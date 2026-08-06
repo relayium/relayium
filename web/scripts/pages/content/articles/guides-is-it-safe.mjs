@@ -45,6 +45,40 @@ const en = {
     },
     {
       heading: "What to actually check before trusting a transfer tool",
+      prereqs: {
+        label: "What you need to run this checklist",
+        items: [
+          "Ten minutes and a browser. The first two checks are reading, not auditing.",
+          "Two devices for the live checks. Three and four cannot be done from a marketing page, which is exactly why they are worth doing.",
+          "No security expertise. Each item below is either something you can read or something you can see happen.",
+        ],
+      },
+      steps: [
+        {
+          text: "Find the vendor's own answer to \"can you read my files?\" in their source, not on their pricing page. If there is no source, that is already an answer.",
+          code: ["https://github.com/relayium/relayium"],
+        },
+        {
+          text: "Check the licence and whether the repository is the thing that is actually deployed. A claim you can inspect is a different kind of claim from one you are asked to accept.",
+        },
+        {
+          text: "On a live transfer, compare the verification code on both screens. This is the step that turns \"end-to-end encrypted\" from a sentence into something being enforced between these two particular endpoints.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "While that transfer runs, open your browser's developer tools and watch the network panel. Look for your file's contents in what is being uploaded. Not finding them is the point; finding them would be the finding.",
+        },
+        {
+          text: "Check what is left afterwards: whether a link expires on its own, and whether the service could produce the file again later if someone asked it to.",
+        },
+      ],
+      success: {
+        label: "What passing this checklist actually tells you",
+        body: [
+          "The first two checks are cheap and rule out most tools in minutes. The last three cannot be faked by a landing page, because they are things you watch happen on your own two devices.",
+          "None of it makes a tool trustworthy in the abstract. It makes specific claims checkable, which is the most any of us can do without reading every line ourselves.",
+        ],
+      },
       body: [
         "The marketing language on a website is worth less than a few concrete questions:",
       ],
@@ -77,6 +111,38 @@ const en = {
         "For anything genuinely sensitive, turn on advanced verification and take the extra few seconds to compare the verification code out loud on a call, or in person, rather than trusting that two matching screens next to each other haven't both been fooled.",
         "And no transfer tool, however well encrypted, protects a file that's already exposed on a device that's compromised — good encryption assumes the two ends themselves are trustworthy. None of this is a reason to be paranoid about sending files; it's just worth knowing what encryption does and doesn't cover.",
       ],
+    },
+    {
+      heading: "When a check does not give you a clean answer",
+      body: [
+        "Three places people get stuck. In each case the ambiguity is itself informative.",
+      ],
+      troubleshooting: {
+        label: "What you run into, what to check, what it means",
+        items: [
+          {
+            symptom: "The network panel shows a large upload and you cannot tell what is in it.",
+            code: [
+              `https://relayium.com/   # developer tools, Network panel, during a transfer`,
+            ],
+            fix: "That is the expected result, not a dead end. What you are looking for is the absence of anything recognisable from your file — a filename you chose, a string you know is in the document. If you can read your own content in the payload, that is the finding, and it is a decisive one.",
+          },
+          {
+            symptom: "There is no verification code, so the third check cannot be done.",
+            code: [
+              `https://relayium.com/   # a stored link has no second live endpoint to compare against`,
+            ],
+            fix: "You are on a stored-link transfer rather than a live one. There is no second endpoint online to compare against, so the guarantee has a different shape: the key lives in the link fragment and never reaches the server at all. Compare codes on live transfers, and check link expiry on stored ones.",
+          },
+          {
+            symptom: "The source is open but you cannot read the language it is written in.",
+            code: [
+              `https://github.com/relayium/relayium   # is the claim falsifiable at all`,
+            ],
+            fix: "You do not have to. The question this check answers is whether the claim is falsifiable at all: is there a repository, does it correspond to what is deployed, could someone who does read that language contradict it. A claim nobody is in a position to check is the finding.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -151,6 +217,40 @@ const zh = {
     },
     {
       heading: "信任一个传输工具之前，真正该检查什么",
+      prereqs: {
+        label: "要跑这份核查清单，你需要什么",
+        items: [
+          "十分钟和一个浏览器。前两项是阅读，不是审计。",
+          "两台设备，用于实时的那几项。第三、第四项没法在营销页面上完成，而这恰恰是它们值得做的原因。",
+          "不需要安全专业知识。下面每一项要么是你能读到的东西，要么是你能亲眼看见发生的事。",
+        ],
+      },
+      steps: [
+        {
+          text: "到厂商的源码里去找他们自己对「你们能读我的文件吗」的回答，而不是去定价页找。如果根本没有源码，那本身就已经是个回答。",
+          code: ["https://github.com/relayium/relayium"],
+        },
+        {
+          text: "看一下许可证，以及那个仓库是不是真正部署上线的那份东西。一个你能亲自查验的说法，和一个要求你接受的说法，是两种不同的说法。",
+        },
+        {
+          text: "在一次实时传输中，比对两块屏幕上的校验码。正是这一步，把「端到端加密」从一句话变成了在这两个具体端点之间正在被强制执行的事。",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "在那次传输进行时，打开浏览器的开发者工具，看网络面板。在上传的内容里找你自己文件的内容。找不到才是重点；找得到才是结论。",
+        },
+        {
+          text: "检查事后还剩下什么：链接会不会自己过期，以及如果有人日后要求，服务方还能不能把这个文件重新拿出来。",
+        },
+      ],
+      success: {
+        label: "通过这份清单到底说明了什么",
+        body: [
+          "前两项代价很低，几分钟就能筛掉大多数工具。后三项是落地页伪造不了的，因为它们是你在自己那两台设备上亲眼看着发生的事。",
+          "这些都不会让一个工具在抽象意义上变得可信。它们做的是让具体的说法变得可核查——在不逐行读完所有代码的前提下，这已经是我们任何人能做到的极限。",
+        ],
+      },
       body: [
         "官网上的营销话术，远不如几个具体问题管用：",
       ],
@@ -183,6 +283,38 @@ const zh = {
         "对于真正敏感的内容，请打开高级验证，多花几秒钟，在通话里读出校验码或者当面核对，而不要只是相信两块并排的屏幕不可能同时被骗过。",
         "而且不管加密做得多好，任何传输工具都保护不了一台已被攻破的设备上早已暴露的文件——好的加密假设的前提是两端本身可信。这些都不是让你对发文件这件事草木皆兵的理由，只是值得清楚加密到底覆盖了什么、没覆盖什么。",
       ],
+    },
+    {
+      heading: "当某一项给不出干净的答案时",
+      body: [
+        "有三个地方容易卡住。而在每一种情形里，这份模糊本身就是有信息量的。",
+      ],
+      troubleshooting: {
+        label: "你遇到什么、检查什么、它意味着什么",
+        items: [
+          {
+            symptom: "网络面板里有一大块上传，但你看不出里面是什么。",
+            code: [
+              `https://relayium.com/   # developer tools, Network panel, during a transfer`,
+            ],
+            fix: "这正是预期结果，不是死胡同。你要找的是「找不到任何能认出来的东西」——你自己起的文件名，或者你知道文档里有的某个字符串。如果你能在上传内容里读出自己的东西，那才是结论，而且是决定性的结论。",
+          },
+          {
+            symptom: "没有校验码，所以第三项做不了。",
+            code: [
+              `https://relayium.com/   # a stored link has no second live endpoint to compare against`,
+            ],
+            fix: "你用的是存储型链接传输，而不是实时传输。这里没有第二个在线端点可供比对，所以保证的形态不同：密钥存在链接的片段部分，根本不会到达服务器。实时传输比对校验码，存储型传输则检查链接过期。",
+          },
+          {
+            symptom: "源码是开放的，但你读不懂它用的那门语言。",
+            code: [
+              `https://github.com/relayium/relayium   # is the claim falsifiable at all`,
+            ],
+            fix: "你不需要读懂。这一项要回答的问题是：这个说法到底可不可证伪——有没有仓库，它是否对应着实际部署的东西，一个读得懂那门语言的人有没有可能站出来反驳它。一个没有任何人有条件去核查的说法，本身就是结论。",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -257,6 +389,40 @@ const ja = {
     },
     {
       heading: "転送ツールを信頼する前に、実際に確認すべきこと",
+      prereqs: {
+        label: "このチェックリストを回すのに必要なもの",
+        items: [
+          "10分とブラウザ。最初の2つは読むだけで、監査ではありません。",
+          "ライブの項目のための端末2台。3つめと4つめはマーケティングページ上ではできず、だからこそやる価値があります。",
+          "セキュリティの専門知識は不要です。以下の各項目は、読めるものか、起きるのを見られるもののどちらかです。",
+        ],
+      },
+      steps: [
+        {
+          text: "「この会社はこちらのファイルを読めるのか」に対する提供者自身の答えを、料金ページではなくソースの中に探します。ソースがないなら、それ自体がすでに答えです。",
+          code: ["https://github.com/relayium/relayium"],
+        },
+        {
+          text: "ライセンスを確認し、そのリポジトリが実際に動いているものと対応しているかを見ます。自分で確かめられる主張と、受け入れるよう求められる主張は、種類が違います。",
+        },
+        {
+          text: "ライブ転送で、両方の画面の検証コードを照合します。「エンドツーエンド暗号化」を一文から、この2つの端点のあいだで実際に強制されている状態へ変えるのが、この手順です。",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "その転送中に、ブラウザの開発者ツールを開いてネットワークパネルを見ます。アップロードされている中身に自分のファイルの内容を探してください。見つからないことが要点で、見つかったならそれが結論です。",
+        },
+        {
+          text: "あとに何が残るかを確認します。リンクが自分で期限切れになるか、そして後日求められたときにサービス側がそのファイルをもう一度出せるのか。",
+        },
+      ],
+      success: {
+        label: "このチェックリストを通ることが実際に示すもの",
+        body: [
+          "最初の2つは安上がりで、数分でたいていのツールをふるい落とせます。あとの3つはランディングページには偽装できません。自分の2台の端末で起きるのを見ているからです。",
+          "これで抽象的にツールが信頼できるようになるわけではありません。具体的な主張を確認可能にするだけです。全行を自分で読むのでない限り、それが誰にとっても限界です。",
+        ],
+      },
       body: [
         "ウェブサイトの宣伝文句より、いくつかの具体的な質問のほうがずっと役に立ちます。",
       ],
@@ -289,6 +455,38 @@ const ja = {
         "本当に機密性の高い内容については、高度な検証をオンにし、あと数秒手間をかけて、通話で検証コードを声に出して読み合わせるか、対面で照合しましょう。隣り合った2つの画面が両方とも欺かれていないと信じるだけでは十分ではありません。",
         "そして、どれほど暗号化がしっかりしていても、すでに侵害された端末上で露出しているファイルを転送ツールが守ることはできません。優れた暗号化は、両端そのものが信頼できることを前提としています。だからといって、ファイルを送ること自体に神経質になる必要はありません。ただ、暗号化がどこまでをカバーし、どこからはカバーしないのかを知っておく価値がある、というだけです。",
       ],
+    },
+    {
+      heading: "確認がすっきりした答えをくれないとき",
+      body: [
+        "つまずきやすいのは3か所です。いずれの場合も、その曖昧さ自体に情報があります。",
+      ],
+      troubleshooting: {
+        label: "ぶつかること、確認すること、その意味",
+        items: [
+          {
+            symptom: "ネットワークパネルに大きなアップロードがあるが、中身が何かわからない。",
+            code: [
+              `https://relayium.com/   # developer tools, Network panel, during a transfer`,
+            ],
+            fix: "それが期待どおりの結果であって、行き止まりではありません。探しているのは、見覚えのあるものが何も見つからないことです——自分で付けたファイル名や、その文書にあるとわかっている文字列など。もしアップロードの中身に自分の内容が読めたなら、それが結論であり、決定的な結論です。",
+          },
+          {
+            symptom: "検証コードがないので、3つめができない。",
+            code: [
+              `https://relayium.com/   # a stored link has no second live endpoint to compare against`,
+            ],
+            fix: "それはライブ転送ではなく保存リンクの転送です。照合する相手の端点がオンラインにいないため、保証の形が違います。鍵はリンクのフラグメントにあり、サーバーには一切届きません。ライブ転送ではコードを照合し、保存型ではリンクの有効期限を確認してください。",
+          },
+          {
+            symptom: "ソースは公開されているが、書かれている言語が読めない。",
+            code: [
+              `https://github.com/relayium/relayium   # is the claim falsifiable at all`,
+            ],
+            fix: "読める必要はありません。この確認が答える問いは、その主張がそもそも反証可能かどうかです。リポジトリはあるか、動いているものと対応しているか、その言語を読める人が反証しうる状態にあるか。誰も確認できる立場にない主張こそが結論です。",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -363,6 +561,40 @@ const ko = {
     },
     {
       heading: "전송 도구를 신뢰하기 전에 실제로 확인해야 할 것",
+      prereqs: {
+        label: "이 점검 목록을 돌리려면 필요한 것",
+        items: [
+          "10분과 브라우저 하나. 앞의 두 항목은 읽는 일이지 감사가 아닙니다.",
+          "실시간 항목을 위한 기기 두 대. 세 번째와 네 번째는 마케팅 페이지에서는 할 수 없고, 그래서 할 가치가 있습니다.",
+          "보안 전문 지식은 필요 없습니다. 아래 각 항목은 읽을 수 있는 것이거나, 벌어지는 것을 볼 수 있는 것입니다.",
+        ],
+      },
+      steps: [
+        {
+          text: "\"내 파일을 읽을 수 있느냐\"에 대한 공급자 자신의 답을 요금 페이지가 아니라 소스에서 찾으세요. 소스가 없다면 그것 자체가 이미 답입니다.",
+          code: ["https://github.com/relayium/relayium"],
+        },
+        {
+          text: "라이선스를 확인하고, 그 저장소가 실제로 배포된 것과 대응하는지 보세요. 직접 살펴볼 수 있는 주장과 받아들이라고 요구되는 주장은 종류가 다릅니다.",
+        },
+        {
+          text: "실시간 전송에서 두 화면의 검증 코드를 대조하세요. 「종단간 암호화」를 한 문장에서, 바로 이 두 종단 사이에 실제로 적용되고 있는 것으로 바꾸는 단계가 이것입니다.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "그 전송이 도는 동안 브라우저 개발자 도구를 열고 네트워크 패널을 보세요. 올라가는 내용에서 자기 파일의 내용을 찾아보세요. 찾지 못하는 것이 핵심이고, 찾는다면 그것이 결론입니다.",
+        },
+        {
+          text: "끝난 뒤에 무엇이 남는지 확인하세요. 링크가 스스로 만료되는지, 그리고 나중에 누군가 요구하면 서비스가 그 파일을 다시 내놓을 수 있는지.",
+        },
+      ],
+      success: {
+        label: "이 목록을 통과한다는 것이 실제로 알려 주는 것",
+        body: [
+          "앞의 두 항목은 값이 싸고 몇 분이면 대부분의 도구를 걸러 냅니다. 뒤의 셋은 랜딩 페이지가 흉내 낼 수 없습니다. 자기 기기 두 대에서 벌어지는 것을 직접 보기 때문입니다.",
+          "이것으로 어떤 도구가 추상적으로 신뢰할 만해지지는 않습니다. 구체적인 주장을 확인 가능하게 만들 뿐이며, 모든 줄을 직접 읽지 않는 한 그것이 누구에게나 최선입니다.",
+        ],
+      },
       body: [
         "웹사이트의 마케팅 문구보다 몇 가지 구체적인 질문이 훨씬 더 값어치가 있습니다.",
       ],
@@ -395,6 +627,38 @@ const ko = {
         "정말로 민감한 내용에 대해서는 고급 검증을 켠 다음, 몇 초를 더 들여 통화로 검증 코드를 소리 내어 읽어 대조하거나 직접 만나서 확인하세요. 나란히 놓인 두 화면이 둘 다 속지 않았을 것이라고 그냥 믿는 것만으로는 부족합니다.",
         "그리고 아무리 암호화가 잘 되어 있어도, 이미 손상된 기기에서 노출된 파일을 어떤 전송 도구도 보호해줄 수는 없습니다. 좋은 암호화는 양쪽 끝 자체가 신뢰할 수 있다는 것을 전제로 합니다. 이것이 파일을 보내는 일 자체에 대해 지나치게 예민해질 이유는 아닙니다. 다만 암호화가 어디까지 커버하고 어디부터는 커버하지 않는지 알아둘 가치가 있다는 것입니다.",
       ],
+    },
+    {
+      heading: "확인이 깔끔한 답을 주지 않을 때",
+      body: [
+        "막히는 지점은 세 군데입니다. 어느 경우든 그 모호함 자체가 정보를 담고 있습니다.",
+      ],
+      troubleshooting: {
+        label: "부딪히는 것, 확인할 것, 그 의미",
+        items: [
+          {
+            symptom: "네트워크 패널에 큰 업로드가 보이는데 안에 무엇이 있는지 알 수 없습니다.",
+            code: [
+              `https://relayium.com/   # developer tools, Network panel, during a transfer`,
+            ],
+            fix: "그것이 기대한 결과이지 막다른 길이 아닙니다. 찾는 것은 알아볼 만한 것이 하나도 없다는 사실입니다 — 직접 붙인 파일 이름이나, 문서에 있다고 아는 문자열 같은 것. 업로드 내용에서 자기 것이 읽힌다면 그것이 결론이고, 결정적인 결론입니다.",
+          },
+          {
+            symptom: "검증 코드가 없어서 세 번째를 할 수 없습니다.",
+            code: [
+              `https://relayium.com/   # a stored link has no second live endpoint to compare against`,
+            ],
+            fix: "실시간 전송이 아니라 저장형 링크 전송입니다. 대조할 상대 종단이 온라인에 없으므로 보장의 모양이 다릅니다. 키는 링크의 프래그먼트에 있고 서버에는 전혀 닿지 않습니다. 실시간 전송에서는 코드를 대조하고, 저장형에서는 링크 만료를 확인하세요.",
+          },
+          {
+            symptom: "소스는 공개되어 있는데 쓰인 언어를 읽지 못합니다.",
+            code: [
+              `https://github.com/relayium/relayium   # is the claim falsifiable at all`,
+            ],
+            fix: "읽을 필요는 없습니다. 이 확인이 답하는 질문은 그 주장이 애초에 반증 가능한가입니다. 저장소가 있는가, 배포된 것과 대응하는가, 그 언어를 읽는 사람이 반박할 수 있는 상태인가. 아무도 확인할 처지가 못 되는 주장이야말로 결론입니다.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -469,6 +733,40 @@ const de = {
     },
     {
       heading: "Was du vor dem Vertrauen in ein Übertragungs-Tool wirklich prüfen solltest",
+      prereqs: {
+        label: "Was du brauchst, um diese Checkliste durchzugehen",
+        items: [
+          "Zehn Minuten und einen Browser. Die ersten beiden Punkte sind Lesen, kein Audit.",
+          "Zwei Geräte für die Live-Punkte. Drei und vier lassen sich auf keiner Marketingseite erledigen — genau deshalb lohnen sie sich.",
+          "Kein Sicherheitswissen. Jeder Punkt unten ist entweder etwas, das du lesen, oder etwas, das du geschehen sehen kannst.",
+        ],
+      },
+      steps: [
+        {
+          text: "Such die Antwort des Anbieters auf \"könnt ihr meine Dateien lesen?\" in seinem Quellcode, nicht auf der Preisseite. Gibt es keinen Quellcode, ist das bereits eine Antwort.",
+          code: ["https://github.com/relayium/relayium"],
+        },
+        {
+          text: "Prüfe die Lizenz und ob das Repository dem entspricht, was tatsächlich läuft. Eine Behauptung, die du nachsehen kannst, ist eine andere Art von Behauptung als eine, die du glauben sollst.",
+        },
+        {
+          text: "Vergleiche bei einer laufenden Übertragung den Verifizierungscode auf beiden Bildschirmen. Dieser Schritt macht aus \"Ende-zu-Ende-verschlüsselt\" statt eines Satzes etwas, das zwischen diesen beiden konkreten Endpunkten durchgesetzt wird.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Öffne währenddessen die Entwicklerwerkzeuge deines Browsers und sieh dir das Netzwerk-Panel an. Such im Hochgeladenen nach dem Inhalt deiner Datei. Ihn nicht zu finden ist der Punkt; ihn zu finden wäre der Befund.",
+        },
+        {
+          text: "Prüfe, was danach bleibt: ob ein Link von selbst abläuft, und ob der Dienst die Datei später noch einmal herausgeben könnte, wenn ihn jemand danach fragt.",
+        },
+      ],
+      success: {
+        label: "Was das Bestehen dieser Liste tatsächlich sagt",
+        body: [
+          "Die ersten beiden Punkte sind billig und sortieren die meisten Werkzeuge in Minuten aus. Die letzten drei kann keine Landingpage vortäuschen, weil du sie auf deinen eigenen zwei Geräten geschehen siehst.",
+          "Nichts davon macht ein Werkzeug abstrakt vertrauenswürdig. Es macht konkrete Behauptungen überprüfbar — und mehr kann niemand von uns tun, ohne jede Zeile selbst zu lesen.",
+        ],
+      },
       body: [
         "Die Marketing-Sprache auf einer Website ist weniger wert als ein paar konkrete Fragen:",
       ],
@@ -501,6 +799,38 @@ const de = {
         "Bei wirklich sensiblen Inhalten schalte die erweiterte Verifizierung ein und nimm dir die paar zusätzlichen Sekunden, den Verifizierungscode am Telefon laut vorzulesen oder persönlich zu vergleichen, statt einfach darauf zu vertrauen, dass zwei nebeneinanderliegende, übereinstimmende Bildschirme nicht beide getäuscht wurden.",
         "Und kein noch so gut verschlüsseltes Übertragungs-Tool schützt eine Datei, die bereits auf einem kompromittierten Gerät offenliegt — gute Verschlüsselung setzt voraus, dass die beiden Endpunkte selbst vertrauenswürdig sind. Das ist kein Grund, beim Versenden von Dateien paranoid zu werden — es lohnt sich nur zu wissen, was Verschlüsselung abdeckt und was nicht.",
       ],
+    },
+    {
+      heading: "Wenn eine Prüfung keine saubere Antwort gibt",
+      body: [
+        "Drei Stellen, an denen man hängen bleibt. In allen dreien steckt in der Unschärfe selbst die Information.",
+      ],
+      troubleshooting: {
+        label: "Worauf du stößt, was du prüfst, was es bedeutet",
+        items: [
+          {
+            symptom: "Das Netzwerk-Panel zeigt einen großen Upload, und du kannst nicht erkennen, was darin steckt.",
+            code: [
+              `https://relayium.com/   # developer tools, Network panel, during a transfer`,
+            ],
+            fix: "Das ist das erwartete Ergebnis, keine Sackgasse. Wonach du suchst, ist das Fehlen von allem Wiedererkennbaren aus deiner Datei — ein Dateiname, den du vergeben hast, eine Zeichenfolge, von der du weißt, dass sie im Dokument steht. Kannst du deinen eigenen Inhalt in der Nutzlast lesen, ist genau das der Befund, und ein eindeutiger.",
+          },
+          {
+            symptom: "Es gibt keinen Verifizierungscode, der dritte Punkt geht also nicht.",
+            code: [
+              `https://relayium.com/   # a stored link has no second live endpoint to compare against`,
+            ],
+            fix: "Du bist bei einer gespeicherten Link-Übertragung statt einer Live-Übertragung. Es ist kein zweiter Endpunkt online, gegen den man vergleichen könnte, die Zusage hat also eine andere Form: der Schlüssel steckt im Link-Fragment und erreicht den Server nie. Bei Live-Übertragungen vergleichst du Codes, bei gespeicherten prüfst du den Ablauf des Links.",
+          },
+          {
+            symptom: "Der Quellcode ist offen, aber du kannst die Sprache nicht lesen, in der er geschrieben ist.",
+            code: [
+              `https://github.com/relayium/relayium   # is the claim falsifiable at all`,
+            ],
+            fix: "Musst du auch nicht. Die Frage, die dieser Punkt beantwortet, ist, ob die Behauptung überhaupt widerlegbar ist: gibt es ein Repository, entspricht es dem, was läuft, könnte jemand, der die Sprache liest, widersprechen. Eine Behauptung, die niemand in der Lage ist zu prüfen, ist selbst der Befund.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -575,6 +905,40 @@ const fr = {
     },
     {
       heading: "Ce qu'il faut vraiment vérifier avant de faire confiance à un outil de transfert",
+      prereqs: {
+        label: "Ce qu'il vous faut pour dérouler cette liste",
+        items: [
+          "Dix minutes et un navigateur. Les deux premiers points relèvent de la lecture, pas de l'audit.",
+          "Deux appareils pour les points en direct. Le troisième et le quatrième ne se font pas depuis une page marketing — c'est précisément ce qui les rend utiles.",
+          "Aucune expertise en sécurité. Chaque point ci-dessous est soit quelque chose que vous pouvez lire, soit quelque chose que vous pouvez voir se produire.",
+        ],
+      },
+      steps: [
+        {
+          text: "Cherchez la réponse de l'éditeur à « pouvez-vous lire mes fichiers ? » dans son code source, pas sur sa page tarifs. S'il n'y a pas de source, c'est déjà une réponse.",
+          code: ["https://github.com/relayium/relayium"],
+        },
+        {
+          text: "Vérifiez la licence, et si le dépôt correspond bien à ce qui est déployé. Une affirmation que vous pouvez inspecter n'est pas du même ordre qu'une affirmation qu'on vous demande d'accepter.",
+        },
+        {
+          text: "Sur un transfert en cours, comparez le code de vérification affiché sur les deux écrans. C'est l'étape qui fait passer « chiffré de bout en bout » du statut de phrase à celui de garantie appliquée entre ces deux extrémités précises.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Pendant ce transfert, ouvrez les outils de développement de votre navigateur et regardez le panneau réseau. Cherchez le contenu de votre fichier dans ce qui est envoyé. Ne pas l'y trouver est le but ; l'y trouver serait le résultat.",
+        },
+        {
+          text: "Vérifiez ce qui subsiste ensuite : si un lien expire de lui-même, et si le service pourrait encore ressortir le fichier plus tard si on le lui demandait.",
+        },
+      ],
+      success: {
+        label: "Ce que réussir cette liste vous apprend réellement",
+        body: [
+          "Les deux premiers points ne coûtent rien et éliminent la plupart des outils en quelques minutes. Les trois derniers, aucune page d'accueil ne peut les simuler, parce que vous les voyez se produire sur vos deux propres appareils.",
+          "Rien de tout cela ne rend un outil digne de confiance dans l'absolu. Cela rend des affirmations précises vérifiables, et c'est le maximum que chacun puisse faire sans lire soi-même chaque ligne.",
+        ],
+      },
       body: [
         "Le langage marketing d'un site web vaut moins que quelques questions concrètes :",
       ],
@@ -607,6 +971,38 @@ const fr = {
         "Pour tout ce qui est vraiment sensible, activez la vérification avancée et prenez les quelques secondes supplémentaires pour comparer le code de vérification à voix haute lors d'un appel, ou en personne, plutôt que de faire confiance au fait que deux écrans côte à côte qui correspondent n'aient pas tous deux été trompés.",
         "Et aucun outil de transfert, aussi bien chiffré soit-il, ne protège un fichier déjà exposé sur un appareil compromis — un bon chiffrement suppose que les deux extrémités elles-mêmes sont dignes de confiance. Rien de tout cela n'est une raison de devenir paranoïaque à l'idée d'envoyer des fichiers ; il vaut simplement la peine de savoir ce que le chiffrement couvre, et ce qu'il ne couvre pas.",
       ],
+    },
+    {
+      heading: "Quand une vérification ne donne pas de réponse nette",
+      body: [
+        "Trois endroits où l'on bloque. Dans chacun, le flou lui-même est instructif.",
+      ],
+      troubleshooting: {
+        label: "Ce sur quoi vous tombez, ce qu'il faut vérifier, ce que cela signifie",
+        items: [
+          {
+            symptom: "Le panneau réseau montre un gros envoi et vous ne pouvez pas dire ce qu'il contient.",
+            code: [
+              `https://relayium.com/   # developer tools, Network panel, during a transfer`,
+            ],
+            fix: "C'est le résultat attendu, pas une impasse. Ce que vous cherchez, c'est l'absence de tout élément reconnaissable de votre fichier — un nom de fichier que vous avez choisi, une chaîne dont vous savez qu'elle est dans le document. Si vous pouvez lire votre propre contenu dans la charge utile, c'est cela le résultat, et il est décisif.",
+          },
+          {
+            symptom: "Il n'y a pas de code de vérification, le troisième point est donc impossible.",
+            code: [
+              `https://relayium.com/   # a stored link has no second live endpoint to compare against`,
+            ],
+            fix: "Vous êtes sur un transfert par lien stocké et non sur un transfert en direct. Aucune seconde extrémité n'est en ligne pour la comparaison, la garantie a donc une autre forme : la clé vit dans le fragment du lien et n'atteint jamais le serveur. Comparez les codes sur les transferts en direct, et vérifiez l'expiration du lien sur les transferts stockés.",
+          },
+          {
+            symptom: "Le code est ouvert, mais vous ne lisez pas le langage dans lequel il est écrit.",
+            code: [
+              `https://github.com/relayium/relayium   # is the claim falsifiable at all`,
+            ],
+            fix: "Vous n'avez pas à le lire. La question à laquelle ce point répond est de savoir si l'affirmation est seulement réfutable : y a-t-il un dépôt, correspond-il à ce qui est déployé, quelqu'un qui lit ce langage pourrait-il la contredire. Une affirmation que personne n'est en mesure de vérifier constitue elle-même le résultat.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -681,6 +1077,40 @@ const ar = {
     },
     {
       heading: "ما الذي ينبغي التحقق منه فعلًا قبل الوثوق بأداة نقل",
+      prereqs: {
+        label: "ما تحتاجه لتنفيذ قائمة الفحص هذه",
+        items: [
+          "عشر دقائق ومتصفّح. فالبندان الأولان قراءة لا تدقيق.",
+          "جهازان للبنود الحيّة. فالبندان الثالث والرابع لا يمكن إجراؤهما من صفحة تسويقية، وهذا بالضبط ما يجعلهما جديرين بالتنفيذ.",
+          "لا حاجة إلى خبرة أمنية. فكل بند أدناه إمّا شيء تستطيع قراءته وإمّا شيء تستطيع أن تراه يحدث.",
+        ],
+      },
+      steps: [
+        {
+          text: "ابحث عن جواب المزوّد نفسه عن سؤال «هل تستطيعون قراءة ملفاتي؟» داخل شفرته المصدرية، لا في صفحة الأسعار. وإن لم تكن هناك شفرة مصدرية فذلك في حد ذاته جواب.",
+          code: ["https://github.com/relayium/relayium"],
+        },
+        {
+          text: "تحقّق من الرخصة، ومن أن المستودع يقابل ما هو منشور فعلًا. فالادّعاء الذي يمكنك فحصه نوع مختلف عن الادّعاء الذي يُطلب منك قبوله.",
+        },
+        {
+          text: "في نقل حيّ، قارن رمز التحقّق على الشاشتين. فهذه هي الخطوة التي تحوّل «التشفير من الطرف إلى الطرف» من جملة إلى شيء يُطبَّق فعلًا بين هذين الطرفين تحديدًا.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "وأثناء ذلك النقل، افتح أدوات المطوّر في متصفّحك وراقب لوحة الشبكة. وابحث عن محتوى ملفك داخل ما يجري رفعه. فألّا تجده هو المقصود، وأن تجده هو النتيجة.",
+        },
+        {
+          text: "تحقّق مما يبقى بعد ذلك: هل ينتهي الرابط من تلقاء نفسه، وهل تستطيع الخدمة إخراج الملف مرة أخرى لاحقًا لو طُلب منها ذلك.",
+        },
+      ],
+      success: {
+        label: "ماذا يخبرك اجتياز هذه القائمة فعلًا",
+        body: [
+          "البندان الأولان رخيصان ويستبعدان معظم الأدوات في دقائق. أما البنود الثلاثة الأخيرة فلا تستطيع صفحة هبوط تزييفها، لأنك تراها تحدث على جهازيك أنت.",
+          "ولا شيء من هذا يجعل أداةً جديرة بالثقة على نحو مجرَّد. إنه يجعل ادّعاءات محدَّدة قابلة للفحص، وهذا أقصى ما يستطيعه أيٌّ منا دون قراءة كل سطر بنفسه.",
+        ],
+      },
       body: [
         "لغة التسويق على أي موقع أقل قيمة من بضعة أسئلة ملموسة:",
       ],
@@ -713,6 +1143,38 @@ const ar = {
         "بالنسبة لأي شيء حسّاس فعلًا، فعِّل التحقّق المتقدّم وخصّص بضع ثوانٍ إضافية لمقارنة رمز التحقق بصوت عالٍ عبر مكالمة، أو وجهًا لوجه، بدلًا من الثقة بأن شاشتين متطابقتين متجاورتين لم تُخدَعا كلتاهما.",
         "ولا توجد أداة نقل، مهما بلغت جودة تشفيرها، تحمي ملفًا منكشفًا أصلًا على جهاز مُخترَق — فالتشفير الجيد يفترض أن الطرفين نفسيهما جديران بالثقة. لا شيء من هذا سبب للإصابة بجنون الارتياب من إرسال الملفات؛ إنما من المفيد فقط أن تعرف ما الذي يغطّيه التشفير وما لا يغطّيه.",
       ],
+    },
+    {
+      heading: "حين لا يعطيك الفحص جوابًا واضحًا",
+      body: [
+        "ثلاثة مواضع يتعثّر الناس عندها. وفي كل حالة منها يكون الغموض نفسه ذا دلالة.",
+      ],
+      troubleshooting: {
+        label: "ما تصادفه، وما تفحصه، وماذا يعني",
+        items: [
+          {
+            symptom: "تُظهر لوحة الشبكة رفعًا كبيرًا ولا تستطيع معرفة ما بداخله.",
+            code: [
+              `https://relayium.com/   # developer tools, Network panel, during a transfer`,
+            ],
+            fix: "هذه هي النتيجة المتوقَّعة لا طريقًا مسدودًا. فما تبحث عنه هو غياب أي شيء يمكن التعرّف عليه من ملفك — اسم ملف اخترته أنت، أو نص تعرف أنه موجود في المستند. فإن استطعت قراءة محتواك داخل الحمولة فتلك هي النتيجة، وهي حاسمة.",
+          },
+          {
+            symptom: "لا يوجد رمز تحقّق، فلا يمكن تنفيذ البند الثالث.",
+            code: [
+              `https://relayium.com/   # a stored link has no second live endpoint to compare against`,
+            ],
+            fix: "أنت في نقل عبر رابط مخزَّن لا في نقل حيّ. فلا يوجد طرف ثانٍ متصل لتقارن معه، ومن ثمّ فشكل الضمان مختلف: المفتاح يعيش في جزء الرابط ولا يصل إلى الخادم إطلاقًا. قارن الرموز في عمليات النقل الحيّة، وتحقّق من انتهاء صلاحية الرابط في المخزَّنة.",
+          },
+          {
+            symptom: "الشفرة مفتوحة لكنك لا تقرأ اللغة المكتوبة بها.",
+            code: [
+              `https://github.com/relayium/relayium   # is the claim falsifiable at all`,
+            ],
+            fix: "لست مضطرًا. فالسؤال الذي يجيب عنه هذا الفحص هو: هل الادّعاء قابل للدحض أصلًا؟ هل هناك مستودع، وهل يقابل ما هو منشور، وهل يستطيع من يقرأ تلك اللغة أن يناقضه. والادّعاء الذي لا أحد في موضع يتيح له فحصه هو نفسه النتيجة.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -787,6 +1249,40 @@ const es = {
     },
     {
       heading: "Qué comprobar de verdad antes de confiar en una herramienta de transferencia",
+      prereqs: {
+        label: "Lo que necesitas para recorrer esta lista",
+        items: [
+          "Diez minutos y un navegador. Los dos primeros puntos son leer, no auditar.",
+          "Dos dispositivos para los puntos en vivo. El tercero y el cuarto no se pueden hacer desde una página de marketing, que es justo lo que los hace valiosos.",
+          "Ninguna experiencia en seguridad. Cada punto de abajo es o algo que puedes leer o algo que puedes ver ocurrir.",
+        ],
+      },
+      steps: [
+        {
+          text: "Busca la respuesta del proveedor a \"¿podéis leer mis archivos?\" en su código fuente, no en su página de precios. Si no hay código fuente, eso ya es una respuesta.",
+          code: ["https://github.com/relayium/relayium"],
+        },
+        {
+          text: "Comprueba la licencia y si el repositorio se corresponde con lo que está realmente desplegado. Una afirmación que puedes inspeccionar es de otro tipo que una que se te pide aceptar.",
+        },
+        {
+          text: "En una transferencia en vivo, compara el código de verificación de las dos pantallas. Este es el paso que convierte \"cifrado de extremo a extremo\" de una frase en algo que se está aplicando entre estos dos extremos concretos.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Mientras esa transferencia corre, abre las herramientas de desarrollo del navegador y mira el panel de red. Busca el contenido de tu archivo en lo que se está subiendo. No encontrarlo es el objetivo; encontrarlo sería el hallazgo.",
+        },
+        {
+          text: "Comprueba qué queda después: si un enlace caduca por sí solo, y si el servicio podría volver a producir el archivo más adelante si alguien se lo pidiera.",
+        },
+      ],
+      success: {
+        label: "Qué te dice de verdad superar esta lista",
+        body: [
+          "Los dos primeros puntos son baratos y descartan la mayoría de las herramientas en minutos. Los tres últimos no los puede fingir ninguna página de aterrizaje, porque los ves ocurrir en tus propios dos dispositivos.",
+          "Nada de esto hace que una herramienta sea de fiar en abstracto. Hace comprobables afirmaciones concretas, que es lo máximo que cualquiera de nosotros puede hacer sin leer cada línea.",
+        ],
+      },
       body: [
         "El lenguaje de marketing de un sitio web vale menos que unas pocas preguntas concretas:",
       ],
@@ -819,6 +1315,38 @@ const es = {
         "Para cualquier cosa genuinamente sensible, activa la verificación avanzada y tómate los pocos segundos de más para comparar el código de verificación en voz alta en una llamada, o en persona, en lugar de fiarte de que dos pantallas coincidentes una al lado de la otra no hayan sido engañadas ambas.",
         "Y ninguna herramienta de transferencia, por bien cifrada que esté, protege un archivo que ya está expuesto en un dispositivo comprometido — un buen cifrado da por supuesto que los dos extremos son de fiar. Nada de esto es motivo para volverse paranoico con el envío de archivos; solo vale la pena saber qué cubre el cifrado y qué no.",
       ],
+    },
+    {
+      heading: "Cuando una comprobación no da una respuesta limpia",
+      body: [
+        "Tres sitios donde la gente se atasca. En los tres, la ambigüedad ya es informativa.",
+      ],
+      troubleshooting: {
+        label: "Con qué te encuentras, qué comprobar, qué significa",
+        items: [
+          {
+            symptom: "El panel de red muestra una subida grande y no puedes saber qué lleva dentro.",
+            code: [
+              `https://relayium.com/   # developer tools, Network panel, during a transfer`,
+            ],
+            fix: "Ese es el resultado esperado, no un callejón sin salida. Lo que buscas es la ausencia de cualquier cosa reconocible de tu archivo: un nombre de archivo que elegiste tú, una cadena que sabes que está en el documento. Si puedes leer tu propio contenido en la carga, ese es el hallazgo, y es concluyente.",
+          },
+          {
+            symptom: "No hay código de verificación, así que el tercer punto no se puede hacer.",
+            code: [
+              `https://relayium.com/   # a stored link has no second live endpoint to compare against`,
+            ],
+            fix: "Estás en una transferencia por enlace almacenado, no en una en vivo. No hay un segundo extremo conectado con el que comparar, así que la garantía tiene otra forma: la clave vive en el fragmento del enlace y nunca llega al servidor. Compara códigos en las transferencias en vivo y revisa la caducidad del enlace en las almacenadas.",
+          },
+          {
+            symptom: "El código es abierto pero no sabes leer el lenguaje en que está escrito.",
+            code: [
+              `https://github.com/relayium/relayium   # is the claim falsifiable at all`,
+            ],
+            fix: "No hace falta. La pregunta que responde este punto es si la afirmación es siquiera refutable: ¿hay repositorio?, ¿se corresponde con lo desplegado?, ¿podría contradecirla alguien que sí lea ese lenguaje? Una afirmación que nadie está en condiciones de comprobar es, ella misma, el hallazgo.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -893,6 +1421,40 @@ const pt = {
     },
     {
       heading: "O que de fato verificar antes de confiar em uma ferramenta de transferência",
+      prereqs: {
+        label: "O que você precisa para percorrer esta lista",
+        items: [
+          "Dez minutos e um navegador. Os dois primeiros pontos são leitura, não auditoria.",
+          "Dois aparelhos para os pontos ao vivo. O terceiro e o quarto não dá para fazer numa página de marketing, que é justamente o que os torna úteis.",
+          "Nenhuma experiência em segurança. Cada ponto abaixo é ou algo que você consegue ler, ou algo que você consegue ver acontecer.",
+        ],
+      },
+      steps: [
+        {
+          text: "Procure a resposta do fornecedor para \"o serviço consegue ler meus arquivos?\" no código-fonte dele, não na página de preços. Se não há código-fonte, isso já é uma resposta.",
+          code: ["https://github.com/relayium/relayium"],
+        },
+        {
+          text: "Confira a licença e se o repositório corresponde ao que está de fato no ar. Uma afirmação que você pode inspecionar é de outro tipo que uma que pedem para você aceitar.",
+        },
+        {
+          text: "Numa transferência ao vivo, compare o código de verificação nas duas telas. É este passo que transforma \"criptografado de ponta a ponta\" de uma frase em algo sendo aplicado entre estas duas pontas específicas.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Enquanto essa transferência roda, abra as ferramentas de desenvolvedor do navegador e olhe o painel de rede. Procure o conteúdo do seu arquivo no que está sendo enviado. Não achar é o objetivo; achar seria a descoberta.",
+        },
+        {
+          text: "Confira o que sobra depois: se um link expira sozinho, e se o serviço conseguiria produzir o arquivo de novo mais tarde caso alguém pedisse.",
+        },
+      ],
+      success: {
+        label: "O que passar nesta lista de fato diz",
+        body: [
+          "Os dois primeiros pontos são baratos e eliminam a maioria das ferramentas em minutos. Os três últimos nenhuma landing page consegue fingir, porque você os vê acontecer nos seus próprios dois aparelhos.",
+          "Nada disso torna uma ferramenta confiável em abstrato. Torna afirmações concretas verificáveis, que é o máximo que qualquer um de nós consegue sem ler cada linha.",
+        ],
+      },
       body: [
         "A linguagem de marketing de um site vale menos do que algumas perguntas concretas:",
       ],
@@ -925,6 +1487,38 @@ const pt = {
         "Para qualquer coisa genuinamente sensível, ative a verificação avançada e dedique os poucos segundos a mais para comparar o código de verificação em voz alta em uma chamada, ou pessoalmente, em vez de confiar que duas telas coincidentes lado a lado não tenham sido ambas enganadas.",
         "E nenhuma ferramenta de transferência, por melhor criptografada que seja, protege um arquivo que já está exposto em um dispositivo comprometido — uma boa criptografia pressupõe que as duas pontas em si são confiáveis. Nada disso é motivo para ficar paranoico em relação a enviar arquivos; só vale a pena saber o que a criptografia cobre e o que não cobre.",
       ],
+    },
+    {
+      heading: "Quando uma checagem não dá resposta limpa",
+      body: [
+        "Três lugares em que se trava. Nos três, a própria ambiguidade já informa.",
+      ],
+      troubleshooting: {
+        label: "O que você encontra, o que checar, o que significa",
+        items: [
+          {
+            symptom: "O painel de rede mostra um envio grande e você não consegue dizer o que tem dentro.",
+            code: [
+              `https://relayium.com/   # developer tools, Network panel, during a transfer`,
+            ],
+            fix: "Esse é o resultado esperado, não um beco sem saída. O que você procura é a ausência de qualquer coisa reconhecível do seu arquivo — um nome de arquivo que você escolheu, um trecho que você sabe estar no documento. Se der para ler o seu próprio conteúdo na carga, essa é a descoberta, e é decisiva.",
+          },
+          {
+            symptom: "Não há código de verificação, então o terceiro ponto não dá para fazer.",
+            code: [
+              `https://relayium.com/   # a stored link has no second live endpoint to compare against`,
+            ],
+            fix: "Você está numa transferência por link armazenado, não numa ao vivo. Não existe uma segunda ponta online para comparar, então a garantia tem outro formato: a chave vive no fragmento do link e nunca chega ao servidor. Compare códigos nas transferências ao vivo e confira a expiração do link nas armazenadas.",
+          },
+          {
+            symptom: "O código é aberto mas você não lê a linguagem em que ele foi escrito.",
+            code: [
+              `https://github.com/relayium/relayium   # is the claim falsifiable at all`,
+            ],
+            fix: "Não precisa. A pergunta que este ponto responde é se a afirmação é sequer refutável: existe repositório, ele corresponde ao que está no ar, alguém que leia aquela linguagem poderia contradizê-la. Uma afirmação que ninguém tem condições de checar é, ela mesma, a descoberta.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -962,6 +1556,6 @@ const pt = {
 export default {
   slug: "guides/is-it-safe-to-send-files-over-the-internet",
   published: "2026-07-09",
-  updated: "2026-07-31",
+  updated: "2026-08-06",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

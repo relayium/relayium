@@ -31,6 +31,8 @@ describe("encryption guide SAS semantics", () => {
   });
 
   it("publishes the current revision date", () => {
-    expect(encryptionGuide.updated).toBe("2026-07-31");
+    // Moved by the guides batch, which turned the code-comparison section into a
+    // verification procedure with its own expected result and troubleshooting.
+    expect(encryptionGuide.updated).toBe("2026-08-06");
   });
 });

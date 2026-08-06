@@ -11,13 +11,18 @@ import text from "./content/articles/howto-send-text-between-devices.mjs";
 import expiringLink from "./content/articles/howto-share-file-expiring-link.mjs";
 import folder from "./content/articles/howto-send-a-folder.mjs";
 
-const revisedArticles = [firefoxSend, googleDrive, weTransfer, dropbox, nextcloud, safety, p2p];
+const revisedArticles = [firefoxSend, googleDrive, weTransfer, dropbox, nextcloud];
 
 // The four how-tos that became runnable tutorials in the browser-howto batch
 // (browser-howto-tutorial.test.mjs). Their `updated` had to move with that
 // rewrite, so they are pinned to their own date rather than dragging the seven
 // articles above — which were not touched — forward with them.
 const browserHowtoTutorials = [largeFiles, text, expiringLink, folder];
+
+// The two explainers the guides batch gave verification procedures to. They
+// moved out of the group above for the same reason the four below moved out of
+// it: a date is only useful if it tracks the rewrite that actually happened.
+const guidesBatch = [safety, p2p];
 
 describe("materially revised article dates", () => {
   it("exposes the current revision date for SEO metadata", () => {
@@ -29,6 +34,12 @@ describe("materially revised article dates", () => {
   it("moves the date on the how-tos rewritten as tutorials", () => {
     for (const article of browserHowtoTutorials) {
       expect(article.updated, article.slug).toBe("2026-08-05");
+    }
+  });
+
+  it("moves the date on the explainers that gained verification procedures", () => {
+    for (const article of guidesBatch) {
+      expect(article.updated, article.slug).toBe("2026-08-06");
     }
   });
 });

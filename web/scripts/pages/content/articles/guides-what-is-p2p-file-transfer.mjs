@@ -59,10 +59,76 @@ const en = {
     },
     {
       heading: "How Relayium puts this together",
+      prereqs: {
+        label: "What you need to check this yourself",
+        items: [
+          "Two devices you can watch at the same time — a laptop and a phone is ideal.",
+          "A small file. This is about which path the connection takes, not about throughput.",
+          "A moment with both on the same Wi-Fi, and a moment with them on different networks — turning the phone's Wi-Fi off for mobile data is enough.",
+        ],
+      },
+      steps: [
+        {
+          text: "With both devices on the same Wi-Fi, open Relayium on each and send the file.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Read the label the app puts on the connection. On one network it says LAN direct.",
+        },
+        {
+          text: "Now put the two devices on different networks and send again, this time using a pairing code.",
+          code: ["https://relayium.com/cross-network"],
+        },
+        {
+          text: "Read the label again. P2P direct means a direct path was found across the internet. Relayed means one could not be, and the encrypted relay carried the bytes instead.",
+        },
+        {
+          text: "Note which you got, and on which pair of networks. That is your own answer to the question this article opened with, rather than ours.",
+        },
+      ],
+      success: {
+        label: "What the labels tell you",
+        body: [
+          "On one network you get LAN direct. Across networks you get either P2P direct or Relayed, and which one depends on the two networks rather than on anything you configured.",
+          "Relayed is not a failure. It is the fallback existing and doing its job, and the relay only ever carries ciphertext — it is the case this article's TURN section describes, seen from the inside.",
+        ],
+      },
       body: [
         "Open relayium.com on two devices on the same network and they typically find each other automatically — no account, no code, nothing to install; that's the LAN case where STUN often isn't even needed. Sending across the internet to someone on a different network uses a pairing code: the sender signs in, generates a code (or shares a link, with an optional QR code to scan), and once the other person joins, the transfer runs over an encrypted TURN relay — the reliable path across unpredictable NATs, and it only ever carries ciphertext — while the receiver never needs an account.",
         "Once the realtime path is open, up to 1,000 files stream continuously over the selected route, each independently verified with a SHA-256 hash. Relayium keeps no server-side realtime content copy or transfer history. If the other person is offline, a zero-knowledge stored link is a genuinely different mode, not a realtime P2P session.",
       ],
+    },
+    {
+      heading: "When the label is not what you expected",
+      body: [
+        "Three things surprise people the first time they look. None of them is a fault to fix, but each is worth being able to name.",
+      ],
+      troubleshooting: {
+        label: "What you see, what to check, what it means",
+        items: [
+          {
+            symptom: "Across networks it always says Relayed, never P2P direct.",
+            code: [
+              `https://relayium.com/cross-network   # the path label reads the same on both ends`,
+            ],
+            fix: "Check whether both ends are on mobile data or behind carrier-grade NAT, which is the usual reason no direct path exists. There is nothing to fix: this is the designed fallback, the relay carries ciphertext only, and same-network transfers between the same two devices still go direct and stay free.",
+          },
+          {
+            symptom: "On one Wi-Fi it never says LAN direct.",
+            code: [
+              `https://relayium.com/   # both devices on one Wi-Fi, and the path label never says LAN direct`,
+            ],
+            fix: "Check whether the network isolates its clients — guest Wi-Fi, and many hotel and office networks, block device-to-device traffic outright. The two devices cannot see each other at all there, so use the cross-network pairing flow instead, which does not depend on them reaching each other locally.",
+          },
+          {
+            symptom: "There is no path label at all.",
+            code: [
+              `https://relayium.com/   # there is no path label until the two ends have connected`,
+            ],
+            fix: "The label names a connection, so it appears once one exists. Before the two ends have found each other there is nothing to name, and a transfer that never starts is a different problem from a transfer that took an unexpected path.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -152,10 +218,76 @@ const zh = {
     },
     {
       heading: "Relayium 是如何把这些拼起来的",
+      prereqs: {
+        label: "要自己验证，你需要什么",
+        items: [
+          "两台你能同时看到屏幕的设备——一台笔记本加一部手机最合适。",
+          "一个小文件。这里关心的是连接走了哪条路径，不是速度。",
+          "一段两台都在同一 Wi-Fi 下的时间，以及一段它们分处不同网络的时间——把手机 Wi-Fi 关掉走蜂窝数据就够了。",
+        ],
+      },
+      steps: [
+        {
+          text: "两台设备都在同一 Wi-Fi 下时，各自打开 Relayium 并把文件发过去。",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "读一下应用给这条连接标的标签。在同一网络下它写的是「局域网直连」。",
+        },
+        {
+          text: "现在把两台设备放到不同网络上，用配对码再发一次。",
+          code: ["https://relayium.com/cross-network"],
+        },
+        {
+          text: "再读一次标签。「P2P 直连」表示跨互联网找到了直连路径；「中继」表示没找到，字节是由加密中继代为转发的。",
+        },
+        {
+          text: "记下你得到的是哪一个，以及当时是哪两个网络。这就是你自己对本文开头那个问题的答案，而不是我们给的答案。",
+        },
+      ],
+      success: {
+        label: "这些标签告诉了你什么",
+        body: [
+          "同一网络下你会看到「局域网直连」。跨网络时你会看到「P2P 直连」或「中继」之一，而具体是哪一个取决于那两个网络，与你做过什么配置无关。",
+          "「中继」不是失败。它是兜底机制存在并且正在起作用，而中继全程只承载密文——这正是本文 TURN 那一节描述的情形，只不过这次是从里面看到的。",
+        ],
+      },
       body: [
         "在同一网络下的两台设备上打开 relayium.com，它们通常会自动找到彼此——不需要账号，不需要配对码，也无需安装任何东西；这就是局域网场景，很多时候甚至用不上 STUN。要跨网络发给不同网络上的人，则用配对码：发送方登录、生成一个配对码（或分享链接，也可选择扫描二维码），对方加入之后，传输经加密 TURN 中继完成——这是穿透难以预测的 NAT 最可靠的一条路，中继也只经手密文；接收方始终不需要账号。",
         "实时路径建立后，每批最多 1,000 个文件会沿选定路径持续流动，每个文件都独立用 SHA-256 校验。Relayium 不保留服务器端实时内容副本或传输历史。对方离线时使用的零知识存储链接是另一种模式，并非实时 P2P 会话。",
       ],
+    },
+    {
+      heading: "当标签不是你预期的那个",
+      body: [
+        "第一次去看的人通常会被三件事意外到。它们都不是需要修的故障，但每一件都值得你能叫出它的名字。",
+      ],
+      troubleshooting: {
+        label: "你看到什么、检查什么、它意味着什么",
+        items: [
+          {
+            symptom: "跨网络时永远显示「中继」，从不出现「P2P 直连」。",
+            code: [
+              `https://relayium.com/cross-network   # the path label reads the same on both ends`,
+            ],
+            fix: "检查一下是不是两端都在蜂窝数据上，或者处在运营商级 NAT 之后——那是找不到直连路径最常见的原因。这里没有需要修的东西：这就是设计中的兜底，中继只承载密文，而同样这两台设备在同一网络下依然走直连、依然免费。",
+          },
+          {
+            symptom: "在同一个 Wi-Fi 下，却从来不显示「局域网直连」。",
+            code: [
+              `https://relayium.com/   # both devices on one Wi-Fi, and the path label never says LAN direct`,
+            ],
+            fix: "检查这个网络是不是隔离了客户端——访客 Wi-Fi，以及很多酒店和办公网络，会直接阻断设备之间的流量。在那种网络里两台设备根本互相看不见，所以改用跨网络的配对码流程，它不依赖两端在本地能互相到达。",
+          },
+          {
+            symptom: "根本没有任何路径标签。",
+            code: [
+              `https://relayium.com/   # there is no path label until the two ends have connected`,
+            ],
+            fix: "这个标签描述的是一条连接，所以它在连接存在之后才会出现。两端还没找到彼此时没有什么可标，而「传输始终没开始」和「传输走了意料之外的路径」是两个不同的问题。",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -245,10 +377,76 @@ const ja = {
     },
     {
       heading: "Relayium はこれをどう組み合わせているか",
+      prereqs: {
+        label: "自分で確かめるために必要なもの",
+        items: [
+          "同時に画面を見られる2台の端末——ノートパソコンとスマートフォンの組み合わせが最適です。",
+          "小さなファイル1つ。ここで見るのは接続がどの経路を通ったかであって、速度ではありません。",
+          "2台が同じ Wi-Fi にある時間と、別々のネットワークにある時間。スマートフォンの Wi-Fi を切ってモバイル回線にするだけで足ります。",
+        ],
+      },
+      steps: [
+        {
+          text: "2台を同じ Wi-Fi につないだ状態で、それぞれ Relayium を開いてファイルを送ります。",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "アプリが接続に付けるラベルを読みます。同じネットワークなら「LAN直結」と表示されます。",
+        },
+        {
+          text: "次に2台を別々のネットワークに置き、今度はペアリングコードを使ってもう一度送ります。",
+          code: ["https://relayium.com/cross-network"],
+        },
+        {
+          text: "もう一度ラベルを読みます。「P2P直結」はインターネット越しに直接の経路が見つかったこと、「中継」は見つからず、暗号化されたリレーがバイトを運んだことを意味します。",
+        },
+        {
+          text: "どちらが出たか、そのときどのネットワークの組み合わせだったかを控えておきます。それが、この記事の冒頭の問いに対する、当社の説明ではなく自分の目で確かめた答えです。",
+        },
+      ],
+      success: {
+        label: "ラベルが教えてくれること",
+        body: [
+          "同じネットワークなら「LAN直結」になります。ネットワークをまたぐと「P2P直結」か「中継」のどちらかになり、どちらになるかは設定した何かではなく、その2つのネットワーク次第です。",
+          "「中継」は失敗ではありません。フォールバックが存在して機能しているということであり、リレーは終始暗号文しか運びません——この記事の TURN の節が説明している状況を、内側から見たものです。",
+        ],
+      },
       body: [
         "同じネットワーク上の2台で relayium.com を開くと、たいていは自動的に見つけ合います——アカウントもコードも不要、インストールするものも何もありません。これがローカルネットワークのケースで、多くの場合 STUN すら不要です。異なるネットワーク上の相手にインターネット越しに送る場合はペアリングコードを使います。送信者がサインインしてコードを生成する（または QR コードのオプション付きでリンクを共有する）と、相手が参加した時点で、転送は暗号化 TURN リレー経由で行われます——予測しづらい NAT を越える最も確実な経路で、リレーが扱うのは暗号文だけです。受信者はアカウント不要のままです。",
         "リアルタイム経路が開けば、最大1,000ファイルが選択された経路を継続的に流れ、各ファイルを SHA-256 で検証します。Relayium はサーバー側のリアルタイム内容コピーや転送履歴を保持しません。相手がオフラインなら、ゼロ知識の保存リンクという別モードを使います。",
       ],
+    },
+    {
+      heading: "ラベルが思っていたものと違うとき",
+      body: [
+        "初めて見る人が意外に思うのは、たいてい次の3つです。どれも直すべき不具合ではありませんが、どれも名前を言えるようにしておく価値があります。",
+      ],
+      troubleshooting: {
+        label: "見えるもの、確認すること、その意味",
+        items: [
+          {
+            symptom: "ネットワークをまたぐと必ず「中継」で、「P2P直結」にならない。",
+            code: [
+              `https://relayium.com/cross-network   # the path label reads the same on both ends`,
+            ],
+            fix: "両端がモバイル回線か、キャリアグレード NAT の内側にないかを確認してください。直接の経路が見つからない最も一般的な理由です。直すべきものはありません。これは設計どおりのフォールバックで、リレーは暗号文しか運ばず、同じ2台でも同一ネットワーク上なら引き続き直結で、無料のままです。",
+          },
+          {
+            symptom: "同じ Wi-Fi なのに「LAN直結」にならない。",
+            code: [
+              `https://relayium.com/   # both devices on one Wi-Fi, and the path label never says LAN direct`,
+            ],
+            fix: "そのネットワークがクライアント同士を分離していないか確認してください。ゲスト用 Wi-Fi や、多くのホテル・オフィスのネットワークは端末間の通信をそもそも遮断します。そこでは2台は互いをまったく見つけられないため、ローカルでの到達性に依存しないネットワーク越しのペアリングコード方式を使ってください。",
+          },
+          {
+            symptom: "経路ラベルがまったく表示されない。",
+            code: [
+              `https://relayium.com/   # there is no path label until the two ends have connected`,
+            ],
+            fix: "このラベルは接続に名前を付けるものなので、接続が成立して初めて現れます。両端が互いを見つける前は名付ける対象がなく、「そもそも始まらない転送」は「予想外の経路を通った転送」とは別の問題です。",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -338,10 +536,76 @@ const ko = {
     },
     {
       heading: "Relayium이 이를 어떻게 조합하는가",
+      prereqs: {
+        label: "직접 확인하려면 필요한 것",
+        items: [
+          "동시에 화면을 볼 수 있는 기기 두 대 — 노트북과 휴대폰 조합이 가장 좋습니다.",
+          "작은 파일 하나. 여기서 보는 것은 연결이 어느 경로를 탔는지이지 속도가 아닙니다.",
+          "두 대가 같은 Wi-Fi에 있는 시간과, 서로 다른 네트워크에 있는 시간. 휴대폰 Wi-Fi를 끄고 모바일 데이터로 바꾸면 충분합니다.",
+        ],
+      },
+      steps: [
+        {
+          text: "두 기기를 같은 Wi-Fi에 둔 상태로 각각 Relayium을 열고 파일을 보냅니다.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "앱이 연결에 붙인 라벨을 읽으세요. 같은 네트워크라면 「LAN 직접」이라고 나옵니다.",
+        },
+        {
+          text: "이제 두 기기를 서로 다른 네트워크에 두고, 이번에는 페어링 코드로 다시 보냅니다.",
+          code: ["https://relayium.com/cross-network"],
+        },
+        {
+          text: "라벨을 다시 읽으세요. 「P2P 직접」은 인터넷을 가로질러 직접 경로를 찾았다는 뜻이고, 「릴레이」는 찾지 못해 암호화된 릴레이가 바이트를 날랐다는 뜻입니다.",
+        },
+        {
+          text: "어느 쪽이 나왔는지, 그리고 그때 어떤 네트워크 조합이었는지 적어 두세요. 그것이 이 글이 처음에 던진 질문에 대한, 우리가 아닌 스스로의 답입니다.",
+        },
+      ],
+      success: {
+        label: "라벨이 알려 주는 것",
+        body: [
+          "같은 네트워크에서는 「LAN 직접」이 나옵니다. 네트워크를 넘어가면 「P2P 직접」이나 「릴레이」 중 하나가 되고, 어느 쪽인지는 설정한 무엇이 아니라 그 두 네트워크에 달려 있습니다.",
+          "「릴레이」는 실패가 아닙니다. 대비책이 존재하고 제 일을 하고 있다는 뜻이며, 릴레이는 시종일관 암호문만 나릅니다 — 이 글의 TURN 절이 설명하는 상황을 안쪽에서 본 것입니다.",
+        ],
+      },
       body: [
         "같은 네트워크에 있는 두 기기에서 relayium.com을 열면 보통 자동으로 서로를 찾습니다. 계정도, 코드도 필요 없고, 설치할 것도 없습니다. 이것이 LAN 상황이며, 많은 경우 STUN조차 필요하지 않습니다. 다른 네트워크에 있는 사람에게 인터넷 너머로 보낼 때는 페어링 코드를 사용합니다. 발신자가 로그인해서 코드를 생성하면(또는 스캔할 수 있는 QR 코드 옵션과 함께 링크를 공유하면), 상대방이 참여하는 순간 전송은 암호화된 TURN 릴레이를 통해 이뤄집니다. 이는 예측하기 어려운 NAT을 넘는 가장 확실한 경로이며, 릴레이는 암호문만 나릅니다. 수신자는 여전히 계정이 필요 없습니다.",
         "실시간 경로가 열리면 최대 1,000개 파일이 선택된 경로를 따라 계속 흐르고 각 파일을 SHA-256으로 검증합니다. Relayium은 서버 측 실시간 내용 복사본이나 전송 기록을 보관하지 않습니다. 상대가 오프라인이면 영지식 저장 링크라는 별도 모드를 사용합니다.",
       ],
+    },
+    {
+      heading: "라벨이 예상과 다를 때",
+      body: [
+        "처음 들여다보면 대개 세 가지에 놀랍니다. 어느 것도 고쳐야 할 결함은 아니지만, 각각 이름을 댈 수 있으면 좋습니다.",
+      ],
+      troubleshooting: {
+        label: "보이는 것, 확인할 것, 그 의미",
+        items: [
+          {
+            symptom: "네트워크를 넘어가면 항상 「릴레이」이고 「P2P 직접」이 되지 않습니다.",
+            code: [
+              `https://relayium.com/cross-network   # the path label reads the same on both ends`,
+            ],
+            fix: "양쪽이 모두 모바일 데이터이거나 통신사 등급 NAT 뒤에 있는지 확인하세요. 직접 경로가 없는 가장 흔한 이유입니다. 고칠 것은 없습니다. 설계된 대비책이고, 릴레이는 암호문만 나르며, 같은 두 기기라도 같은 네트워크에서는 여전히 직접 연결되고 무료입니다.",
+          },
+          {
+            symptom: "같은 Wi-Fi인데 「LAN 직접」이 나오지 않습니다.",
+            code: [
+              `https://relayium.com/   # both devices on one Wi-Fi, and the path label never says LAN direct`,
+            ],
+            fix: "그 네트워크가 클라이언트를 서로 격리하는지 확인하세요. 게스트 Wi-Fi와 많은 호텔·사무실 네트워크는 기기 간 통신을 아예 막습니다. 거기서는 두 기기가 서로를 전혀 찾지 못하므로, 로컬 도달성에 기대지 않는 네트워크 간 페어링 코드 방식을 쓰세요.",
+          },
+          {
+            symptom: "경로 라벨이 아예 없습니다.",
+            code: [
+              `https://relayium.com/   # there is no path label until the two ends have connected`,
+            ],
+            fix: "이 라벨은 연결에 이름을 붙이는 것이라 연결이 생긴 뒤에야 나타납니다. 양쪽이 서로를 찾기 전에는 이름 붙일 대상이 없고, 「아예 시작되지 않는 전송」은 「예상 밖의 경로를 탄 전송」과는 다른 문제입니다.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -431,10 +695,76 @@ const de = {
     },
     {
       heading: "Wie Relayium das zusammenfügt",
+      prereqs: {
+        label: "Was du brauchst, um das selbst zu prüfen",
+        items: [
+          "Zwei Geräte, die du gleichzeitig im Blick hast — ein Laptop und ein Telefon sind ideal.",
+          "Eine kleine Datei. Es geht hier um den Weg, den die Verbindung nimmt, nicht um Durchsatz.",
+          "Einmal beide im selben WLAN, und einmal in verschiedenen Netzen — beim Telefon das WLAN aus und mobile Daten an reicht schon.",
+        ],
+      },
+      steps: [
+        {
+          text: "Öffne Relayium auf beiden Geräten, solange sie im selben WLAN sind, und schick die Datei.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Lies das Etikett, das die App der Verbindung gibt. In einem Netz steht dort LAN direkt.",
+        },
+        {
+          text: "Bring die beiden Geräte jetzt in verschiedene Netze und schick erneut, diesmal per Pairing-Code.",
+          code: ["https://relayium.com/cross-network"],
+        },
+        {
+          text: "Lies das Etikett wieder. P2P direkt heißt, quer durchs Internet wurde ein direkter Weg gefunden. Über Relay heißt, es gab keinen, und das verschlüsselte Relay hat die Bytes getragen.",
+        },
+        {
+          text: "Halt fest, was du bekommen hast und auf welchem Netzpaar. Das ist deine eigene Antwort auf die Frage vom Anfang dieses Artikels, nicht unsere.",
+        },
+      ],
+      success: {
+        label: "Was die Etiketten dir sagen",
+        body: [
+          "Im selben Netz bekommst du LAN direkt. Netzübergreifend bekommst du entweder P2P direkt oder Über Relay, und welches davon, hängt an den beiden Netzen und nicht an etwas, das du eingestellt hast.",
+          "Über Relay ist kein Fehlschlag. Es heißt, dass der Rückfallweg existiert und tut, wofür er da ist — und das Relay trägt durchgehend nur Chiffretext. Es ist genau der Fall, den der TURN-Abschnitt dieses Artikels beschreibt, von innen gesehen.",
+        ],
+      },
       body: [
         "Öffnen zwei Geräte im selben Netzwerk relayium.com, finden sie sich meist automatisch — kein Konto, kein Code, nichts zu installieren; das ist der LAN-Fall, in dem STUN oft nicht einmal gebraucht wird. Für den Versand über das Internet an jemanden in einem anderen Netzwerk kommt ein Pairing-Code zum Einsatz: Der Absender meldet sich an, erzeugt einen Code (oder teilt einen Link, wahlweise mit QR-Code zum Scannen), und sobald die andere Person beitritt, läuft die Übertragung über ein verschlüsseltes TURN-Relay — der zuverlässige Weg durch unvorhersehbare NATs, und es trägt ausschließlich Chiffretext. Der Empfänger braucht weiterhin kein Konto.",
         "Sobald der Echtzeitpfad steht, streamen bis zu 1.000 Dateien fortlaufend über die gewählte Route, jede per SHA-256 geprüft. Relayium behält keine serverseitige Echtzeit-Inhaltskopie oder Übertragungshistorie. Ist die andere Person offline, ist ein Zero-Knowledge-Speicherlink ein eigener Modus.",
       ],
+    },
+    {
+      heading: "Wenn das Etikett nicht das ist, was du erwartet hast",
+      body: [
+        "Drei Dinge überraschen beim ersten Hinsehen. Keines davon ist ein Fehler, den man beheben müsste, aber jedes lohnt es, benennen zu können.",
+      ],
+      troubleshooting: {
+        label: "Was du siehst, was du prüfst, was es bedeutet",
+        items: [
+          {
+            symptom: "Netzübergreifend steht dort immer Über Relay, nie P2P direkt.",
+            code: [
+              `https://relayium.com/cross-network   # the path label reads the same on both ends`,
+            ],
+            fix: "Prüfe, ob beide Enden über Mobilfunk laufen oder hinter Carrier-Grade-NAT sitzen — der übliche Grund, warum es keinen direkten Weg gibt. Zu beheben ist nichts: das ist der vorgesehene Rückfallweg, das Relay trägt nur Chiffretext, und dieselben zwei Geräte gehen im selben Netz weiterhin direkt und bleiben kostenlos.",
+          },
+          {
+            symptom: "Im selben WLAN steht nie LAN direkt.",
+            code: [
+              `https://relayium.com/   # both devices on one Wi-Fi, and the path label never says LAN direct`,
+            ],
+            fix: "Prüfe, ob das Netz seine Clients voneinander trennt — Gast-WLANs und viele Hotel- und Büronetze blockieren Gerät-zu-Gerät-Verkehr grundsätzlich. Dort sehen sich die beiden Geräte überhaupt nicht, nimm also den netzübergreifenden Pairing-Code-Weg, der nicht davon abhängt, dass sie sich lokal erreichen.",
+          },
+          {
+            symptom: "Es steht überhaupt kein Etikett da.",
+            code: [
+              `https://relayium.com/   # there is no path label until the two ends have connected`,
+            ],
+            fix: "Das Etikett benennt eine Verbindung, es erscheint also, sobald es eine gibt. Bevor die beiden Enden sich gefunden haben, gibt es nichts zu benennen — und eine Übertragung, die nie beginnt, ist ein anderes Problem als eine, die einen unerwarteten Weg genommen hat.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -524,10 +854,76 @@ const fr = {
     },
     {
       heading: "Comment Relayium assemble tout cela",
+      prereqs: {
+        label: "Ce qu'il vous faut pour le vérifier vous-même",
+        items: [
+          "Deux appareils que vous pouvez regarder en même temps — un portable et un téléphone sont l'idéal.",
+          "Un petit fichier. Ce qui compte ici, c'est le chemin que prend la connexion, pas le débit.",
+          "Un moment avec les deux sur le même Wi-Fi, et un moment sur des réseaux différents — couper le Wi-Fi du téléphone pour passer en données mobiles suffit.",
+        ],
+      },
+      steps: [
+        {
+          text: "Les deux appareils sur le même Wi-Fi, ouvrez Relayium sur chacun et envoyez le fichier.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Lisez l'étiquette que l'application donne à la connexion. Sur un même réseau, elle indique LAN direct.",
+        },
+        {
+          text: "Mettez maintenant les deux appareils sur des réseaux différents et renvoyez, cette fois avec un code d'appairage.",
+          code: ["https://relayium.com/cross-network"],
+        },
+        {
+          text: "Relisez l'étiquette. P2P direct signifie qu'un chemin direct a été trouvé à travers Internet. Relais signifie qu'il n'y en avait pas, et que le relais chiffré a transporté les octets.",
+        },
+        {
+          text: "Notez ce que vous avez obtenu, et sur quelle paire de réseaux. C'est votre propre réponse à la question posée en ouverture de cet article, plutôt que la nôtre.",
+        },
+      ],
+      success: {
+        label: "Ce que les étiquettes vous apprennent",
+        body: [
+          "Sur un même réseau, vous obtenez LAN direct. D'un réseau à l'autre, vous obtenez soit P2P direct, soit Relais, et laquelle des deux dépend des deux réseaux et non de quelque chose que vous auriez configuré.",
+          "Relais n'est pas un échec. C'est le repli qui existe et qui fait son travail, et le relais ne transporte jamais que du chiffré — c'est exactement le cas décrit par la section TURN de cet article, vu de l'intérieur.",
+        ],
+      },
       body: [
         "Ouvrez relayium.com sur deux appareils du même réseau et ils se trouvent généralement automatiquement — pas de compte, pas de code, rien à installer ; c'est le cas du réseau local, où STUN n'est souvent même pas nécessaire. Pour envoyer sur Internet vers quelqu'un sur un autre réseau, on utilise un code d'appairage : l'expéditeur se connecte, génère un code (ou partage un lien, avec en option un QR code à scanner), et dès que l'autre personne rejoint, le transfert passe par un relais TURN chiffré — la voie fiable à travers des NAT imprévisibles, et il ne transporte que du texte chiffré ; le destinataire n'a toujours besoin d'aucun compte.",
         "Une fois la voie temps réel ouverte, jusqu'à 1 000 fichiers circulent en continu sur la route choisie, chacun vérifié par SHA-256. Relayium ne conserve aucune copie de contenu ni aucun historique temps réel côté serveur. Si l'autre personne est hors ligne, le lien stocké à divulgation nulle est un mode distinct.",
       ],
+    },
+    {
+      heading: "Quand l'étiquette n'est pas celle attendue",
+      body: [
+        "Trois choses surprennent la première fois. Aucune n'est un défaut à corriger, mais chacune mérite qu'on sache la nommer.",
+      ],
+      troubleshooting: {
+        label: "Ce que vous voyez, ce qu'il faut vérifier, ce que cela signifie",
+        items: [
+          {
+            symptom: "D'un réseau à l'autre, c'est toujours Relais, jamais P2P direct.",
+            code: [
+              `https://relayium.com/cross-network   # the path label reads the same on both ends`,
+            ],
+            fix: "Vérifiez si les deux extrémités sont en données mobiles ou derrière un NAT d'opérateur, la raison habituelle pour laquelle aucun chemin direct n'existe. Il n'y a rien à corriger : c'est le repli prévu, le relais ne transporte que du chiffré, et ces mêmes deux appareils continuent de passer en direct, et gratuitement, sur un même réseau.",
+          },
+          {
+            symptom: "Sur un même Wi-Fi, LAN direct n'apparaît jamais.",
+            code: [
+              `https://relayium.com/   # both devices on one Wi-Fi, and the path label never says LAN direct`,
+            ],
+            fix: "Vérifiez si le réseau isole ses clients : les Wi-Fi invités, ainsi que beaucoup de réseaux d'hôtel et de bureau, bloquent purement et simplement le trafic entre appareils. Là, les deux appareils ne se voient pas du tout ; utilisez donc l'appairage entre réseaux, qui ne dépend pas de leur capacité à se joindre localement.",
+          },
+          {
+            symptom: "Il n'y a aucune étiquette de chemin.",
+            code: [
+              `https://relayium.com/   # there is no path label until the two ends have connected`,
+            ],
+            fix: "L'étiquette nomme une connexion : elle apparaît donc dès qu'il y en a une. Tant que les deux extrémités ne se sont pas trouvées, il n'y a rien à nommer — et un transfert qui ne démarre jamais est un problème différent d'un transfert qui a pris un chemin inattendu.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -617,10 +1013,76 @@ const ar = {
     },
     {
       heading: "كيف يجمع Relayium هذا كله",
+      prereqs: {
+        label: "ما تحتاجه للتحقّق بنفسك",
+        items: [
+          "جهازان تستطيع النظر إلى شاشتيهما في آنٍ واحد — حاسوب محمول وهاتف هما الأنسب.",
+          "ملف صغير واحد. فالمقصود هنا هو المسار الذي يسلكه الاتصال، لا سرعة النقل.",
+          "فترة يكون فيها الجهازان على شبكة Wi-Fi نفسها، وفترة يكونان فيها على شبكتين مختلفتين — ويكفي إطفاء Wi-Fi في الهاتف والانتقال إلى بيانات الجوال.",
+        ],
+      },
+      steps: [
+        {
+          text: "والجهازان على شبكة Wi-Fi نفسها، افتح Relayium على كلٍّ منهما وأرسل الملف.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "اقرأ الوسم الذي يضعه التطبيق على الاتصال. على الشبكة نفسها يكتب «مباشر عبر LAN».",
+        },
+        {
+          text: "والآن ضع الجهازين على شبكتين مختلفتين وأرسل مرة أخرى، هذه المرة برمز اقتران.",
+          code: ["https://relayium.com/cross-network"],
+        },
+        {
+          text: "اقرأ الوسم مجددًا. «مباشر P2P» يعني أنه وُجد مسار مباشر عبر الإنترنت، و«مُرحَّل» يعني أنه لم يوجد، وأن المُرحِّل المشفَّر هو من حمل البايتات.",
+        },
+        {
+          text: "دوّن أيَّهما ظهر لك، وعلى أي زوج من الشبكات. فهذه إجابتك أنت عن السؤال الذي فتح به هذا المقال، لا إجابتنا نحن.",
+        },
+      ],
+      success: {
+        label: "ماذا تخبرك هذه الأوسمة",
+        body: [
+          "على الشبكة نفسها تحصل على «مباشر عبر LAN». وعبر الشبكات تحصل إما على «مباشر P2P» وإما على «مُرحَّل»، وأيُّهما يتحدّد بالشبكتين ذاتيهما لا بشيء ضبطته أنت.",
+          "و«مُرحَّل» ليس فشلًا. بل يعني أن مسار الاحتياط موجود ويؤدّي عمله، وأن المُرحِّل لا يحمل طوال الوقت إلا نصًا مشفَّرًا — وهي بعينها الحالة التي يصفها قسم TURN في هذا المقال، لكن مرئية من الداخل.",
+        ],
+      },
       body: [
         "افتح relayium.com على جهازين على الشبكة نفسها فيعثر كل منهما على الآخر تلقائيًا في العادة — دون حساب ودون رمز ودون أي شيء يُثبَّت؛ تلك هي حالة الشبكة المحلية التي لا يكون STUN فيها ضروريًا غالبًا. أما الإرسال عبر الإنترنت إلى شخص على شبكة مختلفة فيستخدم رمز اقتران: يسجّل المُرسِل الدخول، ويولّد رمزًا (أو يشارك رابطًا، مع رمز QR اختياري للمسح)، وما إن ينضم الشخص الآخر حتى يجري النقل عبر مُرحِّل TURN مشفَّر — وهو المسار الموثوق عبر شبكات NAT التي يصعب التنبؤ بها، ولا يحمل إلا نصًا مُشفَّرًا — ويبقى المُستقبِل بلا حاجة إلى حساب.",
         "عند فتح المسار الفوري، يتدفق ما يصل إلى 1000 ملف باستمرار عبر الطريق المختار ويُفحص كل ملف بـ SHA-256. لا يحتفظ Relayium بنسخة محتوى فورية أو سجل نقل على الخادم. وإذا كان الطرف الآخر غير متصل، فالرابط المُخزّن بمعرفة صفرية وضع منفصل.",
       ],
+    },
+    {
+      heading: "حين لا يكون الوسم كما توقّعت",
+      body: [
+        "ثلاثة أمور تفاجئ الناس أول مرة ينظرون فيها. ولا أحد منها عيب يحتاج إصلاحًا، لكن كلًّا منها يستحق أن تعرف اسمه.",
+      ],
+      troubleshooting: {
+        label: "ما تراه، وما تفحصه، وماذا يعني",
+        items: [
+          {
+            symptom: "عبر الشبكات يظهر دائمًا «مُرحَّل» ولا يظهر «مباشر P2P» أبدًا.",
+            code: [
+              `https://relayium.com/cross-network   # the path label reads the same on both ends`,
+            ],
+            fix: "تحقّق إن كان الطرفان على بيانات الجوال أو خلف NAT على مستوى المشغّل، فهذا السبب المعتاد لغياب أي مسار مباشر. ولا شيء هنا يحتاج إصلاحًا: فهذا هو مسار الاحتياط المقصود، والمُرحِّل لا يحمل إلا نصًا مشفَّرًا، وهذان الجهازان نفساهما يظلان يتصلان مباشرةً ومجانًا على الشبكة نفسها.",
+          },
+          {
+            symptom: "على شبكة Wi-Fi واحدة لا يظهر «مباشر عبر LAN» إطلاقًا.",
+            code: [
+              `https://relayium.com/   # both devices on one Wi-Fi, and the path label never says LAN direct`,
+            ],
+            fix: "تحقّق إن كانت الشبكة تعزل عملاءها — فشبكات Wi-Fi للضيوف، وكثير من شبكات الفنادق والمكاتب، تحجب حركة المرور بين الأجهزة من الأساس. فالجهازان هناك لا يريان بعضهما أبدًا، فاستخدم مسار الاقتران عبر الشبكات الذي لا يعتمد على وصول أحدهما إلى الآخر محليًا.",
+          },
+          {
+            symptom: "لا يوجد أي وسم مسار على الإطلاق.",
+            code: [
+              `https://relayium.com/   # there is no path label until the two ends have connected`,
+            ],
+            fix: "الوسم يسمّي اتصالًا، فهو يظهر متى وُجد اتصال. وقبل أن يعثر الطرفان على بعضهما لا يوجد ما يُسمّى، و«نقل لا يبدأ أصلًا» مشكلة مختلفة عن «نقل سلك مسارًا غير متوقَّع».",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -710,10 +1172,76 @@ const es = {
     },
     {
       heading: "Cómo lo junta todo Relayium",
+      prereqs: {
+        label: "Lo que necesitas para comprobarlo tú mismo",
+        items: [
+          "Dos dispositivos que puedas mirar a la vez: un portátil y un móvil son lo ideal.",
+          "Un archivo pequeño. Aquí lo que importa es qué ruta toma la conexión, no la velocidad.",
+          "Un rato con ambos en el mismo Wi-Fi y otro con cada uno en una red distinta: basta con apagar el Wi-Fi del móvil y pasar a datos.",
+        ],
+      },
+      steps: [
+        {
+          text: "Con los dos dispositivos en el mismo Wi-Fi, abre Relayium en cada uno y envía el archivo.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Lee la etiqueta que la aplicación pone a la conexión. En una misma red dice Directo por LAN.",
+        },
+        {
+          text: "Ahora pon los dos dispositivos en redes distintas y envía otra vez, esta vez con un código de emparejamiento.",
+          code: ["https://relayium.com/cross-network"],
+        },
+        {
+          text: "Vuelve a leer la etiqueta. Directo P2P significa que se encontró una ruta directa a través de internet. Retransmitido significa que no la había y que el retransmisor cifrado llevó los bytes.",
+        },
+        {
+          text: "Anota cuál te salió y con qué par de redes. Esa es tu propia respuesta a la pregunta con la que abría este artículo, y no la nuestra.",
+        },
+      ],
+      success: {
+        label: "Qué te dicen las etiquetas",
+        body: [
+          "En una misma red obtienes Directo por LAN. Entre redes obtienes Directo P2P o Retransmitido, y cuál de las dos depende de esas dos redes y no de nada que hayas configurado.",
+          "Retransmitido no es un fallo. Es el repliegue existiendo y haciendo su trabajo, y el retransmisor no lleva más que texto cifrado: es exactamente el caso que describe la sección de TURN de este artículo, visto desde dentro.",
+        ],
+      },
       body: [
         "Abre relayium.com en dos dispositivos de la misma red y normalmente se encuentran automáticamente — sin cuenta, sin código, nada que instalar; ese es el caso de la red local, donde a menudo ni siquiera hace falta STUN. Para enviar a través de internet a alguien en una red distinta se usa un código de emparejamiento: el remitente inicia sesión, genera un código (o comparte un enlace, con un código QR opcional para escanear) y, en cuanto la otra persona se une, la transferencia va por un retransmisor TURN cifrado: la vía fiable a través de NAT impredecibles, y solo transporta texto cifrado; el destinatario sigue sin necesitar cuenta.",
         "Una vez abierta la vía en tiempo real, hasta 1.000 archivos fluyen continuamente por la ruta elegida y cada uno se verifica con SHA-256. Relayium no conserva copia de contenido ni historial en tiempo real del lado del servidor. Si la otra persona está desconectada, el enlace almacenado de conocimiento cero es un modo separado.",
       ],
+    },
+    {
+      heading: "Cuando la etiqueta no es la que esperabas",
+      body: [
+        "Tres cosas sorprenden la primera vez que uno mira. Ninguna es un defecto que haya que arreglar, pero conviene saber nombrarlas.",
+      ],
+      troubleshooting: {
+        label: "Qué ves, qué comprobar, qué significa",
+        items: [
+          {
+            symptom: "Entre redes siempre pone Retransmitido y nunca Directo P2P.",
+            code: [
+              `https://relayium.com/cross-network   # the path label reads the same on both ends`,
+            ],
+            fix: "Comprueba si ambos extremos van por datos móviles o están tras un NAT de operador, que es el motivo habitual de que no exista ruta directa. No hay nada que arreglar: es el repliegue previsto, el retransmisor solo lleva texto cifrado, y esos mismos dos dispositivos siguen conectando directo y gratis en una misma red.",
+          },
+          {
+            symptom: "En un mismo Wi-Fi nunca pone Directo por LAN.",
+            code: [
+              `https://relayium.com/   # both devices on one Wi-Fi, and the path label never says LAN direct`,
+            ],
+            fix: "Comprueba si la red aísla a sus clientes: los Wi-Fi de invitados, y muchas redes de hotel y de oficina, bloquean sin más el tráfico entre dispositivos. Allí los dos no se ven en absoluto, así que usa el emparejamiento entre redes, que no depende de que se alcancen localmente.",
+          },
+          {
+            symptom: "No aparece ninguna etiqueta de ruta.",
+            code: [
+              `https://relayium.com/   # there is no path label until the two ends have connected`,
+            ],
+            fix: "La etiqueta nombra una conexión, así que aparece en cuanto hay una. Antes de que los dos extremos se hayan encontrado no hay nada que nombrar, y una transferencia que nunca empieza es un problema distinto de una que tomó una ruta inesperada.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -803,10 +1331,76 @@ const pt = {
     },
     {
       heading: "Como o Relayium junta tudo isso",
+      prereqs: {
+        label: "O que você precisa para verificar por conta própria",
+        items: [
+          "Dois aparelhos que dê para olhar ao mesmo tempo — um notebook e um celular são o ideal.",
+          "Um arquivo pequeno. O que importa aqui é o caminho que a conexão toma, não a velocidade.",
+          "Um momento com os dois no mesmo Wi-Fi e outro com cada um numa rede diferente — basta desligar o Wi-Fi do celular e passar para os dados móveis.",
+        ],
+      },
+      steps: [
+        {
+          text: "Com os dois aparelhos no mesmo Wi-Fi, abra o Relayium em cada um e envie o arquivo.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Leia o rótulo que o aplicativo dá à conexão. Numa mesma rede ele diz LAN direto.",
+        },
+        {
+          text: "Agora coloque os dois em redes diferentes e envie de novo, desta vez com um código de emparelhamento.",
+          code: ["https://relayium.com/cross-network"],
+        },
+        {
+          text: "Leia o rótulo outra vez. P2P direto significa que se achou um caminho direto pela internet. Retransmitido significa que não havia e o retransmissor cifrado levou os bytes.",
+        },
+        {
+          text: "Anote qual apareceu e com que par de redes. Essa é a sua própria resposta à pergunta que abriu este texto, e não a nossa.",
+        },
+      ],
+      success: {
+        label: "O que os rótulos contam",
+        body: [
+          "Numa mesma rede você recebe LAN direto. Entre redes você recebe P2P direto ou Retransmitido, e qual dos dois depende dessas duas redes e não de algo que você configurou.",
+          "Retransmitido não é falha. É o plano B existindo e fazendo o serviço dele, e o retransmissor só carrega texto cifrado — é exatamente o caso que a seção sobre TURN deste texto descreve, visto por dentro.",
+        ],
+      },
       body: [
         "Abra relayium.com em dois dispositivos na mesma rede e normalmente eles se encontram automaticamente — sem conta, sem código, nada para instalar; esse é o caso da rede local, em que muitas vezes o STUN nem é necessário. Para enviar pela internet a alguém em outra rede, usa-se um código de emparelhamento: o remetente entra, gera um código (ou compartilha um link, com um código QR opcional para escanear) e, assim que a outra pessoa entra, a transferência corre por um retransmissor TURN criptografado: o caminho confiável através de NATs imprevisíveis, e ele só carrega texto cifrado; o destinatário continua sem precisar de conta.",
         "Uma vez aberto o caminho em tempo real, até 1.000 arquivos fluem continuamente pela rota escolhida e cada um é verificado com SHA-256. O Relayium não mantém cópia de conteúdo nem histórico em tempo real no servidor. Se a outra pessoa estiver offline, o link armazenado de conhecimento zero é um modo separado.",
       ],
+    },
+    {
+      heading: "Quando o rótulo não é o que você esperava",
+      body: [
+        "Três coisas surpreendem na primeira vez que se olha. Nenhuma é um defeito a corrigir, mas vale saber nomear cada uma.",
+      ],
+      troubleshooting: {
+        label: "O que você vê, o que checar, o que significa",
+        items: [
+          {
+            symptom: "Entre redes aparece sempre Retransmitido e nunca P2P direto.",
+            code: [
+              `https://relayium.com/cross-network   # the path label reads the same on both ends`,
+            ],
+            fix: "Cheque se as duas pontas estão em dados móveis ou atrás de NAT de operadora, que é o motivo usual de não existir caminho direto. Não há o que corrigir: é o plano B previsto, o retransmissor só leva texto cifrado, e esses mesmos dois aparelhos continuam conectando direto e de graça numa mesma rede.",
+          },
+          {
+            symptom: "Num mesmo Wi-Fi nunca aparece LAN direto.",
+            code: [
+              `https://relayium.com/   # both devices on one Wi-Fi, and the path label never says LAN direct`,
+            ],
+            fix: "Cheque se a rede isola os clientes — Wi-Fi de visitantes, e muitas redes de hotel e de escritório, bloqueiam de saída o tráfego entre aparelhos. Ali os dois não se enxergam de jeito nenhum, então use o emparelhamento entre redes, que não depende de eles se alcançarem localmente.",
+          },
+          {
+            symptom: "Não aparece rótulo de caminho nenhum.",
+            code: [
+              `https://relayium.com/   # there is no path label until the two ends have connected`,
+            ],
+            fix: "O rótulo nomeia uma conexão, então ele surge assim que existe uma. Antes de as duas pontas se acharem não há o que nomear, e uma transferência que nunca começa é um problema diferente de uma que tomou um caminho inesperado.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -844,6 +1438,6 @@ const pt = {
 export default {
   slug: "guides/what-is-peer-to-peer-file-transfer",
   published: "2026-07-09",
-  updated: "2026-07-31",
+  updated: "2026-08-06",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

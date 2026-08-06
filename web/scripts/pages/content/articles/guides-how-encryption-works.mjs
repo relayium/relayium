@@ -28,6 +28,40 @@ const en = {
     },
     {
       heading: "The 6-digit code that catches a dishonest server",
+      prereqs: {
+        label: "What you need to do this comparison",
+        items: [
+          "Both devices in front of you, or one other person who is at theirs right now.",
+          "A channel that is not this transfer — a phone call, or the room you are both in. Pasting the code into the same chat you are worried about proves nothing.",
+          "Ten seconds. That is the whole cost of the only check that catches a dishonest server.",
+        ],
+      },
+      steps: [
+        {
+          text: "Start a transfer between the two devices and wait for the verification code to appear on each screen.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Read one of them out loud, digit by digit, over the out-of-band channel — not by copying it into the app or into the same chat thread.",
+        },
+        {
+          text: "Compare all six digits. Partial agreement is disagreement.",
+        },
+        {
+          text: "Accept only if they match. If they differ, decline and find out which machine the other person is actually on before trying again.",
+        },
+        {
+          text: "On the CLI, make the comparison blocking rather than optional: --verify stops the transfer at that point and waits for you to confirm, so no bytes move until someone has actually looked.",
+          code: ["relayium send --verify ./report.pdf"],
+        },
+      ],
+      success: {
+        label: "What a matching comparison proves, and what it does not",
+        body: [
+          "Two screens showing the same six digits means the certificate fingerprints the two ends pinned agree, so the rendezvous did not substitute an endpoint or impersonate either side. That is exactly the attack this section is about.",
+          "It authenticates the two endpoints. It does not prove anything about every network hop in between, and it proves nothing at all if nobody compares it — which is why --verify exists.",
+        ],
+      },
       body: [
         "There's a subtlety worth being honest about. WebRTC's own built-in encryption (DTLS) exchanges key fingerprints through the signaling server that introduces the two devices to each other. If that server were dishonest, it could in theory sit in the middle and swap in its own keys — a classic man-in-the-middle attack — without either browser immediately noticing.",
         "Relayium closes that gap with a short verification code. Both devices derive the same 6-digit Short Authentication String (SAS) from their two public keys, and can display it on screen. Showing it and stopping to compare it is advanced verification, which is off by default — so a default transfer shows no code. Everything else described here still runs on every transfer: the fresh keys, the encryption, the commit-then-reveal handshake and the per-chunk authentication. What a default transfer does not get is this check itself — catching a swapped key, or a stranger on the other end, needs advanced verification turned on and the two people actually comparing the code out of band. If the codes match, the public keys weren't swapped: the signaling or relay server did not impersonate either endpoint or terminate the application-layer end-to-end encryption. This does not mean there was no server on the network path — cross-network ciphertext may still travel through TURN by design. But a plain 6-digit code is only about 20 bits, which in principle a well-positioned attacker could try to brute-force into matching after seeing both real keys. To prevent that, Relayium uses a commit-then-reveal handshake: each side first sends a hash committing to its key, and only reveals the real key after receiving the other side's commitment. That ordering means a malicious server has to commit to a fake key blind, before it has seen the real one — it cannot pick a colliding key after the fact, so the short code stays trustworthy.",
@@ -61,6 +95,38 @@ const en = {
         "It's worth spelling out exactly where the server sits in all of this, because \"end-to-end encrypted\" is a claim that's easy to make and harder to make precisely. On the same network in realtime mode, the file itself never touches Relayium's servers at all — it streams directly between the two browsers. The signaling server's job is limited to relaying connection-setup messages (the technical SDP/ICE information WebRTC needs to establish a direct link) so the two devices can find each other; it never sees file contents, filenames, or keys.",
         "Across networks — where restrictive NATs and firewalls often rule out a direct path — the encrypted stream runs over a TURN relay server. The relay only ever forwards ciphertext; it has no key and cannot decrypt what passes through it. What it does do is count the bytes it relays against the sending account's monthly relay allowance, purely for metering and abuse prevention — never inspecting what's inside.",
       ],
+    },
+    {
+      heading: "When the comparison goes wrong",
+      body: [
+        "Three outcomes, and only the first is an emergency. Knowing which one you are looking at is most of the value.",
+      ],
+      troubleshooting: {
+        label: "What you see, what to check, what it means",
+        items: [
+          {
+            symptom: "The two screens show different codes.",
+            code: [
+              `https://relayium.com/   # the two screens show different verification codes`,
+            ],
+            fix: "Stop and do not send the file. Differing codes mean the two ends pinned different certificate fingerprints, so the far end is not the machine you think it is. Confirm out of band which device the other person is on, then start over. Re-running with --verify makes the transfer wait at that comparison instead of leaving it to your attention.",
+          },
+          {
+            symptom: "No verification code has appeared.",
+            code: [
+              `https://relayium.com/   # no verification code on screen yet`,
+            ],
+            fix: "The code is derived from a connection, so it exists once the two ends have connected. Before that there is nothing to compare, and a transfer that never connects is a different problem from one whose codes disagree.",
+          },
+          {
+            symptom: "You compared the codes by pasting one into the chat you are already using.",
+            code: [
+              `relayium send --verify ./report.pdf   # holds the transfer at the comparison`,
+            ],
+            fix: "That does not test what you wanted to test. If that channel is the thing you are worried about, an attacker who can change the transfer can change the pasted code too. Read it aloud, or use a channel with a different failure mode than the one you are checking.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -119,6 +185,40 @@ const zh = {
     },
     {
       heading: "识破不诚实服务器的六位校验码",
+      prereqs: {
+        label: "要做这次比对，你需要什么",
+        items: [
+          "两台设备都在你面前，或者对方此刻正坐在他那台前面。",
+          "一条不属于这次传输的通道——一通电话，或者你们同处的房间。把校验码粘进你正担心的那个聊天里，什么也证明不了。",
+          "十秒钟。这就是唯一能抓住不诚实服务器的那道检查的全部成本。",
+        ],
+      },
+      steps: [
+        {
+          text: "在两台设备之间发起一次传输，等两边屏幕上都出现校验码。",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "通过带外通道把其中一个逐位念出来——不要复制进应用里，也不要发进同一个聊天串。",
+        },
+        {
+          text: "六位全部比对。只对上一部分，就等于没对上。",
+        },
+        {
+          text: "只有完全一致才接受。如果不一致，拒绝，并先弄清楚对方到底在哪台机器上，再重试。",
+        },
+        {
+          text: "在 CLI 上把这次比对从可选改成阻塞：--verify 会让传输停在这一步等你确认，在有人真的看过之前，一个字节都不会动。",
+          code: ["relayium send --verify ./report.pdf"],
+        },
+      ],
+      success: {
+        label: "比对一致证明了什么、又没证明什么",
+        body: [
+          "两块屏幕显示同样的六位数字，说明两端各自钉住的证书指纹是一致的，也就意味着会合服务器没有替换端点、没有冒充任何一方。这正是本节所讲的那种攻击。",
+          "它认证的是两个端点。它不能证明中间每一跳网络的任何事情，而且如果没有人真的去比对，它什么都证明不了——这正是 --verify 存在的理由。",
+        ],
+      },
       body: [
         "这里有个值得坦白说明的细微之处。WebRTC 自带的加密（DTLS）会通过负责撮合两台设备的信令服务器交换密钥指纹。如果这个服务器不诚实，理论上它可以居中调包成自己的密钥——一次经典的中间人攻击——而两端浏览器不会立刻察觉。",
         "Relayium 用一段简短的校验码堵上这个缺口。两台设备都从各自的公钥推导出同一段 6 位短校验码（SAS），并可以把它显示在屏幕上。是否显示、是否停下来核对属于「高级验证」，默认关闭——所以默认的传输并不会显示任何校验码。这里描述的其余部分对每一次传输都照常生效：每次新生成的密钥、加密、「先承诺后揭示」握手，以及逐块的认证。默认传输缺少的正是这道核对本身——要发现密钥被调包，或者对面根本是陌生人，需要打开高级验证，并且两个人真的通过其他渠道核对这段码。如果两边的码一致，说明公钥没有被调包：信令服务器或中继服务器没有冒充任一端点，也没有终止应用层端到端加密。这并不意味着传输路径上没有服务器——跨网络传输的密文仍可能按设计经过 TURN。一段普通的 6 位数字码只有约 20 比特，一个位置合适的攻击者理论上可以在看到双方真实密钥后暴力凑出一个匹配的码。为防止这一点，Relayium 采用「先承诺后揭示」的握手方式：双方先各自发送一段对自己密钥的哈希承诺，收到对方的承诺之后才揭示真正的密钥。这个顺序意味着恶意服务器必须在还没见到真实密钥的情况下盲目地承诺一个伪造密钥——它无法事后再挑一个能撞上的密钥，短校验码因此依然可信。",
@@ -152,6 +252,38 @@ const zh = {
         "有必要把服务器在其中扮演的角色说清楚，因为「端到端加密」这句话说起来容易，说准确却没那么简单。在同一网络的实时模式下，文件本身完全不经过 Relayium 的服务器——它直接在两端浏览器之间流动。信令服务器的职责仅限于转发建立连接所需的消息（WebRTC 建立直连所需的 SDP/ICE 技术信息），帮两台设备互相找到对方；它从不看到文件内容、文件名或密钥。",
         "跨网络传输的加密数据流经 TURN 中继服务器转发——在受限的 NAT 或防火墙之后，直连往往根本无从建立。中继只转发密文；它没有密钥，无法解密经过它的任何内容。它会做的是把中继的字节数计入发送方账号的每月中继额度，纯粹用于计量和防止滥用——从不检查里面的内容。",
       ],
+    },
+    {
+      heading: "当比对出问题时",
+      body: [
+        "三种结果，只有第一种是紧急情况。能分清自己正面对哪一种，就已经拿到了大半价值。",
+      ],
+      troubleshooting: {
+        label: "你看到什么、检查什么、它意味着什么",
+        items: [
+          {
+            symptom: "两块屏幕显示的校验码不同。",
+            code: [
+              `https://relayium.com/   # the two screens show different verification codes`,
+            ],
+            fix: "停下，不要发这个文件。校验码不同意味着两端钉住的证书指纹不一致，也就是说对面那台并不是你以为的机器。先带外确认对方在哪台设备上，然后重新开始。再跑一次时加上 --verify，传输会停在那次比对上等你，而不是把它交给你的注意力。",
+          },
+          {
+            symptom: "一直没有出现校验码。",
+            code: [
+              `https://relayium.com/   # no verification code on screen yet`,
+            ],
+            fix: "校验码是从一条连接推导出来的，所以它在两端连上之后才存在。在那之前没有什么可比，而「始终连不上」和「两边校验码不一致」是两个不同的问题。",
+          },
+          {
+            symptom: "你把其中一个校验码粘进了你们正在用的那个聊天里来做比对。",
+            code: [
+              `relayium send --verify ./report.pdf   # holds the transfer at the comparison`,
+            ],
+            fix: "这样并没有检验到你想检验的东西。如果你担心的正是那条通道，那么能改动传输的攻击者同样能改动被粘进去的那个码。请念出来，或者换一条与你正在核查的那条失效方式不同的通道。",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -210,6 +342,40 @@ const ja = {
     },
     {
       heading: "不正なサーバーを見破る6桁のコード",
+      prereqs: {
+        label: "この照合に必要なもの",
+        items: [
+          "2台とも目の前にあること。あるいは、いま自分の端末の前にいる相手がいること。",
+          "この転送とは別の経路——電話、あるいは同じ部屋にいること。心配している当のチャットにコードを貼り付けても、何の証明にもなりません。",
+          "10秒。不誠実なサーバーを捕まえられる唯一の確認にかかる費用は、それだけです。",
+        ],
+      },
+      steps: [
+        {
+          text: "2台のあいだで転送を開始し、それぞれの画面に検証コードが出るまで待ちます。",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "どちらか一方を、帯域外の経路で1桁ずつ読み上げます。アプリにコピーしたり、同じチャットに流したりしないでください。",
+        },
+        {
+          text: "6桁すべてを照合します。一部だけ一致しているのは、一致していないのと同じです。",
+        },
+        {
+          text: "一致したときだけ受け入れます。食い違うなら拒否し、相手が実際にどの端末にいるのかを確かめてからやり直してください。",
+        },
+        {
+          text: "CLI では、この照合を任意ではなくブロッキングにできます。--verify はその時点で転送を止めて確認を待つので、誰かが実際に見るまで1バイトも動きません。",
+          code: ["relayium send --verify ./report.pdf"],
+        },
+      ],
+      success: {
+        label: "一致した照合が証明すること、しないこと",
+        body: [
+          "2つの画面に同じ6桁が出るということは、両端がピン留めした証明書のフィンガープリントが一致しているということであり、ランデブーが端点をすり替えたり、どちらかになりすましたりしていないことを意味します。まさにこの節が扱っている攻撃です。",
+          "これが認証するのは2つの端点です。あいだのネットワークの各ホップについては何も証明せず、そして誰も照合しなければ何ひとつ証明しません——だからこそ --verify があります。",
+        ],
+      },
       body: [
         "ここには正直に触れておくべき細部があります。WebRTC 標準の暗号化（DTLS）は、2台のデバイスを引き合わせるシグナリングサーバー経由で鍵のフィンガープリントを交換します。もしそのサーバーが不正であれば、理論上は中間に入って自分の鍵にすり替えることができます——典型的な中間者攻撃で、しかもどちらのブラウザもすぐには気づきません。",
         "Relayium はこの隙を短い検証コードで塞ぎます。両方のデバイスは双方の公開鍵から同じ6桁の Short Authentication String（SAS）を導出し、画面に表示できます。表示して照合のために止まるかどうかは「高度な検証」で、既定はオフです——つまり既定の転送ではコードは表示されません。ここで説明しているそれ以外の仕組み（毎回新しい鍵、暗号化、コミット後開示ハンドシェイク、チャンクごとの認証）は、どの転送でもそのまま働きます。既定の転送に欠けているのはこの照合そのものです——鍵のすり替えや、相手が意図した人物でないことを検知するには、高度な検証をオンにしたうえで、二人が実際に別の手段でコードを読み合わせる必要があります。2つのコードが一致すれば公開鍵はすり替えられておらず、シグナリングサーバーやリレーサーバーがどちらかのエンドポイントになりすましたり、アプリケーション層のエンドツーエンド暗号化を終端したりしていないことを確認できます。これはネットワーク経路上にサーバーが存在しないという意味ではありません——ネットワークをまたぐ暗号文は設計どおり TURN を通ることがあります。しかし単純な6桁のコードは約20ビットしかなく、原理的には双方の本物の鍵を見た攻撃者が一致するコードを総当たりで作り出そうとする余地があります。それを防ぐため、Relayium はコミット後開示ハンドシェイクを使います。各側はまず自分の鍵に対するハッシュを送ってコミットし、相手のコミットメントを受け取ってから初めて本物の鍵を開示します。この順序によって、悪意あるサーバーは本物の鍵を見る前に盲目的に偽の鍵をコミットせざるを得ず、後から衝突する鍵を選ぶことはできません。だから短いコードは信頼できるままなのです。",
@@ -243,6 +409,38 @@ const ja = {
         "サーバーがこの仕組みのどこに位置しているのかを正確に説明しておく価値があります。「エンドツーエンドで暗号化されている」という主張は口にするのは簡単でも、正確に言うのは意外と難しいからです。同一ネットワークでのリアルタイムモードでは、ファイル自体は Relayium のサーバーに一切触れません——2台のブラウザ間を直接ストリーミングされます。シグナリングサーバーの役割は、接続確立のためのメッセージ（WebRTC が直接リンクを確立するのに必要な SDP/ICE の技術情報）を中継し、2台のデバイスが互いを見つけられるようにすることに限られます。ファイルの内容やファイル名、鍵を目にすることは一切ありません。",
         "ネットワークをまたぐ転送では——制限の厳しい NAT やファイアウォールの内側では直接経路が成立しないことが多いため——暗号化ストリームは TURN リレーサーバーを経由します。リレーが転送するのは暗号文だけです。鍵を持たないため、そこを通過する内容を復号することはできません。リレーが行うのは、送信側アカウントの月間リレー割り当てに対してリレーしたバイト数を数えることだけで、それは純粋に計量と不正利用防止のためであり、中身を検査することは決してありません。",
       ],
+    },
+    {
+      heading: "照合がうまくいかないとき",
+      body: [
+        "結果は3通りで、緊急なのは最初の1つだけです。自分がどれを見ているのかを見分けられること自体に、価値の大半があります。",
+      ],
+      troubleshooting: {
+        label: "見えるもの、確認すること、その意味",
+        items: [
+          {
+            symptom: "2つの画面で検証コードが違う。",
+            code: [
+              `https://relayium.com/   # the two screens show different verification codes`,
+            ],
+            fix: "そこで止めて、ファイルを送らないでください。コードが違うということは、両端がピン留めした証明書のフィンガープリントが食い違っているということで、向こう側は思っている端末ではありません。相手がどの端末にいるかを帯域外で確認してから、やり直してください。--verify を付けて実行し直せば、転送はその照合の手前で待ち、注意力任せになりません。",
+          },
+          {
+            symptom: "検証コードがまだ表示されない。",
+            code: [
+              `https://relayium.com/   # no verification code on screen yet`,
+            ],
+            fix: "コードは接続から導かれるので、両端がつながって初めて存在します。それまでは照合するものがなく、「そもそもつながらない」は「コードが食い違う」とは別の問題です。",
+          },
+          {
+            symptom: "すでに使っているチャットにコードを貼って照合した。",
+            code: [
+              `relayium send --verify ./report.pdf   # holds the transfer at the comparison`,
+            ],
+            fix: "それでは確かめたかったことを確かめられていません。心配しているのがその経路そのものなら、転送を変えられる攻撃者は貼り付けられたコードも変えられます。声に出して読むか、いま点検している経路とは壊れ方の異なる経路を使ってください。",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -301,6 +499,40 @@ const ko = {
     },
     {
       heading: "부정직한 서버를 잡아내는 6자리 코드",
+      prereqs: {
+        label: "이 대조를 하려면 필요한 것",
+        items: [
+          "두 기기가 모두 눈앞에 있거나, 지금 자기 기기 앞에 있는 상대가 있을 것.",
+          "이 전송이 아닌 다른 경로 — 전화 통화, 또는 함께 있는 그 방. 걱정하고 있는 바로 그 대화창에 코드를 붙여 넣는 것은 아무것도 증명하지 못합니다.",
+          "10초. 정직하지 않은 서버를 잡아내는 유일한 확인의 비용 전부가 그것입니다.",
+        ],
+      },
+      steps: [
+        {
+          text: "두 기기 사이에 전송을 시작하고 각 화면에 검증 코드가 뜰 때까지 기다리세요.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "둘 중 하나를 대역 외 경로로 한 자리씩 소리 내어 읽으세요. 앱에 복사하거나 같은 대화창에 올리지 마세요.",
+        },
+        {
+          text: "여섯 자리를 모두 대조하세요. 일부만 맞는 것은 틀린 것입니다.",
+        },
+        {
+          text: "일치할 때만 수락하세요. 다르면 거절하고, 상대가 실제로 어느 기기에 있는지 확인한 뒤에 다시 시도하세요.",
+        },
+        {
+          text: "CLI에서는 이 대조를 선택이 아니라 차단으로 바꿀 수 있습니다. --verify는 그 지점에서 전송을 멈추고 확인을 기다리므로, 누군가 실제로 볼 때까지 단 1바이트도 움직이지 않습니다.",
+          code: ["relayium send --verify ./report.pdf"],
+        },
+      ],
+      success: {
+        label: "일치한 대조가 증명하는 것과 하지 못하는 것",
+        body: [
+          "두 화면에 같은 여섯 자리가 뜬다는 것은 양쪽이 고정한 인증서 지문이 서로 맞는다는 뜻이고, 곧 랑데부가 종단을 바꿔치기하거나 어느 한쪽을 사칭하지 않았다는 뜻입니다. 이 절이 다루는 공격이 바로 그것입니다.",
+          "이것이 인증하는 것은 두 종단입니다. 그 사이 네트워크의 모든 구간에 대해서는 아무것도 증명하지 않으며, 아무도 대조하지 않으면 아무것도 증명하지 못합니다 — --verify가 있는 이유입니다.",
+        ],
+      },
       body: [
         "여기서 솔직히 짚고 넘어갈 부분이 있습니다. WebRTC 자체 내장 암호화(DTLS)는 두 기기를 소개해주는 시그널링 서버를 통해 키 지문을 교환합니다. 만약 그 서버가 부정직하다면, 이론적으로는 중간에 끼어들어 자신의 키로 바꿔치기할 수 있습니다——고전적인 중간자 공격이며, 양쪽 브라우저 모두 즉시 알아차리지 못할 수 있습니다.",
         "Relayium은 짧은 검증 코드로 이 틈을 막습니다. 두 기기는 각자의 공개 키에서 동일한 6자리 Short Authentication String(SAS)을 도출해 화면에 표시할 수 있습니다. 이를 표시하고 대조를 위해 멈출지는 «고급 검증»이며 기본값은 꺼짐입니다 — 즉 기본 전송에서는 코드가 표시되지 않습니다. 여기에서 설명하는 나머지, 곧 매번 새로 만드는 키와 암호화, 커밋 후 공개 핸드셰이크, 청크마다의 인증은 모든 전송에 그대로 적용됩니다. 기본 전송에 없는 것은 이 대조 자체입니다 — 키가 바뀌었는지, 상대가 의도한 사람이 아닌지 알아내려면 고급 검증을 켜고 두 사람이 실제로 다른 경로로 코드를 맞춰 봐야 합니다. 두 코드가 일치하면 공개 키가 바뀌지 않았으며, 시그널링 서버나 릴레이 서버가 어느 엔드포인트도 사칭하지 않았고 애플리케이션 계층의 종단 간 암호화를 종료하지 않았다는 뜻입니다. 이는 네트워크 경로에 서버가 없다는 뜻이 아닙니다——네트워크 간 암호문은 설계상 여전히 TURN을 통과할 수 있습니다. 하지만 단순한 6자리 코드는 약 20비트에 불과해서, 원칙적으로는 유리한 위치에 있는 공격자가 양쪽의 진짜 키를 본 뒤 일치하는 코드를 무차별 대입으로 만들어낼 여지가 있습니다. 이를 막기 위해 Relayium은 커밋 후 공개 핸드셰이크를 사용합니다. 각 측은 먼저 자신의 키에 대한 해시를 보내 커밋하고, 상대방의 커밋을 받은 후에야 진짜 키를 공개합니다. 이 순서 덕분에 악의적인 서버는 진짜 키를 보기도 전에 눈을 감은 채 가짜 키를 커밋해야 하며, 나중에 충돌하는 키를 고를 수 없습니다. 그래서 짧은 코드가 계속 신뢰할 수 있는 상태로 남는 것입니다.",
@@ -334,6 +566,38 @@ const ko = {
         "서버가 이 모든 과정에서 정확히 어디에 위치하는지 짚어볼 가치가 있습니다. \"종단간 암호화\"라는 말은 하기는 쉬워도 정확히 말하기는 어렵기 때문입니다. 같은 네트워크의 실시간 모드에서는 파일 자체가 Relayium의 서버를 전혀 거치지 않습니다——두 브라우저 사이에서 직접 스트리밍됩니다. 시그널링 서버의 역할은 연결 설정 메시지(WebRTC가 직접 연결을 맺는 데 필요한 SDP/ICE 기술 정보)를 중계해 두 기기가 서로를 찾도록 돕는 데 국한됩니다. 파일 내용이나 파일 이름, 키를 보는 일은 전혀 없습니다.",
         "네트워크를 넘는 전송에서는——제한적인 NAT나 방화벽 뒤에서는 직접 경로가 열리지 않는 경우가 많기 때문에——암호화된 스트림이 TURN 릴레이 서버를 거칩니다. 릴레이 서버는 오직 암호문만 전달합니다. 키가 없으므로 그것을 통과하는 내용을 복호화할 수 없습니다. 릴레이 서버가 하는 일은 발신 계정의 월간 릴레이 허용량에 대해 릴레이한 바이트 수를 세는 것뿐이며, 이는 순전히 계량과 남용 방지를 위한 것으로, 내용을 검사하는 일은 결코 없습니다.",
       ],
+    },
+    {
+      heading: "대조가 어긋날 때",
+      body: [
+        "결과는 세 가지이고, 급한 것은 첫 번째뿐입니다. 지금 보고 있는 것이 어느 쪽인지 아는 것만으로 대부분의 값어치를 얻습니다.",
+      ],
+      troubleshooting: {
+        label: "보이는 것, 확인할 것, 그 의미",
+        items: [
+          {
+            symptom: "두 화면의 검증 코드가 다릅니다.",
+            code: [
+              `https://relayium.com/   # the two screens show different verification codes`,
+            ],
+            fix: "멈추고 파일을 보내지 마세요. 코드가 다르다는 것은 양쪽이 고정한 인증서 지문이 어긋난다는 뜻이고, 저쪽은 생각한 그 기기가 아닙니다. 상대가 어느 기기에 있는지 대역 외로 확인한 다음 다시 시작하세요. --verify를 붙여 다시 실행하면 전송이 그 대조 앞에서 기다리므로, 주의력에 맡기지 않아도 됩니다.",
+          },
+          {
+            symptom: "검증 코드가 아직 나타나지 않았습니다.",
+            code: [
+              `https://relayium.com/   # no verification code on screen yet`,
+            ],
+            fix: "코드는 연결에서 유도되므로 양쪽이 연결된 뒤에야 존재합니다. 그 전에는 대조할 것이 없고, 「아예 연결되지 않는다」는 「코드가 어긋난다」와 다른 문제입니다.",
+          },
+          {
+            symptom: "이미 쓰고 있던 대화창에 코드를 붙여 넣어 대조했습니다.",
+            code: [
+              `relayium send --verify ./report.pdf   # holds the transfer at the comparison`,
+            ],
+            fix: "그렇게 하면 확인하려던 것을 확인하지 못합니다. 걱정하는 대상이 바로 그 경로라면, 전송을 바꿀 수 있는 공격자는 붙여 넣은 코드도 바꿀 수 있습니다. 소리 내어 읽거나, 지금 점검 중인 경로와 고장 방식이 다른 경로를 쓰세요.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -392,6 +656,40 @@ const de = {
     },
     {
       heading: "Der sechsstellige Code, der einen unehrlichen Server entlarvt",
+      prereqs: {
+        label: "Was du für diesen Vergleich brauchst",
+        items: [
+          "Beide Geräte vor dir — oder eine andere Person, die gerade an ihrem sitzt.",
+          "Einen Kanal, der nicht diese Übertragung ist: ein Telefonat, oder der Raum, in dem ihr beide seid. Den Code in genau den Chat zu kopieren, um den du dir Sorgen machst, beweist nichts.",
+          "Zehn Sekunden. Das ist der gesamte Preis der einzigen Prüfung, die einen unehrlichen Server auffliegen lässt.",
+        ],
+      },
+      steps: [
+        {
+          text: "Starte eine Übertragung zwischen den beiden Geräten und warte, bis auf jedem Bildschirm ein Verifizierungscode steht.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Lies einen davon Ziffer für Ziffer über den Nebenkanal vor — nicht in die App kopieren und nicht in denselben Chat-Verlauf.",
+        },
+        {
+          text: "Vergleiche alle sechs Ziffern. Teilweise Übereinstimmung ist keine Übereinstimmung.",
+        },
+        {
+          text: "Nimm nur an, wenn sie gleich sind. Weichen sie ab, lehn ab und kläre erst, an welchem Rechner die andere Person wirklich sitzt.",
+        },
+        {
+          text: "Auf der CLI machst du den Vergleich verbindlich statt optional: --verify hält die Übertragung genau dort an und wartet auf deine Bestätigung, es bewegt sich also kein Byte, bevor jemand wirklich hingesehen hat.",
+          code: ["relayium send --verify ./report.pdf"],
+        },
+      ],
+      success: {
+        label: "Was ein übereinstimmender Vergleich beweist — und was nicht",
+        body: [
+          "Zwei Bildschirme mit denselben sechs Ziffern heißen, dass die von beiden Enden gepinnten Zertifikat-Fingerprints übereinstimmen — der Rendezvous hat also keine Gegenstelle ausgetauscht und keine Seite imitiert. Genau darum geht es in diesem Abschnitt.",
+          "Er authentifiziert die beiden Endpunkte. Über jeden Netzwerk-Hop dazwischen sagt er nichts, und wenn ihn niemand vergleicht, sagt er überhaupt nichts — dafür gibt es --verify.",
+        ],
+      },
       body: [
         "Hier gibt es eine Feinheit, die man offen ansprechen sollte. Die in WebRTC eingebaute Verschlüsselung (DTLS) tauscht Schlüssel-Fingerabdrücke über den Signalisierungsserver aus, der die beiden Geräte einander vorstellt. Wäre dieser Server unehrlich, könnte er sich theoretisch dazwischenschalten und eigene Schlüssel unterschieben — ein klassischer Man-in-the-Middle-Angriff, den keiner der beiden Browser sofort bemerken würde.",
         "Relayium schließt diese Lücke mit einem kurzen Verifizierungscode. Beide Geräte leiten aus ihren beiden öffentlichen Schlüsseln denselben sechsstelligen Short Authentication String (SAS) ab und können ihn auf dem Bildschirm anzeigen. Ob er angezeigt und für den Vergleich angehalten wird, ist die „erweiterte Verifizierung“ und standardmäßig aus — eine Standardübertragung zeigt also keinen Code. Alles andere hier Beschriebene läuft bei jeder Übertragung unverändert weiter: die frischen Schlüssel, die Verschlüsselung, der Commit-dann-Offenlegen-Handshake und die Authentifizierung jedes Chunks. Was einer Standardübertragung fehlt, ist genau diese Prüfung — einen ausgetauschten Schlüssel oder eine fremde Gegenstelle erkennt man nur mit eingeschalteter erweiterter Verifizierung und wenn beide Personen den Code tatsächlich über einen anderen Kanal vergleichen. Stimmen die Codes überein, wurden die öffentlichen Schlüssel nicht ausgetauscht: Der Signalisierungs- oder Relay-Server hat sich weder als einer der Endpunkte ausgegeben noch die Ende-zu-Ende-Verschlüsselung auf Anwendungsebene beendet. Das bedeutet nicht, dass sich kein Server im Netzwerkpfad befand — netzwerkübergreifender Geheimtext kann weiterhin planmäßig über TURN laufen. Ein einfacher sechsstelliger Code hat jedoch nur etwa 20 Bit, was ein gut positionierter Angreifer im Prinzip per Brute Force zu einem passenden Code verarbeiten könnte, nachdem er beide echten Schlüssel gesehen hat. Um das zu verhindern, nutzt Relayium einen Commit-dann-Offenlegen-Handshake: Jede Seite sendet zunächst einen Hash, der sich auf ihren Schlüssel festlegt, und gibt den echten Schlüssel erst preis, nachdem sie die Festlegung der Gegenseite erhalten hat. Diese Reihenfolge zwingt einen bösartigen Server dazu, sich blind — bevor er den echten Schlüssel gesehen hat — auf einen gefälschten Schlüssel festzulegen; er kann also nicht nachträglich einen kollidierenden Schlüssel wählen, weshalb der kurze Code vertrauenswürdig bleibt.",
@@ -425,6 +723,38 @@ const de = {
         "Es lohnt sich, genau zu benennen, wo der Server bei alldem steht, denn „Ende-zu-Ende verschlüsselt“ ist eine Behauptung, die sich leicht aufstellen, aber schwerer präzise belegen lässt. Im Echtzeitmodus im selben Netzwerk berührt die Datei selbst Relayiums Server überhaupt nicht — sie wird direkt zwischen den beiden Browsern gestreamt. Die Aufgabe des Signalisierungsservers beschränkt sich darauf, Nachrichten zum Verbindungsaufbau weiterzuleiten (die technischen SDP/ICE-Informationen, die WebRTC benötigt, um eine direkte Verbindung herzustellen), damit sich die beiden Geräte finden können; er sieht nie Dateiinhalte, Dateinamen oder Schlüssel.",
         "Netzübergreifend — wo restriktive NATs oder Firewalls einen direkten Pfad ohnehin oft ausschließen — läuft der verschlüsselte Datenstrom über einen TURN-Relay-Server. Das Relay leitet ausschließlich Chiffretext weiter; es besitzt keinen Schlüssel und kann nicht entschlüsseln, was es durchleitet. Was es tut, ist die Anzahl der weitergeleiteten Bytes gegen das monatliche Weiterleitungskontingent des sendenden Kontos zu zählen, rein zur Abrechnung und Missbrauchsprävention — der Inhalt wird dabei nie eingesehen.",
       ],
+    },
+    {
+      heading: "Wenn der Vergleich schiefgeht",
+      body: [
+        "Drei Ausgänge, und nur der erste ist ein Notfall. Zu erkennen, welchen du vor dir hast, ist schon der größte Teil des Nutzens.",
+      ],
+      troubleshooting: {
+        label: "Was du siehst, was du prüfst, was es bedeutet",
+        items: [
+          {
+            symptom: "Die beiden Bildschirme zeigen unterschiedliche Codes.",
+            code: [
+              `https://relayium.com/   # the two screens show different verification codes`,
+            ],
+            fix: "Hör auf und schick die Datei nicht. Unterschiedliche Codes heißen, dass die beiden Enden verschiedene Zertifikat-Fingerprints gepinnt haben — die Gegenstelle ist also nicht der Rechner, für den du sie hältst. Kläre über einen Nebenkanal, an welchem Gerät die andere Person sitzt, und fang neu an. Ein erneuter Lauf mit --verify lässt die Übertragung an diesem Vergleich warten, statt ihn deiner Aufmerksamkeit zu überlassen.",
+          },
+          {
+            symptom: "Es ist noch kein Verifizierungscode erschienen.",
+            code: [
+              `https://relayium.com/   # no verification code on screen yet`,
+            ],
+            fix: "Der Code wird aus einer Verbindung abgeleitet, er existiert also, sobald die beiden Enden verbunden sind. Vorher gibt es nichts zu vergleichen, und eine Übertragung, die nie zustande kommt, ist ein anderes Problem als eine mit abweichenden Codes.",
+          },
+          {
+            symptom: "Du hast die Codes verglichen, indem du einen in den ohnehin benutzten Chat kopiert hast.",
+            code: [
+              `relayium send --verify ./report.pdf   # holds the transfer at the comparison`,
+            ],
+            fix: "Damit prüfst du nicht, was du prüfen wolltest. Wenn genau dieser Kanal deine Sorge ist, kann ein Angreifer, der die Übertragung verändern kann, auch den hineinkopierten Code verändern. Lies ihn vor, oder nimm einen Kanal, der anders ausfällt als der, den du gerade überprüfst.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -483,6 +813,40 @@ const fr = {
     },
     {
       heading: "Le code à 6 chiffres qui démasque un serveur malhonnête",
+      prereqs: {
+        label: "Ce qu'il vous faut pour cette comparaison",
+        items: [
+          "Les deux appareils devant vous, ou une autre personne qui est devant le sien en ce moment.",
+          "Un canal qui n'est pas ce transfert : un appel, ou la pièce où vous êtes tous les deux. Coller le code dans la conversation même qui vous inquiète ne prouve rien.",
+          "Dix secondes. C'est tout le coût de la seule vérification capable de démasquer un serveur malhonnête.",
+        ],
+      },
+      steps: [
+        {
+          text: "Lancez un transfert entre les deux appareils et attendez qu'un code de vérification s'affiche sur chaque écran.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Lisez l'un d'eux à voix haute, chiffre par chiffre, par le canal hors bande — sans le copier dans l'application ni dans le même fil de discussion.",
+        },
+        {
+          text: "Comparez les six chiffres. Une correspondance partielle est une divergence.",
+        },
+        {
+          text: "N'acceptez que s'ils sont identiques. S'ils diffèrent, refusez et déterminez sur quelle machine se trouve réellement l'autre personne avant de recommencer.",
+        },
+        {
+          text: "En ligne de commande, rendez la comparaison bloquante plutôt qu'optionnelle : --verify arrête le transfert à cet endroit et attend votre confirmation, si bien qu'aucun octet ne bouge tant que personne n'a réellement regardé.",
+          code: ["relayium send --verify ./report.pdf"],
+        },
+      ],
+      success: {
+        label: "Ce qu'une comparaison concordante prouve, et ce qu'elle ne prouve pas",
+        body: [
+          "Deux écrans affichant les mêmes six chiffres signifient que les empreintes de certificat épinglées par les deux extrémités concordent : le rendez-vous n'a donc pas substitué d'extrémité ni usurpé l'identité de l'une des deux. C'est exactement l'attaque dont parle cette section.",
+          "Cela authentifie les deux extrémités. Cela ne prouve rien sur chaque saut réseau intermédiaire, et cela ne prouve rien du tout si personne ne compare — d'où l'existence de --verify.",
+        ],
+      },
       body: [
         "Il y a une subtilité qu'il vaut la peine d'exposer honnêtement. Le chiffrement intégré de WebRTC (DTLS) échange les empreintes de clés via le serveur de signalisation qui présente les deux appareils l'un à l'autre. Si ce serveur était malhonnête, il pourrait en théorie s'interposer et substituer ses propres clés — une attaque classique de l'homme du milieu — sans qu'aucun des deux navigateurs ne le remarque immédiatement.",
         "Relayium comble cette faille avec un court code de vérification. Les deux appareils dérivent le même Short Authentication String (SAS) à 6 chiffres à partir de leurs deux clés publiques et peuvent l'afficher à l'écran. L'afficher et s'arrêter pour le comparer relève de la « vérification avancée », désactivée par défaut — un transfert par défaut n'affiche donc aucun code. Tout le reste de ce qui est décrit ici s'applique à chaque transfert : les clés régénérées, le chiffrement, la poignée de main « engagement puis révélation » et l'authentification de chaque fragment. Ce qui manque à un transfert par défaut, c'est cette comparaison elle-même — détecter une clé substituée, ou un inconnu à l'autre bout, suppose la vérification avancée activée et deux personnes qui comparent réellement le code par un autre canal. Si les codes correspondent, les clés publiques n'ont pas été substituées : le serveur de signalisation ou de relais n'a usurpé aucun des deux terminaux ni interrompu le chiffrement de bout en bout au niveau applicatif. Cela ne signifie pas qu'aucun serveur ne se trouvait sur le chemin réseau — le texte chiffré entre réseaux peut toujours transiter par TURN comme prévu. Mais un simple code à 6 chiffres ne représente qu'environ 20 bits, ce qu'un attaquant bien placé pourrait en principe tenter de forcer par force brute pour obtenir une correspondance après avoir vu les deux vraies clés. Pour l'empêcher, Relayium utilise une poignée de main « engagement puis révélation » : chaque partie envoie d'abord un hachage qui l'engage sur sa clé, et ne révèle la vraie clé qu'après avoir reçu l'engagement de l'autre. Cet ordre oblige un serveur malveillant à s'engager sur une fausse clé à l'aveugle, avant d'avoir vu la vraie — il ne peut donc pas choisir après coup une clé provoquant une collision, et le code court reste digne de confiance.",
@@ -516,6 +880,38 @@ const fr = {
         "Il vaut la peine de préciser exactement où se situe le serveur dans tout cela, car « chiffré de bout en bout » est une affirmation facile à faire et plus difficile à faire avec précision. En mode temps réel sur le même réseau, le fichier lui-même ne touche jamais les serveurs de Relayium — il circule directement entre les deux navigateurs. Le rôle du serveur de signalisation se limite à relayer les messages d'établissement de connexion (les informations techniques SDP/ICE dont WebRTC a besoin pour établir un lien direct) afin que les deux appareils puissent se trouver ; il ne voit jamais le contenu des fichiers, leurs noms, ni les clés.",
         "Entre réseaux — où des NAT ou des pare-feu restrictifs excluent souvent tout chemin direct —, le flux chiffré passe par un serveur relais TURN. Le relais ne transmet que du texte chiffré ; il n'a pas de clé et ne peut pas déchiffrer ce qui le traverse. Ce qu'il fait, c'est compter les octets qu'il relaie au titre du quota mensuel de relais du compte expéditeur, uniquement à des fins de mesure et de prévention des abus — sans jamais inspecter ce qu'il contient.",
       ],
+    },
+    {
+      heading: "Quand la comparaison tourne mal",
+      body: [
+        "Trois issues, et seule la première est une urgence. Savoir laquelle vous avez sous les yeux constitue déjà l'essentiel de l'intérêt.",
+      ],
+      troubleshooting: {
+        label: "Ce que vous voyez, ce qu'il faut vérifier, ce que cela signifie",
+        items: [
+          {
+            symptom: "Les deux écrans affichent des codes différents.",
+            code: [
+              `https://relayium.com/   # the two screens show different verification codes`,
+            ],
+            fix: "Arrêtez-vous et n'envoyez pas le fichier. Des codes différents signifient que les deux extrémités ont épinglé des empreintes de certificat distinctes : l'autre bout n'est donc pas la machine que vous croyez. Confirmez hors bande sur quel appareil se trouve l'autre personne, puis recommencez. Relancer avec --verify fait attendre le transfert à cette comparaison au lieu de la laisser à votre vigilance.",
+          },
+          {
+            symptom: "Aucun code de vérification n'est apparu.",
+            code: [
+              `https://relayium.com/   # no verification code on screen yet`,
+            ],
+            fix: "Le code se dérive d'une connexion : il existe donc dès que les deux extrémités sont connectées. Avant cela il n'y a rien à comparer, et un transfert qui ne se connecte jamais est un problème différent d'un transfert dont les codes divergent.",
+          },
+          {
+            symptom: "Vous avez comparé les codes en en collant un dans la conversation que vous utilisiez déjà.",
+            code: [
+              `relayium send --verify ./report.pdf   # holds the transfer at the comparison`,
+            ],
+            fix: "Cela ne teste pas ce que vous vouliez tester. Si c'est précisément ce canal qui vous inquiète, un attaquant capable de modifier le transfert peut aussi modifier le code collé. Lisez-le à voix haute, ou utilisez un canal dont le mode de défaillance diffère de celui que vous êtes en train de contrôler.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -574,6 +970,40 @@ const ar = {
     },
     {
       heading: "رمز الخانات الست الذي يكشف الخادم غير النزيه",
+      prereqs: {
+        label: "ما تحتاجه لإجراء هذه المقارنة",
+        items: [
+          "أن يكون الجهازان أمامك، أو أن يكون هناك شخص آخر جالسًا أمام جهازه الآن.",
+          "قناة ليست هي هذا النقل — مكالمة هاتفية، أو الغرفة التي تجلسان فيها معًا. أما لصق الرمز في المحادثة نفسها التي تقلق بشأنها فلا يثبت شيئًا.",
+          "عشر ثوانٍ. هذه هي كامل كلفة الفحص الوحيد الذي يكشف خادمًا غير أمين.",
+        ],
+      },
+      steps: [
+        {
+          text: "ابدأ نقلًا بين الجهازين وانتظر حتى يظهر رمز التحقّق على كل شاشة.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "اقرأ أحدهما بصوت مسموع رقمًا رقمًا عبر القناة الخارجة عن المسار — لا تنسخه داخل التطبيق ولا في خيط المحادثة نفسه.",
+        },
+        {
+          text: "قارن الأرقام الستة كلها. فالتطابق الجزئي هو عدم تطابق.",
+        },
+        {
+          text: "لا تقبل إلا إذا تطابقا. وإن اختلفا فارفض، واعرف على أي جهاز يجلس الطرف الآخر فعلًا قبل أن تعيد المحاولة.",
+        },
+        {
+          text: "في سطر الأوامر اجعل المقارنة حاجزة لا اختيارية: يوقف ‎--verify‎ النقل عند تلك النقطة وينتظر تأكيدك، فلا يتحرك بايت واحد قبل أن ينظر أحدهم فعلًا.",
+          code: ["relayium send --verify ./report.pdf"],
+        },
+      ],
+      success: {
+        label: "ماذا تثبت المقارنة المتطابقة وماذا لا تثبت",
+        body: [
+          "ظهور الأرقام الستة نفسها على الشاشتين يعني أن بصمات الشهادات التي ثبّتها الطرفان متطابقة، أي أن خادم اللقاء لم يستبدل طرفًا ولم ينتحل شخصية أيٍّ منهما. وهذا بالضبط هو الهجوم الذي يتناوله هذا القسم.",
+          "إنها تُوثّق الطرفين. ولا تثبت شيئًا عن كل قفزة شبكية بينهما، ولا تثبت شيئًا على الإطلاق إن لم يقارنها أحد — ولهذا وُجد ‎--verify‎.",
+        ],
+      },
       body: [
         "هناك دقيقة تستحق الصراحة بشأنها. يتبادل التشفير المدمج في WebRTC (DTLS) بصمات المفاتيح عبر خادم الإشارة الذي يُعرّف الجهازين أحدهما بالآخر. لو كان ذلك الخادم غير نزيه، لأمكنه نظريًا أن يتوسّط ويستبدل مفاتيحه الخاصة — هجوم وسيط كلاسيكي — دون أن يلاحظ أيٌّ من المتصفحَين ذلك فورًا.",
         "يسدّ Relayium هذه الثغرة برمز تحقق قصير. يشتقّ كلا الجهازين نفس سلسلة المصادقة القصيرة (SAS) المكوَّنة من ست خانات من مفتاحيهما العامّين، ويمكنهما عرضها على الشاشة. أما عرضها والتوقّف لمقارنتها فهو «التحقّق المتقدّم» المعطَّل افتراضيًا — أي أن عملية النقل الافتراضية لا تعرض أي رمز. وأما بقية ما هو موضَّح هنا فيسري على كل عملية نقل كما هو: المفاتيح الجديدة في كل مرة، والتشفير، ومصافحة «الالتزام ثم الكشف»، والتحقق من كل جزء. ما ينقص عملية النقل الافتراضية هو هذه المقارنة نفسها — فاكتشاف استبدال المفاتيح، أو أن الطرف الآخر شخص غير الذي تقصده، يتطلّب تفعيل التحقّق المتقدّم ومقارنة الرمز فعليًا عبر قناة أخرى. إذا تطابق الرمزان، فهذا يؤكد أن المفاتيح العامة لم تُستبدَل، وأن خادم الإشارة أو الترحيل لم ينتحل شخصية أيٍّ من الطرفين ولم يُنهِ التشفير من طرف إلى طرف في طبقة التطبيق. ولا يعني ذلك غياب الخوادم عن مسار الشبكة — فقد تظل البيانات المشفرة بين الشبكات تمر عبر TURN وفق التصميم. لكن الرمز البسيط المكوَّن من ست خانات لا يتجاوز نحو 20 بت، وهو ما قد يحاول مهاجم في موقع مناسب مبدئيًا أن يخمّنه بالقوة الغاشمة ليطابقه بعد رؤية المفتاحين الحقيقيين. لمنع ذلك، يستخدم Relayium مصافحة «الالتزام ثم الكشف»: يرسل كل طرف أولًا تجزئة (hash) تلتزم بمفتاحه، ولا يكشف عن المفتاح الحقيقي إلا بعد تلقّي التزام الطرف الآخر. يعني هذا الترتيب أن الخادم الخبيث عليه أن يلتزم بمفتاح مزيّف على العمياء، قبل أن يكون قد رأى المفتاح الحقيقي — فلا يستطيع اختيار مفتاح متصادم بعد وقوع الأمر، وهكذا يبقى الرمز القصير جديرًا بالثقة.",
@@ -607,6 +1037,38 @@ const ar = {
         "من المفيد أن نوضّح بالضبط أين يقف الخادم من كل هذا، لأن «التشفير من الطرف إلى الطرف» ادّعاء يسهل قوله ويصعب قوله بدقة. في الوضع الفوري على نفس الشبكة، لا يلمس الملف نفسه خوادم Relayium إطلاقًا — بل يُبَثّ مباشرة بين المتصفحَين. تقتصر مهمة خادم الإشارة على تمرير رسائل إعداد الاتصال (معلومات SDP/ICE التقنية التي يحتاجها WebRTC لإنشاء رابط مباشر) حتى يتمكن الجهازان من إيجاد أحدهما الآخر؛ فهو لا يرى أبدًا محتوى الملفات أو أسماءها أو المفاتيح.",
         "عبر الشبكات — حيث تستبعد أنظمة NAT وجدران الحماية المقيِّدة المسار المباشر في الغالب — يمرّ التدفق المُشفَّر على خادم مُرحِّل TURN. لا يمرّر المُرحِّل سوى النص المُشفَّر؛ فليس لديه مفتاح ولا يمكنه فك تشفير ما يمرّ عبره. أما ما يفعله فهو عدّ البايتات التي يُرحّلها ضمن حصة الترحيل الشهرية لحساب المُرسِل، لغرض القياس ومنع إساءة الاستخدام فقط — دون أن يفحص ما بداخلها أبدًا.",
       ],
+    },
+    {
+      heading: "حين تسوء المقارنة",
+      body: [
+        "ثلاث نتائج، والأولى وحدها حالة طارئة. ومعرفة أيَّها أمامك هي معظم الفائدة.",
+      ],
+      troubleshooting: {
+        label: "ما تراه، وما تفحصه، وماذا يعني",
+        items: [
+          {
+            symptom: "تعرض الشاشتان رمزين مختلفين.",
+            code: [
+              `https://relayium.com/   # the two screens show different verification codes`,
+            ],
+            fix: "توقّف ولا ترسل الملف. فاختلاف الرمزين يعني أن الطرفين ثبّتا بصمتي شهادة مختلفتين، أي أن الطرف البعيد ليس الجهاز الذي تظنه. تأكّد خارج المسار من الجهاز الذي يجلس عليه الطرف الآخر ثم ابدأ من جديد. وإعادة التشغيل مع ‎--verify‎ تجعل النقل ينتظر عند تلك المقارنة بدل تركها لانتباهك.",
+          },
+          {
+            symptom: "لم يظهر أي رمز تحقّق بعد.",
+            code: [
+              `https://relayium.com/   # no verification code on screen yet`,
+            ],
+            fix: "الرمز مشتقّ من اتصال، فهو يوجد متى اتصل الطرفان. وقبل ذلك لا شيء يُقارَن، و«نقل لا يتصل أبدًا» مشكلة مختلفة عن «نقل اختلف رمزاه».",
+          },
+          {
+            symptom: "قارنت الرمزين بلصق أحدهما في المحادثة التي تستخدمها أصلًا.",
+            code: [
+              `relayium send --verify ./report.pdf   # holds the transfer at the comparison`,
+            ],
+            fix: "هذا لا يختبر ما أردت اختباره. فإن كانت تلك القناة نفسها هي مصدر قلقك، فالمهاجم القادر على تغيير النقل قادر أيضًا على تغيير الرمز الملصوق. اقرأه بصوت مسموع، أو استخدم قناة يختلف نمط إخفاقها عن القناة التي تفحصها الآن.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -665,6 +1127,40 @@ const es = {
     },
     {
       heading: "El código de 6 dígitos que detecta a un servidor deshonesto",
+      prereqs: {
+        label: "Lo que necesitas para hacer esta comparación",
+        items: [
+          "Los dos dispositivos delante de ti, o alguien que esté ahora mismo delante del suyo.",
+          "Un canal que no sea esta transferencia: una llamada, o la habitación en la que estáis los dos. Pegar el código en la misma conversación que te preocupa no demuestra nada.",
+          "Diez segundos. Ese es todo el coste de la única comprobación que descubre a un servidor deshonesto.",
+        ],
+      },
+      steps: [
+        {
+          text: "Inicia una transferencia entre los dos dispositivos y espera a que aparezca un código de verificación en cada pantalla.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Lee uno de ellos en voz alta, dígito a dígito, por el canal aparte: sin copiarlo en la aplicación ni en el mismo hilo de chat.",
+        },
+        {
+          text: "Compara los seis dígitos. Coincidir en parte es no coincidir.",
+        },
+        {
+          text: "Acepta solo si son iguales. Si difieren, rechaza y averigua en qué máquina está realmente la otra persona antes de volver a intentarlo.",
+        },
+        {
+          text: "En la CLI, haz que la comparación sea bloqueante en vez de opcional: --verify detiene la transferencia en ese punto y espera tu confirmación, así que no se mueve ni un byte hasta que alguien haya mirado de verdad.",
+          code: ["relayium send --verify ./report.pdf"],
+        },
+      ],
+      success: {
+        label: "Qué demuestra una comparación que coincide, y qué no",
+        body: [
+          "Dos pantallas con los mismos seis dígitos significan que las huellas de certificado fijadas por ambos extremos coinciden, así que el rendezvous no sustituyó ningún extremo ni suplantó a ninguna de las dos partes. Ese es exactamente el ataque del que trata esta sección.",
+          "Autentica los dos extremos. No demuestra nada sobre cada salto de red intermedio, y no demuestra absolutamente nada si nadie la compara: para eso existe --verify.",
+        ],
+      },
       body: [
         "Hay una sutileza que conviene reconocer con honestidad. El cifrado propio de WebRTC (DTLS) intercambia las huellas de las claves a través del servidor de señalización que presenta los dos dispositivos entre sí. Si ese servidor fuera deshonesto, podría en teoría situarse en medio y sustituir sus propias claves — un clásico ataque de intermediario — sin que ninguno de los dos navegadores lo notara de inmediato.",
         "Relayium cierra esa brecha con un breve código de verificación. Ambos dispositivos derivan el mismo Short Authentication String (SAS) de 6 dígitos a partir de sus dos claves públicas y pueden mostrarlo en pantalla. Mostrarlo y detenerse a compararlo es la «verificación avanzada», desactivada por omisión: una transferencia predeterminada no muestra ningún código. Todo lo demás que se describe aquí sigue aplicándose a cada transferencia: las claves nuevas, el cifrado, el handshake de comprometer-y-luego-revelar y la autenticación de cada fragmento. Lo que no tiene una transferencia predeterminada es esta comprobación en sí — detectar una clave sustituida, o a un desconocido al otro lado, exige activar la verificación avanzada y que las dos personas comparen realmente el código por otro canal. Si los códigos coinciden, las claves públicas no se sustituyeron: el servidor de señalización o de retransmisión no suplantó a ninguno de los extremos ni terminó el cifrado de extremo a extremo de la capa de aplicación. Esto no significa que no hubiera ningún servidor en la ruta de red — el texto cifrado entre redes aún puede pasar por TURN por diseño. Pero un código simple de 6 dígitos son solo unos 20 bits, que en principio un atacante bien situado podría intentar forzar por fuerza bruta hasta hacerlo coincidir tras ver ambas claves reales. Para evitarlo, Relayium usa un handshake de comprometer-y-luego-revelar: cada lado envía primero un hash que lo compromete con su clave, y solo revela la clave real después de recibir el compromiso del otro lado. Ese orden significa que un servidor malicioso tiene que comprometerse a ciegas con una clave falsa, antes de haber visto la real — no puede elegir después una clave que colisione, así que el código corto sigue siendo fiable.",
@@ -698,6 +1194,38 @@ const es = {
         "Vale la pena precisar exactamente dónde se sitúa el servidor en todo esto, porque «cifrado de extremo a extremo» es una afirmación fácil de hacer y más difícil de precisar. En modo tiempo real en la misma red, el archivo en sí nunca toca los servidores de Relayium — se transmite directamente entre los dos navegadores. El trabajo del servidor de señalización se limita a retransmitir los mensajes de establecimiento de conexión (la información técnica SDP/ICE que WebRTC necesita para establecer un enlace directo) para que los dos dispositivos puedan encontrarse; nunca ve el contenido de los archivos, los nombres de archivo ni las claves.",
         "Entre redes —donde los NAT o cortafuegos restrictivos suelen descartar cualquier ruta directa— el flujo cifrado pasa por un servidor retransmisor TURN. El retransmisor solo reenvía texto cifrado; no tiene ninguna clave y no puede descifrar lo que pasa a través de él. Lo que sí hace es contabilizar los bytes que retransmite contra la asignación mensual de retransmisión de la cuenta que envía, puramente para medición y prevención de abusos — sin inspeccionar nunca lo que hay dentro.",
       ],
+    },
+    {
+      heading: "Cuando la comparación sale mal",
+      body: [
+        "Tres desenlaces, y solo el primero es una urgencia. Saber cuál tienes delante ya es la mayor parte del valor.",
+      ],
+      troubleshooting: {
+        label: "Qué ves, qué comprobar, qué significa",
+        items: [
+          {
+            symptom: "Las dos pantallas muestran códigos distintos.",
+            code: [
+              `https://relayium.com/   # the two screens show different verification codes`,
+            ],
+            fix: "Para y no envíes el archivo. Que los códigos difieran significa que los dos extremos fijaron huellas de certificado distintas, así que el otro lado no es la máquina que crees. Confirma por un canal aparte en qué dispositivo está la otra persona y empieza de nuevo. Volver a lanzarlo con --verify hace que la transferencia espere en esa comparación en lugar de dejarla a tu atención.",
+          },
+          {
+            symptom: "No ha aparecido ningún código de verificación.",
+            code: [
+              `https://relayium.com/   # no verification code on screen yet`,
+            ],
+            fix: "El código se deriva de una conexión, así que existe en cuanto los dos extremos se han conectado. Antes de eso no hay nada que comparar, y una transferencia que nunca conecta es un problema distinto de una cuyos códigos discrepan.",
+          },
+          {
+            symptom: "Comparaste los códigos pegando uno en el chat que ya estabais usando.",
+            code: [
+              `relayium send --verify ./report.pdf   # holds the transfer at the comparison`,
+            ],
+            fix: "Eso no comprueba lo que querías comprobar. Si ese canal es justo lo que te preocupa, un atacante capaz de alterar la transferencia también puede alterar el código pegado. Léelo en voz alta, o usa un canal que falle de otra manera que el que estás revisando.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -756,6 +1284,40 @@ const pt = {
     },
     {
       heading: "O código de 6 dígitos que flagra um servidor desonesto",
+      prereqs: {
+        label: "O que você precisa para fazer essa comparação",
+        items: [
+          "Os dois aparelhos à sua frente, ou outra pessoa que esteja agora diante do dela.",
+          "Um canal que não seja esta transferência: uma ligação, ou a sala em que os dois estão. Colar o código na mesma conversa que preocupa você não prova nada.",
+          "Dez segundos. É esse o custo inteiro da única checagem que pega um servidor desonesto.",
+        ],
+      },
+      steps: [
+        {
+          text: "Comece uma transferência entre os dois aparelhos e espere o código de verificação aparecer em cada tela.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Leia um deles em voz alta, dígito por dígito, pelo canal à parte — sem copiar para o aplicativo nem para a mesma conversa.",
+        },
+        {
+          text: "Compare os seis dígitos. Bater em parte é não bater.",
+        },
+        {
+          text: "Aceite só se forem iguais. Se diferirem, recuse e descubra em qual máquina a outra pessoa realmente está antes de tentar de novo.",
+        },
+        {
+          text: "Na CLI, torne a comparação bloqueante em vez de opcional: o --verify para a transferência nesse ponto e espera a sua confirmação, então nenhum byte se move até alguém ter de fato olhado.",
+          code: ["relayium send --verify ./report.pdf"],
+        },
+      ],
+      success: {
+        label: "O que uma comparação que bate prova, e o que não prova",
+        body: [
+          "Duas telas mostrando os mesmos seis dígitos significam que as impressões digitais de certificado fixadas pelas duas pontas coincidem, ou seja, o rendezvous não trocou nenhuma ponta nem se passou por nenhum dos lados. É exatamente o ataque de que esta seção trata.",
+          "Ela autentica as duas pontas. Não prova nada sobre cada salto de rede no meio, e não prova nada mesmo se ninguém comparar — é para isso que existe o --verify.",
+        ],
+      },
       body: [
         "Há uma sutileza que vale a pena reconhecer com honestidade. A criptografia embutida do WebRTC (DTLS) troca as impressões digitais das chaves através do servidor de sinalização que apresenta os dois dispositivos um ao outro. Se esse servidor fosse desonesto, ele poderia em teoria se colocar no meio e substituir suas próprias chaves — um clássico ataque de intermediário — sem que nenhum dos dois navegadores percebesse de imediato.",
         "O Relayium fecha essa brecha com um curto código de verificação. Ambos os dispositivos derivam o mesmo Short Authentication String (SAS) de 6 dígitos a partir de suas duas chaves públicas e podem exibi-lo na tela. Exibi-lo e parar para compará-lo é a “verificação avançada”, desligada por padrão: uma transferência padrão não mostra código algum. Todo o restante descrito aqui continua valendo para cada transferência: as chaves novas, a criptografia, o handshake de comprometer-e-depois-revelar e a autenticação de cada bloco. O que falta a uma transferência padrão é justamente essa conferência — detectar uma chave substituída, ou um desconhecido do outro lado, exige a verificação avançada ligada e as duas pessoas comparando o código de fato por outro canal. Se os códigos coincidem, as chaves públicas não foram substituídas: o servidor de sinalização ou de retransmissão não se passou por nenhum dos endpoints nem encerrou a criptografia de ponta a ponta da camada de aplicação. Isso não significa que não havia servidor no caminho de rede — o texto cifrado entre redes ainda pode passar pelo TURN por design. Mas um código simples de 6 dígitos tem apenas cerca de 20 bits, o que em princípio um atacante bem posicionado poderia tentar quebrar por força bruta até fazer coincidir depois de ver as duas chaves reais. Para evitar isso, o Relayium usa um handshake de comprometer-e-depois-revelar: cada lado primeiro envia um hash que o compromete com sua chave, e só revela a chave real depois de receber o compromisso do outro lado. Essa ordem significa que um servidor malicioso tem de se comprometer com uma chave falsa às cegas, antes de ter visto a real — ele não pode escolher depois uma chave que colida, então o código curto continua confiável.",
@@ -789,6 +1351,38 @@ const pt = {
         "Vale a pena explicitar exatamente onde o servidor se situa em tudo isso, porque “criptografado de ponta a ponta” é uma afirmação fácil de fazer e mais difícil de fazer com precisão. No modo tempo real na mesma rede, o próprio arquivo nunca toca os servidores do Relayium — ele é transmitido diretamente entre os dois navegadores. O trabalho do servidor de sinalização se limita a retransmitir as mensagens de estabelecimento de conexão (as informações técnicas SDP/ICE de que o WebRTC precisa para estabelecer um link direto) para que os dois dispositivos possam se encontrar; ele nunca vê o conteúdo dos arquivos, os nomes dos arquivos ou as chaves.",
         "Entre redes — onde NATs ou firewalls restritivos costumam descartar qualquer caminho direto — o fluxo criptografado passa por um servidor retransmissor TURN. O retransmissor só encaminha texto cifrado; ele não tem chave e não pode descriptografar o que passa por ele. O que ele faz é contar os bytes que retransmite em relação à cota mensal de retransmissão da conta que envia, puramente para medição e prevenção de abuso — sem nunca inspecionar o que há dentro.",
       ],
+    },
+    {
+      heading: "Quando a comparação dá errado",
+      body: [
+        "Três desfechos, e só o primeiro é emergência. Saber qual deles está diante de você já é a maior parte do valor.",
+      ],
+      troubleshooting: {
+        label: "O que você vê, o que checar, o que significa",
+        items: [
+          {
+            symptom: "As duas telas mostram códigos diferentes.",
+            code: [
+              `https://relayium.com/   # the two screens show different verification codes`,
+            ],
+            fix: "Pare e não envie o arquivo. Códigos diferentes significam que as duas pontas fixaram impressões digitais de certificado distintas, então o outro lado não é a máquina que você imagina. Confirme por um canal à parte em qual aparelho a outra pessoa está e recomece. Rodar de novo com --verify faz a transferência esperar nessa comparação em vez de deixá-la por conta da sua atenção.",
+          },
+          {
+            symptom: "Nenhum código de verificação apareceu.",
+            code: [
+              `https://relayium.com/   # no verification code on screen yet`,
+            ],
+            fix: "O código é derivado de uma conexão, então existe assim que as duas pontas se conectam. Antes disso não há o que comparar, e uma transferência que nunca conecta é um problema diferente de uma cujos códigos divergem.",
+          },
+          {
+            symptom: "Você comparou os códigos colando um deles na conversa que já estava usando.",
+            code: [
+              `relayium send --verify ./report.pdf   # holds the transfer at the comparison`,
+            ],
+            fix: "Isso não testa o que você queria testar. Se é justamente esse canal que preocupa você, um atacante capaz de alterar a transferência também consegue alterar o código colado. Leia em voz alta, ou use um canal que falhe de um jeito diferente daquele que você está conferindo.",
+          },
+        ],
+      },
     },
   ],
   faq: {
@@ -826,6 +1420,6 @@ const pt = {
 export default {
   slug: "guides/how-relayium-encrypts-your-files",
   published: "2026-07-09",
-  updated: "2026-07-31",
+  updated: "2026-08-06",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };
