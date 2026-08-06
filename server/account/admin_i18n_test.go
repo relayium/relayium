@@ -1,6 +1,7 @@
 package account
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"regexp"
@@ -170,5 +171,91 @@ func TestATranslationCannotBreakOutOfTheConfirmString(t *testing.T) {
 	}
 	if strings.Contains(sb.String(), `alert('pwned`) {
 		t.Error("a quote in a translation escaped the JS string literal")
+	}
+}
+
+func TestAdminLangCookieBeatsTheHeader(t *testing.T) {
+	// The reason the picker exists: a great many browsers send en-US first no
+	// matter who is holding them, so the header alone handed Chinese operators an
+	// English console. An explicit choice has to win.
+	r := httptest.NewRequest("GET", "/admin", nil)
+	r.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	r.AddCookie(&http.Cookie{Name: adminLangCookie, Value: "zh"})
+	if got := adminLangFrom(r); got != "zh" {
+		t.Errorf("cookie zh with English header = %q, want zh", got)
+	}
+
+	r2 := httptest.NewRequest("GET", "/admin", nil)
+	r2.Header.Set("Accept-Language", "zh-CN")
+	r2.AddCookie(&http.Cookie{Name: adminLangCookie, Value: "en"})
+	if got := adminLangFrom(r2); got != "en" {
+		t.Errorf("cookie en with Chinese header = %q, want en", got)
+	}
+
+	// A junk cookie must not win, and must not error — it falls back to the
+	// header, which is the same as never having chosen.
+	r3 := httptest.NewRequest("GET", "/admin", nil)
+	r3.Header.Set("Accept-Language", "en")
+	r3.AddCookie(&http.Cookie{Name: adminLangCookie, Value: "../../etc/passwd"})
+	if got := adminLangFrom(r3); got != "en" {
+		t.Errorf("junk cookie = %q, want the header's en", got)
+	}
+}
+
+func TestAdminLangReturnPathCannotLeaveTheConsole(t *testing.T) {
+	// The Referer is attacker-influenceable, so it is reduced to a path under
+	// /admin or discarded. Anything else would make the console a redirector.
+	cases := map[string]string{
+		"":                                 "/admin",
+		"https://relayium.com/admin/audit": "/admin/audit",
+		"https://relayium.com/admin?q=x":   "/admin?q=x",
+		"https://evil.example/admin/audit": "/admin/audit", // host discarded, path kept
+		"https://relayium.com/me":          "/admin",
+		"https://evil.example/":            "/admin",
+		"//evil.example/admin":             "/admin",
+		"/adminsomething":                  "/admin",
+		"::::not a url":                    "/admin",
+	}
+	for referer, want := range cases {
+		if got := adminReturnPath(referer); got != want {
+			t.Errorf("adminReturnPath(%q) = %q, want %q", referer, got, want)
+		}
+	}
+}
+
+func TestLanguagePickerIsOnEveryConsolePage(t *testing.T) {
+	// One page having it is worse than none: an operator who lands on the audit
+	// log with the console in the wrong language should not have to guess that
+	// the control lives somewhere else.
+	pages := map[string]func() (string, error){
+		"login": func() (string, error) {
+			var sb strings.Builder
+			err := adminLoginTmpl.Execute(&sb, adminLoginData{Lang: "en"})
+			return sb.String(), err
+		},
+		"home": func() (string, error) {
+			var sb strings.Builder
+			err := adminUsersTmpl.Execute(&sb, adminHomeData{Lang: "en"})
+			return sb.String(), err
+		},
+		"audit": func() (string, error) {
+			var sb strings.Builder
+			err := adminAuditTmpl.Execute(&sb, adminAuditData{Lang: "en"})
+			return sb.String(), err
+		},
+	}
+	for name, render := range pages {
+		out, err := render()
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if !strings.Contains(out, `action="/admin/lang"`) {
+			t.Errorf("%s page has no language picker", name)
+		}
+		// The current language is marked, so the control says which one you are
+		// on rather than only offering a swap.
+		if !strings.Contains(out, `value="en" class="on"`) {
+			t.Errorf("%s page does not mark English as current", name)
+		}
 	}
 }

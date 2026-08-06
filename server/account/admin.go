@@ -497,6 +497,9 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	mux.HandleFunc("GET /admin/audit", s.handleAdminAudit)
 	mux.Handle("POST /admin/login", s.CSRFGuard(http.HandlerFunc(s.handleAdminLogin)))
 	mux.Handle("POST /admin/logout", s.CSRFGuard(http.HandlerFunc(s.handleAdminLogout)))
+	// A display preference, but still a state change, so it goes through the same
+	// CSRF guard as every other POST here rather than being a convenient link.
+	mux.Handle("POST /admin/lang", s.CSRFGuard(http.HandlerFunc(s.handleAdminLang)))
 	// The passkey endpoints are fetch-only, so a missing Origin (which CSRFGuard
 	// lets through for form posts and native clients) is a forgery signal here.
 	mux.Handle("POST /admin/passkey/login/begin",

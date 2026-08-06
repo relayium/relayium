@@ -339,8 +339,8 @@ button:hover{filter:brightness(1.07)}
 :focus-visible{outline:2px solid var(--a);outline-offset:2px}
 .err{color:#e5484d;margin:0 0 10px}
 .muted{color:var(--muted);margin:0 0 10px}
-[hidden]{display:none!important}</style></head>
-<body><h1>{{t $.Lang "Relayium 后台"}}</h1>
+[hidden]{display:none!important}.langpick{display:inline-flex;gap:0;border:1px solid var(--bd);border-radius:7px;overflow:hidden}.langpick button{font:inherit;font-size:12px;padding:3px 8px;border:0;background:transparent;color:var(--muted);cursor:pointer;width:auto;margin:0}.langpick button.on{background:var(--a);color:#fff}</style></head>
+<body><div style="display:flex;justify-content:space-between;align-items:center;margin:0 0 16px"><h1 style="margin:0">{{t $.Lang "Relayium 后台"}}</h1><form method="post" action="/admin/lang" class="langpick"><button type="submit" name="l" value="zh"{{if ne $.Lang "en"}} class="on" aria-current="true"{{end}}>中文</button><button type="submit" name="l" value="en"{{if eq $.Lang "en"}} class="on" aria-current="true"{{end}}>EN</button></form></div>
 {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
 <form method="post" action="/admin/login">
 <input type="text" name="username" placeholder="{{t $.Lang "管理员账号"}}" autofocus autocomplete="username">
@@ -449,7 +449,7 @@ button:hover{filter:brightness(1.07)}
 .blast{border:2px solid #dc2626;border-radius:12px;padding:14px 16px;margin:0 0 18px;background:var(--card)}
 .blast .t{color:#dc2626;font-weight:700;font-size:15px;margin:0 0 6px}
 .blast .track{font-size:22px;font-weight:700;letter-spacing:.5px;margin:0 0 4px}
-.blast .who{font-size:14px}</style></head>
+.blast .who{font-size:14px}.langpick{display:inline-flex;gap:0;border:1px solid var(--bd);border-radius:7px;overflow:hidden}.langpick button{font:inherit;font-size:12px;padding:3px 8px;border:0;background:transparent;color:var(--muted);cursor:pointer;width:auto;margin:0}.langpick button.on{background:var(--a);color:#fff}</style></head>
 <body>
 <h1>{{t $.Lang "请确认这项操作"}}</h1>
 <p class="sub">{{t $.Lang "动作："}}<code>{{.Action}}</code>{{if ne .Target "-"}} · 目标：<code>{{.Target}}</code>{{end}}</p>
@@ -662,10 +662,11 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 .ro-ctl{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 12px}
 .ro-tag{margin-left:6px;font-size:11px;padding:1px 6px;border-radius:6px;background:var(--soft);color:var(--muted)}
 /* [hidden] alone loses to .mint's display:flex, so state it outright. */
-[hidden]{display:none!important}</style></head>
+[hidden]{display:none!important}.langpick{display:inline-flex;gap:0;border:1px solid var(--bd);border-radius:7px;overflow:hidden}.langpick button{font:inherit;font-size:12px;padding:3px 8px;border:0;background:transparent;color:var(--muted);cursor:pointer;width:auto;margin:0}.langpick button.on{background:var(--a);color:#fff}</style></head>
 <body>
 <div class="top"><h1>{{t $.Lang "后台概览"}}</h1>
 <div style="display:flex;gap:12px;align-items:center">
+<form method="post" action="/admin/lang" class="langpick"><button type="submit" name="l" value="zh"{{if ne $.Lang "en"}} class="on" aria-current="true"{{end}}>中文</button><button type="submit" name="l" value="en"{{if eq $.Lang "en"}} class="on" aria-current="true"{{end}}>EN</button></form>
 <a href="/admin/audit" style="color:var(--a);text-decoration:none">{{t $.Lang "审计日志"}}</a>
 <form method="post" action="/admin/logout"><button type="submit">{{t $.Lang "退出"}}</button></form>
 </div></div>
@@ -1166,9 +1167,9 @@ tbody tr:last-child td{border-bottom:0}tbody tr:hover{background:var(--soft)}
 .pager{display:flex;gap:16px;align-items:center;margin:18px 0}
 .pager a{color:var(--a);text-decoration:none}.pager a:hover{text-decoration:underline}
 .pager .off{color:var(--muted);opacity:.55}
-:focus-visible{outline:2px solid var(--a);outline-offset:2px}</style></head>
+:focus-visible{outline:2px solid var(--a);outline-offset:2px}.langpick{display:inline-flex;gap:0;border:1px solid var(--bd);border-radius:7px;overflow:hidden}.langpick button{font:inherit;font-size:12px;padding:3px 8px;border:0;background:transparent;color:var(--muted);cursor:pointer;width:auto;margin:0}.langpick button.on{background:var(--a);color:#fff}</style></head>
 <body>
-<div class="top"><h1>{{t $.Lang "审计日志"}}</h1><a href="/admin">{{t $.Lang "← 返回后台"}}</a></div>
+<div class="top"><h1>{{t $.Lang "审计日志"}}</h1><div style="display:flex;gap:12px;align-items:center"><form method="post" action="/admin/lang" class="langpick"><button type="submit" name="l" value="zh"{{if ne $.Lang "en"}} class="on" aria-current="true"{{end}}>中文</button><button type="submit" name="l" value="en"{{if eq $.Lang "en"}} class="on" aria-current="true"{{end}}>EN</button></form><a href="/admin">{{t $.Lang "← 返回后台"}}</a></div></div>
 
 <form method="get" action="/admin/audit" class="filter">
 <select name="action" onchange="this.form.submit()">

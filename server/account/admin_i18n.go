@@ -2,6 +2,7 @@ package account
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -261,14 +262,27 @@ var adminEN = map[string]string{
 	"手动标记该节点已卸载？用于卸载脚本联系不到中央、来不及自动登记的情况；节点会退出放置/ICE/直连下载，文件与历史保留，可随时用「恢复」撤销。": "Mark this node uninstalled by hand? For when the uninstall script could not reach central in time. The node leaves placement, ICE and direct downloads. Files and history are kept, and Restore undoes it at any time.",
 }
 
+// adminLangCookie holds an explicit choice made in the console's header.
+const adminLangCookie = "relayium_admin_lang"
+
 // adminLangFrom picks the console language for one request.
 //
-// Deliberately crude: it looks for an English preference and otherwise keeps
-// Chinese, which is what the console rendered before this existed. A full
-// Accept-Language parse (q-values, regional subtags, a language negotiation
-// table) would be more code than the two-language choice it decides, and every
-// extra branch is a way to serve an operator a language they did not ask for.
+// An explicit choice wins over the header, and that ordering is the whole point
+// of the cookie existing. Accept-Language alone was not enough in practice: a
+// great many browsers send en-US first regardless of who is holding them, so
+// Chinese operators were handed an English console by a preference they never
+// expressed. A header is a guess; the picker is an answer.
+//
+// The header remains the default for anyone who has not chosen, and no choice
+// plus no English preference still means Chinese — what the console rendered
+// before any of this existed.
 func adminLangFrom(r *http.Request) string {
+	if c, err := r.Cookie(adminLangCookie); err == nil {
+		switch c.Value {
+		case "zh", "en":
+			return c.Value
+		}
+	}
 	for _, part := range strings.Split(r.Header.Get("Accept-Language"), ",") {
 		tag := strings.ToLower(strings.TrimSpace(strings.SplitN(part, ";", 2)[0]))
 		switch {
@@ -290,4 +304,46 @@ func adminT(lang, zh string) string {
 		return s
 	}
 	return zh
+}
+
+// handleAdminLang records an explicit language choice and returns the operator
+// to the page they were on.
+//
+// POST rather than a link, so it goes through CSRFGuard like every other state
+// change in the console. The redirect target is taken from the Referer but only
+// ever used as a PATH under /admin: echoing a full URL back into a redirect is
+// how an open redirect gets built by accident, and an admin console is the last
+// place to hand someone a same-origin-looking hop to elsewhere.
+func (s *Service) handleAdminLang(w http.ResponseWriter, r *http.Request) {
+	lang := r.FormValue("l")
+	if lang != "zh" && lang != "en" {
+		lang = "zh"
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name: adminLangCookie, Value: lang, Path: "/admin",
+		MaxAge: 365 * 24 * 3600, HttpOnly: true,
+		Secure: s.CookieSecure(), SameSite: http.SameSiteLaxMode,
+	})
+	http.Redirect(w, r, adminReturnPath(r.Referer()), http.StatusFound)
+}
+
+// adminReturnPath reduces a Referer to a path inside the console, or /admin.
+func adminReturnPath(referer string) string {
+	if referer == "" {
+		return "/admin"
+	}
+	u, err := url.Parse(referer)
+	if err != nil {
+		return "/admin"
+	}
+	// Path only: the host is discarded rather than compared, so there is nothing
+	// to get wrong about which hosts count as ours.
+	p := u.EscapedPath()
+	if p != "/admin" && !strings.HasPrefix(p, "/admin/") {
+		return "/admin"
+	}
+	if u.RawQuery != "" {
+		return p + "?" + u.RawQuery
+	}
+	return p
 }
