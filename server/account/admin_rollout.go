@@ -25,6 +25,11 @@ import (
 // path, one state object) hands that property straight back. If a panel cannot
 // be built, Err is set on THAT panel only and the other one renders as usual.
 type rolloutPanelView struct {
+	// Lang is repeated here rather than read from the page data because
+	// {{template "rolloutPanel" .RolloutFleet}} rebinds $ to the ARGUMENT: inside
+	// the define, $.Lang means this struct's field, not the page's. Leaving it
+	// off makes every render of the panel fail mid-way and truncate the page.
+	Lang  string
 	Track string // "fleet" | "byo" — goes straight into this panel's form actions
 	Title string
 	// Err marks a panel whose state could not be read. Its controls are hidden

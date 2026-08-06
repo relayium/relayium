@@ -71,6 +71,7 @@ func (s *Service) RequireStepUp(action string, next http.HandlerFunc) http.Handl
 			track, trackLabel = pathID, rolloutTrackLabel(pathID)
 		}
 		s.renderConfirmPage(w, confirmPageData{
+			Lang:       adminLangFrom(r),
 			Token:      tok,
 			Action:     action,
 			Target:     target,

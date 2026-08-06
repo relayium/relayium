@@ -24,6 +24,8 @@ type adminSettingsView struct {
 }
 
 type adminHomeData struct {
+	// Lang selects the console language for this request (admin_i18n.go).
+	Lang        string
 	Metrics     AdminMetrics
 	Users       []AdminUserRow
 	Total       int64
@@ -140,6 +142,10 @@ type adminFleetTokenView struct {
 }
 
 type adminLoginData struct {
+	// Lang selects the console language for this request (see admin_i18n.go).
+	// It lives on the data rather than in the FuncMap because templates are
+	// parsed once at package init and the language varies per request.
+	Lang    string
 	Error   string
 	TOTP    bool   // render the 6-digit code field
 	Passkey bool   // render the passkey button (only when a credential exists)
@@ -150,6 +156,10 @@ type adminLoginData struct {
 // page): the diff a pending high-risk write would apply, plus the token that
 // identifies it so the confirm POST can retrieve (and burn) it.
 type confirmPageData struct {
+	// Lang selects the console language for this request (admin_i18n.go). It is
+	// on the data, not in the FuncMap, because templates parse once at package
+	// init while the language varies per request.
+	Lang   string
 	Token  string // pending-action token; echoed back as the confirm_token field
 	Action string // audit action name (AuditSettings etc.), shown for context
 	Target string // "-" for global actions, "plan:x" / "node:x" for scoped ones
@@ -237,11 +247,11 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 <div class="ro-panel" id="rollout-{{.Track}}">
 <h3>{{.Title}}（{{.Track}}）</h3>
 {{if .Err}}
-<p class="err">读取该轨道状态失败，控制按钮已隐藏（另一条轨道不受影响）。</p>
+<p class="err">{{t $.Lang "读取该轨道状态失败，控制按钮已隐藏（另一条轨道不受影响）。"}}</p>
 {{else}}
 <p class="ro-state">
 目标版本：<b>{{if .TargetVersion}}{{.TargetVersion}}{{else}}—{{end}}</b> ·
-状态：<b>{{.StatusText}}</b>{{if .Emergency}} <span class="ro-emg">紧急发布中（已跳过分批）</span>{{end}} ·
+状态：<b>{{.StatusText}}</b>{{if .Emergency}} <span class="ro-emg">{{t $.Lang "紧急发布中（已跳过分批）"}}</span>{{end}} ·
 进度：{{.OnTarget}}/{{.Total}} 台已在目标版本 ·
 {{if eq .Track "fleet"}}正在更新：{{if .CurrentNodeID}}{{.CurrentNodeID}}{{else}}—{{end}}
 {{else}}当前批次：{{if .ByoBatch}}{{.ByoBatch}}%{{else}}未开批{{end}}{{end}}
@@ -253,41 +263,41 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 
 <div class="ro-ctl">
 <form method="post" action="/admin/rollout/{{.Track}}/target" class="lim">
-<input type="text" name="version" placeholder="v1.2.3" title="目标版本（vMAJOR.MINOR.PATCH）" style="width:110px">
-<button type="submit">设定目标版本</button>
+<input type="text" name="version" placeholder="v1.2.3" title="{{t $.Lang "目标版本（vMAJOR.MINOR.PATCH）"}}" style="width:110px">
+<button type="submit">{{t $.Lang "设定目标版本"}}</button>
 </form>
 {{if eq .Status "rolling"}}
 <form method="post" action="/admin/rollout/{{.Track}}/pause" class="lim"
-  onsubmit="return confirm('暂停 {{.Track}} 轨的发布？')"><button type="submit">暂停</button></form>
+  onsubmit="return confirm('暂停 {{.Track}} 轨的发布？')"><button type="submit">{{t $.Lang "暂停"}}</button></form>
 {{end}}
 {{if eq .Status "halted"}}
 <form method="post" action="/admin/rollout/{{.Track}}/resume" class="lim"
-  onsubmit="return confirm('继续 {{.Track}} 轨的发布？将从头重新分批。')"><button type="submit">继续</button></form>
+  onsubmit="return confirm('继续 {{.Track}} 轨的发布？将从头重新分批。')"><button type="submit">{{t $.Lang "继续"}}</button></form>
 {{end}}
 <form method="post" action="/admin/rollout/{{.Track}}/rollback" class="lim"
   onsubmit="return confirm('把 {{.Track}} 轨回滚到该版本？')">
-<input type="text" name="version" placeholder="v1.2.2" title="回滚到的版本" style="width:110px">
-<button type="submit">回滚</button>
+<input type="text" name="version" placeholder="v1.2.2" title="{{t $.Lang "回滚到的版本"}}" style="width:110px">
+<button type="submit">{{t $.Lang "回滚"}}</button>
 </form>
 {{if .PreviousVersion}}
 <form method="post" action="/admin/rollout/{{.Track}}/rollback-previous" class="lim"
   onsubmit="return confirm('回滚到上一版本 {{.PreviousVersion}}？')">
-<button type="submit" title="回到该轨上一个目标版本；该版本当初已通过机队门槛，因此不受机队当前发布状态影响">回滚到上一版本（{{.PreviousVersion}}）</button>
+<button type="submit" title="{{t $.Lang "回到该轨上一个目标版本；该版本当初已通过机队门槛，因此不受机队当前发布状态影响"}}">回滚到上一版本（{{.PreviousVersion}}）</button>
 </form>
 {{end}}
 <form method="post" action="/admin/rollout/{{.Track}}/emergency" class="lim">
-<input type="text" name="version" placeholder="v1.2.4" title="紧急发布的版本" style="width:110px">
-<button type="submit" class="danger">紧急发布</button>
+<input type="text" name="version" placeholder="v1.2.4" title="{{t $.Lang "紧急发布的版本"}}" style="width:110px">
+<button type="submit" class="danger">{{t $.Lang "紧急发布"}}</button>
 </form>
 </div>
 
 <table>
-<thead><tr><th>节点</th><th>状态</th><th>当前版本</th><th>更新结果</th><th>从版本</th><th>下发时间(UTC)</th></tr></thead>
+<thead><tr><th>{{t $.Lang "节点"}}</th><th>{{t $.Lang "状态"}}</th><th>{{t $.Lang "当前版本"}}</th><th>{{t $.Lang "更新结果"}}</th><th>{{t $.Lang "从版本"}}</th><th>{{t $.Lang "下发时间(UTC)"}}</th></tr></thead>
 <tbody>
 {{range .Nodes}}
 <tr>
 <td>{{if .Label}}<b>{{.Label}}</b> {{end}}<span style="color:var(--muted);font-size:12px">{{.ID}}</span>
-{{if .Status.Label}}<span class="ro-tag{{if .Status.Alarm}} never{{end}}">{{.Status.Label}}</span>{{end}}{{if .Status.Detail}}<div style="color:var(--muted);font-size:12px">{{.Status.Detail}}</div>{{end}}{{if .InBatch}}<span class="ro-tag">本批次</span>{{end}}{{if .PassedOverReason}}<div style="color:var(--muted);font-size:12px">{{.PassedOverReason}}</div>{{end}}</td>
+{{if .Status.Label}}<span class="ro-tag{{if .Status.Alarm}} never{{end}}">{{.Status.Label}}</span>{{end}}{{if .Status.Detail}}<div style="color:var(--muted);font-size:12px">{{.Status.Detail}}</div>{{end}}{{if .InBatch}}<span class="ro-tag">{{t $.Lang "本批次"}}</span>{{end}}{{if .PassedOverReason}}<div style="color:var(--muted);font-size:12px">{{.PassedOverReason}}</div>{{end}}</td>
 <td>{{if .Online}}在线{{else}}离线{{end}}</td>
 <td>{{if .Version}}{{.Version}}{{else}}—{{end}}{{if .OnTarget}} ✓{{end}}</td>
 <td>{{if eq .Result "failed"}}<b class="never">{{.ResultText}}</b>{{else if eq .Result "rolled_back"}}<b class="never">{{.ResultText}}</b>{{else}}{{.ResultText}}{{end}}
@@ -298,13 +308,13 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 {{if and (eq $.Track "fleet") .PassedOver (eq $.Status "complete")}}<form method="post" action="/admin/rollout/{{$.Track}}/retry" class="lim"
   onsubmit="return confirm('重新给 {{.ID}} 下发 {{$.TargetVersion}}？该轨道会回到发布中。')">
 <input type="hidden" name="node" value="{{.ID}}">
-<button type="submit" title="把这台重新放回发布队列；不改目标版本">重试</button>
+<button type="submit" title="{{t $.Lang "把这台重新放回发布队列；不改目标版本"}}">{{t $.Lang "重试"}}</button>
 </form>{{end}}</td>
 <td>{{if .UpdateFromVersion}}{{.UpdateFromVersion}}{{else}}—{{end}}</td>
 <td>{{if .UpdateStartedAt}}{{ts .UpdateStartedAt}}{{else}}—{{end}}</td>
 </tr>
 {{else}}
-<tr><td colspan="6" style="color:var(--muted)">该轨道下暂无节点</td></tr>
+<tr><td colspan="6" style="color:var(--muted)">{{t $.Lang "该轨道下暂无节点"}}</td></tr>
 {{end}}
 </tbody></table>
 {{if .Hidden}}<p style="color:var(--muted);font-size:12px">共 {{.Total}} 台，仅列出最需要关注的 {{len .Nodes}} 台（失败 / 发布中 / 落后版本优先），其余 {{.Hidden}} 台未显示。</p>{{end}}
@@ -317,7 +327,7 @@ func withRolloutPanel(t *template.Template) *template.Template {
 	return template.Must(t.Parse(rolloutPanelTmpl))
 }
 
-var adminLoginTmpl = template.Must(withPasskeyJS(template.New("login")).Parse(`<!doctype html>
+var adminLoginTmpl = template.Must(withPasskeyJS(template.New("login").Funcs(template.FuncMap{"t": adminT})).Parse(`<!doctype html>
 <html><head><meta charset="utf-8"><title>Relayium Admin</title>
 <style>:root{--a:#7c3aad;--bg:#faf9fb;--fg:#1a1420;--bd:#e5e4e7;--card:#fff;--muted:#6b6375}
 @media(prefers-color-scheme:dark){:root{--a:#c084fc;--bg:#16171d;--fg:#f3f4f6;--bd:#2e303a;--card:#1c1d25;--muted:#9ca3af}}
@@ -332,16 +342,16 @@ button:hover{filter:brightness(1.07)}
 .err{color:#e5484d;margin:0 0 10px}
 .muted{color:var(--muted);margin:0 0 10px}
 [hidden]{display:none!important}</style></head>
-<body><h1>Relayium 后台</h1>
+<body><h1>{{t $.Lang "Relayium 后台"}}</h1>
 {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
 <form method="post" action="/admin/login">
-<input type="text" name="username" placeholder="管理员账号" autofocus autocomplete="username">
-<input type="password" name="password" placeholder="管理员密码" autocomplete="current-password">
-{{if .TOTP}}<input type="text" name="totp" placeholder="6 位验证码" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="6">{{end}}
-<button type="submit">登录</button>
+<input type="text" name="username" placeholder="{{t $.Lang "管理员账号"}}" autofocus autocomplete="username">
+<input type="password" name="password" placeholder="{{t $.Lang "管理员密码"}}" autocomplete="current-password">
+{{if .TOTP}}<input type="text" name="totp" placeholder="{{t $.Lang "6 位验证码"}}" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="6">{{end}}
+<button type="submit">{{t $.Lang "登录"}}</button>
 </form>
 {{if .Passkey}}
-<button type="button" id="passkey-login" style="margin-top:12px;background:transparent;color:var(--a);border:1px solid var(--bd)">使用 passkey 登录</button>
+<button type="button" id="passkey-login" style="margin-top:12px;background:transparent;color:var(--a);border:1px solid var(--bd)">{{t $.Lang "使用 passkey 登录"}}</button>
 <p class="err" id="passkey-error" style="margin-top:10px" hidden></p>
 <script nonce="{{.Nonce}}">
 (function(){
@@ -414,8 +424,8 @@ button:hover{filter:brightness(1.07)}
 // /admin/confirm. Values interpolated below (Field/Old/New, Action, Target)
 // include admin-supplied strings such as plan names, so this MUST stay
 // html/template (auto-escaping), never text/template or raw string building.
-var adminConfirmTmpl = template.Must(withPasskeyJS(template.New("confirm")).Parse(`<!doctype html>
-<html><head><meta charset="utf-8"><title>Relayium Admin · 确认操作</title>
+var adminConfirmTmpl = template.Must(withPasskeyJS(template.New("confirm").Funcs(template.FuncMap{"t": adminT})).Parse(`<!doctype html>
+<html><head><meta charset="utf-8"><title>{{t $.Lang "Relayium Admin · 确认操作"}}</title>
 <style>:root{--a:#7c3aad;--bg:#faf9fb;--fg:#1a1420;--bd:#e5e4e7;--card:#fff;--muted:#6b6375;--soft:#f4f3ec}
 @media(prefers-color-scheme:dark){:root{--a:#c084fc;--bg:#16171d;--fg:#f3f4f6;--bd:#2e303a;--card:#1c1d25;--muted:#9ca3af;--soft:#1f2028}}
 *{box-sizing:border-box}
@@ -443,12 +453,12 @@ button:hover{filter:brightness(1.07)}
 .blast .track{font-size:22px;font-weight:700;letter-spacing:.5px;margin:0 0 4px}
 .blast .who{font-size:14px}</style></head>
 <body>
-<h1>请确认这项操作</h1>
-<p class="sub">动作：<code>{{.Action}}</code>{{if ne .Target "-"}} · 目标：<code>{{.Target}}</code>{{end}}</p>
+<h1>{{t $.Lang "请确认这项操作"}}</h1>
+<p class="sub">{{t $.Lang "动作："}}<code>{{.Action}}</code>{{if ne .Target "-"}} · 目标：<code>{{.Target}}</code>{{end}}</p>
 
 {{if .Track}}
 <div class="blast">
-<p class="t">⚠ 紧急发布：跳过金丝雀与分批，整条轨道一次性放行</p>
+<p class="t">{{t $.Lang "⚠ 紧急发布：跳过金丝雀与分批，整条轨道一次性放行"}}</p>
 <p class="track">轨道：{{.Track}}</p>
 <p class="who">{{.TrackLabel}}</p>
 </div>
@@ -456,13 +466,13 @@ button:hover{filter:brightness(1.07)}
 
 {{if .Changes}}
 <table>
-<thead><tr><th>字段</th><th>原值</th><th>新值</th></tr></thead>
+<thead><tr><th>{{t $.Lang "字段"}}</th><th>{{t $.Lang "原值"}}</th><th>{{t $.Lang "新值"}}</th></tr></thead>
 <tbody>
 {{range .Changes}}<tr><td>{{.Field}}</td><td class="old">{{.Old}}</td><td class="new">{{.New}}</td></tr>{{end}}
 </tbody>
 </table>
 {{else}}
-<p class="muted">该操作没有逐字段的差异可展示，请确认操作本身无误。</p>
+<p class="muted">{{t $.Lang "该操作没有逐字段的差异可展示，请确认操作本身无误。"}}</p>
 {{end}}
 
 <form method="post" action="/admin/confirm" id="confirm-form">
@@ -470,23 +480,23 @@ button:hover{filter:brightness(1.07)}
 {{if .NeedFactor}}
 {{if eq .Factor "passkey"}}
 <input type="hidden" name="factor_assertion" id="factor-assertion">
-<p class="muted">用你注册的 passkey 确认这项操作。</p>
+<p class="muted">{{t $.Lang "用你注册的 passkey 确认这项操作。"}}</p>
 <p class="muted" id="passkey-error" hidden></p>
 {{else if eq .Factor "totp"}}
-<label>验证码（TOTP）<input type="text" name="factor_code" inputmode="numeric" autocomplete="off" placeholder="6 位动态验证码"></label>
+<label>{{t $.Lang "验证码（TOTP）"}}<input type="text" name="factor_code" inputmode="numeric" autocomplete="off" placeholder="{{t $.Lang "6 位动态验证码"}}"></label>
 {{else}}
-<label>管理员密码<input type="password" name="factor_code" autocomplete="current-password" placeholder="再次输入密码以确认"></label>
+<label>{{t $.Lang "管理员密码"}}<input type="password" name="factor_code" autocomplete="current-password" placeholder="{{t $.Lang "再次输入密码以确认"}}"></label>
 {{end}}
 {{else}}
-<p class="muted">刚验证过第二因子，此次操作仍在宽限期内，免再输入 —— 但请确认上面的改动无误。</p>
+<p class="muted">{{t $.Lang "刚验证过第二因子，此次操作仍在宽限期内，免再输入 —— 但请确认上面的改动无误。"}}</p>
 {{end}}
 <div class="actions">
 {{if and .NeedFactor (eq .Factor "passkey")}}
-<button type="button" id="passkey-confirm">用 passkey 确认执行</button>
+<button type="button" id="passkey-confirm">{{t $.Lang "用 passkey 确认执行"}}</button>
 {{else}}
-<button type="submit">确认执行</button>
+<button type="submit">{{t $.Lang "确认执行"}}</button>
 {{end}}
-<a href="/admin">取消</a>
+<a href="/admin">{{t $.Lang "取消"}}</a>
 </div>
 </form>
 {{if and .NeedFactor (eq .Factor "passkey")}}
@@ -574,6 +584,7 @@ button:hover{filter:brightness(1.07)}
 // Note the shape: the handler calls the predicate rather than restating it.
 // Restating it is what let a stale page post while the panel showed nothing.
 var adminUsersTmpl = template.Must(withRolloutPanel(withPasskeyJS(template.New("users").Funcs(template.FuncMap{
+	"t":     adminT,
 	"ts":    func(sec int64) string { return time.Unix(sec, 0).UTC().Format("2006-01-02 15:04") },
 	"bytes": humanBytes,
 	"gib":   func(b int64) int64 { return b / (1 << 30) },
@@ -584,7 +595,7 @@ var adminUsersTmpl = template.Must(withRolloutPanel(withPasskeyJS(template.New("
 		return p
 	},
 }))).Parse(`<!doctype html>
-<html><head><meta charset="utf-8"><title>Relayium Admin · 用户</title>
+<html><head><meta charset="utf-8"><title>{{t $.Lang "Relayium Admin · 用户"}}</title>
 <style>:root{--a:#7c3aad;--bg:#faf9fb;--fg:#1a1420;--muted:#6b6375;--bd:#e5e4e7;--card:#fff;--soft:#f4f3ec}
 @media(prefers-color-scheme:dark){:root{--a:#c084fc;--bg:#16171d;--fg:#f3f4f6;--muted:#9ca3af;--bd:#2e303a;--card:#1c1d25;--soft:#1f2028}}
 *{box-sizing:border-box}
@@ -655,10 +666,10 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 /* [hidden] alone loses to .mint's display:flex, so state it outright. */
 [hidden]{display:none!important}</style></head>
 <body>
-<div class="top"><h1>后台概览</h1>
+<div class="top"><h1>{{t $.Lang "后台概览"}}</h1>
 <div style="display:flex;gap:12px;align-items:center">
-<a href="/admin/audit" style="color:var(--a);text-decoration:none">审计日志</a>
-<form method="post" action="/admin/logout"><button type="submit">退出</button></form>
+<a href="/admin/audit" style="color:var(--a);text-decoration:none">{{t $.Lang "审计日志"}}</a>
+<form method="post" action="/admin/logout"><button type="submit">{{t $.Lang "退出"}}</button></form>
 </div></div>
 
 {{with .ReleaseNotice}}
@@ -677,17 +688,17 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 {{end}}
 <form method="post" action="/admin/release/dismiss" class="lim">
 <input type="hidden" name="version" value="{{.LatestTag}}">
-<button type="submit">忽略此版本</button></form>
+<button type="submit">{{t $.Lang "忽略此版本"}}</button></form>
 </div>
 </section>
 {{else if .DismissedTag}}
 <div style="color:var(--muted);font-size:12px">已忽略 {{.DismissedTag}} ·
 <form method="post" action="/admin/release/dismiss" class="lim" style="display:inline">
 <input type="hidden" name="version" value="">
-<button type="submit">撤销</button></form></div>
+<button type="submit">{{t $.Lang "撤销"}}</button></form></div>
 {{end}}
 {{if .CheckedAt}}<div style="color:var(--muted);font-size:12px">上次成功检查：{{ts .CheckedAt}} UTC</div>
-{{else}}<div style="color:var(--muted);font-size:12px">尚未成功检查过</div>{{end}}
+{{else}}<div style="color:var(--muted);font-size:12px">{{t $.Lang "尚未成功检查过"}}</div>{{end}}
 {{end}}
 {{end}}
 
@@ -697,16 +708,16 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <div class="halt">
 <b>发布已中止：{{.Title}}（{{.Track}}）</b> · 目标版本 {{if .Version}}{{.Version}}{{else}}—{{end}}
 <div class="halt-why">{{if .Reason}}{{.Reason}}{{else}}未记录中止原因{{end}}</div>
-<a href="#{{.Anchor}}">前往该轨面板处理 ↓</a>
+<a href="#{{.Anchor}}">{{t $.Lang "前往该轨面板处理 ↓"}}</a>
 </div>
 {{end}}
 </section>
 {{end}}
 
 <section class="cards">
-<div class="card"><div class="n">{{.Metrics.TotalUsers}}</div><div class="l">总用户数</div></div>
-<div class="card"><div class="n">{{.Metrics.ActiveStoredFiles}}</div><div class="l">未过期暂存文件</div></div>
-<div class="card"><div class="n">{{bytes .Metrics.ActiveStoredBytes}}</div><div class="l">占用存储(近似)</div></div>
+<div class="card"><div class="n">{{.Metrics.TotalUsers}}</div><div class="l">{{t $.Lang "总用户数"}}</div></div>
+<div class="card"><div class="n">{{.Metrics.ActiveStoredFiles}}</div><div class="l">{{t $.Lang "未过期暂存文件"}}</div></div>
+<div class="card"><div class="n">{{bytes .Metrics.ActiveStoredBytes}}</div><div class="l">{{t $.Lang "占用存储(近似)"}}</div></div>
 <div class="card"><div class="n">{{bytes .Metrics.UploadBytes}}</div><div class="l">上传 · {{period .Period}}</div></div>
 <div class="card"><div class="n">{{bytes .Metrics.DownloadBytes}}</div><div class="l">下载 · {{period .Period}}</div></div>
 <div class="card"><div class="n">{{bytes .Metrics.RelayBytes}}</div><div class="l">中继 · {{period .Period}}</div></div>
@@ -718,61 +729,61 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 
 {{if .MintedToken}}
 <div class="minted">
-<p>新节点 Token（仅显示一次，请立即复制）：</p>
+<p>{{t $.Lang "新节点 Token（仅显示一次，请立即复制）："}}</p>
 <pre>{{.MintedToken}}</pre>
-<p>在官方服务器上执行以下命令安装并启动节点：</p>
+<p>{{t $.Lang "在官方服务器上执行以下命令安装并启动节点："}}</p>
 <pre>{{.MintedInstallCmd}}</pre>
 </div>
 {{end}}
 
 <form method="post" action="/admin/nodes/token" class="mint">
-<input type="text" name="name" placeholder="节点备注名（如 cn-shanghai-1）">
-<button type="submit">生成节点 Token</button>
+<input type="text" name="name" placeholder="{{t $.Lang "节点备注名（如 cn-shanghai-1）"}}">
+<button type="submit">{{t $.Lang "生成节点 Token"}}</button>
 </form>
 
 <table>
-<thead><tr><th>备注 / ID</th><th>IP</th><th>区域</th><th>状态</th><th>中继(本月/累计) / 上限</th><th>存储 / 硬盘上限</th><th>盘 剩余/总量</th><th>可存储</th><th>排空</th><th>剩余文件 / 最早可安全卸载</th><th>版本</th><th>备注名 · 限额(GB)</th><th></th></tr></thead>
+<thead><tr><th>{{t $.Lang "备注 / ID"}}</th><th>IP</th><th>{{t $.Lang "区域"}}</th><th>{{t $.Lang "状态"}}</th><th>{{t $.Lang "中继(本月/累计) / 上限"}}</th><th>{{t $.Lang "存储 / 硬盘上限"}}</th><th>{{t $.Lang "盘 剩余/总量"}}</th><th>{{t $.Lang "可存储"}}</th><th>{{t $.Lang "排空"}}</th><th>{{t $.Lang "剩余文件 / 最早可安全卸载"}}</th><th>{{t $.Lang "版本"}}</th><th>{{t $.Lang "备注名 · 限额(GB)"}}</th><th></th></tr></thead>
 <tbody>
 {{range .Nodes}}{{if eq .OwnerType "fleet"}}
 <tr>
 <td>{{if .Label}}<b>{{.Label}}</b><br>{{end}}<span style="color:var(--muted);font-size:12px">{{.ID}}</span></td>
 <td>{{if .Host}}{{.Host}}{{else}}—{{end}}</td>
 <td>{{.Region}}</td>
-<td>{{if .Removed}}<span class="err">已卸载</span>
-<form method="post" action="/admin/nodes/{{.ID}}/restore" class="lim" onsubmit="return confirm('恢复该节点？它会重新进入放置/ICE/直连下载。')"><button type="submit" title="清除已卸载标记，让节点重新上线（不影响它的文件与历史）">恢复</button></form>
+<td>{{if .Removed}}<span class="err">{{t $.Lang "已卸载"}}</span>
+<form method="post" action="/admin/nodes/{{.ID}}/restore" class="lim" onsubmit="return confirm('恢复该节点？它会重新进入放置/ICE/直连下载。')"><button type="submit" title="{{t $.Lang "清除已卸载标记，让节点重新上线（不影响它的文件与历史）"}}">{{t $.Lang "恢复"}}</button></form>
 {{else}}{{if .Online}}在线{{else}}离线{{end}}
-<form method="post" action="/admin/nodes/{{.ID}}/remove" class="lim" onsubmit="return confirm('手动标记该节点已卸载？用于卸载脚本联系不到中央、来不及自动登记的情况；节点会退出放置/ICE/直连下载，文件与历史保留，可随时用&quot;恢复&quot;撤销。')"><button type="submit" title="卸载脚本未能联系中央时的人工补救：标记为已移除">标记已移除</button></form>
+<form method="post" action="/admin/nodes/{{.ID}}/remove" class="lim" onsubmit="return confirm('手动标记该节点已卸载？用于卸载脚本联系不到中央、来不及自动登记的情况；节点会退出放置/ICE/直连下载，文件与历史保留，可随时用&quot;恢复&quot;撤销。')"><button type="submit" title="{{t $.Lang "卸载脚本未能联系中央时的人工补救：标记为已移除"}}">{{t $.Lang "标记已移除"}}</button></form>
 {{end}}</td>
 <td>{{bytes .MonthRelayedBytes}} / {{bytes .RelayedBytes}} / {{if .EffectiveTrafficLimitBytes}}{{bytes .EffectiveTrafficLimitBytes}}{{else}}∞{{end}}</td>
 <td>{{if .StorageEnabled}}{{bytes .StoredBytes}}{{else}}—{{end}} / {{if .DiskLimitBytes}}{{bytes .DiskLimitBytes}}{{else}}∞{{end}}</td>
 <td>{{if .StorageEnabled}}{{bytes .StorageFree}} / {{bytes .StorageTotal}}{{else}}—{{end}}</td>
 <td>{{if .StorageEnabled}}{{bytes .StorableBytes}}{{else}}—{{end}}</td>
 <td>
-{{if .Draining}}<span class="err">排空中</span>{{else}}正常{{end}}
+{{if .Draining}}<span class="err">{{t $.Lang "排空中"}}</span>{{else}}正常{{end}}
 <form method="post" action="/admin/nodes/{{.ID}}/draining" class="lim">
 <input type="hidden" name="on" value="{{if .Draining}}0{{else}}1{{end}}">
 <button type="submit">{{if .Draining}}取消排空{{else}}开始排空{{end}}</button>
 </form>
 {{if and .Draining (not .StoredFileCount)}}
-<div style="color:var(--muted);font-size:12px">可以卸载了，在该机器上执行（先下载到文件、确认非空再运行——不要直接 <code>curl | sudo sh</code>，链接一旦暂时不可达，这种管道写法会让整条命令"看起来成功"、实际什么都没做）：<br><code>curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh</code></div>
+<div style="color:var(--muted);font-size:12px">{{t $.Lang "可以卸载了，在该机器上执行（先下载到文件、确认非空再运行——不要直接"}} <code>curl | sudo sh</code>，链接一旦暂时不可达，这种管道写法会让整条命令"看起来成功"、实际什么都没做）：<br><code>curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh</code></div>
 {{else if .Draining}}
-<div style="color:var(--muted);font-size:12px">等最后一个文件过期后，在该机器上执行 <code>uninstall-node.sh</code> 卸载</div>
+<div style="color:var(--muted);font-size:12px">{{t $.Lang "等最后一个文件过期后，在该机器上执行"}} <code>uninstall-node.sh</code> {{t $.Lang "卸载"}}</div>
 {{end}}
 </td>
 <td>{{if .StoredFileCount}}{{.StoredFileCount}} 个 / {{ts .SafeToUninstallAt}}{{else}}0 个 · 可随时卸载{{end}}</td>
 <td>{{.Version}}</td>
 <td>
 <form method="post" action="/admin/nodes/{{.ID}}/label" class="lim">
-<input type="text" name="label" value="{{.Label}}" placeholder="备注名" title="节点备注名" style="width:110px">
-<button type="submit">改名</button>
+<input type="text" name="label" value="{{.Label}}" placeholder="{{t $.Lang "备注名"}}" title="{{t $.Lang "节点备注名"}}" style="width:110px">
+<button type="submit">{{t $.Lang "改名"}}</button>
 </form>
 <form method="post" action="/admin/nodes/{{.ID}}/limits" class="lim">
-<input type="number" name="traffic_limit_gb" min="0" value="{{gib .TrafficLimitBytes}}" title="流量上限 GB/月，0=用全局默认">
-<input type="number" name="disk_limit_gb" min="0" value="{{gib .DiskLimitBytes}}" title="硬盘上限 GB，0=无限">
-<button type="submit">保存</button>
+<input type="number" name="traffic_limit_gb" min="0" value="{{gib .TrafficLimitBytes}}" title="{{t $.Lang "流量上限 GB/月，0=用全局默认"}}">
+<input type="number" name="disk_limit_gb" min="0" value="{{gib .DiskLimitBytes}}" title="{{t $.Lang "硬盘上限 GB，0=无限"}}">
+<button type="submit">{{t $.Lang "保存"}}</button>
 </form>
 </td>
-<td><form method="post" action="/admin/nodes/{{.ID}}/delete" onsubmit="return confirm('删除该官方节点？')"><button type="submit" class="danger">删除</button></form></td>
+<td><form method="post" action="/admin/nodes/{{.ID}}/delete" onsubmit="return confirm('删除该官方节点？')"><button type="submit" class="danger">{{t $.Lang "删除"}}</button></form></td>
 </tr>
 {{end}}{{end}}
 </tbody></table>
@@ -789,7 +800,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <section class="nodes byo-nodes">
 {{/* 标题在查询失败时绝不能报"共 0 台"——那是把一次错误说成了一个答案。 */}}
 <h2>自带节点（用户机器{{if .ByoErr}}，查询失败{{else if .ByoSearch}}，匹配"{{.ByoSearch}}"的共 {{.ByoNodeCount}} 台，第 {{.ByoPage}}/{{.ByoTotalPages}} 页{{else}}，共 {{.ByoNodeCount}} 台，第 {{.ByoPage}}/{{.ByoTotalPages}} 页{{end}}）</h2>
-<p class="byo-warn">这些不是我们的机器，是用户贡献的。排空/标记已移除只影响<b>该用户自己的</b>放置池与直连下载，机器本身仍在用户手里运行；先看清"剩余文件"再动手，节点上的文件没有副本。</p>
+<p class="byo-warn">{{t $.Lang "这些不是我们的机器，是用户贡献的。排空/标记已移除只影响"}}<b>{{t $.Lang "该用户自己的"}}</b>放置池与直连下载，机器本身仍在用户手里运行；先看清"剩余文件"再动手，节点上的文件没有副本。</p>
 {{/* 搜索是 GET（安全方法，不带 CSRF token，和用户列表的搜索一致）。隐藏字段把
      用户列表自己的 q/sort/dir/period **和页码 page** 原样带过去：两张表各自分
      页，提交节点表的搜索绝不能把用户列表的搜索、排序和页码清掉。这里刻意不带
@@ -800,13 +811,13 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <input type="hidden" name="dir" value="{{.Dir}}">
 <input type="hidden" name="period" value="{{.Period}}">
 <input type="hidden" name="page" value="{{.Page}}">
-<input type="search" name="bq" value="{{.ByoSearch}}" placeholder="搜索：节点 ID / 用户邮箱 / 备注名 / 区域" maxlength="200" style="width:300px">
-<button type="submit">搜索</button>
-{{if .ByoSearch}}<a href="{{.ByoClearHref}}">清除</a>{{end}}
+<input type="search" name="bq" value="{{.ByoSearch}}" placeholder="{{t $.Lang "搜索：节点 ID / 用户邮箱 / 备注名 / 区域"}}" maxlength="200" style="width:300px">
+<button type="submit">{{t $.Lang "搜索"}}</button>
+{{if .ByoSearch}}<a href="{{.ByoClearHref}}">{{t $.Lang "清除"}}</a>{{end}}
 </form>
-{{if .ByoErr}}<p class="err">自带节点查询失败，下表<b>不是</b>"没有匹配"的结果——是这次查询没跑成功。请查看服务端日志后重试；在确认之前不要据此认定某台节点不存在。</p>{{end}}
+{{if .ByoErr}}<p class="err">{{t $.Lang "自带节点查询失败，下表"}}<b>{{t $.Lang "不是"}}</b>"没有匹配"的结果——是这次查询没跑成功。请查看服务端日志后重试；在确认之前不要据此认定某台节点不存在。</p>{{end}}
 <table>
-<thead><tr><th>备注 / ID</th><th>所属用户</th><th>IP</th><th>状态</th><th>版本</th><th>最后心跳(UTC)</th><th>排空</th><th>剩余文件 / 最早可安全卸载</th></tr></thead>
+<thead><tr><th>{{t $.Lang "备注 / ID"}}</th><th>{{t $.Lang "所属用户"}}</th><th>IP</th><th>{{t $.Lang "状态"}}</th><th>{{t $.Lang "版本"}}</th><th>{{t $.Lang "最后心跳(UTC)"}}</th><th>{{t $.Lang "排空"}}</th><th>{{t $.Lang "剩余文件 / 最早可安全卸载"}}</th></tr></thead>
 <tbody>
 {{range .ByoNodes}}
 <tr>
@@ -814,12 +825,12 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <td><span style="color:var(--muted);font-size:12px">{{if .OwnerEmail}}{{.OwnerEmail}}{{else}}{{.OwnerUserID}}{{end}}</span></td>
 <td>{{if .Host}}{{.Host}}{{else}}—{{end}}</td>
 <td>{{if .Online}}在线{{else}}离线{{end}}
-<form method="post" action="/admin/nodes/{{.ID}}/remove" class="lim" onsubmit="return confirm('标记该用户节点已卸载？它会退出该用户的放置池/ICE/直连下载，文件与历史保留，可随时用&quot;恢复&quot;撤销。')"><button type="submit" title="把这台用户节点移出服务（可恢复）">标记已移除</button></form>
+<form method="post" action="/admin/nodes/{{.ID}}/remove" class="lim" onsubmit="return confirm('标记该用户节点已卸载？它会退出该用户的放置池/ICE/直连下载，文件与历史保留，可随时用&quot;恢复&quot;撤销。')"><button type="submit" title="{{t $.Lang "把这台用户节点移出服务（可恢复）"}}">{{t $.Lang "标记已移除"}}</button></form>
 </td>
 <td>{{if .Version}}{{.Version}}{{else}}—{{end}}</td>
 <td>{{if .LastSeenAt}}{{ts .LastSeenAt}}{{else}}—{{end}}</td>
 <td>
-{{if .Draining}}<span class="err">排空中</span>{{else}}正常{{end}}
+{{if .Draining}}<span class="err">{{t $.Lang "排空中"}}</span>{{else}}正常{{end}}
 <form method="post" action="/admin/nodes/{{.ID}}/draining" class="lim">
 <input type="hidden" name="on" value="{{if .Draining}}0{{else}}1{{end}}">
 <button type="submit">{{if .Draining}}取消排空{{else}}开始排空{{end}}</button>
@@ -835,16 +846,16 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
      上一页/下一页）是为了让"跳回第 1 页"这种最常见的动作只要一次点击。 */}}
 {{if gt .ByoTotalPages 1}}
 <div class="pager">
-{{if .ByoPrevHref}}<a href="{{.ByoPrevHref}}">← 上一页</a>{{else}}<span class="off">← 上一页</span>{{end}}
+{{if .ByoPrevHref}}<a href="{{.ByoPrevHref}}">{{t $.Lang "← 上一页"}}</a>{{else}}<span class="off">{{t $.Lang "← 上一页"}}</span>{{end}}
 {{range .ByoPages}}{{if .Current}}<b>{{.Num}}</b>{{else}}<a href="{{.Href}}">{{.Num}}</a>{{end}}{{end}}
-{{if .ByoNextHref}}<a href="{{.ByoNextHref}}">下一页 →</a>{{else}}<span class="off">下一页 →</span>{{end}}
+{{if .ByoNextHref}}<a href="{{.ByoNextHref}}">{{t $.Lang "下一页 →"}}</a>{{else}}<span class="off">{{t $.Lang "下一页 →"}}</span>{{end}}
 </div>
 {{/* 见 adminByoNodesShown 的注释：排序键 last_seen_at 每次在线节点心跳
      （~30 秒一次）都会变，OFFSET 分页对仍在心跳的节点不是一次能走完的清点——
      翻页时可能跳过或重复看到同一台在线节点。只对搜索、以及不再心跳的节点
      （已离线/已卸载）才是可靠的。这里明说，免得管理员把"翻完所有页"当成
      "点清了所有在线节点"。 */}}
-<p class="byo-warn">翻页看到的是当前这一刻的快照：在线节点每次心跳都会重新排名，翻页不保证遍历到每一台在线节点（可能跳过或重复）。要确认某一台节点还在，请用上面的搜索定位，不要靠翻页去清点。</p>
+<p class="byo-warn">{{t $.Lang "翻页看到的是当前这一刻的快照：在线节点每次心跳都会重新排名，翻页不保证遍历到每一台在线节点（可能跳过或重复）。要确认某一台节点还在，请用上面的搜索定位，不要靠翻页去清点。"}}</p>
 {{end}}
 </section>
 
@@ -861,10 +872,10 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
      这里以前只写一个光秃秃的"共 N 台"，看起来像是全部已卸载节点的总数，其实是
      过滤后的数量——同一页上两个口径不一致最容易读错。 */}}
 <h2>已卸载的自带节点（{{if .ByoRemovedErr}}查询失败{{else if .ByoSearch}}匹配"{{.ByoSearch}}"的共 {{.ByoRemovedNodeCount}} 台，第 {{.ByoRemovedPage}}/{{.ByoRemovedTotalPages}} 页{{else}}共 {{.ByoRemovedNodeCount}} 台，第 {{.ByoRemovedPage}}/{{.ByoRemovedTotalPages}} 页{{end}}）</h2>
-{{if .ByoRemovedErr}}<p class="err">已卸载自带节点查询失败，下面<b>不是</b>"没有匹配"的结果。请查看服务端日志后重试。</p>{{end}}
+{{if .ByoRemovedErr}}<p class="err">{{t $.Lang "已卸载自带节点查询失败，下面"}}<b>{{t $.Lang "不是"}}</b>"没有匹配"的结果。请查看服务端日志后重试。</p>{{end}}
 <p class="byo-warn">这些用户节点已被标记卸载，已退出对应用户的放置池/ICE/直连下载。如果是误操作或卸载脚本没跑完整，用"恢复"撤销——不影响它的文件与历史。</p>
 <table>
-<thead><tr><th>备注 / ID</th><th>所属用户</th><th>IP</th><th>版本</th><th>最后心跳(UTC)</th><th></th></tr></thead>
+<thead><tr><th>{{t $.Lang "备注 / ID"}}</th><th>{{t $.Lang "所属用户"}}</th><th>IP</th><th>{{t $.Lang "版本"}}</th><th>{{t $.Lang "最后心跳(UTC)"}}</th><th></th></tr></thead>
 <tbody>
 {{range .ByoRemovedNodes}}
 <tr>
@@ -873,7 +884,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <td>{{if .Host}}{{.Host}}{{else}}—{{end}}</td>
 <td>{{if .Version}}{{.Version}}{{else}}—{{end}}</td>
 <td>{{if .LastSeenAt}}{{ts .LastSeenAt}}{{else}}—{{end}}</td>
-<td><form method="post" action="/admin/nodes/{{.ID}}/restore" class="lim" onsubmit="return confirm('恢复该用户节点？它会重新进入该用户的放置池/ICE/直连下载。')"><button type="submit" title="清除已卸载标记（不影响它的文件与历史）">恢复</button></form></td>
+<td><form method="post" action="/admin/nodes/{{.ID}}/restore" class="lim" onsubmit="return confirm('恢复该用户节点？它会重新进入该用户的放置池/ICE/直连下载。')"><button type="submit" title="{{t $.Lang "清除已卸载标记（不影响它的文件与历史）"}}">{{t $.Lang "恢复"}}</button></form></td>
 </tr>
 {{else}}
 {{/* 与上面的实时节点表一致：查询出错时也要在表内给一行明确的"查询失败"，
@@ -884,9 +895,9 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 </tbody></table>
 {{if gt .ByoRemovedTotalPages 1}}
 <div class="pager">
-{{if .ByoRemovedPrevHref}}<a href="{{.ByoRemovedPrevHref}}">← 上一页</a>{{else}}<span class="off">← 上一页</span>{{end}}
+{{if .ByoRemovedPrevHref}}<a href="{{.ByoRemovedPrevHref}}">{{t $.Lang "← 上一页"}}</a>{{else}}<span class="off">{{t $.Lang "← 上一页"}}</span>{{end}}
 {{range .ByoRemovedPages}}{{if .Current}}<b>{{.Num}}</b>{{else}}<a href="{{.Href}}">{{.Num}}</a>{{end}}{{end}}
-{{if .ByoRemovedNextHref}}<a href="{{.ByoRemovedNextHref}}">下一页 →</a>{{else}}<span class="off">下一页 →</span>{{end}}
+{{if .ByoRemovedNextHref}}<a href="{{.ByoRemovedNextHref}}">{{t $.Lang "下一页 →"}}</a>{{else}}<span class="off">{{t $.Lang "下一页 →"}}</span>{{end}}
 </div>
 {{end}}
 </section>
@@ -896,14 +907,14 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 {{if .FleetTokens}}
 <h2>活跃节点 Token（{{len .FleetTokens}}）</h2>
 <table>
-<thead><tr><th>备注名</th><th>创建时间(UTC)</th><th>最后使用</th><th>绑定节点</th><th></th></tr></thead>
+<thead><tr><th>{{t $.Lang "备注名"}}</th><th>{{t $.Lang "创建时间(UTC)"}}</th><th>{{t $.Lang "最后使用"}}</th><th>{{t $.Lang "绑定节点"}}</th><th></th></tr></thead>
 <tbody>
 {{range .FleetTokens}}
 <tr>
 <td>{{.Name}}</td><td>{{ts .CreatedAt}}</td>
 <td>{{if .LastUsedAt}}{{ts .LastUsedAt}}{{else}}—{{end}}</td>
 <td>{{if .NodeID}}{{.NodeID}}{{else}}—{{end}}</td>
-<td><form method="post" action="/admin/nodes/token/{{.ID}}/revoke" onsubmit="return confirm('撤销该 Token？')"><button type="submit" class="danger">撤销</button></form></td>
+<td><form method="post" action="/admin/nodes/token/{{.ID}}/revoke" onsubmit="return confirm('撤销该 Token？')"><button type="submit" class="danger">{{t $.Lang "撤销"}}</button></form></td>
 </tr>
 {{end}}
 </tbody></table>
@@ -911,7 +922,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 </section>
 
 <section class="rollout">
-<h2>节点版本发布</h2>
+<h2>{{t $.Lang "节点版本发布"}}</h2>
 {{if .RolloutError}}<p class="err">{{.RolloutError}}</p>{{end}}
 {{template "rolloutPanel" .RolloutFleet}}
 {{template "rolloutPanel" .RolloutByo}}
@@ -920,25 +931,25 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <section class="plans">
 <h2>套餐（{{len .Plans}}）</h2>
 <table>
-<thead><tr><th>ID</th><th>名称</th><th>存储(MB)</th><th>流量(GB/月)</th><th>暂存天数</th><th>每日额度(MiB)</th><th>月付(分)</th><th>年付(分)</th><th>排序</th><th>启用</th><th>Stripe 月付价格ID</th><th>Stripe 年付价格ID</th><th></th></tr></thead>
+<thead><tr><th>ID</th><th>{{t $.Lang "名称"}}</th><th>{{t $.Lang "存储(MB)"}}</th><th>{{t $.Lang "流量(GB/月)"}}</th><th>{{t $.Lang "暂存天数"}}</th><th>{{t $.Lang "每日额度(MiB)"}}</th><th>{{t $.Lang "月付(分)"}}</th><th>{{t $.Lang "年付(分)"}}</th><th>{{t $.Lang "排序"}}</th><th>{{t $.Lang "启用"}}</th><th>{{t $.Lang "Stripe 月付价格ID"}}</th><th>{{t $.Lang "Stripe 年付价格ID"}}</th><th></th></tr></thead>
 <tbody>
 {{range .Plans}}
 <tr><td colspan="13">
 <form method="post" action="/admin/plans" class="plan-row">
 <input type="hidden" name="id" value="{{.ID}}">
 <span>{{.ID}}</span>
-<input type="text" name="name" value="{{.Name}}" title="名称" required>
-<input type="number" name="storage_mb" min="0" value="{{.StorageMB}}" title="存储(MB)">
-<input type="number" name="traffic_gb" min="0" value="{{.TrafficGB}}" title="流量(GB/月)">
-<input type="number" name="retention_days" min="0" value="{{.RetentionDays}}" title="暂存天数">
-<input type="number" name="daily_quota_mb" min="0" value="{{.DailyQuotaMB}}" title="每日额度(MiB)，0 = 用全局设置">
-<input type="number" name="price_monthly_cents" min="0" value="{{.PriceMonthlyCents}}" title="月付(分)">
-<input type="number" name="price_yearly_cents" min="0" value="{{.PriceYearlyCents}}" title="年付(分)">
-<input type="number" name="sort_order" min="0" value="{{.SortOrder}}" title="排序">
-<label><input type="checkbox" name="active" value="1"{{if .Active}} checked{{end}}> 启用</label>
-<input type="text" name="stripe_price_monthly_id" value="{{.StripePriceMonthlyID}}" title="Stripe 月付价格ID" placeholder="price_...">
-<input type="text" name="stripe_price_yearly_id" value="{{.StripePriceYearlyID}}" title="Stripe 年付价格ID" placeholder="price_...">
-<button type="submit">保存</button>
+<input type="text" name="name" value="{{.Name}}" title="{{t $.Lang "名称"}}" required>
+<input type="number" name="storage_mb" min="0" value="{{.StorageMB}}" title="{{t $.Lang "存储(MB)"}}">
+<input type="number" name="traffic_gb" min="0" value="{{.TrafficGB}}" title="{{t $.Lang "流量(GB/月)"}}">
+<input type="number" name="retention_days" min="0" value="{{.RetentionDays}}" title="{{t $.Lang "暂存天数"}}">
+<input type="number" name="daily_quota_mb" min="0" value="{{.DailyQuotaMB}}" title="{{t $.Lang "每日额度(MiB)，0 = 用全局设置"}}">
+<input type="number" name="price_monthly_cents" min="0" value="{{.PriceMonthlyCents}}" title="{{t $.Lang "月付(分)"}}">
+<input type="number" name="price_yearly_cents" min="0" value="{{.PriceYearlyCents}}" title="{{t $.Lang "年付(分)"}}">
+<input type="number" name="sort_order" min="0" value="{{.SortOrder}}" title="{{t $.Lang "排序"}}">
+<label><input type="checkbox" name="active" value="1"{{if .Active}} checked{{end}}> {{t $.Lang "启用"}}</label>
+<input type="text" name="stripe_price_monthly_id" value="{{.StripePriceMonthlyID}}" title="{{t $.Lang "Stripe 月付价格ID"}}" placeholder="price_...">
+<input type="text" name="stripe_price_yearly_id" value="{{.StripePriceYearlyID}}" title="{{t $.Lang "Stripe 年付价格ID"}}" placeholder="price_...">
+<button type="submit">{{t $.Lang "保存"}}</button>
 </form>
 </td></tr>
 {{end}}
@@ -946,54 +957,54 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 </section>
 
 <section class="settings">
-<h2>暂存传输设置</h2>
+<h2>{{t $.Lang "暂存传输设置"}}</h2>
 <form method="post" action="/admin/settings" class="grid">
-<label>单文件上限 (MiB)<input type="number" name="max_file_size_mb" min="1" value="{{.Settings.MaxFileSizeMB}}"></label>
-<label>每账号每日额度 (MiB)<input type="number" name="daily_quota_mb" min="1" value="{{.Settings.DailyQuotaMB}}"></label>
-<label>默认有效期 (小时)<input type="number" name="default_ttl_hours" min="1" value="{{.Settings.DefaultTTLHrs}}"></label>
-<label>最长有效期 (小时)<input type="number" name="max_ttl_hours" min="1" value="{{.Settings.MaxTTLHrs}}"></label>
-<label>默认保留策略<select name="default_retention">
-<option value="0"{{if eq .Settings.DefaultRetention 0}} selected{{end}}>阅后即焚</option>
-<option value="1"{{if eq .Settings.DefaultRetention 1}} selected{{end}}>保存N天</option>
-<option value="2"{{if eq .Settings.DefaultRetention 2}} selected{{end}}>限定次数</option>
+<label>{{t $.Lang "单文件上限 (MiB)"}}<input type="number" name="max_file_size_mb" min="1" value="{{.Settings.MaxFileSizeMB}}"></label>
+<label>{{t $.Lang "每账号每日额度 (MiB)"}}<input type="number" name="daily_quota_mb" min="1" value="{{.Settings.DailyQuotaMB}}"></label>
+<label>{{t $.Lang "默认有效期 (小时)"}}<input type="number" name="default_ttl_hours" min="1" value="{{.Settings.DefaultTTLHrs}}"></label>
+<label>{{t $.Lang "最长有效期 (小时)"}}<input type="number" name="max_ttl_hours" min="1" value="{{.Settings.MaxTTLHrs}}"></label>
+<label>{{t $.Lang "默认保留策略"}}<select name="default_retention">
+<option value="0"{{if eq .Settings.DefaultRetention 0}} selected{{end}}>{{t $.Lang "阅后即焚"}}</option>
+<option value="1"{{if eq .Settings.DefaultRetention 1}} selected{{end}}>{{t $.Lang "保存N天"}}</option>
+<option value="2"{{if eq .Settings.DefaultRetention 2}} selected{{end}}>{{t $.Lang "限定次数"}}</option>
 </select></label>
-<label>默认下载次数上限<input type="number" name="default_max_downloads" min="1" value="{{.Settings.DefaultMaxDownloads}}"></label>
-<label>下载次数上限的上限<input type="number" name="max_max_downloads" min="1" value="{{.Settings.MaxMaxDownloads}}"></label>
-<label>全局存储上限 (MiB，0=无限)<input type="number" name="storage_disk_cap_mb" min="0" value="{{.Settings.StorageDiskCapMB}}"></label>
-<label>节点默认流量上限 (GB/月，0=不限)<input type="number" name="node_traffic_default_gb" min="0" value="{{.Settings.NodeTrafficDefaultGB}}"></label>
-<label style="flex-direction:row;align-items:center;gap:8px;grid-column:1/-1"><input type="checkbox" name="disable_central_fallback" value="1" style="width:auto"{{if .Settings.DisableCentralFallback}} checked{{end}}>关闭中央兜底：无可用存储节点时上传直接失败，不再落到本站服务器磁盘</label>
-<button type="submit">保存设置</button>
+<label>{{t $.Lang "默认下载次数上限"}}<input type="number" name="default_max_downloads" min="1" value="{{.Settings.DefaultMaxDownloads}}"></label>
+<label>{{t $.Lang "下载次数上限的上限"}}<input type="number" name="max_max_downloads" min="1" value="{{.Settings.MaxMaxDownloads}}"></label>
+<label>{{t $.Lang "全局存储上限 (MiB，0=无限)"}}<input type="number" name="storage_disk_cap_mb" min="0" value="{{.Settings.StorageDiskCapMB}}"></label>
+<label>{{t $.Lang "节点默认流量上限 (GB/月，0=不限)"}}<input type="number" name="node_traffic_default_gb" min="0" value="{{.Settings.NodeTrafficDefaultGB}}"></label>
+<label style="flex-direction:row;align-items:center;gap:8px;grid-column:1/-1"><input type="checkbox" name="disable_central_fallback" value="1" style="width:auto"{{if .Settings.DisableCentralFallback}} checked{{end}}>{{t $.Lang "关闭中央兜底：无可用存储节点时上传直接失败，不再落到本站服务器磁盘"}}</label>
+<button type="submit">{{t $.Lang "保存设置"}}</button>
 </form>
 </section>
 
 <section class="passkeys">
 <h2>Passkey 登录{{if not .PasskeysErr}}（{{len .Passkeys}}）{{end}}</h2>
 {{if .PasskeysErr}}
-<p class="err">凭据列表读取失败，请查看服务端日志</p>
+<p class="err">{{t $.Lang "凭据列表读取失败，请查看服务端日志"}}</p>
 {{else}}
 <table>
-<thead><tr><th>名称</th><th>添加时间(UTC)</th><th>最后使用</th><th></th></tr></thead>
+<thead><tr><th>{{t $.Lang "名称"}}</th><th>{{t $.Lang "添加时间(UTC)"}}</th><th>{{t $.Lang "最后使用"}}</th><th></th></tr></thead>
 <tbody>
 {{range .Passkeys}}
 <tr>
 <td>{{.Name}}</td>
 <td>{{ts .CreatedAt}}</td>
-<td>{{if .LastUsedAt}}{{ts .LastUsedAt}}{{else}}<span class="never">从未使用</span>{{end}}</td>
+<td>{{if .LastUsedAt}}{{ts .LastUsedAt}}{{else}}<span class="never">{{t $.Lang "从未使用"}}</span>{{end}}</td>
 <td><form method="post" action="/admin/passkey/delete" onsubmit="return confirm('删除这枚 passkey？')">
-<input type="hidden" name="id" value="{{.ID}}"><button type="submit" class="danger">删除</button></form></td>
+<input type="hidden" name="id" value="{{.ID}}"><button type="submit" class="danger">{{t $.Lang "删除"}}</button></form></td>
 </tr>
 {{else}}
-<tr><td colspan="4">尚未添加 passkey</td></tr>
+<tr><td colspan="4">{{t $.Lang "尚未添加 passkey"}}</td></tr>
 {{end}}
 </tbody></table>
 {{end}}
 
 <form id="passkey-add" class="mint" hidden>
-<input type="text" name="name" placeholder="设备名称，如 MacBook" required>
-<input type="text" name="username" placeholder="管理员账号" autocomplete="username" required>
-<input type="password" name="password" placeholder="管理员密码" autocomplete="current-password" required>
-<input type="text" name="totp" placeholder="6 位验证码（如已启用）" inputmode="numeric" autocomplete="one-time-code">
-<button type="submit">添加 passkey</button>
+<input type="text" name="name" placeholder="{{t $.Lang "设备名称，如 MacBook"}}" required>
+<input type="text" name="username" placeholder="{{t $.Lang "管理员账号"}}" autocomplete="username" required>
+<input type="password" name="password" placeholder="{{t $.Lang "管理员密码"}}" autocomplete="current-password" required>
+<input type="text" name="totp" placeholder="{{t $.Lang "6 位验证码（如已启用）"}}" inputmode="numeric" autocomplete="one-time-code">
+<button type="submit">{{t $.Lang "添加 passkey"}}</button>
 </form>
 <p class="err" id="passkey-add-error" hidden></p>
 <script nonce="{{.Nonce}}">
@@ -1055,33 +1066,33 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 </script>
 </section>
 
-<div class="top"><h2>用量月份</h2>
+<div class="top"><h2>{{t $.Lang "用量月份"}}</h2>
 <form method="get" action="/admin" class="search">
 <input type="hidden" name="q" value="{{.Search}}"><input type="hidden" name="sort" value="{{.Sort}}"><input type="hidden" name="dir" value="{{.Dir}}">
 <select name="period" onchange="this.form.submit()">
 {{$sel := .Period}}{{range .Months}}<option value="{{.}}"{{if eq . $sel}} selected{{end}}>{{period .}}</option>{{end}}
 </select>
-<noscript><button type="submit">切换</button></noscript>
+<noscript><button type="submit">{{t $.Lang "切换"}}</button></noscript>
 </form></div>
 
 <div class="top"><h2>注册用户（{{.Total}}）</h2>
 <form method="get" action="/admin" class="search">
-<input type="text" name="q" value="{{.Search}}" placeholder="搜索邮箱或显示名">
+<input type="text" name="q" value="{{.Search}}" placeholder="{{t $.Lang "搜索邮箱或显示名"}}">
 <input type="hidden" name="sort" value="{{.Sort}}"><input type="hidden" name="dir" value="{{.Dir}}"><input type="hidden" name="period" value="{{.Period}}">
-<button type="submit">搜索</button>
+<button type="submit">{{t $.Lang "搜索"}}</button>
 </form></div>
 
 <table><thead><tr>
-<th><a href="{{index .SortHref "email"}}">邮箱</a></th>
-<th>显示名</th>
-<th><a href="{{index .SortHref "created"}}">注册时间(UTC)</a></th>
-<th>登录方式</th><th>设备</th>
-<th><a href="{{index .SortHref "upload"}}">上传</a></th>
-<th><a href="{{index .SortHref "download"}}">下载</a></th>
-<th><a href="{{index .SortHref "relayed"}}">中继</a></th>
-<th><a href="{{index .SortHref "storage"}}">当前存储占用</a></th>
-<th>套餐</th>
-<th>订阅来源</th>
+<th><a href="{{index .SortHref "email"}}">{{t $.Lang "邮箱"}}</a></th>
+<th>{{t $.Lang "显示名"}}</th>
+<th><a href="{{index .SortHref "created"}}">{{t $.Lang "注册时间(UTC)"}}</a></th>
+<th>{{t $.Lang "登录方式"}}</th><th>{{t $.Lang "设备"}}</th>
+<th><a href="{{index .SortHref "upload"}}">{{t $.Lang "上传"}}</a></th>
+<th><a href="{{index .SortHref "download"}}">{{t $.Lang "下载"}}</a></th>
+<th><a href="{{index .SortHref "relayed"}}">{{t $.Lang "中继"}}</a></th>
+<th><a href="{{index .SortHref "storage"}}">{{t $.Lang "当前存储占用"}}</a></th>
+<th>{{t $.Lang "套餐"}}</th>
+<th>{{t $.Lang "订阅来源"}}</th>
 </tr></thead><tbody>
 {{$plans := .ActivePlans}}
 {{range .Users}}<tr>
@@ -1096,7 +1107,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <select name="plan_id">
 {{$cur := .PlanID}}{{range $plans}}<option value="{{.ID}}"{{if eq .ID $cur}} selected{{end}}>{{.Name}}</option>{{end}}
 </select>
-<button type="submit">分配</button>
+<button type="submit">{{t $.Lang "分配"}}</button>
 </form>
 </td>
 <td>{{if eq .PlanSource "admin"}}{{.PlanID}} · admin{{else if eq .PlanSource "stripe"}}{{.PlanID}} · stripe/{{.SubscriptionStatus}}{{else}}—{{end}}</td>
@@ -1104,9 +1115,9 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 </tbody></table>
 
 <div class="pager">
-{{if .PrevHref}}<a href="{{.PrevHref}}">← 上一页</a>{{else}}<span class="off">← 上一页</span>{{end}}
+{{if .PrevHref}}<a href="{{.PrevHref}}">{{t $.Lang "← 上一页"}}</a>{{else}}<span class="off">{{t $.Lang "← 上一页"}}</span>{{end}}
 <span>第 {{.Page}} / {{.TotalPages}} 页</span>
-{{if .NextHref}}<a href="{{.NextHref}}">下一页 →</a>{{else}}<span class="off">下一页 →</span>{{end}}
+{{if .NextHref}}<a href="{{.NextHref}}">{{t $.Lang "下一页 →"}}</a>{{else}}<span class="off">{{t $.Lang "下一页 →"}}</span>{{end}}
 </div>
 </body></html>`))
 
@@ -1126,6 +1137,7 @@ type adminAuditRow struct {
 }
 
 type adminAuditData struct {
+	Lang     string // console language for this request (admin_i18n.go)
 	Rows     []adminAuditRow
 	Actions  []string // known action constants (audit.go's auditActions), for the filter dropdown
 	Action   string   // currently selected filter; "" = all actions
@@ -1138,8 +1150,8 @@ type adminAuditData struct {
 // all carry admin- or user-controlled strings (plan names, node labels, IP
 // headers), so — same rule as adminConfirmTmpl above — this MUST stay
 // html/template (auto-escaping), never text/template or raw string building.
-var adminAuditTmpl = template.Must(template.New("audit").Parse(`<!doctype html>
-<html><head><meta charset="utf-8"><title>Relayium Admin · 审计日志</title>
+var adminAuditTmpl = template.Must(template.New("audit").Funcs(template.FuncMap{"t": adminT}).Parse(`<!doctype html>
+<html><head><meta charset="utf-8"><title>{{t $.Lang "Relayium Admin · 审计日志"}}</title>
 <style>:root{--a:#7c3aad;--bg:#faf9fb;--fg:#1a1420;--bd:#e5e4e7;--card:#fff;--muted:#6b6375;--soft:#f4f3ec}
 @media(prefers-color-scheme:dark){:root{--a:#c084fc;--bg:#16171d;--fg:#f3f4f6;--bd:#2e303a;--card:#1c1d25;--muted:#9ca3af;--soft:#1f2028}}
 *{box-sizing:border-box}
@@ -1158,18 +1170,18 @@ tbody tr:last-child td{border-bottom:0}tbody tr:hover{background:var(--soft)}
 .pager .off{color:var(--muted);opacity:.55}
 :focus-visible{outline:2px solid var(--a);outline-offset:2px}</style></head>
 <body>
-<div class="top"><h1>审计日志</h1><a href="/admin">← 返回后台</a></div>
+<div class="top"><h1>{{t $.Lang "审计日志"}}</h1><a href="/admin">{{t $.Lang "← 返回后台"}}</a></div>
 
 <form method="get" action="/admin/audit" class="filter">
 <select name="action" onchange="this.form.submit()">
-<option value=""{{if eq .Action ""}} selected{{end}}>全部动作</option>
+<option value=""{{if eq .Action ""}} selected{{end}}>{{t $.Lang "全部动作"}}</option>
 {{$sel := .Action}}{{range .Actions}}<option value="{{.}}"{{if eq . $sel}} selected{{end}}>{{.}}</option>{{end}}
 </select>
-<noscript><button type="submit">筛选</button></noscript>
+<noscript><button type="submit">{{t $.Lang "筛选"}}</button></noscript>
 </form>
 
 <table>
-<thead><tr><th>时间(UTC)</th><th>动作</th><th>目标</th><th>变更</th><th>IP</th><th>登录方式</th><th>步进因子</th></tr></thead>
+<thead><tr><th>{{t $.Lang "时间(UTC)"}}</th><th>{{t $.Lang "动作"}}</th><th>{{t $.Lang "目标"}}</th><th>{{t $.Lang "变更"}}</th><th>IP</th><th>{{t $.Lang "登录方式"}}</th><th>{{t $.Lang "步进因子"}}</th></tr></thead>
 <tbody>
 {{range .Rows}}<tr>
 <td>{{.Time}}</td>
@@ -1180,14 +1192,14 @@ tbody tr:last-child td{border-bottom:0}tbody tr:hover{background:var(--soft)}
 <td>{{.Auth}}</td>
 <td>{{if .StepUp}}{{.StepUp}}{{else}}—{{end}}</td>
 </tr>{{else}}
-<tr><td colspan="7">暂无记录</td></tr>
+<tr><td colspan="7">{{t $.Lang "暂无记录"}}</td></tr>
 {{end}}
 </tbody></table>
 
 <div class="pager">
-{{if .PrevHref}}<a href="{{.PrevHref}}">← 上一页</a>{{else}}<span class="off">← 上一页</span>{{end}}
+{{if .PrevHref}}<a href="{{.PrevHref}}">{{t $.Lang "← 上一页"}}</a>{{else}}<span class="off">{{t $.Lang "← 上一页"}}</span>{{end}}
 <span>第 {{.Page}} 页</span>
-{{if .NextHref}}<a href="{{.NextHref}}">下一页 →</a>{{else}}<span class="off">下一页 →</span>{{end}}
+{{if .NextHref}}<a href="{{.NextHref}}">{{t $.Lang "下一页 →"}}</a>{{else}}<span class="off">{{t $.Lang "下一页 →"}}</span>{{end}}
 </div>
 </body></html>`))
 

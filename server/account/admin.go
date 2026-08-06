@@ -962,6 +962,9 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 	// of the two-track design, so keep these two calls separate.
 	rolloutFleet := s.rolloutPanel(r.Context(), "fleet", "机队轨", s.Now(), allNodes, nodesErr)
 	rolloutByo := s.rolloutPanel(r.Context(), "byo", "自带节点轨", s.Now(), allNodes, nodesErr)
+	// The panel is rendered through {{template "rolloutPanel" .}}, which rebinds
+	// $ to the panel itself, so it needs its own copy of the language.
+	rolloutFleet.Lang, rolloutByo.Lang = adminLangFrom(r), adminLangFrom(r)
 
 	// The release notice reads the fleet track DIRECTLY rather than off
 	// rolloutFleet above: rolloutPanel is the rollout PANEL's own read, and a
@@ -988,6 +991,7 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		RolloutFleet: rolloutFleet, RolloutByo: rolloutByo,
 		HaltedTracks:  haltedRolloutTracks(rolloutFleet, rolloutByo),
 		ReleaseNotice: notice,
+		Lang:          adminLangFrom(r),
 		Metrics:       metrics, Users: rows, Total: total, Page: page, TotalPages: totalPages,
 		Search: search, Sort: sortBy, Dir: dir, Period: period, Months: months,
 		PrevHref: prev, NextHref: next, SortHref: sortHref,
@@ -1100,6 +1104,7 @@ func (s *Service) handleAdminAudit(w http.ResponseWriter, r *http.Request) {
 		next = adminAuditHref(action, page+1)
 	}
 	data := adminAuditData{
+		Lang: adminLangFrom(r),
 		Rows: rows, Actions: auditActions, Action: action, Page: page,
 		PrevHref: prev, NextHref: next,
 	}
@@ -1492,6 +1497,6 @@ func (s *Service) renderAdminLogin(w http.ResponseWriter, r *http.Request, statu
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 	_ = adminLoginTmpl.Execute(w, adminLoginData{
-		Error: errMsg, TOTP: s.AdminTOTPEnabled(), Passkey: passkey, Nonce: CSPNonce(r),
+		Lang: adminLangFrom(r), Error: errMsg, TOTP: s.AdminTOTPEnabled(), Passkey: passkey, Nonce: CSPNonce(r),
 	})
 }
