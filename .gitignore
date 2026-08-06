@@ -16,6 +16,13 @@ web/dist/
 /.deployed-sha
 server/relayium-node
 
+# Compose reads a project-root .env for variable interpolation, so a self-hoster
+# following docs/self-hosting.md may create one holding a real TURN secret.
+# server/.gitignore already covers server/.env; the repository root did not.
+/.env
+/.env.*
+!/.env.example
+
 # macOS
 **/.DS_Store
 

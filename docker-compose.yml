@@ -34,8 +34,22 @@ services:
 
   # --- Optional: TURN relay for cross-network transfers (profile: relay) ---
   # TURN needs the host's real IP and a wide UDP relay-port range, so it runs
-  # with host networking. Set RELAYIUM_TURN_SECRET (and the server's matching
-  # -turn-secret / -turn-urls) before enabling. See docs/self-hosting.md.
+  # with host networking. See docs/self-hosting.md.
+  #
+  # THE SECRET HAS TO BE SET IN TWO PLACES, and the failure when it isn't is
+  # silent. coturn reads it from the interpolation below, which Compose resolves
+  # from the shell or the project-root .env — NOT from ./server/.env, which is an
+  # `env_file` and therefore only ever reaches the container it is attached to.
+  # The server reads RELAYIUM_TURN_SECRET / RELAYIUM_TURN_URLS from its OWN
+  # environment (./server/.env), and an empty -turn-secret disables TURN outright
+  # (server/main.go). Set only the shell variable and you get a running coturn
+  # that the server never hands out credentials for: the stack looks healthy and
+  # strict-NAT transfers keep failing with nothing logged anywhere.
+  #
+  # Not fixed by adding a `RELAYIUM_TURN_SECRET: ${RELAYIUM_TURN_SECRET:-}`
+  # passthrough here: `environment:` outranks `env_file:`, and the empty default
+  # counts as set, so that would blank out the value of everyone who correctly
+  # keeps their secret in ./server/.env.
   coturn:
     image: coturn/coturn:latest
     profiles: ["relay"]
@@ -49,7 +63,7 @@ services:
       - --min-port=49152
       - --max-port=65535
       - --use-auth-secret
-      - --static-auth-secret=${RELAYIUM_TURN_SECRET:?set RELAYIUM_TURN_SECRET in the shell or ./server/.env}
+      - --static-auth-secret=${RELAYIUM_TURN_SECRET:?set it in the shell or the project-root .env for coturn, AND in ./server/.env so the server enables TURN too — see docs/self-hosting.md}
       - --no-cli
       # - --external-ip=YOUR.PUBLIC.IP
       # Relay-byte metering: also write stats to redis (host-networked, so localhost):

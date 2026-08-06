@@ -66,7 +66,7 @@ definitions in [`server/main.go`](../server/main.go). The essentials:
 | `RELAYIUM_BLOB_DIR` | Directory for stored-transfer ciphertext blobs. Docker image default: `/data/blobs`. |
 | `RELAYIUM_STATIC` | Built SPA directory the Go server falls back to serving. Docker image default: `/app/web/dist`. |
 | `RELAYIUM_STUN_URLS` | Comma-separated STUN URLs for cross-network NAT traversal. Empty is derived from `RELAYIUM_TURN_URLS` (a TURN server answers STUN on the same host:port); with neither set, no STUN is advertised and only same-LAN transfers work. |
-| `RELAYIUM_TURN_URLS` / `RELAYIUM_TURN_SECRET` | Optional TURN relay for transfers where a direct P2P connection isn't possible (see [Cross-network transfers](#cross-network-transfers) below). |
+| `RELAYIUM_TURN_URLS` / `RELAYIUM_TURN_SECRET` | Optional TURN relay for transfers where a direct P2P connection isn't possible (see [Cross-network transfers](#cross-network-transfers) below). With the bundled `relay` profile the secret must be set in **two** places — see that section; setting only one of them leaves TURN silently off. |
 | `RELAYIUM_REDIS_ADDR` | Optional Redis `host:port` for TURN relay-byte metering. Empty disables metering entirely; transfers still work without it. |
 | `RELAYIUM_ADMIN_USER` / `RELAYIUM_ADMIN_PASS` | Credentials for the `/admin` console (username defaults to `admin` if unset). It is a full mutating console, not a read-only viewer — see [Admin dashboard](#admin-dashboard-optional-and-not-read-only) below. Password empty (the default) disables `/admin` outright — it 404s and falls through to the SPA. |
 | `RELAYIUM_ADMIN_TOTP_SECRET` | Optional TOTP 2FA on top of the admin login. See [Admin dashboard](#admin-dashboard-optional-and-not-read-only) below. |
@@ -165,10 +165,42 @@ for NAT traversal, and a TURN relay for the (fairly common) case where a
 direct peer-to-peer connection still can't be established.
 
 The compose file includes an optional `relay` profile that also starts
-coturn and Redis:
+coturn and Redis.
+
+**The secret has to go in two places, and the failure when it doesn't is
+silent.** coturn gets it from Compose variable interpolation, which resolves
+from the shell or the project-root `.env` — an `env_file:` like `server/.env`
+is only injected into the container it is attached to and is never used for
+interpolation. The *server* reads `RELAYIUM_TURN_SECRET` and
+`RELAYIUM_TURN_URLS` from its own environment, and an empty `-turn-secret`
+disables TURN outright. Set just the shell variable and you get a running
+coturn that the server never issues credentials for: `docker compose ps` is
+green, nothing is logged, and strict-NAT transfers keep failing exactly as
+they did before.
+
+Put both keys in `server/.env` (mode `0600`) so the server picks them up:
 
 ```bash
-RELAYIUM_TURN_SECRET=$(openssl rand -hex 32) docker compose --profile relay up -d --build
+RELAYIUM_TURN_SECRET=<the same long random value>
+RELAYIUM_TURN_URLS=turn:example.com:3478,turns:example.com:5349
+```
+
+then export that same file into the shell before starting the profile, so
+Compose's interpolation sees the value coturn needs. Sourcing it keeps one
+source of truth and, unlike `RELAYIUM_TURN_SECRET=… docker compose …`, keeps
+the secret off the command line where `ps` would expose it:
+
+```bash
+set -a; . ./server/.env; set +a
+docker compose --profile relay up -d --build
+```
+
+Confirm the server side actually came up with it — this is the check that
+catches the silent case, because coturn being up proves nothing about the
+server:
+
+```bash
+docker compose exec server env | grep RELAYIUM_TURN   # both keys, non-empty
 ```
 
 A plain `docker compose up` does **not** start coturn or Redis — you must
