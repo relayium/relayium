@@ -50,7 +50,12 @@ h2{color:var(--text-h);font-size:24px;margin:44px 0 12px}
 h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .pitch{font-size:20px;margin:0 0 24px;max-width:42em}
 p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:8px 0}
-ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
+ol.shots{display:grid;gap:18px;margin:22px 0 4px}
+.shots figure{margin:0}
+.shots img{display:block;width:100%;height:auto;border:1px solid var(--border);border-radius:10px;background:#fff}
+.shots figcaption{margin-top:8px;font-size:14.5px;color:var(--muted);line-height:1.5}
+@media(min-width:820px){.shots{grid-template-columns:repeat(3,1fr);align-items:start}}
+.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
 .cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
 .langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
@@ -94,6 +99,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
         <li>선택 사항: 고급 검증을 켜면 양쪽 화면에 동일한 6자리 검증 코드(SAS)가 표시되며 별도 채널로 대조할 수 있습니다. 기본값은 꺼짐이고, 암호화와 커밋 후 공개 핸드셰이크, 무결성 검증은 켜든 끄든 항상 동작합니다. 코드가 일치하면 X25519 끝점 공개 키 교체나 시그널링 서버가 끝점을 사칭해 애플리케이션 계층 종단간 암호화를 종료하려는 시도를 탐지할 수 있습니다. 네트워크 경로에 서버나 TURN 릴레이가 없음을 증명하지는 않습니다.</li>
         <li>파일은 청크별 AES-256-GCM으로 암호화하고 SHA-256으로 무결성을 확인합니다. 일회성 텍스트는 별도의 종단간 암호화 세션을 사용합니다. 두 기기가 온라인이어야 하며 서버는 본문이나 기록을 저장하지 않지만 기기는 보관할 수 있습니다.</li>
       </ol>
+      <div class="shots"><figure><img src="/shots/ko/01-devices.png" width="892" height="355" loading="lazy" decoding="async" alt="같은 네트워크의 두 기기가 저절로 나타납니다. 로그인도 페어링 코드도 필요 없습니다." /><figcaption>같은 네트워크의 두 기기가 저절로 나타납니다. 로그인도 페어링 코드도 필요 없습니다.</figcaption></figure><figure><img src="/shots/ko/02-confirm.png" width="892" height="620" loading="lazy" decoding="async" alt="상대 화면에 수신 요청과 대조용 검증 코드가 뜹니다. 수락하기 전에는 아무것도 저장되지 않습니다." /><figcaption>상대 화면에 수신 요청과 대조용 검증 코드가 뜹니다. 수락하기 전에는 아무것도 저장되지 않습니다.</figcaption></figure><figure><img src="/shots/ko/03-done.png" width="892" height="148" loading="lazy" decoding="async" alt="수신 완료 — 경로는 「LAN 직접」이며 바이트는 어떤 서버도 거치지 않았습니다." /><figcaption>수신 완료 — 경로는 「LAN 직접」이며 바이트는 어떤 서버도 거치지 않았습니다.</figcaption></figure></div>
       </section>
 
       <section class="reveal">

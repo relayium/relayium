@@ -23,7 +23,12 @@ h2{color:var(--text-h);font-size:24px;margin:44px 0 12px}
 h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .pitch{font-size:20px;margin:0 0 24px;max-width:42em}
 p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:8px 0}
-ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
+ol.shots{display:grid;gap:18px;margin:22px 0 4px}
+.shots figure{margin:0}
+.shots img{display:block;width:100%;height:auto;border:1px solid var(--border);border-radius:10px;background:#fff}
+.shots figcaption{margin-top:8px;font-size:14.5px;color:var(--muted);line-height:1.5}
+@media(min-width:820px){.shots{grid-template-columns:repeat(3,1fr);align-items:start}}
+.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
 .cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
 .langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}

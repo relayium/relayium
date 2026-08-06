@@ -50,7 +50,12 @@ h2{color:var(--text-h);font-size:24px;margin:44px 0 12px}
 h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .pitch{font-size:20px;margin:0 0 24px;max-width:42em}
 p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:8px 0}
-ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
+ol.shots{display:grid;gap:18px;margin:22px 0 4px}
+.shots figure{margin:0}
+.shots img{display:block;width:100%;height:auto;border:1px solid var(--border);border-radius:10px;background:#fff}
+.shots figcaption{margin-top:8px;font-size:14.5px;color:var(--muted);line-height:1.5}
+@media(min-width:820px){.shots{grid-template-columns:repeat(3,1fr);align-items:start}}
+.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
 .cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
 .langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
@@ -94,6 +99,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
         <li>任意：「高度な検証」をオンにすると両方の画面に同じ6桁の検証コード（SAS）が表示され、別の通信手段で照合できます。既定はオフで、暗号化・コミット後開示ハンドシェイク・完全性検証はオンオフに関わらず常に動作します。一致すれば、X25519エンドポイント公開鍵の差し替えや、シグナリングサーバーがエンドポイントになりすましてアプリケーション層のエンドツーエンド暗号化を終端する試みを検出できます。ネットワーク経路にサーバーやTURNリレーがないことを証明するものではありません。</li>
         <li>ファイルはAES-256-GCMでチャンクごとに暗号化し、SHA-256で完全性を検証します。一時テキストは独立したエンドツーエンド暗号化セッションを使います。両端末がオンラインで、サーバーは本文や履歴を保存しませんが、端末は保持できます。</li>
       </ol>
+      <div class="shots"><figure><img src="/shots/ja/01-devices.png" width="892" height="355" loading="lazy" decoding="async" alt="同じネットワーク上の2台が自動的に現れます。ログインもペアリングコードも不要です。" /><figcaption>同じネットワーク上の2台が自動的に現れます。ログインもペアリングコードも不要です。</figcaption></figure><figure><img src="/shots/ja/02-confirm.png" width="892" height="620" loading="lazy" decoding="async" alt="相手の画面に受信リクエストと照合用の検証コードが出ます。承認するまで何も保存されません。" /><figcaption>相手の画面に受信リクエストと照合用の検証コードが出ます。承認するまで何も保存されません。</figcaption></figure><figure><img src="/shots/ja/03-done.png" width="892" height="148" loading="lazy" decoding="async" alt="受信完了——経路は「LAN直結」で、バイトはどのサーバーも経由していません。" /><figcaption>受信完了——経路は「LAN直結」で、バイトはどのサーバーも経由していません。</figcaption></figure></div>
       </section>
 
       <section class="reveal">

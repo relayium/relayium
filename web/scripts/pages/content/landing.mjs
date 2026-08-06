@@ -11,6 +11,11 @@ const zh = {
     cta: "开始传输",
   },
   how: {
+    shots: [
+      "两台设备在同一网络上自己出现，无需登录，也无需配对码。",
+      "对方屏幕上出现接收请求和一段可比对的校验码，接受之前什么都不会保存。",
+      "文件已收到——整条路径是「局域网直连」，字节没有经过任何服务器。",
+    ],
     heading: "四步完成一次传输",
     steps: [
       "两台设备用现代浏览器打开 relayium.com。",
@@ -111,6 +116,11 @@ const ja = {
     cta: "転送を始める",
   },
   how: {
+    shots: [
+      "同じネットワーク上の2台が自動的に現れます。ログインもペアリングコードも不要です。",
+      "相手の画面に受信リクエストと照合用の検証コードが出ます。承認するまで何も保存されません。",
+      "受信完了——経路は「LAN直結」で、バイトはどのサーバーも経由していません。",
+    ],
     heading: "4ステップで転送",
     steps: [
       "2台の端末でモダンブラウザから relayium.com を開きます。",
@@ -211,6 +221,11 @@ const ko = {
     cta: "전송 시작",
   },
   how: {
+    shots: [
+      "같은 네트워크의 두 기기가 저절로 나타납니다. 로그인도 페어링 코드도 필요 없습니다.",
+      "상대 화면에 수신 요청과 대조용 검증 코드가 뜹니다. 수락하기 전에는 아무것도 저장되지 않습니다.",
+      "수신 완료 — 경로는 「LAN 직접」이며 바이트는 어떤 서버도 거치지 않았습니다.",
+    ],
     heading: "4단계로 전송",
     steps: [
       "두 기기에서 최신 브라우저로 relayium.com에 접속합니다.",
@@ -311,6 +326,11 @@ const de = {
     cta: "Übertragung starten",
   },
   how: {
+    shots: [
+      "Zwei Geräte im selben Netz tauchen von selbst auf — ohne Anmeldung und ohne Pairing-Code.",
+      "Auf dem anderen Bildschirm erscheinen die Anfrage und ein Code zum Vergleichen. Vor der Annahme wird nichts gespeichert.",
+      "Empfangen — der Weg war „LAN direkt“, die Bytes sind über keinen Server gelaufen.",
+    ],
     heading: "In vier Schritten übertragen",
     steps: [
       "Öffne relayium.com auf beiden Geräten in einem modernen Browser.",
@@ -413,6 +433,11 @@ const fr = {
     cta: "Démarrer le transfert",
   },
   how: {
+    shots: [
+      "Deux appareils sur le même réseau apparaissent d'eux-mêmes, sans connexion ni code d'appairage.",
+      "L'autre écran affiche la demande et un code à comparer. Rien n'est enregistré avant l'acceptation.",
+      "Reçu — le chemin était « LAN direct », les octets ne sont passés par aucun serveur.",
+    ],
     heading: "Transférer en quatre étapes",
     steps: [
       "Ouvrez relayium.com sur les deux appareils dans un navigateur moderne.",
@@ -515,6 +540,11 @@ const ar = {
     cta: "ابدأ النقل",
   },
   how: {
+    shots: [
+      "يظهر الجهازان على الشبكة نفسها من تلقاء نفسيهما، بلا تسجيل دخول وبلا رمز اقتران.",
+      "تظهر على الشاشة الأخرى طلب الاستقبال ورمز تحقّق للمقارنة. ولا يُحفظ شيء قبل القبول.",
+      "تم الاستقبال — وكان المسار «مباشر عبر LAN»، فلم تمر البايتات بأي خادم.",
+    ],
     heading: "انقل في أربع خطوات",
     steps: [
       "افتح relayium.com على كلا الجهازين في متصفح حديث.",
@@ -617,6 +647,11 @@ const es = {
     cta: "Iniciar transferencia",
   },
   how: {
+    shots: [
+      "Dos dispositivos en la misma red aparecen solos, sin iniciar sesión y sin código de emparejamiento.",
+      "En la otra pantalla salen la petición y un código para comparar. No se guarda nada hasta aceptar.",
+      "Recibido: la ruta fue «Directo por LAN», los bytes no pasaron por ningún servidor.",
+    ],
     heading: "Transferir en cuatro pasos",
     steps: [
       "Abre relayium.com en ambos dispositivos con un navegador moderno.",
@@ -719,6 +754,11 @@ const pt = {
     cta: "Iniciar transferência",
   },
   how: {
+    shots: [
+      "Dois aparelhos na mesma rede aparecem sozinhos, sem login e sem código de emparelhamento.",
+      "Na outra tela surgem o pedido e um código para comparar. Nada é salvo antes de aceitar.",
+      "Recebido — o caminho foi «LAN direto», e os bytes não passaram por nenhum servidor.",
+    ],
     heading: "Transferir em quatro passos",
     steps: [
       "Abra relayium.com nos dois dispositivos em um navegador moderno.",

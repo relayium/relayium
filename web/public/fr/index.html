@@ -50,7 +50,12 @@ h2{color:var(--text-h);font-size:24px;margin:44px 0 12px}
 h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .pitch{font-size:20px;margin:0 0 24px;max-width:42em}
 p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:8px 0}
-ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
+ol.shots{display:grid;gap:18px;margin:22px 0 4px}
+.shots figure{margin:0}
+.shots img{display:block;width:100%;height:auto;border:1px solid var(--border);border-radius:10px;background:#fff}
+.shots figcaption{margin-top:8px;font-size:14.5px;color:var(--muted);line-height:1.5}
+@media(min-width:820px){.shots{grid-template-columns:repeat(3,1fr);align-items:start}}
+.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
 .cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
 .langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
@@ -94,6 +99,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
         <li>Facultatif : activez la vérification avancée et les deux écrans affichent le même code de vérification à 6 chiffres (SAS), que vous pouvez comparer par un canal indépendant. Elle est désactivée par défaut ; le chiffrement, la poignée de main « engagement puis révélation » et le contrôle d&#39;intégrité s&#39;exécutent dans tous les cas. Une correspondance détecte le remplacement des clés publiques X25519 des extrémités, ou un serveur de signalisation qui usurpe une extrémité et termine le chiffrement applicatif de bout en bout ; elle ne prouve pas l&#39;absence de serveur ou de relais TURN sur le chemin réseau.</li>
         <li>Les fichiers sont chiffrés bloc par bloc en AES-256-GCM et vérifiés par SHA-256 ; le texte éphémère utilise une session chiffrée distincte. Les deux appareils restent en ligne. Le serveur ne conserve ni corps ni historique, mais les appareils peuvent garder le texte.</li>
       </ol>
+      <div class="shots"><figure><img src="/shots/fr/01-devices.png" width="892" height="374" loading="lazy" decoding="async" alt="Deux appareils sur le même réseau apparaissent d&#39;eux-mêmes, sans connexion ni code d&#39;appairage." /><figcaption>Deux appareils sur le même réseau apparaissent d&#39;eux-mêmes, sans connexion ni code d&#39;appairage.</figcaption></figure><figure><img src="/shots/fr/02-confirm.png" width="892" height="620" loading="lazy" decoding="async" alt="L&#39;autre écran affiche la demande et un code à comparer. Rien n&#39;est enregistré avant l&#39;acceptation." /><figcaption>L&#39;autre écran affiche la demande et un code à comparer. Rien n&#39;est enregistré avant l&#39;acceptation.</figcaption></figure><figure><img src="/shots/fr/03-done.png" width="892" height="148" loading="lazy" decoding="async" alt="Reçu — le chemin était « LAN direct », les octets ne sont passés par aucun serveur." /><figcaption>Reçu — le chemin était « LAN direct », les octets ne sont passés par aucun serveur.</figcaption></figure></div>
       </section>
 
       <section class="reveal">

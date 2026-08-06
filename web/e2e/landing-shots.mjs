@@ -31,8 +31,14 @@ import {
 // 按阶段用会在第一张图之后就退出。这里只在最外层用一次。
 
 const BASE = argFlag("--url", "http://localhost:8099");
+/**
+ * 界面语言。图会进本地化落地页，而英文截图配中文页和英文 /pricing 配中文页脚是同一类
+ * 缺陷——读者按自己的语言点进来，却看到看不懂的界面。所以每个语言各出一套。
+ */
+const LANG = argFlag("--lang", "en");
+const LANG_INIT = `try { localStorage.setItem("relayium-lang", ${JSON.stringify(LANG)}); } catch {}`;
 const DEBUG_PORT = Number(argFlag("--port", "9333"));
-const OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "public", "shots");
+const OUT_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "public", "shots", LANG);
 
 // 截图视口。用 setWideViewport 的默认值，不要自作聪明改窄：1200 宽时工作区切到
 // 紧凑布局，主文件选择器 .file-pick-input 根本还没渲染出来，脚本会在第二张图上
@@ -48,10 +54,13 @@ const PEERS_SEEN = "document.querySelectorAll('.pname').length > 0";
 // 当前的统一工作区流程：名册里先出现「和 X 开一个共享工作区」，进去之后才有附件选择器。
 // lan-transfer.mjs 走的是有旧版对端在场时的降级路径，那条路上 .file-pick-input 一开始
 // 就在——照抄它会拍出一个真实用户看不到的界面。
-const OPEN_WS = `[...document.querySelectorAll('button')].find(b => /Open workspace|打开工作区/i.test(b.textContent))`;
+// 按钮文案随语言变，所以按结构定位：对端卡片里那个唯一的主按钮。
+const OPEN_WS = `document.querySelector('.peers .open-workspace')`;
 const PICKER = "!!document.querySelector('.file-pick-input.attach-file')";
 const SAS_SHOWN = "/\\d{6}/.test(document.body.textContent || '')";
-const ACCEPT_BTN = `[...document.querySelectorAll('button')].find(b => /接受|Accept|受け取|수락|Annehmen|Accepter|قبول|Aceptar/i.test(b.textContent))`;
+// 同理：接受是请求卡片里的主按钮。要排除 .send——消息区的「发送」也是 btn-primary，
+// 而它在 DOM 里就排在后面，用裸的 .btn-primary 会在某些时刻选错。
+const ACCEPT_BTN = `document.querySelector('.lan-task button.btn-primary:not(.send)')`;
 
 /** 发一个可预测的字节序列——和 lan-transfer.mjs 用的是同一个公式。
  *  工作区里附加文件本身就发起了请求，不需要再点 Send（那个按钮是发文本的）。 */
@@ -155,7 +164,7 @@ async function shoot(browser, tab, name, elExpr, expect) {
 }
 
 async function main() {
-  console.log(`\n首屏演示图：真实传输，${BASE}\n`);
+  console.log(`\n首屏演示图：真实传输，${BASE}，界面语言 ${LANG}\n`);
   await requireServer(BASE, "start it with: cd server && RELAYIUM_ADDR=:8099 go run .");
   mkdirSync(OUT_DIR, { recursive: true });
 
@@ -164,8 +173,8 @@ async function main() {
   const sizes = [];
   try {
     // 收方开着验证码：第二张图要拍的就是"有东西可以比对"。
-    const sender = await newTab(browser, BASE + "/", VERIFY_ON);
-    const receiver = await newTab(browser, BASE + "/", VERIFY_ON + SAVE_STUB);
+    const sender = await newTab(browser, BASE + "/", LANG_INIT + VERIFY_ON);
+    const receiver = await newTab(browser, BASE + "/", LANG_INIT + VERIFY_ON + SAVE_STUB);
     await setWideViewport(sender, SHOT_W, SHOT_H);
     await setWideViewport(receiver, SHOT_W, SHOT_H);
 
@@ -174,7 +183,7 @@ async function main() {
     // 名册刚出现的那一帧还在做入场动画，截下来是半透明的。
     await sleep(600);
     sizes.push(await shoot(browser, sender, "01-devices.png",
-      "document.querySelector('.peers')", /workspace|工作区/i));
+      "document.querySelector('.peers')", /./));
 
     await sender.evaluate(`(() => { (${OPEN_WS}).click(); return true; })()`);
     await sender.waitFor(PICKER, "the attach picker inside the workspace");
@@ -186,7 +195,7 @@ async function main() {
     // 会被重构改掉的类名更耐用，也保证框住的一定是那张卡。
     sizes.push(await shoot(browser, receiver, "02-confirm.png",
       `[document.querySelector('.lan-task .ui-card'), (${ACCEPT_BTN}).closest('.ui-card')]`,
-      /Verification code[\s\S]*wants to send/i));
+      /\d{6}/));
 
     await receiver.evaluate(`(() => { (${ACCEPT_BTN}).click(); return true; })()`);
     await receiver.waitFor("window.__e2e.closed === true", "the receiver to finish writing");

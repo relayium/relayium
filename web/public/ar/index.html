@@ -50,7 +50,12 @@ h2{color:var(--text-h);font-size:24px;margin:44px 0 12px}
 h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .pitch{font-size:20px;margin:0 0 24px;max-width:42em}
 p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:8px 0}
-ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
+ol.shots{display:grid;gap:18px;margin:22px 0 4px}
+.shots figure{margin:0}
+.shots img{display:block;width:100%;height:auto;border:1px solid var(--border);border-radius:10px;background:#fff}
+.shots figcaption{margin-top:8px;font-size:14.5px;color:var(--muted);line-height:1.5}
+@media(min-width:820px){.shots{grid-template-columns:repeat(3,1fr);align-items:start}}
+.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
 .cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
 .langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
@@ -94,6 +99,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
         <li>اختياري: فعِّل التحقّق المتقدّم لتعرض الشاشتان الرمز نفسه المكوّن من 6 أرقام (SAS)، ثم قارِنه عبر قناة مستقلة. وهو معطَّل افتراضيًا، بينما يعمل التشفير ومصافحة «الالتزام ثم الكشف» وفحص السلامة في الحالتين. يكشف التطابق استبدال مفاتيح X25519 العامة للطرفين، أو انتحال خادم الإشارة لأحد الطرفين وإنهاء التشفير من الطرف إلى الطرف على مستوى التطبيق؛ لكنه لا يثبت خلو مسار الشبكة من الخوادم أو مُرحِّلات TURN.</li>
         <li>تُشفَّر الملفات كتلةً كتلة بـ AES-256-GCM وتُفحص بـ SHA-256؛ ويستخدم النص العابر جلسة مستقلة مشفَّرة من الطرف إلى الطرف. يبقى الجهازان متصلين. لا يحفظ الخادم أجسام الرسائل أو سجلها، لكن يمكن للطرفين الاحتفاظ بالنص.</li>
       </ol>
+      <div class="shots"><figure><img src="/shots/ar/01-devices.png" width="892" height="355" loading="lazy" decoding="async" alt="يظهر الجهازان على الشبكة نفسها من تلقاء نفسيهما، بلا تسجيل دخول وبلا رمز اقتران." /><figcaption>يظهر الجهازان على الشبكة نفسها من تلقاء نفسيهما، بلا تسجيل دخول وبلا رمز اقتران.</figcaption></figure><figure><img src="/shots/ar/02-confirm.png" width="892" height="620" loading="lazy" decoding="async" alt="تظهر على الشاشة الأخرى طلب الاستقبال ورمز تحقّق للمقارنة. ولا يُحفظ شيء قبل القبول." /><figcaption>تظهر على الشاشة الأخرى طلب الاستقبال ورمز تحقّق للمقارنة. ولا يُحفظ شيء قبل القبول.</figcaption></figure><figure><img src="/shots/ar/03-done.png" width="892" height="148" loading="lazy" decoding="async" alt="تم الاستقبال — وكان المسار «مباشر عبر LAN»، فلم تمر البايتات بأي خادم." /><figcaption>تم الاستقبال — وكان المسار «مباشر عبر LAN»، فلم تمر البايتات بأي خادم.</figcaption></figure></div>
       </section>
 
       <section class="reveal">

@@ -1,6 +1,10 @@
 // web/scripts/pages/landing-template.mjs — renders one static localized landing page.
 // Self-contained: no JS, no external CSS. Styles are inlined so the page is
 // independent of the Vite asset graph and fully crawlable with JS disabled.
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { LANGS, LANG_LABELS, GUIDES_LABELS, APPS_LABELS, pricingLabel, PRICING_URL, RELEASES_LABELS, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, landingUrl, ctaHref, urlPath, absUrl, esc, dirAttr, rtlHead } from "./shared.mjs";
 
 // Exported so mode-template.mjs (and any other landing-style page) can reuse the
@@ -19,7 +23,12 @@ h2{color:var(--text-h);font-size:24px;margin:44px 0 12px}
 h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .pitch{font-size:20px;margin:0 0 24px;max-width:42em}
 p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:8px 0}
-ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
+ol.shots{display:grid;gap:18px;margin:22px 0 4px}
+.shots figure{margin:0}
+.shots img{display:block;width:100%;height:auto;border:1px solid var(--border);border-radius:10px;background:#fff}
+.shots figcaption{margin-top:8px;font-size:14.5px;color:var(--muted);line-height:1.5}
+@media(min-width:820px){.shots{grid-template-columns:repeat(3,1fr);align-items:start}}
+.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
 .cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
 .langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
@@ -57,6 +66,42 @@ function alternates() {
   );
   links.push(`<link rel="alternate" hreflang="x-default" href="${absUrl(landingUrl("en"))}" />`);
   return links.join("\n    ");
+}
+
+/**
+ * 三张演示图，插在「如何传输」的步骤后面。
+ *
+ * 只有本地化落地页有这一块，英文首页没有——`/` 上读者已经身处真实应用，在真界面上方
+ * 放同一界面的截图既冗余又白付 LCP 成本。落地页是唯一一处读者还没见过产品的地方。
+ *
+ * 图是按语言各出一套的（`e2e/landing-shots.mjs --lang`）。英文截图配中文页，和英文
+ * /pricing 配中文页脚是同一类缺陷。
+ *
+ * 只出浅色一套：为了给深色模式再出一套要把资产翻倍到 48 张、生成时间翻倍，而收益只是
+ * 少一点亮度落差。改为给图加中性边框和留白，让它在深色页面上也站得住。
+ */
+const SHOTS_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "public", "shots");
+
+/** PNG 的宽高就在 IHDR 里（16..24 字节）。读它是为了写死 width/height 属性——
+ *  各语言的文字长度不同，图的尺寸也就不同，缺了尺寸首屏会抖。 */
+function pngSize(file) {
+  const b = readFileSync(file);
+  return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) };
+}
+
+const SHOT_FILES = ["01-devices.png", "02-confirm.png", "03-done.png"];
+
+function shotsHtml(lang, captions) {
+  if (!captions?.length) return "";
+  const figures = SHOT_FILES.map((file, i) => {
+    const { w, h } = pngSize(join(SHOTS_DIR, lang, file));
+    const cap = captions[i] ?? "";
+    return (
+      `<figure><img src="/shots/${lang}/${file}" width="${w}" height="${h}" loading="lazy" decoding="async"` +
+      ` alt="${esc(cap)}" /><figcaption>${esc(cap)}</figcaption></figure>`
+    );
+  }).join("");
+  return `\n      <div class="shots">${figures}</div>`;
 }
 
 export function renderLandingPage({ lang, doc, articleLinks = [] }) {
@@ -154,7 +199,7 @@ export function renderLandingPage({ lang, doc, articleLinks = [] }) {
       <h2>${esc(doc.how.heading)}</h2>
       <ol class="steps">
         ${steps}
-      </ol>
+      </ol>${shotsHtml(lang, doc.how.shots)}
       </section>
 
       <section class="reveal">

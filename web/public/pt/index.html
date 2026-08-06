@@ -50,7 +50,12 @@ h2{color:var(--text-h);font-size:24px;margin:44px 0 12px}
 h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .pitch{font-size:20px;margin:0 0 24px;max-width:42em}
 p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:8px 0}
-ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
+ol.shots{display:grid;gap:18px;margin:22px 0 4px}
+.shots figure{margin:0}
+.shots img{display:block;width:100%;height:auto;border:1px solid var(--border);border-radius:10px;background:#fff}
+.shots figcaption{margin-top:8px;font-size:14.5px;color:var(--muted);line-height:1.5}
+@media(min-width:820px){.shots{grid-template-columns:repeat(3,1fr);align-items:start}}
+.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
 .cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
 .langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
@@ -94,6 +99,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
         <li>Opcional: ative a verificação avançada e as duas telas mostrarão o mesmo código de verificação de 6 dígitos (SAS), que você pode comparar por um canal independente. Ela vem desligada; a criptografia, o handshake de compromisso e revelação e a verificação de integridade rodam de qualquer forma. A correspondência detecta a substituição das chaves públicas X25519 das pontas, ou o servidor de sinalização se passando por uma ponta e encerrando a criptografia de ponta a ponta da aplicação; ela não prova que não há servidores ou retransmissores TURN na rota de rede.</li>
         <li>Os arquivos são criptografados em blocos com AES-256-GCM e verificados com SHA-256; o texto efêmero usa uma sessão criptografada separada. Os dois dispositivos ficam online. O servidor não guarda corpo nem histórico, mas as pontas podem reter texto.</li>
       </ol>
+      <div class="shots"><figure><img src="/shots/pt/01-devices.png" width="892" height="355" loading="lazy" decoding="async" alt="Dois aparelhos na mesma rede aparecem sozinhos, sem login e sem código de emparelhamento." /><figcaption>Dois aparelhos na mesma rede aparecem sozinhos, sem login e sem código de emparelhamento.</figcaption></figure><figure><img src="/shots/pt/02-confirm.png" width="892" height="620" loading="lazy" decoding="async" alt="Na outra tela surgem o pedido e um código para comparar. Nada é salvo antes de aceitar." /><figcaption>Na outra tela surgem o pedido e um código para comparar. Nada é salvo antes de aceitar.</figcaption></figure><figure><img src="/shots/pt/03-done.png" width="892" height="148" loading="lazy" decoding="async" alt="Recebido — o caminho foi «LAN direto», e os bytes não passaram por nenhum servidor." /><figcaption>Recebido — o caminho foi «LAN direto», e os bytes não passaram por nenhum servidor.</figcaption></figure></div>
       </section>
 
       <section class="reveal">

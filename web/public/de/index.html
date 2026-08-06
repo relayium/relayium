@@ -50,7 +50,12 @@ h2{color:var(--text-h);font-size:24px;margin:44px 0 12px}
 h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
 .pitch{font-size:20px;margin:0 0 24px;max-width:42em}
 p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:8px 0}
-ol.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
+ol.shots{display:grid;gap:18px;margin:22px 0 4px}
+.shots figure{margin:0}
+.shots img{display:block;width:100%;height:auto;border:1px solid var(--border);border-radius:10px;background:#fff}
+.shots figcaption{margin-top:8px;font-size:14.5px;color:var(--muted);line-height:1.5}
+@media(min-width:820px){.shots{grid-template-columns:repeat(3,1fr);align-items:start}}
+.steps{margin:12px 0;padding-inline-start:22px}ol.steps li{margin:10px 0}
 .cta{display:inline-block;margin:8px 0 4px;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
 .langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
 .langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
@@ -94,6 +99,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
         <li>Optional: Schalte die erweiterte Verifizierung ein, dann zeigen beide Bildschirme denselben 6-stelligen Verifizierungscode (SAS), den du über einen unabhängigen Kanal vergleichen kannst. Standardmäßig ist sie aus; Verschlüsselung, Commit-dann-Offenlegen-Handshake und Integritätsprüfung laufen so oder so. Eine Übereinstimmung erkennt ausgetauschte öffentliche X25519-Endpunktschlüssel oder einen Signalisierungsserver, der einen Endpunkt imitiert und die Ende-zu-Ende-Verschlüsselung der Anwendung beendet; sie beweist nicht, dass der Netzwerkpfad frei von Servern oder TURN-Relays ist.</li>
         <li>Dateien werden blockweise mit AES-256-GCM verschlüsselt und per SHA-256 geprüft; flüchtiger Text nutzt eine eigene Ende-zu-Ende-verschlüsselte Sitzung. Beide Geräte bleiben online. Der Server speichert weder Nachrichtentexte noch Verlauf, Endgeräte können Text behalten.</li>
       </ol>
+      <div class="shots"><figure><img src="/shots/de/01-devices.png" width="892" height="374" loading="lazy" decoding="async" alt="Zwei Geräte im selben Netz tauchen von selbst auf — ohne Anmeldung und ohne Pairing-Code." /><figcaption>Zwei Geräte im selben Netz tauchen von selbst auf — ohne Anmeldung und ohne Pairing-Code.</figcaption></figure><figure><img src="/shots/de/02-confirm.png" width="892" height="620" loading="lazy" decoding="async" alt="Auf dem anderen Bildschirm erscheinen die Anfrage und ein Code zum Vergleichen. Vor der Annahme wird nichts gespeichert." /><figcaption>Auf dem anderen Bildschirm erscheinen die Anfrage und ein Code zum Vergleichen. Vor der Annahme wird nichts gespeichert.</figcaption></figure><figure><img src="/shots/de/03-done.png" width="892" height="148" loading="lazy" decoding="async" alt="Empfangen — der Weg war „LAN direkt“, die Bytes sind über keinen Server gelaufen." /><figcaption>Empfangen — der Weg war „LAN direkt“, die Bytes sind über keinen Server gelaufen.</figcaption></figure></div>
       </section>
 
       <section class="reveal">
