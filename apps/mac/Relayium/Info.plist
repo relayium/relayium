@@ -34,6 +34,48 @@
 	     ASSETCATALOG_COMPILER_APPICON_NAME in both build configurations. -->
 	<key>CFBundleIconName</key>
 	<string>AppIcon</string>
+	<!-- What makes Relayium a Dock drop target and a Finder "Open With" entry.
+	     Without it the app has no way in from outside its own window, which is
+	     the native advantage a desktop app has over the website and the reason
+	     this exists at all.
+
+	     `LSHandlerRank` = `None` is the load-bearing line, not boilerplate. The
+	     content types below are `public.data` and `public.folder` — deliberately
+	     everything, because "send this" is not a format question and a list of
+	     extensions would be a list of the files a user may NOT send. Declaring
+	     that breadth at any other rank offers Launch Services a candidate
+	     default handler for every file on the Mac: `Owner` and `Alternate` both
+	     compete, and a utility that opened the user's documents instead of their
+	     editor because it once claimed `public.data` is a support incident, not a
+	     feature. `None` means "never propose me, but honour an explicit choice" —
+	     the drop and the Open With still work, and nothing changes for a
+	     double-click.
+
+	     `Viewer`, not `Editor`: Relayium never writes back to what it is given.
+	     It reads the bytes, encrypts them and sends them; the original file is
+	     untouched, and `Editor` would additionally make this app a candidate for
+	     "revert to" and document-restore behaviour it does not implement.
+
+	     `CFBundleTypeName` is not localized. At rank `None` it is not surfaced in
+	     the places a type name is read — the Kind column and Get Info both keep
+	     answering with the real owner's name — so nine InfoPlist.strings would be
+	     nine translations of a string this app never displays. -->
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>File or folder to send</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>None</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.data</string>
+				<string>public.folder</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>

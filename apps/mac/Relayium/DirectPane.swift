@@ -23,6 +23,9 @@ struct DirectPane: View {
 
     @EnvironmentObject private var navigation: AppNavigationModel
     @EnvironmentObject private var presence: TransferPresence
+    /// Files the OS opened with this app. Read-only here — this pane takes only
+    /// the batch addressed to it.
+    @EnvironmentObject private var fileOpenRouting: AppFileOpenCoordinator
 
     @StateObject private var selection = SelectionStore()
     @State private var stagingError: String?
@@ -64,6 +67,23 @@ struct DirectPane: View {
                 InlineMessage(.failure, stagingError)
             }
         }
+        // Files opened from Finder or dropped on the Dock icon, for the same
+        // reasons and by the same rule as Nearby's. Keyed on both the batch and
+        // `busy`: a batch that arrived mid-session is never republished, so
+        // keying on the batch alone would strand it here.
+        .task(id: FileOpenAdoption(staged: fileOpenRouting.staged, busy: model.isBusy)) {
+            adoptOpenedFiles()
+        }
+    }
+
+    /// Stage a batch the OS opened, if this pane is the one it was addressed to
+    /// and is free to take it. `add`, not `replace` — the same call the drop
+    /// zone makes.
+    private func adoptOpenedFiles() {
+        guard let batch = fileOpenRouting.batch(for: .pairingCode, busy: model.isBusy)
+        else { return }
+        selection.add(batch.urls)
+        fileOpenRouting.consume(batch)
     }
 
     // MARK: - create (needs an account)

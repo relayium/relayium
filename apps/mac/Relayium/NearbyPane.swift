@@ -27,6 +27,11 @@ struct NearbyPane: View {
     /// moved to app scope so it survives the window's view tree.
     @EnvironmentObject private var presence: TransferPresence
 
+    /// Files the OS opened with this app, waiting for whichever send surface
+    /// they were addressed to. Read-only here: this pane takes its own batch and
+    /// decides nothing about anybody else's.
+    @EnvironmentObject private var fileOpenRouting: AppFileOpenCoordinator
+
     @StateObject private var selection = SelectionStore()
     @State private var stagingError: String?
 
@@ -39,6 +44,15 @@ struct NearbyPane: View {
             } else {
                 discoverySection
             }
+        }
+        // Files opened from Finder or dropped on the Dock icon. `task(id:)`
+        // keyed on BOTH the batch and `busy`, because either can be the change
+        // that makes adoption possible: a batch that arrived mid-transfer is
+        // never republished, so keying on the batch alone would strand it.
+        // Whether this pane may take it is `AppFileOpenCoordinator`'s answer,
+        // not a rule re-derived here.
+        .task(id: FileOpenAdoption(staged: fileOpenRouting.staged, busy: busy)) {
+            adoptOpenedFiles()
         }
         // A session that ends by any route — Cancel, Done, a failure the user
         // dismissed — returns this pane to the roster rather than stranding it
@@ -329,6 +343,17 @@ struct NearbyPane: View {
         stagingError = nil
         presence.claim(.nearby, mode: mode)
         Task { await textModel.connectNearby(peerId: device.id, role: .initiator) }
+    }
+
+    /// Stage a batch the OS opened, if this pane is the one it was addressed to
+    /// and is free to take it.
+    ///
+    /// `add`, not `replace`: an opened file joins what the user already picked
+    /// rather than discarding it, which is the same call the drop zone makes.
+    private func adoptOpenedFiles() {
+        guard let batch = fileOpenRouting.batch(for: .nearby, busy: busy) else { return }
+        selection.add(batch.urls)
+        fileOpenRouting.consume(batch)
     }
 
     private func leaveSession() {

@@ -597,8 +597,14 @@ final class MacSurfaceGuardTests: XCTestCase {
 
         XCTAssertEqual(all.map { occurrences(of: ".onOpenURL", in: $0.text) }.reduce(0, +), 1,
                        "a second onOpenURL would be a second entry point for a link")
-        XCTAssertTrue(app.contains(".onOpenURL { deepLinks.open($0) }"),
-                      "the OS hand-off belongs at the scene root, and hands over unparsed")
+        // The modifier now carries BOTH hand-offs — see the opened-files guard
+        // below for why every `file://` URL arrives here too — but the link half
+        // is unchanged: tried first, unparsed, and by the router rather than by
+        // anything in this file.
+        XCTAssertTrue(app.contains(".onOpenURL { url in"),
+                      "the OS hand-off belongs at the scene root")
+        XCTAssertTrue(app.contains("guard !deepLinks.open(url) else { return }"),
+                      "a link must still reach the router unparsed, and must still win outright")
 
         // Both objects are the App's, so a retained link outlives not just the
         // window's view tree but the window itself — which on this platform is an
@@ -697,6 +703,167 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertFalse(try claimSurfaceText("apps/README.md")
             .contains("**macOS still applies links inline**"),
                        "apps/README.md still records the adoption as a follow-up")
+    }
+
+    // MARK: - files the OS opened with this app
+
+    /// Finder's Open With, and a drop on the Dock icon. Wired once, at the
+    /// delegate, and every decision about it lives outside the view layer —
+    /// exactly the shape the link hand-off above is held to.
+    func testTheOpenedFileHandOffIsWiredOnceAndDecidesNothingInTheViewLayer() throws {
+        let all = try sources(under: macRoot, atLeast: 20)
+        let app = try source(named: "RelayiumApp.swift")
+        let shell = try source(named: "Shell/AppShellView.swift")
+
+        // **Where an opened file actually arrives, measured rather than assumed.**
+        // SwiftUI's own app delegate consumes an AppKit open, republishes each
+        // URL — `file://` included — through the scene's `onOpenURL`, and only
+        // then calls the adaptor delegate with an EMPTIED array. A probe on this
+        // tree logged `onOpenURL file:///…/qa-sample.txt` one millisecond before
+        // `application(_:open:) got 0 urls`.
+        //
+        // The first version of this feature routed files from the delegate and
+        // shipped nothing: every opened file reached `deepLinks.open`, failed to
+        // parse as an https link, and was discarded in silence. This assertion
+        // is the one that would have caught it.
+        XCTAssertTrue(app.contains("fileOpens.open([url])"),
+                      "opened files must be routed from onOpenURL; the delegate's array is empty")
+
+        // The delegate keeps exactly one job, and it is the one the scene cannot
+        // do: this app is menu-bar resident with a closable window, so Open With
+        // against a closed window would otherwise stage files into a window
+        // nobody can see.
+        XCTAssertEqual(all.map { occurrences(of: "func application(", in: $0.text) }.reduce(0, +), 1,
+                       "a second AppKit open callback would be a second entry point")
+        XCTAssertTrue(app.contains("func application(_ application: NSApplication, open urls: [URL])"))
+        // TWO occurrences: the definition and exactly one call. Asserting mere
+        // presence passed while the call site was deleted — the definition line
+        // contains the same spelling — so the count is what makes this guard
+        // load-bearing rather than decorative.
+        XCTAssertEqual(occurrences(of: "showTheMainWindow()", in: app), 2,
+                       "an open with the window closed must bring it back, from exactly one place")
+        // Ordered front, never created. A `WindowGroup` would make a second
+        // window here, which is the one thing the whole shell design prevents.
+        XCTAssertTrue(app.contains("window.makeKeyAndOrderFront(nil)"))
+        XCTAssertFalse(app.contains("NSWindow("), "the delegate must not build a window")
+
+        // The fallback stays wired rather than becoming a comment: if a future
+        // macOS stops emptying that array, the files must have somewhere to go.
+        // The failure it guards is silent, which is exactly why it is not left
+        // to a reader to notice.
+        XCTAssertTrue(app.contains("var didOpenFiles: (([URL]) -> Void)?"))
+        XCTAssertTrue(app.contains("quitGuard.didOpenFiles = { fileOpens.open($0) }"),
+                      "the delegate fallback must reach the same app-scoped router")
+
+        // Both objects are the App's, so a batch outlives the window's view tree
+        // and the window itself — the ordinary resident state on this platform.
+        for scoped in ["@StateObject private var fileOpens = AppFileOpenRouter()",
+                       "@StateObject private var fileOpenRouting: AppFileOpenCoordinator"] {
+            XCTAssertTrue(app.contains(scoped), "RelayiumApp lost \(scoped)")
+        }
+        XCTAssertEqual(occurrences(of: "AppFileOpenCoordinator(", in: app), 1,
+                       "a second coordinator would be a second answer to where files go")
+        // The SAME navigation model the link coordinator gets. Two navigation
+        // models would let an opened file and a tapped link disagree about
+        // where the user is.
+        XCTAssertTrue(app.contains("AppFileOpenCoordinator(navigation: routing)"),
+                      "the coordinator must share the app's navigation model")
+
+        // One subscription, in the shell, doing exactly what the link one does.
+        XCTAssertEqual(all.map { occurrences(of: "fileOpens.$pending", in: $0.text) }.reduce(0, +), 1,
+                       "a second subscription would route every batch twice")
+        XCTAssertTrue(shell.contains(".onReceive(fileOpens.$pending.compactMap { $0 }) { urls in"))
+        XCTAssertTrue(shell.contains("fileOpenRouting.deliver(urls)"))
+        // Deferred AND expected, for the `@Published` willSet ordering and the
+        // second-batch race the link path's consume documents.
+        XCTAssertTrue(shell.contains("Task { @MainActor in fileOpens.consume(urls) }"),
+                      "the consume must be deferred and must name the batch it acted on")
+        XCTAssertFalse(shell.contains("fileOpens.consume()"),
+                       "an unqualified consume can discard a newer batch")
+    }
+
+    /// The shell forwards; it does not stage. A shell holding a `SelectionStore`
+    /// has a way to re-derive the routing and busy rules the coordinator owns,
+    /// which is how the link path grew its inline version in the first place.
+    func testTheOpenedFilePathAppliesNothingItself() throws {
+        let shell = try source(named: "Shell/AppShellView.swift")
+        for reaching in ["AppRouting.destination(forOpenedFiles", "SelectionStore",
+                         "selection.add(", "expandSelection", "fileOpenRouting.batch("] {
+            XCTAssertFalse(shell.contains(reaching),
+                           "the shell stages opened files itself: \(reaching)")
+        }
+        let app = try source(named: "RelayiumApp.swift")
+        for reaching in ["AppRouting.destination(forOpenedFiles", "SelectionStore",
+                         "selection.add("] {
+            XCTAssertFalse(app.contains(reaching),
+                           "RelayiumApp stages opened files itself: \(reaching)")
+        }
+    }
+
+    /// Exactly the three panes that can send files adopt a batch, each for its
+    /// own destination, and none of them re-derives when it may.
+    ///
+    /// The negative half is the load-bearing one. A pane that read `staged`
+    /// directly would be a second copy of the busy rule — and the copy that
+    /// contradicts the disabled drop zone beside it.
+    func testOnlyTheThreeSendPanesAdoptOpenedFilesAndNoneReDerivesTheRule() throws {
+        let panes: [(file: String, destination: String)] = [
+            ("NearbyPane.swift", ".nearby"),
+            ("DirectPane.swift", ".pairingCode"),
+            ("UploadPane.swift", ".storedSend"),
+        ]
+        for pane in panes {
+            let text = try source(named: pane.file)
+            XCTAssertTrue(text.contains("fileOpenRouting.batch(for: \(pane.destination), busy:"),
+                          "\(pane.file) must ask the coordinator for its own destination's batch")
+            XCTAssertTrue(text.contains("selection.add(batch.urls)"),
+                          "\(pane.file) must append rather than replace what the user already picked")
+            XCTAssertTrue(text.contains("fileOpenRouting.consume(batch)"),
+                          "\(pane.file) must consume the batch it staged")
+            // Keyed on BOTH facts. Keyed on the batch alone, one that arrived
+            // mid-transfer is never republished and therefore never lands.
+            XCTAssertTrue(text.contains("FileOpenAdoption(staged: fileOpenRouting.staged, busy:"),
+                          "\(pane.file) must re-ask adoption when either the batch or busy changes")
+        }
+
+        // Nobody else touches the coordinator's state, and nobody reads `staged`
+        // to decide for themselves.
+        let all = try sources(under: macRoot, atLeast: 20)
+        let adopters = all.filter { $0.text.contains("fileOpenRouting.batch(") }
+        XCTAssertEqual(Set(adopters.map(\.name)), Set(panes.map(\.file)),
+                       "exactly the three send panes may adopt opened files")
+        for file in all where !panes.map(\.file).contains(file.name) {
+            XCTAssertFalse(file.text.contains("fileOpenRouting.consume("),
+                           "\(file.name) consumes a batch it did not stage")
+        }
+        // Three destinations, three panes, no two claiming the same one.
+        XCTAssertEqual(Set(panes.map(\.destination)).count, panes.count)
+    }
+
+    /// The document-type declaration that makes the app a Dock drop target — and
+    /// the one line that keeps it from becoming the Mac's default handler for
+    /// every file on disk.
+    ///
+    /// `LSHandlerRank` = `None` is not boilerplate here. The declared types are
+    /// `public.data` and `public.folder` deliberately, because "send this" is not
+    /// a format question; at any other rank that breadth offers Launch Services a
+    /// candidate default handler for everything, and a utility that opened the
+    /// user's documents instead of their editor is a support incident. Nothing at
+    /// runtime would reveal the regression — it is a plist string.
+    func testTheAppAcceptsEveryFileWithoutClaimingToOwnAnyType() throws {
+        let plist = try String(contentsOf: macRoot.appendingPathComponent("Info.plist"),
+                               encoding: .utf8)
+        XCTAssertTrue(plist.contains("<key>CFBundleDocumentTypes</key>"),
+                      "without a document type there is no Dock drop target and no Open With")
+        for type in ["public.data", "public.folder"] {
+            XCTAssertTrue(plist.contains("<string>\(type)</string>"),
+                          "\(type) is missing; that half of what a user can send is unreachable")
+        }
+        XCTAssertTrue(flattened(plist).contains("<key>LSHandlerRank</key> <string>None</string>"),
+                      "any rank but None offers Relayium as a default handler for every file")
+        XCTAssertFalse(plist.contains("<string>Editor</string>"),
+                       "Relayium never writes back to what it is given")
+        XCTAssertTrue(flattened(plist).contains("<key>CFBundleTypeRole</key> <string>Viewer</string>"))
     }
 
     // MARK: - the sidebar's live-session marker

@@ -41,6 +41,30 @@ public enum AppRouting {
         }
     }
 
+    /// Files the OS opened with this app — a Finder **Open With**, or a drop on
+    /// the Dock icon.
+    ///
+    /// Unlike the two above, this one reads where the user already is, because a
+    /// file is not itself a request to go anywhere: someone on Stored send who
+    /// drops a folder on the Dock means *that* send, and moving them would
+    /// discard the flow they had already chosen. So a send destination is kept.
+    ///
+    /// The three that can are listed by name, again with **no `default`**, so a
+    /// sixth destination has to state whether it sends files rather than
+    /// inheriting an answer.
+    ///
+    /// `.nearby` is the fallback for the two that cannot, and it is the only
+    /// defensible one: it is the sole send flow that needs neither an account
+    /// nor a code, so dropping files on the Dock while signed out stages them
+    /// instead of opening a sign-in wall. Routing to Stored send would make the
+    /// app's most native gesture the one place a signed-out user is refused.
+    public static func destination(forOpenedFiles current: AppDestination) -> AppDestination {
+        switch current {
+        case .nearby, .pairingCode, .storedSend: return current
+        case .storedReceive, .account: return .nearby
+        }
+    }
+
     /// Everything an unsolicited session must settle **synchronously**, in one
     /// call, before its responder is built.
     ///

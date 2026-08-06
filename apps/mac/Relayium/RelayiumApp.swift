@@ -60,6 +60,68 @@ final class TransferQuitGuard: NSObject, NSApplicationDelegate {
     /// closing it must not end the process. Quit is still ⌘Q, still guarded by
     /// `applicationShouldTerminate` above.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    /// Finder's **Open With**, and a drop on the Dock icon.
+    ///
+    /// **The `urls` are empty here, and that is not a bug to work around.**
+    /// Measured on this tree: SwiftUI's own app delegate consumes an open and
+    /// re-publishes each URL through the scene's `onOpenURL` — including
+    /// `file://` ones — and then calls this method with nothing left in it. The
+    /// probe that established it logged `onOpenURL file:///…/qa-sample.txt`
+    /// followed one millisecond later by `application(_:open:) got 0 urls`. So
+    /// the payload arrives at the scene, and this method's only remaining job is
+    /// the one the scene cannot do.
+    ///
+    /// That job is showing the window. The most native case for this feature is
+    /// also the one where there is nothing on screen: the app is resident in the
+    /// menu bar with its window closed, the user picks Open With, and without
+    /// this the files stage correctly into a window nobody can see.
+    ///
+    /// The array is still forwarded rather than ignored. It is empty on every
+    /// macOS this tree has been run on, so that branch is not exercised today —
+    /// but the failure it covers is silent, and a version of this method that
+    /// dropped a non-empty array on the floor would lose the user's files with
+    /// no error anywhere.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        showTheMainWindow()
+        if !urls.isEmpty { didOpenFiles?(urls) }
+    }
+
+    /// Where opened files would go if AppKit stopped emptying the array above.
+    ///
+    /// Wired to the same app-scoped router `onOpenURL` feeds, so the fallback is
+    /// a working path rather than a comment.
+    var didOpenFiles: (([URL]) -> Void)?
+
+    /// Bring the window back when files arrive and it is closed.
+    ///
+    /// `SwiftUI.Window` is a single persistent window rather than a group, so
+    /// closing it orders it out instead of releasing it, and it is still in
+    /// `NSApp.windows` to be ordered back. That is exactly why this app's main
+    /// scene is a `Window`; against a `WindowGroup` there would be nothing here
+    /// to find, and re-creating one would be the second window the whole shell
+    /// is designed to prevent.
+    ///
+    /// Which window, and why not simply the first titled one. This process owns
+    /// several `NSWindow`s and three of them are titled: the shell, Sparkle's
+    /// update window, and the quit-guard `NSAlert` this same class puts up. The
+    /// first-titled rule would order whichever AppKit happened to list first,
+    /// so an Open With during an update check could raise the updater and leave
+    /// the staged files invisible — the exact bug this method exists to prevent.
+    ///
+    /// `canBecomeMain` is the property that separates them: only a real document
+    /// window can become the app's main window. An alert is a modal panel and
+    /// the `MenuBarExtra`'s status item is not a main-window candidate either,
+    /// so neither can be selected here regardless of ordering. `isSheet` is
+    /// excluded as well, because a sheet reports its parent's capabilities while
+    /// being the wrong thing to raise on its own.
+    private func showTheMainWindow() {
+        NSApp.activate(ignoringOtherApps: true)
+        guard let window = NSApp.windows.first(where: {
+            $0.canBecomeMain && $0.styleMask.contains(.titled) && $0.sheetParent == nil
+        }) else { return }
+        window.makeKeyAndOrderFront(nil)
+    }
 }
 
 @main
@@ -87,6 +149,15 @@ struct RelayiumApp: App {
     /// this platform, the window itself — and it watches the models directly
     /// rather than through a view.
     @StateObject private var deepLinkRouting: AppDeepLinkCoordinator
+    /// Files the OS opened with this app — Finder's Open With, a drop on the
+    /// Dock icon. App-scoped for a reason the link router only half has: those
+    /// files can arrive *as the launch*, before any scene exists, and they must
+    /// still be staged once one does.
+    @StateObject private var fileOpens = AppFileOpenRouter()
+    /// Where those files go. App-scoped because the batch is retained until the
+    /// pane it is addressed to is free to take it, and that pane may be
+    /// mid-transfer — or its window closed — for the whole wait.
+    @StateObject private var fileOpenRouting: AppFileOpenCoordinator
     // App-scoped rather than view-scoped: a transfer must survive the window's
     // view tree being rebuilt, and the quit guard has to be able to ask whether
     // one is running.
@@ -210,6 +281,11 @@ struct RelayiumApp: App {
         _deepLinkRouting = StateObject(wrappedValue: AppDeepLinkCoordinator(
             navigation: routing, download: downloads,
             realtime: files, realtimeText: text))
+        // Built from the SAME navigation model, so an opened file and a tapped
+        // link cannot disagree about where the user is. It takes nothing else:
+        // staging a selection touches no transfer model, which is why this one
+        // needs no busy rule of its own.
+        _fileOpenRouting = StateObject(wrappedValue: AppFileOpenCoordinator(navigation: routing))
     }
 
     var body: some Scene {
@@ -233,6 +309,8 @@ struct RelayiumApp: App {
                 .environmentObject(session)
                 .environmentObject(deepLinks)
                 .environmentObject(deepLinkRouting)
+                .environmentObject(fileOpens)
+                .environmentObject(fileOpenRouting)
                 .environmentObject(uploadModel)
                 .environmentObject(downloadModel)
                 .environmentObject(accountManagement)
@@ -270,8 +348,32 @@ struct RelayiumApp: App {
                         // runs.
                         presence.releaseAll()
                     }
+                    // The fallback path, for the day AppKit stops emptying
+                    // `application(_:open:)`. Wired here for the same reason as
+                    // the two above: the adaptor builds the delegate before the
+                    // StateObjects exist.
+                    quitGuard.didOpenFiles = { fileOpens.open($0) }
                 }
-                .onOpenURL { deepLinks.open($0) }
+                // BOTH kinds of hand-off arrive here — a Universal Link and, as
+                // this tree measured, every file the OS opens with this app.
+                // SwiftUI republishes an AppKit open through this modifier and
+                // then calls the delegate with an emptied array, so this is the
+                // only place a `file://` URL actually exists.
+                //
+                // The two are disjoint by construction: `parseAppDeepLink`
+                // requires `https` and `relayium.com`, and `droppedFileURL`
+                // requires `isFileURL`. Trying the link first is therefore not a
+                // precedence rule to reason about — it is two total predicates
+                // over one value, and a URL that satisfies neither (a `mailto:`,
+                // an https link to somewhere else) is refused by both and does
+                // nothing, which is the intended answer.
+                //
+                // Before this split, an opened file reached `deepLinks.open`,
+                // failed to parse, and was discarded in silence.
+                .onOpenURL { url in
+                    guard !deepLinks.open(url) else { return }
+                    fileOpens.open([url])
+                }
         }
         .defaultSize(width: 1040, height: 700)
         .commands {

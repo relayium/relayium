@@ -24,6 +24,11 @@ struct AppShellView: View {
     // where no test reaches it.
     @EnvironmentObject private var deepLinks: AppDeepLinkRouter
     @EnvironmentObject private var deepLinkRouting: AppDeepLinkCoordinator
+    /// The OS hand-off for opened files, and where they go. Held here for the
+    /// same reason the link pair is: this shell forwards one to the other and
+    /// decides nothing itself.
+    @EnvironmentObject private var fileOpens: AppFileOpenRouter
+    @EnvironmentObject private var fileOpenRouting: AppFileOpenCoordinator
     @EnvironmentObject private var presence: TransferPresence
     @EnvironmentObject private var nearbyReceive: NearbyReceiveModel
     /// The ONE account-adjacent fact this file learns, and it is deliberately
@@ -99,6 +104,20 @@ struct AppShellView: View {
             // can land inside it, and a bare `consume()` would throw away a link
             // this subscription has never seen and `Published` will not re-emit.
             Task { @MainActor in deepLinks.consume(link) }
+        }
+        // Files the OS opened with this app. Structurally identical to the link
+        // hand-off above, and for the identical reasons — this file forwards a
+        // batch and consumes it one turn later, deciding nothing. Where the
+        // files go is `AppFileOpenCoordinator`'s, and whether the addressed pane
+        // may take them yet is that pane's own `busy`.
+        //
+        // The router's `pending` is the batch the OS gave; the coordinator's
+        // `staged` is that batch addressed to a destination. Two objects rather
+        // than one, so a batch that arrives while the window is closed is still
+        // routed the moment this subscription is rebuilt.
+        .onReceive(fileOpens.$pending.compactMap { $0 }) { urls in
+            fileOpenRouting.deliver(urls)
+            Task { @MainActor in fileOpens.consume(urls) }
         }
         // A session nobody asked for. `task(id:)` rather than `onChange`
         // because the window may have been closed when it started and rebuilt

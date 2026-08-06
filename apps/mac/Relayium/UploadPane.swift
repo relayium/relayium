@@ -21,6 +21,9 @@ struct UploadPane: View {
     /// navigation model rather than through a callback because this pane is
     /// rendered by exactly one destination.
     @EnvironmentObject private var navigation: AppNavigationModel
+    /// Files the OS opened with this app. Read-only here — this pane takes only
+    /// the batch addressed to it.
+    @EnvironmentObject private var fileOpenRouting: AppFileOpenCoordinator
 
     /// The pane owns the selection; the model owns what is being uploaded. They
     /// are kept in step through `model.pick`, so the model still refuses an
@@ -44,6 +47,23 @@ struct UploadPane: View {
                 model.clearSelection()
             }
         }
+        // Files opened from Finder or dropped on the Dock icon. Adopting into
+        // `selection` is enough: the `onChange` above is what carries a staged
+        // selection into the model, so this path does not — and must not — push
+        // to the model itself, or an opened file would reach it by two routes.
+        .task(id: FileOpenAdoption(staged: fileOpenRouting.staged, busy: model.isBusy)) {
+            adoptOpenedFiles()
+        }
+    }
+
+    /// Stage a batch the OS opened, if this pane is the one it was addressed to
+    /// and is free to take it. `add`, not `replace` — the same call the drop
+    /// zone makes.
+    private func adoptOpenedFiles() {
+        guard let batch = fileOpenRouting.batch(for: .storedSend, busy: model.isBusy)
+        else { return }
+        selection.add(batch.urls)
+        fileOpenRouting.consume(batch)
     }
 
     /// The account gate applies only while a new upload can be started. Once
