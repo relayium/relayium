@@ -85,6 +85,74 @@ final class SharedDraftInboxTests: XCTestCase {
         XCTAssertTrue(box.collect().isEmpty, "a draft must never be offered twice")
     }
 
+    /// **The regression this file exists for.** The app calls `collect()` from
+    /// `.task` and again on every return to `.active`, so the second call
+    /// happens the first time the user switches away and back — the most
+    /// ordinary gesture there is, right after sharing.
+    ///
+    /// The original implementation held no per-session state: it read the whole
+    /// recorded set out of `UserDefaults` and retired it, with nothing
+    /// distinguishing "recorded by a previous session" from "recorded ten
+    /// seconds ago by this one". So the second call deleted the very bytes the
+    /// send flow was pointing at, and Send failed with nothing in the UI having
+    /// said why.
+    ///
+    /// The test above passed throughout, because it only ever asserted that the
+    /// second call RETURNS nothing — never that the files survived it. Asserting
+    /// the return value alone is what let the bug through.
+    func testASecondCollectInTheSameSessionDoesNotDeleteTheStagedBytes() throws {
+        try publish("a.bin")
+        let box = inbox()
+        let files = box.collect()
+        XCTAssertEqual(files.count, 1)
+
+        _ = box.collect()
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: files[0].path),
+                      "the send flow is still pointing at these bytes")
+        XCTAssertEqual(adoptedIds.count, 1,
+                       "the draft must stay recorded, so the NEXT session retires it")
+    }
+
+    /// Many activations, one share. The bytes survive all of them.
+    func testRepeatedActivationsNeverCollectThisSessionsOwnDraft() throws {
+        try publish("a.bin")
+        let box = inbox()
+        let files = box.collect()
+        for _ in 0..<5 { _ = box.collect() }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: files[0].path))
+    }
+
+    /// A batch adopted earlier in the session stays recorded when a later batch
+    /// arrives — otherwise the earlier one is dropped from the record and its
+    /// bytes are never collected at all.
+    func testAnEarlierBatchStaysRecordedWhenALaterOneArrives() throws {
+        let first = try publish("a.bin")
+        let box = inbox()
+        let firstFiles = box.collect()
+        let second = try publish("b.bin")
+        _ = box.collect()
+
+        XCTAssertEqual(Set(adoptedIds), Set([first.id, second.id]))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: firstFiles[0].path),
+                      "the first batch is still staged and must not have been swept")
+    }
+
+    /// And the deferral still works across sessions: a NEW object retires
+    /// everything the previous one recorded, both batches included.
+    func testTheNextSessionStillRetiresEverythingTheLastOneAdopted() throws {
+        try publish("a.bin")
+        let box = inbox()
+        let firstFiles = box.collect()
+        try publish("b.bin")
+        let secondFiles = box.collect()
+
+        XCTAssertTrue(inbox().collect().isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: firstFiles[0].path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: secondFiles[0].path))
+        XCTAssertEqual(adoptedIds, [])
+    }
+
     /// A new session — a new object over the same defaults — retires what the
     /// previous one adopted, and only then looks for new work.
     func testTheNextSessionRetiresWhatTheLastOneAdopted() throws {

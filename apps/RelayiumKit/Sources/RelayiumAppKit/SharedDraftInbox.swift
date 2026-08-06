@@ -43,6 +43,12 @@ public final class SharedDraftInbox {
     private let store: SharedDraftStore?
     private let defaults: UserDefaults
 
+    /// Ids THIS object has handed to the send flow. Never retired while this
+    /// object lives — see `collect()` for the data-loss bug their absence
+    /// caused. Deliberately not persisted: on the next launch these are exactly
+    /// the ids that must be retired.
+    private var adoptedThisSession: Set<String> = []
+
     /// `store` is nil when the App Group cannot be resolved — the un-provisioned
     /// development build. Everything else in the app goes on working; shared
     /// drafts simply never arrive, because nothing can write one.
@@ -57,18 +63,30 @@ public final class SharedDraftInbox {
     /// send flow. Empty is the ordinary case and is not an error.
     ///
     /// Safe to call repeatedly — on every activation, which is what the app
-    /// does. A second call in the same session retires nothing new (the ids it
-    /// just recorded are this session's) and adopts nothing new (their drafts
-    /// are already recorded).
+    /// does.
+    ///
+    /// **`adoptedThisSession` is what makes that true, and its absence was a
+    /// data-loss bug.** `collect()` used to read the whole recorded set from
+    /// `UserDefaults` and retire it, with nothing distinguishing "recorded by a
+    /// previous session" from "recorded ten seconds ago by this one". The app
+    /// calls this from `.task` and again on every return to `.active`, so the
+    /// first time the user switched away and back — the most ordinary gesture
+    /// there is, right after sharing — the second call deleted the very bytes
+    /// the send flow was pointing at, and Send would then fail with nothing in
+    /// the UI having said why.
+    ///
+    /// In memory rather than in `UserDefaults`, because "this session" is
+    /// exactly the lifetime of this object. Persisting it would recreate the
+    /// original bug on the next launch, where those ids DO need retiring.
     @discardableResult
     public func collect() -> [URL] {
         guard let store else { return [] }
 
         // First, because a draft adopted earlier must not be re-offered by the
-        // listing below, and because doing it after would retire ids this call
-        // has only just recorded.
-        let previouslyAdopted = Set(defaults.stringArray(forKey: Self.defaultsKey) ?? [])
-        for id in previouslyAdopted {
+        // listing below. Only ids this object has NOT handed over are retired:
+        // the ones it has are still on screen.
+        let recorded = Set(defaults.stringArray(forKey: Self.defaultsKey) ?? [])
+        for id in recorded.subtracting(adoptedThisSession) {
             store.retire(id: id)
         }
         // Anything still listed after those retirements is genuinely new. A
@@ -78,7 +96,13 @@ public final class SharedDraftInbox {
 
         var adopted: [String] = []
         var files: [URL] = []
-        for plan in store.drafts() {
+        // `where` rather than relying on retirement to hide them. Retirement is
+        // what used to keep a draft from being offered twice, and it did so by
+        // deleting it — so the fix for that had to take over this job as well.
+        // Without this clause the same batch is handed to the send flow again on
+        // every activation, appending the user's files to their selection over
+        // and over.
+        for plan in store.drafts() where !adoptedThisSession.contains(plan.id) {
             // A draft whose files cannot be listed is left alone rather than
             // recorded: recording it would retire it next launch without the
             // user ever having seen it.
@@ -88,10 +112,12 @@ public final class SharedDraftInbox {
             adopted.append(plan.id)
             files.append(contentsOf: roots)
         }
-        // Written even when `files` is empty of new drafts, because the set has
-        // changed: this session's adoptions replace the previous session's,
-        // which have just been retired.
-        defaults.set(adopted, forKey: Self.defaultsKey)
+        // The union, not just this call's finds: the record is "what this
+        // session has handed over", and the next launch retires all of it.
+        // Assigning only `adopted` would drop earlier batches from the record
+        // and leave their bytes behind forever.
+        adoptedThisSession.formUnion(adopted)
+        defaults.set(adoptedThisSession.sorted(), forKey: Self.defaultsKey)
         return files
     }
 
