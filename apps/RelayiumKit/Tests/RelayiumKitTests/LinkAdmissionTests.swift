@@ -317,6 +317,193 @@ final class LinkAdmissionTests: XCTestCase {
                        .leave(auth: auth))
     }
 
+    // MARK: - claiming what a decision authorised
+    //
+    // `route` and `ensure` answer from the phase they observed and deliberately
+    // do not act, so acting on one is a second step — and the window between them
+    // is where two offers delivered in one socket burst both find an idle room.
+    // These two close that window: the test and the claim are one critical
+    // section, and the loser is told it lost.
+
+    /// The first claim wins and takes the room; the second is refused, which is
+    /// exactly when its peer is owed a `busy`.
+    func testOnlyOneEstablishmentCanClaimAnIdleRoom() {
+        let admission = admission(selfId: smaller)
+
+        XCTAssertTrue(admission.admitEstablishment(peerId: larger, role: .initiator))
+        XCTAssertFalse(admission.admitEstablishment(peerId: "ccc", role: .initiator))
+
+        XCTAssertEqual(admission.phase, .connecting(peerId: larger))
+    }
+
+    /// Idempotent for the peer already being established with, so a crossing
+    /// offer adopted while this side's own attempt is in flight is not told it
+    /// lost a race it is not in.
+    func testClaimingTheRoomTwiceForOnePeerIsIdempotent() {
+        let admission = admission(selfId: smaller)
+        XCTAssertTrue(admission.admitEstablishment(peerId: larger, role: .initiator))
+
+        XCTAssertTrue(admission.admitEstablishment(peerId: larger, role: .initiator))
+        XCTAssertEqual(admission.phase, .connecting(peerId: larger))
+    }
+
+    /// A reclaim must not rewrite the role, and the proof is what happens a whole
+    /// lifecycle later.
+    ///
+    /// `establishedRole` is not read at claim time at all: it is read during
+    /// RECOVERY, where it decides who drives a rebuild. Only the responder
+    /// consumes an inbound authenticated resume offer, because the initiator
+    /// drives its own — so a duplicate claim carrying the opposite role would
+    /// turn this initiator into a second consumer, and the two peers would put
+    /// two PeerConnections into one pair of lanes. Nothing at the moment of the
+    /// reclaim would look wrong; the damage surfaces during a gap, which is
+    /// exactly why this asserts through one.
+    func testAReclaimWithAConflictingRoleDoesNotChangeWhoDrivesARebuild() {
+        let admission = admission(selfId: smaller)
+        XCTAssertTrue(admission.admitEstablishment(peerId: larger, role: .initiator))
+
+        // The duplicate: same peer, opposite role. Idempotent, and inert.
+        XCTAssertTrue(admission.admitEstablishment(peerId: larger, role: .responder),
+                      "a duplicate claim for the peer we are already dialling still succeeds")
+
+        admission.didOpen(peerId: larger)
+        admission.didInterrupt()
+        XCTAssertEqual(admission.phase, .interrupted(peerId: larger))
+
+        XCTAssertEqual(admission.route(from: larger, signal: resumeOffer()), .ignore,
+                       "this side is still the initiator, so it drives its own rebuild")
+    }
+
+    /// The positive control for the test above: a link whose role really IS
+    /// responder consumes the same signal. Without this, the assertion above
+    /// would pass just as well against a resume offer that is malformed, and the
+    /// regression it exists for would go unnoticed.
+    func testAResponderStillConsumesTheSameResumeOffer() {
+        let admission = admission(selfId: larger)
+        XCTAssertTrue(admission.admitEstablishment(peerId: smaller, role: .responder))
+        admission.didOpen(peerId: smaller)
+        admission.didInterrupt()
+
+        XCTAssertEqual(admission.route(from: smaller, signal: resumeOffer()), .resumeOffer,
+                       "the responder answers the initiator's authenticated offer")
+    }
+
+    /// The role a NEW establishment settles is the one it was given, whichever
+    /// path it came in on — a claim from idle, and a claim that supersedes this
+    /// side's own outstanding ask.
+    func testANewEstablishmentSettlesTheRoleItWasGiven() {
+        let fromIdle = admission(selfId: larger)
+        XCTAssertTrue(fromIdle.admitEstablishment(peerId: smaller, role: .responder))
+        fromIdle.didOpen(peerId: smaller)
+        fromIdle.didInterrupt()
+        XCTAssertEqual(fromIdle.route(from: smaller, signal: resumeOffer()), .resumeOffer)
+
+        let fromAsk = admission(selfId: larger)
+        fromAsk.didBeginRequesting(peerId: smaller)
+        XCTAssertTrue(fromAsk.admitEstablishment(peerId: smaller, role: .responder),
+                      "the crossing offer supersedes our ask")
+        fromAsk.didOpen(peerId: smaller)
+        fromAsk.didInterrupt()
+        XCTAssertEqual(fromAsk.route(from: smaller, signal: resumeOffer()), .resumeOffer,
+                       "and it settled the role, because nothing had settled one before")
+    }
+
+    /// A room that has been given up and re-taken settles a fresh role: `didClose`
+    /// clears it, so the next establishment is genuinely new.
+    func testARoomGivenUpAndRetakenSettlesAFreshRole() {
+        let admission = admission(selfId: larger)
+        XCTAssertTrue(admission.admitEstablishment(peerId: smaller, role: .initiator))
+        admission.didClose()
+
+        XCTAssertTrue(admission.admitEstablishment(peerId: smaller, role: .responder))
+        admission.didOpen(peerId: smaller)
+        admission.didInterrupt()
+
+        XCTAssertEqual(admission.route(from: smaller, signal: resumeOffer()), .resumeOffer,
+                       "the new establishment's role is the one that applies")
+    }
+
+    /// A crossing offer supersedes this side's own outstanding ask to the same
+    /// peer — that convergence is what the request mechanism exists to produce —
+    /// and is refused for any other peer.
+    func testAnOutstandingAskIsSupersededOnlyByItsOwnPeer() {
+        let admission = admission(selfId: smaller)
+        admission.didBeginRequesting(peerId: larger)
+
+        XCTAssertFalse(admission.admitEstablishment(peerId: "ccc", role: .responder))
+        XCTAssertEqual(admission.phase, .requesting(peerId: larger))
+
+        XCTAssertTrue(admission.admitEstablishment(peerId: larger, role: .responder))
+        XCTAssertEqual(admission.phase, .connecting(peerId: larger))
+    }
+
+    /// A held link is never displaced by a claim, open or interrupted.
+    func testAHeldLinkIsNeverDisplacedByAClaim() {
+        let admission = admission(selfId: smaller)
+        admission.didBeginEstablishing(peerId: larger, role: .initiator)
+        admission.didOpen(peerId: larger)
+
+        XCTAssertFalse(admission.admitEstablishment(peerId: "ccc", role: .initiator))
+        XCTAssertEqual(admission.phase, .open(peerId: larger))
+
+        admission.didInterrupt()
+        XCTAssertFalse(admission.admitEstablishment(peerId: "ccc", role: .initiator))
+        XCTAssertEqual(admission.phase, .interrupted(peerId: larger))
+    }
+
+    /// Claiming the room consumes the peer's timed-out mark: this side is no
+    /// longer waiting on it, so its next offer is genuine rather than the one
+    /// late offer a mark exists to answer.
+    func testClaimingConsumesATimedOutMark() {
+        let admission = admission(selfId: larger)
+        admission.didBeginRequesting(peerId: smaller)
+        admission.didRequestTimeOut(peerId: smaller)
+
+        XCTAssertTrue(admission.admitEstablishment(peerId: smaller, role: .responder))
+        admission.didClose()
+        admission.didBeginRequesting(peerId: smaller)
+
+        // The mark is gone, so a later offer is establishment rather than busy.
+        XCTAssertEqual(admission.route(from: smaller, signal: linkOffer()),
+                       .establish(role: .responder))
+    }
+
+    /// An ask claims an idle room, is idempotent for its own peer, and never
+    /// overwrites an establishment that was admitted in the meantime — which is
+    /// the race a router acting on `ensure`'s answer would otherwise lose.
+    func testAnAskClaimsOnlyAnIdleRoom() {
+        let admission = admission(selfId: larger)
+
+        XCTAssertTrue(admission.admitRequest(peerId: smaller))
+        XCTAssertTrue(admission.admitRequest(peerId: smaller), "idempotent for its own peer")
+        XCTAssertFalse(admission.admitRequest(peerId: "aab"))
+        XCTAssertEqual(admission.phase, .requesting(peerId: smaller))
+
+        admission.didClose()
+        XCTAssertTrue(admission.admitEstablishment(peerId: smaller, role: .responder))
+        XCTAssertFalse(admission.admitRequest(peerId: "aab"),
+                       "an establishment is not overwritten by an ask")
+        XCTAssertEqual(admission.phase, .connecting(peerId: smaller))
+    }
+
+    /// Concurrent claims from many threads: exactly one wins, and the room ends
+    /// up committed to that one peer.
+    func testConcurrentClaimsAdmitExactlyOnePeer() {
+        let admission = admission(selfId: smaller)
+        let peers = (0..<32).map { "peer-\($0)" }
+        let won = NSLock()
+        var winners: [String] = []
+
+        DispatchQueue.concurrentPerform(iterations: peers.count) { index in
+            if admission.admitEstablishment(peerId: peers[index], role: .initiator) {
+                won.lock(); winners.append(peers[index]); won.unlock()
+            }
+        }
+
+        XCTAssertEqual(winners.count, 1, "exactly one claim took the room")
+        XCTAssertEqual(admission.phase, .connecting(peerId: winners[0]))
+    }
+
     // MARK: - stale peers and room teardown
 
     func testCloseReleasesTheLinkAndTheTimeoutMarks() {

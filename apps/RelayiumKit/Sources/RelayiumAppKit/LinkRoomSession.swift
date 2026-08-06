@@ -167,11 +167,36 @@ final class LinkRoomSession {
     /// afterwards would overwrite that open with a connecting.
     @discardableResult
     func begin(peerId: String, role: Role, initialSignal: JSONValue? = nil) -> Bool {
+        begin(peerId: peerId, role: role, initialSignal: initialSignal, alreadyAdmitted: false)
+    }
+
+    /// Begin an establishment the caller has ALREADY claimed the room for.
+    ///
+    /// `LinkAdmission.admitEstablishment` moves the phase to `.connecting` in the
+    /// same critical section as the test that authorised it, which is the only
+    /// way a router acting on `route`'s answer can be safe against two offers in
+    /// one socket burst. A caller that used it has therefore already made the one
+    /// announcement this object would otherwise make, and making it a second time
+    /// would re-enter `didBeginEstablishing` — clearing the timed-out mark the
+    /// reservation just consumed and re-announcing a phase that is already true.
+    ///
+    /// Everything else is identical, including the refusal when an establishment
+    /// is already held: a caller that reserved the room and then finds this
+    /// object busy has a router bug, and the backstop is the same one.
+    @discardableResult
+    func beginAdmitted(peerId: String, role: Role, initialSignal: JSONValue? = nil) -> Bool {
+        begin(peerId: peerId, role: role, initialSignal: initialSignal, alreadyAdmitted: true)
+    }
+
+    private func begin(peerId: String,
+                       role: Role,
+                       initialSignal: JSONValue?,
+                       alreadyAdmitted: Bool) -> Bool {
         guard current == nil else { return false }
         generation += 1
         let mine = generation
 
-        admission.didBeginEstablishing(peerId: peerId, role: role)
+        if !alreadyAdmitted { admission.didBeginEstablishing(peerId: peerId, role: role) }
         let assembly = assemble(peerId, role, initialSignal)
         current = Establishment(generation: mine, peerId: peerId,
                                 assembly: assembly, published: false)

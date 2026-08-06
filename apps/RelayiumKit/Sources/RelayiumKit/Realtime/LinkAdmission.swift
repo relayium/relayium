@@ -282,6 +282,95 @@ public final class LinkAdmission: @unchecked Sendable {
         return .ignore
     }
 
+    // MARK: - claiming what a decision authorised
+
+    /// Take the room for an establishment with this peer, in one critical
+    /// section with the phase test that justifies it.
+    ///
+    /// ## Why this exists beside `route` and `ensure`
+    ///
+    /// Those two ANSWER; they deliberately do not act. `route` reads the phase
+    /// and says `establish(role:)`, and the caller then has to build something —
+    /// which it cannot do while holding this object's lock, and in the app's case
+    /// cannot even do on this thread. Between the answer and the claim the phase
+    /// is unguarded, and the failure that lives in that window is not theoretical:
+    /// two offers delivered in ONE socket burst are both routed against an idle
+    /// room, both told `establish`, and the second is then either a second
+    /// PeerConnection into the same pair of lanes or a peer silently dropped
+    /// instead of being told the room is taken.
+    ///
+    /// So this is the second half of the decision, and it is the half that is
+    /// atomic. It answers false when the room has since been taken by somebody
+    /// else, which is exactly when the caller owes that peer a `busy`.
+    ///
+    /// It is idempotent for the peer already being established with, so a caller
+    /// that re-claims — a crossing offer adopted while this side's own request is
+    /// outstanding — is not told it lost.
+    ///
+    /// It does NOT decide the role: that is `linkRole`'s and arrives already
+    /// computed, exactly as `didBeginEstablishing` takes it.
+    ///
+    /// **A reclaim never rewrites the role, and that is the sharp edge here.**
+    /// The idempotent path exists for a duplicate — a replayed offer, a crossing
+    /// signal, a peer that sent twice — and a duplicate can carry the OPPOSITE
+    /// role, either because it was forged or because it arrived from a routing
+    /// decision taken against a different self id. `establishedRole` is what
+    /// `route` reads to decide who drives a rebuild: only the responder consumes
+    /// an inbound authenticated resume offer, because the initiator drives its
+    /// own. So a reclaim that flipped this field would leave both peers
+    /// consuming, or both driving, the next rebuild — two PeerConnections into
+    /// one pair of lanes, or none — and it would do it long after the reclaim,
+    /// during a recovery nobody would connect to a duplicate signal. The role is
+    /// therefore written only where a NEW establishment begins, and an
+    /// already-connecting peer keeps the one its first claim settled.
+    public func admitEstablishment(peerId: String, role: Role) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        switch _phase {
+        case .idle, .failed:
+            // A new establishment: this claim is what settles the role.
+            establishedRole = role
+        case let .requesting(held):
+            // Our own ask, superseded by an establishment with the same peer.
+            // Still new — nothing has settled a role yet.
+            guard held == peerId else { return false }
+            establishedRole = role
+        case let .connecting(held):
+            // The attempt we already have. Idempotent, and deliberately silent
+            // about `role`: see above.
+            guard held == peerId else { return false }
+        case .open, .interrupted:
+            return false
+        }
+        // The mark is consumed by the establishment it would have refused: this
+        // side is no longer waiting on that peer, so its next offer is genuine.
+        timedOutPeers.remove(peerId)
+        _phase = .connecting(peerId: peerId)
+        return true
+    }
+
+    /// Take the room for an outstanding ask to this peer, on the same terms.
+    ///
+    /// `didBeginRequesting` below assigns unconditionally, which is right for the
+    /// owner that already knows it holds the room. A router acting on `ensure`'s
+    /// answer does not: an inbound offer may have been admitted between the
+    /// answer and the ask, and overwriting `.connecting` with `.requesting` would
+    /// leave this side asking a peer to offer while a link to a different one was
+    /// already being built.
+    public func admitRequest(peerId: String) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        switch _phase {
+        case .idle, .failed:
+            break
+        case let .requesting(held):
+            guard held == peerId else { return false }
+        case .connecting, .open, .interrupted:
+            return false
+        }
+        timedOutPeers.remove(peerId)
+        _phase = .requesting(peerId: peerId)
+        return true
+    }
+
     // MARK: - lifecycle, driven by the transport owner
 
     public func didBeginRequesting(peerId: String) {
@@ -302,6 +391,21 @@ public final class LinkAdmission: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// The transport owner announces that IT has begun an establishment.
+    ///
+    /// Deliberately unconditional, and deliberately unlike `admitEstablishment`
+    /// above, which preserves the role of a peer already being connected to. The
+    /// two have different callers and therefore different rules: this one is the
+    /// owner stating what it has decided and started, and the only thing that can
+    /// reach it is code that already holds the room. `admitEstablishment` is the
+    /// one that turns an UNTRUSTED signal into a claim, so it is the one that has
+    /// to survive a duplicate or replayed claim carrying the opposite role.
+    ///
+    /// An owner that called this twice for one peer with two roles would be
+    /// announcing something contradictory about its own establishment, and
+    /// believing it is the right answer — nothing else can tell the owner what it
+    /// is doing. Today there is exactly one caller, `LinkRoomSession.begin`, and
+    /// it makes the call once per establishment behind its own single-slot guard.
     public func didBeginEstablishing(peerId: String, role: Role) {
         lock.lock()
         establishedRole = role

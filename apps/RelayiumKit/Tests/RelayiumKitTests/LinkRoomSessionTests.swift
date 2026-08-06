@@ -258,6 +258,69 @@ final class LinkRoomSessionTests: XCTestCase {
                       "and the room heard about it, though the hook was installed after")
     }
 
+    // MARK: - 1b. beginning an establishment the caller already claimed
+
+    /// A valid authenticated rebuild offer, as the interrupted link's peer sends
+    /// one. What it routes to is decided by the role the establishment settled,
+    /// which is the whole point of the two tests below.
+    private func resumeOffer() -> JSONValue {
+        .object(["resume": .bool(true),
+                 "auth": .string(String(repeating: "a", count: LINK_AUTH_TAG_LENGTH)),
+                 "sdp": .object(["type": .string("offer"), "sdp": .string("v=0 rebuild")])])
+    }
+
+    /// `beginAdmitted` assembles, and does NOT announce — proved through a whole
+    /// lifecycle rather than by reading the source.
+    ///
+    /// The role argument here is deliberately WRONG. A caller that reserved the
+    /// room atomically has already settled the role, and this call passes the
+    /// opposite one: if `beginAdmitted` announced through `didBeginEstablishing`,
+    /// that announcement would overwrite `establishedRole` with `.responder` and
+    /// nothing at this point would look amiss. The damage would surface much
+    /// later, during recovery — only a responder consumes an inbound
+    /// authenticated resume offer, because the initiator drives its own — so this
+    /// asserts through an interruption, where the two answers differ.
+    ///
+    /// Admission is driven to `open` and `interrupted` directly, because the
+    /// question is what `beginAdmitted` did or did not announce, not what the
+    /// runtime under it would have reported.
+    func testBeginningAnAdmittedEstablishmentDoesNotReAnnounceTheRole() {
+        let r = rig()
+        XCTAssertTrue(r.admission.admitEstablishment(peerId: "peer-1", role: .initiator),
+                      "the caller claimed the room atomically, as a router does")
+
+        XCTAssertTrue(r.session.beginAdmitted(peerId: "peer-1", role: .responder))
+
+        XCTAssertEqual(r.assembled.transports.count, 1, "exactly one assembly")
+        XCTAssertEqual(r.assembled.peers, ["peer-1"])
+        XCTAssertEqual(r.session.peerId, "peer-1")
+        XCTAssertEqual(r.admission.phase, .connecting(peerId: "peer-1"),
+                       "and the phase the claim set is simply still true")
+
+        r.admission.didOpen(peerId: "peer-1")
+        r.admission.didInterrupt()
+
+        XCTAssertEqual(r.admission.route(from: "peer-1", signal: resumeOffer()), .ignore,
+                       "the claim's initiator role survived: this side drives its own rebuild")
+    }
+
+    /// The positive control. `begin` — the path for a caller that did NOT claim
+    /// the room — announces, and its announcement is what settles the role. Both
+    /// halves are needed: without this one the assertion above would hold just as
+    /// well against a resume offer that could never be consumed by anybody.
+    func testBeginningAnUnclaimedEstablishmentIsWhatSettlesTheRole() {
+        let r = rig()
+
+        XCTAssertTrue(r.session.begin(peerId: "peer-1", role: .responder))
+
+        XCTAssertEqual(r.admission.phase, .connecting(peerId: "peer-1"))
+        r.admission.didOpen(peerId: "peer-1")
+        r.admission.didInterrupt()
+
+        XCTAssertEqual(r.admission.route(from: "peer-1", signal: resumeOffer()), .resumeOffer,
+                       "announced as responder, so an inbound rebuild offer is this side's")
+    }
+
     // MARK: - 2. the room is released when nobody else will
 
     /// The gap this object exists to close. A transport that fails before it ever
