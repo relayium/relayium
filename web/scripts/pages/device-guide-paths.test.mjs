@@ -17,10 +17,23 @@ const FACTS = {
   pt: [/LAN/i, /TURN/i, /não consegue ler nem descriptografar/i, /não mantém cópia nem histórico/i, /criador faz login/i, /entra nunca precisa de conta/i],
 };
 
+/**
+ * The SAS copy of the same-network section, whichever field carries it.
+ *
+ * These guides became runnable tutorials (browser-howto-tutorial.test.mjs), so
+ * the procedure that used to be `bullets` is now `steps`. The claim this file
+ * polices did not move — only the field it sits in — and reading both keeps the
+ * rule pointed at the sentence rather than at a shape.
+ */
+const sasCopy = (article, lang) => {
+  const section = article.langs[lang].sections[1];
+  return [...(section.bullets || []), ...(section.steps || []).map((s) => s.text)].join(" ");
+};
+
 describe("device guide realtime paths", () => {
   it("states the complete path, privacy, and account boundary in every localized lead", () => {
     for (const [name, article] of Object.entries(ARTICLES)) {
-      expect(article.updated, name).toBe("2026-07-31");
+      expect(article.updated, name).toBe("2026-08-05");
       for (const lang of LANGS) {
         const lead = article.langs[lang].lead[1];
         for (const fact of FACTS[lang]) expect(lead, `${name} [${lang}] ${fact}`).toMatch(fact);
@@ -31,7 +44,7 @@ describe("device guide realtime paths", () => {
   it("describes the verification code as session authentication, not path proof", () => {
     for (const [name, article] of Object.entries(ARTICLES))
       for (const lang of LANGS) {
-        const sas = article.langs[lang].sections[1].bullets[3];
+        const sas = sasCopy(article, lang);
         expect(sas, `${name} [${lang}]`).not.toMatch(
           /proves? no server|confirms? .*direct|没有服务器|证明.*直连|サーバーが入り込んでいない|직접적이며 중간|kein Server dazwischen|connexion est directe|خادم بينكما|conexión es directa|conexão é direta/i,
         );
@@ -40,7 +53,7 @@ describe("device guide realtime paths", () => {
 
   it("removes the old English direct-only lead and SAS claims", () => {
     const copy = Object.values(ARTICLES)
-      .map((article) => `${article.langs.en.lead[1]} ${article.langs.en.sections[1].bullets[3]}`)
+      .map((article) => `${article.langs.en.lead[1]} ${sasCopy(article, "en")}`)
       .join(" ");
     expect(copy).not.toMatch(/files travel directly between them/i);
     expect(copy).not.toMatch(/proves no server|confirms the connection is direct/i);

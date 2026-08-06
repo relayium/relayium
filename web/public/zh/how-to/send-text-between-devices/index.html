@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="在设备之间发送文本、链接和命令" />
     <meta name="twitter:description" content="用 Relayium 在设备之间传递文本、链接、命令和多行代码——端到端加密、仅限双方在线；Relayium 服务器不保存消息正文或服务端历史，但任一端都可留存收到的文本。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"在设备之间发送文本、链接和命令","description":"用 Relayium 在设备之间传递文本、链接、命令和多行代码——端到端加密、仅限双方在线；Relayium 服务器不保存消息正文或服务端历史，但任一端都可留存收到的文本。","inLanguage":"zh-Hans","datePublished":"2026-07-30","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/send-text-between-devices/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"在设备之间发送文本、链接和命令"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Relayium 能读取或恢复我的消息吗？","acceptedAnswer":{"@type":"Answer","text":"不能。消息内容在两台设备之间端到端加密，Relayium 服务器不保存消息正文或服务端历史。任一端都可复制或留存收到的文本；实时会话结束后，Relayium 没有可恢复的服务器副本。"}},{"@type":"Question","name":"一端用浏览器、另一端用 CLI 可以吗？","acceptedAnswer":{"@type":"Answer","text":"不可以。浏览器与 CLI 使用不同的传输和配对握手。请使用两台浏览器，或两端都使用 CLI。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"在设备之间发送文本、链接和命令","description":"用 Relayium 在设备之间传递文本、链接、命令和多行代码——端到端加密、仅限双方在线；Relayium 服务器不保存消息正文或服务端历史，但任一端都可留存收到的文本。","inLanguage":"zh-Hans","datePublished":"2026-07-30","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/send-text-between-devices/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"在设备之间发送文本、链接和命令"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Relayium 能读取或恢复我的消息吗？","acceptedAnswer":{"@type":"Answer","text":"不能。消息内容在两台设备之间端到端加密，Relayium 服务器不保存消息正文或服务端历史。任一端都可复制或留存收到的文本；实时会话结束后，Relayium 没有可恢复的服务器副本。"}},{"@type":"Question","name":"一端用浏览器、另一端用 CLI 可以吗？","acceptedAnswer":{"@type":"Answer","text":"不可以。浏览器与 CLI 使用不同的传输和配对握手。请使用两台浏览器，或两端都使用 CLI。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -65,6 +65,23 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -83,13 +100,19 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
+      <p class="updated">最近更新: <bdi>2026-08-05</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-text-between-devices/">English</a><a href="/zh/how-to/send-text-between-devices/" aria-current="true">中文</a><a href="/ja/how-to/send-text-between-devices/">日本語</a><a href="/ko/how-to/send-text-between-devices/">한국어</a><a href="/de/how-to/send-text-between-devices/">Deutsch</a><a href="/fr/how-to/send-text-between-devices/">Français</a><a href="/ar/how-to/send-text-between-devices/">العربية</a><a href="/es/how-to/send-text-between-devices/">Español</a><a href="/pt/how-to/send-text-between-devices/">Português</a></nav>
       <p class="lead">Relayium 不只能传文件，也能传适合剪贴板的内容：手机上的网址、要在另一台电脑执行的命令，或一整段多行代码。消息端到端加密；Relayium 服务器不保存消息正文或服务端历史，但任一端都能复制或留存收到的文本。</p>
       <p class="lead">浏览器和命令行都支持文本，但它们是两套独立传输，不能加入彼此的配对码。下面任选一种方式，两端保持一致。</p>
       <h2>浏览器：给在线设备发送消息</h2>
-      <p>在两台设备上打开 relayium.com。同一网络的设备会自动出现；不同网络时，在跨网络页面创建浏览器配对码，再让另一台浏览器加入。</p>
-      <ul><li>在对端卡片上选择“发送消息”。默认情况下会话会直接在两端打开输入框——无论是否核对校验码，连接都是加密的。</li><li>输入或粘贴文本，用 ⌘/Ctrl+Enter 发送。如果希望两块屏幕先显示同一个 6 位校验码（SAS）供核对，并在会话打开前多一步明确接受，请先打开“高级验证”。</li><li>会话保持打开时，双方都能连续发送多条消息，也能对收到的任意消息点“复制”。</li></ul>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">开始之前</p><ul><li>两台设备同时在线，并且都在浏览器里打开着页面。这里没有收件箱：消息只存在于双方都保持打开的那个会话里。</li><li>两端选定同一种传输方式。同一网络下什么都不用准备；不同网络需要一个浏览器配对码，由创建方登录生成，有效期 5 分钟。</li><li>内容要装进一条消息：65,536 个 UTF-8 字节。输入时计数会往上走，超出后会提示你改用文件发送。</li><li>准备好安放收到的内容。收到的消息留在打开的会话里，所以想保留什么，请在会话结束或页面刷新之前先复制走。</li></ul></div>
+      <p>在两台设备上打开 relayium.com，然后按你们所处的情形选其中一套流程。同一网络下，对方会自己出现在「附近的设备」里，它的卡片只提供一个动作——「打开工作区」：输入框就在那个工作区里，和文件、文件夹附件并排，共用同一条加密连接。跨网络则是另一套流程：在跨网络页面创建浏览器配对码，再让另一台浏览器加入；那个房间保留着更早的一套控件，对端卡片上仍然是「发送消息」。</p>
+      <ol class="steps" data-block="steps"><li><p>在两台设备上打开传输页面——同一网络的页面会自动帮你找到对方，而配对码要用在实时传输页面上（两端不在同一网络时）。</p><pre><code>https://relayium.com/</code></pre></li><li><p>按你们所在的路径打开会话。同一网络：在「附近的设备」里那台设备的卡片上按「打开工作区」，然后在工作区给出的输入框里打字。跨网络：在配对码房间里，改按对端卡片上的「发送消息」。默认情况下会话会直接在两端打开输入框——无论是否核对校验码，连接都是加密的。</p></li><li><p>输入或粘贴文本。输入框下方的计数显示你已经用掉了单条消息预算的多少，单位是字节而不是字符，因为一个 emoji 或一个汉字要占好几个字节。</p><pre><code>1,024 / 65,536 字节</code></pre></li><li><p>用 ⌘/Ctrl+回车发送——单按回车是换行，正是这一点让多行片段可以一次粘贴、一次发出。输入框下方的提示就写着这套按键。</p><pre><code>回车换行 · ⌘/Ctrl+回车发送</code></pre></li><li><p>会话保持打开时，双方都能连续发送多条消息，想留下的内容就点「复制」。如果希望先核对校验码（SAS），请在打开会话之前先打开「高级验证」：它增加的是校验码和一步明确接受，而不是加密。</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">会话正常时是什么样</p><p>两端都显示会话已建立，你的消息出现在对方设备的记录里，字节计数也为下一条清零。</p><p>这份记录是 Relayium 唯一参与的副本：它只存在于两个打开的页面里，刷新或结束会话就没了；而「复制」会把文本放进那台设备的剪贴板，其他 App 也能读到。</p><pre><code>会话已建立
+1,024 / 65,536 字节</code></pre></div>
+      <h2>消息发不出去时</h2>
+      <p>文本和文件传输走同一条连接，所以大多数失败其实是连接的问题，而不是消息的问题。只有两种例外很具体，而且都会在屏幕上说明：一条超过大小上限的消息，以及因为一次发得太多而被关闭的会话。</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、处理</p><dl><dt>对方设备一直不出现，也就没有卡片可以开消息会话。</dt><dd><pre><code>https://relayium.com/   # 对比两台设备上状态条里的公网 IP</code></pre><p>同网络发现是按连接过来的公网 IP 分组的，所以两个不同地址就是两个房间——断开 VPN 或 iCloud 专用代理，或者连到同一个 Wi-Fi。如果两端确实不在同一网络，就改用 https://relayium.com/cross-network 上的配对码。</p></dd><dt>输入框拒收这段文本，提示消息太长。</dt><dd><pre><code>1,024 / 65,536 字节   # 计数是 UTF-8 字节，不是字符</code></pre><p>一条消息装 65,536 个 UTF-8 字节，而非拉丁文字每个字符要花 2 到 4 个字节，所以一段很长的中文或大量 emoji 会远在字符数看起来还很宽裕的时候就撞上这个字节上限。请拆开发送，或者作为文件发送——输入框本来就给了这个提示。</p></dd><dt>会话自己关掉了，并归因于消息发得太多。</dt><dd><pre><code>https://relayium.com/   # 会话那行会显示它是结束，而不是失败</code></pre><p>当一侧发送的消息数量远超人手打字的量时，防洪机制会关闭会话——脚本或卡住的按键都会造成这种情况。用你当初打开它的方式重新打开会话——同一网络就在附近设备的卡片上按「打开工作区」，跨网络就在配对码房间里按「发送消息」——再把剩下的内容合并成更少、更长的几条发出去。</p></dd><dt>本来一切正常，刷新之后对话是空的。</dt><dd><pre><code>https://relayium.com/   # 刷新这个页面就是开一个没有记录的新会话</code></pre><p>这是设计而不是缺陷：Relayium 不保存服务端历史，所以没有可恢复的东西，也没有可供调取的服务器副本。离开会话之前，请把重要内容复制到备忘录里——这份记录的寿命只等于那个页面开着的时间。</p></dd><dt>浏览器和 CLI 无法加入彼此的配对码。</dt><dd><pre><code>relayium text 483920   # CLI 的配对码只能 CLI 对 CLI</code></pre><p>浏览器与 CLI 的文本会话使用不同的传输和配对握手，所以一端生成的 6 位码对另一端毫无意义。请用两个浏览器，或者两端都用 CLI——relayium text 会打印出第二台机器该运行的完整命令。</p></dd></dl></div>
       <h2>CLI：一台机器生成配对码，另一台加入</h2>
       <p>在其中一台机器上直接运行 relayium text，不带配对码。它会用你的账号生成一个 6 位数字配对码，打印出另一台机器该运行的完整命令，并留在会话里等待对方加入。不需要临时文件，也不需要另外停掉任何进程。</p>
       <p>另一台机器用该码运行 relayium text。交互模式每行是一条消息，除非你主动要求，否则不会停下来核对校验码；多行或要求逐字节保真的内容请通过管道作为一条消息发送，管道方式不需要额外加任何参数。</p>

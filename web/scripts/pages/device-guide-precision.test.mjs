@@ -53,7 +53,7 @@ describe("device guide path and SAS precision", () => {
 
   it("publishes the current revision date for all three guides", () => {
     for (const article of [computers, pcPhone, qrCode]) {
-      expect(article.updated, article.slug).toBe("2026-07-31");
+      expect(article.updated, article.slug).toBe("2026-08-05");
     }
   });
 });

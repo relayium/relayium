@@ -28,8 +28,15 @@ function article(c) {
     sections: [
       {
         heading: c.browserHeading,
+        prereqs: { label: c.prereqLabel, items: c.prereqs },
         body: [c.browserBody],
-        bullets: c.browserSteps,
+        steps: c.browserSteps,
+        success: { label: c.successLabel, body: c.successBody, code: c.successCode },
+      },
+      {
+        heading: c.fixHeading,
+        body: [c.fixBody],
+        troubleshooting: { label: c.fixLabel, items: c.fixes },
       },
       {
         heading: c.cliHeading,
@@ -63,11 +70,70 @@ const en = article({
   ],
   browserHeading: "Browser: send a message to an online device",
   browserBody:
-    "Open relayium.com on both devices. Devices on the same network appear automatically; for different networks, create a browser pairing code from the cross-network page and join it in the other browser.",
+    "Open relayium.com on both devices, then follow whichever of the two procedures fits. On one network the other device appears by itself under “Nearby devices”, and its card offers a single action, “Open workspace”: the composer lives inside that workspace, beside the file and folder attachments, on the one encrypted connection. Across networks it is a separate procedure — create a browser pairing code on the cross-network page and join it in the other browser, and that room keeps its own older controls, where the peer card still offers “Send a message”.",
+  prereqLabel: "Before you start",
+  prereqs: [
+    "Both devices online at the same time, with the page open in a browser. There is no inbox: a message exists only inside a session both sides are holding open.",
+    "One transport chosen for both ends. Same network needs nothing at all; different networks need a browser pairing code, which the creating side signs in for and which lives five minutes.",
+    "Text that fits one message: 65,536 UTF-8 bytes. The composer counts up as you type and tells you to send it as a file instead once you go past that.",
+    "Somewhere to put what arrives. The received message stays in the open session, so copy anything you want to keep before the session ends or the page reloads.",
+  ],
   browserSteps: [
-    "On the peer card, choose “Send a message”. By default the session opens straight into the composer on both ends — the connection is encrypted either way.",
-    "Type or paste text and send with ⌘/Ctrl+Enter. Turn on advanced verification first if you want both screens to show a six-digit verification code (SAS) to compare, plus an explicit accept step before the session opens.",
-    "Each side can send several messages and use Copy on any received message while the session remains open.",
+    {
+      text: "Open the transfer page on both devices — the same-network page finds them for you, and the realtime page is where a pairing code goes if they are on different networks.",
+      code: ["https://relayium.com/"],
+    },
+    {
+      text: "Open the session by the route your two devices are on. Same network: press “Open workspace” on the other device's card under “Nearby devices”, and type into the composer that workspace puts on screen. Across networks: in the pairing-code room, press “Send a message” on the peer card instead. By default the session opens straight into the composer on both ends — the connection is encrypted either way.",
+    },
+    {
+      text: "Type or paste the text. The counter under the box shows how much of the one-message budget you have used, in bytes rather than characters, because an emoji or a CJK character costs several.",
+      code: ["1,024 / 65,536 bytes"],
+    },
+    {
+      text: "Send with ⌘/Ctrl+Enter — plain Enter inserts a newline, which is what makes a multiline snippet paste-and-send in one go. The hint under the box states that mapping.",
+      code: ["Enter for a new line · ⌘/Ctrl+Enter to send"],
+    },
+    {
+      text: "Keep the session open to send several messages in either direction, and press “Copy” on anything you want to keep. To compare a verification code (SAS) first, turn on “Advanced verification” before opening the session: it adds the code and an explicit accept step, not the encryption.",
+    },
+  ],
+  successLabel: "What a working session looks like",
+  successBody: [
+    "Both sides show the session as open, your message appears in the transcript on the other device, and the byte counter resets for the next one.",
+    "That transcript is the only copy Relayium is involved in: it lives in the two open pages, so it is gone on reload or when the session ends, and “Copy” puts the text on that device's clipboard where other apps can read it.",
+  ],
+  successCode: ["Session open\n1,024 / 65,536 bytes"],
+  fixHeading: "When a message won't go through",
+  fixBody:
+    "Text uses the same connection as a file transfer, so most failures are the connection rather than the message. The two exceptions are specific and both say so on screen: a message over the size limit, and a session that was closed for sending too many at once.",
+  fixLabel: "Symptom, check, fix",
+  fixes: [
+    {
+      symptom: "The other device never appears, so there is no card to open a message session from.",
+      code: ["https://relayium.com/   # compare the public IP in the status pill on both devices"],
+      fix: "Same-network discovery groups devices by the public IP they connect from, so two different addresses mean two rooms — drop a VPN or iCloud Private Relay, or join the same Wi-Fi. If they are genuinely on different networks, use a pairing code on https://relayium.com/cross-network instead.",
+    },
+    {
+      symptom: "The composer refuses the text and says the message is too long.",
+      code: ["1,024 / 65,536 bytes   # the counter is bytes of UTF-8, not characters"],
+      fix: "One message holds 65,536 UTF-8 bytes, and non-Latin text spends two to four bytes per character, so a long Chinese or emoji-heavy paste hits that byte limit long before the character count would suggest. Split it, or send it as a file — the composer offers exactly that.",
+    },
+    {
+      symptom: "The session closed itself and blamed too many messages.",
+      code: ["https://relayium.com/   # the session line reports it ended rather than failed"],
+      fix: "A flood guard closes a session when one side sends far more messages than a person types, which a script or a stuck key can do. Reopen the session the way you opened it — “Open workspace” on a nearby device's card, or “Send a message” in a cross-network pairing-code room — and send the remaining text in fewer, larger messages.",
+    },
+    {
+      symptom: "Everything worked, and after a reload the conversation is empty.",
+      code: ["https://relayium.com/   # reloading this page starts a new session with no transcript"],
+      fix: "That is the design rather than a bug: Relayium keeps no server-side history, so there is nothing to restore and no server copy to subpoena either. Copy what matters into a note before you leave the session — the transcript is only as durable as the open page.",
+    },
+    {
+      symptom: "A browser and the CLI cannot join each other's code.",
+      code: ["relayium text 483920   # a CLI code only ever pairs CLI to CLI"],
+      fix: "Browser and CLI text sessions use different transports and pairing handshakes, so a six-digit code minted by one is meaningless to the other. Use two browsers, or the CLI on both ends — relayium text prints the exact command the second machine should run.",
+    },
   ],
   cliHeading: "CLI: mint a code on one machine, join it on the other",
   cliBody: [
@@ -114,11 +180,70 @@ const zh = article({
   ],
   browserHeading: "浏览器：给在线设备发送消息",
   browserBody:
-    "在两台设备上打开 relayium.com。同一网络的设备会自动出现；不同网络时，在跨网络页面创建浏览器配对码，再让另一台浏览器加入。",
+    "在两台设备上打开 relayium.com，然后按你们所处的情形选其中一套流程。同一网络下，对方会自己出现在「附近的设备」里，它的卡片只提供一个动作——「打开工作区」：输入框就在那个工作区里，和文件、文件夹附件并排，共用同一条加密连接。跨网络则是另一套流程：在跨网络页面创建浏览器配对码，再让另一台浏览器加入；那个房间保留着更早的一套控件，对端卡片上仍然是「发送消息」。",
+  prereqLabel: "开始之前",
+  prereqs: [
+    "两台设备同时在线，并且都在浏览器里打开着页面。这里没有收件箱：消息只存在于双方都保持打开的那个会话里。",
+    "两端选定同一种传输方式。同一网络下什么都不用准备；不同网络需要一个浏览器配对码，由创建方登录生成，有效期 5 分钟。",
+    "内容要装进一条消息：65,536 个 UTF-8 字节。输入时计数会往上走，超出后会提示你改用文件发送。",
+    "准备好安放收到的内容。收到的消息留在打开的会话里，所以想保留什么，请在会话结束或页面刷新之前先复制走。",
+  ],
   browserSteps: [
-    "在对端卡片上选择“发送消息”。默认情况下会话会直接在两端打开输入框——无论是否核对校验码，连接都是加密的。",
-    "输入或粘贴文本，用 ⌘/Ctrl+Enter 发送。如果希望两块屏幕先显示同一个 6 位校验码（SAS）供核对，并在会话打开前多一步明确接受，请先打开“高级验证”。",
-    "会话保持打开时，双方都能连续发送多条消息，也能对收到的任意消息点“复制”。",
+    {
+      text: "在两台设备上打开传输页面——同一网络的页面会自动帮你找到对方，而配对码要用在实时传输页面上（两端不在同一网络时）。",
+      code: ["https://relayium.com/"],
+    },
+    {
+      text: "按你们所在的路径打开会话。同一网络：在「附近的设备」里那台设备的卡片上按「打开工作区」，然后在工作区给出的输入框里打字。跨网络：在配对码房间里，改按对端卡片上的「发送消息」。默认情况下会话会直接在两端打开输入框——无论是否核对校验码，连接都是加密的。",
+    },
+    {
+      text: "输入或粘贴文本。输入框下方的计数显示你已经用掉了单条消息预算的多少，单位是字节而不是字符，因为一个 emoji 或一个汉字要占好几个字节。",
+      code: ["1,024 / 65,536 字节"],
+    },
+    {
+      text: "用 ⌘/Ctrl+回车发送——单按回车是换行，正是这一点让多行片段可以一次粘贴、一次发出。输入框下方的提示就写着这套按键。",
+      code: ["回车换行 · ⌘/Ctrl+回车发送"],
+    },
+    {
+      text: "会话保持打开时，双方都能连续发送多条消息，想留下的内容就点「复制」。如果希望先核对校验码（SAS），请在打开会话之前先打开「高级验证」：它增加的是校验码和一步明确接受，而不是加密。",
+    },
+  ],
+  successLabel: "会话正常时是什么样",
+  successBody: [
+    "两端都显示会话已建立，你的消息出现在对方设备的记录里，字节计数也为下一条清零。",
+    "这份记录是 Relayium 唯一参与的副本：它只存在于两个打开的页面里，刷新或结束会话就没了；而「复制」会把文本放进那台设备的剪贴板，其他 App 也能读到。",
+  ],
+  successCode: ["会话已建立\n1,024 / 65,536 字节"],
+  fixHeading: "消息发不出去时",
+  fixBody:
+    "文本和文件传输走同一条连接，所以大多数失败其实是连接的问题，而不是消息的问题。只有两种例外很具体，而且都会在屏幕上说明：一条超过大小上限的消息，以及因为一次发得太多而被关闭的会话。",
+  fixLabel: "现象、检查、处理",
+  fixes: [
+    {
+      symptom: "对方设备一直不出现，也就没有卡片可以开消息会话。",
+      code: ["https://relayium.com/   # 对比两台设备上状态条里的公网 IP"],
+      fix: "同网络发现是按连接过来的公网 IP 分组的，所以两个不同地址就是两个房间——断开 VPN 或 iCloud 专用代理，或者连到同一个 Wi-Fi。如果两端确实不在同一网络，就改用 https://relayium.com/cross-network 上的配对码。",
+    },
+    {
+      symptom: "输入框拒收这段文本，提示消息太长。",
+      code: ["1,024 / 65,536 字节   # 计数是 UTF-8 字节，不是字符"],
+      fix: "一条消息装 65,536 个 UTF-8 字节，而非拉丁文字每个字符要花 2 到 4 个字节，所以一段很长的中文或大量 emoji 会远在字符数看起来还很宽裕的时候就撞上这个字节上限。请拆开发送，或者作为文件发送——输入框本来就给了这个提示。",
+    },
+    {
+      symptom: "会话自己关掉了，并归因于消息发得太多。",
+      code: ["https://relayium.com/   # 会话那行会显示它是结束，而不是失败"],
+      fix: "当一侧发送的消息数量远超人手打字的量时，防洪机制会关闭会话——脚本或卡住的按键都会造成这种情况。用你当初打开它的方式重新打开会话——同一网络就在附近设备的卡片上按「打开工作区」，跨网络就在配对码房间里按「发送消息」——再把剩下的内容合并成更少、更长的几条发出去。",
+    },
+    {
+      symptom: "本来一切正常，刷新之后对话是空的。",
+      code: ["https://relayium.com/   # 刷新这个页面就是开一个没有记录的新会话"],
+      fix: "这是设计而不是缺陷：Relayium 不保存服务端历史，所以没有可恢复的东西，也没有可供调取的服务器副本。离开会话之前，请把重要内容复制到备忘录里——这份记录的寿命只等于那个页面开着的时间。",
+    },
+    {
+      symptom: "浏览器和 CLI 无法加入彼此的配对码。",
+      code: ["relayium text 483920   # CLI 的配对码只能 CLI 对 CLI"],
+      fix: "浏览器与 CLI 的文本会话使用不同的传输和配对握手，所以一端生成的 6 位码对另一端毫无意义。请用两个浏览器，或者两端都用 CLI——relayium text 会打印出第二台机器该运行的完整命令。",
+    },
   ],
   cliHeading: "CLI：一台机器生成配对码，另一台加入",
   cliBody: [
@@ -165,11 +290,70 @@ const ja = article({
   ],
   browserHeading: "ブラウザ：オンライン端末へメッセージを送る",
   browserBody:
-    "両方の端末で relayium.com を開きます。同じネットワークなら自動表示され、別ネットワークならクロスネットワーク画面でブラウザ用コードを作り、もう一方のブラウザで参加します。",
+    "両方の端末で relayium.com を開き、状況に合う方の手順に進みます。同じネットワークなら相手は「近くのデバイス」に自動表示され、そのカードの操作は「ワークスペースを開く」の一つだけです。入力欄はそのワークスペースの中、ファイルとフォルダの添付の隣にあり、同じ1本の暗号化接続を使います。ネットワークをまたぐ場合は別の手順です。クロスネットワーク画面でブラウザ用コードを作り、もう一方のブラウザで参加します。その部屋には以前からの操作が残っていて、相手のカードには今も「メッセージを送る」が並びます。",
+  prereqLabel: "始める前に",
+  prereqs: [
+    "2台が同時にオンラインで、どちらもブラウザでページを開いていること。受信箱はありません。メッセージは双方が開いたままにしているセッションの中にだけ存在します。",
+    "両端で同じ転送方式を選ぶこと。同一ネットワークなら準備は何も要りません。別のネットワークならブラウザ用のペアリングコードが必要で、作成側がサインインし、寿命は5分です。",
+    "1メッセージに収まる分量、つまり UTF-8 で 65,536 バイトまで。入力に応じてカウンターが増え、超えるとファイルとして送るよう案内されます。",
+    "届いたものを置く場所。受信メッセージは開いているセッションの中に留まるので、残したいものはセッションが終わる前、ページを再読み込みする前にコピーしてください。",
+  ],
   browserSteps: [
-    "相手のカードで「メッセージを送信」を選びます。既定では両端でそのまま入力欄が開きます。いずれの場合も接続は暗号化されています。",
-    "テキストを入力または貼り付け、⌘/Ctrl+Enter で送信します。両画面に同じ 6 桁の確認コード（SAS）を表示して照合し、セッションを開く前に明示的な承認を挟みたい場合は、先に「高度な検証」をオンにしてください。",
-    "セッション中は双方が複数のメッセージを送り、受信メッセージをコピーできます。",
+    {
+      text: "両方の端末で転送ページを開きます。同一ネットワークのページは相手を自動的に見つけ、別ネットワークならペアリングコードをリアルタイム転送のページで使います。",
+      code: ["https://relayium.com/"],
+    },
+    {
+      text: "2台がどちらの経路にいるかでセッションの開き方が変わります。同じネットワークなら、「近くのデバイス」にある相手のカードで「ワークスペースを開く」を押し、ワークスペースが出す入力欄に打ち込みます。ネットワークをまたぐ場合は、ペアリングコードの部屋で相手のカードの「メッセージを送る」を押します。既定では両端でそのまま入力欄が開きます。いずれの場合も接続は暗号化されています。",
+    },
+    {
+      text: "テキストを入力または貼り付けます。入力欄の下のカウンターは、1メッセージ分の枠をどれだけ使ったかを文字数ではなくバイト数で示します。絵文字や日本語の1文字は数バイトを消費するためです。",
+      code: ["1,024 / 65,536 バイト"],
+    },
+    {
+      text: "⌘/Ctrl+Enter で送信します。Enter 単体は改行なので、複数行のスニペットを貼り付けてそのまま送れます。その割り当ては入力欄の下のヒントに書かれています。",
+      code: ["Enter で改行 · ⌘/Ctrl+Enter で送信"],
+    },
+    {
+      text: "セッションを開いたままにすれば双方向に何度でも送れ、残したいものは「コピー」を押します。先に検証コード（SAS）を照合したい場合は、セッションを開く前に「高度な検証」をオンにしてください。増えるのはコードと明示的な承認の一手間で、暗号化そのものではありません。",
+    },
+  ],
+  successLabel: "セッションが正常なときの画面",
+  successBody: [
+    "両端でセッションが開いていると表示され、送ったメッセージが相手の端末の履歴に現れ、バイトカウンターは次の1通のためにゼロへ戻ります。",
+    "その履歴が Relayium の関わる唯一のコピーです。開いている2つのページの中だけに存在し、再読み込みやセッション終了で消えます。また「コピー」はその端末のクリップボードにテキストを置くため、ほかのアプリからも読める状態になります。",
+  ],
+  successCode: ["セッション接続中\n1,024 / 65,536 バイト"],
+  fixHeading: "メッセージが送れないとき",
+  fixBody:
+    "テキストはファイル転送と同じ接続を使うため、失敗のほとんどはメッセージではなく接続の問題です。例外は2つだけで具体的であり、どちらも画面に表示されます。サイズ上限を超えたメッセージと、一度に送りすぎて閉じられたセッションです。",
+  fixLabel: "症状・確認・対処",
+  fixes: [
+    {
+      symptom: "相手の端末がいつまでも現れず、メッセージセッションを開くカードがない。",
+      code: ["https://relayium.com/   # 両方の端末のステータス表示にあるグローバル IP を比べる"],
+      fix: "同一ネットワークの検出は接続元のグローバル IP でグループ化するため、アドレスが2つ違えばルームも2つです。VPN や iCloud プライベートリレーを切る、あるいは同じ Wi-Fi に参加してください。本当に別のネットワークにいる場合は、https://relayium.com/cross-network のペアリングコードを使います。",
+    },
+    {
+      symptom: "入力欄がテキストを受け付けず、メッセージが長すぎると出る。",
+      code: ["1,024 / 65,536 バイト   # カウンターは文字数ではなく UTF-8 のバイト数"],
+      fix: "1メッセージは UTF-8 で 65,536 バイトまでで、非ラテン文字は1文字あたり2〜4バイトを使うため、長い日本語や絵文字の多い貼り付けは、文字数から想像するよりずっと手前でそのバイト上限に達します。分割するか、ファイルとして送ってください。入力欄がまさにそれを案内します。",
+    },
+    {
+      symptom: "セッションが自ら閉じ、メッセージが多すぎたと告げる。",
+      code: ["https://relayium.com/   # セッションの行が失敗ではなく終了と表示する"],
+      fix: "片側が人の入力を大きく超える数のメッセージを送ると、洪水対策がセッションを閉じます。スクリプトや押されたままのキーがこれを起こします。開いたときと同じやり方でセッションを開き直し——同じネットワークなら近くのデバイスのカードで「ワークスペースを開く」、ネットワークをまたぐならペアリングコードの部屋で「メッセージを送る」——残りのテキストは少ない回数でまとめて送ってください。",
+    },
+    {
+      symptom: "うまくいっていたのに、再読み込みしたら会話が空になっている。",
+      code: ["https://relayium.com/   # このページを再読み込みすると履歴のない新しいセッションになる"],
+      fix: "これは不具合ではなく設計です。Relayium はサーバー側の履歴を保存しないので、復元するものはなく、取り寄せられるサーバーのコピーもありません。セッションを離れる前に必要な内容をメモへコピーしてください。履歴の寿命は、そのページが開いている間だけです。",
+    },
+    {
+      symptom: "ブラウザと CLI が互いのコードで参加できない。",
+      code: ["relayium text 483920   # CLI のコードは CLI 同士しかペアにしない"],
+      fix: "ブラウザと CLI のテキストセッションは転送方式もペアリング手順も異なるため、一方が発行した6桁コードは他方には無意味です。ブラウザ2つ、または両端で CLI を使ってください。relayium text は2台目が実行すべきコマンドをそのまま表示します。",
+    },
   ],
   cliHeading: "CLI：片方でコードを発行し、もう片方が参加する",
   cliBody: [
@@ -210,11 +394,70 @@ const ko = article({
   ],
   browserHeading: "브라우저: 온라인 기기에 메시지 보내기",
   browserBody:
-    "두 기기에서 relayium.com을 엽니다. 같은 네트워크에서는 자동으로 나타나고, 다른 네트워크에서는 교차 네트워크 페이지에서 브라우저 코드를 만든 뒤 다른 브라우저가 참여합니다.",
+    "두 기기에서 relayium.com을 열고, 상황에 맞는 절차를 고르세요. 같은 네트워크에서는 상대가 “주변 기기”에 저절로 나타나고 그 카드가 주는 동작은 “작업 공간 열기” 하나뿐입니다. 작성기는 그 작업 공간 안, 파일과 폴더 첨부 옆에 있고 하나의 암호화된 연결을 함께 씁니다. 다른 네트워크에서는 별개의 절차입니다. 교차 네트워크 페이지에서 브라우저 코드를 만들고 다른 브라우저가 참여하며, 그 방은 예전 컨트롤을 그대로 두어 상대 카드에 여전히 “메시지 보내기”가 있습니다.",
+  prereqLabel: "시작하기 전에",
+  prereqs: [
+    "두 기기가 같은 시간에 온라인이고, 둘 다 브라우저에서 페이지를 열어 두어야 합니다. 받은편지함은 없습니다. 메시지는 양쪽이 열어 둔 세션 안에만 존재합니다.",
+    "양쪽에서 같은 전송 방식을 고르세요. 같은 네트워크에서는 준비할 것이 없고, 다른 네트워크에서는 브라우저 페어링 코드가 필요하며 만드는 쪽이 로그인하고 수명은 5분입니다.",
+    "한 메시지에 들어갈 분량, 즉 UTF-8 65,536바이트까지. 입력하는 동안 카운터가 올라가고, 넘으면 파일로 보내라고 알려줍니다.",
+    "도착한 것을 둘 자리. 받은 메시지는 열린 세션 안에 남으므로, 남기고 싶은 것은 세션이 끝나거나 페이지를 새로고침하기 전에 복사하세요.",
+  ],
   browserSteps: [
-    "상대 카드에서 “메시지 보내기”를 선택합니다. 기본값에서는 양쪽 모두 곧바로 작성기가 열립니다. 어느 쪽이든 연결은 암호화됩니다.",
-    "텍스트를 입력하거나 붙여 넣고 ⌘/Ctrl+Enter로 보냅니다. 두 화면에 같은 6자리 확인 코드(SAS)를 띄워 대조하고 세션을 열기 전에 명시적인 수락 단계를 두려면 먼저 고급 검증을 켜세요.",
-    "세션이 열린 동안 양쪽에서 여러 메시지를 보내고 받은 메시지를 복사할 수 있습니다.",
+    {
+      text: "두 기기에서 전송 페이지를 엽니다. 같은 네트워크 페이지는 상대를 알아서 찾아 주고, 서로 다른 네트워크라면 페어링 코드를 실시간 전송 페이지에서 씁니다.",
+      code: ["https://relayium.com/"],
+    },
+    {
+      text: "두 기기가 놓인 경로에 맞게 세션을 엽니다. 같은 네트워크: “주변 기기”에 있는 상대 카드에서 “작업 공간 열기”를 누르고, 작업 공간이 띄우는 작성기에 입력합니다. 다른 네트워크: 페어링 코드 방에서 상대 카드의 “메시지 보내기”를 누릅니다. 기본값에서는 양쪽 모두 곧바로 작성기가 열립니다. 어느 쪽이든 연결은 암호화됩니다.",
+    },
+    {
+      text: "텍스트를 입력하거나 붙여 넣습니다. 입력창 아래 카운터는 한 메시지 예산을 얼마나 썼는지 글자 수가 아니라 바이트로 보여줍니다. 이모지나 한글 한 글자가 여러 바이트를 쓰기 때문입니다.",
+      code: ["1,024 / 65,536 바이트"],
+    },
+    {
+      text: "⌘/Ctrl+Enter로 보냅니다. Enter만 누르면 줄바꿈이라, 여러 줄 스니펫을 붙여 넣고 한 번에 보낼 수 있습니다. 그 할당은 입력창 아래 안내에 적혀 있습니다.",
+      code: ["Enter 로 줄바꿈 · ⌘/Ctrl+Enter 로 전송"],
+    },
+    {
+      text: "세션을 열어 두면 양방향으로 여러 메시지를 보낼 수 있고, 남기고 싶은 것은 “복사”를 누르면 됩니다. 먼저 검증 코드(SAS)를 대조하려면 세션을 열기 전에 “고급 검증”을 켜세요. 늘어나는 것은 코드와 명시적인 수락 한 단계일 뿐 암호화가 아닙니다.",
+    },
+  ],
+  successLabel: "세션이 잘될 때의 화면",
+  successBody: [
+    "양쪽에서 세션이 열렸다고 표시되고, 보낸 메시지가 상대 기기의 기록에 나타나며, 바이트 카운터는 다음 메시지를 위해 0으로 돌아갑니다.",
+    "그 기록이 Relayium이 관여하는 유일한 사본입니다. 열려 있는 두 페이지 안에만 있어 새로고침하거나 세션이 끝나면 사라지고, “복사”는 그 기기의 클립보드에 텍스트를 올려 다른 앱도 읽을 수 있게 합니다.",
+  ],
+  successCode: ["세션 연결됨\n1,024 / 65,536 바이트"],
+  fixHeading: "메시지가 가지 않을 때",
+  fixBody:
+    "텍스트는 파일 전송과 같은 연결을 쓰므로, 실패는 대개 메시지가 아니라 연결의 문제입니다. 예외는 둘뿐이고 구체적이며 둘 다 화면에 표시됩니다. 크기 상한을 넘긴 메시지, 그리고 한꺼번에 너무 많이 보내 닫힌 세션입니다.",
+  fixLabel: "증상, 확인, 조치",
+  fixes: [
+    {
+      symptom: "상대 기기가 끝내 나타나지 않아 메시지 세션을 열 카드가 없습니다.",
+      code: ["https://relayium.com/   # 두 기기의 상태 표시에 있는 공인 IP를 비교한다"],
+      fix: "같은 네트워크 탐색은 접속해 온 공인 IP로 기기를 묶으므로, 주소가 다르면 방도 둘입니다. VPN이나 iCloud 비공개 릴레이를 끄거나 같은 Wi-Fi에 접속하세요. 정말로 다른 네트워크라면 https://relayium.com/cross-network 의 페어링 코드를 쓰세요.",
+    },
+    {
+      symptom: "작성기가 텍스트를 받지 않고 메시지가 너무 길다고 합니다.",
+      code: ["1,024 / 65,536 바이트   # 카운터는 글자 수가 아니라 UTF-8 바이트다"],
+      fix: "한 메시지는 UTF-8 65,536바이트까지이고, 라틴 문자가 아닌 글자는 한 글자에 2~4바이트를 쓰므로 긴 한글이나 이모지가 많은 붙여넣기는 글자 수로 짐작하는 것보다 훨씬 앞에서 그 바이트 상한에 닿습니다. 나누어 보내거나 파일로 보내세요 — 작성기가 바로 그것을 제안합니다.",
+    },
+    {
+      symptom: "세션이 스스로 닫히며 메시지가 너무 많았다고 알립니다.",
+      code: ["https://relayium.com/   # 세션 줄이 실패가 아니라 종료라고 보고한다"],
+      fix: "한쪽이 사람이 타이핑하는 양을 크게 넘는 메시지를 보내면 홍수 방지가 세션을 닫습니다. 스크립트나 눌린 키가 그렇게 만듭니다. 열었던 방식 그대로 세션을 다시 여세요 — 같은 네트워크면 주변 기기 카드에서 “작업 공간 열기”, 다른 네트워크면 페어링 코드 방에서 “메시지 보내기” — 그리고 남은 텍스트를 더 적고 큰 메시지로 보내세요.",
+    },
+    {
+      symptom: "잘되고 있었는데 새로고침하니 대화가 비어 있습니다.",
+      code: ["https://relayium.com/   # 이 페이지를 새로고침하면 기록 없는 새 세션이 된다"],
+      fix: "이것은 결함이 아니라 설계입니다. Relayium은 서버 측 기록을 저장하지 않으므로 복원할 것도, 제출을 요구받을 서버 사본도 없습니다. 세션을 떠나기 전에 중요한 내용을 메모로 복사하세요. 기록의 수명은 그 페이지가 열려 있는 동안뿐입니다.",
+    },
+    {
+      symptom: "브라우저와 CLI가 서로의 코드로 참여하지 못합니다.",
+      code: ["relayium text 483920   # CLI 코드는 CLI끼리만 짝을 짓는다"],
+      fix: "브라우저와 CLI의 텍스트 세션은 전송 방식과 페어링 절차가 달라, 한쪽이 발급한 여섯 자리 코드는 다른 쪽에 아무 의미가 없습니다. 브라우저 두 개를 쓰거나 양쪽 모두 CLI를 쓰세요. relayium text가 두 번째 컴퓨터에서 실행할 명령을 그대로 출력합니다.",
+    },
   ],
   cliHeading: "CLI: 한쪽에서 코드를 발급하고 다른 쪽이 참여",
   cliBody: [
@@ -255,11 +498,70 @@ const de = article({
   ],
   browserHeading: "Browser: Nachricht an ein Online-Gerät senden",
   browserBody:
-    "Öffne relayium.com auf beiden Geräten. Im selben Netz erscheinen sie automatisch; über verschiedene Netze erzeugst du auf der Cross-Network-Seite einen Browser-Code und trittst im zweiten Browser bei.",
+    "Öffne relayium.com auf beiden Geräten und folge dann dem passenden der beiden Abläufe. Im selben Netz erscheint das andere Gerät von selbst unter „Geräte in der Nähe“, und seine Karte bietet genau eine Aktion: „Arbeitsbereich öffnen“. Das Eingabefeld sitzt in diesem Arbeitsbereich, neben den Anhängen für Dateien und Ordner, auf derselben einen verschlüsselten Verbindung. Über verschiedene Netze ist es ein eigener Ablauf: Auf der Cross-Network-Seite erzeugst du einen Browser-Code und trittst im zweiten Browser bei, und dieser Raum behält seine älteren Bedienelemente, wo die Karte der Gegenstelle weiterhin „Nachricht senden“ anbietet.",
+  prereqLabel: "Bevor du anfängst",
+  prereqs: [
+    "Beide Geräte gleichzeitig online, mit der Seite im Browser geöffnet. Es gibt keine Inbox: Eine Nachricht existiert nur in einer Sitzung, die beide Seiten offen halten.",
+    "Ein Transportweg, für beide Enden derselbe. Im selben Netz braucht es gar nichts; über verschiedene Netze braucht es einen Browser-Pairing-Code, für den sich die erzeugende Seite anmeldet und der fünf Minuten lebt.",
+    "Text, der in eine Nachricht passt: 65.536 UTF-8-Bytes. Der Zähler im Eingabefeld läuft beim Tippen mit und weist dich darüber hinaus darauf hin, es als Datei zu senden.",
+    "Ein Platz für das, was ankommt. Die empfangene Nachricht bleibt in der offenen Sitzung — kopiere also alles, was du behalten willst, bevor die Sitzung endet oder die Seite neu lädt.",
+  ],
   browserSteps: [
-    "Wähle auf der Gerätekarte „Nachricht senden“. Standardmäßig öffnet sich die Sitzung auf beiden Seiten direkt im Eingabefeld — verschlüsselt ist die Verbindung so oder so.",
-    "Text eingeben oder einfügen und mit ⌘/Strg+Enter senden. Schalte vorher die erweiterte Verifizierung ein, wenn beide Bildschirme denselben sechsstelligen Prüfcode (SAS) zum Vergleichen zeigen und die Sitzung erst nach ausdrücklicher Annahme öffnen soll.",
-    "Solange die Sitzung offen ist, können beide Seiten mehrere Nachrichten senden und empfangene Inhalte kopieren.",
+    {
+      text: "Öffne die Übertragungsseite auf beiden Geräten — die Seite für dasselbe Netz findet sie für dich, und auf der Echtzeitseite kommt ein Pairing-Code zum Einsatz, wenn sie in verschiedenen Netzen sind.",
+      code: ["https://relayium.com/"],
+    },
+    {
+      text: "Öffne die Sitzung auf dem Weg, auf dem eure beiden Geräte sind. Gleiches Netz: Drücke auf der Karte des anderen Geräts unter „Geräte in der Nähe“ auf „Arbeitsbereich öffnen“ und tippe in das Eingabefeld, das der Arbeitsbereich zeigt. Über Netze hinweg: Drücke im Pairing-Code-Raum stattdessen „Nachricht senden“ auf der Karte der Gegenstelle. Standardmäßig öffnet sich die Sitzung auf beiden Seiten direkt im Eingabefeld — verschlüsselt ist die Verbindung so oder so.",
+    },
+    {
+      text: "Text eingeben oder einfügen. Der Zähler unter dem Feld zeigt, wie viel des Budgets für eine Nachricht verbraucht ist, und zwar in Bytes statt in Zeichen, denn ein Emoji oder ein CJK-Zeichen kostet mehrere.",
+      code: ["1.024 / 65.536 Bytes"],
+    },
+    {
+      text: "Mit ⌘/Strg+Enter senden — Enter allein setzt einen Zeilenumbruch, und genau das macht ein mehrzeiliges Snippet in einem Zug einfügbar und sendbar. Der Hinweis unter dem Feld nennt diese Belegung.",
+      code: ["Enter für neue Zeile · ⌘/Ctrl+Enter zum Senden"],
+    },
+    {
+      text: "Lass die Sitzung offen, um in beide Richtungen mehrere Nachrichten zu senden, und drücke „Kopieren“ bei allem, was du behalten willst. Wer vorher einen Verifizierungscode (SAS) vergleichen will, schaltet „Erweiterte Verifizierung“ ein, bevor die Sitzung geöffnet wird: Sie ergänzt den Code und einen ausdrücklichen Annahmeschritt, nicht die Verschlüsselung.",
+    },
+  ],
+  successLabel: "So sieht eine funktionierende Sitzung aus",
+  successBody: [
+    "Beide Seiten zeigen die Sitzung als offen an, deine Nachricht erscheint im Verlauf auf dem anderen Gerät, und der Byte-Zähler steht für die nächste wieder auf Null.",
+    "Dieser Verlauf ist die einzige Kopie, an der Relayium beteiligt ist: Er lebt in den zwei offenen Seiten, ist also nach einem Neuladen oder mit dem Ende der Sitzung fort, und „Kopieren“ legt den Text in die Zwischenablage dieses Geräts, wo andere Apps ihn lesen können.",
+  ],
+  successCode: ["Sitzung offen\n1.024 / 65.536 Bytes"],
+  fixHeading: "Wenn eine Nachricht nicht durchgeht",
+  fixBody:
+    "Text nutzt dieselbe Verbindung wie eine Dateiübertragung, die meisten Fehler betreffen also die Verbindung und nicht die Nachricht. Die zwei Ausnahmen sind konkret und stehen beide auf dem Bildschirm: eine Nachricht über der Größengrenze, und eine Sitzung, die wegen zu vieler Nachrichten auf einmal geschlossen wurde.",
+  fixLabel: "Symptom, Prüfung, Lösung",
+  fixes: [
+    {
+      symptom: "Das andere Gerät erscheint nie, es gibt also keine Karte, aus der eine Nachrichtensitzung zu öffnen wäre.",
+      code: ["https://relayium.com/   # die öffentliche IP in der Statuszeile auf beiden Geräten vergleichen"],
+      fix: "Die Erkennung im selben Netz gruppiert Geräte nach der öffentlichen IP, über die sie sich verbinden, zwei verschiedene Adressen bedeuten also zwei Räume — trenne ein VPN oder iCloud Private Relay, oder geh ins selbe WLAN. Sind sie wirklich in verschiedenen Netzen, nimm einen Pairing-Code auf https://relayium.com/cross-network.",
+    },
+    {
+      symptom: "Das Eingabefeld nimmt den Text nicht an und meldet, die Nachricht sei zu lang.",
+      code: ["1.024 / 65.536 Bytes   # der Zähler zählt UTF-8-Bytes, nicht Zeichen"],
+      fix: "Eine Nachricht fasst 65.536 UTF-8-Bytes, und nichtlateinischer Text verbraucht zwei bis vier Bytes pro Zeichen, ein langer chinesischer oder emoji-lastiger Einfügevorgang erreicht diese Byte-Grenze also lange vor dem, was die Zeichenzahl vermuten lässt. Teile ihn auf, oder sende ihn als Datei — genau das bietet das Eingabefeld an.",
+    },
+    {
+      symptom: "Die Sitzung hat sich selbst geschlossen und zu viele Nachrichten dafür verantwortlich gemacht.",
+      code: ["https://relayium.com/   # die Sitzungszeile meldet beendet statt fehlgeschlagen"],
+      fix: "Ein Flutschutz schließt eine Sitzung, wenn eine Seite weit mehr Nachrichten sendet, als ein Mensch tippt — ein Skript oder eine hängende Taste schafft das. Öffne die Sitzung so neu, wie du sie geöffnet hast — „Arbeitsbereich öffnen“ auf der Karte eines Geräts in der Nähe, oder „Nachricht senden“ in einem netzübergreifenden Pairing-Code-Raum — und schicke den restlichen Text in weniger, größeren Nachrichten.",
+    },
+    {
+      symptom: "Alles lief, und nach einem Neuladen ist das Gespräch leer.",
+      code: ["https://relayium.com/   # ein Neuladen dieser Seite startet eine neue Sitzung ohne Verlauf"],
+      fix: "Das ist Absicht und kein Fehler: Relayium speichert keinen serverseitigen Verlauf, es gibt also nichts wiederherzustellen und auch keine Serverkopie, die jemand anfordern könnte. Kopiere Wichtiges in eine Notiz, bevor du die Sitzung verlässt — der Verlauf hält nur so lange wie die offene Seite.",
+    },
+    {
+      symptom: "Ein Browser und die CLI können dem Code des jeweils anderen nicht beitreten.",
+      code: ["relayium text 483920   # ein CLI-Code koppelt immer nur CLI mit CLI"],
+      fix: "Browser- und CLI-Textsitzungen nutzen verschiedene Transportwege und Kopplungsverfahren, ein sechsstelliger Code der einen Seite ist für die andere also bedeutungslos. Nimm zwei Browser, oder die CLI an beiden Enden — relayium text gibt genau den Befehl aus, den der zweite Rechner ausführen soll.",
+    },
   ],
   cliHeading: "CLI: auf einem Rechner einen Code erzeugen, auf dem anderen beitreten",
   cliBody: [
@@ -300,11 +602,70 @@ const fr = article({
   ],
   browserHeading: "Navigateur : envoyer un message à un appareil en ligne",
   browserBody:
-    "Ouvrez relayium.com sur les deux appareils. Sur le même réseau ils apparaissent automatiquement ; sinon créez un code navigateur sur la page interréseau et rejoignez-le dans l'autre navigateur.",
+    "Ouvrez relayium.com sur les deux appareils, puis suivez celle des deux procédures qui correspond. Sur le même réseau, l'autre appareil apparaît tout seul sous « Appareils à proximité » et sa carte ne propose qu'une action, « Ouvrir l’espace de travail » : la zone de saisie vit dans cet espace de travail, à côté des pièces jointes fichier et dossier, sur la même connexion chiffrée. Entre réseaux, c'est une procédure distincte : créez un code navigateur sur la page interréseau et rejoignez-le dans l'autre navigateur, et cette salle conserve ses commandes plus anciennes, où la carte du pair propose toujours « Envoyer un message ». En résumé : l'espace de travail partagé sur un même réseau ; la salle par code d'appairage entre deux réseaux différents.",
+  prereqLabel: "Avant de commencer",
+  prereqs: [
+    "Les deux appareils en ligne en même temps, avec la page ouverte dans un navigateur. Il n'y a pas de boîte de réception : un message n'existe que dans une session que les deux côtés maintiennent ouverte.",
+    "Un seul transport, choisi pour les deux extrémités. Sur le même réseau, rien à préparer, alors qu'entre réseaux différents il faut un code d'appairage navigateur, créé par une partie connectée et valable cinq minutes.",
+    "Un texte qui tient dans un message, soit 65 536 octets UTF-8. Le compteur sous la zone de saisie monte pendant que vous tapez et vous invite à l'envoyer comme fichier au-delà.",
+    "Un endroit pour ce qui arrive. Le message reçu reste dans la session ouverte, donc copiez ce que vous voulez garder avant la fin de la session ou un rechargement de la page.",
+  ],
   browserSteps: [
-    "Choisissez « Envoyer un message » sur la carte du pair. Par défaut, la session s'ouvre directement sur la zone de saisie des deux côtés — la connexion est chiffrée dans tous les cas.",
-    "Saisissez ou collez le texte, puis envoyez avec ⌘/Ctrl+Entrée. Activez d'abord la vérification avancée si vous voulez que les deux écrans affichent le même code de vérification à six chiffres (SAS) à comparer, avec une acceptation explicite avant l'ouverture de la session.",
-    "Tant que la session reste ouverte, chaque côté peut envoyer plusieurs messages et copier ceux qu'il reçoit.",
+    {
+      text: "Ouvrez la page de transfert sur les deux appareils : celle du même réseau les trouve pour vous, et c'est sur la page temps réel qu'un code d'appairage sert lorsqu'ils sont sur des réseaux différents.",
+      code: ["https://relayium.com/"],
+    },
+    {
+      text: "Ouvrez la session par la voie sur laquelle sont vos deux appareils. Même réseau : appuyez sur « Ouvrir l’espace de travail » sur la carte de l'autre appareil, sous « Appareils à proximité », puis écrivez dans la zone de saisie que l'espace de travail affiche. Entre réseaux : dans la salle par code d'appairage, appuyez plutôt sur « Envoyer un message » sur la carte du pair. Par défaut, la session s'ouvre directement sur la zone de saisie des deux côtés — la connexion est chiffrée dans tous les cas.",
+    },
+    {
+      text: "Saisissez ou collez le texte. Le compteur sous la zone indique la part du budget d'un message déjà consommée, en octets plutôt qu'en caractères, car un emoji ou un idéogramme en coûte plusieurs.",
+      code: ["1 024 / 65 536 octets"],
+    },
+    {
+      text: "Envoyez avec ⌘/Ctrl+Entrée : Entrée seule insère un retour à la ligne, ce qui permet de coller puis d'envoyer un extrait multiligne d'un seul geste. L'indication sous la zone rappelle cette correspondance.",
+      code: ["Entrée pour une nouvelle ligne · ⌘/Ctrl+Entrée pour envoyer"],
+    },
+    {
+      text: "Laissez la session ouverte pour envoyer plusieurs messages dans les deux sens, et appuyez sur « Copier » sur tout ce que vous voulez garder. Pour comparer d'abord un code de vérification (SAS), activez « Vérification avancée » avant d'ouvrir la session : elle ajoute le code et une acceptation explicite, pas le chiffrement.",
+    },
+  ],
+  successLabel: "À quoi ressemble une session qui marche",
+  successBody: [
+    "Les deux côtés indiquent la session comme ouverte, votre message apparaît dans l'historique de l'autre appareil, et le compteur d'octets repart de zéro pour le suivant.",
+    "Cet historique est la seule copie à laquelle Relayium participe : il vit dans les deux pages ouvertes, disparaît donc au rechargement ou à la fin de la session, et « Copier » place le texte dans le presse-papiers de cet appareil, où d'autres applications peuvent le lire.",
+  ],
+  successCode: ["Session ouverte\n1 024 / 65 536 octets"],
+  fixHeading: "Quand un message ne passe pas",
+  fixBody:
+    "Le texte emprunte la même connexion qu'un transfert de fichiers, donc la plupart des échecs viennent de la connexion et non du message. Les deux exceptions sont précises et s'affichent toutes les deux à l'écran : un message au-delà de la limite de taille, et une session fermée pour en avoir envoyé trop d'un coup.",
+  fixLabel: "Symptôme, vérification, correction",
+  fixes: [
+    {
+      symptom: "L'autre appareil n'apparaît jamais, il n'y a donc aucune carte pour ouvrir une session de messages.",
+      code: ["https://relayium.com/   # comparez l'IP publique de la ligne d'état sur les deux appareils"],
+      fix: "La détection sur le même réseau regroupe les appareils selon l'IP publique par laquelle ils se connectent, donc deux adresses différentes signifient deux salles : coupez un VPN ou iCloud Private Relay, ou rejoignez le même Wi-Fi. S'ils sont réellement sur des réseaux différents, passez par un code d'appairage sur https://relayium.com/cross-network.",
+    },
+    {
+      symptom: "La zone de saisie refuse le texte et indique que le message est trop long.",
+      code: ["1 024 / 65 536 octets   # le compteur compte des octets UTF-8, pas des caractères"],
+      fix: "Un message contient 65 536 octets UTF-8, et un texte non latin dépense de deux à quatre octets par caractère, donc un long collage en chinois ou riche en emojis atteint cette limite en octets bien avant ce que le nombre de caractères laisse croire. Découpez-le, ou envoyez-le comme fichier, ce que la zone de saisie propose justement.",
+    },
+    {
+      symptom: "La session s'est fermée d'elle-même en invoquant trop de messages.",
+      code: ["https://relayium.com/   # la ligne de session indique terminée plutôt qu'échouée"],
+      fix: "Une protection contre les envois en rafale ferme une session quand un côté envoie bien plus de messages qu'une personne n'en tape, ce qu'un script ou une touche bloquée provoque. Rouvrez la session comme vous l'aviez ouverte — « Ouvrir l’espace de travail » sur la carte d'un appareil à proximité, ou « Envoyer un message » dans une salle par code d'appairage entre réseaux — et envoyez le reste en moins de messages, plus longs.",
+    },
+    {
+      symptom: "Tout fonctionnait, et après un rechargement la conversation est vide.",
+      code: ["https://relayium.com/   # recharger cette page ouvre une nouvelle session sans historique"],
+      fix: "C'est le fonctionnement voulu et non une panne : Relayium ne garde aucun historique côté serveur, il n'y a donc rien à restaurer et aucune copie serveur à réclamer. Copiez l'essentiel dans une note avant de quitter la session, car l'historique ne dure que le temps de la page ouverte.",
+    },
+    {
+      symptom: "Un navigateur et la CLI ne peuvent pas rejoindre le code de l'autre.",
+      code: ["relayium text 483920   # un code CLI n'appaire jamais que CLI avec CLI"],
+      fix: "Les sessions de texte navigateur et CLI utilisent des transports et des appairages différents, donc un code à six chiffres créé par l'un n'a aucun sens pour l'autre. Utilisez deux navigateurs, ou la CLI aux deux extrémités : relayium text affiche exactement la commande que la seconde machine doit exécuter.",
+    },
   ],
   cliHeading: "CLI : créer un code sur une machine, le rejoindre sur l'autre",
   cliBody: [
@@ -345,11 +706,70 @@ const ar = article({
   ],
   browserHeading: "المتصفح: إرسال رسالة إلى جهاز متصل",
   browserBody:
-    "افتح relayium.com على الجهازين. تظهر الأجهزة على الشبكة نفسها تلقائيًا؛ وعبر شبكتين أنشئ رمز متصفح من صفحة النقل بين الشبكات وانضم إليه من المتصفح الآخر.",
+    "افتح relayium.com على الجهازين، ثم اتبع أيًّا من المسارين يناسبك. على الشبكة نفسها يظهر الجهاز الآخر وحده تحت «الأجهزة القريبة»، ولا تعرض بطاقته سوى إجراء واحد: «فتح مساحة العمل»؛ ومربع الكتابة داخل مساحة العمل تلك، إلى جانب مرفقات الملفات والمجلدات، على الاتصال المشفَّر الواحد نفسه. أما عبر شبكتين فهو مسار منفصل: أنشئ رمز متصفح من صفحة النقل بين الشبكات وانضم إليه من المتصفح الآخر، وتلك الغرفة تحتفظ بأدواتها الأقدم، حيث ما تزال بطاقة الطرف الآخر تعرض «إرسال رسالة».",
+  prereqLabel: "قبل أن تبدأ",
+  prereqs: [
+    "أن يكون الجهازان متصلين في الوقت نفسه، والصفحة مفتوحة في متصفح على كليهما. لا يوجد صندوق وارد: فالرسالة لا توجد إلا داخل جلسة يُبقيها الطرفان مفتوحة.",
+    "وسيلة نقل واحدة يختارها الطرفان معًا. على نفس الشبكة لا يلزم شيء؛ وبين شبكتين مختلفتين يلزم رمز اقتران للمتصفح، يسجّل الطرف المُنشِئ الدخول لأجله، وعمره خمس دقائق.",
+    "نص يتّسع لرسالة واحدة، أي 65,536 بايت UTF-8. يتزايد العدّاد وأنت تكتب، ويُنبّهك إلى إرساله كملف عند تجاوز ذلك.",
+    "مكان لما يصل. تبقى الرسالة المستلمة في الجلسة المفتوحة، فانسخ ما تريد الاحتفاظ به قبل انتهاء الجلسة أو إعادة تحميل الصفحة.",
+  ],
   browserSteps: [
-    "اختر «إرسال رسالة» من بطاقة الطرف الآخر. افتراضيًا تُفتح الجلسة مباشرةً على مربع الكتابة في الطرفين، والاتصال مُشفَّر في الحالتين.",
-    "اكتب النص أو الصقه ثم أرسله باستخدام ⌘/Ctrl+Enter. فعِّل التحقّق المتقدّم أولًا إذا أردت أن تعرض الشاشتان رمز تحقّق واحدًا من ست خانات (SAS) لمقارنته، مع خطوة قبول صريحة قبل فتح الجلسة.",
-    "ما دامت الجلسة مفتوحة يستطيع الطرفان إرسال عدة رسائل ونسخ أي رسالة مستلمة.",
+    {
+      text: "افتح صفحة النقل على الجهازين — صفحة نفس الشبكة تجد أحدهما الآخر تلقائيًا، أما صفحة النقل الفوري فهي موضع رمز الاقتران عندما يكونان على شبكتين مختلفتين.",
+      code: ["https://relayium.com/"],
+    },
+    {
+      text: "افتح الجلسة بحسب المسار الذي عليه جهازاكما. على الشبكة نفسها: اضغط «فتح مساحة العمل» على بطاقة الجهاز الآخر تحت «الأجهزة القريبة»، ثم اكتب في مربع الكتابة الذي تعرضه مساحة العمل. وعبر شبكتين: اضغط «إرسال رسالة» على بطاقة الطرف الآخر داخل غرفة رمز الاقتران بدلًا من ذلك. افتراضيًا تُفتح الجلسة مباشرةً على مربع الكتابة في الطرفين، والاتصال مُشفَّر في الحالتين.",
+    },
+    {
+      text: "اكتب النص أو الصقه. يبيّن العدّاد أسفل المربع ما استُهلك من ميزانية الرسالة الواحدة، بالبايت لا بالحروف، لأن الرمز التعبيري أو الحرف الصيني يستهلك عدة بايتات.",
+      code: ["1,024 / 65,536 بايت"],
+    },
+    {
+      text: "أرسِل باستخدام ⌘/Ctrl+Enter — فـ Enter وحده يُنشئ سطرًا جديدًا، وهذا بالضبط ما يجعل مقتطفًا متعدد الأسطر يُلصق ويُرسَل في خطوة واحدة. والتلميح أسفل المربع يذكر هذا التوزيع.",
+      code: ["Enter لسطر جديد · ⌘/Ctrl+Enter للإرسال"],
+    },
+    {
+      text: "أبقِ الجلسة مفتوحة لإرسال عدة رسائل في الاتجاهين، واضغط «نسخ» على كل ما تريد الاحتفاظ به. وإن أردت مقارنة رمز التحقق (SAS) أولًا، فعّل «التحقّق المتقدّم» قبل فتح الجلسة: فهو يضيف الرمز وخطوة قبول صريحة، لا التشفير.",
+    },
+  ],
+  successLabel: "كيف تبدو جلسة ناجحة",
+  successBody: [
+    "يعرض الطرفان أن الجلسة مفتوحة، وتظهر رسالتك في سجل الجهاز الآخر، ويعود عدّاد البايتات إلى الصفر للرسالة التالية.",
+    "وهذا السجل هو النسخة الوحيدة التي لـ Relayium علاقة بها: فهو يعيش في الصفحتين المفتوحتين، ويزول عند إعادة التحميل أو انتهاء الجلسة، و«نسخ» يضع النص في حافظة ذلك الجهاز حيث تستطيع تطبيقات أخرى قراءته.",
+  ],
+  successCode: ["الجلسة مفتوحة\n1,024 / 65,536 بايت"],
+  fixHeading: "عندما لا تنفذ الرسالة",
+  fixBody:
+    "يستخدم النص الاتصال نفسه الذي يستخدمه نقل الملفات، فمعظم الإخفاقات تتعلق بالاتصال لا بالرسالة. والاستثناءان محدَّدان ويظهر كلاهما على الشاشة: رسالة تتجاوز حدّ الحجم، وجلسة أُغلقت لأن الرسائل أُرسلت بكثافة مفرطة.",
+  fixLabel: "العَرَض والفحص والحل",
+  fixes: [
+    {
+      symptom: "لا يظهر الجهاز الآخر أبدًا، فلا توجد بطاقة تُفتح منها جلسة رسائل.",
+      code: ["https://relayium.com/   # قارن عنوان IP العام في شريط الحالة على الجهازين"],
+      fix: "يجمع اكتشاف نفس الشبكة الأجهزة بحسب عنوان IP العام الذي تتصل منه، فعنوانان مختلفان يعنيان غرفتين — اقطع VPN أو الترحيل الخاص في iCloud، أو انضم إلى شبكة Wi-Fi نفسها. وإن كانا فعلًا على شبكتين مختلفتين، فاستخدم رمز اقتران على https://relayium.com/cross-network.",
+    },
+    {
+      symptom: "يرفض مربع الكتابة النص ويقول إن الرسالة طويلة جدًا.",
+      code: ["1,024 / 65,536 بايت   # العدّاد يحسب بايتات UTF-8 لا الحروف"],
+      fix: "تتّسع الرسالة الواحدة لـ 65,536 بايت UTF-8، والنص غير اللاتيني يستهلك من بايتين إلى أربعة لكل حرف، فاللصق العربي الطويل أو المزدحم بالرموز التعبيرية يصل إلى حدّ البايتات قبل ما يوحي به عدد الحروف بمسافة كبيرة. جزّئه، أو أرسِله كملف — وهو ما يعرضه مربع الكتابة تمامًا.",
+    },
+    {
+      symptom: "أغلقت الجلسة نفسها وعزت ذلك إلى كثرة الرسائل.",
+      code: ["https://relayium.com/   # سطر الجلسة يذكر أنها انتهت لا أنها فشلت"],
+      fix: "تُغلق حمايةُ الطوفان الجلسةَ عندما يرسل أحد الطرفين رسائل تتجاوز بكثير ما يكتبه إنسان، وهو ما يفعله نص برمجي أو مفتاح ملتصق. أعِد فتح الجلسة بالطريقة نفسها التي فتحتها بها — «فتح مساحة العمل» على بطاقة جهاز قريب، أو «إرسال رسالة» في غرفة رمز اقتران عبر الشبكات — وأرسِل ما بقي في رسائل أقل وأطول.",
+    },
+    {
+      symptom: "كان كل شيء يعمل، وبعد إعادة التحميل صار الحوار فارغًا.",
+      code: ["https://relayium.com/   # إعادة تحميل هذه الصفحة تبدأ جلسة جديدة بلا سجل"],
+      fix: "هذا تصميم لا خلل: لا يحفظ Relayium سجلًا على الخادم، فلا شيء يُستعاد ولا نسخة خادم تُطلَب. انسخ ما يهمّك إلى ملاحظة قبل مغادرة الجلسة — فعمر السجل لا يزيد على عمر الصفحة المفتوحة.",
+    },
+    {
+      symptom: "لا يستطيع المتصفح وسطر الأوامر الانضمام برمز أحدهما الآخر.",
+      code: ["relayium text 483920   # رمز CLI يقرن CLI بـ CLI فقط"],
+      fix: "تستخدم جلسات النص في المتصفح وسطر الأوامر وسائل نقل ومصافحات اقتران مختلفة، فرمزٌ من ست خانات يصدره أحدهما لا معنى له عند الآخر. استخدم متصفحين، أو سطر الأوامر في الطرفين — فـ relayium text يطبع الأمر الذي ينبغي أن يشغّله الجهاز الثاني تمامًا.",
+    },
   ],
   cliHeading: "سطر الأوامر: أصدر الرمز على جهاز وانضم إليه من الآخر",
   cliBody: [
@@ -390,11 +810,70 @@ const es = article({
   ],
   browserHeading: "Navegador: enviar un mensaje a un dispositivo en línea",
   browserBody:
-    "Abre relayium.com en ambos dispositivos. En la misma red aparecen automáticamente; en redes distintas crea un código de navegador en la página entre redes y únete desde el otro navegador.",
+    "Abre relayium.com en ambos dispositivos y sigue el procedimiento que te toque de los dos. En la misma red el otro dispositivo aparece solo bajo «Dispositivos cercanos», y su tarjeta ofrece una única acción, «Abrir espacio de trabajo»: el editor vive dentro de ese espacio de trabajo, junto a los adjuntos de archivo y carpeta, sobre la misma conexión cifrada. En redes distintas es un procedimiento aparte: crea un código de navegador en la página entre redes y únete desde el otro navegador, y esa sala conserva sus controles más antiguos, donde la tarjeta del par sigue ofreciendo «Enviar un mensaje».",
+  prereqLabel: "Antes de empezar",
+  prereqs: [
+    "Los dos dispositivos en línea a la vez, con la página abierta en un navegador. No hay bandeja de entrada: un mensaje solo existe dentro de una sesión que ambos lados mantienen abierta.",
+    "Un transporte elegido para los dos extremos. En la misma red no hace falta nada; entre redes distintas hace falta un código de emparejamiento de navegador, que crea un lado con sesión iniciada y que vive cinco minutos.",
+    "Texto que quepa en un mensaje: 65.536 bytes UTF-8. El contador del editor sube mientras escribes y te indica que lo envíes como archivo en cuanto te pasas.",
+    "Un sitio donde poner lo que llega. El mensaje recibido se queda en la sesión abierta, así que copia lo que quieras conservar antes de que la sesión termine o la página se recargue.",
+  ],
   browserSteps: [
-    "Elige «Enviar un mensaje» en la tarjeta del par. De forma predeterminada la sesión se abre directamente en el editor en ambos lados; la conexión está cifrada en cualquier caso.",
-    "Escribe o pega el texto y envíalo con ⌘/Ctrl+Enter. Activa antes la verificación avanzada si quieres que ambas pantallas muestren el mismo código de verificación de seis dígitos (SAS) para comparar, con una aceptación explícita antes de abrir la sesión.",
-    "Mientras la sesión siga abierta, ambos lados pueden enviar varios mensajes y copiar cualquiera que reciban.",
+    {
+      text: "Abre la página de transferencia en los dos dispositivos: la de la misma red los encuentra por ti, y la página en tiempo real es donde se usa un código de emparejamiento si están en redes distintas.",
+      code: ["https://relayium.com/"],
+    },
+    {
+      text: "Abre la sesión por la vía en la que estén tus dos dispositivos. Misma red: pulsa «Abrir espacio de trabajo» en la tarjeta del otro dispositivo bajo «Dispositivos cercanos» y escribe en el editor que ese espacio de trabajo pone en pantalla. Entre redes: en la sala de código de emparejamiento, pulsa «Enviar un mensaje» en la tarjeta del par. De forma predeterminada la sesión se abre directamente en el editor en ambos lados; la conexión está cifrada en cualquier caso.",
+    },
+    {
+      text: "Escribe o pega el texto. El contador bajo el cuadro muestra cuánto del presupuesto de un mensaje has gastado, en bytes y no en caracteres, porque un emoji o un carácter CJK cuesta varios.",
+      code: ["1.024 / 65.536 bytes"],
+    },
+    {
+      text: "Envía con ⌘/Ctrl+Enter: Enter a secas inserta un salto de línea, que es lo que permite pegar y enviar un fragmento multilínea de una vez. La indicación bajo el cuadro recuerda esa asignación.",
+      code: ["Enter para una nueva línea · ⌘/Ctrl+Enter para enviar"],
+    },
+    {
+      text: "Deja la sesión abierta para enviar varios mensajes en ambos sentidos y pulsa «Copiar» en lo que quieras conservar. Para comparar antes un código de verificación (SAS), activa «Verificación avanzada» antes de abrir la sesión: añade el código y un paso de aceptación explícito, no el cifrado.",
+    },
+  ],
+  successLabel: "Qué se ve cuando la sesión funciona",
+  successBody: [
+    "Los dos lados muestran la sesión como abierta, tu mensaje aparece en el historial del otro dispositivo y el contador de bytes vuelve a cero para el siguiente.",
+    "Ese historial es la única copia en la que Relayium participa: vive en las dos páginas abiertas, así que desaparece al recargar o al terminar la sesión, y «Copiar» pone el texto en el portapapeles de ese dispositivo, donde otras apps pueden leerlo.",
+  ],
+  successCode: ["Sesión abierta\n1.024 / 65.536 bytes"],
+  fixHeading: "Cuando un mensaje no sale",
+  fixBody:
+    "El texto usa la misma conexión que una transferencia de archivos, así que la mayoría de los fallos son de la conexión y no del mensaje. Las dos excepciones son concretas y las dos se ven en pantalla: un mensaje por encima del límite de tamaño, y una sesión cerrada por enviar demasiados de golpe.",
+  fixLabel: "Síntoma, comprobación, solución",
+  fixes: [
+    {
+      symptom: "El otro dispositivo no aparece nunca, así que no hay tarjeta desde la que abrir una sesión de mensajes.",
+      code: ["https://relayium.com/   # compara la IP pública de la línea de estado en los dos dispositivos"],
+      fix: "El descubrimiento en la misma red agrupa los dispositivos por la IP pública desde la que se conectan, así que dos direcciones distintas son dos salas: corta una VPN o iCloud Private Relay, o conéctate a la misma Wi-Fi. Si de verdad están en redes distintas, usa un código de emparejamiento en https://relayium.com/cross-network.",
+    },
+    {
+      symptom: "El editor rechaza el texto y dice que el mensaje es demasiado largo.",
+      code: ["1.024 / 65.536 bytes   # el contador cuenta bytes UTF-8, no caracteres"],
+      fix: "Un mensaje admite 65.536 bytes UTF-8, y el texto no latino gasta de dos a cuatro bytes por carácter, así que un pegado largo en chino o cargado de emojis llega a ese límite de bytes mucho antes de lo que el número de caracteres sugiere. Divídelo, o envíalo como archivo: eso es justo lo que ofrece el editor.",
+    },
+    {
+      symptom: "La sesión se cerró sola y culpó al exceso de mensajes.",
+      code: ["https://relayium.com/   # la línea de sesión informa de terminada en vez de fallida"],
+      fix: "Una protección contra avalanchas cierra la sesión cuando un lado envía muchos más mensajes de los que teclea una persona, algo que consigue un script o una tecla atascada. Vuelve a abrir la sesión como la abriste — «Abrir espacio de trabajo» en la tarjeta de un dispositivo cercano, o «Enviar un mensaje» en una sala de código de emparejamiento entre redes — y manda el resto en menos mensajes, más largos.",
+    },
+    {
+      symptom: "Todo iba bien y, tras una recarga, la conversación está vacía.",
+      code: ["https://relayium.com/   # recargar esta página abre una sesión nueva sin historial"],
+      fix: "Es el diseño y no un error: Relayium no guarda historial del lado del servidor, así que no hay nada que restaurar ni copia de servidor que reclamar. Copia lo importante en una nota antes de dejar la sesión, porque el historial dura lo que dure la página abierta.",
+    },
+    {
+      symptom: "Un navegador y la CLI no pueden unirse con el código del otro.",
+      code: ["relayium text 483920   # un código de la CLI solo empareja CLI con CLI"],
+      fix: "Las sesiones de texto del navegador y de la CLI usan transportes y emparejamientos distintos, así que un código de seis dígitos creado por uno no significa nada para el otro. Usa dos navegadores, o la CLI en los dos extremos: relayium text imprime exactamente el comando que debe ejecutar la segunda máquina.",
+    },
   ],
   cliHeading: "CLI: emite el código en un equipo y únete desde el otro",
   cliBody: [
@@ -435,11 +914,70 @@ const pt = article({
   ],
   browserHeading: "Navegador: enviar mensagem a um dispositivo online",
   browserBody:
-    "Abra relayium.com nos dois dispositivos. Na mesma rede eles aparecem automaticamente; em redes diferentes crie um código de navegador na página entre redes e entre pelo outro navegador.",
+    "Abra relayium.com nos dois dispositivos e siga o procedimento que se aplica, entre os dois. Na mesma rede o outro dispositivo aparece sozinho em “Dispositivos próximos”, e o cartão dele oferece uma única ação, “Abrir área de trabalho”: o editor fica dentro dessa área de trabalho, ao lado dos anexos de arquivo e de pasta, na mesma conexão criptografada. Em redes diferentes é um procedimento à parte: crie um código de navegador na página entre redes e entre pelo outro navegador, e essa sala mantém os controles mais antigos, onde o cartão do par ainda oferece “Enviar uma mensagem”.",
+  prereqLabel: "Antes de começar",
+  prereqs: [
+    "Os dois dispositivos online ao mesmo tempo, com a página aberta em um navegador. Não existe caixa de entrada: uma mensagem só existe dentro de uma sessão que os dois lados mantêm aberta.",
+    "Um transporte escolhido para as duas pontas. Na mesma rede não é preciso nada; entre redes diferentes é preciso um código de emparelhamento de navegador, criado por um lado logado e válido por cinco minutos.",
+    "Texto que caiba em uma mensagem: 65.536 bytes UTF-8. O contador do editor sobe enquanto você digita e avisa para enviar como arquivo quando passa disso.",
+    "Um lugar para o que chega. A mensagem recebida fica na sessão aberta, então copie o que quiser guardar antes de a sessão terminar ou a página recarregar.",
+  ],
   browserSteps: [
-    "Escolha “Enviar uma mensagem” no cartão do par. Por padrão a sessão abre direto no editor dos dois lados; a conexão é criptografada de qualquer forma.",
-    "Digite ou cole o texto e envie com ⌘/Ctrl+Enter. Ative antes a verificação avançada se quiser que as duas telas mostrem o mesmo código de verificação de seis dígitos (SAS) para comparar, com uma aceitação explícita antes de a sessão abrir.",
-    "Enquanto a sessão estiver aberta, os dois lados podem enviar várias mensagens e copiar qualquer mensagem recebida.",
+    {
+      text: "Abra a página de transferência nos dois dispositivos: a da mesma rede encontra um ao outro para você, e a página em tempo real é onde um código de emparelhamento entra quando eles estão em redes diferentes.",
+      code: ["https://relayium.com/"],
+    },
+    {
+      text: "Abra a sessão pelo caminho em que seus dois dispositivos estão. Mesma rede: aperte “Abrir área de trabalho” no cartão do outro dispositivo em “Dispositivos próximos” e escreva no editor que essa área de trabalho coloca na tela. Entre redes: na sala de código de emparelhamento, aperte “Enviar uma mensagem” no cartão do par. Por padrão a sessão abre direto no editor dos dois lados; a conexão é criptografada de qualquer forma.",
+    },
+    {
+      text: "Digite ou cole o texto. O contador abaixo da caixa mostra quanto do orçamento de uma mensagem já foi usado, em bytes e não em caracteres, porque um emoji ou um caractere CJK custa vários.",
+      code: ["1.024 / 65.536 bytes"],
+    },
+    {
+      text: "Envie com ⌘/Ctrl+Enter: o Enter sozinho insere uma quebra de linha, e é isso que permite colar e enviar um trecho multilinha de uma só vez. A dica abaixo da caixa informa esse mapeamento.",
+      code: ["Enter para uma nova linha · ⌘/Ctrl+Enter para enviar"],
+    },
+    {
+      text: "Deixe a sessão aberta para enviar várias mensagens nos dois sentidos e clique em “Copiar” no que quiser guardar. Para comparar antes um código de verificação (SAS), ligue a “Verificação avançada” antes de abrir a sessão: ela acrescenta o código e uma aceitação explícita, não a criptografia.",
+    },
+  ],
+  successLabel: "Como é uma sessão que funciona",
+  successBody: [
+    "Os dois lados mostram a sessão como aberta, sua mensagem aparece no histórico do outro dispositivo, e o contador de bytes volta a zero para a próxima.",
+    "Esse histórico é a única cópia de que o Relayium participa: ele vive nas duas páginas abertas, então desaparece ao recarregar ou quando a sessão termina, e “Copiar” coloca o texto na área de transferência daquele dispositivo, onde outros aplicativos podem ler.",
+  ],
+  successCode: ["Sessão aberta\n1.024 / 65.536 bytes"],
+  fixHeading: "Quando uma mensagem não vai",
+  fixBody:
+    "O texto usa a mesma conexão de uma transferência de arquivos, então a maioria das falhas é da conexão e não da mensagem. As duas exceções são específicas e as duas aparecem na tela: uma mensagem acima do limite de tamanho, e uma sessão fechada por enviar demais de uma vez.",
+  fixLabel: "Sintoma, verificação, correção",
+  fixes: [
+    {
+      symptom: "O outro dispositivo nunca aparece, então não há cartão para abrir uma sessão de mensagens.",
+      code: ["https://relayium.com/   # compare o IP público da linha de status nos dois dispositivos"],
+      fix: "A descoberta na mesma rede agrupa dispositivos pelo IP público de onde se conectam, então dois endereços diferentes são duas salas: desligue uma VPN ou o iCloud Private Relay, ou entre na mesma Wi-Fi. Se eles estiverem realmente em redes diferentes, use um código de emparelhamento em https://relayium.com/cross-network.",
+    },
+    {
+      symptom: "O editor recusa o texto e diz que a mensagem é longa demais.",
+      code: ["1.024 / 65.536 bytes   # o contador conta bytes UTF-8, não caracteres"],
+      fix: "Uma mensagem aceita 65.536 bytes UTF-8, e texto não latino gasta de dois a quatro bytes por caractere, então uma colagem longa em chinês ou cheia de emojis chega a esse limite de bytes muito antes do que a contagem de caracteres sugere. Divida, ou envie como arquivo — é exatamente o que o editor oferece.",
+    },
+    {
+      symptom: "A sessão se fechou sozinha culpando o excesso de mensagens.",
+      code: ["https://relayium.com/   # a linha da sessão informa encerrada em vez de falhou"],
+      fix: "Uma proteção contra enxurrada fecha a sessão quando um lado envia muito mais mensagens do que uma pessoa digita, o que um script ou uma tecla presa consegue. Reabra a sessão do mesmo jeito que a abriu — “Abrir área de trabalho” no cartão de um dispositivo próximo, ou “Enviar uma mensagem” em uma sala de código de emparelhamento entre redes — e mande o resto em menos mensagens, maiores.",
+    },
+    {
+      symptom: "Tudo funcionava e, depois de recarregar, a conversa está vazia.",
+      code: ["https://relayium.com/   # recarregar esta página inicia uma sessão nova sem histórico"],
+      fix: "Isso é o projeto e não um defeito: o Relayium não guarda histórico no servidor, então não há o que restaurar nem cópia no servidor para requisitar. Copie o que importa para uma nota antes de sair da sessão, porque o histórico dura só enquanto a página fica aberta.",
+    },
+    {
+      symptom: "Um navegador e a CLI não conseguem entrar com o código um do outro.",
+      code: ["relayium text 483920   # um código da CLI só pareia CLI com CLI"],
+      fix: "As sessões de texto do navegador e da CLI usam transportes e handshakes de emparelhamento diferentes, então um código de seis dígitos criado por um não significa nada para o outro. Use dois navegadores, ou a CLI nas duas pontas: o relayium text imprime exatamente o comando que a segunda máquina deve executar.",
+    },
   ],
   cliHeading: "CLI: emita o código em uma máquina e entre pela outra",
   cliBody: [
@@ -472,6 +1010,6 @@ const pt = article({
 export default {
   slug: "how-to/send-text-between-devices",
   published: "2026-07-30",
-  updated: "2026-07-31",
+  updated: "2026-08-05",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="如何不用网盘传输大文件" />
     <meta name="twitter:description" content="大视频和工程文件建议生成端到端加密下载链接，让接收方稍后再取；只有双方都能保持在线时，才把实时传输作为即时替代方案。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"如何不用网盘传输大文件","description":"大视频和工程文件建议生成端到端加密下载链接，让接收方稍后再取；只有双方都能保持在线时，才把实时传输作为即时替代方案。","inLanguage":"zh-Hans","datePublished":"2026-07-03","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/send-large-files-without-cloud/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"如何不用网盘传输大文件"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"最大能传多大的文件？","acceptedAnswer":{"@type":"Answer","text":"大文件请使用下载链接，页面会在上传前显示单文件上限与额度。实时模式没有服务器端上限，桌面版 Chrome 或 Edge 也能流式写盘，但双方页面必须保持在线。Firefox 和 Safari 会把实时接收内容放在内存中，超过约 256 MB 时 Relayium 会提示——这是保守估计而非硬上限。"}},{"@type":"Question","name":"传输中断了怎么办？","acceptedAnswer":{"@type":"Answer","text":"双方页面保持运行时，短暂连接中断可从持久断点续传；关闭或刷新页面、结束 App 会话会结束实时传输。下载链接不要求接收方保持在线，但发送方仍须保持页面打开直到上传完成。"}},{"@type":"Question","name":"传大文件时隐私如何保证？","acceptedAnswer":{"@type":"Answer","text":"实时传输用 X25519 密钥交换加逐块 AES-256-GCM 做端到端加密，密钥从不抵达任何服务器。打开高级验证（默认关闭）后两台设备会显示 6 位校验码；每个文件都用 SHA-256 校验。局域网 WebRTC 直连；跨网络浏览器按设计使用 TURN，中继只承载它无法读取或解密的密文。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"如何不用网盘传输大文件","description":"大视频和工程文件建议生成端到端加密下载链接，让接收方稍后再取；只有双方都能保持在线时，才把实时传输作为即时替代方案。","inLanguage":"zh-Hans","datePublished":"2026-07-03","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/send-large-files-without-cloud/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"如何不用网盘传输大文件"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"最大能传多大的文件？","acceptedAnswer":{"@type":"Answer","text":"大文件请使用下载链接，页面会在上传前显示单文件上限与额度。实时模式没有服务器端上限，桌面版 Chrome 或 Edge 也能流式写盘，但双方页面必须保持在线。Firefox 和 Safari 会把实时接收内容放在内存中，超过约 256 MB 时 Relayium 会提示——这是保守估计而非硬上限。"}},{"@type":"Question","name":"传输中断了怎么办？","acceptedAnswer":{"@type":"Answer","text":"双方页面保持运行时，短暂连接中断可从持久断点续传；关闭或刷新页面、结束 App 会话会结束实时传输。下载链接不要求接收方保持在线，但发送方仍须保持页面打开直到上传完成。"}},{"@type":"Question","name":"传大文件时隐私如何保证？","acceptedAnswer":{"@type":"Answer","text":"实时传输用 X25519 密钥交换加逐块 AES-256-GCM 做端到端加密，密钥从不抵达任何服务器。打开高级验证（默认关闭）后两台设备会显示 6 位校验码；每个文件都用 SHA-256 校验。局域网 WebRTC 直连；跨网络浏览器按设计使用 TURN，中继只承载它无法读取或解密的密文。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -65,6 +65,23 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -83,11 +100,12 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
+      <p class="updated">最近更新: <bdi>2026-08-05</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-large-files-without-cloud/">English</a><a href="/zh/how-to/send-large-files-without-cloud/" aria-current="true">中文</a><a href="/ja/how-to/send-large-files-without-cloud/">日本語</a><a href="/ko/how-to/send-large-files-without-cloud/">한국어</a><a href="/de/how-to/send-large-files-without-cloud/">Deutsch</a><a href="/fr/how-to/send-large-files-without-cloud/">Français</a><a href="/ar/how-to/send-large-files-without-cloud/">العربية</a><a href="/es/how-to/send-large-files-without-cloud/">Español</a><a href="/pt/how-to/send-large-files-without-cloud/">Português</a></nav>
       <p class="lead">一个 20 GB 的视频导出，或者一个体积庞大的工程压缩包，恰恰是网盘最慢的场景：你先把整个文件上传一遍、等待，然后对方再下载一遍——两次完整传输，还要受制于你的存储配额。对一次性的交付来说，只是想把字节从 A 送到 B，却要这样反复复制和等待。</p>
       <p class="lead">大文件推荐使用 Relayium 的端到端加密下载链接：上传时接收方无需在线，之后可随时来取。发送方须保持页面打开直到上传完成；完成后链接会保留到过期。若双方都能保持在线，实时传输可用于即时交付：局域网 WebRTC 直连，跨网络浏览器经 TURN 承载端到端密文。实时模式不保留服务器端内容副本或历史。</p>
       <h2>为什么大文件默认应使用下载链接</h2>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">开始之前</p><ul><li>发送这一侧要有已登录的账号。创建下载链接需要账号；打开链接的那个人全程不用登录。</li><li>文件要在两条独立的限制里都还有余量：上传页面选择器旁边印着的单文件上限，以及你套餐的存储额度。这两个数字都从页面上读，不要凭猜。</li><li>一个你能接受的留存时长。有效期列表只会提供你套餐允许的档位，服务端也会按同一上限做一次防御性限制，所以你能选到的档位就是你实际拿到的档位；而且这些链接都不是备份。</li><li>上传完成之前，发送方的页面要一直开着。之后链接就能独立存在，直到过期为止，发送方这边可以合上电脑；但接收方仍要让自己的下载完整跑完。</li></ul></div>
       <p>Relayium 下载链接只存浏览器加密后的密文。上传时接收方可以离线，之后再取；上传完成后，发送方关掉页面也不会移除链接。取舍是页面所示的单文件上限、账号额度与有效期。</p>
       <p>实时传输适合双方此刻都已就绪的场景。同一局域网内 WebRTC 免账号直连；跨网络浏览器经 TURN 承载端到端密文，配对码创建者登录。双方页面必须保持在线，因此它更适合快速递送小文件和文本，而不是耗时的大文件交付。</p>
       <h2>实时模式没有大小上限</h2>
@@ -99,7 +117,14 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>网络连通问题也是同样的处理思路。同一网络内传输在设备之间直连；跨网络时加密数据流经 TURN 中继转发。中继只能看到密文，因此这条路径同样保持端到端加密。</p>
       <h2>现在就传，或留个链接稍后取</h2>
       <p>实时传输需要双方同时在线，这在能协调的时候最理想——一通电话、一个共处的时刻、一位就在工位上的同事。如果对方此刻不在，你可以改为创建一个存储下载链接。</p>
-      <p>存储链接是零知识的：浏览器在上传前用 AES-256-GCM 加密文件，解密密钥只存在于 URL 片段里，服务器只保存它读不懂的密文。也要清楚其中的取舍——生成链接需要发送方登录，链接会占用存储配额，并且会过期（也可以设置为首次下载后即焚）。下载页即使在 Firefox 和 Safari 上也能借助 Service Worker 把单个文件流式写入磁盘。文件越大越应该先考虑存储链接：上传时接收方无需在线；发送方保持页面打开直至上传完成，之后任一端合上电脑，链接仍会保留到过期。双方都在电脑前、希望文件立刻到位时，再走实时那条路。</p>
+      <p>存储链接是零知识的：浏览器在上传前用 AES-256-GCM 加密文件，解密密钥只存在于 URL 片段里，服务器只保存它读不懂的密文。也要清楚其中的取舍——生成链接需要发送方登录，链接会占用存储配额，并且会过期（也可以设置为一次性使用：只要有下载开始接收密文，那唯一的名额就会被消耗）。下载页即使在 Firefox 和 Safari 上也能借助 Service Worker 把单个文件流式写入磁盘。文件越大越应该先考虑存储链接：上传时接收方无需在线；发送方保持页面打开直至上传完成，之后发送方的页面就可以关闭，接收方在过期之前随时可以来取——但对方自己的下载仍要完整跑完。双方都在电脑前、希望文件立刻到位时，再走实时那条路。</p>
+      <ol class="steps" data-block="steps"><li><p>打开异步传输页面并登录。</p><pre><code>https://relayium.com/offline-transfer</code></pre></li><li><p>选好文件，或者直接拖进去。选择器旁边那个数字就是你账号当下的单文件上限——请在开始之前拿大文件去对一下，而不是等上传失败之后。</p><pre><code>选择文件上传
+最大 512 MiB</code></pre></li><li><p>设置「有效期」，如果这个文件不该在第一次被取走之后还留着，就打开「阅后即焚（首次下载后删除）」——只要有下载开始接收密文，那唯一的名额就会被消耗，所以一次没能完成的尝试同样可能把它用掉。列表已经按你套餐允许的范围过滤过了，所以看不到的档位是套餐限制，不是缺陷。</p><pre><code>有效期
+1 天</code></pre></li><li><p>加密和上传过程中让页面保持打开。完成后链接就会出现，下面附着它的到期日期。</p><pre><code>链接已生成，发给对方即可下载：
+https://relayium.com/d/8f3c2a1b#k=hQ2r…</code></pre></li><li><p>把整条链接发出去。#k= 之后的部分是解密密钥，它从不上传到服务器；一条丢掉了这个片段的链接，谁都解不开——包括我们。</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">上传完成时是什么样</p><p>你的页面上会显示链接、它将保持到的到期日期，以及那句提醒：这是临时投递，不是备份。从这一刻起，上传结果就不再依赖你的页面是否开着。</p><p>在接收方那边，链接会打开加密下载页面，上面写着文件数量和总大小，点「下载并解密」最终会走到「下载完成 ✓」。文件落在哪里由对方的浏览器决定，所以要确认的话得看对方的下载列表。</p><pre><code>加密下载链接
+下载完成 ✓</code></pre></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、处理</p><dl><dt>上传被拒，提示文件超出单文件大小上限。</dt><dd><pre><code>https://relayium.com/offline-transfer   # 选择器上会印出「最大 &lt;大小&gt;」</code></pre><p>这个上限是按单个文件算的，不是按整批算的，所以把一个 40 GB 的导出文件切成每块都装得下的分卷才是出路——或者趁双方都在线时改用实时传输，那边没有服务器端大小限制，因为什么都不会被存下来。</p></dd><dt>上传被拒的原因是今天的配额，而不是文件大小。</dt><dd><pre><code>https://relayium.com/offline-transfer   # 每日配额被拒是由上传流程报出来的</code></pre><p>每日上传配额和单文件上限、存储额度是三件不同的事，而且只有上传流程会报出它——https://relayium.com/me 显示的是账号的每月用量，不是每日配额的实时余量。等滚动的每日窗口把较早的上传移出后自行恢复、在可以升级时升级套餐，或者趁双方都在线时用实时传输把文件递过去——实时传输什么都不存，所以不花上传配额。</p></dd><dt>有效期列表里没有你以为会有的 7 天或 14 天。</dt><dd><pre><code>https://relayium.com/pricing   # 留存时长是按套餐给的</code></pre><p>列表只显示你套餐留存上限允许的档位，服务端也会在自己这一侧按同一上限做防御性限制，所以你真正能选到的档位不会被悄悄改短。请选它提供的最长那一档，或者换套餐——决定这件事的是上限，而不是文件。</p></dd><dt>对方说链接无效、已过期，或者已经被下载并删除了。</dt><dd><pre><code>https://relayium.com/d/8f3c2a1b#k=hQ2r…   # 一条链接、一个 id、一把密钥</code></pre><p>这三种说法的落点是同一个：已经没有东西可取了。如果当时打开了「阅后即焚」，那么只要有一次下载开始接收密文，那唯一的名额就已被消耗——中途断掉、但已经取走了部分字节的尝试同样会消耗它，而一个字节都没送出的尝试则会把名额释放回去。请重新上传并发一条新链接；当文件需要给多个人时，不要开启即焚。</p></dd><dt>下载页面提示当前请求太多，或者发送方本月的流量额度已经用完。</dt><dd><pre><code>https://relayium.com/me   # 「本月用量」既包含存储也包含流量</code></pre><p>文件还在——这是计量问题，不是丢失。等几分钟就能解除限流；而月流量额度用尽则要等到下个月、升级套餐，或者用自己的节点，在此期间实时传输可以完全绕开它。</p></dd></dl></div>
       <h2>常见问题</h2>
       <h3>最大能传多大的文件？</h3>
       <p>大文件请使用下载链接，页面会在上传前显示单文件上限与额度。实时模式没有服务器端上限，桌面版 Chrome 或 Edge 也能流式写盘，但双方页面必须保持在线。Firefox 和 Safari 会把实时接收内容放在内存中，超过约 256 MB 时 Relayium 会提示——这是保守估计而非硬上限。</p>

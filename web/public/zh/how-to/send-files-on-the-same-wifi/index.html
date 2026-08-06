@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="同一 Wi-Fi 下的设备之间互传文件" />
     <meta name="twitter:description" content="如何在同一 Wi-Fi 或局域网下的任意设备之间传文件——无需账号，无需配对码，两端都打开 relayium.com 即可直传，全程端到端加密。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"同一 Wi-Fi 下的设备之间互传文件","description":"如何在同一 Wi-Fi 或局域网下的任意设备之间传文件——无需账号，无需配对码，两端都打开 relayium.com 即可直传，全程端到端加密。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-07-09","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/send-files-on-the-same-wifi/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"同一 Wi-Fi 下的设备之间互传文件"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"在同一 Wi-Fi 下传文件需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。同网络传输两端都无需账号，也无需配对码——每台设备打开 relayium.com 就行。"}},{"@type":"Question","name":"Relayium 怎么知道哪些设备在我的网络里？","acceptedAnswer":{"@type":"Answer","text":"同网络下的设备通常共享同一个公网 IP，Relayium 会自动把公网 IP 相同的设备归到同一个房间里，无需任何配对码。"}},{"@type":"Question","name":"能不能同时有两台以上的设备互相看见？","acceptedAnswer":{"@type":"Answer","text":"可以。同网络房间不限于一对一——从该网络打开 relayium.com 的每台设备都能出现并接收文件，适合同一个房间或办公室里给多个人分享。"}},{"@type":"Question","name":"如果传输从未离开我的网络，还是加密的吗？","acceptedAnswer":{"@type":"Answer","text":"是的。每一次同网络传输都使用和跨网络传输一样的 X25519 密钥交换与 AES-256-GCM 加密，有你能亲自核对的校验码，还有逐文件的 SHA-256 完整性校验。"}},{"@type":"Question","name":"如果一台设备用 Wi-Fi，另一台用移动数据怎么办？","acceptedAnswer":{"@type":"Answer","text":"那它们就不在同一网络，自动发现连不上。改用配对码：发送方登录后创建配对码，接收方无需账号。跨网络时传输不走直连，而是经一个加密的 TURN 中继转发，但全程仍是端到端加密：中继只转发密文，读不到文件内容。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"同一 Wi-Fi 下的设备之间互传文件","description":"如何在同一 Wi-Fi 或局域网下的任意设备之间传文件——无需账号，无需配对码，两端都打开 relayium.com 即可直传，全程端到端加密。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/send-files-on-the-same-wifi/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"同一 Wi-Fi 下的设备之间互传文件"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"在同一 Wi-Fi 下传文件需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。同网络传输两端都无需账号，也无需配对码——每台设备打开 relayium.com 就行。"}},{"@type":"Question","name":"Relayium 怎么知道哪些设备在我的网络里？","acceptedAnswer":{"@type":"Answer","text":"同网络下的设备通常共享同一个公网 IP，Relayium 会自动把公网 IP 相同的设备归到同一个房间里，无需任何配对码。"}},{"@type":"Question","name":"能不能同时有两台以上的设备互相看见？","acceptedAnswer":{"@type":"Answer","text":"可以——从该网络打开 relayium.com 的每台设备都会列在房间里，手机、笔记本、台式机可以并排出现。但一次传输是一对一的：你和列表里的某一台设备打开工作区，文件就发给它。要分享给同一个房间里的几个人，就依次和每个人各开一次工作区。"}},{"@type":"Question","name":"如果传输从未离开我的网络，还是加密的吗？","acceptedAnswer":{"@type":"Answer","text":"是的。每一次同网络传输都使用和跨网络传输一样的 X25519 密钥交换与 AES-256-GCM 加密，有你能亲自核对的校验码，还有逐文件的 SHA-256 完整性校验。"}},{"@type":"Question","name":"如果一台设备用 Wi-Fi，另一台用移动数据怎么办？","acceptedAnswer":{"@type":"Answer","text":"那它们就不在同一网络，自动发现连不上。改用配对码：发送方登录后创建配对码，接收方无需账号。跨网络时传输不走直连，而是经一个加密的 TURN 中继转发，但全程仍是端到端加密：中继只转发密文，读不到文件内容。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -65,6 +65,23 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -83,7 +100,7 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">最近更新: <bdi>2026-07-09</bdi></p>
+      <p class="updated">最近更新: <bdi>2026-08-05</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-on-the-same-wifi/">English</a><a href="/zh/how-to/send-files-on-the-same-wifi/" aria-current="true">中文</a><a href="/ja/how-to/send-files-on-the-same-wifi/">日本語</a><a href="/ko/how-to/send-files-on-the-same-wifi/">한국어</a><a href="/de/how-to/send-files-on-the-same-wifi/">Deutsch</a><a href="/fr/how-to/send-files-on-the-same-wifi/">Français</a><a href="/ar/how-to/send-files-on-the-same-wifi/">العربية</a><a href="/es/how-to/send-files-on-the-same-wifi/">Español</a><a href="/pt/how-to/send-files-on-the-same-wifi/">Português</a></nav>
       <p class="lead">如果两台或多台设备在同一个 Wi-Fi 或局域网里，它们之间传文件本不该需要账号、配对码，或绕道云端。Relayium 能识别设备是否处于同一网络，并让它们在浏览器里直接互连，什么都不用注册。</p>
       <p class="lead">本文讲的是通用的同网络场景——任意设备、任意操作系统，甚至可以同时超过两台。如果你心里想的是某个具体设备组合，可以看文末链接的专门指南：电脑传手机、Mac 传 Windows，或面向 Windows/Linux/Android 的 AirDrop 式方案。</p>
@@ -91,22 +108,29 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>Relayium 不需要你输入任何东西来发现附近的设备。当你的浏览器不带配对码打开 relayium.com 时，服务器会根据你所连接的网络把你放进一个房间——实际上，共享同一个公网 IP 的设备（比如同一个家庭、办公室、校园 Wi-Fi，或同一个手机热点）会自动落入同一个房间。</p>
       <p>这个房间不限于两个人：从该网络打开网站的设备有多少，房间里就能容纳多少台，所以一整桌笔记本电脑，或一个教室的手机，都能同时互相看见，不只是一对一。</p>
       <h2>分步操作</h2>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">开始之前</p><ul><li>每台设备都在同一个 Wi-Fi 或局域网里，并且路由器没有把客户端互相隔开。设备列表下方 Relayium 自己的提示就写着要找的那个开关：「AP 隔离 / 客户端隔离」。</li><li>每台设备上都有一个较新的浏览器（Chrome、Edge、Firefox 或 Safari），并且是通过 https://relayium.com/ 打开页面。加密传输需要 HTTPS，用普通 http:// 打开时页面会直接这么告诉你，而不会列出设备。</li><li>不需要账号，也不需要配对码。同网络发现两端都不问这两样，所以第一次传输之前没有任何要配置的东西。</li><li>接收端要有地方存文件。存到哪里由接收端的浏览器和操作系统决定，不由我们决定：电脑上的 Chrome 和 Edge 可以让你选保存位置，其他浏览器会写进自己的下载目录。落到哪里，要在那个浏览器自己的下载列表里确认——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)。</li></ul></div>
       <p>整个流程都在浏览器里完成——任何设备都不用装 App。</p>
-      <ul><li>把你要用到的每台设备都连接到同一个 Wi-Fi 或局域网。</li><li>在每台设备上用现代浏览器（Chrome、Edge、Firefox 或 Safari）打开 relayium.com。</li><li>同网络下的设备会自动互相出现——两端都无需配对码，无需登录，无需账号。</li><li>选好文件或整个文件夹（每批最多 1,000 个文件），再从列表里选出要接收的那台设备。</li><li>接收方接受后传输就开始了。如果你打开「高级验证」（默认关闭），两台设备还会显示同一段简短的校验码（SAS），可以先分别瞄一眼确认一致。</li><li>文件直接从一台设备传到另一台；到达后保存即可。</li></ul>
+      <ol class="steps" data-block="steps"><li><p>把你要用到的每台设备都连接到同一个 Wi-Fi 或局域网，然后在每台设备上打开传输页面。</p><pre><code>https://relayium.com/</code></pre></li><li><p>在两台设备上读一下标题下方的状态条，对比里面的公网 IP。地址相同才会把两台设备放进同一个房间；地址不同就说明是两个网络，Wi-Fi 名字叫什么都不算。</p><pre><code>已连接 · 本机 MacBook · 公网 IP 203.0.113.9</code></pre></li><li><p>看「附近的设备」这一栏。凡是从该网络打开页面的设备，都会以卡片形式列在那里，卡片上是它自己的名字——不用输入，也不用确认。</p></li><li><p>在发送端点开对方的卡片，按「打开工作区」。在较新的浏览器上，这是附近设备卡片提供的唯一动作：文件、文件夹和消息都走它打开的那一条加密连接。房间里可能列着好几台设备，打开工作区就是在其中挑定这次要发给谁；轮到下一个人时，再打开一个工作区。</p></li><li><p>工作区会取代那张卡片。从这一刻起，连接状态要看工作区顶部的标题栏——连的是哪台设备、链路处于什么状态、以及唯一的那个路径标签——发送则用它下面的控件：一批文件用「发送文件」，整个目录树用「发送文件夹」（需要浏览器支持选择文件夹），或者在消息框里输入后按「发送」。一批文件最多 1,000 个。</p></li><li><p>接收端会收到请求，上面写着文件数量和总大小，下面那行说明按「接收」之后会发生什么——要么浏览器问你存到哪，要么文件进入它的下载目录。按「接收」就开始。</p></li><li><p>看着两块屏幕上的文件计数走到最后一个文件。如果希望在任何字节移动之前先核对校验码（SAS），请先在两台设备上打开「高级验证」：它默认关闭，打开后多出来的是一次核对和一步确认，而不是加密——无论开不开，传输都是加密的。</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">传输成功时是什么样</p><p>这时对方的卡片已经不在了——工作区取代了它。状态改看工作区的标题栏：连的是哪台设备、链路状态显示「已连接」、以及唯一的那个路径标签显示「局域网直连」，也就是在你自己网络里的主机到主机一跳。「P2P 直连」是另一种诚实的情况：两台设备确实共享同一个公网 IP，但浏览器最终选中的那一跳并不在本地。</p><p>接收端的计数停在最后一个文件，而文件本身就在保存提示所说的位置。确认这一点要看接收端浏览器自己的下载列表，而不是看本页面——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)。</p><pre><code>已连接到 MacBook · 已连接 · 局域网直连
+文件 3/3</code></pre></div>
+      <ul><li>同网络房间不限于两台设备，所以房间里每部手机、每台笔记本都出现一张卡片是正常的，不是哪里出错了。</li><li>这里不存在先上传、后下载：服务器上没有可以稍后再取的副本，所以两台设备都要停在页面上，直到计数走完。</li></ul>
+      <h2>两台设备互相看不到时</h2>
+      <p>同网络发现依据的是你的浏览器从哪个网络连过来，所以先从这里查起：两台设备其实不在同一个网络、路由器把客户端隔开了、页面不是用 HTTPS 打开的，或者接收端浏览器被要求装下超出它能力的内容。这些是常见的第一批排查项，而不是全部原因；每一项在屏幕上都有能判定它的东西。</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、处理</p><dl><dt>「附近的设备」一直是空的，或者只列出你正在看的这一台。</dt><dd><pre><code>https://relayium.com/   # 两台都打开，然后对比状态条里的公网 IP</code></pre><p>两个不同的公网 IP 就是两个不同的房间。VPN、iCloud 专用代理，或者把客户端从另一个地址送出去的访客 SSID 都是常见原因，但不是全部原因。如果你愿意改动它们：关掉 VPN，或只对当前这个 Wi-Fi 关闭专用代理，或者把两台设备都挪到主网络，然后在每台设备上重新加载 https://relayium.com/。如果你不想改，用 https://relayium.com/cross-network 上的配对码也能接上对方，两个设置都不用动，而且同样是端到端加密。</p></dd><dt>两台设备显示的公网 IP 相同，卡片却仍然一张都不出现。</dt><dd><pre><code>https://relayium.com/   # 设备列表下方的提示写着要改的那个路由器开关</code></pre><p>路由器把自己的客户端隔开了。在它的 Wi-Fi 设置里关闭「AP 隔离 / 客户端隔离」——Mesh 系统、酒店和访客网络经常默认开着——然后在两台设备上重新加载页面。如果路由器不由你管，那就改走 https://relayium.com/cross-network 上的配对码。</p></dd><dt>页面提示加密传输需要 HTTPS，设备列表根本没出现。</dt><dd><pre><code>https://relayium.com/   # 地址栏必须是 https，不是 http</code></pre><p>页面是用 http:// 或裸 IP 打开的，浏览器不会把加密传输所需的接口交给它。relayium.com 本身会跳转到 HTTPS，所以这通常意味着一个用 http:// 访问的自托管实例——请改用 https://relayium.com/ 打开，或者给你自己的实例配一张证书。</p></dd><dt>还没点接收，接收端就警告说它必须把整批文件放在内存里。</dt><dd><pre><code>chrome://downloads   # Chrome 用这个 / Edge 用 edge://downloads / Firefox 用 about:downloads</code></pre><p>那个浏览器无法把下载直接流式写入磁盘，于是会把整批缓存起来，批次一大就可能以标签页崩溃收场。请改用电脑上的 Chrome 或 Edge 接收，或者一次少发几个文件，并在接收端浏览器自己的下载列表里逐个确认到达情况——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)——而不是想当然认为已经保存。</p></dd><dt>传输能跑，但标签显示的是「P2P 直连」而不是「局域网直连」。</dt><dd><pre><code>https://relayium.com/   # 看工作区标题栏里的路径标签</code></pre><p>两台设备共享同一个公网 IP，却没有共享本地的那一跳——运营商级 NAT、同一条上行下的两个 VLAN，或者工作在客户端模式的信号扩展器都会这样。传输仍然是直连，也仍然端到端加密；如果你要的是走局域网而不是浏览器找到的那条路径，就把两台设备接到同一个接入点上。</p></dd></dl></div>
       <h2>为什么这么快：中间没有服务器</h2>
-      <p>由于两台设备本来就在同一网络里，Relayium 会让它们直接点对点连接——字节在你本地 Wi-Fi 上从一台设备流向另一台，从不绕道 Relayium 的服务器往返。没有什么要上传，也没有什么要等下载；速度只受你本地网络的限制，通常比任何方向的公网连接快得多。</p>
+      <p>两台设备是从同一个网络连上来的，所以 Relayium 让它们点对点直连：字节直接从一台设备流向另一台，不绕道 Relayium 的服务器往返，既没有什么要先上传，也没有什么要等着下载。至于到底有多快，取决于两个浏览器最终选中的是哪一跳，而路径标签会把它说出来。「局域网直连」是本地的那一跳——数据不出你自己的网络，跑的是局域网的速度，而不是宽带的速度。「P2P 直连」同样是直连，中间同样没有服务器，但浏览器找到的那条路已经离开了本地网段，因此受限于它实际经过的链路。共享同一个公网 IP 只是把两台设备放进同一个房间，它本身并不保证两者之间那一跳是本地的。</p>
       <p>这也是为什么两端都不需要账号：既然大家已经在同一个可信网络里，Relayium 不需要靠登录来判断谁能连谁。</p>
       <h2>依然是端到端加密</h2>
       <p>在同一网络下不代表传输就是明文的。Relayium 会在两台设备之间协商 X25519 密钥交换，并用 AES-256-GCM 对每个数据块加密；这把密钥不会被任何服务器看到，包括 Relayium 自己的信令服务器——它只负责帮设备找到彼此。打开高级验证后，两块屏幕还会显示同一段简短校验码（SAS），能让你亲眼确认这条连接确实建立在你的两台设备之间，而每个文件还会用 SHA-256 哈希做端到端完整性校验，让你确信它是逐字节完整到达的。</p>
       <h2>如果某台设备在别的网络上</h2>
-      <p>同网络模式只在设备真正共享同一网络时才生效——用移动数据的手机、连着另一个 Wi-Fi 的笔记本，或在另一台路由器后面的设备，都不会自动出现。这种情况下，Relayium 也支持用一个短配对码跨网络连接：发送方登录后生成配对码（或二维码 / 链接），接收方始终无需账号。跨网络时，两个浏览器之间不是直连，而是经一个加密的 TURN 中继转发——这条路径是刻意只走中继的，连接一两秒就能建立，不必卡在两层 NAT 之间几乎注定失败的直连候选探测上。这并不会让它变得不私密：密钥始终留在两台设备上，中继只负责转发密文，读不到文件内容。 配对码有效期 5 分钟，所以生成之前先把两台设备都准备好。</p>
+      <p>同网络模式只在设备真正共享同一网络时才生效——用移动数据的手机、连着另一个 Wi-Fi 的笔记本，或在另一台路由器后面的设备，都不会自动出现。这种情况下，Relayium 也支持用一个短配对码跨网络连接：发送方登录后生成配对码（或二维码 / 链接），接收方始终无需账号。跨网络时，两个浏览器之间不是直连，而是经一个加密的 TURN 中继转发——这条路径是刻意只走中继的，因此建立连接不依赖在中间的 NAT 和防火墙之间探测出一条直连路径——它们可能挡住这样的路径。这并不会让它变得不私密：密钥始终留在两台设备上，中继只负责转发密文，读不到文件内容。 配对码有效期 5 分钟，所以生成之前先把两台设备都准备好。</p>
       <h2>常见问题</h2>
       <h3>在同一 Wi-Fi 下传文件需要账号吗？</h3>
       <p>不需要。同网络传输两端都无需账号，也无需配对码——每台设备打开 relayium.com 就行。</p>
       <h3>Relayium 怎么知道哪些设备在我的网络里？</h3>
       <p>同网络下的设备通常共享同一个公网 IP，Relayium 会自动把公网 IP 相同的设备归到同一个房间里，无需任何配对码。</p>
       <h3>能不能同时有两台以上的设备互相看见？</h3>
-      <p>可以。同网络房间不限于一对一——从该网络打开 relayium.com 的每台设备都能出现并接收文件，适合同一个房间或办公室里给多个人分享。</p>
+      <p>可以——从该网络打开 relayium.com 的每台设备都会列在房间里，手机、笔记本、台式机可以并排出现。但一次传输是一对一的：你和列表里的某一台设备打开工作区，文件就发给它。要分享给同一个房间里的几个人，就依次和每个人各开一次工作区。</p>
       <h3>如果传输从未离开我的网络，还是加密的吗？</h3>
       <p>是的。每一次同网络传输都使用和跨网络传输一样的 X25519 密钥交换与 AES-256-GCM 加密，有你能亲自核对的校验码，还有逐文件的 SHA-256 完整性校验。</p>
       <h3>如果一台设备用 Wi-Fi，另一台用移动数据怎么办？</h3>

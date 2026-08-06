@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="如何直接发送整个文件夹，而不只是文件" />
     <meta name="twitter:description" content="在浏览器里直接选中整个文件夹发送——保留相对路径，一批最多 1,000 个文件，每个都用 SHA-256 校验。发送前无需先打包压缩。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"如何直接发送整个文件夹，而不只是文件","description":"在浏览器里直接选中整个文件夹发送——保留相对路径，一批最多 1,000 个文件，每个都用 SHA-256 校验。发送前无需先打包压缩。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/send-a-folder/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"如何直接发送整个文件夹，而不只是文件"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"能从 iPhone 或 iPad 发送文件夹吗？","acceptedAnswer":{"@type":"Answer","text":"作为发送方不行——iOS 上的 Safari 没有文件夹选择器，只能选单个文件，所以目前发送文件夹要在桌面版 Chrome、Edge 或 Firefox 上进行。但 iPhone 或 iPad 完全可以正常接收文件夹，会以 .zip 形式收到。"}},{"@type":"Question","name":"子文件夹和文件结构会保留吗？","acceptedAnswer":{"@type":"Answer","text":"会。Relayium 保留每个文件的相对路径，包括嵌套的子文件夹，所以到达的文件夹和你选中的那个结构完全一致。"}},{"@type":"Question","name":"一个文件夹最多能发送多少文件？","acceptedAnswer":{"@type":"Answer","text":"单批最多 1,000 个文件，每个文件到达时都会各自用 SHA-256 哈希校验。"}},{"@type":"Question","name":"对方收到的是真正的文件夹还是一个 .zip？","acceptedAnswer":{"@type":"Answer","text":"取决于对方的浏览器。Chrome 和 Edge 会把文件直接写入对方选定的目录。Firefox 和 Safari 会收到一个仅存储的 .zip（不超过 4 GiB），解压后就是相同的文件夹结构。"}},{"@type":"Question","name":"发送文件夹需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"同一网络下不需要。跨网络用配对码发送需要发送方登录，但无论哪种情况接收方都不需要账号。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"如何直接发送整个文件夹，而不只是文件","description":"在浏览器里直接选中整个文件夹发送——保留相对路径，一批最多 1,000 个文件，每个都用 SHA-256 校验。发送前无需先打包压缩。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/send-a-folder/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"如何直接发送整个文件夹，而不只是文件"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"能从 iPhone 或 iPad 发送文件夹吗？","acceptedAnswer":{"@type":"Answer","text":"作为发送方不行——iOS 上的 Safari 没有文件夹选择器，只能选单个文件，所以目前发送文件夹要在桌面版 Chrome、Edge 或 Firefox 上进行。但 iPhone 或 iPad 完全可以正常接收文件夹，会以 .zip 形式收到。"}},{"@type":"Question","name":"子文件夹和文件结构会保留吗？","acceptedAnswer":{"@type":"Answer","text":"实时发送会：Relayium 保留每个文件的相对路径，包括嵌套的子文件夹，所以到达的文件夹和你选中的那个结构完全一致。存储下载链接不一样——它上传的是一份平铺的文件清单，路径会被丢掉——所以需要保住结构时，请自己先打包，再上传那个压缩包。"}},{"@type":"Question","name":"一个文件夹最多能发送多少文件？","acceptedAnswer":{"@type":"Answer","text":"单批最多 1,000 个文件，每个文件到达时都会各自用 SHA-256 哈希校验。"}},{"@type":"Question","name":"对方收到的是真正的文件夹还是一个 .zip？","acceptedAnswer":{"@type":"Answer","text":"取决于对方的浏览器。Chrome 和 Edge 会把文件直接写入对方选定的目录。Firefox 和 Safari 会收到一个仅存储的 .zip（不超过 4 GiB），解压后就是相同的文件夹结构。"}},{"@type":"Question","name":"发送文件夹需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"同一网络下不需要。跨网络用配对码发送需要发送方登录，但无论哪种情况接收方都不需要账号。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -65,6 +65,23 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -83,25 +100,29 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
+      <p class="updated">最近更新: <bdi>2026-08-05</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-a-folder/">English</a><a href="/zh/how-to/send-a-folder/" aria-current="true">中文</a><a href="/ja/how-to/send-a-folder/">日本語</a><a href="/ko/how-to/send-a-folder/">한국어</a><a href="/de/how-to/send-a-folder/">Deutsch</a><a href="/fr/how-to/send-a-folder/">Français</a><a href="/ar/how-to/send-a-folder/">العربية</a><a href="/es/how-to/send-a-folder/">Español</a><a href="/pt/how-to/send-a-folder/">Português</a></nav>
       <p class="lead">发送一个项目和发送一个文件不是一回事——你手上是一个套着子文件夹的文件夹，一个一个复制粘贴会丢掉让它有意义的结构。先打包压缩也行，但那意味着在开始传输之前要先绕道用一个压缩工具。</p>
-      <p class="lead">Relayium 让你选中文件夹整体发送。浏览器会遍历整棵目录树、保留每个相对路径，并选择实时传输——同一局域网内 WebRTC 直连，跨网络经 TURN 承载端到端密文——且不保留服务器端实时副本或历史；也可以生成稍后取用的存储链接。</p>
+      <p class="lead">Relayium 让你在实时传输里选中文件夹整体发送。浏览器会遍历整棵目录树、保留每个相对路径，并实时流式发出——同一局域网内 WebRTC 直连，跨网络经 TURN 承载端到端密文——且不保留服务器端实时副本或历史。留着稍后取用的存储链接是唯一不携带目录结构的那条路：请自己先打包，然后上传那一个压缩文件。</p>
       <h2>选文件夹，而不是一堆散文件</h2>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">你需要准备</p><ul><li>发送这一侧要用桌面浏览器——Chrome、Edge 或 Firefox。iPhone 和 iPad 上 Safari 的文件选择器根本无法选中文件夹，只能选单个文件，所以发送文件夹要从电脑开始。</li><li>一棵最多 1,000 个文件的目录树。这个上限是按批而不是按会话算的，所以更大的树可以分几次发送，不用重新连接。</li><li>对接收方浏览器有个判断，因为它决定了到达时的形态：Chrome 或 Edge 会把目录树写进接收方挑选的文件夹，其他浏览器则会给出一个 .zip。</li><li>实时发送需要双方同时在线；如果对方不在，则需要发送方登录，外加一个你自己打好的压缩包——因为存储链接上传的是一份平铺的文件清单，不携带任何目录结构。</li></ul></div>
       <p>不必一个个选文件，直接选中文件夹本身即可。Relayium 会在浏览器里遍历整个目录树，保留每个文件的相对路径——子文件夹、嵌套的子文件夹，全都保留——所以对方收到的东西和你出发时的目录结构一致。</p>
       <p>目前这在桌面版 Chrome、Edge 和 Firefox 上可用。在 iOS 上不行：iPhone 和 iPad 上 Safari 的文件选择器没有办法选中文件夹，只能选单个文件，所以发送文件夹暂时是桌面端的功能。</p>
-      <ul><li>单批最多 1,000 个文件。</li><li>每个文件都用各自的 SHA-256 哈希做端到端校验，确保到达的内容和你发出的完全一致。</li><li>可以拖放，也可以用文件夹选择按钮——不需要先打包压缩。</li></ul>
+      <ol class="steps" data-block="steps"><li><p>在发送方电脑上打开传输页面——同一网络就用同网络页面，需要配对码就用实时传输页面。</p><pre><code>https://relayium.com/</code></pre></li><li><p>把文件夹拖到页面上，或者用文件夹选择按钮。Relayium 会在浏览器里遍历目录树并保留每个文件的相对路径，所以不需要先打包。</p></li><li><p>同一网络下，在「附近的设备」里找到接收方，在它的卡片上按「打开工作区」，然后用工作区里的「发送文件夹」附件。跨网络的配对码房间保留的是更早的一套控件，文件夹按钮在房间自己的卡片上。无论哪种情形，对方收到的请求上写的都是文件数量和整棵树的总大小，而不是单个文件的大小。</p></li><li><p>在接收方，接受之前先读一下请求下面那行：用 Chrome 或 Edge 时它会说浏览器要问你存到哪，而这条路径才能在磁盘上还原出文件夹。然后按「接收」。</p></li><li><p>看着两块屏幕上的文件计数逐个走过这棵树。它数的是文件，所以一个 300 个文件的文件夹会走到「文件 300/300」，而不是给整批显示一根进度条。</p><pre><code>文件 300/300</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">文件夹发送完成时是什么样</p><p>计数停在这一批的最后一个文件，而每个文件到达时都用各自的 SHA-256 哈希做过端到端校验，所以落地的内容和你发出的逐字节一致。</p><p>接下来要看的是结果，而不是页面，因为它按浏览器而不同：用 Chrome 或 Edge 时，目录树连同子文件夹都在你挑好的文件夹里；用 Firefox 或 Safari 时，下载列表里是一个 .zip，解开后结构一致。</p><pre><code>局域网直连
+文件 300/300</code></pre></div>
       <h2>对方收到的是什么</h2>
       <p>文件夹如何送达取决于接收端的浏览器。Chrome 和 Edge 可以把文件直接写入接收者选定的目录，文件夹会原样出现在磁盘上——不需要额外步骤。</p>
       <p>Firefox 和 Safari 没有这个能力，所以它们收到的是一个仅存储（不压缩）的 .zip 压缩包，解压后就是完全相同的文件夹结构。它保持在 4 GiB 以内（不支持 ZIP64），这足以覆盖绝大多数项目文件夹和照片、文档集合——如果更大，就拆成两次发送。</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、处理</p><dl><dt>发送方设备上根本找不到选文件夹的入口。</dt><dd><pre><code>https://relayium.com/   # 只有浏览器支持时，选择器才会提供文件夹这一项</code></pre><p>你几乎肯定是在 iPhone 或 iPad 上，那里 Safari 的选择器只给出单个文件，别无其他。请从电脑上的 Chrome、Edge 或 Firefox 发起文件夹传输，把手机当作接收方。</p></dd><dt>收到的 .zip 损坏，或者下载在接近 4 GiB 时停住。</dt><dd><pre><code>chrome://downloads   # 把 .zip 的大小和你发出的文件夹对一下</code></pre><p>打包这条路径不支持 ZIP64，所以单个条目和整个压缩包都必须保持在 4 GiB 以内。请把目录树拆成两次发送，或者让接收方改用 Chrome 或 Edge——它会把文件写进选定的文件夹，根本不会生成压缩包。</p></dd><dt>.zip 的大小和文件夹一样，完全没有压缩。</dt><dd><pre><code>chrome://downloads   # 条目的大小等于文件夹总大小，而不是更小</code></pre><p>这是预期行为：这个压缩包仅存储，它只是把目录树打包起来而不做压缩，因此与你发出的内容逐字节一致。如果你更在意传输体积而不是精确副本，请在发送前自己压缩这个文件夹。</p></dd><dt>文件都到了，但全都平铺在一个目录里，子文件夹不见了。</dt><dd><pre><code>chrome://downloads   # 没有目录选择器的浏览器会交给你一个 .zip</code></pre><p>实时发送会保留相对路径，所以这只是压缩包还没解开时的样子，并不是传输把结构拍平了。解开压缩包，子文件夹就在里面；如果希望目录树直接落在磁盘上，请用 Chrome 或 Edge 接收，并在它询问时挑好目标文件夹。真正会拍平的只有存储下载链接那条路——它上传的是一份平铺的文件清单，路径会被丢掉——所以打算走链接的文件夹必须先自己打包。</p></dd><dt>几百个文件的文件夹传到一半停下，缺了一个文件。</dt><dd><pre><code>https://relayium.com/   # 计数会显示它停在哪个文件上</code></pre><p>实时发送是一次实时会话：只要两个页面都还开着，临时掉线可以从最后一个持久化检查点接着传。任何一侧关闭或刷新都会结束这次会话，那就没有什么可续的了。先保持两个标签页开着稍等一会儿再动手；只有在会话确实已经结束时，才从计数停住的那个文件重发这一批。如果对面根本没人，请先自己把文件夹打包成 zip，再把那一个压缩包作为存储链接上传——因为存储上传拿到的是一份平铺的文件清单。</p></dd></dl></div>
       <h2>实时传输，或留个链接稍后取</h2>
       <p>如果双方能同时在线，就实时发送文件夹。同一局域网内 WebRTC 直连；跨网络浏览器按设计使用 TURN 承载端到端加密的密文，中继无法读取或解密。Relayium 不保留服务器端实时副本或传输历史。同一网络无需账号；跨网络时配对码创建者登录，加入的一方始终无需账号。</p>
-      <p>如果对方现在不在，可以改为创建一个存储链接。你的浏览器会在上传前用一把只存在于链接本身的随机 AES-256-GCM 密钥加密文件夹里的文件，服务器只保存它读不懂的密文。创建链接需要发送方登录；可以设置 1 小时、1 天、3 天、7 天或最长 14 天后过期（上限取决于套餐），也可以设置为首次下载后即焚。</p>
+      <p>如果对方现在不在，可以改为创建一个存储链接——但要先自己把文件夹打包。存储上传收到的是一份平铺的文件清单：相对路径会被丢掉，所以直接上传一棵目录树，到手的是一堆散文件，不同子目录下同名的两个文件还会撞名。做一个普通的 .zip 再上传那一个文件，结构就随压缩包一起走了。你的浏览器会在上传前用一把只存在于链接本身的随机 AES-256-GCM 密钥加密你上传的内容，服务器只保存它读不懂的密文。创建链接需要发送方登录；可以设置 1 小时、1 天、3 天、7 天或最长 14 天后过期（上限取决于套餐），也可以设置为首次下载后即焚。</p>
       <h2>常见问题</h2>
       <h3>能从 iPhone 或 iPad 发送文件夹吗？</h3>
       <p>作为发送方不行——iOS 上的 Safari 没有文件夹选择器，只能选单个文件，所以目前发送文件夹要在桌面版 Chrome、Edge 或 Firefox 上进行。但 iPhone 或 iPad 完全可以正常接收文件夹，会以 .zip 形式收到。</p>
       <h3>子文件夹和文件结构会保留吗？</h3>
-      <p>会。Relayium 保留每个文件的相对路径，包括嵌套的子文件夹，所以到达的文件夹和你选中的那个结构完全一致。</p>
+      <p>实时发送会：Relayium 保留每个文件的相对路径，包括嵌套的子文件夹，所以到达的文件夹和你选中的那个结构完全一致。存储下载链接不一样——它上传的是一份平铺的文件清单，路径会被丢掉——所以需要保住结构时，请自己先打包，再上传那个压缩包。</p>
       <h3>一个文件夹最多能发送多少文件？</h3>
       <p>单批最多 1,000 个文件，每个文件到达时都会各自用 SHA-256 哈希校验。</p>
       <h3>对方收到的是真正的文件夹还是一个 .zip？</h3>

@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="电脑无线传文件到手机：不用数据线，不用装 App" />
     <meta name="twitter:description" content="一步步教你在电脑和手机之间通过 Wi-Fi 传文件——拖拽即发，不用数据线，不用网盘账号，全程端到端加密。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"电脑无线传文件到手机：不用数据线，不用装 App","description":"一步步教你在电脑和手机之间通过 Wi-Fi 传文件——拖拽即发，不用数据线，不用网盘账号，全程端到端加密。","inLanguage":"zh-Hans","datePublished":"2026-07-03","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/send-files-pc-to-phone-wirelessly/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"电脑无线传文件到手机：不用数据线，不用装 App"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Mac 和 Android 也行吗，不只是 Windows 和 iPhone？","acceptedAnswer":{"@type":"Answer","text":"行。Relayium 在 Windows、macOS、Linux、Android 和 iOS 的浏览器里都能运行，所以任意组合都可以——Windows 传 Android、Mac 传 iPhone、Linux 传手机，反过来也一样。两端都无需安装任何东西。"}},{"@type":"Question","name":"传输速度有多快？","acceptedAnswer":{"@type":"Answer","text":"在同一 Wi-Fi 下，两台设备直接互连，所以速度由你的本地网络决定，而不受任何服务器限制——通常能跑满你的 Wi-Fi。跨网络时，传输按设计走加密 TURN 中继，因此速度取决于双方的网络以及中继这一跳；换来的是连接一两秒就能建立，而不必去等那些跨网络 NAT 本就极少允许的直连尝试超时。"}},{"@type":"Question","name":"这样传文件安全吗？","acceptedAnswer":{"@type":"Answer","text":"安全。在浏览器的传输加密之上，Relayium 再加了一层：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密，这把密钥从不接触服务器。两台设备的 6 位校验码（SAS）一致，能确认密钥未被替换：服务器或中继没有冒充任一端，也没有终止应用层端到端加密。跨网络时，TURN 中继仍处于传输路径上，但只转发无法解密的密文。每个文件还会用 SHA-256 做端到端校验。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"电脑无线传文件到手机：不用数据线，不用装 App","description":"一步步教你在电脑和手机之间通过 Wi-Fi 传文件——拖拽即发，不用数据线，不用网盘账号，全程端到端加密。","inLanguage":"zh-Hans","datePublished":"2026-07-03","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/send-files-pc-to-phone-wirelessly/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"电脑无线传文件到手机：不用数据线，不用装 App"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Mac 和 Android 也行吗，不只是 Windows 和 iPhone？","acceptedAnswer":{"@type":"Answer","text":"行。Relayium 在 Windows、macOS、Linux、Android 和 iOS 的浏览器里都能运行，所以任意组合都可以——Windows 传 Android、Mac 传 iPhone、Linux 传手机，反过来也一样。两端都无需安装任何东西。"}},{"@type":"Question","name":"传输速度有多快？","acceptedAnswer":{"@type":"Answer","text":"在同一 Wi-Fi 下，两台设备直接互连，所以速度由你的本地网络决定，而不受任何服务器限制——通常能跑满你的 Wi-Fi。跨网络时，传输按设计走加密 TURN 中继，因此速度取决于双方的网络以及中继这一跳；换来的是连接不依赖在中间的 NAT 和防火墙之间探测出一条直连路径——它们可能挡住这样的路径。"}},{"@type":"Question","name":"这样传文件安全吗？","acceptedAnswer":{"@type":"Answer","text":"安全。在浏览器的传输加密之上，Relayium 再加了一层：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密，这把密钥从不接触服务器。两台设备的 6 位校验码（SAS）一致，能确认密钥未被替换：服务器或中继没有冒充任一端，也没有终止应用层端到端加密。跨网络时，TURN 中继仍处于传输路径上，但只转发无法解密的密文。每个文件还会用 SHA-256 做端到端校验。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -65,6 +65,23 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -83,16 +100,23 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
+      <p class="updated">最近更新: <bdi>2026-08-05</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-pc-to-phone-wirelessly/">English</a><a href="/zh/how-to/send-files-pc-to-phone-wirelessly/" aria-current="true">中文</a><a href="/ja/how-to/send-files-pc-to-phone-wirelessly/">日本語</a><a href="/ko/how-to/send-files-pc-to-phone-wirelessly/">한국어</a><a href="/de/how-to/send-files-pc-to-phone-wirelessly/">Deutsch</a><a href="/fr/how-to/send-files-pc-to-phone-wirelessly/">Français</a><a href="/ar/how-to/send-files-pc-to-phone-wirelessly/">العربية</a><a href="/es/how-to/send-files-pc-to-phone-wirelessly/">Español</a><a href="/pt/how-to/send-files-pc-to-phone-wirelessly/">Português</a></nav>
       <p class="lead">把一个文件从笔记本弄到手机上，不该还得翻找合适的数据线、给自己发邮件，或者先上传到网盘再下载一遍。Relayium 通过你自己的 Wi-Fi，把文件字节直接从电脑传到手机，全程在浏览器里完成，两端都无需安装任何软件。</p>
       <p class="lead">本文一步步讲清无线传输的做法——同一网络或跨网络都行——再客观地和常见的几种替代方式（数据线、蓝牙、聊天软件和邮件）作对比，帮你为不同场景选对工具。</p>
       <h2>同一 Wi-Fi 下，从电脑传到手机</h2>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">开始之前</p><ul><li>电脑和手机在同一个 Wi-Fi 里，并且路由器没有把客户端互相隔开。设备列表下方的提示写着那个开关的名字：「AP 隔离 / 客户端隔离」。</li><li>两边各有一个浏览器，并且是通过 https://relayium.com/ 打开页面。加密传输需要 HTTPS，用普通 http:// 打开时页面会直接这么说，而不会列出任何设备。</li><li>整个传输过程中手机上的这个标签页保持在最前面。只要浏览器提供，Relayium 会申请屏幕唤醒锁，这能盖住屏幕自动熄灭——但盖不住你切到别的 App，而手机浏览器可能会限速甚至挂起退到后台的标签页。</li><li>同网络传输时两边都不需要账号。只有在两端处于不同网络、必须生成配对码时，发送方才需要登录。</li></ul></div>
       <p>这是最快的方式：两台设备在同一网络里，直接互连，传输速度只受你的 Wi-Fi 限制。除了浏览器，两边什么都不需要。</p>
-      <ul><li>在电脑上用任意现代浏览器（Chrome、Edge、Firefox 或 Safari）打开 relayium.com。</li><li>在手机上同样打开 relayium.com。在同一网络里，两台设备会自动发现彼此。</li><li>在电脑上，把文件直接拖到页面上，或点击选择——每批最多 1,000 个文件。你也可以整个文件夹拖进去，Relayium 会保留其结构。</li><li>选中手机作为目标并开始。手机接受后文件就飞过去了。如果你还想让两台设备先显示同一段 6 位校验码（SAS）供你瞄一眼确认，请打开默认关闭的「高级验证」。</li><li>在手机上保存收到的文件。像这样的实时传输无需账号。</li></ul>
+      <ol class="steps" data-block="steps"><li><p>在电脑上用任意现代浏览器（Chrome、Edge、Firefox 或 Safari）打开传输页面。</p><pre><code>https://relayium.com/</code></pre></li><li><p>在手机上打开同一个页面，然后对比两块屏幕上状态条里的公网 IP。地址一致才会把两台设备放进同一个房间——如果手机悄悄留在移动数据上，它显示的会是另一个地址。</p><pre><code>已连接 · 本机 Pixel · 公网 IP 203.0.113.9</code></pre></li><li><p>在电脑上于「附近的设备」里找到手机，点它的卡片，然后按「打开工作区」。在当前浏览器上，这是卡片提供的唯一一个动作——因为接下来文件、文件夹和消息都走它打开的那一条加密连接。把文件直接拖到那张卡片上也能发出去，不必先经过这一步。</p></li><li><p>工作区会取代那张卡片。用它标题栏下面的控件来发送：「发送文件」发一批（最多 1,000 个），浏览器支持选目录时用「发送文件夹」发整棵树，或者直接在消息框里打字——「回车换行 · ⌘/Ctrl+回车发送」——然后按「发送」。</p></li><li><p>在手机上，先看请求下面那行再决定接收：它会说明浏览器是要问你存到哪，还是直接写进它的下载目录。然后按「接收」，并让那个标签页一直留在最前面，直到文件计数走到这一批的最后一个文件。如果想在任何字节移动之前核对校验码（SAS），开始前先在两台设备上打开「高级验证」——它默认关闭，打开后增加的是一次核对和一步确认，而不是加密。</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">传输完成时是什么样</p><p>这时手机的卡片已经不在了——工作区取代了它——所以状态要从工作区标题栏上读：你连到了哪台设备、连接状态是「已连接」，以及唯一一个路径标签显示「局域网直连」。两块屏幕上的文件计数都停在这一批的最后一个文件。</p><p>然后要检查的是文件，而不是页面。落在哪里由手机浏览器决定：Android 上的 Chrome 和 Firefox 会放进浏览器自己的下载列表（分别是 chrome://downloads 和 about:downloads），iOS 上的 Safari 会放进你可以在「文件」App 里打开的下载目录。</p><pre><code>已连接到 Pixel · 已连接 · 局域网直连
+文件 1/1</code></pre></div>
+      <ul><li>同网络房间会容纳所有从该网络打开页面的设备，所以手机旁边多出一台平板或第二台笔记本是正常的。</li><li>1,000 个文件的上限是按批而不是按会话算的，所以很大的目录树可以分几次拖过去，不用重新连接。</li></ul>
+      <h2>手机没出现，或者传输中断时</h2>
+      <p>通常是手机那一侧会把原因摆出来：它其实不在你以为的那个网络里、它的标签页退到了后台，或者它的浏览器装不下被要求装的东西。这些是常见的首轮排查，而不是全部可能，而且每一项都有屏幕上现成的东西能判定。</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、处理</p><dl><dt>电脑上的「附近的设备」里始终没有手机。</dt><dd><pre><code>https://relayium.com/   # 对比两块屏幕上状态条里的公网 IP</code></pre><p>两个不同的公网 IP 就是两个房间。手机悄悄留在移动数据上是常见原因之一；VPN 或 iCloud 专用代理把它从另一个地址送出去是另一种，而且都不是唯一可能。如果你愿意改这些设置：让它连上 Wi-Fi、断开 VPN，或只对这一个网络关闭专用代理，然后在手机上重新加载 https://relayium.com/。如果你更想保留它们，用 https://relayium.com/cross-network 上的配对码也能连到这台手机，两个设置都不用动，端到端加密同样成立。</p></dd><dt>两台设备显示的公网 IP 相同，卡片却还是不出现。</dt><dd><pre><code>https://relayium.com/   # 设备列表下方的提示写着要改的那个路由器开关</code></pre><p>路由器把自己的客户端隔开了，访客网络和酒店 Wi-Fi 经常默认这样。关闭「AP 隔离 / 客户端隔离」；如果路由器不由你改，就改用 https://relayium.com/cross-network 上的配对码。</p></dd><dt>传输开始后，你在手机上切了别的 App，然后它就卡住或失败了。</dt><dd><pre><code>https://relayium.com/   # 手机上 Relayium 这个标签页必须是最前面那个</code></pre><p>手机浏览器可能会限速甚至挂起退到后台的标签页，而在它这么做的时候字节根本不动。Relayium 的停滞看护在页面回到前台后会额外给一个完整窗口，而不是立刻判失败，但真正的解决办法是让标签页留在最前面——Relayium 申请的唤醒锁只盖住屏幕熄灭，并不能换来后台执行，而较旧的 Safari 和 Android 连唤醒锁都没有可申请的。</p></dd><dt>还没点接收，手机就警告说整批文件必须放在内存里。</dt><dd><pre><code>chrome://downloads   # Chrome 用这个 / Edge 用 edge://downloads / Firefox 用 about:downloads</code></pre><p>手机浏览器没有 File System Access API，所以整批内容会在内存里拼装，超过大约 256 MiB 时 Relayium 就会警告。这个数字是一个偏保守的警告线，不是硬上限：一次少发几个文件，或者把大文件改成反向发送，发给电脑上的 Chrome 或 Edge，由它直接写盘。每个文件是否真的到了，要在接收端浏览器自己的下载列表里确认——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)。</p></dd><dt>跨网络时手机输入配对码被拒绝。</dt><dd><pre><code>https://relayium.com/cross-network   # 配对卡片上有倒计时，以及中继被拒的原因</code></pre><p>配对码有效期 5 分钟，而且只有生成它的那台设备需要账号。重新生成一个，然后立刻输入。如果卡片提示中继只发给已验证的账号，请先在账户面板里验证发送方的邮箱地址——上面那套同网络流程不受此影响。</p></dd></dl></div>
       <h2>不在同一网络？用配对码</h2>
-      <p>手机用的是移动数据，电脑连的是家里的 Wi-Fi？没关系——Relayium 生来就支持跨网络，而不只是同一个网络。</p>
-      <p>此时不再自动发现，而是发送方登录后拿到一个短配对码（或它生成的加入链接）——接收方始终无需账号。在另一台设备上输入这个码，两者就会通过加密的 TURN 中继连上。跨网络这条路径就是这样刻意设计的：在移动网络和家里的路由器之间，直连路径通常根本找不到，先去试一遍要白白花掉二十秒左右，最后照样落到中继上——直接从中继开始，一两秒就连上了。文件在离开发送端之前就已完成端到端加密，因此中继搬运的始终只是它读不懂的密文。若中途断开，传输可以断点续传，而不必从头再来。 配对码有效期 5 分钟，所以生成之前先把两台设备都准备好。</p>
+      <p>手机用的是移动数据，电脑连的是家里的 Wi-Fi？没关系——Relayium 生来就支持跨网络，而不只是同一个网络。不过配对码房间和「附近的设备」工作区是两套界面：它保留的是早先那套按设备分开的控件，那里没有「打开工作区」可按。</p>
+      <p>此时不再自动发现，而是发送方登录后拿到一个短配对码（或它生成的加入链接）——接收方始终无需账号。在另一台设备上输入这个码，两者就会通过加密的 TURN 中继连上。跨网络这条路径就是这样刻意设计的：它一开始就走中继，因此连接不依赖在移动网络和家用路由器之间的 NAT 和防火墙里探测出一条直连路径——它们可能挡住这样的路径。文件在离开发送端之前就已完成端到端加密，因此中继搬运的始终只是它读不懂的密文。若中途断开，传输可以断点续传，而不必从头再来。 配对码有效期 5 分钟，所以生成之前先把两台设备都准备好。</p>
       <h2>像 App 一样安装（可选的 PWA）</h2>
       <p>Relayium 就是一个网站，所以确实没有什么要安装的。但如果你经常传文件，可以把它添加到主屏幕或桌面，作为渐进式网页应用（PWA）：它会在独立窗口中打开，像原生应用一样启动，而底层依然只是那张网页。</p>
       <p>在手机上用浏览器的「添加到主屏幕」；在电脑上用地址栏里的安装图标。无论哪种方式它都保持免费——Relayium 采用 AGPL-3.0 许可开源，代码在 github.com/relayium/relayium，支持 Windows、macOS、Linux、Android 和 iOS。</p>
@@ -106,7 +130,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>Mac 和 Android 也行吗，不只是 Windows 和 iPhone？</h3>
       <p>行。Relayium 在 Windows、macOS、Linux、Android 和 iOS 的浏览器里都能运行，所以任意组合都可以——Windows 传 Android、Mac 传 iPhone、Linux 传手机，反过来也一样。两端都无需安装任何东西。</p>
       <h3>传输速度有多快？</h3>
-      <p>在同一 Wi-Fi 下，两台设备直接互连，所以速度由你的本地网络决定，而不受任何服务器限制——通常能跑满你的 Wi-Fi。跨网络时，传输按设计走加密 TURN 中继，因此速度取决于双方的网络以及中继这一跳；换来的是连接一两秒就能建立，而不必去等那些跨网络 NAT 本就极少允许的直连尝试超时。</p>
+      <p>在同一 Wi-Fi 下，两台设备直接互连，所以速度由你的本地网络决定，而不受任何服务器限制——通常能跑满你的 Wi-Fi。跨网络时，传输按设计走加密 TURN 中继，因此速度取决于双方的网络以及中继这一跳；换来的是连接不依赖在中间的 NAT 和防火墙之间探测出一条直连路径——它们可能挡住这样的路径。</p>
       <h3>这样传文件安全吗？</h3>
       <p>安全。在浏览器的传输加密之上，Relayium 再加了一层：用 X25519 密钥交换协商出密钥，对每个数据块做 AES-256-GCM 加密，这把密钥从不接触服务器。两台设备的 6 位校验码（SAS）一致，能确认密钥未被替换：服务器或中继没有冒充任一端，也没有终止应用层端到端加密。跨网络时，TURN 中继仍处于传输路径上，但只转发无法解密的密文。每个文件还会用 SHA-256 做端到端校验。</p>
       <div class="ctacard">

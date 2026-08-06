@@ -18,30 +18,91 @@ const en = {
       body: [
         "Nothing to install on the Mac or the PC. On the same network there is nothing to sign up for either — the browser handles everything.",
       ],
-      bullets: [
-        "A Mac with Safari or Chrome, and a Windows PC with Edge or Chrome — any modern browser on either side.",
-        "For the simplest path, connect both machines to the same Wi-Fi or Ethernet network. If they're in different places, a pairing code bridges the gap instead.",
-        "The files or folders to send — up to 1,000 files per batch.",
-      ],
+      prereqs: {
+        label: "What you need",
+        items: [
+          "A Mac with Safari or Chrome, and a Windows PC with Edge or Chrome — any modern browser on either side.",
+          "For the simplest path, both machines on the same Wi-Fi or Ethernet network. Mixing the two is fine: a wired PC and a Mac on the same router still share one public IP, which is what puts them in the same room.",
+          "The page open over https://relayium.com/ on both. Encrypted transfer needs HTTPS, and over plain http:// the page says so instead of listing devices.",
+          "For a large batch, Chrome or Edge on whichever machine is receiving. Only those can stream straight to disk and let you pick a target folder — Safari has no such API and has to assemble the batch in memory instead.",
+          "The files or folders to send — up to 1,000 files per batch.",
+        ],
+      },
     },
     {
       heading: "Mac and PC on the same network",
       body: [
         "If both computers are on the same office or home network, this is the fastest way to move files — no shared drive to mount, no permissions to fight with.",
       ],
-      bullets: [
-        "On the Mac, open relayium.com in the browser. On the Windows PC, open the same address.",
-        "Each machine appears as a nearby device to the other — no Windows workgroup setup, no macOS file sharing to enable.",
-        "On the sending computer, tap the other one, then pick the files (or a whole folder) to send.",
-        "Turn on advanced verification (off by default) and both screens show the same short verification code. Check that it matches on both — that confirms both machines joined the same end-to-end encrypted session; it does not prove which network path carries the ciphertext. Left off, the session is still encrypted; it just has no code to compare.",
-        "Accept on the receiving side and the transfer starts immediately, streaming straight to disk.",
+      steps: [
+        {
+          text: "On the Mac, open the transfer page in the browser. On the Windows PC, open the same address.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Compare the public IP in the status pill on both machines. One shared address is what puts them in the same room — a corporate VPN on the work laptop is the usual reason two machines on one office network report different ones.",
+          code: ["Connected · this device MacBook · public IP 203.0.113.9"],
+        },
+        {
+          text: "Each machine now appears to the other under “Nearby devices” — no Windows workgroup setup, no macOS file sharing to enable. On the sending computer, click the other one and press “Open workspace”. On a current browser that is the single action the card offers, because files, folders and messages all travel over the one encrypted connection it opens.",
+        },
+        {
+          text: "The workspace replaces that card. Send from the controls under its header: “Send files” for a batch of up to 1,000, “Send a folder” for a whole tree, or type into the message box — “Enter for a new line · ⌘/Ctrl+Enter to send” — and press “Send”. On the receiving side, read the line under the request: in Chrome or Edge it says the browser will ask where to save, so you pick the folder yourself, and in Safari or Firefox it says the files go to the browser's own Downloads. Then press “Accept”.",
+        },
+        {
+          text: "Watch the file counter run to the last file on both screens. To compare a verification code (SAS) before any bytes move, turn on “Advanced verification” on both machines first: a match confirms both joined the same end-to-end encrypted session, and it does not prove which network path carries the ciphertext. Left off, the session is still encrypted and there is simply no code to compare.",
+        },
       ],
+      success: {
+        label: "What a working transfer looks like",
+        body: [
+          "The other machine's card is gone by then — the workspace took its place — so the state is read off the workspace header: the machine you are connected to, a link state of “Connected”, and one path badge reading “LAN direct”. The counter ends on the last file of the batch.",
+          "In the folder you picked, the tree arrives with its relative paths intact. A name already present in that directory target is not overwritten: report.pdf lands next to it as report (1).pdf. That renaming is Relayium's own, and it applies only where the browser handed us a directory to write into — Chrome or Edge with the folder picker. Without the picker the naming belongs to that browser's download manager instead, and you read the result in its own list: chrome://downloads in Chrome, edge://downloads in Edge, about:downloads in Firefox.",
+        ],
+        code: ["Connected to ThinkPad · Connected · LAN direct\nFile 12/12"],
+      },
+    },
+    {
+      heading: "When one machine can't see the other",
+      body: [
+        "On this pair a work VPN and a managed office network are the two worth checking first. They are common first checks rather than the whole list, and everything below is decided by something already on the screen rather than by a support ticket.",
+      ],
+      troubleshooting: {
+        label: "Symptom, check, fix",
+        items: [
+          {
+            symptom: "Neither machine appears under “Nearby devices”, even though both are on the office Wi-Fi.",
+            code: ["https://relayium.com/   # compare the public IP in the status pill on both machines"],
+            fix: "Two different public IP addresses mean two rooms, and a corporate VPN is one common cause: it carries one machine out through the company's address while the other leaves through the office router. A guest SSID that exits elsewhere is another, and they are not the only ones. If you are willing to change them, disconnect the VPN on that machine or leave the guest SSID, then reload https://relayium.com/ there. If the VPN has to stay up, a pairing code on https://relayium.com/cross-network reaches the other machine without dropping it.",
+          },
+          {
+            symptom: "Both machines show the same public IP and neither card appears.",
+            code: ["https://relayium.com/   # the hint under the device list names the router setting"],
+            fix: "The network is separating its own clients. On a router that is yours, turn off “AP isolation / client isolation”; on a managed office network that you cannot change, pair the two machines with a code on https://relayium.com/cross-network instead.",
+          },
+          {
+            symptom: "The Mac warns, before you accept, that the whole batch has to be held in memory.",
+            code: ["https://relayium.com/   # the line under the request says how this browser will save"],
+            fix: "Safari has no File System Access API, so it buffers the batch instead of writing it out, and Relayium warns past roughly 256 MiB. Receive the same batch in Chrome or Edge on that Mac: it streams each file straight to disk and asks you for a target folder first.",
+          },
+          {
+            symptom: "One file in a folder transfer fails on the Windows side while the rest arrive.",
+            code: ["https://relayium.com/   # the counter names the file it is on when it stops"],
+            fix: "Windows forbids the characters \\ / : * ? \" < > | in a file name and macOS does not, so a name that is legal on the Mac can be impossible to create on the PC. Rename that file on the Mac — a colon in a date like 2026:08:05 is the usual offender — and send it again.",
+          },
+          {
+            symptom: "The transfer works but the badge reads “P2P direct” instead of “LAN direct”.",
+            code: ["https://relayium.com/   # read the path badge in the workspace header"],
+            fix: "The two machines share a public IP without sharing a local hop, which is what two VLANs behind one office uplink look like. The transfer is still direct and still end-to-end encrypted; put both on the same subnet if you want the path to be your LAN rather than whatever route the browsers found.",
+          },
+        ],
+      },
     },
     {
       heading: "Mac and PC on different networks",
       body: [
-        "Working from home while the other machine is in the office, or just on a different Wi-Fi network? A pairing code connects a Mac and a Windows PC across the internet, not just across the room.",
-        "The sending computer generates a short pairing code (or a share link); enter it on the other machine to connect. A cross-network transfer runs over an encrypted TURN relay rather than a direct machine-to-machine link, and that is the deliberate design: between two different networks a direct path usually can't be found at all, and probing for one first would add roughly 20 seconds of dead time before the connection settled on the relay regardless. The relay only ever forwards ciphertext — the files are sealed end-to-end before they leave the sending machine, so it has nothing it can read. If the connection drops partway through a large folder, it resumes instead of starting over. This mode needs the sender to sign in; whoever is receiving never needs an account.",
+        "Working from home while the other machine is in the office, or just on a different Wi-Fi network? A pairing code connects a Mac and a Windows PC across the internet, not just across the room. A pairing-code room is a separate surface from a nearby-device workspace, though: it keeps the earlier per-device controls, so there is no “Open workspace” to press there.",
+        "The sending computer generates a short pairing code (or a share link); enter it on the other machine to connect. A cross-network transfer runs over an encrypted TURN relay rather than a direct machine-to-machine link, and that is the deliberate design: the session takes the relay from the start, so the connection does not depend on discovering a direct path through the NATs and firewalls between the two networks, which can prevent one. The relay only ever forwards ciphertext — the files are sealed end-to-end before they leave the sending machine, so it has nothing it can read. If the connection drops partway through a large folder, it resumes instead of starting over. This mode needs the sender to sign in; whoever is receiving never needs an account.",
       ],
     },
     {
@@ -70,7 +131,7 @@ const en = {
     {
       heading: "Will anything about the files change?",
       body: [
-        "No. Relayium transfers the original bytes exactly as they are — no re-compression, no reformatting, no line-ending or filename changes between the two operating systems.",
+        "The contents do not. Relayium transfers the original bytes exactly as they are — no re-compression, no reformatting, no line-ending rewriting between the two operating systems — and a folder keeps its relative paths. Two things do not make the crossing, and both belong to the filesystem rather than to the transfer: Windows forbids characters that macOS allows, so a name legal on the Mac can be impossible to create on the PC, and POSIX permission bits, ownership and macOS extended attributes are not carried over — the receiving browser writes ordinary files under NTFS's own permission model.",
         "Every file is checked end-to-end with a SHA-256 hash, so what lands on the Windows PC (or the Mac) is verified identical to what left the other machine. Large files are handled well too: a browser with the File System Access API — Chrome or Edge on the desktop — streams the download straight to disk with no size cap. Firefox and Safari don't have that API, so a batch received there is assembled in memory instead, and Relayium warns you before you accept once it goes past roughly 256 MB. That number is a deliberately conservative estimate rather than a measured limit — where it actually breaks down depends on the machine's memory, its OS and how much else is open.",
       ],
     },
@@ -92,7 +153,7 @@ const en = {
       },
       {
         q: "Will file permissions, line endings, or filenames get mangled crossing from Mac to Windows?",
-        a: "No. Relayium moves the exact bytes of each file and verifies them with a SHA-256 hash end-to-end — it doesn't touch line endings, encoding, or filenames. Anything an application-level conversion would need to handle (like CRLF vs LF in a text file) is unchanged because the file itself is unchanged.",
+        a: "The bytes and the relative path inside a folder are unchanged, verified with a SHA-256 hash end-to-end, so nothing touches line endings or encoding — anything an application-level conversion would need to handle (like CRLF vs LF in a text file) is unchanged because the file itself is unchanged. Two things genuinely do not cross: a name containing one of the characters Windows forbids can't be created on the PC at all, and POSIX permissions, ownership and macOS extended attributes are not transferred, because the receiving browser writes ordinary files under NTFS's own model.",
       },
       {
         q: "Is there a size limit?",
@@ -120,30 +181,91 @@ const zh = {
     {
       heading: "开始前需要准备什么",
       body: ["Mac 和 PC 都不用安装。同一网络下也不用注册——浏览器搞定一切。"],
-      bullets: [
-        "一台用 Safari 或 Chrome 的 Mac，一台用 Edge 或 Chrome 的 Windows PC——任意一侧用现代浏览器即可。",
-        "最简单的方式是把两台电脑接入同一个 Wi-Fi 或有线网络。如果它们不在同一处，配对码同样能连接起来。",
-        "要发送的文件或文件夹——每批最多 1,000 个文件。",
-      ],
+      prereqs: {
+        label: "你需要准备",
+        items: [
+          "一台用 Safari 或 Chrome 的 Mac，一台用 Edge 或 Chrome 的 Windows PC——任意一侧用现代浏览器即可。",
+          "最简单的方式是把两台电脑接入同一个 Wi-Fi 或有线网络。有线和无线混着用也没问题：同一台路由器下的有线 PC 和 Mac 仍然共享同一个公网 IP，而这正是把它们放进同一个房间的依据。",
+          "两台都通过 https://relayium.com/ 打开页面。加密传输需要 HTTPS，用普通 http:// 打开时页面会直接这么说，而不会列出设备。",
+          "如果这一批很大，接收那一侧请用 Chrome 或 Edge。只有它们能流式直接落盘，并让你先挑好目标文件夹——Safari 没有这个接口，只能把整批内容在内存里拼装。",
+          "要发送的文件或文件夹——每批最多 1,000 个文件。",
+        ],
+      },
     },
     {
       heading: "Mac 和 PC 在同一网络下",
       body: [
         "如果两台电脑在同一个办公室或家庭网络中，这是移动文件最快的方式——不用挂载共享盘，也不用跟权限较劲。",
       ],
-      bullets: [
-        "在 Mac 上，用浏览器打开 relayium.com；在 Windows PC 上，打开同一个地址。",
-        "两台机器会互相显示为附近的设备——不用设置 Windows 工作组，也不用开启 macOS 文件共享。",
-        "在发送方电脑上点击另一台，然后选择要发送的文件（或整个文件夹）。",
-        "打开「高级验证」（默认关闭）后，两边屏幕会显示同一段简短的校验码。核对两边是否一致——它确认两台电脑加入了同一个端到端加密会话，并不证明密文采用了哪条网络路径。不打开它，会话依然是加密的，只是没有可核对的码。",
-        "在接收方确认接收，传输立即开始，直接流式写入磁盘。",
+      steps: [
+        {
+          text: "在 Mac 上用浏览器打开传输页面；在 Windows PC 上打开同一个地址。",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "对比两台机器上状态条里的公网 IP。共享同一个地址才会把它们放进同一个房间——同一个办公网络里的两台机器却报出不同地址，通常是工作笔记本上开着公司 VPN。",
+          code: ["已连接 · 本机 MacBook · 公网 IP 203.0.113.9"],
+        },
+        {
+          text: "现在两台机器会在「附近的设备」里互相出现——不用设置 Windows 工作组，也不用开启 macOS 文件共享。在发送方电脑上点击另一台，然后按「打开工作区」。在当前浏览器上，这是卡片提供的唯一一个动作——因为接下来文件、文件夹和消息都走它打开的那一条加密连接。",
+        },
+        {
+          text: "工作区会取代那张卡片。发送用它标题栏下面的控件：「发送文件」发一批（最多 1,000 个），整个目录树用「发送文件夹」，或者直接在消息框里打字——「回车换行 · ⌘/Ctrl+回车发送」——然后按「发送」。在接收方读一下请求下面那行：用 Chrome 或 Edge 时它会说浏览器要问你存到哪，也就是由你自己挑文件夹；用 Safari 或 Firefox 时它会说文件进入浏览器自己的下载目录。然后按「接收」。",
+        },
+        {
+          text: "看着两块屏幕上的文件计数走到最后一个文件。如果想在任何字节移动之前核对校验码（SAS），先在两台机器上打开「高级验证」：一致说明双方加入了同一个端到端加密会话，并不证明密文采用了哪条网络路径。不打开它，会话依然是加密的，只是没有可核对的码。",
+        },
       ],
+      success: {
+        label: "传输成功时是什么样",
+        body: [
+          "这时对方的卡片已经不在了——工作区取代了它——所以状态要从工作区标题栏上读：你连到了哪台机器、连接状态是「已连接」，以及唯一一个路径标签显示「局域网直连」。计数停在这一批的最后一个文件。",
+          "在你挑好的文件夹里，目录树会保持相对路径地落地。目标目录里已经存在的同名文件不会被覆盖：report.pdf 会以 report (1).pdf 的名字落在它旁边。这个改名是 Relayium 自己做的，而且只在浏览器把一个目录交给我们写入时才生效——也就是带文件夹选择器的 Chrome 或 Edge。没有选择器时，命名归那个浏览器的下载管理器，结果要在它自己的列表里看：chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)。",
+        ],
+        code: ["已连接到 ThinkPad · 已连接 · 局域网直连\n文件 12/12"],
+      },
+    },
+    {
+      heading: "一台机器看不到另一台时",
+      body: [
+        "在这一对组合里，工作 VPN 和受管控的办公网络是最值得先查的两项。它们属于常见的首轮排查，而不是全部可能；下面每一种都能靠屏幕上已有的东西判定，不需要找客服。",
+      ],
+      troubleshooting: {
+        label: "现象、检查、处理",
+        items: [
+          {
+            symptom: "两台机器都连着办公 Wi-Fi，但「附近的设备」里谁也不出现。",
+            code: ["https://relayium.com/   # 对比两台机器上状态条里的公网 IP"],
+            fix: "两个不同的公网 IP 就是两个房间，而公司 VPN 是常见原因之一：它把一台机器从公司的出口地址带出去，另一台却还从办公室路由器出去。从别处出网的访客 SSID 是另一种，两者都不是唯一可能。如果你愿意改：在那台机器上断开 VPN，或者离开访客 SSID，然后在那里重新加载 https://relayium.com/。如果 VPN 必须一直开着，用 https://relayium.com/cross-network 上的配对码也能连到另一台机器，不用断开它。",
+          },
+          {
+            symptom: "两台机器显示的公网 IP 相同，却都不出现卡片。",
+            code: ["https://relayium.com/   # 设备列表下方的提示写着要改的那个路由器开关"],
+            fix: "网络把自己的客户端隔开了。路由器如果是你自己的，就关闭「AP 隔离 / 客户端隔离」；如果是你无权改动的受管办公网络，就改用 https://relayium.com/cross-network 上的配对码让两台机器配对。",
+          },
+          {
+            symptom: "还没点接收，Mac 就警告说整批文件必须放在内存里。",
+            code: ["https://relayium.com/   # 请求下面那行写着这个浏览器会怎么保存"],
+            fix: "Safari 没有 File System Access API，所以它会把整批缓存起来而不是直接写出去，超过大约 256 MiB 时 Relayium 就会警告。请在那台 Mac 上换用 Chrome 或 Edge 接收：它会把每个文件流式直接落盘，并且先问你要存到哪个目标文件夹。",
+          },
+          {
+            symptom: "文件夹传输里其余文件都到了，只有一个在 Windows 侧失败。",
+            code: ["https://relayium.com/   # 计数停下时会显示它当时正在处理哪个文件"],
+            fix: "Windows 不允许文件名里出现 \\ / : * ? \" < > |，而 macOS 允许，所以在 Mac 上合法的名字在 PC 上可能根本无法创建。请在 Mac 上给那个文件改名——像 2026:08:05 这样日期里的冒号是最常见的元凶——然后重新发送。",
+          },
+          {
+            symptom: "传输能跑，但标签显示的是「P2P 直连」而不是「局域网直连」。",
+            code: ["https://relayium.com/   # 看工作区标题栏里的路径标签"],
+            fix: "两台机器共享同一个公网 IP，却没有共享本地的那一跳——同一条办公上行下的两个 VLAN 就是这个样子。传输仍然是直连，也仍然端到端加密；如果你要的是走局域网而不是浏览器找到的那条路径，就把两台放到同一个子网里。",
+          },
+        ],
+      },
     },
     {
       heading: "Mac 和 PC 不在同一网络",
       body: [
-        "在家办公而另一台机器在办公室，或者只是连在不同的 Wi-Fi 上？配对码能让 Mac 和 Windows PC 跨越互联网连接，而不仅仅是跨越房间。",
-        "发送方电脑会生成一段简短的配对码（或一个分享链接）；在另一台机器上输入即可连接。跨网络的传输走的是加密 TURN 中继，而不是两台机器之间的直连，这是刻意的设计：在两个不同网络之间，直连路径通常根本找不到，先探一遍只会白白多花二十秒左右，最后照样落到中继上。中继只转发密文——文件在离开发送端之前就已完成端到端加密，所以它拿不到任何能读的东西。如果传输一个大文件夹时连接中途断开，可以续传而不必从头再来。这种方式需要发送方登录；接收方始终无需账号。",
+        "在家办公而另一台机器在办公室，或者只是连在不同的 Wi-Fi 上？配对码能让 Mac 和 Windows PC 跨越互联网连接，而不仅仅是跨越房间。不过配对码房间和「附近的设备」工作区是两套界面：它保留的是早先那套按设备分开的控件，那里没有「打开工作区」可按。",
+        "发送方电脑会生成一段简短的配对码（或一个分享链接）；在另一台机器上输入即可连接。跨网络的传输走的是加密 TURN 中继，而不是两台机器之间的直连，这是刻意的设计：这类会话一开始就走中继，因此连接不依赖在两个网络之间的 NAT 和防火墙里探测出一条直连路径——它们可能挡住这样的路径。中继只转发密文——文件在离开发送端之前就已完成端到端加密，所以它拿不到任何能读的东西。如果传输一个大文件夹时连接中途断开，可以续传而不必从头再来。这种方式需要发送方登录；接收方始终无需账号。",
       ],
     },
     {
@@ -170,7 +292,7 @@ const zh = {
     {
       heading: "文件会有任何改变吗？",
       body: [
-        "不会。Relayium 按原始字节精确传输——不重新压缩、不重新格式化，两个系统之间也不会改动换行符或文件名。",
+        "内容不会。Relayium 按原始字节精确传输——不重新压缩、不重新格式化，两个系统之间也不会改动换行符——文件夹的相对路径也保持不变。但有两样东西过不去，而且都属于文件系统而不是传输本身：Windows 禁止 macOS 允许的一些字符，所以在 Mac 上合法的名字在 PC 上可能根本无法创建；另外 POSIX 权限位、所属关系和 macOS 扩展属性都不会被带过去——接收端浏览器写出的是普通文件，遵循 NTFS 自己的权限模型。",
         "每个文件都用 SHA-256 做端到端校验，所以落到 Windows PC（或 Mac）上的内容，经验证与从另一台机器发出的完全一致。大文件也处理得很好：支持 File System Access API 的浏览器——桌面版 Chrome、Edge——会把下载直接流式写入磁盘，没有大小上限。Firefox 和 Safari 没有这个 API，在它们那边接收时整批文件只能先攒在内存里，因此一旦超过约 256 MB，Relayium 会在你点「接收」之前先提示一次。这个数字是刻意取的保守估计，而不是实测出来的上限——真正撑不住的临界点取决于这台机器的内存、系统以及还开着多少东西。",
       ],
     },
@@ -192,7 +314,7 @@ const zh = {
       },
       {
         q: "从 Mac 传到 Windows，文件权限、换行符或文件名会被弄乱吗？",
-        a: "不会。Relayium 传输的是每个文件的精确字节，并用 SHA-256 哈希做端到端校验——不会触碰换行符、编码或文件名。任何需要应用层转换处理的东西（比如文本文件里 CRLF 和 LF 的区别）都不受影响，因为文件本身没有被改动。",
+        a: "字节和文件夹内的相对路径不变，并用 SHA-256 哈希做端到端校验，所以换行符和编码都不会被触碰——任何需要应用层转换处理的东西（比如文本文件里 CRLF 和 LF 的区别）都不受影响，因为文件本身没有被改动。但确实有两样东西过不去：名字里带有 Windows 禁止字符的文件在 PC 上根本无法创建；POSIX 权限、所属关系和 macOS 扩展属性也不会被传输，因为接收端浏览器写出的是遵循 NTFS 自身模型的普通文件。",
       },
       {
         q: "有大小限制吗？",
@@ -222,30 +344,91 @@ const ja = {
       body: [
         "Mac にも PC にもインストールは不要です。同じネットワークなら登録も不要です。ブラウザがすべて処理します。",
       ],
-      bullets: [
-        "Safari か Chrome を使う Mac と、Edge か Chrome を使う Windows パソコン（どちらも最新のブラウザで構いません）。",
-        "最もシンプルな方法は、両方の端末を同じ Wi-Fi または有線ネットワークに接続することです。別々の場所にあっても、ペアリングコードでつなげます。",
-        "送りたいファイルまたはフォルダ（1バッチあたり最大1,000ファイル）。",
-      ],
+      prereqs: {
+        label: "必要なもの",
+        items: [
+          "Safari か Chrome を使う Mac と、Edge か Chrome を使う Windows パソコン（どちらも最新のブラウザで構いません）。",
+          "最もシンプルな方法は、両方の端末を同じ Wi-Fi または有線ネットワークに接続することです。有線と無線が混ざっていても問題ありません。同じルーター配下なら有線の PC と Mac も同じグローバル IP を共有し、それが 2台を同じルームに入れる根拠になります。",
+          "両方で https://relayium.com/ からページを開いていること。暗号化転送には HTTPS が必要で、素の http:// で開くと端末を一覧せずにその旨を表示します。",
+          "大きなバッチを送るなら、受信する側は Chrome か Edge にしてください。ディスクへ直接ストリーミングでき、保存先フォルダを先に選べるのはその 2つだけです。Safari にはその API がなく、バッチをメモリ上で組み立てることになります。",
+          "送りたいファイルまたはフォルダ（1バッチあたり最大1,000ファイル）。",
+        ],
+      },
     },
     {
       heading: "Mac と PC が同じネットワークにある場合",
       body: [
         "両方のパソコンが同じオフィスや自宅のネットワークにあれば、これがファイルを移す最速の方法です。共有ドライブをマウントする必要も、権限で苦労する必要もありません。",
       ],
-      bullets: [
-        "Mac でブラウザから relayium.com を開きます。Windows パソコンでも同じアドレスを開きます。",
-        "各端末はもう一方に近くの端末として表示されます。Windows のワークグループ設定も、macOS のファイル共有を有効にする必要もありません。",
-        "送信側のパソコンでもう一方をタップし、送るファイル（またはフォルダ丸ごと）を選びます。",
-        "「高度な検証」（既定はオフ）をオンにすると、両方の画面に同じ短い検証コードが表示されます。一致するか確認してください。これは2台が同じエンドツーエンド暗号化セッションに参加したことを確認するもので、暗号文が通るネットワーク経路を証明するものではありません。オフのままでもセッションは暗号化されており、照合すべきコードが出ないだけです。",
-        "受信側で承認すると転送がすぐに始まり、ディスクへ直接ストリーミングされます。",
+      steps: [
+        {
+          text: "Mac でブラウザから転送ページを開きます。Windows パソコンでも同じアドレスを開きます。",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "両方の端末のステータス表示にあるグローバル IP を比べます。同じアドレスを共有していることが 2台を同じルームに入れる条件です。同じオフィスネットワークにいる 2台が違うアドレスを示す場合、原因はたいてい業務用ノート PC で有効な社内 VPN です。",
+          code: ["接続済み · このデバイス MacBook · グローバル IP 203.0.113.9"],
+        },
+        {
+          text: "これで各端末が「近くのデバイス」に互いを表示します。Windows のワークグループ設定も、macOS のファイル共有を有効にする必要もありません。送信側のパソコンでもう一方を選び、「ワークスペースを開く」を押します。最新のブラウザではカードが提供する動作はこれ 1 つだけで、以降はファイルもフォルダもメッセージも、そこで開かれる 1 本の暗号化接続を通ります。",
+        },
+        {
+          text: "ワークスペースがそのカードに取って代わります。送信はヘッダーの下のコントロールで行います：1 バッチ最大 1,000 ファイルなら「ファイルを送信」、ディレクトリ全体なら「フォルダを送信」、あるいはメッセージ欄に入力して——「Enter で改行 · ⌘/Ctrl+Enter で送信」——「送信」を押します。受信側ではリクエストの下の行を読んでください。Chrome か Edge ならブラウザが保存先を尋ねる、つまりフォルダを自分で選ぶと書かれ、Safari か Firefox ならブラウザ自身のダウンロード先に入ると書かれています。読んだうえで「受信」を押します。",
+        },
+        {
+          text: "両方の画面でファイルカウンターが最後のファイルに達するまで見守ります。1 バイトも動く前に検証コード（SAS）を照合したい場合は、先に両方の端末で「高度な検証」をオンにしてください。一致は2台が同じエンドツーエンド暗号化セッションに参加したことを確認するもので、暗号文が通るネットワーク経路を証明するものではありません。オフのままでもセッションは暗号化されており、照合すべきコードが出ないだけです。",
+        },
       ],
+      success: {
+        label: "転送が成功したときの画面",
+        body: [
+          "この時点でもう一方のカードはありません——ワークスペースが取って代わったからです。状態はワークスペースのヘッダーから読みます：接続先の端末、「接続済み」というリンク状態、そして唯一の経路バッジ「LAN直結」。カウンターはそのバッチの最後のファイルで止まります。",
+          "選んだフォルダには、ツリーが相対パスそのままで届きます。その書き込み先ディレクトリにすでに同名のファイルがある場合も上書きされません。report.pdf はその隣に report (1).pdf として着地します。この改名は Relayium 自身が行うもので、ブラウザが書き込み先ディレクトリを渡してきた場合——つまりフォルダ選択のある Chrome か Edge——に限られます。選択できない場合、名前の付け方はそのブラウザのダウンロード管理に委ねられ、結果はそのブラウザ自身の一覧で確認します：chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)。",
+        ],
+        code: ["ThinkPad に接続済み · 接続済み · LAN直結\nファイル 12/12"],
+      },
+    },
+    {
+      heading: "片方の端末がもう片方を見つけられないとき",
+      body: [
+        "この組み合わせでは、業務用 VPN と管理されたオフィスネットワークがまず確認する価値のある 2 つです。これらは網羅した一覧ではなく定番の初手で、以下はどれも問い合わせではなく画面上にあるものだけで判別できます。",
+      ],
+      troubleshooting: {
+        label: "症状・確認・対処",
+        items: [
+          {
+            symptom: "両方ともオフィスの Wi-Fi にいるのに、「近くのデバイス」にどちらも現れない。",
+            code: ["https://relayium.com/   # 両方の端末のステータス表示にあるグローバル IP を比べる"],
+            fix: "グローバル IP が 2つ違えばルームも 2つで、社内 VPN はよくある原因の 1 つです。一方の端末を会社の出口アドレス経由で外に出し、もう一方はオフィスのルーターから出ていくためです。別の出口を使うゲスト SSID がもう 1 つで、これらが唯一の原因ではありません。変更してよいなら、その端末で VPN を切る、あるいはゲスト SSID から離れ、そこで https://relayium.com/ を再読み込みしてください。VPN を切れない場合は、https://relayium.com/cross-network のペアリングコードなら VPN を落とさずにもう一方の端末へ届きます。",
+          },
+          {
+            symptom: "両方の端末が同じグローバル IP を表示しているのに、どちらのカードも現れない。",
+            code: ["https://relayium.com/   # 端末一覧の下のヒントに、変更すべきルーター設定名がある"],
+            fix: "ネットワークが自分のクライアントを隔てています。自分のルーターなら「AP 分離 / クライアント分離」をオフにしてください。変更できない管理されたオフィスネットワークなら、https://relayium.com/cross-network のコードで 2台をペアリングします。",
+          },
+          {
+            symptom: "承認する前に、Mac がバッチ全体をメモリに保持しなければならないと警告する。",
+            code: ["https://relayium.com/   # リクエストの下の行に、このブラウザの保存方法が書かれている"],
+            fix: "Safari には File System Access API がないため、書き出す代わりにバッチを抱え込み、おおよそ 256 MiB を超えると Relayium が警告します。その Mac で Chrome か Edge に切り替えて受け取ってください。各ファイルをディスクへ直接ストリーミングし、先に保存先フォルダを尋ねます。",
+          },
+          {
+            symptom: "フォルダ転送で他のファイルは届いたのに、1つだけ Windows 側で失敗する。",
+            code: ["https://relayium.com/   # 止まった時点でカウンターがどのファイルかを示す"],
+            fix: "Windows はファイル名に \\ / : * ? \" < > | を許さず、macOS は許すため、Mac では正当な名前が PC では作成できないことがあります。その Mac 側でファイル名を変更してから送り直してください。2026:08:05 のような日付のコロンが最も多い原因です。",
+          },
+          {
+            symptom: "転送は動くが、バッジが「LAN直結」ではなく「P2P直結」になっている。",
+            code: ["https://relayium.com/   # ワークスペースのヘッダーにある経路バッジを読む"],
+            fix: "2台はグローバル IP を共有しているのに、ローカルなホップは共有していません。1本のオフィス上流にぶら下がる 2つの VLAN がまさにこの形です。転送は依然として直接で、依然としてエンドツーエンド暗号化です。経路をブラウザが見つけた道ではなく LAN にしたいなら、両方を同じサブネットに置いてください。",
+          },
+        ],
+      },
     },
     {
       heading: "Mac と PC が異なるネットワークにある場合",
       body: [
-        "自宅から作業していて、もう一方のパソコンはオフィスにある、あるいは単に別の Wi-Fi につながっている。そんなときも、ペアリングコードは Mac と Windows パソコンを部屋を越えるだけでなく、インターネット越しにつなげます。",
-        "送信側のパソコンが短いペアリングコード（または共有リンク）を生成するので、もう一方の端末で入力して接続します。ネットワークをまたぐ転送は、端末同士の直接接続ではなく暗号化された TURN リレー経由で行われます。これは意図的な設計です。異なるネットワークの間では直接経路がそもそも見つからないことがほとんどで、先に探すと接続確立に20秒ほど無駄が加わったあげく結局リレーに落ち着くからです。リレーが転送するのは暗号文だけで、ファイルは送信側のパソコンを出る前にエンドツーエンドで封印されているため、読めるものは何も渡りません。大きなフォルダの転送中に接続が切れても、最初からではなく再開できます。この方式には送信側のサインインが必要です。受信側はアカウント不要です。",
+        "自宅から作業していて、もう一方のパソコンはオフィスにある、あるいは単に別の Wi-Fi につながっている。そんなときも、ペアリングコードは Mac と Windows パソコンを部屋を越えるだけでなく、インターネット越しにつなげます。ただしペアリングコードのルームは「近くのデバイス」のワークスペースとは別の画面で、以前どおり端末ごとに分かれたコントロールのままなので、そこに「ワークスペースを開く」はありません。",
+        "送信側のパソコンが短いペアリングコード（または共有リンク）を生成するので、もう一方の端末で入力して接続します。ネットワークをまたぐ転送は、端末同士の直接接続ではなく暗号化された TURN リレー経由で行われます。これは意図的な設計です。この種のセッションは最初からリレーを使うため、接続の成立は、2 つのネットワークの間にある NAT やファイアウォールを越える直接の経路を見つけられるかどうかに左右されません。NAT やファイアウォールが直接の経路を塞ぐこともあります。リレーが転送するのは暗号文だけで、ファイルは送信側のパソコンを出る前にエンドツーエンドで封印されているため、読めるものは何も渡りません。大きなフォルダの転送中に接続が切れても、最初からではなく再開できます。この方式には送信側のサインインが必要です。受信側はアカウント不要です。",
       ],
     },
     {
@@ -272,7 +455,7 @@ const ja = {
     {
       heading: "ファイルに何か変化はありますか？",
       body: [
-        "ありません。Relayium は元のバイトをそのまま正確に転送します。再圧縮も再フォーマットもなく、2つの OS の間で改行コードやファイル名が変わることもありません。",
+        "内容は変わりません。Relayium は元のバイトをそのまま正確に転送します。再圧縮も再フォーマットもなく、2つの OS の間で改行コードが書き換わることもなく、フォルダの相対パスも保たれます。ただし渡らないものが 2 つあり、どちらも転送ではなくファイルシステムに属します。Windows は macOS が許す文字を禁じているため、Mac では正当な名前が PC では作成できないことがあります。そして POSIX のパーミッションビット、所有者、macOS の拡張属性は引き継がれません——受信側のブラウザが書き出すのは、NTFS 自身のパーミッションモデルに従う普通のファイルです。",
         "各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されるので、Windows パソコン（または Mac）に届くものは、もう一方の端末から送られたものと同一であることが確認されます。大きなファイルもうまく扱えます。File System Access API を備えたブラウザ（パソコン版の Chrome や Edge）なら、ダウンロードはサイズ上限なしでそのままディスクにストリーミングされます。Firefox と Safari にはこの API がないため、そちらで受信するとひとまとめにメモリへ溜めることになり、およそ 256MB を超えると Relayium が受け取る前に警告を出します。この数値は実測した上限ではなく意図的に控えめに置いた目安で、実際に破綻する地点はそのパソコンのメモリ・OS・ほかに何を開いているかによって変わります。",
       ],
     },
@@ -294,7 +477,7 @@ const ja = {
       },
       {
         q: "Mac から Windows に渡ると、ファイル権限や改行コード、ファイル名が崩れませんか？",
-        a: "崩れません。Relayium は各ファイルの正確なバイトを移動し、SHA-256 ハッシュでエンドツーエンドに検証します。改行コード、エンコーディング、ファイル名には一切触れません。アプリケーション側の変換が必要になるようなもの（テキストファイルの CRLF と LF の違いなど）は、ファイル自体が変更されないため影響を受けません。",
+        a: "バイトとフォルダ内の相対パスは変わらず、SHA-256 ハッシュでエンドツーエンドに検証されるので、改行コードやエンコーディングには一切触れません。アプリケーション側の変換が必要になるようなもの（テキストファイルの CRLF と LF の違いなど）は、ファイル自体が変更されないため影響を受けません。ただし本当に渡らないものが 2 つあります。Windows が禁じる文字を含む名前は PC 側でそもそも作成できません。そして POSIX のパーミッション、所有者、macOS の拡張属性は転送されません——受信側のブラウザが書き出すのは NTFS 自身のモデルに従う普通のファイルだからです。",
       },
       {
         q: "サイズに制限はありますか？",
@@ -324,30 +507,91 @@ const ko = {
       body: [
         "Mac이나 PC 어느 쪽에도 설치할 것이 없습니다. 같은 네트워크에서는 가입할 것도 없습니다 — 브라우저가 모든 걸 처리합니다.",
       ],
-      bullets: [
-        "Safari나 Chrome을 쓰는 Mac과 Edge나 Chrome을 쓰는 Windows PC — 어느 쪽이든 최신 브라우저면 됩니다.",
-        "가장 간단한 방법은 두 기기를 같은 Wi-Fi나 유선 네트워크에 연결하는 것입니다. 서로 다른 장소에 있어도 페어링 코드로 이어줄 수 있습니다.",
-        "보내려는 파일이나 폴더 — 배치당 최대 1,000개 파일.",
-      ],
+      prereqs: {
+        label: "필요한 것",
+        items: [
+          "Safari나 Chrome을 쓰는 Mac과 Edge나 Chrome을 쓰는 Windows PC — 어느 쪽이든 최신 브라우저면 됩니다.",
+          "가장 간단한 방법은 두 기기를 같은 Wi-Fi나 유선 네트워크에 연결하는 것입니다. 둘을 섞어도 됩니다. 같은 공유기 아래라면 유선 PC와 Mac도 같은 공인 IP를 공유하고, 그것이 둘을 같은 방에 넣는 근거입니다.",
+          "두 기기 모두 https://relayium.com/ 으로 페이지를 열어야 합니다. 암호화 전송에는 HTTPS가 필요하며, 평범한 http:// 로 열면 기기를 나열하는 대신 그 사실을 알립니다.",
+          "배치가 크다면 받는 쪽은 Chrome이나 Edge로 하세요. 디스크로 바로 스트리밍하고 대상 폴더를 먼저 고를 수 있는 것은 그 둘뿐입니다. Safari에는 그 API가 없어 배치를 메모리에서 조립해야 합니다.",
+          "보내려는 파일이나 폴더 — 배치당 최대 1,000개 파일.",
+        ],
+      },
     },
     {
       heading: "Mac과 PC가 같은 네트워크에 있을 때",
       body: [
         "두 컴퓨터가 같은 사무실이나 가정 네트워크에 있다면, 이것이 파일을 옮기는 가장 빠른 방법입니다 — 공유 드라이브를 마운트할 필요도, 권한과 씨름할 필요도 없습니다.",
       ],
-      bullets: [
-        "Mac에서 브라우저로 relayium.com을 엽니다. Windows PC에서도 같은 주소를 엽니다.",
-        "각 기기가 상대에게 근처 기기로 나타납니다 — Windows 작업 그룹 설정도, macOS 파일 공유 활성화도 필요 없습니다.",
-        "보내는 컴퓨터에서 다른 쪽을 탭한 다음, 보낼 파일(또는 폴더 전체)을 고릅니다.",
-        "고급 검증(기본값 꺼짐)을 켜면 양쪽 화면에 같은 짧은 검증 코드가 표시됩니다. 일치하는지 확인하세요 — 두 컴퓨터가 같은 종단간 암호화 세션에 참여했음을 확인할 뿐, 암호문이 어떤 네트워크 경로로 이동하는지는 증명하지 않습니다. 꺼 두어도 세션은 여전히 암호화되며, 대조할 코드가 없을 뿐입니다.",
-        "받는 쪽에서 수락하면 전송이 즉시 시작되어 디스크로 곧바로 스트리밍됩니다.",
+      steps: [
+        {
+          text: "Mac에서 브라우저로 전송 페이지를 엽니다. Windows PC에서도 같은 주소를 엽니다.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "두 기기의 상태 표시에 있는 공인 IP를 비교합니다. 주소를 하나 공유하는 것이 둘을 같은 방에 넣는 조건입니다. 같은 사무실 네트워크의 두 기기가 서로 다른 주소를 보인다면 보통 업무용 노트북에 켜진 회사 VPN 때문입니다.",
+          code: ["연결됨 · 내 기기 MacBook · 공인 IP 203.0.113.9"],
+        },
+        {
+          text: "이제 두 기기가 “주변 기기”에서 서로 나타납니다 — Windows 작업 그룹 설정도, macOS 파일 공유 활성화도 필요 없습니다. 보내는 컴퓨터에서 다른 쪽을 누르고 “작업 공간 열기”를 누르세요. 최신 브라우저에서 카드가 제공하는 동작은 이 하나뿐입니다 — 이후 파일과 폴더와 메시지가 모두 그때 열리는 암호화된 연결 하나를 지나기 때문입니다.",
+        },
+        {
+          text: "작업 공간이 그 카드를 대신합니다. 보내기는 헤더 아래의 컨트롤로 합니다: 한 배치에 최대 1,000개라면 “파일 보내기”, 디렉터리 전체라면 “폴더 보내기”, 또는 메시지 상자에 입력하고 — “Enter 로 줄바꿈 · ⌘/Ctrl+Enter 로 전송” — “보내기”를 누릅니다. 받는 쪽에서는 요청 아래 줄을 읽으세요. Chrome이나 Edge라면 브라우저가 저장 위치를 묻는다고, 즉 폴더를 직접 고른다고 적혀 있고, Safari나 Firefox라면 파일이 브라우저 자체 다운로드 폴더로 간다고 적혀 있습니다. 그다음 “받기”를 누릅니다.",
+        },
+        {
+          text: "두 화면에서 파일 카운터가 마지막 파일까지 가는 것을 지켜보세요. 한 바이트도 움직이기 전에 검증 코드(SAS)를 대조하려면 먼저 두 기기에서 “고급 검증”을 켜세요. 일치한다는 것은 둘이 같은 종단간 암호화 세션에 참여했음을 확인할 뿐, 암호문이 어떤 네트워크 경로로 이동하는지는 증명하지 않습니다. 꺼 두어도 세션은 여전히 암호화되며, 대조할 코드가 없을 뿐입니다.",
+        },
       ],
+      success: {
+        label: "전송이 잘될 때의 화면",
+        body: [
+          "그때쯤 상대 카드는 사라져 있습니다 — 작업 공간이 그 자리를 차지했으니까요 — 그래서 상태는 작업 공간 헤더에서 읽습니다: 연결된 기기, “연결됨”이라는 링크 상태, 그리고 하나뿐인 경로 배지 “LAN 직접”. 카운터는 그 배치의 마지막 파일에서 멈춥니다.",
+          "고른 폴더에는 트리가 상대 경로를 그대로 유지한 채 도착합니다. 그 대상 디렉터리에 이미 같은 이름이 있어도 덮어쓰지 않습니다. report.pdf는 그 옆에 report (1).pdf로 내려앉습니다. 이 이름 변경은 Relayium 자신이 하는 것이며, 브라우저가 쓸 디렉터리를 넘겨준 경우 — 폴더 선택기가 있는 Chrome이나 Edge — 에만 적용됩니다. 선택기가 없으면 이름 짓기는 그 브라우저의 다운로드 관리자 몫이고, 결과는 그 브라우저 자체 목록에서 확인합니다: chrome://downloads (Chrome), edge://downloads (Edge), about:downloads (Firefox).",
+        ],
+        code: ["ThinkPad 에 연결됨 · 연결됨 · LAN 직접\n파일 12/12"],
+      },
+    },
+    {
+      heading: "한쪽 기기가 다른 쪽을 못 볼 때",
+      body: [
+        "이 조합에서는 업무용 VPN과 관리되는 사무실 네트워크가 먼저 확인할 만한 두 가지입니다. 전부를 담은 목록이 아니라 흔한 1차 점검이며, 아래는 모두 문의가 아니라 이미 화면에 있는 것으로 판단됩니다.",
+      ],
+      troubleshooting: {
+        label: "증상, 확인, 조치",
+        items: [
+          {
+            symptom: "둘 다 사무실 Wi-Fi에 있는데도 “주변 기기”에 어느 쪽도 나타나지 않습니다.",
+            code: ["https://relayium.com/   # 두 기기의 상태 표시에 있는 공인 IP를 비교한다"],
+            fix: "공인 IP가 다르면 방도 둘이고, 회사 VPN은 흔한 원인 하나입니다. 한 기기는 회사 출구 주소로 나가고 다른 기기는 사무실 공유기로 나가기 때문입니다. 다른 출구로 나가는 게스트 SSID가 또 하나이며, 이 둘만 있는 것은 아닙니다. 바꿔도 괜찮다면 그 기기에서 VPN을 끊거나 게스트 SSID에서 빠져나온 뒤 거기서 https://relayium.com/ 을 다시 불러오세요. VPN을 계속 켜 두어야 한다면 https://relayium.com/cross-network 의 페어링 코드가 VPN을 끊지 않고 상대 기기에 닿습니다.",
+          },
+          {
+            symptom: "두 기기가 같은 공인 IP를 보여주는데도 어느 카드도 나타나지 않습니다.",
+            code: ["https://relayium.com/   # 기기 목록 아래 안내에 바꿔야 할 공유기 설정 이름이 있다"],
+            fix: "네트워크가 자기 클라이언트를 갈라놓고 있습니다. 내 공유기라면 ‘AP 격리 / 클라이언트 격리’를 끄고, 손댈 수 없는 관리형 사무실 네트워크라면 https://relayium.com/cross-network 의 코드로 두 기기를 페어링하세요.",
+          },
+          {
+            symptom: "받기를 누르기 전에, Mac이 배치 전체를 메모리에 담아야 한다고 경고합니다.",
+            code: ["https://relayium.com/   # 요청 아래 줄에 이 브라우저가 어떻게 저장할지 적혀 있다"],
+            fix: "Safari에는 File System Access API가 없어 내보내는 대신 배치를 안고 있으며, 대략 256 MiB를 넘으면 Relayium이 경고합니다. 그 Mac에서 Chrome이나 Edge로 받으세요. 파일마다 디스크로 바로 스트리밍하고 대상 폴더를 먼저 물어봅니다.",
+          },
+          {
+            symptom: "폴더 전송에서 나머지는 도착했는데 한 파일만 Windows 쪽에서 실패합니다.",
+            code: ["https://relayium.com/   # 멈춘 시점에 카운터가 어느 파일인지 보여준다"],
+            fix: "Windows는 파일 이름에 \\ / : * ? \" < > | 를 허용하지 않고 macOS는 허용하므로, Mac에서 적법한 이름이 PC에서는 만들어질 수 없습니다. Mac에서 그 파일 이름을 바꾸고 다시 보내세요 — 2026:08:05 같은 날짜의 콜론이 가장 흔한 원인입니다.",
+          },
+          {
+            symptom: "전송은 되지만 배지가 “LAN 직접”이 아니라 “P2P 직접”으로 나옵니다.",
+            code: ["https://relayium.com/   # 작업 공간 헤더의 경로 배지를 읽는다"],
+            fix: "두 기기가 공인 IP는 공유하지만 로컬 홉은 공유하지 않습니다. 사무실 회선 하나 아래의 두 VLAN이 바로 그런 모습입니다. 전송은 여전히 직접이고 여전히 종단간 암호화입니다. 경로를 브라우저가 찾은 길이 아니라 LAN으로 만들고 싶다면 둘을 같은 서브넷에 두세요.",
+          },
+        ],
+      },
     },
     {
       heading: "Mac과 PC가 다른 네트워크에 있을 때",
       body: [
-        "집에서 작업 중인데 다른 컴퓨터는 사무실에 있거나, 그냥 다른 Wi-Fi에 연결되어 있나요? 페어링 코드는 Mac과 Windows PC를 방을 넘어서뿐 아니라 인터넷 너머로도 연결해 줍니다.",
-        "보내는 컴퓨터가 짧은 페어링 코드(또는 공유 링크)를 생성하면, 다른 기기에서 입력해 연결합니다. 네트워크를 넘는 전송은 기기 간 직접 연결이 아니라 암호화된 TURN 릴레이를 거치며, 이는 의도된 설계입니다. 서로 다른 네트워크 사이에서는 직접 경로가 아예 없는 경우가 대부분이라, 먼저 탐색하면 연결에 20초쯤 헛되이 더 걸리고도 결국 릴레이로 가게 되기 때문입니다. 릴레이는 암호문만 전달합니다 — 파일은 보내는 컴퓨터를 떠나기 전에 종단간으로 봉인되므로 릴레이가 읽을 수 있는 것은 아무것도 없습니다. 큰 폴더를 전송하다가 중간에 연결이 끊겨도 처음부터가 아니라 이어서 재개됩니다. 이 방식은 보내는 쪽의 로그인이 필요합니다 — 받는 쪽은 계정이 필요 없습니다.",
+        "집에서 작업 중인데 다른 컴퓨터는 사무실에 있거나, 그냥 다른 Wi-Fi에 연결되어 있나요? 페어링 코드는 Mac과 Windows PC를 방을 넘어서뿐 아니라 인터넷 너머로도 연결해 줍니다. 다만 페어링 코드 방은 “주변 기기” 작업 공간과 별개의 화면이며, 기기별로 나뉜 이전 컨트롤을 그대로 쓰므로 거기에는 누를 “작업 공간 열기”가 없습니다.",
+        "보내는 컴퓨터가 짧은 페어링 코드(또는 공유 링크)를 생성하면, 다른 기기에서 입력해 연결합니다. 네트워크를 넘는 전송은 기기 간 직접 연결이 아니라 암호화된 TURN 릴레이를 거치며, 이는 의도된 설계입니다. 이런 세션은 처음부터 릴레이로 가기 때문에, 연결이 두 네트워크 사이의 NAT와 방화벽을 통과하는 직접 경로를 찾아내는 데 의존하지 않습니다. NAT나 방화벽이 그런 경로를 막을 수도 있습니다. 릴레이는 암호문만 전달합니다 — 파일은 보내는 컴퓨터를 떠나기 전에 종단간으로 봉인되므로 릴레이가 읽을 수 있는 것은 아무것도 없습니다. 큰 폴더를 전송하다가 중간에 연결이 끊겨도 처음부터가 아니라 이어서 재개됩니다. 이 방식은 보내는 쪽의 로그인이 필요합니다 — 받는 쪽은 계정이 필요 없습니다.",
       ],
     },
     {
@@ -374,7 +618,7 @@ const ko = {
     {
       heading: "파일에 뭔가 바뀌는 게 있나요?",
       body: [
-        "없습니다. Relayium은 원본 바이트를 있는 그대로 정확히 전송합니다 — 재압축도, 재포맷도 없고, 두 운영체제 사이에서 줄바꿈이나 파일명이 바뀌지도 않습니다.",
+        "내용은 바뀌지 않습니다. Relayium은 원본 바이트를 있는 그대로 정확히 전송합니다 — 재압축도, 재포맷도 없고, 두 운영체제 사이에서 줄바꿈이 다시 쓰이지도 않으며, 폴더의 상대 경로도 그대로입니다. 다만 넘어가지 못하는 것이 두 가지 있고, 둘 다 전송이 아니라 파일 시스템에 속합니다. Windows는 macOS가 허용하는 문자를 금지하므로 Mac에서 적법한 이름이 PC에서는 만들어지지 못할 수 있고, POSIX 권한 비트와 소유권, macOS 확장 속성은 옮겨지지 않습니다 — 받는 쪽 브라우저가 쓰는 것은 NTFS 자체의 권한 모델을 따르는 보통 파일입니다.",
         "각 파일은 SHA-256 해시로 종단간 검증되므로, Windows PC(또는 Mac)에 도착한 것은 다른 쪽 컴퓨터에서 나간 것과 동일함이 확인됩니다. 큰 파일도 잘 처리됩니다. File System Access API가 있는 브라우저 — 데스크톱 Chrome, Edge — 는 크기 제한 없이 다운로드를 곧바로 디스크로 스트리밍합니다. Firefox와 Safari에는 그 API가 없어서 그쪽에서 받으면 한 묶음을 메모리에 모으게 되며, 대략 256MB를 넘어서면 Relayium이 수락하기 전에 미리 경고합니다. 이 수치는 측정된 상한이 아니라 일부러 보수적으로 잡은 추정치이고, 실제로 무너지는 지점은 그 컴퓨터의 메모리와 OS, 그리고 그 밖에 무엇을 열어 두었는지에 달려 있습니다.",
       ],
     },
@@ -396,7 +640,7 @@ const ko = {
       },
       {
         q: "Mac에서 Windows로 넘어갈 때 파일 권한, 줄바꿈, 파일명이 망가지나요?",
-        a: "아니요. Relayium은 각 파일의 정확한 바이트를 옮기고 SHA-256 해시로 종단간 검증합니다 — 줄바꿈, 인코딩, 파일명은 건드리지 않습니다. 애플리케이션 수준의 변환이 필요할 만한 것(텍스트 파일의 CRLF와 LF 차이 등)도 파일 자체가 변경되지 않으므로 영향받지 않습니다.",
+        a: "바이트와 폴더 안의 상대 경로는 그대로이고 SHA-256 해시로 종단간 검증되므로 줄바꿈이나 인코딩은 건드리지 않습니다 — 애플리케이션 수준의 변환이 필요할 만한 것(텍스트 파일의 CRLF와 LF 차이 등)도 파일 자체가 변경되지 않으므로 영향받지 않습니다. 다만 정말로 넘어가지 않는 것이 두 가지 있습니다. Windows가 금지하는 문자가 들어간 이름은 PC에서 아예 만들어지지 못하고, POSIX 권한과 소유권, macOS 확장 속성은 전송되지 않습니다 — 받는 쪽 브라우저가 NTFS 자체 모델을 따르는 보통 파일을 쓰기 때문입니다.",
       },
       {
         q: "크기 제한이 있나요?",
@@ -426,30 +670,91 @@ const de = {
       body: [
         "Nichts zu installieren, weder auf dem Mac noch auf dem PC. Im selben Netz gibt es auch nichts zu registrieren — der Browser erledigt alles.",
       ],
-      bullets: [
-        "Ein Mac mit Safari oder Chrome und ein Windows-PC mit Edge oder Chrome — auf beiden Seiten reicht ein aktueller Browser.",
-        "Für den einfachsten Weg verbinde beide Rechner mit demselben WLAN oder Ethernet-Netzwerk. Sind sie an verschiedenen Orten, überbrückt ein Pairing-Code die Distanz stattdessen.",
-        "Die Dateien oder Ordner zum Senden — bis zu 1.000 Dateien pro Stapel.",
-      ],
+      prereqs: {
+        label: "Was du brauchst",
+        items: [
+          "Ein Mac mit Safari oder Chrome und ein Windows-PC mit Edge oder Chrome — auf beiden Seiten reicht ein aktueller Browser.",
+          "Für den einfachsten Weg beide Rechner im selben WLAN oder Ethernet-Netz. Beides zu mischen ist in Ordnung: Ein verkabelter PC und ein Mac am selben Router teilen weiterhin eine öffentliche IP, und genau das steckt sie in denselben Raum.",
+          "Auf beiden die Seite über https://relayium.com/ geöffnet. Verschlüsselte Übertragung braucht HTTPS, und über einfaches http:// sagt die Seite das, statt Geräte aufzulisten.",
+          "Für einen großen Stapel Chrome oder Edge auf dem empfangenden Rechner. Nur die können direkt auf die Platte streamen und dich vorher einen Zielordner wählen lassen — Safari hat diese API nicht und muss den Stapel im Speicher zusammensetzen.",
+          "Die Dateien oder Ordner zum Senden — bis zu 1.000 Dateien pro Stapel.",
+        ],
+      },
     },
     {
       heading: "Mac und PC im selben Netzwerk",
       body: [
         "Sind beide Rechner im selben Büro- oder Heimnetz, ist das der schnellste Weg, Dateien zu bewegen — kein Netzlaufwerk einzubinden, kein Kampf mit Berechtigungen.",
       ],
-      bullets: [
-        "Öffne auf dem Mac relayium.com im Browser. Öffne auf dem Windows-PC dieselbe Adresse.",
-        "Jeder Rechner erscheint beim anderen als Gerät in der Nähe — keine Windows-Arbeitsgruppe einzurichten, keine macOS-Dateifreigabe zu aktivieren.",
-        "Tippe auf dem sendenden Rechner den anderen an und wähle die Dateien (oder einen ganzen Ordner) zum Senden.",
-        "Schalte die erweiterte Verifizierung ein (standardmäßig aus), dann zeigen beide Bildschirme denselben kurzen Verifizierungscode. Vergleiche ihn auf beiden Seiten — er bestätigt, dass beide Rechner derselben Ende-zu-Ende-verschlüsselten Sitzung beigetreten sind, nicht welchen Netzwerkweg der Chiffretext nimmt. Bleibt sie aus, ist die Sitzung trotzdem verschlüsselt, es gibt nur keinen Code zum Vergleichen.",
-        "Bestätige auf der empfangenden Seite, und die Übertragung startet sofort und streamt direkt auf die Festplatte.",
+      steps: [
+        {
+          text: "Öffne auf dem Mac die Übertragungsseite im Browser. Öffne auf dem Windows-PC dieselbe Adresse.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Vergleiche die öffentliche IP in der Statuszeile auf beiden Rechnern. Eine gemeinsame Adresse steckt sie in denselben Raum — melden zwei Rechner in einem Büronetz verschiedene, liegt das meist an einem Firmen-VPN auf dem Arbeitslaptop.",
+          code: ["Verbunden · dieses Gerät MacBook · öffentliche IP 203.0.113.9"],
+        },
+        {
+          text: "Jetzt erscheint jeder Rechner beim anderen unter „Geräte in der Nähe“ — keine Windows-Arbeitsgruppe einzurichten, keine macOS-Dateifreigabe zu aktivieren. Klicke auf dem sendenden Rechner den anderen an und drücke „Arbeitsbereich öffnen“. In einem aktuellen Browser ist das die einzige Aktion, die die Karte anbietet, denn Dateien, Ordner und Nachrichten laufen alle über die eine verschlüsselte Verbindung, die sie öffnet.",
+        },
+        {
+          text: "Der Arbeitsbereich tritt an die Stelle dieser Karte. Gesendet wird mit den Bedienelementen unter seiner Kopfzeile: „Dateien senden“ für einen Stapel von bis zu 1.000 Dateien, „Ordner senden“ für einen ganzen Baum, oder tippe ins Nachrichtenfeld — „Enter für neue Zeile · ⌘/Ctrl+Enter zum Senden“ — und drücke „Senden“. Lies auf der empfangenden Seite die Zeile unter der Anfrage: In Chrome oder Edge steht dort, dass der Browser nach dem Speicherort fragt, du wählst den Ordner also selbst; in Safari oder Firefox steht, dass die Dateien in den eigenen Download-Ordner gehen. Dann drücke „Annehmen“.",
+        },
+        {
+          text: "Sieh zu, wie der Dateizähler auf beiden Bildschirmen die letzte Datei erreicht. Wer vor dem ersten Byte einen Verifizierungscode (SAS) vergleichen will, schaltet vorher auf beiden Rechnern „Erweiterte Verifizierung“ ein: Eine Übereinstimmung bestätigt, dass beide derselben Ende-zu-Ende-verschlüsselten Sitzung beigetreten sind, nicht welchen Netzwerkweg der Chiffretext nimmt. Bleibt sie aus, ist die Sitzung trotzdem verschlüsselt, es gibt nur keinen Code zum Vergleichen.",
+        },
       ],
+      success: {
+        label: "So sieht eine funktionierende Übertragung aus",
+        body: [
+          "Die Karte des anderen Rechners ist dann verschwunden — der Arbeitsbereich hat ihren Platz übernommen —, der Zustand wird also an der Kopfzeile des Arbeitsbereichs abgelesen: der verbundene Rechner, ein Verbindungszustand „Verbunden“ und ein einziges Pfad-Abzeichen mit „LAN direkt“. Der Zähler endet bei der letzten Datei des Stapels.",
+          "Im gewählten Ordner kommt der Baum mit seinen relativen Pfaden an. Ein Name, der in diesem Zielverzeichnis schon liegt, wird nicht überschrieben: report.pdf landet daneben als report (1).pdf. Diese Umbenennung ist Relayiums eigene und gilt nur dort, wo der Browser uns ein Verzeichnis zum Schreiben übergeben hat — Chrome oder Edge mit der Ordnerauswahl. Ohne Auswahl gehört die Benennung dem Download-Manager dieses Browsers, und das Ergebnis liest du in seiner eigenen Liste: chrome://downloads in Chrome, edge://downloads in Edge, about:downloads in Firefox.",
+        ],
+        code: ["Verbunden mit ThinkPad · Verbunden · LAN direkt\nDatei 12/12"],
+      },
+    },
+    {
+      heading: "Wenn ein Rechner den anderen nicht sieht",
+      body: [
+        "Bei diesem Paar sind ein Firmen-VPN und ein verwaltetes Büronetz die zwei, die zuerst zu prüfen lohnen. Das sind die üblichen ersten Prüfungen und nicht die ganze Liste, und alles unten entscheidet sich an etwas, das schon auf dem Bildschirm steht, und nicht an einer Support-Anfrage.",
+      ],
+      troubleshooting: {
+        label: "Symptom, Prüfung, Lösung",
+        items: [
+          {
+            symptom: "Keiner der beiden Rechner erscheint unter „Geräte in der Nähe“, obwohl beide im Büro-WLAN sind.",
+            code: ["https://relayium.com/   # die öffentliche IP in der Statuszeile auf beiden Rechnern vergleichen"],
+            fix: "Zwei verschiedene öffentliche IP-Adressen bedeuten zwei Räume, und ein Firmen-VPN ist eine häufige Ursache: Es führt einen Rechner über die Adresse der Firma hinaus, während der andere über den Büro-Router geht. Eine Gast-SSID mit eigenem Ausgang ist eine weitere, und sie sind nicht die einzigen. Wenn du sie ändern willst, trenne das VPN auf diesem Rechner oder verlasse die Gast-SSID, und lade dort https://relayium.com/ neu. Muss das VPN oben bleiben, erreicht ein Pairing-Code auf https://relayium.com/cross-network den anderen Rechner, ohne es zu trennen.",
+          },
+          {
+            symptom: "Beide Rechner zeigen dieselbe öffentliche IP, und keine Karte erscheint.",
+            code: ["https://relayium.com/   # der Hinweis unter der Geräteliste nennt die Router-Einstellung"],
+            fix: "Das Netz trennt seine eigenen Clients. Auf einem Router, der dir gehört, schalte „AP-Isolierung / Client-Isolierung“ aus; in einem verwalteten Büronetz, das du nicht ändern kannst, koppel die beiden Rechner stattdessen mit einem Code auf https://relayium.com/cross-network.",
+          },
+          {
+            symptom: "Vor dem Annehmen warnt der Mac, er müsse den ganzen Stapel im Speicher halten.",
+            code: ["https://relayium.com/   # die Zeile unter der Anfrage sagt, wie dieser Browser speichert"],
+            fix: "Safari hat keine File System Access API, puffert den Stapel also statt ihn wegzuschreiben, und ab etwa 256 MiB warnt Relayium. Empfange denselben Stapel in Chrome oder Edge auf diesem Mac: Der streamt jede Datei direkt auf die Platte und fragt dich vorher nach einem Zielordner.",
+          },
+          {
+            symptom: "Eine Datei einer Ordnerübertragung scheitert auf der Windows-Seite, während der Rest ankommt.",
+            code: ["https://relayium.com/   # der Zähler nennt die Datei, bei der er stehen bleibt"],
+            fix: "Windows verbietet die Zeichen \\ / : * ? \" < > | in einem Dateinamen, macOS nicht — ein auf dem Mac legaler Name kann auf dem PC also unmöglich anzulegen sein. Benenne diese Datei auf dem Mac um und sende sie erneut; ein Doppelpunkt in einem Datum wie 2026:08:05 ist der übliche Fall.",
+          },
+          {
+            symptom: "Die Übertragung läuft, aber das Abzeichen zeigt „P2P direkt“ statt „LAN direkt“.",
+            code: ["https://relayium.com/   # das Pfad-Abzeichen in der Kopfzeile des Arbeitsbereichs lesen"],
+            fix: "Die beiden Rechner teilen eine öffentliche IP, aber keinen lokalen Sprung — genau so sehen zwei VLANs hinter einem Büro-Uplink aus. Die Übertragung bleibt direkt und bleibt Ende-zu-Ende-verschlüsselt; setz beide in dasselbe Subnetz, wenn der Pfad dein LAN sein soll und nicht die Route, die die Browser gefunden haben.",
+          },
+        ],
+      },
     },
     {
       heading: "Mac und PC in verschiedenen Netzwerken",
       body: [
-        "Du arbeitest von zu Hause, während der andere Rechner im Büro steht, oder bist einfach in einem anderen WLAN? Ein Pairing-Code verbindet Mac und Windows-PC über das Internet, nicht nur über den Raum hinweg.",
-        "Der sendende Rechner erzeugt einen kurzen Pairing-Code (oder einen Freigabelink); gib ihn auf dem anderen Rechner ein, um dich zu verbinden. Eine netzübergreifende Übertragung läuft über ein verschlüsseltes TURN-Relay statt über eine direkte Verbindung zwischen den Rechnern, und das ist so beabsichtigt: Zwischen zwei verschiedenen Netzwerken lässt sich meist gar kein direkter Weg finden, und die Suche danach würde rund 20 Sekunden Leerlauf kosten, bevor die Verbindung ohnehin beim Relay landet. Das Relay leitet ausschließlich Chiffretext weiter — die Dateien sind Ende-zu-Ende versiegelt, bevor sie den sendenden Rechner verlassen, es bekommt also nichts Lesbares zu sehen. Bricht die Verbindung mitten in einem großen Ordner ab, wird sie fortgesetzt statt neu gestartet. Dieser Weg erfordert die Anmeldung des Absenders; wer empfängt, braucht nie ein Konto.",
+        "Du arbeitest von zu Hause, während der andere Rechner im Büro steht, oder bist einfach in einem anderen WLAN? Ein Pairing-Code verbindet Mac und Windows-PC über das Internet, nicht nur über den Raum hinweg. Ein Pairing-Code-Raum ist allerdings eine andere Oberfläche als ein Arbeitsbereich mit einem Gerät in der Nähe: Er behält die früheren, pro Gerät getrennten Bedienelemente, dort gibt es also kein „Arbeitsbereich öffnen“ zu drücken.",
+        "Der sendende Rechner erzeugt einen kurzen Pairing-Code (oder einen Freigabelink); gib ihn auf dem anderen Rechner ein, um dich zu verbinden. Eine netzübergreifende Übertragung läuft über ein verschlüsseltes TURN-Relay statt über eine direkte Verbindung zwischen den Rechnern, und das ist so beabsichtigt: Die Sitzung nutzt von Anfang an das Relay, sodass die Verbindung nicht davon abhängt, einen direkten Weg durch die NATs und Firewalls zwischen den beiden Netzwerken zu finden — die einen solchen Weg verhindern können. Das Relay leitet ausschließlich Chiffretext weiter — die Dateien sind Ende-zu-Ende versiegelt, bevor sie den sendenden Rechner verlassen, es bekommt also nichts Lesbares zu sehen. Bricht die Verbindung mitten in einem großen Ordner ab, wird sie fortgesetzt statt neu gestartet. Dieser Weg erfordert die Anmeldung des Absenders; wer empfängt, braucht nie ein Konto.",
       ],
     },
     {
@@ -478,7 +783,7 @@ const de = {
     {
       heading: "Ändert sich etwas an den Dateien?",
       body: [
-        "Nein. Relayium überträgt die Original-Bytes exakt so, wie sie sind — keine erneute Komprimierung, keine Neuformatierung, keine geänderten Zeilenumbrüche oder Dateinamen zwischen den beiden Betriebssystemen.",
+        "Der Inhalt nicht. Relayium überträgt die Original-Bytes exakt so, wie sie sind — keine erneute Komprimierung, keine Neuformatierung, keine umgeschriebenen Zeilenumbrüche zwischen den beiden Betriebssystemen —, und ein Ordner behält seine relativen Pfade. Zwei Dinge schaffen den Übergang jedoch nicht, und beide gehören zum Dateisystem und nicht zur Übertragung: Windows verbietet Zeichen, die macOS erlaubt, ein auf dem Mac legaler Name kann auf dem PC also unmöglich anzulegen sein, und POSIX-Rechtebits, Besitzverhältnisse und erweiterte macOS-Attribute werden nicht mitgenommen — der empfangende Browser schreibt gewöhnliche Dateien unter NTFS' eigenem Rechtemodell.",
         "Jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft, sodass das, was auf dem Windows-PC (oder dem Mac) ankommt, nachweislich identisch mit dem ist, was den anderen Rechner verlassen hat. Auch große Dateien werden gut gehandhabt: Ein Browser mit der File System Access API — Chrome oder Edge auf dem Desktop — streamt den Download ohne Größenbegrenzung direkt auf die Festplatte. Firefox und Safari haben diese API nicht, dort sammelt sich ein empfangener Stapel stattdessen im Arbeitsspeicher, und ab etwa 256 MB warnt Relayium dich, bevor du annimmst. Dieser Wert ist eine bewusst vorsichtige Schätzung und keine gemessene Grenze — wo es tatsächlich kippt, hängt vom Arbeitsspeicher des Rechners, vom Betriebssystem und davon ab, was sonst noch offen ist.",
       ],
     },
@@ -500,7 +805,7 @@ const de = {
       },
       {
         q: "Werden Dateiberechtigungen, Zeilenumbrüche oder Dateinamen beim Wechsel von Mac zu Windows durcheinandergebracht?",
-        a: "Nein. Relayium bewegt die exakten Bytes jeder Datei und prüft sie per SHA-256-Hash Ende-zu-Ende — Zeilenumbrüche, Kodierung oder Dateinamen werden nicht angerührt. Alles, was eine Konvertierung auf Anwendungsebene bräuchte (etwa CRLF vs. LF in einer Textdatei), bleibt unverändert, weil die Datei selbst unverändert bleibt.",
+        a: "Die Bytes und der relative Pfad innerhalb eines Ordners bleiben unverändert und werden per SHA-256-Hash Ende-zu-Ende geprüft, Zeilenumbrüche und Kodierung werden also nicht angerührt — alles, was eine Konvertierung auf Anwendungsebene bräuchte (etwa CRLF vs. LF in einer Textdatei), bleibt unverändert, weil die Datei selbst unverändert bleibt. Zwei Dinge kommen wirklich nicht mit: Ein Name mit einem der von Windows verbotenen Zeichen lässt sich auf dem PC überhaupt nicht anlegen, und POSIX-Rechte, Besitzverhältnisse und erweiterte macOS-Attribute werden nicht übertragen, weil der empfangende Browser gewöhnliche Dateien unter NTFS' eigenem Modell schreibt.",
       },
       {
         q: "Gibt es eine Größenbegrenzung?",
@@ -530,30 +835,91 @@ const fr = {
       body: [
         "Rien à installer, ni sur le Mac ni sur le PC. Sur le même réseau, rien à créer non plus — le navigateur s'occupe de tout.",
       ],
-      bullets: [
-        "Un Mac avec Safari ou Chrome, et un PC Windows avec Edge ou Chrome — n'importe quel navigateur moderne des deux côtés suffit.",
-        "Pour la voie la plus simple, connectez les deux machines au même réseau Wi-Fi ou Ethernet. Si elles sont à des endroits différents, un code d'appairage comble l'écart.",
-        "Les fichiers ou dossiers à envoyer — jusqu'à 1 000 fichiers par lot.",
-      ],
+      prereqs: {
+        label: "Ce qu'il vous faut",
+        items: [
+          "Un Mac avec Safari ou Chrome, et un PC Windows avec Edge ou Chrome — n'importe quel navigateur moderne des deux côtés suffit.",
+          "Pour la voie la plus simple, les deux machines sur le même réseau Wi-Fi ou Ethernet. Mélanger les deux ne pose aucun problème : un PC filaire et un Mac derrière le même routeur partagent toujours une IP publique, et c'est elle qui les place dans la même salle.",
+          "La page ouverte via https://relayium.com/ sur les deux. Le transfert chiffré exige HTTPS, et en simple http:// la page le dit au lieu de lister des appareils.",
+          "Pour un gros lot, Chrome ou Edge sur la machine qui reçoit. Seuls ces deux-là écrivent directement sur le disque et vous laissent choisir un dossier de destination au préalable — Safari n'a pas cette API et doit assembler le lot en mémoire.",
+          "Les fichiers ou dossiers à envoyer — jusqu'à 1 000 fichiers par lot.",
+        ],
+      },
     },
     {
       heading: "Mac et PC sur le même réseau",
       body: [
         "Si les deux ordinateurs sont sur le même réseau de bureau ou domestique, c'est le moyen le plus rapide de déplacer des fichiers — aucun lecteur partagé à monter, aucune permission à débloquer.",
       ],
-      bullets: [
-        "Sur le Mac, ouvrez relayium.com dans le navigateur. Sur le PC Windows, ouvrez la même adresse.",
-        "Chaque machine apparaît sur l'autre comme un appareil à proximité — aucun groupe de travail Windows à configurer, aucun partage de fichiers macOS à activer.",
-        "Sur l'ordinateur qui envoie, touchez l'autre, puis choisissez les fichiers (ou un dossier entier) à envoyer.",
-        "Activez la vérification avancée (désactivée par défaut) et les deux écrans affichent le même code de vérification court. Vérifiez qu'il correspond : il confirme que les deux machines ont rejoint la même session chiffrée de bout en bout, pas le chemin réseau emprunté par le texte chiffré. Laissée désactivée, la session reste chiffrée ; il n'y a simplement aucun code à comparer.",
-        "Acceptez du côté récepteur, et le transfert démarre immédiatement, en flux direct vers le disque.",
+      steps: [
+        {
+          text: "Sur le Mac, ouvrez la page de transfert dans le navigateur. Sur le PC Windows, ouvrez la même adresse.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Comparez l'IP publique de la ligne d'état sur les deux machines. Une adresse commune est ce qui les place dans la même salle, et si deux machines d'un même réseau de bureau en annoncent deux différentes, c'est le plus souvent un VPN d'entreprise sur le portable professionnel.",
+          code: ["Connecté · cet appareil MacBook · IP publique 203.0.113.9"],
+        },
+        {
+          text: "Chaque machine apparaît maintenant sur l'autre sous « Appareils à proximité » — aucun groupe de travail Windows à configurer, aucun partage de fichiers macOS à activer. Sur l'ordinateur qui envoie, cliquez sur l'autre et appuyez sur « Ouvrir l’espace de travail ». Sur un navigateur actuel c'est la seule action que la carte propose, car fichiers, dossiers et messages passent tous par l'unique connexion chiffrée qu'elle ouvre.",
+        },
+        {
+          text: "L'espace de travail remplace cette carte. Pour envoyer, utilisez les commandes sous son en-tête : « Envoyer des fichiers » pour un lot d'au plus 1 000 fichiers, « Envoyer un dossier » pour toute une arborescence, ou tapez dans la zone de message — « Entrée pour une nouvelle ligne · ⌘/Ctrl+Entrée pour envoyer » — puis appuyez sur « Envoyer ». Du côté qui reçoit, lisez la ligne sous la demande avant d'accepter. Dans Chrome ou Edge, elle annonce que le navigateur demandera où enregistrer, donc vous choisissez le dossier vous-même, et dans Safari ou Firefox, que les fichiers iront dans les téléchargements du navigateur. Appuyez ensuite sur « Accepter ».",
+        },
+        {
+          text: "Regardez le compteur atteindre le dernier fichier sur les deux écrans. Pour comparer un code de vérification (SAS) avant le moindre octet, activez « Vérification avancée » sur les deux machines avant de commencer. Vérifiez qu'il correspond : il confirme que les deux machines ont rejoint la même session chiffrée de bout en bout, pas le chemin réseau emprunté par le texte chiffré. Laissée désactivée, la session reste chiffrée ; il n'y a simplement aucun code à comparer.",
+        },
       ],
+      success: {
+        label: "À quoi ressemble un transfert qui marche",
+        body: [
+          "La carte de l'autre machine a disparu à ce stade — l'espace de travail a pris sa place — alors l'état se lit sur l'en-tête de l'espace de travail : la machine à laquelle vous êtes connecté, un état de lien « Connecté », et un unique badge de chemin indiquant « LAN direct ». Le compteur s'arrête sur le dernier fichier du lot.",
+          "Dans le dossier choisi, l'arborescence arrive avec ses chemins relatifs intacts. Un nom déjà présent dans ce répertoire de destination n'est pas écrasé, car report.pdf atterrit à côté sous le nom report (1).pdf. Ce renommage est celui de Relayium et ne vaut que là où le navigateur nous a confié un répertoire où écrire — Chrome ou Edge avec le sélecteur de dossier. Sans sélecteur, le nommage appartient au gestionnaire de téléchargements de ce navigateur, et le résultat se lit dans sa propre liste : chrome://downloads dans Chrome, edge://downloads dans Edge, about:downloads dans Firefox.",
+        ],
+        code: ["Connecté à ThinkPad · Connecté · LAN direct\nFichier 12/12"],
+      },
+    },
+    {
+      heading: "Quand une machine ne voit pas l'autre",
+      body: [
+        "Sur cette paire, un VPN d'entreprise et un réseau de bureau administré sont les deux à vérifier en premier. Ce sont des premières vérifications courantes plutôt que la liste complète, et tout ce qui suit se tranche avec un élément déjà présent à l'écran plutôt qu'avec un ticket d'assistance.",
+      ],
+      troubleshooting: {
+        label: "Symptôme, vérification, correction",
+        items: [
+          {
+            symptom: "Aucune des deux machines n'apparaît sous « Appareils à proximité », alors que les deux sont sur le Wi-Fi du bureau.",
+            code: ["https://relayium.com/   # comparez l'IP publique de la ligne d'état sur les deux machines"],
+            fix: "Deux adresses IP publiques différentes, ce sont deux salles, et un VPN d'entreprise en est une cause courante : il fait sortir une machine par l'adresse de la société pendant que l'autre passe par le routeur du bureau. Un SSID invité qui sort ailleurs en est une autre, et ce ne sont pas les seules. Si vous acceptez de les changer, coupez le VPN sur cette machine ou quittez le SSID invité, puis rechargez https://relayium.com/ dessus. Si le VPN doit rester actif, un code d'appairage sur https://relayium.com/cross-network atteint l'autre machine sans le couper.",
+          },
+          {
+            symptom: "Les deux machines affichent la même IP publique et aucune carte n'apparaît.",
+            code: ["https://relayium.com/   # l'indication sous la liste des appareils nomme le réglage du routeur"],
+            fix: "Le réseau sépare ses propres clients. Sur un routeur qui vous appartient, désactivez « l'isolation AP / isolation des clients ». Sur un réseau de bureau administré que vous ne pouvez pas modifier, appairez plutôt les deux machines avec un code sur https://relayium.com/cross-network.",
+          },
+          {
+            symptom: "Avant l'acceptation, le Mac avertit qu'il doit garder tout le lot en mémoire.",
+            code: ["https://relayium.com/   # la ligne sous la demande indique comment ce navigateur enregistre"],
+            fix: "Safari n'a pas d'API File System Access, il met donc le lot en tampon au lieu de l'écrire, et Relayium avertit au-delà d'environ 256 MiB. Recevez le même lot dans Chrome ou Edge sur ce Mac : il écrit chaque fichier directement sur le disque et vous demande d'abord un dossier de destination.",
+          },
+          {
+            symptom: "Un fichier d'un transfert de dossier échoue du côté Windows alors que le reste arrive.",
+            code: ["https://relayium.com/   # le compteur nomme le fichier sur lequel il s'arrête"],
+            fix: "Windows interdit les caractères \\/:*?\"<>| dans un nom de fichier, macOS non, donc un nom légal sur le Mac peut être impossible à créer sur le PC. Renommez ce fichier sur le Mac puis renvoyez-le. Le deux-points d'une date comme 2026:08:05 est le cas le plus courant.",
+          },
+          {
+            symptom: "Le transfert fonctionne, mais le badge indique « P2P direct » au lieu de « LAN direct ».",
+            code: ["https://relayium.com/   # lisez le badge de chemin dans l'en-tête de l'espace de travail"],
+            fix: "Les deux machines partagent une IP publique sans partager de saut local, ce qui est exactement l'allure de deux VLAN derrière un même lien montant de bureau. Le transfert reste direct et reste chiffré de bout en bout : mettez les deux sur le même sous-réseau si vous voulez que le chemin soit votre LAN plutôt que la route trouvée par les navigateurs.",
+          },
+        ],
+      },
     },
     {
       heading: "Mac et PC sur des réseaux différents",
       body: [
-        "Vous travaillez depuis chez vous pendant que l'autre machine est au bureau, ou simplement sur un autre réseau Wi-Fi ? Un code d'appairage connecte un Mac et un PC Windows via Internet, pas seulement d'une pièce à l'autre.",
-        "L'ordinateur qui envoie génère un court code d'appairage (ou un lien de partage) ; saisissez-le sur l'autre machine pour vous connecter. Un transfert entre réseaux passe par un relais TURN chiffré plutôt que par une liaison directe entre les deux machines, et c'est délibéré : entre deux réseaux différents, une voie directe est le plus souvent introuvable, et la chercher d'abord ajouterait une vingtaine de secondes d'attente avant que la connexion n'aboutisse malgré tout au relais. Le relais ne transmet que du texte chiffré — les fichiers sont scellés de bout en bout avant de quitter la machine émettrice, il n'a donc rien de lisible entre les mains. Si la connexion se coupe en cours de transfert d'un gros dossier, elle reprend au lieu de tout recommencer. Ce mode exige que l'expéditeur se connecte ; celui qui reçoit n'a jamais besoin de compte.",
+        "Vous travaillez depuis chez vous pendant que l'autre machine est au bureau, ou simplement sur un autre réseau Wi-Fi ? Un code d'appairage connecte un Mac et un PC Windows via Internet, pas seulement d'une pièce à l'autre. Une salle à code d'appairage reste toutefois une surface distincte d'un espace de travail avec un appareil à proximité : elle conserve les anciennes commandes séparées par appareil, il n'y a donc pas d'« Ouvrir l’espace de travail » à y presser.",
+        "L'ordinateur qui envoie génère un court code d'appairage (ou un lien de partage) ; saisissez-le sur l'autre machine pour vous connecter. Un transfert entre réseaux passe par un relais TURN chiffré plutôt que par une liaison directe entre les deux machines, et c'est délibéré : la session emprunte le relais dès le départ, si bien que la connexion ne dépend pas de la découverte d'une voie directe à travers les NAT et pare-feu situés entre les deux réseaux, qui peuvent en empêcher une. Le relais ne transmet que du texte chiffré — les fichiers sont scellés de bout en bout avant de quitter la machine émettrice, il n'a donc rien de lisible entre les mains. Si la connexion se coupe en cours de transfert d'un gros dossier, elle reprend au lieu de tout recommencer. Ce mode exige que l'expéditeur se connecte ; celui qui reçoit n'a jamais besoin de compte.",
       ],
     },
     {
@@ -582,7 +948,7 @@ const fr = {
     {
       heading: "Quelque chose change-t-il dans les fichiers ?",
       body: [
-        "Non. Relayium transfère les octets d'origine exactement tels quels — aucune recompression, aucun reformatage, aucun changement de fin de ligne ou de nom de fichier entre les deux systèmes d'exploitation.",
+        "Le contenu, non. Relayium transfère les octets d'origine exactement tels quels — aucune recompression, aucun reformatage, aucune réécriture des fins de ligne entre les deux systèmes d'exploitation — et un dossier conserve ses chemins relatifs. Deux choses ne franchissent pas la traversée, et elles relèvent du système de fichiers plutôt que du transfert : Windows interdit des caractères que macOS autorise, donc un nom légal sur le Mac peut être impossible à créer sur le PC, et les bits de permission POSIX, la propriété et les attributs étendus macOS ne sont pas repris — le navigateur qui reçoit écrit des fichiers ordinaires sous le modèle de permissions propre à NTFS.",
         "Chaque fichier est vérifié de bout en bout par une empreinte SHA-256, si bien que ce qui arrive sur le PC Windows (ou le Mac) est vérifié identique à ce qui a quitté l'autre machine. Les gros fichiers sont bien gérés aussi : un navigateur doté de l'API File System Access — Chrome ou Edge sur ordinateur — diffuse le téléchargement directement sur le disque, sans limite de taille. Firefox et Safari n'ont pas cette API : un lot reçu là est assemblé en mémoire, et Relayium vous prévient avant que vous acceptiez dès que l'on dépasse environ 256 Mo. Ce chiffre est une estimation volontairement prudente, pas une limite mesurée — le point de rupture réel dépend de la mémoire de la machine, de son système et de tout ce qui tourne à côté.",
       ],
     },
@@ -604,7 +970,7 @@ const fr = {
       },
       {
         q: "Les permissions de fichiers, fins de ligne ou noms de fichiers sont-ils altérés en passant de Mac à Windows ?",
-        a: "Non. Relayium déplace les octets exacts de chaque fichier et les vérifie par une empreinte SHA-256 de bout en bout — il ne touche ni aux fins de ligne, ni à l'encodage, ni aux noms de fichiers. Tout ce qu'une conversion au niveau applicatif devrait gérer (comme CRLF contre LF dans un fichier texte) reste inchangé, car le fichier lui-même reste inchangé.",
+        a: "Les octets et le chemin relatif à l'intérieur d'un dossier restent inchangés et sont vérifiés par une empreinte SHA-256 de bout en bout, si bien que rien ne touche aux fins de ligne ni à l'encodage — tout ce qu'une conversion au niveau applicatif devrait gérer (comme CRLF contre LF dans un fichier texte) reste inchangé, car le fichier lui-même reste inchangé. Deux choses ne passent vraiment pas : un nom contenant l'un des caractères interdits par Windows ne peut pas être créé sur le PC, et les permissions POSIX, la propriété et les attributs étendus macOS ne sont pas transférés, car le navigateur qui reçoit écrit des fichiers ordinaires sous le modèle propre à NTFS.",
       },
       {
         q: "Y a-t-il une limite de taille ?",
@@ -634,30 +1000,91 @@ const ar = {
       body: [
         "لا شيء لتثبيته على الـ Mac أو الـ PC. على نفس الشبكة لا يوجد ما تسجّل الاشتراك فيه أيضًا — المتصفح يتولى كل شيء.",
       ],
-      bullets: [
-        "جهاز Mac بمتصفح Safari أو Chrome، وحاسوب Windows بمتصفح Edge أو Chrome — أي متصفح حديث على أي من الجانبين.",
-        "لأبسط طريق، صِل الجهازين بنفس شبكة Wi-Fi أو Ethernet. وإن كانا في مكانين مختلفين، فرمز الاقتران يجسّر الفجوة بدلًا من ذلك.",
-        "الملفات أو المجلدات المراد إرسالها — حتى 1,000 ملف لكل دفعة.",
-      ],
+      prereqs: {
+        label: "ما تحتاج إليه",
+        items: [
+          "جهاز Mac بمتصفح Safari أو Chrome، وحاسوب Windows بمتصفح Edge أو Chrome — أي متصفح حديث على أي من الجانبين.",
+          "لأبسط طريق، الجهازان على نفس شبكة Wi-Fi أو Ethernet. ولا مشكلة في الخلط بينهما: فحاسوب Windows موصول بسلك وجهاز Mac على نفس الموجّه يتشاركان عنوان IP عامًا واحدًا، وهو ما يضعهما في الغرفة نفسها.",
+          "الصفحة مفتوحة عبر https://relayium.com/ على الجهازين. يحتاج النقل المشفَّر إلى HTTPS، وعبر http:// المجرّد تقول الصفحة ذلك بدل أن تسرد الأجهزة.",
+          "للدفعات الكبيرة، استخدم Chrome أو Edge على الجهاز المستقبِل. فهما وحدهما يبثّان إلى القرص مباشرةً ويتيحان لك اختيار مجلد الوجهة أولًا — أما Safari فلا يملك تلك الواجهة ويضطر إلى تجميع الدفعة في الذاكرة.",
+          "الملفات أو المجلدات المراد إرسالها — حتى 1,000 ملف لكل دفعة.",
+        ],
+      },
     },
     {
       heading: "Mac وPC على نفس الشبكة",
       body: [
         "إذا كان الحاسوبان على نفس شبكة المكتب أو المنزل، فهذه أسرع طريقة لنقل الملفات — لا قرص مشترك لتوصيله، ولا أذونات للمصارعة معها.",
       ],
-      bullets: [
-        "على الـ Mac، افتح relayium.com في المتصفح. وعلى حاسوب Windows، افتح العنوان نفسه.",
-        "يظهر كل جهاز للآخر كجهاز قريب — لا إعداد لمجموعة عمل Windows، ولا مشاركة ملفات macOS لتفعيلها.",
-        "على الحاسوب المُرسِل، انقر على الآخر، ثم اختر الملفات (أو مجلدًا كاملًا) للإرسال.",
-        "فعّل «التحقّق المتقدّم» (المعطَّل افتراضيًا) لتُظهِر الشاشتان رمز التحقق القصير نفسه. تحقق من تطابقه — فهو يؤكد انضمام الجهازين إلى جلسة واحدة مشفَّرة من الطرف إلى الطرف، ولا يثبت مسار الشبكة الذي يحمله النص المشفّر. وإن تركته معطَّلًا تظل الجلسة مشفَّرة، لكن دون رمز تقارنه.",
-        "اقبل على الطرف المستقبِل فيبدأ النقل فورًا، بثًّا مباشرًا إلى القرص.",
+      steps: [
+        {
+          text: "على الـ Mac، افتح صفحة النقل في المتصفح. وعلى حاسوب Windows، افتح العنوان نفسه.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "قارن عنوان IP العام في شريط الحالة على الجهازين. مشاركة عنوان واحد هي ما يضعهما في الغرفة نفسها، وإذا أعلن جهازان على شبكة مكتب واحدة عنوانين مختلفين، فالسبب في الغالب شبكة VPN للشركة على حاسوب العمل.",
+          code: ["متصل · هذا الجهاز MacBook · عنوان IP العام 203.0.113.9"],
+        },
+        {
+          text: "يظهر الآن كل جهاز للآخر تحت «الأجهزة القريبة» — لا إعداد لمجموعة عمل Windows، ولا مشاركة ملفات macOS لتفعيلها. على الحاسوب المُرسِل، انقر على الآخر واضغط «فتح مساحة العمل». في المتصفحات الحديثة هذا هو الإجراء الوحيد الذي تعرضه البطاقة، لأن الملفات والمجلدات والرسائل تمرّ كلها عبر الاتصال المشفَّر الواحد الذي تفتحه.",
+        },
+        {
+          text: "تحلّ مساحة العمل مكان تلك البطاقة. أرسِل من عناصر التحكم أسفل ترويستها: «إرسال ملفات» لدفعة تصل إلى 1,000 ملف، و«إرسال مجلد» لشجرة كاملة، أو اكتب في صندوق الرسائل — «Enter لسطر جديد · ⌘/Ctrl+Enter للإرسال» — ثم اضغط «إرسال». وعلى الطرف المستقبِل، اقرأ السطر أسفل الطلب: في Chrome أو Edge يقول إن المتصفح سيسأل عن مكان الحفظ، أي أنك تختار المجلد بنفسك؛ وفي Safari أو Firefox يقول إن الملفات ستذهب إلى تنزيلات المتصفح نفسه. ثم اضغط «قبول».",
+        },
+        {
+          text: "راقب عدّاد الملفات حتى يبلغ آخر ملف على الشاشتين. وإن أردت مقارنة رمز التحقق (SAS) قبل أن يتحرك أي بايت، فعّل «التحقّق المتقدّم» على الجهازين أولًا: التطابق يؤكد انضمامهما إلى جلسة واحدة مشفَّرة من الطرف إلى الطرف، ولا يثبت مسار الشبكة الذي يحمله النص المشفّر. وإن تركته معطَّلًا تظل الجلسة مشفَّرة، لكن دون رمز تقارنه.",
+        },
       ],
+      success: {
+        label: "كيف يبدو نقل ناجح",
+        body: [
+          "تكون بطاقة الجهاز الآخر قد اختفت عند هذه اللحظة — إذ حلّت مساحة العمل مكانها — فتُقرأ الحالة من ترويسة مساحة العمل: الجهاز المتصل بك، وحالة رابط تقول «متصل»، ووسم مسار واحد يقرأ «مباشر عبر LAN». ويتوقف العدّاد عند آخر ملف في الدفعة.",
+          "وفي المجلد الذي اخترته تصل الشجرة بمساراتها النسبية سليمة. ولا يُستبدَل اسم موجود أصلًا في مجلد الوجهة ذاك: إذ يحلّ report.pdf بجانبه باسم report (1).pdf. وإعادة التسمية هذه من عمل Relayium نفسه، ولا تنطبق إلا حيث سلّمنا المتصفح مجلدًا نكتب فيه — أي Chrome أو Edge بمنتقي المجلدات. وبدون المنتقي تعود التسمية إلى مدير التنزيلات في ذلك المتصفح، وتقرأ النتيجة في قائمته الخاصة: chrome://downloads في Chrome، وedge://downloads في Edge، وabout:downloads في Firefox.",
+        ],
+        code: ["متصل بـ ThinkPad · متصل · مباشر عبر LAN\nالملف 12/12"],
+      },
+    },
+    {
+      heading: "عندما لا يرى أحد الجهازين الآخر",
+      body: [
+        "في هذا الثنائي تُعدّ شبكة VPN للعمل وشبكة المكتب المُدارة أول ما يستحق الفحص. وهما فحصان أوليان شائعان لا قائمة شاملة، وكل ما يلي يُحسَم بشيء معروض على الشاشة أصلًا، لا بمراسلة الدعم.",
+      ],
+      troubleshooting: {
+        label: "العَرَض والفحص والحل",
+        items: [
+          {
+            symptom: "لا يظهر أي من الجهازين تحت «الأجهزة القريبة» مع أن كليهما على شبكة Wi-Fi في المكتب.",
+            code: ["https://relayium.com/   # قارن عنوان IP العام في شريط الحالة على الجهازين"],
+            fix: "عنوانا IP عامان مختلفان يعنيان غرفتين، وشبكة VPN للشركة سبب شائع: فهي تُخرِج أحد الجهازين من عنوان الشركة بينما يخرج الآخر من موجّه المكتب. وشبكة ضيوف تخرج من مكان آخر سبب شائع ثانٍ، وليسا السببين الوحيدين. فإن كنت مستعدًا لتغييرهما، اقطع VPN على ذلك الجهاز أو اترك شبكة الضيوف، ثم أعِد تحميل https://relayium.com/ عليه. وإن كان لا بد أن تبقى VPN عاملة، فرمز اقتران على https://relayium.com/cross-network يصل إلى الجهاز الآخر دون قطعها.",
+          },
+          {
+            symptom: "يعرض الجهازان نفس عنوان IP العام ولا تظهر أي بطاقة.",
+            code: ["https://relayium.com/   # التلميح أسفل قائمة الأجهزة يسمّي إعداد الموجّه"],
+            fix: "الشبكة تفصل عملاءها عن بعضهم. على موجّه تملكه، أوقف «عزل نقطة الوصول / عزل العملاء»؛ وعلى شبكة مكتب مُدارة لا تستطيع تغييرها، اقرن الجهازين برمز من https://relayium.com/cross-network بدلًا من ذلك.",
+          },
+          {
+            symptom: "قبل القبول، يحذّر جهاز Mac من أنه سيحمل الدفعة كلها في الذاكرة.",
+            code: ["https://relayium.com/   # السطر أسفل الطلب يذكر كيف سيحفظ هذا المتصفح"],
+            fix: "لا يملك Safari واجهة File System Access، فيخزّن الدفعة مؤقتًا بدل كتابتها، ويحذّر Relayium بعد نحو 256 MiB. استقبل الدفعة نفسها في Chrome أو Edge على ذلك الـ Mac: فهو يبثّ كل ملف إلى القرص مباشرةً ويسألك عن مجلد الوجهة أولًا.",
+          },
+          {
+            symptom: "يفشل ملف واحد من نقل مجلد على جانب Windows بينما يصل الباقي.",
+            code: ["https://relayium.com/   # يذكر العدّاد الملف الذي توقّف عنده"],
+            fix: "يمنع Windows المحارف \\ / : * ? \" < > | في أسماء الملفات ولا يمنعها macOS، فالاسم المشروع على الـ Mac قد يكون إنشاؤه مستحيلًا على الـ PC. أعِد تسمية ذلك الملف على الـ Mac ثم أرسِله مرة أخرى؛ والنقطتان في تاريخ مثل 2026:08:05 هما الحالة الأكثر شيوعًا.",
+          },
+          {
+            symptom: "النقل يعمل، لكن الوسم يقرأ «مباشر P2P» بدل «مباشر عبر LAN».",
+            code: ["https://relayium.com/   # اقرأ وسم المسار في ترويسة مساحة العمل"],
+            fix: "الجهازان يتشاركان عنوان IP عامًا دون أن يتشاركا قفزة محلية، وهذا تمامًا شكل شبكتين افتراضيتين خلف وصلة صاعدة واحدة في المكتب. يبقى النقل مباشرًا ويبقى مشفَّرًا من الطرف إلى الطرف، وإن أردت أن يكون المسار شبكتك المحلية لا الطريق الذي وجده المتصفحان، فضعهما في الشبكة الفرعية نفسها.",
+          },
+        ],
+      },
     },
     {
       heading: "Mac وPC على شبكتين مختلفتين",
       body: [
-        "تعمل من المنزل بينما الجهاز الآخر في المكتب، أو مجرد على شبكة Wi-Fi مختلفة؟ يوصِل رمز الاقتران جهاز Mac وحاسوب Windows عبر الإنترنت، لا عبر الغرفة فحسب.",
-        "يولّد الحاسوب المُرسِل رمز اقتران قصيرًا (أو رابط مشاركة)؛ أدخِله على الجهاز الآخر للاتصال. والنقل عبر الشبكات يجري عبر مُرحِّل TURN مشفَّر لا عبر وصلة مباشرة بين الحاسوبين، وهذا مقصود بحكم التصميم: فبين شبكتين مختلفتين يتعذّر في الغالب إيجاد مسار مباشر أصلًا، والبحث عنه أولًا يضيف نحو عشرين ثانية من الانتظار قبل أن يستقر الاتصال على المُرحِّل على أي حال. ولا يُمرِّر المُرحِّل سوى نص مُشفَّر — فالملفات مختومة من الطرف إلى الطرف قبل أن تغادر الحاسوب المُرسِل، فلا يصله شيء يمكن قراءته. وإذا انقطع الاتصال في منتصف مجلد كبير، يستأنف بدلًا من البدء من جديد. يحتاج هذا الوضع إلى تسجيل دخول المُرسِل؛ أما من يستقبل فلا يحتاج أبدًا إلى حساب.",
+        "تعمل من المنزل بينما الجهاز الآخر في المكتب، أو مجرد على شبكة Wi-Fi مختلفة؟ يوصِل رمز الاقتران جهاز Mac وحاسوب Windows عبر الإنترنت، لا عبر الغرفة فحسب. غير أن غرفة رمز الاقتران واجهة منفصلة عن مساحة عمل جهاز قريب: فهي تحتفظ بعناصر التحكم الأقدم المنفصلة لكل جهاز، ولا يوجد فيها «فتح مساحة العمل» لتضغطه.",
+        "يولّد الحاسوب المُرسِل رمز اقتران قصيرًا (أو رابط مشاركة)؛ أدخِله على الجهاز الآخر للاتصال. والنقل عبر الشبكات يجري عبر مُرحِّل TURN مشفَّر لا عبر وصلة مباشرة بين الحاسوبين، وهذا مقصود بحكم التصميم: فالجلسة تسلك المُرحِّل من البداية، فلا يعتمد انعقاد الاتصال على إيجاد مسار مباشر عبر ما بين الشبكتين من شبكات NAT وجدران حماية، وهي قد تمنع مثل هذا المسار. ولا يُمرِّر المُرحِّل سوى نص مُشفَّر — فالملفات مختومة من الطرف إلى الطرف قبل أن تغادر الحاسوب المُرسِل، فلا يصله شيء يمكن قراءته. وإذا انقطع الاتصال في منتصف مجلد كبير، يستأنف بدلًا من البدء من جديد. يحتاج هذا الوضع إلى تسجيل دخول المُرسِل؛ أما من يستقبل فلا يحتاج أبدًا إلى حساب.",
       ],
     },
     {
@@ -686,7 +1113,7 @@ const ar = {
     {
       heading: "هل يتغير أي شيء في الملفات؟",
       body: [
-        "لا. ينقل Relayium البايتات الأصلية كما هي تمامًا — دون إعادة ضغط، ودون إعادة تهيئة، ودون تغيير في نهايات الأسطر أو أسماء الملفات بين نظامَي التشغيل.",
+        "المحتوى لا يتغيّر. ينقل Relayium البايتات الأصلية كما هي تمامًا — دون إعادة ضغط، ودون إعادة تهيئة، ودون إعادة كتابة نهايات الأسطر بين نظامَي التشغيل — ويحافظ المجلد على مساراته النسبية. لكن هناك أمران لا يعبران، وكلاهما يتعلق بنظام الملفات لا بالنقل: يمنع Windows محارف يسمح بها macOS، فالاسم المشروع على الـ Mac قد يكون إنشاؤه مستحيلًا على الـ PC؛ كما أن بتات أذونات POSIX والملكية وسمات macOS الممتدة لا تُنقَل — فالمتصفح المستقبِل يكتب ملفات عادية وفق نموذج أذونات NTFS نفسه.",
         "يُفحَص كل ملف من الطرف إلى الطرف بتجزئة SHA-256، فما يحطّ على حاسوب Windows (أو الـ Mac) مُتحقَّق من تطابقه تمامًا مع ما غادر الجهاز الآخر. وتُعالَج الملفات الكبيرة جيدًا أيضًا: المتصفح الذي يدعم واجهة File System Access — ‏Chrome أو Edge على الحاسوب — يبثّ التنزيل مباشرةً إلى القرص دون سقف للحجم. أما Firefox وSafari فلا تملكان تلك الواجهة، فتُجمَّع الدفعة المستلمة هناك في الذاكرة، وينبّهك Relayium قبل القبول متى تجاوزت نحو 256 ميغابايت. وهذا الرقم تقدير متحفّظ عن قصد لا حدٌّ مقيس — فنقطة الانهيار الفعلية تتوقف على ذاكرة الجهاز ونظامه وما هو مفتوح غير ذلك.",
       ],
     },
@@ -708,7 +1135,7 @@ const ar = {
       },
       {
         q: "هل تتشوّه أذونات الملفات أو نهايات الأسطر أو أسماء الملفات عند الانتقال من Mac إلى Windows؟",
-        a: "لا. ينقل Relayium البايتات الدقيقة لكل ملف ويتحقق منها بتجزئة SHA-256 من الطرف إلى الطرف — فلا يمسّ نهايات الأسطر أو الترميز أو أسماء الملفات. أي شيء قد يحتاج تحويلٌ على مستوى التطبيق إلى معالجته (مثل CRLF مقابل LF في ملف نصي) يبقى دون تغيير لأن الملف نفسه لم يتغير.",
+        a: "البايتات والمسار النسبي داخل المجلد تبقى دون تغيير، ويُتحقَّق منها بتجزئة SHA-256 من الطرف إلى الطرف، فلا يُمَسّ شيء من نهايات الأسطر أو الترميز — وأي شيء قد يحتاج تحويلٌ على مستوى التطبيق إلى معالجته (مثل CRLF مقابل LF في ملف نصي) يبقى دون تغيير لأن الملف نفسه لم يتغير. لكن هناك أمران لا يعبران فعلًا: الاسم الذي يحتوي أحد المحارف التي يمنعها Windows لا يمكن إنشاؤه على الـ PC أصلًا، وأذونات POSIX والملكية وسمات macOS الممتدة لا تُنقَل، لأن المتصفح المستقبِل يكتب ملفات عادية وفق نموذج NTFS نفسه.",
       },
       {
         q: "هل هناك حد للحجم؟",
@@ -738,30 +1165,91 @@ const es = {
       body: [
         "Nada que instalar en el Mac ni en el PC. En la misma red tampoco hay nada que registrar — el navegador se encarga de todo.",
       ],
-      bullets: [
-        "Un Mac con Safari o Chrome, y un PC con Windows con Edge o Chrome — cualquier navegador moderno en cualquiera de los dos lados.",
-        "Para la vía más sencilla, conecta ambas máquinas a la misma red Wi-Fi o Ethernet. Si están en lugares distintos, un código de emparejamiento salva la distancia en su lugar.",
-        "Los archivos o carpetas a enviar — hasta 1.000 archivos por lote.",
-      ],
+      prereqs: {
+        label: "Lo que necesitas",
+        items: [
+          "Un Mac con Safari o Chrome, y un PC con Windows con Edge o Chrome — cualquier navegador moderno en cualquiera de los dos lados.",
+          "Para la vía más sencilla, ambas máquinas en la misma red Wi-Fi o Ethernet. Mezclarlas no es problema: un PC por cable y un Mac detrás del mismo router siguen compartiendo una IP pública, y es ella la que los mete en la misma sala.",
+          "La página abierta mediante https://relayium.com/ en las dos. La transferencia cifrada necesita HTTPS, y con http:// a secas la página lo dice en lugar de listar dispositivos.",
+          "Para un lote grande, Chrome o Edge en la máquina que recibe. Solo esos dos pueden escribir directamente al disco y dejarte elegir antes una carpeta de destino — Safari no tiene esa API y debe montar el lote en memoria.",
+          "Los archivos o carpetas a enviar — hasta 1.000 archivos por lote.",
+        ],
+      },
     },
     {
       heading: "Mac y PC en la misma red",
       body: [
         "Si ambos ordenadores están en la misma red de oficina o de casa, esta es la forma más rápida de mover archivos — ninguna unidad compartida que montar, ningún permiso contra el que pelear.",
       ],
-      bullets: [
-        "En el Mac, abre relayium.com en el navegador. En el PC con Windows, abre la misma dirección.",
-        "Cada máquina aparece como un dispositivo cercano para la otra — sin configurar un grupo de trabajo de Windows, sin habilitar el uso compartido de archivos de macOS.",
-        "En el ordenador que envía, haz clic en el otro y luego elige los archivos (o una carpeta entera) a enviar.",
-        "Activa la verificación avanzada (desactivada por omisión) y ambas pantallas mostrarán el mismo código de verificación corto. Comprueba que coincide: confirma que ambas máquinas se unieron a la misma sesión cifrada de extremo a extremo, no la ruta de red que transporta el texto cifrado. Si la dejas desactivada, la sesión sigue cifrada; simplemente no hay código que comparar.",
-        "Acepta en el lado que recibe y la transferencia empieza de inmediato, transmitiendo directamente al disco.",
+      steps: [
+        {
+          text: "En el Mac, abre la página de transferencia en el navegador. En el PC con Windows, abre la misma dirección.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Compara la IP pública de la línea de estado en las dos máquinas. Compartir una dirección es lo que las mete en la misma sala. Si dos máquinas de una misma red de oficina anuncian direcciones distintas, una VPN corporativa en el portátil de trabajo es una causa común, aunque no la única.",
+          code: ["Conectado · este dispositivo MacBook · IP pública 203.0.113.9"],
+        },
+        {
+          text: "Ahora cada máquina aparece en la otra bajo «Dispositivos cercanos» — sin configurar un grupo de trabajo de Windows, sin habilitar el uso compartido de archivos de macOS. En el ordenador que envía, haz clic en el otro y pulsa «Abrir espacio de trabajo». En un navegador actual esa es la única acción que ofrece la tarjeta, porque archivos, carpetas y mensajes viajan todos por la única conexión cifrada que abre.",
+        },
+        {
+          text: "El espacio de trabajo sustituye a esa tarjeta. Envía desde los controles bajo su encabezado: «Enviar archivos» para un lote de hasta 1.000, «Enviar una carpeta» para un árbol completo, o escribe en el cuadro de mensaje — «Enter para una nueva línea · ⌘/Ctrl+Enter para enviar» — y pulsa «Enviar». En el lado que recibe, lee la línea bajo la solicitud: en Chrome o Edge dice que el navegador preguntará dónde guardar, así que eliges la carpeta tú mismo, y en Safari o Firefox dice que los archivos irán a las descargas del propio navegador. Después pulsa «Aceptar».",
+        },
+        {
+          text: "Observa cómo el contador llega al último archivo en las dos pantallas. Para comparar un código de verificación (SAS) antes de que se mueva un byte, activa primero «Verificación avanzada» en las dos máquinas: una coincidencia confirma que ambas se unieron a la misma sesión cifrada de extremo a extremo, no la ruta de red que transporta el texto cifrado. Si la dejas desactivada, la sesión sigue cifrada y simplemente no hay código que comparar.",
+        },
       ],
+      success: {
+        label: "Qué se ve cuando la transferencia funciona",
+        body: [
+          "A esas alturas la tarjeta de la otra máquina ya no está — el espacio de trabajo ocupó su lugar —, así que el estado se lee en el encabezado del espacio de trabajo: la máquina a la que estás conectado, un estado de enlace «Conectado» y una única etiqueta de ruta que marca «Directo por LAN». El contador termina en el último archivo del lote.",
+          "En la carpeta que elegiste, el árbol llega con sus rutas relativas intactas. Un nombre que ya esté en ese directorio de destino no se sobrescribe: report.pdf aterriza al lado como report (1).pdf. Ese renombrado es propio de Relayium y solo se aplica allí donde el navegador nos entregó un directorio en el que escribir — Chrome o Edge con el selector de carpeta. Sin selector, el nombrado pertenece al gestor de descargas de ese navegador, y el resultado se lee en su propia lista: chrome://downloads en Chrome, edge://downloads en Edge, about:downloads en Firefox.",
+        ],
+        code: ["Conectado a ThinkPad · Conectado · Directo por LAN\nArchivo 12/12"],
+      },
+    },
+    {
+      heading: "Cuando una máquina no ve a la otra",
+      body: [
+        "En esta pareja, una VPN de trabajo y una red de oficina gestionada son las dos que conviene comprobar primero. Son comprobaciones iniciales habituales más que la lista completa, y todo lo de abajo se decide con algo que ya está en pantalla y no con una incidencia de soporte.",
+      ],
+      troubleshooting: {
+        label: "Síntoma, comprobación, solución",
+        items: [
+          {
+            symptom: "Ninguna de las dos máquinas aparece bajo «Dispositivos cercanos», aunque las dos están en la Wi-Fi de la oficina.",
+            code: ["https://relayium.com/   # compara la IP pública de la línea de estado en las dos máquinas"],
+            fix: "Dos direcciones IP públicas distintas son dos salas, y una VPN corporativa es una causa común: saca una máquina por la dirección de la empresa mientras la otra sale por el router de la oficina. Un SSID de invitados que sale por otro lado es otra, y no son las únicas. Si estás dispuesto a cambiarlas, desconecta la VPN en esa máquina o abandona el SSID de invitados, y recarga https://relayium.com/ ahí. Si la VPN tiene que seguir levantada, un código de emparejamiento en https://relayium.com/cross-network llega a la otra máquina sin desconectarla.",
+          },
+          {
+            symptom: "Las dos máquinas muestran la misma IP pública y no aparece ninguna tarjeta.",
+            code: ["https://relayium.com/   # la indicación bajo la lista de dispositivos nombra el ajuste del router"],
+            fix: "La red separa a sus propios clientes. En un router que sea tuyo, desactiva «aislamiento de AP / aislamiento de clientes»; en una red de oficina gestionada que no puedes cambiar, empareja las dos máquinas con un código en https://relayium.com/cross-network.",
+          },
+          {
+            symptom: "Antes de aceptar, el Mac avisa de que tiene que sostener todo el lote en memoria.",
+            code: ["https://relayium.com/   # la línea bajo la solicitud dice cómo va a guardar este navegador"],
+            fix: "Safari no tiene la API File System Access, así que almacena el lote en vez de escribirlo, y Relayium avisa a partir de unos 256 MiB. Recibe el mismo lote en Chrome o Edge en ese Mac: escribe cada archivo directamente al disco y te pide antes una carpeta de destino.",
+          },
+          {
+            symptom: "Un archivo de una transferencia de carpeta falla en el lado Windows mientras el resto llega.",
+            code: ["https://relayium.com/   # el contador nombra el archivo en el que se detiene"],
+            fix: "Windows prohíbe los caracteres \\ / : * ? \" < > | en un nombre de archivo y macOS no, así que un nombre legal en el Mac puede ser imposible de crear en el PC. Renombra ese archivo en el Mac y envíalo de nuevo; los dos puntos de una fecha como 2026:08:05 son el caso más frecuente.",
+          },
+          {
+            symptom: "La transferencia funciona, pero la etiqueta marca «Directo P2P» en lugar de «Directo por LAN».",
+            code: ["https://relayium.com/   # lee la etiqueta de ruta en el encabezado del espacio de trabajo"],
+            fix: "Las dos máquinas comparten una IP pública sin compartir un salto local, que es exactamente el aspecto de dos VLAN detrás de un mismo enlace de subida de oficina. La transferencia sigue siendo directa y sigue cifrada de extremo a extremo; pon las dos en la misma subred si quieres que la ruta sea tu LAN y no el camino que encontraron los navegadores.",
+          },
+        ],
+      },
     },
     {
       heading: "Mac y PC en redes distintas",
       body: [
-        "¿Trabajas desde casa mientras la otra máquina está en la oficina, o simplemente en una red Wi-Fi distinta? Un código de emparejamiento conecta un Mac y un PC con Windows a través de internet, no solo de un lado a otro de la habitación.",
-        "El ordenador que envía genera un código de emparejamiento corto (o un enlace para compartir); introdúcelo en la otra máquina para conectar. Una transferencia entre redes va por un retransmisor TURN cifrado en lugar de por un enlace directo entre las dos máquinas, y es a propósito: entre dos redes distintas casi nunca se encuentra una ruta directa, y buscarla primero añadiría unos veinte segundos muertos antes de que la conexión acabara igualmente en el retransmisor. El retransmisor solo reenvía texto cifrado — los archivos van sellados de extremo a extremo antes de salir de la máquina emisora, así que no le llega nada legible. Si la conexión se cae a mitad de una carpeta grande, se reanuda en lugar de empezar de nuevo. Este modo necesita que el remitente inicie sesión; quien recibe nunca necesita una cuenta.",
+        "¿Trabajas desde casa mientras la otra máquina está en la oficina, o simplemente en una red Wi-Fi distinta? Un código de emparejamiento conecta un Mac y un PC con Windows a través de internet, no solo de un lado a otro de la habitación. Eso sí, una sala con código de emparejamiento es una superficie distinta de un espacio de trabajo con un dispositivo cercano: conserva los controles anteriores separados por dispositivo, así que allí no hay ningún «Abrir espacio de trabajo» que pulsar.",
+        "El ordenador que envía genera un código de emparejamiento corto (o un enlace para compartir); introdúcelo en la otra máquina para conectar. Una transferencia entre redes va por un retransmisor TURN cifrado en lugar de por un enlace directo entre las dos máquinas, y es a propósito: la sesión toma el retransmisor desde el principio, de modo que la conexión no depende de encontrar una ruta directa a través de los NAT y cortafuegos que hay entre las dos redes, que pueden impedirla. El retransmisor solo reenvía texto cifrado — los archivos van sellados de extremo a extremo antes de salir de la máquina emisora, así que no le llega nada legible. Si la conexión se cae a mitad de una carpeta grande, se reanuda en lugar de empezar de nuevo. Este modo necesita que el remitente inicie sesión; quien recibe nunca necesita una cuenta.",
       ],
     },
     {
@@ -790,7 +1278,7 @@ const es = {
     {
       heading: "¿Cambiará algo en los archivos?",
       body: [
-        "No. Relayium transfiere los bytes originales exactamente como están — sin recompresión, sin reformateo, sin cambios de fin de línea ni de nombre de archivo entre los dos sistemas operativos.",
+        "El contenido no. Relayium transfiere los bytes originales exactamente como están — sin recompresión, sin reformateo, sin reescribir los fines de línea entre los dos sistemas operativos — y una carpeta conserva sus rutas relativas. Dos cosas sí que no cruzan, y ambas pertenecen al sistema de archivos y no a la transferencia: Windows prohíbe caracteres que macOS permite, así que un nombre legal en el Mac puede ser imposible de crear en el PC, y los bits de permiso POSIX, la propiedad y los atributos extendidos de macOS no se llevan consigo — el navegador que recibe escribe archivos normales bajo el propio modelo de permisos de NTFS.",
         "Cada archivo se comprueba de extremo a extremo con un hash SHA-256, así que lo que llega al PC con Windows (o al Mac) queda verificado como idéntico a lo que salió de la otra máquina. Los archivos grandes también se manejan bien: un navegador con la API File System Access — Chrome o Edge de escritorio — transmite la descarga directamente al disco, sin límite de tamaño. Firefox y Safari no tienen esa API, así que un lote recibido ahí se acumula en memoria y Relayium te avisa antes de que aceptes en cuanto se pasa de unos 256 MB. Esa cifra es una estimación deliberadamente prudente, no un límite medido: dónde falla de verdad depende de la memoria de la máquina, de su sistema y de qué más tengas abierto.",
       ],
     },
@@ -812,7 +1300,7 @@ const es = {
       },
       {
         q: "¿Se estropearán los permisos de archivo, los fines de línea o los nombres al pasar de Mac a Windows?",
-        a: "No. Relayium mueve los bytes exactos de cada archivo y los verifica con un hash SHA-256 de extremo a extremo — no toca los fines de línea, la codificación ni los nombres de archivo. Todo lo que una conversión a nivel de aplicación tendría que manejar (como CRLF frente a LF en un archivo de texto) queda sin cambios porque el propio archivo queda sin cambios.",
+        a: "Los bytes y la ruta relativa dentro de una carpeta quedan sin cambios y se verifican con un hash SHA-256 de extremo a extremo, así que nada toca los fines de línea ni la codificación — todo lo que una conversión a nivel de aplicación tendría que manejar (como CRLF frente a LF en un archivo de texto) queda sin cambios porque el propio archivo queda sin cambios. Dos cosas realmente no cruzan: un nombre que contenga uno de los caracteres que Windows prohíbe no puede crearse en el PC, y los permisos POSIX, la propiedad y los atributos extendidos de macOS no se transfieren, porque el navegador que recibe escribe archivos normales bajo el propio modelo de NTFS.",
       },
       {
         q: "¿Hay algún límite de tamaño?",
@@ -842,30 +1330,91 @@ const pt = {
       body: [
         "Nada para instalar no Mac ou no PC. Na mesma rede também não há nada para se cadastrar — o navegador cuida de tudo.",
       ],
-      bullets: [
-        "Um Mac com Safari ou Chrome e um PC com Windows com Edge ou Chrome — qualquer navegador moderno em qualquer um dos lados.",
-        "Para o caminho mais simples, conecte as duas máquinas à mesma rede Wi-Fi ou Ethernet. Se estiverem em lugares diferentes, um código de emparelhamento faz a ponte no lugar disso.",
-        "Os arquivos ou pastas a enviar — até 1.000 arquivos por lote.",
-      ],
+      prereqs: {
+        label: "O que você precisa",
+        items: [
+          "Um Mac com Safari ou Chrome e um PC com Windows com Edge ou Chrome — qualquer navegador moderno em qualquer um dos lados.",
+          "Para o caminho mais simples, as duas máquinas na mesma rede Wi-Fi ou Ethernet. Misturar as duas não é problema: um PC no cabo e um Mac atrás do mesmo roteador continuam compartilhando um IP público, e é ele que coloca os dois na mesma sala.",
+          "A página aberta por https://relayium.com/ nas duas. A transferência criptografada exige HTTPS, e em http:// puro a página diz isso em vez de listar dispositivos.",
+          "Para um lote grande, Chrome ou Edge na máquina que recebe. Só esses dois gravam direto no disco e deixam você escolher antes uma pasta de destino — o Safari não tem essa API e precisa montar o lote na memória.",
+          "Os arquivos ou pastas a enviar — até 1.000 arquivos por lote.",
+        ],
+      },
     },
     {
       heading: "Mac e PC na mesma rede",
       body: [
         "Se os dois computadores estiverem na mesma rede do escritório ou de casa, esta é a forma mais rápida de mover arquivos — nenhuma unidade compartilhada para montar e nenhuma briga com permissões.",
       ],
-      bullets: [
-        "No Mac, abra o relayium.com no navegador. No PC com Windows, abra o mesmo endereço.",
-        "Cada máquina aparece para a outra como um dispositivo próximo — nenhum grupo de trabalho do Windows para configurar, nenhum compartilhamento de arquivos do macOS para ativar.",
-        "No computador que envia, toque no outro e depois escolha os arquivos (ou uma pasta inteira) para enviar.",
-        "Ative a verificação avançada (desligada por padrão) e as duas telas mostrarão o mesmo código de verificação curto. Confira se ele coincide: isso confirma que as duas máquinas entraram na mesma sessão criptografada de ponta a ponta, não a rota de rede que transporta o texto cifrado. Se deixar desligada, a sessão continua criptografada; apenas não há código para comparar.",
-        "Aceite no lado que recebe e a transferência começa imediatamente, transmitindo direto para o disco.",
+      steps: [
+        {
+          text: "No Mac, abra a página de transferência no navegador. No PC com Windows, abra o mesmo endereço.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Compare o IP público da linha de status nas duas máquinas. Compartilhar um endereço é o que coloca as duas na mesma sala. Se duas máquinas de uma mesma rede de escritório anunciam endereços diferentes, uma VPN corporativa no notebook de trabalho é uma causa comum, mas não a única.",
+          code: ["Conectado · este dispositivo MacBook · IP público 203.0.113.9"],
+        },
+        {
+          text: "Agora cada máquina aparece para a outra em “Dispositivos próximos” — nenhum grupo de trabalho do Windows para configurar, nenhum compartilhamento de arquivos do macOS para ativar. No computador que envia, clique no outro e pressione “Abrir área de trabalho”. Em um navegador atual essa é a única ação que o cartão oferece, porque arquivos, pastas e mensagens passam todos pela única conexão criptografada que ela abre.",
+        },
+        {
+          text: "A área de trabalho toma o lugar daquele cartão. Envie pelos controles abaixo do cabeçalho dela: “Enviar arquivos” para um lote de até 1.000, “Enviar uma pasta” para uma árvore inteira, ou digite na caixa de mensagem — “Enter para uma nova linha · ⌘/Ctrl+Enter para enviar” — e pressione “Enviar”. No lado que recebe, leia a linha abaixo do pedido: no Chrome ou no Edge ela diz que o navegador vai perguntar onde salvar, então você escolhe a pasta, e no Safari ou no Firefox diz que os arquivos vão para os downloads do próprio navegador. Depois clique em “Aceitar”.",
+        },
+        {
+          text: "Acompanhe o contador chegar ao último arquivo nas duas telas. Para comparar um código de verificação (SAS) antes de qualquer byte se mover, ligue primeiro a “Verificação avançada” nas duas máquinas: a coincidência confirma que as duas entraram na mesma sessão criptografada de ponta a ponta, não a rota de rede que transporta o texto cifrado. Se deixar desligada, a sessão continua criptografada e apenas não há código para comparar.",
+        },
       ],
+      success: {
+        label: "Como é uma transferência que funciona",
+        body: [
+          "A essa altura o cartão da outra máquina já não existe — a área de trabalho ocupou o lugar dele —, então o estado é lido no cabeçalho da área de trabalho: a máquina a que você está conectado, um estado de vínculo “Conectado” e um único selo de caminho indicando “LAN direto”. O contador termina no último arquivo do lote.",
+          "Na pasta que você escolheu, a árvore chega com os caminhos relativos intactos. Um nome que já esteja nesse diretório de destino não é sobrescrito: report.pdf cai ao lado como report (1).pdf. Essa renomeação é do próprio Relayium e só vale onde o navegador nos entregou um diretório para gravar — Chrome ou Edge com o seletor de pasta. Sem o seletor, a nomeação é do gerenciador de downloads daquele navegador, e o resultado se lê na lista dele: chrome://downloads no Chrome, edge://downloads no Edge, about:downloads no Firefox.",
+        ],
+        code: ["Conectado a ThinkPad · Conectado · LAN direto\nArquivo 12/12"],
+      },
+    },
+    {
+      heading: "Quando uma máquina não enxerga a outra",
+      body: [
+        "Nesta dupla, uma VPN de trabalho e uma rede de escritório gerenciada são as duas que vale checar primeiro. São verificações iniciais comuns, não a lista completa, e tudo abaixo se decide com algo que já está na tela, e não com um pedido de suporte.",
+      ],
+      troubleshooting: {
+        label: "Sintoma, verificação, correção",
+        items: [
+          {
+            symptom: "Nenhuma das duas máquinas aparece em “Dispositivos próximos”, mesmo com as duas na Wi-Fi do escritório.",
+            code: ["https://relayium.com/   # compare o IP público da linha de status nas duas máquinas"],
+            fix: "Dois endereços IP públicos diferentes são duas salas, e uma VPN corporativa é uma causa comum: ela faz uma máquina sair pelo endereço da empresa enquanto a outra sai pelo roteador do escritório. Um SSID de visitantes que sai por outro lugar é outra, e não são as únicas. Se você estiver disposto a mudá-las, desconecte a VPN nessa máquina ou saia do SSID de visitantes, e recarregue https://relayium.com/ nela. Se a VPN tiver de continuar de pé, um código de emparelhamento em https://relayium.com/cross-network alcança a outra máquina sem derrubá-la.",
+          },
+          {
+            symptom: "As duas máquinas mostram o mesmo IP público e nenhum cartão aparece.",
+            code: ["https://relayium.com/   # a dica abaixo da lista de dispositivos nomeia a configuração do roteador"],
+            fix: "A rede está separando os próprios clientes. Em um roteador que seja seu, desative “isolamento de AP / isolamento de clientes”; em uma rede de escritório gerenciada que você não pode mudar, emparelhe as duas máquinas com um código em https://relayium.com/cross-network.",
+          },
+          {
+            symptom: "Antes de aceitar, o Mac avisa que precisa segurar o lote inteiro na memória.",
+            code: ["https://relayium.com/   # a linha abaixo do pedido diz como este navegador vai salvar"],
+            fix: "O Safari não tem a API File System Access, então guarda o lote em vez de gravá-lo, e o Relayium avisa acima de mais ou menos 256 MiB. Receba o mesmo lote no Chrome ou no Edge nesse Mac: ele grava cada arquivo direto no disco e pede antes uma pasta de destino.",
+          },
+          {
+            symptom: "Um arquivo de uma transferência de pasta falha no lado Windows enquanto o resto chega.",
+            code: ["https://relayium.com/   # o contador informa o arquivo em que ele para"],
+            fix: "O Windows proíbe os caracteres \\ / : * ? \" < > | em um nome de arquivo e o macOS não, então um nome legal no Mac pode ser impossível de criar no PC. Renomeie esse arquivo no Mac e envie de novo; os dois-pontos de uma data como 2026:08:05 são o caso mais comum.",
+          },
+          {
+            symptom: "A transferência funciona, mas o selo mostra “P2P direto” em vez de “LAN direto”.",
+            code: ["https://relayium.com/   # leia o selo de caminho no cabeçalho da área de trabalho"],
+            fix: "As duas máquinas compartilham um IP público sem compartilhar um salto local, que é exatamente a cara de duas VLANs atrás do mesmo enlace de subida do escritório. A transferência continua direta e continua criptografada de ponta a ponta; coloque as duas na mesma sub-rede se quiser que o caminho seja a sua LAN e não a rota que os navegadores encontraram.",
+          },
+        ],
+      },
     },
     {
       heading: "Mac e PC em redes diferentes",
       body: [
-        "Trabalhando de casa enquanto a outra máquina está no escritório, ou apenas em uma rede Wi-Fi diferente? Um código de emparelhamento conecta um Mac e um PC com Windows pela internet, não só de um lado a outro da sala.",
-        "O computador que envia gera um código de emparelhamento curto (ou um link de compartilhamento); digite-o na outra máquina para conectar. Uma transferência entre redes passa por um retransmissor TURN criptografado em vez de uma ligação direta entre as duas máquinas, e isso é proposital: entre duas redes diferentes quase nunca existe um caminho direto, e procurá-lo primeiro acrescentaria uns vinte segundos parados antes de a conexão terminar no retransmissor de qualquer forma. O retransmissor só encaminha texto cifrado — os arquivos são selados de ponta a ponta antes de deixar a máquina que envia, então nada legível chega até ele. Se a conexão cair no meio de uma pasta grande, ela retoma em vez de recomeçar. Esse modo precisa que o remetente faça login; quem recebe nunca precisa de conta.",
+        "Trabalhando de casa enquanto a outra máquina está no escritório, ou apenas em uma rede Wi-Fi diferente? Um código de emparelhamento conecta um Mac e um PC com Windows pela internet, não só de um lado a outro da sala. Só que uma sala com código de emparelhamento é uma superfície separada de uma área de trabalho com um dispositivo próximo: ela mantém os controles anteriores separados por dispositivo, então não há nenhum “Abrir área de trabalho” para pressionar ali.",
+        "O computador que envia gera um código de emparelhamento curto (ou um link de compartilhamento); digite-o na outra máquina para conectar. Uma transferência entre redes passa por um retransmissor TURN criptografado em vez de uma ligação direta entre as duas máquinas, e isso é proposital: a sessão usa o retransmissor desde o início, então a conexão não depende de encontrar uma rota direta através dos NATs e firewalls que existem entre as duas redes, que podem impedi-la. O retransmissor só encaminha texto cifrado — os arquivos são selados de ponta a ponta antes de deixar a máquina que envia, então nada legível chega até ele. Se a conexão cair no meio de uma pasta grande, ela retoma em vez de recomeçar. Esse modo precisa que o remetente faça login; quem recebe nunca precisa de conta.",
       ],
     },
     {
@@ -894,7 +1443,7 @@ const pt = {
     {
       heading: "Alguma coisa vai mudar nos arquivos?",
       body: [
-        "Não. O Relayium transfere os bytes originais exatamente como são — sem recompressão, sem reformatação, sem mudanças de fim de linha ou de nome de arquivo entre os dois sistemas operacionais.",
+        "O conteúdo não. O Relayium transfere os bytes originais exatamente como são — sem recompressão, sem reformatação, sem reescrever os fins de linha entre os dois sistemas operacionais — e uma pasta mantém os caminhos relativos. Duas coisas, porém, não fazem a travessia, e as duas pertencem ao sistema de arquivos e não à transferência: o Windows proíbe caracteres que o macOS permite, então um nome legal no Mac pode ser impossível de criar no PC, e os bits de permissão POSIX, a propriedade e os atributos estendidos do macOS não vão junto — o navegador que recebe grava arquivos comuns sob o próprio modelo de permissões do NTFS.",
         "Cada arquivo é conferido de ponta a ponta com um hash SHA-256, então o que pousa no PC com Windows (ou no Mac) é verificado como idêntico ao que saiu da outra máquina. Arquivos grandes também são bem tratados: um navegador com a API File System Access — Chrome ou Edge no computador — transmite o download direto para o disco, sem limite de tamanho. Firefox e Safari não têm essa API, então um lote recebido neles é montado na memória, e o Relayium avisa antes de você aceitar assim que passa de cerca de 256 MB. Esse número é uma estimativa propositalmente conservadora, não um limite medido — onde realmente cede depende da memória da máquina, do sistema e do que mais estiver aberto.",
       ],
     },
@@ -916,7 +1465,7 @@ const pt = {
       },
       {
         q: "As permissões de arquivo, os fins de linha ou os nomes de arquivo vão se embaralhar ao passar do Mac para o Windows?",
-        a: "Não. O Relayium move os bytes exatos de cada arquivo e os verifica com um hash SHA-256 de ponta a ponta — ele não toca nos fins de linha, na codificação ou nos nomes de arquivo. Tudo o que uma conversão em nível de aplicação precisaria tratar (como CRLF versus LF em um arquivo de texto) fica inalterado, porque o próprio arquivo fica inalterado.",
+        a: "Os bytes e o caminho relativo dentro de uma pasta ficam inalterados e são verificados com um hash SHA-256 de ponta a ponta, então nada toca nos fins de linha nem na codificação — tudo o que uma conversão em nível de aplicação precisaria tratar (como CRLF versus LF em um arquivo de texto) fica inalterado, porque o próprio arquivo fica inalterado. Duas coisas realmente não passam: um nome que contenha um dos caracteres proibidos pelo Windows não pode ser criado no PC, e as permissões POSIX, a propriedade e os atributos estendidos do macOS não são transferidos, porque o navegador que recebe grava arquivos comuns sob o próprio modelo do NTFS.",
       },
       {
         q: "Existe algum limite de tamanho?",
@@ -934,6 +1483,6 @@ const pt = {
 export default {
   slug: "how-to/transfer-files-between-mac-and-windows",
   published: "2026-07-09",
-  updated: "2026-07-31",
+  updated: "2026-08-05",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

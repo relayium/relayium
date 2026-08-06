@@ -27,7 +27,7 @@
 > | 5 | 每篇配对教程补 5 分钟 TTL / 码从哪来 | ✅ | 16 篇提到配对码的教程已按“教流程 / 仅提及”完整分类；6 篇缺失流程说明的文章已补齐 5 分钟有效期与账户铸码来源，`pairing-facts.test.mjs` 对 9 语言守住分类完备性和事实 |
 > | 6 | 相关链接改策展 | ✅ | `content/related-map.mjs`，每篇 4 条 |
 > | 7 | 教程入口 | ⏳ **部分**：SPA 页脚已有 Guides 入口、UseCases 卡片已可点（`UseCases.svelte` 的 `caseHref`）；**落地页 learn 区仍是 37 条平铺、仍无收尾 CTA** |
-> | 8 | 编号步骤 / 预期输出 / 排障块 | ⏳ **部分**：第一批 6 篇 CLI 教程 ×9 语言已完成；模板已支持语义化编号步骤、成功标志与排障定义列表，`cli-tutorial-structure.test.mjs` 守住结构、可运行命令和关键事实。剩余浏览器 how-to 11 篇与 guides 8 篇待后续两批 |
+> | 8 | 编号步骤 / 预期输出 / 排障块 | ⏳ **部分**：CLI 6 篇和浏览器 how-to 11 篇均已完成（各 ×9 语言）；模板已支持语义化编号步骤、成功标志与排障定义列表，`cli-tutorial-structure.test.mjs` 与 `browser-howto-tutorial.test.mjs` 分别守住可运行命令、当前 UI 标签、跨网路径、浏览器落盘、阅后即焚和配额事实。仅剩 guides 8 篇 |
 > | 9 | 事实去重成权威 snippet | ⏳ **部分**：`content/install-section.mjs` 是已落地的共享段落；跨网段落与浏览器限制段落仍各自散在文章里（由 1/2 的测试守住正确性，但没有单一来源） |
 > | 10 | 4 篇中文半角标点 | ✅ | 见下方 §11 的 2026-08-05 记录，并由 lint 守住 |
 > | 11 | 术语表 + 构建期强制 + zh 代码注释 | ✅ | `content/GLOSSARY.md` + `register-glossary.test.mjs` |

@@ -24,22 +24,96 @@ const en = {
     },
     {
       heading: "Step by step",
+      prereqs: {
+        label: "Before you start",
+        items: [
+          "Every device on the same Wi-Fi or local network, with the router not keeping its clients apart. Relayium's own hint under the device list names the setting to look for: “AP isolation / client isolation”.",
+          "A current browser on each device (Chrome, Edge, Firefox or Safari) with the page open over https://relayium.com/. Encrypted transfer needs HTTPS, and over plain http:// the page says exactly that instead of listing devices.",
+          "No account and no pairing code. Same-network discovery asks for neither, on either side, so there is nothing to set up before the first transfer.",
+          "Somewhere for the files to land on the receiving device. Which place that is belongs to the receiving browser and its operating system, not to us: Chrome and Edge on a computer can ask you where to save, and other browsers write to their own Downloads folder. You confirm where they landed in that browser's own downloads list — chrome://downloads in Chrome, edge://downloads in Edge, about:downloads in Firefox.",
+        ],
+      },
       body: [
         "The whole flow happens in the browser — no app to install on any device.",
       ],
-      bullets: [
-        "Connect every device you want to use to the same Wi-Fi or local network.",
-        "On each device, open relayium.com in a modern browser (Chrome, Edge, Firefox or Safari).",
-        "The devices on that network appear to each other automatically — no code, no login, no account on either side.",
-        "Pick a file or a whole folder (up to 1,000 files per batch) and choose which device on the list should receive it.",
-        "The transfer starts once the recipient accepts. If you turn on advanced verification (off by default), both devices also show the same short verification code (SAS) to glance at and confirm first.",
-        "Files move straight from one device to the other; save them when they land.",
+      steps: [
+        {
+          text: "Connect every device you want to use to the same Wi-Fi or local network, then open the transfer page on each of them.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Read the status pill under the heading on both devices and compare the public IP in it. One shared address is what puts two devices in the same room; two different addresses mean two different networks, whatever the Wi-Fi name says.",
+          code: ["Connected · this device MacBook · public IP 203.0.113.9"],
+        },
+        {
+          text: "Look under “Nearby devices”. Every device that opened the page from that network is listed there as a card carrying its own name — nothing to type, nothing to confirm.",
+        },
+        {
+          text: "On the sending device, click the recipient's card and press “Open workspace”. On a current browser that is the single action a nearby-device card offers, because files, folders and messages all travel over the one encrypted connection it opens. The room may list several devices; opening a workspace is how you pick the one this transfer goes to, and you open another one when the next person's turn comes.",
+        },
+        {
+          text: "The workspace replaces that card. Read the connection off its header from now on — who you are connected to, the link state, and the one path badge — and use the controls under it to send: “Send files” for a batch, “Send a folder” for a whole tree where the browser offers folder picking, or type into the message box and press “Send”. One file batch carries up to 1,000 files.",
+        },
+        {
+          text: "On the receiving device the request arrives with the file count and the total size, and the line under it says what pressing “Accept” will do — either the browser asks where to save, or the files go to its Downloads folder. Press “Accept” to start.",
+        },
+        {
+          text: "Watch the file counter reach the last file on both screens. If you want to compare a verification code (SAS) before anything moves, turn on “Advanced verification” on both devices first: it is off by default, and switching it on adds a comparison and an approval step rather than encryption — the transfer is encrypted either way.",
+        },
       ],
+      success: {
+        label: "What a working transfer looks like",
+        body: [
+          "The peer card is gone by then — the workspace took its place. The state is in the workspace header instead: the device you are connected to, a link state of “Connected”, and one path badge reading “LAN direct”, a host-to-host hop across your own network. “P2P direct” is the honest second case: the two devices really did share a public IP, but the hop their browsers settled on was not a local one.",
+          "On the receiving side the counter ends on the last file, and the file itself is wherever the save line said it would be. The receiving browser's own downloads list is where you confirm that, not this page — chrome://downloads in Chrome, edge://downloads in Edge, about:downloads in Firefox.",
+        ],
+        code: ["Connected to MacBook · Connected · LAN direct\nFile 3/3"],
+      },
+      bullets: [
+        "A same-network room is not capped at two devices, so a card for every phone and laptop in the room is normal rather than a sign that something went wrong.",
+        "Nothing here is uploaded first and downloaded afterwards, so there is no copy on a server to pick up later: both devices stay on the page until the counter finishes.",
+      ],
+    },
+    {
+      heading: "When the devices don't see each other",
+      body: [
+        "Same-network discovery keys off the network your browser is connecting from, so that is where to look first: the two devices are not really on one network, the router is keeping its clients apart, the page was not opened over HTTPS, or the receiving browser is being asked to hold more than it can. Those are common first checks rather than the whole list, and each of them has something on screen that decides it.",
+      ],
+      troubleshooting: {
+        label: "Symptom, check, fix",
+        items: [
+          {
+            symptom: "“Nearby devices” stays empty, or lists only the device you are looking at.",
+            code: ["https://relayium.com/   # open it on both, then compare the public IP in the status pill"],
+            fix: "Two different public IP addresses mean two separate rooms. A VPN, iCloud Private Relay, or a guest SSID that sends clients out through another address are common reasons for that, and not the only ones. If you are willing to change them: switch the VPN off, or turn Private Relay off for that one Wi-Fi network, or move both devices onto the main network, then reload https://relayium.com/ on each. If you would rather leave them on, a pairing code on https://relayium.com/cross-network reaches the other device without touching either setting, and is end-to-end encrypted the same way.",
+          },
+          {
+            symptom: "Both devices show the same public IP and still neither card appears.",
+            code: ["https://relayium.com/   # the hint under the device list names the router setting"],
+            fix: "The router is separating its own clients. Turn off “AP isolation / client isolation” in its Wi-Fi settings — mesh systems, hotel and guest networks often ship with it on — and reload the page on both devices. When you do not control the router, a pairing code on https://relayium.com/cross-network is the way through instead.",
+          },
+          {
+            symptom: "The page says encrypted transfer requires HTTPS, and no device list appears at all.",
+            code: ["https://relayium.com/   # the address bar has to read https, not http"],
+            fix: "The page was opened over http:// or by raw IP address, so the browser withholds the APIs an encrypted transfer needs. relayium.com itself redirects to HTTPS, so this normally means a self-hosted instance reached over http:// — open it as https://relayium.com/, or give your own instance a certificate.",
+          },
+          {
+            symptom: "The receiving device warns, before you accept, that it has to hold the whole batch in memory.",
+            code: ["chrome://downloads   # in Chrome; Edge has edge://downloads and Firefox about:downloads"],
+            fix: "That browser cannot stream a download straight to disk, so it buffers the batch and a large one may end in a crashed tab. Receive it in Chrome or Edge on a computer, or send fewer files at a time, and check each arrival in the receiving browser's own downloads list — chrome://downloads in Chrome, edge://downloads in Edge, about:downloads in Firefox — rather than assuming it saved.",
+          },
+          {
+            symptom: "The transfer runs, but the badge reads “P2P direct” instead of “LAN direct”.",
+            code: ["https://relayium.com/   # read the path badge in the workspace header"],
+            fix: "The two devices share a public IP without sharing a local hop — carrier-grade NAT, two VLANs behind one uplink, or an extender in client mode all do this. The transfer is still direct and still end-to-end encrypted; put both devices on the same access point if you want the path to be your LAN rather than whatever route the browsers found.",
+          },
+        ],
+      },
     },
     {
       heading: "Why it is fast: no server in the middle",
       body: [
-        "Because both devices are already on the same network, Relayium connects them peer-to-peer directly — the bytes travel from one device to the other over your local Wi-Fi and never make a round trip to a Relayium server. There is nothing to upload and nothing to wait on downloading; speed is bounded only by your local network, which is usually much faster than an internet connection in either direction.",
+        "Both devices connect from the same network, so Relayium links them peer-to-peer: the bytes go from one device to the other without a round trip to a Relayium server, and there is nothing to upload first and nothing to wait on downloading afterwards. How fast that is depends on the hop the two browsers actually settled on, and the path badge names it. “LAN direct” is the local one — the data stays inside your own network and runs at your network's speed rather than your internet connection's. “P2P direct” is still direct and still has no server in the middle, but the route the browsers found left the local segment, so it is bounded by whatever link it really crosses. A shared public IP is what puts two devices in the same room; on its own it is not a promise that the hop between them is local.",
         "This is also why no account is involved on either side: with everyone already on the same trusted network, Relayium does not need sign-in to know who should be allowed to connect to whom.",
       ],
     },
@@ -52,7 +126,7 @@ const en = {
     {
       heading: "If a device is on a different network",
       body: [
-        "Same-network mode only works when the devices actually share a network — a phone on mobile data, a laptop on a different Wi-Fi, or a device behind a different router will not show up automatically. For that case, Relayium also supports connecting across networks with a short pairing code: the sender signs in to generate the code (or a QR code / link), and the receiver never needs an account. Across networks the two browsers connect through an encrypted TURN relay rather than directly — that path is relay-only by design, so the connection comes up in a second or two instead of stalling on direct-candidate checks that would almost always fail between two NATs. It is no less private: the key stays on the two devices, so the relay only ever forwards ciphertext and cannot read the file. The code is good for five minutes, so have both devices in front of you before you generate one.",
+        "Same-network mode only works when the devices actually share a network — a phone on mobile data, a laptop on a different Wi-Fi, or a device behind a different router will not show up automatically. For that case, Relayium also supports connecting across networks with a short pairing code: the sender signs in to generate the code (or a QR code / link), and the receiver never needs an account. Across networks the two browsers connect through an encrypted TURN relay rather than directly — that path is relay-only by design, so the connection does not depend on discovering a direct path through the NATs and firewalls in between, which can prevent one. It is no less private: the key stays on the two devices, so the relay only ever forwards ciphertext and cannot read the file. The code is good for five minutes, so have both devices in front of you before you generate one.",
       ],
     },
   ],
@@ -69,7 +143,7 @@ const en = {
       },
       {
         q: "Can more than two devices see each other at once?",
-        a: "Yes. Same-network rooms are not limited to a pair — every device that opens relayium.com from that network can appear and receive files, useful for sharing with several people in the same room or office.",
+        a: "Yes — the room lists every device that opens relayium.com from that network, so a phone, a laptop and a desktop all appear side by side. A transfer itself is one-to-one: you open a workspace with one of the listed devices, and that is who the files go to. Sharing with several people in the same room means opening a workspace with each of them in turn.",
       },
       {
         q: "Is the transfer still encrypted if it never leaves my network?",
@@ -107,22 +181,96 @@ const zh = {
     },
     {
       heading: "分步操作",
+      prereqs: {
+        label: "开始之前",
+        items: [
+          "每台设备都在同一个 Wi-Fi 或局域网里，并且路由器没有把客户端互相隔开。设备列表下方 Relayium 自己的提示就写着要找的那个开关：「AP 隔离 / 客户端隔离」。",
+          "每台设备上都有一个较新的浏览器（Chrome、Edge、Firefox 或 Safari），并且是通过 https://relayium.com/ 打开页面。加密传输需要 HTTPS，用普通 http:// 打开时页面会直接这么告诉你，而不会列出设备。",
+          "不需要账号，也不需要配对码。同网络发现两端都不问这两样，所以第一次传输之前没有任何要配置的东西。",
+          "接收端要有地方存文件。存到哪里由接收端的浏览器和操作系统决定，不由我们决定：电脑上的 Chrome 和 Edge 可以让你选保存位置，其他浏览器会写进自己的下载目录。落到哪里，要在那个浏览器自己的下载列表里确认——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)。",
+        ],
+      },
       body: [
         "整个流程都在浏览器里完成——任何设备都不用装 App。",
       ],
-      bullets: [
-        "把你要用到的每台设备都连接到同一个 Wi-Fi 或局域网。",
-        "在每台设备上用现代浏览器（Chrome、Edge、Firefox 或 Safari）打开 relayium.com。",
-        "同网络下的设备会自动互相出现——两端都无需配对码，无需登录，无需账号。",
-        "选好文件或整个文件夹（每批最多 1,000 个文件），再从列表里选出要接收的那台设备。",
-        "接收方接受后传输就开始了。如果你打开「高级验证」（默认关闭），两台设备还会显示同一段简短的校验码（SAS），可以先分别瞄一眼确认一致。",
-        "文件直接从一台设备传到另一台；到达后保存即可。",
+      steps: [
+        {
+          text: "把你要用到的每台设备都连接到同一个 Wi-Fi 或局域网，然后在每台设备上打开传输页面。",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "在两台设备上读一下标题下方的状态条，对比里面的公网 IP。地址相同才会把两台设备放进同一个房间；地址不同就说明是两个网络，Wi-Fi 名字叫什么都不算。",
+          code: ["已连接 · 本机 MacBook · 公网 IP 203.0.113.9"],
+        },
+        {
+          text: "看「附近的设备」这一栏。凡是从该网络打开页面的设备，都会以卡片形式列在那里，卡片上是它自己的名字——不用输入，也不用确认。",
+        },
+        {
+          text: "在发送端点开对方的卡片，按「打开工作区」。在较新的浏览器上，这是附近设备卡片提供的唯一动作：文件、文件夹和消息都走它打开的那一条加密连接。房间里可能列着好几台设备，打开工作区就是在其中挑定这次要发给谁；轮到下一个人时，再打开一个工作区。",
+        },
+        {
+          text: "工作区会取代那张卡片。从这一刻起，连接状态要看工作区顶部的标题栏——连的是哪台设备、链路处于什么状态、以及唯一的那个路径标签——发送则用它下面的控件：一批文件用「发送文件」，整个目录树用「发送文件夹」（需要浏览器支持选择文件夹），或者在消息框里输入后按「发送」。一批文件最多 1,000 个。",
+        },
+        {
+          text: "接收端会收到请求，上面写着文件数量和总大小，下面那行说明按「接收」之后会发生什么——要么浏览器问你存到哪，要么文件进入它的下载目录。按「接收」就开始。",
+        },
+        {
+          text: "看着两块屏幕上的文件计数走到最后一个文件。如果希望在任何字节移动之前先核对校验码（SAS），请先在两台设备上打开「高级验证」：它默认关闭，打开后多出来的是一次核对和一步确认，而不是加密——无论开不开，传输都是加密的。",
+        },
       ],
+      success: {
+        label: "传输成功时是什么样",
+        body: [
+          "这时对方的卡片已经不在了——工作区取代了它。状态改看工作区的标题栏：连的是哪台设备、链路状态显示「已连接」、以及唯一的那个路径标签显示「局域网直连」，也就是在你自己网络里的主机到主机一跳。「P2P 直连」是另一种诚实的情况：两台设备确实共享同一个公网 IP，但浏览器最终选中的那一跳并不在本地。",
+          "接收端的计数停在最后一个文件，而文件本身就在保存提示所说的位置。确认这一点要看接收端浏览器自己的下载列表，而不是看本页面——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)。",
+        ],
+        code: ["已连接到 MacBook · 已连接 · 局域网直连\n文件 3/3"],
+      },
+      bullets: [
+        "同网络房间不限于两台设备，所以房间里每部手机、每台笔记本都出现一张卡片是正常的，不是哪里出错了。",
+        "这里不存在先上传、后下载：服务器上没有可以稍后再取的副本，所以两台设备都要停在页面上，直到计数走完。",
+      ],
+    },
+    {
+      heading: "两台设备互相看不到时",
+      body: [
+        "同网络发现依据的是你的浏览器从哪个网络连过来，所以先从这里查起：两台设备其实不在同一个网络、路由器把客户端隔开了、页面不是用 HTTPS 打开的，或者接收端浏览器被要求装下超出它能力的内容。这些是常见的第一批排查项，而不是全部原因；每一项在屏幕上都有能判定它的东西。",
+      ],
+      troubleshooting: {
+        label: "现象、检查、处理",
+        items: [
+          {
+            symptom: "「附近的设备」一直是空的，或者只列出你正在看的这一台。",
+            code: ["https://relayium.com/   # 两台都打开，然后对比状态条里的公网 IP"],
+            fix: "两个不同的公网 IP 就是两个不同的房间。VPN、iCloud 专用代理，或者把客户端从另一个地址送出去的访客 SSID 都是常见原因，但不是全部原因。如果你愿意改动它们：关掉 VPN，或只对当前这个 Wi-Fi 关闭专用代理，或者把两台设备都挪到主网络，然后在每台设备上重新加载 https://relayium.com/。如果你不想改，用 https://relayium.com/cross-network 上的配对码也能接上对方，两个设置都不用动，而且同样是端到端加密。",
+          },
+          {
+            symptom: "两台设备显示的公网 IP 相同，卡片却仍然一张都不出现。",
+            code: ["https://relayium.com/   # 设备列表下方的提示写着要改的那个路由器开关"],
+            fix: "路由器把自己的客户端隔开了。在它的 Wi-Fi 设置里关闭「AP 隔离 / 客户端隔离」——Mesh 系统、酒店和访客网络经常默认开着——然后在两台设备上重新加载页面。如果路由器不由你管，那就改走 https://relayium.com/cross-network 上的配对码。",
+          },
+          {
+            symptom: "页面提示加密传输需要 HTTPS，设备列表根本没出现。",
+            code: ["https://relayium.com/   # 地址栏必须是 https，不是 http"],
+            fix: "页面是用 http:// 或裸 IP 打开的，浏览器不会把加密传输所需的接口交给它。relayium.com 本身会跳转到 HTTPS，所以这通常意味着一个用 http:// 访问的自托管实例——请改用 https://relayium.com/ 打开，或者给你自己的实例配一张证书。",
+          },
+          {
+            symptom: "还没点接收，接收端就警告说它必须把整批文件放在内存里。",
+            code: ["chrome://downloads   # Chrome 用这个 / Edge 用 edge://downloads / Firefox 用 about:downloads"],
+            fix: "那个浏览器无法把下载直接流式写入磁盘，于是会把整批缓存起来，批次一大就可能以标签页崩溃收场。请改用电脑上的 Chrome 或 Edge 接收，或者一次少发几个文件，并在接收端浏览器自己的下载列表里逐个确认到达情况——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)——而不是想当然认为已经保存。",
+          },
+          {
+            symptom: "传输能跑，但标签显示的是「P2P 直连」而不是「局域网直连」。",
+            code: ["https://relayium.com/   # 看工作区标题栏里的路径标签"],
+            fix: "两台设备共享同一个公网 IP，却没有共享本地的那一跳——运营商级 NAT、同一条上行下的两个 VLAN，或者工作在客户端模式的信号扩展器都会这样。传输仍然是直连，也仍然端到端加密；如果你要的是走局域网而不是浏览器找到的那条路径，就把两台设备接到同一个接入点上。",
+          },
+        ],
+      },
     },
     {
       heading: "为什么这么快：中间没有服务器",
       body: [
-        "由于两台设备本来就在同一网络里，Relayium 会让它们直接点对点连接——字节在你本地 Wi-Fi 上从一台设备流向另一台，从不绕道 Relayium 的服务器往返。没有什么要上传，也没有什么要等下载；速度只受你本地网络的限制，通常比任何方向的公网连接快得多。",
+        "两台设备是从同一个网络连上来的，所以 Relayium 让它们点对点直连：字节直接从一台设备流向另一台，不绕道 Relayium 的服务器往返，既没有什么要先上传，也没有什么要等着下载。至于到底有多快，取决于两个浏览器最终选中的是哪一跳，而路径标签会把它说出来。「局域网直连」是本地的那一跳——数据不出你自己的网络，跑的是局域网的速度，而不是宽带的速度。「P2P 直连」同样是直连，中间同样没有服务器，但浏览器找到的那条路已经离开了本地网段，因此受限于它实际经过的链路。共享同一个公网 IP 只是把两台设备放进同一个房间，它本身并不保证两者之间那一跳是本地的。",
         "这也是为什么两端都不需要账号：既然大家已经在同一个可信网络里，Relayium 不需要靠登录来判断谁能连谁。",
       ],
     },
@@ -135,7 +283,7 @@ const zh = {
     {
       heading: "如果某台设备在别的网络上",
       body: [
-        "同网络模式只在设备真正共享同一网络时才生效——用移动数据的手机、连着另一个 Wi-Fi 的笔记本，或在另一台路由器后面的设备，都不会自动出现。这种情况下，Relayium 也支持用一个短配对码跨网络连接：发送方登录后生成配对码（或二维码 / 链接），接收方始终无需账号。跨网络时，两个浏览器之间不是直连，而是经一个加密的 TURN 中继转发——这条路径是刻意只走中继的，连接一两秒就能建立，不必卡在两层 NAT 之间几乎注定失败的直连候选探测上。这并不会让它变得不私密：密钥始终留在两台设备上，中继只负责转发密文，读不到文件内容。 配对码有效期 5 分钟，所以生成之前先把两台设备都准备好。",
+        "同网络模式只在设备真正共享同一网络时才生效——用移动数据的手机、连着另一个 Wi-Fi 的笔记本，或在另一台路由器后面的设备，都不会自动出现。这种情况下，Relayium 也支持用一个短配对码跨网络连接：发送方登录后生成配对码（或二维码 / 链接），接收方始终无需账号。跨网络时，两个浏览器之间不是直连，而是经一个加密的 TURN 中继转发——这条路径是刻意只走中继的，因此建立连接不依赖在中间的 NAT 和防火墙之间探测出一条直连路径——它们可能挡住这样的路径。这并不会让它变得不私密：密钥始终留在两台设备上，中继只负责转发密文，读不到文件内容。 配对码有效期 5 分钟，所以生成之前先把两台设备都准备好。",
       ],
     },
   ],
@@ -152,7 +300,7 @@ const zh = {
       },
       {
         q: "能不能同时有两台以上的设备互相看见？",
-        a: "可以。同网络房间不限于一对一——从该网络打开 relayium.com 的每台设备都能出现并接收文件，适合同一个房间或办公室里给多个人分享。",
+        a: "可以——从该网络打开 relayium.com 的每台设备都会列在房间里，手机、笔记本、台式机可以并排出现。但一次传输是一对一的：你和列表里的某一台设备打开工作区，文件就发给它。要分享给同一个房间里的几个人，就依次和每个人各开一次工作区。",
       },
       {
         q: "如果传输从未离开我的网络，还是加密的吗？",
@@ -190,22 +338,96 @@ const ja = {
     },
     {
       heading: "手順",
+      prereqs: {
+        label: "始める前に",
+        items: [
+          "すべての端末が同じ Wi-Fi またはローカルネットワークにあり、ルーターがクライアント同士を隔てていないこと。探すべき設定名は、端末一覧の下にある Relayium 自身のヒントに書かれています：「AP 分離 / クライアント分離」。",
+          "各端末に最近のブラウザ（Chrome、Edge、Firefox、Safari）があり、ページを https://relayium.com/ で開いていること。暗号化転送には HTTPS が必要で、素の http:// で開いた場合は端末一覧の代わりにその旨が表示されます。",
+          "アカウントもペアリングコードも不要です。同一ネットワークの検出はどちら側にもそれを求めないので、最初の転送の前に設定するものは何もありません。",
+          "受信側にファイルの置き場所があること。どこに置かれるかを決めるのは Relayium ではなく受信側のブラウザと OS です：PC の Chrome と Edge は保存先を尋ねられますが、ほかのブラウザは自分のダウンロード先に書き込みます。実際にどこへ着いたかは、そのブラウザ自身のダウンロード一覧——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)——で確認します。",
+        ],
+      },
       body: [
         "すべてブラウザの中で完結します。どの端末にもインストールするものはありません。",
       ],
-      bullets: [
-        "使いたいすべての端末を同じ Wi-Fi またはローカルネットワークに接続します。",
-        "各端末で最新のブラウザ（Chrome、Edge、Firefox、Safari）で relayium.com を開きます。",
-        "そのネットワーク上の端末は自動的に互いに表示されます。両側ともコードもログインもアカウントも不要です。",
-        "ファイルまたはフォルダ全体（1バッチ最大1,000ファイル）を選び、一覧から受信させたい端末を選びます。",
-        "受信側が承諾すると転送が始まります。「高度な検証」（既定はオフ）をオンにすると、両方の端末が同じ短い検証コード（SAS）も表示するので、先にそれぞれの画面でちらっと見て一致を確認できます。",
-        "ファイルは1台からもう1台へ直接移動します。届いたら保存してください。",
+      steps: [
+        {
+          text: "使いたいすべての端末を同じ Wi-Fi またはローカルネットワークに接続し、それぞれで転送ページを開きます。",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "両方の端末で見出しの下のステータス表示を読み、そこにあるグローバル IP を比べます。同じアドレスであることが 2 台を同じルームに入れる条件で、アドレスが違えばネットワークも別です。Wi-Fi の名前が同じでも関係ありません。",
+          code: ["接続済み · このデバイス MacBook · グローバル IP 203.0.113.9"],
+        },
+        {
+          text: "「近くのデバイス」の欄を見てください。そのネットワークからページを開いた端末はすべて、自分の名前を載せたカードとして並びます。入力も確認も要りません。",
+        },
+        {
+          text: "送信側で相手のカードを押し、「ワークスペースを開く」を押します。最近のブラウザでは、近くのデバイスのカードが差し出す操作はこれ 1 つだけです。ファイルもフォルダもメッセージも、それが開く 1 本の暗号化接続を通ります。ルームに何台も並んでいることはありますが、ワークスペースを開くという操作が、今回の送り先を 1 台に決める操作です。次の相手にはあらためてもう 1 つ開きます。",
+        },
+        {
+          text: "ワークスペースがそのカードと入れ替わります。以後、接続の状態はワークスペース上部のヘッダーで読みます——どの端末につながっているか、リンクの状態、そして 1 つだけの経路バッジ。送信はその下のコントロールで行います：まとめて送るなら「ファイルを送信」、ディレクトリ全体はブラウザがフォルダ選択に対応していれば「フォルダを送信」、あるいはメッセージ欄に入力して「送信」を押します。1 バッチは最大 1,000 ファイルです。",
+        },
+        {
+          text: "受信側にはファイル数と合計サイズを添えたリクエストが届き、その下の行に「受信」を押すと何が起きるかが書かれています。ブラウザが保存先を尋ねるか、ダウンロード先に入るかのどちらかです。「受信」を押すと始まります。",
+        },
+        {
+          text: "両方の画面でファイルカウンターが最後のファイルに達するまで見守ります。1 バイトも動く前に検証コード（SAS）を照合したい場合は、先に両方の端末で「高度な検証」をオンにしてください。既定はオフで、オンにして増えるのは照合と承認の一手間であって暗号化ではありません。オンでもオフでも転送は暗号化されています。",
+        },
       ],
+      success: {
+        label: "転送が成功したときの画面",
+        body: [
+          "その頃には相手のカードは消えています——ワークスペースが取って代わったからです。状態はワークスペースのヘッダーで読みます：どの端末につながっているか、リンクの状態は「接続済み」、そして 1 つだけの経路バッジが「LAN直結」。自分のネットワーク内のホスト間 1 ホップという意味です。「P2P直結」はもう一つの正直な結果です：2 台は確かに同じグローバル IP を共有していたものの、ブラウザが選んだホップはローカルなものではありませんでした。",
+          "受信側ではカウンターが最後のファイルで止まり、ファイル自体は保存の案内が示した場所にあります。それを確かめる場所はこのページではなく、受信側のブラウザ自身のダウンロード一覧です——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)。",
+        ],
+        code: ["MacBook に接続済み · 接続済み · LAN直結\nファイル 3/3"],
+      },
+      bullets: [
+        "同一ネットワークのルームは 2 台に限られないので、部屋にあるスマートフォンやノート PC の分だけカードが並ぶのは正常で、不具合ではありません。",
+        "ここでは先にアップロードして後からダウンロードする、という動きはありません。あとで取りに行けるサーバー上のコピーは存在しないので、カウンターが終わるまで両方の端末はページに留まってください。",
+      ],
+    },
+    {
+      heading: "端末が互いに見えないとき",
+      body: [
+        "同一ネットワークの検出は、ブラウザがどのネットワークから接続しているかを手がかりにします。だからまずそこを見ます。2 台が実は同じネットワークにない、ルーターがクライアントを隔てている、ページが HTTPS で開かれていない、あるいは受信側のブラウザが抱えきれない量を求められている。これらは原因の全部ではなく、よくある最初の確認項目です。どれも画面上に判定材料があります。",
+      ],
+      troubleshooting: {
+        label: "症状・確認・対処",
+        items: [
+          {
+            symptom: "「近くのデバイス」がずっと空か、今見ている端末しか並ばない。",
+            code: ["https://relayium.com/   # 両方で開き、ステータス表示のグローバル IP を比べる"],
+            fix: "グローバル IP が 2 つ違えばルームも 2 つです。VPN、iCloud プライベートリレー、クライアントを別アドレスから出すゲスト SSID はよくある原因ですが、原因はそれだけではありません。設定を変えてよいなら、VPN を切る、その Wi-Fi にかぎってプライベートリレーをオフにする、または両方の端末をメインのネットワークへ移し、それぞれで https://relayium.com/ を再読み込みしてください。変えたくない場合は、https://relayium.com/cross-network のペアリングコードならどちらの設定も触らずに相手へ届き、同じくエンドツーエンド暗号化です。",
+          },
+          {
+            symptom: "両方の端末が同じグローバル IP を表示しているのに、カードが 1 枚も現れない。",
+            code: ["https://relayium.com/   # 端末一覧の下のヒントに、変更すべきルーター設定名がある"],
+            fix: "ルーターが自分のクライアントを隔てています。Wi-Fi 設定で「AP 分離 / クライアント分離」をオフにし——メッシュ機器やホテル・ゲスト用ネットワークでは既定で有効なことが多いです——両方の端末でページを再読み込みしてください。ルーターを管理できない場合は、https://relayium.com/cross-network のペアリングコードが代わりの道です。",
+          },
+          {
+            symptom: "暗号化転送には HTTPS が必要と表示され、端末一覧がまったく出ない。",
+            code: ["https://relayium.com/   # アドレス欄は http ではなく https でなければならない"],
+            fix: "ページが http:// か素の IP アドレスで開かれているため、ブラウザが暗号化転送に必要な API を渡しません。relayium.com 自体は HTTPS へリダイレクトするので、これは通常 http:// で参照している自己ホスト環境を意味します。https://relayium.com/ で開くか、自分の環境に証明書を用意してください。",
+          },
+          {
+            symptom: "受信を押す前に、受信側がバッチ全体をメモリに保持しなければならないと警告する。",
+            code: ["chrome://downloads   # Chrome 用 / Edge は edge://downloads / Firefox は about:downloads"],
+            fix: "そのブラウザはダウンロードをディスクへ直接ストリーミングできないため、バッチ全体を抱え込み、大きいとタブが落ちて終わることがあります。PC の Chrome か Edge で受け取るか、一度に送るファイルを減らし、保存できたと決め込まずに受信側のブラウザ自身のダウンロード一覧——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)——で 1 つずつ確認してください。",
+          },
+          {
+            symptom: "転送は動くが、バッジが「LAN直結」ではなく「P2P直結」になっている。",
+            code: ["https://relayium.com/   # ワークスペースのヘッダーにある経路バッジを読む"],
+            fix: "2 台はグローバル IP を共有しているのに、ローカルなホップは共有していません。キャリアグレード NAT、1 本の上流にぶら下がる 2 つの VLAN、クライアントモードの中継機などがこうなります。転送は依然として直接で、依然としてエンドツーエンド暗号化です。経路をブラウザが見つけた道ではなく LAN にしたいなら、両方の端末を同じアクセスポイントにつないでください。",
+          },
+        ],
+      },
     },
     {
       heading: "なぜ速いのか：間にサーバーが挟まらない",
       body: [
-        "両方の端末がすでに同じネットワークにあるため、Relayium はそれらを P2P で直接つなぎます。バイトはローカル Wi-Fi 上を1台からもう1台へ流れ、Relayium のサーバーへ往復することは決してありません。アップロードするものも、ダウンロードを待つものもなく、速度はローカルネットワークだけに左右されます。これは通常、どちら向きのインターネット接続よりもずっと速いものです。",
+        "2 台は同じネットワークから接続しているので、Relayium は両者を P2P で直接つなぎます。バイトは一方からもう一方へ渡り、Relayium のサーバーを往復しません。先にアップロードするものも、あとからダウンロードを待つものもありません。どれだけ速いかは、2 つのブラウザが最終的に選んだホップ次第で、それを言い当てるのが経路バッジです。「LAN直結」はローカルなホップで、データは自分のネットワークの外に出ず、インターネット回線ではなく LAN の速度で流れます。「P2P直結」も同じく直接で、間にサーバーはありませんが、ブラウザが見つけた経路はローカルなセグメントを出ているので、実際に通る回線の速さに縛られます。グローバル IP が同じであることは 2 台を同じルームに入れるだけで、それ自体は 2 台の間のホップがローカルだという保証ではありません。",
         "これがどちら側にもアカウントが要らない理由でもあります。全員がすでに同じ信頼できるネットワーク上にいるので、誰が誰につないでよいかを知るのにサインインは必要ありません。",
       ],
     },
@@ -218,7 +440,7 @@ const ja = {
     {
       heading: "端末が別のネットワークにある場合",
       body: [
-        "同一ネットワークモードは端末が実際にネットワークを共有しているときだけ働きます。モバイル通信のスマホ、別の Wi-Fi のノートPC、別のルーターの背後にある端末は自動的には現れません。その場合、Relayium は短いペアリングコードでネットワークをまたいで接続することもサポートしています。送信側がサインインしてコード（または QR コード／リンク）を生成し、受信側はアカウント不要です。ネットワークをまたぐ場合、2 つのブラウザは直接ではなく暗号化された TURN リレー経由でつながります。この経路は意図的にリレー専用にしてあり、2 つの NAT の間でほぼ確実に失敗する直接候補のチェックを待たずに、1〜2 秒で接続が確立します。プライバシーが下がるわけではありません。鍵は 2 台の端末に留まるので、リレーが転送するのは常に暗号文だけで、ファイルの中身は読めません。 コードの有効期限は5分なので、生成する前に両方の端末を手元に用意してください。",
+        "同一ネットワークモードは端末が実際にネットワークを共有しているときだけ働きます。モバイル通信のスマホ、別の Wi-Fi のノートPC、別のルーターの背後にある端末は自動的には現れません。その場合、Relayium は短いペアリングコードでネットワークをまたいで接続することもサポートしています。送信側がサインインしてコード（または QR コード／リンク）を生成し、受信側はアカウント不要です。ネットワークをまたぐ場合、2 つのブラウザは直接ではなく暗号化された TURN リレー経由でつながります。この経路は意図的にリレー専用にしてあり、接続の成立は、途中の NAT やファイアウォールを越える直接の経路を見つけられるかどうかに左右されません。NAT やファイアウォールが直接の経路を塞ぐこともあります。プライバシーが下がるわけではありません。鍵は 2 台の端末に留まるので、リレーが転送するのは常に暗号文だけで、ファイルの中身は読めません。 コードの有効期限は5分なので、生成する前に両方の端末を手元に用意してください。",
       ],
     },
   ],
@@ -235,7 +457,7 @@ const ja = {
       },
       {
         q: "3台以上の端末が同時に互いを見られますか？",
-        a: "はい。同一ネットワークのルームは2台に限られません。そのネットワークから relayium.com を開いた端末はすべて表示されファイルを受け取れるので、同じ部屋やオフィスの複数人と共有するのに便利です。",
+        a: "はい。そのネットワークから relayium.com を開いた端末はすべてルームに並ぶので、スマートフォンもノートPCもデスクトップも横並びで表示されます。ただし転送そのものは 1 対 1 です。並んだ端末のうち 1 台とワークスペースを開き、ファイルはその相手に届きます。同じ部屋の複数人に渡すときは、相手ごとに順番にワークスペースを開いてください。",
       },
       {
         q: "ネットワークの外に出ない転送でも暗号化されていますか？",
@@ -273,22 +495,96 @@ const ko = {
     },
     {
       heading: "단계별 안내",
+      prereqs: {
+        label: "시작하기 전에",
+        items: [
+          "모든 기기가 같은 Wi-Fi 또는 로컬 네트워크에 있고, 공유기가 클라이언트끼리를 갈라놓지 않아야 합니다. 찾아야 할 설정 이름은 기기 목록 아래에 있는 Relayium 자체 안내에 적혀 있습니다: ‘AP 격리 / 클라이언트 격리’.",
+          "각 기기에 최신 브라우저(Chrome, Edge, Firefox 또는 Safari)가 있고, 페이지를 https://relayium.com/ 으로 열어야 합니다. 암호화 전송에는 HTTPS가 필요하며, 평범한 http:// 로 열면 기기 목록 대신 바로 그 사실이 표시됩니다.",
+          "계정도 페어링 코드도 필요 없습니다. 같은 네트워크 탐색은 양쪽 모두에 그것을 요구하지 않으므로, 첫 전송 전에 설정할 것이 하나도 없습니다.",
+          "받는 기기에 파일이 놓일 자리가 있어야 합니다. 어디에 놓일지는 Relayium이 아니라 받는 쪽 브라우저와 운영체제가 정합니다: 컴퓨터의 Chrome과 Edge는 저장 위치를 물어볼 수 있고, 다른 브라우저는 자체 다운로드 폴더에 씁니다. 실제로 어디에 떨어졌는지는 그 브라우저 자체의 다운로드 목록 — chrome://downloads (Chrome), edge://downloads (Edge), about:downloads (Firefox) — 에서 확인합니다.",
+        ],
+      },
       body: [
         "전 과정이 브라우저 안에서 이루어집니다 — 어느 기기에도 설치할 앱이 없습니다.",
       ],
-      bullets: [
-        "사용하려는 모든 기기를 같은 Wi-Fi 또는 로컬 네트워크에 연결합니다.",
-        "각 기기에서 최신 브라우저(Chrome, Edge, Firefox 또는 Safari)로 relayium.com을 엽니다.",
-        "그 네트워크에 있는 기기가 자동으로 서로에게 나타납니다 — 양쪽 다 코드도, 로그인도, 계정도 필요 없습니다.",
-        "파일이나 폴더 전체(배치당 최대 1,000개)를 고르고, 목록에서 받을 기기를 선택합니다.",
-        "받는 쪽이 수락하면 전송이 시작됩니다. 고급 검증(기본값 꺼짐)을 켜면 두 기기가 동일한 짧은 검증 코드(SAS)도 표시하므로, 각 화면에서 힐끗 보고 먼저 일치를 확인할 수 있습니다.",
-        "파일이 한 기기에서 다른 기기로 곧장 이동합니다. 도착하면 저장합니다.",
+      steps: [
+        {
+          text: "사용하려는 모든 기기를 같은 Wi-Fi 또는 로컬 네트워크에 연결한 다음, 각 기기에서 전송 페이지를 엽니다.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "두 기기에서 제목 아래 상태 표시를 읽고 거기 있는 공인 IP를 비교합니다. 주소가 같아야 두 기기가 같은 방에 들어가고, 주소가 다르면 Wi-Fi 이름이 무엇이든 서로 다른 네트워크입니다.",
+          code: ["연결됨 · 내 기기 MacBook · 공인 IP 203.0.113.9"],
+        },
+        {
+          text: "“주변 기기” 칸을 봅니다. 그 네트워크에서 페이지를 연 기기는 모두 자기 이름이 적힌 카드로 나열됩니다. 입력할 것도, 확인할 것도 없습니다.",
+        },
+        {
+          text: "보내는 기기에서 상대 카드를 누르고 “작업 공간 열기”를 누릅니다. 최신 브라우저에서 주변 기기 카드가 내놓는 동작은 이것 하나뿐입니다. 파일도 폴더도 메시지도 모두 그것이 여는 하나의 암호화된 연결을 지나갑니다. 방에는 여러 기기가 나열될 수 있는데, 작업 공간을 여는 행위가 이번에 보낼 상대를 한 대로 고르는 행위입니다. 다음 사람에게 보낼 때는 작업 공간을 다시 엽니다.",
+        },
+        {
+          text: "작업 공간이 그 카드를 대신합니다. 이제부터 연결 상태는 작업 공간 위쪽 헤더에서 읽습니다 — 어느 기기에 연결되었는지, 링크 상태, 그리고 단 하나의 경로 배지. 보내기는 그 아래 컨트롤로 합니다: 묶음은 “파일 보내기”, 디렉터리 전체는 브라우저가 폴더 선택을 지원할 때 “폴더 보내기”, 아니면 메시지 칸에 입력하고 “보내기”를 누릅니다. 한 배치는 최대 1,000개입니다.",
+        },
+        {
+          text: "받는 기기에는 파일 개수와 총 크기가 붙은 요청이 도착하고, 그 아래 줄에 “받기”를 누르면 무슨 일이 생기는지 적혀 있습니다. 브라우저가 저장 위치를 묻거나, 파일이 다운로드 폴더로 들어가거나 둘 중 하나입니다. “받기”를 누르면 시작됩니다.",
+        },
+        {
+          text: "두 화면에서 파일 카운터가 마지막 파일에 닿을 때까지 지켜봅니다. 한 바이트도 움직이기 전에 검증 코드(SAS)를 대조하고 싶다면 두 기기에서 먼저 “고급 검증”을 켜세요. 기본값은 꺼짐이며, 켜서 늘어나는 것은 대조와 승인 한 단계일 뿐 암호화가 아닙니다. 켜든 끄든 전송은 암호화됩니다.",
+        },
       ],
+      success: {
+        label: "전송이 잘될 때의 화면",
+        body: [
+          "그때쯤이면 상대 카드는 사라져 있습니다 — 작업 공간이 그 자리를 차지했기 때문입니다. 상태는 작업 공간 헤더에서 읽습니다: 어느 기기에 연결되었는지, 링크 상태는 “연결됨”, 그리고 단 하나의 경로 배지가 “LAN 직접”. 내 네트워크 안의 호스트 대 호스트 한 홉이라는 뜻입니다. “P2P 직접”은 또 하나의 정직한 결과입니다: 두 기기가 정말 같은 공인 IP를 공유했지만, 브라우저가 정착한 홉은 로컬이 아니었다는 뜻입니다.",
+          "받는 쪽에서는 카운터가 마지막 파일에서 멈추고, 파일 자체는 저장 안내가 말한 곳에 있습니다. 그것을 확인하는 자리는 이 페이지가 아니라 받는 쪽 브라우저 자체의 다운로드 목록입니다 — chrome://downloads (Chrome), edge://downloads (Edge), about:downloads (Firefox).",
+        ],
+        code: ["MacBook 에 연결됨 · 연결됨 · LAN 직접\n파일 3/3"],
+      },
+      bullets: [
+        "같은 네트워크 방은 두 대로 제한되지 않으므로, 방에 있는 휴대폰과 노트북 수만큼 카드가 늘어서는 것은 정상이며 고장이 아닙니다.",
+        "여기에는 먼저 올리고 나중에 받는 단계가 없습니다. 나중에 가져올 서버 사본이 존재하지 않으니, 카운터가 끝날 때까지 두 기기 모두 페이지에 머물러야 합니다.",
+      ],
+    },
+    {
+      heading: "기기가 서로 보이지 않을 때",
+      body: [
+        "같은 네트워크 탐색은 브라우저가 어느 네트워크에서 접속하는지를 기준으로 삼으니, 먼저 그쪽부터 봅니다. 두 기기가 실은 같은 네트워크가 아니거나, 공유기가 클라이언트를 갈라놓았거나, 페이지를 HTTPS로 열지 않았거나, 받는 브라우저가 감당하지 못할 양을 요구받은 경우입니다. 이것들은 원인의 전부가 아니라 흔한 첫 확인 항목이며, 모두 화면에 판단 근거가 있습니다.",
+      ],
+      troubleshooting: {
+        label: "증상, 확인, 조치",
+        items: [
+          {
+            symptom: "“주변 기기”가 계속 비어 있거나, 지금 보고 있는 기기만 나옵니다.",
+            code: ["https://relayium.com/   # 두 기기에서 열고 상태 표시의 공인 IP를 비교한다"],
+            fix: "공인 IP가 다르면 방도 다릅니다. VPN, iCloud 비공개 릴레이, 클라이언트를 다른 주소로 내보내는 게스트 SSID는 흔한 원인이지만 그것만은 아닙니다. 설정을 바꿔도 괜찮다면 VPN을 끄거나, 그 Wi-Fi에 한해 비공개 릴레이를 끄거나, 두 기기를 주 네트워크로 옮긴 뒤 각 기기에서 https://relayium.com/ 을 다시 불러오세요. 그대로 두고 싶다면 https://relayium.com/cross-network 의 페어링 코드가 두 설정을 건드리지 않고 상대에게 닿으며, 마찬가지로 종단간 암호화입니다.",
+          },
+          {
+            symptom: "두 기기가 같은 공인 IP를 보여주는데도 카드가 하나도 나타나지 않습니다.",
+            code: ["https://relayium.com/   # 기기 목록 아래 안내에 바꿔야 할 공유기 설정 이름이 있다"],
+            fix: "공유기가 자기 클라이언트를 갈라놓고 있습니다. Wi-Fi 설정에서 ‘AP 격리 / 클라이언트 격리’를 끄고 — 메시 장비, 호텔과 게스트 네트워크는 기본으로 켜둔 경우가 많습니다 — 두 기기에서 페이지를 다시 불러오세요. 공유기를 관리할 수 없다면 https://relayium.com/cross-network 의 페어링 코드가 대신 쓸 길입니다.",
+          },
+          {
+            symptom: "암호화 전송에 HTTPS가 필요하다고만 나오고 기기 목록이 전혀 보이지 않습니다.",
+            code: ["https://relayium.com/   # 주소창이 http가 아니라 https여야 한다"],
+            fix: "페이지가 http:// 또는 맨 IP 주소로 열려서, 브라우저가 암호화 전송에 필요한 API를 내주지 않습니다. relayium.com 자체는 HTTPS로 넘겨주므로 이는 보통 http:// 로 접근하는 자체 호스팅 인스턴스를 뜻합니다. https://relayium.com/ 으로 열거나, 자기 인스턴스에 인증서를 붙이세요.",
+          },
+          {
+            symptom: "받기를 누르기 전에, 받는 기기가 배치 전체를 메모리에 담아야 한다고 경고합니다.",
+            code: ["chrome://downloads   # Chrome용 / Edge는 edge://downloads / Firefox는 about:downloads"],
+            fix: "그 브라우저는 다운로드를 디스크로 바로 스트리밍하지 못해 배치 전체를 안고 있으며, 크면 탭이 죽으며 끝날 수 있습니다. 컴퓨터의 Chrome이나 Edge로 받거나 한 번에 보내는 파일 수를 줄이고, 저장되었다고 단정하지 말고 받는 쪽 브라우저 자체의 다운로드 목록 — chrome://downloads (Chrome), edge://downloads (Edge), about:downloads (Firefox) — 에서 하나씩 확인하세요.",
+          },
+          {
+            symptom: "전송은 되지만 배지가 “LAN 직접”이 아니라 “P2P 직접”으로 나옵니다.",
+            code: ["https://relayium.com/   # 작업 공간 헤더의 경로 배지를 읽는다"],
+            fix: "두 기기가 공인 IP는 공유하지만 로컬 홉은 공유하지 않습니다. 통신사급 NAT, 한 회선 아래 두 VLAN, 클라이언트 모드로 동작하는 확장기가 모두 이렇게 됩니다. 전송은 여전히 직접이고 여전히 종단간 암호화입니다. 경로를 브라우저가 찾은 길이 아니라 LAN으로 만들고 싶다면 두 기기를 같은 액세스 포인트에 연결하세요.",
+          },
+        ],
+      },
     },
     {
       heading: "왜 빠른가: 중간에 서버가 없다",
       body: [
-        "두 기기가 이미 같은 네트워크에 있으므로 Relayium은 이들을 P2P로 직접 연결합니다 — 바이트가 로컬 Wi-Fi를 통해 한 기기에서 다른 기기로 이동하며, Relayium 서버를 왕복하는 일이 전혀 없습니다. 업로드할 것도, 다운로드를 기다릴 것도 없어서 속도는 오직 로컬 네트워크에만 좌우되며, 보통 어느 방향의 인터넷 연결보다 훨씬 빠릅니다.",
+        "두 기기가 같은 네트워크에서 접속하므로 Relayium은 둘을 P2P로 직접 잇습니다. 바이트는 한 기기에서 다른 기기로 곧장 건너가며 Relayium 서버를 왕복하지 않고, 먼저 올릴 것도 나중에 받기를 기다릴 것도 없습니다. 얼마나 빠른지는 두 브라우저가 실제로 정착한 홉에 달렸고, 그것을 이름 붙이는 것이 경로 배지입니다. “LAN 직접”은 로컬 홉이라, 데이터가 내 네트워크 밖으로 나가지 않고 인터넷 회선이 아니라 랜의 속도로 흐릅니다. “P2P 직접”도 마찬가지로 직접이고 중간에 서버가 없지만, 브라우저가 찾아낸 경로가 로컬 구간을 벗어났으므로 실제로 지나는 회선의 속도에 묶입니다. 공인 IP가 같다는 것은 두 기기를 같은 방에 넣어줄 뿐, 그 자체로 둘 사이의 홉이 로컬이라는 보장은 아닙니다.",
         "이것이 양쪽 다 계정이 필요 없는 이유이기도 합니다. 모두가 이미 같은 신뢰할 수 있는 네트워크에 있으니, 누가 누구에게 연결해도 되는지 알기 위해 로그인이 필요하지 않습니다.",
       ],
     },
@@ -301,7 +597,7 @@ const ko = {
     {
       heading: "기기가 다른 네트워크에 있다면",
       body: [
-        "같은 네트워크 모드는 기기가 실제로 네트워크를 공유할 때만 작동합니다 — 모바일 데이터를 쓰는 휴대폰, 다른 Wi-Fi에 있는 노트북, 다른 공유기 뒤에 있는 기기는 자동으로 나타나지 않습니다. 이런 경우 Relayium은 짧은 페어링 코드로 네트워크를 넘나드는 연결도 지원합니다. 보내는 쪽이 로그인해 코드(또는 QR 코드/링크)를 생성하고, 받는 쪽은 계정이 필요 없습니다. 네트워크를 넘나드는 경우 두 브라우저는 직접이 아니라 암호화된 TURN 릴레이를 거쳐 연결됩니다 — 이 경로는 의도적으로 릴레이 전용이며, 두 NAT 사이에서 거의 반드시 실패할 직접 후보 검사를 기다리는 대신 1~2초 만에 연결이 맺어집니다. 그렇다고 덜 안전한 것은 아닙니다. 키는 두 기기에만 남으므로 릴레이는 암호문만 전달할 뿐 파일 내용을 읽을 수 없습니다. 코드는 5분 동안만 유효하니, 만들기 전에 두 기기를 모두 곁에 두세요.",
+        "같은 네트워크 모드는 기기가 실제로 네트워크를 공유할 때만 작동합니다 — 모바일 데이터를 쓰는 휴대폰, 다른 Wi-Fi에 있는 노트북, 다른 공유기 뒤에 있는 기기는 자동으로 나타나지 않습니다. 이런 경우 Relayium은 짧은 페어링 코드로 네트워크를 넘나드는 연결도 지원합니다. 보내는 쪽이 로그인해 코드(또는 QR 코드/링크)를 생성하고, 받는 쪽은 계정이 필요 없습니다. 네트워크를 넘나드는 경우 두 브라우저는 직접이 아니라 암호화된 TURN 릴레이를 거쳐 연결됩니다 — 이 경로는 의도적으로 릴레이 전용이라, 연결이 중간의 NAT와 방화벽을 통과하는 직접 경로를 찾아내는 데 의존하지 않습니다. NAT나 방화벽이 그런 경로를 막을 수도 있습니다. 그렇다고 덜 안전한 것은 아닙니다. 키는 두 기기에만 남으므로 릴레이는 암호문만 전달할 뿐 파일 내용을 읽을 수 없습니다. 코드는 5분 동안만 유효하니, 만들기 전에 두 기기를 모두 곁에 두세요.",
       ],
     },
   ],
@@ -318,7 +614,7 @@ const ko = {
       },
       {
         q: "두 대보다 많은 기기가 동시에 서로를 볼 수 있나요?",
-        a: "네. 같은 네트워크 방은 한 쌍으로 제한되지 않습니다. 그 네트워크에서 relayium.com을 연 모든 기기가 나타나 파일을 받을 수 있어서, 같은 방이나 사무실의 여러 사람과 공유할 때 유용합니다.",
+        a: "네. 그 네트워크에서 relayium.com을 연 기기는 모두 방에 나열되어 휴대폰과 노트북, 데스크톱이 나란히 보입니다. 다만 전송 자체는 1대 1입니다. 나열된 기기 중 하나와 작업 공간을 열고, 파일은 그 상대에게 갑니다. 같은 방의 여러 사람과 나누려면 각자와 차례로 작업 공간을 열면 됩니다.",
       },
       {
         q: "전송이 내 네트워크를 벗어나지 않아도 여전히 암호화되나요?",
@@ -356,22 +652,96 @@ const de = {
     },
     {
       heading: "Schritt für Schritt",
+      prereqs: {
+        label: "Bevor du anfängst",
+        items: [
+          "Alle Geräte im selben WLAN oder lokalen Netz, und der Router trennt seine Clients nicht voneinander. Wie die Einstellung heißt, steht in Relayiums eigenem Hinweis unter der Geräteliste: „AP-Isolierung / Client-Isolierung“.",
+          "Ein aktueller Browser auf jedem Gerät (Chrome, Edge, Firefox oder Safari), und die Seite über https://relayium.com/ geöffnet. Verschlüsselte Übertragung braucht HTTPS; über einfaches http:// sagt die Seite genau das, statt Geräte aufzulisten.",
+          "Kein Konto und kein Pairing-Code. Die Erkennung im selben Netz verlangt beides auf keiner Seite, also gibt es vor der ersten Übertragung nichts einzurichten.",
+          "Platz für die Dateien auf dem empfangenden Gerät. Wo sie landen, entscheiden der empfangende Browser und sein Betriebssystem und nicht Relayium: Chrome und Edge am Computer können nach dem Speicherort fragen, andere Browser schreiben in ihren eigenen Download-Ordner. Wo sie tatsächlich gelandet sind, siehst du in der Download-Liste dieses Browsers — chrome://downloads in Chrome, edge://downloads in Edge, about:downloads in Firefox.",
+        ],
+      },
       body: [
         "Der gesamte Ablauf findet im Browser statt — auf keinem Gerät ist etwas zu installieren.",
       ],
-      bullets: [
-        "Verbinde jedes Gerät, das du nutzen möchtest, mit demselben WLAN oder lokalen Netz.",
-        "Öffne auf jedem Gerät relayium.com in einem modernen Browser (Chrome, Edge, Firefox oder Safari).",
-        "Die Geräte in diesem Netz erscheinen einander automatisch — kein Code, kein Login, auf keiner der beiden Seiten ein Konto.",
-        "Wähle eine Datei oder einen ganzen Ordner (bis zu 1.000 Dateien pro Stapel) und bestimme, welches Gerät aus der Liste sie empfangen soll.",
-        "Die Übertragung beginnt, sobald die Gegenseite annimmt. Schaltest du die erweiterte Verifizierung ein (standardmäßig aus), zeigen beide Geräte zusätzlich denselben kurzen Verifizierungscode (SAS), auf den du vorher einen Blick werfen und dessen Übereinstimmung du bestätigen kannst.",
-        "Dateien wandern direkt von einem Gerät zum anderen; speichere sie, sobald sie ankommen.",
+      steps: [
+        {
+          text: "Verbinde jedes Gerät, das du nutzen möchtest, mit demselben WLAN oder lokalen Netz und öffne dann auf jedem die Übertragungsseite.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Lies auf beiden Geräten die Statuszeile unter der Überschrift und vergleiche die öffentliche IP darin. Erst eine gemeinsame Adresse steckt zwei Geräte in denselben Raum; zwei verschiedene Adressen bedeuten zwei Netze, ganz egal wie das WLAN heißt.",
+          code: ["Verbunden · dieses Gerät MacBook · öffentliche IP 203.0.113.9"],
+        },
+        {
+          text: "Schau unter „Geräte in der Nähe“. Jedes Gerät, das die Seite aus diesem Netz geöffnet hat, steht dort als Karte mit seinem eigenen Namen — nichts zu tippen, nichts zu bestätigen.",
+        },
+        {
+          text: "Klicke auf dem sendenden Gerät die Karte der Gegenseite an und drücke „Arbeitsbereich öffnen“. In einem aktuellen Browser ist das die einzige Aktion, die eine Karte in der Nähe anbietet: Dateien, Ordner und Nachrichten laufen alle über die eine verschlüsselte Verbindung, die sie öffnet. Im Raum stehen womöglich mehrere Geräte; mit dem Öffnen des Arbeitsbereichs legst du fest, an welches davon diese Übertragung geht — für die nächste Person öffnest du einen weiteren.",
+        },
+        {
+          text: "Der Arbeitsbereich ersetzt diese Karte. Den Verbindungszustand liest du ab jetzt in seiner Kopfzeile — mit wem du verbunden bist, der Zustand der Verbindung und das eine Pfad-Abzeichen. Gesendet wird mit den Bedienelementen darunter: „Dateien senden“ für einen Stapel, „Ordner senden“ für einen ganzen Baum, sofern der Browser Ordnerauswahl anbietet, oder tippe ins Nachrichtenfeld und drücke „Senden“. Ein Dateistapel trägt bis zu 1.000 Dateien.",
+        },
+        {
+          text: "Auf dem empfangenden Gerät kommt die Anfrage mit Dateizahl und Gesamtgröße an, und die Zeile darunter sagt, was „Annehmen“ auslöst: entweder fragt der Browser nach dem Speicherort, oder die Dateien landen in seinem Download-Ordner. Mit „Annehmen“ startet es.",
+        },
+        {
+          text: "Sieh zu, wie der Dateizähler auf beiden Bildschirmen die letzte Datei erreicht. Wer vor dem ersten Byte einen Verifizierungscode (SAS) vergleichen will, schaltet vorher auf beiden Geräten „Erweiterte Verifizierung“ ein: standardmäßig aus, und was dabei hinzukommt, ist ein Vergleich samt Zustimmungsschritt, nicht die Verschlüsselung — verschlüsselt ist die Übertragung so oder so.",
+        },
       ],
+      success: {
+        label: "So sieht eine funktionierende Übertragung aus",
+        body: [
+          "Die Karte der Gegenseite ist dann verschwunden — der Arbeitsbereich hat ihren Platz eingenommen. Der Zustand steht stattdessen in dessen Kopfzeile: mit welchem Gerät du verbunden bist, ein Verbindungszustand „Verbunden“ und ein einziges Pfad-Abzeichen mit „LAN direkt“ — ein Host-zu-Host-Sprung über dein eigenes Netz. „P2P direkt“ ist der zweite ehrliche Fall: die beiden Geräte teilten tatsächlich eine öffentliche IP, aber der Sprung, auf den sich die Browser geeinigt haben, war kein lokaler.",
+          "Auf der Empfangsseite bleibt der Zähler auf der letzten Datei stehen, und die Datei selbst liegt dort, wo die Speicherzeile es angekündigt hat. Nachsehen kannst du das in der Download-Liste des empfangenden Browsers, nicht auf dieser Seite — chrome://downloads in Chrome, edge://downloads in Edge, about:downloads in Firefox.",
+        ],
+        code: ["Verbunden mit MacBook · Verbunden · LAN direkt\nDatei 3/3"],
+      },
+      bullets: [
+        "Ein Raum im selben Netz ist nicht auf zwei Geräte begrenzt: eine Karte für jedes Handy und jeden Laptop im Zimmer ist normal und kein Anzeichen für einen Fehler.",
+        "Hier wird nichts erst hochgeladen und später heruntergeladen, es gibt also keine Kopie auf einem Server zum späteren Abholen — beide Geräte bleiben auf der Seite, bis der Zähler durch ist.",
+      ],
+    },
+    {
+      heading: "Wenn sich die Geräte nicht sehen",
+      body: [
+        "Die Erkennung im selben Netz richtet sich danach, aus welchem Netz sich der Browser verbindet — dort schaust du also zuerst nach: die beiden Geräte sind gar nicht in einem Netz, der Router hält seine Clients auseinander, die Seite wurde nicht über HTTPS geöffnet, oder der empfangende Browser soll mehr halten als er kann. Das sind übliche erste Prüfungen und nicht die vollständige Liste; für jede steht etwas auf dem Bildschirm, das sie entscheidet.",
+      ],
+      troubleshooting: {
+        label: "Symptom, Prüfung, Lösung",
+        items: [
+          {
+            symptom: "„Geräte in der Nähe“ bleibt leer oder listet nur das Gerät, auf das du gerade schaust.",
+            code: ["https://relayium.com/   # auf beiden öffnen, dann die öffentliche IP in der Statuszeile vergleichen"],
+            fix: "Zwei verschiedene öffentliche IP-Adressen bedeuten zwei getrennte Räume. Ein VPN, iCloud Private Relay oder eine Gast-SSID, die Clients über eine andere Adresse hinausschickt, sind häufige Gründe dafür und nicht die einzigen. Wenn du sie ändern willst: VPN aus, oder Private Relay nur für dieses eine WLAN aus, oder beide Geräte ins Hauptnetz holen, dann auf jedem https://relayium.com/ neu laden. Willst du sie lieber anlassen, erreicht ein Pairing-Code auf https://relayium.com/cross-network das andere Gerät, ohne eine der Einstellungen anzufassen, und ist genauso Ende-zu-Ende-verschlüsselt.",
+          },
+          {
+            symptom: "Beide Geräte zeigen dieselbe öffentliche IP, und trotzdem erscheint keine Karte.",
+            code: ["https://relayium.com/   # der Hinweis unter der Geräteliste nennt die Router-Einstellung"],
+            fix: "Der Router trennt seine eigenen Clients. Schalte „AP-Isolierung / Client-Isolierung“ in seinen WLAN-Einstellungen aus — Mesh-Systeme sowie Hotel- und Gastnetze liefern das oft aktiv aus — und lade die Seite auf beiden Geräten neu. Wenn der Router nicht dir gehört, führt stattdessen ein Pairing-Code auf https://relayium.com/cross-network zum Ziel.",
+          },
+          {
+            symptom: "Die Seite meldet, verschlüsselte Übertragung erfordere HTTPS, und es erscheint überhaupt keine Geräteliste.",
+            code: ["https://relayium.com/   # in der Adresszeile muss https stehen, nicht http"],
+            fix: "Die Seite wurde über http:// oder per nackter IP-Adresse geöffnet, und der Browser gibt die APIs für eine verschlüsselte Übertragung dann nicht heraus. relayium.com selbst leitet auf HTTPS um, das heißt hier steckt in der Regel eine selbst gehostete Instanz über http:// dahinter — öffne sie als https://relayium.com/, oder gib der eigenen Instanz ein Zertifikat.",
+          },
+          {
+            symptom: "Das empfangende Gerät warnt vor dem Annehmen, es müsse den ganzen Stapel im Speicher halten.",
+            code: ["chrome://downloads   # in Chrome; Edge hat edge://downloads und Firefox about:downloads"],
+            fix: "Dieser Browser kann einen Download nicht direkt auf die Platte streamen, puffert also den Stapel, und ein großer endet womöglich in einem abgestürzten Tab. Empfange ihn in Chrome oder Edge am Computer, oder schicke weniger Dateien auf einmal, und kontrolliere jede Ankunft in der Download-Liste des empfangenden Browsers — chrome://downloads in Chrome, edge://downloads in Edge, about:downloads in Firefox — statt das Speichern anzunehmen.",
+          },
+          {
+            symptom: "Die Übertragung läuft, aber das Abzeichen zeigt „P2P direkt“ statt „LAN direkt“.",
+            code: ["https://relayium.com/   # das Pfad-Abzeichen in der Kopfzeile des Arbeitsbereichs lesen"],
+            fix: "Die beiden Geräte teilen eine öffentliche IP, aber keinen lokalen Sprung — Carrier-Grade-NAT, zwei VLANs hinter einem Uplink oder ein Repeater im Client-Modus führen alle dazu. Die Übertragung bleibt direkt und bleibt Ende-zu-Ende-verschlüsselt; häng beide Geräte an denselben Access Point, wenn der Pfad dein LAN sein soll und nicht die Route, die die Browser gefunden haben.",
+          },
+        ],
+      },
     },
     {
       heading: "Warum es schnell ist: kein Server dazwischen",
       body: [
-        "Da beide Geräte bereits im selben Netz sind, verbindet Relayium sie direkt Peer-to-Peer — die Bytes wandern über dein lokales WLAN von einem Gerät zum anderen und machen nie den Umweg zu einem Relayium-Server. Es gibt nichts hochzuladen und nichts herunterzuladen, worauf man warten müsste; die Geschwindigkeit ist nur durch dein lokales Netz begrenzt, das in beiden Richtungen meist deutlich schneller ist als eine Internetverbindung.",
+        "Beide Geräte verbinden sich aus demselben Netz, also koppelt Relayium sie Peer-to-Peer: Die Bytes wandern von einem Gerät zum anderen, ohne den Umweg über einen Relayium-Server, und es gibt weder etwas vorher hochzuladen noch hinterher auf einen Download zu warten. Wie schnell das ist, hängt an dem Sprung, auf den sich die beiden Browser tatsächlich geeinigt haben — und genau den benennt das Pfad-Abzeichen. „LAN direkt“ ist der lokale: Die Daten bleiben in deinem eigenen Netz und laufen mit dessen Tempo statt mit dem deiner Internetleitung. „P2P direkt“ ist ebenso direkt und hat ebenso keinen Server dazwischen, aber die gefundene Route hat das lokale Segment verlassen und ist damit von der Leitung begrenzt, die sie wirklich kreuzt. Eine gemeinsame öffentliche IP steckt zwei Geräte in denselben Raum; sie ist für sich genommen keine Zusage, dass der Sprung dazwischen ein lokaler ist.",
         "Das ist auch der Grund, warum auf keiner Seite ein Konto beteiligt ist: Da alle bereits im selben vertrauenswürdigen Netz sind, braucht Relayium keine Anmeldung, um zu wissen, wer sich mit wem verbinden darf.",
       ],
     },
@@ -384,7 +754,7 @@ const de = {
     {
       heading: "Wenn ein Gerät in einem anderen Netz ist",
       body: [
-        "Der Modus für dasselbe Netz funktioniert nur, wenn die Geräte tatsächlich ein Netzwerk teilen — ein Handy im Mobilfunknetz, ein Laptop in einem anderen WLAN oder ein Gerät hinter einem anderen Router erscheint nicht automatisch. Für diesen Fall unterstützt Relayium auch die Verbindung über Netzwerke hinweg mit einem kurzen Pairing-Code: Der Absender meldet sich an, um den Code (oder einen QR-Code / Link) zu erzeugen, und der Empfänger braucht dabei nie ein Konto. Über Netzwerkgrenzen hinweg verbinden sich die beiden Browser nicht direkt, sondern über ein verschlüsseltes TURN-Relay — dieser Weg ist von Grund auf reines Relay, sodass die Verbindung in ein bis zwei Sekunden steht, statt auf Prüfungen direkter Kandidaten zu warten, die zwischen zwei NATs fast immer scheitern. Das ist nicht weniger privat: Der Schlüssel bleibt auf den beiden Geräten, das Relay leitet also immer nur Chiffretext weiter und kann die Datei nicht lesen. Der Code gilt fünf Minuten — halte beide Geräte bereit, bevor du einen erzeugst.",
+        "Der Modus für dasselbe Netz funktioniert nur, wenn die Geräte tatsächlich ein Netzwerk teilen — ein Handy im Mobilfunknetz, ein Laptop in einem anderen WLAN oder ein Gerät hinter einem anderen Router erscheint nicht automatisch. Für diesen Fall unterstützt Relayium auch die Verbindung über Netzwerke hinweg mit einem kurzen Pairing-Code: Der Absender meldet sich an, um den Code (oder einen QR-Code / Link) zu erzeugen, und der Empfänger braucht dabei nie ein Konto. Über Netzwerkgrenzen hinweg verbinden sich die beiden Browser nicht direkt, sondern über ein verschlüsseltes TURN-Relay — dieser Weg ist von Grund auf reines Relay, sodass die Verbindung nicht davon abhängt, einen direkten Pfad durch die NATs und Firewalls dazwischen zu finden — die einen solchen Pfad verhindern können. Das ist nicht weniger privat: Der Schlüssel bleibt auf den beiden Geräten, das Relay leitet also immer nur Chiffretext weiter und kann die Datei nicht lesen. Der Code gilt fünf Minuten — halte beide Geräte bereit, bevor du einen erzeugst.",
       ],
     },
   ],
@@ -401,7 +771,7 @@ const de = {
       },
       {
         q: "Können mehr als zwei Geräte einander gleichzeitig sehen?",
-        a: "Ja. Räume im selben Netz sind nicht auf ein Paar begrenzt: Jedes Gerät, das relayium.com aus diesem Netz öffnet, kann erscheinen und Dateien empfangen — nützlich, um mit mehreren Personen im selben Raum oder Büro zu teilen.",
+        a: "Ja — im Raum steht jedes Gerät, das relayium.com aus diesem Netz öffnet, also Handy, Laptop und Desktop nebeneinander. Eine Übertragung selbst läuft eins zu eins: Du öffnest mit einem der gelisteten Geräte einen Arbeitsbereich, und dorthin gehen die Dateien. Mit mehreren Personen im selben Raum teilst du, indem du nacheinander mit jeder einen Arbeitsbereich öffnest.",
       },
       {
         q: "Ist die Übertragung immer noch verschlüsselt, wenn sie mein Netz nie verlässt?",
@@ -439,22 +809,96 @@ const fr = {
     },
     {
       heading: "Étape par étape",
+      prereqs: {
+        label: "Avant de commencer",
+        items: [
+          "Tous les appareils sur le même Wi-Fi ou réseau local, et un routeur qui ne sépare pas ses clients. Le nom du réglage à chercher figure dans l'indication de Relayium sous la liste des appareils : « l'isolation AP / isolation des clients ».",
+          "Un navigateur récent sur chaque appareil (Chrome, Edge, Firefox ou Safari), avec la page ouverte via https://relayium.com/. Le transfert chiffré exige HTTPS, et en simple http:// la page le dit au lieu de lister des appareils.",
+          "Aucun compte et aucun code d'appairage. La détection sur le même réseau ne demande ni l'un ni l'autre, d'aucun côté, donc il n'y a rien à configurer avant le premier transfert.",
+          "De la place pour les fichiers sur l'appareil qui reçoit. Où ils atterrissent relève du navigateur qui reçoit et de son système, pas de Relayium : Chrome et Edge sur un ordinateur peuvent demander où enregistrer, les autres navigateurs écrivent dans leur propre dossier de téléchargements. Où ils ont réellement atterri se vérifie dans la liste de téléchargements de ce navigateur — chrome://downloads dans Chrome, edge://downloads dans Edge, about:downloads dans Firefox.",
+        ],
+      },
       body: [
         "Tout le flux se déroule dans le navigateur — rien à installer sur aucun appareil.",
       ],
-      bullets: [
-        "Connectez chaque appareil que vous voulez utiliser au même Wi-Fi ou réseau local.",
-        "Sur chaque appareil, ouvrez relayium.com dans un navigateur moderne (Chrome, Edge, Firefox ou Safari).",
-        "Les appareils de ce réseau apparaissent automatiquement les uns aux autres — aucun code, aucune connexion, aucun compte d'aucun côté.",
-        "Choisissez un fichier ou un dossier entier (jusqu'à 1 000 fichiers par lot) et sélectionnez, dans la liste, l'appareil qui doit le recevoir.",
-        "Le transfert démarre dès que le destinataire accepte. Si vous activez la vérification avancée (désactivée par défaut), les deux appareils affichent en plus le même code de vérification court (SAS) : un coup d'œil sur chaque écran, et vous confirmez qu'il concorde avant.",
-        "Les fichiers passent directement d'un appareil à l'autre ; enregistrez-les une fois arrivés.",
+      steps: [
+        {
+          text: "Connectez chaque appareil que vous voulez utiliser au même Wi-Fi ou réseau local, puis ouvrez la page de transfert sur chacun d'eux.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Lisez la ligne d'état sous le titre sur les deux appareils et comparez l'IP publique qui y figure. C'est une adresse commune qui place deux appareils dans la même salle : deux adresses différentes signifient deux réseaux, quel que soit le nom du Wi-Fi.",
+          code: ["Connecté · cet appareil MacBook · IP publique 203.0.113.9"],
+        },
+        {
+          text: "Regardez sous « Appareils à proximité ». Chaque appareil ayant ouvert la page depuis ce réseau y figure comme une carte portant son propre nom, sans rien à saisir ni à confirmer.",
+        },
+        {
+          text: "Sur l'appareil qui envoie, cliquez sur la carte du destinataire et appuyez sur « Ouvrir l’espace de travail ». Sur un navigateur récent, c'est la seule action qu'une carte d'appareil à proximité propose : fichiers, dossiers et messages passent tous par l'unique connexion chiffrée qu'elle ouvre. La salle peut lister plusieurs appareils, et ouvrir l'espace de travail est justement ce qui choisit celui à qui ce transfert s'adresse. Pour la personne suivante, vous en ouvrez un autre.",
+        },
+        {
+          text: "L'espace de travail remplace cette carte. L'état de la connexion se lit désormais dans son en-tête — avec quel appareil vous êtes connecté, l'état du lien et l'unique badge de chemin — et l'envoi se fait avec les commandes en dessous : « Envoyer des fichiers » pour un lot, « Envoyer un dossier » pour toute une arborescence lorsque le navigateur propose la sélection de dossier, ou tapez dans le champ de message et appuyez sur « Envoyer ». Un lot de fichiers transporte jusqu'à 1 000 fichiers.",
+        },
+        {
+          text: "Sur l'appareil qui reçoit, la demande arrive avec le nombre de fichiers et la taille totale, et la ligne en dessous indique ce que fera « Accepter » : soit le navigateur demande où enregistrer, soit les fichiers vont dans son dossier de téléchargements. « Accepter » lance le transfert.",
+        },
+        {
+          text: "Regardez le compteur de fichiers atteindre le dernier fichier sur les deux écrans. Pour comparer un code de vérification (SAS) avant le moindre octet, activez d'abord « Vérification avancée » sur les deux appareils : elle est désactivée par défaut, et ce qu'elle ajoute est une comparaison et une étape d'acceptation, pas le chiffrement — le transfert est chiffré dans les deux cas.",
+        },
       ],
+      success: {
+        label: "À quoi ressemble un transfert qui marche",
+        body: [
+          "À ce moment-là la carte de l'autre appareil a disparu — l'espace de travail a pris sa place. L'état se lit dans son en-tête : l'appareil auquel vous êtes connecté, un état de lien « Connecté » et un unique badge de chemin indiquant « LAN direct », un saut d'hôte à hôte sur votre propre réseau. « P2P direct » est le second cas honnête : les deux appareils partageaient bien une IP publique, mais le saut retenu par les navigateurs n'était pas local.",
+          "Du côté qui reçoit, le compteur s'arrête sur le dernier fichier, et le fichier lui-même se trouve là où la ligne d'enregistrement l'annonçait. C'est la liste de téléchargements du navigateur qui reçoit qui le confirme, pas cette page — chrome://downloads dans Chrome, edge://downloads dans Edge, about:downloads dans Firefox.",
+        ],
+        code: ["Connecté à MacBook · Connecté · LAN direct\nFichier 3/3"],
+      },
+      bullets: [
+        "Une salle du même réseau n'est pas limitée à deux appareils : une carte par téléphone et par portable présent dans la pièce est normale, et non le signe d'un problème.",
+        "Rien n'est ici téléversé d'abord puis téléchargé ensuite, donc aucune copie ne dort sur un serveur pour plus tard — les deux appareils restent sur la page jusqu'à la fin du compteur.",
+      ],
+    },
+    {
+      heading: "Quand les appareils ne se voient pas",
+      body: [
+        "La détection sur le même réseau s'appuie sur le réseau depuis lequel le navigateur se connecte, c'est donc là qu'il faut regarder d'abord : les deux appareils ne sont pas vraiment sur un même réseau, le routeur garde ses clients séparés, la page n'a pas été ouverte en HTTPS, ou le navigateur qui reçoit doit retenir plus qu'il ne peut. Ce sont des vérifications courantes à faire en premier, pas la liste complète, et chacune laisse à l'écran de quoi la trancher.",
+      ],
+      troubleshooting: {
+        label: "Symptôme, vérification, correction",
+        items: [
+          {
+            symptom: "« Appareils à proximité » reste vide, ou ne liste que l'appareil que vous regardez.",
+            code: ["https://relayium.com/   # ouvrez-la sur les deux, puis comparez l'IP publique de la ligne d'état"],
+            fix: "Deux adresses IP publiques différentes, ce sont deux salles distinctes. Un VPN, iCloud Private Relay ou un SSID invité qui fait sortir ses clients par une autre adresse sont des causes fréquentes, et pas les seules. Si vous acceptez de les modifier : coupez le VPN, ou désactivez Private Relay pour ce seul réseau Wi-Fi, ou ramenez les deux appareils sur le réseau principal, puis rechargez https://relayium.com/ sur chacun. Si vous préférez les laisser en place, un code d'appairage sur https://relayium.com/cross-network atteint l'autre appareil sans toucher à l'un ni à l'autre, et reste chiffré de bout en bout.",
+          },
+          {
+            symptom: "Les deux appareils affichent la même IP publique et aucune carte n'apparaît malgré tout.",
+            code: ["https://relayium.com/   # l'indication sous la liste des appareils nomme le réglage du routeur"],
+            fix: "Le routeur sépare ses propres clients. Désactivez « l'isolation AP / isolation des clients » dans ses réglages Wi-Fi — les systèmes mesh et les réseaux d'hôtel ou invité le livrent souvent actif — puis rechargez la page sur les deux appareils. Quand le routeur ne vous appartient pas, un code d'appairage sur https://relayium.com/cross-network est la voie de secours.",
+          },
+          {
+            symptom: "La page indique que le transfert chiffré nécessite HTTPS, et aucune liste d'appareils n'apparaît.",
+            code: ["https://relayium.com/   # la barre d'adresse doit afficher https, pas http"],
+            fix: "La page a été ouverte en http:// ou par adresse IP brute, et le navigateur retient alors les API nécessaires à un transfert chiffré. relayium.com redirige lui-même vers HTTPS, donc cela désigne d'ordinaire une instance auto-hébergée jointe en http:// — ouvrez-la comme https://relayium.com/, ou donnez un certificat à votre propre instance.",
+          },
+          {
+            symptom: "Avant l'acceptation, l'appareil qui reçoit avertit qu'il doit garder tout le lot en mémoire.",
+            code: ["chrome://downloads   # dans Chrome ; Edge a edge://downloads et Firefox about:downloads"],
+            fix: "Ce navigateur ne sait pas écrire un téléchargement directement sur le disque, il met donc le lot en tampon, et un gros lot peut finir sur un onglet planté. Recevez-le dans Chrome ou Edge sur un ordinateur, ou envoyez moins de fichiers à la fois, et contrôlez chaque arrivée dans la liste de téléchargements du navigateur qui reçoit — chrome://downloads dans Chrome, edge://downloads dans Edge, about:downloads dans Firefox — au lieu de supposer l'enregistrement.",
+          },
+          {
+            symptom: "Le transfert fonctionne, mais le badge indique « P2P direct » au lieu de « LAN direct ».",
+            code: ["https://relayium.com/   # lisez le badge de chemin dans l'en-tête de l'espace de travail"],
+            fix: "Les deux appareils partagent une IP publique sans partager de saut local — NAT d'opérateur, deux VLAN derrière un même lien montant, ou un répéteur en mode client produisent tous cet effet. Le transfert reste direct et reste chiffré de bout en bout : branchez les deux appareils sur le même point d'accès si vous voulez que le chemin soit votre LAN plutôt que la route trouvée par les navigateurs.",
+          },
+        ],
+      },
     },
     {
       heading: "Pourquoi c'est rapide : aucun serveur au milieu",
       body: [
-        "Comme les deux appareils sont déjà sur le même réseau, Relayium les connecte directement en pair-à-pair — les octets voyagent sur votre Wi-Fi local d'un appareil à l'autre et ne font jamais l'aller-retour par un serveur Relayium. Rien à téléverser, rien à attendre en téléchargement ; la vitesse n'est limitée que par votre réseau local, généralement bien plus rapide qu'une connexion internet dans un sens ou dans l'autre.",
+        "Les deux appareils se connectent depuis le même réseau, alors Relayium les relie en pair-à-pair — les octets vont d'un appareil à l'autre sans aller-retour par un serveur Relayium, sans rien à téléverser d'abord ni aucun téléchargement à attendre ensuite ; la rapidité dépend du saut que les deux navigateurs ont réellement retenu, et c'est le badge de chemin qui le nomme. « LAN direct » est le saut local, celui où les données ne quittent pas votre réseau et avancent à sa vitesse plutôt qu'à celle de votre connexion internet. « P2P direct » reste tout aussi direct, toujours sans serveur au milieu, mais la route trouvée par les navigateurs a quitté le segment local, elle est donc bornée par la liaison qu'elle traverse vraiment. Une IP publique commune place deux appareils dans la même salle, elle ne promet pas à elle seule que le saut entre eux soit local.",
         "C'est aussi pourquoi aucun compte n'intervient d'aucun côté : tout le monde étant déjà sur le même réseau de confiance, Relayium n'a pas besoin d'une connexion pour savoir qui peut se connecter à qui.",
       ],
     },
@@ -467,7 +911,7 @@ const fr = {
     {
       heading: "Si un appareil est sur un réseau différent",
       body: [
-        "Le mode même réseau ne fonctionne que quand les appareils partagent réellement un réseau — un téléphone en données mobiles, un ordinateur portable sur un autre Wi-Fi, ou un appareil derrière un autre routeur n'apparaîtra pas automatiquement. Dans ce cas, Relayium prend aussi en charge la connexion entre réseaux différents avec un court code d'appairage : l'expéditeur se connecte pour générer le code (ou un code QR / lien), et le destinataire n'a jamais besoin de compte. Entre réseaux différents, les deux navigateurs ne se connectent pas directement mais passent par un relais TURN chiffré — cette voie est délibérément réservée au relais, si bien que la connexion s'établit en une ou deux secondes au lieu d'attendre des tests de candidats directs qui échouent presque toujours entre deux NAT. Ce n'est pas moins privé : la clé reste sur les deux appareils, le relais ne transmet donc jamais que du texte chiffré et ne peut pas lire le fichier. Le code est valable cinq minutes : ayez les deux appareils sous la main avant d'en générer un.",
+        "Le mode même réseau ne fonctionne que quand les appareils partagent réellement un réseau — un téléphone en données mobiles, un ordinateur portable sur un autre Wi-Fi, ou un appareil derrière un autre routeur n'apparaîtra pas automatiquement. Dans ce cas, Relayium prend aussi en charge la connexion entre réseaux différents avec un court code d'appairage : l'expéditeur se connecte pour générer le code (ou un code QR / lien), et le destinataire n'a jamais besoin de compte. Entre réseaux différents, les deux navigateurs ne se connectent pas directement mais passent par un relais TURN chiffré — cette voie est délibérément réservée au relais, si bien que la connexion ne dépend pas de la découverte d'un chemin direct à travers les NAT et pare-feu intermédiaires, qui peuvent en empêcher un. Ce n'est pas moins privé : la clé reste sur les deux appareils, le relais ne transmet donc jamais que du texte chiffré et ne peut pas lire le fichier. Le code est valable cinq minutes : ayez les deux appareils sous la main avant d'en générer un.",
       ],
     },
   ],
@@ -484,7 +928,7 @@ const fr = {
       },
       {
         q: "Plus de deux appareils peuvent-ils se voir en même temps ?",
-        a: "Oui. Les salles du même réseau ne sont pas limitées à une paire : tout appareil qui ouvre relayium.com depuis ce réseau peut apparaître et recevoir des fichiers, pratique pour partager avec plusieurs personnes dans la même pièce ou le même bureau.",
+        a: "Oui. Les salles du même réseau ne sont pas limitées à une paire : tout appareil qui ouvre relayium.com depuis ce réseau y apparaît, téléphone, portable et ordinateur de bureau côte à côte. Un transfert, lui, va d'un appareil à un seul autre. Vous ouvrez un espace de travail avec l'un des appareils listés, et c'est à lui que les fichiers arrivent. Pour partager avec plusieurs personnes dans la même pièce, vous ouvrez un espace de travail avec chacune à son tour.",
       },
       {
         q: "Le transfert est-il quand même chiffré s'il ne quitte jamais mon réseau ?",
@@ -522,22 +966,96 @@ const ar = {
     },
     {
       heading: "خطوة بخطوة",
+      prereqs: {
+        label: "قبل أن تبدأ",
+        items: [
+          "كل الأجهزة على نفس شبكة Wi-Fi أو الشبكة المحلية، والموجّه لا يفصل عملاءه عن بعضهم. اسم الإعداد الذي تبحث عنه مكتوب في تلميح Relayium نفسه أسفل قائمة الأجهزة: «عزل نقطة الوصول / عزل العملاء».",
+          "متصفح حديث على كل جهاز (Chrome أو Edge أو Firefox أو Safari)، والصفحة مفتوحة عبر https://relayium.com/. يحتاج النقل المشفَّر إلى HTTPS، وعند فتحها عبر http:// المجرّد تقول الصفحة ذلك بالضبط بدل أن تسرد الأجهزة.",
+          "لا حساب ولا رمز اقتران. لا يطلب اكتشاف نفس الشبكة أيًّا منهما على أي من الجانبين، فليس هناك ما تهيّئه قبل أول عملية نقل.",
+          "مكان تحلّ فيه الملفات على الجهاز المستلم. تحديد ذلك المكان يعود إلى المتصفح المستلم ونظام تشغيله لا إلى Relayium: يستطيع Chrome وEdge على الحاسوب أن يسألاك عن مكان الحفظ، أما المتصفحات الأخرى فتكتب في مجلد التنزيلات الخاص بها. وأين حلّت فعلًا تتأكد منه في قائمة تنزيلات ذلك المتصفح — chrome://downloads في Chrome، edge://downloads في Edge، about:downloads في Firefox.",
+        ],
+      },
       body: [
         "يجري مسار النقل كله في المتصفح — لا تطبيق لتثبيته على أي جهاز.",
       ],
-      bullets: [
-        "اربط كل جهاز تريد استخدامه بنفس شبكة Wi-Fi أو الشبكة المحلية.",
-        "على كل جهاز، افتح relayium.com في متصفح حديث (Chrome أو Edge أو Firefox أو Safari).",
-        "تظهر الأجهزة الموجودة على تلك الشبكة لبعضها تلقائيًا — لا رمز، لا تسجيل دخول، لا حساب على أي من الجانبين.",
-        "اختر ملفًا أو مجلدًا كاملًا (حتى 1,000 ملف لكل دفعة) وحدّد أي جهاز في القائمة ينبغي أن يستقبله.",
-        "يبدأ النقل بمجرد قبول الطرف المستلم. وإذا فعّلت التحقّق المتقدّم (المعطَّل افتراضيًا)، يعرض الجهازان أيضًا رمز التحقق القصير نفسه (SAS)، فألقِ نظرة عليه على كل شاشة وتأكّد من تطابقه أولًا.",
-        "تنتقل الملفات مباشرةً من جهاز إلى آخر؛ احفظها عند وصولها.",
+      steps: [
+        {
+          text: "اربط كل جهاز تريد استخدامه بنفس شبكة Wi-Fi أو الشبكة المحلية، ثم افتح صفحة النقل على كل واحد منها.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "اقرأ شريط الحالة أسفل العنوان على الجهازين وقارن عنوان IP العام الظاهر فيه. وجود عنوان واحد مشترك هو ما يضع جهازين في غرفة واحدة، أما اختلاف العنوانين فيعني شبكتين مختلفتين مهما كان اسم شبكة Wi-Fi.",
+          code: ["متصل · هذا الجهاز MacBook · عنوان IP العام 203.0.113.9"],
+        },
+        {
+          text: "انظر تحت «الأجهزة القريبة». كل جهاز فتح الصفحة من تلك الشبكة يظهر هناك كبطاقة تحمل اسمه — لا شيء تكتبه ولا شيء تؤكّده.",
+        },
+        {
+          text: "على الجهاز المُرسِل، انقر بطاقة المستلم ثم اضغط «فتح مساحة العمل». في المتصفحات الحديثة هذا هو الإجراء الوحيد الذي تعرضه بطاقة الجهاز القريب، لأن الملفات والمجلدات والرسائل تمرّ كلها عبر الاتصال المشفَّر الواحد الذي تفتحه. وقد تسرد الغرفة أجهزة عدة، وفتح مساحة العمل هو بالضبط ما يحدّد إلى أيّها يذهب هذا النقل؛ وللشخص التالي تفتح مساحة عمل أخرى.",
+        },
+        {
+          text: "تحلّ مساحة العمل محلّ تلك البطاقة. ومن هنا فصاعدًا تُقرأ حالة الاتصال من ترويسة مساحة العمل — بأي جهاز أنت متصل، وحالة الوصلة، ووسم المسار الوحيد — أما الإرسال فمن الأدوات التي تحتها: «إرسال ملفات» لدفعة، و«إرسال مجلد» لشجرة كاملة حين يتيح المتصفح اختيار المجلدات، أو اكتب في حقل الرسالة واضغط «إرسال». تحمل الدفعة الواحدة حتى 1,000 ملف.",
+        },
+        {
+          text: "يصل الطلب إلى الجهاز المستلم مصحوبًا بعدد الملفات وحجمها الإجمالي، ويقول السطر الذي تحته ماذا سيحدث عند الضغط على «قبول»: إما أن يسألك المتصفح عن مكان الحفظ، وإما أن تذهب الملفات إلى مجلد التنزيلات الخاص به. الضغط على «قبول» يبدأ النقل.",
+        },
+        {
+          text: "راقب عدّاد الملفات حتى يبلغ الملف الأخير على الشاشتين. وإذا أردت مقارنة رمز التحقق (SAS) قبل أن يتحرك أي بايت، فعّل «التحقّق المتقدّم» على الجهازين أولًا: هو معطَّل افتراضيًا، وما يضيفه تفعيله هو مقارنة وخطوة موافقة، لا التشفير — فالنقل مشفَّر في الحالتين.",
+        },
       ],
+      success: {
+        label: "كيف يبدو نقل ناجح",
+        body: [
+          "تكون بطاقة الجهاز الآخر قد اختفت عندئذ — إذ حلّت مساحة العمل محلّها. وتُقرأ الحالة من ترويسة مساحة العمل: بأي جهاز أنت متصل، وحالة وصلة تقول «متصل»، ووسم مسار وحيد يقرأ «مباشر عبر LAN» — أي قفزة من مضيف إلى مضيف داخل شبكتك أنت. و«مباشر P2P» هي الحالة الثانية الصادقة: الجهازان تشاركا فعلًا عنوان IP عامًا واحدًا، لكن القفزة التي استقر عليها المتصفحان لم تكن محلية.",
+          "على الجانب المستلم يتوقف العدّاد عند الملف الأخير، ويكون الملف نفسه في المكان الذي ذكره سطر الحفظ. والمكان الذي تتأكد فيه من ذلك هو قائمة تنزيلات المتصفح المستلم نفسه، لا هذه الصفحة — chrome://downloads في Chrome، edge://downloads في Edge، about:downloads في Firefox.",
+        ],
+        code: ["متصل بـ MacBook · متصل · مباشر عبر LAN\nالملف 3/3"],
+      },
+      bullets: [
+        "غرفة نفس الشبكة ليست محدودة بجهازين، فظهور بطاقة لكل هاتف وحاسوب محمول في الغرفة أمر طبيعي وليس علامة على خطأ.",
+        "لا شيء هنا يُرفع أولًا ثم يُنزَّل بعد ذلك، فلا توجد نسخة على خادم تُجلب لاحقًا — يبقى الجهازان على الصفحة حتى ينتهي العدّاد.",
+      ],
+    },
+    {
+      heading: "عندما لا يرى الجهازان أحدهما الآخر",
+      body: [
+        "يعتمد اكتشاف نفس الشبكة على الشبكة التي يتصل منها متصفحك، ومن هناك تبدأ: الجهازان ليسا فعلًا على شبكة واحدة، أو الموجّه يفصل عملاءه، أو الصفحة لم تُفتح عبر HTTPS، أو يُطلب من متصفح الاستقبال أن يحمل أكثر مما يستطيع. وهذه فحوص أولى شائعة لا قائمة كاملة بالأسباب، ولكل واحدة منها ما يحسمها على الشاشة.",
+      ],
+      troubleshooting: {
+        label: "العَرَض والفحص والحل",
+        items: [
+          {
+            symptom: "تبقى «الأجهزة القريبة» فارغة، أو لا تسرد سوى الجهاز الذي تنظر إليه.",
+            code: ["https://relayium.com/   # افتحها على الجهازين ثم قارن عنوان IP العام في شريط الحالة"],
+            fix: "عنوانا IP عامان مختلفان يعنيان غرفتين منفصلتين. ومن الأسباب المعتادة لذلك VPN، أو ميزة الترحيل الخاص في iCloud، أو شبكة ضيوف تُخرِج عملاءها من عنوان آخر، وليست وحدها. فإن كنت مستعدًا لتغييرها: أوقف VPN، أو أوقف الترحيل الخاص لشبكة Wi-Fi هذه وحدها، أو انقل الجهازين إلى الشبكة الرئيسية، ثم أعِد تحميل https://relayium.com/ على كل منهما. وإن فضّلت إبقاءها كما هي، فرمز الاقتران على https://relayium.com/cross-network يصل إلى الجهاز الآخر دون المساس بأي من الإعدادين، وهو مشفَّر من الطرف إلى الطرف بالقدر نفسه.",
+          },
+          {
+            symptom: "يعرض الجهازان نفس عنوان IP العام ومع ذلك لا تظهر أي بطاقة.",
+            code: ["https://relayium.com/   # التلميح أسفل قائمة الأجهزة يسمّي إعداد الموجّه"],
+            fix: "الموجّه يفصل عملاءه عن بعضهم. أوقف «عزل نقطة الوصول / عزل العملاء» في إعدادات Wi-Fi لديه — كثيرًا ما تأتي أنظمة Mesh وشبكات الفنادق والضيوف وهي مفعَّلة — ثم أعِد تحميل الصفحة على الجهازين. وإن لم يكن الموجّه تحت يدك، فرمز الاقتران على https://relayium.com/cross-network هو الطريق البديل.",
+          },
+          {
+            symptom: "تقول الصفحة إن النقل المشفَّر يتطلب HTTPS، ولا تظهر قائمة أجهزة إطلاقًا.",
+            code: ["https://relayium.com/   # يجب أن يقرأ شريط العنوان https لا http"],
+            fix: "فُتحت الصفحة عبر http:// أو بعنوان IP مجرّد، فيحجب المتصفح واجهات البرمجة التي يحتاجها النقل المشفَّر. وموقع relayium.com نفسه يعيد التوجيه إلى HTTPS، لذا يعني هذا عادةً نسخة مستضافة ذاتيًا يجري الوصول إليها عبر http:// — افتحها بصيغة https://relayium.com/، أو زوِّد نسختك بشهادة.",
+          },
+          {
+            symptom: "قبل أن تضغط قبول، يحذّر الجهاز المستلم من أنه سيحمل الدفعة كلها في الذاكرة.",
+            code: ["chrome://downloads   # في Chrome / edge://downloads في Edge / about:downloads في Firefox"],
+            fix: "ذلك المتصفح لا يستطيع بثّ التنزيل إلى القرص مباشرةً، فيخزّن الدفعة مؤقتًا، وقد تنتهي الدفعة الكبيرة بانهيار التبويب. استقبلها في Chrome أو Edge على حاسوب، أو أرسِل ملفات أقل في المرة الواحدة، وتحقّق من كل وصول في قائمة تنزيلات المتصفح المستلم نفسه — chrome://downloads في Chrome، edge://downloads في Edge، about:downloads في Firefox — بدلًا من افتراض أنها حُفظت.",
+          },
+          {
+            symptom: "النقل يعمل، لكن الوسم يقرأ «مباشر P2P» بدل «مباشر عبر LAN».",
+            code: ["https://relayium.com/   # اقرأ وسم المسار في ترويسة مساحة العمل"],
+            fix: "الجهازان يتشاركان عنوان IP عامًا دون أن يتشاركا قفزة محلية — وتفعل ذلك شبكات NAT على مستوى المشغّل، أو شبكتان افتراضيتان خلف وصلة صاعدة واحدة، أو مُوسِّع نطاق يعمل في وضع العميل. يبقى النقل مباشرًا ويبقى مشفَّرًا من الطرف إلى الطرف، وإن أردت أن يكون المسار شبكتك المحلية لا الطريق الذي وجده المتصفحان، فاربط الجهازين بنفس نقطة الوصول.",
+          },
+        ],
+      },
     },
     {
       heading: "لماذا هو سريع: لا خادم في المنتصف",
       body: [
-        "لأن كلا الجهازين على نفس الشبكة أصلًا، يربطهما Relayium من الند للند مباشرةً — تنتقل البايتات من جهاز إلى آخر عبر شبكة Wi-Fi المحلية لديك ولا تقوم أبدًا برحلة ذهاب وإياب إلى خادم Relayium. لا شيء لرفعه ولا شيء لانتظار تنزيله؛ وتتحدد السرعة بشبكتك المحلية فقط، وهي عادةً أسرع كثيرًا من اتصال الإنترنت في أي من الاتجاهين.",
+        "يتصل الجهازان من الشبكة نفسها، فيربطهما Relayium من الند للند: تنتقل البايتات من جهاز إلى آخر دون رحلة ذهاب وإياب إلى خادم Relayium، فلا شيء يُرفع أولًا ولا تنزيل يُنتظَر بعد ذلك. أما مقدار السرعة فيتوقف على القفزة التي استقر عليها المتصفحان فعلًا، ووسم المسار هو ما يسمّيها. «مباشر عبر LAN» هي القفزة المحلية: تبقى البيانات داخل شبكتك أنت وتسير بسرعتها هي، لا بسرعة اشتراك الإنترنت لديك. و«مباشر P2P» مباشر مثله ولا خادم في منتصفه كذلك، غير أن المسار الذي وجده المتصفحان قد غادر المقطع المحلي، فتحدّه الوصلة التي يعبرها فعلًا. واشتراك الجهازين في عنوان IP عام واحد يضعهما في الغرفة نفسها، لكنه وحده لا يَعِد بأن القفزة بينهما محلية.",
         "وهذا أيضًا سبب عدم إشراك أي حساب على أي جانب: فما دام الجميع على نفس الشبكة الموثوقة، لا يحتاج Relayium إلى تسجيل الدخول ليعرف مَن يُسمح له بالاتصال بمَن.",
       ],
     },
@@ -550,7 +1068,7 @@ const ar = {
     {
       heading: "إذا كان جهاز على شبكة مختلفة",
       body: [
-        "لا يعمل وضع نفس الشبكة إلا عندما تتشارك الأجهزة شبكةً بالفعل — فالهاتف على بيانات الجوال، أو الحاسوب المحمول على شبكة Wi-Fi مختلفة، أو جهاز خلف موجّه مختلف لن يظهر تلقائيًا. لتلك الحالة، يدعم Relayium أيضًا الاتصال عبر الشبكات برمز اقتران قصير: يسجّل المُرسِل الدخول لتوليد الرمز (أو رمز QR / رابط)، ولا يحتاج المُستقبِل أبدًا إلى حساب. وعبر الشبكات، يتصل المتصفّحان عبر مُرحِّل TURN مُشفَّر بدلًا من الاتصال المباشر — فهذا المسار مُخصَّص للمُرحِّل عن قصد، بحيث ينعقد الاتصال خلال ثانية أو ثانيتين بدل انتظار فحوص المرشّحين المباشرين التي تفشل غالبًا بين شبكتَي NAT. وهذا لا يقلّل من الخصوصية: يبقى المفتاح على الجهازين، فلا يُمرِّر المُرحِّل سوى نصّ مُشفَّر ولا يستطيع قراءة الملف. والرمز صالح خمس دقائق، فجهِّز الجهازين معًا قبل توليده.",
+        "لا يعمل وضع نفس الشبكة إلا عندما تتشارك الأجهزة شبكةً بالفعل — فالهاتف على بيانات الجوال، أو الحاسوب المحمول على شبكة Wi-Fi مختلفة، أو جهاز خلف موجّه مختلف لن يظهر تلقائيًا. لتلك الحالة، يدعم Relayium أيضًا الاتصال عبر الشبكات برمز اقتران قصير: يسجّل المُرسِل الدخول لتوليد الرمز (أو رمز QR / رابط)، ولا يحتاج المُستقبِل أبدًا إلى حساب. وعبر الشبكات، يتصل المتصفّحان عبر مُرحِّل TURN مُشفَّر بدلًا من الاتصال المباشر — فهذا المسار مُخصَّص للمُرحِّل عن قصد، فلا يعتمد انعقاد الاتصال على العثور على مسار مباشر عبر ما بينهما من شبكات NAT وجدران حماية، وهي قد تمنع مثل هذا المسار. وهذا لا يقلّل من الخصوصية: يبقى المفتاح على الجهازين، فلا يُمرِّر المُرحِّل سوى نصّ مُشفَّر ولا يستطيع قراءة الملف. والرمز صالح خمس دقائق، فجهِّز الجهازين معًا قبل توليده.",
       ],
     },
   ],
@@ -567,7 +1085,7 @@ const ar = {
       },
       {
         q: "هل يمكن لأكثر من جهازين رؤية بعضها في آنٍ واحد؟",
-        a: "نعم. غرف نفس الشبكة ليست محدودة بزوج — فكل جهاز يفتح relayium.com من تلك الشبكة يمكن أن يظهر ويستقبل الملفات، وهو مفيد للمشاركة مع عدة أشخاص في نفس الغرفة أو المكتب.",
+        a: "نعم. كل جهاز يفتح relayium.com من تلك الشبكة يظهر في الغرفة، فيصطف الهاتف والحاسوب المحمول والمكتبي جنبًا إلى جنب. أما النقل نفسه فمن جهاز إلى جهاز واحد: تفتح مساحة عمل مع أحد الأجهزة المسرودة، وإليه تذهب الملفات. وللمشاركة مع عدة أشخاص في الغرفة نفسها، تفتح مساحة عمل مع كل واحد منهم بدوره.",
       },
       {
         q: "هل يبقى النقل مشفَّرًا إن لم يغادر شبكتي أبدًا؟",
@@ -605,22 +1123,96 @@ const es = {
     },
     {
       heading: "Paso a paso",
+      prereqs: {
+        label: "Antes de empezar",
+        items: [
+          "Todos los dispositivos en la misma Wi-Fi o red local, y un router que no separe a sus clientes. El nombre del ajuste que hay que buscar está en la propia indicación de Relayium bajo la lista de dispositivos: «aislamiento de AP / aislamiento de clientes».",
+          "Un navegador actual en cada dispositivo (Chrome, Edge, Firefox o Safari), con la página abierta mediante https://relayium.com/. La transferencia cifrada necesita HTTPS, y con http:// a secas la página dice justo eso en lugar de listar dispositivos.",
+          "Ninguna cuenta y ningún código de emparejamiento. El descubrimiento en la misma red no pide ni una cosa ni la otra, en ninguno de los lados, así que no hay nada que configurar antes de la primera transferencia.",
+          "Sitio donde dejar los archivos en el dispositivo que recibe. Cuál es ese sitio lo deciden el navegador que recibe y su sistema operativo, no Relayium: Chrome y Edge en un ordenador pueden preguntarte dónde guardar, y los demás navegadores escriben en su propia carpeta de descargas. Dónde han acabado lo confirmas en la lista de descargas de ese navegador — chrome://downloads en Chrome, edge://downloads en Edge, about:downloads en Firefox.",
+        ],
+      },
       body: [
         "Todo el proceso ocurre en el navegador — ninguna app que instalar en ningún dispositivo.",
       ],
-      bullets: [
-        "Conecta cada dispositivo que quieras usar a la misma Wi-Fi o red local.",
-        "En cada dispositivo, abre relayium.com en un navegador moderno (Chrome, Edge, Firefox o Safari).",
-        "Los dispositivos de esa red aparecen entre sí automáticamente — sin código, sin inicio de sesión, sin cuenta en ninguno de los lados.",
-        "Elige un archivo o una carpeta entera (hasta 1.000 archivos por lote) y selecciona qué dispositivo de la lista debe recibirlo.",
-        "La transferencia empieza en cuanto quien recibe acepta. Si activas la verificación avanzada (desactivada por omisión), ambos dispositivos muestran además el mismo código de verificación corto (SAS): échale un vistazo en cada pantalla y confirma que coincide antes.",
-        "Los archivos pasan directamente de un dispositivo al otro; guárdalos cuando lleguen.",
+      steps: [
+        {
+          text: "Conecta cada dispositivo que quieras usar a la misma Wi-Fi o red local y abre después la página de transferencia en cada uno.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Lee la línea de estado bajo el título en ambos dispositivos y compara la IP pública que aparece en ella. Una dirección compartida es lo que mete a dos dispositivos en la misma sala; dos direcciones distintas significan dos redes, se llame como se llame la Wi-Fi.",
+          code: ["Conectado · este dispositivo MacBook · IP pública 203.0.113.9"],
+        },
+        {
+          text: "Mira bajo «Dispositivos cercanos». Cada dispositivo que haya abierto la página desde esa red figura ahí como una tarjeta con su propio nombre, sin nada que teclear ni confirmar.",
+        },
+        {
+          text: "En el dispositivo que envía, pulsa la tarjeta de quien recibe y luego «Abrir espacio de trabajo». En un navegador actual esa es la única acción que ofrece una tarjeta de dispositivo cercano, porque archivos, carpetas y mensajes viajan todos por la única conexión cifrada que abre. La sala puede listar varios dispositivos, y abrir el espacio de trabajo es justo lo que elige a cuál va esta transferencia; para la siguiente persona abres otro.",
+        },
+        {
+          text: "El espacio de trabajo sustituye a esa tarjeta. Desde ahí el estado de la conexión se lee en su cabecera — con qué dispositivo estás conectado, el estado del enlace y la única etiqueta de ruta — y para enviar están los controles de debajo: «Enviar archivos» para un lote, «Enviar una carpeta» para un árbol entero cuando el navegador ofrece elegir carpetas, o escribe en el campo de mensaje y pulsa «Enviar». Un lote de archivos lleva hasta 1.000 archivos.",
+        },
+        {
+          text: "En el dispositivo que recibe llega la solicitud con el número de archivos y el tamaño total, y la línea de debajo dice qué hará «Aceptar»: o el navegador pregunta dónde guardar, o los archivos van a su carpeta de descargas. Con «Aceptar» empieza.",
+        },
+        {
+          text: "Observa cómo el contador de archivos llega al último en ambas pantallas. Para comparar un código de verificación (SAS) antes de que se mueva un solo byte, activa primero «Verificación avanzada» en los dos dispositivos: viene desactivada, y lo que añade es una comparación y un paso de aceptación, no el cifrado — la transferencia va cifrada en cualquier caso.",
+        },
       ],
+      success: {
+        label: "Qué se ve cuando la transferencia funciona",
+        body: [
+          "Para entonces la tarjeta del otro dispositivo ya no está: el espacio de trabajo ocupó su lugar. El estado se lee en su cabecera: a qué dispositivo estás conectado, un estado de enlace «Conectado» y una única etiqueta de ruta que marca «Directo por LAN», un salto de host a host por tu propia red. «Directo P2P» es el segundo caso honesto: los dos dispositivos sí compartían una IP pública, pero el salto en el que se quedaron los navegadores no era local.",
+          "En el lado que recibe, el contador se detiene en el último archivo y el archivo está donde la línea de guardado dijo. Eso se confirma en la lista de descargas del propio navegador que recibe, no en esta página — chrome://downloads en Chrome, edge://downloads en Edge, about:downloads en Firefox.",
+        ],
+        code: ["Conectado a MacBook · Conectado · Directo por LAN\nArchivo 3/3"],
+      },
+      bullets: [
+        "Una sala de la misma red no se limita a dos dispositivos, así que una tarjeta por cada móvil y portátil de la habitación es lo normal y no una señal de que algo falle.",
+        "Aquí nada se sube primero y se descarga después, de modo que no queda ninguna copia en un servidor para recoger más tarde: los dos dispositivos siguen en la página hasta que el contador termina.",
+      ],
+    },
+    {
+      heading: "Cuando los dispositivos no se ven",
+      body: [
+        "El descubrimiento en la misma red se guía por la red desde la que se conecta tu navegador, así que ahí es donde hay que mirar primero: los dos dispositivos no están realmente en una misma red, el router mantiene separados a sus clientes, la página no se abrió por HTTPS, o al navegador que recibe se le pide sostener más de lo que puede. Son las comprobaciones habituales para empezar y no la lista completa; cada una deja en pantalla algo que la decide.",
+      ],
+      troubleshooting: {
+        label: "Síntoma, comprobación, solución",
+        items: [
+          {
+            symptom: "«Dispositivos cercanos» sigue vacío, o solo lista el dispositivo que estás mirando.",
+            code: ["https://relayium.com/   # ábrela en los dos y compara la IP pública de la línea de estado"],
+            fix: "Dos direcciones IP públicas distintas son dos salas separadas. Una VPN, iCloud Private Relay o un SSID de invitados que saca a sus clientes por otra dirección son causas frecuentes, y no las únicas. Si estás dispuesto a cambiarlos: apaga la VPN, o desactiva Private Relay solo para esa red Wi-Fi, o pasa los dos dispositivos a la red principal, y recarga después https://relayium.com/ en cada uno. Si prefieres dejarlos como están, un código de emparejamiento en https://relayium.com/cross-network llega al otro dispositivo sin tocar ninguno de los dos ajustes, y va igual de cifrado de extremo a extremo.",
+          },
+          {
+            symptom: "Los dos dispositivos muestran la misma IP pública y aun así no aparece ninguna tarjeta.",
+            code: ["https://relayium.com/   # la indicación bajo la lista de dispositivos nombra el ajuste del router"],
+            fix: "El router separa a sus propios clientes. Desactiva «aislamiento de AP / aislamiento de clientes» en sus ajustes de Wi-Fi — los sistemas mesh y las redes de hotel o de invitados suelen traerlo activado — y recarga la página en los dos dispositivos. Cuando el router no es tuyo, la salida es un código de emparejamiento en https://relayium.com/cross-network.",
+          },
+          {
+            symptom: "La página dice que la transferencia cifrada requiere HTTPS y no aparece ninguna lista de dispositivos.",
+            code: ["https://relayium.com/   # la barra de direcciones tiene que decir https, no http"],
+            fix: "La página se abrió por http:// o por dirección IP a secas, y entonces el navegador retiene las API que necesita una transferencia cifrada. relayium.com redirige por sí mismo a HTTPS, así que esto suele apuntar a una instancia autoalojada a la que se llega por http:// — ábrela como https://relayium.com/, o dale un certificado a tu propia instancia.",
+          },
+          {
+            symptom: "Antes de aceptar, el dispositivo que recibe avisa de que tiene que sostener todo el lote en memoria.",
+            code: ["chrome://downloads   # en Chrome; en Edge es edge://downloads y en Firefox about:downloads"],
+            fix: "Ese navegador no sabe escribir una descarga directamente en el disco, así que almacena el lote entero y uno grande puede acabar en una pestaña caída. Recíbelo en Chrome o Edge en un ordenador, o manda menos archivos de una vez, y revisa cada llegada en la lista de descargas del propio navegador que recibe — chrome://downloads en Chrome, edge://downloads en Edge, about:downloads en Firefox — en vez de dar por hecho que se guardó.",
+          },
+          {
+            symptom: "La transferencia funciona, pero la etiqueta marca «Directo P2P» en lugar de «Directo por LAN».",
+            code: ["https://relayium.com/   # lee la etiqueta de ruta en la cabecera del espacio de trabajo"],
+            fix: "Los dos dispositivos comparten una IP pública sin compartir un salto local: NAT de operador, dos VLAN detrás de un mismo enlace de subida o un repetidor en modo cliente producen ese efecto. La transferencia sigue siendo directa y sigue cifrada de extremo a extremo; conecta los dos dispositivos al mismo punto de acceso si quieres que la ruta sea tu LAN y no el camino que encontraron los navegadores.",
+          },
+        ],
+      },
     },
     {
       heading: "Por qué es rápido: sin servidor en medio",
       body: [
-        "Como ambos dispositivos ya están en la misma red, Relayium los conecta directamente de igual a igual — los bytes viajan de un dispositivo al otro por tu Wi-Fi local y nunca hacen un viaje de ida y vuelta a un servidor de Relayium. No hay nada que subir ni nada que esperar al descargar; la velocidad solo está limitada por tu red local, que suele ser mucho más rápida que una conexión a internet en cualquier sentido.",
+        "Los dos dispositivos se conectan desde la misma red, así que Relayium los enlaza de igual a igual: los bytes van de uno al otro sin un viaje de ida y vuelta a un servidor de Relayium, sin nada que subir antes ni nada que esperar al descargar después. Lo rápido que sea depende del salto en el que se quedaron de verdad los dos navegadores, y la etiqueta de ruta es la que lo nombra. «Directo por LAN» es el salto local: los datos no salen de tu propia red y van a la velocidad de esa red, no a la de tu conexión a internet. «Directo P2P» es igual de directo y tampoco tiene servidor en medio, pero la ruta que encontraron los navegadores salió del segmento local, así que la limita el enlace que de verdad atraviesa. Compartir una IP pública es lo que mete a dos dispositivos en la misma sala; por sí solo no promete que el salto entre ellos sea local.",
         "Esta es también la razón por la que no interviene cuenta alguna en ningún lado: con todos ya en la misma red de confianza, Relayium no necesita inicio de sesión para saber quién debería poder conectarse con quién.",
       ],
     },
@@ -633,7 +1225,7 @@ const es = {
     {
       heading: "Si un dispositivo está en una red distinta",
       body: [
-        "El modo de la misma red solo funciona cuando los dispositivos comparten realmente una red — un teléfono con datos móviles, un portátil en otra Wi-Fi o un dispositivo detrás de otro router no aparecerán automáticamente. Para ese caso, Relayium también admite conectar entre redes con un código de emparejamiento corto: el remitente inicia sesión para generar el código (o un código QR / enlace) y quien recibe nunca necesita una cuenta. Entre redes distintas, los dos navegadores no se conectan directamente, sino a través de un retransmisor TURN cifrado — esa vía es solo de retransmisión a propósito, así que la conexión se establece en uno o dos segundos en lugar de esperar comprobaciones de candidatos directos que casi siempre fallan entre dos NAT. No es menos privado: la clave se queda en los dos dispositivos, así que el retransmisor solo reenvía texto cifrado y no puede leer el archivo. El código vale cinco minutos, así que ten los dos dispositivos a mano antes de generarlo.",
+        "El modo de la misma red solo funciona cuando los dispositivos comparten realmente una red — un teléfono con datos móviles, un portátil en otra Wi-Fi o un dispositivo detrás de otro router no aparecerán automáticamente. Para ese caso, Relayium también admite conectar entre redes con un código de emparejamiento corto: el remitente inicia sesión para generar el código (o un código QR / enlace) y quien recibe nunca necesita una cuenta. Entre redes distintas, los dos navegadores no se conectan directamente, sino a través de un retransmisor TURN cifrado — esa vía es solo de retransmisión a propósito, así que la conexión no depende de encontrar una ruta directa a través de los NAT y cortafuegos intermedios, que pueden impedirla. No es menos privado: la clave se queda en los dos dispositivos, así que el retransmisor solo reenvía texto cifrado y no puede leer el archivo. El código vale cinco minutos, así que ten los dos dispositivos a mano antes de generarlo.",
       ],
     },
   ],
@@ -650,7 +1242,7 @@ const es = {
       },
       {
         q: "¿Pueden verse más de dos dispositivos a la vez?",
-        a: "Sí. Las salas de la misma red no se limitan a una pareja — cada dispositivo que abra relayium.com desde esa red puede aparecer y recibir archivos, útil para compartir con varias personas en la misma sala u oficina.",
+        a: "Sí. Cada dispositivo que abra relayium.com desde esa red aparece en la sala, con el móvil, el portátil y el sobremesa uno al lado del otro. La transferencia en sí es de uno a uno: abres un espacio de trabajo con uno de los dispositivos listados y ahí es donde llegan los archivos. Para compartir con varias personas en la misma sala, abres un espacio de trabajo con cada una por turno.",
       },
       {
         q: "¿Sigue cifrada la transferencia aunque nunca salga de mi red?",
@@ -688,22 +1280,96 @@ const pt = {
     },
     {
       heading: "Passo a passo",
+      prereqs: {
+        label: "Antes de começar",
+        items: [
+          "Todos os dispositivos na mesma Wi-Fi ou rede local, e um roteador que não separe os próprios clientes. O nome da configuração a procurar está na dica do próprio Relayium abaixo da lista de dispositivos: “isolamento de AP / isolamento de clientes”.",
+          "Um navegador atual em cada dispositivo (Chrome, Edge, Firefox ou Safari), com a página aberta por https://relayium.com/. A transferência criptografada exige HTTPS, e em http:// puro a página diz exatamente isso em vez de listar dispositivos.",
+          "Nenhuma conta e nenhum código de emparelhamento. A descoberta na mesma rede não pede nem uma coisa nem outra, em nenhum dos lados, então não há nada para configurar antes da primeira transferência.",
+          "Lugar para os arquivos caírem no dispositivo que recebe. Qual lugar é esse cabe ao navegador que recebe e ao sistema dele, não ao Relayium: Chrome e Edge em um computador podem perguntar onde salvar, e os outros navegadores escrevem na própria pasta de downloads. Onde eles foram parar você confirma na lista de downloads desse navegador — chrome://downloads no Chrome, edge://downloads no Edge, about:downloads no Firefox.",
+        ],
+      },
       body: [
         "Todo o fluxo acontece no navegador — nenhum app para instalar em qualquer dispositivo.",
       ],
-      bullets: [
-        "Conecte cada dispositivo que você quer usar à mesma Wi-Fi ou rede local.",
-        "Em cada dispositivo, abra relayium.com em um navegador moderno (Chrome, Edge, Firefox ou Safari).",
-        "Os dispositivos daquela rede aparecem uns para os outros automaticamente — sem código, sem login, sem conta em nenhum dos lados.",
-        "Escolha um arquivo ou uma pasta inteira (até 1.000 arquivos por lote) e escolha qual dispositivo da lista deve recebê-lo.",
-        "A transferência começa assim que quem recebe aceita. Se você ativar a verificação avançada (desligada por padrão), os dois dispositivos também mostram o mesmo código de verificação curto (SAS): dê uma olhada em cada tela e confirme que coincide antes.",
-        "Os arquivos passam direto de um dispositivo para o outro; salve-os quando chegarem.",
+      steps: [
+        {
+          text: "Conecte cada dispositivo que você quer usar à mesma Wi-Fi ou rede local e depois abra a página de transferência em cada um deles.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Leia a linha de status abaixo do título nos dois dispositivos e compare o IP público que aparece nela. Um endereço em comum é o que coloca dois dispositivos na mesma sala; dois endereços diferentes significam duas redes, seja qual for o nome da Wi-Fi.",
+          code: ["Conectado · este dispositivo MacBook · IP público 203.0.113.9"],
+        },
+        {
+          text: "Olhe abaixo de “Dispositivos próximos”. Todo dispositivo que abriu a página a partir daquela rede aparece ali como um cartão com o próprio nome — nada para digitar, nada para confirmar.",
+        },
+        {
+          text: "No dispositivo que envia, clique no cartão de quem recebe e aperte “Abrir área de trabalho”. Em um navegador atual essa é a única ação que um cartão de dispositivo próximo oferece, porque arquivos, pastas e mensagens passam todos pela única conexão criptografada que ela abre. A sala pode listar vários dispositivos, e abrir a área de trabalho é justamente o que escolhe para qual deles esta transferência vai; para a próxima pessoa, você abre outra.",
+        },
+        {
+          text: "A área de trabalho toma o lugar daquele cartão. Daí em diante o estado da conexão se lê no cabeçalho dela — a qual dispositivo você está conectado, o estado do enlace e o único selo de caminho — e o envio sai dos controles logo abaixo: “Enviar arquivos” para um lote, “Enviar uma pasta” para uma árvore inteira quando o navegador oferece escolher pastas, ou digite no campo de mensagem e aperte “Enviar”. Um lote de arquivos leva até 1.000 arquivos.",
+        },
+        {
+          text: "No dispositivo que recebe, o pedido chega com a quantidade de arquivos e o tamanho total, e a linha abaixo dele diz o que “Aceitar” vai fazer: ou o navegador pergunta onde salvar, ou os arquivos vão para a pasta de downloads dele. Em “Aceitar”, a transferência começa.",
+        },
+        {
+          text: "Acompanhe o contador de arquivos chegar ao último arquivo nas duas telas. Para comparar um código de verificação (SAS) antes de qualquer byte se mover, ligue primeiro a “Verificação avançada” nos dois dispositivos: ela vem desligada, e o que ela acrescenta é uma comparação e uma etapa de aceite, não a criptografia — a transferência é criptografada de qualquer forma.",
+        },
       ],
+      success: {
+        label: "Como é uma transferência que funciona",
+        body: [
+          "A essa altura o cartão do outro dispositivo já sumiu — a área de trabalho tomou o lugar dele. O estado se lê no cabeçalho dela: a qual dispositivo você está conectado, um estado de enlace “Conectado” e um único selo de caminho marcando “LAN direto”, um salto de host para host pela sua própria rede. “P2P direto” é o segundo caso honesto: os dois dispositivos realmente compartilhavam um IP público, mas o salto em que os navegadores se fixaram não era local.",
+          "No lado que recebe, o contador para no último arquivo e o arquivo em si está onde a linha de salvamento disse. Quem confirma isso é a lista de downloads do próprio navegador que recebe, não esta página — chrome://downloads no Chrome, edge://downloads no Edge, about:downloads no Firefox.",
+        ],
+        code: ["Conectado a MacBook · Conectado · LAN direto\nArquivo 3/3"],
+      },
+      bullets: [
+        "Uma sala da mesma rede não é limitada a dois dispositivos, então um cartão para cada celular e notebook da sala é o normal, e não sinal de que algo deu errado.",
+        "Aqui nada é enviado primeiro e baixado depois, então não fica cópia em servidor para buscar mais tarde: os dois dispositivos permanecem na página até o contador terminar.",
+      ],
+    },
+    {
+      heading: "Quando os dispositivos não se enxergam",
+      body: [
+        "A descoberta na mesma rede se guia pela rede de onde seu navegador está se conectando, então é por aí que se começa a olhar: os dois dispositivos não estão de fato em uma mesma rede, o roteador mantém os clientes separados, a página não foi aberta por HTTPS, ou o navegador que recebe está sendo obrigado a segurar mais do que consegue. Essas são as primeiras verificações usuais, não a lista completa, e cada uma delas deixa na tela algo que a decide.",
+      ],
+      troubleshooting: {
+        label: "Sintoma, verificação, correção",
+        items: [
+          {
+            symptom: "“Dispositivos próximos” continua vazio, ou lista apenas o dispositivo que você está olhando.",
+            code: ["https://relayium.com/   # abra nos dois e compare o IP público da linha de status"],
+            fix: "Dois endereços IP públicos diferentes são duas salas separadas. Uma VPN, o iCloud Private Relay ou um SSID de visitantes que faz os clientes saírem por outro endereço são motivos comuns, e não os únicos. Se você topa mexer neles: desligue a VPN, ou desative o Private Relay só para aquela rede Wi-Fi, ou traga os dois dispositivos para a rede principal, e recarregue https://relayium.com/ em cada um. Se preferir deixá-los como estão, um código de emparelhamento em https://relayium.com/cross-network alcança o outro dispositivo sem tocar em nenhuma das duas configurações, e é criptografado de ponta a ponta do mesmo jeito.",
+          },
+          {
+            symptom: "Os dois dispositivos mostram o mesmo IP público e mesmo assim nenhum cartão aparece.",
+            code: ["https://relayium.com/   # a dica abaixo da lista de dispositivos nomeia a configuração do roteador"],
+            fix: "O roteador está separando os próprios clientes. Desative “isolamento de AP / isolamento de clientes” nas configurações de Wi-Fi dele — sistemas mesh e redes de hotel ou de visitantes costumam vir com isso ligado — e recarregue a página nos dois dispositivos. Quando o roteador não é seu, o caminho é um código de emparelhamento em https://relayium.com/cross-network.",
+          },
+          {
+            symptom: "A página diz que a transferência criptografada exige HTTPS e nenhuma lista de dispositivos aparece.",
+            code: ["https://relayium.com/   # a barra de endereços precisa mostrar https, não http"],
+            fix: "A página foi aberta por http:// ou por endereço IP cru, e o navegador então retém as APIs de que uma transferência criptografada precisa. O relayium.com redireciona por conta própria para HTTPS, então isso normalmente aponta para uma instância auto-hospedada acessada por http:// — abra como https://relayium.com/, ou dê um certificado à sua própria instância.",
+          },
+          {
+            symptom: "Antes de você aceitar, o dispositivo que recebe avisa que precisa segurar o lote inteiro na memória.",
+            code: ["chrome://downloads   # no Chrome; o Edge tem edge://downloads e o Firefox about:downloads"],
+            fix: "Esse navegador não consegue gravar um download direto no disco, então guarda o lote inteiro, e um lote grande pode terminar em aba travada. Receba no Chrome ou no Edge em um computador, ou mande menos arquivos por vez, e confira cada chegada na lista de downloads do próprio navegador que recebe — chrome://downloads no Chrome, edge://downloads no Edge, about:downloads no Firefox — em vez de supor que salvou.",
+          },
+          {
+            symptom: "A transferência funciona, mas o selo mostra “P2P direto” em vez de “LAN direto”.",
+            code: ["https://relayium.com/   # leia o selo de caminho no cabeçalho da área de trabalho"],
+            fix: "Os dois dispositivos compartilham um IP público sem compartilhar um salto local — NAT de operadora, duas VLANs atrás do mesmo enlace de subida ou um repetidor em modo cliente produzem esse efeito. A transferência continua direta e continua criptografada de ponta a ponta; ligue os dois dispositivos ao mesmo ponto de acesso se quiser que o caminho seja a sua LAN e não a rota que os navegadores encontraram.",
+          },
+        ],
+      },
     },
     {
       heading: "Por que é rápido: nenhum servidor no meio",
       body: [
-        "Como os dois dispositivos já estão na mesma rede, o Relayium os conecta diretamente ponto a ponto — os bytes viajam de um dispositivo para o outro pela sua Wi-Fi local e nunca fazem uma ida e volta a um servidor do Relayium. Não há nada para enviar e nada para esperar baixando; a velocidade é limitada apenas pela sua rede local, que normalmente é muito mais rápida do que uma conexão de internet em qualquer sentido.",
+        "Os dois dispositivos se conectam a partir da mesma rede, então o Relayium liga um ao outro ponto a ponto: os bytes vão de um dispositivo para o outro sem ida e volta a um servidor do Relayium, sem nada para enviar antes nem nada para esperar baixando depois. O quanto isso é rápido depende do salto em que os dois navegadores realmente se fixaram, e quem dá nome a ele é o selo de caminho. “LAN direto” é o salto local: os dados não saem da sua própria rede e correm na velocidade dela, não na da sua conexão de internet. “P2P direto” é igualmente direto e também não tem servidor no meio, mas a rota que os navegadores acharam saiu do segmento local, então ela é limitada pelo enlace que de fato atravessa. Compartilhar um IP público é o que coloca dois dispositivos na mesma sala; por si só isso não promete que o salto entre eles seja local.",
         "É também por isso que nenhuma conta está envolvida em nenhum dos lados: com todos já na mesma rede confiável, o Relayium não precisa de login para saber quem deve poder se conectar a quem.",
       ],
     },
@@ -716,7 +1382,7 @@ const pt = {
     {
       heading: "Se um dispositivo estiver em uma rede diferente",
       body: [
-        "O modo da mesma rede só funciona quando os dispositivos realmente compartilham uma rede — um celular usando dados móveis, um notebook em outra Wi-Fi ou um dispositivo atrás de outro roteador não aparecerá automaticamente. Para esse caso, o Relayium também oferece conexão entre redes com um código de emparelhamento curto: o remetente faz login para gerar o código (ou um código QR / link) e quem recebe nunca precisa de conta. Entre redes diferentes, os dois navegadores não se conectam diretamente, e sim através de um retransmissor TURN criptografado — esse caminho é propositalmente só de retransmissão, então a conexão se estabelece em um ou dois segundos em vez de esperar por verificações de candidatos diretos que quase sempre falham entre dois NATs. Não é menos privado: a chave fica nos dois dispositivos, então o retransmissor só encaminha texto cifrado e não consegue ler o arquivo. O código vale cinco minutos, então deixe os dois aparelhos à mão antes de gerar um.",
+        "O modo da mesma rede só funciona quando os dispositivos realmente compartilham uma rede — um celular usando dados móveis, um notebook em outra Wi-Fi ou um dispositivo atrás de outro roteador não aparecerá automaticamente. Para esse caso, o Relayium também oferece conexão entre redes com um código de emparelhamento curto: o remetente faz login para gerar o código (ou um código QR / link) e quem recebe nunca precisa de conta. Entre redes diferentes, os dois navegadores não se conectam diretamente, e sim através de um retransmissor TURN criptografado — esse caminho é propositalmente só de retransmissão, então a conexão não depende de encontrar uma rota direta através dos NATs e firewalls no meio, que podem impedi-la. Não é menos privado: a chave fica nos dois dispositivos, então o retransmissor só encaminha texto cifrado e não consegue ler o arquivo. O código vale cinco minutos, então deixe os dois aparelhos à mão antes de gerar um.",
       ],
     },
   ],
@@ -733,7 +1399,7 @@ const pt = {
       },
       {
         q: "Mais de dois dispositivos podem se ver ao mesmo tempo?",
-        a: "Sim. As salas da mesma rede não são limitadas a um par — todo dispositivo que abrir relayium.com a partir daquela rede pode aparecer e receber arquivos, útil para compartilhar com várias pessoas na mesma sala ou escritório.",
+        a: "Sim. Todo dispositivo que abrir relayium.com a partir daquela rede aparece na sala, com celular, notebook e desktop lado a lado. A transferência em si é de um para um: você abre uma área de trabalho com um dos dispositivos listados, e é para ele que os arquivos vão. Para compartilhar com várias pessoas na mesma sala, abra uma área de trabalho com cada uma delas por vez.",
       },
       {
         q: "A transferência continua criptografada mesmo que nunca saia da minha rede?",
@@ -755,6 +1421,6 @@ const pt = {
 export default {
   slug: "how-to/send-files-on-the-same-wifi",
   published: "2026-07-09",
-  updated: "2026-07-09",
+  updated: "2026-08-05",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

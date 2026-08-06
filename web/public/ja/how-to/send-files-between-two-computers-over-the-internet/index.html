@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="インターネット経由で2台のPC間にファイルを送る方法" />
     <meta name="twitter:description" content="ブラウザ間でファイルを送る手順ガイド。同じ LAN では直接接続し、ネットワークをまたぐ場合は TURN でエンドツーエンド暗号文を運びます。クラウドへのアップロードもインストールも不要です。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"インターネット経由で2台のPC間にファイルを送る方法","description":"ブラウザ間でファイルを送る手順ガイド。同じ LAN では直接接続し、ネットワークをまたぐ場合は TURN でエンドツーエンド暗号文を運びます。クラウドへのアップロードもインストールも不要です。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/how-to/send-files-between-two-computers-over-the-internet/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"インターネット経由で2台のPC間にファイルを送る方法"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"本当に P2P 直接接続ですか、それともファイルはサーバーを経由しますか？","acceptedAnswer":{"@type":"Answer","text":"肝心な意味では P2P です。ファイルはブラウザからブラウザへ流れ、サーバーに保存されることはありません。同じ LAN では2つのブラウザが直接接続し、ネットワークをまたぐペアリングコード転送は設計上 TURN を使います。リレーが運ぶのはエンドツーエンド暗号文だけで、ファイルを読み取りも復号もできず、サーバー側にリアルタイム内容のコピーや履歴を残しません。"}},{"@type":"Question","name":"双方ともアカウントが必要ですか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。同じネットワーク上では、どちらの側もアカウントは不要です。ネットワークをまたぐ場合、送信する側はペアリングコードを作成するためにサインインします（これは Relayium がコードを発行・管理するために必要です）。ですが受信する側は、コードを入力するにせよリンクを開くにせよ、アカウントは一切不要です。"}},{"@type":"Question","name":"異なるネットワークや国をまたいでも使えますか？","acceptedAnswer":{"@type":"Answer","text":"はい。ペアリングコードはまさにこのケースのために存在します。同じローカルネットワークにない2台のパソコンが、世界のどこにいてもつながります。その経路は直接接続ではなく暗号化された TURN リレーを通ります。NAT やファイアウォールが間に立ちはだかるときに確実につながるのがこの経路で、しかもほぼ必ずタイムアウトする直接接続の試行を待たずに1〜2秒で確立します。"}},{"@type":"Question","name":"ファイルサイズや送れるファイル数に制限はありますか？","acceptedAnswer":{"@type":"Answer","text":"1バッチで最大1,000ファイルまで送れます。サーバーが強制するサイズ上限はなく、限界は受信側のブラウザが扱える範囲で決まります。パソコン版の Chrome や Edge（ディスクへストリーミング）では事実上無制限で、Firefox や Safari はバッチをメモリに保持するため、およそ 256MB を超えると Relayium が警告します。この閾値は硬い天井ではなく控えめな目安で、本当の限界はその機械しだいです。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"インターネット経由で2台のPC間にファイルを送る方法","description":"ブラウザ間でファイルを送る手順ガイド。同じ LAN では直接接続し、ネットワークをまたぐ場合は TURN でエンドツーエンド暗号文を運びます。クラウドへのアップロードもインストールも不要です。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/how-to/send-files-between-two-computers-over-the-internet/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"インターネット経由で2台のPC間にファイルを送る方法"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"本当に P2P 直接接続ですか、それともファイルはサーバーを経由しますか？","acceptedAnswer":{"@type":"Answer","text":"肝心な意味では P2P です。ファイルはブラウザからブラウザへ流れ、サーバーに保存されることはありません。同じ LAN では2つのブラウザが直接接続し、ネットワークをまたぐペアリングコード転送は設計上 TURN を使います。リレーが運ぶのはエンドツーエンド暗号文だけで、ファイルを読み取りも復号もできず、サーバー側にリアルタイム内容のコピーや履歴を残しません。"}},{"@type":"Question","name":"双方ともアカウントが必要ですか？","acceptedAnswer":{"@type":"Answer","text":"いいえ。同じネットワーク上では、どちらの側もアカウントは不要です。ネットワークをまたぐ場合、送信する側はペアリングコードを作成するためにサインインします（これは Relayium がコードを発行・管理するために必要です）。ですが受信する側は、コードを入力するにせよリンクを開くにせよ、アカウントは一切不要です。"}},{"@type":"Question","name":"異なるネットワークや国をまたいでも使えますか？","acceptedAnswer":{"@type":"Answer","text":"はい。ペアリングコードはまさにこのケースのために存在します。同じローカルネットワークにない2台のパソコンが、世界のどこにいてもつながります。その経路は直接接続ではなく暗号化された TURN リレーを通ります。これは意図的な設計です。Relayium はリレーを選ぶことで、NAT やファイアウォールの越え方が直接経路の有無に左右されないようにしています。"}},{"@type":"Question","name":"ファイルサイズや送れるファイル数に制限はありますか？","acceptedAnswer":{"@type":"Answer","text":"1バッチで最大1,000ファイルまで送れます。Relayium のサーバーがサイズ上限を課すことはなく、残るのは現実的な制約です。パソコン版の Chrome や Edge はバッチをそのままディスクへストリーミングするので、そこで効いてくるのはブラウザ自身、OS、そのディスクの空き容量、そしてライブセッションがどれだけ保つかです。Firefox や Safari はバッチをメモリに保持するため、およそ 256MB を超えると Relayium が警告します。この閾値は硬い天井ではなく控えめな目安で、本当の限界はその機械しだいです。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -65,6 +65,23 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -83,7 +100,7 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">最終更新: <bdi>2026-07-31</bdi></p>
+      <p class="updated">最終更新: <bdi>2026-08-05</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-between-two-computers-over-the-internet/">English</a><a href="/zh/how-to/send-files-between-two-computers-over-the-internet/">中文</a><a href="/ja/how-to/send-files-between-two-computers-over-the-internet/" aria-current="true">日本語</a><a href="/ko/how-to/send-files-between-two-computers-over-the-internet/">한국어</a><a href="/de/how-to/send-files-between-two-computers-over-the-internet/">Deutsch</a><a href="/fr/how-to/send-files-between-two-computers-over-the-internet/">Français</a><a href="/ar/how-to/send-files-between-two-computers-over-the-internet/">العربية</a><a href="/es/how-to/send-files-between-two-computers-over-the-internet/">Español</a><a href="/pt/how-to/send-files-between-two-computers-over-the-internet/">Português</a></nav>
       <p class="lead">別のパソコンにファイルを送るには、たいていまずどこかにアップロードして（クラウドドライブ、メールの添付、チャットアプリ）、相手が無事に取り出せることを願うことになります。Relayium はその保存手順を省きます。同じ LAN ではブラウザ同士が直接接続し、ネットワークをまたぐ転送は TURN リレーがエンドツーエンド暗号文だけを運び、サーバー側にリアルタイム内容のコピーや履歴を残しません。</p>
       <p class="lead">本ガイドは2つのケース、すなわち同じネットワーク上の2台と、まったく別のネットワーク（別の家、別のオフィス、別の国）にある2台を扱い、それぞれの側が何をすればよいかを正確に示します。</p>
@@ -94,8 +111,16 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>2台とも同じ Wi-Fi や LAN にあれば、Relayium は自動的に互いを見つけます。両方で relayium.com を開くだけで、どちらの側もアカウントは不要です。</p>
       <p>2台が別々のネットワークにある場合（たとえば自宅のデスクトップと遠方にいる同僚のノートPCなど）、自動発見はインターネットをまたげないため、Relayium は代わりに短いペアリングコードを使います。送信する側がサインインしてそのコードを発行し、受信する側はコードを入力するにせよ、生成されたリンクを開くにせよ、アカウントは一切不要です。 コードの有効期限は5分なので、生成する前に両方の端末を手元に用意してください。</p>
       <h2>手順：インターネット経由でファイルを送る</h2>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">始める前に</p><ul><li>サインイン済みのアカウントが必要なのは送信側のパソコンだけです。ペアリングコードの発行にはアカウントが要りますが、コードやリンクで参加する側は最後までサインインしません。</li><li>そのアカウントのメールアドレスが確認済みであること。ネットワークをまたぐセッションのリレーは確認済みアカウントにのみ発行され、断られた場合はペアリングカードにその理由がはっきり表示されます。</li><li>2人が同時にそれぞれのパソコンの前にいること。ペアリングコードの寿命は5分で、これは相手が後から取りに来るアップロードではなく、1回のライブセッションです。</li><li>6桁の数字かリンクを別経路で伝える手段。電話、チャットの画面、テキストメッセージなどです。</li></ul></div>
       <p>別々のネットワークにある2台のパソコンの場合の全体の流れです。</p>
-      <ul><li>送信側のパソコンで relayium.com を開き、サインインします。</li><li>送るファイルまたはフォルダを選びます。1バッチ最大1,000ファイル。Relayium が 6 桁の数字ペアリングコード（対応する参加リンク／QRコード付き）を発行します。</li><li>そのコードやリンクを都合の良い方法で相手に伝えます。読み上げる、テキストメッセージで送る、チャットに貼り付けるなど。</li><li>受信側のパソコンで、リンクを開くか、relayium.com を開いて 6 桁の数字コードを入力します。こちら側にサインインは不要です。</li><li>その後、転送が自動的に始まります。先に「高度な検証」（既定はオフ）をオンにしておくと、両方の画面に同じ短い検証コード（SAS）も表示され、始まる前に照合できます。一致すれば、鍵がすり替えられず、2台が同じエンドツーエンド暗号化セッションに参加したことを確認しますが、暗号文がどのネットワーク経路を通るかを証明するものではありません。その後、転送が自動的に始まります。</li></ul>
+      <ol class="steps" data-block="steps"><li><p>送信側のパソコンでリアルタイム転送のページを開き、サインインします。</p><pre><code>https://relayium.com/cross-network</code></pre></li><li><p>送るファイルまたはフォルダを選び（1 バッチ最大 1,000 ファイル）、ペアリングコードを作成します。カードには 6 桁の数字、リンクをコピーするボタン、QR コード、そしてカウントダウンが表示されます。</p><pre><code>ペアリングコード — 相手に伝えてください
+483920
+ペアリングコードは 4:52 で失効</code></pre></li><li><p>そのコードやリンクを都合の良い方法で相手に伝えます。読み上げる、テキストメッセージで送る、チャットに貼り付けるなど。リンクはフラグメントに同じコードを載せているので、どちらを渡しても同じことです。</p><pre><code>https://relayium.com/cross-network#c=483920</code></pre></li><li><p>受信側のパソコンでそのリンクを開くか、同じページを開いて 6 桁の数字を入力し、「接続」を押します。こちら側にサインインはありません。</p><pre><code>https://relayium.com/cross-network</code></pre></li><li><p>相手が参加すると転送が始まります。ファイルカウンターが終わるまで両方のタブを開いたままにしてください。カウントダウンが管理するのは新しい参加だけなので、それが尽きても進行中の転送が切れることはありません。開始前に「高度な検証」をオンにすると照合用の検証コード（SAS）が加わります。一致すれば、鍵がすり替えられず、2台が同じエンドツーエンド暗号化セッションに参加したことを確認しますが、暗号文がどのネットワーク経路を通るかを証明するものではありません。</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">転送が成功したときの画面</p><p>送信側の「相手の参加を待っています…」の行が接続済みのカードに置き換わり、その経路バッジは「中継」と表示されます。ここではこれが期待どおりの値であり、不具合ではありません。ネットワークをまたぐブラウザセッションは設計上、暗号化された TURN リレーを通ります。「LAN直結」が出るのは、2台が実は同じネットワークにいた場合だけです。</p><p>その後、両方の画面でファイルカウンターがそのバッチの最後のファイルまで進み、ファイル自体はリクエストの下の行が示した、受信側ブラウザの保存先にあります。</p><pre><code>中継
+ファイル 1/1</code></pre></div>
+      <h2>コードが拒否される、または転送が止まるとき</h2>
+      <p>ネットワークをまたぐ転送は同一ネットワークより可動部が多く、寿命のあるコード、アカウント、リレーの割り当てが関わります。そのどれが原因でも、黙って失敗するのではなくペアリングカードがどれなのかを告げます。まずはそのカードを読んでください。</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>受信側のパソコンがコードを入力すると「ペアリングコードが無効か期限切れです」と出る。</dt><dd><pre><code>https://relayium.com/cross-network   # 送信側のカードに実時間のカウントダウンが出る</code></pre><p>発行から5分が過ぎたか、数字を打ち間違えたかのどちらかです。送信側のパソコンで新しいコードを作り、相手にすぐ入力してもらってください。あるいは参加リンクを送れば、入力そのものが不要になります。</p></dd><dt>リレーは確認済みアカウントにのみ発行される、とカードに出る。</dt><dd><pre><code>https://relayium.com/cross-network   # ペアリングカードが拒否の理由を示す</code></pre><p>送信側のメールアドレスがまだ確認されていません。アカウントパネルを開き、Relayium から届いたメールでアドレスを確認し、新しいペアリングコードを作成してください。すでに拒否された古いコードが後からリレーを受け取ることはありません。同一ネットワークの転送と CLI はこの影響を受けません。</p></dd><dt>今月のリレー通信量を使い切った、とカードに出る。</dt><dd><pre><code>https://relayium.com/me   # 「今月の使用量」でリレーの残りが分かる</code></pre><p>割り当てが翌月にリセットされるまで、ネットワークをまたぐブラウザセッションは開始も継続もできません。いま送りたい場合は https://relayium.com/offline-transfer でダウンロードリンクとしてアップロードする、プランを上げる、自分のノードを動かす、のいずれかです。いずれの場合も同一ネットワークの転送は使えます。</p></dd><dt>転送が途中で止まり、再開しない。</dt><dd><pre><code>https://relayium.com/cross-network   # 両方のタブがこのページに残っている必要がある</code></pre><p>これは1回のライブセッションなので、一時的な回線断からは続きを再開できますが、タブを閉じたりページを再読み込みしたりすると終了し、サーバー側に引き継げるコピーはありません。新しいコードでやり直してください。相手がオンラインを保てない場合は、https://relayium.com/offline-transfer の非同期ダウンロードリンクを使います。</p></dd><dt>転送は動くが、同じファイルを同一ネットワークで送るよりずっと遅い。</dt><dd><pre><code>https://relayium.com/cross-network   # 接続済みカードの経路バッジが「中継」になっている</code></pre><p>リレー経由のセッションは双方のインターネット回線とリレーの 1ホップに縛られるため、LAN 転送より実際に遅く、それを変える設定はありません。バッチが非常に大きい場合は、双方が同時にオンラインである必要のない https://relayium.com/offline-transfer のダウンロードリンクのほうが落ち着いた経路です。</p></dd></dl></div>
       <h2>ネットワークをまたぐ場合：暗号化リレー</h2>
       <p>同じネットワーク上の2つのブラウザは互いに直接接続します。ネットワークをまたぐ場合は、企業のファイアウォールや厳格な NAT が直接経路を日常的に阻むため、Relayium が暗号化されたストリームを TURN リレー経由で運び、確実につながるようにします。</p>
       <p>リレーが見るのは常に暗号文だけです。ファイルは送信側ブラウザを離れる前にすでにエンドツーエンドで暗号化されており（X25519 鍵交換と AES-256-GCM）、リレーはインターネット上の見知らぬパソコンと同様、中身を読み取ることはできません。途中で接続が切れても、転送は最初からではなく再開されます。</p>
@@ -108,9 +133,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>双方ともアカウントが必要ですか？</h3>
       <p>いいえ。同じネットワーク上では、どちらの側もアカウントは不要です。ネットワークをまたぐ場合、送信する側はペアリングコードを作成するためにサインインします（これは Relayium がコードを発行・管理するために必要です）。ですが受信する側は、コードを入力するにせよリンクを開くにせよ、アカウントは一切不要です。</p>
       <h3>異なるネットワークや国をまたいでも使えますか？</h3>
-      <p>はい。ペアリングコードはまさにこのケースのために存在します。同じローカルネットワークにない2台のパソコンが、世界のどこにいてもつながります。その経路は直接接続ではなく暗号化された TURN リレーを通ります。NAT やファイアウォールが間に立ちはだかるときに確実につながるのがこの経路で、しかもほぼ必ずタイムアウトする直接接続の試行を待たずに1〜2秒で確立します。</p>
+      <p>はい。ペアリングコードはまさにこのケースのために存在します。同じローカルネットワークにない2台のパソコンが、世界のどこにいてもつながります。その経路は直接接続ではなく暗号化された TURN リレーを通ります。これは意図的な設計です。Relayium はリレーを選ぶことで、NAT やファイアウォールの越え方が直接経路の有無に左右されないようにしています。</p>
       <h3>ファイルサイズや送れるファイル数に制限はありますか？</h3>
-      <p>1バッチで最大1,000ファイルまで送れます。サーバーが強制するサイズ上限はなく、限界は受信側のブラウザが扱える範囲で決まります。パソコン版の Chrome や Edge（ディスクへストリーミング）では事実上無制限で、Firefox や Safari はバッチをメモリに保持するため、およそ 256MB を超えると Relayium が警告します。この閾値は硬い天井ではなく控えめな目安で、本当の限界はその機械しだいです。</p>
+      <p>1バッチで最大1,000ファイルまで送れます。Relayium のサーバーがサイズ上限を課すことはなく、残るのは現実的な制約です。パソコン版の Chrome や Edge はバッチをそのままディスクへストリーミングするので、そこで効いてくるのはブラウザ自身、OS、そのディスクの空き容量、そしてライブセッションがどれだけ保つかです。Firefox や Safari はバッチをメモリに保持するため、およそ 256MB を超えると Relayium が警告します。この閾値は硬い天井ではなく控えめな目安で、本当の限界はその機械しだいです。</p>
       <div class="ctacard">
         <p>両方のパソコンで Relayium を開き、インターネット経由で最初のファイルを送ってみてください。クラウドへのアップロードも、インストールも不要で、受信側は常にアカウント不要です。</p>
         <a class="cta" href="/?lang=ja">Relayium を今すぐ試す</a>

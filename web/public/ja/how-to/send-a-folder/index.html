@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="ファイルではなくフォルダごと送る方法" />
     <meta name="twitter:description" content="ブラウザでフォルダをまるごと選んで一括送信。相対パスを保持したまま、1バッチ最大1,000ファイル、それぞれ SHA-256 で検証。事前の圧縮は不要です。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"ファイルではなくフォルダごと送る方法","description":"ブラウザでフォルダをまるごと選んで一括送信。相対パスを保持したまま、1バッチ最大1,000ファイル、それぞれ SHA-256 で検証。事前の圧縮は不要です。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/how-to/send-a-folder/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"ファイルではなくフォルダごと送る方法"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"iPhone や iPad からフォルダを送れますか？","acceptedAnswer":{"@type":"Answer","text":"送信側としては送れません。iOS の Safari にはフォルダ選択の手段がなく、個々のファイルしか選べないため、現在フォルダ送信はデスクトップの Chrome、Edge、Firefox からのみ行えます。iPhone や iPad は受信側としてはフォルダを問題なく受け取れます（.zip として届きます）。"}},{"@type":"Question","name":"サブフォルダやファイル構造は保持されますか？","acceptedAnswer":{"@type":"Answer","text":"はい。Relayium は入れ子になったサブフォルダを含む各ファイルの相対パスを保持するため、届くフォルダは選んだものと同じレイアウトになります。"}},{"@type":"Question","name":"フォルダ送信に入れられるファイル数の上限は？","acceptedAnswer":{"@type":"Answer","text":"1バッチ最大1,000ファイルで、それぞれ到着時に固有の SHA-256 ハッシュで検証されます。"}},{"@type":"Question","name":"相手が受け取るのは実際のフォルダですか、それとも .zip ですか？","acceptedAnswer":{"@type":"Answer","text":"相手のブラウザによります。Chrome と Edge は相手が選んだディレクトリへファイルを直接書き込みます。Firefox と Safari は無圧縮の .zip（4 GiB 未満）を1つ受け取り、解凍すると同じフォルダ構造になります。"}},{"@type":"Question","name":"フォルダを送るのにアカウントは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"同じネットワークなら不要です。ネットワークをまたいでペアリングコードで送る場合は送信側のサインインが必要ですが、受信側はどちらの場合もアカウント不要です。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"ファイルではなくフォルダごと送る方法","description":"ブラウザでフォルダをまるごと選んで一括送信。相対パスを保持したまま、1バッチ最大1,000ファイル、それぞれ SHA-256 で検証。事前の圧縮は不要です。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/how-to/send-a-folder/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"ファイルではなくフォルダごと送る方法"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"iPhone や iPad からフォルダを送れますか？","acceptedAnswer":{"@type":"Answer","text":"送信側としては送れません。iOS の Safari にはフォルダ選択の手段がなく、個々のファイルしか選べないため、現在フォルダ送信はデスクトップの Chrome、Edge、Firefox からのみ行えます。iPhone や iPad は受信側としてはフォルダを問題なく受け取れます（.zip として届きます）。"}},{"@type":"Question","name":"サブフォルダやファイル構造は保持されますか？","acceptedAnswer":{"@type":"Answer","text":"リアルタイム送信なら保持されます。Relayium は入れ子になったサブフォルダを含む各ファイルの相対パスを保持するため、届くフォルダは選んだものと同じレイアウトになります。保存ダウンロードリンクは別で、平坦なファイル一覧をアップロードしてパスを捨てるので、構造を残したいときは自分でフォルダを書庫へまとめ、その書庫をアップロードしてください。"}},{"@type":"Question","name":"フォルダ送信に入れられるファイル数の上限は？","acceptedAnswer":{"@type":"Answer","text":"1バッチ最大1,000ファイルで、それぞれ到着時に固有の SHA-256 ハッシュで検証されます。"}},{"@type":"Question","name":"相手が受け取るのは実際のフォルダですか、それとも .zip ですか？","acceptedAnswer":{"@type":"Answer","text":"相手のブラウザによります。Chrome と Edge は相手が選んだディレクトリへファイルを直接書き込みます。Firefox と Safari は無圧縮の .zip（4 GiB 未満）を1つ受け取り、解凍すると同じフォルダ構造になります。"}},{"@type":"Question","name":"フォルダを送るのにアカウントは必要ですか？","acceptedAnswer":{"@type":"Answer","text":"同じネットワークなら不要です。ネットワークをまたいでペアリングコードで送る場合は送信側のサインインが必要ですが、受信側はどちらの場合もアカウント不要です。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -65,6 +65,23 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -83,25 +100,29 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">最終更新: <bdi>2026-07-31</bdi></p>
+      <p class="updated">最終更新: <bdi>2026-08-05</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-a-folder/">English</a><a href="/zh/how-to/send-a-folder/">中文</a><a href="/ja/how-to/send-a-folder/" aria-current="true">日本語</a><a href="/ko/how-to/send-a-folder/">한국어</a><a href="/de/how-to/send-a-folder/">Deutsch</a><a href="/fr/how-to/send-a-folder/">Français</a><a href="/ar/how-to/send-a-folder/">العربية</a><a href="/es/how-to/send-a-folder/">Español</a><a href="/pt/how-to/send-a-folder/">Português</a></nav>
       <p class="lead">プロジェクトを送ることは、ファイルを送ることとは違います。手元にあるのはサブフォルダの入ったフォルダで、ひとつずつコピー&amp;ペーストすると、それを役立つものにしている構造が失われてしまいます。先に圧縮しておく手もありますが、転送を始める前に圧縮ツールへ寄り道することになります。</p>
-      <p class="lead">Relayium ならフォルダをそのまま選んで送信できます。ブラウザはツリー全体と相対パスを保ち、同じ LAN では WebRTC で直接、ネットワークをまたぐ場合は TURN でエンドツーエンド暗号文としてライブ転送し、サーバー側のリアルタイムコピーや履歴を残しません。または後で受け取れる保存リンクを作れます。</p>
+      <p class="lead">Relayium ならリアルタイム転送でフォルダをそのまま選んで送信できます。ブラウザはツリー全体と相対パスを保ち、同じ LAN では WebRTC で直接、ネットワークをまたぐ場合は TURN でエンドツーエンド暗号文としてライブ転送し、サーバー側のリアルタイムコピーや履歴を残しません。後で受け取れる保存リンクだけは、ツリーを運ばない唯一の経路です。自分でフォルダを書庫にまとめ、その1ファイルをアップロードしてください。</p>
       <h2>ファイルの山ではなく、フォルダを選ぶ</h2>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">必要なもの</p><ul><li>送信側はデスクトップのブラウザ、つまり Chrome、Edge、Firefox のいずれか。iPhone や iPad の Safari のファイル選択画面はフォルダをまったく選べず個々のファイルだけなので、フォルダ送信はパソコンから始めます。</li><li>ファイル数が最大 1,000 のツリー。この上限はセッションごとではなくバッチごとなので、より大きなツリーは接続し直さずに数回に分けて送れます。</li><li>受信側のブラウザについての判断。届いたものの形はそれで決まります。Chrome か Edge なら受信者が選んだフォルダにツリーを書き込み、それ以外のブラウザでは代わりに 1つの .zip ができます。</li><li>リアルタイム送信なら双方が同時にオンラインであること。相手がいない場合は、サインイン済みの送信者に加えて、自分で作った書庫が必要です。保存リンクがアップロードするのは平坦なファイル一覧で、ディレクトリ構造は運ばれないからです。</li></ul></div>
       <p>ファイルを1つずつ選ぶのではなく、フォルダそのものを選びます。Relayium はブラウザ内でディレクトリツリー全体をたどり、各ファイルの相対パス（サブフォルダ、入れ子になったサブフォルダも含む）をすべて保持するので、相手に届くものは元と同じレイアウトになります。</p>
       <p>これは現在、デスクトップの Chrome、Edge、Firefox で使えます。iOS では使えません。iPhone や iPad の Safari のファイル選択画面にはフォルダを選ぶ手段がなく、個々のファイルしか選べないため、フォルダ送信は今のところデスクトップの機能です。</p>
-      <ul><li>1バッチ最大1,000ファイル。</li><li>各ファイルは固有の SHA-256 ハッシュでエンドツーエンドに検証され、届いたものが送ったものと完全に一致することを確認します。</li><li>ドラッグ&amp;ドロップでもフォルダ選択ボタンでも使えます。事前に圧縮する必要はありません。</li></ul>
+      <ol class="steps" data-block="steps"><li><p>送信側のパソコンで転送ページを開きます。同じネットワークなら同一ネットワークのページ、ペアリングコードが必要ならリアルタイム転送のページです。</p><pre><code>https://relayium.com/</code></pre></li><li><p>フォルダをページにドラッグするか、フォルダ選択ボタンを使います。Relayium がブラウザ内でツリーをたどり、各ファイルの相対パスを保つので、事前に圧縮する必要はありません。</p></li><li><p>同じネットワークなら、「近くのデバイス」で相手を見つけ、そのカードで「ワークスペースを開く」を押し、ワークスペース内の「フォルダを送信」の添付を使います。ネットワークをまたぐペアリングコードの部屋には以前からの操作が残っていて、フォルダのボタンはその部屋自身のカードにあります。どちらの場合も、相手に届くリクエストには、1ファイルではなくツリー全体のファイル数と合計サイズが示されます。</p></li><li><p>受信側では、受け入れる前にリクエストの下の行を読んでください。Chrome か Edge ならブラウザが保存先を尋ねると書かれており、その経路こそがディスク上にフォルダを再現します。読んだうえで「受信」を押します。</p></li><li><p>両方の画面で、ファイルカウンターがツリーを1つずつ進むのを見守ります。数えているのはファイルなので、300 ファイルのフォルダはバッチ全体の進捗バー1本ではなく「ファイル 300/300」まで進みます。</p><pre><code>ファイル 300/300</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">フォルダ送信が終わったときの画面</p><p>カウンターはそのバッチの最後のファイルで止まり、各ファイルは到着時に固有の SHA-256 ハッシュでエンドツーエンドに検証済みなので、着地したものは送ったものとバイト単位で一致します。</p><p>その次に見るのはページではなく結果で、ブラウザによって異なります。Chrome か Edge なら選んだフォルダの中にサブフォルダごとツリーがあり、Firefox か Safari ならダウンロード一覧に .zip が1つあって、展開すると同じ構造になります。</p><pre><code>LAN直結
+ファイル 300/300</code></pre></div>
       <h2>相手が受け取るもの</h2>
       <p>フォルダの届き方は受信側のブラウザによって変わります。Chrome と Edge は、受信者が選んだディレクトリへファイルを直接書き込めるため、フォルダは送り出したときとまったく同じ形でディスク上に現れます。追加の手順は不要です。</p>
       <p>Firefox と Safari にはその機能がないため、代わりに無圧縮（ストア方式）の .zip アーカイブを1つ受け取り、解凍すると同じフォルダ構造になります。サイズは 4 GiB 未満に収まります（ZIP64 非対応）。これはほとんどのプロジェクトフォルダや写真・書類のまとまりをカバーしますが、それより大きい場合は2回に分けて送ってください。</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>送信側の端末でフォルダを選ぶ手段がまったく見つからない。</dt><dd><pre><code>https://relayium.com/   # 選択画面がフォルダを出すのはブラウザが対応している場合だけ</code></pre><p>ほぼ確実に iPhone か iPad で、そこでは Safari の選択画面が個々のファイルしか出しません。フォルダ送信はパソコンの Chrome、Edge、Firefox から始め、スマホは受信側として使ってください。</p></dd><dt>届いた .zip が壊れている、またはダウンロードが 4 GiB 近くで止まる。</dt><dd><pre><code>chrome://downloads   # .zip のサイズを送ったフォルダと見比べる</code></pre><p>アーカイブ経路は ZIP64 に対応していないため、単一エントリもアーカイブ全体も 4 GiB 未満に収める必要があります。ツリーを2回に分けて送るか、受信側に Chrome か Edge を使ってもらってください。そちらは選んだフォルダへファイルを書き込み、アーカイブをまったく作りません。</p></dd><dt>.zip のサイズがフォルダと同じで、まったく圧縮されていない。</dt><dd><pre><code>chrome://downloads   # エントリのサイズがフォルダの合計と一致し、小さくならない</code></pre><p>これは想定どおりです。このアーカイブはストア方式なので、圧縮せずにツリーをまとめるだけで、送ったものとバイト単位で同一のままです。回線上のサイズが正確な複製より重要なら、送る前に自分でフォルダを圧縮してください。</p></dd><dt>ファイルは届いたが、すべて1つのフォルダに平たく並び、サブフォルダが消えている。</dt><dd><pre><code>chrome://downloads   # ディレクトリ選択のないブラウザは .zip を1つ渡す</code></pre><p>リアルタイム送信では相対パスが保たれるので、これは転送が構造をつぶしたのではなく、展開前の .zip の見た目です。アーカイブを展開すればサブフォルダはそこにあります。ツリーを直接ディスクへ置きたい場合は Chrome か Edge で受け取り、尋ねられたときに保存先フォルダを選んでください。本当に平坦になる経路は保存ダウンロードリンクだけで、そこは平坦なファイル一覧をアップロードしてパスを捨てます。リンクで渡すフォルダを先に書庫へまとめるのはそのためです。</p></dd><dt>数百ファイルのフォルダが途中で止まり、1つ足りない。</dt><dd><pre><code>https://relayium.com/   # カウンターが止まったファイルの名前を示す</code></pre><p>リアルタイム送信は1回のライブセッションで、両方のページが開いたままなら一時的な切断は最後の永続チェックポイントから再開できます。どちらかを閉じたり再読み込みしたりするとセッションは終わり、再開できるものは残りません。まずは両方のタブを開いたまま少し待ち、セッションが本当に終わっていたときだけ、カウンターが示したファイルからバッチを送り直してください。相手が同席しない受け渡しなら、先に自分でフォルダを zip にまとめ、その1つの書庫を保存リンクとしてアップロードします。保存アップロードが受け取るのは平坦なファイル一覧だからです。</p></dd></dl></div>
       <h2>今すぐリアルタイムで、または後で取れるリンクを</h2>
       <p>双方が同時にオンラインなら、フォルダをリアルタイムで送れます。同じ LAN では WebRTC が直接接続し、ネットワークをまたぐブラウザは設計上 TURN で、リレーが読み取りも復号もできないエンドツーエンド暗号文を運びます。Relayium はサーバー側のリアルタイムコピーや転送履歴を保持しません。同じネットワークはアカウント不要で、ネットワークをまたぐ場合はペアリングコードの作成者がサインインし、参加者は不要です。</p>
-      <p>相手が今いない場合は、代わりに保存リンクを作成できます。ブラウザはアップロード前に、そのリンク自体にしか存在しないランダムな AES-256-GCM 鍵でフォルダ内のファイルを暗号化するため、サーバーは読めない暗号文だけを保持します。リンクの作成には送信側のサインインが必要です。有効期限は1時間・1日・3日・7日・最長14日（プランによる）から選ぶか、初回ダウンロード後に消去する設定にもできます。</p>
+      <p>相手が今いない場合は、代わりに保存リンクを作成できます。ただし先に自分でフォルダを書庫へまとめてください。保存アップロードが受け取るのは平坦なファイル一覧で、相対パスは捨てられます。ツリーをそのままアップロードすると、届くのはばらばらのファイルで、別のサブフォルダにある同名の2ファイルは衝突します。ふつうの .zip を作ってその1ファイルをアップロードすれば、構造は書庫の中を一緒に運ばれます。ブラウザはアップロード前に、そのリンク自体にしか存在しないランダムな AES-256-GCM 鍵でアップロードするものを暗号化するため、サーバーは読めない暗号文だけを保持します。リンクの作成には送信側のサインインが必要です。有効期限は1時間・1日・3日・7日・最長14日（プランによる）から選ぶか、初回ダウンロード後に消去する設定にもできます。</p>
       <h2>よくある質問</h2>
       <h3>iPhone や iPad からフォルダを送れますか？</h3>
       <p>送信側としては送れません。iOS の Safari にはフォルダ選択の手段がなく、個々のファイルしか選べないため、現在フォルダ送信はデスクトップの Chrome、Edge、Firefox からのみ行えます。iPhone や iPad は受信側としてはフォルダを問題なく受け取れます（.zip として届きます）。</p>
       <h3>サブフォルダやファイル構造は保持されますか？</h3>
-      <p>はい。Relayium は入れ子になったサブフォルダを含む各ファイルの相対パスを保持するため、届くフォルダは選んだものと同じレイアウトになります。</p>
+      <p>リアルタイム送信なら保持されます。Relayium は入れ子になったサブフォルダを含む各ファイルの相対パスを保持するため、届くフォルダは選んだものと同じレイアウトになります。保存ダウンロードリンクは別で、平坦なファイル一覧をアップロードしてパスを捨てるので、構造を残したいときは自分でフォルダを書庫へまとめ、その書庫をアップロードしてください。</p>
       <h3>フォルダ送信に入れられるファイル数の上限は？</h3>
       <p>1バッチ最大1,000ファイルで、それぞれ到着時に固有の SHA-256 ハッシュで検証されます。</p>
       <h3>相手が受け取るのは実際のフォルダですか、それとも .zip ですか？</h3>

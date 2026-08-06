@@ -18,19 +18,88 @@ const en = {
       body: [
         "This is the fastest path: both devices are on the same network, so they connect directly and the transfer is bounded only by your Wi-Fi. You need nothing but a browser on each device.",
       ],
-      bullets: [
-        "On the computer, open relayium.com in any modern browser (Chrome, Edge, Firefox or Safari).",
-        "On the phone, open relayium.com too. On the same network, the two devices discover each other automatically.",
-        "On the computer, drag files straight onto the page, or click to pick them — up to 1,000 files per batch. You can drop a whole folder and Relayium keeps its structure.",
-        "Pick the phone as the destination and start. The phone accepts and the files fly over. Turn on advanced verification (off by default) if you also want both devices to show the same 6-digit verification code (SAS) to glance at and confirm first.",
-        "On the phone, save the received files. No account is needed for a realtime transfer like this.",
+      prereqs: {
+        label: "Before you start",
+        items: [
+          "The computer and the phone on the same Wi-Fi, with the router not keeping its clients apart. The hint under the device list names the setting: “AP isolation / client isolation”.",
+          "A browser on each, with the page open over https://relayium.com/. Encrypted transfer needs HTTPS, and over plain http:// the page says so instead of listing any devices.",
+          "The phone's tab kept in front for the whole transfer. Relayium requests a screen wake lock where the browser offers one, which covers the screen switching off — it does not cover switching to another app, and a mobile browser may throttle or suspend a tab that goes to the background.",
+          "No account on either device for a same-network transfer. Signing in becomes necessary only for the sender, and only when the two are on different networks and a pairing code has to be minted.",
+        ],
+      },
+      steps: [
+        {
+          text: "On the computer, open the transfer page in any modern browser (Chrome, Edge, Firefox or Safari).",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Open the same page on the phone, then compare the public IP in the status pill on both screens. A matching address is what puts the two devices in one room — a phone that quietly stayed on mobile data shows a different one.",
+          code: ["Connected · this device Pixel · public IP 203.0.113.9"],
+        },
+        {
+          text: "On the computer, find the phone under “Nearby devices”, click its card and press “Open workspace”. On a current browser that is the single action the card offers, because files, folders and messages then all travel over the one encrypted connection it opens. Dragging files straight onto that card sends them without this step.",
+        },
+        {
+          text: "The workspace replaces the card. Use the controls under its header to send: “Send files” for a batch of up to 1,000, “Send a folder” for a whole tree where the browser offers folder picking, or type into the message box — “Enter for a new line · ⌘/Ctrl+Enter to send” — and press “Send”.",
+        },
+        {
+          text: "On the phone, read the line under the request before you accept — it says whether the browser will ask where to save or write straight to its Downloads folder — then press “Accept” and leave that tab in front until the file counter reaches the last file of the batch. To compare a verification code (SAS) before any bytes move, turn on “Advanced verification” on both devices before you start — it is off by default and adds a comparison plus an approval step, not encryption.",
+        },
       ],
+      success: {
+        label: "What a finished transfer looks like",
+        body: [
+          "The phone's card is gone by then — the workspace took its place — so read the state off the workspace header: the device you are connected to, a link state of “Connected”, and one path badge reading “LAN direct”. The file counter on both screens ends on the last file of the batch.",
+          "Then check the file, not the page. Where it landed is the phone browser's decision: Chrome and Firefox on Android put it in the browser's own downloads list — chrome://downloads and about:downloads respectively — and Safari on iOS puts it in the Downloads folder you can open in the Files app.",
+        ],
+        code: ["Connected to Pixel · Connected · LAN direct\nFile 1/1"],
+      },
+      bullets: [
+        "A same-network room holds every device that opened the page from that network, so a tablet or a second laptop appearing next to the phone is normal.",
+        "The 1,000-file cap is per batch rather than per session, so a very large tree can go over in several drops without reconnecting.",
+      ],
+    },
+    {
+      heading: "When the phone doesn't show up, or the transfer stops",
+      body: [
+        "The phone is usually the side that explains itself: it is on a different network than you thought, its tab went to the background, or its browser cannot hold what it was asked to hold. Those are the common first checks rather than the whole list, and each of them has something already on screen that decides it.",
+      ],
+      troubleshooting: {
+        label: "Symptom, check, fix",
+        items: [
+          {
+            symptom: "The phone never appears under “Nearby devices” on the computer.",
+            code: ["https://relayium.com/   # compare the public IP in the status pill on both screens"],
+            fix: "Two different public IP addresses mean two rooms. A phone that quietly stayed on mobile data is one common reason; a VPN or iCloud Private Relay sending it out through another address is another, and they are not the only ones. If you are willing to change them: join the Wi-Fi, switch the VPN off, or turn Private Relay off for that one network, then reload https://relayium.com/ on the phone. If you would rather leave them on, a pairing code on https://relayium.com/cross-network reaches the phone without touching either setting, and is end-to-end encrypted the same way.",
+          },
+          {
+            symptom: "Both devices show the same public IP and the cards still do not appear.",
+            code: ["https://relayium.com/   # the hint under the device list names the router setting"],
+            fix: "The router is separating its own clients, which guest and hotel Wi-Fi often do by default. Turn off “AP isolation / client isolation”, or use a pairing code on https://relayium.com/cross-network when the router is not yours to change.",
+          },
+          {
+            symptom: "The transfer starts and then stalls or fails after you switch apps on the phone.",
+            code: ["https://relayium.com/   # the Relayium tab has to be the one in front on the phone"],
+            fix: "A mobile browser may throttle or suspend a backgrounded tab, and while it does, no bytes move. Relayium's stall watchdog grants one fresh window after the page returns to the foreground rather than failing instantly, but the fix is to leave the tab in front — the wake lock Relayium requests only covers the screen turning off and buys no background execution, and older Safari and Android offer no wake lock to request at all.",
+          },
+          {
+            symptom: "Before you accept, the phone warns that the whole batch has to be held in memory.",
+            code: ["chrome://downloads   # in Chrome; Edge has edge://downloads and Firefox about:downloads"],
+            fix: "Phone browsers have no File System Access API, so the batch is assembled in memory and Relayium warns past roughly 256 MiB. That figure is a cautious warning threshold rather than a hard cap: send fewer files at a time, or send the large one in the other direction into a desktop Chrome or Edge, which writes it straight to disk. Confirm each arrival in the receiving browser's own downloads list — chrome://downloads in Chrome, edge://downloads in Edge, about:downloads in Firefox.",
+          },
+          {
+            symptom: "The pairing code for the cross-network case is refused when the phone types it in.",
+            code: ["https://relayium.com/cross-network   # the pairing card shows the countdown and any relay refusal"],
+            fix: "A pairing code lives five minutes, and only the device that created it needs an account. Generate a fresh one and type it in straight away. If the card says relay is only issued to verified accounts, verify the sender's email address from the account panel first — the same-network flow above is unaffected by that.",
+          },
+        ],
+      },
     },
     {
       heading: "Not on the same network? Use a pairing code",
       body: [
-        "Your phone is on mobile data and your PC is on home Wi-Fi? That is fine — Relayium is built to reach across networks, not only the same one.",
-        "Instead of automatic discovery, the sender gets a short pairing code (or the join link it generates) and signs in to generate it — the person receiving never needs an account. Enter the code on the other device and the two connect through an encrypted TURN relay. That is the deliberate design for the cross-network path: between a mobile network and a home router a direct route usually can't be found, and trying for one first would burn about 20 seconds before the connection ended up on the relay regardless — starting there instead has you connected in a second or two. Your files are sealed end-to-end before they leave the sending device, so the relay only ever moves ciphertext it cannot read. If the connection drops mid-way, the transfer can resume instead of starting over. The code is good for five minutes, so have both devices in front of you before you generate one.",
+        "Your phone is on mobile data and your PC is on home Wi-Fi? That is fine — Relayium is built to reach across networks, not only the same one. A pairing-code room is a separate surface from a nearby-device workspace, though: it keeps the earlier per-device controls, so there is no “Open workspace” to press there.",
+        "Instead of automatic discovery, the sender gets a short pairing code (or the join link it generates) and signs in to generate it — the person receiving never needs an account. Enter the code on the other device and the two connect through an encrypted TURN relay. That is the deliberate design for the cross-network path: it takes the relay from the start, so the connection does not depend on discovering a direct route through the NATs and firewalls between a mobile network and a home router, which can prevent one. Your files are sealed end-to-end before they leave the sending device, so the relay only ever moves ciphertext it cannot read. If the connection drops mid-way, the transfer can resume instead of starting over. The code is good for five minutes, so have both devices in front of you before you generate one.",
       ],
     },
     {
@@ -69,7 +138,7 @@ const en = {
       },
       {
         q: "How fast is the transfer?",
-        a: "On the same Wi-Fi the two devices connect directly, so speed is bounded by your local network rather than by any server — usually as fast as your Wi-Fi allows. Across different networks the transfer runs over an encrypted TURN relay by design, so it depends on both internet connections plus that extra hop; the payoff is that the connection comes up in a second or two rather than waiting out direct-path attempts that cross-network NATs rarely allow anyway.",
+        a: "On the same Wi-Fi the two devices connect directly, so speed is bounded by your local network rather than by any server — usually as fast as your Wi-Fi allows. Across different networks the transfer runs over an encrypted TURN relay by design, so it depends on both internet connections plus that extra hop; the payoff is that the connection does not depend on discovering a direct path through the NATs and firewalls in between, which can prevent one.",
       },
       {
         q: "Is it secure to send files this way?",
@@ -99,19 +168,88 @@ const zh = {
       body: [
         "这是最快的方式：两台设备在同一网络里，直接互连，传输速度只受你的 Wi-Fi 限制。除了浏览器，两边什么都不需要。",
       ],
-      bullets: [
-        "在电脑上用任意现代浏览器（Chrome、Edge、Firefox 或 Safari）打开 relayium.com。",
-        "在手机上同样打开 relayium.com。在同一网络里，两台设备会自动发现彼此。",
-        "在电脑上，把文件直接拖到页面上，或点击选择——每批最多 1,000 个文件。你也可以整个文件夹拖进去，Relayium 会保留其结构。",
-        "选中手机作为目标并开始。手机接受后文件就飞过去了。如果你还想让两台设备先显示同一段 6 位校验码（SAS）供你瞄一眼确认，请打开默认关闭的「高级验证」。",
-        "在手机上保存收到的文件。像这样的实时传输无需账号。",
+      prereqs: {
+        label: "开始之前",
+        items: [
+          "电脑和手机在同一个 Wi-Fi 里，并且路由器没有把客户端互相隔开。设备列表下方的提示写着那个开关的名字：「AP 隔离 / 客户端隔离」。",
+          "两边各有一个浏览器，并且是通过 https://relayium.com/ 打开页面。加密传输需要 HTTPS，用普通 http:// 打开时页面会直接这么说，而不会列出任何设备。",
+          "整个传输过程中手机上的这个标签页保持在最前面。只要浏览器提供，Relayium 会申请屏幕唤醒锁，这能盖住屏幕自动熄灭——但盖不住你切到别的 App，而手机浏览器可能会限速甚至挂起退到后台的标签页。",
+          "同网络传输时两边都不需要账号。只有在两端处于不同网络、必须生成配对码时，发送方才需要登录。",
+        ],
+      },
+      steps: [
+        {
+          text: "在电脑上用任意现代浏览器（Chrome、Edge、Firefox 或 Safari）打开传输页面。",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "在手机上打开同一个页面，然后对比两块屏幕上状态条里的公网 IP。地址一致才会把两台设备放进同一个房间——如果手机悄悄留在移动数据上，它显示的会是另一个地址。",
+          code: ["已连接 · 本机 Pixel · 公网 IP 203.0.113.9"],
+        },
+        {
+          text: "在电脑上于「附近的设备」里找到手机，点它的卡片，然后按「打开工作区」。在当前浏览器上，这是卡片提供的唯一一个动作——因为接下来文件、文件夹和消息都走它打开的那一条加密连接。把文件直接拖到那张卡片上也能发出去，不必先经过这一步。",
+        },
+        {
+          text: "工作区会取代那张卡片。用它标题栏下面的控件来发送：「发送文件」发一批（最多 1,000 个），浏览器支持选目录时用「发送文件夹」发整棵树，或者直接在消息框里打字——「回车换行 · ⌘/Ctrl+回车发送」——然后按「发送」。",
+        },
+        {
+          text: "在手机上，先看请求下面那行再决定接收：它会说明浏览器是要问你存到哪，还是直接写进它的下载目录。然后按「接收」，并让那个标签页一直留在最前面，直到文件计数走到这一批的最后一个文件。如果想在任何字节移动之前核对校验码（SAS），开始前先在两台设备上打开「高级验证」——它默认关闭，打开后增加的是一次核对和一步确认，而不是加密。",
+        },
       ],
+      success: {
+        label: "传输完成时是什么样",
+        body: [
+          "这时手机的卡片已经不在了——工作区取代了它——所以状态要从工作区标题栏上读：你连到了哪台设备、连接状态是「已连接」，以及唯一一个路径标签显示「局域网直连」。两块屏幕上的文件计数都停在这一批的最后一个文件。",
+          "然后要检查的是文件，而不是页面。落在哪里由手机浏览器决定：Android 上的 Chrome 和 Firefox 会放进浏览器自己的下载列表（分别是 chrome://downloads 和 about:downloads），iOS 上的 Safari 会放进你可以在「文件」App 里打开的下载目录。",
+        ],
+        code: ["已连接到 Pixel · 已连接 · 局域网直连\n文件 1/1"],
+      },
+      bullets: [
+        "同网络房间会容纳所有从该网络打开页面的设备，所以手机旁边多出一台平板或第二台笔记本是正常的。",
+        "1,000 个文件的上限是按批而不是按会话算的，所以很大的目录树可以分几次拖过去，不用重新连接。",
+      ],
+    },
+    {
+      heading: "手机没出现，或者传输中断时",
+      body: [
+        "通常是手机那一侧会把原因摆出来：它其实不在你以为的那个网络里、它的标签页退到了后台，或者它的浏览器装不下被要求装的东西。这些是常见的首轮排查，而不是全部可能，而且每一项都有屏幕上现成的东西能判定。",
+      ],
+      troubleshooting: {
+        label: "现象、检查、处理",
+        items: [
+          {
+            symptom: "电脑上的「附近的设备」里始终没有手机。",
+            code: ["https://relayium.com/   # 对比两块屏幕上状态条里的公网 IP"],
+            fix: "两个不同的公网 IP 就是两个房间。手机悄悄留在移动数据上是常见原因之一；VPN 或 iCloud 专用代理把它从另一个地址送出去是另一种，而且都不是唯一可能。如果你愿意改这些设置：让它连上 Wi-Fi、断开 VPN，或只对这一个网络关闭专用代理，然后在手机上重新加载 https://relayium.com/。如果你更想保留它们，用 https://relayium.com/cross-network 上的配对码也能连到这台手机，两个设置都不用动，端到端加密同样成立。",
+          },
+          {
+            symptom: "两台设备显示的公网 IP 相同，卡片却还是不出现。",
+            code: ["https://relayium.com/   # 设备列表下方的提示写着要改的那个路由器开关"],
+            fix: "路由器把自己的客户端隔开了，访客网络和酒店 Wi-Fi 经常默认这样。关闭「AP 隔离 / 客户端隔离」；如果路由器不由你改，就改用 https://relayium.com/cross-network 上的配对码。",
+          },
+          {
+            symptom: "传输开始后，你在手机上切了别的 App，然后它就卡住或失败了。",
+            code: ["https://relayium.com/   # 手机上 Relayium 这个标签页必须是最前面那个"],
+            fix: "手机浏览器可能会限速甚至挂起退到后台的标签页，而在它这么做的时候字节根本不动。Relayium 的停滞看护在页面回到前台后会额外给一个完整窗口，而不是立刻判失败，但真正的解决办法是让标签页留在最前面——Relayium 申请的唤醒锁只盖住屏幕熄灭，并不能换来后台执行，而较旧的 Safari 和 Android 连唤醒锁都没有可申请的。",
+          },
+          {
+            symptom: "还没点接收，手机就警告说整批文件必须放在内存里。",
+            code: ["chrome://downloads   # Chrome 用这个 / Edge 用 edge://downloads / Firefox 用 about:downloads"],
+            fix: "手机浏览器没有 File System Access API，所以整批内容会在内存里拼装，超过大约 256 MiB 时 Relayium 就会警告。这个数字是一个偏保守的警告线，不是硬上限：一次少发几个文件，或者把大文件改成反向发送，发给电脑上的 Chrome 或 Edge，由它直接写盘。每个文件是否真的到了，要在接收端浏览器自己的下载列表里确认——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)。",
+          },
+          {
+            symptom: "跨网络时手机输入配对码被拒绝。",
+            code: ["https://relayium.com/cross-network   # 配对卡片上有倒计时，以及中继被拒的原因"],
+            fix: "配对码有效期 5 分钟，而且只有生成它的那台设备需要账号。重新生成一个，然后立刻输入。如果卡片提示中继只发给已验证的账号，请先在账户面板里验证发送方的邮箱地址——上面那套同网络流程不受此影响。",
+          },
+        ],
+      },
     },
     {
       heading: "不在同一网络？用配对码",
       body: [
-        "手机用的是移动数据，电脑连的是家里的 Wi-Fi？没关系——Relayium 生来就支持跨网络，而不只是同一个网络。",
-        "此时不再自动发现，而是发送方登录后拿到一个短配对码（或它生成的加入链接）——接收方始终无需账号。在另一台设备上输入这个码，两者就会通过加密的 TURN 中继连上。跨网络这条路径就是这样刻意设计的：在移动网络和家里的路由器之间，直连路径通常根本找不到，先去试一遍要白白花掉二十秒左右，最后照样落到中继上——直接从中继开始，一两秒就连上了。文件在离开发送端之前就已完成端到端加密，因此中继搬运的始终只是它读不懂的密文。若中途断开，传输可以断点续传，而不必从头再来。 配对码有效期 5 分钟，所以生成之前先把两台设备都准备好。",
+        "手机用的是移动数据，电脑连的是家里的 Wi-Fi？没关系——Relayium 生来就支持跨网络，而不只是同一个网络。不过配对码房间和「附近的设备」工作区是两套界面：它保留的是早先那套按设备分开的控件，那里没有「打开工作区」可按。",
+        "此时不再自动发现，而是发送方登录后拿到一个短配对码（或它生成的加入链接）——接收方始终无需账号。在另一台设备上输入这个码，两者就会通过加密的 TURN 中继连上。跨网络这条路径就是这样刻意设计的：它一开始就走中继，因此连接不依赖在移动网络和家用路由器之间的 NAT 和防火墙里探测出一条直连路径——它们可能挡住这样的路径。文件在离开发送端之前就已完成端到端加密，因此中继搬运的始终只是它读不懂的密文。若中途断开，传输可以断点续传，而不必从头再来。 配对码有效期 5 分钟，所以生成之前先把两台设备都准备好。",
       ],
     },
     {
@@ -150,7 +288,7 @@ const zh = {
       },
       {
         q: "传输速度有多快？",
-        a: "在同一 Wi-Fi 下，两台设备直接互连，所以速度由你的本地网络决定，而不受任何服务器限制——通常能跑满你的 Wi-Fi。跨网络时，传输按设计走加密 TURN 中继，因此速度取决于双方的网络以及中继这一跳；换来的是连接一两秒就能建立，而不必去等那些跨网络 NAT 本就极少允许的直连尝试超时。",
+        a: "在同一 Wi-Fi 下，两台设备直接互连，所以速度由你的本地网络决定，而不受任何服务器限制——通常能跑满你的 Wi-Fi。跨网络时，传输按设计走加密 TURN 中继，因此速度取决于双方的网络以及中继这一跳；换来的是连接不依赖在中间的 NAT 和防火墙之间探测出一条直连路径——它们可能挡住这样的路径。",
       },
       {
         q: "这样传文件安全吗？",
@@ -180,19 +318,88 @@ const ja = {
       body: [
         "これが最速の方法です。2台が同じネットワークにあるので直接つながり、転送速度は Wi-Fi だけに左右されます。必要なのは各端末のブラウザだけです。",
       ],
-      bullets: [
-        "パソコンで、任意の最新ブラウザ（Chrome、Edge、Firefox、Safari）で relayium.com を開きます。",
-        "スマホでも relayium.com を開きます。同じネットワークなら、2台は自動的に互いを発見します。",
-        "パソコンで、ファイルをページ上に直接ドラッグするか、クリックして選びます（1バッチ最大1,000ファイル）。フォルダごとドロップしても Relayium は構造を保ちます。",
-        "宛先にスマホを選んで開始します。スマホ側が承諾するとファイルが飛んでいきます。先に両方の端末で同じ6桁の検証コード（SAS）を見比べて確かめたい場合は、既定でオフの「高度な検証」をオンにしてください。",
-        "スマホで受け取ったファイルを保存します。このようなリアルタイム転送にアカウントは不要です。",
+      prereqs: {
+        label: "始める前に",
+        items: [
+          "パソコンとスマホが同じ Wi-Fi にあり、ルーターがクライアント同士を隔てていないこと。設定名は端末一覧の下のヒントに書かれています：「AP 分離 / クライアント分離」。",
+          "両方にブラウザがあり、ページを https://relayium.com/ で開いていること。暗号化転送には HTTPS が必要で、素の http:// で開くと端末を一覧せずにその旨を表示します。",
+          "転送中はスマホのタブを前面に置いたままにすること。ブラウザが対応していれば Relayium は画面のウェイクロックを要求し、画面が消えるのは防げます。ただし他のアプリへの切り替えは防げず、スマホのブラウザはバックグラウンドに回ったタブを絞ったり停止させたりすることがあります。",
+          "同一ネットワークの転送では、どちらの端末にもアカウントは不要です。サインインが必要になるのは送信側だけで、しかも両者が別のネットワークにあってペアリングコードを発行する場合だけです。",
+        ],
+      },
+      steps: [
+        {
+          text: "パソコンで、任意の最新ブラウザ（Chrome、Edge、Firefox、Safari）で転送ページを開きます。",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "スマホでも同じページを開き、両方の画面のステータス表示にあるグローバル IP を比べます。同じアドレスであることが 2 台を同じルームに入れる条件です。気づかないうちにモバイル通信のままだったスマホは、別のアドレスを表示します。",
+          code: ["接続済み · このデバイス Pixel · グローバル IP 203.0.113.9"],
+        },
+        {
+          text: "パソコンで「近くのデバイス」からスマホを見つけ、そのカードをクリックして「ワークスペースを開く」を押します。最新のブラウザではカードが提供する動作はこれ 1 つだけです。というのも、以降はファイルもフォルダもメッセージも、そこで開かれる 1 本の暗号化接続を通るからです。ファイルをそのカードへ直接ドラッグすれば、この手順を経ずに送ることもできます。",
+        },
+        {
+          text: "ワークスペースがそのカードに取って代わります。送信はヘッダーの下のコントロールで行います：1 バッチ最大 1,000 ファイルなら「ファイルを送信」、ブラウザがフォルダ選択に対応していればツリーごと「フォルダを送信」、あるいはメッセージ欄に入力して——「Enter で改行 · ⌘/Ctrl+Enter で送信」——「送信」を押します。",
+        },
+        {
+          text: "スマホでは、受け入れる前にリクエストの下の行を読んでください。ブラウザが保存先を尋ねるのか、ダウンロード先へ直接書き込むのかが書かれています。読んだうえで「受信」を押し、ファイルカウンターがそのバッチの最後のファイルに達するまでそのタブを前面に置いたままにします。1 バイトも動く前に検証コード（SAS）を照合したい場合は、開始前に両方の端末で「高度な検証」をオンにしてください。既定はオフで、増えるのは照合と承認の一手間であって暗号化ではありません。",
+        },
       ],
+      success: {
+        label: "転送が終わったときの画面",
+        body: [
+          "この時点でスマホのカードはもうありません——ワークスペースが取って代わったからです。状態はワークスペースのヘッダーから読みます：接続先のデバイス、「接続済み」というリンク状態、そして唯一の経路バッジ「LAN直結」。両方の画面のファイルカウンターはそのバッチの最後のファイルで止まります。",
+          "その次に確かめるのはページではなくファイルです。どこに置かれるかはスマホのブラウザが決めます：Android の Chrome と Firefox はブラウザ自身のダウンロード一覧（それぞれ chrome://downloads と about:downloads）に入れ、iOS の Safari は「ファイル」アプリで開けるダウンロードフォルダに入れます。",
+        ],
+        code: ["Pixel に接続済み · 接続済み · LAN直結\nファイル 1/1"],
+      },
+      bullets: [
+        "同一ネットワークのルームはそのネットワークからページを開いた端末をすべて収めるので、スマホの隣にタブレットや 2 台目のノート PC が現れるのは正常です。",
+        "1,000 ファイルの上限はセッションごとではなくバッチごとなので、非常に大きなツリーは接続し直さずに何回かのドロップで送れます。",
+      ],
+    },
+    {
+      heading: "スマホが現れない、または転送が止まるとき",
+      body: [
+        "理由を明かすのはたいていスマホ側です。思っていたのとは別のネットワークにいる、タブがバックグラウンドに回った、あるいはブラウザが求められた量を抱えきれない。これらは網羅した一覧ではなく、まず当たるべき定番の確認事項で、どれも推測ではなく画面上にあるものだけで判断できます。",
+      ],
+      troubleshooting: {
+        label: "症状・確認・対処",
+        items: [
+          {
+            symptom: "パソコンの「近くのデバイス」にスマホがいつまでも現れない。",
+            code: ["https://relayium.com/   # 両方の画面のステータス表示にあるグローバル IP を比べる"],
+            fix: "グローバル IP が 2 つ違えばルームも 2 つです。気づかないうちにモバイル通信のままだったのはよくある原因の 1 つ、iCloud プライベートリレーや VPN が別アドレスから出しているのはもう 1 つで、どちらも唯一の原因ではありません。設定を変えてよいなら：Wi-Fi に参加する、VPN を切る、あるいはその 1 つのネットワークだけプライベートリレーをオフにする、のどれかを行い、スマホで https://relayium.com/ を再読み込みしてください。そのままにしておきたい場合は、https://relayium.com/cross-network のペアリングコードならどちらの設定にも触れずにそのスマホへ届き、エンドツーエンド暗号化も同じです。",
+          },
+          {
+            symptom: "両方の端末が同じグローバル IP を表示しているのに、カードが現れない。",
+            code: ["https://relayium.com/   # 端末一覧の下のヒントに、変更すべきルーター設定名がある"],
+            fix: "ルーターが自分のクライアントを隔てています。ゲスト用やホテルの Wi-Fi では既定でそうなっていることが多いです。「AP 分離 / クライアント分離」をオフにするか、ルーターを変更できない場合は https://relayium.com/cross-network のペアリングコードを使ってください。",
+          },
+          {
+            symptom: "転送が始まったあと、スマホで他のアプリに切り替えると止まる、または失敗する。",
+            code: ["https://relayium.com/   # スマホでは Relayium のタブが前面にある必要がある"],
+            fix: "スマホのブラウザはバックグラウンドのタブを絞ったり停止させたりすることがあり、そうしている間はバイトが動きません。Relayium の停滞監視はページが前面に戻ったあと即座に失敗させず 1 回分の猶予を与えますが、対処はタブを前面に置いたままにすることです。Relayium が要求するウェイクロックは画面が消えるのを防ぐだけでバックグラウンド実行までは得られず、古い Safari と Android には要求できるウェイクロックそのものがありません。",
+          },
+          {
+            symptom: "受け入れる前に、スマホがバッチ全体をメモリに保持しなければならないと警告する。",
+            code: ["chrome://downloads   # Chrome 用 / Edge は edge://downloads / Firefox は about:downloads"],
+            fix: "スマホのブラウザには File System Access API がないため、バッチはメモリ上で組み立てられ、おおよそ 256 MiB を超えると Relayium が警告します。この数値は硬い上限ではなく慎重な警告線です。一度に送るファイルを減らすか、大きいものは向きを変えて、ディスクへ直接書き出せる PC の Chrome か Edge へ送ってください。何が実際に届いたかは、受信側のブラウザ自身のダウンロード一覧——chrome://downloads (Chrome)、edge://downloads (Edge)、about:downloads (Firefox)——で確認します。",
+          },
+          {
+            symptom: "ネットワークをまたぐ場合、スマホが入力したペアリングコードが拒否される。",
+            code: ["https://relayium.com/cross-network   # ペアリングカードにカウントダウンとリレー拒否の理由が出る"],
+            fix: "ペアリングコードの有効期限は5分で、アカウントが必要なのは発行した端末だけです。新しいコードを発行し、すぐに入力してください。カードにリレーは確認済みアカウントにのみ発行されると出る場合は、まずアカウントパネルで送信側のメールアドレスを確認してください。上の同一ネットワークの手順はその影響を受けません。",
+          },
+        ],
+      },
     },
     {
       heading: "同じネットワークにない？ペアリングコードを使う",
       body: [
-        "スマホはモバイル通信、PC は自宅の Wi-Fi？大丈夫です。Relayium は同じネットワークだけでなく、ネットワークをまたいで届くように作られています。",
-        "この場合は自動発見ではなく、送信側がサインインして短いペアリングコード（またはそれが生成する参加リンク）を受け取ります。受信側はアカウント不要です。もう一方の端末でそのコードを入力すると、2台は暗号化された TURN リレーを介してつながります。これはネットワークをまたぐ経路の意図的な設計です。モバイル回線と自宅ルーターの間では直接経路がまず見つからず、先に試すと20秒ほど無駄にしたあげく結局リレーに落ち着くため、最初からリレーを使えば1〜2秒で接続できます。ファイルは送信側の端末を出る前にエンドツーエンドで封印されているので、リレーが運ぶのは読めない暗号文だけです。途中で切れても、転送は最初からではなく再開できます。 コードの有効期限は5分なので、生成する前に両方の端末を手元に用意してください。",
+        "スマホはモバイル通信、PC は自宅の Wi-Fi？大丈夫です。Relayium は同じネットワークだけでなく、ネットワークをまたいで届くように作られています。ただしペアリングコードのルームは「近くのデバイス」のワークスペースとは別の画面で、以前どおり端末ごとに分かれたコントロールのままなので、そこに「ワークスペースを開く」はありません。",
+        "この場合は自動発見ではなく、送信側がサインインして短いペアリングコード（またはそれが生成する参加リンク）を受け取ります。受信側はアカウント不要です。もう一方の端末でそのコードを入力すると、2台は暗号化された TURN リレーを介してつながります。これはネットワークをまたぐ経路の意図的な設計です。最初からリレーを使うため、接続の成立は、モバイル回線と自宅ルーターの間にある NAT やファイアウォールを越える直接の経路を見つけられるかどうかに左右されません。NAT やファイアウォールが直接の経路を塞ぐこともあります。ファイルは送信側の端末を出る前にエンドツーエンドで封印されているので、リレーが運ぶのは読めない暗号文だけです。途中で切れても、転送は最初からではなく再開できます。 コードの有効期限は5分なので、生成する前に両方の端末を手元に用意してください。",
       ],
     },
     {
@@ -231,7 +438,7 @@ const ja = {
       },
       {
         q: "転送はどのくらい速いですか？",
-        a: "同じ Wi-Fi では2台が直接つながるため、速度はサーバーではなくローカルネットワークで決まり、たいてい Wi-Fi の許す限りの速さです。ネットワークをまたぐ場合、転送は設計上つねに暗号化 TURN リレー経由となるため、双方の回線とそのひと跳び分に左右されます。その代わり、ネットワークをまたぐ NAT ではめったに通らない直接接続の試行を待たずに、1〜2秒で接続が確立します。",
+        a: "同じ Wi-Fi では2台が直接つながるため、速度はサーバーではなくローカルネットワークで決まり、たいてい Wi-Fi の許す限りの速さです。ネットワークをまたぐ場合、転送は設計上つねに暗号化 TURN リレー経由となるため、双方の回線とそのひと跳び分に左右されます。その代わり、接続の成立は、途中の NAT やファイアウォールを越える直接の経路を見つけられるかどうかに左右されません。NAT やファイアウォールが直接の経路を塞ぐこともあります。",
       },
       {
         q: "この方法でファイルを送っても安全ですか？",
@@ -261,19 +468,88 @@ const ko = {
       body: [
         "이것이 가장 빠른 방법입니다. 두 기기가 같은 네트워크에 있어 직접 연결되고, 전송 속도는 오직 Wi-Fi에만 좌우됩니다. 각 기기의 브라우저 외에는 아무것도 필요 없습니다.",
       ],
-      bullets: [
-        "컴퓨터에서 최신 브라우저(Chrome, Edge, Firefox 또는 Safari)로 relayium.com을 엽니다.",
-        "휴대폰에서도 relayium.com을 엽니다. 같은 네트워크라면 두 기기가 자동으로 서로를 찾습니다.",
-        "컴퓨터에서 파일을 페이지 위로 바로 드래그하거나 클릭해 고릅니다 — 배치당 최대 1,000개. 폴더째 드롭해도 Relayium이 구조를 유지합니다.",
-        "대상으로 휴대폰을 고르고 시작합니다. 휴대폰이 수락하면 파일이 날아갑니다. 두 기기가 동일한 6자리 검증 코드(SAS)를 먼저 표시해 힐끗 보고 확인하게 하려면 기본값이 꺼짐인 고급 검증을 켜세요.",
-        "휴대폰에서 받은 파일을 저장합니다. 이런 실시간 전송에는 계정이 필요 없습니다.",
+      prereqs: {
+        label: "시작하기 전에",
+        items: [
+          "컴퓨터와 휴대폰이 같은 Wi-Fi에 있고, 공유기가 클라이언트끼리를 갈라놓지 않아야 합니다. 기기 목록 아래 안내에 그 설정 이름이 적혀 있습니다: ‘AP 격리 / 클라이언트 격리’.",
+          "양쪽에 브라우저가 있고, 페이지를 https://relayium.com/ 으로 열어야 합니다. 암호화 전송에는 HTTPS가 필요하며, 평범한 http:// 로 열면 기기를 나열하는 대신 그 사실을 알립니다.",
+          "전송이 끝날 때까지 휴대폰의 탭을 맨 앞에 두어야 합니다. 브라우저가 지원하면 Relayium이 화면 웨이크 록을 요청해 화면이 꺼지는 것은 막지만, 다른 앱으로 전환하는 것은 막지 못하며 모바일 브라우저는 백그라운드로 간 탭을 조이거나 정지시킬 수 있습니다.",
+          "같은 네트워크 전송에서는 어느 기기에도 계정이 필요 없습니다. 로그인은 보내는 쪽에만, 그것도 두 기기가 다른 네트워크에 있어 페어링 코드를 만들어야 할 때만 필요합니다.",
+        ],
+      },
+      steps: [
+        {
+          text: "컴퓨터에서 최신 브라우저(Chrome, Edge, Firefox 또는 Safari)로 전송 페이지를 엽니다.",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "휴대폰에서도 같은 페이지를 열고, 두 화면의 상태 표시에 있는 공인 IP를 비교합니다. 주소가 같아야 두 기기가 한 방에 들어갑니다. 슬그머니 모바일 데이터에 남아 있던 휴대폰은 다른 주소를 보여줍니다.",
+          code: ["연결됨 · 내 기기 Pixel · 공인 IP 203.0.113.9"],
+        },
+        {
+          text: "컴퓨터에서 “주변 기기”에서 휴대폰을 찾아 그 카드를 클릭하고 “작업 공간 열기”를 누릅니다. 최신 브라우저에서 카드가 제공하는 동작은 이 하나뿐입니다 — 이후 파일과 폴더와 메시지가 모두 그때 열리는 암호화된 연결 하나를 지나기 때문입니다. 파일을 그 카드 위로 바로 드래그하면 이 단계 없이도 보낼 수 있습니다.",
+        },
+        {
+          text: "작업 공간이 그 카드를 대신합니다. 보내기는 헤더 아래의 컨트롤로 합니다: 한 배치에 최대 1,000개라면 “파일 보내기”, 브라우저가 폴더 선택을 지원하면 트리째 “폴더 보내기”, 또는 메시지 상자에 입력하고 — “Enter 로 줄바꿈 · ⌘/Ctrl+Enter 로 전송” — “보내기”를 누릅니다.",
+        },
+        {
+          text: "휴대폰에서는 받기 전에 요청 아래 줄을 읽으세요. 브라우저가 저장 위치를 물을지, 다운로드 폴더에 바로 쓸지가 적혀 있습니다. 그다음 “받기”를 누르고, 파일 카운터가 그 배치의 마지막 파일에 닿을 때까지 그 탭을 맨 앞에 두세요. 한 바이트도 움직이기 전에 검증 코드(SAS)를 대조하려면 시작 전에 두 기기에서 “고급 검증”을 켜세요. 기본값은 꺼짐이고, 늘어나는 것은 대조와 승인 한 단계일 뿐 암호화가 아닙니다.",
+        },
       ],
+      success: {
+        label: "전송이 끝났을 때의 화면",
+        body: [
+          "그때쯤 휴대폰 카드는 사라져 있습니다 — 작업 공간이 그 자리를 차지했으니까요. 상태는 작업 공간 헤더에서 읽습니다: 연결된 기기, “연결됨”이라는 링크 상태, 그리고 하나뿐인 경로 배지 “LAN 직접”. 두 화면의 파일 카운터는 그 배치의 마지막 파일에서 멈춥니다.",
+          "그다음 확인할 것은 페이지가 아니라 파일입니다. 어디에 놓일지는 휴대폰 브라우저가 정합니다: Android의 Chrome과 Firefox는 브라우저 자체 다운로드 목록(각각 chrome://downloads 과 about:downloads)에 넣고, iOS의 Safari는 파일 앱에서 열 수 있는 다운로드 폴더에 넣습니다.",
+        ],
+        code: ["Pixel 에 연결됨 · 연결됨 · LAN 직접\n파일 1/1"],
+      },
+      bullets: [
+        "같은 네트워크 방은 그 네트워크에서 페이지를 연 기기를 모두 담으므로, 휴대폰 옆에 태블릿이나 두 번째 노트북이 나타나는 것은 정상입니다.",
+        "1,000개 상한은 세션당이 아니라 배치당이므로, 아주 큰 트리는 다시 연결하지 않고 여러 번 드롭해 보낼 수 있습니다.",
+      ],
+    },
+    {
+      heading: "휴대폰이 보이지 않거나 전송이 멈출 때",
+      body: [
+        "이유를 드러내는 쪽은 대개 휴대폰입니다. 생각했던 것과 다른 네트워크에 있거나, 탭이 백그라운드로 갔거나, 브라우저가 요구받은 양을 감당하지 못하는 경우입니다. 이것들은 전부가 아니라 흔한 1차 점검이며, 각 항목은 짐작이 아니라 이미 화면에 있는 것으로 판정됩니다.",
+      ],
+      troubleshooting: {
+        label: "증상, 확인, 조치",
+        items: [
+          {
+            symptom: "컴퓨터의 “주변 기기”에 휴대폰이 끝내 나타나지 않습니다.",
+            code: ["https://relayium.com/   # 두 화면의 상태 표시에 있는 공인 IP를 비교한다"],
+            fix: "공인 IP가 다르면 방도 둘입니다. 휴대폰이 슬그머니 모바일 데이터에 남아 있는 것이 흔한 이유 하나이고, VPN이나 iCloud 비공개 릴레이가 다른 주소로 내보내는 것이 또 하나이며, 이 둘만 있는 것도 아닙니다. 설정을 바꿔도 괜찮다면: Wi-Fi에 접속하거나, VPN을 끊거나, 그 한 네트워크에서만 비공개 릴레이를 끄고 휴대폰에서 https://relayium.com/ 을 다시 불러오세요. 그대로 두고 싶다면 https://relayium.com/cross-network 의 페어링 코드가 두 설정을 건드리지 않고 그 휴대폰에 닿으며, 종단간 암호화도 똑같습니다.",
+          },
+          {
+            symptom: "두 기기가 같은 공인 IP를 보여주는데도 카드가 나타나지 않습니다.",
+            code: ["https://relayium.com/   # 기기 목록 아래 안내에 바꿔야 할 공유기 설정 이름이 있다"],
+            fix: "공유기가 자기 클라이언트를 갈라놓고 있습니다. 게스트망과 호텔 Wi-Fi가 기본으로 그렇게 합니다. ‘AP 격리 / 클라이언트 격리’를 끄거나, 공유기를 바꿀 수 없다면 https://relayium.com/cross-network 의 페어링 코드를 쓰세요.",
+          },
+          {
+            symptom: "전송이 시작된 뒤 휴대폰에서 다른 앱으로 전환하면 멈추거나 실패합니다.",
+            code: ["https://relayium.com/   # 휴대폰에서 Relayium 탭이 맨 앞에 있어야 한다"],
+            fix: "모바일 브라우저는 백그라운드 탭을 조이거나 정지시킬 수 있고, 그러는 동안에는 바이트가 움직이지 않습니다. Relayium의 정지 감시는 페이지가 앞으로 돌아온 뒤 곧바로 실패시키지 않고 한 번의 여유를 주지만, 해법은 탭을 맨 앞에 두는 것입니다. Relayium이 요청하는 웨이크 록은 화면이 꺼지는 것만 막고 백그라운드 실행까지 주지는 않으며, 오래된 Safari와 Android에는 요청할 웨이크 록 자체가 없습니다.",
+          },
+          {
+            symptom: "받기를 누르기 전에, 휴대폰이 배치 전체를 메모리에 담아야 한다고 경고합니다.",
+            code: ["chrome://downloads   # Chrome용 / Edge는 edge://downloads / Firefox는 about:downloads"],
+            fix: "휴대폰 브라우저에는 File System Access API가 없어 배치가 메모리에서 조립되고, 대략 256 MiB를 넘으면 Relayium이 경고합니다. 그 숫자는 단단한 상한이 아니라 조심스러운 경고선입니다. 한 번에 보내는 파일 수를 줄이거나, 큰 파일은 방향을 바꿔 디스크로 바로 쓰는 컴퓨터의 Chrome이나 Edge로 보내세요. 실제로 무엇이 도착했는지는 받는 쪽 브라우저 자체의 다운로드 목록 — chrome://downloads (Chrome), edge://downloads (Edge), about:downloads (Firefox) — 에서 확인하세요.",
+          },
+          {
+            symptom: "네트워크를 넘는 경우, 휴대폰이 입력한 페어링 코드가 거부됩니다.",
+            code: ["https://relayium.com/cross-network   # 페어링 카드에 남은 시간과 릴레이 거부 이유가 보인다"],
+            fix: "페어링 코드는 5분 동안만 살아 있고, 계정이 필요한 쪽은 코드를 만든 기기뿐입니다. 새로 만들고 곧바로 입력하세요. 카드에 릴레이가 인증된 계정에만 발급된다고 나오면, 먼저 계정 패널에서 보내는 쪽의 이메일 주소를 인증하세요. 위의 같은 네트워크 절차는 그 영향을 받지 않습니다.",
+          },
+        ],
+      },
     },
     {
       heading: "같은 네트워크가 아니라면? 페어링 코드를 쓰세요",
       body: [
-        "휴대폰은 모바일 데이터, PC는 집 Wi-Fi인가요? 괜찮습니다 — Relayium은 같은 네트워크뿐 아니라 네트워크를 넘나들며 닿도록 만들어졌습니다.",
-        "이 경우 자동 탐색 대신 보내는 쪽이 로그인해서 짧은 페어링 코드(또는 그것이 생성하는 참여 링크)를 받습니다 — 받는 쪽은 계정이 필요 없습니다. 상대 기기에 그 코드를 입력하면 두 기기는 암호화된 TURN 릴레이를 거쳐 연결됩니다. 네트워크를 넘는 경로는 의도적으로 그렇게 설계되어 있습니다. 모바일 망과 집 공유기 사이에서는 직접 경로를 찾지 못하는 것이 보통이라, 먼저 시도하면 20초쯤 허비하고도 결국 릴레이로 가게 됩니다. 처음부터 릴레이로 가면 1~2초 만에 연결됩니다. 파일은 보내는 기기를 떠나기 전에 종단간으로 봉인되므로, 릴레이가 옮기는 것은 읽을 수 없는 암호문뿐입니다. 도중에 끊겨도 전송은 처음부터가 아니라 이어서 재개할 수 있습니다. 코드는 5분 동안만 유효하니, 만들기 전에 두 기기를 모두 곁에 두세요.",
+        "휴대폰은 모바일 데이터, PC는 집 Wi-Fi인가요? 괜찮습니다 — Relayium은 같은 네트워크뿐 아니라 네트워크를 넘나들며 닿도록 만들어졌습니다. 다만 페어링 코드 방은 “주변 기기” 작업 공간과 별개의 화면이며, 기기별로 나뉜 이전 컨트롤을 그대로 쓰므로 거기에는 누를 “작업 공간 열기”가 없습니다.",
+        "이 경우 자동 탐색 대신 보내는 쪽이 로그인해서 짧은 페어링 코드(또는 그것이 생성하는 참여 링크)를 받습니다 — 받는 쪽은 계정이 필요 없습니다. 상대 기기에 그 코드를 입력하면 두 기기는 암호화된 TURN 릴레이를 거쳐 연결됩니다. 네트워크를 넘는 경로는 의도적으로 그렇게 설계되어 있습니다. 처음부터 릴레이로 가기 때문에, 연결이 모바일 망과 집 공유기 사이의 NAT와 방화벽을 통과하는 직접 경로를 찾아내는 데 의존하지 않습니다. NAT나 방화벽이 그런 경로를 막을 수도 있습니다. 파일은 보내는 기기를 떠나기 전에 종단간으로 봉인되므로, 릴레이가 옮기는 것은 읽을 수 없는 암호문뿐입니다. 도중에 끊겨도 전송은 처음부터가 아니라 이어서 재개할 수 있습니다. 코드는 5분 동안만 유효하니, 만들기 전에 두 기기를 모두 곁에 두세요.",
       ],
     },
     {
@@ -312,7 +588,7 @@ const ko = {
       },
       {
         q: "전송은 얼마나 빠른가요?",
-        a: "같은 Wi-Fi에서는 두 기기가 직접 연결되어 속도가 서버가 아닌 로컬 네트워크로 결정되며, 보통 Wi-Fi가 허락하는 만큼 빠릅니다. 서로 다른 네트워크에서는 설계상 전송이 암호화된 TURN 릴레이를 거치므로, 양쪽 인터넷 회선과 그 한 홉에 달려 있습니다. 대신 네트워크를 넘는 NAT에서 좀처럼 통하지 않는 직접 연결 시도를 기다리지 않고 1~2초 만에 연결이 성립합니다.",
+        a: "같은 Wi-Fi에서는 두 기기가 직접 연결되어 속도가 서버가 아닌 로컬 네트워크로 결정되며, 보통 Wi-Fi가 허락하는 만큼 빠릅니다. 서로 다른 네트워크에서는 설계상 전송이 암호화된 TURN 릴레이를 거치므로, 양쪽 인터넷 회선과 그 한 홉에 달려 있습니다. 대신 연결이 중간의 NAT와 방화벽을 통과하는 직접 경로를 찾아내는 데 의존하지 않습니다. NAT나 방화벽이 그런 경로를 막을 수도 있습니다.",
       },
       {
         q: "이렇게 파일을 보내도 안전한가요?",
@@ -342,19 +618,88 @@ const de = {
       body: [
         "Das ist der schnellste Weg: Beide Geräte sind im selben Netz, verbinden sich also direkt, und die Übertragung ist nur durch dein WLAN begrenzt. Du brauchst nichts außer einem Browser auf jedem Gerät.",
       ],
-      bullets: [
-        "Öffne am Computer relayium.com in einem beliebigen modernen Browser (Chrome, Edge, Firefox oder Safari).",
-        "Öffne relayium.com auch auf dem Handy. Im selben Netz erkennen sich die beiden Geräte automatisch.",
-        "Ziehe am Computer Dateien direkt auf die Seite oder klicke, um sie auszuwählen — bis zu 1.000 Dateien pro Stapel. Du kannst einen ganzen Ordner ablegen, und Relayium behält dessen Struktur bei.",
-        "Wähle das Handy als Ziel und starte. Das Handy nimmt an und die Dateien fliegen hinüber. Schalte die standardmäßig ausgeschaltete erweiterte Verifizierung ein, wenn beide Geräte vorher denselben sechsstelligen Verifizierungscode (SAS) zum Vergleichen zeigen sollen.",
-        "Speichere die empfangenen Dateien auf dem Handy. Für eine solche Echtzeitübertragung ist kein Konto nötig.",
+      prereqs: {
+        label: "Bevor du anfängst",
+        items: [
+          "Computer und Handy im selben WLAN, und der Router trennt seine Clients nicht voneinander. Wie die Einstellung heißt, steht im Hinweis unter der Geräteliste: „AP-Isolierung / Client-Isolierung“.",
+          "Auf beiden ein Browser, mit der Seite über https://relayium.com/ geöffnet. Verschlüsselte Übertragung braucht HTTPS, und über einfaches http:// sagt die Seite das, statt Geräte aufzulisten.",
+          "Der Tab auf dem Handy bleibt während der ganzen Übertragung vorn. Relayium fordert eine Bildschirm-Wake-Lock an, wo der Browser eine anbietet — das deckt den abschaltenden Bildschirm ab, nicht den Wechsel in eine andere App, und ein Handy-Browser kann einen Tab im Hintergrund ausbremsen oder einfrieren.",
+          "Für eine Übertragung im selben Netz braucht keines der Geräte ein Konto. Anmelden muss sich nur die sendende Seite, und nur wenn beide in verschiedenen Netzen sind und ein Pairing-Code erzeugt werden muss.",
+        ],
+      },
+      steps: [
+        {
+          text: "Öffne am Computer die Übertragungsseite in einem beliebigen modernen Browser (Chrome, Edge, Firefox oder Safari).",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Öffne dieselbe Seite auf dem Handy und vergleiche dann die öffentliche IP in der Statuszeile auf beiden Bildschirmen. Eine übereinstimmende Adresse steckt die beiden Geräte in einen Raum — ein Handy, das still auf Mobilfunk geblieben ist, zeigt eine andere.",
+          code: ["Verbunden · dieses Gerät Pixel · öffentliche IP 203.0.113.9"],
+        },
+        {
+          text: "Suche am Computer das Handy unter „Geräte in der Nähe“, klicke seine Karte an und drücke „Arbeitsbereich öffnen“. In einem aktuellen Browser ist das die einzige Aktion, die die Karte anbietet, denn Dateien, Ordner und Nachrichten laufen danach alle über die eine verschlüsselte Verbindung, die sie öffnet. Dateien direkt auf diese Karte zu ziehen sendet sie auch ohne diesen Schritt.",
+        },
+        {
+          text: "Der Arbeitsbereich tritt an die Stelle der Karte. Gesendet wird mit den Bedienelementen unter seiner Kopfzeile: „Dateien senden“ für einen Stapel von bis zu 1.000 Dateien, „Ordner senden“ für einen ganzen Baum, wo der Browser die Ordnerauswahl anbietet, oder tippe ins Nachrichtenfeld — „Enter für neue Zeile · ⌘/Ctrl+Enter zum Senden“ — und drücke „Senden“.",
+        },
+        {
+          text: "Lies auf dem Handy die Zeile unter der Anfrage, bevor du annimmst — sie sagt, ob der Browser nach dem Speicherort fragt oder direkt in seinen Download-Ordner schreibt —, drücke dann „Annehmen“ und lass diesen Tab vorn, bis der Dateizähler die letzte Datei des Stapels erreicht. Wer vor dem ersten Byte einen Verifizierungscode (SAS) vergleichen will, schaltet vor dem Start auf beiden Geräten „Erweiterte Verifizierung“ ein — standardmäßig aus, und hinzu kommt ein Vergleich samt Zustimmungsschritt, nicht die Verschlüsselung.",
+        },
       ],
+      success: {
+        label: "So sieht eine fertige Übertragung aus",
+        body: [
+          "Die Karte des Handys ist dann verschwunden — der Arbeitsbereich hat ihren Platz übernommen —, also liest du den Zustand an der Kopfzeile des Arbeitsbereichs ab: das verbundene Gerät, ein Verbindungszustand „Verbunden“ und ein einziges Pfad-Abzeichen mit „LAN direkt“. Der Dateizähler endet auf beiden Bildschirmen bei der letzten Datei des Stapels.",
+          "Danach prüfst du die Datei, nicht die Seite. Wo sie landet, entscheidet der Browser des Handys: Chrome und Firefox unter Android legen sie in ihre eigene Download-Liste — chrome://downloads beziehungsweise about:downloads —, Safari unter iOS in den Download-Ordner, den du in der Dateien-App öffnen kannst.",
+        ],
+        code: ["Verbunden mit Pixel · Verbunden · LAN direkt\nDatei 1/1"],
+      },
+      bullets: [
+        "Ein Raum im selben Netz fasst jedes Gerät, das die Seite aus diesem Netz geöffnet hat — ein Tablet oder ein zweiter Laptop neben dem Handy ist also normal.",
+        "Die Grenze von 1.000 Dateien gilt pro Stapel, nicht pro Sitzung: ein sehr großer Baum geht in mehreren Ablagen hinüber, ohne die Verbindung neu aufzubauen.",
+      ],
+    },
+    {
+      heading: "Wenn das Handy nicht auftaucht oder die Übertragung stehen bleibt",
+      body: [
+        "Meist ist es das Handy, das sich erklärt: Es ist in einem anderen Netz als gedacht, sein Tab ist in den Hintergrund gerutscht, oder sein Browser kann nicht halten, was von ihm verlangt wird. Das sind die üblichen ersten Prüfungen und nicht die ganze Liste, und für jede gibt es etwas auf dem Bildschirm, das sie entscheidet, statt etwas zu raten.",
+      ],
+      troubleshooting: {
+        label: "Symptom, Prüfung, Lösung",
+        items: [
+          {
+            symptom: "Das Handy erscheint am Computer nie unter „Geräte in der Nähe“.",
+            code: ["https://relayium.com/   # die öffentliche IP in der Statuszeile auf beiden Bildschirmen vergleichen"],
+            fix: "Zwei verschiedene öffentliche IP-Adressen bedeuten zwei Räume. Ein Handy, das still auf Mobilfunk geblieben ist, ist ein häufiger Grund; ein VPN oder iCloud Private Relay, das es über eine andere Adresse hinausschickt, ein weiterer — und sie sind nicht die einzigen. Wenn du sie ändern willst: ins WLAN wechseln, das VPN trennen oder Private Relay für dieses eine Netz ausschalten, dann https://relayium.com/ auf dem Handy neu laden. Willst du sie lieber anlassen, erreicht ein Pairing-Code auf https://relayium.com/cross-network das Handy, ohne eine der beiden Einstellungen anzutasten, und ist genauso Ende-zu-Ende verschlüsselt.",
+          },
+          {
+            symptom: "Beide Geräte zeigen dieselbe öffentliche IP, und die Karten erscheinen trotzdem nicht.",
+            code: ["https://relayium.com/   # der Hinweis unter der Geräteliste nennt die Router-Einstellung"],
+            fix: "Der Router trennt seine eigenen Clients, was Gast- und Hotel-WLANs oft von Haus aus tun. Schalte „AP-Isolierung / Client-Isolierung“ aus, oder nimm einen Pairing-Code auf https://relayium.com/cross-network, wenn der Router nicht dir gehört.",
+          },
+          {
+            symptom: "Die Übertragung startet und bleibt dann stehen oder scheitert, nachdem du auf dem Handy die App gewechselt hast.",
+            code: ["https://relayium.com/   # auf dem Handy muss der Relayium-Tab der vorderste sein"],
+            fix: "Ein Handy-Browser kann einen Tab im Hintergrund ausbremsen oder einfrieren, und solange er das tut, bewegt sich kein Byte. Relayiums Stillstandswächter gewährt nach der Rückkehr in den Vordergrund ein frisches Zeitfenster statt sofort abzubrechen, aber die Lösung ist, den Tab vorn zu lassen — die Wake-Lock, die Relayium anfordert, deckt nur den abschaltenden Bildschirm ab und verschafft keine Ausführung im Hintergrund, und ältere Safari- und Android-Versionen bieten überhaupt keine an.",
+          },
+          {
+            symptom: "Vor dem Annehmen warnt das Handy, es müsse den ganzen Stapel im Speicher halten.",
+            code: ["chrome://downloads   # in Chrome; Edge hat edge://downloads und Firefox about:downloads"],
+            fix: "Handy-Browser haben keine File System Access API, der Stapel wird dort also im Speicher zusammengesetzt, und ab etwa 256 MiB warnt Relayium. Diese Zahl ist eine vorsichtige Warnschwelle und keine harte Grenze: schicke weniger Dateien auf einmal, oder schicke die große Datei in die andere Richtung, in ein Chrome oder Edge am Computer, das sie direkt auf die Platte streamt. Was tatsächlich ankam, prüfst du in der Download-Liste des empfangenden Browsers — chrome://downloads in Chrome, edge://downloads in Edge, about:downloads in Firefox.",
+          },
+          {
+            symptom: "Über Netzwerkgrenzen hinweg wird der Pairing-Code abgelehnt, den das Handy eintippt.",
+            code: ["https://relayium.com/cross-network   # die Pairing-Karte zeigt den Countdown und eine Relay-Absage"],
+            fix: "Ein Pairing-Code lebt fünf Minuten, und ein Konto braucht nur das Gerät, das ihn erzeugt hat. Erzeuge einen frischen und tippe ihn gleich ein. Steht auf der Karte, dass ein Relay nur an verifizierte Konten geht, dann bestätige zuerst im Kontobereich die E-Mail-Adresse der sendenden Seite — der Ablauf im selben Netz weiter oben ist davon unberührt.",
+          },
+        ],
+      },
     },
     {
       heading: "Nicht im selben Netz? Nimm einen Pairing-Code",
       body: [
-        "Das Handy ist im Mobilfunknetz und der PC im heimischen WLAN? Kein Problem — Relayium ist darauf ausgelegt, über Netzwerke hinweg zu reichen, nicht nur im selben.",
-        "Statt automatischer Erkennung meldet sich der Absender an und erhält einen kurzen Pairing-Code (oder den erzeugten Beitrittslink) — der Empfänger braucht dabei nie ein Konto. Gib den Code auf dem anderen Gerät ein, und die beiden verbinden sich über ein verschlüsseltes TURN-Relay. So ist der netzübergreifende Weg bewusst ausgelegt: Zwischen einem Mobilfunknetz und einem Heimrouter lässt sich meist kein direkter Weg finden, und der Versuch würde rund 20 Sekunden kosten, bevor die Verbindung ohnehin beim Relay landet — gleich dort zu beginnen bringt sie in ein bis zwei Sekunden zustande. Deine Dateien sind Ende-zu-Ende versiegelt, bevor sie das sendende Gerät verlassen, das Relay bewegt also nur Chiffretext, den es nicht lesen kann. Bricht die Verbindung mittendrin ab, kann die Übertragung fortgesetzt werden, statt neu zu beginnen. Der Code gilt fünf Minuten — halte beide Geräte bereit, bevor du einen erzeugst.",
+        "Das Handy ist im Mobilfunknetz und der PC im heimischen WLAN? Kein Problem — Relayium ist darauf ausgelegt, über Netzwerke hinweg zu reichen, nicht nur im selben. Ein Pairing-Code-Raum ist allerdings eine andere Oberfläche als ein Arbeitsbereich mit einem Gerät in der Nähe: Er behält die früheren, pro Gerät getrennten Bedienelemente, dort gibt es also kein „Arbeitsbereich öffnen“ zu drücken.",
+        "Statt automatischer Erkennung meldet sich der Absender an und erhält einen kurzen Pairing-Code (oder den erzeugten Beitrittslink) — der Empfänger braucht dabei nie ein Konto. Gib den Code auf dem anderen Gerät ein, und die beiden verbinden sich über ein verschlüsseltes TURN-Relay. So ist der netzübergreifende Weg bewusst ausgelegt: Er nutzt von Anfang an das Relay, sodass die Verbindung nicht davon abhängt, einen direkten Weg durch die NATs und Firewalls zwischen einem Mobilfunknetz und einem Heimrouter zu finden — die einen solchen Weg verhindern können. Deine Dateien sind Ende-zu-Ende versiegelt, bevor sie das sendende Gerät verlassen, das Relay bewegt also nur Chiffretext, den es nicht lesen kann. Bricht die Verbindung mittendrin ab, kann die Übertragung fortgesetzt werden, statt neu zu beginnen. Der Code gilt fünf Minuten — halte beide Geräte bereit, bevor du einen erzeugst.",
       ],
     },
     {
@@ -393,7 +738,7 @@ const de = {
       },
       {
         q: "Wie schnell ist die Übertragung?",
-        a: "Im selben WLAN verbinden sich die beiden Geräte direkt, die Geschwindigkeit hängt also von deinem lokalen Netz ab und nicht von einem Server — meist so schnell, wie dein WLAN es erlaubt. Netzwerkübergreifend läuft die Übertragung von vornherein über ein verschlüsseltes TURN-Relay, hängt also von beiden Internetverbindungen plus diesem zusätzlichen Sprung ab; dafür steht die Verbindung in ein bis zwei Sekunden, statt auf Direktversuche zu warten, die netzübergreifende NATs ohnehin selten zulassen.",
+        a: "Im selben WLAN verbinden sich die beiden Geräte direkt, die Geschwindigkeit hängt also von deinem lokalen Netz ab und nicht von einem Server — meist so schnell, wie dein WLAN es erlaubt. Netzwerkübergreifend läuft die Übertragung von vornherein über ein verschlüsseltes TURN-Relay, hängt also von beiden Internetverbindungen plus diesem zusätzlichen Sprung ab; dafür hängt die Verbindung nicht davon ab, einen direkten Pfad durch die NATs und Firewalls dazwischen zu finden — die einen solchen Pfad verhindern können.",
       },
       {
         q: "Ist es sicher, Dateien so zu senden?",
@@ -423,19 +768,88 @@ const fr = {
       body: [
         "C'est la voie la plus rapide : les deux appareils sont sur le même réseau, ils se connectent donc directement et le transfert n'est limité que par votre Wi-Fi. Vous n'avez besoin que d'un navigateur sur chaque appareil.",
       ],
-      bullets: [
-        "Sur l'ordinateur, ouvrez relayium.com dans n'importe quel navigateur moderne (Chrome, Edge, Firefox ou Safari).",
-        "Sur le téléphone, ouvrez relayium.com aussi. Sur le même réseau, les deux appareils se découvrent automatiquement.",
-        "Sur l'ordinateur, glissez les fichiers directement sur la page, ou cliquez pour les choisir — jusqu'à 1 000 fichiers par lot. Vous pouvez déposer un dossier entier et Relayium en conserve la structure.",
-        "Choisissez le téléphone comme destination et lancez. Le téléphone accepte et les fichiers filent. Activez la vérification avancée (désactivée par défaut) si vous voulez qu'en plus les deux appareils affichent le même code de vérification à 6 chiffres (SAS) à comparer d'abord.",
-        "Sur le téléphone, enregistrez les fichiers reçus. Aucun compte n'est nécessaire pour un transfert en temps réel comme celui-ci.",
+      prereqs: {
+        label: "Avant de commencer",
+        items: [
+          "L'ordinateur et le téléphone sur le même Wi-Fi, avec un routeur qui ne sépare pas ses clients. L'indication sous la liste des appareils nomme le réglage : « l'isolation AP / isolation des clients ».",
+          "Un navigateur sur chacun, avec la page ouverte via https://relayium.com/. Le transfert chiffré exige HTTPS, et en simple http:// la page le dit au lieu de lister le moindre appareil.",
+          "L'onglet du téléphone gardé au premier plan pendant tout le transfert. Relayium demande un verrou d'écran là où le navigateur en propose un, ce qui couvre l'extinction de l'écran mais pas le passage à une autre application, et un navigateur mobile peut brider voire suspendre un onglet passé en arrière-plan.",
+          "Aucun compte sur l'un ou l'autre appareil pour un transfert sur le même réseau. La connexion ne devient nécessaire que pour l'expéditeur, et seulement quand les deux sont sur des réseaux différents et qu'un code d'appairage doit être créé.",
+        ],
+      },
+      steps: [
+        {
+          text: "Sur l'ordinateur, ouvrez la page de transfert dans n'importe quel navigateur moderne (Chrome, Edge, Firefox ou Safari).",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Ouvrez la même page sur le téléphone, puis comparez l'IP publique de la ligne d'état sur les deux écrans. Une adresse identique place les deux appareils dans une même salle : un téléphone resté discrètement en données mobiles en affiche une autre.",
+          code: ["Connecté · cet appareil Pixel · IP publique 203.0.113.9"],
+        },
+        {
+          text: "Sur l'ordinateur, trouvez le téléphone sous « Appareils à proximité », cliquez sa carte et appuyez sur « Ouvrir l’espace de travail ». Sur un navigateur actuel c'est la seule action que la carte propose, car fichiers, dossiers et messages passent ensuite tous par l'unique connexion chiffrée qu'elle ouvre. Glisser des fichiers directement sur cette carte les envoie aussi, sans cette étape.",
+        },
+        {
+          text: "L'espace de travail remplace la carte. Pour envoyer, utilisez les commandes sous son en-tête : « Envoyer des fichiers » pour un lot d'au plus 1 000 fichiers, « Envoyer un dossier » pour une arborescence entière là où le navigateur propose de choisir un dossier, ou tapez dans la zone de message — « Entrée pour une nouvelle ligne · ⌘/Ctrl+Entrée pour envoyer » — puis appuyez sur « Envoyer ».",
+        },
+        {
+          text: "Sur le téléphone, lisez la ligne sous la demande avant d'accepter — elle indique si le navigateur demandera où enregistrer ou écrira directement dans son dossier de téléchargements —, puis appuyez sur « Accepter » et laissez cet onglet au premier plan jusqu'à ce que le compteur atteigne le dernier fichier du lot. Pour comparer un code de vérification (SAS) avant le moindre octet, activez « Vérification avancée » sur les deux appareils avant de commencer : désactivée par défaut, elle ajoute une comparaison et une étape d'acceptation, pas le chiffrement.",
+        },
       ],
+      success: {
+        label: "À quoi ressemble un transfert terminé",
+        body: [
+          "La carte du téléphone a disparu à ce stade — l'espace de travail a pris sa place —, alors lisez l'état sur l'en-tête de l'espace de travail : l'appareil auquel vous êtes connecté, un état de lien « Connecté », et un unique badge de chemin indiquant « LAN direct ». Le compteur de fichiers s'arrête sur le dernier fichier du lot sur les deux écrans.",
+          "Ensuite, vérifiez le fichier et non la page. L'endroit où il atterrit relève du navigateur du téléphone : Chrome et Firefox sous Android le placent dans leur propre liste de téléchargements — chrome://downloads et about:downloads respectivement —, et Safari sous iOS dans le dossier Téléchargements que vous pouvez ouvrir dans l'app Fichiers.",
+        ],
+        code: ["Connecté à Pixel · Connecté · LAN direct\nFichier 1/1"],
+      },
+      bullets: [
+        "Une salle du même réseau accueille tout appareil ayant ouvert la page depuis ce réseau, donc une tablette ou un second portable à côté du téléphone est normal.",
+        "La limite de 1 000 fichiers vaut par lot et non par session : une très grande arborescence passe en plusieurs dépôts, sans reconnexion.",
+      ],
+    },
+    {
+      heading: "Quand le téléphone n'apparaît pas, ou que le transfert s'arrête",
+      body: [
+        "C'est en général le téléphone qui s'explique : il est sur un autre réseau que prévu, son onglet est passé en arrière-plan, ou son navigateur ne peut pas retenir ce qu'on lui demande. Ce sont les premières vérifications courantes plutôt que la liste complète, et chacune se tranche avec quelque chose déjà à l'écran plutôt qu'en devinant.",
+      ],
+      troubleshooting: {
+        label: "Symptôme, vérification, correction",
+        items: [
+          {
+            symptom: "Le téléphone n'apparaît jamais sous « Appareils à proximité » sur l'ordinateur.",
+            code: ["https://relayium.com/   # comparez l'IP publique de la ligne d'état sur les deux écrans"],
+            fix: "Deux adresses IP publiques différentes, ce sont deux salles. Un téléphone resté discrètement en données mobiles est une raison courante ; un VPN ou iCloud Private Relay qui le fait sortir par une autre adresse en est une autre, et ce ne sont pas les seules. Si vous acceptez de les changer : rejoignez le Wi-Fi, coupez le VPN, ou désactivez Private Relay pour ce seul réseau, puis rechargez https://relayium.com/ sur le téléphone. Si vous préférez les laisser en place, un code d'appairage sur https://relayium.com/cross-network atteint le téléphone sans toucher ni l'un ni l'autre réglage, et reste chiffré de bout en bout de la même façon.",
+          },
+          {
+            symptom: "Les deux appareils affichent la même IP publique et les cartes n'apparaissent toujours pas.",
+            code: ["https://relayium.com/   # l'indication sous la liste des appareils nomme le réglage du routeur"],
+            fix: "Le routeur sépare ses propres clients, ce que font souvent par défaut les Wi-Fi d'hôtel et d'invités. Désactivez « l'isolation AP / isolation des clients », ou passez par un code d'appairage sur https://relayium.com/cross-network quand le routeur ne vous appartient pas.",
+          },
+          {
+            symptom: "Le transfert démarre puis se bloque ou échoue après un changement d'application sur le téléphone.",
+            code: ["https://relayium.com/   # sur le téléphone, l'onglet Relayium doit être celui au premier plan"],
+            fix: "Un navigateur mobile peut brider voire suspendre un onglet en arrière-plan, et pendant ce temps aucun octet ne circule. Le chien de garde de Relayium accorde une nouvelle fenêtre au retour au premier plan au lieu d'échouer aussitôt, mais la solution est de laisser l'onglet devant : le verrou que Relayium demande ne couvre que l'extinction de l'écran et n'achète aucune exécution en arrière-plan, et les anciens Safari et Android n'en proposent aucun à demander.",
+          },
+          {
+            symptom: "Avant l'acceptation, le téléphone avertit qu'il doit garder tout le lot en mémoire.",
+            code: ["chrome://downloads   # dans Chrome ; Edge a edge://downloads et Firefox about:downloads"],
+            fix: "Les navigateurs de téléphone n'ont pas d'API File System Access, le lot y est donc assemblé en mémoire et Relayium avertit au-delà d'environ 256 MiB. Ce chiffre est un seuil d'alerte prudent et non une limite dure : envoyez moins de fichiers à la fois, ou envoyez le gros fichier dans l'autre sens, vers un Chrome ou Edge d'ordinateur qui l'écrit directement sur le disque. Ce qui est réellement arrivé se vérifie dans la liste de téléchargements du navigateur récepteur — chrome://downloads dans Chrome, edge://downloads dans Edge, about:downloads dans Firefox.",
+          },
+          {
+            symptom: "Entre réseaux différents, le code d'appairage saisi sur le téléphone est refusé.",
+            code: ["https://relayium.com/cross-network   # la carte d'appairage montre le décompte et tout refus de relais"],
+            fix: "Un code d'appairage vit cinq minutes, et seul l'appareil qui l'a créé a besoin d'un compte. Générez-en un nouveau et saisissez-le tout de suite. Si la carte indique que le relais n'est délivré qu'aux comptes vérifiés, vérifiez d'abord l'adresse e-mail de l'expéditeur depuis le panneau du compte : le flux sur le même réseau ci-dessus n'en dépend pas.",
+          },
+        ],
+      },
     },
     {
       heading: "Pas sur le même réseau ? Utilisez un code d'appairage",
       body: [
-        "Votre téléphone est en données mobiles et votre PC sur le Wi-Fi de la maison ? Aucun souci — Relayium est conçu pour atteindre à travers les réseaux, pas seulement le même.",
-        "Au lieu de la découverte automatique, l'expéditeur se connecte et obtient un court code d'appairage (ou le lien de participation qu'il génère) — le destinataire n'a jamais besoin de compte. Saisissez le code sur l'autre appareil et les deux se connectent via un relais TURN chiffré. C'est le choix délibéré pour le trajet entre réseaux : entre un réseau mobile et une box domestique, une voie directe est généralement introuvable, et la chercher d'abord coûterait une vingtaine de secondes avant que la connexion n'aboutisse malgré tout au relais — en partant directement du relais, elle s'établit en une ou deux secondes. Vos fichiers sont scellés de bout en bout avant de quitter l'appareil émetteur : le relais ne déplace donc que du texte chiffré qu'il ne peut pas lire. Si la connexion se coupe en cours de route, le transfert peut reprendre au lieu de tout recommencer. Le code est valable cinq minutes : ayez les deux appareils sous la main avant d'en générer un.",
+        "Votre téléphone est en données mobiles et votre PC sur le Wi-Fi de la maison ? Aucun souci — Relayium est conçu pour atteindre à travers les réseaux, pas seulement le même. Une salle à code d'appairage reste toutefois une surface distincte d'un espace de travail avec un appareil à proximité : elle conserve les anciennes commandes séparées par appareil, il n'y a donc pas d'« Ouvrir l’espace de travail » à y presser.",
+        "Au lieu de la découverte automatique, l'expéditeur se connecte et obtient un court code d'appairage (ou le lien de participation qu'il génère) — le destinataire n'a jamais besoin de compte. Saisissez le code sur l'autre appareil et les deux se connectent via un relais TURN chiffré. C'est le choix délibéré pour le trajet entre réseaux : il emprunte le relais dès le départ, si bien que la connexion ne dépend pas de la découverte d'une voie directe à travers les NAT et pare-feu situés entre un réseau mobile et une box domestique, qui peuvent en empêcher une. Vos fichiers sont scellés de bout en bout avant de quitter l'appareil émetteur : le relais ne déplace donc que du texte chiffré qu'il ne peut pas lire. Si la connexion se coupe en cours de route, le transfert peut reprendre au lieu de tout recommencer. Le code est valable cinq minutes : ayez les deux appareils sous la main avant d'en générer un.",
       ],
     },
     {
@@ -474,7 +888,7 @@ const fr = {
       },
       {
         q: "À quelle vitesse se fait le transfert ?",
-        a: "Sur le même Wi-Fi, les deux appareils se connectent directement, la vitesse est donc limitée par votre réseau local et non par un serveur — en général aussi rapide que votre Wi-Fi le permet. Entre réseaux différents, le transfert passe par conception par un relais TURN chiffré : cela dépend donc des deux connexions internet et de ce saut supplémentaire, mais la connexion s'établit en une ou deux secondes au lieu d'attendre des tentatives directes que les NAT entre réseaux autorisent rarement.",
+        a: "Sur le même Wi-Fi, les deux appareils se connectent directement, la vitesse est donc limitée par votre réseau local et non par un serveur — en général aussi rapide que votre Wi-Fi le permet. Entre réseaux différents, le transfert passe par conception par un relais TURN chiffré : cela dépend donc des deux connexions internet et de ce saut supplémentaire, mais la connexion ne dépend pas de la découverte d'un chemin direct à travers les NAT et pare-feu intermédiaires, qui peuvent en empêcher un.",
       },
       {
         q: "Est-ce sûr d'envoyer des fichiers ainsi ?",
@@ -504,19 +918,88 @@ const ar = {
       body: [
         "هذا هو المسار الأسرع: كلا الجهازين على نفس الشبكة، فيتصلان مباشرةً ولا يحدّ النقل سوى شبكة Wi-Fi لديك. لا تحتاج إلى شيء سوى متصفح على كل جهاز.",
       ],
-      bullets: [
-        "على الحاسوب، افتح relayium.com في أي متصفح حديث (Chrome أو Edge أو Firefox أو Safari).",
-        "على الهاتف، افتح relayium.com أيضًا. على نفس الشبكة، يكتشف الجهازان أحدهما الآخر تلقائيًا.",
-        "على الحاسوب، اسحب الملفات مباشرةً إلى الصفحة، أو انقر لاختيارها — حتى 1,000 ملف لكل دفعة. يمكنك إفلات مجلد كامل ويحافظ Relayium على بنيته.",
-        "اختر الهاتف وجهةً وابدأ. يقبل الهاتف فتطير الملفات إلى الجانب الآخر. وإن أردت أن يعرض الجهازان أولًا رمز التحقق نفسه المكوَّن من 6 أرقام (SAS) لتقارنه، فعّل «التحقّق المتقدّم» المعطَّل افتراضيًا.",
-        "على الهاتف، احفظ الملفات المستلمة. لا يلزم أي حساب لنقل فوري كهذا.",
+      prereqs: {
+        label: "قبل أن تبدأ",
+        items: [
+          "الحاسوب والهاتف على نفس شبكة Wi-Fi، والموجّه لا يفصل عملاءه عن بعضهم. التلميح أسفل قائمة الأجهزة يسمّي الإعداد: «عزل نقطة الوصول / عزل العملاء».",
+          "متصفح على كل منهما، والصفحة مفتوحة عبر https://relayium.com/. يحتاج النقل المشفَّر إلى HTTPS، وعبر http:// المجرّد تقول الصفحة ذلك بدل أن تسرد أي جهاز.",
+          "إبقاء تبويب الهاتف في المقدمة طوال النقل. يطلب Relayium قفل إبقاء الشاشة مضاءة حيث يوفّره المتصفح، وهذا يغطّي انطفاء الشاشة لا الانتقال إلى تطبيق آخر، كما قد يخفّض متصفح الهاتف سرعة التبويب الذي ينتقل إلى الخلفية أو يعلّقه.",
+          "لا حساب على أي من الجهازين للنقل على نفس الشبكة. لا يصبح تسجيل الدخول لازمًا إلا للطرف المُرسِل، وفقط عندما يكون الجهازان على شبكتين مختلفتين ويجب توليد رمز اقتران.",
+        ],
+      },
+      steps: [
+        {
+          text: "على الحاسوب، افتح صفحة النقل في أي متصفح حديث (Chrome أو Edge أو Firefox أو Safari).",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "افتح الصفحة نفسها على الهاتف، ثم قارن عنوان IP العام في شريط الحالة على الشاشتين. تطابق العنوان هو ما يضع الجهازين في غرفة واحدة — أما الهاتف الذي ظلّ على بيانات الجوال بهدوء فسيعرض عنوانًا آخر.",
+          code: ["متصل · هذا الجهاز Pixel · عنوان IP العام 203.0.113.9"],
+        },
+        {
+          text: "على الحاسوب، اعثر على الهاتف تحت «الأجهزة القريبة»، وانقر بطاقته واضغط «فتح مساحة العمل». في المتصفحات الحديثة هذا هو الإجراء الوحيد الذي تعرضه البطاقة، لأن الملفات والمجلدات والرسائل تمرّ بعد ذلك كلها عبر الاتصال المشفَّر الواحد الذي تفتحه. وسحب الملفات مباشرةً إلى تلك البطاقة يرسلها أيضًا دون هذه الخطوة.",
+        },
+        {
+          text: "تحلّ مساحة العمل مكان البطاقة. أرسِل من عناصر التحكم أسفل ترويستها: «إرسال ملفات» لدفعة تصل إلى 1,000 ملف، و«إرسال مجلد» لشجرة كاملة حيث يوفّر المتصفح اختيار المجلدات، أو اكتب في صندوق الرسائل — «Enter لسطر جديد · ⌘/Ctrl+Enter للإرسال» — ثم اضغط «إرسال».",
+        },
+        {
+          text: "على الهاتف، اقرأ السطر أسفل الطلب قبل القبول — فهو يقول إن كان المتصفح سيسأل عن مكان الحفظ أم سيكتب مباشرةً في مجلد التنزيلات الخاص به — ثم اضغط «قبول» وأبقِ ذلك التبويب في المقدمة حتى يبلغ عدّاد الملفات آخر ملف في الدفعة. وإن أردت مقارنة رمز التحقق (SAS) قبل أن يتحرك أي بايت، فعّل «التحقّق المتقدّم» على الجهازين قبل البدء — فهو معطَّل افتراضيًا ويضيف مقارنة وخطوة موافقة، لا التشفير.",
+        },
       ],
+      success: {
+        label: "كيف يبدو نقل مكتمل",
+        body: [
+          "تكون بطاقة الهاتف قد اختفت عند هذه اللحظة — إذ حلّت مساحة العمل مكانها — فاقرأ الحالة من ترويسة مساحة العمل: الجهاز المتصل بك، وحالة رابط تقول «متصل»، ووسم مسار واحد يقرأ «مباشر عبر LAN». ويتوقف عدّاد الملفات على الشاشتين عند آخر ملف في الدفعة.",
+          "بعد ذلك تحقّق من الملف لا من الصفحة. فمكان وصوله قرار متصفح الهاتف: يضعه Chrome وFirefox على Android في قائمة التنزيلات الخاصة بالمتصفح — chrome://downloads وabout:downloads على التوالي — ويضعه Safari على iOS في مجلد التنزيلات الذي يمكنك فتحه من تطبيق «الملفات».",
+        ],
+        code: ["متصل بـ Pixel · متصل · مباشر عبر LAN\nالملف 1/1"],
+      },
+      bullets: [
+        "تسع غرفة نفس الشبكة كل جهاز فتح الصفحة من تلك الشبكة، فظهور لوح أو حاسوب محمول ثانٍ إلى جانب الهاتف أمر طبيعي.",
+        "حد 1,000 ملف يخص الدفعة لا الجلسة، فالشجرة الضخمة يمكن أن تنتقل على عدة دفعات دون إعادة الاتصال.",
+      ],
+    },
+    {
+      heading: "عندما لا يظهر الهاتف أو يتوقف النقل",
+      body: [
+        "الهاتف عادةً هو الطرف الذي يفصح عن السبب: فهو على شبكة غير التي تظنها، أو انتقل تبويبه إلى الخلفية، أو لا يستطيع متصفحه حمل ما طُلب منه حمله. وهذه فحوص أولى شائعة لا قائمة شاملة، ولكل منها شيء موجود على الشاشة يحسمه بدل أن تخمّنه.",
+      ],
+      troubleshooting: {
+        label: "العَرَض والفحص والحل",
+        items: [
+          {
+            symptom: "لا يظهر الهاتف أبدًا تحت «الأجهزة القريبة» على الحاسوب.",
+            code: ["https://relayium.com/   # قارن عنوان IP العام في شريط الحالة على الشاشتين"],
+            fix: "عنوانا IP عامان مختلفان يعنيان غرفتين. وبقاء الهاتف على بيانات الجوال بهدوء سبب شائع، وإخراجه من عنوان آخر بواسطة VPN أو الترحيل الخاص في iCloud سبب شائع آخر، وليسا السببين الوحيدين. فإن كنت مستعدًا لتغييرها: انضم إلى شبكة Wi-Fi، أو اقطع VPN، أو أوقف الترحيل الخاص لهذه الشبكة وحدها، ثم أعِد تحميل https://relayium.com/ على الهاتف. وإن كنت تفضّل تركها كما هي، فرمز اقتران على https://relayium.com/cross-network يصل إلى الهاتف دون المساس بأي من الإعدادين، ومشفَّر من الطرف إلى الطرف بالطريقة نفسها.",
+          },
+          {
+            symptom: "يعرض الجهازان نفس عنوان IP العام ومع ذلك لا تظهر البطاقات.",
+            code: ["https://relayium.com/   # التلميح أسفل قائمة الأجهزة يسمّي إعداد الموجّه"],
+            fix: "الموجّه يفصل عملاءه، وهو ما تفعله شبكات الضيوف والفنادق افتراضيًا في الغالب. أوقف «عزل نقطة الوصول / عزل العملاء»، أو استخدم رمز اقتران على https://relayium.com/cross-network إن لم يكن الموجّه بيدك لتغييره.",
+          },
+          {
+            symptom: "يبدأ النقل ثم يتجمّد أو يفشل بعد أن تنتقل إلى تطبيق آخر على الهاتف.",
+            code: ["https://relayium.com/   # يجب أن يكون تبويب Relayium هو الأمامي على الهاتف"],
+            fix: "قد يخفّض متصفح الهاتف سرعة التبويب في الخلفية أو يعلّقه، وما دام يفعل ذلك فلا يتحرك أي بايت. ويمنح مراقب التجمّد في Relayium نافذة جديدة كاملة بعد عودة الصفحة إلى المقدمة بدل الفشل الفوري، لكن الحل هو إبقاء التبويب في المقدمة — فالقفل الذي يطلبه Relayium يغطّي انطفاء الشاشة فقط ولا يشتري تنفيذًا في الخلفية، والإصدارات الأقدم من Safari وAndroid لا توفّر قفلًا يُطلَب أصلًا.",
+          },
+          {
+            symptom: "قبل القبول، يحذّر الهاتف من أنه سيحمل الدفعة كلها في الذاكرة.",
+            code: ["chrome://downloads   # في Chrome / وEdge لديه edge://downloads / وFirefox لديه about:downloads"],
+            fix: "لا تملك متصفحات الهواتف واجهة File System Access، فتُجمَّع الدفعة في الذاكرة ويحذّر Relayium بعد نحو 256 MiB. وهذا الرقم عتبة تحذير حصيفة وليس حدًا صارمًا: أرسِل ملفات أقل في المرة الواحدة، أو أرسِل الملف الكبير في الاتجاه المعاكس إلى Chrome أو Edge على حاسوب يكتبه إلى القرص مباشرةً. وتأكّد مما وصل فعلًا من قائمة التنزيلات الخاصة بالمتصفح المُستقبِل — chrome://downloads في Chrome، وedge://downloads في Edge، وabout:downloads في Firefox.",
+          },
+          {
+            symptom: "عبر الشبكات، يُرفض رمز الاقتران الذي يكتبه الهاتف.",
+            code: ["https://relayium.com/cross-network   # تُظهر بطاقة الاقتران العدّ التنازلي وأي رفض للمُرحِّل"],
+            fix: "يعيش رمز الاقتران خمس دقائق، والجهاز الذي أنشأه وحده يحتاج حسابًا. أنشِئ رمزًا جديدًا واكتبه فورًا. وإن قالت البطاقة إن المُرحِّل لا يُمنح إلا للحسابات المُوثَّقة، فوثِّق بريد الطرف المُرسِل من لوحة الحساب أولًا — ولا يتأثر مسار نفس الشبكة أعلاه بذلك.",
+          },
+        ],
+      },
     },
     {
       heading: "لست على نفس الشبكة؟ استخدم رمز اقتران",
       body: [
-        "هاتفك على بيانات الجوال وحاسوبك على شبكة Wi-Fi المنزلية؟ لا بأس بذلك — بُني Relayium ليصل عبر الشبكات، لا على نفس الشبكة فقط.",
-        "بدلًا من الاكتشاف التلقائي، يحصل المُرسِل على رمز اقتران قصير (أو رابط الانضمام الذي يولّده) ويسجّل الدخول لتوليده — أما المُستقبِل فلا يحتاج إلى حساب أبدًا. أدخِل الرمز على الجهاز الآخر فيتصل الجهازان عبر مُرحِّل TURN مُشفَّر. هكذا صُمِّم المسار عبر الشبكات عن قصد: فبين شبكة الجوال وموجّه المنزل يتعذّر عادةً إيجاد مسار مباشر، ومحاولته أولًا تستهلك نحو عشرين ثانية قبل أن ينتهي الاتصال إلى المُرحِّل على أي حال — أما البدء منه مباشرةً فيُنشئ الاتصال في ثانية أو ثانيتين. وملفاتك مختومة من الطرف إلى الطرف قبل أن تغادر الجهاز المُرسِل، فلا ينقل المُرحِّل سوى نص مُشفَّر لا يستطيع قراءته. وإذا انقطع الاتصال في منتصف الطريق، يمكن استئناف النقل بدلًا من البدء من جديد. والرمز صالح خمس دقائق، فجهِّز الجهازين معًا قبل توليده.",
+        "هاتفك على بيانات الجوال وحاسوبك على شبكة Wi-Fi المنزلية؟ لا بأس بذلك — بُني Relayium ليصل عبر الشبكات، لا على نفس الشبكة فقط. غير أن غرفة رمز الاقتران واجهة منفصلة عن مساحة عمل جهاز قريب: فهي تحتفظ بعناصر التحكم الأقدم المنفصلة لكل جهاز، ولا يوجد فيها «فتح مساحة العمل» لتضغطه.",
+        "بدلًا من الاكتشاف التلقائي، يحصل المُرسِل على رمز اقتران قصير (أو رابط الانضمام الذي يولّده) ويسجّل الدخول لتوليده — أما المُستقبِل فلا يحتاج إلى حساب أبدًا. أدخِل الرمز على الجهاز الآخر فيتصل الجهازان عبر مُرحِّل TURN مُشفَّر. هكذا صُمِّم المسار عبر الشبكات عن قصد: فهو يسلك المُرحِّل من البداية، فلا يعتمد انعقاد الاتصال على إيجاد مسار مباشر عبر ما بين شبكة الجوال وموجّه المنزل من شبكات NAT وجدران حماية، وهي قد تمنع مثل هذا المسار. وملفاتك مختومة من الطرف إلى الطرف قبل أن تغادر الجهاز المُرسِل، فلا ينقل المُرحِّل سوى نص مُشفَّر لا يستطيع قراءته. وإذا انقطع الاتصال في منتصف الطريق، يمكن استئناف النقل بدلًا من البدء من جديد. والرمز صالح خمس دقائق، فجهِّز الجهازين معًا قبل توليده.",
       ],
     },
     {
@@ -555,7 +1038,7 @@ const ar = {
       },
       {
         q: "ما مدى سرعة النقل؟",
-        a: "على نفس شبكة Wi-Fi يتصل الجهازان مباشرةً، فتتحدد السرعة بشبكتك المحلية لا بأي خادم — عادةً بأقصى سرعة تسمح بها شبكة Wi-Fi لديك. أما عبر شبكات مختلفة فيجري النقل بحكم التصميم عبر مُرحِّل TURN مُشفَّر، فيعتمد على كلا اتصالَي الإنترنت وعلى تلك القفزة الإضافية؛ والمقابل أن الاتصال يقوم في ثانية أو ثانيتين بدل انتظار محاولات مباشرة نادرًا ما تسمح بها شبكات NAT عبر الشبكات.",
+        a: "على نفس شبكة Wi-Fi يتصل الجهازان مباشرةً، فتتحدد السرعة بشبكتك المحلية لا بأي خادم — عادةً بأقصى سرعة تسمح بها شبكة Wi-Fi لديك. أما عبر شبكات مختلفة فيجري النقل بحكم التصميم عبر مُرحِّل TURN مُشفَّر، فيعتمد على كلا اتصالَي الإنترنت وعلى تلك القفزة الإضافية؛ والمقابل أن انعقاد الاتصال لا يعتمد على إيجاد مسار مباشر عبر ما بينهما من شبكات NAT وجدران حماية، وهي قد تمنع مثل هذا المسار.",
       },
       {
         q: "هل من الآمن إرسال الملفات بهذه الطريقة؟",
@@ -585,19 +1068,88 @@ const es = {
       body: [
         "Esta es la vía más rápida: ambos dispositivos están en la misma red, así que se conectan directamente y la transferencia solo está limitada por tu Wi-Fi. No necesitas nada más que un navegador en cada dispositivo.",
       ],
-      bullets: [
-        "En el ordenador, abre relayium.com en cualquier navegador moderno (Chrome, Edge, Firefox o Safari).",
-        "En el teléfono, abre relayium.com también. En la misma red, los dos dispositivos se descubren automáticamente.",
-        "En el ordenador, arrastra los archivos directamente a la página, o haz clic para elegirlos — hasta 1.000 archivos por lote. Puedes soltar una carpeta entera y Relayium conserva su estructura.",
-        "Elige el teléfono como destino y empieza. El teléfono acepta y los archivos vuelan al otro lado. Activa la verificación avanzada (desactivada por omisión) si además quieres que ambos dispositivos muestren antes el mismo código de verificación de 6 dígitos (SAS) para compararlo.",
-        "En el teléfono, guarda los archivos recibidos. No hace falta cuenta para una transferencia en tiempo real como esta.",
+      prereqs: {
+        label: "Antes de empezar",
+        items: [
+          "El ordenador y el teléfono en la misma Wi-Fi, con un router que no separe a sus clientes. La indicación bajo la lista de dispositivos nombra el ajuste: «aislamiento de AP / aislamiento de clientes».",
+          "Un navegador en cada uno, con la página abierta mediante https://relayium.com/. La transferencia cifrada necesita HTTPS, y con http:// a secas la página lo dice en lugar de listar ningún dispositivo.",
+          "La pestaña del teléfono en primer plano durante toda la transferencia. Relayium pide un bloqueo de pantalla donde el navegador lo ofrece, lo que cubre que la pantalla se apague pero no que cambies de aplicación, y un navegador móvil puede frenar o incluso suspender una pestaña que pasa al fondo.",
+          "Ninguna cuenta en ninguno de los dos para una transferencia en la misma red. Iniciar sesión solo hace falta en el lado que envía, y solo cuando los dos están en redes distintas y hay que crear un código de emparejamiento.",
+        ],
+      },
+      steps: [
+        {
+          text: "En el ordenador, abre la página de transferencia en cualquier navegador moderno (Chrome, Edge, Firefox o Safari).",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Abre la misma página en el teléfono y compara la IP pública de la línea de estado en las dos pantallas. Una dirección coincidente es lo que mete a los dos dispositivos en una sala; un teléfono que se quedó calladamente en datos móviles muestra otra.",
+          code: ["Conectado · este dispositivo Pixel · IP pública 203.0.113.9"],
+        },
+        {
+          text: "En el ordenador, busca el teléfono bajo «Dispositivos cercanos», haz clic en su tarjeta y pulsa «Abrir espacio de trabajo». En un navegador actual esa es la única acción que ofrece la tarjeta, porque a partir de ahí archivos, carpetas y mensajes viajan todos por la única conexión cifrada que abre. Arrastrar archivos directamente sobre esa tarjeta también los envía, sin este paso.",
+        },
+        {
+          text: "El espacio de trabajo sustituye a la tarjeta. Para enviar, usa los controles bajo su encabezado: «Enviar archivos» para un lote de hasta 1.000, «Enviar una carpeta» para un árbol completo allí donde el navegador ofrece elegir carpetas, o escribe en el cuadro de mensaje — «Enter para una nueva línea · ⌘/Ctrl+Enter para enviar» — y pulsa «Enviar».",
+        },
+        {
+          text: "En el teléfono, lee la línea bajo la solicitud antes de aceptar — dice si el navegador preguntará dónde guardar o escribirá directamente en su carpeta de descargas —, después pulsa «Aceptar» y deja esa pestaña delante hasta que el contador llegue al último archivo del lote. Para comparar un código de verificación (SAS) antes de que se mueva un byte, activa «Verificación avanzada» en los dos dispositivos antes de empezar: viene desactivada y añade una comparación y un paso de aceptación, no el cifrado.",
+        },
       ],
+      success: {
+        label: "Qué se ve al terminar la transferencia",
+        body: [
+          "A esas alturas la tarjeta del teléfono ya no está — el espacio de trabajo ocupó su lugar —, así que el estado se lee en el encabezado del espacio de trabajo: el dispositivo al que estás conectado, un estado de enlace «Conectado» y una única etiqueta de ruta que marca «Directo por LAN». El contador de archivos termina en el último archivo del lote en las dos pantallas.",
+          "Después comprueba el archivo, no la página. Dónde aterriza lo decide el navegador del teléfono: Chrome y Firefox en Android lo dejan en su propia lista de descargas — chrome://downloads y about:downloads respectivamente —, y Safari en iOS en la carpeta Descargas que puedes abrir en la app Archivos.",
+        ],
+        code: ["Conectado a Pixel · Conectado · Directo por LAN\nArchivo 1/1"],
+      },
+      bullets: [
+        "Una sala de la misma red acoge a todo dispositivo que haya abierto la página desde esa red, así que una tableta o un segundo portátil junto al teléfono es normal.",
+        "El tope de 1.000 archivos es por lote y no por sesión, de modo que un árbol muy grande pasa en varias tandas sin reconectar.",
+      ],
+    },
+    {
+      heading: "Cuando el teléfono no aparece, o la transferencia se detiene",
+      body: [
+        "Normalmente es el teléfono el que se explica: está en una red distinta de la que creías, su pestaña pasó al fondo, o su navegador no puede sostener lo que se le pide. Son las primeras comprobaciones habituales y no la lista completa, y cada una se resuelve con algo que ya está en pantalla en lugar de adivinando.",
+      ],
+      troubleshooting: {
+        label: "Síntoma, comprobación, solución",
+        items: [
+          {
+            symptom: "El teléfono nunca aparece bajo «Dispositivos cercanos» en el ordenador.",
+            code: ["https://relayium.com/   # compara la IP pública de la línea de estado en las dos pantallas"],
+            fix: "Dos direcciones IP públicas distintas son dos salas. Que el teléfono se haya quedado calladamente en datos móviles es un motivo frecuente; que una VPN o iCloud Private Relay lo saquen por otra dirección es otro, y no son los únicos. Si estás dispuesto a cambiarlos: conéctalo a la Wi-Fi, corta la VPN o desactiva Private Relay solo para esa red, y recarga https://relayium.com/ en el teléfono. Si prefieres dejarlos puestos, un código de emparejamiento en https://relayium.com/cross-network llega al teléfono sin tocar ninguno de los dos ajustes, y va cifrado de extremo a extremo igual.",
+          },
+          {
+            symptom: "Los dos dispositivos muestran la misma IP pública y las tarjetas siguen sin aparecer.",
+            code: ["https://relayium.com/   # la indicación bajo la lista de dispositivos nombra el ajuste del router"],
+            fix: "El router separa a sus propios clientes, algo que las Wi-Fi de hotel y de invitados hacen a menudo de fábrica. Desactiva «aislamiento de AP / aislamiento de clientes», o usa un código de emparejamiento en https://relayium.com/cross-network cuando el router no sea tuyo.",
+          },
+          {
+            symptom: "La transferencia empieza y luego se para o falla después de cambiar de aplicación en el teléfono.",
+            code: ["https://relayium.com/   # en el teléfono, la pestaña de Relayium tiene que ser la de delante"],
+            fix: "Un navegador móvil puede frenar o incluso suspender una pestaña en segundo plano, y mientras lo hace no se mueve ningún byte. El vigilante de atascos de Relayium concede una ventana nueva al volver al primer plano en vez de fallar al instante, pero la solución es dejar la pestaña delante: el bloqueo que Relayium pide solo cubre que la pantalla se apague y no compra ejecución en segundo plano, y los Safari y Android antiguos no ofrecen ninguno que pedir.",
+          },
+          {
+            symptom: "Antes de aceptar, el teléfono avisa de que tiene que sostener todo el lote en memoria.",
+            code: ["chrome://downloads   # en Chrome; Edge tiene edge://downloads y Firefox about:downloads"],
+            fix: "Los navegadores de teléfono no tienen la API File System Access, así que el lote se monta en memoria y Relayium avisa a partir de unos 256 MiB. Esa cifra es un umbral de aviso prudente y no un tope duro: manda menos archivos de una vez, o manda el archivo grande en el otro sentido, a un Chrome o Edge de ordenador que lo escribe directamente en el disco. Comprueba qué llegó de verdad en la lista de descargas del propio navegador receptor — chrome://downloads en Chrome, edge://downloads en Edge, about:downloads en Firefox.",
+          },
+          {
+            symptom: "Entre redes distintas, el código de emparejamiento que teclea el teléfono es rechazado.",
+            code: ["https://relayium.com/cross-network   # la tarjeta de emparejamiento muestra la cuenta atrás y el rechazo del retransmisor"],
+            fix: "Un código de emparejamiento vive cinco minutos, y solo el dispositivo que lo creó necesita cuenta. Genera uno nuevo y tecléalo enseguida. Si la tarjeta dice que el retransmisor solo se entrega a cuentas verificadas, verifica antes la dirección de correo de quien envía desde el panel de la cuenta: el flujo en la misma red de arriba no depende de eso.",
+          },
+        ],
+      },
     },
     {
       heading: "¿No están en la misma red? Usa un código de emparejamiento",
       body: [
-        "¿Tu teléfono va con datos móviles y tu PC con la Wi-Fi de casa? No pasa nada — Relayium está hecho para llegar entre redes, no solo dentro de la misma.",
-        "En lugar del descubrimiento automático, el remitente obtiene un código de emparejamiento corto (o el enlace de unión que genera) e inicia sesión para generarlo — la persona que recibe nunca necesita una cuenta. Introduce el código en el otro dispositivo y los dos se conectan a través de un retransmisor TURN cifrado. Así está pensada a propósito la vía entre redes: entre una red móvil y el router de casa casi nunca se encuentra una ruta directa, e intentarla primero gastaría unos veinte segundos antes de que la conexión acabara igualmente en el retransmisor — empezando por él, queda establecida en uno o dos segundos. Tus archivos van sellados de extremo a extremo antes de salir del dispositivo emisor, así que el retransmisor solo mueve texto cifrado que no puede leer. Si la conexión se corta a medias, la transferencia puede reanudarse en lugar de empezar de nuevo. El código vale cinco minutos, así que ten los dos dispositivos a mano antes de generarlo.",
+        "¿Tu teléfono va con datos móviles y tu PC con la Wi-Fi de casa? No pasa nada — Relayium está hecho para llegar entre redes, no solo dentro de la misma. Eso sí, una sala con código de emparejamiento es una superficie distinta de un espacio de trabajo con un dispositivo cercano: conserva los controles anteriores separados por dispositivo, así que allí no hay ningún «Abrir espacio de trabajo» que pulsar.",
+        "En lugar del descubrimiento automático, el remitente obtiene un código de emparejamiento corto (o el enlace de unión que genera) e inicia sesión para generarlo — la persona que recibe nunca necesita una cuenta. Introduce el código en el otro dispositivo y los dos se conectan a través de un retransmisor TURN cifrado. Así está pensada a propósito la vía entre redes: toma el retransmisor desde el principio, de modo que la conexión no depende de encontrar una ruta directa a través de los NAT y cortafuegos que hay entre una red móvil y el router de casa, que pueden impedirla. Tus archivos van sellados de extremo a extremo antes de salir del dispositivo emisor, así que el retransmisor solo mueve texto cifrado que no puede leer. Si la conexión se corta a medias, la transferencia puede reanudarse en lugar de empezar de nuevo. El código vale cinco minutos, así que ten los dos dispositivos a mano antes de generarlo.",
       ],
     },
     {
@@ -636,7 +1188,7 @@ const es = {
       },
       {
         q: "¿Qué velocidad tiene la transferencia?",
-        a: "En la misma Wi-Fi los dos dispositivos se conectan directamente, así que la velocidad la limita tu red local y no un servidor — normalmente tan rápido como lo permita tu Wi-Fi. Entre redes distintas la transferencia va por diseño a través de un retransmisor TURN cifrado, así que depende de ambas conexiones a internet más ese salto extra; a cambio, la conexión se establece en uno o dos segundos en vez de esperar intentos directos que los NAT entre redes rara vez permiten.",
+        a: "En la misma Wi-Fi los dos dispositivos se conectan directamente, así que la velocidad la limita tu red local y no un servidor — normalmente tan rápido como lo permita tu Wi-Fi. Entre redes distintas la transferencia va por diseño a través de un retransmisor TURN cifrado, así que depende de ambas conexiones a internet más ese salto extra; a cambio, la conexión no depende de encontrar una ruta directa a través de los NAT y cortafuegos intermedios, que pueden impedirla.",
       },
       {
         q: "¿Es seguro enviar archivos así?",
@@ -666,19 +1218,88 @@ const pt = {
       body: [
         "Este é o caminho mais rápido: os dois dispositivos estão na mesma rede, então se conectam diretamente e a transferência é limitada apenas pela sua rede Wi-Fi. Você não precisa de nada além de um navegador em cada dispositivo.",
       ],
-      bullets: [
-        "No computador, abra relayium.com em qualquer navegador moderno (Chrome, Edge, Firefox ou Safari).",
-        "No celular, abra relayium.com também. Na mesma rede, os dois dispositivos se descobrem automaticamente.",
-        "No computador, arraste os arquivos direto para a página, ou clique para escolhê-los — até 1.000 arquivos por lote. Você pode soltar uma pasta inteira e o Relayium mantém a estrutura dela.",
-        "Escolha o celular como destino e comece. O celular aceita e os arquivos voam para o outro lado. Ative a verificação avançada (desligada por padrão) se você também quiser que os dois dispositivos mostrem antes o mesmo código de verificação de 6 dígitos (SAS) para comparar.",
-        "No celular, salve os arquivos recebidos. Nenhuma conta é necessária para uma transferência em tempo real como esta.",
+      prereqs: {
+        label: "Antes de começar",
+        items: [
+          "O computador e o celular na mesma Wi-Fi, com um roteador que não separe os próprios clientes. A dica abaixo da lista de dispositivos nomeia a configuração: “isolamento de AP / isolamento de clientes”.",
+          "Um navegador em cada um, com a página aberta por https://relayium.com/. A transferência criptografada exige HTTPS, e em http:// puro a página diz isso em vez de listar qualquer dispositivo.",
+          "A aba do celular mantida à frente durante toda a transferência. O Relayium pede um bloqueio de tela onde o navegador oferece um, o que cobre a tela apagar mas não a troca para outro aplicativo, e um navegador de celular pode limitar ou até suspender uma aba que vai para o segundo plano.",
+          "Nenhuma conta em nenhum dos dois para uma transferência na mesma rede. Fazer login só passa a ser necessário para quem envia, e apenas quando os dois estão em redes diferentes e um código de emparelhamento precisa ser criado.",
+        ],
+      },
+      steps: [
+        {
+          text: "No computador, abra a página de transferência em qualquer navegador moderno (Chrome, Edge, Firefox ou Safari).",
+          code: ["https://relayium.com/"],
+        },
+        {
+          text: "Abra a mesma página no celular e compare o IP público da linha de status nas duas telas. Um endereço igual é o que coloca os dois dispositivos em uma sala; um celular que ficou quietinho nos dados móveis mostra outro.",
+          code: ["Conectado · este dispositivo Pixel · IP público 203.0.113.9"],
+        },
+        {
+          text: "No computador, encontre o celular em “Dispositivos próximos”, clique no cartão dele e pressione “Abrir área de trabalho”. Em um navegador atual essa é a única ação que o cartão oferece, porque a partir daí arquivos, pastas e mensagens passam todos pela única conexão criptografada que ela abre. Arrastar arquivos direto para aquele cartão também os envia, sem essa etapa.",
+        },
+        {
+          text: "A área de trabalho toma o lugar do cartão. Para enviar, use os controles abaixo do cabeçalho dela: “Enviar arquivos” para um lote de até 1.000, “Enviar uma pasta” para uma árvore inteira onde o navegador oferece escolher pastas, ou digite na caixa de mensagem — “Enter para uma nova linha · ⌘/Ctrl+Enter para enviar” — e pressione “Enviar”.",
+        },
+        {
+          text: "No celular, leia a linha abaixo do pedido antes de aceitar — ela diz se o navegador vai perguntar onde salvar ou gravar direto na pasta de downloads dele —, depois toque em “Aceitar” e deixe essa aba à frente até o contador de arquivos chegar ao último arquivo do lote. Para comparar um código de verificação (SAS) antes de qualquer byte se mover, ligue a “Verificação avançada” nos dois dispositivos antes de começar: ela vem desligada e acrescenta uma comparação e uma etapa de aceite, não a criptografia.",
+        },
       ],
+      success: {
+        label: "Como é uma transferência concluída",
+        body: [
+          "A essa altura o cartão do celular já não existe — a área de trabalho ocupou o lugar dele —, então leia o estado no cabeçalho da área de trabalho: o dispositivo a que você está conectado, um estado de vínculo “Conectado” e um único selo de caminho indicando “LAN direto”. O contador de arquivos termina no último arquivo do lote nas duas telas.",
+          "Depois confira o arquivo, não a página. Onde ele cai é decisão do navegador do celular: Chrome e Firefox no Android colocam na própria lista de downloads — chrome://downloads e about:downloads respectivamente —, e o Safari no iOS coloca na pasta Downloads que você abre no app Arquivos.",
+        ],
+        code: ["Conectado a Pixel · Conectado · LAN direto\nArquivo 1/1"],
+      },
+      bullets: [
+        "Uma sala da mesma rede acomoda todo dispositivo que abriu a página a partir daquela rede, então um tablet ou um segundo notebook ao lado do celular é normal.",
+        "O limite de 1.000 arquivos é por lote, não por sessão, então uma árvore muito grande passa em várias remessas sem reconectar.",
+      ],
+    },
+    {
+      heading: "Quando o celular não aparece, ou a transferência para",
+      body: [
+        "Normalmente é o celular que se explica: está em uma rede diferente da que você imaginava, a aba dele foi para o segundo plano, ou o navegador dele não consegue segurar o que foi pedido. Essas são as primeiras verificações comuns, não a lista completa, e cada uma se decide por algo que já está na tela em vez de por adivinhação.",
+      ],
+      troubleshooting: {
+        label: "Sintoma, verificação, correção",
+        items: [
+          {
+            symptom: "O celular nunca aparece em “Dispositivos próximos” no computador.",
+            code: ["https://relayium.com/   # compare o IP público da linha de status nas duas telas"],
+            fix: "Dois endereços IP públicos diferentes são duas salas. Um celular que ficou quietinho nos dados móveis é um motivo comum; uma VPN ou o iCloud Private Relay fazendo a saída por outro endereço é outro, e não são os únicos. Se você estiver disposto a mudá-los: entre na Wi-Fi, desligue a VPN ou desative o Private Relay só para aquela rede, e recarregue https://relayium.com/ no celular. Se preferir deixá-los ligados, um código de emparelhamento em https://relayium.com/cross-network alcança o celular sem tocar em nenhuma das duas configurações, e é criptografado de ponta a ponta do mesmo jeito.",
+          },
+          {
+            symptom: "Os dois dispositivos mostram o mesmo IP público e os cartões continuam sem aparecer.",
+            code: ["https://relayium.com/   # a dica abaixo da lista de dispositivos nomeia a configuração do roteador"],
+            fix: "O roteador está separando os próprios clientes, o que Wi-Fi de hotel e de visitantes costuma fazer de fábrica. Desative “isolamento de AP / isolamento de clientes”, ou use um código de emparelhamento em https://relayium.com/cross-network quando o roteador não for seu para mexer.",
+          },
+          {
+            symptom: "A transferência começa e depois trava ou falha quando você troca de aplicativo no celular.",
+            code: ["https://relayium.com/   # no celular, a aba do Relayium precisa ser a da frente"],
+            fix: "Um navegador de celular pode limitar ou até suspender uma aba em segundo plano, e enquanto faz isso nenhum byte se move. O vigia de travamento do Relayium concede uma janela nova depois que a página volta à frente em vez de falhar na hora, mas a solução é deixar a aba à frente: o bloqueio que o Relayium pede só cobre a tela apagar e não compra execução em segundo plano, e Safari e Android antigos não oferecem nenhum para pedir.",
+          },
+          {
+            symptom: "Antes de você aceitar, o celular avisa que precisa segurar o lote inteiro na memória.",
+            code: ["chrome://downloads   # no Chrome; o Edge tem edge://downloads e o Firefox about:downloads"],
+            fix: "Navegadores de celular não têm a API File System Access, então o lote é montado na memória e o Relayium avisa acima de mais ou menos 256 MiB. Esse número é um limiar de aviso cauteloso e não um teto rígido: mande menos arquivos por vez, ou mande o arquivo grande no sentido contrário, para um Chrome ou Edge de computador que grava direto no disco. Confirme o que realmente chegou na lista de downloads do próprio navegador que recebe — chrome://downloads no Chrome, edge://downloads no Edge, about:downloads no Firefox.",
+          },
+          {
+            symptom: "Entre redes diferentes, o código de emparelhamento digitado no celular é recusado.",
+            code: ["https://relayium.com/cross-network   # o cartão de emparelhamento mostra a contagem e a recusa do retransmissor"],
+            fix: "Um código de emparelhamento vive cinco minutos, e só o dispositivo que o criou precisa de conta. Gere um novo e digite na hora. Se o cartão disser que o retransmissor só é entregue a contas verificadas, verifique primeiro o e-mail de quem envia no painel da conta: o fluxo na mesma rede acima não depende disso.",
+          },
+        ],
+      },
     },
     {
       heading: "Não estão na mesma rede? Use um código de emparelhamento",
       body: [
-        "Seu celular está no dados móveis e seu PC na rede Wi-Fi de casa? Tudo bem — o Relayium foi feito para alcançar entre redes, não só dentro da mesma.",
-        "Em vez da descoberta automática, o remetente recebe um código de emparelhamento curto (ou o link de entrada que ele gera) e faz login para gerá-lo — quem recebe nunca precisa de conta. Digite o código no outro dispositivo e os dois se conectam por um retransmissor TURN criptografado. O caminho entre redes foi pensado assim de propósito: entre uma rede móvel e o roteador de casa quase nunca se acha uma rota direta, e tentá-la primeiro gastaria uns vinte segundos antes de a conexão terminar no retransmissor de qualquer forma — começando por ele, ela sobe em um ou dois segundos. Seus arquivos são selados de ponta a ponta antes de deixar o dispositivo que envia, então o retransmissor só move texto cifrado que não consegue ler. Se a conexão cair no meio, a transferência pode ser retomada em vez de recomeçar. O código vale cinco minutos, então deixe os dois aparelhos à mão antes de gerar um.",
+        "Seu celular está no dados móveis e seu PC na rede Wi-Fi de casa? Tudo bem — o Relayium foi feito para alcançar entre redes, não só dentro da mesma. Só que uma sala com código de emparelhamento é uma superfície separada de uma área de trabalho com um dispositivo próximo: ela mantém os controles anteriores separados por dispositivo, então não há nenhum “Abrir área de trabalho” para pressionar ali.",
+        "Em vez da descoberta automática, o remetente recebe um código de emparelhamento curto (ou o link de entrada que ele gera) e faz login para gerá-lo — quem recebe nunca precisa de conta. Digite o código no outro dispositivo e os dois se conectam por um retransmissor TURN criptografado. O caminho entre redes foi pensado assim de propósito: ele usa o retransmissor desde o início, então a conexão não depende de encontrar uma rota direta através dos NATs e firewalls que existem entre uma rede móvel e o roteador de casa, que podem impedi-la. Seus arquivos são selados de ponta a ponta antes de deixar o dispositivo que envia, então o retransmissor só move texto cifrado que não consegue ler. Se a conexão cair no meio, a transferência pode ser retomada em vez de recomeçar. O código vale cinco minutos, então deixe os dois aparelhos à mão antes de gerar um.",
       ],
     },
     {
@@ -717,7 +1338,7 @@ const pt = {
       },
       {
         q: "Qual é a velocidade da transferência?",
-        a: "Na mesma rede Wi-Fi os dois dispositivos se conectam diretamente, então a velocidade é limitada pela sua rede local e não por um servidor — normalmente tão rápido quanto sua rede Wi-Fi permitir. Entre redes diferentes a transferência passa, por decisão de projeto, por um retransmissor TURN criptografado, então depende das duas conexões de internet mais esse salto extra; em troca, a conexão sobe em um ou dois segundos em vez de esperar tentativas diretas que os NATs entre redes raramente permitem.",
+        a: "Na mesma rede Wi-Fi os dois dispositivos se conectam diretamente, então a velocidade é limitada pela sua rede local e não por um servidor — normalmente tão rápido quanto sua rede Wi-Fi permitir. Entre redes diferentes a transferência passa, por decisão de projeto, por um retransmissor TURN criptografado, então depende das duas conexões de internet mais esse salto extra; em troca, a conexão não depende de encontrar uma rota direta através dos NATs e firewalls no meio, que podem impedi-la.",
       },
       {
         q: "É seguro enviar arquivos assim?",
@@ -735,6 +1356,6 @@ const pt = {
 export default {
   slug: "how-to/send-files-pc-to-phone-wirelessly",
   published: "2026-07-03",
-  updated: "2026-07-31",
+  updated: "2026-08-05",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

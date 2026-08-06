@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="クラウドを使わずに大きなファイルを送る方法" />
     <meta name="twitter:description" content="大きな動画やプロジェクトアーカイブにはエンドツーエンド暗号化ダウンロードリンクを作り、相手が後で取得できるようにします。双方がオンラインを保てる場合はリアルタイムも選べます。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"クラウドを使わずに大きなファイルを送る方法","description":"大きな動画やプロジェクトアーカイブにはエンドツーエンド暗号化ダウンロードリンクを作り、相手が後で取得できるようにします。双方がオンラインを保てる場合はリアルタイムも選べます。","inLanguage":"ja","datePublished":"2026-07-03","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/how-to/send-large-files-without-cloud/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"クラウドを使わずに大きなファイルを送る方法"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"送れるファイルの最大サイズは？","acceptedAnswer":{"@type":"Answer","text":"大きなファイルには保存型ダウンロードリンクを使ってください。1ファイル上限と容量枠はアップロード前に表示されます。リアルタイムにはサーバー側上限がなく、パソコン版 Chrome／Edge はディスクへ流せますが、双方のページを開いたままにする必要があります。Firefox／Safari のリアルタイム受信はメモリに保持され、約256 MBを超えると保守的な警告を表示します。"}},{"@type":"Question","name":"転送が中断されたらどうなりますか？","acceptedAnswer":{"@type":"Answer","text":"双方のページが動作中なら、一時的な接続切れは保存済みチェックポイントから再開できます。ページを閉じる／再読み込みする、または App セッションを終了するとライブ転送は終了します。保存リンクでは受信者のオンラインは不要ですが、送信側はアップロード完了までページを開く必要があります。"}},{"@type":"Question","name":"大きなファイルでプライバシーはどう守られますか？","acceptedAnswer":{"@type":"Answer","text":"リアルタイム転送は X25519 の鍵交換とチャンクごとの AES-256-GCM でエンドツーエンドに暗号化され、鍵はどのサーバーにも届きません。高度な検証（既定はオフ）をオンにすると両端末が6桁の検証コードを表示します。各ファイルは SHA-256 で検証します。同じ LAN の WebRTC は直接接続し、ネットワークをまたぐブラウザは設計上 TURN を使用します。リレーは暗号文を運ぶだけで読み取りも復号もできません。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"クラウドを使わずに大きなファイルを送る方法","description":"大きな動画やプロジェクトアーカイブにはエンドツーエンド暗号化ダウンロードリンクを作り、相手が後で取得できるようにします。双方がオンラインを保てる場合はリアルタイムも選べます。","inLanguage":"ja","datePublished":"2026-07-03","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/how-to/send-large-files-without-cloud/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"クラウドを使わずに大きなファイルを送る方法"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"送れるファイルの最大サイズは？","acceptedAnswer":{"@type":"Answer","text":"大きなファイルには保存型ダウンロードリンクを使ってください。1ファイル上限と容量枠はアップロード前に表示されます。リアルタイムにはサーバー側上限がなく、パソコン版 Chrome／Edge はディスクへ流せますが、双方のページを開いたままにする必要があります。Firefox／Safari のリアルタイム受信はメモリに保持され、約256 MBを超えると保守的な警告を表示します。"}},{"@type":"Question","name":"転送が中断されたらどうなりますか？","acceptedAnswer":{"@type":"Answer","text":"双方のページが動作中なら、一時的な接続切れは保存済みチェックポイントから再開できます。ページを閉じる／再読み込みする、または App セッションを終了するとライブ転送は終了します。保存リンクでは受信者のオンラインは不要ですが、送信側はアップロード完了までページを開く必要があります。"}},{"@type":"Question","name":"大きなファイルでプライバシーはどう守られますか？","acceptedAnswer":{"@type":"Answer","text":"リアルタイム転送は X25519 の鍵交換とチャンクごとの AES-256-GCM でエンドツーエンドに暗号化され、鍵はどのサーバーにも届きません。高度な検証（既定はオフ）をオンにすると両端末が6桁の検証コードを表示します。各ファイルは SHA-256 で検証します。同じ LAN の WebRTC は直接接続し、ネットワークをまたぐブラウザは設計上 TURN を使用します。リレーは暗号文を運ぶだけで読み取りも復号もできません。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -65,6 +65,23 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -83,11 +100,12 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">最終更新: <bdi>2026-07-31</bdi></p>
+      <p class="updated">最終更新: <bdi>2026-08-05</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-large-files-without-cloud/">English</a><a href="/zh/how-to/send-large-files-without-cloud/">中文</a><a href="/ja/how-to/send-large-files-without-cloud/" aria-current="true">日本語</a><a href="/ko/how-to/send-large-files-without-cloud/">한국어</a><a href="/de/how-to/send-large-files-without-cloud/">Deutsch</a><a href="/fr/how-to/send-large-files-without-cloud/">Français</a><a href="/ar/how-to/send-large-files-without-cloud/">العربية</a><a href="/es/how-to/send-large-files-without-cloud/">Español</a><a href="/pt/how-to/send-large-files-without-cloud/">Português</a></nav>
       <p class="lead">20 GB の動画書き出しや重いプロジェクトのアーカイブは、まさにクラウドストレージが最も遅く感じる場面です。ファイル全体を一度アップロードして待ち、相手がもう一度ダウンロードします。2回の完全な転送に加え、ストレージ容量の制限も受けます。一度きりの受け渡しなのに、A から B へ送るだけのバイトのために、これだけの複製と待ち時間がかかります。</p>
       <p class="lead">大きなファイルでは、Relayium はエンドツーエンド暗号化された保存型ダウンロードリンクを推奨します。アップロード中に受信者がオンラインである必要はなく、後で取得できます。送信側はアップロード完了までページを開き、その後リンクは期限まで残ります。双方がオンラインを保てる場合、リアルタイムはライブの選択肢です。同じ LAN では WebRTC が直接接続し、ネットワーク間では TURN が暗号文を運びます。リアルタイム内容やサーバー側のコピーは残しません。</p>
       <h2>大きなファイルで保存リンクを既定にする理由</h2>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">始める前に</p><ul><li>送信側にサインイン済みのアカウント。保存ダウンロードリンクの作成には必要ですが、リンクを開く人は最後までサインインしません。</li><li>2つの別々の上限に対する余裕。アップロードページが選択ボタンの隣に表示する1ファイルあたりの上限と、プランの保存容量です。どちらも推測ではなくページから読み取ります。</li><li>受け入れられる保持期間。有効期限の一覧はプランが許す範囲だけを示し、サーバーも同じ上限を自分の側で防御的に適用します。つまり選べる期間はそのまま適用されます。そしてこれらのリンクはいずれもバックアップではありません。</li><li>アップロードが終わるまで開いたままの送信側ページ。終わったあとはリンクが独立して期限まで残るので、送信側はノートPCを閉じて構いません。受信側は自分のダウンロードを最後まで走らせる必要があります。</li></ul></div>
       <p>Relayium のダウンロードリンクが保存するのはブラウザで暗号化された暗号文だけです。アップロード中に受信者はオフラインでもよく、後で取得できます。完了後に送信側がページを閉じても、リンクは期限まで残ります。制約は画面に表示される1ファイル上限、容量枠、有効期限です。</p>
       <p>リアルタイムは双方が今すぐ準備できる場合の選択肢です。同じ LAN ではアカウントなしで WebRTC が直接接続し、ネットワーク間では TURN がエンドツーエンド暗号文を運び、コード作成側がサインインします。双方のページを開いたままにする必要があるため、時間のかかる大容量転送より、小さなファイルやテキストの素早い受け渡しに向きます。</p>
       <h2>リアルタイムモードにはサイズ上限がない</h2>
@@ -99,7 +117,14 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>接続性も同じように扱われます。同一ネットワーク内では転送はデバイス間で直接行われ、ネットワークをまたぐ場合は暗号化ストリームが TURN リレーを経由します。リレーが見るのは暗号文だけなので、この経路でもエンドツーエンド暗号化のままです。</p>
       <h2>今すぐ送る、または後で取れるリンクを残す</h2>
       <p>リアルタイム転送は双方が同時にオンラインであることが必要で、都合を合わせられるときに最適です。相手が今いない場合は、代わりに保存型のダウンロードリンクを作成できます。</p>
-      <p>保存リンクはゼロ知識です。ブラウザがアップロード前に AES-256-GCM で暗号化し、復号鍵は URL フラグメントにだけ存在します。作成には送信側のサインインが必要で、容量枠を使い、有効期限があります。ダウンロードページは Firefox や Safari でも Service Worker で単一ファイルをディスクへ流せます。大きなファイルほど保存リンクを先に選びます。アップロード中に受信者はオンライン不要ですが、送信側は完了までページを開きます。その後はどちらがノートPCを閉じても期限までリンクが残ります。ライブ経路は双方が机の前にいて、今すぐ届けたいときの手段です。</p>
+      <p>保存リンクはゼロ知識です。ブラウザがアップロード前に AES-256-GCM で暗号化し、復号鍵は URL フラグメントにだけ存在します。作成には送信側のサインインが必要で、容量枠を使い、有効期限があります（1回限りにもできます。その場合、ダウンロードが暗号文を受け取り始めた時点で1回分の枠が消費されます）。ダウンロードページは Firefox や Safari でも Service Worker で単一ファイルをディスクへ流せます。大きなファイルほど保存リンクを先に選びます。アップロード中に受信者はオンライン不要ですが、送信側は完了までページを開きます。その後は送信側のページを閉じてよく、受信者は期限までいつでも取得できます。ただし受信側のダウンロード自体は最後まで走らせる必要があります。ライブ経路は双方が机の前にいて、今すぐ届けたいときの手段です。</p>
+      <ol class="steps" data-block="steps"><li><p>非同期転送のページを開き、サインインします。</p><pre><code>https://relayium.com/offline-transfer</code></pre></li><li><p>ファイルを選ぶか、ドラッグして入れます。選択ボタンの隣の数値が、そのアカウントの現在の1ファイル上限です。アップロードが失敗してからではなく、始める前に大きいファイルと見比べてください。</p><pre><code>アップロードするファイルを選択
+最大 512 MiB</code></pre></li><li><p>「有効期限」を設定し、そのファイルが最初の取得より長く残るべきでないなら「閲覧後削除（初回ダウンロード完了後に削除）」をオンにします。1回分の枠はダウンロードが暗号文を受け取り始めた時点で消費されるため、途中で終わった試行でも使い切られることがあります。一覧はプランが許す範囲に絞られているので、見えない期間は不具合ではなくプランの制限です。</p><pre><code>有効期限
+1 日</code></pre></li><li><p>暗号化とアップロードの間はページを開いたままにします。終わるとリンクが現れ、その下に期限の日付が付きます。</p><pre><code>リンクを作成しました。相手に送ってダウンロードしてもらえます：
+https://relayium.com/d/8f3c2a1b#k=hQ2r…</code></pre></li><li><p>リンク全体を送ってください。#k= より後ろは復号鍵で、サーバーには決して届きません。そのフラグメントを失ったリンクは、当社を含め誰にも復号できません。</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">アップロードが終わったときの画面</p><p>ページにリンクと、そのリンクが保たれる期限の日付、そして「これは一時的な受け渡しでバックアップではない」という注意が表示されます。この時点からアップロードは、ページを開いたままかどうかに依存しません。</p><p>受信者側では、リンクが暗号化ダウンロードページを開き、ファイル数と合計サイズが示され、「ダウンロードして復号」は「ダウンロード完了 ✓」で終わります。どこに置かれるかは相手のブラウザが決めるので、確認する場所は相手のダウンロード一覧です。</p><pre><code>暗号化ダウンロードリンク
+ダウンロード完了 ✓</code></pre></div>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>ファイルが1ファイルのサイズ上限を超えているという理由でアップロードが拒否される。</dt><dd><pre><code>https://relayium.com/offline-transfer   # 選択ボタンが上限を「最大 &lt;サイズ&gt;」と表示する</code></pre><p>この上限はバッチ単位ではなく1ファイル単位なので、40 GB の書き出しをそれぞれ収まる分割ファイルにするのが道筋です。あるいは双方がオンラインのうちにリアルタイムで送ってください。何も保存しないため、サーバー側のサイズ制限がありません。</p></dd><dt>拒否の理由がファイルサイズではなく、その日の割り当てだった。</dt><dd><pre><code>https://relayium.com/offline-transfer   # 1日の枠による拒否はアップロードの流れが知らせる</code></pre><p>1日のアップロード枠は、1ファイル上限や保存容量とは別物で、知らせるのはアップロードの流れです。https://relayium.com/me が示すのはアカウントの月次使用量で、1日の枠の残量ではありません。古いアップロードが枠から外れて回復するのを待つ、可能ならプランを上げる、あるいは双方がオンラインのうちにリアルタイムで渡してください。リアルタイム転送は何も保存しないので、アップロード枠を消費しません。</p></dd><dt>有効期限の一覧に、期待していた7日や14日がない。</dt><dd><pre><code>https://relayium.com/pricing   # 保持期間はプランごとの数値</code></pre><p>一覧はプランの保持上限が許す期間だけを示し、サーバーも同じ上限を自分の側で防御的に適用します。そのため実際に選べる期間が黙って短くされることはありません。提示された中で最長のものを選ぶか、プランを変更してください。決めているのは上限で、ファイルではありません。</p></dd><dt>相手がリンクは無効、期限切れ、あるいはすでにダウンロードされて削除済みだと言う。</dt><dd><pre><code>https://relayium.com/d/8f3c2a1b#k=hQ2r…   # リンク1つ、id 1つ、鍵1つ</code></pre><p>3つはどれも同じ結論に至ります。もう取得できるものが残っていません。「閲覧後削除」がオンだったなら、ダウンロードが暗号文を受け取り始めた時点で1回分の枠は消費されています。途中で切れた試行でも、いくらかのバイトが届いていれば消費され、1バイトも届かなかった試行だけが枠を返します。もう一度アップロードして新しいリンクを送ってください。複数人に渡す必要があるときは、削除をオフにしてください。</p></dd><dt>ダウンロードページが、リクエストが多すぎる、または送信者の今月の転送量を使い切ったと表示する。</dt><dd><pre><code>https://relayium.com/me   # 今月の使用量は保存だけでなく転送も含む</code></pre><p>ファイルはまだあります。これは喪失ではなく計量です。数分待てばレート制限は解けますが、月間の転送量を使い切った場合は月替わり、プランの変更、または自分のノードが必要です。その間はリアルタイム転送がこれを完全に回避します。</p></dd></dl></div>
       <h2>よくある質問</h2>
       <h3>送れるファイルの最大サイズは？</h3>
       <p>大きなファイルには保存型ダウンロードリンクを使ってください。1ファイル上限と容量枠はアップロード前に表示されます。リアルタイムにはサーバー側上限がなく、パソコン版 Chrome／Edge はディスクへ流せますが、双方のページを開いたままにする必要があります。Firefox／Safari のリアルタイム受信はメモリに保持され、約256 MBを超えると保守的な警告を表示します。</p>

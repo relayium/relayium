@@ -67,7 +67,7 @@ describe("AirDrop alternative SAS explanation", () => {
     expect(Object.keys(article.langs)).toEqual(LANGS);
 
     for (const lang of LANGS) {
-      const detail = norm(article.langs[lang].sections[2].body[0]);
+      const detail = norm(article.langs[lang].sections[3].body[0]);
       expect(detail, `${lang}: key was not replaced`).toMatch(
         REQUIRED[lang].key,
       );
@@ -84,12 +84,12 @@ describe("AirDrop alternative SAS explanation", () => {
   });
 
   it("removes the vague English middle-person claim", () => {
-    expect(article.langs.en.sections[2].body[0]).not.toContain(
+    expect(article.langs.en.sections[3].body[0]).not.toContain(
       "confirm no one is sitting in the middle",
     );
   });
 
   it("records the material revision date", () => {
-    expect(article.updated).toBe("2026-07-31");
+    expect(article.updated).toBe("2026-08-05");
   });
 });

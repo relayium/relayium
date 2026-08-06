@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="기기 사이에서 텍스트, 링크, 명령 보내기" />
     <meta name="twitter:description" content="Relayium으로 텍스트, 링크, 명령과 여러 줄 코드를 기기 사이에 전송하세요. 종단간 암호화와 동시 온라인 전용이며, Relayium 서버는 메시지 본문이나 서버 측 기록을 저장하지 않지만 각 기기는 받은 텍스트를 보관할 수 있습니다." />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"기기 사이에서 텍스트, 링크, 명령 보내기","description":"Relayium으로 텍스트, 링크, 명령과 여러 줄 코드를 기기 사이에 전송하세요. 종단간 암호화와 동시 온라인 전용이며, Relayium 서버는 메시지 본문이나 서버 측 기록을 저장하지 않지만 각 기기는 받은 텍스트를 보관할 수 있습니다.","inLanguage":"ko","datePublished":"2026-07-30","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/how-to/send-text-between-devices/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"기기 사이에서 텍스트, 링크, 명령 보내기"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"Relayium이 메시지를 읽거나 복구할 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. 내용은 기기 사이에서 종단간 암호화되고 Relayium 서버는 본문이나 서버 측 기록을 저장하지 않습니다. 각 기기는 받은 텍스트를 보관할 수 있지만, 세션이 끝나면 Relayium에서 복구할 서버 사본은 없습니다."}},{"@type":"Question","name":"한쪽은 브라우저, 다른 쪽은 CLI를 쓸 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. 전송과 페어링 방식이 다릅니다. 브라우저 두 개 또는 CLI 두 개를 사용하세요."}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"기기 사이에서 텍스트, 링크, 명령 보내기","description":"Relayium으로 텍스트, 링크, 명령과 여러 줄 코드를 기기 사이에 전송하세요. 종단간 암호화와 동시 온라인 전용이며, Relayium 서버는 메시지 본문이나 서버 측 기록을 저장하지 않지만 각 기기는 받은 텍스트를 보관할 수 있습니다.","inLanguage":"ko","datePublished":"2026-07-30","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/how-to/send-text-between-devices/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"기기 사이에서 텍스트, 링크, 명령 보내기"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"Relayium이 메시지를 읽거나 복구할 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. 내용은 기기 사이에서 종단간 암호화되고 Relayium 서버는 본문이나 서버 측 기록을 저장하지 않습니다. 각 기기는 받은 텍스트를 보관할 수 있지만, 세션이 끝나면 Relayium에서 복구할 서버 사본은 없습니다."}},{"@type":"Question","name":"한쪽은 브라우저, 다른 쪽은 CLI를 쓸 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. 전송과 페어링 방식이 다릅니다. 브라우저 두 개 또는 CLI 두 개를 사용하세요."}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -65,6 +65,23 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -83,13 +100,19 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">최근 업데이트: <bdi>2026-07-31</bdi></p>
+      <p class="updated">최근 업데이트: <bdi>2026-08-05</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-text-between-devices/">English</a><a href="/zh/how-to/send-text-between-devices/">中文</a><a href="/ja/how-to/send-text-between-devices/">日本語</a><a href="/ko/how-to/send-text-between-devices/" aria-current="true">한국어</a><a href="/de/how-to/send-text-between-devices/">Deutsch</a><a href="/fr/how-to/send-text-between-devices/">Français</a><a href="/ar/how-to/send-text-between-devices/">العربية</a><a href="/es/how-to/send-text-between-devices/">Español</a><a href="/pt/how-to/send-text-between-devices/">Português</a></nav>
       <p class="lead">Relayium은 파일뿐 아니라 휴대폰의 URL, 다른 컴퓨터에서 쓸 명령, 여러 줄 코드처럼 클립보드에 맞는 내용도 옮깁니다. 메시지는 종단간 암호화되며 Relayium 서버는 본문이나 서버 측 기록을 저장하지 않지만, 각 기기는 받은 텍스트를 복사하거나 보관할 수 있습니다.</p>
       <p class="lead">브라우저와 CLI 모두 텍스트를 지원하지만 서로 다른 전송 방식이므로 상대 방식의 페어링 코드에 참여할 수 없습니다. 양쪽에서 같은 방식을 사용하세요.</p>
       <h2>브라우저: 온라인 기기에 메시지 보내기</h2>
-      <p>두 기기에서 relayium.com을 엽니다. 같은 네트워크에서는 자동으로 나타나고, 다른 네트워크에서는 교차 네트워크 페이지에서 브라우저 코드를 만든 뒤 다른 브라우저가 참여합니다.</p>
-      <ul><li>상대 카드에서 “메시지 보내기”를 선택합니다. 기본값에서는 양쪽 모두 곧바로 작성기가 열립니다. 어느 쪽이든 연결은 암호화됩니다.</li><li>텍스트를 입력하거나 붙여 넣고 ⌘/Ctrl+Enter로 보냅니다. 두 화면에 같은 6자리 확인 코드(SAS)를 띄워 대조하고 세션을 열기 전에 명시적인 수락 단계를 두려면 먼저 고급 검증을 켜세요.</li><li>세션이 열린 동안 양쪽에서 여러 메시지를 보내고 받은 메시지를 복사할 수 있습니다.</li></ul>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">시작하기 전에</p><ul><li>두 기기가 같은 시간에 온라인이고, 둘 다 브라우저에서 페이지를 열어 두어야 합니다. 받은편지함은 없습니다. 메시지는 양쪽이 열어 둔 세션 안에만 존재합니다.</li><li>양쪽에서 같은 전송 방식을 고르세요. 같은 네트워크에서는 준비할 것이 없고, 다른 네트워크에서는 브라우저 페어링 코드가 필요하며 만드는 쪽이 로그인하고 수명은 5분입니다.</li><li>한 메시지에 들어갈 분량, 즉 UTF-8 65,536바이트까지. 입력하는 동안 카운터가 올라가고, 넘으면 파일로 보내라고 알려줍니다.</li><li>도착한 것을 둘 자리. 받은 메시지는 열린 세션 안에 남으므로, 남기고 싶은 것은 세션이 끝나거나 페이지를 새로고침하기 전에 복사하세요.</li></ul></div>
+      <p>두 기기에서 relayium.com을 열고, 상황에 맞는 절차를 고르세요. 같은 네트워크에서는 상대가 “주변 기기”에 저절로 나타나고 그 카드가 주는 동작은 “작업 공간 열기” 하나뿐입니다. 작성기는 그 작업 공간 안, 파일과 폴더 첨부 옆에 있고 하나의 암호화된 연결을 함께 씁니다. 다른 네트워크에서는 별개의 절차입니다. 교차 네트워크 페이지에서 브라우저 코드를 만들고 다른 브라우저가 참여하며, 그 방은 예전 컨트롤을 그대로 두어 상대 카드에 여전히 “메시지 보내기”가 있습니다.</p>
+      <ol class="steps" data-block="steps"><li><p>두 기기에서 전송 페이지를 엽니다. 같은 네트워크 페이지는 상대를 알아서 찾아 주고, 서로 다른 네트워크라면 페어링 코드를 실시간 전송 페이지에서 씁니다.</p><pre><code>https://relayium.com/</code></pre></li><li><p>두 기기가 놓인 경로에 맞게 세션을 엽니다. 같은 네트워크: “주변 기기”에 있는 상대 카드에서 “작업 공간 열기”를 누르고, 작업 공간이 띄우는 작성기에 입력합니다. 다른 네트워크: 페어링 코드 방에서 상대 카드의 “메시지 보내기”를 누릅니다. 기본값에서는 양쪽 모두 곧바로 작성기가 열립니다. 어느 쪽이든 연결은 암호화됩니다.</p></li><li><p>텍스트를 입력하거나 붙여 넣습니다. 입력창 아래 카운터는 한 메시지 예산을 얼마나 썼는지 글자 수가 아니라 바이트로 보여줍니다. 이모지나 한글 한 글자가 여러 바이트를 쓰기 때문입니다.</p><pre><code>1,024 / 65,536 바이트</code></pre></li><li><p>⌘/Ctrl+Enter로 보냅니다. Enter만 누르면 줄바꿈이라, 여러 줄 스니펫을 붙여 넣고 한 번에 보낼 수 있습니다. 그 할당은 입력창 아래 안내에 적혀 있습니다.</p><pre><code>Enter 로 줄바꿈 · ⌘/Ctrl+Enter 로 전송</code></pre></li><li><p>세션을 열어 두면 양방향으로 여러 메시지를 보낼 수 있고, 남기고 싶은 것은 “복사”를 누르면 됩니다. 먼저 검증 코드(SAS)를 대조하려면 세션을 열기 전에 “고급 검증”을 켜세요. 늘어나는 것은 코드와 명시적인 수락 한 단계일 뿐 암호화가 아닙니다.</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">세션이 잘될 때의 화면</p><p>양쪽에서 세션이 열렸다고 표시되고, 보낸 메시지가 상대 기기의 기록에 나타나며, 바이트 카운터는 다음 메시지를 위해 0으로 돌아갑니다.</p><p>그 기록이 Relayium이 관여하는 유일한 사본입니다. 열려 있는 두 페이지 안에만 있어 새로고침하거나 세션이 끝나면 사라지고, “복사”는 그 기기의 클립보드에 텍스트를 올려 다른 앱도 읽을 수 있게 합니다.</p><pre><code>세션 연결됨
+1,024 / 65,536 바이트</code></pre></div>
+      <h2>메시지가 가지 않을 때</h2>
+      <p>텍스트는 파일 전송과 같은 연결을 쓰므로, 실패는 대개 메시지가 아니라 연결의 문제입니다. 예외는 둘뿐이고 구체적이며 둘 다 화면에 표시됩니다. 크기 상한을 넘긴 메시지, 그리고 한꺼번에 너무 많이 보내 닫힌 세션입니다.</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">증상, 확인, 조치</p><dl><dt>상대 기기가 끝내 나타나지 않아 메시지 세션을 열 카드가 없습니다.</dt><dd><pre><code>https://relayium.com/   # 두 기기의 상태 표시에 있는 공인 IP를 비교한다</code></pre><p>같은 네트워크 탐색은 접속해 온 공인 IP로 기기를 묶으므로, 주소가 다르면 방도 둘입니다. VPN이나 iCloud 비공개 릴레이를 끄거나 같은 Wi-Fi에 접속하세요. 정말로 다른 네트워크라면 https://relayium.com/cross-network 의 페어링 코드를 쓰세요.</p></dd><dt>작성기가 텍스트를 받지 않고 메시지가 너무 길다고 합니다.</dt><dd><pre><code>1,024 / 65,536 바이트   # 카운터는 글자 수가 아니라 UTF-8 바이트다</code></pre><p>한 메시지는 UTF-8 65,536바이트까지이고, 라틴 문자가 아닌 글자는 한 글자에 2~4바이트를 쓰므로 긴 한글이나 이모지가 많은 붙여넣기는 글자 수로 짐작하는 것보다 훨씬 앞에서 그 바이트 상한에 닿습니다. 나누어 보내거나 파일로 보내세요 — 작성기가 바로 그것을 제안합니다.</p></dd><dt>세션이 스스로 닫히며 메시지가 너무 많았다고 알립니다.</dt><dd><pre><code>https://relayium.com/   # 세션 줄이 실패가 아니라 종료라고 보고한다</code></pre><p>한쪽이 사람이 타이핑하는 양을 크게 넘는 메시지를 보내면 홍수 방지가 세션을 닫습니다. 스크립트나 눌린 키가 그렇게 만듭니다. 열었던 방식 그대로 세션을 다시 여세요 — 같은 네트워크면 주변 기기 카드에서 “작업 공간 열기”, 다른 네트워크면 페어링 코드 방에서 “메시지 보내기” — 그리고 남은 텍스트를 더 적고 큰 메시지로 보내세요.</p></dd><dt>잘되고 있었는데 새로고침하니 대화가 비어 있습니다.</dt><dd><pre><code>https://relayium.com/   # 이 페이지를 새로고침하면 기록 없는 새 세션이 된다</code></pre><p>이것은 결함이 아니라 설계입니다. Relayium은 서버 측 기록을 저장하지 않으므로 복원할 것도, 제출을 요구받을 서버 사본도 없습니다. 세션을 떠나기 전에 중요한 내용을 메모로 복사하세요. 기록의 수명은 그 페이지가 열려 있는 동안뿐입니다.</p></dd><dt>브라우저와 CLI가 서로의 코드로 참여하지 못합니다.</dt><dd><pre><code>relayium text 483920   # CLI 코드는 CLI끼리만 짝을 짓는다</code></pre><p>브라우저와 CLI의 텍스트 세션은 전송 방식과 페어링 절차가 달라, 한쪽이 발급한 여섯 자리 코드는 다른 쪽에 아무 의미가 없습니다. 브라우저 두 개를 쓰거나 양쪽 모두 CLI를 쓰세요. relayium text가 두 번째 컴퓨터에서 실행할 명령을 그대로 출력합니다.</p></dd></dl></div>
       <h2>CLI: 한쪽에서 코드를 발급하고 다른 쪽이 참여</h2>
       <p>한쪽 컴퓨터에서 코드 없이 relayium text를 실행합니다. 계정으로 6자리 코드를 발급하고, 다른 쪽이 실행할 명령을 그대로 출력한 뒤 상대가 참여할 때까지 세션에서 기다립니다. 임시 파일도, 따로 중지할 프로세스도 없습니다.</p>
       <p>다른 쪽 컴퓨터에서 그 코드로 relayium text를 실행합니다. 대화형 모드는 한 줄을 한 메시지로 보내며, 직접 요청하지 않는 한 코드를 대조하려고 멈추지 않습니다. 여러 줄이거나 바이트 그대로 보내야 하는 stdin은 파이프로 한 메시지로 보내면 되고, 파이프 실행에는 추가 플래그가 필요 없습니다.</p>

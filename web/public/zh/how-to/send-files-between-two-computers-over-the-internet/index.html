@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="如何通过互联网在两台电脑之间传文件" />
     <meta name="twitter:description" content="一步步教你用浏览器在两台电脑间传文件：同一局域网直连，跨网络则经 TURN 传送端到端加密密文；不用上传网盘，也不用安装软件。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"如何通过互联网在两台电脑之间传文件","description":"一步步教你用浏览器在两台电脑间传文件：同一局域网直连，跨网络则经 TURN 传送端到端加密密文；不用上传网盘，也不用安装软件。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/send-files-between-two-computers-over-the-internet/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"如何通过互联网在两台电脑之间传文件"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"这真的是点对点直连吗，会经过服务器吗？","acceptedAnswer":{"@type":"Answer","text":"在真正关键的那一点上，它就是点对点：文件从一个浏览器流向另一个浏览器，从不存储在服务器上。同一局域网内两个浏览器彼此直连；跨网络配对码传输则按设计使用 TURN。中继只转发端到端加密密文，无法读取或解密文件，也不保留服务器端实时内容副本或历史。"}},{"@type":"Question","name":"双方都需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。同一网络下，双方都不需要账号。跨网络时，发送方需要登录才能生成配对码——这是 Relayium 生成和管理配对码所必需的——但接收方始终无需账号，无论对方是输入配对码还是直接打开链接。"}},{"@type":"Question","name":"能跨不同网络甚至不同国家传输吗？","acceptedAnswer":{"@type":"Answer","text":"可以。配对码正是为这种情况设计的：两台不在同一局域网的电脑，无论各自身处世界哪个角落都能连上。这条路径走的是加密 TURN 中继而不是直连——在 NAT 和防火墙挡在中间时，它才是可靠连上的那条路，而且一两秒就能建立，不必去等那些几乎注定超时的直连尝试。"}},{"@type":"Question","name":"文件大小或数量有限制吗？","acceptedAnswer":{"@type":"Answer","text":"一批最多可以发送 1,000 个文件。服务器不设大小上限——限制取决于接收方浏览器能扛多大：桌面版 Chrome 或 Edge（流式写入磁盘）基本没有上限；Firefox 和 Safari 会把整批文件放在内存里，超过约 256 MB 时 Relayium 会先提示你。这个阈值是保守估计而非硬性天花板，真正的上限要看那台机器。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"如何通过互联网在两台电脑之间传文件","description":"一步步教你用浏览器在两台电脑间传文件：同一局域网直连，跨网络则经 TURN 传送端到端加密密文；不用上传网盘，也不用安装软件。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-08-05","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/how-to/send-files-between-two-computers-over-the-internet/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"如何通过互联网在两台电脑之间传文件"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"这真的是点对点直连吗，会经过服务器吗？","acceptedAnswer":{"@type":"Answer","text":"在真正关键的那一点上，它就是点对点：文件从一个浏览器流向另一个浏览器，从不存储在服务器上。同一局域网内两个浏览器彼此直连；跨网络配对码传输则按设计使用 TURN。中继只转发端到端加密密文，无法读取或解密文件，也不保留服务器端实时内容副本或历史。"}},{"@type":"Question","name":"双方都需要账号吗？","acceptedAnswer":{"@type":"Answer","text":"不需要。同一网络下，双方都不需要账号。跨网络时，发送方需要登录才能生成配对码——这是 Relayium 生成和管理配对码所必需的——但接收方始终无需账号，无论对方是输入配对码还是直接打开链接。"}},{"@type":"Question","name":"能跨不同网络甚至不同国家传输吗？","acceptedAnswer":{"@type":"Answer","text":"可以。配对码正是为这种情况设计的：两台不在同一局域网的电脑，无论各自身处世界哪个角落都能连上。这条路径走的是加密 TURN 中继而不是直连，而且是刻意如此：Relayium 选择走中继，好让穿越 NAT 和防火墙这件事不必依赖于是否存在一条可用的直连路径。"}},{"@type":"Question","name":"文件大小或数量有限制吗？","acceptedAnswer":{"@type":"Answer","text":"一批最多可以发送 1,000 个文件。Relayium 的服务器端不设大小上限，剩下的都是实际层面的限制：桌面版 Chrome 或 Edge 会把整批文件直接流式写入磁盘，此时约束来自浏览器本身、操作系统、磁盘剩余空间，以及这次实时会话能维持多久。Firefox 和 Safari 则把整批文件放在内存里，超过约 256 MB 时 Relayium 会先提示你——这个阈值是保守估计而非硬性天花板，真正的上限要看那台机器。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -65,6 +65,23 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -83,7 +100,7 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
+      <p class="updated">最近更新: <bdi>2026-08-05</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-between-two-computers-over-the-internet/">English</a><a href="/zh/how-to/send-files-between-two-computers-over-the-internet/" aria-current="true">中文</a><a href="/ja/how-to/send-files-between-two-computers-over-the-internet/">日本語</a><a href="/ko/how-to/send-files-between-two-computers-over-the-internet/">한국어</a><a href="/de/how-to/send-files-between-two-computers-over-the-internet/">Deutsch</a><a href="/fr/how-to/send-files-between-two-computers-over-the-internet/">Français</a><a href="/ar/how-to/send-files-between-two-computers-over-the-internet/">العربية</a><a href="/es/how-to/send-files-between-two-computers-over-the-internet/">Español</a><a href="/pt/how-to/send-files-between-two-computers-over-the-internet/">Português</a></nav>
       <p class="lead">给另一台电脑发文件，通常得先把它传到某个地方——网盘、邮件附件、聊天软件——然后指望对方能顺利取出来。Relayium 省掉了存储这一步：同一局域网内浏览器彼此直连；跨网络时则由 TURN 中继承载端到端加密密文，服务器端不保留实时内容副本或历史。</p>
       <p class="lead">本文覆盖两种情况——两台电脑在同一网络，以及两台电脑处于完全不同的网络（不同的家、不同的办公室、不同的国家）——并说明双方各自需要做什么。</p>
@@ -94,8 +111,16 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>如果两台电脑在同一 Wi-Fi 或局域网里，Relayium 会自动找到彼此——两边都打开 relayium.com 即可，双方都无需账号。</p>
       <p>如果两台电脑处于不同网络——比如你家里的台式机和同事在外地的笔记本——自动发现就没法跨越互联网了，这时 Relayium 改用一个短配对码。发送方需要登录才能生成这个码；接收方始终无需账号，无论是手动输入码还是直接打开它生成的链接。 配对码有效期 5 分钟，所以生成之前先把两台设备都准备好。</p>
       <h2>分步操作：跨互联网发送文件</h2>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">开始之前</p><ul><li>只有发送方的电脑需要已登录账号。生成配对码需要账号；用码或链接加入的那台电脑全程不用登录。</li><li>该账号的邮箱已验证。跨网络会话的中继只发给已验证的账号，被拒时配对卡片会明确写出原因。</li><li>两个人同时守在各自电脑前。配对码有效期 5 分钟，而且这是一次实时会话，不是先上传、对方稍后再来取。</li><li>一个能把六位数字或链接带外告诉对方的渠道——一通电话、一个聊天窗口、一条短信。</li></ul></div>
       <p>以下是两台电脑处于不同网络时的完整流程：</p>
-      <ul><li>在发送方的电脑上，打开 relayium.com 并登录。</li><li>选择要发送的文件或文件夹——每批最多 1,000 个文件。Relayium 会生成一个 6 位数字配对码（以及对应的加入链接/二维码）。</li><li>用任意方便的方式把这个码或链接告诉对方——念出来、发短信、贴到聊天窗口都行。</li><li>在接收方的电脑上，打开链接，或者打开 relayium.com 输入这个 6 位数字码。这一侧不需要登录。</li><li>之后传输会自动开始。如果你事先打开了「高级验证」（默认关闭），两边屏幕还会先显示同一段短校验码（SAS）供你核对——一致能确认密钥未被替换、两台电脑加入的是同一个端到端加密会话；它并不能证明密文走的是哪条网络路径——之后传输会自动开始。</li></ul>
+      <ol class="steps" data-block="steps"><li><p>在发送方的电脑上打开实时传输页面并登录。</p><pre><code>https://relayium.com/cross-network</code></pre></li><li><p>选择要发送的文件或文件夹——每批最多 1,000 个文件——然后生成配对码。卡片上会显示这六位数字、一个复制链接的按钮、一个二维码，以及一个倒计时。</p><pre><code>你的配对码 —— 念给对方
+483920
+配对码 4:52 后失效</code></pre></li><li><p>用任意方便的方式把这个码或链接告诉对方——念出来、发短信、贴到聊天窗口都行。链接的片段里带的就是同一个码，所以发哪个都一样。</p><pre><code>https://relayium.com/cross-network#c=483920</code></pre></li><li><p>在接收方的电脑上打开那个链接，或者打开同一个页面，输入这六位数字并按「连接」。这一侧不需要登录。</p><pre><code>https://relayium.com/cross-network</code></pre></li><li><p>对方加入后传输就开始了。让两个标签页都开着，直到文件计数走完：倒计时只管新设备能不能加入，它归零并不会掐断已经在跑的传输。开始前打开「高级验证」会多出一个可核对的校验码（SAS）——一致能确认密钥未被替换、两台电脑加入的是同一个端到端加密会话；它并不能证明密文走的是哪条网络路径。</p></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">传输成功时是什么样</p><p>发送方那行「等待对方加入…」会被已连接的卡片取代，卡片上的路径标签显示「中继」。在这里这是预期值，而不是故障：跨网络的浏览器会话本来就刻意走加密的 TURN 中继；只有当两台电脑其实处于同一网络时，你才会看到「局域网直连」。</p><p>随后两块屏幕上的文件计数都会走到这一批的最后一个文件，而文件本身就在请求下面那行所说的、接收方浏览器会放置的位置。</p><pre><code>中继
+文件 1/1</code></pre></div>
+      <h2>配对码被拒绝，或者传输中断时</h2>
+      <p>跨网络传输比同网络多几个活动部件——一个有寿命的码、一个账号、一份中继额度——而每一样出问题时，配对卡片都会写明是哪一样，而不是默默失败。所以先读那张卡片。</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、处理</p><dl><dt>接收方输入配对码后提示「配对码无效或已过期」。</dt><dd><pre><code>https://relayium.com/cross-network   # 发送方卡片上有实时倒计时</code></pre><p>要么距离生成已经过了 5 分钟，要么有一位数字输错了。在发送方电脑上重新生成一个码，让对方立刻输入；或者干脆把加入链接发过去，那样根本不用手动输入。</p></dd><dt>卡片提示中继只发给已验证的账号。</dt><dd><pre><code>https://relayium.com/cross-network   # 配对卡片会写明被拒的原因</code></pre><p>发送方的邮箱地址还没有验证。打开账户面板，用 Relayium 发出的那封邮件完成验证，然后重新生成一个配对码——旧的那个拿不到已经被拒绝过的中继。同网络传输和 CLI 都不受此影响。</p></dd><dt>卡片提示本月的中继流量已经用完。</dt><dd><pre><code>https://relayium.com/me   # 「本月用量」里能看到中继额度还剩多少</code></pre><p>在额度于下个月重置之前，跨网络的浏览器会话既无法建立也无法继续。想现在就发，可以在 https://relayium.com/offline-transfer 把文件传成一个下载链接、升级套餐，或者自己跑一个节点；无论哪种情况，同网络传输都照常可用。</p></dd><dt>传输传到一半停下，而且不再恢复。</dt><dd><pre><code>https://relayium.com/cross-network   # 两个标签页都必须还停在这个页面上</code></pre><p>这是一次实时会话，所以网络短暂中断后可以从断点继续，但关掉标签页或刷新页面就意味着会话结束，服务器上也没有可供续传的副本。请用新的配对码重新开始——如果对方没法一直在线，就改用 https://relayium.com/offline-transfer 上的异步下载链接。</p></dd><dt>传输能跑，但比同一网络下传同样的文件慢很多。</dt><dd><pre><code>https://relayium.com/cross-network   # 已连接卡片上的路径标签显示「中继」</code></pre><p>走中继的会话受两端互联网连接加上中继这一跳共同限制，所以它确实比局域网传输慢，而且没有哪个设置能改变这一点。如果这一批特别大，https://relayium.com/offline-transfer 上的下载链接是更从容的路线，因为它不要求双方同时在线。</p></dd></dl></div>
       <h2>跨网络：加密中继</h2>
       <p>同一网络下的两个浏览器彼此直连。跨网络时——企业防火墙和严格 NAT 经常挡住直连路径——Relayium 改用 TURN 中继来承载加密数据流，因此连接更可靠。</p>
       <p>中继只能看到密文：文件在离开发送方浏览器之前就已端到端加密（X25519 密钥交换加 AES-256-GCM），所以中继读不到内容，就跟互联网上随便一台电脑一样看不到。如果中途断线，传输会续传而不是从头再来。</p>
@@ -108,9 +133,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <h3>双方都需要账号吗？</h3>
       <p>不需要。同一网络下，双方都不需要账号。跨网络时，发送方需要登录才能生成配对码——这是 Relayium 生成和管理配对码所必需的——但接收方始终无需账号，无论对方是输入配对码还是直接打开链接。</p>
       <h3>能跨不同网络甚至不同国家传输吗？</h3>
-      <p>可以。配对码正是为这种情况设计的：两台不在同一局域网的电脑，无论各自身处世界哪个角落都能连上。这条路径走的是加密 TURN 中继而不是直连——在 NAT 和防火墙挡在中间时，它才是可靠连上的那条路，而且一两秒就能建立，不必去等那些几乎注定超时的直连尝试。</p>
+      <p>可以。配对码正是为这种情况设计的：两台不在同一局域网的电脑，无论各自身处世界哪个角落都能连上。这条路径走的是加密 TURN 中继而不是直连，而且是刻意如此：Relayium 选择走中继，好让穿越 NAT 和防火墙这件事不必依赖于是否存在一条可用的直连路径。</p>
       <h3>文件大小或数量有限制吗？</h3>
-      <p>一批最多可以发送 1,000 个文件。服务器不设大小上限——限制取决于接收方浏览器能扛多大：桌面版 Chrome 或 Edge（流式写入磁盘）基本没有上限；Firefox 和 Safari 会把整批文件放在内存里，超过约 256 MB 时 Relayium 会先提示你。这个阈值是保守估计而非硬性天花板，真正的上限要看那台机器。</p>
+      <p>一批最多可以发送 1,000 个文件。Relayium 的服务器端不设大小上限，剩下的都是实际层面的限制：桌面版 Chrome 或 Edge 会把整批文件直接流式写入磁盘，此时约束来自浏览器本身、操作系统、磁盘剩余空间，以及这次实时会话能维持多久。Firefox 和 Safari 则把整批文件放在内存里，超过约 256 MB 时 Relayium 会先提示你——这个阈值是保守估计而非硬性天花板，真正的上限要看那台机器。</p>
       <div class="ctacard">
         <p>在两台电脑上打开 Relayium，跨互联网发出你的第一个文件——不用上传到云端，不用安装，接收方也始终无需账号。</p>
         <a class="cta" href="/?lang=zh">立即试用 Relayium</a>
