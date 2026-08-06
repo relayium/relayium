@@ -77,16 +77,33 @@ final class AppShellUITests: XCTestCase {
         }
     }
 
-    /// ⌘, opens a settings window, and it is a SECOND window rather than a
-    /// replacement — the main window must survive it.
+    /// Settings opens as a SECOND window rather than a replacement — the main
+    /// window must survive it.
+    ///
+    /// Driven from the menu item rather than ⌘,. The first version of this test
+    /// used `typeKey(",", modifierFlags: .command)` and failed: the synthetic
+    /// keystroke never reached the app, so the assertion was measuring XCUITest
+    /// rather than the scene. Clicking the item tests the same thing — that a
+    /// `Settings` scene exists and opens — through the path a user actually
+    /// takes, and it additionally proves the item is in the app menu at all,
+    /// which is the placement a `Settings` scene is chosen for.
     func testSettingsOpensWithoutReplacingTheMainWindow() {
         let main = app.windows.firstMatch
         XCTAssertTrue(main.waitForExistence(timeout: 20))
-        app.typeKey(",", modifierFlags: .command)
+
+        let appMenu = app.menuBarItems.element(boundBy: 1)
+        XCTAssertTrue(appMenu.waitForExistence(timeout: 10))
+        appMenu.click()
+        let settingsItem = appMenu.menuItems["Settings…"]
+        XCTAssertTrue(settingsItem.waitForExistence(timeout: 10),
+                      "the app menu has no Settings item; a Settings scene creates one")
+        settingsItem.click()
+
         // Two windows: the shell and the settings scene.
         let twoWindows = NSPredicate(format: "count >= 2")
         expectation(for: twoWindows, evaluatedWith: app.windows, handler: nil)
-        waitForExpectations(timeout: 15)
+        waitForExpectations(timeout: 20)
+        XCTAssertTrue(main.exists, "opening settings must not close the main window")
     }
 
     /// Closing the window does not quit the app. This is the property the whole
