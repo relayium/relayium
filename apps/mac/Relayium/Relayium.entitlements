@@ -35,5 +35,24 @@
 	<array>
 		<string>$(AppIdentifierPrefix)com.relayium.shared</string>
 	</array>
+	<!-- The other half of the Share extension's hand-off. The extension copies
+	     what the user shared into this container; without the same entitlement
+	     here the app's `containerURL(forSecurityApplicationGroupIdentifier:)`
+	     returns nil and every shared draft is a copy of the user's files that
+	     nothing will ever show them.
+
+	     Written out rather than `$(TeamIdentifierPrefix)…` so it is the same
+	     literal `AppGroup.macOSIdentifier` holds and `MacSurfaceGuardTests`
+	     compares; a substitution would make the two impossible to check against
+	     each other without re-implementing Xcode's expansion in a test.
+
+	     NOT iOS's `group.com.relayium.app`. The macOS provisioning profiles
+	     authorize `group.com.relayium.shared` and the team-prefixed wildcard
+	     `7PVYUG4YQS.*` and never iOS's string, and Apple documents the macOS
+	     form of an App Group identifier as `<team>.<group>`. -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>7PVYUG4YQS.com.relayium.shared</string>
+	</array>
 </dict>
 </plist>

@@ -132,6 +132,10 @@ struct RelayiumApp: App {
         userDriverDelegate: nil
     )
     @NSApplicationDelegateAdaptor(TransferQuitGuard.self) private var quitGuard
+    /// Whether this app is frontmost. Read only to notice a return to `.active`,
+    /// which is when a draft the Share extension staged in the meantime becomes
+    /// collectable.
+    @Environment(\.scenePhase) private var scenePhase
     // Assigned in `init` rather than defaulted inline, because the sign-out
     // coordinator built there needs a reference to it: a property's wrapped
     // value cannot be read from `init`, so the object has to exist as a local
@@ -207,6 +211,17 @@ struct RelayiumApp: App {
     /// the main window — a view-scoped object would re-read the system on every
     /// open and lose a refusal the user has not yet read.
     @StateObject private var loginItem = LoginItemPreference(service: SystemLoginItem())
+    /// Drafts the Share extension left in the App Group.
+    ///
+    /// Not a `@StateObject`: it publishes nothing and holds no state a view
+    /// renders — it is asked a question on activation and answers with files.
+    /// App-scoped all the same, because the answer must be given once per
+    /// activation and not once per view that happens to be mounted.
+    ///
+    /// `makeSharedDraftStore()` is nil on an un-provisioned build, and the inbox
+    /// takes that in its stride: nothing can arrive, so nothing does, and the
+    /// rest of the app is unaffected.
+    private let sharedDrafts = SharedDraftInbox(store: AppEnvironment.makeSharedDraftStore())
 
     /// The strings live in a Swift-package resource bundle, while SwiftUI asks
     /// the app bundle which way to lay out the scene. macOS therefore kept an
@@ -326,6 +341,29 @@ struct RelayiumApp: App {
                 .environmentObject(lanDiscovery)
                 .environmentObject(nearbyReceive)
                 .task { await session.restore() }
+                // Files the Share extension staged while this app was closed or
+                // in the background.
+                //
+                // A Share extension may not open its containing app, so nothing
+                // pushes them here — the user opens Relayium and they are
+                // waiting. `scenePhase` rather than a one-shot `.task`, because
+                // the ordinary case is sharing from Finder while Relayium is
+                // already running, and that never re-runs a `.task`.
+                //
+                // They are handed to the SAME router an Open With uses, so a
+                // shared draft and an opened file take one path into the send
+                // flow instead of two that can disagree.
+                .onChange(of: scenePhase) { phase in
+                    guard phase == .active else { return }
+                    fileOpens.open(sharedDrafts.collect())
+                }
+                .task {
+                    // Also on first appearance: `scenePhase` does not deliver a
+                    // change for the state the scene starts in, so a draft
+                    // staged before a cold launch would otherwise wait for the
+                    // user to switch away and back.
+                    fileOpens.open(sharedDrafts.collect())
+                }
                 .task {
                     // Both idempotent, and both app-scoped rather than
                     // window-scoped: residency is what makes this Mac reachable,

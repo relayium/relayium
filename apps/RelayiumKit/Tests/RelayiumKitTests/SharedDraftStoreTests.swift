@@ -190,10 +190,24 @@ final class SharedDraftStoreTests: XCTestCase {
         XCTAssertEqual(SHARED_DRAFT_COPY_CHUNK, STORE_CHUNK_SIZE)
     }
 
-    /// The production identifier, exactly. A typo here is the failure that looks
-    /// like everything working.
+    /// The production identifiers, exactly, and the platform rule that picks
+    /// between them. A typo in either is the failure that looks like everything
+    /// working: the sheet stages a draft into one container and the app lists an
+    /// empty one.
+    ///
+    /// The two strings are deliberately different. macOS's provisioning profiles
+    /// authorize `group.com.relayium.shared` and `7PVYUG4YQS.*` — never iOS's
+    /// `group.com.relayium.app` — and Apple documents the macOS form as
+    /// team-prefixed. One shared string would therefore resolve to nil on every
+    /// Mac.
     func testTheAppGroupIdentifierIsExactAndFailsClosed() throws {
-        XCTAssertEqual(AppGroup.identifier, "group.com.relayium.app")
+        XCTAssertEqual(AppGroup.iOSIdentifier, "group.com.relayium.app")
+        XCTAssertEqual(AppGroup.macOSIdentifier, "7PVYUG4YQS.com.relayium.shared")
+        XCTAssertNotEqual(AppGroup.iOSIdentifier, AppGroup.macOSIdentifier)
+        // This suite compiles for macOS, so `identifier` must resolve there.
+        // Asserting the resolution rather than the string is what keeps the
+        // `#if` honest if either literal is edited.
+        XCTAssertEqual(AppGroup.identifier, AppGroup.macOSIdentifier)
 
         // No container means a refusal — with no fallback to a temporary
         // directory, Application Support, or this process's own container. A

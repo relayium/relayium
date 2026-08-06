@@ -9,10 +9,27 @@
 /* Begin PBXBuildFile section */
 		A100000000000000000000B2 /* RelayiumKit in Frameworks */ = {isa = PBXBuildFile; productRef = A100000000000000000000B1 /* RelayiumKit */; };
 		A100000000000000000000C2 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A100000000000000000000C1 /* Sparkle */; };
+		A100000000000000000000D6 /* RelayiumShareKit in Frameworks */ = {isa = PBXBuildFile; productRef = A100000000000000000000D5 /* RelayiumShareKit */; };
+		A100000000000000000000D7 /* RelayiumShare.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A100000000000000000000D1 /* RelayiumShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A100000000000000000000D8 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A100000000000000000000D7 /* RelayiumShare.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		A100000000000000000000A4 /* Relayium.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Relayium.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A100000000000000000000D1 /* RelayiumShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RelayiumShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -22,6 +39,13 @@
 				Info.plist,
 			);
 			target = A100000000000000000000A5 /* Relayium */;
+		};
+		A100000000000000000000D4 /* Exceptions for "RelayiumShare" folder in "RelayiumShare" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = A100000000000000000000D2 /* RelayiumShare */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -36,6 +60,16 @@
 			path = Relayium;
 			sourceTree = "<group>";
 		};
+		A100000000000000000000D3 /* RelayiumShare */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A100000000000000000000D4 /* Exceptions for "RelayiumShare" folder in "RelayiumShare" target */,
+			);
+			explicitFileTypes = {};
+			explicitFolders = ();
+			path = RelayiumShare;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -48,6 +82,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A100000000000000000000DD /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A100000000000000000000D6 /* RelayiumShareKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -55,6 +97,7 @@
 			isa = PBXGroup;
 			children = (
 				A100000000000000000000AF /* Relayium */,
+				A100000000000000000000D3 /* RelayiumShare */,
 				A100000000000000000000A3 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -63,6 +106,7 @@
 			isa = PBXGroup;
 			children = (
 				A100000000000000000000A4 /* Relayium.app */,
+				A100000000000000000000D1 /* RelayiumShare.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -77,10 +121,12 @@
 				A100000000000000000000AC /* Sources */,
 				A100000000000000000000AD /* Frameworks */,
 				A100000000000000000000AE /* Resources */,
+				A100000000000000000000D8 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				A100000000000000000000D9 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				A100000000000000000000AF /* Relayium */,
@@ -94,7 +140,48 @@
 			productReference = A100000000000000000000A4 /* Relayium.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A100000000000000000000D2 /* RelayiumShare */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A100000000000000000000DE /* Build configuration list for PBXNativeTarget "RelayiumShare" */;
+			buildPhases = (
+				A100000000000000000000DC /* Sources */,
+				A100000000000000000000DD /* Frameworks */,
+				A100000000000000000000DF /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A100000000000000000000D3 /* RelayiumShare */,
+			);
+			name = RelayiumShare;
+			packageProductDependencies = (
+				A100000000000000000000D5 /* RelayiumShareKit */,
+			);
+			productName = RelayiumShare;
+			productReference = A100000000000000000000D1 /* RelayiumShare.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
+
+/* Begin PBXTargetDependency section */
+		A100000000000000000000D9 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A100000000000000000000D2 /* RelayiumShare */;
+			targetProxy = A100000000000000000000DA /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXContainerItemProxy section */
+		A100000000000000000000DA /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A100000000000000000000A1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A100000000000000000000D2;
+			remoteInfo = RelayiumShare;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXProject section */
 		A100000000000000000000A1 /* Project object */ = {
@@ -104,6 +191,9 @@
 				LastUpgradeCheck = 1700;
 				TargetAttributes = {
 					A100000000000000000000A5 = {
+						CreatedOnToolsVersion = 26.6;
+					};
+					A100000000000000000000D2 = {
 						CreatedOnToolsVersion = 26.6;
 					};
 				};
@@ -136,6 +226,7 @@
 			projectRoot = "";
 			targets = (
 				A100000000000000000000A5 /* Relayium */,
+				A100000000000000000000D2 /* RelayiumShare */,
 			);
 		};
 /* End PBXProject section */
@@ -148,10 +239,24 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A100000000000000000000DF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		A100000000000000000000AC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A100000000000000000000DC /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -218,6 +323,64 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "Relayium Mac";
 				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		A100000000000000000000DB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = RelayiumShare/RelayiumShare.entitlements;
+				CODE_SIGN_IDENTITY = "Developer ID Application";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7PVYUG4YQS;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = RelayiumShare/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.mac.Share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "Relayium Mac Share Extension";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		A100000000000000000000E0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_INJECT_BASE_ENTITLEMENTS = NO;
+				OTHER_CODE_SIGN_FLAGS = "--timestamp";
+				CODE_SIGN_ENTITLEMENTS = RelayiumShare/RelayiumShare.entitlements;
+				CODE_SIGN_IDENTITY = "Developer ID Application";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7PVYUG4YQS;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = RelayiumShare/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.mac.Share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "Relayium Mac Share Extension";
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
 			};
@@ -347,6 +510,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		A100000000000000000000DE /* Build configuration list for PBXNativeTarget "RelayiumShare" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A100000000000000000000DB /* Debug */,
+				A100000000000000000000E0 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		A100000000000000000000A9 /* Build configuration list for PBXProject "Relayium" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -380,6 +552,10 @@
 		A100000000000000000000B1 /* RelayiumKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = RelayiumKit;
+		};
+		A100000000000000000000D5 /* RelayiumShareKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = RelayiumShareKit;
 		};
 		A100000000000000000000C1 /* Sparkle */ = {
 			isa = XCSwiftPackageProductDependency;

@@ -577,9 +577,14 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // package resolves. A mismatch here is the failure that looks like
         // everything working: the sheet stages a draft into one container and
         // the app lists an empty one.
+        // `iOSIdentifier`, not `identifier`. The package resolves `identifier`
+        // from the platform it is COMPILED for, and this suite compiles for
+        // macOS — so comparing an iOS entitlement against it would assert the
+        // wrong platform's group and pass only while the two strings happened to
+        // be equal, which they no longer are.
         XCTAssertEqual(plist["com.apple.security.application-groups"] as? [String],
-                       [AppGroup.identifier])
-        XCTAssertEqual(AppGroup.identifier, "group.com.relayium.app")
+                       [AppGroup.iOSIdentifier])
+        XCTAssertEqual(AppGroup.iOSIdentifier, "group.com.relayium.app")
         XCTAssertNil(plist["keychain-access-groups"],
                      "the bearer lives in this app's own default keychain group")
     }
@@ -607,7 +612,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertEqual(plist.keys.sorted(), ["com.apple.security.application-groups"],
                        "the extension claims a capability it does not use: \(plist.keys.sorted())")
         XCTAssertEqual(plist["com.apple.security.application-groups"] as? [String],
-                       [AppGroup.identifier],
+                       [AppGroup.iOSIdentifier],
                        "the extension must share exactly the app's one group")
         for absent in ["keychain-access-groups",
                        "com.apple.developer.applesignin",

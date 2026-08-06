@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!-- TWO entitlements, and together they are the whole of what this process may
+     do. The macOS extension is held to the same shape as the iOS one, and every
+     absence below is load-bearing rather than merely unclaimed.
+
+     `com.apple.security.app-sandbox` is not optional here the way it is for a
+     Developer ID app: an appex runs inside another application's session and
+     macOS requires it to be sandboxed.
+
+     `com.apple.security.application-groups = [7PVYUG4YQS.com.relayium.shared]`
+     gives the extension a directory the containing app can also read. That is
+     the entire hand-off: copy what the user shared into that directory, write a
+     small plan describing it, and say on the sheet that the files are waiting in
+     Relayium. Nothing is pushed to the app — a Share extension may not open its
+     containing app — so what brings the draft onto a send surface is the user
+     opening Relayium themselves.
+
+     **The identifier is team-prefixed and is NOT iOS's string.** iOS uses
+     `group.com.relayium.app`; the macOS provisioning profiles authorize
+     `group.com.relayium.shared` plus the wildcard `7PVYUG4YQS.*`, and Apple
+     documents the macOS form of an App Group as `<team>.<group>`. It must stay
+     byte-identical to `AppGroup.macOSIdentifier`, and `MacSurfaceGuardTests`
+     compares the two — a mismatch is the failure that looks like everything
+     working, where the sheet stages a draft into one container and the app lists
+     an empty one.
+
+     No `keychain-access-groups`. The extension holds no bearer, reads no
+     account, and generates no content key. The key for a shared draft is minted
+     in the APP when the user presses Send. A keychain group here would be a
+     credential share with a process that has nothing to share, and would put the
+     user's bearer one API call away from a target whose whole safety argument is
+     that it cannot reach it.
+
+     No `com.apple.developer.associated-domains`. The extension neither receives
+     a link nor emits one.
+
+     No `com.apple.security.network.client` and no `network.server`. This target
+     is a staging process: it copies plaintext the user chose into the App Group
+     and stops. Encryption, the account's limits, the upload and the link are all
+     the app's and stay the app's — and with no network entitlement at all, that
+     is enforced by the sandbox rather than by review.
+
+     No `files.user-selected` either: what this process may read is what the
+     Share menu hands it, and nothing else. -->
+<dict>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>7PVYUG4YQS.com.relayium.shared</string>
+	</array>
+</dict>
+</plist>

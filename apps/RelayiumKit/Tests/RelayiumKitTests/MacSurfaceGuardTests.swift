@@ -1,4 +1,6 @@
 import XCTest
+@testable import RelayiumAppKit
+@testable import RelayiumShareKit
 
 /// What the macOS app is NOT allowed to contain.
 ///
@@ -870,6 +872,128 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertFalse(plist.contains("<string>Editor</string>"),
                        "Relayium never writes back to what it is given")
         XCTAssertTrue(flattened(plist).contains("<key>CFBundleTypeRole</key> <string>Viewer</string>"))
+    }
+
+    // MARK: - the Share extension is a second TARGET, and a second process
+
+    private var macShareRoot: URL { appsRoot.appendingPathComponent("mac/RelayiumShare") }
+
+    /// The extension stages files and stops. Every symbol below is an absence,
+    /// and an absence has no runtime to observe — so it is asserted here.
+    ///
+    /// The entitlements enforce the same thing from the other side: with no
+    /// network entitlement at all a request added here would be refused by the
+    /// sandbox. Both halves exist because either alone can be edited away.
+    func testTheMacShareExtensionCarriesNoAccountNetworkOrCrypto() throws {
+        let sources = try sources(under: macShareRoot, atLeast: 2)
+        for forbidden in ["URLSession", "URLRequest", "AccountSession", "bearerToken",
+                          "TokenStore", "Keychain", "CloudUploader", "SecItem",
+                          "RealtimeSessionModel", "AppEnvironment"] {
+            for file in sources {
+                XCTAssertFalse(file.text.contains(forbidden),
+                               "\(file.name) reaches for \(forbidden); the extension only stages")
+            }
+        }
+    }
+
+    /// A Share extension may not open its containing app, and there is no
+    /// half-measure that counts as not doing it.
+    func testTheMacShareExtensionNeverTriesToOpenTheApp() throws {
+        for file in try sources(under: macShareRoot, atLeast: 2) {
+            for attempt in ["extensionContext?.open", "NSWorkspace", "NSApplication.shared",
+                            "NSApp", "openURL", "NSPasteboard", "relayium://"] {
+                XCTAssertFalse(file.text.contains(attempt),
+                               "\(file.name) tries to reach the app: \(attempt)")
+            }
+        }
+    }
+
+    /// Exactly two entitlements, and the App Group is the macOS one.
+    ///
+    /// iOS's `group.com.relayium.app` is **not** authorized by the macOS
+    /// profiles, and Apple documents the macOS form as team-prefixed. A mismatch
+    /// is the failure that looks like everything working: the sheet stages a
+    /// draft into one container and the app lists an empty one.
+    func testTheMacShareEntitlementsAreExactlyTheSandboxAndOneGroup() throws {
+        let data = try Data(contentsOf: macShareRoot
+            .appendingPathComponent("RelayiumShare.entitlements"))
+        let plist = try XCTUnwrap(
+            try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
+                as? [String: Any])
+        XCTAssertEqual(plist.keys.sorted(),
+                       ["com.apple.security.app-sandbox",
+                        "com.apple.security.application-groups"],
+                       "the extension claims a capability it does not use: \(plist.keys.sorted())")
+        XCTAssertEqual(plist["com.apple.security.app-sandbox"] as? Bool, true)
+        XCTAssertEqual(plist["com.apple.security.application-groups"] as? [String],
+                       [AppGroup.macOSIdentifier])
+        XCTAssertEqual(AppGroup.macOSIdentifier, "7PVYUG4YQS.com.relayium.shared")
+        XCTAssertNotEqual(AppGroup.macOSIdentifier, AppGroup.iOSIdentifier,
+                          "iOS's group is not authorized by the macOS profiles")
+    }
+
+    /// The containing app must be in the same group, or the extension writes
+    /// into a container the app cannot read — a runtime failure with no
+    /// build-time symptom.
+    func testTheAppJoinsTheSameGroupAsItsExtension() throws {
+        let data = try Data(contentsOf: macRoot.appendingPathComponent("Relayium.entitlements"))
+        let plist = try XCTUnwrap(
+            try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
+                as? [String: Any])
+        XCTAssertEqual(plist["com.apple.security.application-groups"] as? [String],
+                       [AppGroup.macOSIdentifier])
+    }
+
+    /// The activation rule decides where this appears. A `TRUEPREDICATE` would
+    /// offer Relayium for a selected sentence, a URL and a contact — none of
+    /// which it can stage.
+    func testTheMacShareExtensionOffersItselfOnlyWhereItWorks() throws {
+        let data = try Data(contentsOf: macShareRoot.appendingPathComponent("Info.plist"))
+        let plist = try XCTUnwrap(
+            try PropertyListSerialization.propertyList(from: data, options: [], format: nil)
+                as? [String: Any])
+        let ext = try XCTUnwrap(plist["NSExtension"] as? [String: Any])
+        XCTAssertEqual(ext["NSExtensionPointIdentifier"] as? String, "com.apple.share-services")
+        // A principal class, not a storyboard: a storyboard puts this surface in
+        // a file no test can read and no localization guard can scan.
+        XCTAssertEqual(ext["NSExtensionPrincipalClass"] as? String,
+                       "$(PRODUCT_MODULE_NAME).ShareViewController")
+        XCTAssertNil(ext["NSExtensionMainStoryboard"])
+        let attributes = try XCTUnwrap(ext["NSExtensionAttributes"] as? [String: Any])
+        let rule = try XCTUnwrap(attributes["NSExtensionActivationRule"] as? [String: Any],
+                                 "a dictionary rule, never TRUEPREDICATE")
+        // The aggregate is what makes the total the same bound as the per-type
+        // maxima; without it a mixed share satisfies all three and delivers 3x.
+        for key in ["NSExtensionActivationSupportsAttachmentsWithMaxCount",
+                    "NSExtensionActivationSupportsFileWithMaxCount",
+                    "NSExtensionActivationSupportsImageWithMaxCount",
+                    "NSExtensionActivationSupportsMovieWithMaxCount"] {
+            XCTAssertEqual(rule[key] as? Int, SHARED_DRAFT_MAX_FILES,
+                           "\(key) must be the manifest bound the product enforces")
+        }
+        for absent in ["NSExtensionActivationSupportsText",
+                       "NSExtensionActivationSupportsWebURLWithMaxCount",
+                       "NSExtensionActivationSupportsWebPageWithMaxCount"] {
+            XCTAssertNil(rule[absent],
+                         "sharing a link or a paragraph would produce a file nobody asked for")
+        }
+        // `installd`'s equivalent on macOS is less loud, but the Share menu shows
+        // this string and `CFBundleName` is the target name, not the product.
+        XCTAssertEqual(plist["CFBundleDisplayName"] as? String, "Relayium")
+        XCTAssertEqual(plist["CFBundleLocalizations"] as? [String],
+                       ["en", "zh-Hans", "ja", "ko", "de", "fr", "ar", "es", "pt"],
+                       "an appex has its own bundle, so it needs its own localization list")
+    }
+
+    /// The app collects staged drafts through the SAME router an Open With uses.
+    /// Two routes into the send flow are two places the rules can disagree.
+    func testStagedDraftsEnterThroughTheOpenedFilesRouter() throws {
+        let app = try source(named: "RelayiumApp.swift")
+        XCTAssertTrue(app.contains("SharedDraftInbox(store: AppEnvironment.makeSharedDraftStore())"))
+        XCTAssertEqual(occurrences(of: "fileOpens.open(sharedDrafts.collect())", in: app), 2,
+                       "collected on first appearance AND on every return to active")
+        XCTAssertTrue(app.contains(".onChange(of: scenePhase) { phase in"),
+                      "sharing while the app is already running never re-runs a task")
     }
 
     // MARK: - the settings scene

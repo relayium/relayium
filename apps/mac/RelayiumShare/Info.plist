@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<!-- The same nine languages the app declares, and for the same reason its
+	     own Info.plist lists them: the catalogs live in the RelayiumShareKit
+	     package bundle rather than in this one, so without this list macOS
+	     treats the extension as English-only. It would render correct Arabic
+	     words — the package bundle answers for them — while laying the sheet out
+	     left to right, because the layout direction is decided from the BUNDLE's
+	     localizations. An appex has its own bundle, so it needs its own copy of
+	     this list; keep in step with AppLanguage and with the app's Info.plist. -->
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>zh-Hans</string>
+		<string>ja</string>
+		<string>ko</string>
+		<string>de</string>
+		<string>fr</string>
+		<string>ar</string>
+		<string>es</string>
+		<string>pt</string>
+	</array>
+	<!-- What the user sees in the Share menu. "Relayium" and not
+	     "RelayiumShare": the target name is a build artifact, and what belongs
+	     in the menu is the app the files are going to.
+
+	     Not localized, and not a `$(...)` substitution. A brand name is the same
+	     in all nine languages, and the catalogs this extension uses live in the
+	     RelayiumShareKit package bundle rather than here, so a key looked up in
+	     THIS bundle would find nothing to vary anyway. -->
+	<key>CFBundleDisplayName</key>
+	<string>Relayium</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>XPC!</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>NSExtension</key>
+	<dict>
+		<key>NSExtensionAttributes</key>
+		<dict>
+			<!-- A DICTIONARY rule, never `NSExtensionActivationRule` =
+			     `TRUEPREDICATE`, for the reason the iOS extension records: the
+			     template's default offers Relayium in every Share menu on the
+			     Mac — including for a selected sentence, a URL, a web page and a
+			     contact, none of which this extension can stage. An entry that
+			     appears everywhere and fails on most of them is worse than one
+			     that appears where it works.
+
+			     Four keys, four counts, and no text or web key at all:
+
+			      - `SupportsFileWithMaxCount` — documents from Finder and from
+			        any app that vends `public.data`/`public.content`, which is
+			        also how a shared folder arrives.
+			      - `SupportsImageWithMaxCount` / `SupportsMovieWithMaxCount` —
+			        Photos' two kinds.
+			      - `SupportsAttachmentsWithMaxCount` — the AGGREGATE, which Apple
+			        documents as the maximum total number of attachments. The
+			        three per-type maxima are each satisfiable on their own, so
+			        without this a mixed share of 1000 files, 1000 images and 1000
+			        movies would satisfy all three and hand this extension 3000
+			        items — three times a bound the product enforces everywhere
+			        else.
+
+			     Every count is `SHARED_DRAFT_MAX_FILES`, the manifest bound the
+			     whole product enforces, so the menu never accepts a share this
+			     app would have to refuse afterwards. `SupportsText`,
+			     `SupportsWebURL` and `SupportsWebPage` are deliberately absent:
+			     sharing a link or a paragraph to Relayium would produce a text
+			     file the user never asked for. -->
+			<key>NSExtensionActivationRule</key>
+			<dict>
+				<key>NSExtensionActivationSupportsAttachmentsWithMaxCount</key>
+				<integer>1000</integer>
+				<key>NSExtensionActivationSupportsFileWithMaxCount</key>
+				<integer>1000</integer>
+				<key>NSExtensionActivationSupportsImageWithMaxCount</key>
+				<integer>1000</integer>
+				<key>NSExtensionActivationSupportsMovieWithMaxCount</key>
+				<integer>1000</integer>
+			</dict>
+		</dict>
+		<key>NSExtensionPointIdentifier</key>
+		<string>com.apple.share-services</string>
+		<!-- A principal class, not a storyboard. `NSExtensionMainStoryboard`
+		     would be the template's default and would put this surface in a file
+		     no test can read and no localization guard can scan. -->
+		<key>NSExtensionPrincipalClass</key>
+		<string>$(PRODUCT_MODULE_NAME).ShareViewController</string>
+	</dict>
+</dict>
+</plist>

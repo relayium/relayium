@@ -170,6 +170,27 @@ jobs:
           # message that does not mention this step.
           security cms -D -i "$dir/relayium.provisionprofile" \
             | plutil -extract Name raw -o - -
+      # A second profile, because the Share extension is a second bundle with its
+      # own App ID and its own App Groups entitlement. Without it the signed
+      # Release fails at the appex with "requires a provisioning profile", and
+      # the message does not mention this step.
+      - name: Install Share extension provisioning profile
+        env:
+          SHARE_PROFILE_BASE64: ${{ secrets.MACOS_SHARE_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "$SHARE_PROFILE_BASE64" ]; then
+            echo "::error::MACOS_SHARE_PROVISIONING_PROFILE_BASE64 is not set — see the macos-signing runbook in relayium-ops"
+            exit 1
+          fi
+          dir="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$dir"
+          ( umask 077; printf '%s' "$SHARE_PROFILE_BASE64" \
+            | base64 --decode > "$dir/relayium-share.provisionprofile" )
+          # Name, not UUID, for the reason above: the appex's
+          # PROVISIONING_PROFILE_SPECIFIER names "Relayium Mac Share Extension".
+          security cms -D -i "$dir/relayium-share.provisionprofile" \
+            | plutil -extract Name raw -o - -
       - name: Build (signed, Release)
         run: |
           xcodebuild -project apps/mac/Relayium.xcodeproj -scheme Relayium \
@@ -212,8 +233,36 @@ jobs:
             printf '%s\n' "$details" | grep -q '^Timestamp=' || {
               echo "::error::Sparkle component has no secure timestamp: $component"; exit 1; }
           done
+          # The Share extension is a separate signature, a separate entitlement
+          # set and a separate notarization subject. Verifying the app alone
+          # would pass while the appex inside it was unsigned, un-hardened, or
+          # carrying an entitlement it has no business holding.
+          appex="$app/Contents/PlugIns/RelayiumShare.appex"
+          [ -d "$appex" ] || {
+            echo "::error::the Share extension is not embedded in the signed app"; exit 1; }
+          codesign --verify --strict --verbose=2 "$appex"
+          appex_details="$(codesign -d --verbose=4 "$appex" 2>&1)"
+          printf '%s\n' "$appex_details"
+          printf '%s\n' "$appex_details" | grep -q 'flags=.*runtime' || {
+            echo "::error::Hardened Runtime flag missing from the Share extension"; exit 1; }
+          printf '%s\n' "$appex_details" | grep -q '^Timestamp=' || {
+            echo "::error::Secure timestamp missing from the Share extension"; exit 1; }
+          appex_ents="$(codesign -d --entitlements - --xml "$appex" | plutil -convert xml1 -o - -)"
+          printf '%s\n' "$appex_ents"
+          printf '%s' "$appex_ents" | grep -q '7PVYUG4YQS.com.relayium.shared' || {
+            echo "::error::Share extension is not in the app's App Group"; exit 1; }
+          # The absences are the point: a staging process that gains the network
+          # or the Keychain stops being one.
+          for forbidden in keychain-access-groups network.client network.server \
+            associated-domains applesignin; do
+            if printf '%s' "$appex_ents" | grep -q "$forbidden"; then
+              echo "::error::Share extension claims $forbidden; it only stages files"; exit 1
+            fi
+          done
           ents="$(codesign -d --entitlements - --xml "$app" | plutil -convert xml1 -o - -)"
           printf '%s\n' "$ents"
+          printf '%s' "$ents" | grep -q 'com.apple.security.application-groups' || {
+            echo "::error::app is not in the App Group its Share extension writes to"; exit 1; }
           printf '%s' "$ents" | grep -q 'com.apple.security.app-sandbox' || {
             echo "::error::app-sandbox entitlement missing from the signed build"; exit 1; }
           # The expanded value, not $(AppIdentifierPrefix): an unexpanded prefix
