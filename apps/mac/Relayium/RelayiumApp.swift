@@ -202,6 +202,11 @@ struct RelayiumApp: App {
     // — a defence against a second window; the scene being a unique `Window` is
     // what makes that impossible.
     @StateObject private var presence = TransferPresence()
+    /// Whether this Mac starts Relayium at login. App-scoped because it is the
+    /// settings scene's, and that scene is opened and closed independently of
+    /// the main window — a view-scoped object would re-read the system on every
+    /// open and lose a refusal the user has not yet read.
+    @StateObject private var loginItem = LoginItemPreference(service: SystemLoginItem())
 
     /// The strings live in a Swift-package resource bundle, while SwiftUI asks
     /// the app bundle which way to lay out the scene. macOS therefore kept an
@@ -380,6 +385,21 @@ struct RelayiumApp: App {
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesView(updater: updaterController.updater)
             }
+        }
+
+        // ⌘, — and the reason the app menu gains a Settings item at all. A
+        // `Settings` scene is the only way to get the standard placement and
+        // shortcut; a window opened from a custom menu item would be neither.
+        //
+        // It carries the resolved layout direction like the other two scene
+        // roots, for the reason recorded on `appLayoutDirection`: the catalogs
+        // live in a package bundle, so SwiftUI does not mirror an Arabic UI on
+        // its own.
+        Settings {
+            SettingsView(updater: updaterController.updater)
+                .environment(\.layoutDirection, appLayoutDirection)
+                .environmentObject(loginItem)
+                .environmentObject(verification)
         }
 
         // Residency. This is the surface the persistent room socket reports

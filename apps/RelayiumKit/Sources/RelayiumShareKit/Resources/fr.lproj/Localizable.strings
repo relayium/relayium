@@ -30,6 +30,21 @@
 
 /* MARK: cycle de vie de l’app */
 "app.checkForUpdates" = "Rechercher les mises à jour…";
+"settings.general" = "Général";
+"settings.updates" = "Mises à jour";
+"settings.openAtLogin" = "Ouvrir Relayium à l’ouverture de session";
+"settings.openAtLoginBody" = "Relayium ne peut recevoir que lorsqu’il est en cours d’exécution. En l’ouvrant à l’ouverture de session, ce Mac reste joignable après un redémarrage sans que personne ait à lancer l’app.";
+"settings.loginNeedsApproval" = "macOS attend que vous autorisiez Relayium dans « Ouverture ».";
+"settings.loginUnavailable" = "macOS ne gère pas cette copie de Relayium. Placez-la dans le dossier Applications et ouvrez-la depuis là.";
+"settings.loginRefused" = "macOS a refusé la modification. Vérifiez si Relayium est bloqué dans « Ouverture ».";
+"settings.openLoginItems" = "Ouvrir les réglages « Ouverture »";
+"settings.automaticUpdates" = "Rechercher les mises à jour automatiquement";
+"settings.automaticUpdatesBody" = "Relayium vérifie en arrière-plan et vous prévient dès qu’une mise à jour est prête. Les mises à jour sont signées ; un téléchargement dont la signature échoue n’est jamais installé.";
+"settings.lastChecked" = "Dernière recherche %@";
+"settings.neverChecked" = "Pas encore recherché";
+"settings.checkNow" = "Rechercher";
+"settings.version" = "Version %1$@ (%2$@)";
+
 "quit.title" = "Un transfert est encore en cours";
 "quit.body" = "Quitter maintenant l’annule. Rien n’est enregistré, et un envoi en cours devra repartir de zéro.";
 "quit.cancelAndQuit" = "Annuler le transfert et quitter";

@@ -30,6 +30,21 @@
 
 /* MARK: 앱 수명주기 */
 "app.checkForUpdates" = "업데이트 확인…";
+"settings.general" = "일반";
+"settings.updates" = "업데이트";
+"settings.openAtLogin" = "로그인 시 Relayium 열기";
+"settings.openAtLoginBody" = "Relayium은 실행 중일 때만 받을 수 있습니다. 로그인 시 열어 두면 재시동 후에도 누가 앱을 먼저 열지 않아도 이 Mac에 도달할 수 있습니다.";
+"settings.loginNeedsApproval" = "'로그인 항목'에서 Relayium을 허용할 때까지 macOS가 보류하고 있습니다.";
+"settings.loginUnavailable" = "macOS가 이 위치의 Relayium을 관리하지 않습니다. '응용 프로그램' 폴더로 옮긴 뒤 열어 주십시오.";
+"settings.loginRefused" = "macOS가 변경을 거부했습니다. '로그인 항목'에서 Relayium이 차단되어 있는지 확인해 주십시오.";
+"settings.openLoginItems" = "'로그인 항목' 설정 열기";
+"settings.automaticUpdates" = "자동으로 업데이트 확인";
+"settings.automaticUpdatesBody" = "Relayium이 백그라운드에서 확인하고 업데이트가 준비되면 알려 드립니다. 업데이트에는 서명이 있으며, 서명 검사를 통과하지 못한 다운로드는 설치되지 않습니다.";
+"settings.lastChecked" = "마지막 확인 %@";
+"settings.neverChecked" = "아직 확인하지 않음";
+"settings.checkNow" = "지금 확인";
+"settings.version" = "버전 %1$@ (%2$@)";
+
 "quit.title" = "아직 전송이 진행 중입니다";
 "quit.body" = "지금 종료하면 전송이 취소됩니다. 아무것도 저장되지 않으며, 진행 중인 업로드는 처음부터 다시 해야 합니다.";
 "quit.cancelAndQuit" = "전송 취소하고 종료";

@@ -30,6 +30,21 @@
 
 /* MARK: 应用生命周期 */
 "app.checkForUpdates" = "检查更新…";
+"settings.general" = "通用";
+"settings.updates" = "更新";
+"settings.openAtLogin" = "登录时打开 Relayium";
+"settings.openAtLoginBody" = "Relayium 只有在运行时才能接收。登录时打开它，这台 Mac 重启后无需有人先打开应用就能被找到。";
+"settings.loginNeedsApproval" = "macOS 正在等待你在「登录项」中允许 Relayium。";
+"settings.loginUnavailable" = "macOS 不会管理当前这份 Relayium。请把它移到「应用程序」文件夹，再从那里打开。";
+"settings.loginRefused" = "macOS 拒绝了这次更改。请检查 Relayium 是否在「登录项」中被阻止。";
+"settings.openLoginItems" = "打开「登录项」设置";
+"settings.automaticUpdates" = "自动检查更新";
+"settings.automaticUpdatesBody" = "Relayium 会在后台检查，有更新时告诉你。更新经过签名；签名校验不通过的下载绝不会被安装。";
+"settings.lastChecked" = "上次检查 %@";
+"settings.neverChecked" = "尚未检查";
+"settings.checkNow" = "立即检查";
+"settings.version" = "版本 %1$@（%2$@）";
+
 "quit.title" = "仍有传输正在进行";
 "quit.body" = "现在退出会取消传输。已传部分不会保存，正在进行的上传必须从头再来。";
 "quit.cancelAndQuit" = "取消传输并退出";

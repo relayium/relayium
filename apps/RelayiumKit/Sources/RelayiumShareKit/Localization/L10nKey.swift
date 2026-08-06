@@ -54,6 +54,30 @@ public enum L10nKey: String, CaseIterable, Sendable {
     // MARK: - App lifecycle, menus
 
     case appCheckForUpdates = "app.checkForUpdates"
+
+    // MARK: - Settings (macOS ⌘,)
+    //
+    // The login-item rows are four states rather than a switch and a message,
+    // because "registered but held for approval" is neither on nor an error.
+
+    case settingsGeneral = "settings.general"
+    case settingsUpdates = "settings.updates"
+    case settingsOpenAtLogin = "settings.openAtLogin"
+    case settingsOpenAtLoginBody = "settings.openAtLoginBody"
+    case settingsLoginNeedsApproval = "settings.loginNeedsApproval"
+    case settingsLoginUnavailable = "settings.loginUnavailable"
+    case settingsLoginRefused = "settings.loginRefused"
+    case settingsOpenLoginItems = "settings.openLoginItems"
+    case settingsAutomaticUpdates = "settings.automaticUpdates"
+    case settingsAutomaticUpdatesBody = "settings.automaticUpdatesBody"
+    /// %@ — a date and time already formatted in the user's own locale.
+    case settingsLastChecked = "settings.lastChecked"
+    case settingsNeverChecked = "settings.neverChecked"
+    case settingsCheckNow = "settings.checkNow"
+    /// %1$@ marketing version, %2$@ build number. Both are digits, never
+    /// translated; the key exists so a language can order the two around them.
+    case settingsVersion = "settings.version"
+
     case quitTitle = "quit.title"
     case quitBody = "quit.body"
     case quitCancelAndQuit = "quit.cancelAndQuit"

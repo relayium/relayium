@@ -31,6 +31,21 @@
 
 /* MARK: app lifecycle */
 "app.checkForUpdates" = "Check for Updates…";
+"settings.general" = "General";
+"settings.updates" = "Updates";
+"settings.openAtLogin" = "Open Relayium at login";
+"settings.openAtLoginBody" = "Relayium can receive only while it is running. Opening it at login keeps this Mac reachable after a restart without anyone opening the app first.";
+"settings.loginNeedsApproval" = "macOS is holding this until you approve Relayium in Login Items.";
+"settings.loginUnavailable" = "macOS will not manage this copy of Relayium. Move it to your Applications folder and open it from there.";
+"settings.loginRefused" = "macOS refused the change. Check whether Relayium is blocked in Login Items.";
+"settings.openLoginItems" = "Open Login Items settings";
+"settings.automaticUpdates" = "Check for updates automatically";
+"settings.automaticUpdatesBody" = "Relayium checks in the background and tells you when an update is ready. Updates are signed; a download that fails the signature check is never installed.";
+"settings.lastChecked" = "Last checked %@";
+"settings.neverChecked" = "Not checked yet";
+"settings.checkNow" = "Check Now";
+"settings.version" = "Version %1$@ (%2$@)";
+
 "quit.title" = "A transfer is still running";
 "quit.body" = "Quitting now cancels it. Nothing is saved, and an upload in progress will have to start over.";
 "quit.cancelAndQuit" = "Cancel Transfer and Quit";

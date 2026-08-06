@@ -341,18 +341,24 @@ final class MacSurfaceGuardTests: XCTestCase {
     }
 
     /// Package-backed catalogs select the Arabic copy but do not tell a macOS
-    /// SwiftUI scene to mirror itself. Both scene roots therefore derive one
+    /// SwiftUI scene to mirror itself. Every scene root therefore derives one
     /// direction from the same language resolver as the copy layer. Keeping the
     /// override at the roots — and exactly there — preserves semantic
     /// leading/trailing layout throughout the destination tree without a set of
     /// per-screen exceptions that will drift.
-    func testBothMacSceneRootsUseTheResolvedLanguageDirection() throws {
+    ///
+    /// The count is the number of scene roots, and it moved from two to three
+    /// when the `Settings` scene arrived. That is the point of asserting a count
+    /// rather than a presence: a new scene is a new bundle-level layout
+    /// decision, and the one that gets forgotten is the Arabic screen laid out
+    /// left to right.
+    func testEveryMacSceneRootUsesTheResolvedLanguageDirection() throws {
         let app = try source(named: "RelayiumApp.swift")
         XCTAssertTrue(app.contains("L10n.current.isRightToLeft"),
                       "layout direction must come from the localized copy resolver")
         XCTAssertEqual(occurrences(of: ".environment(\\.layoutDirection, appLayoutDirection)",
-                                   in: app), 2,
-                       "the window and menu-bar roots must share one derived direction")
+                                   in: app), 3,
+                       "the window, settings and menu-bar roots must share one derived direction")
         for (name, text) in try sources(under: macRoot, atLeast: 20)
             where name != "RelayiumApp.swift" {
             XCTAssertFalse(text.contains("\\.layoutDirection"),
@@ -864,6 +870,94 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertFalse(plist.contains("<string>Editor</string>"),
                        "Relayium never writes back to what it is given")
         XCTAssertTrue(flattened(plist).contains("<key>CFBundleTypeRole</key> <string>Viewer</string>"))
+    }
+
+    // MARK: - the settings scene
+
+    /// ⌘, exists, is a real `Settings` scene, and owns nothing it should not.
+    func testSettingsIsASceneAndTheSystemTouchIsOneFile() throws {
+        let all = try sources(under: macRoot, atLeast: 20)
+        let app = try source(named: "RelayiumApp.swift")
+
+        // A `Settings` scene, not a window opened from a hand-rolled menu item:
+        // only the scene gets the standard app-menu placement and ⌘,.
+        XCTAssertEqual(occurrences(of: "Settings {", in: app), 1,
+                       "there is exactly one settings scene")
+        XCTAssertTrue(app.contains("SettingsView(updater: updaterController.updater)"),
+                      "the settings scene must drive the app's one updater, not a second")
+        // Same resolved direction as the other two scene roots. The catalogs
+        // live in a package bundle, so SwiftUI does not mirror Arabic on its own
+        // — a settings window left out of this is the one Arabic screen laid out
+        // left to right.
+        XCTAssertEqual(occurrences(of: ".environment(\\.layoutDirection, appLayoutDirection)",
+                                   in: app), 3,
+                       "every macOS scene root must set the resolved layout direction")
+
+        // `SMAppService` acts on `Bundle.main`, so exactly one file may touch it
+        // and that file holds no decisions — otherwise a package test, or a
+        // second call site, registers whoever's Mac runs it as a login item.
+        let touching = all.filter { $0.text.contains("SMAppService") }
+        XCTAssertEqual(touching.map(\.name), ["Settings/SystemLoginItem.swift"],
+                       "SMAppService belongs to one adapter")
+        let adapter = try source(named: "Settings/SystemLoginItem.swift")
+        // All four statuses answered by name. `@unknown default` is required by
+        // the compiler for a non-frozen enum and is the only default allowed;
+        // a plain `default` would silently map a future status to something.
+        for status in ["case .enabled", "case .notRegistered", "case .requiresApproval",
+                       "case .notFound", "@unknown default"] {
+            XCTAssertTrue(adapter.contains(status), "SystemLoginItem stopped answering \(status)")
+        }
+        XCTAssertFalse(adapter.contains("@Published"),
+                       "the adapter holds no state; the preference does")
+    }
+
+    /// The settings surface reports the system, and states every case it cannot
+    /// show as a switch.
+    func testTheLoginSettingReportsTheSystemAndExplainsEveryStateItCannotShow() throws {
+        let settings = try source(named: "Settings/SettingsView.swift")
+
+        // Bound to what macOS says, never to what was requested. A switch built
+        // from the requested value snaps to on for a registration macOS is still
+        // holding for approval — the app asserting a residency it lacks.
+        XCTAssertTrue(settings.contains("get: { loginItem.state == .on }"),
+                      "the switch must read the system's answer")
+        XCTAssertFalse(settings.contains("@State private var opensAtLogin"),
+                       "a mirrored boolean would drift from the system")
+
+        // Every state that is not a plain on/off says what it is and what
+        // resolves it. A greyed switch with no sentence beside it is the dead
+        // control this app's design rules forbid.
+        for state in ["case .needsApproval", "case .unavailable"] {
+            XCTAssertTrue(settings.contains(state), "the settings pane ignores \(state)")
+        }
+        for copy in ["settingsLoginNeedsApproval", "settingsLoginUnavailable",
+                     "settingsLoginRefused", "settingsOpenLoginItems"] {
+            XCTAssertTrue(settings.contains(copy), "\(copy) is never rendered")
+        }
+        // The user can change this in System Settings while the app runs and
+        // nothing notifies it, so the pane re-asks on appear.
+        XCTAssertTrue(settings.contains("loginItem.refresh()"),
+                      "the pane must re-read the system when it appears")
+    }
+
+    /// The updates pane says what the old lone menu item could not, and reads
+    /// every one of those facts from the thing that owns it.
+    func testTheUpdatesPaneReadsSparkleAndTheBundleRatherThanRestatingThem() throws {
+        let settings = try source(named: "Settings/SettingsView.swift")
+        XCTAssertTrue(settings.contains("updater.automaticallyChecksForUpdates = $0"),
+                      "the toggle must write through to Sparkle")
+        XCTAssertTrue(settings.contains("lastCheck = updater.lastUpdateCheckDate"),
+                      "the timestamp must be read back from Sparkle, not stamped locally")
+        XCTAssertTrue(settings.contains("settingsNeverChecked"),
+                      "a fresh install has never checked, and a blank line reads as a bug")
+
+        // Read from the bundle. A literal here survives a version bump and then
+        // tells every bug reporter the wrong number.
+        for key in ["CFBundleShortVersionString", "CFBundleVersion"] {
+            XCTAssertTrue(settings.contains(key), "the version row must read \(key)")
+        }
+        XCTAssertFalse(settings.contains("\"1.0\""),
+                       "the displayed version must not be hard-coded")
     }
 
     // MARK: - the sidebar's live-session marker

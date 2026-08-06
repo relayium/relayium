@@ -33,6 +33,21 @@
 
 /* MARK: دورة حياة التطبيق */
 "app.checkForUpdates" = "التحقق من التحديثات…";
+"settings.general" = "عام";
+"settings.updates" = "التحديثات";
+"settings.openAtLogin" = "فتح Relayium عند تسجيل الدخول";
+"settings.openAtLoginBody" = "لا يستطيع Relayium الاستقبال إلا أثناء تشغيله. فتحه عند تسجيل الدخول يُبقي هذا الـ Mac قابلاً للوصول بعد إعادة التشغيل دون أن يفتح أحد التطبيق أولاً.";
+"settings.loginNeedsApproval" = "يحتفظ macOS بهذا حتى تسمح بـ Relayium في «عناصر تسجيل الدخول».";
+"settings.loginUnavailable" = "لن يدير macOS هذه النسخة من Relayium. انقلها إلى مجلد «التطبيقات» وافتحها من هناك.";
+"settings.loginRefused" = "رفض macOS هذا التغيير. تحقق مما إذا كان Relayium محظورًا في «عناصر تسجيل الدخول».";
+"settings.openLoginItems" = "فتح إعدادات «عناصر تسجيل الدخول»";
+"settings.automaticUpdates" = "التحقق من التحديثات تلقائيًا";
+"settings.automaticUpdatesBody" = "يتحقق Relayium في الخلفية ويخبرك عندما يصبح التحديث جاهزًا. التحديثات موقَّعة، وأي تنزيل يفشل في فحص التوقيع لا يُثبَّت أبدًا.";
+"settings.lastChecked" = "آخر تحقق %@";
+"settings.neverChecked" = "لم يتم التحقق بعد";
+"settings.checkNow" = "تحقق الآن";
+"settings.version" = "الإصدار %1$@ ‏(%2$@)";
+
 "quit.title" = "لا يزال هناك نقل جارٍ";
 "quit.body" = "الخروج الآن يُلغيه. لن يُحفظ شيء، وأي رفع قيد التنفيذ سيبدأ من جديد.";
 "quit.cancelAndQuit" = "إلغاء النقل والخروج";

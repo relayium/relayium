@@ -30,6 +30,21 @@
 
 /* MARK: App-Lebenszyklus */
 "app.checkForUpdates" = "Nach Updates suchen…";
+"settings.general" = "Allgemein";
+"settings.updates" = "Updates";
+"settings.openAtLogin" = "Relayium bei der Anmeldung öffnen";
+"settings.openAtLoginBody" = "Relayium kann nur empfangen, solange es läuft. Beim Anmelden geöffnet, bleibt dieser Mac auch nach einem Neustart erreichbar, ohne dass jemand die App zuerst öffnen muss.";
+"settings.loginNeedsApproval" = "macOS wartet, bis Sie Relayium unter „Anmeldeobjekte“ erlauben.";
+"settings.loginUnavailable" = "macOS verwaltet diese Kopie von Relayium nicht. Bewegen Sie sie in den Ordner „Programme“ und öffnen Sie sie von dort.";
+"settings.loginRefused" = "macOS hat die Änderung abgelehnt. Prüfen Sie, ob Relayium unter „Anmeldeobjekte“ blockiert ist.";
+"settings.openLoginItems" = "Einstellungen für Anmeldeobjekte öffnen";
+"settings.automaticUpdates" = "Automatisch nach Updates suchen";
+"settings.automaticUpdatesBody" = "Relayium sucht im Hintergrund und meldet sich, sobald ein Update bereitsteht. Updates sind signiert; ein Download, der die Signaturprüfung nicht besteht, wird nie installiert.";
+"settings.lastChecked" = "Zuletzt gesucht %@";
+"settings.neverChecked" = "Noch nicht gesucht";
+"settings.checkNow" = "Jetzt suchen";
+"settings.version" = "Version %1$@ (%2$@)";
+
 "quit.title" = "Eine Übertragung läuft noch";
 "quit.body" = "Jetzt zu beenden bricht sie ab. Nichts wird gespeichert, und ein laufender Upload muss von vorn beginnen.";
 "quit.cancelAndQuit" = "Übertragung abbrechen und beenden";
