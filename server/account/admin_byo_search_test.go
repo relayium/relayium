@@ -405,9 +405,16 @@ func TestAdminDashboardByoRemovedSectionIsPaged(t *testing.T) {
 
 	page1 := getAdminPathHTML(t, ts, ts.URL, "/admin?bq=needle", cookie)
 	// The heading must say a filter is active and how many matched — not a
-	// bare 共 N 台 that reads as "this is all of them".
-	if !strings.Contains(page1, fmt.Sprintf(`匹配"needle"的共 %d 台`, n)) {
-		t.Fatalf("removed section heading does not state the filter and match count")
+	// bare count that reads as "this is all of them". The wording moved when the
+	// heading was restructured for translation (the branches now hold whole
+	// clauses instead of a sentence split around {{if}}); the property is the
+	// same and is what is asserted.
+	// Asserted as three separate facts rather than one exact string: the wording
+	// and the markup around it are free to change, the property is not.
+	for _, want := range []string{"匹配：", `"needle"`, fmt.Sprintf("%d", n)} {
+		if !strings.Contains(page1, want) {
+			t.Fatalf("removed section heading does not state the filter and match count (missing %q)", want)
+		}
 	}
 	if !strings.Contains(page1, "brp=2") {
 		t.Fatalf("removed section has %d matches (page %d) but no page-2 link", n, adminByoRemovedShown)

@@ -1090,7 +1090,7 @@ func (s *Service) handleAdminAudit(w http.ResponseWriter, r *http.Request) {
 			Time:    time.Unix(e.At, 0).UTC().Format("2006-01-02 15:04:05"),
 			Action:  e.Action,
 			Target:  e.Target,
-			Changes: renderAuditChanges(e.Changes),
+			Changes: renderAuditChanges(adminLangFrom(r), e.Changes),
 			IP:      e.IP,
 			Auth:    e.Auth,
 			StepUp:  e.StepUp,

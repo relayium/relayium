@@ -74,7 +74,7 @@ type adminHomeData struct {
 	// params — "clear" must not double as "reset the rest of the page".
 	ByoClearHref string
 	// ByoErr means the BYO query FAILED. It must render as a failure, not as
-	// an empty table: "共 0 台 / 没有匹配的自带节点" in answer to a query that
+	// an empty table: "共 0 台 / {{t $.Lang "没有匹配"}}的自带节点" in answer to a query that
 	// errored is a confident wrong answer, and this is the table where acting
 	// on "there is no such node" costs the most.
 	ByoErr bool
@@ -250,10 +250,10 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 <p class="err">{{t $.Lang "读取该轨道状态失败，控制按钮已隐藏（另一条轨道不受影响）。"}}</p>
 {{else}}
 <p class="ro-state">{{t $.Lang "目标版本："}}<b>{{if .TargetVersion}}{{.TargetVersion}}{{else}}—{{end}}</b>{{t $.Lang "· 状态："}}<b>{{.StatusText}}</b>{{if .Emergency}} <span class="ro-emg">{{t $.Lang "紧急发布中（已跳过分批）"}}</span>{{end}} ·
-进度：{{.OnTarget}}/{{.Total}} 台已在目标版本 ·
-{{if eq .Track "fleet"}}正在更新：{{if .CurrentNodeID}}{{.CurrentNodeID}}{{else}}—{{end}}
-{{else}}当前批次：{{if .ByoBatch}}{{.ByoBatch}}%{{else}}未开批{{end}}{{end}}
-{{if .StageStartedAt}} · 本阶段开始：{{ts .StageStartedAt}}{{end}}
+{{t $.Lang "进度："}}{{.OnTarget}}/{{.Total}} {{t $.Lang "台已在目标版本"}} ·
+{{if eq .Track "fleet"}}{{t $.Lang "正在更新："}}{{if .CurrentNodeID}}{{.CurrentNodeID}}{{else}}—{{end}}
+{{else}}{{t $.Lang "当前批次："}}{{if .ByoBatch}}{{.ByoBatch}}%{{else}}{{t $.Lang "未开批"}}{{end}}{{end}}
+{{if .StageStartedAt}} · {{t $.Lang "本阶段开始："}}{{ts .StageStartedAt}}{{end}}
 </p>
 {{if .NextStepText}}<div style="color:var(--muted);font-size:12px">{{.NextStepLabel}}：{{.NextStepText}}</div>{{end}}
 {{if .RulesText}}<div style="color:var(--muted);font-size:12px">{{.RulesText}}</div>{{end}}
@@ -452,7 +452,7 @@ button:hover{filter:brightness(1.07)}
 .blast .who{font-size:14px}.langpick{display:inline-flex;gap:0;border:1px solid var(--bd);border-radius:7px;overflow:hidden}.langpick button{font:inherit;font-size:12px;padding:3px 8px;border:0;background:transparent;color:var(--muted);cursor:pointer;width:auto;margin:0}.langpick button.on{background:var(--a);color:#fff}</style></head>
 <body>
 <h1>{{t $.Lang "请确认这项操作"}}</h1>
-<p class="sub">{{t $.Lang "动作："}}<code>{{.Action}}</code>{{if ne .Target "-"}} · 目标：<code>{{.Target}}</code>{{end}}</p>
+<p class="sub">{{t $.Lang "动作："}}<code>{{.Action}}</code>{{if ne .Target "-"}} · {{t $.Lang "目标："}}<code>{{.Target}}</code>{{end}}</p>
 
 {{if .Track}}
 <div class="blast">
@@ -764,7 +764,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <button type="submit">{{if .Draining}}{{t $.Lang "取消排空"}}{{else}}{{t $.Lang "开始排空"}}{{end}}</button>
 </form>
 {{if and .Draining (not .StoredFileCount)}}
-<div style="color:var(--muted);font-size:12px">{{t $.Lang "可以卸载了，在该机器上执行（先下载到文件、确认非空再运行——不要直接"}} <code>curl | sudo sh</code>，链接一旦暂时不可达，这种管道写法会让整条命令"看起来成功"、实际什么都没做）：<br><code>curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh</code></div>
+<div style="color:var(--muted);font-size:12px">{{t $.Lang "可以卸载了，在该机器上执行（先下载到文件、确认非空再运行——不要直接"}} <code>curl | sudo sh</code>，{{t $.Lang "链接一旦暂时不可达，这种管道写法会让整条命令"}}"{{t $.Lang "看起来成功"}}"、{{t $.Lang "实际什么都没做）："}}<br><code>curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh</code></div>
 {{else if .Draining}}
 <div style="color:var(--muted);font-size:12px">{{t $.Lang "等最后一个文件过期后，在该机器上执行"}} <code>uninstall-node.sh</code> {{t $.Lang "卸载"}}</div>
 {{end}}
@@ -798,8 +798,9 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
      这张表里，恢复入口在下面那个不受本表分页影响的小节。 */}}
 <section class="nodes byo-nodes">
 {{/* 标题在查询失败时绝不能报"共 0 台"——那是把一次错误说成了一个答案。 */}}
-<h2>自带节点（用户机器{{if .ByoErr}}，查询失败{{else if .ByoSearch}}，匹配"{{.ByoSearch}}"的共 {{.ByoNodeCount}} 台，第 {{.ByoPage}}/{{.ByoTotalPages}} 页{{else}}，共 {{.ByoNodeCount}} 台，第 {{.ByoPage}}/{{.ByoTotalPages}} 页{{end}}）</h2>
-<p class="byo-warn">{{t $.Lang "这些不是我们的机器，是用户贡献的。排空/标记已移除只影响"}}<b>{{t $.Lang "该用户自己的"}}</b>放置池与直连下载，机器本身仍在用户手里运行；先看清"剩余文件"再动手，节点上的文件没有副本。</p>
+<h2>{{t $.Lang "自带节点（用户机器）"}}</h2>
+<p class="sub">{{if .ByoErr}}{{t $.Lang "查询失败"}}{{else}}{{if .ByoSearch}}{{t $.Lang "匹配："}}"{{.ByoSearch}}" · {{end}}{{t $.Lang "共"}} {{.ByoNodeCount}} · {{t $.Lang "第"}} {{.ByoPage}}/{{.ByoTotalPages}}{{end}}</p>
+<p class="byo-warn">{{t $.Lang "这些不是我们的机器，是用户贡献的。排空/标记已移除只影响"}}<b>{{t $.Lang "该用户自己的"}}</b>{{t $.Lang "放置池与直连下载，机器本身仍在用户手里运行；先看清"}}"{{t $.Lang "剩余文件"}}"{{t $.Lang "再动手，节点上的文件没有副本。"}}</p>
 {{/* 搜索是 GET（安全方法，不带 CSRF token，和用户列表的搜索一致）。隐藏字段把
      用户列表自己的 q/sort/dir/period **和页码 page** 原样带过去：两张表各自分
      页，提交节点表的搜索绝不能把用户列表的搜索、排序和页码清掉。这里刻意不带
@@ -814,7 +815,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <button type="submit">{{t $.Lang "搜索"}}</button>
 {{if .ByoSearch}}<a href="{{.ByoClearHref}}">{{t $.Lang "清除"}}</a>{{end}}
 </form>
-{{if .ByoErr}}<p class="err">{{t $.Lang "自带节点查询失败，下表"}}<b>{{t $.Lang "不是"}}</b>"没有匹配"的结果——是这次查询没跑成功。请查看服务端日志后重试；在确认之前不要据此认定某台节点不存在。</p>{{end}}
+{{if .ByoErr}}<p class="err">{{t $.Lang "自带节点查询失败，下表"}}<b>{{t $.Lang "不是"}}</b>"{{t $.Lang "没有匹配"}}"{{t $.Lang "的结果——是这次查询没跑成功。请查看服务端日志后重试；在确认之前不要据此认定某台节点不存在。"}}</p>{{end}}
 <table>
 <thead><tr><th>{{t $.Lang "备注 / ID"}}</th><th>{{t $.Lang "所属用户"}}</th><th>IP</th><th>{{t $.Lang "状态"}}</th><th>{{t $.Lang "版本"}}</th><th>{{t $.Lang "最后心跳(UTC)"}}</th><th>{{t $.Lang "排空"}}</th><th>{{t $.Lang "剩余文件 / 最早可安全卸载"}}</th></tr></thead>
 <tbody>
@@ -870,9 +871,10 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 {{/* 标题必须说清"当前有没有在过滤"。上面那张表带搜索时会写"匹配 X 的共 N 台"，
      这里以前只写一个光秃秃的"共 N 台"，看起来像是全部已卸载节点的总数，其实是
      过滤后的数量——同一页上两个口径不一致最容易读错。 */}}
-<h2>已卸载的自带节点（{{if .ByoRemovedErr}}查询失败{{else if .ByoSearch}}匹配"{{.ByoSearch}}"的共 {{.ByoRemovedNodeCount}} 台，第 {{.ByoRemovedPage}}/{{.ByoRemovedTotalPages}} 页{{else}}共 {{.ByoRemovedNodeCount}} 台，第 {{.ByoRemovedPage}}/{{.ByoRemovedTotalPages}} 页{{end}}）</h2>
-{{if .ByoRemovedErr}}<p class="err">{{t $.Lang "已卸载自带节点查询失败，下面"}}<b>{{t $.Lang "不是"}}</b>"没有匹配"的结果。请查看服务端日志后重试。</p>{{end}}
-<p class="byo-warn">这些用户节点已被标记卸载，已退出对应用户的放置池/ICE/直连下载。如果是误操作或卸载脚本没跑完整，用"恢复"撤销——不影响它的文件与历史。</p>
+<h2>{{t $.Lang "已卸载的自带节点"}}</h2>
+<p class="sub">{{if .ByoRemovedErr}}{{t $.Lang "查询失败"}}{{else}}{{if .ByoSearch}}{{t $.Lang "匹配："}}"{{.ByoSearch}}" · {{end}}{{t $.Lang "共"}} {{.ByoRemovedNodeCount}} · {{t $.Lang "第"}} {{.ByoRemovedPage}}/{{.ByoRemovedTotalPages}}{{end}}</p>
+{{if .ByoRemovedErr}}<p class="err">{{t $.Lang "已卸载自带节点查询失败，下面"}}<b>{{t $.Lang "不是"}}</b>"{{t $.Lang "没有匹配"}}"{{t $.Lang "的结果。请查看服务端日志后重试。"}}</p>{{end}}
+<p class="byo-warn">{{t $.Lang "这些用户节点已被标记卸载，已退出对应用户的放置池/ICE/直连下载。如果是误操作或卸载脚本没跑完整，用「恢复」撤销——不影响它的文件与历史。"}}</p>
 <table>
 <thead><tr><th>{{t $.Lang "备注 / ID"}}</th><th>{{t $.Lang "所属用户"}}</th><th>IP</th><th>{{t $.Lang "版本"}}</th><th>{{t $.Lang "最后心跳(UTC)"}}</th><th></th></tr></thead>
 <tbody>
@@ -1225,14 +1227,14 @@ type auditChangeRaw struct {
 // An empty array ("[]", encodeChanges' floor value) renders as "—", never
 // the literal "[]" — a bare bracket pair reads as a rendering bug, not as
 // "nothing changed".
-func renderAuditChanges(raw string) string {
+func renderAuditChanges(lang, raw string) string {
 	var fields []auditChangeRaw
 	if err := json.Unmarshal([]byte(raw), &fields); err != nil || len(fields) == 0 {
 		return "—"
 	}
 	parts := make([]string, 0, len(fields))
 	for _, f := range fields {
-		old := "(新增)"
+		old := adminT(lang, "(新增)")
 		if f.Old != nil {
 			old = formatChangeValue(f.Old)
 		}

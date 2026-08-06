@@ -272,6 +272,34 @@ var adminEN = map[string]string{
 	"验证失败，请重试。":                               "Verification failed. Try again.",
 	"注册失败（服务器 ":                               "Registration failed (server ",
 	"注册失败":                                    "Registration failed",
+
+	// Text that used to be interleaved with {{if}}/{{else}}. The branches were
+	// restructured so each holds a whole clause, rather than translating a
+	// sentence in pieces whose order only works in Chinese.
+	"进度：":        "Progress:",
+	"台已在目标版本":    "on the target version",
+	"正在更新：":      "Updating:",
+	"当前批次：":      "Current batch:",
+	"未开批":        "not started",
+	"本阶段开始：":     "Stage started:",
+	"自带节点（用户机器）": "Bring-your-own nodes (user machines)",
+	"已卸载的自带节点":   "Uninstalled bring-your-own nodes",
+	"查询失败":       "query failed",
+	"(新增)":       "(added)",
+	"匹配：":        "Matching:",
+	"这些用户节点已被标记卸载，已退出对应用户的放置池/ICE/直连下载。如果是误操作或卸载脚本没跑完整，用「恢复」撤销——不影响它的文件与历史。": "These user nodes are marked uninstalled and have left that user's placement pool, ICE and direct downloads. If that was a mistake, or the uninstall script did not finish, Restore undoes it — files and history are untouched.",
+
+	// Remaining inline fragments around <b>/<code> emphasis.
+	"目标：": "Target:",
+	"链接一旦暂时不可达，这种管道写法会让整条命令": "if the link is briefly unreachable, piping like that makes the whole command",
+	"看起来成功":     "look like it worked",
+	"实际什么都没做）：": "while doing nothing):",
+	"放置池与直连下载，机器本身仍在用户手里运行；先看清": "placement pool and direct downloads; the machine itself keeps running in the user's hands. Check",
+	"剩余文件": "files left",
+	"再动手，节点上的文件没有副本。": "before acting — the files on that node have no replica.",
+	"没有匹配": "no matches",
+	"的结果——是这次查询没跑成功。请查看服务端日志后重试；在确认之前不要据此认定某台节点不存在。": " — the query itself failed. Check the server log and retry; do not conclude a node is gone until you have.",
+	"的结果。请查看服务端日志后重试。": " result. Check the server log and retry.",
 }
 
 // adminLangCookie holds an explicit choice made in the console's header.

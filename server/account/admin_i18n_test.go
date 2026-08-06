@@ -93,9 +93,17 @@ func wrappedStrings(t *testing.T) map[string]bool {
 		t.Fatalf("read templates: %v", err)
 	}
 	out := map[string]bool{}
-	re := regexp.MustCompile(`\{\{t \$\.Lang "((?:[^"\\]|\\.)*)"\}\}`)
-	for _, m := range re.FindAllStringSubmatch(string(src), -1) {
-		out[strings.ReplaceAll(m[1], `\"`, `"`)] = true
+	// Two call shapes: the template action, and adminT() from Go for the handful
+	// of strings that are assembled in code rather than in a template (the audit
+	// diff's "(added)"). Missing the second shape made the dead-entry guard
+	// report a live translation as dead.
+	for _, re := range []*regexp.Regexp{
+		regexp.MustCompile(`\{\{t \$\.Lang "((?:[^"\\]|\\.)*)"\}\}`),
+		regexp.MustCompile(`adminT\([a-zA-Z]+, "((?:[^"\\]|\\.)*)"\)`),
+	} {
+		for _, m := range re.FindAllStringSubmatch(string(src), -1) {
+			out[strings.ReplaceAll(m[1], `\"`, `"`)] = true
+		}
 	}
 	return out
 }
