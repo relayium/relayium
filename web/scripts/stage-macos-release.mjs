@@ -34,10 +34,45 @@ function enclosure(appcast) {
   return match[0];
 }
 
+/// The whole `<item>…</item>`, which is where Sparkle puts the version.
+function releaseItem(appcast) {
+  const match = appcast.match(/<item>[\s\S]*?<\/item>/);
+  if (!match) throw new Error("appcast has no release item");
+  return match[0];
+}
+
 function attribute(element, name) {
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const match = element.match(new RegExp(`(?:^|\\s)${escaped}="([^"]+)"`));
   return match?.[1] ?? null;
+}
+
+/// A child element's text.
+///
+/// The version lives here and NOT on the enclosure, which is what this file got
+/// wrong until a real `generate_appcast` run was read instead of assumed. Sparkle
+/// 2 writes:
+///
+///     <item>
+///       <sparkle:version>1</sparkle:version>
+///       <sparkle:shortVersionString>1.0</sparkle:shortVersionString>
+///       <enclosure url="…" length="…" type="…" sparkle:edSignature="…"/>
+///     </item>
+///
+/// so `url`, `length` and the signature are attributes and the two versions are
+/// not. Reading them off the enclosure returned null every time, which compared
+/// unequal to the requested version and failed every release with a message that
+/// looked like a version mismatch rather than a parser looking in the wrong
+/// element.
+///
+/// There is deliberately **no attribute fallback**. A future Sparkle that moved
+/// these back onto the enclosure should fail loudly at release time rather than
+/// be silently absorbed here — the whole value of this check is that it knows
+/// what shape it is reading.
+function childText(element, tag) {
+  const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = element.match(new RegExp(`<${escaped}>([^<]*)</${escaped}>`));
+  return match?.[1]?.trim() || null;
 }
 
 function canonicalizeChannel(appcast) {
@@ -81,24 +116,28 @@ export async function stageMacOSRelease({
   const root = resolve(webRoot);
   const generatedAppcast = await readFile(source, "utf8");
   const appcast = canonicalizeChannel(generatedAppcast);
-  const item = enclosure(appcast);
+  // Two elements, not one. The enclosure carries the asset; the item carries
+  // the version. The single misnamed `item = enclosure(...)` this replaced is
+  // what made every version read return null.
+  const asset = enclosure(appcast);
+  const item = releaseItem(appcast);
   const expectedUrl =
     `https://github.com/${repository}/releases/download/macos-v${version}/Relayium.dmg`;
 
-  if (attribute(item, "url") !== expectedUrl) {
+  if (attribute(asset, "url") !== expectedUrl) {
     throw new Error(`appcast enclosure URL does not match the immutable release asset: ${expectedUrl}`);
   }
-  if (!attribute(item, "sparkle:edSignature")) {
+  if (!attribute(asset, "sparkle:edSignature")) {
     throw new Error("appcast enclosure has no Sparkle EdDSA signature");
   }
-  if (attribute(item, "sparkle:shortVersionString") !== version) {
+  if (childText(item, "sparkle:shortVersionString") !== version) {
     throw new Error(`appcast short version does not match ${version}`);
   }
-  const build = attribute(item, "sparkle:version");
+  const build = childText(item, "sparkle:version");
   if (!build || !/^[1-9][0-9]{0,9}$/.test(build)) {
     throw new Error("appcast build version must be a positive integer");
   }
-  const length = attribute(item, "length");
+  const length = attribute(asset, "length");
   if (!length || !/^[1-9][0-9]*$/.test(length)) {
     throw new Error("appcast enclosure length must be a positive integer");
   }
@@ -110,8 +149,15 @@ export async function stageMacOSRelease({
     if (current.macos.version === version) {
       throw new Error(`release version ${version} is already published; release tags are immutable`);
     }
+    // The same element mistake, and the more dangerous half: the published
+    // appcast is one this script wrote, so it has the same shape. Reading the
+    // build off the enclosure returned null, and a null build means "published
+    // appcast has no valid build version" — a monotonicity check that could
+    // never pass, on the branch that only runs for the SECOND release. The
+    // first release fails at the version comparison above; without this it
+    // would have failed here instead, months later.
     const previousAppcast = await readFile(destination, "utf8");
-    const previousBuild = attribute(enclosure(previousAppcast), "sparkle:version");
+    const previousBuild = childText(releaseItem(previousAppcast), "sparkle:version");
     if (!previousBuild || !/^[1-9][0-9]{0,9}$/.test(previousBuild)) {
       throw new Error("published appcast has no valid build version");
     }
