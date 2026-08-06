@@ -240,6 +240,25 @@ var adminEN = map[string]string{
 	"注册用户（":       "Registered users (",
 	"第":           "Page",
 	"页":           "",
+
+	// confirm() text on destructive forms. These are the last sentence an
+	// operator reads before a rollback or a removal, so they are worth more than
+	// their word count. Variables were moved OUT of the translated sentence
+	// rather than translated around, which is how fragment translation reads
+	// wrong in a language with different word order.
+	"重新下发？该轨道会回到发布中。":                 "Re-dispatch? The track goes back to releasing.",
+	"把机队轨的目标版本设为该版本并开始发布？":            "Set the fleet track's target to this version and start releasing?",
+	"回滚到上一版本？":                        "Roll back to the previous version?",
+	"暂停该轨的发布？":                        "Pause this track's release?",
+	"把该轨回滚到这个版本？":                     "Roll this track back to this version?",
+	"继续该轨的发布？将从头重新分批。":                "Resume this track's release? Batching restarts from the beginning.",
+	"删除这枚 passkey？":                   "Delete this passkey?",
+	"撤销该 Token？":                      "Revoke this token?",
+	"删除该官方节点？":                        "Delete this fleet node?",
+	"恢复该节点？它会重新进入放置/ICE/直连下载。":        "Restore this node? It re-enters placement, ICE and direct downloads.",
+	"恢复该用户节点？它会重新进入该用户的放置池/ICE/直连下载。": "Restore this user node? It re-enters that user's placement pool, ICE and direct downloads.",
+	"标记该用户节点已卸载？它会退出该用户的放置池/ICE/直连下载，文件与历史保留，可随时用「恢复」撤销。":                     "Mark this user node uninstalled? It leaves that user's placement pool, ICE and direct downloads. Files and history are kept, and Restore undoes it at any time.",
+	"手动标记该节点已卸载？用于卸载脚本联系不到中央、来不及自动登记的情况；节点会退出放置/ICE/直连下载，文件与历史保留，可随时用「恢复」撤销。": "Mark this node uninstalled by hand? For when the uninstall script could not reach central in time. The node leaves placement, ICE and direct downloads. Files and history are kept, and Restore undoes it at any time.",
 }
 
 // adminLangFrom picks the console language for one request.

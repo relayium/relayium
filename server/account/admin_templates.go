@@ -266,20 +266,20 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 </form>
 {{if eq .Status "rolling"}}
 <form method="post" action="/admin/rollout/{{.Track}}/pause" class="lim"
-  onsubmit="return confirm('暂停 {{.Track}} 轨的发布？')"><button type="submit">{{t $.Lang "暂停"}}</button></form>
+  onsubmit="return confirm('{{t $.Lang "暂停该轨的发布？"}} {{.Track}}')"><button type="submit">{{t $.Lang "暂停"}}</button></form>
 {{end}}
 {{if eq .Status "halted"}}
 <form method="post" action="/admin/rollout/{{.Track}}/resume" class="lim"
-  onsubmit="return confirm('继续 {{.Track}} 轨的发布？将从头重新分批。')"><button type="submit">{{t $.Lang "继续"}}</button></form>
+  onsubmit="return confirm('{{t $.Lang "继续该轨的发布？将从头重新分批。"}} {{.Track}}')"><button type="submit">{{t $.Lang "继续"}}</button></form>
 {{end}}
 <form method="post" action="/admin/rollout/{{.Track}}/rollback" class="lim"
-  onsubmit="return confirm('把 {{.Track}} 轨回滚到该版本？')">
+  onsubmit="return confirm('{{t $.Lang "把该轨回滚到这个版本？"}} {{.Track}}')">
 <input type="text" name="version" placeholder="v1.2.2" title="{{t $.Lang "回滚到的版本"}}" style="width:110px">
 <button type="submit">{{t $.Lang "回滚"}}</button>
 </form>
 {{if .PreviousVersion}}
 <form method="post" action="/admin/rollout/{{.Track}}/rollback-previous" class="lim"
-  onsubmit="return confirm('回滚到上一版本 {{.PreviousVersion}}？')">
+  onsubmit="return confirm('{{t $.Lang "回滚到上一版本？"}} {{.PreviousVersion}}')">
 <button type="submit" title="{{t $.Lang "回到该轨上一个目标版本；该版本当初已通过机队门槛，因此不受机队当前发布状态影响"}}">{{t $.Lang "回滚到上一版本（"}}{{.PreviousVersion}}）</button>
 </form>
 {{end}}
@@ -304,7 +304,7 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
      自带节点轨上这个按钮什么也做不到。handler 会重新读全部条件，按钮不在场
      不等于守卫在场。 */}}
 {{if and (eq $.Track "fleet") .PassedOver (eq $.Status "complete")}}<form method="post" action="/admin/rollout/{{$.Track}}/retry" class="lim"
-  onsubmit="return confirm('重新给 {{.ID}} 下发 {{$.TargetVersion}}？该轨道会回到发布中。')">
+  onsubmit="return confirm('{{t $.Lang "重新下发？该轨道会回到发布中。"}} {{.ID}} → {{$.TargetVersion}}')">
 <input type="hidden" name="node" value="{{.ID}}">
 <button type="submit" title="{{t $.Lang "把这台重新放回发布队列；不改目标版本"}}">{{t $.Lang "重试"}}</button>
 </form>{{end}}</td>
@@ -678,7 +678,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <b>{{t $.Lang "有新版本："}}{{.LatestTag}}</b>{{if .TargetTag}} {{t $.Lang "· 当前目标"}} {{.TargetTag}}{{else}} {{t $.Lang "· 尚未配置发布目标"}}{{end}}
 {{if .OfferButton}}
 <form method="post" action="/admin/release/rollout" class="lim"
-  onsubmit="return confirm('把机队轨的目标版本设为 {{.LatestTag}} 并开始发布？')">
+  onsubmit="return confirm('{{t $.Lang "把机队轨的目标版本设为该版本并开始发布？"}} {{.LatestTag}}')">
 <input type="hidden" name="version" value="{{.LatestTag}}">
 <button type="submit">{{t $.Lang "发布"}} {{.LatestTag}} {{t $.Lang "到机队"}}</button></form>
 {{else}}
@@ -748,9 +748,9 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <td>{{if .Host}}{{.Host}}{{else}}—{{end}}</td>
 <td>{{.Region}}</td>
 <td>{{if .Removed}}<span class="err">{{t $.Lang "已卸载"}}</span>
-<form method="post" action="/admin/nodes/{{.ID}}/restore" class="lim" onsubmit="return confirm('恢复该节点？它会重新进入放置/ICE/直连下载。')"><button type="submit" title="{{t $.Lang "清除已卸载标记，让节点重新上线（不影响它的文件与历史）"}}">{{t $.Lang "恢复"}}</button></form>
+<form method="post" action="/admin/nodes/{{.ID}}/restore" class="lim" onsubmit="return confirm('{{t $.Lang "恢复该节点？它会重新进入放置/ICE/直连下载。"}}')"><button type="submit" title="{{t $.Lang "清除已卸载标记，让节点重新上线（不影响它的文件与历史）"}}">{{t $.Lang "恢复"}}</button></form>
 {{else}}{{if .Online}}{{t $.Lang "在线"}}{{else}}{{t $.Lang "离线"}}{{end}}
-<form method="post" action="/admin/nodes/{{.ID}}/remove" class="lim" onsubmit="return confirm('手动标记该节点已卸载？用于卸载脚本联系不到中央、来不及自动登记的情况；节点会退出放置/ICE/直连下载，文件与历史保留，可随时用&quot;恢复&quot;撤销。')"><button type="submit" title="{{t $.Lang "卸载脚本未能联系中央时的人工补救：标记为已移除"}}">{{t $.Lang "标记已移除"}}</button></form>
+<form method="post" action="/admin/nodes/{{.ID}}/remove" class="lim" onsubmit="return confirm('{{t $.Lang "手动标记该节点已卸载？用于卸载脚本联系不到中央、来不及自动登记的情况；节点会退出放置/ICE/直连下载，文件与历史保留，可随时用「恢复」撤销。"}}')"><button type="submit" title="{{t $.Lang "卸载脚本未能联系中央时的人工补救：标记为已移除"}}">{{t $.Lang "标记已移除"}}</button></form>
 {{end}}</td>
 <td>{{bytes .MonthRelayedBytes}} / {{bytes .RelayedBytes}} / {{if .EffectiveTrafficLimitBytes}}{{bytes .EffectiveTrafficLimitBytes}}{{else}}∞{{end}}</td>
 <td>{{if .StorageEnabled}}{{bytes .StoredBytes}}{{else}}—{{end}} / {{if .DiskLimitBytes}}{{bytes .DiskLimitBytes}}{{else}}∞{{end}}</td>
@@ -781,7 +781,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <button type="submit">{{t $.Lang "保存"}}</button>
 </form>
 </td>
-<td><form method="post" action="/admin/nodes/{{.ID}}/delete" onsubmit="return confirm('删除该官方节点？')"><button type="submit" class="danger">{{t $.Lang "删除"}}</button></form></td>
+<td><form method="post" action="/admin/nodes/{{.ID}}/delete" onsubmit="return confirm('{{t $.Lang "删除该官方节点？"}}')"><button type="submit" class="danger">{{t $.Lang "删除"}}</button></form></td>
 </tr>
 {{end}}{{end}}
 </tbody></table>
@@ -823,7 +823,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <td><span style="color:var(--muted);font-size:12px">{{if .OwnerEmail}}{{.OwnerEmail}}{{else}}{{.OwnerUserID}}{{end}}</span></td>
 <td>{{if .Host}}{{.Host}}{{else}}—{{end}}</td>
 <td>{{if .Online}}{{t $.Lang "在线"}}{{else}}{{t $.Lang "离线"}}{{end}}
-<form method="post" action="/admin/nodes/{{.ID}}/remove" class="lim" onsubmit="return confirm('标记该用户节点已卸载？它会退出该用户的放置池/ICE/直连下载，文件与历史保留，可随时用&quot;恢复&quot;撤销。')"><button type="submit" title="{{t $.Lang "把这台用户节点移出服务（可恢复）"}}">{{t $.Lang "标记已移除"}}</button></form>
+<form method="post" action="/admin/nodes/{{.ID}}/remove" class="lim" onsubmit="return confirm('{{t $.Lang "标记该用户节点已卸载？它会退出该用户的放置池/ICE/直连下载，文件与历史保留，可随时用「恢复」撤销。"}}')"><button type="submit" title="{{t $.Lang "把这台用户节点移出服务（可恢复）"}}">{{t $.Lang "标记已移除"}}</button></form>
 </td>
 <td>{{if .Version}}{{.Version}}{{else}}—{{end}}</td>
 <td>{{if .LastSeenAt}}{{ts .LastSeenAt}}{{else}}—{{end}}</td>
@@ -882,7 +882,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <td>{{if .Host}}{{.Host}}{{else}}—{{end}}</td>
 <td>{{if .Version}}{{.Version}}{{else}}—{{end}}</td>
 <td>{{if .LastSeenAt}}{{ts .LastSeenAt}}{{else}}—{{end}}</td>
-<td><form method="post" action="/admin/nodes/{{.ID}}/restore" class="lim" onsubmit="return confirm('恢复该用户节点？它会重新进入该用户的放置池/ICE/直连下载。')"><button type="submit" title="{{t $.Lang "清除已卸载标记（不影响它的文件与历史）"}}">{{t $.Lang "恢复"}}</button></form></td>
+<td><form method="post" action="/admin/nodes/{{.ID}}/restore" class="lim" onsubmit="return confirm('{{t $.Lang "恢复该用户节点？它会重新进入该用户的放置池/ICE/直连下载。"}}')"><button type="submit" title="{{t $.Lang "清除已卸载标记（不影响它的文件与历史）"}}">{{t $.Lang "恢复"}}</button></form></td>
 </tr>
 {{else}}
 {{/* 与上面的实时节点表一致：查询出错时也要在表内给一行明确的"查询失败"，
@@ -912,7 +912,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <td>{{.Name}}</td><td>{{ts .CreatedAt}}</td>
 <td>{{if .LastUsedAt}}{{ts .LastUsedAt}}{{else}}—{{end}}</td>
 <td>{{if .NodeID}}{{.NodeID}}{{else}}—{{end}}</td>
-<td><form method="post" action="/admin/nodes/token/{{.ID}}/revoke" onsubmit="return confirm('撤销该 Token？')"><button type="submit" class="danger">{{t $.Lang "撤销"}}</button></form></td>
+<td><form method="post" action="/admin/nodes/token/{{.ID}}/revoke" onsubmit="return confirm('{{t $.Lang "撤销该 Token？"}}')"><button type="submit" class="danger">{{t $.Lang "撤销"}}</button></form></td>
 </tr>
 {{end}}
 </tbody></table>
@@ -988,7 +988,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 <td>{{.Name}}</td>
 <td>{{ts .CreatedAt}}</td>
 <td>{{if .LastUsedAt}}{{ts .LastUsedAt}}{{else}}<span class="never">{{t $.Lang "从未使用"}}</span>{{end}}</td>
-<td><form method="post" action="/admin/passkey/delete" onsubmit="return confirm('删除这枚 passkey？')">
+<td><form method="post" action="/admin/passkey/delete" onsubmit="return confirm('{{t $.Lang "删除这枚 passkey？"}}')">
 <input type="hidden" name="id" value="{{.ID}}"><button type="submit" class="danger">{{t $.Lang "删除"}}</button></form></td>
 </tr>
 {{else}}

@@ -127,3 +127,48 @@ func TestEveryWrappedStringHasEnglish(t *testing.T) {
 		}
 	}
 }
+
+func TestConfirmTextIsTranslatedAndJSEscaped(t *testing.T) {
+	// The confirm() strings live in a JS string inside an HTML attribute. That is
+	// the context where html/template escaping is easiest to get wrong and
+	// hardest to notice, and it is attached to rollback and removal buttons — so
+	// it gets its own test rather than riding on the generic render check.
+	var sb strings.Builder
+	data := adminHomeData{Lang: "en", RolloutFleet: rolloutPanelView{Lang: "en", Track: "fleet", Configured: true, Status: "rolling"}}
+	if err := adminUsersTmpl.Execute(&sb, data); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	out := sb.String()
+	for _, want := range []string{"Pause this track", "Roll this track back"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("English admin page missing confirm text %q", want)
+		}
+	}
+	if strings.Contains(out, "暂停该轨的发布？") {
+		t.Error("English page still carries the Chinese confirm text")
+	}
+}
+
+func TestATranslationCannotBreakOutOfTheConfirmString(t *testing.T) {
+	// Adversarial: a translation containing a quote must be escaped by the
+	// template, not end the JS string. If this ever regresses, a translator --
+	// or anyone who edits adminEN -- gains script injection on the admin console.
+	orig, had := adminEN["暂停该轨的发布？"]
+	adminEN["暂停该轨的发布？"] = `x'); alert('pwned`
+	defer func() {
+		if had {
+			adminEN["暂停该轨的发布？"] = orig
+		} else {
+			delete(adminEN, "暂停该轨的发布？")
+		}
+	}()
+
+	var sb strings.Builder
+	data := adminHomeData{Lang: "en", RolloutFleet: rolloutPanelView{Lang: "en", Track: "fleet", Configured: true, Status: "rolling"}}
+	if err := adminUsersTmpl.Execute(&sb, data); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if strings.Contains(sb.String(), `alert('pwned`) {
+		t.Error("a quote in a translation escaped the JS string literal")
+	}
+}
