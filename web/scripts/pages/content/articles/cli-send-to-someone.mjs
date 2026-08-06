@@ -137,7 +137,7 @@ Code: 483920   (valid 5 minutes)`,
     items: [
       {
         q: "Where does the pairing code come from?",
-        a: "Relayium mints it. Run `relayium send ./release.zip` (after `relayium login`) and the CLI prints a 6-digit code good for five minutes, plus the exact command the other end runs. You can't choose it yourself — the server only accepts codes it issued.",
+        a: "Relayium mints it. Run relayium send ./release.zip (after relayium login) and the CLI prints a 6-digit code good for five minutes, plus the exact command the other end runs. You can't choose it yourself — the server only accepts codes it issued.",
       },
       {
         q: "Is the file uploaded anywhere?",
@@ -293,7 +293,7 @@ Code: 483920   (valid 5 minutes)`,
     items: [
       {
         q: "配对码是从哪来的？",
-        a: "由 Relayium 生成。登录后运行 `relayium send ./release.zip`，CLI 会打印一个 6 位数字、5 分钟内有效的码，以及对面要执行的完整命令。这个码不能自己指定——服务器只认它自己签发的。",
+        a: "由 Relayium 生成。登录后运行 relayium send ./release.zip，CLI 会打印一个 6 位数字、5 分钟内有效的码，以及对面要执行的完整命令。这个码不能自己指定——服务器只认它自己签发的。",
       },
       {
         q: "文件会上传到什么地方吗？",
@@ -449,7 +449,7 @@ Code: 483920   (valid 5 minutes)`,
     items: [
       {
         q: "ペアリングコードはどこから来るのですか？",
-        a: "Relayium が発行します。`relayium login` のうえで `relayium send ./release.zip` を実行すると、CLI が 5 分間有効な 6 桁の数字コードと、相手が実行するコマンドをそのまま表示します。自分で選ぶことはできません。サーバーは自身が発行したコードしか受け付けないからです。",
+        a: "Relayium が発行します。relayium login のうえで relayium send ./release.zip を実行すると、CLI が 5 分間有効な 6 桁の数字コードと、相手が実行するコマンドをそのまま表示します。自分で選ぶことはできません。サーバーは自身が発行したコードしか受け付けないからです。",
       },
       {
         q: "ファイルはどこかにアップロードされますか？",
@@ -605,7 +605,7 @@ Code: 483920   (valid 5 minutes)`,
     items: [
       {
         q: "페어링 코드는 어디서 나오나요?",
-        a: "Relayium이 발급합니다. `relayium login` 후 `relayium send ./release.zip`을 실행하면 CLI가 5분간 유효한 6자리 숫자 코드와 상대가 실행할 명령을 그대로 출력합니다. 직접 고를 수는 없습니다. 서버는 자신이 발급한 코드만 받아들이기 때문입니다.",
+        a: "Relayium이 발급합니다. relayium login 후 relayium send ./release.zip을 실행하면 CLI가 5분간 유효한 6자리 숫자 코드와 상대가 실행할 명령을 그대로 출력합니다. 직접 고를 수는 없습니다. 서버는 자신이 발급한 코드만 받아들이기 때문입니다.",
       },
       {
         q: "파일이 어딘가에 업로드되나요?",
@@ -761,7 +761,7 @@ Code: 483920   (valid 5 minutes)`,
     items: [
       {
         q: "Woher kommt der Pairing-Code?",
-        a: "Relayium erzeugt ihn. Führe `relayium send ./release.zip` aus (nach `relayium login`), und die CLI gibt einen Code aus 6 Ziffern aus, der fünf Minuten gilt, dazu den genauen Befehl für die andere Seite. Selbst wählen kannst du ihn nicht — der Server akzeptiert nur Codes, die er selbst ausgegeben hat.",
+        a: "Relayium erzeugt ihn. Führe relayium send ./release.zip aus (nach relayium login), und die CLI gibt einen Code aus 6 Ziffern aus, der fünf Minuten gilt, dazu den genauen Befehl für die andere Seite. Selbst wählen kannst du ihn nicht — der Server akzeptiert nur Codes, die er selbst ausgegeben hat.",
       },
       {
         q: "Wird die Datei irgendwohin hochgeladen?",
@@ -917,7 +917,7 @@ Code: 483920   (valid 5 minutes)`,
     items: [
       {
         q: "D'où vient le code d'appairage ?",
-        a: "C'est Relayium qui le génère. Lancez `relayium send ./release.zip` (après `relayium login`) et la CLI affiche un code de 6 chiffres valable cinq minutes, ainsi que la commande exacte que l'autre extrémité doit exécuter. Vous ne pouvez pas le choisir vous-même — le serveur n'accepte que les codes qu'il a émis.",
+        a: "C'est Relayium qui le génère. Lancez relayium send ./release.zip (après relayium login) et la CLI affiche un code de 6 chiffres valable cinq minutes, ainsi que la commande exacte que l'autre extrémité doit exécuter. Vous ne pouvez pas le choisir vous-même — le serveur n'accepte que les codes qu'il a émis.",
       },
       {
         q: "Le fichier est-il envoyé quelque part ?",
@@ -1073,7 +1073,7 @@ Code: 483920   (valid 5 minutes)`,
     items: [
       {
         q: "من أين يأتي رمز الاقتران؟",
-        a: "‏Relayium هو من يُصدره. شغِّل `relayium send ./release.zip` (بعد `relayium login`) فتطبع واجهة CLI رمزًا من 6 أرقام صالحًا لخمس دقائق، مع الأمر الذي سينفّذه الطرف الآخر بالضبط. لا يمكنك اختياره بنفسك — فالخادم لا يقبل إلا الرموز التي أصدرها هو.",
+        a: "‏Relayium هو من يُصدره. شغِّل relayium send ./release.zip (بعد relayium login) فتطبع واجهة CLI رمزًا من 6 أرقام صالحًا لخمس دقائق، مع الأمر الذي سينفّذه الطرف الآخر بالضبط. لا يمكنك اختياره بنفسك — فالخادم لا يقبل إلا الرموز التي أصدرها هو.",
       },
       {
         q: "هل يُرفَع الملف إلى أي مكان؟",
@@ -1229,7 +1229,7 @@ Code: 483920   (valid 5 minutes)`,
     items: [
       {
         q: "¿De dónde sale el código de emparejamiento?",
-        a: "Lo genera Relayium. Ejecuta `relayium send ./release.zip` (después de `relayium login`) y la CLI imprime un código de 6 dígitos válido durante cinco minutos, junto con el comando exacto que ejecuta el otro extremo. No puedes elegirlo tú: el servidor solo acepta los códigos que él mismo emitió.",
+        a: "Lo genera Relayium. Ejecuta relayium send ./release.zip (después de relayium login) y la CLI imprime un código de 6 dígitos válido durante cinco minutos, junto con el comando exacto que ejecuta el otro extremo. No puedes elegirlo tú: el servidor solo acepta los códigos que él mismo emitió.",
       },
       {
         q: "¿Se sube el archivo a algún sitio?",
@@ -1385,7 +1385,7 @@ Code: 483920   (valid 5 minutes)`,
     items: [
       {
         q: "De onde vem o código de emparelhamento?",
-        a: "Quem gera é o Relayium. Rode `relayium send ./release.zip` (depois de `relayium login`) e a CLI exibe um código de 6 dígitos válido por cinco minutos, junto com o comando exato que a outra ponta executa. Você não pode escolhê-lo — o servidor só aceita os códigos que ele mesmo emitiu.",
+        a: "Quem gera é o Relayium. Rode relayium send ./release.zip (depois de relayium login) e a CLI exibe um código de 6 dígitos válido por cinco minutos, junto com o comando exato que a outra ponta executa. Você não pode escolhê-lo — o servidor só aceita os códigos que ele mesmo emitiu.",
       },
       {
         q: "O arquivo é enviado para algum lugar?",

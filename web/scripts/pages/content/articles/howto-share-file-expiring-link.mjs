@@ -81,7 +81,7 @@ const en = {
     {
       heading: "The zero-knowledge guarantee, and its limits",
       body: [
-        "Here's what actually happens when you create a link. Your browser generates a random AES-256-GCM key — a different mechanism from Relayium's realtime mode, which negotiates a key between two devices with X25519; a stored link's key is generated locally, with nothing to negotiate. That key encrypts your files and the list of filenames before anything leaves your device, and it's appended to the download link after a `#` — a part of the URL that browsers never send to any server. The server stores the ciphertext it's given, and only the ciphertext; it has no way to decrypt it, because it never receives the key.",
+        "Here's what actually happens when you create a link. Your browser generates a random AES-256-GCM key — a different mechanism from Relayium's realtime mode, which negotiates a key between two devices with X25519; a stored link's key is generated locally, with nothing to negotiate. That key encrypts your files and the list of filenames before anything leaves your device, and it's appended to the download link after a # — a part of the URL that browsers never send to any server. The server stores the ciphertext it's given, and only the ciphertext; it has no way to decrypt it, because it never receives the key.",
         "That design has real trade-offs worth knowing. The key never reaches the server, so there is no password reset we could offer you. It is not quite the link's only copy, though: the browser you uploaded from keeps it locally as well, and “My files” on the account page can rebuild and copy the link in that same browser. What makes a file unrecoverable is losing both — the full link and that local copy, which is what opening the account page on a different device, or clearing this browser's site data, amounts to. After that the stored ciphertext is permanently unreadable, to you and to us. Creating a link requires the sender to be signed in, and every link counts against your account's storage quota until it's deleted or expires. And it's worth being precise about what \"zero-knowledge\" means here: the ciphertext is genuinely stored on Relayium's server between creation and download — it's just unreadable without the key that never left your browser.",
       ],
       troubleshooting: {
@@ -121,7 +121,7 @@ const en = {
     items: [
       {
         q: "Does the person I send the link to need an account?",
-        a: "No. Anyone with the full link — including the part after the `#` — can open it and download the files. Only the sender needs to sign in to create the link in the first place.",
+        a: "No. Anyone with the full link — including the part after the # — can open it and download the files. Only the sender needs to sign in to create the link in the first place.",
       },
       {
         q: "Can Relayium read my file?",
@@ -214,7 +214,7 @@ const zh = {
     {
       heading: "零知识保证，以及它的边界",
       body: [
-        "创建链接时实际发生的是这样的：你的浏览器会生成一把随机的 AES-256-GCM 密钥——这跟 Relayium 实时模式的机制不一样，实时模式要通过 X25519 在两台设备之间协商密钥，而存储链接的密钥是在本地直接生成的，没有什么可协商。这把密钥会在文件离开你的设备之前，把文件本身和文件名列表一并加密，然后被附加到下载链接的 `#` 之后——这是浏览器永远不会发给任何服务器的那部分 URL。服务器只保存它收到的密文，而且只有密文；它没有办法解密，因为它从未拿到过密钥。",
+        "创建链接时实际发生的是这样的：你的浏览器会生成一把随机的 AES-256-GCM 密钥——这跟 Relayium 实时模式的机制不一样，实时模式要通过 X25519 在两台设备之间协商密钥，而存储链接的密钥是在本地直接生成的，没有什么可协商。这把密钥会在文件离开你的设备之前，把文件本身和文件名列表一并加密，然后被附加到下载链接的 # 之后——这是浏览器永远不会发给任何服务器的那部分 URL。服务器只保存它收到的密文，而且只有密文；它没有办法解密，因为它从未拿到过密钥。",
         "这个设计有几个值得了解的真实取舍。密钥从不上传到服务器，所以我们没有「找回密码」可以提供。不过它也不是只存在于链接里：上传时用的那个浏览器会在本地留一份，在同一个浏览器里打开账户页的「我的文件」，就能重建并复制出那条链接。真正让文件无法找回的，是这两份都丢了——完整链接，以及那个浏览器里的本地副本（换一台设备打开账户页，或者清掉这个浏览器的站点数据，就等于丢了它）。到那一步，服务器上的密文就永久不可读了，对你对我们都一样。创建链接需要发送方处于登录状态，而且每个链接在被删除或过期之前，都会占用你账号的存储配额。这里的「零知识」也有必要说清楚：密文确实在创建到下载之间存放在 Relayium 的服务器上——只是少了那把从未离开过你浏览器的密钥，谁都读不懂它。",
       ],
       troubleshooting: {
@@ -254,7 +254,7 @@ const zh = {
     items: [
       {
         q: "我发链接给的那个人需要账号吗？",
-        a: "不需要。任何拿到完整链接的人——包括 `#` 后面那部分——都能打开并下载文件。只有发送方在创建链接时需要登录。",
+        a: "不需要。任何拿到完整链接的人——包括 # 后面那部分——都能打开并下载文件。只有发送方在创建链接时需要登录。",
       },
       {
         q: "Relayium 能看到我的文件内容吗？",
@@ -347,7 +347,7 @@ const ja = {
     {
       heading: "ゼロ知識保証と、その限界",
       body: [
-        "リンクを作成するとき実際に起きていることはこうです。ブラウザはランダムな AES-256-GCM 鍵を生成します。これは Relayium のリアルタイムモードとは異なる仕組みで、リアルタイムモードは X25519 で2つの端末間の鍵を協議します。保存リンクの鍵はローカルで生成され、誰とも協議する必要がありません。その鍵は、何かが端末を離れる前にファイル本体とファイル名のリストを暗号化し、ダウンロードリンクの `#` の後に付加されます。ここはブラウザが決してどのサーバーにも送信しない URL の部分です。サーバーは渡された暗号文を、暗号文だけを保存します。鍵を一切受け取らないため、それを復号する方法がありません。",
+        "リンクを作成するとき実際に起きていることはこうです。ブラウザはランダムな AES-256-GCM 鍵を生成します。これは Relayium のリアルタイムモードとは異なる仕組みで、リアルタイムモードは X25519 で2つの端末間の鍵を協議します。保存リンクの鍵はローカルで生成され、誰とも協議する必要がありません。その鍵は、何かが端末を離れる前にファイル本体とファイル名のリストを暗号化し、ダウンロードリンクの # の後に付加されます。ここはブラウザが決してどのサーバーにも送信しない URL の部分です。サーバーは渡された暗号文を、暗号文だけを保存します。鍵を一切受け取らないため、それを復号する方法がありません。",
         "この設計には知っておくべき現実的なトレードオフがあります。鍵はサーバーに一度も届かないので、こちらから提供できるパスワードリセットはありません。ただし、鍵のコピーがリンクだけにあるわけでもありません。アップロードしたブラウザは鍵をローカルにも保持していて、同じブラウザでアカウントページの「マイファイル」を開けばリンクを組み立て直してコピーできます。ファイルが本当に取り戻せなくなるのは、その両方を失ったとき——完全なリンクと、そのブラウザのローカルコピーです（別の端末でアカウントページを開くことや、このブラウザのサイトデータを消去することが、それに当たります）。そうなると、保存された暗号文は利用者にも当社にも永久に読めません。リンクの作成には送信側がサインインしている必要があり、削除または期限切れになるまで各リンクはアカウントのストレージ容量を消費します。そして「ゼロ知識」がここで何を意味するかは正確に言っておく価値があります。暗号文は作成からダウンロードまでの間、実際に Relayium のサーバーに保存されています。ただ、ブラウザを一度も離れなかった鍵がなければ読めない、というだけです。",
       ],
       troubleshooting: {
@@ -387,7 +387,7 @@ const ja = {
     items: [
       {
         q: "リンクを送る相手にアカウントは必要ですか？",
-        a: "いいえ。`#` の後の部分を含む完全なリンクを持っている人なら誰でも開いてファイルをダウンロードできます。リンクを作成するときにサインインが必要なのは送信側だけです。",
+        a: "いいえ。# の後の部分を含む完全なリンクを持っている人なら誰でも開いてファイルをダウンロードできます。リンクを作成するときにサインインが必要なのは送信側だけです。",
       },
       {
         q: "Relayium は私のファイルを読めますか？",
@@ -480,7 +480,7 @@ const ko = {
     {
       heading: "영지식 보장, 그리고 그 한계",
       body: [
-        "링크를 만들 때 실제로 일어나는 일은 이렇습니다. 브라우저가 무작위 AES-256-GCM 키를 생성합니다. 이는 Relayium의 실시간 모드와는 다른 방식으로, 실시간 모드는 X25519로 두 기기 사이에 키를 협상합니다. 저장 링크의 키는 로컬에서 생성되며 협상할 상대가 없습니다. 이 키는 무언가가 기기를 떠나기 전에 파일 본문과 파일명 목록을 암호화하고, 다운로드 링크의 `#` 뒤에 붙습니다. 브라우저가 어떤 서버로도 절대 보내지 않는 URL 부분입니다. 서버는 전달받은 암호문을, 오직 암호문만 저장합니다. 키를 전혀 받지 않으므로 복호화할 방법이 없습니다.",
+        "링크를 만들 때 실제로 일어나는 일은 이렇습니다. 브라우저가 무작위 AES-256-GCM 키를 생성합니다. 이는 Relayium의 실시간 모드와는 다른 방식으로, 실시간 모드는 X25519로 두 기기 사이에 키를 협상합니다. 저장 링크의 키는 로컬에서 생성되며 협상할 상대가 없습니다. 이 키는 무언가가 기기를 떠나기 전에 파일 본문과 파일명 목록을 암호화하고, 다운로드 링크의 # 뒤에 붙습니다. 브라우저가 어떤 서버로도 절대 보내지 않는 URL 부분입니다. 서버는 전달받은 암호문을, 오직 암호문만 저장합니다. 키를 전혀 받지 않으므로 복호화할 방법이 없습니다.",
         "이 설계에는 알아둘 만한 현실적인 절충점이 있습니다. 키는 서버에 한 번도 닿지 않으므로 저희가 드릴 수 있는 비밀번호 재설정 같은 것은 없습니다. 그렇다고 링크가 키의 유일한 사본인 것도 아닙니다. 업로드한 브라우저가 키를 로컬에도 보관하고 있어서, 같은 브라우저에서 계정 페이지의 “내 파일”을 열면 링크를 다시 만들어 복사할 수 있습니다. 파일을 정말로 되찾을 수 없게 되는 것은 그 둘을 모두 잃었을 때입니다 — 전체 링크와, 그 브라우저의 로컬 사본(다른 기기에서 계정 페이지를 열거나 이 브라우저의 사이트 데이터를 지우는 것이 여기에 해당합니다). 그다음부터 저장된 암호문은 여러분에게도 저희에게도 영구히 읽을 수 없습니다. 링크 생성에는 보내는 쪽이 로그인 상태여야 하고, 삭제되거나 만료될 때까지 각 링크는 계정의 스토리지 할당량을 차지합니다. 그리고 여기서 '영지식'이 정확히 무엇을 뜻하는지 분명히 해둘 가치가 있습니다. 암호문은 생성부터 다운로드까지 실제로 Relayium 서버에 저장되어 있습니다. 다만 내 브라우저를 한 번도 떠난 적 없는 키가 없으면 읽을 수 없을 뿐입니다.",
       ],
       troubleshooting: {
@@ -520,7 +520,7 @@ const ko = {
     items: [
       {
         q: "링크를 보낼 상대방도 계정이 필요한가요?",
-        a: "아니요. `#` 뒤의 부분을 포함한 전체 링크를 가진 사람이라면 누구나 열어서 파일을 다운로드할 수 있습니다. 링크를 만들 때 로그인이 필요한 쪽은 보내는 사람뿐입니다.",
+        a: "아니요. # 뒤의 부분을 포함한 전체 링크를 가진 사람이라면 누구나 열어서 파일을 다운로드할 수 있습니다. 링크를 만들 때 로그인이 필요한 쪽은 보내는 사람뿐입니다.",
       },
       {
         q: "Relayium이 제 파일을 읽을 수 있나요?",
@@ -620,7 +620,7 @@ const de = {
     {
       heading: "Die Zero-Knowledge-Garantie — und ihre Grenzen",
       body: [
-        "So läuft es tatsächlich ab, wenn du einen Link erstellst: Dein Browser erzeugt einen zufälligen AES-256-GCM-Schlüssel — ein anderer Mechanismus als bei Relayiums Echtzeitmodus, der per X25519 einen Schlüssel zwischen zwei Geräten aushandelt; der Schlüssel eines gespeicherten Links wird lokal erzeugt, ohne dass etwas ausgehandelt werden muss. Dieser Schlüssel verschlüsselt deine Dateien und die Liste der Dateinamen, bevor irgendetwas dein Gerät verlässt, und wird nach einem `#` an den Download-Link angehängt — ein Teil der URL, den Browser nie an einen Server senden. Der Server speichert genau den Chiffretext, den er erhält, und nur diesen; er kann ihn nicht entschlüsseln, weil er den Schlüssel niemals bekommt.",
+        "So läuft es tatsächlich ab, wenn du einen Link erstellst: Dein Browser erzeugt einen zufälligen AES-256-GCM-Schlüssel — ein anderer Mechanismus als bei Relayiums Echtzeitmodus, der per X25519 einen Schlüssel zwischen zwei Geräten aushandelt; der Schlüssel eines gespeicherten Links wird lokal erzeugt, ohne dass etwas ausgehandelt werden muss. Dieser Schlüssel verschlüsselt deine Dateien und die Liste der Dateinamen, bevor irgendetwas dein Gerät verlässt, und wird nach einem # an den Download-Link angehängt — ein Teil der URL, den Browser nie an einen Server senden. Der Server speichert genau den Chiffretext, den er erhält, und nur diesen; er kann ihn nicht entschlüsseln, weil er den Schlüssel niemals bekommt.",
         "Dieses Design hat reale Kompromisse, die man kennen sollte. Der Schlüssel erreicht den Server nie, also gibt es kein Zurücksetzen des Passworts, das wir anbieten könnten. Ganz die einzige Kopie ist der Link aber nicht: Der Browser, aus dem du hochgeladen hast, behält ihn auch lokal, und „Meine Dateien“ auf der Kontoseite kann den Link in genau diesem Browser wieder zusammensetzen und kopieren. Unwiederbringlich wird eine Datei erst, wenn beides fehlt — der vollständige Link und diese lokale Kopie, was ein anderes Gerät oder das Löschen der Website-Daten dieses Browsers bedeutet. Danach ist der gespeicherte Chiffretext dauerhaft unlesbar, für dich wie für uns. Zum Erstellen eines Links muss der Absender angemeldet sein, und jeder Link zählt gegen das Speicherkontingent deines Kontos, bis er gelöscht wird oder abläuft. Und es lohnt sich, genau zu sein, was „Zero-Knowledge“ hier bedeutet: Der Chiffretext wird zwischen Erstellung und Download tatsächlich auf Relayiums Server gespeichert — er ist nur unlesbar ohne den Schlüssel, der deinen Browser nie verlassen hat.",
       ],
       troubleshooting: {
@@ -660,7 +660,7 @@ const de = {
     items: [
       {
         q: "Braucht die Person, der ich den Link schicke, ein Konto?",
-        a: "Nein. Wer den vollständigen Link hat — einschließlich des Teils nach dem `#` — kann ihn öffnen und die Dateien herunterladen. Nur der Absender muss sich anmelden, um den Link überhaupt zu erstellen.",
+        a: "Nein. Wer den vollständigen Link hat — einschließlich des Teils nach dem # — kann ihn öffnen und die Dateien herunterladen. Nur der Absender muss sich anmelden, um den Link überhaupt zu erstellen.",
       },
       {
         q: "Kann Relayium meine Datei lesen?",
@@ -760,7 +760,7 @@ const fr = {
     {
       heading: "La garantie à divulgation nulle, et ses limites",
       body: [
-        "Voici ce qui se passe réellement quand vous créez un lien. Votre navigateur génère une clé AES-256-GCM aléatoire — ce n'est pas le même mécanisme que le mode temps réel de Relayium, qui négocie une clé entre deux appareils via X25519 ; la clé d'un lien stocké est générée localement, sans rien à négocier. Cette clé chiffre vos fichiers et la liste des noms de fichiers avant que quoi que ce soit ne quitte votre appareil, et elle est ajoutée au lien de téléchargement après un `#` — une partie de l'URL que les navigateurs n'envoient jamais à un serveur. Le serveur stocke le texte chiffré qu'on lui donne, et seulement lui ; il n'a aucun moyen de le déchiffrer, car il ne reçoit jamais la clé.",
+        "Voici ce qui se passe réellement quand vous créez un lien. Votre navigateur génère une clé AES-256-GCM aléatoire — ce n'est pas le même mécanisme que le mode temps réel de Relayium, qui négocie une clé entre deux appareils via X25519 ; la clé d'un lien stocké est générée localement, sans rien à négocier. Cette clé chiffre vos fichiers et la liste des noms de fichiers avant que quoi que ce soit ne quitte votre appareil, et elle est ajoutée au lien de téléchargement après un # — une partie de l'URL que les navigateurs n'envoient jamais à un serveur. Le serveur stocke le texte chiffré qu'on lui donne, et seulement lui ; il n'a aucun moyen de le déchiffrer, car il ne reçoit jamais la clé.",
         "Cette conception a de vrais compromis à connaître. La clé n'atteint jamais le serveur, donc aucune réinitialisation de mot de passe n'est possible de notre côté. Le lien n'en est pas tout à fait la seule copie pour autant : le navigateur depuis lequel vous avez téléversé conserve la clé localement lui aussi, et « Mes fichiers » sur la page de compte peut reconstruire et copier le lien dans ce même navigateur. Ce qui rend un fichier irrécupérable, c'est de perdre les deux — le lien complet et cette copie locale, ce qui revient à ouvrir la page de compte sur un autre appareil ou à effacer les données de site de ce navigateur. Passé ce point, le texte chiffré stocké est définitivement illisible, pour vous comme pour nous. Créer un lien exige que l'expéditeur soit connecté, et chaque lien compte dans le quota de stockage de votre compte jusqu'à sa suppression ou son expiration. Et il vaut la peine d'être précis sur ce que signifie ici « divulgation nulle » : le texte chiffré est bel et bien stocké sur le serveur de Relayium entre la création et le téléchargement — il est simplement illisible sans la clé qui n'a jamais quitté votre navigateur.",
       ],
       troubleshooting: {
@@ -800,7 +800,7 @@ const fr = {
     items: [
       {
         q: "La personne à qui j'envoie le lien a-t-elle besoin d'un compte ?",
-        a: "Non. Quiconque possède le lien complet — y compris la partie après le `#` — peut l'ouvrir et télécharger les fichiers. Seul l'expéditeur doit se connecter pour créer le lien.",
+        a: "Non. Quiconque possède le lien complet — y compris la partie après le # — peut l'ouvrir et télécharger les fichiers. Seul l'expéditeur doit se connecter pour créer le lien.",
       },
       {
         q: "Relayium peut-il lire mon fichier ?",
@@ -900,7 +900,7 @@ const ar = {
     {
       heading: "ضمان المعرفة الصفرية، وحدوده",
       body: [
-        "إليك ما يحدث فعلًا عندما تنشئ رابطًا. يولّد متصفحك مفتاح AES-256-GCM عشوائيًا — آلية مختلفة عن وضع Relayium الفوري الذي يتفاوض على مفتاح بين جهازين باستخدام X25519؛ أما مفتاح الرابط المُخزَّن فيُولَّد محليًا، دون شيء للتفاوض عليه. يشفّر ذلك المفتاح ملفاتك وقائمة أسماء الملفات قبل أن يغادر أي شيء جهازك، ويُلحَق برابط التنزيل بعد `#` — وهو جزء من الـ URL لا ترسله المتصفحات أبدًا إلى أي خادم. يخزّن الخادم النص المُشفَّر الذي يُعطى له، والنص المُشفَّر وحده؛ ولا سبيل لديه لفك تشفيره، لأنه لا يتلقى المفتاح أبدًا.",
+        "إليك ما يحدث فعلًا عندما تنشئ رابطًا. يولّد متصفحك مفتاح AES-256-GCM عشوائيًا — آلية مختلفة عن وضع Relayium الفوري الذي يتفاوض على مفتاح بين جهازين باستخدام X25519؛ أما مفتاح الرابط المُخزَّن فيُولَّد محليًا، دون شيء للتفاوض عليه. يشفّر ذلك المفتاح ملفاتك وقائمة أسماء الملفات قبل أن يغادر أي شيء جهازك، ويُلحَق برابط التنزيل بعد # — وهو جزء من الـ URL لا ترسله المتصفحات أبدًا إلى أي خادم. يخزّن الخادم النص المُشفَّر الذي يُعطى له، والنص المُشفَّر وحده؛ ولا سبيل لديه لفك تشفيره، لأنه لا يتلقى المفتاح أبدًا.",
         "لهذا التصميم مقايضات حقيقية تستحق المعرفة. المفتاح لا يصل إلى الخادم أبدًا، فليست لدينا إعادة تعيين لكلمة مرور نقدّمها لك. لكن الرابط ليس تمامًا نسخته الوحيدة: فالمتصفح الذي رفعت منه يحتفظ به محليًا أيضًا، و«ملفاتي» في صفحة الحساب تستطيع إعادة تركيب الرابط ونسخه داخل المتصفح نفسه. وما يجعل الملف غير قابل للاسترجاع هو فقدان الاثنين معًا — الرابط الكامل وتلك النسخة المحلية، وهو ما يعنيه فتح صفحة الحساب على جهاز آخر أو مسح بيانات الموقع في هذا المتصفح. وبعد ذلك يصبح النص المشفَّر المخزَّن غير قابل للقراءة نهائيًا، لك ولنا معًا. إنشاء رابط يتطلب أن يكون المُرسِل مسجّل الدخول، وكل رابط يُحتسب ضمن حصة تخزين حسابك حتى يُحذف أو تنتهي صلاحيته. ويجدر أن نكون دقيقين بشأن ما تعنيه «المعرفة الصفرية» هنا: النص المُشفَّر مخزَّن فعلًا على خادم Relayium بين الإنشاء والتنزيل — لكنه فقط غير قابل للقراءة دون المفتاح الذي لم يغادر متصفحك أبدًا.",
       ],
       troubleshooting: {
@@ -940,7 +940,7 @@ const ar = {
     items: [
       {
         q: "هل يحتاج الشخص الذي أرسل إليه الرابط إلى حساب؟",
-        a: "لا. أي شخص لديه الرابط الكامل — بما في ذلك الجزء الذي بعد `#` — يمكنه فتحه وتنزيل الملفات. المُرسِل وحده يحتاج إلى تسجيل الدخول لإنشاء الرابط في المقام الأول.",
+        a: "لا. أي شخص لديه الرابط الكامل — بما في ذلك الجزء الذي بعد # — يمكنه فتحه وتنزيل الملفات. المُرسِل وحده يحتاج إلى تسجيل الدخول لإنشاء الرابط في المقام الأول.",
       },
       {
         q: "هل يستطيع Relayium قراءة ملفي؟",
@@ -1040,7 +1040,7 @@ const es = {
     {
       heading: "La garantía de conocimiento cero, y sus límites",
       body: [
-        "Esto es lo que realmente ocurre cuando creas un enlace. Tu navegador genera una clave AES-256-GCM aleatoria — un mecanismo distinto del modo en tiempo real de Relayium, que negocia una clave entre dos dispositivos con X25519; la clave de un enlace almacenado se genera localmente, sin nada que negociar. Esa clave cifra tus archivos y la lista de nombres de archivo antes de que nada salga de tu dispositivo, y se añade al enlace de descarga después de un `#` — una parte de la URL que los navegadores nunca envían a ningún servidor. El servidor almacena el texto cifrado que se le da, y solo el texto cifrado; no tiene forma de descifrarlo, porque nunca recibe la clave.",
+        "Esto es lo que realmente ocurre cuando creas un enlace. Tu navegador genera una clave AES-256-GCM aleatoria — un mecanismo distinto del modo en tiempo real de Relayium, que negocia una clave entre dos dispositivos con X25519; la clave de un enlace almacenado se genera localmente, sin nada que negociar. Esa clave cifra tus archivos y la lista de nombres de archivo antes de que nada salga de tu dispositivo, y se añade al enlace de descarga después de un # — una parte de la URL que los navegadores nunca envían a ningún servidor. El servidor almacena el texto cifrado que se le da, y solo el texto cifrado; no tiene forma de descifrarlo, porque nunca recibe la clave.",
         "Ese diseño tiene compromisos reales que conviene conocer. La clave nunca llega al servidor, así que no hay restablecimiento de contraseña que podamos ofrecerte. Tampoco es exactamente la única copia: el navegador desde el que subiste la guarda también en local, y «Mis archivos» en la página de cuenta puede reconstruir y copiar el enlace en ese mismo navegador. Lo que deja un archivo irrecuperable es perder las dos cosas — el enlace completo y esa copia local, que es lo que significa abrir la página de cuenta en otro dispositivo o borrar los datos de sitio de este navegador. A partir de ahí, el texto cifrado almacenado queda permanentemente ilegible, para ti y para nosotros. Crear un enlace requiere que el remitente haya iniciado sesión, y cada enlace se descuenta de la cuota de almacenamiento de tu cuenta hasta que se borra o caduca. Y vale la pena ser precisos sobre lo que significa aquí «conocimiento cero»: el texto cifrado sí se almacena en el servidor de Relayium entre la creación y la descarga — solo que es ilegible sin la clave que nunca salió de tu navegador.",
       ],
       troubleshooting: {
@@ -1080,7 +1080,7 @@ const es = {
     items: [
       {
         q: "¿La persona a la que envío el enlace necesita una cuenta?",
-        a: "No. Cualquiera que tenga el enlace completo — incluida la parte después del `#` — puede abrirlo y descargar los archivos. Solo el remitente necesita iniciar sesión para crear el enlace en primer lugar.",
+        a: "No. Cualquiera que tenga el enlace completo — incluida la parte después del # — puede abrirlo y descargar los archivos. Solo el remitente necesita iniciar sesión para crear el enlace en primer lugar.",
       },
       {
         q: "¿Puede Relayium leer mi archivo?",
@@ -1180,7 +1180,7 @@ const pt = {
     {
       heading: "A garantia de conhecimento zero, e seus limites",
       body: [
-        "Veja o que realmente acontece quando você cria um link. O seu navegador gera uma chave AES-256-GCM aleatória — um mecanismo diferente do modo em tempo real do Relayium, que negocia uma chave entre dois dispositivos com X25519; a chave de um link armazenado é gerada localmente, sem nada a negociar. Essa chave criptografa seus arquivos e a lista de nomes de arquivo antes de qualquer coisa sair do seu dispositivo, e é anexada ao link de download depois de um `#` — uma parte da URL que os navegadores nunca enviam a nenhum servidor. O servidor armazena o texto cifrado que recebe, e apenas o texto cifrado; ele não tem como descriptografá-lo, porque nunca recebe a chave.",
+        "Veja o que realmente acontece quando você cria um link. O seu navegador gera uma chave AES-256-GCM aleatória — um mecanismo diferente do modo em tempo real do Relayium, que negocia uma chave entre dois dispositivos com X25519; a chave de um link armazenado é gerada localmente, sem nada a negociar. Essa chave criptografa seus arquivos e a lista de nomes de arquivo antes de qualquer coisa sair do seu dispositivo, e é anexada ao link de download depois de um # — uma parte da URL que os navegadores nunca enviam a nenhum servidor. O servidor armazena o texto cifrado que recebe, e apenas o texto cifrado; ele não tem como descriptografá-lo, porque nunca recebe a chave.",
         "Esse design tem compromissos reais que vale a pena conhecer. A chave nunca chega ao servidor, então não existe redefinição de senha que possamos oferecer. Só que o link também não é bem a única cópia dela: o navegador de onde você enviou a guarda localmente, e “Meus arquivos” na página de conta consegue remontar e copiar o link nesse mesmo navegador. O que deixa um arquivo irrecuperável é perder as duas coisas — o link completo e essa cópia local, que é o que significa abrir a página de conta em outro dispositivo ou limpar os dados de site deste navegador. Daí em diante, o texto cifrado armazenado fica permanentemente ilegível, para você e para nós. Criar um link exige que o remetente esteja com login feito, e cada link conta contra a cota de armazenamento da sua conta até ser apagado ou expirar. E vale ser preciso sobre o que “conhecimento zero” significa aqui: o texto cifrado é de fato armazenado no servidor do Relayium entre a criação e o download — só que é ilegível sem a chave que nunca saiu do seu navegador.",
       ],
       troubleshooting: {
@@ -1220,7 +1220,7 @@ const pt = {
     items: [
       {
         q: "A pessoa para quem envio o link precisa de uma conta?",
-        a: "Não. Qualquer pessoa com o link completo — incluindo a parte depois do `#` — pode abri-lo e baixar os arquivos. Só o remetente precisa fazer login para criar o link em primeiro lugar.",
+        a: "Não. Qualquer pessoa com o link completo — incluindo a parte depois do # — pode abri-lo e baixar os arquivos. Só o remetente precisa fazer login para criar o link em primeiro lugar.",
       },
       {
         q: "O Relayium consegue ler meu arquivo?",

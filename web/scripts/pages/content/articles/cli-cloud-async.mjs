@@ -161,7 +161,7 @@ downloads/report.pdf
         label: "Symptom, check, fix",
         items: [
           {
-            symptom: "up refuses with \"run `relayium login` first\".",
+            symptom: "up refuses with \"run relayium login first\".",
             code: [
               `relayium whoami
 # not logged in (run \`relayium login\`)`,
@@ -387,7 +387,7 @@ downloads/report.pdf
         label: "现象、检查、修复",
         items: [
           {
-            symptom: "up 直接拒绝并提示 “run `relayium login` first”。",
+            symptom: "up 直接拒绝并提示 “run relayium login first”。",
             code: [
               `relayium whoami
 # not logged in (run \`relayium login\`)`,
@@ -613,7 +613,7 @@ downloads/report.pdf
         label: "症状・確認・対処",
         items: [
           {
-            symptom: "up が「run `relayium login` first」と出て断る。",
+            symptom: "up が「run relayium login first」と出て断る。",
             code: [
               `relayium whoami
 # not logged in (run \`relayium login\`)`,
@@ -839,7 +839,7 @@ downloads/report.pdf
         label: "증상, 확인, 해결",
         items: [
           {
-            symptom: "up이 “run `relayium login` first”를 내며 거부합니다.",
+            symptom: "up이 “run relayium login first”를 내며 거부합니다.",
             code: [
               `relayium whoami
 # not logged in (run \`relayium login\`)`,
@@ -1065,7 +1065,7 @@ downloads/report.pdf
         label: "Symptom, Prüfung, Lösung",
         items: [
           {
-            symptom: "up verweigert mit „run `relayium login` first“.",
+            symptom: "up verweigert mit „run relayium login first“.",
             code: [
               `relayium whoami
 # not logged in (run \`relayium login\`)`,
@@ -1291,7 +1291,7 @@ downloads/report.pdf
         label: "Symptôme, vérification, correction",
         items: [
           {
-            symptom: "up refuse avec « run `relayium login` first ».",
+            symptom: "up refuse avec « run relayium login first ».",
             code: [
               `relayium whoami
 # not logged in (run \`relayium login\`)`,
@@ -1517,7 +1517,7 @@ downloads/report.pdf
         label: "العَرَض، الفحص، الإصلاح",
         items: [
           {
-            symptom: "يرفض up ويقول «run `relayium login` first».",
+            symptom: "يرفض up ويقول «run relayium login first».",
             code: [
               `relayium whoami
 # not logged in (run \`relayium login\`)`,
@@ -1743,7 +1743,7 @@ downloads/report.pdf
         label: "Síntoma, comprobación, solución",
         items: [
           {
-            symptom: "up se niega con «run `relayium login` first».",
+            symptom: "up se niega con «run relayium login first».",
             code: [
               `relayium whoami
 # not logged in (run \`relayium login\`)`,
@@ -1969,7 +1969,7 @@ downloads/report.pdf
         label: "Sintoma, verificação, correção",
         items: [
           {
-            symptom: "O up recusa com “run `relayium login` first”.",
+            symptom: "O up recusa com “run relayium login first”.",
             code: [
               `relayium whoami
 # not logged in (run \`relayium login\`)`,

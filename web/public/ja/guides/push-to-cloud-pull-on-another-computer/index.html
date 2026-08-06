@@ -151,7 +151,7 @@ downloads/report.pdf
       <ul><li>ファイルはアップロード前に自分のマシンで暗号化されます。復号鍵はリンクの #k= 断片にのみ存在し、サーバーには決して送られません。Relayium は読めない暗号文を、ファイル名も含めて保存します。</li><li>つまりリンクだけがファイルへ戻る唯一の手段です。失えばファイルは復旧できません。自分でも当社でも同じです。</li></ul>
       <h2>リンクが働かないとき</h2>
       <p>失敗する up と down のほとんどは次の4つで尽きます。どれも当て推量は要りません。判定を決める状態は、コマンドが表示するか、自分が打ったコマンドの中に見えています。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>up が「run `relayium login` first」と出て断る。</dt><dd><pre><code>relayium whoami
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状・確認・対処</p><dl><dt>up が「run relayium login first」と出て断る。</dt><dd><pre><code>relayium whoami
 # not logged in (run `relayium login`)</code></pre><p>アップロードはファイルをアカウントの下に保管するので、このマシンに資格情報が必要です。relayium login を実行し、ブラウザーの relayium.com/device で承認してください。以後 whoami はアカウントと結び付き先のサーバーを表示します。</p></dd><dt>down がリンクを解釈できず、鍵が消えたように見える。</dt><dd><pre><code>echo relayium down https://relayium.com/d/7fK2p#k=Xr8s
 # relayium down https://relayium.com/d/7fK2p</code></pre><p>多くのシェルでは引用符のない # がコメントを始めるため、#k= 以降はコマンドに届いていません。echo が、生き残った部分をそのまま見せてくれます。リンク全体をシングルクォートで囲めば、復号鍵であるその断片も無傷で届きます。</p></dd><dt>指定した --ttl より早くリンクが切れる。</dt><dd><pre><code>relayium up ./report.pdf --ttl 7d
 # note: your plan caps retention, so this link is kept 1d, not the 7d you asked for</code></pre><p>プランの上限を超える要求を、サーバーは黙って上限に切り詰めます（Free は1日、Plus は3日、Pro は7日、Max は14日）。そのあと up がこの注記を出して、実際に得られた期間を伝えます。--burn や --max-downloads でもリンクは早く終わります。新しいものが必要ならもう一度アップロードしてください。</p></dd><dt>ログイン済みなのに、up が別の場所にログインしていると言う。</dt><dd><pre><code>relayium whoami

@@ -151,7 +151,7 @@ downloads/report.pdf
       <ul><li>你的文件在上传前就已在你的机器上加密。解密密钥只存在于链接的 #k= 片段里，从不发给服务器——Relayium 存的是它读不了的密文，连文件名也是。</li><li>这也意味着链接是回到文件的唯一途径：丢了链接，文件就无法找回，你和我们都不行。</li></ul>
       <h2>链接不管用的时候</h2>
       <p>几乎所有失败的 up 或 down 都落在下面四种里，而且没有一种需要靠猜——决定性的状态要么由一条命令打印出来，要么就摆在你敲的那行命令里。</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、修复</p><dl><dt>up 直接拒绝并提示 “run `relayium login` first”。</dt><dd><pre><code>relayium whoami
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、修复</p><dl><dt>up 直接拒绝并提示 “run relayium login first”。</dt><dd><pre><code>relayium whoami
 # not logged in (run `relayium login`)</code></pre><p>上传是把文件存到你的账号名下，所以这台机器需要凭据。运行 relayium login，在浏览器的 relayium.com/device 上批准；之后 whoami 就会打印出你的账号和它绑定的服务器。</p></dd><dt>down 解析不了链接，密钥像是凭空消失了。</dt><dd><pre><code>echo relayium down https://relayium.com/d/7fK2p#k=Xr8s
 # relayium down https://relayium.com/d/7fK2p</code></pre><p>在大多数 shell 里，没加引号的 # 会开启注释，于是从 #k= 起的部分根本没进到命令里——echo 会原样告诉你活下来的是哪一截。把整条链接用单引号括起来，那个片段（也就是解密密钥）就能完整送达。</p></dd><dt>链接比你要的 --ttl 更早失效。</dt><dd><pre><code>relayium up ./report.pdf --ttl 7d
 # note: your plan caps retention, so this link is kept 1d, not the 7d you asked for</code></pre><p>超过套餐上限的请求，服务器会静默地按上限处理——Free 1 天、Plus 3 天、Pro 7 天、Max 14 天——随后 up 会打印这行提示，告诉你实际拿到了多久。此外 --burn 和 --max-downloads 也会让链接提前作废。想要新的就重新上传一次。</p></dd><dt>明明登录了，up 却说你登录在别处。</dt><dd><pre><code>relayium whoami

@@ -151,7 +151,7 @@ downloads/report.pdf
       <ul><li>파일은 업로드 전에 내 기기에서 암호화됩니다. 복호화 키는 링크의 #k= 조각에만 있고 서버로 전송되지 않습니다 — Relayium은 읽을 수 없는 암호문을 파일 이름까지 포함해 저장합니다.</li><li>그래서 링크가 파일로 돌아가는 유일한 길입니다: 잃으면 파일은 복구할 수 없습니다. 본인도, 저희도.</li></ul>
       <h2>링크가 듣지 않을 때</h2>
       <p>실패하는 up과 down은 거의 다 아래 네 가지입니다. 어느 것도 추측이 필요 없습니다. 판정을 가르는 상태는 명령이 출력해 주거나, 직접 친 명령 안에 보입니다.</p>
-      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">증상, 확인, 해결</p><dl><dt>up이 “run `relayium login` first”를 내며 거부합니다.</dt><dd><pre><code>relayium whoami
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">증상, 확인, 해결</p><dl><dt>up이 “run relayium login first”를 내며 거부합니다.</dt><dd><pre><code>relayium whoami
 # not logged in (run `relayium login`)</code></pre><p>업로드는 파일을 계정 아래에 보관하므로 이 기기에 자격 증명이 필요합니다. relayium login 을 실행하고 브라우저의 relayium.com/device 에서 승인하세요. 그 뒤 whoami가 계정과 묶여 있는 서버를 출력합니다.</p></dd><dt>down이 링크를 해석하지 못하고, 키가 사라진 것처럼 보입니다.</dt><dd><pre><code>echo relayium down https://relayium.com/d/7fK2p#k=Xr8s
 # relayium down https://relayium.com/d/7fK2p</code></pre><p>대부분의 셸에서 따옴표 없는 #은 주석을 시작하므로 #k= 이후는 명령에 닿지도 못했습니다. echo가 살아남은 부분을 그대로 보여 줍니다. 링크 전체를 작은따옴표로 감싸면 복호화 키인 그 조각이 온전히 전달됩니다.</p></dd><dt>요청한 --ttl보다 링크가 일찍 끊깁니다.</dt><dd><pre><code>relayium up ./report.pdf --ttl 7d
 # note: your plan caps retention, so this link is kept 1d, not the 7d you asked for</code></pre><p>요금제 상한을 넘는 요청을 서버는 조용히 상한으로 깎습니다 — Free 1일, Plus 3일, Pro 7일, Max 14일 — 그리고 up이 실제로 받은 기간을 이 안내로 알려 줍니다. --burn이나 --max-downloads로도 링크는 일찍 끝납니다. 새 링크가 필요하면 다시 올리세요.</p></dd><dt>로그인해 두었는데도 up이 다른 곳에 로그인되어 있다고 합니다.</dt><dd><pre><code>relayium whoami
