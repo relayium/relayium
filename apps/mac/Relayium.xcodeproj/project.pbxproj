@@ -30,6 +30,7 @@
 /* Begin PBXFileReference section */
 		A100000000000000000000A4 /* Relayium.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Relayium.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A100000000000000000000D1 /* RelayiumShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = RelayiumShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A100000000000000000000E1 /* RelayiumUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RelayiumUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -70,6 +71,13 @@
 			path = RelayiumShare;
 			sourceTree = "<group>";
 		};
+		A100000000000000000000E3 /* RelayiumUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			explicitFileTypes = {};
+			explicitFolders = ();
+			path = RelayiumUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -98,6 +106,7 @@
 			children = (
 				A100000000000000000000AF /* Relayium */,
 				A100000000000000000000D3 /* RelayiumShare */,
+				A100000000000000000000E3 /* RelayiumUITests */,
 				A100000000000000000000A3 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -107,6 +116,7 @@
 			children = (
 				A100000000000000000000A4 /* Relayium.app */,
 				A100000000000000000000D1 /* RelayiumShare.appex */,
+				A100000000000000000000E1 /* RelayiumUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -163,6 +173,29 @@
 			productReference = A100000000000000000000D1 /* RelayiumShare.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		A100000000000000000000E2 /* RelayiumUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A100000000000000000000E7 /* Build configuration list for PBXNativeTarget "RelayiumUITests" */;
+			buildPhases = (
+				A100000000000000000000E4 /* Sources */,
+				A100000000000000000000E5 /* Frameworks */,
+				A100000000000000000000E6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A100000000000000000000EA /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A100000000000000000000E3 /* RelayiumUITests */,
+			);
+			name = RelayiumUITests;
+			packageProductDependencies = (
+			);
+			productName = RelayiumUITests;
+			productReference = A100000000000000000000E1 /* RelayiumUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXTargetDependency section */
@@ -170,6 +203,11 @@
 			isa = PBXTargetDependency;
 			target = A100000000000000000000D2 /* RelayiumShare */;
 			targetProxy = A100000000000000000000DA /* PBXContainerItemProxy */;
+		};
+		A100000000000000000000EA /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A100000000000000000000A5 /* Relayium */;
+			targetProxy = A100000000000000000000EB /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -180,6 +218,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = A100000000000000000000D2;
 			remoteInfo = RelayiumShare;
+		};
+		A100000000000000000000EB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A100000000000000000000A1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A100000000000000000000A5;
+			remoteInfo = Relayium;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -195,6 +240,10 @@
 					};
 					A100000000000000000000D2 = {
 						CreatedOnToolsVersion = 26.6;
+					};
+					A100000000000000000000E2 = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = A100000000000000000000A5;
 					};
 				};
 			};
@@ -227,12 +276,20 @@
 			targets = (
 				A100000000000000000000A5 /* Relayium */,
 				A100000000000000000000D2 /* RelayiumShare */,
+				A100000000000000000000E2 /* RelayiumUITests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		A100000000000000000000AE /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A100000000000000000000E6 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -251,6 +308,20 @@
 /* Begin PBXSourcesBuildPhase section */
 		A100000000000000000000AC /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A100000000000000000000E4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A100000000000000000000E5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -325,6 +396,42 @@
 				SDKROOT = macosx;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		A100000000000000000000E8 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_IDENTITY = "-";
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.mac.UITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = Relayium;
+			};
+			name = Debug;
+		};
+		A100000000000000000000E9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CODE_SIGN_IDENTITY = "-";
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.relayium.mac.UITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = Relayium;
 			};
 			name = Release;
 		};
@@ -506,6 +613,15 @@
 			buildConfigurations = (
 				A100000000000000000000A7 /* Debug */,
 				A100000000000000000000A8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A100000000000000000000E7 /* Build configuration list for PBXNativeTarget "RelayiumUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A100000000000000000000E8 /* Debug */,
+				A100000000000000000000E9 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

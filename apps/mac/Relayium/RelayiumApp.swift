@@ -370,6 +370,7 @@ struct RelayiumApp: App {
                     // and it outlives every window (MenuBarExtra keeps the
                     // process up). A second window must not reopen the room
                     // socket, and must never override an explicit pause.
+                    guard !UITestMode.isActive else { return }
                     notifications.start()
                     lanDiscovery.startResident()
                 }
