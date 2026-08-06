@@ -29,7 +29,9 @@ import Foundation
 ///    reuse still has no policy;
 ///  - no END acknowledgement timing and no ICE restart;
 ///  - no lifecycle or UI integration — the coordinator drives `LinkAdmission`'s
-///    interrupt/replace transitions and nothing above them — and
+///    interrupt/replace transitions, `LinkSessionRuntime` claims the initial
+///    `didOpen`, and nothing above those two exists: no room owner routes a
+///    signal, moves admission to `.connecting` or assembles a link — and
 ///    `LINK_BUILD_SUPPORT` is still false, so no peer is ever told this build
 ///    speaks `link/1`;
 ///  - no native↔Web evidence for any of it.

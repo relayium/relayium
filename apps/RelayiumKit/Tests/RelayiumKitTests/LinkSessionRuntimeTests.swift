@@ -358,6 +358,10 @@ final class LinkSessionRuntimeTests: XCTestCase {
         let events: EventRecorder
         let scheduler: ManualScheduler
         let replacements: BuiltReplacements
+        /// The room's one-link state, exactly as a room owner would hand it over:
+        /// already moved to `.connecting` for this peer before the runtime
+        /// existed. Nothing else in the system can move it to `.open`.
+        let admission: LinkAdmission
     }
 
     /// A runtime, the initial transport under it, and the peer that talks to it.
@@ -375,6 +379,10 @@ final class LinkSessionRuntimeTests: XCTestCase {
         let events = EventRecorder()
         let scheduler = ManualScheduler()
         let replacements = BuiltReplacements()
+        // Where a room owner leaves it before assembling a link: this peer
+        // admitted, an establishment announced, and nothing open.
+        let admission = LinkAdmission(selfId: { "peer-a" }, supportsLink: { _ in true })
+        admission.didBeginEstablishing(peerId: identity.peerId, role: role)
         let runtime = LinkSessionRuntime(
             transport: transport,
             receiveDirectory: receiveDirectory ?? dir,
@@ -385,10 +393,12 @@ final class LinkSessionRuntimeTests: XCTestCase {
                 replacements.append(replacement)
                 return replacement
             },
+            admission: admission,
             onEvent: { events.append($0) })
         return Harness(runtime: runtime, transport: transport, identity: identity,
                        codecs: codecs, peer: RealtimeSender(sessionKey: recvKey),
-                       events: events, scheduler: scheduler, replacements: replacements)
+                       events: events, scheduler: scheduler, replacements: replacements,
+                       admission: admission)
     }
 
     /// Started and published: the ordinary state every operation below assumes.
@@ -1089,6 +1099,142 @@ final class LinkSessionRuntimeTests: XCTestCase {
         XCTAssertEqual(h.runtime.joinRecovery(peerId: "peer-b") { _ in }, .unavailable)
     }
 
+    // MARK: - the room's phase
+    //
+    // `LinkAdmission` arrives `.connecting`, because that is where the room owner
+    // that routed the signal left it. This runtime is the only thing in the
+    // system that can move it to `.open`: the coordinator drives interrupt,
+    // replace, close and fail, and a screen learns of `opened` one hop later, by
+    // which time the transport may already have died. Every case below is a way
+    // that one transition goes wrong.
+
+    /// The room is told at publication, once, for the peer that actually
+    /// authenticated — and not before. A link announced early is a room that
+    /// answers every other peer `busy` for a connection that may never open.
+    func testTheRoomIsOpenedExactlyWhenTheLinkPublishes() {
+        let h = harness()
+        XCTAssertEqual(h.admission.phase, .connecting(peerId: "peer-b"),
+                       "as the room owner left it")
+
+        h.runtime.start()
+        XCTAssertEqual(h.admission.phase, .connecting(peerId: "peer-b"),
+                       "starting is not opening: nothing has authenticated yet")
+
+        h.transport.publish(h.identity)
+        h.runtime.settle()
+
+        XCTAssertEqual(h.admission.phase, .open(peerId: "peer-b"))
+    }
+
+    /// The peer is the published identity's, not the transport's construction
+    /// argument and not the admission's previous occupant. They agree today; a
+    /// runtime that read the wrong one would only diverge on the rebuild path,
+    /// where a resume offer is matched against this exact id.
+    func testTheRoomIsOpenedForThePeerThatAuthenticated() {
+        let h = harness()
+        h.runtime.start()
+
+        h.transport.publish(LinkIdentity(peerId: "peer-authenticated", role: .initiator,
+                                         sas: "424242", codecs: h.codecs,
+                                         authenticationGeneration: 2))
+        h.runtime.settle()
+
+        XCTAssertEqual(h.admission.phase, .open(peerId: "peer-authenticated"))
+    }
+
+    /// Only the FIRST publication is an opening. A second `onReady` — a replayed
+    /// callback, or a transport that published twice — is refused by the state
+    /// guard before it reaches admission, so it cannot move the room onto a peer
+    /// whose link this runtime never built.
+    func testASecondPublicationCannotMoveTheRoomToAnotherPeer() {
+        let h = harness()
+        opened(h)
+        XCTAssertEqual(h.admission.phase, .open(peerId: "peer-b"))
+
+        h.transport.publish(LinkIdentity(peerId: "peer-impostor", role: .initiator,
+                                         sas: "999999", codecs: h.codecs,
+                                         authenticationGeneration: 2))
+        h.runtime.settle()
+
+        XCTAssertEqual(h.admission.phase, .open(peerId: "peer-b"),
+                       "the room still holds the one link that really published")
+    }
+
+    /// A transport that dies before it publishes opens nothing. There is no link
+    /// to announce, and announcing one would leave the room holding a peer that
+    /// never authenticated.
+    ///
+    /// It stays `.connecting` rather than becoming `.failed`: the terminal
+    /// transition for an establishment that never published belongs to the room
+    /// owner that started it — this runtime never claimed the room, so it has no
+    /// business releasing it. That owner does not exist yet, which is exactly the
+    /// gap the next slice closes; this test states the boundary rather than
+    /// pretending it is already closed.
+    func testAnEstablishmentThatDiesBeforePublicationOpensNothing() {
+        let h = harness()
+        h.runtime.start()
+
+        h.transport.die(error: LinkTransportError.peerConnectionFailed)
+        h.runtime.settle()
+
+        XCTAssertEqual(h.events.all, [.ended(.establishmentFailed)])
+        XCTAssertEqual(h.admission.phase, .connecting(peerId: "peer-b"),
+                       "nothing opened, and releasing the room is not this layer's")
+    }
+
+    /// A stopped runtime cannot open the room afterwards. The publication guard
+    /// refuses on the typed state before admission is reached, so a `onReady`
+    /// that arrives late — a transport already closing, a callback in flight —
+    /// finds no link to announce.
+    func testAPublicationAfterTheEndCannotOpenTheRoom() {
+        let h = harness()
+        h.runtime.start()
+        h.runtime.stop()
+        h.runtime.settle()
+
+        h.transport.publish(h.identity)
+        h.runtime.settle()
+
+        XCTAssertNotEqual(h.admission.phase, .open(peerId: "peer-b"),
+                          "an ended runtime opens nothing")
+        XCTAssertEqual(h.events.all, [.ended(.stopped)])
+    }
+
+    /// The room is opened BEFORE anything can observe the link as live, so a
+    /// transport that dies immediately afterwards produces a real gap. This is
+    /// the ordering the transition exists for: `didInterrupt` only acts on a
+    /// phase that is already `.open`, so an opening that happened one instant
+    /// later would leave the room stuck at `.connecting` while the link was
+    /// interrupted — every later peer refused, and the rebuild offer that could
+    /// have saved it routed to `.ignore`.
+    func testAnInterruptionImmediatelyAfterPublicationReachesInterrupted() throws {
+        let h = harness()
+        opened(h)
+        try holdingAReceive(h)
+
+        h.transport.die(error: LinkTransportError.laneClosed(LINK_FILE_CHANNEL))
+        h.runtime.settle()
+
+        XCTAssertEqual(h.runtime.recoveryPhase, .interrupted)
+        XCTAssertEqual(h.admission.phase, .interrupted(peerId: "peer-b"),
+                       "the room knows its link is in a gap, not connecting and not open")
+    }
+
+    /// Ending a published link releases the room, through the coordinator that
+    /// already owns every terminal transition. The runtime adds no second one:
+    /// two layers closing one admission is how a room ends up idle while a link
+    /// is still live.
+    func testEndingAPublishedLinkLeavesTheRoomReleasedRatherThanOpen() {
+        let h = harness()
+        opened(h)
+        XCTAssertEqual(h.admission.phase, .open(peerId: "peer-b"))
+
+        h.runtime.stop()
+        h.runtime.settle()
+
+        XCTAssertEqual(h.admission.phase, .idle, "the room is free for the next peer")
+    }
+
     // MARK: - re-entrancy and concurrency
 
     /// A client callback may call straight back into this runtime on the
@@ -1277,6 +1423,14 @@ final class LinkSessionRuntimeTests: XCTestCase {
         XCTAssertEqual(h.events.all, [.sas("424242"), .ended(.stopped)],
                        "the digits this runtime had already shown, then the end, and nothing else")
         XCTAssertNil(h.runtime.owner, "the owner that lost the race is discarded, not published")
+        // The room half of the same race. A publication that lost has assembled
+        // an owner and a coordinator and is one line from announcing — and it
+        // must announce nothing, because the link it would announce is already
+        // being taken apart. The coordinator it discards releases the room on its
+        // way out, which is why this is `.idle` and not the `.connecting` it
+        // arrived as.
+        XCTAssertEqual(h.admission.phase, .idle,
+                       "a stop that wins the race opens nothing and leaves the room free")
     }
 
     /// The UNCONTENDED teardown: nothing else is delivering, so each driver's
@@ -1548,6 +1702,56 @@ final class LinkSessionRuntimeTests: XCTestCase {
             XCTAssertFalse(source.contains(piecemeal),
                            "\(piecemeal) would take a hook the lane owner installed atomically")
         }
+    }
+
+    /// ONE admission transition, and it is `didOpen`.
+    ///
+    /// Pinned as source as well as behaviour, because the two failures this rules
+    /// out are both invisible to a passing behavioural suite. A SECOND `didOpen`
+    /// — on a rebuild, say — would refill the peer's leave budget, handing a peer
+    /// that had already spent it a fresh one by dropping the connection; that is
+    /// `didReplaceTransport`'s whole reason for existing and it stays the
+    /// coordinator's. And any terminal transition made here would be a second
+    /// layer releasing one room, which is how an admission goes idle under a link
+    /// that is still live.
+    func testTheRuntimeMakesExactlyOneAdmissionTransitionAndItIsTheOpen() {
+        let source = code(runtimeSource)
+        XCTAssertFalse(source.isEmpty, "the runtime source must be readable")
+
+        XCTAssertEqual(source.components(separatedBy: "admission?.").count - 1, 1,
+                       "the runtime drives admission exactly once")
+        XCTAssertTrue(source.contains("admission?.didOpen(peerId: ready.peerId)"),
+                      "and the one call is the open, for the published peer")
+        for coordinators in ["didReplaceTransport", "didInterrupt", "didClose", "didFail",
+                             "didBeginEstablishing", "didBeginRequesting",
+                             "didEndReplacingTransport", "didBeginReplacingTransport",
+                             "didRequestTimeOut"] {
+            XCTAssertFalse(source.contains(coordinators),
+                           "\(coordinators) belongs to the coordinator or the room owner")
+        }
+    }
+
+    /// The open is made inside the SAME critical section that claims `.active`,
+    /// and that placement is the whole correctness argument — see `publish`. A
+    /// later edit that moved it below the unlock would leave a window in which a
+    /// transport terminating right then routes `didInterrupt` at a room still
+    /// `.connecting`, where it is a no-op, and this side then announces `.open`
+    /// for a link that is already gone. The window is a few instructions wide, so
+    /// no behavioural test can be relied on to catch it.
+    func testTheRoomIsOpenedUnderTheSameLockThatClaimsTheLink() throws {
+        let source = code(runtimeSource)
+        XCTAssertFalse(source.isEmpty, "the runtime source must be readable")
+
+        let claim = try XCTUnwrap(source.range(of: "state = .active(owner: owner"))
+        let open = try XCTUnwrap(source.range(of: "admission?.didOpen("))
+        let queued = try XCTUnwrap(source.range(of: "pending.append(.opened("))
+        let unlock = try XCTUnwrap(source.range(of: "lock.unlock()", range: claim.upperBound..<source.endIndex))
+
+        XCTAssertTrue(claim.upperBound < open.lowerBound, "the claim comes first")
+        XCTAssertTrue(open.upperBound < queued.lowerBound,
+                      "then the room, then the report")
+        XCTAssertTrue(queued.upperBound < unlock.lowerBound,
+                      "and all three are inside one acquisition")
     }
 
     /// Every event leaves through the ONE consumer.

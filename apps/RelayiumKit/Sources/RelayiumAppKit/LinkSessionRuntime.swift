@@ -235,8 +235,13 @@ public enum LinkSessionRuntimeError: Error, Equatable, Sendable {
 /// authentication across a rebuild, and both are complete — but nothing builds
 /// either, and the two have an ordering requirement between them that no test of
 /// either alone can state. This is the thing that builds them, in that order, and
-/// it is deliberately nothing else: it owns no UI, no admission, no signalling
-/// policy, no picker and no directory selection.
+/// it is deliberately nothing else: it owns no UI, no signalling policy, no
+/// picker and no directory selection.
+///
+/// It owns no admission POLICY either — it admits nobody, refuses nobody and
+/// decides no role — but it does make exactly one admission transition, and that
+/// is not a policy: `didOpen`, at the instant this runtime claims a published
+/// link. It is the only layer that can. See invariant 6.
 ///
 /// ## The invariants it exists to make structural
 ///
@@ -274,14 +279,42 @@ public enum LinkSessionRuntimeError: Error, Equatable, Sendable {
 /// **5. Stop is what discards an uncommitted receive.** Not `deinit` — see
 /// "Lifetime".
 ///
+/// **6. This runtime is what tells the room its link is OPEN, and the only thing
+/// that can be.** `LinkAdmission` is moved to `.connecting` by the room owner
+/// before this object exists, and from there nothing else in the system can move
+/// it to `.open`: `LinkRecoveryCoordinator` drives only interrupt, replace, close
+/// and fail, and a screen or a future UI coordinator learns of `opened` one hop
+/// later, by which time the transport may already have died. So `publish` makes
+/// that one transition, in the same critical section that claims `.active` — see
+/// the comment there for why the two cannot be separate steps, and why this is
+/// the single call this object makes with `lock` held.
+///
+/// It is `didOpen` and nothing else. A REPLACEMENT is the same authentication
+/// step on a new wire and stays `didReplaceTransport`, which is the coordinator's
+/// — the two differ in whether the peer's leave budget is refilled, and refilling
+/// it for a rebuild would hand a peer that already spent it a fresh one by
+/// dropping the connection.
+///
 /// ## Threading
 ///
 /// **One lock, `lock`, and it protects two things that must agree: `state`, and
 /// the queue of events that state has admitted.** It is taken to read or write a
 /// decision and released before anything is acted on. There is no path from under
 /// it to the transport, the coordinator, the owner, either driver, a destination,
-/// the scheduler or a client callback, and it is therefore a LEAF: nothing is ever
-/// acquired under it, and nothing is ever called under it — with no exception. The
+/// the scheduler or a client callback, and it is therefore a LEAF for every one of
+/// those: nothing that can run arbitrary code, re-enter this object or acquire a
+/// lock of its own is ever called under it.
+///
+/// **The one call made under it is `LinkAdmission.didOpen`, and it is a leaf
+/// mutation rather than an exception to the rule's purpose.** It assigns three
+/// stored properties under that object's own lock and returns; the only arbitrary
+/// code `LinkAdmission` holds is its three owner-supplied predicates, every one of
+/// which it evaluates outside its lock precisely so re-entrancy is impossible, and
+/// `didOpen` evaluates none of them. `lock` → the admission's lock is therefore a
+/// terminal edge that cannot close a cycle, and it is the same direction
+/// `LinkRecoveryCoordinator` already takes when it drives that object from inside
+/// its own critical sections. Invariant 6 and `publish` record why it cannot be
+/// moved outside. The
 /// transport's four callback slots, which are the one thing that has to be written
 /// before anything else can happen, are written in `init`, where there is no
 /// concurrency to guard against and therefore no reason to hold anything across
@@ -358,9 +391,12 @@ public final class LinkSessionRuntime: @unchecked Sendable {
     //    `admission` and `onEvent` are immutable after `init`.
     //  - `state`, `pending` and `delivering` are the only mutable properties, and
     //    every read and every write of each is made with `lock` held.
-    //  - `lock` is never held across a call to anything: not the transport, not
-    //    the coordinator, not the owner, not a driver, not a destination, not
-    //    the scheduler and not a client callback.
+    //  - `lock` is never held across a call to anything that can run arbitrary
+    //    code or reach back here: not the transport, not the coordinator, not
+    //    the owner, not a driver, not a destination, not the scheduler and not a
+    //    client callback. The single call it IS held across is
+    //    `LinkAdmission.didOpen`, a closure-free leaf mutation — see "Threading"
+    //    and invariant 6.
 
     /// Where this runtime is, as one word rather than a handful of booleans that
     /// could disagree.
@@ -445,8 +481,17 @@ public final class LinkSessionRuntime: @unchecked Sendable {
     ///     a property of the type system.
     ///   - admission: the room's one-link state, if the caller owns one, so it
     ///     and the coordinator's gap cannot disagree about whether a rebuild is
-    ///     in flight. Passed straight through; this object makes no admission
-    ///     decision of its own.
+    ///     in flight. This object makes no admission DECISION of its own — it
+    ///     admits nobody, refuses nobody and decides no role — and it makes
+    ///     exactly one transition: `didOpen`, at the instant it claims a
+    ///     published link, because nothing else in the system can. Everything
+    ///     after that is the coordinator's, through the same object. See
+    ///     invariant 6.
+    ///
+    ///     Still optional, and a runtime built without one simply announces
+    ///     nothing. A caller that has a room passes its admission —
+    ///     `LinkSessionFactory` makes that non-optional at the boundary where it
+    ///     stops being a convention.
     ///   - onEvent: see `LinkSessionRuntimeEvent` for the delivery contract.
     ///     There is no main-actor guarantee: it runs on whichever thread is
     ///     draining, which may or may not be the main one, so a presentation
@@ -603,9 +648,46 @@ public final class LinkSessionRuntime: @unchecked Sendable {
             return
         }
         state = .active(owner: owner, coordinator: coordinator)
-        // The claim and the report are ONE step. A `stop()` from another thread
-        // cannot get between them, so it can only find this link already open
-        // and queue its end behind this — never in front of it.
+        // The claim, the room's phase and the report are ONE step. A `stop()`
+        // from another thread cannot get between them, so it can only find this
+        // link already open and queue its end behind this — never in front of it.
+        //
+        // ADMISSION IS MOVED HERE, AND IT HAS TO BE INSIDE THIS CRITICAL SECTION.
+        // The room owner moved it to `.connecting` before this runtime existed
+        // and nothing else can move it to `.open`: the coordinator below only
+        // ever drives interrupt/replace/close/fail, and by the time a screen or a
+        // future UI coordinator could observe `opened` the transport may already
+        // have died. This is the first and only layer that knows one authenticated
+        // identity published, both lanes and the coordinator are built and bound,
+        // and this runtime has atomically claimed `.active`.
+        //
+        // The line below `lock.unlock()` is where it would race. `.active` is
+        // exactly what `initialTransportTerminated` needs to route a terminal
+        // callback into `coordinator.transportTerminated`, which calls
+        // `admission.didInterrupt()` — and `didInterrupt` only acts on a phase
+        // that is `.open`. Opening after the unlock would therefore let a
+        // transport that died in that window take the interrupt as a no-op and
+        // leave this side announcing `.open` for a link that is already gone:
+        // every later peer answered `busy` for nothing, and the rebuild offer
+        // that could have saved it routed to `.ignore`. Opening inside makes that
+        // window not exist.
+        //
+        // **This is the one call made under `lock`, and it is deliberate.**
+        // `LinkAdmission.didOpen` is a leaf mutation — it takes that object's own
+        // lock, assigns three stored properties and returns, calling nothing and
+        // reaching nothing that can reach back here. `LinkAdmission` guarantees
+        // that structurally rather than by convention: its owner-supplied
+        // predicates (`selfId`, `supportsLink`, `canAcceptLink`) are the only
+        // arbitrary code it holds, every one of them is evaluated OUTSIDE its
+        // lock precisely so re-entrancy is impossible, and `didOpen` evaluates
+        // none of them. So `lock` → the admission's lock is a terminal edge that
+        // cannot close a cycle, and it is the direction `LinkRecoveryCoordinator`
+        // already takes: it calls `didInterrupt`, `didClose` and `didFail` from
+        // inside its own `locked` sections, for exactly this reason. Nothing else
+        // — not the transport, the coordinator, the owner, a driver, a
+        // destination, the scheduler or a client callback — is ever called from
+        // under this lock. See this type's `@unchecked Sendable` note.
+        admission?.didOpen(peerId: ready.peerId)
         pending.append(.opened(peerId: ready.peerId, sas: ready.sas))
         lock.unlock()
 

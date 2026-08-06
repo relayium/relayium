@@ -121,11 +121,18 @@ extension WebRTCLinkTransport: LinkRoutableInitialTransport {}
 ///
 /// **6. Admission is forwarded, never driven.** The room's `LinkAdmission` is
 /// passed through so it and `LinkRecoveryCoordinator`'s gap cannot disagree
-/// about whether a rebuild is in flight. Nothing here calls
-/// `didBeginEstablishing`, `didOpen`, `didFail` or `didClose`: those belong to
-/// the room owner that routed the signal and decided this link should exist, and
-/// making one of them from inside an assembly would be admission policy in the
-/// layer that must not have any.
+/// about whether a rebuild is in flight. Nothing HERE calls
+/// `didBeginEstablishing`, `didOpen`, `didFail` or `didClose`, and making one of
+/// them from inside an assembly would be admission policy in the layer that must
+/// not have any.
+///
+/// Each of them belongs to the layer that knows the fact it announces:
+/// `didBeginEstablishing` to the room owner that routed the signal and decided
+/// this link should exist; `didOpen` to `LinkSessionRuntime`, which is the first
+/// and only layer that knows one authenticated identity published with both lanes
+/// bound under it; and the terminal and rebuild transitions to
+/// `LinkRecoveryCoordinator`. An assembly knows none of those three things — it
+/// has not started anything by the time it returns a value.
 ///
 /// It is non-optional here even though the runtime accepts nil, because an
 /// application that has a room has an admission — and this is the boundary where

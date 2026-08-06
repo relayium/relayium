@@ -404,17 +404,28 @@ final class LinkSessionFactoryTests: XCTestCase {
         XCTAssertFalse(r.attempt.isRetired)
     }
 
-    /// The admission the room owns is the one the link's own end reaches. That
-    /// is the whole reason it is threaded through: an admission that stayed
-    /// `open` after its link ended would answer every later peer `busy` for a
-    /// link that no longer exists.
-    func testTheRoomsAdmissionIsTheOneTheLinkEndsThrough() {
+    /// The admission the room owns is the one the assembled link both OPENS and
+    /// ends through. That is the whole reason it is threaded through: a second
+    /// admission object would leave the room announcing `connecting` under a live
+    /// link, and one that stayed `open` after its link ended would answer every
+    /// later peer `busy` for a link that no longer exists.
+    ///
+    /// Neither transition is this layer's. `LinkSessionRuntime` claims the open
+    /// at publication and `LinkRecoveryCoordinator` releases it at the end; what
+    /// the assembly owes is that both of them reach the object the caller handed
+    /// in, and this is what proves it.
+    func testTheRoomsAdmissionIsTheOneTheLinkOpensAndEndsThrough() {
         let admission = LinkAdmission(selfId: { "self-id" }, supportsLink: { _ in true })
-        admission.didOpen(peerId: "peer-factory")
+        // Where the room owner leaves it before assembly.
+        admission.didBeginEstablishing(peerId: "peer-factory", role: .initiator)
         let r = rig(admission: admission)
+        XCTAssertEqual(admission.phase, .connecting(peerId: "peer-factory"),
+                       "the assembly announced nothing of its own")
+
         r.transport.publish(identity())
+
         XCTAssertEqual(admission.phase, .open(peerId: "peer-factory"),
-                       "publication alone announces nothing here either")
+                       "the link this factory assembled opened the room it was given")
 
         r.attempt.retire()
 
