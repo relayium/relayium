@@ -1564,8 +1564,10 @@ final class LinkSessionRuntimeTests: XCTestCase {
                        "`onEvent` is called from `deliver` and from nowhere else")
     }
 
-    /// Still unreachable from production: nothing outside the tests constructs
-    /// one, and neither feature flag has moved.
+    /// Still unreachable from production: the ONLY thing that constructs one is
+    /// `LinkSessionFactory`, which nothing outside the tests reaches, and
+    /// neither feature flag has moved. `LinkSessionFactoryTests` owns the guard
+    /// that the factory itself stays unreachable.
     func testTheRuntimeStaysUnreachableFromProduction() throws {
         XCTAssertFalse(LINK_BUILD_SUPPORT)
         XCTAssertFalse(LINK_TRANSPORT_REPLACEMENT_SUPPORTED)
@@ -1579,7 +1581,8 @@ final class LinkSessionRuntimeTests: XCTestCase {
             let files = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)?
                 .compactMap { $0 as? URL }
                 .filter { $0.pathExtension == "swift"
-                    && $0.lastPathComponent != "LinkSessionRuntime.swift" }
+                    && $0.lastPathComponent != "LinkSessionRuntime.swift"
+                    && $0.lastPathComponent != "LinkSessionFactory.swift" }
             for file in try XCTUnwrap(files) {
                 scanned += 1
                 let text = code((try? String(contentsOf: file, encoding: .utf8)) ?? "")

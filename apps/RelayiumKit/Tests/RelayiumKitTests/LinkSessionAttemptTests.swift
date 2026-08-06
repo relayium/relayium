@@ -1071,13 +1071,15 @@ final class LinkSessionAttemptTests: XCTestCase {
         return sources
     }
 
-    /// Both flags are still false, and nothing outside the tests builds an
-    /// attempt: no view, no app target, no environment.
+    /// Both flags are still false, and the ONLY thing that builds an attempt is
+    /// `LinkSessionFactory` — which nothing reaches either: no view, no app
+    /// target, no environment. `LinkSessionFactoryTests` owns the second half of
+    /// that sentence; this half is that no other file may build one at all.
     func testTheAttemptStaysUnreachableFromProduction() throws {
         XCTAssertFalse(LINK_BUILD_SUPPORT)
         XCTAssertFalse(LINK_TRANSPORT_REPLACEMENT_SUPPORTED)
 
-        for source in try appSources() {
+        for source in try appSources() where source.name != "LinkSessionFactory.swift" {
             XCTAssertFalse(source.code.contains("LinkSessionAttempt("),
                            "\(source.name) constructs a link session attempt")
         }
