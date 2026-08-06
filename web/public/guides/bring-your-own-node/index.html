@@ -121,7 +121,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul><li>Don&#39;t want it: re-run the installer with RELAYIUM_NODE_AUTO_UPDATE=off. The timer and its service are disabled and deleted; the node keeps running and you update it when you choose.</li><li>Done with the node entirely: see “Removing your node” below.</li></ul>
       <h2>Removing your node</h2>
       <p>Uninstalling is one script, and it is the same one whether your node stores files or only relays. It removes the units, the binary, the config and the service account, and makes a best-effort call telling relayium.com the node is gone. If that call fails it is one line on your terminal, not a broken uninstall — it prints the node&#39;s ID so it can be marked removed by hand.</p>
-      <p>Download it, check it, then run it. Piping straight into `sh` means a 404 or a network blip makes the whole command print nothing and exit 0, which reads exactly like a successful uninstall.</p>
+      <p>Download it, check it, then run it. Piping straight into sh means a 404 or a network blip makes the whole command print nothing and exit 0, which reads exactly like a successful uninstall.</p>
       <p>It removes only what it recognises: anything unexpected in the state or storage directories is kept and reported rather than swept away.</p>
       <pre><code>curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh &amp;&amp; \
   [ -s uninstall-node.sh ] &amp;&amp; sudo sh uninstall-node.sh</code></pre>

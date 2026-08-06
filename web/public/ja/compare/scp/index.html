@@ -103,7 +103,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>SSH の先へ：デーモン直結とネットワークをまたぐペアリング</h2>
       <p>scp は SSH アクセスがある場所でしか動作しません。Relayium の CLI は、scp に相当するものがない、さらに2つのファイル移動方法を加えています。</p>
       <p>relayium serve は、所有するマシンを証明書ピンニング付きの TLS 1.3 経由で到達可能なデーモン直結のターゲットに変えます。SSH も 22 番ポートも不要で、信頼は最初の接続時に成立し（対話的に承認するか、無人運用向けに relayium authorize で事前承認）、以後は固定されます。relayium:// アドレスで直接そこへ push できます。</p>
-      <p>SSH アクセスがまったくない、インターネットの向こう側にいる相手へ送る場合は、代わりに relayium send / receive が短いコードで2台のコンピュータをペアリングします。直接の P2P で、任意で短い検証コード（SAS）を両端で照合できます（`--verify` を付けるとそこで止まります）。この場合 scp には答えがなく、そもそも SSH アクセスが必要になります。</p>
+      <p>SSH アクセスがまったくない、インターネットの向こう側にいる相手へ送る場合は、代わりに relayium send / receive が短いコードで2台のコンピュータをペアリングします。直接の P2P で、任意で短い検証コード（SAS）を両端で照合できます（--verify を付けるとそこで止まります）。この場合 scp には答えがなく、そもそも SSH アクセスが必要になります。</p>
       <pre><code>relayium push ./build relayium://your-server</code></pre>
       <pre><code>relayium send ./report.pdf</code></pre>
       <h2>フォルダのミラーリング：sync 対 scp -r の繰り返し</h2>

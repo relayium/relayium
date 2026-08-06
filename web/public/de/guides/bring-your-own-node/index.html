@@ -121,7 +121,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul><li>Nicht erwünscht: Führe den Installer erneut mit RELAYIUM_NODE_AUTO_UPDATE=off aus. Der Timer und sein Dienst werden deaktiviert und gelöscht; der Node läuft weiter, und du aktualisierst ihn, wann du willst.</li><li>Node ganz aufgeben: siehe „Node entfernen“ weiter unten.</li></ul>
       <h2>Node entfernen</h2>
       <p>Die Deinstallation ist ein einziges Skript — dasselbe, ob dein Node Dateien speichert oder nur weiterleitet. Es entfernt die Units, die Binärdatei, die Konfiguration und das Dienstkonto und meldet relayium.com nach bestem Wissen, dass der Node weg ist. Schlägt dieser Aufruf fehl, ist das eine Zeile auf deinem Terminal und keine kaputte Deinstallation — die ausgegebene Node-ID erlaubt es, ihn von Hand als entfernt zu markieren.</p>
-      <p>Herunterladen, prüfen, dann ausführen. Direkt in `sh` zu pipen bedeutet, dass ein 404 oder ein kurzer Netzaussetzer den ganzen Befehl nichts ausgeben und mit Code 0 enden lässt — was wie eine erfolgreiche Deinstallation aussieht.</p>
+      <p>Herunterladen, prüfen, dann ausführen. Direkt in sh zu pipen bedeutet, dass ein 404 oder ein kurzer Netzaussetzer den ganzen Befehl nichts ausgeben und mit Code 0 enden lässt — was wie eine erfolgreiche Deinstallation aussieht.</p>
       <p>Entfernt wird nur, was es kennt: Unerwartetes im Status- oder Speicherverzeichnis wird behalten und gemeldet statt mitgelöscht.</p>
       <pre><code>curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh &amp;&amp; \
   [ -s uninstall-node.sh ] &amp;&amp; sudo sh uninstall-node.sh</code></pre>

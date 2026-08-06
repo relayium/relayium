@@ -103,7 +103,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <h2>Além do SSH: daemon direto e emparelhamento entre redes</h2>
       <p>O scp só funciona onde você tem acesso SSH. A CLI do Relayium acrescenta mais duas formas de mover arquivos para as quais o scp não tem equivalente.</p>
       <p>relayium serve transforma uma máquina sua num destino daemon direto acessível por TLS 1.3 com fixação — sem SSH, sem porta 22, a confiança se estabelece na primeira conexão (aprovada de forma interativa, ou pré-autorizada com relayium authorize para uso sem supervisão) e fica fixada dali em diante. Faça push direto para ela com um endereço relayium://.</p>
-      <p>Para enviar pela internet a alguém sobre quem você não tem nenhum acesso SSH, relayium send / receive emparelha, em vez disso, dois computadores com um código curto — ponto a ponto direto, com um código de verificação curto opcional (SAS) que os dois lados podem comparar antes — `--verify` para para isso. O scp não tem resposta para esse caso; você precisaria antes de acesso SSH.</p>
+      <p>Para enviar pela internet a alguém sobre quem você não tem nenhum acesso SSH, relayium send / receive emparelha, em vez disso, dois computadores com um código curto — ponto a ponto direto, com um código de verificação curto opcional (SAS) que os dois lados podem comparar antes — --verify para para isso. O scp não tem resposta para esse caso; você precisaria antes de acesso SSH.</p>
       <pre><code>relayium push ./build relayium://your-server</code></pre>
       <pre><code>relayium send ./report.pdf</code></pre>
       <h2>Espelhamento de pastas: sync versus reexecutar scp -r</h2>

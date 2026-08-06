@@ -44,7 +44,7 @@ const en = {
       body: [
         "scp only ever works where you have SSH access. Relayium's CLI adds two more ways to move files that scp has no equivalent for.",
         "relayium serve turns a machine you own into a daemon-direct target reachable over pinned TLS 1.3 — no SSH, no port 22, trust established on the first connection (approved interactively, or pre-authorized with relayium authorize for unattended use) and pinned from then on. Push straight to it with a relayium:// address.",
-        "For sending to someone across the internet who you don't have SSH access to at all, relayium send / receive pairs two computers with a short code instead — direct peer-to-peer, with an optional short verification code (SAS) both sides can compare first — `--verify` stops for it. scp has no answer for that case; you'd need SSH access first.",
+        "For sending to someone across the internet who you don't have SSH access to at all, relayium send / receive pairs two computers with a short code instead — direct peer-to-peer, with an optional short verification code (SAS) both sides can compare first — --verify stops for it. scp has no answer for that case; you'd need SSH access first.",
       ],
       code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf"],
     },
@@ -234,7 +234,7 @@ const ja = {
       body: [
         "scp は SSH アクセスがある場所でしか動作しません。Relayium の CLI は、scp に相当するものがない、さらに2つのファイル移動方法を加えています。",
         "relayium serve は、所有するマシンを証明書ピンニング付きの TLS 1.3 経由で到達可能なデーモン直結のターゲットに変えます。SSH も 22 番ポートも不要で、信頼は最初の接続時に成立し（対話的に承認するか、無人運用向けに relayium authorize で事前承認）、以後は固定されます。relayium:// アドレスで直接そこへ push できます。",
-        "SSH アクセスがまったくない、インターネットの向こう側にいる相手へ送る場合は、代わりに relayium send / receive が短いコードで2台のコンピュータをペアリングします。直接の P2P で、任意で短い検証コード（SAS）を両端で照合できます（`--verify` を付けるとそこで止まります）。この場合 scp には答えがなく、そもそも SSH アクセスが必要になります。",
+        "SSH アクセスがまったくない、インターネットの向こう側にいる相手へ送る場合は、代わりに relayium send / receive が短いコードで2台のコンピュータをペアリングします。直接の P2P で、任意で短い検証コード（SAS）を両端で照合できます（--verify を付けるとそこで止まります）。この場合 scp には答えがなく、そもそも SSH アクセスが必要になります。",
       ],
       code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf"],
     },
@@ -424,7 +424,7 @@ const de = {
       body: [
         "scp funktioniert nur dort, wo du SSH-Zugang hast. Die Relayium CLI fügt zwei weitere Wege hinzu, Dateien zu bewegen, für die scp kein Äquivalent hat.",
         "relayium serve macht aus einer dir gehörenden Maschine ein daemon-direct-Ziel, erreichbar über TLS 1.3 mit Pinning — kein SSH, kein Port 22, Vertrauen entsteht bei der ersten Verbindung (interaktiv bestätigt oder mit relayium authorize für unbeaufsichtigten Betrieb vorab autorisiert) und ist danach gepinnt. Pushe direkt dorthin mit einer relayium://-Adresse.",
-        "Um an jemanden über das Internet zu senden, bei dem du gar keinen SSH-Zugang hast, koppelt relayium send / receive stattdessen zwei Computer mit einem kurzen Code — direktes Peer-to-Peer, mit einem optionalen kurzen Verifizierungscode (SAS), den beide Seiten vorher vergleichen können — `--verify` hält dafür an. Für diesen Fall hat scp keine Antwort; du bräuchtest zuerst SSH-Zugang.",
+        "Um an jemanden über das Internet zu senden, bei dem du gar keinen SSH-Zugang hast, koppelt relayium send / receive stattdessen zwei Computer mit einem kurzen Code — direktes Peer-to-Peer, mit einem optionalen kurzen Verifizierungscode (SAS), den beide Seiten vorher vergleichen können — --verify hält dafür an. Für diesen Fall hat scp keine Antwort; du bräuchtest zuerst SSH-Zugang.",
       ],
       code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf"],
     },
@@ -519,7 +519,7 @@ const fr = {
       body: [
         "scp ne fonctionne que là où vous avez un accès SSH. La CLI Relayium ajoute deux autres façons de déplacer des fichiers pour lesquelles scp n'a aucun équivalent.",
         "relayium serve transforme une machine que vous possédez en cible daemon-direct, accessible via TLS 1.3 avec épinglage — pas de SSH, pas de port 22, la confiance s'établit à la première connexion (approuvée de façon interactive, ou pré-autorisée avec relayium authorize pour un usage sans surveillance) puis reste épinglée ensuite. Poussez directement vers elle avec une adresse relayium://.",
-        "Pour envoyer à quelqu'un sur Internet auprès de qui vous n'avez aucun accès SSH, relayium send / receive appaire à la place deux ordinateurs avec un court code — pair-à-pair direct, avec un court code de vérification facultatif (SAS) que les deux parties peuvent comparer d'abord — `--verify` s'arrête pour cela. scp n'a aucune réponse à ce cas de figure ; il vous faudrait d'abord un accès SSH.",
+        "Pour envoyer à quelqu'un sur Internet auprès de qui vous n'avez aucun accès SSH, relayium send / receive appaire à la place deux ordinateurs avec un court code — pair-à-pair direct, avec un court code de vérification facultatif (SAS) que les deux parties peuvent comparer d'abord — --verify s'arrête pour cela. scp n'a aucune réponse à ce cas de figure ; il vous faudrait d'abord un accès SSH.",
       ],
       code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf"],
     },
@@ -616,7 +616,7 @@ const ar = {
       body: [
         "لا يعمل scp إلا حيث يكون لديك وصول SSH. تضيف واجهة Relayium السطرية طريقتين أخريين لنقل الملفات لا يملك scp ما يعادلهما.",
         "يحوّل relayium serve جهازًا تملكه إلى هدف daemon direct يمكن الوصول إليه عبر TLS 1.3 مثبَّت — بلا SSH، ولا منفذ 22، تُنشأ الثقة عند أول اتصال (تُوافَق عليها تفاعليًا، أو تُصرَّح مسبقًا بـ relayium authorize للاستخدام دون إشراف) وتظل مثبَّتة بعد ذلك. ادفع إليه مباشرة بعنوان relayium://.",
-        "للإرسال إلى شخص عبر الإنترنت لا تملك تجاهه أي وصول SSH على الإطلاق، يقرن relayium send / receive حاسوبين برمز قصير بدلًا من ذلك — من الند للند مباشرةً، مع رمز تحقق قصير اختياري (SAS) يمكن للطرفين مقارنته أولًا — ويتوقّف `--verify` من أجله. لا جواب لدى scp لهذه الحالة؛ ستحتاج إلى وصول SSH أولًا.",
+        "للإرسال إلى شخص عبر الإنترنت لا تملك تجاهه أي وصول SSH على الإطلاق، يقرن relayium send / receive حاسوبين برمز قصير بدلًا من ذلك — من الند للند مباشرةً، مع رمز تحقق قصير اختياري (SAS) يمكن للطرفين مقارنته أولًا — ويتوقّف --verify من أجله. لا جواب لدى scp لهذه الحالة؛ ستحتاج إلى وصول SSH أولًا.",
       ],
       code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf"],
     },
@@ -713,7 +713,7 @@ const es = {
       body: [
         "scp solo funciona donde tienes acceso SSH. La CLI de Relayium añade dos formas más de mover archivos para las que scp no tiene equivalente.",
         "relayium serve convierte una máquina de tu propiedad en un destino daemon directo accesible por TLS 1.3 con anclaje: sin SSH, sin puerto 22, la confianza se establece en la primera conexión (aprobada de forma interactiva, o preautorizada con relayium authorize para un uso desatendido) y queda fijada a partir de ahí. Haz push directamente hacia ella con una dirección relayium://.",
-        "Para enviar por internet a alguien sobre quien no tienes ningún acceso SSH, relayium send / receive empareja en su lugar dos ordenadores con un código corto: de igual a igual directo, con un código de verificación corto opcional (SAS) que ambas partes pueden comparar primero: `--verify` se detiene para ello. scp no tiene respuesta para ese caso; primero necesitarías acceso SSH.",
+        "Para enviar por internet a alguien sobre quien no tienes ningún acceso SSH, relayium send / receive empareja en su lugar dos ordenadores con un código corto: de igual a igual directo, con un código de verificación corto opcional (SAS) que ambas partes pueden comparar primero: --verify se detiene para ello. scp no tiene respuesta para ese caso; primero necesitarías acceso SSH.",
       ],
       code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf"],
     },
@@ -810,7 +810,7 @@ const pt = {
       body: [
         "O scp só funciona onde você tem acesso SSH. A CLI do Relayium acrescenta mais duas formas de mover arquivos para as quais o scp não tem equivalente.",
         "relayium serve transforma uma máquina sua num destino daemon direto acessível por TLS 1.3 com fixação — sem SSH, sem porta 22, a confiança se estabelece na primeira conexão (aprovada de forma interativa, ou pré-autorizada com relayium authorize para uso sem supervisão) e fica fixada dali em diante. Faça push direto para ela com um endereço relayium://.",
-        "Para enviar pela internet a alguém sobre quem você não tem nenhum acesso SSH, relayium send / receive emparelha, em vez disso, dois computadores com um código curto — ponto a ponto direto, com um código de verificação curto opcional (SAS) que os dois lados podem comparar antes — `--verify` para para isso. O scp não tem resposta para esse caso; você precisaria antes de acesso SSH.",
+        "Para enviar pela internet a alguém sobre quem você não tem nenhum acesso SSH, relayium send / receive emparelha, em vez disso, dois computadores com um código curto — ponto a ponto direto, com um código de verificação curto opcional (SAS) que os dois lados podem comparar antes — --verify para para isso. O scp não tem resposta para esse caso; você precisaria antes de acesso SSH.",
       ],
       code: ["relayium push ./build relayium://your-server", "relayium send ./report.pdf"],
     },

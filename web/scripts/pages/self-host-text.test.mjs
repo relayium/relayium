@@ -98,6 +98,23 @@ const SELF_HOST_PRIVACY = {
   pt: /bytes cifrados.*metadados de sinalização.*ler ou descriptografar o texto simples.*cópia ou histórico.*no servidor/i,
 };
 
+/**
+ * Every command a section renders, wherever it is attached.
+ *
+ * The two text commands used to sit in the section's own `code` array. They now
+ * hang off the numbered steps that run them, which is the point of the tutorial
+ * structure — a command belongs to its step, not to the section at large. What
+ * this file pins is that both commands are on the page and copy-ready, and that
+ * is unchanged; only where they live moved, so the locator follows them rather
+ * than the assertion being dropped.
+ */
+const sectionCode = (s) => [
+  ...(s.code || []),
+  ...(s.steps || []).flatMap((step) => step.code || []),
+  ...(s.success?.code || []),
+  ...(s.troubleshooting?.items || []).flatMap((i) => i.code || []),
+];
+
 describe("self-hosting guide documents CLI text against a custom server", () => {
   for (const lang of LANGS) {
     it(`${lang}: gives both copy-ready text commands and preserves the protocol facts`, () => {
@@ -105,10 +122,10 @@ describe("self-hosting guide documents CLI text against a custom server", () => 
       expect(doc.title).toMatch(TEXT_WORD[lang]);
       expect(doc.description).toMatch(TEXT_WORD[lang]);
       const section = doc.sections.find((candidate) =>
-        candidate.code?.includes("relayium text --server https://your-domain"),
+        sectionCode(candidate).includes("relayium text --server https://your-domain"),
       );
       expect(section, `${lang} has no self-hosted text section`).toBeTruthy();
-      expect(section.code).toContain("relayium text 483920 --server https://your-domain");
+      expect(sectionCode(section)).toContain("relayium text 483920 --server https://your-domain");
 
       const prose = [...section.body, ...section.bullets].join(" ");
       expect(prose).toContain("relayium login --server https://your-domain");
@@ -144,6 +161,10 @@ describe("self-hosting guide documents CLI text against a custom server", () => 
   }
 
   it("carries the current article update date", () => {
-    expect(article.updated).toBe("2026-07-31");
+    // Moved by the guides tutorial batch, which rewrote the Docker, TURN and CLI
+    // sections into prerequisites, numbered steps, expected output and
+    // troubleshooting. A structural rewrite of that size is exactly what this
+    // date is for, so it does not stay at the previous content revision.
+    expect(article.updated).toBe("2026-08-06");
   });
 });

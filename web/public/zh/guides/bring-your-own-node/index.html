@@ -121,7 +121,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul><li>不想要它：带 RELAYIUM_NODE_AUTO_UPDATE=off 重跑一遍安装脚本。timer 和它的 service 会被停用并删除；节点照常运行，什么时候升级由你决定。</li><li>彻底不用这台节点了：见下面的「移除你的节点」。</li></ul>
       <h2>移除你的节点</h2>
       <p>卸载只有一个脚本，无论这台节点只做中继还是也存文件，用的都是它。它会删掉 unit、二进制、配置和那个服务账号，并尽力（best-effort）通知 relayium.com 这台节点已经下线。这次调用失败的话，终端上只多一行提示，不是卸载出了问题——它会打印节点 ID，方便手工标记为已移除。</p>
-      <p>先下载、检查，再执行。直接管道给 `sh` 的话，一旦 404 或网络抖动，整条命令会什么都不打印、退出码却是 0，看起来和卸载成功一模一样。</p>
+      <p>先下载、检查，再执行。直接管道给 sh 的话，一旦 404 或网络抖动，整条命令会什么都不打印、退出码却是 0，看起来和卸载成功一模一样。</p>
       <p>它只删自己认得的东西：状态目录或存储目录里出现的意外文件会被保留并报告，而不是一并扫掉。</p>
       <pre><code>curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh &amp;&amp; \
   [ -s uninstall-node.sh ] &amp;&amp; sudo sh uninstall-node.sh</code></pre>

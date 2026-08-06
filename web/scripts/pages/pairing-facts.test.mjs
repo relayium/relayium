@@ -53,6 +53,10 @@ const MENTIONS_ONLY = [
   "guides/what-is-peer-to-peer-file-transfer",
   "guides/push-to-cloud-pull-on-another-computer",
   "guides/server-to-server-transfers",
+  // Self-hosting names the pairing code once, to say that --server decides which
+  // rendezvous mints it. The article is about standing up a server, not about
+  // running a pairing handshake, so its reader never waits on a code's life.
+  "guides/self-host-relayium",
 ];
 
 // The term each locale uses for a pairing code — the GLOSSARY.md row, except

@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="自托管 Relayium：运行属于你自己的文件与文本传输服务器" />
     <meta name="twitter:description" content="用一条 Docker 命令自己运行完整的 Relayium 服务端——自己的域名、自己的数据，无需任何第三方账号。涵盖文件与临时文本配对、环境变量、可选的网页 TURN 中继，以及如何让 CLI 指向它。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"自托管 Relayium：运行属于你自己的文件与文本传输服务器","description":"用一条 Docker 命令自己运行完整的 Relayium 服务端——自己的域名、自己的数据，无需任何第三方账号。涵盖文件与临时文本配对、环境变量、可选的网页 TURN 中继，以及如何让 CLI 指向它。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/self-host-relayium/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"自托管 Relayium：运行属于你自己的文件与文本传输服务器"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"我需要搭建 TURN 吗？","acceptedAnswer":{"@type":"Answer","text":"只有当你希望跨网络的实时传输能穿透严格 NAT 时才需要。同一网络传输、基于 SSH 的 push/pull，以及 daemon 直连都不需要它——TURN 只用于跨网络配对码路径上的 NAT 穿透。"}},{"@type":"Question","name":"自托管之后 CLI 还免费吗？","acceptedAnswer":{"@type":"Answer","text":"是的。无论连接的是 relayium.com 还是你自己运行的服务器，CLI 都完全免费——--server 只是让它指向你的实例。send 或 text 不带码生成配对码时，以及 up 存文件时，需要目标服务器上的账号；receive、down 和使用打印配对码加入的 text 都无需登录。"}},{"@type":"Question","name":"我可以用自己的域名和 TLS 证书吗？","acceptedAnswer":{"@type":"Answer","text":"可以。Docker 镜像本身在 :8080 上以明文 HTTP 监听；在前面加一层 nginx 或 Caddy，配上你自己的域名和证书（例如通过 certbot/Let's Encrypt）。docs/self-hosting.md 说明了需要反代哪些路径；Relayium 自己生产环境用的 nginx 配置并未公开，需要你自己编写。"}},{"@type":"Question","name":"我自托管的服务器会存储哪些数据？","acceptedAnswer":{"@type":"Answer","text":"一个位于 RELAYIUM_DB 的 SQLite 数据库（账号、会话），以及——对于存储型/链接型传输——位于 RELAYIUM_BLOB_DIR 的加密数据块，服务器自己也无法解密它们。服务器不保存实时文件或消息正文，只转发信令握手；接收端仍可保存文件或留存文本。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"自托管 Relayium：运行属于你自己的文件与文本传输服务器","description":"用一条 Docker 命令自己运行完整的 Relayium 服务端——自己的域名、自己的数据，无需任何第三方账号。涵盖文件与临时文本配对、环境变量、可选的网页 TURN 中继，以及如何让 CLI 指向它。","inLanguage":"zh-Hans","datePublished":"2026-07-09","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/self-host-relayium/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"自托管 Relayium：运行属于你自己的文件与文本传输服务器"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"我需要搭建 TURN 吗？","acceptedAnswer":{"@type":"Answer","text":"只有当你希望跨网络的实时传输能穿透严格 NAT 时才需要。同一网络传输、基于 SSH 的 push/pull，以及 daemon 直连都不需要它——TURN 只用于跨网络配对码路径上的 NAT 穿透。"}},{"@type":"Question","name":"自托管之后 CLI 还免费吗？","acceptedAnswer":{"@type":"Answer","text":"是的。无论连接的是 relayium.com 还是你自己运行的服务器，CLI 都完全免费——--server 只是让它指向你的实例。send 或 text 不带码生成配对码时，以及 up 存文件时，需要目标服务器上的账号；receive、down 和使用打印配对码加入的 text 都无需登录。"}},{"@type":"Question","name":"我可以用自己的域名和 TLS 证书吗？","acceptedAnswer":{"@type":"Answer","text":"可以。Docker 镜像本身在 :8080 上以明文 HTTP 监听；在前面加一层 nginx 或 Caddy，配上你自己的域名和证书（例如通过 certbot/Let's Encrypt）。docs/self-hosting.md 说明了需要反代哪些路径；Relayium 自己生产环境用的 nginx 配置并未公开，需要你自己编写。"}},{"@type":"Question","name":"我自托管的服务器会存储哪些数据？","acceptedAnswer":{"@type":"Answer","text":"一个位于 RELAYIUM_DB 的 SQLite 数据库（账号、会话），以及——对于存储型/链接型传输——位于 RELAYIUM_BLOB_DIR 的加密数据块，服务器自己也无法解密它们。服务器不保存实时文件或消息正文，只转发信令握手；接收端仍可保存文件或留存文本。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -65,6 +65,23 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -83,7 +100,7 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
+      <p class="updated">最近更新: <bdi>2026-08-06</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/self-host-relayium/">English</a><a href="/zh/guides/self-host-relayium/" aria-current="true">中文</a><a href="/ja/guides/self-host-relayium/">日本語</a><a href="/ko/guides/self-host-relayium/">한국어</a><a href="/de/guides/self-host-relayium/">Deutsch</a><a href="/fr/guides/self-host-relayium/">Français</a><a href="/ar/guides/self-host-relayium/">العربية</a><a href="/es/guides/self-host-relayium/">Español</a><a href="/pt/guides/self-host-relayium/">Português</a></nav>
       <p class="lead">Relayium 采用 AGPL-3.0 许可、开源，服务端是一个自包含的镜像——不需要外部数据库，不需要第三方存储桶，也没有什么需要注册。如果你更想自己运行整套系统而不是依赖 relayium.com，本指南会带你用 Docker 起一台服务器，并让 CLI 指向它。</p>
       <p class="lead">自托管让你完全掌控数据存放的位置、拥有自己的域名和 TLS 证书，也不依赖别人的运维决策。以下内容全部基于仓库中实际存在的文件——docker-compose.yml、server/.env.example 和 docs/self-hosting.md——因此这里不会出现任何实际不存在的参数或配置项。</p>
@@ -91,25 +108,50 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>Relayium 的实时传输采用端到端加密。自托管的 TURN 中继可能承载密文字节，服务器也会处理信令元数据，但两者都无法读取或解密文件明文；服务器和中继均不保存实时内容的服务端副本或历史。服务器确实保存着你的账号，以及——对于存储型/链接型传输——密文数据块和一个小型 SQLite 数据库。自托管意味着这些数据存放在你自己掌控的基础设施上，挂在你自己的域名下，不受其他任何人的运维决策影响。</p>
       <p>由于该项目采用 AGPL-3.0 许可并且开源（github.com/relayium/relayium），你可以在信任它之前先读清楚服务端到底做了什么，也可以自由 fork 或修改它。</p>
       <h2>用 Docker 快速开始</h2>
-      <p>仓库根目录提供了一个 Dockerfile 和一个 docker-compose.yml，它们会构建出一个自包含的镜像——一个静态 Go 二进制文件，同时提供预构建好的 Web 应用，因此仅仅为了运行它，你不需要单独的 Node、Go 工具链或 nginx：</p>
-      <pre><code>docker compose up -d --build</code></pre>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">开始之前你需要什么</p><ul><li>一台装了 Docker Engine 和 Compose 插件的主机。docker compose version 会打印版本号；如果提示 “docker: &#39;compose&#39; is not a docker command”，说明插件没装。</li><li>一份仓库克隆。compose 文件是从这份源码构建镜像的，因此它需要旁边的 Dockerfile 和 web/ 目录——没有现成镜像可以直接拉取。</li><li>给具名卷 relayium-data 准备的磁盘空间：SQLite 数据库，加上你保留的存储型传输密文。</li><li>如果除你之外还有别人要用，就需要一个域名和一层负责终止 TLS 的反向代理。容器只讲明文 HTTP，而且默认只发布在回环接口上。</li><li>除此之外别无所需。不需要外部数据库，不需要对象存储桶，也不需要任何第三方账号。</li></ul></div>
+      <p>仓库根目录提供了一个 Dockerfile 和一个 docker-compose.yml，它们会构建出一个自包含的镜像——一个静态 Go 二进制文件，同时提供预构建好的 Web 应用，因此仅仅为了运行它，你不需要单独的 Node、Go 工具链或 nginx。</p>
+      <ol class="steps" data-block="steps"><li><p>克隆仓库并进入目录。</p><pre><code>git clone https://github.com/relayium/relayium.git</code></pre><pre><code>cd relayium</code></pre></li><li><p>构建并启动。即使中继是关着的，这个占位密钥也不能省：Compose 在解析文件时就会校验被 profile 关掉的 coturn 服务所需的变量，所以直接跑 docker compose up 会被拒绝。</p><pre><code>RELAYIUM_TURN_SECRET=placeholder docker compose up -d --build</code></pre></li><li><p>确认容器是真的起来了，而不是在反复崩溃重启。</p><pre><code>docker compose ps</code></pre></li><li><p>问这个实例它到底能不能提供服务。用 /readyz，不要用 /healthz——这两者的区别正是这一步的意义所在，下面的预期结果框里说明了原因。</p><pre><code>curl -s http://127.0.0.1:8080/readyz</code></pre></li><li><p>复制配置模板并设置你的公开地址。RELAYIUM_BASE_URL 决定了外发邮件里链接的样子，也决定了会话 Cookie 是否带 Secure 标志，所以它必须是你真实的 https:// 地址。</p><pre><code>cp server/.env.example server/.env</code></pre><pre><code>chmod 600 server/.env</code></pre></li><li><p>在前面放一层 nginx 或 Caddy，为你的域名终止 TLS，并把所有路径——/、/api、/ws、/admin——反代到 8080 端口。然后重启，让 server/.env 生效。</p><pre><code>docker compose up -d</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">一个正常实例长什么样</p><p>容器状态为 Up，两个端点都能应答。真正说明问题的是 ready：/healthz 无条件返回 ok，在任何东西打开之前就会通过，所以一个数据库或数据块目录已经不可用的实例同样能骗过它。/readyz 会去 ping SQLite 数据库和数据块目录，任一出问题就返回 503。</p><pre><code>$ docker compose ps
+NAME                IMAGE                     STATUS          PORTS
+relayium-server-1   relayium/relayium:local   Up 12 seconds   127.0.0.1:8080-&gt;8080/tcp
+
+$ curl -s http://127.0.0.1:8080/healthz
+ok
+$ curl -s http://127.0.0.1:8080/readyz
+ready</code></pre></div>
       <ul><li>这就是完整的服务器，监听在 :8080。生产环境请在前面加一层 nginx 或 Caddy 来处理 TLS——docs/self-hosting.md 说明了 Docker 部署路径以及需要反代哪些路径；Relayium 自己生产环境用的 nginx 配置并未公开。</li><li>应用配置来自可选的 server/.env 文件，加上 docker-compose.yml 里的 environment: 块。每个设置项都有对应的 RELAYIUM_* 环境变量——可以先复制 server/.env.example 作为起点。</li><li>基础部署最关键的四个变量是：RELAYIUM_ADDR（监听地址）、RELAYIUM_STATIC（已构建的 Web 应用路径）、RELAYIUM_DB（SQLite 文件路径），以及 RELAYIUM_BLOB_DIR（存储型链接密文的写入位置）。docker-compose.yml 已经为这四项设好了合理的默认值，并把它们持久化在一个具名卷里。</li></ul>
       <h2>为跨网络传输加上 TURN 中继</h2>
       <p>同一网络（局域网）的传输，以及基于 SSH 的 push/pull，不需要任何额外配置就能工作。跨网络的实时传输（两台设备各自处于不同的 NAT 之后）有时需要一个 TURN 中继来建立路径——中继全程只能看到密文，绝不会看到文件内容。</p>
-      <p>docker-compose.yml 里有一个可选的 relay profile，会在启动主服务器的同时启动 coturn（TURN 服务器）和一个用于中继流量计量的小型 Redis 实例：</p>
-      <pre><code>RELAYIUM_TURN_SECRET=$(openssl rand -hex 32) docker compose --profile relay up -d --build</code></pre>
+      <p>docker-compose.yml 里有一个可选的 relay profile，会在启动主服务器的同时启动 coturn（TURN 服务器）和一个用于中继流量计量的小型 Redis 实例。</p>
+      <p>这个密钥必须送到两个不同的地方，而送错了是不会报错的。coturn 通过 Compose 的变量插值拿到它，插值只从 shell 或项目根目录的 .env 解析。服务端则是从它自己的环境变量里读——也就是 server/.env——而密钥为空就等于彻底关闭 TURN。只设其中一处，你就会得到一个正在运行、服务端却从不为它签发凭据的 coturn：每个容器都报告健康，日志里什么都没有，跨严格 NAT 的传输和加中继之前一样失败。</p>
+      <ol class="steps" data-block="steps"><li><p>生成一个足够长的随机密钥。下面所有地方都用同一个值。</p><pre><code>openssl rand -hex 32</code></pre></li><li><p>把这个密钥，以及你的域名解析到的中继地址，写进 server/.env，服务端才会真正启用 TURN。</p><pre><code>RELAYIUM_TURN_SECRET=&lt;the value from step 1&gt;
+RELAYIUM_TURN_URLS=turn:example.com:3478,turns:example.com:5349</code></pre></li><li><p>把同一个文件源进 shell，好让 Compose 的插值把完全相同的密钥交给 coturn。用 source 的方式既保持了单一来源，也让密钥不会出现在命令行上被 ps 看见。</p><pre><code>set -a; . ./server/.env; set +a</code></pre></li><li><p>带上 relay profile 启动整套服务。</p><pre><code>docker compose --profile relay up -d --build</code></pre></li><li><p>在主机防火墙上放行中继端口。coturn 用的是 host 网络模式，所以这些是主机规则而不是 Docker 规则：UDP 3478 与 49152-65535，TCP 3478 与 5349。</p></li><li><p>确认拿到密钥的是服务端，而不只是 coturn。这条检查专门用来抓那个不出声的失败。</p><pre><code>docker compose exec server env | grep RELAYIUM_TURN</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">一个正常的中继长什么样</p><p>从服务端容器内部查，两个变量都非空。coturn 起来了本身说明不了任何事——浏览器拿到的中继凭据只可能由服务端签发。</p><pre><code>$ docker compose exec server env | grep RELAYIUM_TURN
+RELAYIUM_TURN_SECRET=3f7a…
+RELAYIUM_TURN_URLS=turn:example.com:3478,turns:example.com:5349</code></pre></div>
       <ul><li>coturn 需要主机真实的公网 IP，以及一段开放的 UDP 端口范围才能工作——docs/self-hosting.md 说明了通过 Docker 的 relay profile 运行它；Relayium 自己生产环境用的 coturn 配置（以及安装脚本）并未公开。</li><li>如果不加 --profile relay 和 RELAYIUM_TURN_SECRET，服务器依然能正常运行——只是跨网络传输会退化为纯 STUN，这对较宽松的 NAT 类型没问题，但对最严格的类型不行。</li></ul>
       <h2>在你自己的机器上装 CLI</h2>
       <p>最后这一步是在你自己的电脑上运行 relayium CLI（不是服务器），所以没装的话先在本机装上。macOS 或 Linux：</p>
       <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>relayium.com/cli 列出了所有安装方式——Windows 二进制、发布页，或装了 Go 用 go build。</li><li>relayium --version 可确认。没装 CLI，下面的命令只会报 “command not found”。</li></ul>
       <h2>让 CLI 指向你的服务器</h2>
-      <p>Relayium CLI 默认使用 relayium.com 的会合服务器来完成跨网络的 send/receive 与 text。传入 --server 即可改用你自己的服务器：</p>
-      <pre><code>relayium send ./report.pdf --server https://your-domain</code></pre>
-      <pre><code>relayium receive 483920 --server https://your-domain</code></pre>
-      <pre><code>relayium text --server https://your-domain</code></pre>
-      <pre><code>relayium text 483920 --server https://your-domain</code></pre>
+      <p>Relayium CLI 默认使用 relayium.com 的会合服务器来完成跨网络的 send/receive 与 text。传入 --server 即可改用你自己的服务器。</p>
+      <ol class="steps" data-block="steps"><li><p>在上一节已经装好 CLI 的机器上，登录到你自己的服务器而不是 relayium.com。它会打印一个网址和一个码；在已登录你实例的浏览器里批准它。</p><pre><code>relayium login --server https://your-domain</code></pre></li><li><p>确认已保存的凭据绑定的是哪台服务器。whoami 不接受任何参数——它汇报的是登录实际写下的内容，这正是它值得一跑的原因。</p><pre><code>relayium whoami</code></pre></li><li><p>发送时带上同一个 --server。不带的话，CLI 会在 relayium.com 上生成配对码，另一端在你的实例上永远找不到它。</p><pre><code>relayium send ./report.pdf --server https://your-domain</code></pre></li><li><p>在另一台机器上，用打印出来的配对码和同一个 --server 接收。文本会话的用法完全一样。</p><pre><code>relayium receive 483920 --server https://your-domain</code></pre><pre><code>relayium text --server https://your-domain</code></pre><pre><code>relayium text 483920 --server https://your-domain</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">怎么确认它连的是你自己的实例</p><p>whoami 会打印账号，后面括号里跟着它绑定的服务器。那里出现的是你自己的域名而不是 relayium.com，就是确认。</p><pre><code>$ relayium login --server https://your-domain
+Open https://your-domain/device and enter code: WDJB-MJHT
+logged in as you@example.com
+
+$ relayium whoami
+you@example.com (https://your-domain)</code></pre></div>
       <ul><li>无论用哪个服务器，CLI 都是免费的——--server 只是改变了配对码握手所连接的会合服务器。send 或 text 不带码运行时会在该服务器生成配对码，云端 up 也存到那台服务器上的账号下，所以要先用 relayium login --server https://your-domain 在那边登录；receive、down，以及使用打印配对码加入的 text 都无需登录。</li><li>text 两端必须同时在线。消息使用独立的端到端加密 P2P 直连会话；CLI text 只支持直连，不使用网页版的 TURN 中继。Relayium 和你的自托管服务器都不保存消息正文或服务端历史，但任一终端或接收方都可以在收到文本后复制或留存。</li><li>push/pull（走你自己的 SSH）以及 serve + daemon 直连的 push relayium://host，无论是否自托管都完全不会接触 relayium.com——它们直接连到你指定的远程地址。</li></ul>
+      <h2>出问题时怎么办</h2>
+      <p>几乎所有失败的自托管都逃不出这五种。每一种都有一行可以读的输出或一条可以跑的命令来判定，而其中三种在你跑那条检查之前，看起来都像是成功了。</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">现象、检查、修复</p><dl><dt>docker compose up 直接拒绝启动，什么都还没开始构建。</dt><dd><pre><code>docker compose up -d --build
+# required variable RELAYIUM_TURN_SECRET is missing a value</code></pre><p>Compose 会先对整个文件做插值，然后才按 profile 过滤，所以被关掉的 coturn 服务所需的变量照样会被校验，即便中继根本没启用。前面加任意占位值即可——RELAYIUM_TURN_SECRET=placeholder docker compose up -d --build——等你真正启用 relay profile 时再把它换成真正的密钥。</p></dd><dt>容器状态是 Up，但另一台机器上的浏览器访问不到。</dt><dd><pre><code>docker compose ps
+# PORTS  127.0.0.1:8080-&gt;8080/tcp</code></pre><p>绑定到回环是默认行为，这样公网主机才不会把明文 HTTP 直接暴露到互联网上。生产环境请保持这个默认，并在同一台主机上用反向代理终止 TLS。如果是没有反代的纯局域网机器，用 RELAYIUM_BIND=0.0.0.0 docker compose up -d 把它发布得更宽——这个变量由 compose 读取，服务端本身并不认识它。</p></dd><dt>/healthz 返回 ok，但注册失败，存储型链接也一直出不来。</dt><dd><pre><code>curl -s -o /dev/null -w &#39;%{http_code}\n&#39; http://127.0.0.1:8080/readyz
+# 503</code></pre><p>/healthz 无条件返回 ok，只能证明进程在监听。/readyz 会去 ping SQLite 数据库和数据块目录，所以 503 意味着其中之一不可用——检查 relayium-data 卷是否挂上了，以及 RELAYIUM_DB 和 RELAYIUM_BLOB_DIR 是否指向卷里面。</p></dd><dt>relayium login 打印出的验证网址在 localhost 上，你根本打不开。</dt><dd><pre><code>relayium login --server https://your-domain
+# Open http://localhost:8080/device and enter code: WDJB-MJHT</code></pre><p>那个网址是服务端用 RELAYIUM_BASE_URL 拼出来的，而它的默认值就是 http://localhost:8080。在 server/.env 里把它设成你真实的 https:// 地址再重启。它同时决定会话 Cookie 是否带 Secure 标志，所以设错了不只是难看的问题。</p></dd><dt>coturn 在跑，但跨严格 NAT 的传输依然失败——而且日志里什么都没有。</dt><dd><pre><code>docker compose exec server env | grep RELAYIUM_TURN
+# 没有任何输出</code></pre><p>密钥通过 Compose 插值到了 coturn，却从来没到过服务端，而服务端密钥为空就等于彻底关闭 TURN。把 RELAYIUM_TURN_SECRET 和 RELAYIUM_TURN_URLS 写进 server/.env，用 set -a; . ./server/.env; set +a 源进 shell 让插值看到同一个值，然后重启 relay profile。那条检查必须两个变量都非空才算过。</p></dd></dl></div>
       <h2>常见问题</h2>
       <h3>我需要搭建 TURN 吗？</h3>
       <p>只有当你希望跨网络的实时传输能穿透严格 NAT 时才需要。同一网络传输、基于 SSH 的 push/pull，以及 daemon 直连都不需要它——TURN 只用于跨网络配对码路径上的 NAT 穿透。</p>

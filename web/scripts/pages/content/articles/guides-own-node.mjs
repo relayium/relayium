@@ -103,7 +103,7 @@ const en = {
       heading: "Removing your node",
       body: [
         "Uninstalling is one script, and it is the same one whether your node stores files or only relays. It removes the units, the binary, the config and the service account, and makes a best-effort call telling relayium.com the node is gone. If that call fails it is one line on your terminal, not a broken uninstall — it prints the node's ID so it can be marked removed by hand.",
-        "Download it, check it, then run it. Piping straight into `sh` means a 404 or a network blip makes the whole command print nothing and exit 0, which reads exactly like a successful uninstall.",
+        "Download it, check it, then run it. Piping straight into sh means a 404 or a network blip makes the whole command print nothing and exit 0, which reads exactly like a successful uninstall.",
         "It removes only what it recognises: anything unexpected in the state or storage directories is kept and reported rather than swept away.",
       ],
       code: ["curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && \\\n  [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh"],
@@ -252,7 +252,7 @@ const zh = {
       heading: "移除你的节点",
       body: [
         "卸载只有一个脚本，无论这台节点只做中继还是也存文件，用的都是它。它会删掉 unit、二进制、配置和那个服务账号，并尽力（best-effort）通知 relayium.com 这台节点已经下线。这次调用失败的话，终端上只多一行提示，不是卸载出了问题——它会打印节点 ID，方便手工标记为已移除。",
-        "先下载、检查，再执行。直接管道给 `sh` 的话，一旦 404 或网络抖动，整条命令会什么都不打印、退出码却是 0，看起来和卸载成功一模一样。",
+        "先下载、检查，再执行。直接管道给 sh 的话，一旦 404 或网络抖动，整条命令会什么都不打印、退出码却是 0，看起来和卸载成功一模一样。",
         "它只删自己认得的东西：状态目录或存储目录里出现的意外文件会被保留并报告，而不是一并扫掉。",
       ],
       code: ["curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && \\\n  [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh"],
@@ -401,7 +401,7 @@ const ja = {
       heading: "ノードを削除する",
       body: [
         "アンインストールはスクリプト 1 本だけで、ファイルを保存するノードでもリレー専用でも同じものを使います。ユニット、バイナリ、設定、サービスアカウントを削除し、ノードが無くなったことを relayium.com にベストエフォートで伝えます。その通知が失敗しても、ターミナルに 1 行出るだけで、アンインストールが壊れたわけではありません — ノード ID が表示されるので、手動で削除済みにできます。",
-        "ダウンロードして、中身を確認してから実行してください。`sh` に直接パイプすると、404 やネットワークの瞬断のときにコマンド全体が何も出力せず終了コード 0 で終わり、成功したように見えます。",
+        "ダウンロードして、中身を確認してから実行してください。sh に直接パイプすると、404 やネットワークの瞬断のときにコマンド全体が何も出力せず終了コード 0 で終わり、成功したように見えます。",
         "削除するのは把握しているものだけです。状態ディレクトリや保存ディレクトリに想定外のファイルがあれば、消さずに保持して報告します。",
       ],
       code: ["curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && \\\n  [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh"],
@@ -550,7 +550,7 @@ const ko = {
       heading: "노드 제거하기",
       body: [
         "제거는 스크립트 하나로 끝나며, 파일을 저장하는 노드든 릴레이만 하는 노드든 같은 스크립트를 씁니다. 유닛, 바이너리, 설정, 서비스 계정을 제거하고 노드가 사라졌음을 relayium.com에 최선을 다해 알립니다. 그 호출이 실패해도 터미널에 한 줄이 더 나올 뿐 제거가 고장 난 것은 아니며, 노드 ID가 출력되므로 수동으로 제거됨 표시를 할 수 있습니다.",
-        "내려받고, 확인한 다음 실행하세요. `sh`로 바로 파이프하면 404나 일시적인 네트워크 문제에서 명령 전체가 아무것도 출력하지 않고 종료 코드 0으로 끝나, 제거가 성공한 것처럼 보입니다.",
+        "내려받고, 확인한 다음 실행하세요. sh로 바로 파이프하면 404나 일시적인 네트워크 문제에서 명령 전체가 아무것도 출력하지 않고 종료 코드 0으로 끝나, 제거가 성공한 것처럼 보입니다.",
         "아는 것만 지웁니다. 상태 디렉터리나 저장 디렉터리에 예상치 못한 파일이 있으면 지우지 않고 보관한 뒤 보고합니다.",
       ],
       code: ["curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && \\\n  [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh"],
@@ -699,7 +699,7 @@ const de = {
       heading: "Node entfernen",
       body: [
         "Die Deinstallation ist ein einziges Skript — dasselbe, ob dein Node Dateien speichert oder nur weiterleitet. Es entfernt die Units, die Binärdatei, die Konfiguration und das Dienstkonto und meldet relayium.com nach bestem Wissen, dass der Node weg ist. Schlägt dieser Aufruf fehl, ist das eine Zeile auf deinem Terminal und keine kaputte Deinstallation — die ausgegebene Node-ID erlaubt es, ihn von Hand als entfernt zu markieren.",
-        "Herunterladen, prüfen, dann ausführen. Direkt in `sh` zu pipen bedeutet, dass ein 404 oder ein kurzer Netzaussetzer den ganzen Befehl nichts ausgeben und mit Code 0 enden lässt — was wie eine erfolgreiche Deinstallation aussieht.",
+        "Herunterladen, prüfen, dann ausführen. Direkt in sh zu pipen bedeutet, dass ein 404 oder ein kurzer Netzaussetzer den ganzen Befehl nichts ausgeben und mit Code 0 enden lässt — was wie eine erfolgreiche Deinstallation aussieht.",
         "Entfernt wird nur, was es kennt: Unerwartetes im Status- oder Speicherverzeichnis wird behalten und gemeldet statt mitgelöscht.",
       ],
       code: ["curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && \\\n  [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh"],
@@ -848,7 +848,7 @@ const fr = {
       heading: "Retirer votre nœud",
       body: [
         "La désinstallation tient en un seul script, le même que votre nœud stocke des fichiers ou se contente de relayer. Il retire les unités, le binaire, la configuration et le compte de service, et signale à relayium.com, sans garantie, que le nœud a disparu. Si cet appel échoue, c'est une ligne sur votre terminal et non une désinstallation cassée — l'identifiant du nœud s'affiche pour qu'on puisse le marquer retiré à la main.",
-        "Téléchargez-le, vérifiez-le, puis exécutez-le. Le faire passer directement dans `sh` signifie qu'une 404 ou un accroc réseau fait que toute la commande n'affiche rien et se termine avec le code 0 — ce qui ressemble à une désinstallation réussie.",
+        "Téléchargez-le, vérifiez-le, puis exécutez-le. Le faire passer directement dans sh signifie qu'une 404 ou un accroc réseau fait que toute la commande n'affiche rien et se termine avec le code 0 — ce qui ressemble à une désinstallation réussie.",
         "Il ne retire que ce qu'il reconnaît : tout élément inattendu dans le répertoire d'état ou de stockage est conservé et signalé plutôt que balayé.",
       ],
       code: ["curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && \\\n  [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh"],
@@ -997,7 +997,7 @@ const ar = {
       heading: "إزالة عقدتك",
       body: [
         "الإلغاء سكربت واحد، وهو نفسه سواء كانت عقدتك تخزّن الملفات أو تُرحّل فقط. يزيل الوحدات والثنائي والإعدادات وحساب الخدمة، ويحاول قدر استطاعته إبلاغ relayium.com بأن العقدة لم تعد موجودة. وإن فشل ذلك الاتصال فهو سطر واحد على طرفيتك لا إلغاء معطوب — ويطبع معرّف العقدة كي تُعلَّم كمُزالة يدويًا.",
-        "نزّله وتحقّق منه ثم شغّله. تمريره مباشرة إلى `sh` يعني أن خطأ 404 أو انقطاعًا عابرًا في الشبكة سيجعل الأمر كله لا يطبع شيئًا وينتهي برمز 0، وهو ما يبدو كإلغاء ناجح.",
+        "نزّله وتحقّق منه ثم شغّله. تمريره مباشرة إلى sh يعني أن خطأ 404 أو انقطاعًا عابرًا في الشبكة سيجعل الأمر كله لا يطبع شيئًا وينتهي برمز 0، وهو ما يبدو كإلغاء ناجح.",
         "لا يزيل إلا ما يعرفه: أي شيء غير متوقع في دليل الحالة أو دليل التخزين يُحتفظ به ويُبلَّغ عنه بدل حذفه.",
       ],
       code: ["curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && \\\n  [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh"],
@@ -1146,7 +1146,7 @@ const es = {
       heading: "Eliminar tu nodo",
       body: [
         "Desinstalar es un solo script, el mismo tanto si tu nodo almacena archivos como si solo retransmite. Elimina las unidades, el binario, la configuración y la cuenta de servicio, y hace un intento de mejor esfuerzo por avisar a relayium.com de que el nodo ya no está. Si esa llamada falla, es una línea en tu terminal y no una desinstalación rota: muestra el ID del nodo para poder marcarlo como eliminado a mano.",
-        "Descárgalo, compruébalo y luego ejecútalo. Canalizarlo directamente a `sh` significa que un 404 o un corte de red pasajero hace que todo el comando no muestre nada y termine con código 0, lo que parece una desinstalación correcta.",
+        "Descárgalo, compruébalo y luego ejecútalo. Canalizarlo directamente a sh significa que un 404 o un corte de red pasajero hace que todo el comando no muestre nada y termine con código 0, lo que parece una desinstalación correcta.",
         "Solo elimina lo que reconoce: cualquier cosa inesperada en el directorio de estado o de almacenamiento se conserva y se informa en vez de barrerse.",
       ],
       code: ["curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && \\\n  [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh"],
@@ -1295,7 +1295,7 @@ const pt = {
       heading: "Remover o seu nó",
       body: [
         "Desinstalar é um único script, o mesmo quer o seu nó armazene arquivos quer apenas retransmita. Ele remove as unidades, o binário, a configuração e a conta de serviço, e tenta, em regime de melhor esforço, avisar o relayium.com de que o nó se foi. Se essa chamada falhar, é uma linha no seu terminal e não uma desinstalação quebrada — ela imprime o ID do nó para que seja marcado como removido à mão.",
-        "Baixe, verifique e só então execute. Canalizar direto para o `sh` significa que um 404 ou uma falha passageira de rede faz o comando inteiro não exibir nada e sair com código 0, o que parece uma desinstalação bem-sucedida.",
+        "Baixe, verifique e só então execute. Canalizar direto para o sh significa que um 404 ou uma falha passageira de rede faz o comando inteiro não exibir nada e sair com código 0, o que parece uma desinstalação bem-sucedida.",
         "Só remove o que reconhece: qualquer coisa inesperada no diretório de estado ou de armazenamento é mantida e reportada em vez de ser varrida.",
       ],
       code: ["curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh && \\\n  [ -s uninstall-node.sh ] && sudo sh uninstall-node.sh"],

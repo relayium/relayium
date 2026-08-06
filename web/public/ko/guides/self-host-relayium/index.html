@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="Relayium 셀프 호스팅: 나만의 파일·텍스트 전송 서버 운영하기" />
     <meta name="twitter:description" content="Docker 명령어 하나로 Relayium 전체 스택을 직접 운영하세요 — 자신의 도메인, 자신의 데이터, 제3자 계정 불필요. 파일과 임시 텍스트 페어링, 환경 변수, 선택적 브라우저 TURN 릴레이, CLI를 서버로 연결하는 방법까지 다룹니다." />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 셀프 호스팅: 나만의 파일·텍스트 전송 서버 운영하기","description":"Docker 명령어 하나로 Relayium 전체 스택을 직접 운영하세요 — 자신의 도메인, 자신의 데이터, 제3자 계정 불필요. 파일과 임시 텍스트 페어링, 환경 변수, 선택적 브라우저 TURN 릴레이, CLI를 서버로 연결하는 방법까지 다룹니다.","inLanguage":"ko","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/guides/self-host-relayium/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"Relayium 셀프 호스팅: 나만의 파일·텍스트 전송 서버 운영하기"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"TURN을 설정해야 하나요?","acceptedAnswer":{"@type":"Answer","text":"네트워크를 넘나드는 실시간 전송이 엄격한 NAT 환경에서도 동작하길 원할 때만 필요합니다. 같은 네트워크 전송, SSH 기반 push/pull, 데몬 다이렉트는 모두 TURN 없이 동작합니다 — TURN은 네트워크 간 페어링 코드 경로의 NAT 통과에만 쓰입니다."}},{"@type":"Question","name":"자체 호스팅해도 CLI는 여전히 무료인가요?","acceptedAnswer":{"@type":"Answer","text":"네. relayium.com이든 직접 운영하는 서버든 CLI는 완전히 무료입니다. 코드 없는 send나 text로 코드를 발급할 때와 up으로 파일을 저장할 때는 대상 서버 계정이 필요합니다. receive, down, 출력된 코드로 참여하는 text는 로그인이 필요 없습니다."}},{"@type":"Question","name":"자신의 도메인과 TLS 인증서를 쓸 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"네. Docker 이미지 자체는 :8080에서 평문 HTTP로 대기합니다. 앞단에 nginx나 Caddy를 두고 자신의 도메인과 인증서(예: certbot/Let's Encrypt)를 설정하세요. docs/self-hosting.md에 프록시해야 할 경로가 설명되어 있습니다. Relayium이 실제 운영에 쓰는 nginx 설정은 공개되어 있지 않으므로 직접 작성해야 합니다."}},{"@type":"Question","name":"자체 호스팅한 서버는 어떤 데이터를 저장하나요?","acceptedAnswer":{"@type":"Answer","text":"RELAYIUM_DB에 있는 SQLite 데이터베이스(계정, 세션)와, 저장형/링크형 전송의 경우 RELAYIUM_BLOB_DIR에 있는 암호화된 블롭 — 이는 서버 자신도 복호화할 수 없습니다. 서버는 실시간 파일이나 메시지 본문을 저장하지 않고 시그널링 핸드셰이크만 중계하지만, 수신 기기는 파일이나 텍스트를 보관할 수 있습니다."}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium 셀프 호스팅: 나만의 파일·텍스트 전송 서버 운영하기","description":"Docker 명령어 하나로 Relayium 전체 스택을 직접 운영하세요 — 자신의 도메인, 자신의 데이터, 제3자 계정 불필요. 파일과 임시 텍스트 페어링, 환경 변수, 선택적 브라우저 TURN 릴레이, CLI를 서버로 연결하는 방법까지 다룹니다.","inLanguage":"ko","datePublished":"2026-07-09","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/guides/self-host-relayium/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"Relayium 셀프 호스팅: 나만의 파일·텍스트 전송 서버 운영하기"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"TURN을 설정해야 하나요?","acceptedAnswer":{"@type":"Answer","text":"네트워크를 넘나드는 실시간 전송이 엄격한 NAT 환경에서도 동작하길 원할 때만 필요합니다. 같은 네트워크 전송, SSH 기반 push/pull, 데몬 다이렉트는 모두 TURN 없이 동작합니다 — TURN은 네트워크 간 페어링 코드 경로의 NAT 통과에만 쓰입니다."}},{"@type":"Question","name":"자체 호스팅해도 CLI는 여전히 무료인가요?","acceptedAnswer":{"@type":"Answer","text":"네. relayium.com이든 직접 운영하는 서버든 CLI는 완전히 무료입니다. 코드 없는 send나 text로 코드를 발급할 때와 up으로 파일을 저장할 때는 대상 서버 계정이 필요합니다. receive, down, 출력된 코드로 참여하는 text는 로그인이 필요 없습니다."}},{"@type":"Question","name":"자신의 도메인과 TLS 인증서를 쓸 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"네. Docker 이미지 자체는 :8080에서 평문 HTTP로 대기합니다. 앞단에 nginx나 Caddy를 두고 자신의 도메인과 인증서(예: certbot/Let's Encrypt)를 설정하세요. docs/self-hosting.md에 프록시해야 할 경로가 설명되어 있습니다. Relayium이 실제 운영에 쓰는 nginx 설정은 공개되어 있지 않으므로 직접 작성해야 합니다."}},{"@type":"Question","name":"자체 호스팅한 서버는 어떤 데이터를 저장하나요?","acceptedAnswer":{"@type":"Answer","text":"RELAYIUM_DB에 있는 SQLite 데이터베이스(계정, 세션)와, 저장형/링크형 전송의 경우 RELAYIUM_BLOB_DIR에 있는 암호화된 블롭 — 이는 서버 자신도 복호화할 수 없습니다. 서버는 실시간 파일이나 메시지 본문을 저장하지 않고 시그널링 핸드셰이크만 중계하지만, 수신 기기는 파일이나 텍스트를 보관할 수 있습니다."}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -65,6 +65,23 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -83,7 +100,7 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">마지막 업데이트: <bdi>2026-07-31</bdi></p>
+      <p class="updated">마지막 업데이트: <bdi>2026-08-06</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/self-host-relayium/">English</a><a href="/zh/guides/self-host-relayium/">中文</a><a href="/ja/guides/self-host-relayium/">日本語</a><a href="/ko/guides/self-host-relayium/" aria-current="true">한국어</a><a href="/de/guides/self-host-relayium/">Deutsch</a><a href="/fr/guides/self-host-relayium/">Français</a><a href="/ar/guides/self-host-relayium/">العربية</a><a href="/es/guides/self-host-relayium/">Español</a><a href="/pt/guides/self-host-relayium/">Português</a></nav>
       <p class="lead">Relayium은 AGPL-3.0 라이선스 오픈소스이며, 서버는 단일한 자체 완결형 이미지입니다 — 외부 데이터베이스도, 서드파티 스토리지 버킷도 필요 없고, 가입할 것도 없습니다. relayium.com에 의존하는 대신 전체를 직접 운영하고 싶다면, 이 가이드는 Docker로 서버를 띄우고 CLI를 그 서버로 연결하는 방법을 안내합니다.</p>
       <p class="lead">자체 호스팅을 하면 데이터가 어디에 저장되는지 완전히 통제할 수 있고, 자신의 도메인과 TLS 인증서를 쓸 수 있으며, 다른 누구의 운영 판단에도 의존하지 않습니다. 아래 내용은 모두 저장소에 실제로 존재하는 파일 — docker-compose.yml, server/.env.example, docs/self-hosting.md — 을 근거로 하므로, 실제로 존재하지 않는 플래그나 설정은 등장하지 않습니다.</p>
@@ -91,25 +108,50 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>Relayium의 실시간 전송은 종단간 암호화됩니다. 자체 호스팅한 TURN 릴레이는 암호문 바이트를 운반할 수 있고 서버는 시그널링 메타데이터를 처리하지만, 어느 쪽도 파일 평문을 읽거나 복호화할 수 없습니다. 서버와 릴레이 모두 실시간 내용의 서버 측 사본이나 기록을 저장하지 않습니다. 서버는 계정을 보관하며, 저장형/링크형 전송의 경우 암호화된 블롭과 작은 SQLite 데이터베이스도 보관합니다. 자체 호스팅이란 그 데이터가 직접 통제하는 인프라 위에, 자신의 도메인 아래 놓이고, 다른 누구의 운영 판단도 개입하지 않는다는 뜻입니다.</p>
       <p>이 프로젝트는 AGPL-3.0 라이선스로 오픈소스(github.com/relayium/relayium)이므로, 무언가를 맡기기 전에 서버가 정확히 무엇을 하는지 직접 읽어볼 수 있고, 자유롭게 fork하거나 수정할 수도 있습니다.</p>
       <h2>Docker로 빠르게 시작하기</h2>
-      <p>저장소 루트에는 Dockerfile과 docker-compose.yml이 있으며, 이들은 단일한 자체 완결형 이미지 — 미리 빌드된 웹 앱을 제공하는 정적 Go 바이너리 — 를 빌드합니다. 그저 실행만 하는 데는 별도의 Node, Go 툴체인, nginx가 필요 없습니다:</p>
-      <pre><code>docker compose up -d --build</code></pre>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">1단계 전에 필요한 것</p><ul><li>Docker Engine과 Compose 플러그인이 설치된 호스트. docker compose version은 버전 문자열을 출력합니다. &quot;docker: &#39;compose&#39; is not a docker command&quot;가 나오면 플러그인이 없는 것입니다.</li><li>저장소 클론. compose 파일은 이 소스 트리에서 이미지를 빌드하므로 옆에 Dockerfile과 web/이 있어야 합니다 — 받아올 미리 빌드된 이미지는 없습니다.</li><li>이름 있는 볼륨 relayium-data를 위한 디스크 공간. SQLite 데이터베이스와 보관하는 저장형 전송 암호문이 들어갑니다.</li><li>본인 외에 다른 사람도 쓸 예정이라면 도메인과 TLS를 종료하는 리버스 프록시. 컨테이너는 평문 HTTP만 사용하며 기본적으로 루프백 인터페이스에만 게시됩니다.</li><li>그 밖에는 아무것도 필요 없습니다. 외부 데이터베이스도, 오브젝트 스토리지 버킷도, 제3자 계정도 필요하지 않습니다.</li></ul></div>
+      <p>저장소 루트에는 Dockerfile과 docker-compose.yml이 있으며, 이들은 단일한 자체 완결형 이미지 — 미리 빌드된 웹 앱을 제공하는 정적 Go 바이너리 — 를 빌드합니다. 그저 실행만 하는 데는 별도의 Node, Go 툴체인, nginx가 필요 없습니다.</p>
+      <ol class="steps" data-block="steps"><li><p>저장소를 클론하고 그 디렉터리로 이동합니다.</p><pre><code>git clone https://github.com/relayium/relayium.git</code></pre><pre><code>cd relayium</code></pre></li><li><p>빌드하고 시작합니다. 릴레이가 꺼져 있어도 이 자리표시자 비밀값은 생략할 수 없습니다. Compose는 파일을 파싱하는 시점에 프로필로 꺼둔 coturn 서비스의 필수 변수까지 검증하므로, 맨 docker compose up은 거부됩니다.</p><pre><code>RELAYIUM_TURN_SECRET=placeholder docker compose up -d --build</code></pre></li><li><p>컨테이너가 재시작을 반복하지 않고 계속 떠 있는지 확인합니다.</p><pre><code>docker compose ps</code></pre></li><li><p>이 인스턴스가 실제로 서비스할 수 있는 상태인지 물어봅니다. /healthz가 아니라 /readyz를 쓰세요 — 둘의 차이가 이 확인의 핵심이며, 아래 예상 결과 상자가 그 이유를 설명합니다.</p><pre><code>curl -s http://127.0.0.1:8080/readyz</code></pre></li><li><p>설정 템플릿을 복사하고 공개 주소를 설정합니다. RELAYIUM_BASE_URL은 발송 메일의 링크를 만들고 세션 쿠키에 Secure 플래그를 붙일지도 결정하므로, 실제 https:// 주소여야 합니다.</p><pre><code>cp server/.env.example server/.env</code></pre><pre><code>chmod 600 server/.env</code></pre></li><li><p>앞단에 nginx나 Caddy를 두어 자신의 도메인으로 TLS를 종료하고 모든 경로 — /, /api, /ws, /admin — 를 8080 포트로 프록시합니다. 그런 다음 server/.env를 반영하도록 재시작합니다.</p><pre><code>docker compose up -d</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">정상적인 인스턴스의 모습</p><p>컨테이너가 Up으로 보고되고 두 엔드포인트 모두 응답합니다. 의미가 있는 쪽은 ready입니다. /healthz는 무엇이 열리기도 전에 무조건 ok를 반환하므로, 데이터베이스나 블롭 디렉터리를 쓸 수 없는 인스턴스도 통과시킵니다. /readyz는 SQLite 데이터베이스와 블롭 디렉터리에 핑을 보내고 둘 중 하나라도 문제가 있으면 503을 반환합니다.</p><pre><code>$ docker compose ps
+NAME                IMAGE                     STATUS          PORTS
+relayium-server-1   relayium/relayium:local   Up 12 seconds   127.0.0.1:8080-&gt;8080/tcp
+
+$ curl -s http://127.0.0.1:8080/healthz
+ok
+$ curl -s http://127.0.0.1:8080/readyz
+ready</code></pre></div>
       <ul><li>이것이 서버 전체이며, :8080에서 대기합니다. 운영 환경에서는 앞단에 nginx나 Caddy를 두어 TLS를 처리하세요 — docs/self-hosting.md에 Docker 배포 경로와 프록시해야 할 경로가 설명되어 있습니다. Relayium이 실제 운영에 쓰는 nginx 설정 자체는 공개되어 있지 않습니다.</li><li>앱 설정은 선택적인 server/.env 파일과 docker-compose.yml의 environment: 블록에서 옵니다. 모든 설정 항목에는 대응하는 RELAYIUM_* 키가 있습니다 — 시작점으로 server/.env.example을 복사하세요.</li><li>기본 배포에서 중요한 4가지 키는 RELAYIUM_ADDR(리스닝 주소), RELAYIUM_STATIC(빌드된 웹 앱 경로), RELAYIUM_DB(SQLite 파일 경로), RELAYIUM_BLOB_DIR(저장형 링크 암호문이 기록되는 위치)입니다. docker-compose.yml은 이미 이 4가지 모두에 합리적인 기본값을 설정해 두었고, 명명된 볼륨에 영속화합니다.</li></ul>
       <h2>네트워크 간 전송을 위한 TURN 릴레이 추가하기</h2>
       <p>같은 네트워크(LAN) 전송과 SSH 기반 push/pull은 별도 설정 없이 동작합니다. 네트워크를 넘나드는 실시간 전송(서로 다른 NAT 뒤에 있는 두 기기)은 경로를 확보하기 위해 TURN 릴레이가 필요할 때가 있습니다 — 릴레이는 언제나 암호문만 볼 뿐, 파일 내용을 보는 일은 결코 없습니다.</p>
-      <p>docker-compose.yml에는 선택적인 relay 프로필이 있어, 메인 서버와 함께 coturn(TURN 서버)과 릴레이 바이트 계량용 소형 Redis 인스턴스를 시작할 수 있습니다:</p>
-      <pre><code>RELAYIUM_TURN_SECRET=$(openssl rand -hex 32) docker compose --profile relay up -d --build</code></pre>
+      <p>docker-compose.yml에는 선택적인 relay 프로필이 있어, 메인 서버와 함께 coturn(TURN 서버)과 릴레이 바이트 계량용 소형 Redis 인스턴스를 시작할 수 있습니다.</p>
+      <p>이 비밀값은 서로 다른 두 곳에 도달해야 하며, 잘못하면 아무 소리 없이 실패합니다. coturn은 Compose 변수 치환으로 받는데, 이 치환은 셸이나 프로젝트 루트의 .env에서만 해석됩니다. 서버는 자신의 환경 — 즉 server/.env — 에서 읽으며, 비밀값이 비어 있으면 TURN이 아예 꺼집니다. 한쪽만 설정하면 돌아가고는 있지만 서버가 자격 증명을 전혀 발급해 주지 않는 coturn이 남습니다. 모든 컨테이너는 정상이라고 보고하고, 로그에는 아무것도 남지 않으며, 엄격한 NAT를 넘는 전송은 릴레이를 추가하기 전과 똑같이 계속 실패합니다.</p>
+      <ol class="steps" data-block="steps"><li><p>충분히 긴 무작위 비밀값을 하나 생성합니다. 아래에서는 모두 같은 값을 씁니다.</p><pre><code>openssl rand -hex 32</code></pre></li><li><p>그 비밀값과 도메인이 가리키는 릴레이 주소를 server/.env에 적습니다. 그래야 서버가 TURN을 실제로 활성화합니다.</p><pre><code>RELAYIUM_TURN_SECRET=&lt;the value from step 1&gt;
+RELAYIUM_TURN_URLS=turn:example.com:3478,turns:example.com:5349</code></pre></li><li><p>같은 파일을 셸로 불러와 Compose의 치환이 coturn에 동일한 비밀값을 넘기도록 합니다. source 방식은 출처를 하나로 유지하면서, ps에 드러나는 명령줄에 비밀값이 실리지 않게 해줍니다.</p><pre><code>set -a; . ./server/.env; set +a</code></pre></li><li><p>relay 프로필을 붙여 스택을 시작합니다.</p><pre><code>docker compose --profile relay up -d --build</code></pre></li><li><p>호스트 방화벽에서 릴레이 포트를 엽니다. coturn은 호스트 네트워크로 실행되므로 이는 Docker가 아니라 호스트 규칙입니다: UDP 3478과 49152-65535, TCP 3478과 5349.</p></li><li><p>coturn뿐 아니라 서버가 비밀값을 가지고 올라왔는지 확인합니다. 소리 없이 지나가는 실패를 잡아내는 확인이 바로 이것입니다.</p><pre><code>docker compose exec server env | grep RELAYIUM_TURN</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">정상적인 릴레이의 모습</p><p>서버 컨테이너 안에서 두 키가 모두 비어 있지 않은 값으로 돌아옵니다. coturn이 떠 있다는 사실만으로는 아무것도 증명되지 않습니다 — 브라우저가 받는 릴레이 자격 증명은 오직 서버가 발급한 것뿐입니다.</p><pre><code>$ docker compose exec server env | grep RELAYIUM_TURN
+RELAYIUM_TURN_SECRET=3f7a…
+RELAYIUM_TURN_URLS=turn:example.com:3478,turns:example.com:5349</code></pre></div>
       <ul><li>coturn이 동작하려면 호스트의 실제 공인 IP와 열려 있는 UDP 포트 범위가 필요합니다 — docs/self-hosting.md에 Docker의 relay 프로필로 실행하는 방법이 설명되어 있습니다. Relayium이 실제 운영에 쓰는 coturn 설정(설치 스크립트 포함)은 공개되어 있지 않습니다.</li><li>--profile relay와 RELAYIUM_TURN_SECRET 없이도 서버 자체는 문제없이 동작합니다 — 다만 네트워크 간 전송이 STUN만 사용하는 방식으로 대체되며, 이는 비교적 느슨한 NAT 유형에서는 동작하지만 가장 엄격한 유형에서는 동작하지 않습니다.</li></ul>
       <h2>내 컴퓨터에 CLI 설치</h2>
       <p>이 마지막 단계는 서버가 아니라 내 컴퓨터에서 relayium CLI를 실행합니다. 설치하지 않았다면 먼저 설치하세요. macOS나 Linux:</p>
       <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>relayium.com/cli 에 모든 설치 방법이 있습니다 — Windows 바이너리, 릴리스 페이지, 또는 Go가 있으면 go build.</li><li>relayium --version 으로 확인합니다. CLI가 없으면 아래 명령은 “command not found”만 출력합니다.</li></ul>
       <h2>CLI를 자신의 서버로 연결하기</h2>
-      <p>Relayium CLI는 네트워크 간 send/receive와 text에서 기본적으로 relayium.com의 랑데부 서버를 사용합니다. --server를 전달하면 대신 자신의 서버를 사용할 수 있습니다:</p>
-      <pre><code>relayium send ./report.pdf --server https://your-domain</code></pre>
-      <pre><code>relayium receive 483920 --server https://your-domain</code></pre>
-      <pre><code>relayium text --server https://your-domain</code></pre>
-      <pre><code>relayium text 483920 --server https://your-domain</code></pre>
+      <p>Relayium CLI는 네트워크 간 send/receive와 text에서 기본적으로 relayium.com의 랑데부 서버를 사용합니다. --server를 전달하면 대신 자신의 서버를 사용할 수 있습니다.</p>
+      <ol class="steps" data-block="steps"><li><p>앞 절에서 CLI를 설치한 기기에서 relayium.com이 아니라 자신의 서버로 로그인합니다. URL과 코드가 출력되며, 자신의 인스턴스에 로그인된 브라우저에서 승인합니다.</p><pre><code>relayium login --server https://your-domain</code></pre></li><li><p>저장된 자격 증명이 어느 서버에 묶여 있는지 확인합니다. whoami는 플래그를 받지 않습니다 — 로그인이 실제로 기록한 내용을 그대로 보고하며, 그래서 실행해 볼 가치가 있습니다.</p><pre><code>relayium whoami</code></pre></li><li><p>보낼 때도 같은 --server를 전달합니다. 빠뜨리면 CLI가 relayium.com에서 페어링 코드를 발급하고, 상대는 자신의 인스턴스에서 그 코드를 영영 찾지 못합니다.</p><pre><code>relayium send ./report.pdf --server https://your-domain</code></pre></li><li><p>다른 기기에서 출력된 코드와 같은 --server로 받습니다. 텍스트 세션도 방식이 같습니다.</p><pre><code>relayium receive 483920 --server https://your-domain</code></pre><pre><code>relayium text --server https://your-domain</code></pre><pre><code>relayium text 483920 --server https://your-domain</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">자신의 인스턴스와 통신하고 있음을 확인하는 방법</p><p>whoami는 계정을 출력하고 괄호 안에 묶여 있는 서버를 함께 보여줍니다. 거기에 relayium.com이 아니라 자신의 도메인이 있으면 확인된 것입니다.</p><pre><code>$ relayium login --server https://your-domain
+Open https://your-domain/device and enter code: WDJB-MJHT
+logged in as you@example.com
+
+$ relayium whoami
+you@example.com (https://your-domain)</code></pre></div>
       <ul><li>어느 서버를 쓰든 CLI는 무료입니다 — --server는 페어링 코드 핸드셰이크 서버만 바꿉니다. send나 text를 코드 없이 실행하면 그 서버에서 코드를 발급하고, 클라우드 up도 그 서버 계정에 저장하므로 먼저 relayium login --server https://your-domain으로 로그인하세요. receive, down, 출력된 코드로 참여하는 text는 로그인이 필요 없습니다.</li><li>text 양쪽은 동시에 온라인이어야 합니다. 메시지는 별도의 종단간 암호화 P2P 직접 연결 세션을 사용합니다. CLI text는 직접 연결 전용이며 브라우저의 TURN 릴레이를 사용하지 않습니다. Relayium과 자체 호스팅 서버는 메시지 본문이나 서버 측 기록을 저장하지 않지만, 어느 터미널이나 수신자든 받은 텍스트를 복사하거나 보관할 수 있습니다.</li><li>push/pull(자신의 SSH를 통한)과 serve + 데몬 다이렉트의 push relayium://host는 자체 호스팅 여부와 무관하게 relayium.com에 전혀 닿지 않습니다 — 지정한 원격지에 직접 연결됩니다.</li></ul>
+      <h2>잘 안 될 때</h2>
+      <p>실패하는 자체 호스팅은 거의 모두 다섯 가지 중 하나입니다. 각각 읽어서 판단할 수 있는 한 줄이나 실행해서 결론을 내는 명령이 있으며, 다섯 중 셋은 그 확인을 돌려보기 전까지는 성공한 것처럼 보입니다.</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">증상, 확인, 해결</p><dl><dt>빌드가 시작되기도 전에 docker compose up이 아예 시작을 거부합니다.</dt><dd><pre><code>docker compose up -d --build
+# required variable RELAYIUM_TURN_SECRET is missing a value</code></pre><p>Compose는 프로필로 걸러내기 전에 파일 전체를 치환하므로, 릴레이가 꺼져 있어도 꺼둔 coturn 서비스의 필수 변수까지 검증합니다. 아무 자리표시자나 앞에 붙이세요 — RELAYIUM_TURN_SECRET=placeholder docker compose up -d --build — 실제로 relay 프로필을 켤 때 진짜 비밀값으로 바꾸면 됩니다.</p></dd><dt>컨테이너는 Up인데 다른 기기의 브라우저에서 접근되지 않습니다.</dt><dd><pre><code>docker compose ps
+# PORTS  127.0.0.1:8080-&gt;8080/tcp</code></pre><p>그 루프백 바인딩은 기본 동작으로, 공개 호스트가 평문 HTTP를 인터넷에 노출하지 않게 합니다. 운영에서는 그대로 두고 같은 호스트의 리버스 프록시에서 TLS를 종료하세요. 프록시가 없는 LAN 전용 장비라면 RELAYIUM_BIND=0.0.0.0 docker compose up -d로 더 넓게 게시합니다 — 이 변수는 서버가 아니라 compose가 읽습니다.</p></dd><dt>/healthz는 ok라는데 가입이 실패하고 저장형 링크가 끝내 나타나지 않습니다.</dt><dd><pre><code>curl -s -o /dev/null -w &#39;%{http_code}\n&#39; http://127.0.0.1:8080/readyz
+# 503</code></pre><p>/healthz는 무조건 ok를 반환하며 프로세스가 대기 중이라는 것만 증명합니다. /readyz는 SQLite 데이터베이스와 블롭 디렉터리에 핑을 보내므로 503은 둘 중 하나를 쓸 수 없다는 뜻입니다 — relayium-data 볼륨이 마운트되었는지, RELAYIUM_DB와 RELAYIUM_BLOB_DIR이 그 안쪽을 가리키는지 확인하세요.</p></dd><dt>relayium login이 열 수 없는 localhost 확인 URL을 출력합니다.</dt><dd><pre><code>relayium login --server https://your-domain
+# Open http://localhost:8080/device and enter code: WDJB-MJHT</code></pre><p>그 URL은 서버가 RELAYIUM_BASE_URL로 만들며, 기본값이 http://localhost:8080입니다. server/.env에서 실제 https:// 주소로 설정하고 재시작하세요. 이 값은 세션 쿠키에 Secure 플래그를 붙일지도 결정하므로, 잘못 둔 채로 두는 것은 보기 나쁜 정도의 문제가 아닙니다.</p></dd><dt>coturn은 돌아가는데 엄격한 NAT를 넘는 전송이 계속 실패합니다 — 로그에는 아무것도 없습니다.</dt><dd><pre><code>docker compose exec server env | grep RELAYIUM_TURN
+# 출력 없음</code></pre><p>비밀값이 Compose 치환으로 coturn에는 닿았지만 서버에는 한 번도 닿지 않았고, 서버는 비밀값이 비어 있어 TURN이 아예 꺼져 있습니다. RELAYIUM_TURN_SECRET과 RELAYIUM_TURN_URLS를 server/.env에 적고, set -a; . ./server/.env; set +a로 셸에 불러와 치환도 같은 값을 보게 한 뒤 relay 프로필을 재시작하세요. 그 확인에서 두 키가 모두 비어 있지 않아야 합니다.</p></dd></dl></div>
       <h2>자주 묻는 질문</h2>
       <h3>TURN을 설정해야 하나요?</h3>
       <p>네트워크를 넘나드는 실시간 전송이 엄격한 NAT 환경에서도 동작하길 원할 때만 필요합니다. 같은 네트워크 전송, SSH 기반 push/pull, 데몬 다이렉트는 모두 TURN 없이 동작합니다 — TURN은 네트워크 간 페어링 코드 경로의 NAT 통과에만 쓰입니다.</p>

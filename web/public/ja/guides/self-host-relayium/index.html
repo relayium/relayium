@@ -35,7 +35,7 @@
     <meta name="twitter:title" content="Relayium をセルフホスト：自分専用のファイル・テキスト転送サーバーを運用" />
     <meta name="twitter:description" content="1つの Docker コマンドで Relayium のサーバー一式を自分で運用——自分のドメイン、自分のデータ、第三者のアカウントは不要。ファイルと一時的なテキストのペアリング、環境変数、任意のブラウザ用 TURN リレー、CLI をそのサーバーに向ける方法を解説します。" />
     <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
-    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium をセルフホスト：自分専用のファイル・テキスト転送サーバーを運用","description":"1つの Docker コマンドで Relayium のサーバー一式を自分で運用——自分のドメイン、自分のデータ、第三者のアカウントは不要。ファイルと一時的なテキストのペアリング、環境変数、任意のブラウザ用 TURN リレー、CLI をそのサーバーに向ける方法を解説します。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-07-31","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/self-host-relayium/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"Relayium をセルフホスト：自分専用のファイル・テキスト転送サーバーを運用"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"TURN を設定する必要はありますか？","acceptedAnswer":{"@type":"Answer","text":"ネットワークをまたぐリアルタイム転送を厳しい NAT 越しでも機能させたい場合にのみ必要です。同一ネットワークの転送、SSH ベースの push/pull、デーモン直結はいずれも TURN なしで動作します——TURN はネットワークをまたぐペアリングコード経路での NAT 越え専用です。"}},{"@type":"Question","name":"セルフホストしても CLI は無料のままですか？","acceptedAnswer":{"@type":"Answer","text":"はい。relayium.com でも自分のサーバーでも CLI は完全無料です。コードなしの send または text でコードを発行するときと、up でファイルを保存するときは、指し先サーバーのアカウントが必要です。receive、down、表示されたコードで参加する text はログイン不要です。"}},{"@type":"Question","name":"自分のドメインと TLS 証明書を使えますか？","acceptedAnswer":{"@type":"Answer","text":"使えます。Docker イメージ自体は :8080 で平文の HTTP を待ち受けます。前段に nginx か Caddy を置き、自分のドメインと証明書（例えば certbot/Let's Encrypt 経由）を設定してください。docs/self-hosting.md はプロキシすべき内容を説明しています。Relayium 自身の本番 nginx 設定は公開されていないため、自分で用意する必要があります。"}},{"@type":"Question","name":"セルフホストしたサーバーはどんなデータを保存しますか？","acceptedAnswer":{"@type":"Answer","text":"RELAYIUM_DB にある SQLite データベース（アカウント、セッション）と、保存型/リンク型の転送については RELAYIUM_BLOB_DIR にある暗号化されたブロブ——これはサーバー自身も復号できません。サーバーはリアルタイムのファイルやメッセージ本文を保存せず、シグナリングのハンドシェイクだけを中継しますが、受信端末はファイルやテキストを保持できます。"}}]}]}</script>
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Relayium をセルフホスト：自分専用のファイル・テキスト転送サーバーを運用","description":"1つの Docker コマンドで Relayium のサーバー一式を自分で運用——自分のドメイン、自分のデータ、第三者のアカウントは不要。ファイルと一時的なテキストのペアリング、環境変数、任意のブラウザ用 TURN リレー、CLI をそのサーバーに向ける方法を解説します。","inLanguage":"ja","datePublished":"2026-07-09","dateModified":"2026-08-06","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ja/guides/self-host-relayium/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ja/"},{"@type":"ListItem","position":2,"name":"ガイド","item":"https://relayium.com/ja/guides/"},{"@type":"ListItem","position":3,"name":"Relayium をセルフホスト：自分専用のファイル・テキスト転送サーバーを運用"}]},{"@type":"FAQPage","inLanguage":"ja","mainEntity":[{"@type":"Question","name":"TURN を設定する必要はありますか？","acceptedAnswer":{"@type":"Answer","text":"ネットワークをまたぐリアルタイム転送を厳しい NAT 越しでも機能させたい場合にのみ必要です。同一ネットワークの転送、SSH ベースの push/pull、デーモン直結はいずれも TURN なしで動作します——TURN はネットワークをまたぐペアリングコード経路での NAT 越え専用です。"}},{"@type":"Question","name":"セルフホストしても CLI は無料のままですか？","acceptedAnswer":{"@type":"Answer","text":"はい。relayium.com でも自分のサーバーでも CLI は完全無料です。コードなしの send または text でコードを発行するときと、up でファイルを保存するときは、指し先サーバーのアカウントが必要です。receive、down、表示されたコードで参加する text はログイン不要です。"}},{"@type":"Question","name":"自分のドメインと TLS 証明書を使えますか？","acceptedAnswer":{"@type":"Answer","text":"使えます。Docker イメージ自体は :8080 で平文の HTTP を待ち受けます。前段に nginx か Caddy を置き、自分のドメインと証明書（例えば certbot/Let's Encrypt 経由）を設定してください。docs/self-hosting.md はプロキシすべき内容を説明しています。Relayium 自身の本番 nginx 設定は公開されていないため、自分で用意する必要があります。"}},{"@type":"Question","name":"セルフホストしたサーバーはどんなデータを保存しますか？","acceptedAnswer":{"@type":"Answer","text":"RELAYIUM_DB にある SQLite データベース（アカウント、セッション）と、保存型/リンク型の転送については RELAYIUM_BLOB_DIR にある暗号化されたブロブ——これはサーバー自身も復号できません。サーバーはリアルタイムのファイルやメッセージ本文を保存せず、シグナリングのハンドシェイクだけを中継しますが、受信端末はファイルやテキストを保持できます。"}}]}]}</script>
     <style>
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
 @media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
@@ -65,6 +65,23 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
 </style>
+    <style>
+.cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
+.cbox-t{margin:0 0 8px;color:var(--text-h);font-weight:600;font-size:15.5px}
+.cbox p:last-child{margin-bottom:0}
+.cbox ul{margin:0}
+.cbox pre{margin:10px 0 0}
+ol.steps{margin:18px 0;padding-inline-start:26px}
+ol.steps>li{margin:12px 0}
+ol.steps>li::marker{color:var(--text-h);font-weight:600}
+ol.steps>li>p{margin:0}
+ol.steps>li>pre{margin:8px 0 0}
+.fix dl{margin:0}
+.fix dt{margin:14px 0 4px;color:var(--text-h);font-weight:600}
+.fix dl>dt:first-child{margin-top:0}
+.fix dd{margin:0}
+.fix dd>pre{margin:6px 0}
+</style>
   </head>
   <body>
     <div class="wrap">
@@ -83,7 +100,7 @@ footer a{color:var(--text-h);text-decoration:none}
            and disagreeing with the dateModified in this page's own JSON-LD.
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
-      <p class="updated">最終更新: <bdi>2026-07-31</bdi></p>
+      <p class="updated">最終更新: <bdi>2026-08-06</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/self-host-relayium/">English</a><a href="/zh/guides/self-host-relayium/">中文</a><a href="/ja/guides/self-host-relayium/" aria-current="true">日本語</a><a href="/ko/guides/self-host-relayium/">한국어</a><a href="/de/guides/self-host-relayium/">Deutsch</a><a href="/fr/guides/self-host-relayium/">Français</a><a href="/ar/guides/self-host-relayium/">العربية</a><a href="/es/guides/self-host-relayium/">Español</a><a href="/pt/guides/self-host-relayium/">Português</a></nav>
       <p class="lead">Relayium は AGPL-3.0 ライセンスのオープンソースで、サーバーは1つの自己完結型イメージです——外部データベースも、サードパーティのストレージバケットも不要で、登録するものもありません。relayium.com に頼るのではなく全体を自分で運用したいなら、本ガイドで Docker によりサーバーを立ち上げ、CLI をそこに向ける方法を案内します。</p>
       <p class="lead">セルフホストすることで、データがどこに置かれるかを完全に管理でき、自分のドメインと TLS 証明書を使え、他人のインフラ運用判断に依存しません。以下の内容はすべてリポジトリに実際に存在するファイル——docker-compose.yml、server/.env.example、docs/self-hosting.md——に基づいており、実在しないフラグや設定は登場しません。</p>
@@ -91,25 +108,50 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>Relayium のリアルタイム転送はエンドツーエンドで暗号化されています。セルフホストした TURN リレーは暗号文のバイトを運ぶことがあり、サーバーはシグナリングのメタデータを処理しますが、どちらもファイルの平文を読んだり復号したりできません。サーバーもリレーも、リアルタイム内容のサーバー側コピーや履歴を保存しません。サーバーはアカウントを保持し、また保存型/リンク型の転送については、暗号化されたブロブと小さな SQLite データベースを保持します。セルフホストとは、そのデータが自分が管理するインフラ上に、自分のドメインの下に置かれ、他人の運用判断が介在しないということです。</p>
       <p>このプロジェクトは AGPL-3.0 ライセンスでオープンソース（github.com/relayium/relayium）なので、何かを任せる前にサーバーが正確に何をしているかを読んで確認でき、自由に fork したり改変したりできます。</p>
       <h2>Docker でクイックスタート</h2>
-      <p>リポジトリのルートには Dockerfile と docker-compose.yml があり、これらは1つの自己完結型イメージ——事前ビルド済みの Web アプリを配信する静的 Go バイナリ——をビルドします。実行するためだけに別途 Node、Go ツールチェーン、nginx は不要です:</p>
-      <pre><code>docker compose up -d --build</code></pre>
+      <div class="cbox prereq" data-block="prereqs"><p class="cbox-t">手順1の前に必要なもの</p><ul><li>Docker Engine と Compose プラグインが入ったホスト。docker compose version はバージョン文字列を表示します。「docker: &#39;compose&#39; is not a docker command」と出る場合はプラグインが入っていません。</li><li>リポジトリのクローン。compose ファイルはこのソースツリーからイメージをビルドするため、隣に Dockerfile と web/ が必要です——取得できる事前ビルド済みイメージはありません。</li><li>名前付きボリューム relayium-data 用のディスク容量。SQLite データベースと、保持する保存型転送の暗号文が入ります。</li><li>自分以外も使うなら、ドメインと TLS を終端するリバースプロキシ。コンテナは平文 HTTP しか話さず、既定ではループバックインターフェースにしか公開されません。</li><li>必要なものはこれだけです。外部データベースも、オブジェクトストレージのバケットも、第三者のアカウントも要りません。</li></ul></div>
+      <p>リポジトリのルートには Dockerfile と docker-compose.yml があり、これらは1つの自己完結型イメージ——事前ビルド済みの Web アプリを配信する静的 Go バイナリ——をビルドします。実行するためだけに別途 Node、Go ツールチェーン、nginx は不要です。</p>
+      <ol class="steps" data-block="steps"><li><p>リポジトリをクローンして、そのディレクトリに移動します。</p><pre><code>git clone https://github.com/relayium/relayium.git</code></pre><pre><code>cd relayium</code></pre></li><li><p>ビルドして起動します。リレーが無効でもこのプレースホルダーの秘密鍵は省けません。Compose はファイルを解析する時点で、プロファイルによって無効化されている coturn サービスの必須変数まで検証するため、素の docker compose up は拒否されます。</p><pre><code>RELAYIUM_TURN_SECRET=placeholder docker compose up -d --build</code></pre></li><li><p>コンテナが再起動を繰り返さずに立ち上がったままか確認します。</p><pre><code>docker compose ps</code></pre></li><li><p>このインスタンスが実際に応答できる状態かを尋ねます。/healthz ではなく /readyz を使ってください——両者の違いこそがこの確認の要点で、下の期待結果ボックスがその理由を説明します。</p><pre><code>curl -s http://127.0.0.1:8080/readyz</code></pre></li><li><p>設定テンプレートをコピーし、公開 URL を設定します。RELAYIUM_BASE_URL は送信メール内のリンクを組み立て、セッション Cookie に Secure フラグを付けるかどうかも決めるため、実際の https:// アドレスである必要があります。</p><pre><code>cp server/.env.example server/.env</code></pre><pre><code>chmod 600 server/.env</code></pre></li><li><p>前段に nginx か Caddy を置き、自分のドメインで TLS を終端して、すべてのパス——/、/api、/ws、/admin——を 8080 番ポートへプロキシします。その後、server/.env を反映させるために再起動します。</p><pre><code>docker compose up -d</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">正常なインスタンスの見え方</p><p>コンテナが Up となり、両方のエンドポイントが応答します。意味を持つのは ready のほうです。/healthz は何も開かれる前に無条件で ok を返すため、データベースやブロブディレクトリが使えないインスタンスでも通ってしまいます。/readyz は SQLite データベースとブロブディレクトリに ping を送り、どちらかが壊れていれば 503 を返します。</p><pre><code>$ docker compose ps
+NAME                IMAGE                     STATUS          PORTS
+relayium-server-1   relayium/relayium:local   Up 12 seconds   127.0.0.1:8080-&gt;8080/tcp
+
+$ curl -s http://127.0.0.1:8080/healthz
+ok
+$ curl -s http://127.0.0.1:8080/readyz
+ready</code></pre></div>
       <ul><li>これでサーバー全体が :8080 で待ち受けます。本番環境では前段に nginx か Caddy を置いて TLS を処理してください——docs/self-hosting.md は Docker での構成とプロキシすべきパスを説明しています。Relayium 自身の本番 nginx 設定は公開されていません。</li><li>アプリの設定は任意の server/.env ファイルと、docker-compose.yml 内の environment: ブロックから読み込まれます。すべての設定項目に対応する RELAYIUM_* キーがあります——出発点として server/.env.example をコピーしてください。</li><li>基本的なデプロイで重要な4つのキーは、RELAYIUM_ADDR（リッスンアドレス）、RELAYIUM_STATIC（ビルド済み Web アプリのパス）、RELAYIUM_DB（SQLite ファイルパス）、RELAYIUM_BLOB_DIR（保存型リンクの暗号文の書き込み先）です。docker-compose.yml はこの4つすべてに妥当なデフォルトを設定済みで、名前付きボリュームに永続化します。</li></ul>
       <h2>ネットワークをまたぐ転送用に TURN リレーを追加する</h2>
       <p>同一ネットワーク（LAN）の転送や、SSH ベースの push/pull は、追加設定なしで動作します。ネットワークをまたぐリアルタイム転送（それぞれ異なる NAT の背後にある2台のデバイス）は、経路確立のために TURN リレーが必要になることがあります——リレーは常に暗号文しか見ず、ファイルの中身を見ることは決してありません。</p>
-      <p>docker-compose.yml には任意の relay プロファイルがあり、メインサーバーと合わせて coturn（TURN サーバー）と、リレーバイト計測用の小さな Redis インスタンスを起動できます:</p>
-      <pre><code>RELAYIUM_TURN_SECRET=$(openssl rand -hex 32) docker compose --profile relay up -d --build</code></pre>
+      <p>docker-compose.yml には任意の relay プロファイルがあり、メインサーバーと合わせて coturn（TURN サーバー）と、リレーバイト計測用の小さな Redis インスタンスを起動できます。</p>
+      <p>この秘密鍵は2か所に届ける必要があり、間違えても何のエラーも出ません。coturn は Compose の変数展開で受け取り、その展開はシェルかプロジェクトルートの .env からしか解決されません。サーバーは自分自身の環境変数——つまり server/.env——から読み、秘密鍵が空なら TURN は完全に無効になります。片方だけ設定すると、動いてはいるがサーバーが決して資格情報を発行しない coturn ができあがります。コンテナはすべて健全と報告し、ログには何も出ず、厳しい NAT をまたぐ転送はリレーを追加する前とまったく同じように失敗し続けます。</p>
+      <ol class="steps" data-block="steps"><li><p>十分に長いランダムな秘密鍵を1つ生成します。以下ではすべて同じ値を使います。</p><pre><code>openssl rand -hex 32</code></pre></li><li><p>その秘密鍵と、自分のドメインが解決するリレーアドレスを server/.env に書きます。これでサーバー側の TURN が有効になります。</p><pre><code>RELAYIUM_TURN_SECRET=&lt;the value from step 1&gt;
+RELAYIUM_TURN_URLS=turn:example.com:3478,turns:example.com:5349</code></pre></li><li><p>同じファイルをシェルに読み込ませ、Compose の変数展開が coturn へ同一の秘密鍵を渡せるようにします。source する方法なら情報源が1つに保たれ、ps から見える形でコマンドラインに秘密鍵が載ることもありません。</p><pre><code>set -a; . ./server/.env; set +a</code></pre></li><li><p>relay プロファイルを付けてスタックを起動します。</p><pre><code>docker compose --profile relay up -d --build</code></pre></li><li><p>ホストのファイアウォールでリレーポートを開けます。coturn はホストネットワークで動くため、これは Docker ではなくホスト側のルールです: UDP 3478 と 49152-65535、TCP 3478 と 5349。</p></li><li><p>coturn だけでなくサーバーが秘密鍵を持って起動したことを確認します。これが、音もなく起きる失敗を捕まえるための確認です。</p><pre><code>docker compose exec server env | grep RELAYIUM_TURN</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">正常なリレーの見え方</p><p>サーバーコンテナの内側から見て、両方のキーが空でない値を返します。coturn が動いていること自体は何の証明にもなりません——ブラウザが受け取るリレー資格情報は、サーバーが発行したものだけです。</p><pre><code>$ docker compose exec server env | grep RELAYIUM_TURN
+RELAYIUM_TURN_SECRET=3f7a…
+RELAYIUM_TURN_URLS=turn:example.com:3478,turns:example.com:5349</code></pre></div>
       <ul><li>coturn が動作するにはホストの実際のパブリック IP と、開放された UDP ポート範囲が必要です——docs/self-hosting.md は Docker の relay プロファイルでの起動方法を説明しています。Relayium 自身の本番 coturn 設定（インストールスクリプトを含む）は公開されていません。</li><li>--profile relay と RELAYIUM_TURN_SECRET を使わなくてもサーバー自体は問題なく動作します——ネットワークをまたぐ転送は単に STUN のみにフォールバックし、比較的緩い NAT タイプでは機能しますが、最も厳しいタイプでは機能しません。</li></ul>
       <h2>自分のマシンに CLI をインストール</h2>
       <p>この最後の手順はサーバーではなく自分のコンピュータで relayium CLI を実行します。未インストールならまず入れてください。macOS または Linux：</p>
       <pre><code>curl -fsSL https://relayium.com/install.sh | sh</code></pre>
       <ul><li>relayium.com/cli にすべてのインストール方法があります——Windows バイナリ、リリースページ、または Go があれば go build。</li><li>relayium --version で確認できます。CLI がないと下のコマンドは「command not found」と出るだけです。</li></ul>
       <h2>CLI を自分のサーバーに向ける</h2>
-      <p>Relayium CLI は、ネットワークをまたぐ send/receive と text で既定では relayium.com のランデブーサーバーを使います。--server を渡せば、代わりに自分のサーバーを使えます:</p>
-      <pre><code>relayium send ./report.pdf --server https://your-domain</code></pre>
-      <pre><code>relayium receive 483920 --server https://your-domain</code></pre>
-      <pre><code>relayium text --server https://your-domain</code></pre>
-      <pre><code>relayium text 483920 --server https://your-domain</code></pre>
+      <p>Relayium CLI は、ネットワークをまたぐ send/receive と text で既定では relayium.com のランデブーサーバーを使います。--server を渡せば、代わりに自分のサーバーを使えます。</p>
+      <ol class="steps" data-block="steps"><li><p>前の節で CLI を入れたマシンで、relayium.com ではなく自分のサーバーにサインインします。URL とコードが表示されるので、自分のインスタンスにサインイン済みのブラウザで承認します。</p><pre><code>relayium login --server https://your-domain</code></pre></li><li><p>保存された資格情報がどのサーバーに結び付いているかを確認します。whoami はフラグを取りません——ログインが実際に書き込んだ内容をそのまま報告するので、実行する価値があります。</p><pre><code>relayium whoami</code></pre></li><li><p>送信時にも同じ --server を渡します。付け忘れると CLI は relayium.com でペアリングコードを発行してしまい、相手は自分のインスタンス上でそれを見つけられません。</p><pre><code>relayium send ./report.pdf --server https://your-domain</code></pre></li><li><p>もう一方のマシンで、表示されたコードと同じ --server を使って受け取ります。テキストセッションも同じ要領です。</p><pre><code>relayium receive 483920 --server https://your-domain</code></pre><pre><code>relayium text --server https://your-domain</code></pre><pre><code>relayium text 483920 --server https://your-domain</code></pre></li></ol>
+      <div class="cbox ok" data-block="success"><p class="cbox-t">自分のインスタンスに向いていると分かる形</p><p>whoami はアカウントに続けて、結び付いているサーバーを括弧内に表示します。そこが relayium.com ではなく自分のドメインになっていれば確認完了です。</p><pre><code>$ relayium login --server https://your-domain
+Open https://your-domain/device and enter code: WDJB-MJHT
+logged in as you@example.com
+
+$ relayium whoami
+you@example.com (https://your-domain)</code></pre></div>
       <ul><li>どちらのサーバーを使っても CLI は無料です——--server はペアリングコードのハンドシェイク先を変更するだけです。send または text をコードなしで実行するとそのサーバーでコードを発行し、クラウドの up もそのサーバー上のアカウントに保存するため、先に relayium login --server https://your-domain でサインインしてください。receive、down、表示されたコードで参加する text はログイン不要です。</li><li>text の両端は同時にオンラインである必要があります。メッセージは独立したエンドツーエンド暗号化 P2P 直結セッションを使います。CLI text は直結専用で、ブラウザ版の TURN リレーは使いません。Relayium もセルフホストしたサーバーもメッセージ本文やサーバー側の履歴を保存しませんが、どちらの端末または受信者も受信後のテキストをコピーまたは保持できます。</li><li>push/pull（自分の SSH 経由）や、serve とデーモン直結の push relayium://host は、セルフホストかどうかにかかわらず relayium.com に一切触れません——指定したリモートに直接接続します。</li></ul>
+      <h2>うまくいかないとき</h2>
+      <p>失敗するセルフホストのほぼすべては、次の5つのどれかです。それぞれに、読めば分かる1行か、実行すれば決着がつくコマンドがあります。そして5つのうち3つは、その確認を走らせるまで成功したように見えます。</p>
+      <div class="cbox fix" data-block="troubleshooting"><p class="cbox-t">症状、確認、対処</p><dl><dt>ビルドが始まる前に、docker compose up がそもそも起動を拒否する。</dt><dd><pre><code>docker compose up -d --build
+# required variable RELAYIUM_TURN_SECRET is missing a value</code></pre><p>Compose はプロファイルで絞り込む前にファイル全体を変数展開するため、リレーが無効でも、無効化された coturn サービスの必須変数まで検証されます。任意のプレースホルダーを前置してください——RELAYIUM_TURN_SECRET=placeholder docker compose up -d --build——実際に relay プロファイルを有効化するときに本物の秘密鍵へ置き換えます。</p></dd><dt>コンテナは Up なのに、別のマシンのブラウザから到達できない。</dt><dd><pre><code>docker compose ps
+# PORTS  127.0.0.1:8080-&gt;8080/tcp</code></pre><p>そのループバックへのバインドは既定の動作で、公開ホストが平文 HTTP をインターネットに晒さないためのものです。本番ではそのままにして、同じホスト上のリバースプロキシで TLS を終端してください。プロキシのない LAN 専用機なら、RELAYIUM_BIND=0.0.0.0 docker compose up -d でより広く公開します——この変数を読むのは compose であって、サーバー自身ではありません。</p></dd><dt>/healthz は ok を返すのに、サインアップが失敗し、保存型リンクがいつまでも現れない。</dt><dd><pre><code>curl -s -o /dev/null -w &#39;%{http_code}\n&#39; http://127.0.0.1:8080/readyz
+# 503</code></pre><p>/healthz は無条件に ok を返し、プロセスが待ち受けていることしか証明しません。/readyz は SQLite データベースとブロブディレクトリに ping を送るため、503 はそのどちらかが使えないという意味です——relayium-data ボリュームがマウントされているか、RELAYIUM_DB と RELAYIUM_BLOB_DIR がその内側を指しているかを確認してください。</p></dd><dt>relayium login が、開けるはずのない localhost の確認 URL を表示する。</dt><dd><pre><code>relayium login --server https://your-domain
+# Open http://localhost:8080/device and enter code: WDJB-MJHT</code></pre><p>その URL はサーバーが RELAYIUM_BASE_URL から組み立てており、既定値は http://localhost:8080 です。server/.env で実際の https:// アドレスに設定して再起動してください。この値はセッション Cookie に Secure フラグを付けるかどうかも決めるので、間違ったままにするのは見た目だけの問題ではありません。</p></dd><dt>coturn は動いているのに、厳しい NAT をまたぐ転送が失敗し続ける——しかもログには何も出ない。</dt><dd><pre><code>docker compose exec server env | grep RELAYIUM_TURN
+# 出力なし</code></pre><p>秘密鍵は Compose の変数展開で coturn には届いたものの、サーバーには一度も届いておらず、サーバー側は秘密鍵が空なので TURN が完全に無効です。RELAYIUM_TURN_SECRET と RELAYIUM_TURN_URLS を server/.env に書き、set -a; . ./server/.env; set +a でシェルに読み込ませて変数展開にも同じ値を見せ、relay プロファイルを再起動してください。先ほどの確認で両方のキーが空でない値を返すことが条件です。</p></dd></dl></div>
       <h2>よくある質問</h2>
       <h3>TURN を設定する必要はありますか？</h3>
       <p>ネットワークをまたぐリアルタイム転送を厳しい NAT 越しでも機能させたい場合にのみ必要です。同一ネットワークの転送、SSH ベースの push/pull、デーモン直結はいずれも TURN なしで動作します——TURN はネットワークをまたぐペアリングコード経路での NAT 越え専用です。</p>

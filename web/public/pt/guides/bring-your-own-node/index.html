@@ -121,7 +121,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul><li>Se você não quiser: execute o instalador de novo com RELAYIUM_NODE_AUTO_UPDATE=off. O temporizador e o serviço dele são desativados e removidos; o nó continua rodando e você o atualiza quando decidir.</li><li>Terminou de vez com o nó: veja “Remover o seu nó” mais abaixo.</li></ul>
       <h2>Remover o seu nó</h2>
       <p>Desinstalar é um único script, o mesmo quer o seu nó armazene arquivos quer apenas retransmita. Ele remove as unidades, o binário, a configuração e a conta de serviço, e tenta, em regime de melhor esforço, avisar o relayium.com de que o nó se foi. Se essa chamada falhar, é uma linha no seu terminal e não uma desinstalação quebrada — ela imprime o ID do nó para que seja marcado como removido à mão.</p>
-      <p>Baixe, verifique e só então execute. Canalizar direto para o `sh` significa que um 404 ou uma falha passageira de rede faz o comando inteiro não exibir nada e sair com código 0, o que parece uma desinstalação bem-sucedida.</p>
+      <p>Baixe, verifique e só então execute. Canalizar direto para o sh significa que um 404 ou uma falha passageira de rede faz o comando inteiro não exibir nada e sair com código 0, o que parece uma desinstalação bem-sucedida.</p>
       <p>Só remove o que reconhece: qualquer coisa inesperada no diretório de estado ou de armazenamento é mantida e reportada em vez de ser varrida.</p>
       <pre><code>curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh &amp;&amp; \
   [ -s uninstall-node.sh ] &amp;&amp; sudo sh uninstall-node.sh</code></pre>

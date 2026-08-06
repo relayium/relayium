@@ -121,7 +121,7 @@ footer a{color:var(--text-h);text-decoration:none}
       <ul><li>Vous n&#39;en voulez pas : relancez l&#39;installateur avec RELAYIUM_NODE_AUTO_UPDATE=off. Le minuteur et son service sont désactivés puis supprimés ; le nœud continue de tourner et vous le mettez à jour quand vous le décidez.</li><li>Vous arrêtez tout : voir « Retirer votre nœud » plus bas.</li></ul>
       <h2>Retirer votre nœud</h2>
       <p>La désinstallation tient en un seul script, le même que votre nœud stocke des fichiers ou se contente de relayer. Il retire les unités, le binaire, la configuration et le compte de service, et signale à relayium.com, sans garantie, que le nœud a disparu. Si cet appel échoue, c&#39;est une ligne sur votre terminal et non une désinstallation cassée — l&#39;identifiant du nœud s&#39;affiche pour qu&#39;on puisse le marquer retiré à la main.</p>
-      <p>Téléchargez-le, vérifiez-le, puis exécutez-le. Le faire passer directement dans `sh` signifie qu&#39;une 404 ou un accroc réseau fait que toute la commande n&#39;affiche rien et se termine avec le code 0 — ce qui ressemble à une désinstallation réussie.</p>
+      <p>Téléchargez-le, vérifiez-le, puis exécutez-le. Le faire passer directement dans sh signifie qu&#39;une 404 ou un accroc réseau fait que toute la commande n&#39;affiche rien et se termine avec le code 0 — ce qui ressemble à une désinstallation réussie.</p>
       <p>Il ne retire que ce qu&#39;il reconnaît : tout élément inattendu dans le répertoire d&#39;état ou de stockage est conservé et signalé plutôt que balayé.</p>
       <pre><code>curl -fsSL https://relayium.com/uninstall-node.sh -o uninstall-node.sh &amp;&amp; \
   [ -s uninstall-node.sh ] &amp;&amp; sudo sh uninstall-node.sh</code></pre>
