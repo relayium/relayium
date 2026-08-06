@@ -29,10 +29,9 @@ All file/line references are relative to `server/` in the
 
 ## The short version
 
-- A transfer between two devices that can reach each other directly — same
-  LAN, or NAT traversal via STUN across networks — never touches
-  relayium.com's infrastructure after the initial handshake, and **nothing
-  about it is billed or persisted**.
+- A transfer between two devices on the same LAN never touches relayium.com's
+  infrastructure after the initial handshake, and **nothing about it is billed
+  or persisted**. The same is true of any CLI transfer, which is direct-only.
 - The only thing relayium.com meters is **bytes relayed through a TURN
   server**, for the (fairly common) case where a direct connection can't be
   established. That's the entire billable event. It requires the sender to be
@@ -51,11 +50,25 @@ All file/line references are relative to `server/` in the
 
 ## What actually costs money: relay bytes, and only relay bytes
 
-Relayium picks the cheapest working path for a transfer: same-LAN direct →
-STUN-negotiated P2P → TURN relay, in that order (see the root
-[`README.md`](../README.md#how-it-works)). Only the last one runs bytes
-through infrastructure relayium.com pays for, and only the last one is
-metered.
+Which path a transfer takes, precisely — this is narrower than "it tries direct
+first" and the difference is what decides whether anything is billed:
+
+- **Same LAN, browser:** direct. The server issues no relay for a code-less LAN
+  room, so `chooseRtcConfig` (`web/src/lib/ice.ts:208-220`) leaves the policy at
+  `all` and host candidates carry the bytes.
+- **Cross-network, browser:** **relay, by design — not as a fallback.** As soon
+  as a TURN server is present in the ICE list, that same function returns
+  `iceTransportPolicy: "relay"` outright. It does not attempt STUN-negotiated
+  P2P first: on a cross-network path the direct candidates are going to fail
+  anyway, and waiting out their checks costs about 20 seconds before ICE reaches
+  the relay it would have used. So **there is no STUN-P2P rung for the browser**,
+  and a cross-network browser transfer is a metered transfer.
+- **CLI:** direct only. It never uses a relay, so it is never metered.
+
+The root [`README.md`](../README.md#how-it-works) states the same thing
+("LAN: direct · browser cross-network: TURN carries ciphertext only"). Only the
+relayed path runs bytes through infrastructure relayium.com pays for, and only
+that path is metered.
 
 **Getting a relay credential at all requires being signed in and under quota.**
 `handleICE` (`account/turn.go:59`) is the endpoint that hands out
@@ -150,8 +163,7 @@ would reasonably ask:
 
 Some of this is architectural, not a promise the server keeps by policy:
 
-- **Realtime transfers (LAN or STUN-negotiated P2P) leave the database
-  entirely.** The signaling hub (`internal/signal/hub.go`) — which groups
+- **Realtime transfers leave the database entirely**, relayed or not. The signaling hub (`internal/signal/hub.go`) — which groups
   devices into rooms, holds nicknames, and forwards WebRTC offers/ICE
   candidates — has **no dependency on `account` or the SQLite store at
   all** (verified by grep: no `account.`/`sqlite`/`Store` reference in that
@@ -277,13 +289,19 @@ withholds relay credentials for an invalid/unattributable pairing code
 endpoint at all — the two browsers find each other in the in-memory
 signaling hub and negotiate a DataChannel directly.
 
-**Cross-network P2P (STUN, no relay needed) also needs no payment**, though
-it does need the sender signed in to obtain a pairing code
-(`account/turn.go:69-73` resolves ownership from the code). If STUN alone
-gets the two peers connected, no TURN credential is ever consumed and
-nothing is billed — the sign-in requirement here is about attribution and
-abuse control (rate limits, email verification), not about charging for
-bytes that never touch a relay.
+**A cross-network browser transfer does need payment**, and this document
+used to say the opposite. It claimed that STUN alone might connect the two
+peers so that no TURN credential was consumed. The browser never tries that:
+`chooseRtcConfig` forces `iceTransportPolicy: "relay"` whenever a relay is in
+the list, so a cross-network browser session is relayed and metered from the
+start. Obtaining a pairing code therefore requires the sender to be signed in
+for two reasons rather than one — attribution and abuse control (rate limits,
+email verification) **and** the relay bytes it is about to spend
+(`account/turn.go:63-135` issues the credentials once the code clears those
+gates).
+
+The unmetered cross-network path that does exist is the **CLI**, which is
+direct-only and never asks for a relay.
 
 **What actually costs money on the Free tier**: relay bytes beyond 1 GiB/month
 combined with stored-transfer traffic, storage beyond 100 MiB live at once,
@@ -341,8 +359,10 @@ which flags a given deployment sets (`main.go`):
   Redis configured → the metering worker never starts → relay bytes are
   never ingested or attributed to anyone, full stop.
 - **TURN relay itself** is off unless `-turn-secret` /
-  `RELAYIUM_TURN_SECRET` is set (`main.go:89`) — without it there's simply
-  no relay to meter; only STUN-negotiated P2P and LAN work.
+  `RELAYIUM_TURN_SECRET` is set (`main.go:94`) — without it there's simply no
+  relay to meter. What still works is LAN browser transfers and the direct-only
+  CLI; cross-network browser transfers do not, because the relay they depend on
+  is the thing that is switched off.
 - **Billing (Stripe)** is entirely off unless `-stripe-secret-key` /
   `RELAYIUM_STRIPE_SECRET_KEY` is set (`main.go:149`); every
   `/api/billing/*` route 404s otherwise (`account/billing.go:19-22`) and

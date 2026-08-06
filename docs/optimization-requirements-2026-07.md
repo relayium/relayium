@@ -5,7 +5,7 @@
 > | 条目 | 状态 | 依据 / 缺口 |
 > |---|---|---|
 > | P0-1 独立 /security 页 | ✅ | `content/legal/security.mjs`，9 语言静态页 |
-> | P0-2 首屏降密度 + 视觉演示 | ⏳ **部分** | 技术细节已下沉到 `/security`（FeatureStrip 链接）；**演示动图 / 三张流程截图仍未做**——`web/public/` 里除图标与 og-image 外无任何产品截图 |
+> | P0-2 首屏降密度 + 视觉演示 | ⏳ **部分** | 技术细节已下沉到 `/security`（FeatureStrip 链接）。**三张流程截图已完成并上线**（2026-08-06 复核）：`web/public/shots/<lang>/{01-devices,02-confirm,03-done}.png`，九语言各一套共 24 张，由 `web/e2e/landing-shots.mjs` 从一次真实的双标签页传输里截出（`4ddacdff`），落地页引用见 `landing-template.mjs`（`4709072a`）。**仅剩 20–30 秒演示动图**，因体积与录制成本单独评估而推迟，需 Owner 定夺 |
 > | P0-3 「无需账号」如实修正 | ✅ | 九语言文案已改，并由 `content-claims.test.mjs` 的"发送无需账户"规则锁死（9 语言注入验证） |
 > | P0-4 Dockerfile + docker-compose | ✅ | 仓库根 `Dockerfile`、`docker-compose.yml` |
 > | P1-1 PWA：SW + share_target | ✅ | `site.webmanifest` 的 `share_target` + `/share-target` 路由 + `sw-template.js` |
@@ -16,7 +16,7 @@
 > | P2 A-1 信任背书区（MIT/无跟踪/GitHub/changelog） | ⏳ **基本完成** | `/releases/` 已上线（`1140ed55`）并进入页脚；**注意报告里的「MIT」已过时**——项目已改为开放内核：`server/`+`web/` AGPL-3.0、`apps/` Apache-2.0、`docs/` CC BY 4.0。首页尚无集中的"背书区"区块，链接分散在 FeatureStrip / 页脚 |
 > | P2 A-2 独立 Use Cases / Compare / Docs 页 | ✅ | 12 篇 compare 文章 + `/compare/` 真 hub + `/how-to/` 真 hub（`5e4addaf`）；UseCases 卡片已可点 |
 > | P2 B-3 中继策略统一叙事（降级链可视化） | ❌ **未做**（依赖 P1-2 之后的自动降级功能本身） |
-> | P2 B-4 管理后台国际化 | ❌ **未做** | `server/account/admin_templates.go` 仍是纯中文；是生产面（含灰度与二次确认页），需单独立项与测试扩展，不并入文案批次 |
+> | P2 B-4 管理后台国际化 | ✅ **已完成**（2026-08-06 复核） | `server/account/admin_i18n.go`（24 KB）+ `admin_i18n_test.go`；`adminLangFrom()`、语言 Cookie、`POST /admin/lang`（`admin.go`），`Lang` 已贯穿每个模板结构体。提交 `0c9e30d4`…`bf8e527d`。有意保留中文的只剩切换器自身的「中文 / EN」（语言名以自身语言呈现）与 Go 注释 |
 
 > 来源：一份基于公开页面的竞品调研报告（LocalSend / PairDrop / ShareDrop / ToffeeShare / Wormhole / AirDrop / Quick Share），
 > 经过与代码库实况逐条核对后筛选。报告作者未读源码，因此部分建议已实现、部分建议与实际情况有偏差，本文档只保留**真实缺口**，并补充了报告没有发现的问题。

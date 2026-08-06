@@ -5,7 +5,7 @@
 >
 > | 条目 | 状态 |
 > |---|---|
-> | 1.1 软 404 | ✅ 全部完成，线上 nginx 已于 2026-07-24 02:22 UTC 应用并验证（407 条 sitemap URL 全 200，未知路径返真 404）；见 `docs/runbook-seo-404-nginx.md` |
+> | 1.1 软 404 | ✅ 全部完成，线上 nginx 已于 2026-07-24 02:22 UTC 应用并验证（407 条 sitemap URL 全 200，未知路径返真 404）；见 `relayium-ops/docs/runbook-seo-404-nginx.md`（运维仓库，非公开） |
 > | 1.2 / 5.2 英文路由 JS-only | ✅ 构建产出每路由静态外壳（`web/scripts/pages/shells.mjs` + `vite-plugin-route-shells.ts`），head + 英文正文均正确 |
 > | 1.3 `/pricing` | ✅ 有外壳 + 入 sitemap |
 > | 1.4 `/cli` canonical | ✅ 外壳 + `pageMeta` 补 `cli` 分支 + `cliPage.metaTitle/metaDesc`（9 语言）+ 入 sitemap |
@@ -32,7 +32,7 @@
 > 自述形式不一致（互指不成立）。见 `src/lib/page-meta.ts` 的 `CLUSTERED_PATHS`。
 >
 > **第二轮（2026-07-24，对照 GSC coverage 导出实爬生产）又发现 3 项本报告漏掉的**，
-> 详见 `docs/runbook-seo-404-nginx.md` 的 "Round 2"：
+> 详见 `relayium-ops/docs/runbook-seo-404-nginx.md`（运维仓库，非公开） 的 "Round 2"：
 >
 > 1. **`/foo/index.html` 孪生 URL（约 400 个）**——生成页都写在 `<slug>/index.html`，
 >    nginx 直接 200 提供，canonical 指向带斜杠形式。这正是 "Alternate page with proper
@@ -43,7 +43,9 @@
 >
 > 另有一项**不在仓库里、需要你在 Cloudflare 面板关**：Scrape Shield 的 Email Address
 > Obfuscation 在边缘把 27 个法律/支持页的 `support@relayium.com` 改写成 404 的
-> `/cdn-cgi/l/email-protection` 链接（源站产物里 0 处）。见 `docs/cloudflare-setup.md` §7。
+> `/cdn-cgi/l/email-protection` 链接（源站产物里 0 处）。见 `relayium-ops/docs/cloudflare-setup.md`（运维仓库，非公开） §7。
+>
+> **2026-08-06 复核：已解决。** 线上 `https://relayium.com/privacy/` 实测为 3 处明文 `support@relayium.com`、`email-protection` 0 处，即 Scrape Shield 的邮箱混淆未生效于该页——正是 runbook 规定的验证方式。此项不再是待办。
 >
 > 新增 `web/scripts/pages/site-graph.test.mjs`：重复标题 / 孤儿页 / 指向重定向或 404 的内链 /
 > 指向 `*/index.html` 的链接，任一复发都会让测试红。

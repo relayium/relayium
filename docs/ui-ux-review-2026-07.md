@@ -23,7 +23,7 @@
 > | 16 | 无找回密码路径 | ✅ | `account.forgotPasswordLink` / `resetPasswordSend` |
 > | 17 | iOS 上文件夹按钮不可用 | ✅ | `lib/platform.ts` `isIOS()` |
 > | 18 | toast 用 sticky 顶内容 | ✅ | 改 `position: fixed` |
-> | 19 | 导航守卫用原生 `confirm()` | ❌ **未做** | `App.svelte` `setNavGuard(... confirm(...))`；报告原文即判"低收益，可不做"，站内已有 `ConfirmModal.svelte` 可用 |
+> | 19 | 导航守卫用原生 `confirm()` | ✅ **已完成**（2026-08-06 复核） | `App.svelte:985` 现为 `setNavGuard(() => (busy ? confirmDialog(messages[lang()].confirmLeave) : true))`，L980 附有为何原生对话框不安全的说明。提交 `ae97570c`。本表因此为 28/28 |
 > | 20 | 主题只跟随系统 | ✅ | `theme` 三态（system/light/dark） |
 > | 21 | TTL 只有 1/3/7 天 | ✅ | `ttl-options.ts` 五挡，含 1 小时（3600） |
 > | 22 | i18n 全量进主 bundle | ✅ | 按语言分块（构建产物 `fr-*.js` / `ja-*.js` / `ar-*.js`） |

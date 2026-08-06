@@ -26,15 +26,15 @@
 > | 4 | "六位数字码"错 | ✅ | 现在码本身就是 6 位纯数字，表述与实现一致 |
 > | 5 | 每篇配对教程补 5 分钟 TTL / 码从哪来 | ✅ | 16 篇提到配对码的教程已按“教流程 / 仅提及”完整分类；6 篇缺失流程说明的文章已补齐 5 分钟有效期与账户铸码来源，`pairing-facts.test.mjs` 对 9 语言守住分类完备性和事实 |
 > | 6 | 相关链接改策展 | ✅ | `content/related-map.mjs`，每篇 4 条 |
-> | 7 | 教程入口 | ⏳ **部分**：SPA 页脚已有 Guides 入口、UseCases 卡片已可点（`UseCases.svelte` 的 `caseHref`）；**落地页 learn 区仍是 37 条平铺、仍无收尾 CTA** |
-> | 8 | 编号步骤 / 预期输出 / 排障块 | ⏳ **部分**：CLI 6 篇和浏览器 how-to 11 篇均已完成（各 ×9 语言）；模板已支持语义化编号步骤、成功标志与排障定义列表，`cli-tutorial-structure.test.mjs` 与 `browser-howto-tutorial.test.mjs` 分别守住可运行命令、当前 UI 标签、跨网路径、浏览器落盘、阅后即焚和配额事实。仅剩 guides 8 篇 |
-> | 9 | 事实去重成权威 snippet | ⏳ **部分**：`content/install-section.mjs` 是已落地的共享段落；跨网段落与浏览器限制段落仍各自散在文章里（由 1/2 的测试守住正确性，但没有单一来源） |
+> | 7 | 教程入口 | ✅ **已完成**（2026-08-06 复核）：`landing-template.mjs` 的 learn 区已是三组各 5 条（`PER_GROUP = 5`）+ 全部索引链接（`.learn-all`）+ 收尾 CTA（`.close-cta`）。提交 `deebc8da` |
+> | 8 | 编号步骤 / 预期输出 / 排障块 | ⏳ **部分**：CLI 6 篇和浏览器 how-to 11 篇均已完成（各 ×9 语言）；模板已支持语义化编号步骤、成功标志与排障定义列表，`cli-tutorial-structure.test.mjs` 与 `browser-howto-tutorial.test.mjs` 分别守住可运行命令、当前 UI 标签、跨网路径、浏览器落盘、阅后即焚和配额事实。guides 8 篇亦已完成（2026-08-06 复核），`guides-tutorial-structure.test.mjs` 把 8 篇 × 9 语言断言为 PROCEDURAL / EXPLAINER 的**完备且互斥**划分并带反向变异证明。提交 `ecf68224`、`8457fcc1`、`fa759d97`、`6418edce`、`bae36671`、`c1195619`、`013af5c2` |
+> | 9 | 事实去重成权威 snippet | 🔄 **已被取代（superseded）**（2026-08-06 复核）：snippet 化经实测被否决——它会把同一段文字放到 19 个可索引页面上，而问题本质是**事实**而非重复。改由 `pairing-facts.test.mjs` 把每篇配对教程划分为「讲流程」与「仅提及」两类并断言划分完备；缺失有效期的那一半已在 `6457ff67` 补齐（6 篇 × 9 语言）。不再作为待办 |
 > | 10 | 4 篇中文半角标点 | ✅ | 见下方 §11 的 2026-08-05 记录，并由 lint 守住 |
 > | 11 | 术语表 + 构建期强制 + zh 代码注释 | ✅ | `content/GLOSSARY.md` + `register-glossary.test.mjs` |
-> | 12 | 文章元数据 + 五类重组 | ❌ **未做**（架构级，需单独一轮） |
+> | 12 | 文章元数据 + 五类重组 | ✅ **已完成**（2026-08-06 复核）：`content/taxonomy.mjs` 显式指派 37 篇的分组与组内阅读顺序，五个 GROUPS，zh 标签可区分，**URL 一个没动**。原判「需要动 URL」是当时自加的假设而非需求本身。提交 `abd5a2d0` |
 > | 13 | `/how-to/`、`/compare/` 根 + 面包屑 + sitemap 权重 | ✅ | 两个根已是真 hub（`5e4addaf`）；`article-template.mjs` 已出面包屑 + `BreadcrumbList`；hub priority 已是 0.8 |
 > | 14 | /cli 与 cli-* 主从关系 | ✅ | `/cli` 外壳链 6 篇 CLI 文章（`shells.mjs` + `cli-articles.mjs`），文章侧经 `install-section` 指回 `relayium.com/cli` |
-> | 15 | en 首页与落地页区块契约 / 非英语 footer 标注 /pricing 为英文 | ❌ **未做** |
+> | 15 | en 首页与落地页区块契约 / 非英语 footer 标注 /pricing 为英文 | ⏳ **一半已取代、一半仍开**（2026-08-06 复核）：`/pricing` 语言标注曾实现（`6f4669fc`）后被**撤销**（`deebc8da`）——前提是错的，九种语言都有完整的 33 字段 `pricingPage`，标注等于用读者自己的语言告诉他这页不是他的语言；`pricing-label.test.mjs` 已反转为断言「任何标注都不得否认自身语言」。**仍开的是区块契约那一半**：en 首页无 compare 区块、learn 区未分组。判定为差异而非缺陷——页脚已链 guides hub，其 compare 组两次点击可达全部 12 篇 |
 
 ---
 
