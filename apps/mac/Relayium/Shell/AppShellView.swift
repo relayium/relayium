@@ -50,15 +50,21 @@ struct AppShellView: View {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 208, ideal: 224, max: 288)
         } detail: {
-            // No `default`: a sixth destination is a compile error here rather
-            // than a sidebar row that opens nothing.
-            switch navigation.selection {
-            case .nearby:        NearbyDestination()
-            case .pairingCode:   PairingCodeDestination()
-            case .storedSend:    StoredSendDestination()
-            case .storedReceive: StoredReceiveDestination()
-            case .account:       AccountDestination()
+            Group {
+                // No `default`: a sixth destination is a compile error here rather
+                // than a sidebar row that opens nothing.
+                switch navigation.selection {
+                case .nearby:        NearbyDestination()
+                case .pairingCode:   PairingCodeDestination()
+                case .storedSend:    StoredSendDestination()
+                case .storedReceive: StoredReceiveDestination()
+                case .account:       AccountDestination()
+                }
             }
+            // Stable and nonlocalized. The UI suite must observe the detail
+            // surface itself, not mistake the identically titled sidebar row
+            // for proof that a destination rendered.
+            .accessibilityIdentifier("destination-\(navigation.selection.rawValue)")
         }
         .frame(minWidth: 860, minHeight: 560)
         // A modifier ON the split view, never a branch around it: the structure

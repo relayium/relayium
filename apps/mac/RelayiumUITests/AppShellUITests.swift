@@ -31,6 +31,13 @@ final class AppShellUITests: XCTestCase {
         app?.terminate()
     }
 
+    /// Destination titles also appear as page headings. Scope navigation to
+    /// the labelled sidebar outline so a rendered heading cannot turn one
+    /// intended click into an ambiguous two-element query.
+    private func sidebarDestination(_ title: String, in window: XCUIElement) -> XCUIElement {
+        window.outlines["Relayium destinations"].staticTexts[title].firstMatch
+    }
+
     /// The window opens at all. A `Window` scene that fails to build leaves a
     /// running process with nothing on screen, and the menu-bar extra keeps that
     /// process alive — so "it launched" is not evidence.
@@ -50,7 +57,7 @@ final class AppShellUITests: XCTestCase {
         // English is the CI locale; the localized suites cover the other eight.
         for destination in ["Nearby", "Pairing code", "Send a link",
                             "Open a link", "Account"] {
-            let row = window.descendants(matching: .any)[destination]
+            let row = sidebarDestination(destination, in: window)
             XCTAssertTrue(row.waitForExistence(timeout: 10),
                           "the sidebar has no row for \(destination)")
         }
@@ -59,7 +66,7 @@ final class AppShellUITests: XCTestCase {
     func testStoppedNearbyDiscoveryAsksForActionWithoutPretendingToWork() {
         let window = app.windows.firstMatch
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let nearby = window.descendants(matching: .any)["Nearby"]
+        let nearby = sidebarDestination("Nearby", in: window)
         XCTAssertTrue(nearby.waitForExistence(timeout: 10))
         nearby.click()
 
@@ -74,18 +81,22 @@ final class AppShellUITests: XCTestCase {
     func testEachDestinationRendersItsOwnSurface() {
         let window = app.windows.firstMatch
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        for destination in ["Pairing code", "Send a link", "Open a link", "Account", "Nearby"] {
-            let row = window.descendants(matching: .any)[destination]
+        let destinations = [
+            (title: "Pairing code", id: "pairingCode"),
+            (title: "Send a link", id: "storedSend"),
+            (title: "Open a link", id: "storedReceive"),
+            (title: "Account", id: "account"),
+            (title: "Nearby", id: "nearby"),
+        ]
+        for destination in destinations {
+            let row = sidebarDestination(destination.title, in: window)
             guard row.waitForExistence(timeout: 10) else {
-                return XCTFail("the sidebar has no row for \(destination)")
+                return XCTFail("the sidebar has no row for \(destination.title)")
             }
             row.click()
-            // The window's title tracks the selected destination, so it is the
-            // one assertion that holds for all five without naming each pane's
-            // internals.
-            XCTAssertTrue(window.staticTexts[destination].waitForExistence(timeout: 10)
-                            || window.title == destination,
-                          "\(destination) selected but nothing identifying it rendered")
+            XCTAssertTrue(window.descendants(matching: .any)["destination-\(destination.id)"]
+                .waitForExistence(timeout: 10),
+                          "\(destination.title) selected but its detail surface did not render")
         }
     }
 
@@ -96,7 +107,7 @@ final class AppShellUITests: XCTestCase {
         let window = app.windows.firstMatch
         XCTAssertTrue(window.waitForExistence(timeout: 20))
 
-        let pairing = window.descendants(matching: .any)["Pairing code"]
+        let pairing = sidebarDestination("Pairing code", in: window)
         XCTAssertTrue(pairing.waitForExistence(timeout: 10))
         pairing.click()
 
@@ -156,7 +167,7 @@ final class AppShellUITests: XCTestCase {
 
         let window = app.windows.firstMatch
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let pairing = window.descendants(matching: .any)["Pairing code"]
+        let pairing = sidebarDestination("Pairing code", in: window)
         XCTAssertTrue(pairing.waitForExistence(timeout: 10))
         pairing.click()
         let textMode = window.radioButtons["Text"]

@@ -72,6 +72,25 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the peer-accept wait is unnamed")
     }
 
+    func testMacUITestNavigationCannotMistakePageHeadingsForSidebarRows() throws {
+        let shell = try source(named: "Shell/AppShellView.swift")
+        XCTAssertTrue(shell.contains(
+            ".accessibilityIdentifier(\"destination-\\(navigation.selection.rawValue)\")"),
+            "the detail surface has no stable runtime identity")
+
+        let uiURL = macRoot.deletingLastPathComponent()
+            .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
+        let ui = try String(contentsOf: uiURL, encoding: .utf8)
+        XCTAssertTrue(ui.contains(
+            "window.outlines[\"Relayium destinations\"].staticTexts[title].firstMatch"),
+            "destination clicks are not scoped to the labelled sidebar")
+        XCTAssertFalse(ui.contains("window.descendants(matching: .any)[destination]"),
+                       "a page heading can still make a sidebar click ambiguous")
+        XCTAssertTrue(ui.contains(
+            "window.descendants(matching: .any)[\"destination-\\(destination.id)\"]"),
+            "the destination smoke test does not observe the rendered detail surface")
+    }
+
     func testRealtimeFileDetailsSurviveTransferAndCompletion() throws {
         let view = try source(named: "RealtimeFileSessionView.swift")
         XCTAssertGreaterThanOrEqual(view.components(separatedBy: "fileList").count - 1, 3,
