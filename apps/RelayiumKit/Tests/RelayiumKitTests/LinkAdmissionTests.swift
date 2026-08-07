@@ -504,6 +504,197 @@ final class LinkAdmissionTests: XCTestCase {
         XCTAssertEqual(admission.phase, .connecting(peerId: winners[0]))
     }
 
+    // MARK: - ending exactly the request a claim took
+    //
+    // A router arms its own timeout and tears its own ask down when the peer
+    // disappears, so both endings arrive from outside — one instant after the
+    // request may have become an establishment, an open link, or somebody else's
+    // ask entirely. Each test below is a way a late or misaddressed ending
+    // destroys something it has no business touching, or leaves a debt on a peer
+    // that will pay it with its next genuine offer.
+
+    /// An ending names the request it means to end. Fired at any other peer it
+    /// is inert — it does not end the live ask, and it does not leave a mark on
+    /// the peer it named either.
+    func testEndingARequestForAnotherPeerIsInert() {
+        let b = admission(selfId: larger)
+        b.didBeginRequesting(peerId: smaller)
+
+        XCTAssertFalse(b.endRequest(peerId: "aab", as: .timedOut))
+        XCTAssertFalse(b.endRequest(peerId: "aab", as: .cancelled))
+        XCTAssertEqual(b.phase, .requesting(peerId: smaller))
+        XCTAssertFalse(b.forgetRequestTimeout(peerId: "aab"),
+                       "an inert ending must not leave a mark on the peer it named")
+
+        // The ask it did not end still converges on the peer's crossing offer.
+        XCTAssertEqual(b.route(from: smaller, signal: linkOffer()),
+                       .establish(role: .responder))
+    }
+
+    /// The timer that fires one instant too late. By then the ask has become an
+    /// establishment — or an open link — and cancelling it would tear down a
+    /// link that had just connected, on behalf of a wait nobody is doing any
+    /// more.
+    func testEndingARequestThatAlreadyBecameAnEstablishmentIsInert() {
+        let b = admission(selfId: larger)
+        b.didBeginRequesting(peerId: smaller)
+        XCTAssertTrue(b.admitEstablishment(peerId: smaller, role: .responder),
+                      "the crossing offer supersedes our ask")
+
+        XCTAssertFalse(b.endRequest(peerId: smaller, as: .cancelled))
+        XCTAssertFalse(b.endRequest(peerId: smaller, as: .timedOut))
+        XCTAssertEqual(b.phase, .connecting(peerId: smaller))
+
+        b.didOpen(peerId: smaller)
+        XCTAssertFalse(b.endRequest(peerId: smaller, as: .cancelled))
+        XCTAssertFalse(b.endRequest(peerId: smaller, as: .timedOut))
+        XCTAssertEqual(b.phase, .open(peerId: smaller))
+    }
+
+    /// Exactly one caller ends the request, and a repeat does not quietly buy a
+    /// second late-offer refusal on top of the first.
+    func testARequestTimesOutOnlyOnce() {
+        let b = admission(selfId: larger)
+        b.didBeginRequesting(peerId: smaller)
+
+        XCTAssertTrue(b.endRequest(peerId: smaller, as: .timedOut))
+        XCTAssertFalse(b.endRequest(peerId: smaller, as: .timedOut),
+                       "only the call that changed the state may report it")
+        XCTAssertEqual(b.phase, .failed)
+
+        // One mark, not two: the repeat is inert on the debt as well as on the
+        // phase, so the peer still pays exactly one offer.
+        XCTAssertEqual(b.route(from: smaller, signal: linkOffer()), .busy)
+        XCTAssertEqual(b.route(from: smaller, signal: linkOffer()),
+                       .establish(role: .responder))
+    }
+
+    /// The debt a timeout leaves, paid in full and once: the peer whose offer
+    /// was already in flight is told explicitly to retry, and the retry is
+    /// admitted rather than black-holed for the rest of the session.
+    func testATimedOutRequestCostsExactlyOneLateOfferThenEstablishes() {
+        let b = admission(selfId: larger)
+        b.didBeginRequesting(peerId: smaller)
+        XCTAssertTrue(b.endRequest(peerId: smaller, as: .timedOut))
+        XCTAssertEqual(b.phase, .failed)
+
+        XCTAssertEqual(b.route(from: smaller, signal: linkOffer()), .busy)
+        XCTAssertEqual(b.route(from: smaller, signal: linkOffer()),
+                       .establish(role: .responder))
+    }
+
+    /// A withdrawal owes the peer nothing. The room goes back to idle and the
+    /// peer's next offer is admitted normally — a mark here would refuse the
+    /// first genuine offer of a peer that came back.
+    func testSilentCancellationNeverRefusesTheNextOffer() {
+        let b = admission(selfId: larger)
+        b.didBeginRequesting(peerId: smaller)
+
+        XCTAssertTrue(b.endRequest(peerId: smaller, as: .cancelled))
+        XCTAssertEqual(b.phase, .idle)
+        XCTAssertEqual(b.boundPeerId, "")
+        XCTAssertFalse(b.forgetRequestTimeout(peerId: smaller), "no debt was left")
+        XCTAssertEqual(b.route(from: smaller, signal: linkOffer()),
+                       .establish(role: .responder))
+
+        // And a cancellation after an EARLIER timeout is still clean: the
+        // re-ask cleared that mark, and this ending adds none back.
+        b.didClose()
+        b.didBeginRequesting(peerId: smaller)
+        XCTAssertTrue(b.endRequest(peerId: smaller, as: .timedOut))
+        b.didBeginRequesting(peerId: smaller)
+        XCTAssertTrue(b.endRequest(peerId: smaller, as: .cancelled))
+        XCTAssertEqual(b.route(from: smaller, signal: linkOffer()),
+                       .establish(role: .responder))
+    }
+
+    /// One peer leaving says nothing about another peer's outstanding late
+    /// offer. Forgetting is per peer and one-shot.
+    func testForgettingOneStalePeerLeavesTheOthersMarkStanding() {
+        let b = admission(selfId: larger)
+        b.didBeginRequesting(peerId: smaller)
+        XCTAssertTrue(b.endRequest(peerId: smaller, as: .timedOut))
+        b.didBeginRequesting(peerId: "aab")
+        XCTAssertTrue(b.endRequest(peerId: "aab", as: .timedOut))
+
+        XCTAssertTrue(b.forgetRequestTimeout(peerId: smaller))
+        XCTAssertFalse(b.forgetRequestTimeout(peerId: smaller), "one mark, forgotten once")
+
+        XCTAssertEqual(b.route(from: smaller, signal: linkOffer()),
+                       .establish(role: .responder),
+                       "the forgotten peer owes nothing")
+        XCTAssertEqual(b.route(from: "aab", signal: linkOffer()), .busy,
+                       "the other peer's late offer is still owed an explicit refusal")
+        XCTAssertEqual(b.route(from: "aab", signal: linkOffer()),
+                       .establish(role: .responder))
+    }
+
+    /// Forgetting a mark is bookkeeping about an ABSENT peer, so it must not
+    /// disturb the room — this side may be mid-ask with somebody else while a
+    /// roster update proves an unrelated peer gone.
+    func testForgettingAStaleMarkChangesNoPhase() {
+        let b = admission(selfId: larger)
+        b.didBeginRequesting(peerId: "aab")
+        XCTAssertTrue(b.endRequest(peerId: "aab", as: .timedOut))
+        b.didBeginRequesting(peerId: smaller)
+
+        XCTAssertTrue(b.forgetRequestTimeout(peerId: "aab"))
+        XCTAssertEqual(b.phase, .requesting(peerId: smaller))
+        XCTAssertFalse(b.forgetRequestTimeout(peerId: "ccc"),
+                       "a peer that never timed out has nothing to forget")
+        XCTAssertEqual(b.phase, .requesting(peerId: smaller))
+
+        XCTAssertEqual(b.route(from: smaller, signal: linkOffer()),
+                       .establish(role: .responder))
+    }
+
+    /// The narrow calls above do not weaken the broad one: giving up the room
+    /// still drops every mark, for every peer.
+    func testCloseStillClearsEveryPeersMark() {
+        let b = admission(selfId: larger)
+        b.didBeginRequesting(peerId: smaller)
+        XCTAssertTrue(b.endRequest(peerId: smaller, as: .timedOut))
+        b.didBeginRequesting(peerId: "aab")
+        XCTAssertTrue(b.endRequest(peerId: "aab", as: .timedOut))
+
+        b.didClose()
+
+        XCTAssertEqual(b.phase, .idle)
+        XCTAssertFalse(b.forgetRequestTimeout(peerId: smaller))
+        XCTAssertFalse(b.forgetRequestTimeout(peerId: "aab"))
+        XCTAssertEqual(b.route(from: smaller, signal: linkOffer()),
+                       .establish(role: .responder))
+        XCTAssertEqual(b.route(from: "aab", signal: linkOffer()),
+                       .establish(role: .responder))
+    }
+
+    /// A timeout and a departure can reach one ask from two threads at once —
+    /// the timer queue and the signalling queue. Exactly one of them ends it,
+    /// and the room lands in the state that winner chose, never a mixture of
+    /// both.
+    func testConcurrentEndingsResolveToExactlyOneWinner() {
+        let b = admission(selfId: larger)
+        b.didBeginRequesting(peerId: smaller)
+        let won = NSLock()
+        var winners: [LinkRequestEnding] = []
+
+        DispatchQueue.concurrentPerform(iterations: 32) { index in
+            let ending: LinkRequestEnding = index.isMultiple(of: 2) ? .timedOut : .cancelled
+            if b.endRequest(peerId: smaller, as: ending) {
+                won.lock(); winners.append(ending); won.unlock()
+            }
+            // A roster sweep for an unrelated peer, running through the same
+            // lock at the same time.
+            _ = b.forgetRequestTimeout(peerId: "aab")
+        }
+
+        XCTAssertEqual(winners.count, 1, "exactly one call ended the request")
+        XCTAssertEqual(b.phase, winners[0] == .timedOut ? .failed : .idle)
+        // And the ending that won is the only one that left a debt.
+        XCTAssertEqual(b.route(from: smaller, signal: linkOffer()),
+                       winners[0] == .timedOut ? .busy : .establish(role: .responder))
+    }
+
     // MARK: - stale peers and room teardown
 
     func testCloseReleasesTheLinkAndTheTimeoutMarks() {

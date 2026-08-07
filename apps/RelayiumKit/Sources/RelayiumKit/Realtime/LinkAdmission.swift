@@ -40,6 +40,30 @@ public enum LinkAdmissionDecision: Equatable, Sendable {
     case leave(auth: String)
 }
 
+/// How an outstanding request ended, and therefore what it leaves behind.
+///
+/// The two endings differ in exactly one observable way, and it is the one that
+/// matters to the peer: a request that TIMED OUT leaves a one-shot late-offer
+/// mark, because this side stopped waiting while the peer may still be about to
+/// offer, and that peer is owed an explicit `busy` rather than silence. A
+/// request this side CANCELLED — the peer left the roster, the room detached,
+/// the physical device went away — leaves nothing, because there is no late
+/// offer to answer: either the peer is gone, or, if it comes back and offers, it
+/// is offering into a room this side never abandoned mid-handshake and must be
+/// admitted normally.
+///
+/// Getting that backwards is not a cosmetic difference. A cancellation that left
+/// a mark would refuse the returning peer's first genuine offer, and a timeout
+/// that left none would black-hole a peer whose offer is already in flight.
+public enum LinkRequestEnding: Equatable, Sendable {
+    /// This side gave up waiting. Ends `.failed`, and leaves one late offer from
+    /// this peer to be consumed and answered `busy`.
+    case timedOut
+    /// This side withdrew the ask, and the peer is owed nothing. Ends `.idle`,
+    /// and leaves no mark.
+    case cancelled
+}
+
 /// What local intent resolves to.
 public enum LinkIntent: Equatable, Sendable {
     case existing
@@ -371,6 +395,77 @@ public final class LinkAdmission: @unchecked Sendable {
         return true
     }
 
+    // MARK: - ending exactly the request a claim took
+
+    /// End THIS peer's outstanding ask, and nothing else.
+    ///
+    /// ## Why this exists beside `didRequestTimeOut`
+    ///
+    /// The lifecycle call below announces; this one answers. A router that armed
+    /// a timeout, or that is tearing an ask down because the peer disappeared,
+    /// has to know whether its call is the one that actually ended the request:
+    /// only the caller that changed the state may go on to tell the user the ask
+    /// failed, release its own slot, or send anything. Fired against a request
+    /// that has already become an establishment, an open link, or somebody
+    /// else's ask, this is inert and says so — which is what stops a timer that
+    /// fired one instant too late from cancelling a link that had just connected.
+    ///
+    /// ## Why there is no request token here
+    ///
+    /// The obvious alternative is to hand out a token per ask and require it
+    /// back. It would be redundant: the router already serialises install and
+    /// cancel in ONE outer critical section under its own epoch plus an opaque
+    /// token, so by the time a call reaches this object the "is this still my
+    /// request" question has been answered by the only lock that can see the
+    /// router's own timer. A second identity here would be a second thing to
+    /// keep in step with the first, and the peer-and-phase test below is already
+    /// exact for everything this object can observe.
+    ///
+    /// Deliberately callback-free and fully contained by this lock. Nothing
+    /// owner-supplied is evaluated, so unlike `route` and `ensure` there is no
+    /// re-entrancy hazard: a caller may hold its own lock across this call.
+    ///
+    /// - Returns: true only if this call is the one that ended the request.
+    @discardableResult
+    public func endRequest(peerId: String, as ending: LinkRequestEnding) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard case let .requesting(held) = _phase, held == peerId else { return false }
+        switch ending {
+        case .timedOut:
+            timedOutPeers.insert(peerId)
+            _phase = .failed
+        case .cancelled:
+            // Defensive, and cheap: the postcondition of a cancellation is that
+            // this peer carries no mark, not merely that this call added none.
+            // Nothing can currently leave a mark standing on the peer of a live
+            // ask — both entry points clear it — and the router is not asked to
+            // depend on that staying true.
+            timedOutPeers.remove(peerId)
+            _phase = .idle
+        }
+        return true
+    }
+
+    /// Forget one peer's stale late-offer mark, without touching the room.
+    ///
+    /// A mark is a debt owed to a peer that may still be about to offer. When
+    /// the roster or a physical departure proves that peer is gone, the debt is
+    /// gone with it, and keeping it would spend the peer's ONE late offer on a
+    /// session it no longer has — so the next time it appears, its first genuine
+    /// offer is the one refused.
+    ///
+    /// Deliberately narrower than `didClose`, which drops every mark along with
+    /// the room. One peer leaving says nothing about another peer's outstanding
+    /// late offer, and nothing at all about the phase — this side may be
+    /// mid-ask, connecting, or open with somebody else while it runs.
+    ///
+    /// - Returns: true if a mark was actually forgotten.
+    @discardableResult
+    public func forgetRequestTimeout(peerId: String) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return timedOutPeers.remove(peerId) != nil
+    }
+
     // MARK: - lifecycle, driven by the transport owner
 
     public func didBeginRequesting(peerId: String) {
@@ -380,15 +475,11 @@ public final class LinkAdmission: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// The owner announcing that its own wait ran out. Unchanged in behaviour,
+    /// and now one word of `endRequest` — a caller that needs to know whether it
+    /// was the one that ended the request calls that directly.
     public func didRequestTimeOut(peerId: String) {
-        lock.lock()
-        guard case let .requesting(held) = _phase, held == peerId else {
-            lock.unlock()
-            return
-        }
-        timedOutPeers.insert(peerId)
-        _phase = .failed
-        lock.unlock()
+        endRequest(peerId: peerId, as: .timedOut)
     }
 
     /// The transport owner announces that IT has begun an establishment.
