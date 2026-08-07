@@ -2835,6 +2835,13 @@ final class IOSSurfaceGuardTests: XCTestCase {
                       "a peer-supplied label must not be presented as verified identity")
     }
 
+    func testNearbyExitAppearsOnlyAfterAClaimHasBecomeARealSessionAndThenEnded() throws {
+        let view = try nearby()
+        XCTAssertTrue(view.text.contains("private var hasRetainedSession: Bool"))
+        XCTAssertTrue(view.text.contains("if hasRetainedSession && !busy"),
+                      "Back to devices is either exposed before async start or absent after terminal state")
+    }
+
     /// **This slice adds no network capability, and the reason matters.**
     ///
     /// `LanDiscoveryModel` is not Bonjour and does not scan: it joins the hub's

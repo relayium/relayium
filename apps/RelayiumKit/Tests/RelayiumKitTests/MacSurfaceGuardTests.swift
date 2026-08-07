@@ -454,6 +454,8 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(boundary.contains(".buttonStyle(.bordered)"))
         XCTAssertFalse(boundary.contains(".buttonStyle(.link)"),
                        "Back to devices is exposed as a navigation Link")
+        XCTAssertTrue(session.contains("if hasRetainedSession && !modelBusy"),
+                      "a claimed owner made the terminal exit permanently unreachable")
     }
 
     /// Copying ephemeral text changes the system clipboard, but previously gave
@@ -1262,7 +1264,11 @@ final class MacSurfaceGuardTests: XCTestCase {
     func testRealtimeOpenedFilesWaitForClaimedSessionOwnershipToClear() throws {
         let nearby = try source(named: "NearbyPane.swift")
         XCTAssertTrue(nearby.contains(
-            "private var busy: Bool { presence.owner != nil || fileModel.isBusy || textModel.isBusy }"))
+            "private var fileAdoptionBusy: Bool { presence.owner != nil || modelBusy }"))
+        XCTAssertTrue(nearby.contains(
+            "FileOpenAdoption(staged: fileOpenRouting.staged, busy: fileAdoptionBusy)"))
+        XCTAssertTrue(nearby.contains(
+            "fileOpenRouting.batch(for: .nearby, busy: fileAdoptionBusy)"))
 
         let pairing = try source(named: "DirectPane.swift")
         XCTAssertTrue(pairing.contains(

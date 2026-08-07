@@ -244,14 +244,18 @@ struct RelayiumApp: App {
         // two models' inbound builders cannot reach for a room the offer never
         // came from. Owned by the receive model; the session models only read it.
         let inboundRoom = InboundRoom()
-        let files = AppEnvironment.makeRealtimeModel(
-            verification: prefs, nearby: nearby, inboundRoom: inboundRoom)
         #if DEBUG
+        let files = UITestMode.showsTerminalNearby
+            ? UITestMode.makeTerminalNearbyFileModel(verification: prefs)
+            : AppEnvironment.makeRealtimeModel(
+                verification: prefs, nearby: nearby, inboundRoom: inboundRoom)
         let text = UITestMode.isActive
             ? UITestMode.makeRealtimeTextModel(verification: prefs)
             : AppEnvironment.makeRealtimeTextModel(
                 verification: prefs, nearby: nearby, inboundRoom: inboundRoom)
         #else
+        let files = AppEnvironment.makeRealtimeModel(
+            verification: prefs, nearby: nearby, inboundRoom: inboundRoom)
         let text = AppEnvironment.makeRealtimeTextModel(
             verification: prefs, nearby: nearby, inboundRoom: inboundRoom)
         #endif
@@ -314,6 +318,13 @@ struct RelayiumApp: App {
                                      peerLabel: nearby.label(forPeerID: peerID),
                                      presence: presenting, navigation: routing)
         }
+        #if DEBUG
+        if UITestMode.showsTerminalNearby {
+            presenting.claim(.nearby, mode: .files, peerLabel: "Studio Mac · 19af02")
+            routing.select(.nearby)
+            Task { await files.connectNearby(peerId: "ui-nearby-peer", role: .initiator) }
+        }
+        #endif
         // Last, because it is built from four objects above and owns none of
         // them. It navigates exactly once per link, and it is the ONE place that
         // decides whether a link may write into a model that is mid-transfer —

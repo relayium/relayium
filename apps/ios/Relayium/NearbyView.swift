@@ -78,6 +78,12 @@ struct NearbyView: View {
     @State private var actionError: String?
 
     private var busy: Bool { file.isBusy || text.isBusy }
+    /// Ownership is published before an async start, so it cannot by itself
+    /// mean there is already a task the user may leave. Terminal states remain
+    /// non-idle and keep the exit visible after active work stops.
+    private var hasRetainedSession: Bool {
+        file.state != .idle || text.state != .idle
+    }
 
     /// Derived on every render from the two live models rather than cached: a
     /// stored flag would be a second answer to a question they already answer.
@@ -447,7 +453,7 @@ struct NearbyView: View {
             case .text:
                 DirectTextSessionView(model: text)
             }
-            if !busy {
+            if hasRetainedSession && !busy {
                 Button(L10n.t(.nearbyBackToDevices)) { leaveSession() }
                     .buttonStyle(.bordered)
                     .controlSize(.large)

@@ -36,6 +36,11 @@ enum UITestMode {
     // nonlocalized: a test-only launch argument, absent from Release
     static let terminalTextArgument = "--relayium-ui-testing-terminal-text"
     static let showsTerminalText = ProcessInfo.processInfo.arguments.contains(terminalTextArgument)
+    /// Builds a deterministic failed Nearby file task so the UI suite can prove
+    /// its retained terminal surface still exposes the route back to the roster.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let terminalNearbyArgument = "--relayium-ui-testing-terminal-nearby"
+    static let showsTerminalNearby = ProcessInfo.processInfo.arguments.contains(terminalNearbyArgument)
     #else
     /// In Release the answer is a constant the optimiser folds away, so the
     /// guarded work is unconditional and the argument means nothing.
@@ -56,6 +61,16 @@ enum UITestMode {
             makeConnection: { _, _, _ in throw AccountError.network }
         )
     }
+
+    @MainActor
+    static func makeTerminalNearbyFileModel(verification: VerificationPreference) -> RealtimeSessionModel {
+        RealtimeSessionModel(
+            pairClient: UITestPairClient(),
+            iceClient: UITestFailingICEClient(),
+            requiresVerification: { verification.requiresSASConfirmation },
+            makeConnection: { _, _, _ in throw AccountError.network }
+        )
+    }
     #endif
 }
 
@@ -72,5 +87,9 @@ private struct UITestWaitingICEClient: ICEConfigClient {
         try await Task.sleep(nanoseconds: 300_000_000_000)
         throw AccountError.network
     }
+}
+
+private struct UITestFailingICEClient: ICEConfigClient {
+    func fetch(code: String) async throws -> ICEConfig { throw AccountError.network }
 }
 #endif

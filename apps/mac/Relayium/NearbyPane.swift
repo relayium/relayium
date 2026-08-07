@@ -35,7 +35,16 @@ struct NearbyPane: View {
     @StateObject private var selection = SelectionStore()
     @State private var stagingError: String?
 
-    private var busy: Bool { presence.owner != nil || fileModel.isBusy || textModel.isBusy }
+    /// Whether either shared model is actively setting up or transferring.
+    private var modelBusy: Bool { fileModel.isBusy || textModel.isBusy }
+    /// Open With and Dock Drop also stop in the synchronous claim-before-start
+    /// interval, without turning that ownership fact into permanent session busy.
+    private var fileAdoptionBusy: Bool { presence.owner != nil || modelBusy }
+    /// A claim alone is not yet a session the user can leave. Once a model has
+    /// published any non-idle state, its retained terminal state owns the exit.
+    private var hasRetainedSession: Bool {
+        fileModel.state != .idle || textModel.state != .idle
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -51,7 +60,7 @@ struct NearbyPane: View {
         // never republished, so keying on the batch alone would strand it.
         // Whether this pane may take it is `AppFileOpenCoordinator`'s answer,
         // not a rule re-derived here.
-        .task(id: FileOpenAdoption(staged: fileOpenRouting.staged, busy: busy)) {
+        .task(id: FileOpenAdoption(staged: fileOpenRouting.staged, busy: fileAdoptionBusy)) {
             adoptOpenedFiles()
         }
         // A session that ends by any route — Cancel, Done, a failure the user
@@ -96,7 +105,7 @@ struct NearbyPane: View {
             } else if !discovery.isPaused {
                 HStack {
                     Button(L10n.t(.nearbyLookAgain)) { discovery.start() }
-                        .disabled(busy)
+                        .disabled(modelBusy)
                     // `off` is waiting for the user and must not animate as if
                     // work were running. A dropped resident socket really does
                     // retry in the background, so only that state gets a
@@ -126,7 +135,7 @@ struct NearbyPane: View {
     @ViewBuilder
     private var filesToSend: some View {
         VStack(alignment: .leading, spacing: 6) {
-            FileDropZone(store: selection, isBusy: busy) {
+            FileDropZone(store: selection, isBusy: modelBusy) {
                 Text(selection.summary ?? L10n.t(.nearbyDropHint))
                     .font(.caption).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -139,7 +148,7 @@ struct NearbyPane: View {
             if !selection.isEmpty {
                 Button(L10n.t(.commonClear)) { selection.clear() }
                     .buttonStyle(.bordered)
-                    .disabled(busy)
+                    .disabled(modelBusy)
             }
         }
         .frame(maxWidth: 720, alignment: .leading)
@@ -160,7 +169,7 @@ struct NearbyPane: View {
                     Button(L10n.t(.nearbyResumeReceiving)) { discovery.resume() }
                 } else {
                     Button(L10n.t(.nearbyPauseReceiving)) { discovery.pause() }
-                        .disabled(busy)
+                        .disabled(modelBusy)
                 }
             }
             // The default is no prompt, by the same decision that made advanced
@@ -234,7 +243,7 @@ struct NearbyPane: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(busy)
+        .disabled(modelBusy)
         .accessibilityAddTraits(selected ? [.isSelected] : [])
         .accessibilityHint(L10n.t(.nearbyA11yChooseDevice))
     }
@@ -259,7 +268,7 @@ struct NearbyPane: View {
                 Button(L10n.t(.commonSend)) { sendFiles() }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(selection.isEmpty || busy)
+                    .disabled(selection.isEmpty || modelBusy)
             case .text:
                 Text(L10n.t(.nearbyTextIntent))
                     .font(.caption).foregroundStyle(.secondary)
@@ -268,7 +277,7 @@ struct NearbyPane: View {
                 Button(L10n.t(.nearbyStartMessageSession)) { startText() }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(busy)
+                    .disabled(modelBusy)
             }
             // Says what actually happens on the other end rather than implying a
             // human gate that is not there: file transfers stop at the browser's
@@ -296,7 +305,7 @@ struct NearbyPane: View {
             case .text:
                 RealtimeTextSessionView(model: textModel)
             }
-            if !busy {
+            if hasRetainedSession && !modelBusy {
                 Button(L10n.t(.nearbyBackToDevices)) { leaveSession() }
                     // This is not navigation: it tears down the connection,
                     // removes a partial receive, clears text history and drops
@@ -333,7 +342,7 @@ struct NearbyPane: View {
         // A second press while the first send is still setting up would stage a
         // second batch over the first and dial again. The button is disabled
         // while busy; this is the guard that does not depend on a redraw.
-        guard !busy else { return }
+        guard !modelBusy else { return }
         // Re-read rather than capturing the device at render time: the roster
         // is live, and a device that left between the list being drawn and this
         // button being pressed must not be dialled by a stale id.
@@ -378,7 +387,7 @@ struct NearbyPane: View {
     /// `add`, not `replace`: an opened file joins what the user already picked
     /// rather than discarding it, which is the same call the drop zone makes.
     private func adoptOpenedFiles() {
-        guard let batch = fileOpenRouting.batch(for: .nearby, busy: busy) else { return }
+        guard let batch = fileOpenRouting.batch(for: .nearby, busy: fileAdoptionBusy) else { return }
         selection.add(batch.urls)
         fileOpenRouting.consume(batch)
     }

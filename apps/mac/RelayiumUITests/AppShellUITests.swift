@@ -179,6 +179,34 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(window.buttons["Join"].exists)
     }
 
+    /// A terminal Nearby task retains both its peer context and a real cleanup
+    /// boundary. This catches the regression where ownership was folded into a
+    /// generic `busy` value, making `if !busy` false for the entire lifetime of
+    /// the very surface that needed to expose Back to devices.
+    func testTerminalNearbySessionNamesItsPeerAndReturnsToTheRoster() {
+        app.terminate()
+        app.launchArguments = ["--relayium-ui-testing",
+                               "--relayium-ui-testing-terminal-nearby"]
+        app.launch()
+
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        XCTAssertTrue(window.staticTexts["Session with Studio Mac · 19af02"]
+            .waitForExistence(timeout: 10), "the terminal task lost who it was with")
+        XCTAssertTrue(window.staticTexts[
+            "This name is provided by the other device and is not verified identity."
+        ].exists)
+
+        let back = window.buttons["Back to nearby devices"]
+        XCTAssertTrue(back.waitForExistence(timeout: 10),
+                      "the retained Nearby owner made its own exit unreachable")
+        back.click()
+        XCTAssertTrue(window.buttons["Look again"].waitForExistence(timeout: 10),
+                      "Back to devices did not release the terminal task")
+        XCTAssertFalse(window.staticTexts["Session with Studio Mac · 19af02"].exists,
+                       "the released task kept stale peer context on screen")
+    }
+
     /// Settings opens as a SECOND window rather than a replacement — the main
     /// window must survive it.
     ///
