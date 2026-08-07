@@ -172,6 +172,26 @@ final class IOSSurfaceGuardTests: XCTestCase {
                           "a long file list pushes the failure reason below the fold")
     }
 
+    func testFileCompletionClearsOnlyTheBatchThatWasActuallySent() throws {
+        let all = try sources()
+        let session = try XCTUnwrap(all.first { $0.name == "DirectFileSessionView.swift" }?.text)
+        XCTAssertTrue(session.contains("let onDone: () -> Void"))
+        XCTAssertTrue(session.contains("Button(L10n.t(.commonDone), action: onDone)"))
+
+        let direct = try XCTUnwrap(all.first { $0.name == "DirectView.swift" }?.text)
+        XCTAssertTrue(direct.contains(
+            "DirectFileSessionView(model: file, onDone: finishCompletedFileTransfer)"))
+        XCTAssertTrue(direct.contains("if file.received == nil { selection.clear() }"))
+
+        let nearby = try XCTUnwrap(all.first { $0.name == "NearbyView.swift" }?.text)
+        XCTAssertTrue(nearby.contains(
+            "DirectFileSessionView(model: file, onDone: finishCompletedFileTransfer)"))
+        XCTAssertTrue(nearby.contains("if file.received == nil { selection.clear() }"))
+        XCTAssertTrue(nearby.contains("if modes.mode == .files, case .failed = file.state"),
+                      "a failed outbound batch should return to the roster ready to retry")
+        XCTAssertTrue(nearby.contains("if !preservesFailedFiles { selection.clear() }"))
+    }
+
     /// Creating a code removes the start controls while a network request owns
     /// the screen. Both file and text modes must still offer an explicit exit.
     func testPairingMintingCanBeCancelledInBothModes() throws {

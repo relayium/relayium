@@ -16,6 +16,7 @@ import RelayiumKit
 /// (`.idle`, `.failed`, `.minting`, `.showingCode`); `DirectView` owns those.
 struct DirectFileSessionView: View {
     @ObservedObject var model: RealtimeSessionModel
+    let onDone: () -> Void
 
     var body: some View {
         switch model.state {
@@ -135,7 +136,7 @@ struct DirectFileSessionView: View {
 
             // `cancel()`, not a bare state reset: it is the one path that also
             // lets go of the connection a terminal state leaves retained.
-            Button(L10n.t(.commonDone)) { model.cancel() }
+            Button(L10n.t(.commonDone), action: onDone)
                 .buttonStyle(.bordered)
                 .controlSize(.large)
         }

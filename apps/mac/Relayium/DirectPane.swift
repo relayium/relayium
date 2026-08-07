@@ -67,7 +67,7 @@ struct DirectPane: View {
                 // Shared with the nearby pane: everything past "a peer has been
                 // reached" is identical whether the peer came from a code or
                 // from the same-network roster.
-                RealtimeFileSessionView(model: model)
+                RealtimeFileSessionView(model: model, onDone: finishCompletedTransfer)
             }
 
             if case let .failed(message) = model.state {
@@ -244,6 +244,14 @@ struct DirectPane: View {
         guard presence.beginSession(.pairingCode, mode: .files) else { return }
         model.stageSend(sources: staged.sources, metas: staged.metas)
         Task { await mintAndWait(token: access.token) }
+    }
+
+    /// A completed SEND consumed this staged selection, so Done starts a fresh
+    /// task. A completed RECEIVE did not: receiving must not silently erase an
+    /// unrelated outbound batch the user prepared before joining the code.
+    private func finishCompletedTransfer() {
+        if model.received == nil { selection.clear() }
+        model.cancel()
     }
 
     private func mintAndWait(token: String) async {

@@ -14,6 +14,7 @@ import RelayiumKit
 /// (`.idle`, `.failed`, `.minting`, `.showingCode`); each pane owns those.
 struct RealtimeFileSessionView: View {
     @ObservedObject var model: RealtimeSessionModel
+    let onDone: () -> Void
 
     var body: some View {
         switch model.state {
@@ -41,7 +42,7 @@ struct RealtimeFileSessionView: View {
                 if let payload = model.received {
                     ReceivedResultView(payload: payload)
                 }
-                Button(L10n.t(.commonDone)) { model.cancel() }.buttonStyle(.bordered)
+                Button(L10n.t(.commonDone), action: onDone).buttonStyle(.bordered)
             }
         }
     }

@@ -234,7 +234,7 @@ final class MacSurfaceGuardTests: XCTestCase {
 
         let session = try source(named: "RealtimeFileSessionView.swift")
         let completed = try XCTUnwrap(session.components(separatedBy: "case .completed:").dropFirst().first)
-        XCTAssertTrue(completed.contains("Button(L10n.t(.commonDone)) { model.cancel() }"))
+        XCTAssertTrue(completed.contains("Button(L10n.t(.commonDone), action: onDone)"))
         XCTAssertFalse(completed.components(separatedBy: "private func verifying").first?.contains(
             "buttonStyle(.link)") ?? true)
     }
@@ -264,6 +264,25 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertLessThan(try XCTUnwrap(nearbySession.range(of: "InlineMessage(.failure")).lowerBound,
                           try XCTUnwrap(nearbySession.range(of: "RealtimeFileSessionView")).lowerBound,
                           "a long file list pushes the failure reason below the fold")
+    }
+
+    func testFileCompletionClearsOnlyTheBatchThatWasActuallySent() throws {
+        let session = try source(named: "RealtimeFileSessionView.swift")
+        XCTAssertTrue(session.contains("let onDone: () -> Void"))
+        XCTAssertTrue(session.contains("Button(L10n.t(.commonDone), action: onDone)"))
+
+        let pairing = try source(named: "DirectPane.swift")
+        XCTAssertTrue(pairing.contains(
+            "RealtimeFileSessionView(model: model, onDone: finishCompletedTransfer)"))
+        XCTAssertTrue(pairing.contains("if model.received == nil { selection.clear() }"))
+
+        let nearby = try source(named: "NearbyPane.swift")
+        XCTAssertTrue(nearby.contains(
+            "RealtimeFileSessionView(model: fileModel, onDone: finishCompletedFileTransfer)"))
+        XCTAssertTrue(nearby.contains("if fileModel.received == nil { selection.clear() }"))
+        XCTAssertTrue(nearby.contains("if mode == .files, case .failed = fileModel.state"),
+                      "a failed outbound batch should return to the roster ready to retry")
+        XCTAssertTrue(nearby.contains("if !preservesFailedFiles { selection.clear() }"))
     }
 
     /// Minting is a locked network wait: the idle controls are gone until the

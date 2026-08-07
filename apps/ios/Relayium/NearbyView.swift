@@ -462,7 +462,7 @@ struct NearbyView: View {
             switch modes.mode {
             case .files:
                 if case let .failed(message) = file.state { failureLine(message) }
-                DirectFileSessionView(model: file)
+                DirectFileSessionView(model: file, onDone: finishCompletedFileTransfer)
             case .text:
                 DirectTextSessionView(model: text)
             }
@@ -575,6 +575,14 @@ struct NearbyView: View {
         Task { await file.connectNearby(peerId: device.id, role: .initiator) }
     }
 
+    /// A successful send should not return to the roster with the same batch
+    /// still armed. A receive preserves any separately prepared outbound batch,
+    /// and a failure stays untouched so the user can retry it.
+    private func finishCompletedFileTransfer() {
+        if file.received == nil { selection.clear() }
+        file.cancel()
+    }
+
     private func startText() {
         guard !busy else { return }
         guard let device = discovery.selectedDevice else {
@@ -587,16 +595,22 @@ struct NearbyView: View {
         Task { await text.connectNearby(peerId: device.id, role: .initiator) }
     }
 
-    /// Back to the roster. The explicit discard: the file model's `cancel`
-    /// removes a partial write, the text model's `reset` drops the transcript,
-    /// and the staged selection goes with them so the next send is a fresh
-    /// choice rather than a repeat nobody asked for.
+    /// Back to the roster. A failed outbound file task keeps its staged batch so
+    /// retry does not begin with another picker trip. Completion and every text
+    /// exit clear their consumed/local task state; file cancel still removes a
+    /// receiver's partial write.
     private func leaveSession() {
+        let preservesFailedFiles: Bool
+        if modes.mode == .files, case .failed = file.state {
+            preservesFailedFiles = true
+        } else {
+            preservesFailedFiles = false
+        }
         switch modes.mode {
         case .files: file.cancel()
         case .text: text.reset()
         }
-        selection.clear()
+        if !preservesFailedFiles { selection.clear() }
         actionError = nil
         presence.release(.nearby)
     }

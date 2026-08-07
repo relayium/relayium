@@ -249,7 +249,7 @@ struct DirectView: View {
                 file.cancel()
             }
         case .joining, .connecting, .verifying, .transferring, .completed:
-            DirectFileSessionView(model: file)
+            DirectFileSessionView(model: file, onDone: finishCompletedFileTransfer)
         }
 
         if let destinationError { failureLine(destinationError) }
@@ -650,6 +650,14 @@ struct DirectView: View {
         foreground.sessionStarting()
         file.stageSend(sources: staged.sources, metas: staged.metas)
         Task { await mintAndSendFiles(token: access.token) }
+    }
+
+    /// Only a completed SEND owns the staged outbound selection. A receive may
+    /// happen while a different future send is prepared, so Done leaves that
+    /// selection alone. Failed sends never enter this completion path.
+    private func finishCompletedFileTransfer() {
+        if file.received == nil { selection.clear() }
+        file.cancel()
     }
 
     private func mintAndSendFiles(token: String) async {

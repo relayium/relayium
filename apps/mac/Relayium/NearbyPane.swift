@@ -314,7 +314,7 @@ struct NearbyPane: View {
                 if case let .failed(message) = fileModel.state {
                     InlineMessage(.failure, message)
                 }
-                RealtimeFileSessionView(model: fileModel)
+                RealtimeFileSessionView(model: fileModel, onDone: finishCompletedFileTransfer)
             case .text:
                 RealtimeTextSessionView(model: textModel)
             }
@@ -384,6 +384,14 @@ struct NearbyPane: View {
         Task { await fileModel.connectNearby(peerId: device.id, role: .initiator) }
     }
 
+    /// Success closes the task without leaving its already-sent batch armed for
+    /// another device. Receiving preserves an independent outbound selection;
+    /// failures never reach this action and therefore remain ready to retry.
+    private func finishCompletedFileTransfer() {
+        if fileModel.received == nil { selection.clear() }
+        fileModel.cancel()
+    }
+
     private func startText() {
         guard let device = discovery.selectedDevice else {
             stagingError = L10n.t(.nearbyDeviceGone)
@@ -405,12 +413,21 @@ struct NearbyPane: View {
         fileOpenRouting.consume(batch)
     }
 
+    /// A failed file task returns to the roster with its batch ready to retry.
+    /// Completed work and text exits start fresh; cancel still discards any
+    /// partial receive before the surface releases ownership.
     private func leaveSession() {
+        let preservesFailedFiles: Bool
+        if mode == .files, case .failed = fileModel.state {
+            preservesFailedFiles = true
+        } else {
+            preservesFailedFiles = false
+        }
         switch mode {
         case .files: fileModel.cancel()
         case .text: textModel.reset()
         }
-        selection.clear()
+        if !preservesFailedFiles { selection.clear() }
         presence.release(.nearby)
     }
 
