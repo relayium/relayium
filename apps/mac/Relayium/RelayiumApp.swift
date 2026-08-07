@@ -320,7 +320,8 @@ struct RelayiumApp: App {
         }
         #if DEBUG
         if UITestMode.showsTerminalNearby {
-            presenting.claim(.nearby, mode: .files, peerLabel: "Studio Mac · 19af02")
+            presenting.claim(.nearby, mode: .files,
+                             peerLabel: "Studio Mac · 19af02") // nonlocalized: deterministic UI-test fixture
             routing.select(.nearby)
             Task { await files.connectNearby(peerId: "ui-nearby-peer", role: .initiator) }
         }
