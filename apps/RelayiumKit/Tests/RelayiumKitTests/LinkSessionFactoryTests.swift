@@ -268,10 +268,11 @@ final class LinkSessionFactoryTests: XCTestCase {
     /// hops to the main actor, so nothing below can assert synchronously.
     private func wait(_ description: String,
                       until condition: @MainActor () -> Bool,
-                      rounds: Int = 400) async {
-        for _ in 0..<rounds {
+                      seconds: TimeInterval = 5) async {
+        let deadline = Date().addingTimeInterval(seconds)
+        while Date() < deadline {
             if condition() { return }
-            await Task.yield()
+            try? await Task.sleep(nanoseconds: 1_000_000)
         }
         XCTAssertTrue(condition(), description)
     }
