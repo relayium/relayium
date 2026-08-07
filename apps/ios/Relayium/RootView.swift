@@ -117,7 +117,7 @@ struct RootView: View {
                 .tabItem { Label(L10n.t(.navNearby), systemImage: "dot.radiowaves.left.and.right") }
                 .tag(AppDestination.nearby)
 
-            AccountTab()
+            AccountTab(onOpenStoredLink: { deepLinkRouting.deliverStoredLink($0) })
                 .tabItem { Label(L10n.t(.tabAccount), systemImage: "person.crop.circle") }
                 .tag(AppDestination.account)
         }

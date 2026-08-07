@@ -262,6 +262,8 @@ final class MacSurfaceGuardTests: XCTestCase {
         let source = try source(named: "AccountView.swift")
         XCTAssertTrue(source.contains("@State private var copiedStoredFileID: String?"))
         XCTAssertTrue(source.contains("ShareLink(item: link)"))
+        XCTAssertTrue(source.contains("deepLinkRouting.deliverStoredLink(link)"))
+        XCTAssertTrue(source.contains("AccountPresentation.openActionLabel("))
         XCTAssertTrue(source.contains(
             "AccountPresentation.shareActionLabel(fileId: row.file.id)"))
         XCTAssertTrue(source.contains("copiedStoredFileID = row.id"))

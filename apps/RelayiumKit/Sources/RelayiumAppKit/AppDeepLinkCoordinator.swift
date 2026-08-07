@@ -102,6 +102,19 @@ public final class AppDeepLinkCoordinator: ObservableObject {
         apply(link)
     }
 
+    /// The Account surface already holds a reconstructed stored link as text.
+    /// Route it through the same parser, busy admission and one-shot retention
+    /// policy as an OS-delivered Universal Link instead of letting either app
+    /// target reimplement that security boundary.
+    @discardableResult
+    public func deliverStoredLink(_ rawLink: String) -> Bool {
+        guard let url = URL(string: rawLink),
+              let link = parseAppDeepLink(url),
+              case .download = link else { return false }
+        deliver(link)
+        return true
+    }
+
     /// Write a retained link into the models if the work it was waiting on has
     /// stopped. **No navigation write** — see the type's note.
     ///

@@ -11,6 +11,7 @@ import RelayiumAppKit
 struct AccountTab: View {
     @EnvironmentObject private var session: AccountSession
     @Environment(\.openURL) private var openURL
+    let onOpenStoredLink: (String) -> Void
 
     var body: some View {
         NavigationStack {
@@ -70,7 +71,8 @@ struct AccountTab: View {
                 }
 
             case let .ready(user, usage):
-                AccountSummaryView(user: user, usage: usage)
+                AccountSummaryView(user: user, usage: usage,
+                                   onOpenStoredLink: onOpenStoredLink)
 
             case .loggedOut, .authenticating, .registering, .failed:
                 // Unreachable: `SignInPresentation.form` is non-nil for exactly

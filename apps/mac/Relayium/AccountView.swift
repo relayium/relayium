@@ -19,6 +19,7 @@ struct AccountView: View {
 
     @EnvironmentObject private var session: AccountSession
     @EnvironmentObject private var management: AccountManagementModel
+    @EnvironmentObject private var deepLinkRouting: AppDeepLinkCoordinator
     /// Leaving the account, from either direction. App-scoped rather than this
     /// view's `@State`, because the moment that matters is the one where this
     /// view does not exist: a revoke of the current device can land after the
@@ -349,6 +350,13 @@ struct AccountView: View {
             switch row.link {
             case .available(let link):
                 HStack(spacing: 8) {
+                    Button {
+                        deepLinkRouting.deliverStoredLink(link)
+                    } label: {
+                        Label(L10n.t(.downloadOpen), systemImage: "arrow.down.circle")
+                    }
+                    .accessibilityLabel(
+                        AccountPresentation.openActionLabel(fileId: row.file.id))
                     Button {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(link, forType: .string)

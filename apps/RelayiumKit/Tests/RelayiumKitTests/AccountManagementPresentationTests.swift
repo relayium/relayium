@@ -178,16 +178,17 @@ final class AccountManagementPresentationTests: XCTestCase {
         XCTAssertTrue(label.contains(L10n.t(.accountUnnamedDevice, language: .en)), label)
     }
 
-    /// The two stored-row actions are a share and a destruction. They may not
-    /// read alike, and each has to name the row it belongs to — a screen of
-    /// "Share"/"Delete" pairs is unusable without sight.
+    /// Stored-row actions have to name the row they belong to — a screen of
+    /// repeated Open/Copy/Share/Delete groups is unusable without sight.
     func testTheStoredRowActionsNameTheirFileAndDifferFromEachOther() {
+        let open = AccountPresentation.openActionLabel(fileId: "abc123", language: .en)
         let copy = AccountPresentation.copyActionLabel(fileId: "abc123", copied: false,
                                                        language: .en)
         let copied = AccountPresentation.copyActionLabel(fileId: "abc123", copied: true,
                                                          language: .en)
         let share = AccountPresentation.shareActionLabel(fileId: "abc123", language: .en)
         let delete = AccountPresentation.deleteActionLabel(fileId: "abc123", language: .en)
+        XCTAssertTrue(open.contains("abc123"), open)
         XCTAssertTrue(copy.contains("abc123"), copy)
         XCTAssertTrue(copied.contains("abc123"), copied)
         XCTAssertTrue(share.contains("abc123"), share)
@@ -216,6 +217,7 @@ final class AccountManagementPresentationTests: XCTestCase {
                                                     language: language),
                 AccountPresentation.copyActionLabel(fileId: "f", copied: true,
                                                     language: language),
+                AccountPresentation.openActionLabel(fileId: "f", language: language),
                 AccountPresentation.shareActionLabel(fileId: "f", language: language),
                 AccountPresentation.deleteActionLabel(fileId: "f", language: language),
             ]

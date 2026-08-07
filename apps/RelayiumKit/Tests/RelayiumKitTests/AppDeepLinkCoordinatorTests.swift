@@ -186,6 +186,37 @@ final class AppDeepLinkCoordinatorTests: XCTestCase {
                        "the link resolved more than once")
     }
 
+    /// Account's Open action is an in-app source of the same capability link.
+    /// It must pass through the production parser and the coordinator rather
+    /// than writing the download model or changing tabs independently.
+    func testAStoredAccountLinkUsesTheSameValidatedDownloadRoute() async {
+        let rig = makeRig()
+        StubURLProtocol.reset()
+
+        XCTAssertTrue(rig.coordinator.deliverStoredLink(downloadURL.absoluteString))
+        XCTAssertEqual(rig.navigation.selection, .storedReceive)
+        XCTAssertEqual(rig.navigation.selectionWrites, 1)
+        XCTAssertEqual(rig.download.linkText, downloadURL.absoluteString)
+        XCTAssertEqual(rig.download.state, .resolving)
+
+        await waitFor("the account link resolve to finish", { !rig.download.isBusy })
+        XCTAssertEqual(requests(forLinkID: "abc123"), 1)
+        XCTAssertNil(rig.download.received,
+                     "opening an Account row downloaded without Save")
+    }
+
+    func testAStoredAccountLinkRefusesAnythingOutsideTheDownloadTrustBoundary() {
+        let rig = makeRig()
+        for raw in ["not a link", "https://evil.example/d/abc123#k=KEYPART",
+                    "https://relayium.com/cross-network#c=483920"] {
+            XCTAssertFalse(rig.coordinator.deliverStoredLink(raw), raw)
+        }
+        XCTAssertEqual(rig.navigation.selection, .nearby)
+        XCTAssertEqual(rig.navigation.selectionWrites, 0)
+        XCTAssertTrue(rig.download.linkText.isEmpty)
+        XCTAssertEqual(rig.download.state, .idle)
+    }
+
     /// A realtime link selects Direct and prefills BOTH models, because the URL
     /// does not say whether the sender chose files or text. Prefilling one would
     /// make the feature work for half the codes it can carry.

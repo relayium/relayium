@@ -1399,8 +1399,14 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let tab = try XCTUnwrap(all.first { $0.name == "AccountTab.swift" })
         XCTAssertFalse(tab.text.contains("management"),
                        "the router must not reach into the account's rows")
-        XCTAssertTrue(tab.text.contains("AccountSummaryView(user: user, usage: usage)"),
+        XCTAssertTrue(tab.text.contains("AccountSummaryView(user: user, usage: usage,"),
                       "and the summary must stay the `.ready` arm")
+        XCTAssertTrue(tab.text.contains("onOpenStoredLink: onOpenStoredLink"),
+                      "Account drops the in-app stored-link handoff")
+        let root = try XCTUnwrap(all.first { $0.name == "RootView.swift" })
+        XCTAssertTrue(root.text.contains(
+            "AccountTab(onOpenStoredLink: { deepLinkRouting.deliverStoredLink($0) })"),
+                      "Account bypasses the shared deep-link admission policy")
     }
 
     /// Every call into the model carries the scope, and the load is KEYED on it.
@@ -1700,8 +1706,9 @@ final class IOSSurfaceGuardTests: XCTestCase {
             .contains("systemImage: \"exclamationmark.triangle\""),
                       "the helper states a failure in colour with no symbol beside it")
         // The row actions are named for the row they belong to, which is the
-        // only thing telling two same-named devices apart without sight.
+        // only thing telling repeated action groups apart without sight.
         for label in ["AccountPresentation.revokeActionLabel(for: device)",
+                      "AccountPresentation.openActionLabel(fileId: row.file.id)",
                       "AccountPresentation.shareActionLabel(fileId: row.file.id)",
                       "AccountPresentation.deleteActionLabel(fileId: row.file.id)"] {
             XCTAssertTrue(summary.text.contains(label), "missing accessibility label: \(label)")

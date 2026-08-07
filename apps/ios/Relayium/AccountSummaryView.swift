@@ -25,6 +25,7 @@ import RelayiumAppKit
 struct AccountSummaryView: View {
     let user: NativeUser
     let usage: UsageResponse
+    let onOpenStoredLink: (String) -> Void
 
     @EnvironmentObject private var session: AccountSession
     @EnvironmentObject private var management: AccountManagementModel
@@ -363,9 +364,13 @@ struct AccountSummaryView: View {
             // Which of the three states this row is in is decided in
             // `AccountPresentation`, where a test drives it. The consequential
             // half is that a `#k=` link — which IS the plaintext to anybody
-            // holding it — reaches a share sheet in exactly one of them.
+            // holding it — reaches Open and Share in exactly one of them.
             switch AccountPresentation.link(for: row.link) {
             case .shareable(let link):
+                Button(L10n.t(.downloadOpen)) { onOpenStoredLink(link) }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityLabel(
+                        AccountPresentation.openActionLabel(fileId: row.file.id))
                 // The platform's own hand-off, never a pasteboard write: an app
                 // that puts a key on the clipboard behind the user's back is
                 // doing the thing this product promises not to do, and iOS would

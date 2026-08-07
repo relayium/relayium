@@ -186,6 +186,14 @@ public enum AccountPresentation {
         ], language: language)
     }
 
+    public static func openActionLabel(fileId: String,
+                                       language: AppLanguage? = nil) -> String {
+        L10n.detail([
+            L10n.t(.downloadOpen, language: language),
+            L10n.token(fileId, language: language),
+        ], language: language)
+    }
+
     public static func deleteActionLabel(fileId: String,
                                          language: AppLanguage? = nil) -> String {
         L10n.t(.accountDeleteFileLabel, [L10n.token(fileId, language: language)],
