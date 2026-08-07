@@ -84,7 +84,7 @@ ICE/TURN credentials for a pairing-code transfer. It:
    still works in both cases; only relay is withheld.
 3. Embeds the owner's user ID and the pairing code into the TURN username as
    `<expiry>:<userID>.<code>` (`account/turn.go:122`, `turnCredentials` at
-   `account/turn.go:223`) — this is the only mechanism that ties relay bytes
+   `account/turn.go:273`) — this is the only mechanism that ties relay bytes
    back to an account.
 
 **Ingesting what was actually relayed** is a separate, one-way pipeline:
@@ -92,20 +92,20 @@ coturn (the TURN server) reports each allocation's cumulative relayed bytes
 over Redis pub/sub; `internal/metering/metering.go` ingests those reports.
 `Worker.handle` (`internal/metering/metering.go:81`) parses the coturn
 username via `relayusage.TokenFromUsername` and `relayusage.SplitAttrib`
-(`internal/relayusage/parse.go:10` and `:21`) to recover the owner's user ID,
+(`internal/relayusage/parse.go:18` and `:21`) to recover the owner's user ID,
 and records a `UsageEvent{RelayedBytes, Billable: true}` against that user.
 A username with no owner prefix (a legacy/anonymous code) is recorded but
 never attributed to any account and never billed — see the
 `SplitAttrib` doc comment. If Redis isn't configured
 (`-redis-addr` / `RELAYIUM_REDIS_ADDR` unset), this whole pipeline never
-starts (`main.go:459`) and relay usage is never ingested at all — transfers
+starts (`main.go:551`) and relay usage is never ingested at all — transfers
 still work, they're simply not metered.
 
 **Self-hosted relay nodes are recorded but never billed.** If you point
 Relayium at your own TURN node (BYO), its relay traffic is reported over a
 separate HTTPS heartbeat path (same `relayusage` parser, different
 transport) and stored with `billable = node.OwnerType == "fleet"`
-(`account/nodes.go:1218`) — i.e. `false` for a self-hosted node. The bytes
+(`account/nodes.go:1252`) — i.e. `false` for a self-hosted node. The bytes
 still get a row (so you, the node owner, can see them in the admin
 dashboard), but `UserRelayedSince` — the query the quota/billing math reads —
 only sums `billable = 1` rows (see the comment in
@@ -131,24 +131,24 @@ migrations that follow it) — not a summary of intent, the actual columns.
 
 | Table | What's in it | Why |
 |---|---|---|
-| `users` (`sqlite.go:39`) | id, email, display name, creation time, plan tier, Stripe customer/subscription IDs and status, subscription period end, plan-change bookkeeping. **No card data** — Stripe Checkout is a hosted redirect (`account/stripe.go:311`, `EnsureCustomer`/`CreateCheckoutSession`); Relayium's server never sees a card number. |
-| `devices` (`sqlite.go:66`) | id, owning user, a **name** (nickname), creation and last-seen time, device kind (browser/CLI). This is the persistent paired-device list (settings page), not the realtime signaling room — see below. |
-| `usage_events` (`sqlite.go:73`) | per-TURN-allocation relayed-byte totals: alloc ID, token, user ID, bytes, timestamp, later `node_id` and `billable` (`sqlite.go:321-322`). |
-| `usage_periods` (`sqlite.go:690`) | the same relay data bucketed by calendar month (`YYYYMM`), which is what billing/cap queries actually read (`account/plan_enforce.go:63`, `UserRelayedSince`). |
-| `usage_monthly` (`sqlite.go:115`) | per-user, per-month upload/download byte totals for **stored transfers** (not relay). |
-| `stored_files` (`sqlite.go:81`) | id, owner, an opaque `blob_key` (pointer to ciphertext on disk), an opaque `enc_manifest` blob (the encrypted filename/size manifest — server can't read it), plaintext **size in bytes**, burn-after-read flag, created/expires timestamps, download count. |
-| `upload_events` (`sqlite.go:94`) | rolling 24h ledger of upload sizes per user, for the daily-quota check. |
-| `nodes` (`sqlite.go:134`) | self-hosted or fleet relay/storage node registry: owner, region, URLs, per-node relayed/stored byte totals, online status. |
-| `cli_device_auth` (`sqlite.go:177`) | the CLI's device-code login flow: **the requesting CLI's origin IP and user-agent**, shown on the browser approval page so a user can spot a phishing attempt (`sqlite.go:187-188`). This is the one place a general client IP is persisted — see [What the server could know but chooses not to keep](#what-the-server-could-know-but-chooses-not-to-keep). |
-| `admin_audit` (`sqlite.go:231`) | every admin-console mutation: actor, **the admin's IP**, action, target, and a diff of what changed. Kept for up to 2 years by default — see [Retention](#retention-how-long-anything-is-kept). |
-| `plans` (`sqlite.go:209`) | the tier table itself: storage/traffic/retention caps, prices, Stripe price IDs. No user data. |
+| `users` (`sqlite.go:48`) | id, email, display name, creation time, plan tier, Stripe customer/subscription IDs and status, subscription period end, plan-change bookkeeping. **No card data** — Stripe Checkout is a hosted redirect (`account/stripe.go:311`, `EnsureCustomer`/`CreateCheckoutSession`); Relayium's server never sees a card number. |
+| `devices` (`sqlite.go:75`) | id, owning user, a **name** (nickname), creation and last-seen time, device kind (browser/CLI). This is the persistent paired-device list (settings page), not the realtime signaling room — see below. |
+| `usage_events` (`sqlite.go:82`) | per-TURN-allocation relayed-byte totals: alloc ID, token, user ID, bytes, timestamp, later `node_id` and `billable` (`sqlite.go:335-336`). |
+| `usage_periods` (`sqlite.go:637`) | the same relay data bucketed by calendar month (`YYYYMM`), which is what billing/cap queries actually read (`account/plan_enforce.go:63`, `UserRelayedSince`). |
+| `usage_monthly` (`sqlite.go:124`) | per-user, per-month upload/download byte totals for **stored transfers** (not relay). |
+| `stored_files` (`sqlite.go:90`) | id, owner, an opaque `blob_key` (pointer to ciphertext on disk), an opaque `enc_manifest` blob (the encrypted filename/size manifest — server can't read it), plaintext **size in bytes**, burn-after-read flag, created/expires timestamps, download count. |
+| `upload_events` (`sqlite.go:103`) | rolling 24h ledger of upload sizes per user, for the daily-quota check. |
+| `nodes` (`sqlite.go:143`) | self-hosted or fleet relay/storage node registry: owner, region, URLs, per-node relayed/stored byte totals, online status. |
+| `cli_device_auth` (`sqlite.go:186`) | the CLI's device-code login flow: **the requesting CLI's origin IP and user-agent**, shown on the browser approval page so a user can spot a phishing attempt (`sqlite.go:187-188`). This is the one place a general client IP is persisted — see [What the server could know but chooses not to keep](#what-the-server-could-know-but-chooses-not-to-keep). |
+| `admin_audit` (`sqlite.go:240`) | every admin-console mutation: actor, **the admin's IP**, action, target, and a diff of what changed. Kept for up to 2 years by default — see [Retention](#retention-how-long-anything-is-kept). |
+| `plans` (`sqlite.go:218`) | the tier table itself: storage/traffic/retention caps, prices, Stripe price IDs. No user data. |
 
 Two things worth being explicit about, because a privacy-conscious reader
 would reasonably ask:
 
 - **Byte counts are the metered quantity, not access logs.** There's no table
   of "user X downloaded file Y at time Z from IP W" for ordinary transfers.
-  `download_receipts` (`sqlite.go:413`) exists, but it's a 24-hour dedup table
+  `download_receipts` (`sqlite.go:429`) exists, but it's a 24-hour dedup table
   keyed by an opaque per-download nonce — its purpose is to stop a replayed
   receipt from double-crediting a node's bandwidth accounting, not to log who
   downloaded what.
@@ -190,7 +190,7 @@ Some of this is architectural, not a promise the server keeps by policy:
   manifest (which holds the real filenames) and the file bytes, and that key
   lives only in the URL **fragment** (`#k=...`) — which by construction is
   never sent in an HTTP request, so the server that stores the ciphertext
-  never receives the key. `stored_files.enc_manifest` (`sqlite.go:85`) is
+  never receives the key. `stored_files.enc_manifest` (`sqlite.go:94`) is
   exactly that opaque blob. The server can see the **size** of what's stored
   (it has to, to enforce storage caps) but not the name or contents of a
   single file inside a multi-file batch.
@@ -244,7 +244,7 @@ The dimensions actually checked, each fail-closed at write time:
 
 - **Daily upload quota** — a rolling 24-hour window (`account/plan_enforce.go:186`,
   `remainingDailyQuota`), reserved atomically per upload
-  (`account/files.go:249-277`, `ReserveUpload`) so concurrent uploads can't
+  (`account/sqlite.go:2911`, `ReserveUpload`) so concurrent uploads can't
   race past it. A near-empty file still debits a 64 KiB floor
   (`minBillableBytes`, `account/files.go:32` — capping object *count*, not
   just size). Exceeding it: `429` "daily quota exceeded".
@@ -278,7 +278,7 @@ except the file's own retention/download-count settings — they land on the
 user's own infrastructure, which the operator (not relayium.com) pays for.
 
 Users can see exactly what they've used against their own cap at
-`GET /api/me/usage` (`account/handlers.go:135`, `handleMeUsage`) — the same
+`GET /api/me/usage` (`account/handlers.go:515`, `handleMeUsage`) — the same
 numbers this document describes, not a hidden internal metric.
 
 ## The free tier, and what needs no account at all
@@ -314,7 +314,7 @@ tiers via Stripe Checkout/subscription (`account/billing.go:18-22`,
 ## Retention: how long anything is kept
 
 `account/gc.go`'s `GC.sweep` (`account/gc.go:111`) runs every 10 minutes
-(`main.go:456`) and is the only thing that prunes any of this. If stored
+(`main.go:484`) and is the only thing that prunes any of this. If stored
 transfers are disabled entirely (no blob directory configured), **GC never
 runs at all** — including the admin-audit prune below — see the residual
 noted at `account/gc.go:49-52`.
@@ -324,9 +324,9 @@ noted at `account/gc.go:49-52`.
 | Stored file (ciphertext + row) | Until its TTL/max-downloads is hit, whichever first | `ListExpiredStoredFiles` + `DeleteStoredFile`, `account/gc.go:113-125` |
 | Rolling daily-quota ledger (`upload_events`) | ~25 hours (a small margin past the 24h window it backs) | `pruneMargin`, `account/gc.go:13`, applied at `account/gc.go:130` |
 | Download-receipt dedup rows | 24 hours | `receiptRetention`, `account/gc.go:17`, applied at `account/gc.go:135` |
-| Admin audit trail (`admin_audit`) | 2 years by default, admin-overridable (`-audit-retention-days` / `RELAYIUM_AUDIT_RETENTION_DAYS`, `main.go:144`) | `auditRetentionDefault`, `account/gc.go:53`, applied at `account/gc.go:141` |
+| Admin audit trail (`admin_audit`) | 2 years by default, admin-overridable (`-audit-retention-days` / `RELAYIUM_AUDIT_RETENTION_DAYS`, `main.go:150`) | `auditRetentionDefault`, `account/gc.go:53`, applied at `account/gc.go:141` |
 | Monthly relay/traffic history (`usage_events`, `usage_periods`, `usage_monthly`) | **Not pruned by age at all** while the account is active — this is the billing history the quota math depends on | No prune call for these tables exists in `GC.sweep`; confirmed by reading the full sweep function |
-| Account + all of the above, on deletion | A grace period after a self-deletion request (`-account-grace-days` / `RELAYIUM_ACCOUNT_GRACE_DAYS`, default 30 days, `main.go:132`), then hard-purged | `ArchiveAndPurgeUser`, `account/sqlite.go:1512` |
+| Account + all of the above, on deletion | A grace period after a self-deletion request (`-account-grace-days` / `RELAYIUM_ACCOUNT_GRACE_DAYS`, default 30 days, `main.go:138`), then hard-purged | `ArchiveAndPurgeUser`, `account/sqlite.go:1537` |
 
 **What "hard-purged" actually does**, read directly from
 `ArchiveAndPurgeUser` (`account/sqlite.go:1512-1560`): the user's monthly
@@ -355,7 +355,7 @@ Everything above is what the code *can* do; what actually runs depends on
 which flags a given deployment sets (`main.go`):
 
 - **Relay metering** is entirely off unless `-redis-addr` /
-  `RELAYIUM_REDIS_ADDR` is set (`main.go:94`, wired at `main.go:459`). No
+  `RELAYIUM_REDIS_ADDR` is set (`main.go:99`, wired at `main.go:551`). No
   Redis configured → the metering worker never starts → relay bytes are
   never ingested or attributed to anyone, full stop.
 - **TURN relay itself** is off unless `-turn-secret` /
@@ -364,7 +364,7 @@ which flags a given deployment sets (`main.go`):
   CLI; cross-network browser transfers do not, because the relay they depend on
   is the thing that is switched off.
 - **Billing (Stripe)** is entirely off unless `-stripe-secret-key` /
-  `RELAYIUM_STRIPE_SECRET_KEY` is set (`main.go:149`); every
+  `RELAYIUM_STRIPE_SECRET_KEY` is set (`main.go:155`); every
   `/api/billing/*` route 404s otherwise (`account/billing.go:19-22`) and
   every account is, functionally, unlimited-by-payment (still subject to
   whatever plan caps an admin has configured locally).
