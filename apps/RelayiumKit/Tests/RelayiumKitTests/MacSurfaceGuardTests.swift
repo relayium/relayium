@@ -90,6 +90,21 @@ final class MacSurfaceGuardTests: XCTestCase {
         try String(contentsOf: macRoot.appendingPathComponent(name), encoding: .utf8)
     }
 
+    /// A count-only staging surface is not an acceptable description of the
+    /// user's own files. All three macOS send destinations must render the same
+    /// bounded, sanitized name-and-size list.
+    func testEverySendPaneShowsThePendingFileNamesAndSizes() throws {
+        let component = try source(named: "PendingFileList.swift")
+        for required in ["safeDisplayName(file.relativePath)", "L10n.bytes(bytes)",
+                         "ScrollView", ".frame(maxHeight: 200)"] {
+            XCTAssertTrue(component.contains(required), "pending-file list lost \(required)")
+        }
+        for pane in ["NearbyPane.swift", "DirectPane.swift", "UploadPane.swift"] {
+            XCTAssertTrue(try source(named: pane).contains("PendingFileList(files:"),
+                          "\(pane) regressed to a count-only selection")
+        }
+    }
+
     private func occurrences(of needle: String, in text: String) -> Int {
         text.components(separatedBy: needle).count - 1
     }

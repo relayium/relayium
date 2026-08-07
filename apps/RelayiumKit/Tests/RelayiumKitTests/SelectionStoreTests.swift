@@ -79,7 +79,9 @@ final class SelectionStoreTests: XCTestCase {
         let summary = try XCTUnwrap(store.summaryText(language: .en))
         XCTAssertTrue(summary.contains("3 files"), summary)
         XCTAssertTrue(summary.contains("1 folder"), summary)
+        XCTAssertTrue(summary.contains("3 B"), summary)
         XCTAssertTrue(summary.contains("empty folder"), summary)
+        XCTAssertEqual(store.files.map(\.byteCount), [1, 1, 1])
     }
 
     func testNoSummaryWhenNothingIsSelected() {

@@ -125,6 +125,7 @@ struct NearbyPane: View {
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            PendingFileList(files: selection.files)
             if let message = selection.error {
                 InlineMessage(.failure, message)
             }

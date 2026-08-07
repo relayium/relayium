@@ -65,6 +65,22 @@ final class IOSSurfaceGuardTests: XCTestCase {
         appsRoot.appendingPathComponent("RelayiumKit/Sources/RelayiumAppKit")
     }
 
+    /// Nearby, pairing-code and stored sending are three destinations for the
+    /// same promise: before Send, the user can inspect every file and its size.
+    func testEverySendSurfaceShowsThePendingFileNamesAndSizes() throws {
+        let all = try sources()
+        let component = try XCTUnwrap(all.first { $0.name == "PendingFileList.swift" }?.text)
+        for required in ["safeDisplayName(file.relativePath)", "L10n.bytes(bytes)",
+                         "ScrollView", ".frame(maxHeight: 220)"] {
+            XCTAssertTrue(component.contains(required), "pending-file list lost \(required)")
+        }
+        for view in ["NearbyView.swift", "DirectView.swift", "SendView.swift"] {
+            let text = try XCTUnwrap(all.first { $0.name == view }?.text)
+            XCTAssertTrue(text.contains("PendingFileList(files: selection.selectedFiles)"),
+                          "\(view) regressed to a count-only selection")
+        }
+    }
+
     /// Each source's CODE, with whole-line comments dropped.
     ///
     /// Load-bearing, not tidiness: these files explain what they deliberately do

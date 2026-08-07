@@ -116,6 +116,17 @@ final class FileSelectionTests: XCTestCase {
         try file("z/one.bin", [7])
         let selection = try expandSelection([try dir("z")])
         XCTAssertEqual(selection.files.map(\.relativePath), ["z/empty.bin", "z/one.bin"])
+        XCTAssertEqual(selection.files.map(\.byteCount), [0, 1],
+                       "the sender must be able to distinguish an empty file from an unknown size")
+    }
+
+    /// Size is captured in the same filesystem read that classifies the item,
+    /// so the UI does not reopen every file merely to describe the selection.
+    func testSelectionCapturesExactByteCountsForLooseAndNestedFiles() throws {
+        let loose = try file("loose.bin", Array(repeating: 1, count: 2_048))
+        try file("trip/a.bin", Array(repeating: 2, count: 3))
+        let selection = try expandSelection([loose, try dir("trip")])
+        XCTAssertEqual(selection.files.map(\.byteCount), [2_048, 3])
     }
 
     // MARK: - what cannot be sent

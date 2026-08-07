@@ -90,6 +90,9 @@ final class DirectSendSelectionTests: XCTestCase {
         XCTAssertEqual(spy.started(b), 1)
         XCTAssertFalse(selection.isEmpty)
         XCTAssertNotNil(selection.summary, "the chosen files are not described")
+        XCTAssertEqual(selection.selectedFiles.map(\.name), ["a.txt", "b.txt"])
+        XCTAssertEqual(selection.selectedFiles.map(\.byteCount), [3, 3])
+        XCTAssertTrue(selection.summary?.contains("6 B") == true)
         XCTAssertNil(selection.errorMessage)
     }
 

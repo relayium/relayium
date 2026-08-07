@@ -328,12 +328,15 @@ final class SharedDraftAdoptionTests: XCTestCase {
         }
         // Hierarchy rides in the manifest name, exactly as for a picked folder.
         XCTAssertEqual(files.map(\.relativePath), ["trip/a.txt", "trip/deep/b.txt"])
+        XCTAssertEqual(files.map(\.byteCount), [3, 3])
+        XCTAssertEqual(send.selectedFiles, files)
         // And the URLs are the STAGED copies, never anything the extension saw.
         for file in files {
             XCTAssertTrue(file.url.path.hasPrefix(drafts.draftURL(id: plan.id).path),
                           "the app is sending from outside the draft: \(file.url.path)")
         }
-        XCTAssertNotNil(send.summary, "an adopted draft must describe itself on screen")
+        XCTAssertTrue(send.summary?.contains("6 B") == true,
+                      "an adopted draft must describe its total size on screen")
         // Out of the offered list, because it is now the selection: offering it
         // again would be the same files twice.
         XCTAssertEqual(send.sharedDrafts, [])

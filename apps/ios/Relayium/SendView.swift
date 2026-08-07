@@ -303,6 +303,7 @@ struct SendView: View {
                 // stopping on each fragment of the summary.
                 .accessibilityElement(children: .combine)
             }
+            PendingFileList(files: selection.selectedFiles)
 
             if selection.isImportingPhotos {
                 // Labelled rather than a bare spinner: staging copies bytes and

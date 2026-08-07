@@ -127,6 +127,7 @@ struct UploadPane: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            PendingFileList(files: visibleSelectedFiles)
             if let message = selection.error {
                 InlineMessage(.failure, message)
             }
@@ -145,6 +146,13 @@ struct UploadPane: View {
     private var isEmptySelection: Bool {
         guard case .idle = model.state else { return false }
         return selection.summary == nil
+    }
+
+    /// Ordinarily the store and model name the same selection. Recovery and
+    /// model-driven picks can legitimately populate only the model, so use that
+    /// derived state when the pane's store has no list of its own.
+    private var visibleSelectedFiles: [SelectedFile] {
+        selection.files.isEmpty ? model.selectedFiles : selection.files
     }
 
     // MARK: - how long it lives

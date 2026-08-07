@@ -75,6 +75,9 @@ public final class SelectionStore: ObservableObject {
     }
 
     public var isEmpty: Bool { selection?.files.isEmpty ?? true }
+    /// The canonical expanded selection. Views may describe it, but never own a
+    /// second copy or re-read disk to guess its size.
+    public var files: [SelectedFile] { selection?.files ?? [] }
     public var fileCount: Int { selection?.files.count ?? 0 }
     public var folderCount: Int {
         guard let selection else { return 0 }
@@ -106,6 +109,14 @@ public final class SelectionStore: ObservableObject {
         let folders = folderCount
         if folders > 0 {
             text += " " + L10n.plural(.selectionFolders, folders, language: language)
+        }
+        if let total = selection.files.reduce(Optional<Int64>(0), { total, file in
+            guard let total, let bytes = file.byteCount,
+                  bytes <= Int64.max - total else { return nil }
+            return total + bytes
+        }) {
+            text = L10n.detail([text, L10n.bytes(total, language: language)],
+                               language: language)
         }
         let skipped = selection.emptyDirectories.count
         if skipped > 0 {

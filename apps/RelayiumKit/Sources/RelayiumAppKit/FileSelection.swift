@@ -22,10 +22,15 @@ public struct SelectedFile: Equatable {
     /// (`web/src/lib/drag.ts` `walkEntry`) and the Go CLI derives from
     /// `filepath.Rel(parent, p)` (`internal/cloud/transfer.go` `walkUploadPaths`).
     public let relativePath: String
+    /// Size observed when the user chose the file. This is the native analogue
+    /// of the browser's `File.size`: presentation and the eventual manifest use
+    /// one selection snapshot, including for a real zero-byte file.
+    public let byteCount: Int64?
 
-    public init(url: URL, relativePath: String) {
+    public init(url: URL, relativePath: String, byteCount: Int64? = nil) {
         self.url = url
         self.relativePath = relativePath
+        self.byteCount = byteCount
     }
 
     /// The leaf name — what goes in `FileMeta.name` / a flat manifest entry.
@@ -109,8 +114,9 @@ public func expandSelection(_ roots: [URL],
         switch try classify(standardized, fileManager: fileManager) {
         case .symlink:
             throw FileSelectionError.symbolicLink(name)
-        case .file:
-            try append(SelectedFile(url: standardized, relativePath: name), to: &files)
+        case let .file(byteCount):
+            try append(SelectedFile(url: standardized, relativePath: name,
+                                    byteCount: byteCount), to: &files)
         case .directory:
             let before = files.count
             try walk(standardized, prefix: name, into: &files,
@@ -125,7 +131,7 @@ public func expandSelection(_ roots: [URL],
 
 // MARK: - internals
 
-private enum Kind { case file, directory, symlink }
+private enum Kind { case file(Int64), directory, symlink }
 
 /// lstat semantics: `attributesOfItem` does NOT resolve a final symlink, which
 /// is what makes the symlink refusal meaningful.
@@ -136,7 +142,11 @@ private func classify(_ url: URL, fileManager: FileManager) throws -> Kind {
     switch attrs[.type] as? FileAttributeType {
     case .typeSymbolicLink?: return .symlink
     case .typeDirectory?: return .directory
-    case .typeRegular?: return .file
+    case .typeRegular?:
+        guard let number = attrs[.size] as? NSNumber, number.int64Value >= 0 else {
+            throw FileSelectionError.unreadable(url.lastPathComponent)
+        }
+        return .file(number.int64Value)
     default:
         // Sockets, FIFOs, devices: not something a transfer can carry, and a
         // FIFO in particular would block the reader forever.
@@ -166,8 +176,9 @@ private func walk(_ directory: URL, prefix: String,
         switch try classify(child, fileManager: fileManager) {
         case .symlink:
             throw FileSelectionError.symbolicLink(relative)
-        case .file:
-            try append(SelectedFile(url: child, relativePath: relative), to: &files)
+        case let .file(byteCount):
+            try append(SelectedFile(url: child, relativePath: relative,
+                                    byteCount: byteCount), to: &files)
         case .directory:
             let before = files.count
             try walk(child, prefix: relative, into: &files,

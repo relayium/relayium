@@ -60,6 +60,9 @@ public final class DirectSendSelection: ObservableObject {
     }
 
     public var isEmpty: Bool { store.isEmpty }
+    /// Derived from the one canonical store; publishing `summary` redraws the
+    /// view after every selection change, so this needs no duplicate state.
+    public var selectedFiles: [SelectedFile] { store.files }
 
     /// The picker result, and the only caller of `SecurityScopedAccess.replace`.
     ///

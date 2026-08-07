@@ -65,6 +65,10 @@ public final class SendSelectionModel: ObservableObject {
     @Published public private(set) var isImportingPhotos: Bool = false
     @Published public private(set) var importError: String?
 
+    /// The files named by `summary`, derived from the upload state that owns the
+    /// selection rather than mirrored in another published property.
+    public var selectedFiles: [SelectedFile] { upload.selectedFiles }
+
     /// Drafts the iOS share extension has staged and nobody has used yet,
     /// oldest first.
     ///
@@ -460,7 +464,10 @@ public final class SendSelectionModel: ObservableObject {
         // The staged copies, under their manifest names. Hierarchy rides in the
         // name exactly as it does for a picked folder, so the receiving side
         // rebuilds the same tree.
-        let files = staged.map { SelectedFile(url: $0.url, relativePath: $0.name) }
+        let files = zip(staged, plan.files).map { stagedFile, plannedFile in
+            SelectedFile(url: stagedFile.url, relativePath: stagedFile.name,
+                         byteCount: Int64(plannedFile.size))
+        }
         upload.sourceDraftId = plan.id
         upload.pick(FileSelection(files: files, emptyDirectories: []))
         guard case .picked = upload.state else {
@@ -593,7 +600,10 @@ public final class SendSelectionModel: ObservableObject {
         // same plural the picker path uses, rather than left blank because the
         // store happens to be empty.
         if let adoptedDraft {
-            summary = L10n.plural(.selectionFiles, adoptedDraft.fileCount)
+            summary = L10n.detail([
+                L10n.plural(.selectionFiles, adoptedDraft.fileCount),
+                L10n.bytes(Int64(adoptedDraft.totalBytes)),
+            ])
             return
         }
         summary = store.summaryText(language: nil)

@@ -304,6 +304,7 @@ struct NearbyView: View {
                 // stopping on each fragment of the summary.
                 .accessibilityElement(children: .combine)
             }
+            PendingFileList(files: selection.selectedFiles)
             if let message = selection.errorMessage { failureLine(message) }
             Button { isChoosingFiles = true } label: {
                 Text(L10n.t(.commonChooseFilesOrFolders)).frame(maxWidth: .infinity)

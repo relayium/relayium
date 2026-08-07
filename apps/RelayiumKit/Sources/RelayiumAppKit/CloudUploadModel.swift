@@ -62,6 +62,13 @@ public final class CloudUploadModel: ObservableObject {
     /// this device and that is theirs to know.
     @Published public private(set) var cleanupWarning: String?
 
+    /// Files that are presently actionable as a picked selection. Derived from
+    /// `state`, never retained as a second presentation list.
+    public var selectedFiles: [SelectedFile] {
+        guard case let .picked(files) = state else { return [] }
+        return files
+    }
+
     private let uploader: CloudUploader
     /// Where the key of every successful upload is kept, so the Account tab can
     /// rebuild this link later. The same store the account management model
