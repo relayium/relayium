@@ -1385,12 +1385,12 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertEqual(all.map { occurrences(of: "func application(", in: $0.text) }.reduce(0, +), 1,
                        "a second AppKit open callback would be a second entry point")
         XCTAssertTrue(app.contains("func application(_ application: NSApplication, open urls: [URL])"))
-        // TWO occurrences: the definition and exactly one call. Asserting mere
-        // presence passed while the call site was deleted — the definition line
-        // contains the same spelling — so the count is what makes this guard
-        // load-bearing rather than decorative.
-        XCTAssertEqual(occurrences(of: "showTheMainWindow()", in: app), 2,
-                       "an open with the window closed must bring it back, from exactly one place")
+        // THREE occurrences: the definition, the one production Open With call,
+        // and the DEBUG-only UI harness call pinned above. Asserting mere
+        // presence passed while the production call site was deleted, so the
+        // count remains load-bearing rather than decorative.
+        XCTAssertEqual(occurrences(of: "showTheMainWindow()", in: app), 3,
+                       "window recovery must have one production and one test-only caller")
         // Ordered front, never created. A `WindowGroup` would make a second
         // window here, which is the one thing the whole shell design prevents.
         XCTAssertTrue(app.contains("window.makeKeyAndOrderFront(nil)"))
