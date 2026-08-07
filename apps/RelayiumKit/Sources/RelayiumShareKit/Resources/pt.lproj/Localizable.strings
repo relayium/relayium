@@ -166,6 +166,7 @@
 "direct.waitingForDevice" = "À espera do outro dispositivo…";
 "direct.chooseFilesFirst" = "Escolha primeiro os ficheiros ou pastas a enviar.";
 "direct.joinNoAccountNeeded" = "Aderir a um código criado por outra pessoa não exige qualquer conta.";
+"direct.modeMatchHint" = "Escolha «Ficheiros» ou «Texto» de acordo com o que o remetente iniciou. O código não identifica o tipo.";
 "direct.largeFilesTitle" = "Vai enviar algo grande?";
 "direct.largeFilesBody" = "Uma transferência direta só avança enquanto o Relayium estiver aberto nos dois dispositivos, por isso um ficheiro grande pode ser mais lento por esta via e recomeça se qualquer uma das apps for fechada. «Enviar» guarda antes o ficheiro cifrado, e o outro dispositivo pode ir buscá-lo quando quiser.";
 "direct.openSend" = "Abrir «Enviar»";
@@ -260,7 +261,6 @@
 "text.startBody" = "Ambos os dispositivos ficam online. As mensagens são cifradas ponta a ponta e ficam apenas na memória desta sessão.";
 "text.createCode" = "Criar um código de texto";
 "text.joinHeading" = "Entrar numa sessão de texto";
-"text.joinHint" = "Um código de emparelhamento não revela o seu tipo. Escolha «Texto» aqui apenas se quem envia iniciou uma sessão de texto.";
 "text.giveCode" = "Dê este código de texto ao outro dispositivo";
 "text.connecting" = "A ligar uma sessão de texto privada…";
 "text.checkMatches" = "Verifique se corresponde ao outro dispositivo";

@@ -255,6 +255,17 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(textMinting.contains(".buttonStyle(.bordered)"))
     }
 
+    func testPairingModePickerExplainsThatTheReceiverMustMatchTheSender() throws {
+        let destination = try source(named: "Destinations/PairingCodeDestination.swift")
+        let picker = try XCTUnwrap(destination.components(
+            separatedBy: "private var modePicker:").dropFirst().first?
+            .components(separatedBy: "private func busyElsewhere").first)
+        XCTAssertTrue(picker.contains("Text(L10n.t(.directModeMatchHint))"))
+        XCTAssertTrue(picker.contains(".accessibilityHint(L10n.t(.directModeMatchHint))"))
+        XCTAssertFalse(try source(named: "RealtimeTextPane.swift").contains(".textJoinHint"),
+                       "the shared picker explanation is duplicated only in Text mode")
+    }
+
     /// Before a text peer connects there is no transcript or result to retain.
     /// Cancel should match the file flow and return directly to the start screen.
     func testTextConnectingCancelDoesNotCreateAnEmptyTerminalTask() throws {

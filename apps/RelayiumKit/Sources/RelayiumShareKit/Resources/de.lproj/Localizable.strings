@@ -166,6 +166,7 @@
 "direct.waitingForDevice" = "Warten auf das andere Gerät…";
 "direct.chooseFilesFirst" = "Wähle zuerst Dateien oder Ordner zum Senden aus.";
 "direct.joinNoAccountNeeded" = "Zum Beitreten zu einem Code, den jemand anderes erstellt hat, ist kein Konto nötig.";
+"direct.modeMatchHint" = "Wähle „Dateien“ oder „Text“ passend zu dem, was die sendende Seite gestartet hat. Der Code selbst nennt die Art nicht.";
 "direct.largeFilesTitle" = "Etwas Großes zu senden?";
 "direct.largeFilesBody" = "Eine Direktübertragung läuft nur, solange auf beiden Geräten Relayium geöffnet ist. Eine große Datei kann auf diesem Weg deshalb langsamer sein und beginnt von vorn, sobald eine der beiden Apps geschlossen wird. „Senden“ legt stattdessen die verschlüsselte Datei ab, und das andere Gerät kann sie jederzeit abholen.";
 "direct.openSend" = "„Senden“ öffnen";
@@ -260,7 +261,6 @@
 "text.startBody" = "Beide Geräte bleiben online. Nachrichten sind Ende-zu-Ende-verschlüsselt und bleiben nur im Arbeitsspeicher dieser Sitzung.";
 "text.createCode" = "Textcode erstellen";
 "text.joinHeading" = "Textsitzung beitreten";
-"text.joinHint" = "Ein Kopplungscode verrät seine Art nicht. Wähle hier nur dann „Text“, wenn die sendende Seite eine Textsitzung gestartet hat.";
 "text.giveCode" = "Gib diesen Textcode an das andere Gerät weiter";
 "text.connecting" = "Private Textsitzung wird verbunden…";
 "text.checkMatches" = "Prüfe, ob dies mit dem anderen Gerät übereinstimmt";

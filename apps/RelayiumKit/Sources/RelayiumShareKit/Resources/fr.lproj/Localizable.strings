@@ -166,6 +166,7 @@
 "direct.waitingForDevice" = "En attente de l’autre appareil…";
 "direct.chooseFilesFirst" = "Choisissez d’abord les fichiers ou dossiers à envoyer.";
 "direct.joinNoAccountNeeded" = "Rejoindre un code créé par quelqu’un d’autre ne nécessite aucun compte.";
+"direct.modeMatchHint" = "Choisissez « Fichiers » ou « Texte » selon ce que l’expéditeur a lancé. Le code n’indique pas le type.";
 "direct.largeFilesTitle" = "Vous envoyez un fichier volumineux ?";
 "direct.largeFilesBody" = "Un transfert direct ne progresse que tant que Relayium est ouvert sur les deux appareils : un fichier volumineux peut donc être plus lent ainsi, et il recommence si l’une des applications est fermée. « Envoyer » dépose plutôt le fichier chiffré, que l’autre appareil peut récupérer quand il veut.";
 "direct.openSend" = "Ouvrir « Envoyer »";
@@ -260,7 +261,6 @@
 "text.startBody" = "Les deux appareils restent en ligne. Les messages sont chiffrés de bout en bout et ne restent qu’en mémoire pour la durée de la session.";
 "text.createCode" = "Créer un code texte";
 "text.joinHeading" = "Rejoindre une session texte";
-"text.joinHint" = "Un code d’appairage ne révèle pas son type. Ne choisissez « Texte » ici que si l’expéditeur a démarré une session texte.";
 "text.giveCode" = "Communiquez ce code texte à l’autre appareil";
 "text.connecting" = "Connexion d’une session texte privée…";
 "text.checkMatches" = "Vérifiez que cela correspond à l’autre appareil";

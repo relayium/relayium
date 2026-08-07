@@ -54,13 +54,19 @@ struct PairingCodeDestination: View {
     /// files or text, so somebody has to say, and saying it twice would be two
     /// answers to one question.
     private var modePicker: some View {
-        Picker(L10n.t(.hubTransferType), selection: $presence.mode) {
-            Text(L10n.t(.hubFiles)).tag(TransferMode.files)
-            Text(L10n.t(.hubText)).tag(TransferMode.text)
+        VStack(alignment: .leading, spacing: 6) {
+            Picker(L10n.t(.hubTransferType), selection: $presence.mode) {
+                Text(L10n.t(.hubFiles)).tag(TransferMode.files)
+                Text(L10n.t(.hubText)).tag(TransferMode.text)
+            }
+            .pickerStyle(.segmented)
+            .disabled(busy || presence.owner != nil)
+            .accessibilityHint(L10n.t(.directModeMatchHint))
+            Text(L10n.t(.directModeMatchHint))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .pickerStyle(.segmented)
-        .disabled(busy || presence.owner != nil)
-        .accessibilityHint(L10n.t(.hubTransferTypeHint))
     }
 
     /// Nearby is presenting the session. Both destinations drive the same two

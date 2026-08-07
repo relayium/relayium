@@ -167,16 +167,22 @@ struct DirectView: View {
     /// which re-reads both model states. SwiftUI still owns the binding behind a
     /// disabled control, so the mechanism cannot be the modifier.
     private var modePicker: some View {
-        Picker(L10n.t(.hubTransferType), selection: Binding(
-            get: { modes.mode },
-            set: { modes.select($0, file: file.state, text: text.state) }
-        )) {
-            Text(L10n.t(.hubFiles)).tag(TransferMode.files)
-            Text(L10n.t(.hubText)).tag(TransferMode.text)
+        VStack(alignment: .leading, spacing: 6) {
+            Picker(L10n.t(.hubTransferType), selection: Binding(
+                get: { modes.mode },
+                set: { modes.select($0, file: file.state, text: text.state) }
+            )) {
+                Text(L10n.t(.hubFiles)).tag(TransferMode.files)
+                Text(L10n.t(.hubText)).tag(TransferMode.text)
+            }
+            .pickerStyle(.segmented)
+            .disabled(isLocked)
+            .accessibilityHint(L10n.t(.directModeMatchHint))
+            Text(L10n.t(.directModeMatchHint))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .pickerStyle(.segmented)
-        .disabled(isLocked)
-        .accessibilityHint(L10n.t(.hubTransferTypeHint))
     }
 
     // MARK: - files

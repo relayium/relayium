@@ -167,6 +167,7 @@
 "direct.waitingForDevice" = "Waiting for the other device…";
 "direct.chooseFilesFirst" = "Choose files or folders to send first.";
 "direct.joinNoAccountNeeded" = "Joining a code somebody else created needs no account.";
+"direct.modeMatchHint" = "Choose Files or Text to match what the sender started. The code itself does not identify the type.";
 "direct.largeFilesTitle" = "Sending something large?";
 "direct.largeFilesBody" = "A direct transfer runs only while both devices have Relayium open, so a large file can be slower this way and starts over if either app is closed. Send stores the encrypted file instead, and the other device can collect it whenever it likes.";
 "direct.openSend" = "Open Send";
@@ -261,7 +262,6 @@
 "text.startBody" = "Both devices stay online. Messages are end-to-end encrypted and kept only in this session's memory.";
 "text.createCode" = "Create a text code";
 "text.joinHeading" = "Join a text session";
-"text.joinHint" = "A pairing code does not reveal its type. Choose Text here only when the sender started a text session.";
 "text.giveCode" = "Give this text code to the other device";
 "text.connecting" = "Connecting a private text session…";
 "text.checkMatches" = "Check this matches the other device";

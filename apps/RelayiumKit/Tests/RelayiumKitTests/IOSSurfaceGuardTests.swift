@@ -2099,6 +2099,15 @@ final class IOSSurfaceGuardTests: XCTestCase {
                       "and it has to say so, rather than leaving it to be discovered")
     }
 
+    func testPairingModePickerExplainsThatTheReceiverMustMatchTheSender() throws {
+        let view = try direct()
+        let picker = try XCTUnwrap(view.text.components(
+            separatedBy: "private var modePicker:").dropFirst().first?
+            .components(separatedBy: "// MARK: - files").first)
+        XCTAssertTrue(picker.contains("Text(L10n.t(.directModeMatchHint))"))
+        XCTAssertTrue(picker.contains(".accessibilityHint(L10n.t(.directModeMatchHint))"))
+    }
+
     /// AccountGate exists to keep unlike failures unlike. Direct must not turn
     /// them all back into the same “open account” card.
     func testTheDirectCreateGateRendersEveryAccountStateTruthfully() throws {

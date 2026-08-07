@@ -316,6 +316,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case directScanOnPhone = "direct.scanOnPhone"
     case directWaitingForDevice = "direct.waitingForDevice"
     case directChooseFilesFirst = "direct.chooseFilesFirst"
+    case directModeMatchHint = "direct.modeMatchHint"
     /// Sits with the join field, which is rendered and enabled identically
     /// signed out. Only minting a code is gated, and only because the code's
     /// owner is billed for the relay capacity it reserves.
@@ -525,7 +526,6 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case textStartBody = "text.startBody"
     case textCreateCode = "text.createCode"
     case textJoinHeading = "text.joinHeading"
-    case textJoinHint = "text.joinHint"
     case textGiveCode = "text.giveCode"
     case textConnecting = "text.connecting"
     case textCheckMatches = "text.checkMatches"

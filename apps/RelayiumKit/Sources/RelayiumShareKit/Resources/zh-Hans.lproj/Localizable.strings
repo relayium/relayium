@@ -166,6 +166,7 @@
 "direct.waitingForDevice" = "正在等待对方设备…";
 "direct.chooseFilesFirst" = "请先选择要发送的文件或文件夹。";
 "direct.joinNoAccountNeeded" = "加入别人创建的配对码不需要账户。";
+"direct.modeMatchHint" = "请选择与发送方发起内容相符的「文件」或「文本」。配对码本身不包含类型信息。";
 "direct.largeFilesTitle" = "要发送大文件？";
 "direct.largeFilesBody" = "直连传输只在两台设备都开着 Relayium 时进行，所以大文件走这条路可能更慢，任何一端关掉应用都要从头再来。“发送”改为存放加密后的文件，对方随时都能取。";
 "direct.openSend" = "打开“发送”";
@@ -257,7 +258,6 @@
 "text.startBody" = "双方设备都需保持在线。消息端到端加密，且仅保存在本次会话的内存中。";
 "text.createCode" = "创建文本配对码";
 "text.joinHeading" = "加入文本会话";
-"text.joinHint" = "配对码本身不会透露类型。只有当发送方发起的是文本会话时，才在这里选择「文本」。";
 "text.giveCode" = "把这个文本配对码告诉对方设备";
 "text.connecting" = "正在建立私密文本会话…";
 "text.checkMatches" = "请核对与对方设备是否一致";

@@ -112,10 +112,6 @@ struct RealtimeTextPane: View {
                     .keyboardShortcut(.defaultAction)
                     .disabled(!model.canJoin)
             }
-            Text(L10n.t(.textJoinHint))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
             InlineMessage(.info, L10n.t(.directJoinNoAccountNeeded))
         }
     }
