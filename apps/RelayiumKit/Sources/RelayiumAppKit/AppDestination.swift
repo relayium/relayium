@@ -41,6 +41,30 @@ public enum AppRouting {
         }
     }
 
+    /// Reconcile a macOS inbound-session publication with the surface that may
+    /// present it.
+    ///
+    /// NearbyReceiveModel and the pairing-code panes share the same realtime
+    /// session models. An outbound pairing-code session therefore makes those
+    /// models busy too; even if a stale or incorrect inbound publication
+    /// arrives, it must not move the window away from the surface that already
+    /// owns the session. Claim first, navigate only after that claim succeeds.
+    ///
+    /// This overload keeps macOS's one TransferPresence.mode authority. iOS
+    /// uses the overload below because its picker state lives in
+    /// DirectModeSelection.
+    @MainActor
+    @discardableResult
+    public static func claimIncoming(_ kind: NearbyReceiveKind,
+                                     presence: TransferPresence,
+                                     navigation: AppNavigationModel) -> Bool {
+        let destination = destination(forIncoming: kind)
+        let mode: TransferMode = kind == .file ? .files : .text
+        guard presence.claim(destination, mode: mode) else { return false }
+        navigation.select(destination)
+        return true
+    }
+
     /// Files the OS opened with this app — a Finder **Open With**, or a drop on
     /// the Dock icon.
     ///

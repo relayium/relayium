@@ -26,6 +26,30 @@ public func isCompletePairingCode(_ raw: String) -> Bool {
     normalizedPairingCode(raw) == raw && raw.count == pairingCodeLength
 }
 
+/// Build the same browser join URL shown as a QR code and as a copyable link.
+///
+/// Keeping this beside the parser makes the round trip testable and prevents
+/// each native surface from inventing its own path or leaking the code into a
+/// query parameter. The fragment is deliberate: it is not sent to the server.
+public func pairingJoinURL(baseURL: URL, code: String) -> URL? {
+    guard isCompletePairingCode(code),
+          var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+        return nil
+    }
+    components.path = "/cross-network"
+    components.query = nil
+    components.percentEncodedFragment = "c=\(code)"
+    return components.url
+}
+
+/// The public Relayium join URL used by first-party native surfaces.
+///
+/// Keeping the production origin out of the view layer leaves URL policy in
+/// one shared, testable place.
+public func productionPairingJoinURL(code: String) -> URL? {
+    pairingJoinURL(baseURL: AppEnvironment.productionBaseURL, code: code)
+}
+
 /// Parse only links that the production Associated Domains entitlement can
 /// deliver. This intentionally does not reuse `parseTransferLink`'s
 /// self-host-friendly origin policy: an OS-level app handoff is a trust boundary,

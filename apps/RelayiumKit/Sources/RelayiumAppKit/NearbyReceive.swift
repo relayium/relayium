@@ -204,11 +204,15 @@ public final class NearbyReceiveModel: ObservableObject, NearbyRoomObserver {
         // answer and its candidates have nowhere to go. Release it so the next
         // socket is free to accept, and discard the buffer that was waiting for
         // a connection that will never be built.
-        gate.releaseIfPending()
+        let releasedPendingAttempt = gate.releaseIfPending()
         // A builder that runs after this point must fail rather than reach for
         // whatever room we join next.
         room.signaling = nil
-        pendingKind = nil
+        // A handed-off inbound session survives loss of the roster socket on
+        // its DataChannel. Keep its kind so the UI remains on the surface that
+        // is still presenting it; only an attempt that never reached handoff is
+        // retired here.
+        if releasedPendingAttempt { pendingKind = nil }
         refreshActivity()
     }
 
@@ -329,7 +333,12 @@ public final class NearbyReceiveModel: ObservableObject, NearbyRoomObserver {
             if !gate.isEngaged { pendingKind = nil }
         }
 
-        if let kind = liveKind ?? pendingKind {
+        // pendingKind is set only by an offer this receive model admitted.
+        // The realtime models are shared with outbound Nearby and pairing-code
+        // flows, so deriving this from "whichever model is busy" mislabels an
+        // outbound session as unsolicited receive and makes the shell jump to
+        // Nearby. Keep the inbound identity we already own instead.
+        if let kind = pendingKind {
             activeKind = kind
             state = .active(kind)
             return
@@ -353,14 +362,6 @@ public final class NearbyReceiveModel: ObservableObject, NearbyRoomObserver {
         case .joined:
             state = .ready
         }
-    }
-
-    /// Which model is busy, if either. File wins an impossible tie only so this
-    /// is total; the two are mutually exclusive by construction.
-    private var liveKind: NearbyReceiveKind? {
-        if fileModel.isBusy { return .file }
-        if textModel.isBusy { return .text }
-        return nil
     }
 
     public func clearFailure() { lastFailure = nil }
@@ -520,10 +521,13 @@ final class InboundGate: @unchecked Sendable {
 
     /// Release only an attempt that never got its connection. A live session
     /// keeps the gate — it is the thing making us busy.
-    func releaseIfPending() {
+    @discardableResult
+    func releaseIfPending() -> Bool {
         lock.lock()
-        if case .reserved = phase { phase = .idle }
-        lock.unlock()
+        defer { lock.unlock() }
+        guard case .reserved = phase else { return false }
+        phase = .idle
+        return true
     }
 
     /// Release only a handed-off session. Called once the models report nothing

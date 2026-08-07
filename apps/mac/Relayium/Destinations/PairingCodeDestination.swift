@@ -25,7 +25,12 @@ struct PairingCodeDestination: View {
     }
 
     private var gate: AccountGate {
-        AccountGate.from(session.state, bearer: session.bearerToken)
+        #if DEBUG
+        if UITestMode.isActive {
+            return .allowed(AccountAccess(token: "ui-test", retentionSecs: 86_400))
+        }
+        #endif
+        return AccountGate.from(session.state, bearer: session.bearerToken)
     }
 
     var body: some View {

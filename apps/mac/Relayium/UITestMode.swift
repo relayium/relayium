@@ -1,4 +1,6 @@
 import Foundation
+import RelayiumAppKit
+import RelayiumKit
 
 /// Whether this process was launched by the UI test suite.
 ///
@@ -34,4 +36,35 @@ enum UITestMode {
     /// guarded work is unconditional and the argument means nothing.
     static let isActive = false
     #endif
+
+    #if DEBUG
+    /// A deterministic code-creation path for UI tests. It changes no Release
+    /// behavior and never opens a network connection: mint succeeds locally,
+    /// then ICE lookup waits until the test process ends so the screen remains
+    /// on the handoff state a person needs time to read and share.
+    @MainActor
+    static func makeRealtimeTextModel(verification: VerificationPreference) -> RealtimeTextSessionModel {
+        RealtimeTextSessionModel(
+            pairClient: UITestPairClient(),
+            iceClient: UITestWaitingICEClient(),
+            requiresVerification: { verification.requiresSASConfirmation },
+            makeConnection: { _, _, _ in throw AccountError.network }
+        )
+    }
+    #endif
 }
+
+#if DEBUG
+private struct UITestPairClient: PairCodeClient {
+    func mint(token: String) async throws -> MintedCode {
+        MintedCode(code: "483920", expiresAt: 4_102_444_800)
+    }
+}
+
+private struct UITestWaitingICEClient: ICEConfigClient {
+    func fetch(code: String) async throws -> ICEConfig {
+        try await Task.sleep(nanoseconds: 300_000_000_000)
+        throw AccountError.network
+    }
+}
+#endif

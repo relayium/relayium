@@ -139,8 +139,11 @@ struct DirectPane: View {
                           dateStyle: .none, timeStyle: .short),
             ]))
                 .font(.caption).foregroundStyle(.secondary)
-            QRCodeView(url: "\(AppEnvironment.productionBaseURL.absoluteString)/cross-network#c=\(code)")
-            Text(L10n.t(.directScanOnPhone)).font(.caption).foregroundStyle(.secondary)
+            if let joinURL = productionPairingJoinURL(code: code) {
+                QRCodeView(url: joinURL.absoluteString)
+                Text(L10n.t(.directScanOnPhone)).font(.caption).foregroundStyle(.secondary)
+                PairingJoinLinkView(url: joinURL)
+            }
             ProgressView(L10n.t(.directWaitingForDevice)).controlSize(.small)
             Button(L10n.t(.commonCancel)) { model.cancel() }
         }

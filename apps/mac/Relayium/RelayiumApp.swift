@@ -246,8 +246,15 @@ struct RelayiumApp: App {
         let inboundRoom = InboundRoom()
         let files = AppEnvironment.makeRealtimeModel(
             verification: prefs, nearby: nearby, inboundRoom: inboundRoom)
+        #if DEBUG
+        let text = UITestMode.isActive
+            ? UITestMode.makeRealtimeTextModel(verification: prefs)
+            : AppEnvironment.makeRealtimeTextModel(
+                verification: prefs, nearby: nearby, inboundRoom: inboundRoom)
+        #else
         let text = AppEnvironment.makeRealtimeTextModel(
             verification: prefs, nearby: nearby, inboundRoom: inboundRoom)
+        #endif
         let receive = AppEnvironment.makeNearbyReceiveModel(
             fileModel: files, textModel: text, discovery: nearby, inboundRoom: inboundRoom)
         // One key store for the whole app: the upload model writes a key here,

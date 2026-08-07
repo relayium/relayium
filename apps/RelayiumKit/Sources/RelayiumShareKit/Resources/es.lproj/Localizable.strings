@@ -159,6 +159,8 @@
 "direct.receiveHeading" = "Recibir";
 "direct.creatingCode" = "Creando un código…";
 "direct.giveCode" = "Dale este código al otro dispositivo";
+"pairing.joinLink" = "Enlace para unirse";
+"pairing.linkCopied" = "Enlace copiado";
 "direct.scanOnPhone" = "O escanéalo con un teléfono.";
 "direct.waitingForDevice" = "Esperando al otro dispositivo…";
 "direct.chooseFilesFirst" = "Elige primero los archivos o carpetas que quieres enviar.";

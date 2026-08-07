@@ -44,6 +44,23 @@ final class AppDeepLinkTests: XCTestCase {
         XCTAssertFalse(isCompletePairingCode("48392a"))
     }
 
+    func testBuildsAParseableBrowserJoinLinkWithoutChangingLeadingZeros() {
+        let url = pairingJoinURL(baseURL: URL(string: "https://relayium.com")!,
+                                 code: "004291")
+        XCTAssertEqual(url?.absoluteString,
+                       "https://relayium.com/cross-network#c=004291")
+        XCTAssertEqual(url.flatMap(parseAppDeepLink), .realtime(code: "004291"))
+        XCTAssertNil(pairingJoinURL(baseURL: URL(string: "https://relayium.com")!,
+                                    code: "4291"))
+    }
+
+    func testProductionJoinLinkUsesTheClaimedWebRoute() throws {
+        let url = try XCTUnwrap(productionPairingJoinURL(code: "004291"))
+        XCTAssertEqual(url.absoluteString,
+                       "https://relayium.com/cross-network#c=004291")
+        XCTAssertEqual(parseAppDeepLink(url), .realtime(code: "004291"))
+    }
+
     func testRejectsUntrustedOrMalformedHandoffs() {
         let rejected = [
             "http://relayium.com/d/a#k=K",

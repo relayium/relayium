@@ -444,6 +444,10 @@ final class NearbyReceiveTests: XCTestCase {
         await fileModel.connectNearby(peerId: "chosen-7")
         await settle(until: { self.fileModel.isBusy })
         XCTAssertEqual(fileModel.state, .connecting)
+        XCTAssertNil(receive.activeKind,
+                     "an outbound session is not an unsolicited Nearby receive")
+        XCTAssertEqual(receive.state, .ready,
+                       "residency must not claim an outbound pairing/Nearby session")
         channel.sent.removeAll()
 
         channel.fireText(fileOffer(from: "stranger-2"))
@@ -611,6 +615,23 @@ final class NearbyReceiveTests: XCTestCase {
 
         XCTAssertTrue(inbound.peerIds.isEmpty, "no connection may be built against a room we left")
         guard case .failed = fileModel.state else { return XCTFail("got \(fileModel.state)") }
+    }
+
+    /// Once the responder has been handed to the transfer model, the roster
+    /// socket is no longer its transport. Losing discovery must not make the
+    /// shell abandon a live inbound transfer that continues on its DataChannel.
+    func testRosterDisconnectDoesNotHideAHandedOffInboundSession() async {
+        channel.fireText(fileOffer(from: "peer-1"))
+        await settle(until: { self.inbound.latest != nil })
+
+        XCTAssertEqual(receive.activeKind, .file)
+        XCTAssertEqual(receive.state, .active(.file))
+
+        channel.fireRemoteClose()
+        await settle()
+
+        XCTAssertEqual(receive.activeKind, .file)
+        XCTAssertEqual(receive.state, .active(.file))
     }
 
     // MARK: - following the socket

@@ -86,7 +86,10 @@ struct RealtimeTextPane: View {
             ]))
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            QRCodeView(url: "\(AppEnvironment.productionBaseURL.absoluteString)/cross-network#c=\(code)")
+            if let joinURL = productionPairingJoinURL(code: code) {
+                QRCodeView(url: joinURL.absoluteString)
+                PairingJoinLinkView(url: joinURL)
+            }
             ProgressView(L10n.t(.directWaitingForDevice)).controlSize(.small)
             Button(L10n.t(.commonCancel)) { model.end() }
         }

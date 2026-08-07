@@ -2083,7 +2083,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "sharing the flat file list would flatten the folder at the destination")
     }
 
-    /// **The pasteboard is written once, by a button the user pressed, and is
+    /// **The pasteboard is written only by buttons the user pressed, and is
     /// never read.**
     ///
     /// This replaces the blanket ban `UIPasteboard` carried through four slices.
@@ -2095,13 +2095,20 @@ final class IOSSurfaceGuardTests: XCTestCase {
     func testThePasteboardIsWrittenOnlyInsideAnExplicitCopyActionAndNeverRead() throws {
         let all = try sources()
         let holders = all.filter { $0.text.contains("UIPasteboard") }.map(\.name).sorted()
-        XCTAssertEqual(holders, ["DirectTextSessionView.swift"],
+        XCTAssertEqual(holders, ["DirectTextSessionView.swift", "DirectView.swift"],
                        "the pasteboard is reachable from somewhere other than Copy")
+        let expectedWrites = [
+            "DirectTextSessionView.swift": "UIPasteboard.general.string = message.body",
+            "DirectView.swift": "UIPasteboard.general.string = url.absoluteString",
+        ]
+        for (name, write) in expectedWrites {
+            let view = try XCTUnwrap(all.first { $0.name == name })
+            XCTAssertEqual(view.text.components(separatedBy: "UIPasteboard").count - 1, 1,
+                           "\(name) must have one pasteboard mention to review")
+            XCTAssertTrue(view.text.contains(write),
+                          "\(name) must only write the value its Copy button belongs to")
+        }
         let view = try XCTUnwrap(all.first { $0.name == "DirectTextSessionView.swift" })
-        XCTAssertEqual(view.text.components(separatedBy: "UIPasteboard").count - 1, 1,
-                       "one mention, so there is one thing to review")
-        XCTAssertTrue(view.text.contains("UIPasteboard.general.string = message.body"),
-                      "the one use must be a write of the message the button belongs to")
         // Every read API, by name. `.string =` above is an assignment; these are
         // the forms that take something OUT.
         for reader in ["UIPasteboard.general.string)", "UIPasteboard.general.hasStrings",

@@ -159,6 +159,8 @@
 "direct.receiveHeading" = "接收";
 "direct.creatingCode" = "正在创建配对码…";
 "direct.giveCode" = "把这个配对码告诉对方设备";
+"pairing.joinLink" = "加入链接";
+"pairing.linkCopied" = "链接已复制";
 "direct.scanOnPhone" = "也可以用手机扫描。";
 "direct.waitingForDevice" = "正在等待对方设备…";
 "direct.chooseFilesFirst" = "请先选择要发送的文件或文件夹。";

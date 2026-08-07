@@ -162,6 +162,8 @@
 "direct.receiveHeading" = "استقبال";
 "direct.creatingCode" = "جارٍ إنشاء رمز…";
 "direct.giveCode" = "أعطِ هذا الرمز للجهاز الآخر";
+"pairing.joinLink" = "رابط الانضمام";
+"pairing.linkCopied" = "تم نسخ الرابط";
 "direct.scanOnPhone" = "أو امسحه ضوئيًا بهاتف.";
 "direct.waitingForDevice" = "في انتظار الجهاز الآخر…";
 "direct.chooseFilesFirst" = "اختر أولًا الملفات أو المجلدات المراد إرسالها.";

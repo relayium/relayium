@@ -1,7 +1,44 @@
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 import RelayiumAppKit
 import RelayiumKit
+
+private struct PairingJoinLinkView: View {
+    let url: URL
+    @State private var copied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L10n.t(.pairingJoinLink))
+                .font(.footnote.weight(.semibold))
+            Text(url.absoluteString)
+                .font(.footnote.monospaced())
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+
+            HStack {
+                Button {
+                    UIPasteboard.general.string = url.absoluteString
+                    copied = true
+                } label: {
+                    Label(L10n.t(.commonCopy), systemImage: "doc.on.doc")
+                }
+                ShareLink(item: url) {
+                    Label(L10n.t(.commonShare), systemImage: "square.and.arrow.up")
+                }
+            }
+            .buttonStyle(.bordered)
+
+            if copied {
+                Label(L10n.t(.pairingLinkCopied), systemImage: "checkmark")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
 
 /// R3-E: transfer straight to another device with six digits, across networks.
 ///
@@ -365,6 +402,9 @@ struct DirectView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(heading).font(.headline)
             PairingCodeText(code: code, style: .pairing)
+            if let joinURL = productionPairingJoinURL(code: code) {
+                PairingJoinLinkView(url: joinURL)
+            }
             Text(L10n.t(.commonExpires, [
                 L10n.date(Date(timeIntervalSince1970: TimeInterval(expiresAt)),
                           dateStyle: .none, timeStyle: .short),

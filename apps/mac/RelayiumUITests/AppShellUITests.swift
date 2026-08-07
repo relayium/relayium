@@ -77,6 +77,37 @@ final class AppShellUITests: XCTestCase {
         }
     }
 
+    /// The exact launch-blocking path reported from the installed app: creating
+    /// a pairing-code text session must not be mistaken for unsolicited Nearby
+    /// receive, and its handoff must be usable without transcribing six digits.
+    func testCreatingATextCodeStaysOnPairingAndShowsEveryHandoff() {
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+
+        let pairing = window.descendants(matching: .any)["Pairing code"]
+        XCTAssertTrue(pairing.waitForExistence(timeout: 10))
+        pairing.click()
+
+        let textMode = window.buttons["Text"]
+        XCTAssertTrue(textMode.waitForExistence(timeout: 10))
+        textMode.click()
+
+        let create = window.buttons["Create a text code"]
+        XCTAssertTrue(create.waitForExistence(timeout: 10))
+        create.click()
+
+        XCTAssertTrue(window.staticTexts["483920"].waitForExistence(timeout: 10),
+                      "the generated pairing code was not visible")
+        XCTAssertTrue(window.staticTexts["Join link"].exists,
+                      "the generated code has no visible browser handoff")
+        XCTAssertTrue(window.buttons["Copy"].exists,
+                      "the join link cannot be copied")
+        XCTAssertTrue(window.buttons["Share"].exists,
+                      "the join link cannot use the system share sheet")
+        XCTAssertTrue(window.staticTexts["Pairing code"].exists || window.title == "Pairing code",
+                      "creating a pairing-code text session navigated elsewhere")
+    }
+
     /// Settings opens as a SECOND window rather than a replacement — the main
     /// window must survive it.
     ///

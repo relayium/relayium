@@ -159,6 +159,8 @@
 "direct.receiveHeading" = "Recevoir";
 "direct.creatingCode" = "Création d’un code…";
 "direct.giveCode" = "Communiquez ce code à l’autre appareil";
+"pairing.joinLink" = "Lien pour rejoindre";
+"pairing.linkCopied" = "Lien copié";
 "direct.scanOnPhone" = "Ou scannez ceci avec un téléphone.";
 "direct.waitingForDevice" = "En attente de l’autre appareil…";
 "direct.chooseFilesFirst" = "Choisissez d’abord les fichiers ou dossiers à envoyer.";

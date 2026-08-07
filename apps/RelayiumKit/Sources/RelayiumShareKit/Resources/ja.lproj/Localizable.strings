@@ -159,6 +159,8 @@
 "direct.receiveHeading" = "受信";
 "direct.creatingCode" = "コードを作成しています…";
 "direct.giveCode" = "このコードを相手のデバイスに伝えてください";
+"pairing.joinLink" = "参加リンク";
+"pairing.linkCopied" = "リンクをコピーしました";
 "direct.scanOnPhone" = "スマートフォンで読み取ることもできます。";
 "direct.waitingForDevice" = "相手のデバイスを待っています…";
 "direct.chooseFilesFirst" = "先に送信するファイルまたはフォルダを選んでください。";

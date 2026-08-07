@@ -125,12 +125,12 @@ struct AppShellView: View {
         // tree never saw, `task(id:)` fires on the value it comes back to.
         .task(id: nearbyReceive.activeKind) {
             guard let kind = nearbyReceive.activeKind else { return }
-            navigation.select(AppRouting.destination(forIncoming: kind))
-            // Idempotent, and deliberately duplicated by `NearbyDestination`:
-            // that one claims when nearby is the destination on screen, this
-            // one claims when it is not yet. A claim by the current owner
-            // returns true and changes nothing.
-            presence.claim(.nearby, mode: kind == .file ? .files : .text)
+            // Claim BEFORE navigating. Pairing-code and Nearby use the same
+            // models, so a mistaken/stale publication must not move the user
+            // away from a pairing session that already owns its surface.
+            AppRouting.claimIncoming(kind,
+                                     presence: presence,
+                                     navigation: navigation)
         }
     }
 }

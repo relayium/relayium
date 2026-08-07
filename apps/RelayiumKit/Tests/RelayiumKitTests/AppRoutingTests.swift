@@ -59,6 +59,28 @@ final class AppRoutingTests: XCTestCase {
                        "remembering the form's own switch is not navigation")
     }
 
+    @MainActor func testMacIncomingRoutingClaimsBeforeItNavigates() {
+        let presence = TransferPresence(mode: .files)
+        let nav = AppNavigationModel(selection: .pairingCode)
+        XCTAssertTrue(presence.claim(.pairingCode, mode: .text))
+
+        XCTAssertFalse(AppRouting.claimIncoming(
+            .text, presence: presence, navigation: nav))
+        XCTAssertEqual(presence.owner, .pairingCode)
+        XCTAssertEqual(presence.mode, .text)
+        XCTAssertEqual(nav.selection, .pairingCode,
+                       "a refused claim must not switch Pairing code to Nearby")
+        XCTAssertEqual(nav.selectionWrites, 0)
+
+        presence.release(.pairingCode)
+        XCTAssertTrue(AppRouting.claimIncoming(
+            .file, presence: presence, navigation: nav))
+        XCTAssertEqual(presence.owner, .nearby)
+        XCTAssertEqual(presence.mode, .files)
+        XCTAssertEqual(nav.selection, .nearby)
+        XCTAssertEqual(nav.selectionWrites, 1)
+    }
+
     @MainActor func testLaterEventWinsAndNeitherClearsTheOther() {
         let nav = AppNavigationModel()
         nav.select(AppRouting.destination(forIncoming: .file))
