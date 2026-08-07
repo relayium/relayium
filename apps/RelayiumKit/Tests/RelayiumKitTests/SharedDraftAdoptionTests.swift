@@ -169,6 +169,8 @@ final class SharedDraftAdoptionTests: XCTestCase {
 
         XCTAssertEqual(send.sharedDrafts.map(\.id), [plan.id])
         XCTAssertEqual(send.sharedDrafts.first?.fileCount, 1)
+        XCTAssertEqual(send.sharedDrafts.first?.files,
+                       [FileMeta(name: "shared.txt", size: 6)])
 
         send.useSharedDraft(plan.id)
         XCTAssertEqual(send.sharedDraftRefusal,

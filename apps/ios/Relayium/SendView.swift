@@ -107,6 +107,11 @@ struct SendView: View {
                                            countStyle: .file))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+            // Safe manifest identities only — no App Group path or staged URL.
+            // This is the decision point between several waiting drafts, so a
+            // count and total are not enough to tell the user which one Use or
+            // Discard will act on.
+            PendingFileList(sessionFiles: draft.files)
 
             // The refusal, in words, above the control it explains. A disabled
             // button with no sentence beside it is indistinguishable from a bug,

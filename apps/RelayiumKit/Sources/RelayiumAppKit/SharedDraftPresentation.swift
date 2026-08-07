@@ -1,25 +1,32 @@
 import Foundation
+import RelayiumKit
 import RelayiumShareKit
 
 /// One waiting shared draft, as the Send surface renders it.
 ///
-/// Deliberately not the plan: a view has no business holding the file list of
-/// something the user has not adopted yet, and the count and the byte total are
-/// the whole of what the card says. The names stay on disk until the draft is
-/// actually used.
+/// Deliberately not the plan: the view receives no staged URLs or container
+/// layout. It does receive the manifest-safe display identity and size of each
+/// file, because a count and total cannot distinguish several waiting drafts or
+/// answer what the user is about to adopt.
 public struct SharedDraftSummary: Equatable, Identifiable, Sendable {
     public let id: String
     public let fileCount: Int
     public let totalBytes: Int
+    public let files: [FileMeta]
 
-    public init(id: String, fileCount: Int, totalBytes: Int) {
+    public init(id: String, fileCount: Int, totalBytes: Int, files: [FileMeta] = []) {
         self.id = id
         self.fileCount = fileCount
         self.totalBytes = totalBytes
+        self.files = files
     }
 
     public init(_ plan: SharedDraftPlan) {
-        self.init(id: plan.id, fileCount: plan.files.count, totalBytes: plan.totalBytes)
+        self.init(id: plan.id, fileCount: plan.files.count, totalBytes: plan.totalBytes,
+                  files: plan.files.map { file in
+                      FileMeta(name: file.name, size: file.size,
+                               path: file.name.contains("/") ? file.name : nil)
+                  })
     }
 }
 

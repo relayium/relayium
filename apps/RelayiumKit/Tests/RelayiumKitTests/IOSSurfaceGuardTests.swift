@@ -86,6 +86,21 @@ final class IOSSurfaceGuardTests: XCTestCase {
             "stored upload lost file identities in a running or terminal state")
     }
 
+    /// Waiting share drafts are send choices too. Several can have the same
+    /// count and total, so each card must expose its safe manifest identities
+    /// before Use or destructive Discard.
+    func testWaitingSharedDraftCardsShowNamesAndSizesWithoutContainerURLs() throws {
+        let view = try XCTUnwrap(try sources().first { $0.name == "SendView.swift" })
+        guard let card = view.text.range(of: "private func sharedDraftCard"),
+              let draftsEnd = view.text.range(of: "private var availability",
+                                              range: card.lowerBound..<view.text.endIndex) else {
+            return XCTFail("SendView lost its waiting shared-draft card")
+        }
+        let body = view.text[card.lowerBound..<draftsEnd.lowerBound]
+        XCTAssertTrue(body.contains("PendingFileList(sessionFiles: draft.files)"))
+        XCTAssertFalse(body.contains("draft.url"))
+    }
+
     func testEveryIOSFileListUsesTheSharedSafeLocalizedIdentity() throws {
         let all = try sources()
         for name in ["PendingFileList.swift", "DirectFileSessionView.swift",
