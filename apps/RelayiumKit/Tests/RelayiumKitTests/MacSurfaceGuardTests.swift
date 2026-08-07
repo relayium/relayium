@@ -180,6 +180,27 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "Open can replace a live download")
     }
 
+    /// A generated stored link is a handoff result, not merely selectable text.
+    /// macOS must provide the platform share sheet like iOS does, acknowledge a
+    /// deliberate copy, and present the state-changing next-task boundary as a
+    /// Button rather than an accessibility Link.
+    func testStoredSendResultHasCompleteHandoffAndButtonSemantics() throws {
+        let source = try source(named: "UploadPane.swift")
+        let terminal = try XCTUnwrap(source.components(
+            separatedBy: "private func linkReadyCard").dropFirst().first)
+            .components(separatedBy: "private func failureCard").first ?? ""
+
+        XCTAssertTrue(terminal.contains("ShareLink(item: link)"),
+                      "the generated link has no system Share action")
+        XCTAssertTrue(terminal.contains("copiedLink = link"),
+                      "Copy gives no visible acknowledgement")
+        XCTAssertTrue(terminal.contains("copiedLink == link"),
+                      "copy acknowledgement can leak into a later result")
+        XCTAssertTrue(terminal.contains("Button(L10n.t(.uploadSendAnother))"))
+        XCTAssertFalse(terminal.contains("buttonStyle(.link)"),
+                       "Send another is exposed as a navigation Link")
+    }
+
     private func occurrences(of needle: String, in text: String) -> Int {
         text.components(separatedBy: needle).count - 1
     }

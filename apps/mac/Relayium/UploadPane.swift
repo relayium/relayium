@@ -29,6 +29,10 @@ struct UploadPane: View {
     /// are kept in step through `model.pick`, so the model still refuses an
     /// oversized file and still has something to return to after a cancel.
     @StateObject private var selection = SelectionStore()
+    /// Copy confirmation belongs to the exact generated link. Keeping the
+    /// string, rather than a bare flag, prevents a later upload from inheriting
+    /// the previous result's confirmation.
+    @State private var copiedLink: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -209,19 +213,33 @@ struct UploadPane: View {
             // old fixed "this link is the only copy" line was false on the
             // common path — and it contradicted the warning on the rare one.
             keyNotice(UploadPresentation.keyNotice(warning: keyWarning))
+            Text(link).textSelection(.enabled).lineLimit(1).truncationMode(.middle)
             HStack {
-                Text(link).textSelection(.enabled).lineLimit(1).truncationMode(.middle)
                 Button(L10n.t(.commonCopy)) {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(link, forType: .string)
+                    copiedLink = link
+                }
+                ShareLink(item: link) {
+                    Label(L10n.t(.commonShare), systemImage: "square.and.arrow.up")
+                }
+                if copiedLink == link {
+                    Label(L10n.t(.pairingLinkCopied), systemImage: "checkmark")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
+            .buttonStyle(.bordered)
             Text(L10n.t(.commonExpires, [
                 L10n.date(Date(timeIntervalSince1970: TimeInterval(expiresAt)),
                           dateStyle: .medium, timeStyle: .short),
             ]))
                 .font(.caption).foregroundStyle(.secondary)
-            Button(L10n.t(.uploadSendAnother)) { model.reset() }.buttonStyle(.link)
+            Button(L10n.t(.uploadSendAnother)) {
+                copiedLink = nil
+                model.reset()
+            }
+            .buttonStyle(.bordered)
         }
     }
 
