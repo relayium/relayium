@@ -200,6 +200,8 @@ struct DirectView: View {
             // `cancel`, not a bare reset: the failure may have left a partial
             // write to discard, and `.failed` still holds the dead connection.
             Button(L10n.t(.commonDone)) { file.cancel() }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
         case .minting:
             ProgressView { Text(L10n.t(.directCreatingCode)) }
             PendingFileList(sessionFiles: file.sessionFiles)
@@ -283,6 +285,8 @@ struct DirectView: View {
         case .failed, .ended, .refused, .unsupported:
             DirectTextSessionView(model: text)
             Button(L10n.t(.commonDone)) { text.reset() }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
         case .minting:
             ProgressView { Text(L10n.t(.textCreatingCode)) }
             Button(L10n.t(.commonCancel)) { text.reset() }

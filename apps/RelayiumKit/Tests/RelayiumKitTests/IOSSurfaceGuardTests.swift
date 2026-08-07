@@ -2171,6 +2171,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(fileIdle.contains("createFiles"))
         XCTAssertTrue(fileIdle.contains("joinCard("))
         XCTAssertTrue(fileFailed.contains("L10n.t(.commonDone)"))
+        XCTAssertTrue(fileFailed.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(fileFailed.contains(".controlSize(.large)"))
         XCTAssertFalse(fileFailed.contains("createFiles"),
                        "a failed file session can be replaced before cleanup")
         XCTAssertFalse(fileFailed.contains("joinCard("),
@@ -2189,6 +2191,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(textIdle.contains("joinCard("))
         XCTAssertTrue(textTerminal.contains("DirectTextSessionView(model: text)"))
         XCTAssertTrue(textTerminal.contains("L10n.t(.commonDone)"))
+        XCTAssertTrue(textTerminal.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(textTerminal.contains(".controlSize(.large)"))
         XCTAssertFalse(textTerminal.contains("createText"),
                        "a terminal transcript can be replaced before Done")
         XCTAssertFalse(textTerminal.contains("joinCard("),
