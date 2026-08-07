@@ -508,6 +508,16 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "a claimed owner made the terminal exit permanently unreachable")
     }
 
+    func testNearbyTextHistoryCannotBeDiscardedByAnUnconfirmedExit() throws {
+        let source = try source(named: "NearbyPane.swift")
+        XCTAssertTrue(source.contains("@State private var confirmingTextHistoryLeave = false"))
+        XCTAssertTrue(source.contains("if mode == .text, !textModel.history.isEmpty"))
+        XCTAssertTrue(source.contains(
+            "Button(L10n.t(.nearbyBackToDevices), role: .destructive) { leaveSession() }"))
+        XCTAssertTrue(source.contains("L10n.t(.textClearHistoryConfirmTitle)"))
+        XCTAssertTrue(source.contains("L10n.t(.textClearHistoryConfirmBody)"))
+    }
+
     /// Copying ephemeral text changes the system clipboard, but previously gave
     /// no success signal. Feedback must follow the exact row and disappear when
     /// its history entry does, without retaining another plaintext body in view

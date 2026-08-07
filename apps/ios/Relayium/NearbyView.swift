@@ -76,6 +76,7 @@ struct NearbyView: View {
     /// state: nothing was connected, so a `.failed` session would offer a retry
     /// that retries nothing.
     @State private var actionError: String?
+    @State private var confirmingTextHistoryLeave = false
 
     private var busy: Bool { file.isBusy || text.isBusy }
     /// Ownership is published before an async start, so it cannot by itself
@@ -124,6 +125,18 @@ struct NearbyView: View {
                       allowedContentTypes: [.item, .folder],
                       allowsMultipleSelection: true) { result in
             selection.chooseFiles(result)
+        }
+        .confirmationDialog(
+            L10n.t(.textClearHistoryConfirmTitle),
+            isPresented: $confirmingTextHistoryLeave,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.t(.nearbyBackToDevices), role: .destructive) { leaveSession() }
+            Button(L10n.t(.commonCancel), role: .cancel) {
+                confirmingTextHistoryLeave = false
+            }
+        } message: {
+            Text(L10n.t(.textClearHistoryConfirmBody))
         }
     }
 
@@ -454,7 +467,7 @@ struct NearbyView: View {
                 DirectTextSessionView(model: text)
             }
             if hasRetainedSession && !busy {
-                Button(L10n.t(.nearbyBackToDevices)) { leaveSession() }
+                Button(L10n.t(.nearbyBackToDevices)) { leaveOrConfirm() }
                     .buttonStyle(.bordered)
                     .controlSize(.large)
                 if modes.mode == .text {
@@ -586,5 +599,13 @@ struct NearbyView: View {
         selection.clear()
         actionError = nil
         presence.release(.nearby)
+    }
+
+    private func leaveOrConfirm() {
+        if modes.mode == .text, !text.history.isEmpty {
+            confirmingTextHistoryLeave = true
+        } else {
+            leaveSession()
+        }
     }
 }

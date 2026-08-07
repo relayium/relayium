@@ -34,6 +34,7 @@ struct NearbyPane: View {
 
     @StateObject private var selection = SelectionStore()
     @State private var stagingError: String?
+    @State private var confirmingTextHistoryLeave = false
 
     /// Whether either shared model is actively setting up or transferring.
     private var modelBusy: Bool { fileModel.isBusy || textModel.isBusy }
@@ -71,6 +72,18 @@ struct NearbyPane: View {
         }
         .onChange(of: textModel.state) { state in
             if mode == .text, state == .idle { presence.release(.nearby) }
+        }
+        .confirmationDialog(
+            L10n.t(.textClearHistoryConfirmTitle),
+            isPresented: $confirmingTextHistoryLeave,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.t(.nearbyBackToDevices), role: .destructive) { leaveSession() }
+            Button(L10n.t(.commonCancel), role: .cancel) {
+                confirmingTextHistoryLeave = false
+            }
+        } message: {
+            Text(L10n.t(.textClearHistoryConfirmBody))
         }
     }
 
@@ -306,7 +319,7 @@ struct NearbyPane: View {
                 RealtimeTextSessionView(model: textModel)
             }
             if hasRetainedSession && !modelBusy {
-                Button(L10n.t(.nearbyBackToDevices)) { leaveSession() }
+                Button(L10n.t(.nearbyBackToDevices)) { leaveOrConfirm() }
                     // This is not navigation: it tears down the connection,
                     // removes a partial receive, clears text history and drops
                     // the staged selection. Match iOS and publish that task
@@ -399,5 +412,13 @@ struct NearbyPane: View {
         }
         selection.clear()
         presence.release(.nearby)
+    }
+
+    private func leaveOrConfirm() {
+        if mode == .text, !textModel.history.isEmpty {
+            confirmingTextHistoryLeave = true
+        } else {
+            leaveSession()
+        }
     }
 }
