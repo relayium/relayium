@@ -116,6 +116,9 @@ final class AppShellUITests: XCTestCase {
                       "the generated pairing code was not visible")
         XCTAssertTrue(window.staticTexts["Join link"].exists,
                       "the generated code has no visible browser handoff")
+        let expectedLink = "https://relayium.com/cross-network?mode=text#c=483920"
+        XCTAssertTrue(window.staticTexts[expectedLink].exists,
+                      "the visible handoff did not preserve the created Text mode")
         XCTAssertTrue(window.buttons["Copy"].exists,
                       "the join link cannot be copied")
         XCTAssertTrue(window.buttons["Share"].exists,

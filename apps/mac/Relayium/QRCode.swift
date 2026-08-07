@@ -8,8 +8,8 @@ import RelayiumAppKit
 /// `CIQRCodeGenerator` ships with macOS, so this costs no dependency. The link
 /// carries the pairing code in the fragment (`#c=<code>`), the form
 /// `web/src/lib/transfer-link.ts` already builds so it never reaches a server
-/// log or a Referer header — a phone that scans it lands in the web app and
-/// joins the room, with no native app and no Universal Links involved.
+/// log or a Referer header. A phone that scans it can continue in a browser or,
+/// when its OS has associated Relayium, hand it to the native app.
 struct QRCodeView: View {
     let url: String
     var side: CGFloat = 160
