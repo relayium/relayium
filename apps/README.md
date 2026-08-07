@@ -255,9 +255,18 @@ What this slice does **not** claim to beat the Web at:
   dies with the app. The quit guard warns about that rather than fixing it.
 - **Some workflows that start outside the app.** As of 2026-08-06 macOS has
   three out-of-app entry points — a Dock drop target and a Finder **Open With**
-  (`CFBundleDocumentTypes`, `LSHandlerRank = None` so Relayium is never proposed
-  as a default handler for anything), and a Share extension. There is still no
-  `NSServices` entry and no Quick Action.
+  (`CFBundleDocumentTypes` over `public.data` and `public.folder`), and a Share
+  extension. There is still no `NSServices` entry and no Quick Action.
+
+  **Open With needs `LSHandlerRank = Alternate`, measured.** The declaration
+  shipped at `None` in the notarized 1.0 build on the belief that `None` still
+  honoured an explicit choice. Installing that build on 2026-08-07 showed the
+  opposite: Finder's Open With menu did not list Relayium at all. `Alternate`
+  makes Relayium an explicit secondary candidate in that menu; the `Viewer` role
+  and the refusal to use `Owner` are what keep it from being proposed as the
+  default handler for every file and folder. The source is corrected; a build
+  with the fix has not yet been installed and re-checked, so Open With is not
+  yet a delivered entry point.
 
   **The Share extension starts switched off.** macOS keeps every new third-party
   sharing extension disabled until the user allows it under Extensions ▸

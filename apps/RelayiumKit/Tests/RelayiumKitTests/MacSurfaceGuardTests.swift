@@ -848,30 +848,45 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertEqual(Set(panes.map(\.destination)).count, panes.count)
     }
 
-    /// The document-type declaration that makes the app a Dock drop target — and
-    /// the one line that keeps it from becoming the Mac's default handler for
-    /// every file on disk.
+    /// The document-type declaration that makes the app a Dock drop target and a
+    /// Finder "Open With" entry — and the one line that keeps it from becoming
+    /// the Mac's default handler for every file on disk.
     ///
-    /// `LSHandlerRank` = `None` is not boilerplate here. The declared types are
+    /// `LSHandlerRank` = `Alternate` is not boilerplate, and it is asserted from
+    /// a measurement. This entry shipped at `None`, and on 2026-08-07 the owner
+    /// installed the notarized 1.0 build and found that Finder's Open With menu
+    /// did not list Relayium at all; the installed plist named `None` as the
+    /// cause. `None` excludes the app from the menu rather than reserving it for
+    /// an explicit choice, so the earlier version of this guard asserted the
+    /// wrong string for the right reason.
+    ///
+    /// `Alternate` is the rank that makes Relayium an explicit secondary
+    /// candidate. `Owner` is rejected below: the declared types are
     /// `public.data` and `public.folder` deliberately, because "send this" is not
-    /// a format question; at any other rank that breadth offers Launch Services a
-    /// candidate default handler for everything, and a utility that opened the
-    /// user's documents instead of their editor is a support incident. Nothing at
-    /// runtime would reveal the regression — it is a plist string.
-    func testTheAppAcceptsEveryFileWithoutClaimingToOwnAnyType() throws {
+    /// a format question, and at `Owner` that breadth would offer Launch Services
+    /// a default handler for everything — a utility that opened the user's
+    /// documents instead of their editor is a support incident. Nothing at
+    /// runtime would reveal either regression; it is a plist string.
+    func testTheAppIsOfferedForEveryFileWithoutClaimingToOwnAnyType() throws {
         let plist = try String(contentsOf: macRoot.appendingPathComponent("Info.plist"),
                                encoding: .utf8)
+        let flat = flattened(plist)
         XCTAssertTrue(plist.contains("<key>CFBundleDocumentTypes</key>"),
                       "without a document type there is no Dock drop target and no Open With")
         for type in ["public.data", "public.folder"] {
             XCTAssertTrue(plist.contains("<string>\(type)</string>"),
                           "\(type) is missing; that half of what a user can send is unreachable")
         }
-        XCTAssertTrue(flattened(plist).contains("<key>LSHandlerRank</key> <string>None</string>"),
-                      "any rank but None offers Relayium as a default handler for every file")
+        XCTAssertTrue(flat.contains("<key>LSHandlerRank</key> <string>Alternate</string>"),
+                      "Alternate is what puts Relayium in Finder's Open With as a secondary candidate")
+        XCTAssertFalse(flat.contains("<key>LSHandlerRank</key> <string>None</string>"),
+                       "None was measured on the installed 1.0 build to exclude Relayium from Open With")
+        XCTAssertFalse(flat.contains("<key>LSHandlerRank</key> <string>Owner</string>"),
+                       "Owner would claim the default handler for every file and folder on the Mac")
         XCTAssertFalse(plist.contains("<string>Editor</string>"),
                        "Relayium never writes back to what it is given")
-        XCTAssertTrue(flattened(plist).contains("<key>CFBundleTypeRole</key> <string>Viewer</string>"))
+        XCTAssertTrue(flat.contains("<key>CFBundleTypeRole</key> <string>Viewer</string>"),
+                      "Viewer is the other half of not owning these types")
     }
 
     // MARK: - the Share extension is a second TARGET, and a second process

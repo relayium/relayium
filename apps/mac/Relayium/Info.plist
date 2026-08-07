@@ -39,27 +39,41 @@
 	     the native advantage a desktop app has over the website and the reason
 	     this exists at all.
 
-	     `LSHandlerRank` = `None` is the load-bearing line, not boilerplate. The
-	     content types below are `public.data` and `public.folder` — deliberately
+	     `LSHandlerRank` = `Alternate` is the load-bearing line, not boilerplate,
+	     and it is set from a measurement rather than from reasoning. This entry
+	     shipped at `None` on the belief that `None` still honoured an explicit
+	     Open With. On 2026-08-07 the owner installed the notarized 1.0 build in
+	     /Applications and Finder's Open With menu did not list Relayium at all;
+	     the installed plist confirmed `None` as the cause. `None` does not mean
+	     "never propose me but honour an explicit choice" — on the shipped macOS
+	     behaviour it excluded the app from the menu outright.
+
+	     `Alternate` is the rank that makes Relayium an explicit secondary
+	     candidate: it appears in Open With below the app that owns the type,
+	     without being offered as that type's default. `Owner` is what would
+	     claim primary ownership, and it is rejected — Relayium transports these
+	     items, and a utility that became the Mac's default opener for every file
+	     because it once claimed `public.data` is a support incident, not a
+	     feature. Nothing here changes what a double-click does.
+
+	     The content types stay `public.data` and `public.folder` — deliberately
 	     everything, because "send this" is not a format question and a list of
-	     extensions would be a list of the files a user may NOT send. Declaring
-	     that breadth at any other rank offers Launch Services a candidate
-	     default handler for every file on the Mac: `Owner` and `Alternate` both
-	     compete, and a utility that opened the user's documents instead of their
-	     editor because it once claimed `public.data` is a support incident, not a
-	     feature. `None` means "never propose me, but honour an explicit choice" —
-	     the drop and the Open With still work, and nothing changes for a
-	     double-click.
+	     extensions would be a list of the files a user may NOT send. That breadth
+	     is why the rank must stay at `Alternate` and never rise to `Owner`.
 
 	     `Viewer`, not `Editor`: Relayium never writes back to what it is given.
 	     It reads the bytes, encrypts them and sends them; the original file is
 	     untouched, and `Editor` would additionally make this app a candidate for
 	     "revert to" and document-restore behaviour it does not implement.
 
-	     `CFBundleTypeName` is not localized. At rank `None` it is not surfaced in
-	     the places a type name is read — the Kind column and Get Info both keep
-	     answering with the real owner's name — so nine InfoPlist.strings would be
-	     nine translations of a string this app never displays. -->
+	     `CFBundleTypeName` is not localized. `Alternate` with a `Viewer` role
+	     does not make Relayium the owner of `public.data` or `public.folder`, so
+	     the places a type name is read — the Kind column, Get Info — are expected
+	     to keep answering with the real owner's name, and nine InfoPlist.strings
+	     would be nine translations of a string this app is not expected to
+	     display. That expectation has not been re-measured on an installed
+	     `Alternate` build; the installed Open With acceptance that is still
+	     required is the place to check it. -->
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -68,7 +82,7 @@
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
 			<key>LSHandlerRank</key>
-			<string>None</string>
+			<string>Alternate</string>
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>public.data</string>
