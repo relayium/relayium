@@ -31,6 +31,7 @@ struct DirectTextSessionView: View {
     /// The row id is enough to render feedback; retaining the message here
     /// would duplicate plaintext after the model clears its in-memory history.
     @State private var copiedMessageID: Int?
+    @State private var copiedDraft = false
     @State private var confirmingHistoryClear = false
     @State private var confirmingDraftDiscard = false
 
@@ -67,6 +68,7 @@ struct DirectTextSessionView: View {
                   !history.contains(where: { $0.id == copiedMessageID }) else { return }
             self.copiedMessageID = nil
         }
+        .onChange(of: model.draft) { _ in copiedDraft = false }
         .confirmationDialog(
             L10n.t(.textClearHistoryConfirmTitle),
             isPresented: $confirmingHistoryClear,
@@ -257,8 +259,9 @@ struct DirectTextSessionView: View {
                 // notice under the composer says what it costs; nothing reads
                 // the pasteboard back, ever.
                 Button {
-                    UIPasteboard.general.string = message.body
+                    copyText(message.body)
                     copiedMessageID = message.id
+                    copiedDraft = false
                 } label: {
                     Label(L10n.t(copiedMessageID == message.id ? .commonCopied : .commonCopy),
                           systemImage: copiedMessageID == message.id ? "checkmark" : "doc.on.doc")
@@ -308,6 +311,15 @@ struct DirectTextSessionView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(10)
                     .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+                Button {
+                    copyText(model.draft)
+                    copiedMessageID = nil
+                    copiedDraft = true
+                } label: {
+                    Label(L10n.t(copiedDraft ? .commonCopied : .commonCopy),
+                          systemImage: copiedDraft ? "checkmark" : "doc.on.doc")
+                }
+                .buttonStyle(.bordered)
             }
         }
     }
@@ -362,5 +374,9 @@ struct DirectTextSessionView: View {
         }
         .font(.callout)
         .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func copyText(_ text: String) {
+        UIPasteboard.general.string = text
     }
 }

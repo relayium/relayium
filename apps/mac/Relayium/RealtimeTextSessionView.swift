@@ -20,6 +20,7 @@ struct RealtimeTextSessionView: View {
     /// Presentation state only: keep the acknowledgement tied to one row by
     /// id, never by retaining a second copy of its plaintext body.
     @State private var copiedMessageID: Int?
+    @State private var copiedDraft = false
     @State private var confirmingHistoryClear = false
     @State private var confirmingDraftDiscard = false
 
@@ -54,6 +55,7 @@ struct RealtimeTextSessionView: View {
                   !history.contains(where: { $0.id == copiedMessageID }) else { return }
             self.copiedMessageID = nil
         }
+        .onChange(of: model.draft) { _ in copiedDraft = false }
         .confirmationDialog(
             L10n.t(.textClearHistoryConfirmTitle),
             isPresented: $confirmingHistoryClear,
@@ -97,7 +99,7 @@ struct RealtimeTextSessionView: View {
                     .textSelection(.enabled)
             }
             Button(L10n.t(.commonEndSession), role: .destructive) {
-                model.discardDraftAndEnd()
+                model.end()
             }
                 .buttonStyle(.bordered)
         }
@@ -202,7 +204,9 @@ struct RealtimeTextSessionView: View {
             isPresented: $confirmingDraftDiscard,
             titleVisibility: .visible
         ) {
-            Button(L10n.t(.commonEndSession), role: .destructive) { model.end() }
+            Button(L10n.t(.commonEndSession), role: .destructive) {
+                model.discardDraftAndEnd()
+            }
             Button(L10n.t(.commonCancel), role: .cancel) { confirmingDraftDiscard = false }
         } message: {
             Text(L10n.t(.textDiscardDraftConfirmBody))
@@ -231,6 +235,15 @@ struct RealtimeTextSessionView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(10)
                     .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+                Button {
+                    copyText(model.draft)
+                    copiedMessageID = nil
+                    copiedDraft = true
+                } label: {
+                    Label(L10n.t(copiedDraft ? .commonCopied : .commonCopy),
+                          systemImage: copiedDraft ? "checkmark" : "doc.on.doc")
+                }
+                .buttonStyle(.link)
             }
         }
     }
@@ -280,9 +293,9 @@ struct RealtimeTextSessionView: View {
                 }
                 Spacer()
                 Button {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(message.body, forType: .string)
+                    copyText(message.body)
                     copiedMessageID = message.id
+                    copiedDraft = false
                 } label: {
                     Label(L10n.t(copiedMessageID == message.id ? .commonCopied : .commonCopy),
                           systemImage: copiedMessageID == message.id ? "checkmark" : "doc.on.doc")
@@ -326,5 +339,10 @@ struct RealtimeTextSessionView: View {
         default:
             EmptyView()
         }
+    }
+
+    private func copyText(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 }

@@ -687,6 +687,9 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(source.contains("terminalMessage\n                retainedDraft"))
         XCTAssertTrue(source.contains("Text(model.draft)"))
         XCTAssertTrue(source.contains(".textSelection(.enabled)"))
+        XCTAssertTrue(source.contains("@State private var copiedDraft = false"))
+        XCTAssertTrue(source.contains("copyText(model.draft)"))
+        XCTAssertTrue(source.contains("copiedDraft ? .commonCopied : .commonCopy"))
     }
 
     func testClearingTheOnlyLocalTextHistoryRequiresDestructiveConfirmation() throws {
@@ -2492,7 +2495,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertEqual(holders, ["DirectTextSessionView.swift", "DirectView.swift"],
                        "the pasteboard is reachable from somewhere other than Copy")
         let expectedWrites = [
-            "DirectTextSessionView.swift": "UIPasteboard.general.string = message.body",
+            "DirectTextSessionView.swift": "UIPasteboard.general.string = text",
             "DirectView.swift": "UIPasteboard.general.string = url.absoluteString",
         ]
         for (name, write) in expectedWrites {

@@ -386,12 +386,22 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(source.contains("if model.draft.isEmpty"))
         XCTAssertTrue(source.contains(
             "Button(L10n.t(.commonEndSession), role: .destructive) { endOrConfirmDraftDiscard() }"))
-        XCTAssertTrue(source.contains("model.discardDraftAndEnd()"))
+        XCTAssertEqual(occurrences(of: "model.discardDraftAndEnd()", in: source), 1)
+        let waiting = try XCTUnwrap(source.components(separatedBy: "private func waiting(")
+            .dropFirst().first?.components(separatedBy: "private func incomingRequest").first)
+        XCTAssertTrue(waiting.contains("model.end()"))
+        XCTAssertFalse(waiting.contains("model.discardDraftAndEnd()"))
+        let confirmation = try XCTUnwrap(source.components(
+            separatedBy: "L10n.t(.textDiscardDraftConfirmTitle)").dropFirst().first)
+        XCTAssertTrue(confirmation.contains("model.discardDraftAndEnd()"))
         XCTAssertTrue(source.contains("L10n.t(.textDiscardDraftConfirmTitle)"))
         XCTAssertTrue(source.contains("L10n.t(.textDiscardDraftConfirmBody)"))
         XCTAssertTrue(source.contains("terminalMessage\n                retainedDraft"))
         XCTAssertTrue(source.contains("Text(model.draft)"))
         XCTAssertTrue(source.contains(".textSelection(.enabled)"))
+        XCTAssertTrue(source.contains("@State private var copiedDraft = false"))
+        XCTAssertTrue(source.contains("copyText(model.draft)"))
+        XCTAssertTrue(source.contains("copiedDraft ? .commonCopied : .commonCopy"))
     }
 
     func testFileMismatchAndMidTransferCancelStateTheirDestructiveCost() throws {
