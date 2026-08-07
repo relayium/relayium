@@ -707,4 +707,15 @@ final class RealtimeTextSessionModelTests: XCTestCase {
         XCTAssertTrue(model.history.isEmpty)
         guard case .ended = model.state else { return XCTFail("got \(model.state)") }
     }
+
+    func testConfirmedDraftDiscardClearsBeforeEnding() async {
+        let model = makeModel()
+        await openInitiator(model)
+        model.draft = "work the user agreed to discard"
+
+        model.discardDraftAndEnd()
+
+        XCTAssertTrue(model.draft.isEmpty)
+        guard case .ended = model.state else { return XCTFail("got \(model.state)") }
+    }
 }

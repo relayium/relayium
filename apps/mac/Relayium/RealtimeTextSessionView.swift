@@ -95,7 +95,9 @@ struct RealtimeTextSessionView: View {
                     .font(.caption.monospaced())
                     .textSelection(.enabled)
             }
-            Button(L10n.t(.commonEndSession), role: .destructive) { model.end() }
+            Button(L10n.t(.commonEndSession), role: .destructive) {
+                model.discardDraftAndEnd()
+            }
                 .buttonStyle(.bordered)
         }
     }

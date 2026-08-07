@@ -81,7 +81,9 @@ struct DirectTextSessionView: View {
             isPresented: $confirmingDraftDiscard,
             titleVisibility: .visible
         ) {
-            Button(L10n.t(.commonEndSession), role: .destructive) { model.end() }
+            Button(L10n.t(.commonEndSession), role: .destructive) {
+                model.discardDraftAndEnd()
+            }
             Button(L10n.t(.commonCancel), role: .cancel) { confirmingDraftDiscard = false }
         } message: {
             Text(L10n.t(.textDiscardDraftConfirmBody))

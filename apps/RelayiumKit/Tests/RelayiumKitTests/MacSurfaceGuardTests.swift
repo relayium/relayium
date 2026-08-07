@@ -386,8 +386,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(source.contains("if model.draft.isEmpty"))
         XCTAssertTrue(source.contains(
             "Button(L10n.t(.commonEndSession), role: .destructive) { endOrConfirmDraftDiscard() }"))
-        XCTAssertTrue(source.contains(
-            "Button(L10n.t(.commonEndSession), role: .destructive) { model.end() }"))
+        XCTAssertTrue(source.contains("model.discardDraftAndEnd()"))
         XCTAssertTrue(source.contains("L10n.t(.textDiscardDraftConfirmTitle)"))
         XCTAssertTrue(source.contains("L10n.t(.textDiscardDraftConfirmBody)"))
     }

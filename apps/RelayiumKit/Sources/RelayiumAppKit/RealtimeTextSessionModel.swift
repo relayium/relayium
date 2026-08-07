@@ -388,6 +388,14 @@ public final class RealtimeTextSessionModel: ObservableObject {
         finish(.ended)
     }
 
+    /// The user has already accepted a confirmation that names the draft loss.
+    /// Keep this separate from `end()`: a peer disconnect or lifecycle stop must
+    /// not silently erase text the user never chose to discard.
+    public func discardDraftAndEnd() {
+        draft = ""
+        finish(.ended)
+    }
+
     public func reset() {
         teardown()
         state = .idle
