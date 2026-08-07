@@ -139,7 +139,12 @@ struct RealtimeTextPane: View {
     }
 
     private func createCode() {
-        guard let access = accessNow() else { return }
+        guard let access = accessNow() else {
+            // A stale enabled button must still produce a visible outcome.
+            // Account owns the precise signed-out/expired/unavailable remedy.
+            navigation.selectAccount(intent: .signIn)
+            return
+        }
         guard presence.beginSession(.pairingCode, mode: .text) else { return }
         Task { await mintAndWait(token: access.token) }
     }

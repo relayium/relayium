@@ -281,6 +281,19 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(source.contains("productionPairingJoinURL(code: code, mode: mode)"))
     }
 
+    func testStalePairingCreateRoutesToTheAccountRemedy() throws {
+        let source = try XCTUnwrap(try sources().first { $0.name == "DirectView.swift" }?.text)
+        for boundary in ["private func createAndSend()", "private func createTextSession()"] {
+            let action = try XCTUnwrap(source.components(separatedBy: boundary).dropFirst().first?
+                .components(separatedBy: "private func").first)
+            let staleGate = try XCTUnwrap(action.components(
+                separatedBy: "guard case let .allowed(access) = gate else {").dropFirst().first?
+                .components(separatedBy: "return").first)
+            XCTAssertTrue(staleGate.contains("onOpenAccount()"),
+                          "\(boundary) silently swallowed a stale Create activation")
+        }
+    }
+
     /// Cold upload recovery locks selection adoption while it reads durable
     /// state. That wait needs the same explicit exit as every other busy phase.
     func testStoredUploadRecoveryCheckCanBeCancelled() throws {
@@ -2191,7 +2204,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         }
         XCTAssertEqual(
             view.text.components(separatedBy:
-                "guard case let .allowed(access) = gate else { return }").count - 1,
+                "guard case let .allowed(access) = gate else {").count - 1,
             2,
             "both create actions must re-read the live gate at the instant of use")
         for handoff in ["mintAndSendFiles(token: access.token)",
@@ -2417,7 +2430,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let action = view.text[start.lowerBound..<end.lowerBound]
         let prepare = try XCTUnwrap(action.range(of: "selection.stageForSend()"))
         let account = try XCTUnwrap(action.range(of:
-            "guard case let .allowed(access) = gate else { return }"))
+            "guard case let .allowed(access) = gate else {"))
         let session = try XCTUnwrap(action.range(of: "foreground.sessionStarting()"))
         let stage = try XCTUnwrap(action.range(of: "file.stageSend("))
         XCTAssertTrue(prepare.lowerBound < account.lowerBound)

@@ -623,7 +623,13 @@ struct DirectView: View {
         // Re-read the computed gate at the instant of use. The `.allowed`
         // payload rendered into the button may predate a sign-out or account
         // transition; a credential is never a value a view action may cache.
-        guard case let .allowed(access) = gate else { return }
+        guard case let .allowed(access) = gate else {
+            // The tap can arrive from an older allowed render. Preserve the
+            // staged selection and show the live account remedy instead of
+            // making Create appear broken.
+            onOpenAccount()
+            return
+        }
         // Before anything is written to the shared model: a refused claim means
         // Nearby owns a session, and staging over its pending batch would be
         // this tab reaching into a transfer it is not even drawing.
@@ -650,7 +656,12 @@ struct DirectView: View {
     private func createTextSession() {
         // Same live credential boundary as file create; joining remains outside
         // it and anonymous.
-        guard case let .allowed(access) = gate else { return }
+        guard case let .allowed(access) = gate else {
+            // Match file creation: stale authorization has a visible recovery
+            // path rather than swallowing the user's tap.
+            onOpenAccount()
+            return
+        }
         guard presence.beginSession(.pairingCode) else { return }
         foreground.sessionStarting()
         Task { await mintAndJoinText(token: access.token) }

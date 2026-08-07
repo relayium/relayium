@@ -1399,7 +1399,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(files.contains(
             "Button(L10n.t(.directCreateCode)) { createCode() }"))
         guard let selection = files.range(of: "guard let expanded = selection.selection"),
-              let access = files.range(of: "guard let access = accessNow() else { return }"),
+              let access = files.range(of: "guard let access = accessNow() else {"),
               let claim = files.range(of:
                 "guard presence.beginSession(.pairingCode, mode: .files) else { return }",
                 range: selection.lowerBound..<files.endIndex),
@@ -1412,7 +1412,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         let text = try source(named: "RealtimeTextPane.swift")
         XCTAssertTrue(text.contains(
             "Button(L10n.t(.textCreateCode)) { createCode() }"))
-        guard let textAccess = text.range(of: "guard let access = accessNow() else { return }"),
+        guard let textAccess = text.range(of: "guard let access = accessNow() else {"),
               let textClaim = text.range(of:
                 "guard presence.beginSession(.pairingCode, mode: .text) else { return }",
                 range: textAccess.lowerBound..<text.endIndex),
@@ -1433,7 +1433,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         for pane in ["DirectPane.swift", "RealtimeTextPane.swift"] {
             let text = try source(named: pane)
             XCTAssertTrue(text.contains("let accessNow: () -> AccountAccess?"))
-            XCTAssertTrue(text.contains("guard let access = accessNow() else { return }"))
+            XCTAssertTrue(text.contains("guard let access = accessNow() else {"))
         }
 
         let upload = try source(named: "UploadPane.swift")
@@ -1443,6 +1443,17 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(upload.contains(
             "case .allowed = AccountGate.from(session.state, bearer: token) else"))
         XCTAssertEqual(occurrences(of: "model.start(token:", in: upload), 1)
+    }
+
+    func testStalePairingCreateRoutesToTheAccountRemedy() throws {
+        for name in ["DirectPane.swift", "RealtimeTextPane.swift"] {
+            let pane = try source(named: name)
+            let staleGate = try XCTUnwrap(pane.components(
+                separatedBy: "guard let access = accessNow() else {").dropFirst().first?
+                .components(separatedBy: "return").first)
+            XCTAssertTrue(staleGate.contains("navigation.selectAccount(intent: .signIn)"),
+                          "\(name) silently swallowed a stale Create activation")
+        }
     }
 
     /// The document-type declaration that makes the app a Dock drop target and a

@@ -234,7 +234,13 @@ struct DirectPane: View {
         // Rendering an allowed gate and activating its button are different
         // turns. Refuse if sign-out, expiry or account replacement won between
         // them; never mint with the bearer captured by the earlier render.
-        guard let access = accessNow() else { return }
+        guard let access = accessNow() else {
+            // The button belonged to an older allowed render. Do not turn the
+            // user's accepted Create into a silent no-op: take them to the one
+            // surface that explains the live account state and its remedy.
+            navigation.selectAccount(intent: .signIn)
+            return
+        }
         guard presence.beginSession(.pairingCode, mode: .files) else { return }
         model.stageSend(sources: staged.sources, metas: staged.metas)
         Task { await mintAndWait(token: access.token) }
