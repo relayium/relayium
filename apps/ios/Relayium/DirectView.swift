@@ -182,6 +182,7 @@ struct DirectView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("pairing-mode-match-hint")
         }
     }
 
@@ -438,6 +439,7 @@ struct DirectView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("pairing-code-expiry-note")
             ProgressView { Text(L10n.t(.directWaitingForDevice)) }
             Text(L10n.t(.directKeepBothOpen))
                 .font(.footnote)

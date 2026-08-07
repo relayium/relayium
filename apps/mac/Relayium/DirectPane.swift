@@ -156,6 +156,7 @@ struct DirectPane: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("pairing-code-expiry-note")
             if let joinURL = productionPairingJoinURL(code: code) {
                 PairingCodeHandoffView(url: joinURL) { model.cancel() }
             }

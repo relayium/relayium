@@ -102,6 +102,8 @@ final class AppShellUITests: XCTestCase {
 
         let textMode = window.radioButtons["Text"]
         XCTAssertTrue(textMode.waitForExistence(timeout: 10))
+        XCTAssertTrue(window.staticTexts["pairing-mode-match-hint"].exists,
+                      "the mode picker hides the requirement to match the sender")
         textMode.click()
 
         let create = window.buttons["Create a text code"]
@@ -120,6 +122,8 @@ final class AppShellUITests: XCTestCase {
                       "the join link cannot use the system share sheet")
         XCTAssertTrue(window.activityIndicators["Waiting for the other device…"].exists,
                       "the generated-code surface hides its live status")
+        XCTAssertTrue(window.staticTexts["pairing-code-expiry-note"].exists,
+                      "the handoff leaves it ambiguous whether the code or transfer expires")
         XCTAssertTrue(window.buttons["Cancel"].exists,
                       "the generated-code surface hides its escape action")
         XCTAssertTrue(window.staticTexts["Pairing code"].exists || window.title == "Pairing code",

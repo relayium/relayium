@@ -255,6 +255,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
             separatedBy: "private func showing(code:").dropFirst().first?
             .components(separatedBy: "private func interruption").first)
         XCTAssertTrue(handoff.contains("L10n.t(.pairingCodeExpiryNote)"))
+        XCTAssertTrue(handoff.contains(
+            ".accessibilityIdentifier(\"pairing-code-expiry-note\")"))
     }
 
     /// Cold upload recovery locks selection adoption while it reads durable
@@ -2165,6 +2167,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
             .components(separatedBy: "// MARK: - files").first)
         XCTAssertTrue(picker.contains("Text(L10n.t(.directModeMatchHint))"))
         XCTAssertTrue(picker.contains(".accessibilityHint(L10n.t(.directModeMatchHint))"))
+        XCTAssertTrue(picker.contains(".accessibilityIdentifier(\"pairing-mode-match-hint\")"))
     }
 
     /// AccountGate exists to keep unlike failures unlike. Direct must not turn

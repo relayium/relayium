@@ -66,6 +66,7 @@ struct PairingCodeDestination: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("pairing-mode-match-hint")
         }
     }
 

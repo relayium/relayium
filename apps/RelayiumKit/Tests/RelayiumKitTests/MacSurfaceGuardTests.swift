@@ -279,6 +279,7 @@ final class MacSurfaceGuardTests: XCTestCase {
             .components(separatedBy: "private func busyElsewhere").first)
         XCTAssertTrue(picker.contains("Text(L10n.t(.directModeMatchHint))"))
         XCTAssertTrue(picker.contains(".accessibilityHint(L10n.t(.directModeMatchHint))"))
+        XCTAssertTrue(picker.contains(".accessibilityIdentifier(\"pairing-mode-match-hint\")"))
         XCTAssertFalse(try source(named: "RealtimeTextPane.swift").contains(".textJoinHint"),
                        "the shared picker explanation is duplicated only in Text mode")
     }
@@ -322,6 +323,8 @@ final class MacSurfaceGuardTests: XCTestCase {
                 .components(separatedBy: "// MARK: - join").first)
             XCTAssertTrue(handoff.contains("L10n.t(.pairingCodeExpiryNote)"),
                           "\(file) leaves the expiry scope ambiguous")
+            XCTAssertTrue(handoff.contains(
+                ".accessibilityIdentifier(\"pairing-code-expiry-note\")"))
         }
     }
 
