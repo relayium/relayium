@@ -64,6 +64,16 @@ public struct SignalHandlerToken: Equatable {
 public final class SignalingClient {
     public var onSelfId: ((String, String) -> Void)?   // (selfPeerId, serverObservedIP)
     public var onPeers: (([Peer]) -> Void)?
+    /// One peer's signaling connection actually closed.
+    ///
+    /// Deliberately *not* derivable from `onPeers`. A peer can leave the roster
+    /// because a representative handoff moved that device's advertised id to
+    /// another of its connections, and tearing down a session on that is a bug:
+    /// the device is still there. The hub emits `left` only for a physical
+    /// departure, which is the one signal that is definitive permission to tear
+    /// down sessions bound to that peer id. Mirrors the same distinction in
+    /// web/src/lib/signaling.ts.
+    public var onPeerLeft: ((String) -> Void)?
     /// The single per-connection slot. `RealtimeConnection` takes it over when it
     /// is built and gives it back on close, so it is last-writer-wins by design:
     /// exactly one live connection interprets SDP/ICE/reveal at a time.
@@ -234,6 +244,15 @@ public final class SignalingClient {
         listenerLock.unlock()
     }
 
+    /// Matches `signal.TypeLeft` on the hub. Named here rather than in
+    /// `SignalType` because the client only ever receives it.
+    private static let leftType = "left"
+
+    /// Just the `peer` of a `left` frame. A separate model because it has to
+    /// reject a non-string `peer`, which `Envelope` — having no such key —
+    /// would silently ignore.
+    private struct LeftFrame: Decodable { let peer: String? }
+
     private func sendJoin() { send(Envelope(type: SignalType.join, name: name)) }
 
     private func send(_ e: Envelope) {
@@ -252,6 +271,16 @@ public final class SignalingClient {
             }
         case SignalType.peers:
             if let p = e.peers { onPeers?(p) }
+        case Self.leftType:
+            // `Envelope` carries no `peer`, so read that one field separately —
+            // and read it strictly. A `left` frame whose peer is missing, empty
+            // or not a string names nobody, and acting on it would tear down a
+            // session belonging to a peer the hub never said had gone. Ignoring
+            // it costs a stale entry until the next roster; guessing costs a
+            // live transfer.
+            guard let left = try? dec.decode(LeftFrame.self, from: Data(text.utf8)),
+                  let peer = left.peer, !peer.isEmpty else { break }
+            onPeerLeft?(peer)
         case SignalType.signal:
             guard let from = e.from, let data = e.data else { break }
             // Listeners first, then the per-connection slot, and the order is

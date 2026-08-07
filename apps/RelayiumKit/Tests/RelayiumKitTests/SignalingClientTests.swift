@@ -45,6 +45,68 @@ final class SignalingClientTests: XCTestCase {
         ch.fireText(#"{"type":"peers","peers":[{"id":"a","name":"A"}]}"#)
         XCTAssertEqual(got, [Peer(id: "a", name: "A")])
     }
+    // MARK: - `left`: a physical departure, not a roster edit
+
+    func testLeftDeliversTheDepartedPeerId() {
+        let ch = FakeWebSocketChannel(); let c = SignalingClient(channel: ch, name: "Mac")
+        var gone: [String] = []; c.onPeerLeft = { gone.append($0) }
+        ch.fireOpen()
+        ch.fireText(#"{"type":"left","peer":"a"}"#)
+        XCTAssertEqual(gone, ["a"])
+    }
+
+    /// A `left` frame that names nobody must not be acted on: tearing down a
+    /// session needs a peer id the hub actually gave us.
+    func testLeftWithoutAUsablePeerIsIgnored() {
+        let ch = FakeWebSocketChannel(); let c = SignalingClient(channel: ch, name: "Mac")
+        var gone: [String] = []; c.onPeerLeft = { gone.append($0) }
+        ch.fireOpen()
+        ch.fireText(#"{"type":"left"}"#)              // missing
+        ch.fireText(#"{"type":"left","peer":""}"#)    // empty
+        ch.fireText(#"{"type":"left","peer":null}"#)  // null
+        ch.fireText(#"{"type":"left","peer":123}"#)   // wrong type
+        ch.fireText(#"{"type":"left","peer":["a"]}"#) // wrong type
+        ch.fireText("not json")
+        ch.fireText(#"{"type":"left""#)               // truncated
+        XCTAssertEqual(gone, [], "only a non-empty string peer is a departure")
+    }
+
+    /// The distinction the web client draws, and the reason `onPeerLeft` is not
+    /// derived from `onPeers`: a roster handoff moves an id between one device's
+    /// connections while the device is still present, so it must not read as a
+    /// departure — and a departure must not be mistaken for a new roster.
+    func testTheRosterAndDeparturesStaySeparateCallbacks() {
+        let ch = FakeWebSocketChannel(); let c = SignalingClient(channel: ch, name: "Mac")
+        var rosters: [[Peer]] = []; var gone: [String] = []
+        c.onPeers = { rosters.append($0) }
+        c.onPeerLeft = { gone.append($0) }
+        ch.fireOpen()
+
+        // A roster shrinking to nothing is a handoff as far as this client knows.
+        ch.fireText(#"{"type":"peers","peers":[{"id":"a","name":"A"}]}"#)
+        ch.fireText(#"{"type":"peers","peers":[]}"#)
+        XCTAssertEqual(gone, [], "a roster change is not a physical departure")
+
+        ch.fireText(#"{"type":"left","peer":"a"}"#)
+        XCTAssertEqual(gone, ["a"])
+        XCTAssertEqual(rosters, [[Peer(id: "a", name: "A")], []], "a departure is not a roster update")
+    }
+
+    /// `left` shares `handle`'s switch with the rest; it must not divert or
+    /// suppress anything that was already routed.
+    func testLeftDoesNotDisturbSignalRouting() {
+        let ch = FakeWebSocketChannel(); let c = SignalingClient(channel: ch, name: "Mac")
+        var signals = 0; var gone = 0
+        c.onSignal = { _, _ in signals += 1 }
+        c.onPeerLeft = { _ in gone += 1 }
+        let sub = c.addSignalListener { _, _ in }
+        ch.fireOpen()
+        ch.fireText(#"{"type":"left","peer":"a"}"#)
+        ch.fireText(#"{"type":"signal","from":"a","data":{}}"#)
+        XCTAssertEqual(signals, 1); XCTAssertEqual(gone, 1)
+        sub.cancel()
+    }
+
     func testSignalDeliversFromAndData() {
         let ch = FakeWebSocketChannel(); let c = SignalingClient(channel: ch, name: "Mac")
         var from = ""; var data: JSONValue?
