@@ -105,6 +105,18 @@ final class IOSSurfaceGuardTests: XCTestCase {
         }
     }
 
+    /// A pre-connection Cancel has no transcript to preserve and should not
+    /// manufacture a terminal screen that requires a second Done tap.
+    func testTextConnectingCancelReturnsDirectlyToThePairingEntry() throws {
+        let all = try sources()
+        let source = try XCTUnwrap(all.first { $0.name == "DirectTextSessionView.swift" }?.text)
+        let connecting = try XCTUnwrap(source.components(
+            separatedBy: "case .joining, .connecting:").dropFirst().first?
+            .components(separatedBy: "case let .verifying").first)
+        XCTAssertTrue(connecting.contains("Button(L10n.t(.commonCancel)) { model.reset() }"))
+        XCTAssertFalse(connecting.contains("model.end()"))
+    }
+
     /// Each source's CODE, with whole-line comments dropped.
     ///
     /// Load-bearing, not tidiness: these files explain what they deliberately do

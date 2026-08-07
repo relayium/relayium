@@ -31,7 +31,7 @@ struct RealtimeTextSessionView: View {
                 retainedHistory
             case .joining, .connecting:
                 ProgressView(L10n.t(.textConnecting)).controlSize(.small)
-                Button(L10n.t(.commonCancel)) { model.end() }
+                Button(L10n.t(.commonCancel)) { model.reset() }
             case let .verifying(sas):
                 verify(sas)
             case let .waitingAccept(sas):

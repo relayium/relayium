@@ -42,7 +42,7 @@ struct DirectTextSessionView: View {
                 retainedHistory
             case .joining, .connecting:
                 ProgressView { Text(L10n.t(.textConnecting)) }
-                Button(L10n.t(.commonCancel)) { model.end() }
+                Button(L10n.t(.commonCancel)) { model.reset() }
             case let .verifying(sas):
                 verify(sas)
             case let .waitingAccept(sas):

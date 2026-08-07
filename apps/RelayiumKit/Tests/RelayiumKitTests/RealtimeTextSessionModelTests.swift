@@ -312,6 +312,24 @@ final class RealtimeTextSessionModelTests: XCTestCase {
         guard case .open = model.state else { return XCTFail("got \(model.state)") }
     }
 
+    func testResetWhileConnectingReturnsToIdleAndRejectsPeerCallbacks() async {
+        let model = makeModel()
+        await model.join(code: "483920", role: .initiator)
+        guard case .connecting = model.state else { return XCTFail("got \(model.state)") }
+
+        model.reset()
+        XCTAssertEqual(model.state, .idle)
+        XCTAssertEqual(connection.closeCount, 1)
+        XCTAssertTrue(model.history.isEmpty)
+
+        connection.onSAS?("late-phrase")
+        connection.onOpen?()
+        connection.onText?("late message", 32)
+        await settle()
+        XCTAssertEqual(model.state, .idle, "callbacks reopened the cancelled connection")
+        XCTAssertTrue(model.history.isEmpty)
+    }
+
     func testAcceptArrivingBeforeSASConfirmationStillOpensSession() async {
         let model = makeModel()
         await model.join(code: "483920", role: .initiator)

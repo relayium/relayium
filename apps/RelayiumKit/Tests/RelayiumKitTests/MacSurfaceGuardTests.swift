@@ -202,6 +202,18 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(textMinting.contains(".buttonStyle(.bordered)"))
     }
 
+    /// Before a text peer connects there is no transcript or result to retain.
+    /// Cancel should match the file flow and return directly to the start screen.
+    func testTextConnectingCancelDoesNotCreateAnEmptyTerminalTask() throws {
+        let source = try source(named: "RealtimeTextSessionView.swift")
+        let connecting = try XCTUnwrap(source.components(
+            separatedBy: "case .joining, .connecting:").dropFirst().first?
+            .components(separatedBy: "case let .verifying").first)
+        XCTAssertTrue(connecting.contains("Button(L10n.t(.commonCancel)) { model.reset() }"))
+        XCTAssertFalse(connecting.contains("model.end()"),
+                       "Cancel creates an empty Session ended task that still needs Done")
+    }
+
     /// iOS already locks both controls while resolving/downloading. macOS must
     /// not leave a second Open path live over a task whose writer and Cancel
     /// handle the shared model still owns.
