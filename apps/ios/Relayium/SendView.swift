@@ -194,7 +194,12 @@ struct SendView: View {
             choosing
             options
         case .checkingRecovery:
-            ProgressView { Text(L10n.t(.uploadCheckingRecovery)) }
+            VStack(alignment: .leading, spacing: 12) {
+                ProgressView { Text(L10n.t(.uploadCheckingRecovery)) }
+                Button(L10n.t(.commonCancel)) { upload.cancel() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+            }
         case .preparing:
             // Copying the selection into this app's own storage. Labelled, not
             // a bare spinner: on a large video this is the longest part of the

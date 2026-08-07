@@ -765,6 +765,33 @@ final class SharedDraftAdoptionTests: XCTestCase {
                        "the surviving draft was no longer offered")
     }
 
+    func testCancellingARecoveryCheckReturnsToIdleAndIgnoresTheLateKeyRead() async throws {
+        let pendingStore = PendingUploadStore(root: root.appendingPathComponent("PendingUploads"))
+        let source = root.appendingPathComponent("recover-cancel.bin")
+        try Data("keep".utf8).write(to: source)
+        _ = try pendingStore.prepare(
+            files: [SelectedFile(url: source, relativePath: "recover-cancel.bin")],
+            accountId: "acct-1", burnAfterRead: false, ttl: 3600)
+
+        let keys = GatedKeyStore(returning: encodeStoreKey(generateStoreKey()))
+        let upload = makeUpload(pendingKeys: keys, store: pendingStore)
+        upload.recoverPendingJob(for: "acct-1")
+        let recovery = try XCTUnwrap(upload.recoveryTask)
+        await keys.gate.waitUntilEntered()
+        XCTAssertEqual(upload.state, .checkingRecovery)
+
+        upload.cancel()
+        XCTAssertEqual(upload.state, .idle)
+        XCTAssertFalse(upload.isBusy)
+        XCTAssertNotNil(pendingStore.plan(for: "acct-1"),
+                        "Cancel discarded a recoverable upload instead of leaving it for later")
+
+        await keys.gate.release()
+        await recovery.value
+        XCTAssertEqual(upload.state, .idle, "a late key read repainted the cancelled recovery")
+        XCTAssertNotNil(pendingStore.plan(for: "acct-1"))
+    }
+
     // MARK: - retirement when the filesystem refuses
 
     /// A `FileManager` that will not delete anything under a given path.

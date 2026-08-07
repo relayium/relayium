@@ -117,6 +117,20 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertFalse(connecting.contains("model.end()"))
     }
 
+    /// Cold upload recovery locks selection adoption while it reads durable
+    /// state. That wait needs the same explicit exit as every other busy phase.
+    func testStoredUploadRecoveryCheckCanBeCancelled() throws {
+        let all = try sources()
+        let source = try XCTUnwrap(all.first { $0.name == "SendView.swift" }?.text)
+        let checking = try XCTUnwrap(source.components(
+            separatedBy: "case .checkingRecovery:").dropFirst().first?
+            .components(separatedBy: "case .preparing:").first)
+        XCTAssertTrue(checking.contains("ProgressView { Text(L10n.t(.uploadCheckingRecovery)) }"))
+        XCTAssertTrue(checking.contains("Button(L10n.t(.commonCancel)) { upload.cancel() }"))
+        XCTAssertTrue(checking.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(checking.contains(".controlSize(.large)"))
+    }
+
     /// Each source's CODE, with whole-line comments dropped.
     ///
     /// Load-bearing, not tidiness: these files explain what they deliberately do
