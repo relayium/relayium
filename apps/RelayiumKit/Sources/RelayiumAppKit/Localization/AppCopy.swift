@@ -65,6 +65,16 @@ public enum TextMessagePresentation {
     }
 }
 
+/// The terminal file result names the direction instead of asking the user to
+/// infer whether “complete” means their files left or new files were saved.
+public enum FileTransferCompletionPresentation {
+    public static func title(received: Bool,
+                             language: AppLanguage? = nil) -> String {
+        L10n.t(received ? .sessionFilesReceived : .sessionFilesSent,
+               language: language)
+    }
+}
+
 /// The Account tab's row details.
 public enum AccountPresentation {
     /// "App · last used 3 Jan 2026 at 09:12 · added 1 Jan 2026 at 08:00".

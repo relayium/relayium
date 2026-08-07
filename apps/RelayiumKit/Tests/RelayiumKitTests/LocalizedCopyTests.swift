@@ -130,6 +130,19 @@ final class LocalizedCopyTests: XCTestCase {
         }
     }
 
+    func testFileCompletionNamesTheResultDirectionInEveryLanguage() {
+        for language in AppLanguage.allCases {
+            let sent = FileTransferCompletionPresentation.title(
+                received: false, language: language)
+            let received = FileTransferCompletionPresentation.title(
+                received: true, language: language)
+            XCTAssertFalse(sent.isEmpty, language.rawValue)
+            XCTAssertFalse(received.isEmpty, language.rawValue)
+            XCTAssertNotEqual(sent, received,
+                              "file completion [\(language.rawValue)] hides its direction")
+        }
+    }
+
     // MARK: - errors carry their language and keep their data
 
     func testErrorCopyIsTranslatedInEveryLanguage() {

@@ -183,7 +183,8 @@
 "session.checkMatchesBody" = "对方设备上显示的应当与此完全相同。如果不同，可能有人正在拦截这条连接。";
 "session.theyMatch" = "一致";
 "session.theyDontMatch" = "不一致";
-"session.transferComplete" = "传输完成";
+"session.filesSent" = "文件已发送";
+"session.filesReceived" = "文件已接收";
 "session.transferProgress" = "正在传输文件…";
 "session.invalidFileList" = "所选文件列表无效。请重新选择文件。";
 "session.peerDisconnected" = "对方设备已断开连接。";

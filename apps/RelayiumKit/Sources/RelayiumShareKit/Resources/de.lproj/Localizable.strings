@@ -183,7 +183,8 @@
 "session.checkMatchesBody" = "Auf dem anderen Gerät sollte genau dasselbe stehen. Wenn nicht, greift möglicherweise jemand in diese Verbindung ein.";
 "session.theyMatch" = "Stimmen überein";
 "session.theyDontMatch" = "Stimmen nicht überein";
-"session.transferComplete" = "Übertragung abgeschlossen";
+"session.filesSent" = "Dateien gesendet";
+"session.filesReceived" = "Dateien empfangen";
 "session.transferProgress" = "Dateien werden übertragen …";
 "session.invalidFileList" = "Die ausgewählte Dateiliste ist ungültig. Wähle die Dateien erneut aus.";
 "session.peerDisconnected" = "Das andere Gerät hat die Verbindung getrennt.";

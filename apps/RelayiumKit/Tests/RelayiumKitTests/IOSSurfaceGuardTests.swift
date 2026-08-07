@@ -730,6 +730,9 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(view.text.contains("model.sessionFiles"))
         XCTAssertTrue(view.text.contains("L10n.bytes(Int64(file.size))"),
                       "file identity without size does not meet the send confirmation standard")
+        XCTAssertTrue(view.text.contains(
+            "FileTransferCompletionPresentation.title(received: model.received != nil)"),
+            "completion does not tell the user whether files were sent or received")
     }
 
     /// A failure a second tap would fix must offer that tap.

@@ -103,7 +103,7 @@ struct DirectFileSessionView: View {
     private var completed: some View {
         VStack(alignment: .leading, spacing: 16) {
             Label {
-                Text(L10n.t(.sessionTransferComplete))
+                Text(FileTransferCompletionPresentation.title(received: model.received != nil))
             } icon: {
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
             }

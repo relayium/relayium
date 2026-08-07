@@ -34,7 +34,8 @@ struct RealtimeFileSessionView: View {
             transferring(done: done, total: total)
         case .completed:
             VStack(alignment: .leading, spacing: 8) {
-                Text(L10n.t(.sessionTransferComplete)).font(.subheadline.weight(.semibold))
+                Text(FileTransferCompletionPresentation.title(received: model.received != nil))
+                    .font(.subheadline.weight(.semibold))
                 fileList
                 // Only a RECEIVE has a payload. A sender reaches `.completed`
                 // with no URLs of its own, and offering it a drag source would

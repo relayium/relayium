@@ -183,7 +183,8 @@
 "session.checkMatchesBody" = "El otro dispositivo debería mostrar exactamente esto. Si no es así, puede que alguien esté interceptando la conexión.";
 "session.theyMatch" = "Coinciden";
 "session.theyDontMatch" = "No coinciden";
-"session.transferComplete" = "Transferencia completada";
+"session.filesSent" = "Archivos enviados";
+"session.filesReceived" = "Archivos recibidos";
 "session.transferProgress" = "Transfiriendo archivos…";
 "session.invalidFileList" = "La lista de archivos seleccionada no es válida. Vuelve a elegir los archivos.";
 "session.peerDisconnected" = "El otro dispositivo se desconectó.";

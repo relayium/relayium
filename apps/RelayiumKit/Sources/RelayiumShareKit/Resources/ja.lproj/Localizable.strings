@@ -183,7 +183,8 @@
 "session.checkMatchesBody" = "相手のデバイスにもまったく同じものが表示されているはずです。違っている場合、誰かがこの接続を傍受している可能性があります。";
 "session.theyMatch" = "一致しています";
 "session.theyDontMatch" = "一致しません";
-"session.transferComplete" = "転送が完了しました";
+"session.filesSent" = "ファイルを送信しました";
+"session.filesReceived" = "ファイルを受信しました";
 "session.transferProgress" = "ファイルを転送中…";
 "session.invalidFileList" = "選択されたファイルリストが不正です。ファイルを選び直してください。";
 "session.peerDisconnected" = "相手のデバイスが切断しました。";
