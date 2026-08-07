@@ -673,10 +673,17 @@ final class IOSSurfaceGuardTests: XCTestCase {
         }?.text)
         XCTAssertTrue(source.contains("@State private var confirmingDraftDiscard = false"))
         XCTAssertTrue(source.contains("if model.draft.isEmpty"))
+        XCTAssertEqual(source.components(separatedBy:
+            "Button(L10n.t(.commonEndSession), role: .destructive) { endOrConfirmDraftDiscard() }")
+            .count - 1, 2,
+            "both waiting and open must use the protected action")
+        XCTAssertEqual(source.components(separatedBy:
+            "Button(L10n.t(.commonEndSession), role: .destructive) { model.end() }").count - 1,
+            1,
+            "only the confirmed destructive action may end directly")
         XCTAssertTrue(source.contains(
-            "Button(L10n.t(.commonEndSession), role: .destructive) { endOrConfirmDraftDiscard() }"))
-        XCTAssertTrue(source.contains(
-            "Button(L10n.t(.commonEndSession), role: .destructive) { model.end() }"))
+            ".confirmationDialog(\n            L10n.t(.textDiscardDraftConfirmTitle)"),
+            "the confirmation must decorate the whole session view, not an inactive state branch")
         XCTAssertTrue(source.contains("L10n.t(.textDiscardDraftConfirmTitle)"))
         XCTAssertTrue(source.contains("L10n.t(.textDiscardDraftConfirmBody)"))
     }

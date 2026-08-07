@@ -76,6 +76,16 @@ struct DirectTextSessionView: View {
         } message: {
             Text(L10n.t(.textClearHistoryConfirmBody))
         }
+        .confirmationDialog(
+            L10n.t(.textDiscardDraftConfirmTitle),
+            isPresented: $confirmingDraftDiscard,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.t(.commonEndSession), role: .destructive) { model.end() }
+            Button(L10n.t(.commonCancel), role: .cancel) { confirmingDraftDiscard = false }
+        } message: {
+            Text(L10n.t(.textDiscardDraftConfirmBody))
+        }
     }
 
     /// The model owns whether the draft can be sent; this is only what the
@@ -114,16 +124,6 @@ struct DirectTextSessionView: View {
             Button(L10n.t(.commonEndSession), role: .destructive) { endOrConfirmDraftDiscard() }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
-        }
-        .confirmationDialog(
-            L10n.t(.textDiscardDraftConfirmTitle),
-            isPresented: $confirmingDraftDiscard,
-            titleVisibility: .visible
-        ) {
-            Button(L10n.t(.commonEndSession), role: .destructive) { model.end() }
-            Button(L10n.t(.commonCancel), role: .cancel) { confirmingDraftDiscard = false }
-        } message: {
-            Text(L10n.t(.textDiscardDraftConfirmBody))
         }
     }
 
@@ -201,7 +201,7 @@ struct DirectTextSessionView: View {
                 confirmingHistoryClear = true
             }
                 .disabled(model.history.isEmpty)
-            Button(L10n.t(.commonEndSession), role: .destructive) { model.end() }
+            Button(L10n.t(.commonEndSession), role: .destructive) { endOrConfirmDraftDiscard() }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
         }
