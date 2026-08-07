@@ -520,6 +520,25 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "copy feedback can survive onto a replacement link")
     }
 
+    func testStoredTransferProgressNamesTheTaskAndCurrentValue() throws {
+        let upload = try source(named: "UploadPane.swift")
+        let uploading = try XCTUnwrap(upload.components(
+            separatedBy: "private func uploadingCard").dropFirst().first?
+            .components(separatedBy: "// MARK: - terminal").first)
+        XCTAssertTrue(uploading.contains(".accessibilityLabel(L10n.t(.uploadHeading))"))
+        XCTAssertTrue(uploading.contains(".accessibilityValue("))
+        XCTAssertTrue(uploading.contains("L10n.percent(done: sent, total: total)"))
+
+        let download = try source(named: "DownloadPane.swift")
+        let downloading = try XCTUnwrap(download.components(
+            separatedBy: "case .downloading").dropFirst().first?
+            .components(separatedBy: "case .done").first)
+        XCTAssertTrue(downloading.contains(
+            ".accessibilityLabel(L10n.t(.downloadInProgress))"))
+        XCTAssertTrue(downloading.contains(".accessibilityValue("))
+        XCTAssertTrue(downloading.contains("L10n.percent(done: received, total: total)"))
+    }
+
     /// iOS already locks both controls while resolving/downloading. macOS must
     /// not leave a second Open path live over a task whose writer and Cancel
     /// handle the shared model still owns.

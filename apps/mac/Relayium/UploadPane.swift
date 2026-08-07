@@ -207,6 +207,9 @@ struct UploadPane: View {
     private func uploadingCard(sent: Int, total: Int) -> some View {
         SectionCard(title: L10n.t(.uploadHeading)) {
             ProgressView(value: total > 0 ? Double(sent) / Double(total) : 0)
+                .accessibilityLabel(L10n.t(.uploadHeading))
+                .accessibilityValue(
+                    L10n.percent(done: sent, total: total) ?? L10n.t(.commonStarting))
             Text(L10n.percent(done: sent, total: total) ?? L10n.t(.commonStarting))
                 .font(.caption).foregroundStyle(.secondary)
             PendingFileList(sessionFiles: model.sessionFiles)

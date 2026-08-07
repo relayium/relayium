@@ -75,6 +75,9 @@ struct DownloadPane: View {
                     .buttonStyle(.borderedProminent)
             case .downloading(let received, let total):
                 ProgressView(value: total > 0 ? Double(received) / Double(total) : 0)
+                    .accessibilityLabel(L10n.t(.downloadInProgress))
+                    .accessibilityValue(
+                        L10n.percent(done: received, total: total) ?? L10n.t(.commonStarting))
                 Text(L10n.percent(done: received, total: total) ?? L10n.t(.downloadInProgress))
                     .font(.caption).foregroundStyle(.secondary)
                 PendingFileList(sessionFiles: model.sessionFiles)
