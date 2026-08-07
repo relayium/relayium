@@ -125,6 +125,16 @@ public final class CloudDownloadModel: ObservableObject {
         return receivedPayload(files: urls, container: receivedContainer)
     }
 
+    /// The decrypted manifest, reduced to the facts a transfer surface needs.
+    /// It survives through download, failure and completion so progress never
+    /// replaces “what am I receiving?” with an anonymous percentage.
+    public var sessionFiles: [FileMeta] {
+        manifest?.files.map {
+            FileMeta(name: $0.name.split(separator: "/").last.map(String.init) ?? $0.name,
+                     size: max($0.size, 0), path: $0.name.contains("/") ? $0.name : nil)
+        } ?? []
+    }
+
     private let client: CloudClient
     private let errorCopy: (Error) -> String
     private var task: Task<Void, Never>?
@@ -214,6 +224,7 @@ public final class CloudDownloadModel: ObservableObject {
         // Before the parse, so the malformed-link failure below is armed with
         // nothing either: no retry re-parses a string into a different link.
         recovery = .none
+        manifest = nil
         guard let parsed = parseTransferLink(linkText) else {
             state = .failed(L10n.t(.downloadBadLink))
             return
@@ -352,6 +363,7 @@ public final class CloudDownloadModel: ObservableObject {
         task = nil
         generation += 1
         receivedContainer = nil
+        manifest = nil
         // Stopping is a decision, not a pause: nothing may stay armed behind it.
         recovery = .none
         state = .idle

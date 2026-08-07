@@ -5,7 +5,18 @@ import RelayiumKit
 /// Every file the current selection will send, kept in a bounded nested scroll
 /// so a large folder remains inspectable without pushing the Send action away.
 struct PendingFileList: View {
-    let files: [SelectedFile]
+    private let files: [FileMeta]
+
+    init(files: [SelectedFile]) {
+        self.files = files.map {
+            FileMeta(name: $0.name, size: Int(max($0.byteCount ?? 0, 0)),
+                     path: $0.isNested ? $0.relativePath : nil)
+        }
+    }
+
+    init(sessionFiles: [FileMeta]) {
+        files = sessionFiles
+    }
 
     var body: some View {
         if !files.isEmpty {
@@ -16,11 +27,9 @@ struct PendingFileList: View {
                             Text(displayName(file))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .fixedSize(horizontal: false, vertical: true)
-                            if let bytes = file.byteCount {
-                                Text(L10n.bytes(bytes))
-                                    .foregroundStyle(.secondary)
-                                    .fixedSize()
-                            }
+                            Text(L10n.bytes(Int64(file.size)))
+                                .foregroundStyle(.secondary)
+                                .fixedSize()
                         }
                         .font(.footnote)
                         .accessibilityElement(children: .combine)
@@ -34,8 +43,8 @@ struct PendingFileList: View {
         }
     }
 
-    private func displayName(_ file: SelectedFile) -> String {
-        let safe = safeDisplayName(file.relativePath)
+    private func displayName(_ file: FileMeta) -> String {
+        let safe = safeDisplayName(file.path ?? file.name)
         return safe.isEmpty ? "download" : safe
     }
 }

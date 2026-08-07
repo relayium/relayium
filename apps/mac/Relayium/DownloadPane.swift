@@ -49,9 +49,13 @@ struct DownloadPane: View {
                 // would silently drop a row from the list the user is deciding
                 // on.
                 ForEach(Array(manifest.files.enumerated()), id: \.offset) { _, f in
-                    Text(safeDisplayName(f.name))
-                        .font(.caption).foregroundStyle(.secondary)
-                        .lineLimit(1).truncationMode(.middle)
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text(safeDisplayName(f.name))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .lineLimit(1).truncationMode(.middle)
+                        Text(L10n.bytes(Int64(f.size))).fixedSize()
+                    }
+                    .font(.caption).foregroundStyle(.secondary)
                 }
                 if burn {
                     // Stated before it costs something, not as a footnote after.
@@ -68,6 +72,7 @@ struct DownloadPane: View {
                 ProgressView(value: total > 0 ? Double(received) / Double(total) : 0)
                 Text(L10n.percent(done: received, total: total) ?? L10n.t(.downloadInProgress))
                     .font(.caption).foregroundStyle(.secondary)
+                PendingFileList(sessionFiles: model.sessionFiles)
                 Button(L10n.t(.commonCancel)) { model.cancel() }
             case .done(let urls):
                 Text(DownloadPresentation.savedSummary(fileCount: urls.count))
@@ -75,8 +80,10 @@ struct DownloadPane: View {
                 if let payload = model.received {
                     ReceivedResultView(payload: payload)
                 }
+                PendingFileList(sessionFiles: model.sessionFiles)
             case .failed(let message):
                 InlineMessage(.failure, message)
+                PendingFileList(sessionFiles: model.sessionFiles)
                 // Offered only where the model says a second attempt can end
                 // differently, and it repeats the work that actually failed —
                 // resolution, or the transfer into the folder already chosen.

@@ -117,6 +117,19 @@ final class CloudUploadModelTests: XCTestCase {
         XCTAssertNil(warning)
     }
 
+    func testFileDetailsSurviveUntilTheCompletedLinkAndClearWithTheSelection() async {
+        let m = makeModel()
+        m.pick([sized(17, name: "report.txt")])
+        XCTAssertEqual(m.sessionFiles, [FileMeta(name: m.selectedFiles[0].name, size: 17)])
+
+        await m.applyOutcome(UploadOutcome(id: "abc", expiresAt: 99, keyB64url: "KEY"))
+        XCTAssertEqual(m.sessionFiles.map(\.size), [17])
+        XCTAssertTrue(m.sessionFiles[0].name.hasSuffix("report.txt"))
+
+        m.clearSelection()
+        XCTAssertEqual(m.sessionFiles, [])
+    }
+
     /// The key exists only in that link. Keeping it is what makes the Account
     /// tab able to hand the link back later instead of listing an object nobody
     /// on this device can open.

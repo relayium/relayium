@@ -70,7 +70,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
     func testEverySendSurfaceShowsThePendingFileNamesAndSizes() throws {
         let all = try sources()
         let component = try XCTUnwrap(all.first { $0.name == "PendingFileList.swift" }?.text)
-        for required in ["safeDisplayName(file.relativePath)", "L10n.bytes(bytes)",
+        for required in ["safeDisplayName(file.path ?? file.name)",
+                         "L10n.bytes(Int64(file.size))",
                          "ScrollView", ".frame(maxHeight: 220)"] {
             XCTAssertTrue(component.contains(required), "pending-file list lost \(required)")
         }
@@ -79,6 +80,10 @@ final class IOSSurfaceGuardTests: XCTestCase {
             XCTAssertTrue(text.contains("PendingFileList(files: selection.selectedFiles)"),
                           "\(view) regressed to a count-only selection")
         }
+        let storedSend = try XCTUnwrap(all.first { $0.name == "SendView.swift" }?.text)
+        XCTAssertGreaterThanOrEqual(storedSend.components(separatedBy:
+            "PendingFileList(sessionFiles: upload.sessionFiles)").count - 1, 4,
+            "stored upload lost file identities in a running or terminal state")
     }
 
     /// Each source's CODE, with whole-line comments dropped.

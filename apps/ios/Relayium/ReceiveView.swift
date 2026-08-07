@@ -119,6 +119,7 @@ struct ReceiveView: View {
                         Text(percent)
                     }
                 }
+                PendingFileList(sessionFiles: model.sessionFiles)
                 cancelButton
             }
 
@@ -128,6 +129,7 @@ struct ReceiveView: View {
         case .failed(let message):
             VStack(alignment: .leading, spacing: 12) {
                 failure(message)
+                PendingFileList(sessionFiles: model.sessionFiles)
                 // The same conditional the macOS pane renders, from the same
                 // model API. This screen used to show the sentence and nothing
                 // else, including for a dropped connection — leaving the user to
@@ -161,11 +163,15 @@ struct ReceiveView: View {
                 // would silently drop a row from the list the user is deciding
                 // on.
                 ForEach(Array(manifest.files.enumerated()), id: \.offset) { _, file in
-                    Text(safeDisplayName(file.name))
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text(safeDisplayName(file.name))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Text(L10n.bytes(Int64(file.size))).fixedSize()
+                    }
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
                 }
             }
             if burnAfterRead {
@@ -201,6 +207,7 @@ struct ReceiveView: View {
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
             }
             .font(.headline)
+            PendingFileList(sessionFiles: model.sessionFiles)
             // Through `ReceiveDestinationCopy`, not `L10n` directly: the route
             // it names is the one the failures name, derived from the same two
             // constants, so the done state cannot come to point at a different

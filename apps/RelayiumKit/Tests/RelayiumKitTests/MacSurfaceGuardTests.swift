@@ -127,7 +127,8 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// bounded, sanitized name-and-size list.
     func testEverySendPaneShowsThePendingFileNamesAndSizes() throws {
         let component = try source(named: "PendingFileList.swift")
-        for required in ["safeDisplayName(file.relativePath)", "L10n.bytes(bytes)",
+        for required in ["safeDisplayName(file.path ?? file.name)",
+                         "L10n.bytes(Int64(file.size))",
                          "ScrollView", ".frame(maxHeight: 200)"] {
             XCTAssertTrue(component.contains(required), "pending-file list lost \(required)")
         }
@@ -135,6 +136,9 @@ final class MacSurfaceGuardTests: XCTestCase {
             XCTAssertTrue(try source(named: pane).contains("PendingFileList(files:"),
                           "\(pane) regressed to a count-only selection")
         }
+        XCTAssertGreaterThanOrEqual(try source(named: "UploadPane.swift").components(
+            separatedBy: "PendingFileList(sessionFiles: model.sessionFiles)").count - 1, 3,
+            "stored upload lost file identities in a running or terminal state")
     }
 
     private func occurrences(of needle: String, in text: String) -> Int {

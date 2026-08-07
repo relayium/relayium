@@ -192,6 +192,7 @@ struct UploadPane: View {
             ProgressView(value: total > 0 ? Double(sent) / Double(total) : 0)
             Text(L10n.percent(done: sent, total: total) ?? L10n.t(.commonStarting))
                 .font(.caption).foregroundStyle(.secondary)
+            PendingFileList(sessionFiles: model.sessionFiles)
             Button(L10n.t(.commonCancel)) { model.cancel() }
         }
     }
@@ -200,6 +201,7 @@ struct UploadPane: View {
 
     private func linkReadyCard(link: String, expiresAt: Int64, keyWarning: String?) -> some View {
         SectionCard(title: L10n.t(.uploadLinkReady)) {
+            PendingFileList(sessionFiles: model.sessionFiles)
             // Exactly one statement about the key, decided in
             // UploadPresentation where it is tested. Which one is not
             // cosmetic: after a successful save the key really is on this
@@ -226,6 +228,7 @@ struct UploadPane: View {
     private func failureCard(_ message: String) -> some View {
         SectionCard(title: L10n.t(.uploadHeading)) {
             InlineMessage(.failure, message)
+            PendingFileList(sessionFiles: model.sessionFiles)
             // `reset` rather than `clearSelection`: a failure must not make the
             // user choose every file again.
             Button(L10n.t(.commonTryAgain)) { model.reset() }

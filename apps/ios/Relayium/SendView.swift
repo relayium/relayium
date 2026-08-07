@@ -234,6 +234,7 @@ struct SendView: View {
             // sizes this sentence is several lines on an iPhone, and the part
             // that would be cut is the part that says where the files are.
             .fixedSize(horizontal: false, vertical: true)
+            PendingFileList(sessionFiles: upload.sessionFiles)
 
             if let message {
                 Text(L10n.t(.uploadInterruptedReason, [L10n.token(message)]))
@@ -407,6 +408,7 @@ struct SendView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            PendingFileList(sessionFiles: upload.sessionFiles)
             Button(L10n.t(.commonCancel)) { upload.cancel() }
         }
     }
@@ -416,6 +418,7 @@ struct SendView: View {
     private func linkReady(link: String, expiresAt: Int64, keyWarning: String?) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(L10n.t(.uploadLinkReady)).font(.headline)
+            PendingFileList(sessionFiles: upload.sessionFiles)
             // Exactly one statement, decided in `UploadPresentation` where it is
             // tested: after a successful save the key really is on this device
             // and the Account tab can hand this link back, so "this link is the
@@ -461,6 +464,7 @@ struct SendView: View {
     private func failure(_ text: String) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             failureLine(text)
+            PendingFileList(sessionFiles: upload.sessionFiles)
             // A reset, not a clear: a failure must not make the user choose
             // every file again. A shared draft that failed before its job became
             // durable is still selected here, which is what makes Try again

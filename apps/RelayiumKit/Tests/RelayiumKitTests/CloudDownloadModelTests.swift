@@ -297,12 +297,16 @@ final class CloudDownloadModelContainerTests: XCTestCase {
         m.resolve()
         _ = await waitFor("the manifest to resolve", { if case .ready = m.state { return true }; return false })
         guard case .ready = m.state else { return XCTFail("resolve failed: \(m.state)") }
+        XCTAssertEqual(m.sessionFiles, [FileMeta(name: "notes.txt", size: 1),
+                                        FileMeta(name: "NOTES.txt", size: 1)])
 
         let parent = try tempDir()
         m.download(into: parent)
         _ = await waitFor("the download to refuse", { if case .failed = m.state { return true }; return false })
 
         guard case .failed = m.state else { return XCTFail("expected a refusal, got \(m.state)") }
+        XCTAssertEqual(m.sessionFiles.map(\.size), [1, 1],
+                       "a transfer failure must keep naming the files it interrupted")
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: parent.path), [],
                        "an empty relayium-<id> was left in the folder the user chose")
         XCTAssertNil(m.receivedContainer)
@@ -327,12 +331,16 @@ final class CloudDownloadModelContainerTests: XCTestCase {
         m.resolve()
         _ = await waitFor("the manifest to resolve", { if case .ready = m.state { return true }; return false })
         guard case .ready = m.state else { return XCTFail("resolve failed: \(m.state)") }
+        XCTAssertEqual(m.sessionFiles, [FileMeta(name: "a.txt", size: 3),
+                                        FileMeta(name: "b.txt", size: 2)])
 
         let parent = try tempDir()
         m.download(into: parent)
         _ = await waitFor("the download to finish", { if case .done = m.state { return true }; return false })
 
         guard case .done(let urls) = m.state else { return XCTFail("expected .done, got \(m.state)") }
+        XCTAssertEqual(m.sessionFiles.map(\.size), [3, 2],
+                       "completion must retain the manifest the files came from")
         let container = try XCTUnwrap(m.receivedContainer)
         XCTAssertEqual(container.lastPathComponent, "relayium-xyz789")
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: parent.path),

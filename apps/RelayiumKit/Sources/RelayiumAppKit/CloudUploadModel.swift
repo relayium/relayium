@@ -69,6 +69,12 @@ public final class CloudUploadModel: ObservableObject {
         return files
     }
 
+    /// The names and sizes the current upload surface must keep showing after
+    /// the picker disappears. Unlike `lastPicked`, this contains no file URLs
+    /// or security-scoped resources, so a completed link can truthfully name
+    /// what it contains without keeping access to the source files alive.
+    @Published public private(set) var sessionFiles: [FileMeta] = []
+
     private let uploader: CloudUploader
     /// Where the key of every successful upload is kept, so the Account tab can
     /// rebuild this link later. The same store the account management model
@@ -173,6 +179,10 @@ public final class CloudUploadModel: ObservableObject {
         // the files disagreeing. The panes disable their pickers while busy;
         // this is the guard that does not depend on a redraw.
         guard !isBusy else { return }
+        // Keep the attempted selection's harmless display facts even when a
+        // validation below refuses it. A failure card must never name files
+        // left over from an earlier attempt.
+        sessionFiles = selection.files.map(Self.fileMeta)
         if maxFileSize > 0 {
             for file in selection.files {
                 let attrs = try? FileManager.default.attributesOfItem(atPath: file.url.path)
@@ -189,6 +199,19 @@ public final class CloudUploadModel: ObservableObject {
         }
         lastPicked = selection.files
         state = .picked(selection.files)
+    }
+
+    private static func fileMeta(_ file: SelectedFile) -> FileMeta {
+        let bytes = file.byteCount ?? 0
+        let size = bytes > Int64(Int.max) ? Int.max : Int(max(bytes, 0))
+        return FileMeta(name: file.name, size: size,
+                        path: file.isNested ? file.relativePath : nil)
+    }
+
+    private static func fileMeta(_ file: PendingUploadFile) -> FileMeta {
+        FileMeta(name: file.name.split(separator: "/").last.map(String.init) ?? file.name,
+                 size: max(file.size, 0),
+                 path: file.name.contains("/") ? file.name : nil)
     }
 
     public func start(token: String) {
@@ -555,6 +578,7 @@ public final class CloudUploadModel: ObservableObject {
             guard !Task.isCancelled, g == self.generation,
                   self.accountId == accountId else { return }
             self.job = plan
+            self.sessionFiles = plan.files.map(Self.fileMeta)
             self.state = .interrupted(files: plan.files.count, bytes: plan.totalBytes,
                                       message: message)
             self.recoveryTask = nil
@@ -571,7 +595,7 @@ public final class CloudUploadModel: ObservableObject {
     private func discard(_ plan: PendingUploadPlan, using pending: PendingUploadSupport) {
         generation += 1
         job = nil
-        state = lastPicked.isEmpty ? .idle : .picked(lastPicked)
+        restorePickedState()
         cleanupWarning = nil
         let cleanupGeneration = generation
         // Record Discard before the asynchronous keychain cleanup begins. A
@@ -605,7 +629,7 @@ public final class CloudUploadModel: ObservableObject {
             discard(plan, using: pending)
         } else {
             generation += 1
-            state = lastPicked.isEmpty ? .idle : .picked(lastPicked)
+            restorePickedState()
         }
         job = nil
         accountId = nil
@@ -617,6 +641,7 @@ public final class CloudUploadModel: ObservableObject {
     private func adopt(_ plan: PendingUploadPlan, g: Int) -> Bool {
         guard g == generation else { return false }
         job = plan
+        sessionFiles = plan.files.map(Self.fileMeta)
         state = .uploading(sent: 0, total: plan.totalBytes)
         return true
     }
@@ -665,7 +690,7 @@ public final class CloudUploadModel: ObservableObject {
             state = .interrupted(files: plan.files.count, bytes: plan.totalBytes, message: nil)
             return
         }
-        state = lastPicked.isEmpty ? .idle : .picked(lastPicked)
+        restorePickedState()
     }
 
     /// Forget the selection entirely — what "Clear" means. Distinct from
@@ -676,13 +701,14 @@ public final class CloudUploadModel: ObservableObject {
         guard !isBusy else { return }
         generation += 1
         lastPicked = []
+        sessionFiles = []
         state = .idle
     }
 
     /// Back to a state the user can start from, after a success or a failure.
     public func reset() {
         generation += 1
-        state = lastPicked.isEmpty ? .idle : .picked(lastPicked)
+        restorePickedState()
     }
 
     // MARK: - state transitions, each guarded by generation
@@ -747,6 +773,11 @@ public final class CloudUploadModel: ObservableObject {
 
     func restore(g: Int) {
         guard g == generation else { return }
+        restorePickedState()
+    }
+
+    private func restorePickedState() {
+        sessionFiles = lastPicked.map(Self.fileMeta)
         state = lastPicked.isEmpty ? .idle : .picked(lastPicked)
     }
 
