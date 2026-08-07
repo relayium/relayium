@@ -48,6 +48,7 @@
   import ReceiveActions from "./lib/ReceiveActions.svelte";
   import WorkspaceHeader from "./lib/WorkspaceHeader.svelte";
   import QueuedBatches from "./lib/QueuedBatches.svelte";
+  import PendingFiles from "./lib/PendingFiles.svelte";
   import DebugPanel from "./lib/DebugPanel.svelte";
   import UpdateNotice from "./lib/UpdateNotice.svelte";
 
@@ -1489,7 +1490,13 @@
     <h2>{currentRoute() === "cross" && roomCode ? t.crossPeersTitle : t.peersTitle}</h2>
     <QuotaNotice />
     {#if outbox().length && visiblePeers.length !== 1}
-      <p class="ui-callout share-pending">{t.sharePending(outbox().length)}</p>
+      <PendingFiles
+        files={outbox()}
+        summary={t.sharePending(
+          outbox().length,
+          formatSize(outbox().reduce((total, item) => total + item.file.size, 0)),
+        )}
+      />
     {/if}
     {#if currentRoute() === "lan"}
       {#if chooser === "empty"}
@@ -1867,10 +1874,8 @@
      otherwise add another 48px on top of that parent gap. */
   .peers.cross { margin-top: 0; }
   .peers h2 { font-size: 20px; }
-  /* Both notices use the shared .ui-callout; the queued-share hint is neutral
-     (it is information) and the send confirmation is accent (it wants a
-     decision). Only spacing/layout is local. */
-  .share-pending { margin-block: 0 12px; }
+  /* The send confirmation is accent because it wants a decision. The queued
+     share now owns its file-detail layout inside PendingFiles. */
   .confirm-send {
     margin-block: 0 12px;
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap;

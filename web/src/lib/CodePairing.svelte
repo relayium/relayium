@@ -14,6 +14,7 @@
   import { relayWarnNote } from "./relay-status";
   import type { RelayAvailability } from "./ice";
   import Icon from "./Icon.svelte";
+  import PendingFiles from "./PendingFiles.svelte";
 
   let { roomCode = "", expired = false, relayStatus = "ok", requireLogin }:
     { roomCode?: string; expired?: boolean; relayStatus?: RelayAvailability; requireLogin?: () => void } = $props();
@@ -146,7 +147,10 @@
         <p class="scan">{t.pair.scanHint}</p>
       {/if}
       {#if outbox().length}
-        <p class="queued">{t.pair.queued(outbox().length, formatSize(queuedBytes))}</p>
+        <PendingFiles
+          files={outbox()}
+          summary={t.pair.queued(outbox().length, formatSize(queuedBytes))}
+        />
       {/if}
     {/if}
     <!-- Deliberately OUTSIDE the isMinter branch: both ends of a code room fetch
@@ -222,7 +226,6 @@
   .pairing { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; }
   .choices { display: flex; gap: var(--space-3); flex-wrap: wrap; justify-content: center; }
   .choices label.btn.disabled { opacity: .55; cursor: not-allowed; }
-  .queued { margin: 0; font-size: var(--fs-xs); color: var(--text-h); text-align: center; }
   .signin { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; }
   .signin .hint { margin: 0; font-size: var(--fs-xs); color: var(--text); text-align: center; max-width: 34ch; }
   .qr { margin-top: var(--space-1); border-radius: var(--radius-sm); background: #fff; padding: 6px; }

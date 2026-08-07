@@ -21,7 +21,7 @@ const de: Messages = {
   pathLan: "LAN direkt",
   pathP2p: "P2P direkt",
   pathRelay: "Über Relay",
-  sharePending: (n) => `${n} Datei${n === 1 ? "" : "en"} bereit zum Senden — Gerät wählen`,
+  sharePending: (n, s) => `${n} Datei${n === 1 ? "" : "en"} · ${s} gesamt — Gerät wählen`,
   sendFile: "Dateien senden",
   sendFolder: "Ordner senden",
   accept: "Annehmen",

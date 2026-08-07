@@ -21,7 +21,7 @@ const es: Messages = {
   pathLan: "Directo por LAN",
   pathP2p: "Directo P2P",
   pathRelay: "Retransmitido",
-  sharePending: (n) => `${n} archivo${n === 1 ? "" : "s"} listo${n === 1 ? "" : "s"} para enviar — elige un dispositivo`,
+  sharePending: (n, s) => `${n} archivo${n === 1 ? "" : "s"} · ${s} en total — elige un dispositivo`,
   sendFile: "Enviar archivos",
   sendFolder: "Enviar una carpeta",
   accept: "Aceptar",

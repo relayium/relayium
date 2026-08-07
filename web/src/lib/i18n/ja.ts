@@ -21,7 +21,7 @@ const ja: Messages = {
   pathLan: "LAN直結",
   pathP2p: "P2P直結",
   pathRelay: "中継",
-  sharePending: (n) => `${n} 個のファイルを送信待ち — デバイスを選択`,
+  sharePending: (n, s) => `${n} 個のファイル · 合計 ${s} — デバイスを選択`,
   sendFile: "ファイルを送信",
   sendFolder: "フォルダを送信",
   accept: "受信",

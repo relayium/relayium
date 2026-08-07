@@ -74,7 +74,7 @@ const ar: Messages = {
   pathLan: "مباشر عبر LAN",
   pathP2p: "مباشر P2P",
   pathRelay: "مُرحَّل",
-  sharePending: (n) => `${count(n, FILE_READY)} للإرسال — اختر جهازًا`,
+  sharePending: (n, s) => `${count(n, FILE_READY)} · ${s} إجمالًا — اختر جهازًا`,
   sendFile: "إرسال ملفات",
   sendFolder: "إرسال مجلد",
   accept: "قبول",

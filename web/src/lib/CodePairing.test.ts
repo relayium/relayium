@@ -3,6 +3,7 @@ import { mount, unmount, flushSync } from "svelte";
 import CodePairing from "./CodePairing.svelte";
 import { loadLang, messages } from "./i18n.svelte";
 import type { RelayAvailability } from "./ice";
+import { clearOutbox, setOutbox } from "./outbox.svelte";
 
 // The one thing that decides which role the component renders as: the minting
 // device stashes the code's expiry here, a joiner never has it.
@@ -13,6 +14,7 @@ let app: unknown;
 
 beforeEach(async () => {
   await loadLang("en");
+  clearOutbox();
   sessionStorage.clear();
   target = document.createElement("div");
   document.body.appendChild(target);
@@ -22,6 +24,7 @@ afterEach(() => {
   if (app) unmount(app);
   app = undefined;
   target.remove();
+  clearOutbox();
   sessionStorage.clear();
 });
 
@@ -75,6 +78,25 @@ describe("the relay warning on a code room", () => {
   it("says nothing outside a code room", () => {
     render({ relayStatus: "ok" });
     expect(warnings()).toHaveLength(0);
+  });
+});
+
+describe("files waiting in a minted code room", () => {
+  it("keeps every current outbox name and size visible while waiting for the peer", () => {
+    sessionStorage.setItem(EXP_KEY, String(Math.floor(Date.now() / 1000) + 1800));
+    setOutbox([
+      { file: new File([], "empty.txt") },
+      { file: new File([new Uint8Array(2048)], "报告.pdf") },
+    ]);
+
+    render({ roomCode: "483920", relayStatus: "ok" });
+
+    expect(target.querySelector(".summary")?.textContent)
+      .toBe(messages.en.pair.queued(2, "2.0 KB"));
+    expect([...target.querySelectorAll<HTMLElement>(".file-name")].map((node) => node.textContent))
+      .toEqual(["empty.txt", "报告.pdf"]);
+    expect([...target.querySelectorAll<HTMLElement>(".file-size")].map((node) => node.textContent))
+      .toEqual(["0 B", "2.0 KB"]);
   });
 });
 

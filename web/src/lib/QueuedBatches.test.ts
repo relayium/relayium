@@ -38,7 +38,8 @@ function open(props: Record<string, unknown> = {}) {
   });
   flushSync();
 }
-const rows = () => [...target.querySelectorAll("li")] as HTMLElement[];
+const batches = () => [...target.querySelectorAll<HTMLElement>(".batch-list > .batch")];
+const fileRows = (batch: HTMLElement) => [...batch.querySelectorAll<HTMLElement>(".file-list li")];
 
 describe("QueuedBatches", () => {
   it("makes the queued state explicit rather than an invisible backlog", () => {
@@ -46,11 +47,16 @@ describe("QueuedBatches", () => {
     expect(target.querySelector("h2")?.textContent)
       .toBe(messages.en.workspace.queuedTitle(2));
     expect(target.textContent).toContain(messages.en.workspace.queuedHint);
-    expect(rows()).toHaveLength(2);
-    expect(rows()[0].textContent).toContain("report.pdf");
-    // Multi-file batches collapse to first name + remainder, like the history log.
-    expect(rows()[1].textContent).toContain("a.png +2");
-    expect(rows()[1].textContent).toContain(messages.en.workspace.queuedFiles(3));
+    expect(batches()).toHaveLength(2);
+    expect(fileRows(batches()[0])).toHaveLength(1);
+    expect(fileRows(batches()[0])[0].textContent).toContain("report.pdf");
+    expect(fileRows(batches()[0])[0].textContent).toContain("2.0 KB");
+
+    expect(fileRows(batches()[1])).toHaveLength(3);
+    expect(fileRows(batches()[1]).map((row) => row.textContent))
+      .toEqual(["a.png 1.0 KB", "b.png 1.0 KB", "c.png 1.0 KB"]);
+    expect(batches()[1].textContent).toContain(messages.en.workspace.queuedFiles(3));
+    expect(batches()[1].textContent).not.toContain("+2");
   });
 
   it("gives every batch its own cancel control routed by id", () => {
@@ -72,7 +78,7 @@ describe("QueuedBatches", () => {
 
   it("renders no rows for an empty queue", () => {
     open({ batches: [] });
-    expect(rows()).toHaveLength(0);
+    expect(batches()).toHaveLength(0);
     expect(target.querySelector("h2")?.textContent)
       .toBe(messages.en.workspace.queuedTitle(0));
   });

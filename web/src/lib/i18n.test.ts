@@ -44,6 +44,8 @@ describe("i18n completeness", () => {
       expect(m.methods.stored.name, `${code}.methods.stored.name`).toBeTruthy();
       expect(m.methods.stored.name, `${code}.methods.stored.name owns no presentation glyph`).not.toContain("📦");
       expect(m.methods.stored.name, `${code}.methods.stored.name is trimmed`).toBe(m.methods.stored.name.trim());
+      expect(m.sharePending(3, "12.5 MB"), `${code}.sharePending count`).toMatch(/\b3\b/);
+      expect(m.sharePending(3, "12.5 MB"), `${code}.sharePending size`).toContain("12.5 MB");
     }
   });
 

@@ -49,7 +49,7 @@ export interface Messages {
   pathLan: string; // connection-path badge: host↔host on the local network
   pathP2p: string; // direct P2P over the public internet (NAT-traversed)
   pathRelay: string; // traffic going through a TURN relay
-  sharePending: (n: number) => string; // files came in via the OS share sheet; pick a device
+  sharePending: (n: number, size: string) => string; // local queued-file summary before device choice
   sendFile: string; // button: choose files to send
   sendFolder: string; // button: choose a folder to send
   accept: string;

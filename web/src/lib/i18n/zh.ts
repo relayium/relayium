@@ -21,7 +21,7 @@ const zh: Messages = {
   pathLan: "局域网直连",
   pathP2p: "P2P 直连",
   pathRelay: "中继",
-  sharePending: (n) => `${n} 个文件待发送 — 选择设备`,
+  sharePending: (n, s) => `${n} 个文件 · 共 ${s} — 选择设备`,
   sendFile: "发送文件",
   sendFolder: "发送文件夹",
   accept: "接收",

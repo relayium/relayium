@@ -21,7 +21,7 @@ const ko: Messages = {
   pathLan: "LAN 직접",
   pathP2p: "P2P 직접",
   pathRelay: "릴레이",
-  sharePending: (n) => `${n}개 파일 전송 대기 — 기기를 선택하세요`,
+  sharePending: (n, s) => `${n}개 파일 · 총 ${s} — 기기를 선택하세요`,
   sendFile: "파일 보내기",
   sendFolder: "폴더 보내기",
   accept: "받기",
