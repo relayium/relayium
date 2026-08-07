@@ -24,6 +24,13 @@ final class AppShellUITests: XCTestCase {
                        "\(name) did not become the selected task")
     }
 
+    private func scrollUntilHittable(_ element: XCUIElement, maxSwipes: Int = 6) {
+        for _ in 0..<maxSwipes where !element.isHittable {
+            app.swipeUp()
+        }
+        XCTAssertTrue(element.isHittable, "\(element) never became reachable")
+    }
+
     @discardableResult
     private func openTask(_ tabName: String, title: String) -> XCUIElement {
         let tabs = app.tabBars.firstMatch
@@ -87,5 +94,28 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Direct"].exists)
         XCTAssertTrue(app.staticTexts["Start a text session"].waitForExistence(timeout: 10),
                       "Direct selected Text but did not render the text task")
+
+        let code = app.textFields["Code"]
+        XCTAssertTrue(code.waitForExistence(timeout: 10),
+                      "the anonymous text receiver has no code field")
+        code.tap()
+        code.typeText("123456")
+        XCTAssertEqual(code.value as? String, "123456")
+        XCTAssertTrue(app.buttons["Join"].isEnabled,
+                      "a complete text code cannot be joined")
+    }
+
+    func testDirectLargeFileRouteReachesSend() {
+        openTask("Direct", title: "Direct")
+        let route = app.buttons["Open Send"]
+        XCTAssertTrue(route.waitForExistence(timeout: 10),
+                      "Direct does not offer its large-file route")
+        scrollUntilHittable(route)
+        route.tap()
+
+        let sendTab = app.tabBars.firstMatch.buttons["Send"]
+        waitForSelection(sendTab, named: "Send")
+        XCTAssertTrue(app.navigationBars["Send files"].waitForExistence(timeout: 10),
+                      "the large-file route selected Send without rendering it")
     }
 }
