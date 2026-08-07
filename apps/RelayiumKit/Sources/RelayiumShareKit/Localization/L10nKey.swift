@@ -17,6 +17,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case commonCancel = "common.cancel"
     case commonClear = "common.clear"
     case commonCopy = "common.copy"
+    case commonCopied = "common.copied"
     case commonDone = "common.done"
     case commonJoin = "common.join"
     case commonSend = "common.send"

@@ -5,6 +5,7 @@
 "common.cancel" = "取消";
 "common.clear" = "清除";
 "common.copy" = "复制";
+"common.copied" = "已复制";
 "common.done" = "完成";
 "common.join" = "加入";
 "common.send" = "发送";

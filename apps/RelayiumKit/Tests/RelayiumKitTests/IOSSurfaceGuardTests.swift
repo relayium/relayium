@@ -398,6 +398,21 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(done.contains("ShareLink(items: payload.dragURLs)"))
     }
 
+    /// The one deliberate pasteboard write must acknowledge completion on its
+    /// own row and release that feedback with the history. Store only the id;
+    /// duplicating the body in SwiftUI state would outlive the model's clear.
+    func testTextCopyAcknowledgesTheExactMessageWithoutRetainingPlaintext() throws {
+        let view = try XCTUnwrap(try sources().first { $0.name == "DirectTextSessionView.swift" })
+        XCTAssertTrue(view.text.contains("@State private var copiedMessageID: Int?"))
+        XCTAssertTrue(view.text.contains("copiedMessageID = message.id"))
+        XCTAssertTrue(view.text.contains(
+            "copiedMessageID == message.id ? .commonCopied : .commonCopy"))
+        XCTAssertTrue(view.text.contains(
+            "!history.contains(where: { $0.id == copiedMessageID })"))
+        XCTAssertFalse(view.text.contains("@State private var copiedMessage:"),
+                       "the view retains a second copy of ephemeral plaintext")
+    }
+
     func testRealtimeFileDetailsSurviveTransferAndCompletion() throws {
         let view = try XCTUnwrap(try sources().first { $0.name == "DirectFileSessionView.swift" })
         XCTAssertGreaterThanOrEqual(view.text.components(separatedBy: "fileList").count - 1, 3,
@@ -2160,8 +2175,11 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "detectPatterns", "value(forPasteboardType"] {
             XCTAssertFalse(view.text.contains(reader), "the app inspects the clipboard: \(reader)")
         }
-        XCTAssertTrue(view.text.contains("Button(L10n.t(.commonCopy))"),
-                      "the write must belong to a Copy button, per message")
+        XCTAssertTrue(view.text.contains("Button {"),
+                      "the write must belong to an explicit button action")
+        XCTAssertTrue(view.text.contains(
+            "copiedMessageID == message.id ? .commonCopied : .commonCopy"),
+            "the per-message button must remain Copy and acknowledge its write")
         XCTAssertTrue(view.text.contains("L10n.t(.textClipboardNotice)"),
                       "and the screen must say what a copy costs")
     }

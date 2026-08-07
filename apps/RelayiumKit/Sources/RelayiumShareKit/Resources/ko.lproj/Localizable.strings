@@ -5,6 +5,7 @@
 "common.cancel" = "취소";
 "common.clear" = "지우기";
 "common.copy" = "복사";
+"common.copied" = "복사했습니다";
 "common.done" = "완료";
 "common.join" = "참여";
 "common.send" = "보내기";

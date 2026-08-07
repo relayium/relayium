@@ -5,6 +5,7 @@
 "common.cancel" = "キャンセル";
 "common.clear" = "クリア";
 "common.copy" = "コピー";
+"common.copied" = "コピーしました";
 "common.done" = "完了";
 "common.join" = "参加";
 "common.send" = "送信";

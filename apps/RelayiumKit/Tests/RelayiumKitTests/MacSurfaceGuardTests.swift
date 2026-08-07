@@ -237,6 +237,20 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "Back to devices is exposed as a navigation Link")
     }
 
+    /// Copying ephemeral text changes the system clipboard, but previously gave
+    /// no success signal. Feedback must follow the exact row and disappear when
+    /// its history entry does, without retaining another plaintext body in view
+    /// state.
+    func testTextCopyAcknowledgesTheExactMessageWithoutRetainingPlaintext() throws {
+        let source = try source(named: "RealtimeTextSessionView.swift")
+        XCTAssertTrue(source.contains("@State private var copiedMessageID: Int?"))
+        XCTAssertTrue(source.contains("copiedMessageID = message.id"))
+        XCTAssertTrue(source.contains("copiedMessageID == message.id ? .commonCopied : .commonCopy"))
+        XCTAssertTrue(source.contains("!history.contains(where: { $0.id == copiedMessageID })"))
+        XCTAssertFalse(source.contains("@State private var copiedMessage:"),
+                       "the view retains a second copy of ephemeral plaintext")
+    }
+
     private func occurrences(of needle: String, in text: String) -> Int {
         text.components(separatedBy: needle).count - 1
     }

@@ -8,6 +8,7 @@
 "common.cancel" = "إلغاء";
 "common.clear" = "مسح";
 "common.copy" = "نسخ";
+"common.copied" = "تم النسخ";
 "common.done" = "تم";
 "common.join" = "انضمام";
 "common.send" = "إرسال";

@@ -17,6 +17,9 @@ struct RealtimeTextSessionView: View {
     /// The model reaches the same preference for the behaviour; this view must
     /// not be the thing that decides whether a gate exists.
     @EnvironmentObject private var verification: VerificationPreference
+    /// Presentation state only: keep the acknowledgement tied to one row by
+    /// id, never by retaining a second copy of its plaintext body.
+    @State private var copiedMessageID: Int?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -42,6 +45,11 @@ struct RealtimeTextSessionView: View {
             if let message = model.errorMessage {
                 InlineMessage(.failure, message)
             }
+        }
+        .onChange(of: model.history) { history in
+            guard let copiedMessageID,
+                  !history.contains(where: { $0.id == copiedMessageID }) else { return }
+            self.copiedMessageID = nil
         }
     }
 
@@ -212,13 +220,19 @@ struct RealtimeTextSessionView: View {
                         .foregroundStyle(.orange)
                 }
                 Spacer()
-                Button(L10n.t(.commonCopy)) {
+                Button {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(message.body, forType: .string)
+                    copiedMessageID = message.id
+                } label: {
+                    Label(L10n.t(copiedMessageID == message.id ? .commonCopied : .commonCopy),
+                          systemImage: copiedMessageID == message.id ? "checkmark" : "doc.on.doc")
                 }
                 .buttonStyle(.link)
-                .accessibilityLabel(L10n.t(message.direction == .outgoing
-                                           ? .textCopySentMessage : .textCopyReceivedMessage))
+                .accessibilityLabel(L10n.t(copiedMessageID == message.id
+                    ? .commonCopied
+                    : (message.direction == .outgoing
+                       ? .textCopySentMessage : .textCopyReceivedMessage)))
             }
             Text(message.body)
                 .textSelection(.enabled)

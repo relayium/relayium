@@ -28,6 +28,9 @@ struct DirectTextSessionView: View {
     /// gate EXISTS is the model's decision, from the same preference — a view
     /// must not be the thing that answers that.
     @EnvironmentObject private var verification: VerificationPreference
+    /// The row id is enough to render feedback; retaining the message here
+    /// would duplicate plaintext after the model clears its in-memory history.
+    @State private var copiedMessageID: Int?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -53,6 +56,11 @@ struct DirectTextSessionView: View {
             if let message = model.errorMessage {
                 failureLine(message)
             }
+        }
+        .onChange(of: model.history) { history in
+            guard let copiedMessageID,
+                  !history.contains(where: { $0.id == copiedMessageID }) else { return }
+            self.copiedMessageID = nil
         }
     }
 
@@ -207,12 +215,18 @@ struct DirectTextSessionView: View {
                 // on a tap, on the body of the message this row is showing. The
                 // notice under the composer says what it costs; nothing reads
                 // the pasteboard back, ever.
-                Button(L10n.t(.commonCopy)) {
+                Button {
                     UIPasteboard.general.string = message.body
+                    copiedMessageID = message.id
+                } label: {
+                    Label(L10n.t(copiedMessageID == message.id ? .commonCopied : .commonCopy),
+                          systemImage: copiedMessageID == message.id ? "checkmark" : "doc.on.doc")
                 }
                 .buttonStyle(.borderless)
-                .accessibilityLabel(L10n.t(message.direction == .outgoing
-                                           ? .textCopySentMessage : .textCopyReceivedMessage))
+                .accessibilityLabel(L10n.t(copiedMessageID == message.id
+                    ? .commonCopied
+                    : (message.direction == .outgoing
+                       ? .textCopySentMessage : .textCopyReceivedMessage)))
             }
             Text(message.body)
                 .textSelection(.enabled)

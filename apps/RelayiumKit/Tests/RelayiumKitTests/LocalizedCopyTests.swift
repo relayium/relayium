@@ -15,6 +15,16 @@ import XCTest
 /// the machine the tests run on.
 final class LocalizedCopyTests: XCTestCase {
 
+    func testCopiedFeedbackIsLocalizedEverywhere() {
+        let english = L10n.t(.commonCopied, language: .en)
+        XCTAssertEqual(english, "Copied")
+        for language in AppLanguage.allCases where language != .en {
+            let text = L10n.t(.commonCopied, language: language)
+            XCTAssertFalse(text.isEmpty, language.rawValue)
+            XCTAssertNotEqual(text, english, "common.copied [\(language.rawValue)] is untranslated")
+        }
+    }
+
     // MARK: - errors carry their language and keep their data
 
     func testErrorCopyIsTranslatedInEveryLanguage() {

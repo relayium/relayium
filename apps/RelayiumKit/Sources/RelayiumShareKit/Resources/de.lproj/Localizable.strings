@@ -5,6 +5,7 @@
 "common.cancel" = "Abbrechen";
 "common.clear" = "Leeren";
 "common.copy" = "Kopieren";
+"common.copied" = "Kopiert";
 "common.done" = "Fertig";
 "common.join" = "Beitreten";
 "common.send" = "Senden";
