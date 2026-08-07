@@ -82,6 +82,26 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/dd-ios" \
             CODE_SIGNING_ALLOWED=NO build
+      # A compile cannot prove that TabView produced five usable screens. Pick
+      # an installed iPhone runtime by id so this remains independent of the
+      # device marketing name on each macOS runner image.
+      - name: Run iOS primary-task UI smoke
+        run: |
+          set -euo pipefail
+          device_id="$(xcrun simctl list devices available -j \
+            | /usr/bin/python3 -c 'import json, sys
+          data = json.load(sys.stdin)
+          print(next(device["udid"]
+                     for devices in data["devices"].values()
+                     for device in devices
+                     if device.get("isAvailable")
+                     and device.get("name", "").startswith("iPhone")))')"
+          [ -n "$device_id" ] || {
+            echo "::error::no available iPhone Simulator runtime"; exit 1; }
+          xcodebuild -project apps/ios/Relayium.xcodeproj -scheme Relayium \
+            -destination "platform=iOS Simulator,id=$device_id" \
+            -derivedDataPath "$RUNNER_TEMP/dd-ios" \
+            -only-testing:RelayiumUITests test
 
   # Needs the signing certificate, so it cannot run where secrets are
   # unavailable. This repository is public: a fork's pull request cannot read

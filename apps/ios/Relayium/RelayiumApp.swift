@@ -341,7 +341,12 @@ struct RelayiumApp: App {
                 // `ForegroundSessionCoordinatorTests` drive every phase against
                 // real models; this only reports the phase.
                 .onChange(of: scenePhase) { phase in
-                    residency.phaseChanged(to: lifecycle(phase))
+                    // UI acceptance must not publish a simulator into the
+                    // public-address Nearby room. In Release `isActive` is a
+                    // compile-time false, so shipped residency is unconditional.
+                    if !UITestMode.isActive {
+                        residency.phaseChanged(to: lifecycle(phase))
+                    }
                     // The share extension's ONLY hand-off. It cannot open this
                     // app — a Share Extension is not an extension point Apple
                     // lets do that — so what brings a staged draft onto the Send
@@ -359,7 +364,9 @@ struct RelayiumApp: App {
                 // resolving the folder is idempotent and `startResident` refuses
                 // both a second socket and an override of the user's pause.
                 .task {
-                    residency.phaseChanged(to: .active)
+                    if !UITestMode.isActive {
+                        residency.phaseChanged(to: .active)
+                    }
                     // Cold launch, including the launch that follows a user
                     // sharing something and then tapping Relayium on the home
                     // screen. `onChange` fires on a CHANGE and the scene is

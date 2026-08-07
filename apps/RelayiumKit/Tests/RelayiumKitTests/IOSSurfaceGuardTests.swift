@@ -65,6 +65,35 @@ final class IOSSurfaceGuardTests: XCTestCase {
         appsRoot.appendingPathComponent("RelayiumKit/Sources/RelayiumAppKit")
     }
 
+    func testIOSRuntimeSmokeIsWiredWithoutPublishingNearbyPresence() throws {
+        let app = try XCTUnwrap(try sources().first { $0.name == "RelayiumApp.swift" }?.text)
+        let mode = try XCTUnwrap(try sources().first { $0.name == "UITestMode.swift" }?.text)
+        XCTAssertTrue(mode.contains("--relayium-ui-testing"))
+        XCTAssertTrue(mode.contains("#if DEBUG"))
+        XCTAssertGreaterThanOrEqual(app.components(
+            separatedBy: "if !UITestMode.isActive").count - 1, 2,
+            "a UI simulator can still enter the public Nearby room")
+
+        let uiURL = appsRoot.appendingPathComponent(
+            "ios/RelayiumUITests/AppShellUITests.swift")
+        let ui = try String(contentsOf: uiURL, encoding: .utf8)
+        for task in ["Receive", "Send", "Direct", "Nearby", "Account"] {
+            XCTAssertTrue(ui.contains("(tab: \"\(task)\""),
+                          "the runtime smoke omits \(task)")
+        }
+
+        let schemeURL = appsRoot.appendingPathComponent(
+            "ios/Relayium.xcodeproj/xcshareddata/xcschemes/Relayium.xcscheme")
+        let scheme = try String(contentsOf: schemeURL, encoding: .utf8)
+        XCTAssertTrue(scheme.contains("RelayiumUITests.xctest"))
+
+        let workflowURL = appsRoot.deletingLastPathComponent()
+            .appendingPathComponent(".github/workflows/macos.yml")
+        let workflow = try String(contentsOf: workflowURL, encoding: .utf8)
+        XCTAssertTrue(workflow.contains("-only-testing:RelayiumUITests test"),
+                      "CI compiles iOS but never runs its shell")
+    }
+
     /// Nearby, pairing-code and stored sending are three destinations for the
     /// same promise: before Send, the user can inspect every file and its size.
     func testEverySendSurfaceShowsThePendingFileNamesAndSizes() throws {
