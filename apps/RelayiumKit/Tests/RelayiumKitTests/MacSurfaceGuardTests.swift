@@ -85,6 +85,8 @@ final class MacSurfaceGuardTests: XCTestCase {
         let uiURL = macRoot.deletingLastPathComponent()
             .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
         let ui = try String(contentsOf: uiURL, encoding: .utf8)
+        XCTAssertTrue(ui.contains("app.windows[\"main\"].firstMatch"),
+                      "runtime checks can mistake an auxiliary window for the product shell")
         XCTAssertTrue(ui.contains(
             "window.descendants(matching: .any)[\"sidebar-\\(id)\"].firstMatch"),
             "destination clicks do not use the stable sidebar task identity")

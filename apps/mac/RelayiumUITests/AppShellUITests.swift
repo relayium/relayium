@@ -20,6 +20,13 @@ import XCTest
 final class AppShellUITests: XCTestCase {
     private var app: XCUIApplication!
 
+    /// Sparkle and AppKit may create auxiliary windows before the shell on a
+    /// hosted runner. `windows.firstMatch` therefore is not a product window:
+    /// it happened to be Relayium locally, but was an auxiliary window on
+    /// macOS 15. SwiftUI propagates the unique `Window` scene id to NSWindow,
+    /// so select that stable product identity rather than creation order.
+    private var mainWindow: XCUIElement { app.windows["main"].firstMatch }
+
     private var offlineLaunchArguments: [String] {
         ["--relayium-ui-testing", "-AppleLanguages", "(en)",
          "-AppleLocale", "en_US"]
@@ -66,7 +73,7 @@ final class AppShellUITests: XCTestCase {
     /// running process with nothing on screen, and the menu-bar extra keeps that
     /// process alive — so "it launched" is not evidence.
     func testTheMainWindowOpens() {
-        XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 20),
+        XCTAssertTrue(mainWindow.waitForExistence(timeout: 20),
                       "the unique main window did not appear")
     }
 
@@ -76,7 +83,7 @@ final class AppShellUITests: XCTestCase {
     /// change, and a positional assertion would fail on a reorder that harmed
     /// nobody. What must not change is that every capability is reachable.
     func testEveryDestinationIsReachableFromTheSidebar() {
-        let window = app.windows.firstMatch
+        let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
         // English is the CI locale; the localized suites cover the other eight.
         for destination in ["Nearby", "Pairing code", "Send a link",
@@ -88,7 +95,7 @@ final class AppShellUITests: XCTestCase {
     }
 
     func testStoppedNearbyDiscoveryAsksForActionWithoutPretendingToWork() {
-        let window = app.windows.firstMatch
+        let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
         let nearby = sidebarDestination("Nearby", in: window)
         XCTAssertTrue(nearby.waitForExistence(timeout: 10))
@@ -103,7 +110,7 @@ final class AppShellUITests: XCTestCase {
     /// is a destination whose body fails to build — which is a blank pane, not a
     /// crash, and is invisible to every other test in this repository.
     func testEachDestinationRendersItsOwnSurface() {
-        let window = app.windows.firstMatch
+        let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
         let destinations = [
             (title: "Pairing code", id: "pairingCode"),
@@ -128,7 +135,7 @@ final class AppShellUITests: XCTestCase {
     /// a pairing-code text session must not be mistaken for unsolicited Nearby
     /// receive, and its handoff must be usable without transcribing six digits.
     func testCreatingATextCodeStaysOnPairingAndShowsEveryHandoff() {
-        let window = app.windows.firstMatch
+        let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
 
         let pairing = sidebarDestination("Pairing code", in: window)
@@ -189,7 +196,7 @@ final class AppShellUITests: XCTestCase {
             + ["--relayium-ui-testing-terminal-text"]
         app.launch()
 
-        let window = app.windows.firstMatch
+        let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
         let pairing = sidebarDestination("Pairing code", in: window)
         XCTAssertTrue(pairing.waitForExistence(timeout: 10))
@@ -224,7 +231,7 @@ final class AppShellUITests: XCTestCase {
             + ["--relayium-ui-testing-terminal-nearby"]
         app.launch()
 
-        let window = app.windows.firstMatch
+        let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
         XCTAssertTrue(window.descendants(matching: .any)["nearby-session-peer"]
             .waitForExistence(timeout: 10), "the terminal task lost who it was with")
@@ -253,7 +260,7 @@ final class AppShellUITests: XCTestCase {
     /// takes, and it additionally proves the item is in the app menu at all,
     /// which is the placement a `Settings` scene is chosen for.
     func testSettingsOpensWithoutReplacingTheMainWindow() {
-        let main = app.windows.firstMatch
+        let main = mainWindow
         XCTAssertTrue(main.waitForExistence(timeout: 20))
 
         let appMenu = app.menuBarItems.element(boundBy: 1)
@@ -275,7 +282,7 @@ final class AppShellUITests: XCTestCase {
     /// residency design rests on — `applicationShouldTerminateAfterLastWindowClosed`
     /// returning false — and until now nothing observed it running.
     func testClosingTheWindowLeavesTheAppRunning() {
-        let window = app.windows.firstMatch
+        let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
         window.buttons[XCUIIdentifierCloseWindow].click()
         let gone = NSPredicate(format: "count == 0")
