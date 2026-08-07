@@ -314,6 +314,15 @@ final class MacSurfaceGuardTests: XCTestCase {
         }
     }
 
+    func testInboundNearbyOfferPassesOwnershipAdmissionBeforeBuildingResponder() throws {
+        let app = try source(named: "RelayiumApp.swift")
+        XCTAssertTrue(app.contains("receive.shouldAcceptSession = { kind in"),
+                      "macOS can build an inbound responder during an outbound claim-before-busy gap")
+        XCTAssertTrue(app.contains(
+            "AppRouting.claimIncoming(kind, presence: presenting, navigation: routing)"),
+                      "inbound admission must use the same atomic claim-before-navigation route")
+    }
+
     /// Before a text peer connects there is no transcript or result to retain.
     /// Cancel should match the file flow and return directly to the start screen.
     func testTextConnectingCancelDoesNotCreateAnEmptyTerminalTask() throws {

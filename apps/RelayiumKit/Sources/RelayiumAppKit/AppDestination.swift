@@ -111,9 +111,9 @@ public enum AppRouting {
     ///  - **which tab** — last, so the shell arrives at a surface that is
     ///    already configured.
     ///
-    /// iOS's shell is the caller. macOS reconciles the same facts from its
-    /// nearby destination's `task(id:)`, because its window can be closed and
-    /// rebuilt while a session runs — a case a one-shot call cannot cover.
+    /// iOS and macOS both call this from pre-responder admission. macOS also
+    /// replays the idempotent claim from AppShell when a closed window is rebuilt
+    /// around an already-live inbound session.
     @MainActor
     @discardableResult
     public static func claimIncoming(_ kind: NearbyReceiveKind,

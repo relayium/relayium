@@ -304,6 +304,14 @@ struct RelayiumApp: App {
         _presence = StateObject(wrappedValue: presenting)
         let routing = AppNavigationModel()
         _navigation = StateObject(wrappedValue: routing)
+        // Admission happens before NearbyReceive builds or publishes an
+        // inbound responder. The models alone are still idle during the short
+        // interval after an outbound action has claimed its surface, so waiting
+        // for AppShell's activeKind task would reject navigation only after the
+        // inbound attempt had already reached the shared model.
+        receive.shouldAcceptSession = { kind in
+            AppRouting.claimIncoming(kind, presence: presenting, navigation: routing)
+        }
         // Last, because it is built from four objects above and owns none of
         // them. It navigates exactly once per link, and it is the ONE place that
         // decides whether a link may write into a model that is mid-transfer —
