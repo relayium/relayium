@@ -79,7 +79,24 @@ struct ReceiveView: View {
     private var stateSection: some View {
         switch model.state {
         case .idle:
-            EmptyView()
+            VStack(alignment: .leading, spacing: 12) {
+                Label {
+                    Text(L10n.t(.downloadIdleHint))
+                } icon: {
+                    Image(systemName: "link")
+                }
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+
+                Label {
+                    Text(L10n.t(.downloadNoAccountNeeded))
+                } icon: {
+                    Image(systemName: "person.crop.circle.badge.checkmark")
+                }
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
 
         case .resolving:
             VStack(alignment: .leading, spacing: 12) {

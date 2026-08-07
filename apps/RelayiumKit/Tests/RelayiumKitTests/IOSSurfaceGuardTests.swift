@@ -364,6 +364,19 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "the shell must not switch on session state — that would gate the receive tab")
     }
 
+    func testIdleReceiveExplainsTheLinkPrivacyAndAnonymousEntryPoint() throws {
+        let receive = try XCTUnwrap(try sources().first { $0.name == "ReceiveView.swift" })
+        let idleStart = try XCTUnwrap(receive.text.range(of: "case .idle:"))
+        let resolvingStart = try XCTUnwrap(receive.text.range(of: "case .resolving:"))
+        let idle = receive.text[idleStart.lowerBound..<resolvingStart.lowerBound]
+        XCTAssertTrue(idle.contains("L10n.t(.downloadIdleHint)"),
+                      "an empty field does not explain what a Relayium link protects")
+        XCTAssertTrue(idle.contains("L10n.t(.downloadNoAccountNeeded)"),
+                      "the anonymous receive capability is invisible on its own tab")
+        XCTAssertFalse(idle.contains("EmptyView()"),
+                       "the first-run receive state must not be a blank remainder")
+    }
+
     /// A failure a second tap would fix must offer that tap.
     ///
     /// This view rendered a sentence and nothing else for every failure,
