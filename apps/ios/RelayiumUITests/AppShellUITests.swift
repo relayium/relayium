@@ -168,4 +168,43 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(link.isEnabled, "an invalid link cannot be corrected in place")
         XCTAssertTrue(open.exists, "an invalid link leaves no way to try the correction")
     }
+
+    func testRegistrationProblemKeepsTheDraftCorrectable() {
+        openTask("Account", title: "Account")
+        app.buttons["New to Relayium? Create an account"].tap()
+        XCTAssertTrue(app.staticTexts["Create your Relayium account"]
+            .waitForExistence(timeout: 10))
+
+        let email = app.textFields["account.email"]
+        let password = app.secureTextFields["account.password"]
+        let confirmation = app.secureTextFields["account.confirmPassword"]
+        XCTAssertTrue(email.waitForExistence(timeout: 10))
+        XCTAssertTrue(password.exists)
+        XCTAssertTrue(confirmation.exists)
+
+        email.tap()
+        email.typeText("person@example.com")
+        password.tap()
+        password.typeText("short")
+        confirmation.tap()
+        confirmation.typeText("wrong battery")
+
+        let submittedPassword = password.value as? String
+        let submittedConfirmation = confirmation.value as? String
+        let create = app.buttons["Create account"]
+        XCTAssertTrue(create.isEnabled, "a complete form cannot explain its problem")
+        scrollUntilHittable(create)
+        create.tap()
+
+        XCTAssertTrue(app.staticTexts["Use at least 8 characters for your password."]
+            .waitForExistence(timeout: 10),
+                      "a short password is not explained beside the form")
+        XCTAssertEqual(password.value as? String, submittedPassword,
+                       "a local validation error erased the password")
+        XCTAssertEqual(confirmation.value as? String, submittedConfirmation,
+                       "a local validation error erased the confirmation")
+        XCTAssertTrue(password.isEnabled)
+        XCTAssertTrue(confirmation.isEnabled)
+        XCTAssertTrue(create.exists, "a local refusal leaves no way to submit a correction")
+    }
 }

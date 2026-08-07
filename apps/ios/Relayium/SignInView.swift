@@ -89,10 +89,14 @@ struct SignInView: View {
             VStack(spacing: 12) {
                 if mode == .register {
                     TextField(L10n.t(.loginDisplayName), text: $draft.displayName)
+                        .accessibilityLabel(L10n.t(.loginDisplayName))
+                        .accessibilityIdentifier("account.name")
                         .textContentType(.name)
                         .autocorrectionDisabled()
                 }
                 TextField(L10n.t(.loginEmail), text: $draft.email)
+                    .accessibilityLabel(L10n.t(.loginEmail))
+                    .accessibilityIdentifier("account.email")
                     // Registration is an email-address field, while sign-in
                     // uses username so Password AutoFill can match an existing
                     // Relayium credential. Both still present the email
@@ -102,6 +106,8 @@ struct SignInView: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                 SecureField(L10n.t(.loginPassword), text: $draft.password)
+                    .accessibilityLabel(L10n.t(.loginPassword))
+                    .accessibilityIdentifier("account.password")
                     // `.newPassword` in register mode, so iOS offers to generate
                     // and save one instead of filling an existing one.
                     .textContentType(mode == .register ? .newPassword : .password)
@@ -109,6 +115,8 @@ struct SignInView: View {
                     .onSubmit(passwordReturn)
                 if mode == .register {
                     SecureField(L10n.t(.loginConfirmPassword), text: $draft.confirmPassword)
+                        .accessibilityLabel(L10n.t(.loginConfirmPassword))
+                        .accessibilityIdentifier("account.confirmPassword")
                         .textContentType(.newPassword)
                         .submitLabel(.go)
                         .focused($confirmFocused)
