@@ -223,6 +223,16 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertFalse(showing.contains("model.end()"))
     }
 
+    func testGeneratedCodeCancelIsPresentedAsATaskButton() throws {
+        let source = try source(named: "QRCode.swift")
+        let handoff = try XCTUnwrap(source.components(
+            separatedBy: "struct PairingCodeHandoffView:").dropFirst().first)
+        let cancel = try XCTUnwrap(handoff.components(
+            separatedBy: "Button(L10n.t(.commonCancel), action: cancel)").dropFirst().first?
+            .components(separatedBy: "}").first)
+        XCTAssertTrue(cancel.contains(".buttonStyle(.bordered)"))
+    }
+
     /// iOS already locks both controls while resolving/downloading. macOS must
     /// not leave a second Open path live over a task whose writer and Cancel
     /// handle the shared model still owns.

@@ -423,6 +423,8 @@ struct DirectView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button(L10n.t(.commonCancel), action: cancel)
+                .buttonStyle(.bordered)
+                .controlSize(.large)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

@@ -107,6 +107,7 @@ struct PairingCodeHandoffView: View {
                 ProgressView(L10n.t(.directWaitingForDevice))
                     .controlSize(.small)
                 Button(L10n.t(.commonCancel), action: cancel)
+                    .buttonStyle(.bordered)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }

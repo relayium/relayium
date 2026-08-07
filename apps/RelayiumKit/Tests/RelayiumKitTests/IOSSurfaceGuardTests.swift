@@ -127,6 +127,19 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertFalse(showing.contains("text.end()"))
     }
 
+    func testGeneratedCodeCancelIsPresentedAsALargeTaskButton() throws {
+        let all = try sources()
+        let source = try XCTUnwrap(all.first { $0.name == "DirectView.swift" }?.text)
+        let showing = try XCTUnwrap(source.components(
+            separatedBy: "private func showing(code:").dropFirst().first?
+            .components(separatedBy: "private func interruption").first)
+        let cancel = try XCTUnwrap(showing.components(
+            separatedBy: "Button(L10n.t(.commonCancel), action: cancel)").dropFirst().first?
+            .components(separatedBy: "}").first)
+        XCTAssertTrue(cancel.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(cancel.contains(".controlSize(.large)"))
+    }
+
     /// Cold upload recovery locks selection adoption while it reads durable
     /// state. That wait needs the same explicit exit as every other busy phase.
     func testStoredUploadRecoveryCheckCanBeCancelled() throws {
