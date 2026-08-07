@@ -436,8 +436,8 @@ struct NearbyView: View {
             if let notice = foreground.interruption { interruption(notice) }
             switch modes.mode {
             case .files:
-                DirectFileSessionView(model: file)
                 if case let .failed(message) = file.state { failureLine(message) }
+                DirectFileSessionView(model: file)
             case .text:
                 DirectTextSessionView(model: text)
             }

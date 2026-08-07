@@ -288,10 +288,10 @@ struct NearbyPane: View {
         VStack(alignment: .leading, spacing: 10) {
             switch mode {
             case .files:
-                RealtimeFileSessionView(model: fileModel)
                 if case let .failed(message) = fileModel.state {
                     InlineMessage(.failure, message)
                 }
+                RealtimeFileSessionView(model: fileModel)
             case .text:
                 RealtimeTextSessionView(model: textModel)
             }

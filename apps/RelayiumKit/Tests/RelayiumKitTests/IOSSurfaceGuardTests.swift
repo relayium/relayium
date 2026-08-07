@@ -147,6 +147,14 @@ final class IOSSurfaceGuardTests: XCTestCase {
             .components(separatedBy: "case .joining").first)
         XCTAssertTrue(failed.contains("fileList"),
                       "Nearby failure hides which files failed")
+
+        let nearby = try XCTUnwrap(try sources().first { $0.name == "NearbyView.swift" }?.text)
+        let live = try XCTUnwrap(nearby.components(
+            separatedBy: "private var session:").dropFirst().first?
+            .components(separatedBy: "// MARK: - shared pieces").first)
+        XCTAssertLessThan(try XCTUnwrap(live.range(of: "failureLine(message)")).lowerBound,
+                          try XCTUnwrap(live.range(of: "DirectFileSessionView")).lowerBound,
+                          "a long file list pushes the failure reason below the fold")
     }
 
     /// Creating a code removes the start controls while a network request owns

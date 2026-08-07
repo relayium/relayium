@@ -246,6 +246,14 @@ final class MacSurfaceGuardTests: XCTestCase {
             .components(separatedBy: "case .joining").first)
         XCTAssertTrue(failed.contains("fileList"),
                       "Nearby failure hides which files failed")
+
+        let nearby = try source(named: "NearbyPane.swift")
+        let nearbySession = try XCTUnwrap(nearby.components(
+            separatedBy: "private var session:").dropFirst().first?
+            .components(separatedBy: "// MARK: - actions").first)
+        XCTAssertLessThan(try XCTUnwrap(nearbySession.range(of: "InlineMessage(.failure")).lowerBound,
+                          try XCTUnwrap(nearbySession.range(of: "RealtimeFileSessionView")).lowerBound,
+                          "a long file list pushes the failure reason below the fold")
     }
 
     /// Minting is a locked network wait: the idle controls are gone until the
