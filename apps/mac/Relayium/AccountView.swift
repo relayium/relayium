@@ -488,5 +488,8 @@ struct AccountView: View {
                 ProgressView(value: fraction)
             }
         }
+        // One result, not three unrelated announcements: the title and
+        // used-of-cap text give the otherwise bare percentage its meaning.
+        .accessibilityElement(children: .combine)
     }
 }

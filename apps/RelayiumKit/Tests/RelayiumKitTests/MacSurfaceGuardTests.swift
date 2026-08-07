@@ -539,6 +539,17 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(downloading.contains("L10n.percent(done: received, total: total)"))
     }
 
+    func testAccountMetersDoNotAnnounceBarePercentages() throws {
+        let source = try source(named: "AccountView.swift")
+        let meter = try XCTUnwrap(source.components(
+            separatedBy: "private func meter(").dropFirst().first)
+        XCTAssertTrue(meter.contains("Text(title)"))
+        XCTAssertTrue(meter.contains("L10n.t(.accountMeterOf"))
+        XCTAssertTrue(meter.contains("ProgressView(value: fraction)"))
+        XCTAssertTrue(meter.contains(".accessibilityElement(children: .combine)"),
+                      "the percentage is detached from the quota it measures")
+    }
+
     /// iOS already locks both controls while resolving/downloading. macOS must
     /// not leave a second Open path live over a task whose writer and Cancel
     /// handle the shared model still owns.
