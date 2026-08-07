@@ -82,3 +82,33 @@ struct PairingJoinLinkView: View {
         }
     }
 }
+
+/// The complete handoff stays above the fold at the app's minimum window size:
+/// scan on the left; inspect/copy/share, current status and Cancel on the right.
+/// File and text pairing use this exact component so one cannot quietly lose an
+/// affordance the other has.
+struct PairingCodeHandoffView: View {
+    let url: URL
+    let cancel: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) {
+                QRCodeView(url: url.absoluteString, side: 144)
+                Text(L10n.t(.directScanOnPhone))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(width: 160, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 12) {
+                PairingJoinLinkView(url: url)
+                ProgressView(L10n.t(.directWaitingForDevice))
+                    .controlSize(.small)
+                Button(L10n.t(.commonCancel), action: cancel)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}

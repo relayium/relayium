@@ -87,11 +87,8 @@ struct RealtimeTextPane: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if let joinURL = productionPairingJoinURL(code: code) {
-                QRCodeView(url: joinURL.absoluteString)
-                PairingJoinLinkView(url: joinURL)
+                PairingCodeHandoffView(url: joinURL) { model.end() }
             }
-            ProgressView(L10n.t(.directWaitingForDevice)).controlSize(.small)
-            Button(L10n.t(.commonCancel)) { model.end() }
         }
     }
 

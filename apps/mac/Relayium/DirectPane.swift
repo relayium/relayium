@@ -140,12 +140,8 @@ struct DirectPane: View {
             ]))
                 .font(.caption).foregroundStyle(.secondary)
             if let joinURL = productionPairingJoinURL(code: code) {
-                QRCodeView(url: joinURL.absoluteString)
-                Text(L10n.t(.directScanOnPhone)).font(.caption).foregroundStyle(.secondary)
-                PairingJoinLinkView(url: joinURL)
+                PairingCodeHandoffView(url: joinURL) { model.cancel() }
             }
-            ProgressView(L10n.t(.directWaitingForDevice)).controlSize(.small)
-            Button(L10n.t(.commonCancel)) { model.cancel() }
         }
     }
 

@@ -104,6 +104,10 @@ final class AppShellUITests: XCTestCase {
                       "the join link cannot be copied")
         XCTAssertTrue(window.buttons["Share"].exists,
                       "the join link cannot use the system share sheet")
+        XCTAssertTrue(window.staticTexts["Waiting for the other device…"].exists,
+                      "the generated-code surface hides its live status")
+        XCTAssertTrue(window.buttons["Cancel"].exists,
+                      "the generated-code surface hides its escape action")
         XCTAssertTrue(window.staticTexts["Pairing code"].exists || window.title == "Pairing code",
                       "creating a pairing-code text session navigated elsewhere")
     }
