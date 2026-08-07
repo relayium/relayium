@@ -6,6 +6,8 @@
 // (a head-to-head comparison) — this is the "AirDrop equivalent for X" intent,
 // so it cross-links that piece instead of repeating its comparison table.
 
+import { browserCrossNetworkSection } from "../browser-fact-sections.mjs";
+
 const en = {
   title: "AirDrop for Windows, Linux and Android",
   description:
@@ -91,13 +93,7 @@ const en = {
         ],
       },
     },
-    {
-      heading: "Across the internet: something AirDrop can't do",
-      body: [
-        "AirDrop is nearby-only — walk out of Bluetooth/Wi-Fi range and it stops working. Relayium's second mode covers exactly that gap: two devices on completely different networks, anywhere in the world. It is a separate surface from a nearby-device workspace, though: a pairing-code room keeps the earlier per-device controls, so there is no “Open workspace” to press there.",
-        "The sender signs in and gets a short pairing code (with a join link and a QR code); the receiver enters it, or scans the QR, or opens the link — and never needs an account. That cross-network connection runs over an encrypted TURN relay rather than a direct link, and it does so by design: it takes the relay from the start, so the connection does not depend on discovering a direct path through the NATs and firewalls between two unrelated networks, which can prevent one. The files are sealed end-to-end before they leave the sender, so the relay only ever forwards ciphertext it has no key to open — the whole route stays end-to-end encrypted. A dropped connection can resume instead of restarting from zero. The code is good for five minutes, so have both devices in front of you before you generate one.",
-      ],
-    },
+    browserCrossNetworkSection.en,
     {
       heading: "What's actually protecting the file",
       body: [
@@ -230,13 +226,7 @@ const zh = {
         ],
       },
     },
-    {
-      heading: "跨越互联网：AirDrop 做不到的事",
-      body: [
-        "AirDrop 只能就近使用——走出蓝牙/Wi-Fi 范围就失灵了。Relayium 的第二种模式正好补上这个空缺：两台设备处在完全不同的网络里，无论在世界的哪个角落。不过它和「附近的设备」工作区是两套界面：配对码房间保留的是早先那套按设备分开的控件，那里没有「打开工作区」可按。",
-        "发送方登录后会拿到一段短配对码（附带加入链接和二维码）；接收方输入这个码，或扫描二维码，或直接打开链接——始终无需账号。这条跨网络的连接走的是加密 TURN 中继，而不是两端直连，这是有意为之：它一开始就走中继，因此连接不依赖在两个互不相干的网络之间的 NAT 和防火墙里探测出一条直连路径——它们可能挡住这样的路径。文件在离开发送方之前就已完成端到端加密，因此中继全程只转发它无法解开的密文——整条路径依旧是端到端加密的。若连接中断，传输可以断点续传，不必从头再来。 配对码有效期 5 分钟，所以生成之前先把两台设备都准备好。",
-      ],
-    },
+    browserCrossNetworkSection.zh,
     {
       heading: "真正保护文件的是什么",
       body: [
@@ -369,13 +359,7 @@ const ja = {
         ],
       },
     },
-    {
-      heading: "インターネット越し：AirDrop にはできないこと",
-      body: [
-        "AirDrop は近接専用です。Bluetooth や Wi-Fi の範囲外に出ると動かなくなります。Relayium の2つ目のモードはまさにその空白を埋めます：まったく異なるネットワーク上の2台の端末を、世界中どこにいても。ただしこれは「近くのデバイス」のワークスペースとは別の画面です。ペアリングコードのルームは以前どおり端末ごとに分かれたコントロールのままなので、そこに「ワークスペースを開く」はありません。",
-        "送信側がサインインすると短いペアリングコード（参加リンクと QR コード付き）を受け取ります。受信側はそれを入力するか、QR を読み取るか、リンクを開きます。アカウントは一切不要です。このネットワークをまたぐ接続は、端末同士の直接接続ではなく暗号化された TURN リレー経由で行われます。これは設計上の選択です。最初からリレーを使うため、接続の成立は、無関係な2つのネットワークの間にある NAT やファイアウォールを越える直接の経路を見つけられるかどうかに左右されません。NAT やファイアウォールが直接の経路を塞ぐこともあります。ファイルは送信側を出る前にエンドツーエンドで封印されているため、リレーが転送するのは鍵を持たない暗号文だけで、経路全体がエンドツーエンド暗号化のままです。接続が切れても、最初からではなく再開できます。 コードの有効期限は5分なので、生成する前に両方の端末を手元に用意してください。",
-      ],
-    },
+    browserCrossNetworkSection.ja,
     {
       heading: "実際にファイルを守っているもの",
       body: [
@@ -508,13 +492,7 @@ const ko = {
         ],
       },
     },
-    {
-      heading: "인터넷 너머로: AirDrop이 할 수 없는 것",
-      body: [
-        "AirDrop은 근접 전용입니다 — Bluetooth/Wi-Fi 범위를 벗어나면 작동을 멈춥니다. Relayium의 두 번째 모드가 정확히 그 빈틈을 메웁니다: 완전히 다른 네트워크에 있는 두 기기를, 세계 어디에서든. 다만 이것은 “주변 기기” 작업 공간과 별개의 화면입니다. 페어링 코드 방은 기기별로 나뉜 이전 컨트롤을 그대로 쓰므로 거기에는 누를 “작업 공간 열기”가 없습니다.",
-        "보내는 쪽이 로그인하면 짧은 페어링 코드(참여 링크와 QR 코드 포함)를 받습니다. 받는 쪽은 그 코드를 입력하거나, QR을 스캔하거나, 링크를 열면 됩니다 — 계정은 전혀 필요 없습니다. 이 네트워크 간 연결은 기기 사이의 직접 연결이 아니라 암호화된 TURN 릴레이를 거칩니다. 의도된 설계입니다. 처음부터 릴레이로 가기 때문에, 연결이 서로 무관한 두 네트워크 사이의 NAT와 방화벽을 통과하는 직접 경로를 찾아내는 데 의존하지 않습니다. NAT나 방화벽이 그런 경로를 막을 수도 있습니다. 파일은 보내는 쪽을 떠나기 전에 종단간으로 봉인되므로 릴레이가 나르는 것은 열 열쇠가 없는 암호문뿐이고, 경로 전체가 종단간 암호화를 유지합니다. 연결이 끊겨도 처음부터가 아니라 이어서 재개할 수 있습니다. 코드는 5분 동안만 유효하니, 만들기 전에 두 기기를 모두 곁에 두세요.",
-      ],
-    },
+    browserCrossNetworkSection.ko,
     {
       heading: "실제로 파일을 지키는 것",
       body: [
@@ -647,13 +625,7 @@ const de = {
         ],
       },
     },
-    {
-      heading: "Übers Internet: etwas, das AirDrop nicht kann",
-      body: [
-        "AirDrop funktioniert nur in der Nähe — verlässt man die Bluetooth-/WLAN-Reichweite, ist Schluss. Der zweite Modus von Relayium schließt genau diese Lücke: zwei Geräte in völlig unterschiedlichen Netzwerken, überall auf der Welt. Er ist allerdings eine andere Oberfläche als ein Arbeitsbereich mit einem Gerät in der Nähe: Ein Pairing-Code-Raum behält die früheren, pro Gerät getrennten Bedienelemente, dort gibt es also kein „Arbeitsbereich öffnen“ zu drücken.",
-        "Der Absender meldet sich an und erhält einen kurzen Pairing-Code (mit Beitrittslink und QR-Code); der Empfänger gibt ihn ein, scannt den QR-Code oder öffnet den Link — und braucht dabei nie ein Konto. Diese netzübergreifende Verbindung läuft über ein verschlüsseltes TURN-Relay statt direkt zwischen den Geräten, und das ist so gewollt: Sie nutzt von Anfang an das Relay, sodass die Verbindung nicht davon abhängt, einen direkten Weg durch die NATs und Firewalls zwischen zwei fremden Netzwerken zu finden — die einen solchen Weg verhindern können. Die Dateien sind versiegelt, bevor sie den Absender verlassen, also leitet das Relay nur Chiffretext weiter, für den es keinen Schlüssel hat — die gesamte Strecke bleibt Ende-zu-Ende-verschlüsselt. Eine abgebrochene Verbindung kann fortgesetzt statt neu gestartet werden. Der Code gilt fünf Minuten — halte beide Geräte bereit, bevor du einen erzeugst.",
-      ],
-    },
+    browserCrossNetworkSection.de,
     {
       heading: "Was die Datei tatsächlich schützt",
       body: [
@@ -786,13 +758,7 @@ const fr = {
         ],
       },
     },
-    {
-      heading: "À travers internet : ce qu'AirDrop ne sait pas faire",
-      body: [
-        "AirDrop fonctionne uniquement à proximité — sortez de la portée Bluetooth/Wi-Fi et il s'arrête. Le second mode de Relayium comble exactement ce manque : deux appareils sur des réseaux totalement différents, n'importe où dans le monde. C'est toutefois une surface distincte d'un espace de travail avec un appareil à proximité : une salle à code d'appairage conserve les anciennes commandes séparées par appareil, il n'y a donc pas d'« Ouvrir l’espace de travail » à y presser.",
-        "L'expéditeur se connecte et obtient un court code d'appairage (avec un lien de participation et un QR code) ; le destinataire le saisit, scanne le QR code, ou ouvre le lien — sans jamais avoir besoin de compte. Cette connexion entre réseaux passe par un relais TURN chiffré plutôt que par une liaison directe, et c'est voulu : elle emprunte le relais dès le départ, si bien qu'elle ne dépend pas de la découverte d'une voie directe à travers les NAT et pare-feu situés entre deux réseaux étrangers l'un à l'autre, qui peuvent en empêcher une. Les fichiers sont scellés de bout en bout avant de quitter l'expéditeur : le relais ne transmet donc que du texte chiffré qu'aucune clé ne lui permet d'ouvrir, et tout le trajet reste chiffré de bout en bout. Une connexion coupée peut reprendre au lieu de repartir de zéro. Le code est valable cinq minutes : ayez les deux appareils sous la main avant d'en générer un.",
-      ],
-    },
+    browserCrossNetworkSection.fr,
     {
       heading: "Ce qui protège réellement le fichier",
       body: [
@@ -925,13 +891,7 @@ const ar = {
         ],
       },
     },
-    {
-      heading: "عبر الإنترنت: أمر لا يقدر عليه AirDrop",
-      body: [
-        "يعمل AirDrop في النطاق القريب فقط — إذا خرجت عن نطاق Bluetooth/Wi-Fi توقف عن العمل. يسد الوضع الثاني في Relayium هذه الثغرة بالضبط: جهازان على شبكتين مختلفتين تمامًا، في أي مكان في العالم. غير أن هذا واجهة منفصلة عن مساحة عمل جهاز قريب: فغرفة رمز الاقتران تحتفظ بعناصر التحكم الأقدم المنفصلة لكل جهاز، ولا يوجد فيها «فتح مساحة العمل» لتضغطه.",
-        "يسجّل المُرسِل الدخول ويحصل على رمز اقتران قصير (مع رابط انضمام ورمز QR)؛ ويُدخله المُستقبِل، أو يمسح رمز QR، أو يفتح الرابط — دون أن يحتاج إلى حساب مطلقًا. وهذا الاتصال عبر الشبكات يجري عبر مُرحِّل TURN مُشفَّر لا عبر وصلة مباشرة بين الجهازين، وذلك بحكم التصميم: فهو يسلك المُرحِّل من البداية، فلا يعتمد انعقاده على إيجاد مسار مباشر عبر ما بين شبكتين لا صلة بينهما من شبكات NAT وجدران حماية، وهي قد تمنع مثل هذا المسار. والملفات مختومة من الطرف إلى الطرف قبل أن تغادر المُرسِل، فلا يُمرِّر المُرحِّل سوى نص مُشفَّر لا يملك مفتاحه — ويبقى المسار كله مُشفَّرًا من الطرف إلى الطرف. ويمكن للاتصال المنقطع أن يستأنف بدلًا من البدء من الصفر. والرمز صالح خمس دقائق، فجهِّز الجهازين معًا قبل توليده.",
-      ],
-    },
+    browserCrossNetworkSection.ar,
     {
       heading: "ما الذي يحمي الملف فعليًا",
       body: [
@@ -1064,13 +1024,7 @@ const es = {
         ],
       },
     },
-    {
-      heading: "A través de internet: algo que AirDrop no puede hacer",
-      body: [
-        "AirDrop es solo de cercanía — sal del alcance de Bluetooth/Wi-Fi y deja de funcionar. El segundo modo de Relayium cubre exactamente ese hueco: dos dispositivos en redes completamente distintas, en cualquier parte del mundo. Eso sí, es una superficie distinta de un espacio de trabajo con un dispositivo cercano: una sala con código de emparejamiento conserva los controles anteriores separados por dispositivo, así que allí no hay ningún «Abrir espacio de trabajo» que pulsar.",
-        "El remitente inicia sesión y obtiene un código de emparejamiento corto (con un enlace para unirse y un código QR); el destinatario lo introduce, escanea el QR o abre el enlace — y nunca necesita una cuenta. Esa conexión entre redes va por un retransmisor TURN cifrado en lugar de por un enlace directo, y es así por diseño: toma el retransmisor desde el principio, de modo que no depende de encontrar una ruta directa a través de los NAT y cortafuegos que hay entre dos redes ajenas la una a la otra, que pueden impedirla. Los archivos van sellados de extremo a extremo antes de salir del remitente, así que el retransmisor solo reenvía texto cifrado que no tiene clave para abrir — todo el trayecto sigue cifrado de extremo a extremo. Una conexión caída puede reanudarse en lugar de empezar de cero. El código vale cinco minutos, así que ten los dos dispositivos a mano antes de generarlo.",
-      ],
-    },
+    browserCrossNetworkSection.es,
     {
       heading: "Qué protege realmente el archivo",
       body: [
@@ -1203,13 +1157,7 @@ const pt = {
         ],
       },
     },
-    {
-      heading: "Pela internet: algo que o AirDrop não consegue fazer",
-      body: [
-        "O AirDrop é só de proximidade — saia do alcance de Bluetooth/Wi-Fi e ele para de funcionar. O segundo modo do Relayium cobre exatamente essa lacuna: dois dispositivos em redes completamente diferentes, em qualquer lugar do mundo. Só que é uma superfície separada de uma área de trabalho com um dispositivo próximo: uma sala com código de emparelhamento mantém os controles anteriores separados por dispositivo, então não há nenhum “Abrir área de trabalho” para pressionar ali.",
-        "O remetente entra e recebe um código de emparelhamento curto (com um link de entrada e um código QR); o destinatário o digita, escaneia o QR ou abre o link — e nunca precisa de conta. Essa conexão entre redes passa por um retransmissor TURN criptografado em vez de uma ligação direta, e isso é proposital: ela usa o retransmissor desde o início, então não depende de encontrar uma rota direta através dos NATs e firewalls que existem entre duas redes sem relação uma com a outra, que podem impedi-la. Os arquivos saem selados de ponta a ponta antes de deixar o remetente, então o retransmissor só encaminha texto cifrado que não tem chave para abrir — o trajeto inteiro continua criptografado de ponta a ponta. Uma conexão caída pode ser retomada em vez de recomeçar do zero. O código vale cinco minutos, então deixe os dois aparelhos à mão antes de gerar um.",
-      ],
-    },
+    browserCrossNetworkSection.pt,
     {
       heading: "O que realmente protege o arquivo",
       body: [
@@ -1260,6 +1208,6 @@ const pt = {
 export default {
   slug: "how-to/airdrop-for-windows-and-android",
   published: "2026-07-09",
-  updated: "2026-08-05",
+  updated: "2026-08-07",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

@@ -3,6 +3,8 @@
 // zh/ja/ko/de/fr follow the same structure with identical facts.
 // Terminology mirrors src/lib/i18n/en.ts and content/articles/howto-android-to-iphone.mjs.
 
+import { browserCrossNetworkSection } from "../browser-fact-sections.mjs";
+
 const en = {
   title: "Transfer files between a Mac and a Windows PC",
   description:
@@ -98,13 +100,7 @@ const en = {
         ],
       },
     },
-    {
-      heading: "Mac and PC on different networks",
-      body: [
-        "Working from home while the other machine is in the office, or just on a different Wi-Fi network? A pairing code connects a Mac and a Windows PC across the internet, not just across the room. A pairing-code room is a separate surface from a nearby-device workspace, though: it keeps the earlier per-device controls, so there is no “Open workspace” to press there.",
-        "The sending computer generates a short pairing code (or a share link); enter it on the other machine to connect. A cross-network transfer runs over an encrypted TURN relay rather than a direct machine-to-machine link, and that is the deliberate design: the session takes the relay from the start, so the connection does not depend on discovering a direct path through the NATs and firewalls between the two networks, which can prevent one. The relay only ever forwards ciphertext — the files are sealed end-to-end before they leave the sending machine, so it has nothing it can read. If the connection drops partway through a large folder, it resumes instead of starting over. This mode needs the sender to sign in; whoever is receiving never needs an account.",
-      ],
-    },
+    browserCrossNetworkSection.en,
     {
       heading: "Sending a whole folder, not just single files",
       body: [
@@ -261,13 +257,7 @@ const zh = {
         ],
       },
     },
-    {
-      heading: "Mac 和 PC 不在同一网络",
-      body: [
-        "在家办公而另一台机器在办公室，或者只是连在不同的 Wi-Fi 上？配对码能让 Mac 和 Windows PC 跨越互联网连接，而不仅仅是跨越房间。不过配对码房间和「附近的设备」工作区是两套界面：它保留的是早先那套按设备分开的控件，那里没有「打开工作区」可按。",
-        "发送方电脑会生成一段简短的配对码（或一个分享链接）；在另一台机器上输入即可连接。跨网络的传输走的是加密 TURN 中继，而不是两台机器之间的直连，这是刻意的设计：这类会话一开始就走中继，因此连接不依赖在两个网络之间的 NAT 和防火墙里探测出一条直连路径——它们可能挡住这样的路径。中继只转发密文——文件在离开发送端之前就已完成端到端加密，所以它拿不到任何能读的东西。如果传输一个大文件夹时连接中途断开，可以续传而不必从头再来。这种方式需要发送方登录；接收方始终无需账号。",
-      ],
-    },
+    browserCrossNetworkSection.zh,
     {
       heading: "发送整个文件夹，而不只是单个文件",
       body: [
@@ -424,13 +414,7 @@ const ja = {
         ],
       },
     },
-    {
-      heading: "Mac と PC が異なるネットワークにある場合",
-      body: [
-        "自宅から作業していて、もう一方のパソコンはオフィスにある、あるいは単に別の Wi-Fi につながっている。そんなときも、ペアリングコードは Mac と Windows パソコンを部屋を越えるだけでなく、インターネット越しにつなげます。ただしペアリングコードのルームは「近くのデバイス」のワークスペースとは別の画面で、以前どおり端末ごとに分かれたコントロールのままなので、そこに「ワークスペースを開く」はありません。",
-        "送信側のパソコンが短いペアリングコード（または共有リンク）を生成するので、もう一方の端末で入力して接続します。ネットワークをまたぐ転送は、端末同士の直接接続ではなく暗号化された TURN リレー経由で行われます。これは意図的な設計です。この種のセッションは最初からリレーを使うため、接続の成立は、2 つのネットワークの間にある NAT やファイアウォールを越える直接の経路を見つけられるかどうかに左右されません。NAT やファイアウォールが直接の経路を塞ぐこともあります。リレーが転送するのは暗号文だけで、ファイルは送信側のパソコンを出る前にエンドツーエンドで封印されているため、読めるものは何も渡りません。大きなフォルダの転送中に接続が切れても、最初からではなく再開できます。この方式には送信側のサインインが必要です。受信側はアカウント不要です。",
-      ],
-    },
+    browserCrossNetworkSection.ja,
     {
       heading: "個々のファイルだけでなく、フォルダ丸ごと送る",
       body: [
@@ -587,13 +571,7 @@ const ko = {
         ],
       },
     },
-    {
-      heading: "Mac과 PC가 다른 네트워크에 있을 때",
-      body: [
-        "집에서 작업 중인데 다른 컴퓨터는 사무실에 있거나, 그냥 다른 Wi-Fi에 연결되어 있나요? 페어링 코드는 Mac과 Windows PC를 방을 넘어서뿐 아니라 인터넷 너머로도 연결해 줍니다. 다만 페어링 코드 방은 “주변 기기” 작업 공간과 별개의 화면이며, 기기별로 나뉜 이전 컨트롤을 그대로 쓰므로 거기에는 누를 “작업 공간 열기”가 없습니다.",
-        "보내는 컴퓨터가 짧은 페어링 코드(또는 공유 링크)를 생성하면, 다른 기기에서 입력해 연결합니다. 네트워크를 넘는 전송은 기기 간 직접 연결이 아니라 암호화된 TURN 릴레이를 거치며, 이는 의도된 설계입니다. 이런 세션은 처음부터 릴레이로 가기 때문에, 연결이 두 네트워크 사이의 NAT와 방화벽을 통과하는 직접 경로를 찾아내는 데 의존하지 않습니다. NAT나 방화벽이 그런 경로를 막을 수도 있습니다. 릴레이는 암호문만 전달합니다 — 파일은 보내는 컴퓨터를 떠나기 전에 종단간으로 봉인되므로 릴레이가 읽을 수 있는 것은 아무것도 없습니다. 큰 폴더를 전송하다가 중간에 연결이 끊겨도 처음부터가 아니라 이어서 재개됩니다. 이 방식은 보내는 쪽의 로그인이 필요합니다 — 받는 쪽은 계정이 필요 없습니다.",
-      ],
-    },
+    browserCrossNetworkSection.ko,
     {
       heading: "개별 파일뿐 아니라 폴더 전체 보내기",
       body: [
@@ -750,13 +728,7 @@ const de = {
         ],
       },
     },
-    {
-      heading: "Mac und PC in verschiedenen Netzwerken",
-      body: [
-        "Du arbeitest von zu Hause, während der andere Rechner im Büro steht, oder bist einfach in einem anderen WLAN? Ein Pairing-Code verbindet Mac und Windows-PC über das Internet, nicht nur über den Raum hinweg. Ein Pairing-Code-Raum ist allerdings eine andere Oberfläche als ein Arbeitsbereich mit einem Gerät in der Nähe: Er behält die früheren, pro Gerät getrennten Bedienelemente, dort gibt es also kein „Arbeitsbereich öffnen“ zu drücken.",
-        "Der sendende Rechner erzeugt einen kurzen Pairing-Code (oder einen Freigabelink); gib ihn auf dem anderen Rechner ein, um dich zu verbinden. Eine netzübergreifende Übertragung läuft über ein verschlüsseltes TURN-Relay statt über eine direkte Verbindung zwischen den Rechnern, und das ist so beabsichtigt: Die Sitzung nutzt von Anfang an das Relay, sodass die Verbindung nicht davon abhängt, einen direkten Weg durch die NATs und Firewalls zwischen den beiden Netzwerken zu finden — die einen solchen Weg verhindern können. Das Relay leitet ausschließlich Chiffretext weiter — die Dateien sind Ende-zu-Ende versiegelt, bevor sie den sendenden Rechner verlassen, es bekommt also nichts Lesbares zu sehen. Bricht die Verbindung mitten in einem großen Ordner ab, wird sie fortgesetzt statt neu gestartet. Dieser Weg erfordert die Anmeldung des Absenders; wer empfängt, braucht nie ein Konto.",
-      ],
-    },
+    browserCrossNetworkSection.de,
     {
       heading: "Einen ganzen Ordner senden, nicht nur einzelne Dateien",
       body: [
@@ -915,13 +887,7 @@ const fr = {
         ],
       },
     },
-    {
-      heading: "Mac et PC sur des réseaux différents",
-      body: [
-        "Vous travaillez depuis chez vous pendant que l'autre machine est au bureau, ou simplement sur un autre réseau Wi-Fi ? Un code d'appairage connecte un Mac et un PC Windows via Internet, pas seulement d'une pièce à l'autre. Une salle à code d'appairage reste toutefois une surface distincte d'un espace de travail avec un appareil à proximité : elle conserve les anciennes commandes séparées par appareil, il n'y a donc pas d'« Ouvrir l’espace de travail » à y presser.",
-        "L'ordinateur qui envoie génère un court code d'appairage (ou un lien de partage) ; saisissez-le sur l'autre machine pour vous connecter. Un transfert entre réseaux passe par un relais TURN chiffré plutôt que par une liaison directe entre les deux machines, et c'est délibéré : la session emprunte le relais dès le départ, si bien que la connexion ne dépend pas de la découverte d'une voie directe à travers les NAT et pare-feu situés entre les deux réseaux, qui peuvent en empêcher une. Le relais ne transmet que du texte chiffré — les fichiers sont scellés de bout en bout avant de quitter la machine émettrice, il n'a donc rien de lisible entre les mains. Si la connexion se coupe en cours de transfert d'un gros dossier, elle reprend au lieu de tout recommencer. Ce mode exige que l'expéditeur se connecte ; celui qui reçoit n'a jamais besoin de compte.",
-      ],
-    },
+    browserCrossNetworkSection.fr,
     {
       heading: "Envoyer un dossier entier, pas seulement des fichiers isolés",
       body: [
@@ -1080,13 +1046,7 @@ const ar = {
         ],
       },
     },
-    {
-      heading: "Mac وPC على شبكتين مختلفتين",
-      body: [
-        "تعمل من المنزل بينما الجهاز الآخر في المكتب، أو مجرد على شبكة Wi-Fi مختلفة؟ يوصِل رمز الاقتران جهاز Mac وحاسوب Windows عبر الإنترنت، لا عبر الغرفة فحسب. غير أن غرفة رمز الاقتران واجهة منفصلة عن مساحة عمل جهاز قريب: فهي تحتفظ بعناصر التحكم الأقدم المنفصلة لكل جهاز، ولا يوجد فيها «فتح مساحة العمل» لتضغطه.",
-        "يولّد الحاسوب المُرسِل رمز اقتران قصيرًا (أو رابط مشاركة)؛ أدخِله على الجهاز الآخر للاتصال. والنقل عبر الشبكات يجري عبر مُرحِّل TURN مشفَّر لا عبر وصلة مباشرة بين الحاسوبين، وهذا مقصود بحكم التصميم: فالجلسة تسلك المُرحِّل من البداية، فلا يعتمد انعقاد الاتصال على إيجاد مسار مباشر عبر ما بين الشبكتين من شبكات NAT وجدران حماية، وهي قد تمنع مثل هذا المسار. ولا يُمرِّر المُرحِّل سوى نص مُشفَّر — فالملفات مختومة من الطرف إلى الطرف قبل أن تغادر الحاسوب المُرسِل، فلا يصله شيء يمكن قراءته. وإذا انقطع الاتصال في منتصف مجلد كبير، يستأنف بدلًا من البدء من جديد. يحتاج هذا الوضع إلى تسجيل دخول المُرسِل؛ أما من يستقبل فلا يحتاج أبدًا إلى حساب.",
-      ],
-    },
+    browserCrossNetworkSection.ar,
     {
       heading: "إرسال مجلد كامل، لا ملفات مفردة فحسب",
       body: [
@@ -1245,13 +1205,7 @@ const es = {
         ],
       },
     },
-    {
-      heading: "Mac y PC en redes distintas",
-      body: [
-        "¿Trabajas desde casa mientras la otra máquina está en la oficina, o simplemente en una red Wi-Fi distinta? Un código de emparejamiento conecta un Mac y un PC con Windows a través de internet, no solo de un lado a otro de la habitación. Eso sí, una sala con código de emparejamiento es una superficie distinta de un espacio de trabajo con un dispositivo cercano: conserva los controles anteriores separados por dispositivo, así que allí no hay ningún «Abrir espacio de trabajo» que pulsar.",
-        "El ordenador que envía genera un código de emparejamiento corto (o un enlace para compartir); introdúcelo en la otra máquina para conectar. Una transferencia entre redes va por un retransmisor TURN cifrado en lugar de por un enlace directo entre las dos máquinas, y es a propósito: la sesión toma el retransmisor desde el principio, de modo que la conexión no depende de encontrar una ruta directa a través de los NAT y cortafuegos que hay entre las dos redes, que pueden impedirla. El retransmisor solo reenvía texto cifrado — los archivos van sellados de extremo a extremo antes de salir de la máquina emisora, así que no le llega nada legible. Si la conexión se cae a mitad de una carpeta grande, se reanuda en lugar de empezar de nuevo. Este modo necesita que el remitente inicie sesión; quien recibe nunca necesita una cuenta.",
-      ],
-    },
+    browserCrossNetworkSection.es,
     {
       heading: "Enviar una carpeta entera, no solo archivos sueltos",
       body: [
@@ -1410,13 +1364,7 @@ const pt = {
         ],
       },
     },
-    {
-      heading: "Mac e PC em redes diferentes",
-      body: [
-        "Trabalhando de casa enquanto a outra máquina está no escritório, ou apenas em uma rede Wi-Fi diferente? Um código de emparelhamento conecta um Mac e um PC com Windows pela internet, não só de um lado a outro da sala. Só que uma sala com código de emparelhamento é uma superfície separada de uma área de trabalho com um dispositivo próximo: ela mantém os controles anteriores separados por dispositivo, então não há nenhum “Abrir área de trabalho” para pressionar ali.",
-        "O computador que envia gera um código de emparelhamento curto (ou um link de compartilhamento); digite-o na outra máquina para conectar. Uma transferência entre redes passa por um retransmissor TURN criptografado em vez de uma ligação direta entre as duas máquinas, e isso é proposital: a sessão usa o retransmissor desde o início, então a conexão não depende de encontrar uma rota direta através dos NATs e firewalls que existem entre as duas redes, que podem impedi-la. O retransmissor só encaminha texto cifrado — os arquivos são selados de ponta a ponta antes de deixar a máquina que envia, então nada legível chega até ele. Se a conexão cair no meio de uma pasta grande, ela retoma em vez de recomeçar. Esse modo precisa que o remetente faça login; quem recebe nunca precisa de conta.",
-      ],
-    },
+    browserCrossNetworkSection.pt,
     {
       heading: "Enviar uma pasta inteira, não só arquivos avulsos",
       body: [
@@ -1483,6 +1431,6 @@ const pt = {
 export default {
   slug: "how-to/transfer-files-between-mac-and-windows",
   published: "2026-07-09",
-  updated: "2026-08-05",
+  updated: "2026-08-07",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

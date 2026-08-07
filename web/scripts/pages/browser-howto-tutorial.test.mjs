@@ -92,6 +92,20 @@ const TUTORIALS = {
   "howto-share-file-expiring-link": expiringLink,
 };
 
+const MATERIAL_REWRITE_DATES = {
+  "howto-same-wifi": "2026-08-07",
+  "howto-pc-to-phone-wirelessly": "2026-08-07",
+  "howto-android-to-iphone": "2026-08-07",
+  "howto-mac-to-windows": "2026-08-07",
+  "howto-airdrop-for-windows-android": "2026-08-07",
+  "howto-send-files-between-computers": "2026-08-05",
+  "howto-transfer-by-qr-code": "2026-08-05",
+  "howto-send-text-between-devices": "2026-08-05",
+  "howto-send-a-folder": "2026-08-05",
+  "howto-large-files-without-cloud": "2026-08-05",
+  "howto-share-file-expiring-link": "2026-08-05",
+};
+
 /** The shipped app tables, so every expected label is read from the app. */
 const APP = { en, zh, ja, ko, de, fr, ar, es, pt };
 
@@ -717,7 +731,7 @@ describe("the eleven browser how-tos are runnable tutorials in all nine locales"
 
   it("publishes the material rewrite date for every tutorial in the batch", () => {
     for (const [name, article] of Object.entries(TUTORIALS)) {
-      expect(article.updated, name).toBe("2026-08-05");
+      expect(article.updated, name).toBe(MATERIAL_REWRITE_DATES[name]);
     }
   });
 

@@ -5,6 +5,8 @@
 // English is the master; zh/ja/ko/de/fr follow the same structure with identical
 // facts. Terminology mirrors src/lib/i18n and other articles in this folder.
 
+import { browserCrossNetworkSection } from "../browser-fact-sections.mjs";
+
 const en = {
   title: "Send files between devices on the same Wi-Fi",
   description:
@@ -123,12 +125,7 @@ const en = {
         "Being on the same network does not mean the transfer is sent in the clear. Relayium negotiates an X25519 key exchange between the two devices and encrypts every chunk with AES-256-GCM; that key is never seen by any server, including Relayium's own signaling server, which only helps the devices find each other. With advanced verification on, both screens also display a short verification code (SAS) that lets you visually confirm the connection is genuinely between your two devices, and each file is checked end to end with a SHA-256 hash so you know it arrived byte-for-byte intact.",
       ],
     },
-    {
-      heading: "If a device is on a different network",
-      body: [
-        "Same-network mode only works when the devices actually share a network — a phone on mobile data, a laptop on a different Wi-Fi, or a device behind a different router will not show up automatically. For that case, Relayium also supports connecting across networks with a short pairing code: the sender signs in to generate the code (or a QR code / link), and the receiver never needs an account. Across networks the two browsers connect through an encrypted TURN relay rather than directly — that path is relay-only by design, so the connection does not depend on discovering a direct path through the NATs and firewalls in between, which can prevent one. It is no less private: the key stays on the two devices, so the relay only ever forwards ciphertext and cannot read the file. The code is good for five minutes, so have both devices in front of you before you generate one.",
-      ],
-    },
+    browserCrossNetworkSection.en,
   ],
   faq: {
     heading: "Frequently asked questions",
@@ -280,12 +277,7 @@ const zh = {
         "在同一网络下不代表传输就是明文的。Relayium 会在两台设备之间协商 X25519 密钥交换，并用 AES-256-GCM 对每个数据块加密；这把密钥不会被任何服务器看到，包括 Relayium 自己的信令服务器——它只负责帮设备找到彼此。打开高级验证后，两块屏幕还会显示同一段简短校验码（SAS），能让你亲眼确认这条连接确实建立在你的两台设备之间，而每个文件还会用 SHA-256 哈希做端到端完整性校验，让你确信它是逐字节完整到达的。",
       ],
     },
-    {
-      heading: "如果某台设备在别的网络上",
-      body: [
-        "同网络模式只在设备真正共享同一网络时才生效——用移动数据的手机、连着另一个 Wi-Fi 的笔记本，或在另一台路由器后面的设备，都不会自动出现。这种情况下，Relayium 也支持用一个短配对码跨网络连接：发送方登录后生成配对码（或二维码 / 链接），接收方始终无需账号。跨网络时，两个浏览器之间不是直连，而是经一个加密的 TURN 中继转发——这条路径是刻意只走中继的，因此建立连接不依赖在中间的 NAT 和防火墙之间探测出一条直连路径——它们可能挡住这样的路径。这并不会让它变得不私密：密钥始终留在两台设备上，中继只负责转发密文，读不到文件内容。 配对码有效期 5 分钟，所以生成之前先把两台设备都准备好。",
-      ],
-    },
+    browserCrossNetworkSection.zh,
   ],
   faq: {
     heading: "常见问题",
@@ -437,12 +429,7 @@ const ja = {
         "同じネットワーク上にあるからといって、転送が平文で送られるわけではありません。Relayium は2台の端末間で X25519 鍵交換を行い、すべてのチャンクを AES-256-GCM で暗号化します。その鍵は、端末同士が互いを見つける手助けをするだけの Relayium 自身のシグナリングサーバーを含め、いかなるサーバーにも見えません。高度な検証をオンにすると両方の画面に短い検証コード（SAS）も表示され、接続が本当に手元の2台の端末間であることを目視で確認でき、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されるので、バイト単位で無事に届いたことがわかります。",
       ],
     },
-    {
-      heading: "端末が別のネットワークにある場合",
-      body: [
-        "同一ネットワークモードは端末が実際にネットワークを共有しているときだけ働きます。モバイル通信のスマホ、別の Wi-Fi のノートPC、別のルーターの背後にある端末は自動的には現れません。その場合、Relayium は短いペアリングコードでネットワークをまたいで接続することもサポートしています。送信側がサインインしてコード（または QR コード／リンク）を生成し、受信側はアカウント不要です。ネットワークをまたぐ場合、2 つのブラウザは直接ではなく暗号化された TURN リレー経由でつながります。この経路は意図的にリレー専用にしてあり、接続の成立は、途中の NAT やファイアウォールを越える直接の経路を見つけられるかどうかに左右されません。NAT やファイアウォールが直接の経路を塞ぐこともあります。プライバシーが下がるわけではありません。鍵は 2 台の端末に留まるので、リレーが転送するのは常に暗号文だけで、ファイルの中身は読めません。 コードの有効期限は5分なので、生成する前に両方の端末を手元に用意してください。",
-      ],
-    },
+    browserCrossNetworkSection.ja,
   ],
   faq: {
     heading: "よくある質問",
@@ -594,12 +581,7 @@ const ko = {
         "같은 네트워크에 있다고 해서 전송이 평문으로 이루어지는 것은 아닙니다. Relayium은 두 기기 사이에서 X25519 키 교환을 협상하고 모든 청크를 AES-256-GCM으로 암호화합니다. 그 키는 기기가 서로를 찾도록 돕기만 하는 Relayium 자체 시그널링 서버를 포함해 어떤 서버에도 보이지 않습니다. 고급 검증을 켜면 두 화면에 동일한 짧은 검증 코드(SAS)도 표시되어 연결이 정말로 내 두 기기 사이에서 이루어졌는지 눈으로 확인할 수 있고, 각 파일은 SHA-256 해시로 종단간 검증되어 바이트 단위로 온전히 도착했음을 알 수 있습니다.",
       ],
     },
-    {
-      heading: "기기가 다른 네트워크에 있다면",
-      body: [
-        "같은 네트워크 모드는 기기가 실제로 네트워크를 공유할 때만 작동합니다 — 모바일 데이터를 쓰는 휴대폰, 다른 Wi-Fi에 있는 노트북, 다른 공유기 뒤에 있는 기기는 자동으로 나타나지 않습니다. 이런 경우 Relayium은 짧은 페어링 코드로 네트워크를 넘나드는 연결도 지원합니다. 보내는 쪽이 로그인해 코드(또는 QR 코드/링크)를 생성하고, 받는 쪽은 계정이 필요 없습니다. 네트워크를 넘나드는 경우 두 브라우저는 직접이 아니라 암호화된 TURN 릴레이를 거쳐 연결됩니다 — 이 경로는 의도적으로 릴레이 전용이라, 연결이 중간의 NAT와 방화벽을 통과하는 직접 경로를 찾아내는 데 의존하지 않습니다. NAT나 방화벽이 그런 경로를 막을 수도 있습니다. 그렇다고 덜 안전한 것은 아닙니다. 키는 두 기기에만 남으므로 릴레이는 암호문만 전달할 뿐 파일 내용을 읽을 수 없습니다. 코드는 5분 동안만 유효하니, 만들기 전에 두 기기를 모두 곁에 두세요.",
-      ],
-    },
+    browserCrossNetworkSection.ko,
   ],
   faq: {
     heading: "자주 묻는 질문",
@@ -751,12 +733,7 @@ const de = {
         "Im selben Netz zu sein bedeutet nicht, dass die Übertragung im Klartext erfolgt. Relayium handelt zwischen den beiden Geräten einen X25519-Schlüsselaustausch aus und verschlüsselt jeden Block mit AES-256-GCM; diesen Schlüssel bekommt kein Server zu sehen, auch nicht Relayiums eigener Signaling-Server, der den Geräten nur hilft, einander zu finden. Mit eingeschalteter erweiterter Verifizierung zeigen beide Bildschirme zusätzlich einen kurzen Verifizierungscode (SAS), der dich visuell bestätigen lässt, dass die Verbindung wirklich zwischen deinen beiden Geräten besteht, und jede Datei wird per SHA-256-Hash Ende-zu-Ende geprüft, damit du weißt, dass sie byte-genau angekommen ist.",
       ],
     },
-    {
-      heading: "Wenn ein Gerät in einem anderen Netz ist",
-      body: [
-        "Der Modus für dasselbe Netz funktioniert nur, wenn die Geräte tatsächlich ein Netzwerk teilen — ein Handy im Mobilfunknetz, ein Laptop in einem anderen WLAN oder ein Gerät hinter einem anderen Router erscheint nicht automatisch. Für diesen Fall unterstützt Relayium auch die Verbindung über Netzwerke hinweg mit einem kurzen Pairing-Code: Der Absender meldet sich an, um den Code (oder einen QR-Code / Link) zu erzeugen, und der Empfänger braucht dabei nie ein Konto. Über Netzwerkgrenzen hinweg verbinden sich die beiden Browser nicht direkt, sondern über ein verschlüsseltes TURN-Relay — dieser Weg ist von Grund auf reines Relay, sodass die Verbindung nicht davon abhängt, einen direkten Pfad durch die NATs und Firewalls dazwischen zu finden — die einen solchen Pfad verhindern können. Das ist nicht weniger privat: Der Schlüssel bleibt auf den beiden Geräten, das Relay leitet also immer nur Chiffretext weiter und kann die Datei nicht lesen. Der Code gilt fünf Minuten — halte beide Geräte bereit, bevor du einen erzeugst.",
-      ],
-    },
+    browserCrossNetworkSection.de,
   ],
   faq: {
     heading: "Häufige Fragen",
@@ -908,12 +885,7 @@ const fr = {
         "Être sur le même réseau ne veut pas dire que le transfert circule en clair. Relayium négocie un échange de clés X25519 entre les deux appareils et chiffre chaque bloc avec AES-256-GCM ; cette clé n'est jamais vue par aucun serveur, y compris le propre serveur de signalisation de Relayium, qui aide seulement les appareils à se trouver. Avec la vérification avancée activée, les deux écrans affichent en plus un code de vérification court (SAS) qui vous permet de confirmer visuellement que la connexion est bien entre vos deux appareils, et chaque fichier est vérifié de bout en bout par une empreinte SHA-256, pour savoir qu'il est arrivé intact, octet pour octet.",
       ],
     },
-    {
-      heading: "Si un appareil est sur un réseau différent",
-      body: [
-        "Le mode même réseau ne fonctionne que quand les appareils partagent réellement un réseau — un téléphone en données mobiles, un ordinateur portable sur un autre Wi-Fi, ou un appareil derrière un autre routeur n'apparaîtra pas automatiquement. Dans ce cas, Relayium prend aussi en charge la connexion entre réseaux différents avec un court code d'appairage : l'expéditeur se connecte pour générer le code (ou un code QR / lien), et le destinataire n'a jamais besoin de compte. Entre réseaux différents, les deux navigateurs ne se connectent pas directement mais passent par un relais TURN chiffré — cette voie est délibérément réservée au relais, si bien que la connexion ne dépend pas de la découverte d'un chemin direct à travers les NAT et pare-feu intermédiaires, qui peuvent en empêcher un. Ce n'est pas moins privé : la clé reste sur les deux appareils, le relais ne transmet donc jamais que du texte chiffré et ne peut pas lire le fichier. Le code est valable cinq minutes : ayez les deux appareils sous la main avant d'en générer un.",
-      ],
-    },
+    browserCrossNetworkSection.fr,
   ],
   faq: {
     heading: "Questions fréquentes",
@@ -1065,12 +1037,7 @@ const ar = {
         "الوجود على نفس الشبكة لا يعني أن النقل يُرسَل بنص صريح. يتفاوض Relayium على تبادل مفاتيح X25519 بين الجهازين ويشفّر كل جزء بـ AES-256-GCM؛ ولا يرى هذا المفتاح أي خادم، بما في ذلك خادم الإشارة الخاص بـ Relayium نفسه، الذي لا يفعل سوى مساعدة الجهازين على العثور على بعضهما. وعند تفعيل التحقّق المتقدّم تعرض الشاشتان أيضًا رمز تحقق قصيرًا (SAS) يتيح لك أن تؤكّد بصريًا أن الاتصال قائم حقًا بين جهازيك، ويُتحقَّق من كل ملف من الطرف إلى الطرف بتجزئة SHA-256 لتعلم أنه وصل سليمًا بايتًا ببايت.",
       ],
     },
-    {
-      heading: "إذا كان جهاز على شبكة مختلفة",
-      body: [
-        "لا يعمل وضع نفس الشبكة إلا عندما تتشارك الأجهزة شبكةً بالفعل — فالهاتف على بيانات الجوال، أو الحاسوب المحمول على شبكة Wi-Fi مختلفة، أو جهاز خلف موجّه مختلف لن يظهر تلقائيًا. لتلك الحالة، يدعم Relayium أيضًا الاتصال عبر الشبكات برمز اقتران قصير: يسجّل المُرسِل الدخول لتوليد الرمز (أو رمز QR / رابط)، ولا يحتاج المُستقبِل أبدًا إلى حساب. وعبر الشبكات، يتصل المتصفّحان عبر مُرحِّل TURN مُشفَّر بدلًا من الاتصال المباشر — فهذا المسار مُخصَّص للمُرحِّل عن قصد، فلا يعتمد انعقاد الاتصال على العثور على مسار مباشر عبر ما بينهما من شبكات NAT وجدران حماية، وهي قد تمنع مثل هذا المسار. وهذا لا يقلّل من الخصوصية: يبقى المفتاح على الجهازين، فلا يُمرِّر المُرحِّل سوى نصّ مُشفَّر ولا يستطيع قراءة الملف. والرمز صالح خمس دقائق، فجهِّز الجهازين معًا قبل توليده.",
-      ],
-    },
+    browserCrossNetworkSection.ar,
   ],
   faq: {
     heading: "الأسئلة الشائعة",
@@ -1222,12 +1189,7 @@ const es = {
         "Estar en la misma red no significa que la transferencia se envíe en claro. Relayium negocia un intercambio de claves X25519 entre los dos dispositivos y cifra cada bloque con AES-256-GCM; esa clave nunca la ve ningún servidor, incluido el propio servidor de señalización de Relayium, que solo ayuda a los dispositivos a encontrarse. Con la verificación avanzada activada, ambas pantallas muestran además un código de verificación corto (SAS) que te permite confirmar visualmente que la conexión es realmente entre tus dos dispositivos, y cada archivo se comprueba de extremo a extremo con un hash SHA-256 para que sepas que llegó intacto byte a byte.",
       ],
     },
-    {
-      heading: "Si un dispositivo está en una red distinta",
-      body: [
-        "El modo de la misma red solo funciona cuando los dispositivos comparten realmente una red — un teléfono con datos móviles, un portátil en otra Wi-Fi o un dispositivo detrás de otro router no aparecerán automáticamente. Para ese caso, Relayium también admite conectar entre redes con un código de emparejamiento corto: el remitente inicia sesión para generar el código (o un código QR / enlace) y quien recibe nunca necesita una cuenta. Entre redes distintas, los dos navegadores no se conectan directamente, sino a través de un retransmisor TURN cifrado — esa vía es solo de retransmisión a propósito, así que la conexión no depende de encontrar una ruta directa a través de los NAT y cortafuegos intermedios, que pueden impedirla. No es menos privado: la clave se queda en los dos dispositivos, así que el retransmisor solo reenvía texto cifrado y no puede leer el archivo. El código vale cinco minutos, así que ten los dos dispositivos a mano antes de generarlo.",
-      ],
-    },
+    browserCrossNetworkSection.es,
   ],
   faq: {
     heading: "Preguntas frecuentes",
@@ -1379,12 +1341,7 @@ const pt = {
         "Estar na mesma rede não significa que a transferência é enviada às claras. O Relayium negocia uma troca de chaves X25519 entre os dois dispositivos e criptografa cada bloco com AES-256-GCM; essa chave nunca é vista por nenhum servidor, incluindo o próprio servidor de sinalização do Relayium, que apenas ajuda os dispositivos a se encontrarem. Com a verificação avançada ativada, as duas telas também exibem um código de verificação curto (SAS) que permite confirmar visualmente que a conexão é realmente entre os seus dois dispositivos, e cada arquivo é verificado de ponta a ponta com um hash SHA-256 para você saber que chegou intacto, byte a byte.",
       ],
     },
-    {
-      heading: "Se um dispositivo estiver em uma rede diferente",
-      body: [
-        "O modo da mesma rede só funciona quando os dispositivos realmente compartilham uma rede — um celular usando dados móveis, um notebook em outra Wi-Fi ou um dispositivo atrás de outro roteador não aparecerá automaticamente. Para esse caso, o Relayium também oferece conexão entre redes com um código de emparelhamento curto: o remetente faz login para gerar o código (ou um código QR / link) e quem recebe nunca precisa de conta. Entre redes diferentes, os dois navegadores não se conectam diretamente, e sim através de um retransmissor TURN criptografado — esse caminho é propositalmente só de retransmissão, então a conexão não depende de encontrar uma rota direta através dos NATs e firewalls no meio, que podem impedi-la. Não é menos privado: a chave fica nos dois dispositivos, então o retransmissor só encaminha texto cifrado e não consegue ler o arquivo. O código vale cinco minutos, então deixe os dois aparelhos à mão antes de gerar um.",
-      ],
-    },
+    browserCrossNetworkSection.pt,
   ],
   faq: {
     heading: "Perguntas frequentes",
@@ -1421,6 +1378,6 @@ const pt = {
 export default {
   slug: "how-to/send-files-on-the-same-wifi",
   published: "2026-07-09",
-  updated: "2026-08-05",
+  updated: "2026-08-07",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

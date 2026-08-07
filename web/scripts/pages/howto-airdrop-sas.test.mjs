@@ -90,6 +90,6 @@ describe("AirDrop alternative SAS explanation", () => {
   });
 
   it("records the material revision date", () => {
-    expect(article.updated).toBe("2026-08-05");
+    expect(article.updated).toBe("2026-08-07");
   });
 });

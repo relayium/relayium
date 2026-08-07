@@ -33,7 +33,7 @@ const sasCopy = (article, lang) => {
 describe("device guide realtime paths", () => {
   it("states the complete path, privacy, and account boundary in every localized lead", () => {
     for (const [name, article] of Object.entries(ARTICLES)) {
-      expect(article.updated, name).toBe("2026-08-05");
+      expect(article.updated, name).toBe("2026-08-07");
       for (const lang of LANGS) {
         const lead = article.langs[lang].lead[1];
         for (const fact of FACTS[lang]) expect(lead, `${name} [${lang}] ${fact}`).toMatch(fact);

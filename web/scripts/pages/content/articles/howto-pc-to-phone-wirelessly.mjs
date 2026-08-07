@@ -3,6 +3,8 @@
 // English is the master; zh/ja/ko/de/fr follow the same structure with identical
 // facts. Terminology mirrors src/lib/i18n.svelte.ts and content/landing.mjs.
 
+import { browserCrossNetworkSection } from "../browser-fact-sections.mjs";
+
 const en = {
   title: "Send files from PC to phone wirelessly, no cable or app",
   description:
@@ -95,13 +97,7 @@ const en = {
         ],
       },
     },
-    {
-      heading: "Not on the same network? Use a pairing code",
-      body: [
-        "Your phone is on mobile data and your PC is on home Wi-Fi? That is fine — Relayium is built to reach across networks, not only the same one. A pairing-code room is a separate surface from a nearby-device workspace, though: it keeps the earlier per-device controls, so there is no “Open workspace” to press there.",
-        "Instead of automatic discovery, the sender gets a short pairing code (or the join link it generates) and signs in to generate it — the person receiving never needs an account. Enter the code on the other device and the two connect through an encrypted TURN relay. That is the deliberate design for the cross-network path: it takes the relay from the start, so the connection does not depend on discovering a direct route through the NATs and firewalls between a mobile network and a home router, which can prevent one. Your files are sealed end-to-end before they leave the sending device, so the relay only ever moves ciphertext it cannot read. If the connection drops mid-way, the transfer can resume instead of starting over. The code is good for five minutes, so have both devices in front of you before you generate one.",
-      ],
-    },
+    browserCrossNetworkSection.en,
     {
       heading: "Install it like an app (optional PWA)",
       body: [
@@ -245,13 +241,7 @@ const zh = {
         ],
       },
     },
-    {
-      heading: "不在同一网络？用配对码",
-      body: [
-        "手机用的是移动数据，电脑连的是家里的 Wi-Fi？没关系——Relayium 生来就支持跨网络，而不只是同一个网络。不过配对码房间和「附近的设备」工作区是两套界面：它保留的是早先那套按设备分开的控件，那里没有「打开工作区」可按。",
-        "此时不再自动发现，而是发送方登录后拿到一个短配对码（或它生成的加入链接）——接收方始终无需账号。在另一台设备上输入这个码，两者就会通过加密的 TURN 中继连上。跨网络这条路径就是这样刻意设计的：它一开始就走中继，因此连接不依赖在移动网络和家用路由器之间的 NAT 和防火墙里探测出一条直连路径——它们可能挡住这样的路径。文件在离开发送端之前就已完成端到端加密，因此中继搬运的始终只是它读不懂的密文。若中途断开，传输可以断点续传，而不必从头再来。 配对码有效期 5 分钟，所以生成之前先把两台设备都准备好。",
-      ],
-    },
+    browserCrossNetworkSection.zh,
     {
       heading: "像 App 一样安装（可选的 PWA）",
       body: [
@@ -395,13 +385,7 @@ const ja = {
         ],
       },
     },
-    {
-      heading: "同じネットワークにない？ペアリングコードを使う",
-      body: [
-        "スマホはモバイル通信、PC は自宅の Wi-Fi？大丈夫です。Relayium は同じネットワークだけでなく、ネットワークをまたいで届くように作られています。ただしペアリングコードのルームは「近くのデバイス」のワークスペースとは別の画面で、以前どおり端末ごとに分かれたコントロールのままなので、そこに「ワークスペースを開く」はありません。",
-        "この場合は自動発見ではなく、送信側がサインインして短いペアリングコード（またはそれが生成する参加リンク）を受け取ります。受信側はアカウント不要です。もう一方の端末でそのコードを入力すると、2台は暗号化された TURN リレーを介してつながります。これはネットワークをまたぐ経路の意図的な設計です。最初からリレーを使うため、接続の成立は、モバイル回線と自宅ルーターの間にある NAT やファイアウォールを越える直接の経路を見つけられるかどうかに左右されません。NAT やファイアウォールが直接の経路を塞ぐこともあります。ファイルは送信側の端末を出る前にエンドツーエンドで封印されているので、リレーが運ぶのは読めない暗号文だけです。途中で切れても、転送は最初からではなく再開できます。 コードの有効期限は5分なので、生成する前に両方の端末を手元に用意してください。",
-      ],
-    },
+    browserCrossNetworkSection.ja,
     {
       heading: "アプリのようにインストール（任意の PWA）",
       body: [
@@ -545,13 +529,7 @@ const ko = {
         ],
       },
     },
-    {
-      heading: "같은 네트워크가 아니라면? 페어링 코드를 쓰세요",
-      body: [
-        "휴대폰은 모바일 데이터, PC는 집 Wi-Fi인가요? 괜찮습니다 — Relayium은 같은 네트워크뿐 아니라 네트워크를 넘나들며 닿도록 만들어졌습니다. 다만 페어링 코드 방은 “주변 기기” 작업 공간과 별개의 화면이며, 기기별로 나뉜 이전 컨트롤을 그대로 쓰므로 거기에는 누를 “작업 공간 열기”가 없습니다.",
-        "이 경우 자동 탐색 대신 보내는 쪽이 로그인해서 짧은 페어링 코드(또는 그것이 생성하는 참여 링크)를 받습니다 — 받는 쪽은 계정이 필요 없습니다. 상대 기기에 그 코드를 입력하면 두 기기는 암호화된 TURN 릴레이를 거쳐 연결됩니다. 네트워크를 넘는 경로는 의도적으로 그렇게 설계되어 있습니다. 처음부터 릴레이로 가기 때문에, 연결이 모바일 망과 집 공유기 사이의 NAT와 방화벽을 통과하는 직접 경로를 찾아내는 데 의존하지 않습니다. NAT나 방화벽이 그런 경로를 막을 수도 있습니다. 파일은 보내는 기기를 떠나기 전에 종단간으로 봉인되므로, 릴레이가 옮기는 것은 읽을 수 없는 암호문뿐입니다. 도중에 끊겨도 전송은 처음부터가 아니라 이어서 재개할 수 있습니다. 코드는 5분 동안만 유효하니, 만들기 전에 두 기기를 모두 곁에 두세요.",
-      ],
-    },
+    browserCrossNetworkSection.ko,
     {
       heading: "앱처럼 설치하기 (선택적 PWA)",
       body: [
@@ -695,13 +673,7 @@ const de = {
         ],
       },
     },
-    {
-      heading: "Nicht im selben Netz? Nimm einen Pairing-Code",
-      body: [
-        "Das Handy ist im Mobilfunknetz und der PC im heimischen WLAN? Kein Problem — Relayium ist darauf ausgelegt, über Netzwerke hinweg zu reichen, nicht nur im selben. Ein Pairing-Code-Raum ist allerdings eine andere Oberfläche als ein Arbeitsbereich mit einem Gerät in der Nähe: Er behält die früheren, pro Gerät getrennten Bedienelemente, dort gibt es also kein „Arbeitsbereich öffnen“ zu drücken.",
-        "Statt automatischer Erkennung meldet sich der Absender an und erhält einen kurzen Pairing-Code (oder den erzeugten Beitrittslink) — der Empfänger braucht dabei nie ein Konto. Gib den Code auf dem anderen Gerät ein, und die beiden verbinden sich über ein verschlüsseltes TURN-Relay. So ist der netzübergreifende Weg bewusst ausgelegt: Er nutzt von Anfang an das Relay, sodass die Verbindung nicht davon abhängt, einen direkten Weg durch die NATs und Firewalls zwischen einem Mobilfunknetz und einem Heimrouter zu finden — die einen solchen Weg verhindern können. Deine Dateien sind Ende-zu-Ende versiegelt, bevor sie das sendende Gerät verlassen, das Relay bewegt also nur Chiffretext, den es nicht lesen kann. Bricht die Verbindung mittendrin ab, kann die Übertragung fortgesetzt werden, statt neu zu beginnen. Der Code gilt fünf Minuten — halte beide Geräte bereit, bevor du einen erzeugst.",
-      ],
-    },
+    browserCrossNetworkSection.de,
     {
       heading: "Wie eine App installieren (optionale PWA)",
       body: [
@@ -845,13 +817,7 @@ const fr = {
         ],
       },
     },
-    {
-      heading: "Pas sur le même réseau ? Utilisez un code d'appairage",
-      body: [
-        "Votre téléphone est en données mobiles et votre PC sur le Wi-Fi de la maison ? Aucun souci — Relayium est conçu pour atteindre à travers les réseaux, pas seulement le même. Une salle à code d'appairage reste toutefois une surface distincte d'un espace de travail avec un appareil à proximité : elle conserve les anciennes commandes séparées par appareil, il n'y a donc pas d'« Ouvrir l’espace de travail » à y presser.",
-        "Au lieu de la découverte automatique, l'expéditeur se connecte et obtient un court code d'appairage (ou le lien de participation qu'il génère) — le destinataire n'a jamais besoin de compte. Saisissez le code sur l'autre appareil et les deux se connectent via un relais TURN chiffré. C'est le choix délibéré pour le trajet entre réseaux : il emprunte le relais dès le départ, si bien que la connexion ne dépend pas de la découverte d'une voie directe à travers les NAT et pare-feu situés entre un réseau mobile et une box domestique, qui peuvent en empêcher une. Vos fichiers sont scellés de bout en bout avant de quitter l'appareil émetteur : le relais ne déplace donc que du texte chiffré qu'il ne peut pas lire. Si la connexion se coupe en cours de route, le transfert peut reprendre au lieu de tout recommencer. Le code est valable cinq minutes : ayez les deux appareils sous la main avant d'en générer un.",
-      ],
-    },
+    browserCrossNetworkSection.fr,
     {
       heading: "L'installer comme une appli (PWA facultative)",
       body: [
@@ -995,13 +961,7 @@ const ar = {
         ],
       },
     },
-    {
-      heading: "لست على نفس الشبكة؟ استخدم رمز اقتران",
-      body: [
-        "هاتفك على بيانات الجوال وحاسوبك على شبكة Wi-Fi المنزلية؟ لا بأس بذلك — بُني Relayium ليصل عبر الشبكات، لا على نفس الشبكة فقط. غير أن غرفة رمز الاقتران واجهة منفصلة عن مساحة عمل جهاز قريب: فهي تحتفظ بعناصر التحكم الأقدم المنفصلة لكل جهاز، ولا يوجد فيها «فتح مساحة العمل» لتضغطه.",
-        "بدلًا من الاكتشاف التلقائي، يحصل المُرسِل على رمز اقتران قصير (أو رابط الانضمام الذي يولّده) ويسجّل الدخول لتوليده — أما المُستقبِل فلا يحتاج إلى حساب أبدًا. أدخِل الرمز على الجهاز الآخر فيتصل الجهازان عبر مُرحِّل TURN مُشفَّر. هكذا صُمِّم المسار عبر الشبكات عن قصد: فهو يسلك المُرحِّل من البداية، فلا يعتمد انعقاد الاتصال على إيجاد مسار مباشر عبر ما بين شبكة الجوال وموجّه المنزل من شبكات NAT وجدران حماية، وهي قد تمنع مثل هذا المسار. وملفاتك مختومة من الطرف إلى الطرف قبل أن تغادر الجهاز المُرسِل، فلا ينقل المُرحِّل سوى نص مُشفَّر لا يستطيع قراءته. وإذا انقطع الاتصال في منتصف الطريق، يمكن استئناف النقل بدلًا من البدء من جديد. والرمز صالح خمس دقائق، فجهِّز الجهازين معًا قبل توليده.",
-      ],
-    },
+    browserCrossNetworkSection.ar,
     {
       heading: "ثبّته كتطبيق (تطبيق ويب تقدُّمي PWA اختياري)",
       body: [
@@ -1145,13 +1105,7 @@ const es = {
         ],
       },
     },
-    {
-      heading: "¿No están en la misma red? Usa un código de emparejamiento",
-      body: [
-        "¿Tu teléfono va con datos móviles y tu PC con la Wi-Fi de casa? No pasa nada — Relayium está hecho para llegar entre redes, no solo dentro de la misma. Eso sí, una sala con código de emparejamiento es una superficie distinta de un espacio de trabajo con un dispositivo cercano: conserva los controles anteriores separados por dispositivo, así que allí no hay ningún «Abrir espacio de trabajo» que pulsar.",
-        "En lugar del descubrimiento automático, el remitente obtiene un código de emparejamiento corto (o el enlace de unión que genera) e inicia sesión para generarlo — la persona que recibe nunca necesita una cuenta. Introduce el código en el otro dispositivo y los dos se conectan a través de un retransmisor TURN cifrado. Así está pensada a propósito la vía entre redes: toma el retransmisor desde el principio, de modo que la conexión no depende de encontrar una ruta directa a través de los NAT y cortafuegos que hay entre una red móvil y el router de casa, que pueden impedirla. Tus archivos van sellados de extremo a extremo antes de salir del dispositivo emisor, así que el retransmisor solo mueve texto cifrado que no puede leer. Si la conexión se corta a medias, la transferencia puede reanudarse en lugar de empezar de nuevo. El código vale cinco minutos, así que ten los dos dispositivos a mano antes de generarlo.",
-      ],
-    },
+    browserCrossNetworkSection.es,
     {
       heading: "Instálalo como una app (PWA opcional)",
       body: [
@@ -1295,13 +1249,7 @@ const pt = {
         ],
       },
     },
-    {
-      heading: "Não estão na mesma rede? Use um código de emparelhamento",
-      body: [
-        "Seu celular está no dados móveis e seu PC na rede Wi-Fi de casa? Tudo bem — o Relayium foi feito para alcançar entre redes, não só dentro da mesma. Só que uma sala com código de emparelhamento é uma superfície separada de uma área de trabalho com um dispositivo próximo: ela mantém os controles anteriores separados por dispositivo, então não há nenhum “Abrir área de trabalho” para pressionar ali.",
-        "Em vez da descoberta automática, o remetente recebe um código de emparelhamento curto (ou o link de entrada que ele gera) e faz login para gerá-lo — quem recebe nunca precisa de conta. Digite o código no outro dispositivo e os dois se conectam por um retransmissor TURN criptografado. O caminho entre redes foi pensado assim de propósito: ele usa o retransmissor desde o início, então a conexão não depende de encontrar uma rota direta através dos NATs e firewalls que existem entre uma rede móvel e o roteador de casa, que podem impedi-la. Seus arquivos são selados de ponta a ponta antes de deixar o dispositivo que envia, então o retransmissor só move texto cifrado que não consegue ler. Se a conexão cair no meio, a transferência pode ser retomada em vez de recomeçar. O código vale cinco minutos, então deixe os dois aparelhos à mão antes de gerar um.",
-      ],
-    },
+    browserCrossNetworkSection.pt,
     {
       heading: "Instale como um app (PWA opcional)",
       body: [
@@ -1356,6 +1304,6 @@ const pt = {
 export default {
   slug: "how-to/send-files-pc-to-phone-wirelessly",
   published: "2026-07-03",
-  updated: "2026-08-05",
+  updated: "2026-08-07",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };
