@@ -124,6 +124,18 @@ final class AppShellUITests: XCTestCase {
                       "the generated-code surface hides its escape action")
         XCTAssertTrue(window.staticTexts["Pairing code"].exists || window.title == "Pairing code",
                       "creating a pairing-code text session navigated elsewhere")
+
+        // No conversation or transcript exists yet. Cancel must be the whole
+        // exit, not the first half of Cancel -> Session ended -> Done.
+        window.buttons["Cancel"].click()
+        XCTAssertTrue(window.buttons["Create a text code"].waitForExistence(timeout: 10),
+                      "Cancel did not return directly to text-code creation")
+        XCTAssertTrue(window.buttons["Join"].exists,
+                      "Cancel did not restore the pairing-code join path")
+        XCTAssertFalse(window.buttons["Done"].exists,
+                       "Cancel manufactured an empty terminal task requiring Done")
+        XCTAssertFalse(window.staticTexts["4 8 3 9 2 0"].exists,
+                       "the cancelled pairing code remained on screen")
     }
 
     /// A terminal task is not an invitation to start another one on top of it.
