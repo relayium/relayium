@@ -284,6 +284,24 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "the shared picker explanation is duplicated only in Text mode")
     }
 
+    func testDirectChoicesLockAtClaimBeforeTheModelsBecomeBusy() throws {
+        for name in ["Destinations/PairingCodeDestination.swift",
+                     "Destinations/NearbyDestination.swift"] {
+            let destination = try source(named: name)
+            XCTAssertTrue(destination.contains("set: { presence.selectMode($0) }"),
+                          "\(name) bypasses the ownership-aware mode setter")
+            XCTAssertFalse(destination.contains("selection: $presence.mode"),
+                           "\(name) can move the mode after a session claim")
+        }
+
+        let nearby = try source(named: "Destinations/NearbyDestination.swift")
+        XCTAssertTrue(nearby.contains("presence.owner != nil || anySessionLive"))
+        XCTAssertTrue(nearby.contains(
+            "set: { if !sessionLocked { verification.requiresSASConfirmation = $0 } }"),
+                      "verification can change after claim but before handshake state appears")
+        XCTAssertGreaterThanOrEqual(nearby.components(separatedBy: ".disabled(sessionLocked)").count - 1, 2)
+    }
+
     /// Before a text peer connects there is no transcript or result to retain.
     /// Cancel should match the file flow and return directly to the start screen.
     func testTextConnectingCancelDoesNotCreateAnEmptyTerminalTask() throws {
@@ -989,7 +1007,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         // failure rather than something a reviewer has to notice.
         for wiring in ["navigation: routing, download: downloads,",
                        "realtime: files, realtimeText: text, presence: presenting,",
-                       "selectRealtimeMode: { mode in presenting.mode = mode }",
+                       "selectRealtimeMode: { mode in presenting.selectMode(mode) }",
                        "_presence = StateObject(wrappedValue: presenting)",
                        "_navigation = StateObject(wrappedValue: routing)",
                        "_downloadModel = StateObject(wrappedValue: downloads)",

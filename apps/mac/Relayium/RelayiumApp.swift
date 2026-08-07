@@ -310,7 +310,7 @@ struct RelayiumApp: App {
         _deepLinkRouting = StateObject(wrappedValue: AppDeepLinkCoordinator(
             navigation: routing, download: downloads,
             realtime: files, realtimeText: text, presence: presenting,
-            selectRealtimeMode: { mode in presenting.mode = mode }))
+            selectRealtimeMode: { mode in presenting.selectMode(mode) }))
         // Built from the SAME navigation model, so an opened file and a tapped
         // link cannot disagree about where the user is. It takes nothing else:
         // staging a selection touches no transfer model, which is why this one

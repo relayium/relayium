@@ -36,6 +36,21 @@ final class TransferPresenceTests: XCTestCase {
         XCTAssertEqual(p.mode, .text)
     }
 
+    func testUserModeSelectionStopsAtTheOwnershipBoundary() {
+        let p = TransferPresence(mode: .files)
+        p.selectMode(.text)
+        XCTAssertEqual(p.mode, .text)
+
+        XCTAssertTrue(p.claim(.nearby, mode: .text))
+        p.selectMode(.files)
+        XCTAssertEqual(p.mode, .text,
+                       "a claimed session must not be hidden before its model starts")
+
+        p.release(.nearby)
+        p.selectMode(.files)
+        XCTAssertEqual(p.mode, .files)
+    }
+
     func testExactlyOneDestinationRendersTheSession() {
         let p = TransferPresence()
         p.claim(.pairingCode, mode: .files)

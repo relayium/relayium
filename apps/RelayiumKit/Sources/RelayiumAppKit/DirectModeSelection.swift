@@ -35,24 +35,31 @@ public final class DirectModeSelection: ObservableObject {
         self.mode = mode
     }
 
-    /// True while either model owns a session — live or terminal-and-retained.
+    /// True once the surface is claimed or either model owns a session — live
+    /// or terminal-and-retained. The claim covers the synchronous interval
+    /// before an asynchronous model start publishes its first non-idle state.
     ///
     /// Written as "not idle" rather than as a list of the states that lock,
     /// deliberately: a new state added to either enum locks the picker by
     /// default, which is the safe direction. Opting one back out is then an
     /// explicit edit here rather than an omission somewhere else.
-    public static func isLocked(file: RealtimeState, text: RealtimeTextState) -> Bool {
-        file != .idle || text != .idle
+    public static func isLocked(file: RealtimeState,
+                                text: RealtimeTextState,
+                                sessionClaimed: Bool = false) -> Bool {
+        sessionClaimed || file != .idle || text != .idle
     }
 
     /// The only way the mode changes.
     ///
-    /// It re-reads the two states rather than trusting a flag, because a
+    /// It re-reads ownership and both states rather than trusting a cached flag, because a
     /// `.disabled` modifier is a courtesy and not the mechanism: SwiftUI still
     /// owns the binding behind a disabled control, and a rebuilt view, a
     /// restored scene or a future deep link can all write one.
-    public func select(_ mode: TransferMode, file: RealtimeState, text: RealtimeTextState) {
-        guard !Self.isLocked(file: file, text: text) else { return }
+    public func select(_ mode: TransferMode,
+                       file: RealtimeState,
+                       text: RealtimeTextState,
+                       sessionClaimed: Bool = false) {
+        guard !Self.isLocked(file: file, text: text, sessionClaimed: sessionClaimed) else { return }
         self.mode = mode
     }
 

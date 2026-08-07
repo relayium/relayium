@@ -29,6 +29,10 @@ struct NearbyDestination: View {
         fileModel.state != .idle || textModel.state != .idle
     }
 
+    private var sessionLocked: Bool {
+        presence.owner != nil || anySessionLive
+    }
+
     var body: some View {
         DestinationScaffold(title: L10n.t(.navNearby),
                             subtitle: L10n.t(.navNearbySubtitle),
@@ -69,13 +73,16 @@ struct NearbyDestination: View {
     /// guess. One question, asked once — the answer lives in `TransferPresence`
     /// and the pairing-code destination reads the same one.
     private var modePicker: some View {
-        Picker(L10n.t(.hubTransferType), selection: $presence.mode) {
+        Picker(L10n.t(.hubTransferType), selection: Binding(
+            get: { presence.mode },
+            set: { presence.selectMode($0) }
+        )) {
             Text(L10n.t(.hubFiles)).tag(TransferMode.files)
             Text(L10n.t(.hubText)).tag(TransferMode.text)
         }
         .pickerStyle(.segmented)
         .frame(maxWidth: 720, alignment: .leading)
-        .disabled(busy || presence.owner != nil)
+        .disabled(sessionLocked)
         .accessibilityHint(L10n.t(.hubTransferTypeHint))
     }
 
@@ -103,8 +110,11 @@ struct NearbyDestination: View {
     /// as its first control reads worse than the plain group this already was.
     private var verificationSetting: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Toggle(L10n.t(.verifyToggle), isOn: $verification.requiresSASConfirmation)
-                .disabled(busy)
+            Toggle(L10n.t(.verifyToggle), isOn: Binding(
+                get: { verification.requiresSASConfirmation },
+                set: { if !sessionLocked { verification.requiresSASConfirmation = $0 } }
+            ))
+                .disabled(sessionLocked)
             Text(L10n.t(.verifyExplainWhat))
                 .font(.caption)
                 .foregroundStyle(.secondary)

@@ -55,7 +55,10 @@ struct PairingCodeDestination: View {
     /// answers to one question.
     private var modePicker: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Picker(L10n.t(.hubTransferType), selection: $presence.mode) {
+            Picker(L10n.t(.hubTransferType), selection: Binding(
+                get: { presence.mode },
+                set: { presence.selectMode($0) }
+            )) {
                 Text(L10n.t(.hubFiles)).tag(TransferMode.files)
                 Text(L10n.t(.hubText)).tag(TransferMode.text)
             }

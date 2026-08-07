@@ -42,12 +42,21 @@ public final class TransferPresence: ObservableObject {
     /// cannot clear the session" is enforced rather than agreed.
     @Published public private(set) var owner: AppDestination?
 
-    /// Files or text. Writable because the mode picker binds straight to it
-    /// while nothing is running; a claim sets it when a session decides its own
-    /// kind — an unsolicited incoming one, which nobody chose a mode for.
-    @Published public var mode: TransferMode
+    /// Files or text. User changes go through `selectMode`, while a claim sets
+    /// it when a session decides its own kind — an unsolicited incoming one,
+    /// which nobody chose a mode for.
+    @Published public private(set) var mode: TransferMode
 
     public init(mode: TransferMode = .files) {
+        self.mode = mode
+    }
+
+    /// Change the user's Files/Text choice only while no session owns either
+    /// direct surface. Ownership is taken synchronously before either model can
+    /// publish a non-idle state, so model busy flags alone leave a short window
+    /// in which a picker could hide the session that is about to appear.
+    public func selectMode(_ mode: TransferMode) {
+        guard owner == nil else { return }
         self.mode = mode
     }
 

@@ -82,7 +82,9 @@ struct NearbyView: View {
     /// Derived on every render from the two live models rather than cached: a
     /// stored flag would be a second answer to a question they already answer.
     private var isLocked: Bool {
-        DirectModeSelection.isLocked(file: file.state, text: text.state)
+        DirectModeSelection.isLocked(file: file.state,
+                                     text: text.state,
+                                     sessionClaimed: presence.owner != nil)
     }
 
     var body: some View {
@@ -278,7 +280,10 @@ struct NearbyView: View {
     private var modePicker: some View {
         Picker(L10n.t(.hubTransferType), selection: Binding(
             get: { modes.mode },
-            set: { modes.select($0, file: file.state, text: text.state) }
+            set: { modes.select($0,
+                                file: file.state,
+                                text: text.state,
+                                sessionClaimed: presence.owner != nil) }
         )) {
             Text(L10n.t(.hubFiles)).tag(TransferMode.files)
             Text(L10n.t(.hubText)).tag(TransferMode.text)
@@ -468,7 +473,10 @@ struct NearbyView: View {
     /// depend on timing.
     private var verificationSetting: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Toggle(L10n.t(.verifyToggle), isOn: $verification.requiresSASConfirmation)
+            Toggle(L10n.t(.verifyToggle), isOn: Binding(
+                get: { verification.requiresSASConfirmation },
+                set: { if !isLocked { verification.requiresSASConfirmation = $0 } }
+            ))
                 .disabled(isLocked)
             Text(L10n.t(.verifyExplainWhat))
                 .font(.footnote)

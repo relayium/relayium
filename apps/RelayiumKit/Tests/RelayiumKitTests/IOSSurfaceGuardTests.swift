@@ -2264,8 +2264,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let view = try direct()
         XCTAssertTrue(view.text.contains("modes.select("),
                       "the mode must change through the guarded entry point")
-        XCTAssertTrue(view.text.contains("DirectModeSelection.isLocked(file: file.state, text: text.state)"),
-                      "the lock must be derived from the two live model states")
+        XCTAssertTrue(view.text.contains("sessionClaimed: presence.owner != nil"),
+                      "the lock must cover claim-before-model-start as well as model states")
         XCTAssertFalse(view.text.contains("$modes.mode"),
                        "a raw binding lets a rebuild move the mode under a running session")
     }
@@ -2490,8 +2490,11 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// both models read, rather than a `@State` nothing consults.
     func testTheVerificationSettingIsVisibleAndIsTheSharedPreference() throws {
         let view = try direct()
-        XCTAssertTrue(view.text.contains("Toggle(L10n.t(.verifyToggle), isOn: $verification.requiresSASConfirmation)"),
-                      "the toggle must write the shared preference")
+        XCTAssertTrue(view.text.contains(
+            "set: { if !isLocked { verification.requiresSASConfirmation = $0 } }"),
+                      "the shared preference must refuse changes after session claim")
+        XCTAssertFalse(view.text.contains("isOn: $verification.requiresSASConfirmation"),
+                       "a raw binding can change verification during claim-before-handshake")
         for explanation in [".verifyExplainWhat", ".verifyExplainEncryption"] {
             XCTAssertTrue(view.text.contains(explanation),
                           "the setting must say what it does and does not change: \(explanation)")
@@ -2891,8 +2894,10 @@ final class IOSSurfaceGuardTests: XCTestCase {
     func testTheNearbyTabOffersTheSharedVerificationSettingAndNoSecondAccept() throws {
         let view = try nearby()
         XCTAssertTrue(view.text.contains(
-            "Toggle(L10n.t(.verifyToggle), isOn: $verification.requiresSASConfirmation)"),
-                      "the toggle must write the shared preference")
+            "set: { if !isLocked { verification.requiresSASConfirmation = $0 } }"),
+                      "the shared preference must refuse changes after session claim")
+        XCTAssertFalse(view.text.contains("isOn: $verification.requiresSASConfirmation"),
+                       "a raw binding can change verification during claim-before-handshake")
         XCTAssertFalse(view.text.contains("@State private var requiresSAS"),
                        "a view-local copy would be a setting no session reads")
         XCTAssertTrue(view.text.contains("L10n.t(.nearbyAcceptanceNote)"),

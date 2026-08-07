@@ -27,6 +27,17 @@ final class DirectModeSelectionTests: XCTestCase {
         XCTAssertFalse(DirectModeSelection.isLocked(file: .idle, text: .idle))
     }
 
+    func testAnOwnershipClaimLocksBeforeEitherModelLeavesIdle() {
+        let modes = DirectModeSelection(mode: .files)
+
+        XCTAssertTrue(DirectModeSelection.isLocked(file: .idle,
+                                                    text: .idle,
+                                                    sessionClaimed: true))
+        modes.select(.text, file: .idle, text: .idle, sessionClaimed: true)
+        XCTAssertEqual(modes.mode, .files,
+                       "claim-before-model-start must not expose a mutable mode")
+    }
+
     /// Every non-idle file state locks it, including the two TERMINAL ones.
     ///
     /// `.completed` and `.failed` are not "over" from this surface's point of
