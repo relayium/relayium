@@ -271,7 +271,7 @@
 "text.incomingHeading" = "상대 기기가 텍스트를 주고받으려 합니다";
 "text.nothingDecrypted" = "아직 복호화되거나 표시된 메시지는 없습니다.";
 "text.sessionHeading" = "비공개 텍스트 세션";
-"text.noServerHistory" = "Relayium은 메시지 본문도, 서버 측 기록도 저장하지 않습니다. 다만 어느 쪽 기기든 텍스트를 복사하거나 따로 보관할 수는 있습니다.";
+"text.noServerHistory" = "Relayium은 메시지 본문이나 서버 측 기록을 저장하지 않습니다. 화면의 기록도 저장되지 않으며 앱이 종료되면 사라질 수 있습니다. 다만 어느 쪽 기기든 텍스트를 복사하거나 따로 보관할 수 있습니다.";
 "text.noMessages" = "아직 메시지가 없습니다.";
 "text.composerLabel" = "메시지";
 "text.byteCounter" = "%1$@ / %2$@ UTF-8 바이트";

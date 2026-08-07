@@ -271,7 +271,7 @@
 "text.incomingHeading" = "对方设备想要与你交换文本";
 "text.nothingDecrypted" = "目前还没有任何消息被解密或显示。";
 "text.sessionHeading" = "私密文本会话";
-"text.noServerHistory" = "Relayium 不保存任何消息正文，也没有服务端历史。但任何一方设备仍然可以复制或自行留存文本。";
+"text.noServerHistory" = "Relayium 不保存任何消息正文，也没有服务端历史。屏幕上的这份历史不会保存，应用关闭后可能消失；任何一方设备仍然可以复制或自行留存文本。";
 "text.noMessages" = "还没有消息。";
 "text.composerLabel" = "消息";
 "text.byteCounter" = "%1$@ / %2$@ UTF-8 字节";

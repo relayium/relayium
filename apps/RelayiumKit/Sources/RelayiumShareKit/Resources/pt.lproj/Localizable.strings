@@ -274,7 +274,7 @@
 "text.incomingHeading" = "O outro dispositivo quer trocar texto";
 "text.nothingDecrypted" = "Ainda não foi decifrada nem mostrada qualquer mensagem.";
 "text.sessionHeading" = "Sessão de texto privada";
-"text.noServerHistory" = "O Relayium não guarda o conteúdo das mensagens nem histórico do lado do servidor. Ainda assim, qualquer dos dispositivos pode copiar ou reter o texto.";
+"text.noServerHistory" = "O Relayium não guarda o conteúdo das mensagens nem histórico do lado do servidor. O histórico no ecrã não é guardado e pode desaparecer se a app fechar. Ainda assim, qualquer dos dispositivos pode copiar ou reter o texto.";
 "text.noMessages" = "Ainda não há mensagens.";
 "text.composerLabel" = "Mensagem";
 "text.byteCounter" = "%1$@ / %2$@ bytes UTF-8";

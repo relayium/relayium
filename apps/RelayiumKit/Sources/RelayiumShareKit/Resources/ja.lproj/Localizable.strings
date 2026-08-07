@@ -271,7 +271,7 @@
 "text.incomingHeading" = "相手のデバイスがテキストのやり取りを求めています";
 "text.nothingDecrypted" = "まだ復号も表示もされたメッセージはありません。";
 "text.sessionHeading" = "プライベートなテキストセッション";
-"text.noServerHistory" = "Relayium はメッセージ本文もサーバー側の履歴も保存しません。ただし、どちらのデバイスもテキストをコピーしたり手元に残したりできます。";
+"text.noServerHistory" = "Relayium はメッセージ本文もサーバー側の履歴も保存しません。画面上の履歴も保存されず、アプリが終了すると消えることがあります。ただし、どちらのデバイスもテキストをコピーしたり手元に残したりできます。";
 "text.noMessages" = "まだメッセージはありません。";
 "text.composerLabel" = "メッセージ";
 "text.byteCounter" = "%1$@ / %2$@ UTF-8 バイト";

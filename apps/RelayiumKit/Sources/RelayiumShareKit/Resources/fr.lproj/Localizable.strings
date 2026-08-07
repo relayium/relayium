@@ -274,7 +274,7 @@
 "text.incomingHeading" = "L’autre appareil souhaite échanger du texte";
 "text.nothingDecrypted" = "Aucun message n’a encore été déchiffré ni affiché.";
 "text.sessionHeading" = "Session texte privée";
-"text.noServerHistory" = "Relayium ne conserve aucun contenu de message ni historique côté serveur. Chaque appareil peut néanmoins copier ou conserver le texte.";
+"text.noServerHistory" = "Relayium ne conserve aucun contenu de message ni historique côté serveur. L’historique affiché n’est pas enregistré et peut disparaître à la fermeture de l’app. Chaque appareil peut néanmoins copier ou conserver le texte.";
 "text.noMessages" = "Aucun message pour l’instant.";
 "text.composerLabel" = "Message";
 "text.byteCounter" = "%1$@ / %2$@ octets UTF-8";

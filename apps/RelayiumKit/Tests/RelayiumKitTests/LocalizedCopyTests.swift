@@ -37,6 +37,34 @@ final class LocalizedCopyTests: XCTestCase {
         }
     }
 
+    func testOpenTextSessionWarnsBeforeUnsavedHistoryCanBeLost() throws {
+        let unsaved: [AppLanguage: String] = [
+            .en: "not saved", .zh: "不会保存", .ja: "保存されず", .ko: "저장되지",
+            .de: "nicht gespeichert", .fr: "n’est pas enregistré", .ar: "لا يُحفظ",
+            .es: "no se guarda", .pt: "não é guardado",
+        ]
+        let appClose: [AppLanguage: String] = [
+            .en: "app closes", .zh: "应用关闭", .ja: "アプリが終了", .ko: "앱이 종료",
+            .de: "App beendet", .fr: "fermeture de l’app", .ar: "إغلاق التطبيق",
+            .es: "app se cierra", .pt: "app fechar",
+        ]
+        let peerRetention: [AppLanguage: String] = [
+            .en: "Either device", .zh: "任何一方设备", .ja: "どちらのデバイス",
+            .ko: "어느 쪽 기기", .de: "Beide Geräte", .fr: "Chaque appareil",
+            .ar: "أي من الجهازين", .es: "cualquiera de los dispositivos",
+            .pt: "qualquer dos dispositivos",
+        ]
+        for language in AppLanguage.allCases {
+            let text = L10n.t(.textNoServerHistory, language: language)
+            for (label, table) in [("unsaved local history", unsaved),
+                                   ("app-close loss", appClose),
+                                   ("peer retention", peerRetention)] {
+                XCTAssertTrue(text.contains(try XCTUnwrap(table[language])),
+                              "text.noServerHistory [\(language.rawValue)] dropped \(label): \(text)")
+            }
+        }
+    }
+
     func testCopiedFeedbackIsLocalizedEverywhere() {
         let english = L10n.t(.commonCopied, language: .en)
         XCTAssertEqual(english, "Copied")
