@@ -91,6 +91,19 @@ final class MacSurfaceGuardTests: XCTestCase {
             "the destination smoke test does not observe the rendered detail surface")
     }
 
+    func testMacRuntimeSuiteIsAHostedProductGate() throws {
+        let workflowURL = repoRoot.appendingPathComponent(".github/workflows/macos.yml")
+        let workflow = try String(contentsOf: workflowURL, encoding: .utf8)
+        XCTAssertTrue(workflow.contains("Run macOS product-flow UI smoke"),
+                      "CI compiles macOS but never launches its product flows")
+        XCTAssertTrue(workflow.contains(
+            "xcodebuild -project apps/mac/Relayium.xcodeproj -scheme Relayium"))
+        XCTAssertTrue(workflow.contains("-destination 'platform=macOS'"))
+        XCTAssertTrue(workflow.contains("-only-testing:RelayiumUITests test"))
+        XCTAssertTrue(workflow.contains("timeout-minutes: 15"),
+                      "a hosted desktop failure can occupy the runner indefinitely")
+    }
+
     func testRealtimeFileDetailsSurviveTransferAndCompletion() throws {
         let view = try source(named: "RealtimeFileSessionView.swift")
         XCTAssertGreaterThanOrEqual(view.components(separatedBy: "fileList").count - 1, 3,
