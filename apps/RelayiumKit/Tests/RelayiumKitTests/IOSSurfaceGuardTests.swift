@@ -2946,6 +2946,17 @@ final class IOSSurfaceGuardTests: XCTestCase {
         }
     }
 
+    func testIOSAccountSubmitSnapshotsTheWholeFormBeforeStartingAsyncWork() throws {
+        let form = try XCTUnwrap(try sources().first { $0.name == "SignInView.swift" }?.text)
+        XCTAssertTrue(form.contains("let submitted = draft"))
+        for field in ["submitted.email", "submitted.password", "submitted.displayName"] {
+            XCTAssertTrue(form.contains(field), "account submission lost \(field)")
+        }
+        XCTAssertTrue(form.contains("SignInPresentation.problem(in: submitted)"))
+        XCTAssertFalse(form.contains("session.logIn(email: draft.email"))
+        XCTAssertFalse(form.contains("session.register(email: draft.email"))
+    }
+
     /// The Nearby tab scrolls, like every other screen in this app.
     ///
     /// It is the longest one: an explanation, a status card, a roster of

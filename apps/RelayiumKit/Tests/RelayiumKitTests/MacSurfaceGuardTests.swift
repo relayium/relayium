@@ -894,7 +894,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the form must create the account through the session, in the app")
         XCTAssertTrue(login.contains("@State private var mode: AuthMode"),
                       "the mode is the form's own state")
-        XCTAssertTrue(login.contains("SignInPresentation.problem(in: draft)"),
+        XCTAssertTrue(login.contains("SignInPresentation.problem(in: submitted)"),
                       "the substantive checks run before a request goes out")
         for (name, text) in try sources(under: macRoot, atLeast: 20)
         where name != "LoginView.swift" && name != "Components/CapabilityGateView.swift" {
@@ -1314,6 +1314,17 @@ final class MacSurfaceGuardTests: XCTestCase {
             XCTAssertFalse(source.contains("Task { await \(model).join(code: \(model).joinCode) }"),
                            "\(file) reads mutable input after taking ownership")
         }
+    }
+
+    func testAccountSubmitSnapshotsTheWholeFormBeforeStartingAsyncWork() throws {
+        let login = try source(named: "LoginView.swift")
+        XCTAssertTrue(login.contains("let submitted = draft"))
+        for field in ["submitted.email", "submitted.password", "submitted.displayName"] {
+            XCTAssertTrue(login.contains(field), "account submission lost \(field)")
+        }
+        XCTAssertTrue(login.contains("SignInPresentation.problem(in: submitted)"))
+        XCTAssertFalse(login.contains("session.logIn(email: draft.email"))
+        XCTAssertFalse(login.contains("session.register(email: draft.email"))
     }
 
     /// The document-type declaration that makes the app a Dock drop target and a

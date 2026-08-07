@@ -229,22 +229,27 @@ struct LoginView: View {
 
     private func submit() {
         guard canSubmit else { return }
+        // The task starts after this action returns. Keep the credentials and
+        // registration profile the user submitted together rather than reading
+        // fields that remain editable until the session publishes busy.
+        let submitted = draft
         localProblem = nil
         switch mode {
         case .signIn:
-            Task { await session.logIn(email: draft.email, password: draft.password) }
+            Task { await session.logIn(email: submitted.email,
+                                       password: submitted.password) }
         case .register:
             // Checked here so a mistyped confirmation costs no round trip and no
             // rate-limit budget. The server enforces the same password rule
             // regardless; this only stops the trip.
-            if let problem = SignInPresentation.problem(in: draft) {
+            if let problem = SignInPresentation.problem(in: submitted) {
                 localProblem = problem
                 return
             }
             Task {
-                await session.register(email: draft.email,
-                                       password: draft.password,
-                                       displayName: draft.displayName)
+                await session.register(email: submitted.email,
+                                       password: submitted.password,
+                                       displayName: submitted.displayName)
             }
         }
     }
