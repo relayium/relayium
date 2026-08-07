@@ -372,12 +372,24 @@ final class MacSurfaceGuardTests: XCTestCase {
                            "\(action) lost its destructive role")
         }
         XCTAssertEqual(occurrences(of:
-            "Button(L10n.t(.commonEndSession), role: .destructive)", in: session), 2,
-            "both waiting and open sessions must label termination destructively")
+            "Button(L10n.t(.commonEndSession), role: .destructive)", in: session), 3,
+            "waiting, open and draft-confirmation termination must be destructive")
         XCTAssertEqual(occurrences(of: ".buttonStyle(.bordered)", in: session), 4,
                        "each destructive session action needs an explicit task-button shape")
         XCTAssertEqual(occurrences(of: ".buttonStyle(.borderedProminent)", in: session), 3,
                        "only Match, Accept and the open-session Send action are prominent")
+    }
+
+    func testEndingAnOpenTextSessionCannotSilentlyDiscardADraft() throws {
+        let source = try source(named: "RealtimeTextSessionView.swift")
+        XCTAssertTrue(source.contains("@State private var confirmingDraftDiscard = false"))
+        XCTAssertTrue(source.contains("if model.draft.isEmpty"))
+        XCTAssertTrue(source.contains(
+            "Button(L10n.t(.commonEndSession), role: .destructive) { endOrConfirmDraftDiscard() }"))
+        XCTAssertTrue(source.contains(
+            "Button(L10n.t(.commonEndSession), role: .destructive) { model.end() }"))
+        XCTAssertTrue(source.contains("L10n.t(.textDiscardDraftConfirmTitle)"))
+        XCTAssertTrue(source.contains("L10n.t(.textDiscardDraftConfirmBody)"))
     }
 
     func testFileMismatchAndMidTransferCancelStateTheirDestructiveCost() throws {

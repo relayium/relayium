@@ -280,6 +280,8 @@
 "text.clearHistory" = "기록 지우기";
 "text.clearHistory.confirmTitle" = "로컬 기록을 지울까요?";
 "text.clearHistory.confirmBody" = "이 메시지는 이 기기에만 있습니다. 지운 후에는 되돌릴 수 없습니다.";
+"text.discardDraft.confirmTitle" = "보내지 않은 메시지를 버릴까요?";
+"text.discardDraft.confirmBody" = "세션을 종료하면 아직 보내지 않은 텍스트가 삭제되며 되돌릴 수 없습니다.";
 "text.localHistoryHeading" = "로컬 세션 기록";
 "text.localHistoryBody" = "이 기록은 저장되지 않고 이 앱의 메모리에만 있습니다. 기록을 지우거나 다른 세션을 시작하거나 Relayium을 종료하거나 시스템이 앱을 종료하면 사라집니다.";
 "text.sent" = "보냄";

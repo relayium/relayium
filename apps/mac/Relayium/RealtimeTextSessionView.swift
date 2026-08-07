@@ -21,6 +21,7 @@ struct RealtimeTextSessionView: View {
     /// id, never by retaining a second copy of its plaintext body.
     @State private var copiedMessageID: Int?
     @State private var confirmingHistoryClear = false
+    @State private var confirmingDraftDiscard = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -189,9 +190,27 @@ struct RealtimeTextSessionView: View {
                 }
                     .disabled(model.history.isEmpty)
                 Spacer()
-                Button(L10n.t(.commonEndSession), role: .destructive) { model.end() }
+                Button(L10n.t(.commonEndSession), role: .destructive) { endOrConfirmDraftDiscard() }
                     .buttonStyle(.bordered)
             }
+        }
+        .confirmationDialog(
+            L10n.t(.textDiscardDraftConfirmTitle),
+            isPresented: $confirmingDraftDiscard,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.t(.commonEndSession), role: .destructive) { model.end() }
+            Button(L10n.t(.commonCancel), role: .cancel) { confirmingDraftDiscard = false }
+        } message: {
+            Text(L10n.t(.textDiscardDraftConfirmBody))
+        }
+    }
+
+    private func endOrConfirmDraftDiscard() {
+        if model.draft.isEmpty {
+            model.end()
+        } else {
+            confirmingDraftDiscard = true
         }
     }
 

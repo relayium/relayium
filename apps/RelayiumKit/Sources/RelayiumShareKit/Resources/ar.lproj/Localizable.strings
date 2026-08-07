@@ -298,6 +298,8 @@
 "text.clearHistory" = "مسح السجل";
 "text.clearHistory.confirmTitle" = "مسح السجل المحلي؟";
 "text.clearHistory.confirmBody" = "هذه الرسائل موجودة على هذا الجهاز فقط. لا يمكن التراجع عن مسحها.";
+"text.discardDraft.confirmTitle" = "التخلص من الرسالة غير المرسلة؟";
+"text.discardDraft.confirmBody" = "إنهاء الجلسة يتخلص من النص الذي لم ترسله. لا يمكن التراجع عن ذلك.";
 "text.localHistoryHeading" = "سجل الجلسة المحلي";
 "text.localHistoryBody" = "لا يُحفظ هذا السجل، بل يوجد فقط في ذاكرة التطبيق. يختفي إذا مسحته أو بدأت جلسة أخرى أو أنهيت Relayium أو أغلق النظام التطبيق.";
 "text.sent" = "مُرسَلة";

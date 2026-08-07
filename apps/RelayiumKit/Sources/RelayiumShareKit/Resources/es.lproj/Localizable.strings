@@ -283,6 +283,8 @@
 "text.clearHistory" = "Borrar historial";
 "text.clearHistory.confirmTitle" = "¿Borrar el historial local?";
 "text.clearHistory.confirmBody" = "Estos mensajes solo existen en este dispositivo. Esta acción no se puede deshacer.";
+"text.discardDraft.confirmTitle" = "¿Descartar el mensaje sin enviar?";
+"text.discardDraft.confirmBody" = "Finalizar la sesión descarta el texto que no has enviado. Esta acción no se puede deshacer.";
 "text.localHistoryHeading" = "Historial local de la sesión";
 "text.localHistoryBody" = "Este historial no se guarda y solo existe en la memoria de la app. Desaparece si lo borras, inicias otra sesión, cierras Relayium o el sistema cierra la app.";
 "text.sent" = "Enviado";

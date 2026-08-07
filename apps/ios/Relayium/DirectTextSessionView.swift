@@ -32,6 +32,7 @@ struct DirectTextSessionView: View {
     /// would duplicate plaintext after the model clears its in-memory history.
     @State private var copiedMessageID: Int?
     @State private var confirmingHistoryClear = false
+    @State private var confirmingDraftDiscard = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -110,9 +111,27 @@ struct DirectTextSessionView: View {
                     .font(.footnote.monospaced())
                     .textSelection(.enabled)
             }
-            Button(L10n.t(.commonEndSession), role: .destructive) { model.end() }
+            Button(L10n.t(.commonEndSession), role: .destructive) { endOrConfirmDraftDiscard() }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
+        }
+        .confirmationDialog(
+            L10n.t(.textDiscardDraftConfirmTitle),
+            isPresented: $confirmingDraftDiscard,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.t(.commonEndSession), role: .destructive) { model.end() }
+            Button(L10n.t(.commonCancel), role: .cancel) { confirmingDraftDiscard = false }
+        } message: {
+            Text(L10n.t(.textDiscardDraftConfirmBody))
+        }
+    }
+
+    private func endOrConfirmDraftDiscard() {
+        if model.draft.isEmpty {
+            model.end()
+        } else {
+            confirmingDraftDiscard = true
         }
     }
 

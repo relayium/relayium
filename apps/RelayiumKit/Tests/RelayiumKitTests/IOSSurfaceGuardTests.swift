@@ -667,6 +667,20 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "the view retains a second copy of ephemeral plaintext")
     }
 
+    func testEndingAnOpenTextSessionCannotSilentlyDiscardADraft() throws {
+        let source = try XCTUnwrap(try sources().first {
+            $0.name == "DirectTextSessionView.swift"
+        }?.text)
+        XCTAssertTrue(source.contains("@State private var confirmingDraftDiscard = false"))
+        XCTAssertTrue(source.contains("if model.draft.isEmpty"))
+        XCTAssertTrue(source.contains(
+            "Button(L10n.t(.commonEndSession), role: .destructive) { endOrConfirmDraftDiscard() }"))
+        XCTAssertTrue(source.contains(
+            "Button(L10n.t(.commonEndSession), role: .destructive) { model.end() }"))
+        XCTAssertTrue(source.contains("L10n.t(.textDiscardDraftConfirmTitle)"))
+        XCTAssertTrue(source.contains("L10n.t(.textDiscardDraftConfirmBody)"))
+    }
+
     func testClearingTheOnlyLocalTextHistoryRequiresDestructiveConfirmation() throws {
         let view = try XCTUnwrap(try sources().first { $0.name == "DirectTextSessionView.swift" })
         XCTAssertEqual(view.text.components(separatedBy: "confirmingHistoryClear = true").count - 1, 2)

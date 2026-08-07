@@ -284,6 +284,8 @@
 "text.clearHistory" = "Clear history";
 "text.clearHistory.confirmTitle" = "Clear local history?";
 "text.clearHistory.confirmBody" = "These messages exist only on this device. Clearing them cannot be undone.";
+"text.discardDraft.confirmTitle" = "Discard the unsent message?";
+"text.discardDraft.confirmBody" = "Ending the session discards the text you have not sent. This cannot be undone.";
 "text.localHistoryHeading" = "Local session history";
 "text.localHistoryBody" = "This history is not saved. It exists only in this app's memory and disappears if you clear it, start another session, quit Relayium, or the system closes the app.";
 "text.sent" = "Sent";
