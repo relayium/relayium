@@ -63,7 +63,8 @@ struct RealtimeFileSessionView: View {
             HStack {
                 Button(L10n.t(.sessionTheyMatch)) { model.confirmSAS() }
                     .buttonStyle(.borderedProminent)
-                Button(L10n.t(.sessionTheyDontMatch)) { model.rejectSAS() }
+                Button(L10n.t(.sessionTheyDontMatch), role: .destructive) { model.rejectSAS() }
+                    .buttonStyle(.bordered)
             }
         }
     }
@@ -76,7 +77,8 @@ struct RealtimeFileSessionView: View {
                 Text(L10n.percent(done: done, total: total) ?? L10n.t(.commonStarting))
             }
             fileList
-            Button(L10n.t(.commonCancel)) { model.cancel() }
+            Button(L10n.t(.commonCancel), role: .destructive) { model.cancel() }
+                .buttonStyle(.bordered)
         }
     }
 

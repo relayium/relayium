@@ -370,6 +370,17 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "only Match, Accept and the open-session Send action are prominent")
     }
 
+    func testFileMismatchAndMidTransferCancelStateTheirDestructiveCost() throws {
+        let session = try source(named: "RealtimeFileSessionView.swift")
+        XCTAssertTrue(session.contains(
+            "Button(L10n.t(.sessionTheyDontMatch), role: .destructive) { model.rejectSAS() }"))
+        XCTAssertTrue(session.contains(
+            "Button(L10n.t(.commonCancel), role: .destructive) { model.cancel() }"))
+        XCTAssertEqual(occurrences(of:
+            "Button(L10n.t(.commonCancel)) { model.cancel() }", in: session), 1,
+            "only pre-transfer connection Cancel should remain neutral")
+    }
+
     func testClearingTheOnlyLocalTextHistoryRequiresDestructiveConfirmation() throws {
         let session = try source(named: "RealtimeTextSessionView.swift")
         XCTAssertEqual(occurrences(of: "confirmingHistoryClear = true", in: session), 2,
