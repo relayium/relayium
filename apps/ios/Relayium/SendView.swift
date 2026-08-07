@@ -289,7 +289,15 @@ struct SendView: View {
     }
 
     private func resume() {
-        guard let token = session.bearerToken else { return onOpenAccount() }
+        // A recovered job can outlive the render that exposed Resume. Preserve
+        // it and route to Account if the credential became empty, expired or
+        // otherwise unusable before activation; never change the model to
+        // uploading only to make an unauthorized request.
+        guard let token = session.bearerToken, !token.isEmpty,
+              case .allowed = AccountGate.from(session.state, bearer: token) else {
+            onOpenAccount()
+            return
+        }
         upload.resume(token: token)
     }
 

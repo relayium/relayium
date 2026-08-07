@@ -2008,6 +2008,27 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "a second start would be one that skipped the guard")
     }
 
+    /// Resume is another authenticated start, but with more at stake: changing
+    /// the model to uploading also hides the durable-job decision. It must keep
+    /// that job interrupted and route to Account when live access disappeared.
+    func testResumeRechecksFullAccountAccessBeforeChangingTheUploadState() throws {
+        let view = try XCTUnwrap(try sources().first { $0.name == "SendView.swift" })
+        guard let resume = view.text.range(of: "private func resume()"),
+              let start = view.text.range(of: "upload.resume(token: token)",
+                                          range: resume.lowerBound..<view.text.endIndex) else {
+            return XCTFail("SendView lost its explicit resume action")
+        }
+        let action = view.text[resume.lowerBound..<start.upperBound]
+        XCTAssertTrue(action.contains("guard let token = session.bearerToken, !token.isEmpty,"))
+        XCTAssertTrue(action.contains(
+            "case .allowed = AccountGate.from(session.state, bearer: token) else"))
+        XCTAssertTrue(action.contains("onOpenAccount()"))
+        XCTAssertLessThan(action.range(of: "AccountGate.from")!.lowerBound,
+                          action.range(of: "upload.resume")!.lowerBound)
+        XCTAssertEqual(view.text.components(separatedBy: "upload.resume(token:").count - 1, 1,
+                       "a second resume would bypass the live account check")
+    }
+
     /// The Photos binding is reusable, and that is a behaviour with no runtime a
     /// package test can observe: `PhotosPicker` keeps whatever was chosen, so
     /// choosing the SAME two photos again is no change and therefore no import —
