@@ -138,7 +138,7 @@ struct NearbyPane: View {
             }
             if !selection.isEmpty {
                 Button(L10n.t(.commonClear)) { selection.clear() }
-                    .buttonStyle(.link)
+                    .buttonStyle(.bordered)
                     .disabled(busy)
             }
         }

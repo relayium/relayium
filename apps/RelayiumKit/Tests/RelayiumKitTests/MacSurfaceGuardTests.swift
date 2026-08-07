@@ -141,6 +141,23 @@ final class MacSurfaceGuardTests: XCTestCase {
             "stored upload lost file identities in a running or terminal state")
     }
 
+    /// Clearing a staged selection changes the pending send task; it is not a
+    /// navigation destination. Keep all three macOS entry points aligned with
+    /// the ordinary Button semantics already used on iOS.
+    func testEverySendPanePresentsClearAsAnActionButton() throws {
+        for pane in ["NearbyPane.swift", "DirectPane.swift", "UploadPane.swift"] {
+            let source = try source(named: pane)
+            let clear = try XCTUnwrap(source.components(
+                separatedBy: "Button(L10n.t(.commonClear)) { selection.clear() }").dropFirst().first,
+                "\(pane) lost its staged-selection Clear action")
+                .components(separatedBy: "}").first ?? ""
+            XCTAssertTrue(clear.contains(".buttonStyle(.bordered)"),
+                          "\(pane) does not present Clear as a secondary action")
+            XCTAssertFalse(clear.contains(".buttonStyle(.link)"),
+                           "\(pane) presents a task mutation as navigation")
+        }
+    }
+
     /// A terminal pairing task still owns cleanup and, for text, the only local
     /// transcript. It must not expose a second Create/Join path until Done has
     /// returned the model to idle. iOS already enforces this same boundary.

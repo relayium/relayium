@@ -121,7 +121,8 @@ struct DirectPane: View {
             HStack {
                 Button(L10n.t(.commonChooseFilesOrFolders)) { chooseFilesOrFolders(into: selection) }
                 if !selection.isEmpty {
-                    Button(L10n.t(.commonClear)) { selection.clear() }.buttonStyle(.link)
+                    Button(L10n.t(.commonClear)) { selection.clear() }
+                        .buttonStyle(.bordered)
                 }
                 Button(L10n.t(.directCreateCode)) { Task { await mintAndWait(token: token) } }
                     .buttonStyle(.borderedProminent)
