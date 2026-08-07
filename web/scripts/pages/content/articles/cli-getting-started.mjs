@@ -3,6 +3,8 @@
 // follow the same structure with identical facts. Command blocks (code) stay
 // English in every language.
 
+import { cliDirectFacts } from "../realtime-facts.mjs";
+
 const en = {
   title: "Transfer files and text from the terminal with the Relayium CLI",
   description:
@@ -41,7 +43,8 @@ const en = {
       ],
       bullets: [
         "push / pull — to a server you can already SSH into. Bytes travel over your SSH connection; no Relayium account.",
-        "send / receive — to another person across networks, using a short pairing code the sender's CLI mints (sign in once with relayium login; the receiver never does). Direct peer-to-peer; if a direct path can't be found the transfer fails rather than routing through us. A minted code is good for five minutes, so start the receiving machine's command within that window.",
+        "send / receive — to another person across networks, using a short pairing code the sender's CLI mints (sign in once with relayium login; the receiver never does). A minted code is good for five minutes, so start the receiving machine's command within that window.",
+        cliDirectFacts.en,
         "serve + push relayium:// (daemon direct) — straight between two servers you own, over pinned TLS. No relay, no SSH, no code.",
       ],
     },
@@ -53,7 +56,9 @@ const en = {
       code: ["relayium text", "relayium text 483920"],
       bullets: [
         "Minting the code needs relayium login; joining with a code needs no login.",
-        "Both machines must stay online. Messages are end-to-end encrypted over a direct P2P (peer-to-peer) connection, and Relayium servers never store their bodies; CLI text does not use the browser TURN relay. Either endpoint can still copy or retain received text.",
+        "Both machines must stay online. Messages are end-to-end encrypted, and Relayium servers never store their bodies.",
+        cliDirectFacts.en,
+        "Either endpoint can still copy or retain received text.",
         "Each message can be at most 65,536 UTF-8 bytes. Use relayium send for anything larger.",
       ],
     },
@@ -218,7 +223,8 @@ const zh = {
       ],
       bullets: [
         "push / pull——传到一台你已能 SSH 进去的服务器。字节走你的 SSH 连接；无需 Relayium 账号。",
-        "send / receive——跨网络传给另一个人，使用一个由发送方 CLI 生成的简短配对码（用 relayium login 登录一次即可；接收方无需登录）。直连点对点；如果找不到直连路径，传输会直接失败，而不会经我们中转。 铸出来的配对码有效期 5 分钟，所以要在这段时间内在接收端把命令跑起来。",
+        "send / receive——跨网络传给另一个人，使用一个由发送方 CLI 生成的简短配对码（用 relayium login 登录一次即可；接收方无需登录）。铸出来的配对码有效期 5 分钟，所以要在这段时间内在接收端把命令跑起来。",
+        cliDirectFacts.zh,
         "serve + push relayium://（daemon 直连）——直接在你拥有的两台服务器之间传输，通过证书固定的 TLS。无中继、无 SSH、无需配对码。",
       ],
     },
@@ -230,7 +236,9 @@ const zh = {
       code: ["relayium text", "relayium text 483920"],
       bullets: [
         "生成配对码需要先执行 relayium login；持码加入无需登录。",
-        "两台机器必须同时在线。消息通过 P2P 点对点直连进行端到端加密传输，Relayium 服务器不存储消息正文；CLI text 不使用浏览器的 TURN 中继。任一端仍可复制或保留收到的文本。",
+        "两台机器必须同时在线。消息经过端到端加密，Relayium 服务器不存储消息正文。",
+        cliDirectFacts.zh,
+        "任一端仍可复制或保留收到的文本。",
         "单条消息最多 65,536 UTF-8 字节。更大的内容请使用 relayium send。",
       ],
     },
@@ -395,7 +403,8 @@ const ja = {
       ],
       bullets: [
         "push / pull：すでに SSH でログインできるサーバーへ。バイトは SSH 接続上を流れます。Relayium アカウントは不要です。",
-        "send / receive：送信側の CLI が発行する短いペアリングコードを使って、ネットワークをまたいで他の人へ（relayium login で一度サインインするだけ。受信側は不要です）。直接の P2P です。直接経路が見つからない場合、転送は当社を経由する代わりに、そのまま失敗します。 発行したコードの有効期限は5分なので、その間に受信側のマシンでコマンドを実行してください。",
+        "send / receive：送信側の CLI が発行する短いペアリングコードを使って、ネットワークをまたいで他の人へ（relayium login で一度サインインするだけ。受信側は不要です）。発行したコードの有効期限は5分なので、その間に受信側のマシンでコマンドを実行してください。",
+        cliDirectFacts.ja,
         "serve + push relayium://（デーモン直結）：自分が所有する2台のサーバー間で、証明書ピンニング付き TLS 上を直接。リレーなし、SSH なし、コードなし。",
       ],
     },
@@ -407,7 +416,9 @@ const ja = {
       code: ["relayium text", "relayium text 483920"],
       bullets: [
         "コードの発行には relayium login が必要ですが、コードでの参加にはログイン不要です。",
-        "両方の端末がオンラインである必要があります。メッセージはエンドツーエンド暗号化された P2P 直結で流れ、Relayium サーバーは本文を保存しません。CLI text はブラウザの TURN リレーを使いません。各端末は受信したテキストをコピーまたは保持できます。",
+        "両方の端末がオンラインである必要があります。メッセージはエンドツーエンドで暗号化され、Relayium サーバーは本文を保存しません。",
+        cliDirectFacts.ja,
+        "各端末は受信したテキストをコピーまたは保持できます。",
         "1メッセージは最大 65,536 UTF-8 バイトです。それより大きい内容には relayium send を使ってください。",
       ],
     },
@@ -572,7 +583,8 @@ const ko = {
       ],
       bullets: [
         "push / pull — 이미 SSH로 접속 가능한 서버로. 데이터는 SSH 연결을 통해 오가며, Relayium 계정이 필요 없습니다.",
-        "send / receive — 보내는 쪽 CLI가 발급하는 짧은 페어링 코드를 사용해 네트워크를 넘어 다른 사람에게(relayium login으로 한 번만 로그인하면 되고, 받는 쪽은 로그인하지 않습니다). 직접 P2P 방식입니다. 직접 경로를 찾을 수 없으면 저희를 거쳐 우회하는 대신 전송이 그대로 실패합니다. 발급된 코드는 5분 동안만 유효하니, 그 안에 받는 쪽 머신에서 명령을 실행하세요.",
+        "send / receive — 보내는 쪽 CLI가 발급하는 짧은 페어링 코드를 사용해 네트워크를 넘어 다른 사람에게(relayium login으로 한 번만 로그인하면 되고, 받는 쪽은 로그인하지 않습니다). 발급된 코드는 5분 동안만 유효하니, 그 안에 받는 쪽 머신에서 명령을 실행하세요.",
+        cliDirectFacts.ko,
         "serve + push relayium://(데몬 다이렉트) — 직접 소유한 두 서버 사이에서, 인증서 고정 TLS를 통해 곧바로. 중계도, SSH도, 코드도 필요 없습니다.",
       ],
     },
@@ -584,7 +596,9 @@ const ko = {
       code: ["relayium text", "relayium text 483920"],
       bullets: [
         "코드 발급에는 relayium login이 필요하지만 코드로 참여할 때는 로그인하지 않습니다.",
-        "두 기기가 함께 온라인이어야 합니다. 메시지는 종단간 암호화된 P2P 직결로 전송되며 Relayium 서버는 본문을 저장하지 않습니다. CLI text는 브라우저 TURN 릴레이를 사용하지 않습니다. 각 엔드포인트는 받은 텍스트를 복사하거나 보관할 수 있습니다.",
+        "두 기기가 함께 온라인이어야 합니다. 메시지는 종단간 암호화되며 Relayium 서버는 본문을 저장하지 않습니다.",
+        cliDirectFacts.ko,
+        "각 엔드포인트는 받은 텍스트를 복사하거나 보관할 수 있습니다.",
         "메시지 하나는 최대 65,536 UTF-8바이트입니다. 더 큰 내용은 relayium send를 사용하세요.",
       ],
     },
@@ -749,7 +763,8 @@ const de = {
       ],
       bullets: [
         "push / pull — zu einem Server, in den du dich bereits per SSH einloggen kannst. Die Bytes laufen über deine SSH-Verbindung; kein Relayium-Konto nötig.",
-        "send / receive — an eine andere Person netzwerkübergreifend, mit einem kurzen Pairing-Code, den die CLI des Absenders erzeugt (einmalig mit relayium login anmelden; der Empfänger nie). Direktes Peer-to-Peer; findet sich kein direkter Weg, schlägt die Übertragung fehl, statt über uns umgeleitet zu werden. Ein erzeugter Code gilt fünf Minuten — starte den Befehl auf der empfangenden Maschine in diesem Fenster.",
+        "send / receive — an eine andere Person netzwerkübergreifend, mit einem kurzen Pairing-Code, den die CLI des Absenders erzeugt (einmalig mit relayium login anmelden; der Empfänger nie). Ein erzeugter Code gilt fünf Minuten — starte den Befehl auf der empfangenden Maschine in diesem Fenster.",
+        cliDirectFacts.de,
         "serve + push relayium:// (daemon-direct) — direkt zwischen zwei Servern, die dir gehören, über TLS mit Pinning. Kein Relay, kein SSH, kein Code.",
       ],
     },
@@ -761,7 +776,9 @@ const de = {
       code: ["relayium text", "relayium text 483920"],
       bullets: [
         "Das Erzeugen des Codes braucht relayium login; der Beitritt mit einem Code braucht keine Anmeldung.",
-        "Beide Rechner müssen online bleiben. Nachrichten laufen Ende-zu-Ende-verschlüsselt über eine direkte P2P-Verbindung; Relayium-Server speichern ihre Inhalte nicht. CLI text nutzt das Browser-TURN-Relay nicht. Beide Endpunkte können empfangenen Text dennoch kopieren oder behalten.",
+        "Beide Rechner müssen online bleiben. Nachrichten sind Ende-zu-Ende verschlüsselt; Relayium-Server speichern ihre Inhalte nicht.",
+        cliDirectFacts.de,
+        "Beide Endpunkte können empfangenen Text dennoch kopieren oder behalten.",
         "Eine Nachricht umfasst höchstens 65.536 UTF-8-Bytes. Für größere Inhalte nutze relayium send.",
       ],
     },
@@ -926,7 +943,8 @@ const fr = {
       ],
       bullets: [
         "push / pull — vers un serveur où vous pouvez déjà vous connecter en SSH. Les octets transitent par votre connexion SSH ; aucun compte Relayium requis.",
-        "send / receive — vers une autre personne entre réseaux différents, avec un court code d'appairage que la CLI de l'expéditeur génère (connectez-vous une fois avec relayium login ; le destinataire, jamais). Pair-à-pair direct ; si aucun chemin direct n'est trouvé, le transfert échoue plutôt que d'être routé via nos serveurs. Un code émis est valable cinq minutes : lancez la commande sur la machine réceptrice dans ce délai.",
+        "send / receive — vers une autre personne entre réseaux différents, avec un court code d'appairage que la CLI de l'expéditeur génère (connectez-vous une fois avec relayium login ; le destinataire, jamais). Un code émis est valable cinq minutes : lancez la commande sur la machine réceptrice dans ce délai.",
+        cliDirectFacts.fr,
         "serve + push relayium:// (daemon-direct) — directement entre deux serveurs qui vous appartiennent, via TLS avec épinglage. Pas de relais, pas de SSH, pas de code.",
       ],
     },
@@ -938,7 +956,9 @@ const fr = {
       code: ["relayium text", "relayium text 483920"],
       bullets: [
         "Créer le code nécessite relayium login ; le rejoindre ne nécessite aucune connexion.",
-        "Les deux machines doivent rester en ligne. Les messages sont chiffrés de bout en bout sur une connexion P2P directe et les serveurs Relayium ne stockent pas leur corps. CLI text n'utilise pas le relais TURN du navigateur. Chaque extrémité peut néanmoins copier ou conserver le texte reçu.",
+        "Les deux machines doivent rester en ligne. Les messages sont chiffrés de bout en bout et les serveurs Relayium ne stockent pas leur corps.",
+        cliDirectFacts.fr,
+        "Chaque extrémité peut néanmoins copier ou conserver le texte reçu.",
         "Un message fait au plus 65 536 octets UTF-8. Utilisez relayium send pour un contenu plus grand.",
       ],
     },
@@ -1103,7 +1123,8 @@ const ar = {
       ],
       bullets: [
         "‏push / pull — إلى خادم يمكنك بالفعل الدخول إليه عبر SSH. تنتقل البايتات عبر اتصال SSH لديك؛ بدون حساب Relayium.",
-        "‏send / receive — إلى شخص آخر عبر الشبكات، باستخدام رمز اقتران قصير تُصدره واجهة CLI لدى المُرسِل (سجِّل الدخول مرة واحدة عبر relayium login؛ أما المُستقبِل فلا يسجّل الدخول أبدًا). من الند للند مباشرة؛ إذا تعذّر إيجاد مسار مباشر يفشل النقل بدل توجيهه عبرنا. والرمز المُولَّد صالح خمس دقائق، فشغِّل الأمر على الجهاز المُستقبِل خلال هذه المدة.",
+        "‏send / receive — إلى شخص آخر عبر الشبكات، باستخدام رمز اقتران قصير تُصدره واجهة CLI لدى المُرسِل (سجِّل الدخول مرة واحدة عبر relayium login؛ أما المُستقبِل فلا يسجّل الدخول أبدًا). والرمز المُولَّد صالح خمس دقائق، فشغِّل الأمر على الجهاز المُستقبِل خلال هذه المدة.",
+        cliDirectFacts.ar,
         "‏serve + push relayium:// (daemon direct) — مباشرة بين خادمين تملكهما، عبر TLS مثبَّت. بدون مُرحِّل، بدون SSH، بدون رمز.",
       ],
     },
@@ -1115,7 +1136,9 @@ const ar = {
       code: ["relayium text", "relayium text 483920"],
       bullets: [
         "يتطلب إصدار الرمز relayium login؛ أما الانضمام بالرمز فلا يحتاج إلى تسجيل دخول.",
-        "يجب أن يبقى الجهازان متصلين. تمر الرسائل مشفّرة من الطرف إلى الطرف عبر اتصال P2P مباشر، ولا تخزّن خوادم Relayium متنها. لا يستخدم CLI text مُرحِّل TURN الخاص بالمتصفح. ومع ذلك يمكن لأي طرف نسخ النص المستلم أو الاحتفاظ به.",
+        "يجب أن يبقى الجهازان متصلين. تُشفَّر الرسائل من الطرف إلى الطرف، ولا تخزّن خوادم Relayium متنها.",
+        cliDirectFacts.ar,
+        "ومع ذلك يمكن لأي طرف نسخ النص المستلم أو الاحتفاظ به.",
         "الرسالة الواحدة 65,536 بايت UTF-8 كحد أقصى. استخدم relayium send للمحتوى الأكبر.",
       ],
     },
@@ -1280,7 +1303,8 @@ const es = {
       ],
       bullets: [
         "push / pull — a un servidor al que ya puedes entrar por SSH. Los bytes viajan por tu conexión SSH; sin cuenta de Relayium.",
-        "send / receive — a otra persona entre redes, usando un código de emparejamiento corto que genera la CLI de quien envía (inicia sesión una vez con relayium login; quien recibe, nunca). De igual a igual directo; si no se encuentra una ruta directa, la transferencia falla en lugar de enrutarse a través de nosotros. Un código emitido vale cinco minutos, así que lanza el comando en la máquina receptora dentro de ese margen.",
+        "send / receive — a otra persona entre redes, usando un código de emparejamiento corto que genera la CLI de quien envía (inicia sesión una vez con relayium login; quien recibe, nunca). Un código emitido vale cinco minutos, así que lanza el comando en la máquina receptora dentro de ese margen.",
+        cliDirectFacts.es,
         "serve + push relayium:// (daemon directo) — directamente entre dos servidores que posees, sobre TLS con anclaje. Sin retransmisor, sin SSH, sin código.",
       ],
     },
@@ -1292,7 +1316,9 @@ const es = {
       code: ["relayium text", "relayium text 483920"],
       bullets: [
         "Generar el código requiere relayium login; unirse con un código no requiere iniciar sesión.",
-        "Ambas máquinas deben seguir conectadas. Los mensajes están cifrados de extremo a extremo por una conexión P2P directa y los servidores de Relayium no almacenan su contenido. CLI text no usa el retransmisor TURN del navegador. Cualquiera de los extremos puede copiar o conservar el texto recibido.",
+        "Ambas máquinas deben seguir conectadas. Los mensajes están cifrados de extremo a extremo y los servidores de Relayium no almacenan su contenido.",
+        cliDirectFacts.es,
+        "Cualquiera de los extremos puede copiar o conservar el texto recibido.",
         "Cada mensaje admite hasta 65.536 bytes UTF-8. Usa relayium send para contenido mayor.",
       ],
     },
@@ -1457,7 +1483,8 @@ const pt = {
       ],
       bullets: [
         "push / pull — para um servidor no qual você já consegue entrar por SSH. Os bytes trafegam pela sua conexão SSH; sem conta do Relayium.",
-        "send / receive — para outra pessoa entre redes, usando um código de emparelhamento curto que a CLI de quem envia gera (faça login uma vez com relayium login; quem recebe, nunca). Ponto a ponto direto; se nenhum caminho direto for encontrado, a transferência falha em vez de ser roteada por nós. Um código emitido vale cinco minutos, então rode o comando na máquina que recebe dentro desse prazo.",
+        "send / receive — para outra pessoa entre redes, usando um código de emparelhamento curto que a CLI de quem envia gera (faça login uma vez com relayium login; quem recebe, nunca). Um código emitido vale cinco minutos, então rode o comando na máquina que recebe dentro desse prazo.",
+        cliDirectFacts.pt,
         "serve + push relayium:// (daemon direto) — direto entre dois servidores que você possui, sobre TLS com fixação. Sem retransmissor, sem SSH, sem código.",
       ],
     },
@@ -1469,7 +1496,9 @@ const pt = {
       code: ["relayium text", "relayium text 483920"],
       bullets: [
         "Gerar o código requer relayium login; entrar com um código não requer login.",
-        "As duas máquinas precisam ficar online. As mensagens têm criptografia de ponta a ponta em uma conexão P2P direta, e os servidores da Relayium não armazenam seu conteúdo. CLI text não usa o retransmissor TURN do navegador. Qualquer ponta ainda pode copiar ou guardar o texto recebido.",
+        "As duas máquinas precisam ficar online. As mensagens têm criptografia de ponta a ponta, e os servidores da Relayium não armazenam seu conteúdo.",
+        cliDirectFacts.pt,
+        "Qualquer ponta ainda pode copiar ou guardar o texto recebido.",
         "Cada mensagem pode ter até 65.536 bytes UTF-8. Use relayium send para conteúdo maior.",
       ],
     },
@@ -1599,6 +1628,6 @@ relayium text 483920`,
 export default {
   slug: "guides/transfer-files-from-terminal",
   published: "2026-07-08",
-  updated: "2026-08-05",
+  updated: "2026-08-07",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

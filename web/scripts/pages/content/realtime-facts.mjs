@@ -1,4 +1,4 @@
-// Shared browser-transfer facts. Articles compose these fragments instead of
+// Shared realtime-transfer facts. Articles compose these fragments instead of
 // restating protocol constants in prose, so changing the code format, account
 // boundary, TTL or cross-network path has one nine-language authority.
 
@@ -24,6 +24,18 @@ export const browserRelayFacts = {
   ar: "عبر الشبكات، تستخدم المتصفّحات مُرحِّل TURN مُشفَّرًا بحكم التصميم بدل محاولة مسار مباشر أولًا. يبقى المفتاح على الجهازين، لذلك لا يمرّر المُرحِّل سوى نص مُشفَّر من طرف إلى طرف، ولا يستطيع قراءة الملفات، ولا يحتفظ بنسخة أو سجل للمحتوى الآني.",
   es: "Entre redes distintas, los navegadores usan por diseño un retransmisor TURN cifrado en vez de intentar primero una ruta directa. La clave permanece en los dos dispositivos, así que el retransmisor solo reenvía texto cifrado de extremo a extremo, no puede leer los archivos ni conserva una copia o historial del contenido en tiempo real.",
   pt: "Entre redes diferentes, os navegadores usam por projeto um retransmissor TURN criptografado em vez de tentar primeiro uma rota direta. A chave fica nos dois dispositivos, então o retransmissor só encaminha texto cifrado de ponta a ponta, não consegue ler os arquivos e não guarda cópia nem histórico do conteúdo em tempo real.",
+};
+
+export const cliDirectFacts = {
+  en: "Relayium CLI send/receive and text are direct-only P2P: they never relay file or message bytes through TURN or any other Relayium server. If the two ends cannot establish a direct connection, the session fails rather than falling back to a relay.",
+  zh: "Relayium CLI 的 send/receive 和 text 都只走 P2P 直连：文件或消息字节绝不会通过 TURN 或任何其他 Relayium 服务器中继。两端无法建立直连时，会话会直接失败，不会回退到中继。",
+  ja: "Relayium CLI の send/receive と text は P2P 直接接続専用です。ファイルやメッセージのバイトを TURN やその他の Relayium サーバーで中継することはありません。2 つの端末が直接接続を確立できなければ、リレーへフォールバックせずにセッションは失敗します。",
+  ko: "Relayium CLI의 send/receive와 text는 P2P 직접 연결 전용입니다. 파일이나 메시지 바이트를 TURN 또는 다른 Relayium 서버로 릴레이하지 않습니다. 두 기기가 직접 연결을 맺지 못하면 릴레이로 대체하지 않고 세션이 실패합니다.",
+  de: "Relayium CLI send/receive und text sind direct-only P2P: Datei- oder Nachrichtenbytes werden weder über TURN noch über einen anderen Relayium-Server weitergeleitet. Können die beiden Endpunkte keine direkte Verbindung herstellen, schlägt die Sitzung fehl, statt auf ein Relay auszuweichen.",
+  fr: "Les commandes send/receive et text du CLI Relayium sont P2P et direct-only : aucun octet de fichier ou de message ne transite par TURN ni par un autre serveur Relayium. Si les deux extrémités ne peuvent pas établir de connexion directe, la session échoue au lieu de se rabattre sur un relais.",
+  ar: "تعمل أوامر send/receive وtext في Relayium CLI باتصال P2P مباشر فقط: فلا تُمرَّر بايتات الملفات أو الرسائل عبر TURN أو أي خادم Relayium آخر. وإذا تعذّر على الطرفين إنشاء اتصال مباشر، تفشل الجلسة بدل الرجوع إلى مُرحِّل.",
+  es: "send/receive y text del CLI de Relayium son P2P y direct-only: nunca retransmiten bytes de archivos o mensajes mediante TURN ni ningún otro servidor de Relayium. Si los dos extremos no pueden establecer una conexión directa, la sesión falla en vez de recurrir a un retransmisor.",
+  pt: "send/receive e text da CLI do Relayium são P2P e direct-only: nunca retransmitem bytes de arquivos ou mensagens por TURN nem por qualquer outro servidor Relayium. Se as duas pontas não conseguirem estabelecer uma conexão direta, a sessão falha em vez de recorrer a um retransmissor.",
 };
 
 const headings = {

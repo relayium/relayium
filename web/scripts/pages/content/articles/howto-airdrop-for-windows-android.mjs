@@ -6,7 +6,7 @@
 // (a head-to-head comparison) — this is the "AirDrop equivalent for X" intent,
 // so it cross-links that piece instead of repeating its comparison table.
 
-import { browserCrossNetworkSection } from "../browser-fact-sections.mjs";
+import { browserCrossNetworkSection } from "../realtime-facts.mjs";
 
 const en = {
   title: "AirDrop for Windows, Linux and Android",

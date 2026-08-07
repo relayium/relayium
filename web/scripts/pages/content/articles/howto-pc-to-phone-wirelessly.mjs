@@ -3,7 +3,7 @@
 // English is the master; zh/ja/ko/de/fr follow the same structure with identical
 // facts. Terminology mirrors src/lib/i18n.svelte.ts and content/landing.mjs.
 
-import { browserCrossNetworkSection } from "../browser-fact-sections.mjs";
+import { browserCrossNetworkSection } from "../realtime-facts.mjs";
 
 const en = {
   title: "Send files from PC to phone wirelessly, no cable or app",

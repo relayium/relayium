@@ -3,7 +3,7 @@
 // zh/ja/ko/de/fr follow the same structure with identical facts.
 // Terminology mirrors src/lib/i18n/en.ts and content/articles/howto-android-to-iphone.mjs.
 
-import { browserCrossNetworkSection } from "../browser-fact-sections.mjs";
+import { browserCrossNetworkSection } from "../realtime-facts.mjs";
 
 const en = {
   title: "Transfer files between a Mac and a Windows PC",

@@ -71,7 +71,16 @@ const EXPLAINER = {
 };
 
 const BATCH = { ...PROCEDURAL, ...EXPLAINER };
-const REVISED = "2026-08-06";
+const REVISED = {
+  "guides-what-is-p2p-file-transfer": "2026-08-07",
+  "guides-how-encryption-works": "2026-08-06",
+  "guides-is-it-safe": "2026-08-06",
+  "guides-self-host": "2026-08-06",
+  "guides-own-node": "2026-08-06",
+  "guides-always-on-service": "2026-08-06",
+  "guides-receive-from-cli": "2026-08-06",
+  "howto-automate-server-backups": "2026-08-06",
+};
 
 const sections = (doc) => doc.sections || [];
 const withPrereqs = (doc) => sections(doc).filter((s) => s.prereqs);
@@ -228,7 +237,7 @@ describe("the eight guides of the third batch carry their class's tutorial block
 
   it("publishes the rewrite date for every article in the batch", () => {
     for (const [name, article] of Object.entries(BATCH)) {
-      expect(article.updated, name).toBe(REVISED);
+      expect(article.updated, name).toBe(REVISED[name]);
     }
   });
 

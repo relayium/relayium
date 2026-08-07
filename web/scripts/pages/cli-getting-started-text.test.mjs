@@ -42,7 +42,7 @@ describe("CLI getting-started guide includes ephemeral text", () => {
     // Re-dated when the guide became a runnable tutorial — prerequisites, an
     // ordered procedure, a success signal and troubleshooting, in nine locales.
     // See cli-tutorial-structure.test.mjs.
-    expect(article.updated).toBe("2026-08-05");
+    expect(article.updated).toBe("2026-08-07");
     const en = article.langs.en.sections.find((item) => item.heading === "The three ways it moves files");
     expect(en?.bullets.join(" ")).toContain("push / pull");
     expect(en?.bullets.join(" ")).toContain("send / receive");

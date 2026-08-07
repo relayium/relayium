@@ -22,7 +22,10 @@ const browserHowtoTutorials = [largeFiles, text, expiringLink, folder];
 // The two explainers the guides batch gave verification procedures to. They
 // moved out of the group above for the same reason the four below moved out of
 // it: a date is only useful if it tracks the rewrite that actually happened.
-const guidesBatch = [safety, p2p];
+const guideDates = new Map([
+  [safety, "2026-08-06"],
+  [p2p, "2026-08-07"],
+]);
 
 describe("materially revised article dates", () => {
   it("exposes the current revision date for SEO metadata", () => {
@@ -38,8 +41,8 @@ describe("materially revised article dates", () => {
   });
 
   it("moves the date on the explainers that gained verification procedures", () => {
-    for (const article of guidesBatch) {
-      expect(article.updated, article.slug).toBe("2026-08-06");
+    for (const [article, updated] of guideDates) {
+      expect(article.updated, article.slug).toBe(updated);
     }
   });
 });

@@ -3,7 +3,7 @@
 // zh/ja/ko/de/fr follow the same structure with identical facts.
 // Terminology mirrors src/lib/i18n.svelte.ts and content/landing.mjs.
 
-import { browserCrossNetworkSection } from "../browser-fact-sections.mjs";
+import { browserCrossNetworkSection } from "../realtime-facts.mjs";
 
 const en = {
   title: "How to transfer files from Android to iPhone (no cable)",

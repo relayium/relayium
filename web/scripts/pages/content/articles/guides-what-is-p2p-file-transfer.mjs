@@ -4,6 +4,8 @@
 // Facts grounded in web/src/lib/webrtc.ts, ice.ts, transfer.ts and cross-checked
 // against guides-how-encryption-works.mjs (tone sibling) for wording consistency.
 
+import { cliDirectFacts } from "../realtime-facts.mjs";
+
 const en = {
   title: "What is peer-to-peer file transfer?",
   description:
@@ -34,7 +36,8 @@ const en = {
       ],
       bullets: [
         "STUN only ever learns and shares network addresses — never file contents, filenames, or encryption keys.",
-        "Relayium uses WebRTC directly for same-LAN browser sessions. Its cross-network browser path is deliberately relayed, while the CLI remains direct-only and fails rather than relaying file bytes.",
+        "Relayium uses WebRTC directly for same-LAN browser sessions. Its cross-network browser path is deliberately relayed.",
+        cliDirectFacts.en,
         "Two devices on the same network (no code needed) typically connect the most directly of all, since there's often no NAT in the way at all.",
       ],
     },
@@ -47,7 +50,7 @@ const en = {
       bullets: [
         "On the same network Relayium connects devices directly; across networks it uses the TURN relay by default, because a direct path so often can't be found there.",
         "The relay forwards ciphertext only; it never has the decryption key and can't read file contents, filenames, or anything else about what's inside.",
-        "Relayium CLI transfers are a separate direct-only path: they never relay file bytes and fail if a direct connection cannot be made.",
+        cliDirectFacts.en,
       ],
     },
     {
@@ -193,7 +196,8 @@ const zh = {
       ],
       bullets: [
         "STUN 始终只获取和交换网络地址——从不涉及文件内容、文件名或加密密钥。",
-        "Relayium 在同一局域网的浏览器会话中直接使用 WebRTC；跨网络浏览器路径则有意使用中继。CLI 是另一条仅直连路径，无法直连时会失败，而不会中继文件字节。",
+        "Relayium 在同一局域网的浏览器会话中直接使用 WebRTC；跨网络浏览器路径则有意使用中继。",
+        cliDirectFacts.zh,
         "同一网络下的两台设备（不需要配对码）通常连得最直接，因为往往根本没有 NAT 挡在中间。",
       ],
     },
@@ -206,7 +210,7 @@ const zh = {
       bullets: [
         "同一网络下 Relayium 让设备直连；跨网络时默认走 TURN 中继，因为那种场景下直连路径往往根本找不到。",
         "中继只转发密文；它从不掌握解密密钥，无法读取文件内容、文件名或其中的任何其他信息。",
-        "Relayium CLI 是独立的仅直连路径：它从不中继文件字节，无法建立直连时会直接失败。",
+        cliDirectFacts.zh,
       ],
     },
     {
@@ -352,7 +356,8 @@ const ja = {
       ],
       bullets: [
         "STUN が扱うのはネットワークアドレスの取得と交換のみです——ファイルの中身やファイル名、暗号鍵は一切扱いません。",
-        "Relayium は同じ LAN のブラウザセッションで WebRTC を直接使用します。ネットワークをまたぐブラウザ経路は意図的にリレーされます。一方 CLI は直接接続のみで、接続できなければファイルをリレーせず失敗します。",
+        "Relayium は同じ LAN のブラウザセッションで WebRTC を直接使用します。ネットワークをまたぐブラウザ経路は意図的にリレーされます。",
+        cliDirectFacts.ja,
         "同じネットワーク上の2台（コード不要）は、多くの場合そもそも間に NAT がないため、最も直接的につながる傾向があります。",
       ],
     },
@@ -365,7 +370,7 @@ const ja = {
       bullets: [
         "同一ネットワークでは Relayium はデバイス同士を直接つなぎます。ネットワークをまたぐ場合は、直接経路が見つからないことが多いため、既定で TURN リレーを使います。",
         "リレーは暗号文だけを転送します。復号鍵を持つことは決してなく、ファイルの中身もファイル名も、中に含まれる他の情報も読めません。",
-        "Relayium CLI は別の直接接続専用経路です。ファイルのバイトをリレーせず、直接接続できなければ失敗します。",
+        cliDirectFacts.ja,
       ],
     },
     {
@@ -511,7 +516,8 @@ const ko = {
       ],
       bullets: [
         "STUN은 오직 네트워크 주소만 알아내고 주고받습니다. 파일 내용이나 파일 이름, 암호화 키는 절대 다루지 않습니다.",
-        "Relayium은 같은 LAN의 브라우저 세션에서 WebRTC를 직접 사용합니다. 네트워크를 넘는 브라우저 경로는 의도적으로 릴레이됩니다. CLI는 직접 연결 전용이며 연결할 수 없으면 파일 바이트를 릴레이하지 않고 실패합니다.",
+        "Relayium은 같은 LAN의 브라우저 세션에서 WebRTC를 직접 사용합니다. 네트워크를 넘는 브라우저 경로는 의도적으로 릴레이됩니다.",
+        cliDirectFacts.ko,
         "같은 네트워크에 있는 두 기기(코드 불필요)는 대개 그 사이에 NAT 자체가 없는 경우가 많아 가장 직접적으로 연결되는 경향이 있습니다.",
       ],
     },
@@ -524,7 +530,7 @@ const ko = {
       bullets: [
         "같은 네트워크에서는 Relayium이 기기를 직접 연결합니다. 네트워크를 넘을 때는 직접 경로를 찾지 못하는 경우가 워낙 많아 기본적으로 TURN 릴레이를 사용합니다.",
         "릴레이는 암호문만 전달합니다. 복호화 키를 절대 갖지 않으며, 파일 내용도 파일 이름도 그 안의 다른 어떤 정보도 읽을 수 없습니다.",
-        "Relayium CLI는 별도의 직접 연결 전용 경로입니다. 파일 바이트를 릴레이하지 않으며 직접 연결할 수 없으면 실패합니다.",
+        cliDirectFacts.ko,
       ],
     },
     {
@@ -670,7 +676,8 @@ const de = {
       ],
       bullets: [
         "STUN lernt und teilt ausschließlich Netzwerkadressen — nie Dateiinhalte, Dateinamen oder Verschlüsselungsschlüssel.",
-        "Relayium nutzt WebRTC direkt für Browser-Sitzungen im selben LAN. Der netzübergreifende Browserpfad wird bewusst über ein Relay geführt. Die CLI bleibt direct-only und scheitert, statt Dateibytes weiterzuleiten.",
+        "Relayium nutzt WebRTC direkt für Browser-Sitzungen im selben LAN. Der netzübergreifende Browserpfad wird bewusst über ein Relay geführt.",
+        cliDirectFacts.de,
         "Zwei Geräte im selben Netzwerk (kein Code nötig) verbinden sich meist am direktesten von allen, weil oft überhaupt kein NAT im Weg steht.",
       ],
     },
@@ -683,7 +690,7 @@ const de = {
       bullets: [
         "Im selben Netz verbindet Relayium die Geräte direkt; netzübergreifend nutzt es standardmäßig das TURN-Relay, weil sich dort so oft kein direkter Pfad finden lässt.",
         "Das Relay leitet ausschließlich Chiffretext weiter; es besitzt nie den Entschlüsselungsschlüssel und kann weder Dateiinhalte noch Dateinamen noch sonst etwas über den Inhalt lesen.",
-        "Relayiums CLI ist ein separater direct-only Pfad: Sie leitet niemals Dateibytes weiter und scheitert, wenn keine direkte Verbindung möglich ist.",
+        cliDirectFacts.de,
       ],
     },
     {
@@ -829,7 +836,8 @@ const fr = {
       ],
       bullets: [
         "STUN n'apprend et ne partage jamais que des adresses réseau — jamais le contenu des fichiers, leurs noms, ni les clés de chiffrement.",
-        "Relayium utilise WebRTC directement pour les sessions navigateur sur le même LAN. La voie navigateur entre réseaux est délibérément relayée. Le CLI reste direct-only et échoue au lieu de relayer les octets du fichier.",
+        "Relayium utilise WebRTC directement pour les sessions navigateur sur le même LAN. La voie navigateur entre réseaux est délibérément relayée.",
+        cliDirectFacts.fr,
         "Deux appareils sur le même réseau (aucun code requis) se connectent généralement le plus directement de tous, car il n'y a souvent aucun NAT en travers du chemin.",
       ],
     },
@@ -842,7 +850,7 @@ const fr = {
       bullets: [
         "Sur le même réseau, Relayium relie les appareils directement ; entre réseaux, il utilise le relais TURN par défaut, car un chemin direct y est si souvent introuvable.",
         "Le relais ne transmet que du texte chiffré ; il ne possède jamais la clé de déchiffrement et ne peut lire ni le contenu des fichiers, ni leurs noms, ni rien d'autre à leur sujet.",
-        "Le CLI Relayium est une voie direct-only distincte : il ne relaie jamais les octets du fichier et échoue si aucune connexion directe n'est possible.",
+        cliDirectFacts.fr,
       ],
     },
     {
@@ -988,7 +996,8 @@ const ar = {
       ],
       bullets: [
         "لا يعرف STUN ويشارك سوى عناوين الشبكة — ولا يعرف قط محتويات الملفات أو أسماءها أو مفاتيح التشفير.",
-        "يستخدم Relayium تقنية WebRTC مباشرةً لجلسات المتصفح داخل شبكة LAN نفسها. أما مسار المتصفح عبر الشبكات فيُرحّل عمدًا. وتظل CLI مباشرة فقط، فتفشل بدلًا من ترحيل بايتات الملف.",
+        "يستخدم Relayium تقنية WebRTC مباشرةً لجلسات المتصفح داخل شبكة LAN نفسها. أما مسار المتصفح عبر الشبكات فيُرحّل عمدًا.",
+        cliDirectFacts.ar,
         "جهازان على الشبكة نفسها (دون حاجة إلى رمز) يتصلان عادةً على النحو الأكثر مباشرةً بينها جميعًا، إذ لا يوجد غالبًا أي NAT يعترض الطريق.",
       ],
     },
@@ -1001,7 +1010,7 @@ const ar = {
       bullets: [
         "على الشبكة نفسها يصل Relayium بين الأجهزة مباشرةً؛ أمّا عبر الشبكات فيستخدم مُرحِّل TURN افتراضيًّا، لأن المسار المباشر كثيرًا ما يتعذّر إيجاده هناك.",
         "يمرّر المُرحِّل نصًا مُشفَّرًا فقط؛ ولا يملك قط مفتاح فك التشفير ولا يستطيع قراءة محتويات الملفات أو أسمائها أو أي شيء آخر عمّا بداخلها.",
-        "CLI في Relayium مسار منفصل مباشر فقط: لا يرحّل بايتات الملف أبدًا ويفشل إن تعذّر إنشاء اتصال مباشر.",
+        cliDirectFacts.ar,
       ],
     },
     {
@@ -1147,7 +1156,8 @@ const es = {
       ],
       bullets: [
         "STUN solo llega a conocer y compartir direcciones de red — nunca el contenido de los archivos, sus nombres ni las claves de cifrado.",
-        "Relayium usa WebRTC directamente para sesiones del navegador en la misma LAN. La vía del navegador entre redes se retransmite deliberadamente. El CLI sigue siendo direct-only y falla en vez de retransmitir bytes del archivo.",
+        "Relayium usa WebRTC directamente para sesiones del navegador en la misma LAN. La vía del navegador entre redes se retransmite deliberadamente.",
+        cliDirectFacts.es,
         "Dos dispositivos en la misma red (sin necesidad de código) suelen conectarse de la forma más directa de todas, ya que a menudo no hay ningún NAT de por medio.",
       ],
     },
@@ -1160,7 +1170,7 @@ const es = {
       bullets: [
         "En la misma red, Relayium conecta los dispositivos directamente; entre redes usa el retransmisor TURN por defecto, porque allí muy a menudo no hay ninguna ruta directa.",
         "El retransmisor solo reenvía texto cifrado; nunca tiene la clave de descifrado y no puede leer el contenido de los archivos, sus nombres ni ninguna otra cosa sobre lo que hay dentro.",
-        "El CLI de Relayium es una vía direct-only separada: nunca retransmite bytes del archivo y falla si no puede establecer una conexión directa.",
+        cliDirectFacts.es,
       ],
     },
     {
@@ -1306,7 +1316,8 @@ const pt = {
       ],
       bullets: [
         "O STUN só chega a conhecer e compartilhar endereços de rede — nunca o conteúdo dos arquivos, seus nomes ou as chaves de criptografia.",
-        "O Relayium usa WebRTC diretamente para sessões do navegador na mesma LAN. O caminho do navegador entre redes é retransmitido de propósito. A CLI continua direct-only e falha em vez de retransmitir bytes do arquivo.",
+        "O Relayium usa WebRTC diretamente para sessões do navegador na mesma LAN. O caminho do navegador entre redes é retransmitido de propósito.",
+        cliDirectFacts.pt,
         "Dois dispositivos na mesma rede (sem necessidade de código) costumam se conectar da forma mais direta de todas, já que muitas vezes não há nenhum NAT no caminho.",
       ],
     },
@@ -1319,7 +1330,7 @@ const pt = {
       bullets: [
         "Na mesma rede, o Relayium conecta os dispositivos diretamente; entre redes ele usa o retransmissor TURN por padrão, porque ali muitas vezes não há caminho direto.",
         "O retransmissor só encaminha texto cifrado; ele nunca tem a chave de descriptografia e não pode ler o conteúdo dos arquivos, seus nomes nem qualquer outra coisa sobre o que há dentro.",
-        "A CLI do Relayium é um caminho direct-only separado: nunca retransmite bytes do arquivo e falha se não conseguir estabelecer uma conexão direta.",
+        cliDirectFacts.pt,
       ],
     },
     {
@@ -1438,6 +1449,6 @@ const pt = {
 export default {
   slug: "guides/what-is-peer-to-peer-file-transfer",
   published: "2026-07-09",
-  updated: "2026-08-06",
+  updated: "2026-08-07",
   langs: { en, zh, ja, ko, de, fr, ar, es, pt },
 };

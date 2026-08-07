@@ -5,7 +5,7 @@
 // English is the master; zh/ja/ko/de/fr follow the same structure with identical
 // facts. Terminology mirrors src/lib/i18n and other articles in this folder.
 
-import { browserCrossNetworkSection } from "../browser-fact-sections.mjs";
+import { browserCrossNetworkSection } from "../realtime-facts.mjs";
 
 const en = {
   title: "Send files between devices on the same Wi-Fi",
