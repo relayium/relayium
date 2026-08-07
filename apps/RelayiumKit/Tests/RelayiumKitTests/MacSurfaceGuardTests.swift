@@ -176,6 +176,17 @@ final class MacSurfaceGuardTests: XCTestCase {
         }
     }
 
+    func testStoredReceivePreviewDoesNotTruncateFileIdentity() throws {
+        let source = try source(named: "DownloadPane.swift")
+        let preview = try XCTUnwrap(source.components(
+            separatedBy: "case .ready").dropFirst().first?
+            .components(separatedBy: "case .downloading").first)
+        XCTAssertTrue(preview.contains("FileIdentityPresentation.name(for: f)"))
+        XCTAssertTrue(preview.contains(".fixedSize(horizontal: false, vertical: true)"))
+        XCTAssertFalse(preview.contains(".lineLimit(1)"),
+                       "the pre-save file identity is visually truncated")
+    }
+
     /// Creating a code removes the picker, but it must not remove the sender's
     /// answer to “what am I about to send?” during minting or while the peer joins.
     func testFilePairingKeepsTheStagedFileNamesAndSizesVisibleUntilDone() throws {

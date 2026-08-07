@@ -168,8 +168,10 @@ struct ReceiveView: View {
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Text(FileIdentityPresentation.name(for: file))
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
+                            // This is the pre-save consent surface. Preserve the
+                            // complete relative path so a long name cannot hide
+                            // which file the user is about to receive.
+                            .fixedSize(horizontal: false, vertical: true)
                         Text(L10n.bytes(Int64(file.size))).fixedSize()
                     }
                     .font(.callout)

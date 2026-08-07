@@ -57,7 +57,9 @@ struct DownloadPane: View {
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
                         Text(FileIdentityPresentation.name(for: f))
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .lineLimit(1).truncationMode(.middle)
+                            // The manifest is the user's confirmation before
+                            // Save. A long relative path must remain inspectable.
+                            .fixedSize(horizontal: false, vertical: true)
                         Text(L10n.bytes(Int64(f.size))).fixedSize()
                     }
                     .font(.caption).foregroundStyle(.secondary)

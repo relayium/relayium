@@ -115,6 +115,17 @@ final class IOSSurfaceGuardTests: XCTestCase {
         }
     }
 
+    func testStoredReceivePreviewDoesNotTruncateFileIdentity() throws {
+        let source = try XCTUnwrap(try sources().first { $0.name == "ReceiveView.swift" }?.text)
+        let preview = try XCTUnwrap(source.components(
+            separatedBy: "private func ready(").dropFirst().first?
+            .components(separatedBy: "private func done").first)
+        XCTAssertTrue(preview.contains("FileIdentityPresentation.name(for: file)"))
+        XCTAssertTrue(preview.contains(".fixedSize(horizontal: false, vertical: true)"))
+        XCTAssertFalse(preview.contains(".lineLimit(1)"),
+                       "the pre-save file identity is visually truncated")
+    }
+
     /// The file picker disappears after Create. Minting and the code/QR/link
     /// handoff still have to identify the payload until the peer joins or the
     /// sender cancels.
