@@ -1304,6 +1304,18 @@ final class MacSurfaceGuardTests: XCTestCase {
         }
     }
 
+    func testPairingJoinSnapshotsAValidatedCodeBeforeClaimAndTask() throws {
+        for (file, model) in [("DirectPane.swift", "model"),
+                              ("RealtimeTextPane.swift", "model")] {
+            let source = try source(named: file)
+            XCTAssertTrue(source.contains("let code = \(model).joinCode"))
+            XCTAssertTrue(source.contains("guard \(model).canJoin else { return }"))
+            XCTAssertTrue(source.contains("Task { await \(model).join(code: code) }"))
+            XCTAssertFalse(source.contains("Task { await \(model).join(code: \(model).joinCode) }"),
+                           "\(file) reads mutable input after taking ownership")
+        }
+    }
+
     /// The document-type declaration that makes the app a Dock drop target and a
     /// Finder "Open With" entry — and the one line that keeps it from becoming
     /// the Mac's default handler for every file on disk.

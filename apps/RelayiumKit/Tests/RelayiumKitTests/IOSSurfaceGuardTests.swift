@@ -2343,7 +2343,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // wrong one.
         guard let resolve = view.text.range(of: "try ReceiveDestination.directory()"),
               let install = view.text.range(of: "file.saveDirectory = destination"),
-              let joinCall = view.text.range(of: "await file.join(code: file.joinCode)") else {
+              let joinCall = view.text.range(of: "await file.join(code: code)") else {
             return XCTFail("DirectView no longer resolves a destination before joining")
         }
         XCTAssertTrue(resolve.upperBound < install.lowerBound,
@@ -2933,6 +2933,17 @@ final class IOSSurfaceGuardTests: XCTestCase {
             "guard presence.beginSession(.pairingCode) else { return }").count - 1, 4)
         XCTAssertEqual(nearby.components(separatedBy:
             "guard presence.beginSession(.nearby, peerLabel: device.label) else { return }").count - 1, 2)
+    }
+
+    func testIOSPairingJoinSnapshotsAValidatedCodeBeforeClaimAndTask() throws {
+        let direct = try XCTUnwrap(try sources().first { $0.name == "DirectView.swift" }?.text)
+        for model in ["file", "text"] {
+            XCTAssertTrue(direct.contains("let code = \(model).joinCode"))
+            XCTAssertTrue(direct.contains("guard \(model).canJoin else { return }"))
+            XCTAssertTrue(direct.contains("Task { await \(model).join(code: code) }"))
+            XCTAssertFalse(direct.contains("Task { await \(model).join(code: \(model).joinCode) }"),
+                           "iOS reads mutable input after taking ownership")
+        }
     }
 
     /// The Nearby tab scrolls, like every other screen in this app.

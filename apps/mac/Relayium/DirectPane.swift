@@ -201,10 +201,15 @@ struct DirectPane: View {
     // MARK: - actions
 
     private func join() {
+        // Snapshot before ownership: the field remains editable until the
+        // asynchronous model start publishes state. Reading it inside the Task
+        // could turn one valid click into a different or incomplete code.
+        let code = model.joinCode
+        guard model.canJoin else { return }
         // Claimed before connecting, so the session this starts is presented
         // here rather than in Nearby, which drives the same model.
         guard presence.beginSession(.pairingCode, mode: .files) else { return }
-        Task { await model.join(code: model.joinCode) }
+        Task { await model.join(code: code) }
     }
 
     private func mintAndWait(token: String) async {

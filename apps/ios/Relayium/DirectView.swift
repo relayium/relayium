@@ -589,6 +589,8 @@ struct DirectView: View {
     /// deletes without warning and the Files app never shows.
     private func joinToReceiveFiles() {
         destinationError = nil
+        let code = file.joinCode
+        guard file.canJoin else { return }
         let destination: URL
         do {
             destination = try ReceiveDestination.directory()
@@ -605,7 +607,7 @@ struct DirectView: View {
         // above is already showing that instead.
         guard presence.beginSession(.pairingCode) else { return }
         foreground.sessionStarting()
-        Task { await file.join(code: file.joinCode) }
+        Task { await file.join(code: code) }
     }
 
     /// Sending files: stage inside the live security scope, mint, then dial as
@@ -634,9 +636,11 @@ struct DirectView: View {
     }
 
     private func joinTextSession() {
+        let code = text.joinCode
+        guard text.canJoin else { return }
         guard presence.beginSession(.pairingCode) else { return }
         foreground.sessionStarting()
-        Task { await text.join(code: text.joinCode) }
+        Task { await text.join(code: code) }
     }
 
     private func createTextSession() async {

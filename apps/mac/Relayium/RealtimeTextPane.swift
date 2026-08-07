@@ -124,10 +124,15 @@ struct RealtimeTextPane: View {
     // MARK: - actions
 
     private func join() {
+        // Capture the validated intent before claim. An incomplete value read
+        // after the Task starts is refused by the text model without leaving
+        // idle, which would otherwise strand the synchronous ownership claim.
+        let code = model.joinCode
+        guard model.canJoin else { return }
         // Claimed before connecting, so the session this starts is presented
         // here rather than in Nearby, which drives the same model.
         guard presence.beginSession(.pairingCode, mode: .text) else { return }
-        Task { await model.join(code: model.joinCode) }
+        Task { await model.join(code: code) }
     }
 
     private func mintAndWait(token: String) async {
