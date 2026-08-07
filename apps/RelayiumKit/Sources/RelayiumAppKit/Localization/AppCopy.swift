@@ -36,6 +36,35 @@ public enum NearbyStatusPresentation {
     }
 }
 
+/// Accessible action labels for one ephemeral text row. The visible Copy/Share
+/// controls are intentionally compact, but assistive technology must retain the
+/// sent/received context after Copy changes its visible state to “Copied”.
+public enum TextMessagePresentation {
+    public static func copyActionLabel(direction: RealtimeTextMessage.Direction,
+                                       copied: Bool,
+                                       language: AppLanguage? = nil) -> String {
+        if !copied {
+            return L10n.t(direction == .outgoing
+                          ? .textCopySentMessage : .textCopyReceivedMessage,
+                          language: language)
+        }
+        return L10n.detail([
+            L10n.t(.commonCopied, language: language),
+            L10n.t(direction == .outgoing ? .textSent : .textReceived,
+                   language: language),
+        ], language: language)
+    }
+
+    public static func shareActionLabel(direction: RealtimeTextMessage.Direction,
+                                        language: AppLanguage? = nil) -> String {
+        L10n.detail([
+            L10n.t(.commonShare, language: language),
+            L10n.t(direction == .outgoing ? .textSent : .textReceived,
+                   language: language),
+        ], language: language)
+    }
+}
+
 /// The Account tab's row details.
 public enum AccountPresentation {
     /// "App · last used 3 Jan 2026 at 09:12 · added 1 Jan 2026 at 08:00".

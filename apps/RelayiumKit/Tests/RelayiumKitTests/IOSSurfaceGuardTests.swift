@@ -2180,6 +2180,12 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(view.text.contains(
             "copiedMessageID == message.id ? .commonCopied : .commonCopy"),
             "the per-message button must remain Copy and acknowledge its write")
+        XCTAssertTrue(view.text.contains("ShareLink(item: message.body)"),
+                      "ephemeral text has no explicit system handoff")
+        XCTAssertTrue(view.text.contains("TextMessagePresentation.copyActionLabel("),
+                      "Copied feedback loses its sent/received row context")
+        XCTAssertTrue(view.text.contains("TextMessagePresentation.shareActionLabel("),
+                      "Share is indistinguishable across sent and received rows")
         XCTAssertTrue(view.text.contains("L10n.t(.textClipboardNotice)"),
                       "and the screen must say what a copy costs")
     }

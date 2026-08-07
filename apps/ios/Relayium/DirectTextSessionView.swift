@@ -223,10 +223,18 @@ struct DirectTextSessionView: View {
                           systemImage: copiedMessageID == message.id ? "checkmark" : "doc.on.doc")
                 }
                 .buttonStyle(.borderless)
-                .accessibilityLabel(L10n.t(copiedMessageID == message.id
-                    ? .commonCopied
-                    : (message.direction == .outgoing
-                       ? .textCopySentMessage : .textCopyReceivedMessage)))
+                .accessibilityLabel(TextMessagePresentation.copyActionLabel(
+                    direction: message.direction, copied: copiedMessageID == message.id))
+                // Keep the narrow row compact with the platform-standard icon.
+                // The body reaches the system share sheet only after this
+                // explicit action; it is never mirrored into view state.
+                ShareLink(item: message.body) {
+                    Label(L10n.t(.commonShare), systemImage: "square.and.arrow.up")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(TextMessagePresentation.shareActionLabel(
+                    direction: message.direction))
             }
             Text(message.body)
                 .textSelection(.enabled)

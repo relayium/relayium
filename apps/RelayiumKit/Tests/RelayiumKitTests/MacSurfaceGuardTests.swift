@@ -247,6 +247,9 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(source.contains("copiedMessageID = message.id"))
         XCTAssertTrue(source.contains("copiedMessageID == message.id ? .commonCopied : .commonCopy"))
         XCTAssertTrue(source.contains("!history.contains(where: { $0.id == copiedMessageID })"))
+        XCTAssertTrue(source.contains("ShareLink(item: message.body)"))
+        XCTAssertTrue(source.contains("TextMessagePresentation.copyActionLabel("))
+        XCTAssertTrue(source.contains("TextMessagePresentation.shareActionLabel("))
         XCTAssertFalse(source.contains("@State private var copiedMessage:"),
                        "the view retains a second copy of ephemeral plaintext")
     }

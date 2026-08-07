@@ -25,6 +25,30 @@ final class LocalizedCopyTests: XCTestCase {
         }
     }
 
+    func testTextRowActionsKeepDirectionContextInEveryLanguage() {
+        for language in AppLanguage.allCases {
+            let copySent = TextMessagePresentation.copyActionLabel(
+                direction: .outgoing, copied: false, language: language)
+            let copiedSent = TextMessagePresentation.copyActionLabel(
+                direction: .outgoing, copied: true, language: language)
+            let copiedReceived = TextMessagePresentation.copyActionLabel(
+                direction: .incoming, copied: true, language: language)
+            let shareSent = TextMessagePresentation.shareActionLabel(
+                direction: .outgoing, language: language)
+            let shareReceived = TextMessagePresentation.shareActionLabel(
+                direction: .incoming, language: language)
+            for label in [copySent, copiedSent, copiedReceived, shareSent, shareReceived] {
+                XCTAssertFalse(label.isEmpty, language.rawValue)
+            }
+            XCTAssertEqual(copySent,
+                           L10n.t(.textCopySentMessage, language: language))
+            XCTAssertNotEqual(copiedSent, copiedReceived, language.rawValue)
+            XCTAssertNotEqual(shareSent, shareReceived, language.rawValue)
+            XCTAssertTrue(copiedSent.contains(L10n.t(.commonCopied, language: language)))
+            XCTAssertTrue(shareSent.contains(L10n.t(.commonShare, language: language)))
+        }
+    }
+
     // MARK: - errors carry their language and keep their data
 
     func testErrorCopyIsTranslatedInEveryLanguage() {

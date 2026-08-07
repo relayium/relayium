@@ -229,10 +229,17 @@ struct RealtimeTextSessionView: View {
                           systemImage: copiedMessageID == message.id ? "checkmark" : "doc.on.doc")
                 }
                 .buttonStyle(.link)
-                .accessibilityLabel(L10n.t(copiedMessageID == message.id
-                    ? .commonCopied
-                    : (message.direction == .outgoing
-                       ? .textCopySentMessage : .textCopyReceivedMessage)))
+                .accessibilityLabel(TextMessagePresentation.copyActionLabel(
+                    direction: message.direction, copied: copiedMessageID == message.id))
+                // Explicit system handoff: unlike Copy, Share does not first put
+                // ephemeral plaintext into the clipboard. The system receives
+                // the body only after the user opens this row's share sheet.
+                ShareLink(item: message.body) {
+                    Label(L10n.t(.commonShare), systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(.link)
+                .accessibilityLabel(TextMessagePresentation.shareActionLabel(
+                    direction: message.direction))
             }
             Text(message.body)
                 .textSelection(.enabled)
