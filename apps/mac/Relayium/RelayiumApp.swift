@@ -309,7 +309,7 @@ struct RelayiumApp: App {
         // which is why no view on this platform repeats that decision.
         _deepLinkRouting = StateObject(wrappedValue: AppDeepLinkCoordinator(
             navigation: routing, download: downloads,
-            realtime: files, realtimeText: text,
+            realtime: files, realtimeText: text, presence: presenting,
             selectRealtimeMode: { mode in presenting.mode = mode }))
         // Built from the SAME navigation model, so an opened file and a tapped
         // link cannot disagree about where the user is. It takes nothing else:

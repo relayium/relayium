@@ -66,6 +66,7 @@ public final class AppDeepLinkCoordinator: ObservableObject {
     private let download: CloudDownloadModel
     private let realtime: RealtimeSessionModel
     private let realtimeText: RealtimeTextSessionModel
+    private let presence: TransferPresence
     private let selectRealtimeMode: @MainActor (TransferMode) -> Void
     /// Live only while a link is waiting, and — see `watchForIdle` — subscribed
     /// to the busy BOUNDARIES rather than to every publish. Both halves matter:
@@ -78,11 +79,13 @@ public final class AppDeepLinkCoordinator: ObservableObject {
                 download: CloudDownloadModel,
                 realtime: RealtimeSessionModel,
                 realtimeText: RealtimeTextSessionModel,
+                presence: TransferPresence,
                 selectRealtimeMode: @escaping @MainActor (TransferMode) -> Void) {
         self.navigation = navigation
         self.download = download
         self.realtime = realtime
         self.realtimeText = realtimeText
+        self.presence = presence
         self.selectRealtimeMode = selectRealtimeMode
     }
 
@@ -151,10 +154,12 @@ public final class AppDeepLinkCoordinator: ObservableObject {
             // session. A legacy URL does not say whether the sender chose files
             // or text, so the two fields have to stay in step — and prefilling the
             // idle half while the other half is mid-session would leave the two
-            // pickers disagreeing about which code this device is joining.
-            return !realtime.isBusy && !realtimeText.isBusy
+            // pickers disagreeing about which code this device is joining. The
+            // owner closes the earlier gap: a surface is claimed synchronously,
+            // before its task has moved either model out of idle.
+            return presence.owner == nil && !realtime.isBusy && !realtimeText.isBusy
         case .realtimeWithMode:
-            return !realtime.isBusy && !realtimeText.isBusy
+            return presence.owner == nil && !realtime.isBusy && !realtimeText.isBusy
         }
     }
 
@@ -187,7 +192,8 @@ public final class AppDeepLinkCoordinator: ObservableObject {
         watch.removeAll()
     }
 
-    /// Listen for the models going quiet, without a view being mounted.
+    /// Listen for the models going quiet and session ownership clearing,
+    /// without a view being mounted.
     ///
     /// A `.task(id:)` on the shell would be the obvious shape and the wrong one:
     /// SwiftUI may tear an off-screen tab down and rebuild the tree at any time,
@@ -202,25 +208,26 @@ public final class AppDeepLinkCoordinator: ObservableObject {
     /// for each one — thousands across a single download, every one of them
     /// asking a question whose answer is still "no" — so the stream of hops
     /// would grow with the size of the transfer rather than with anything the
-    /// user did. `busyChanges` maps `$state` and drops duplicates, so what
-    /// arrives here is the boundaries themselves.
+    /// user did. The four streams map their state to one Boolean and drop
+    /// duplicates, so what arrives here is the boundaries themselves.
     private func watchForIdle() {
         guard watch.isEmpty else { return }
         for edges in [download.busyChanges,
                       realtime.busyChanges,
-                      realtimeText.busyChanges] {
+                      realtimeText.busyChanges,
+                      presence.ownershipChanges] {
             // The edge's VALUE is deliberately ignored. Acting only on a falling
             // one would save a wake-up per transfer start and cost the property
             // that makes this safe: every edge re-asks `canApply`, which is the
-            // whole question, rather than this closure deciding from one model
-            // which of three the answer depends on. It also means the current
+            // whole question, rather than this closure deciding from one source
+            // which of four the answer depends on. It also means the current
             // value each publisher emits on subscribe re-checks immediately.
             edges.sink { _ in
                 // `@Published` fires on **willSet**, so the model still reads
                 // its OLD state inside this closure — `busyChanges` carries the
-                // new value, but `canApply` consults all three models and two of
-                // them were not the ones that changed. The check therefore
-                // happens on the next main-actor turn, when the new state is
+                // new value, but `canApply` consults the models and ownership,
+                // most of which were not the source that changed. The check
+                // therefore happens on the next main-actor turn, when the new state is
                 // actually stored. Same ordering both shells' deferred
                 // `consume(_:)` exists for, and `AppDeepLinkTests` pins it on
                 // the router.

@@ -1231,6 +1231,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "a second coordinator would be a second answer to what a link may touch")
         XCTAssertTrue(app.text.contains("navigation: routing, download: downloads,"),
                       "the coordinator must be built from the app-scoped models, not its own")
+        XCTAssertTrue(app.text.contains("realtime: files, realtimeText: texts, presence: presenting,"),
+                      "the coordinator must observe the app-scoped session owner")
         XCTAssertTrue(app.text.contains("selectRealtimeMode: { mode in"))
         XCTAssertTrue(app.text.contains("modes.select(mode, file: files.state, text: texts.state)"),
                       "a typed pairing link must select the app-scoped Direct mode")

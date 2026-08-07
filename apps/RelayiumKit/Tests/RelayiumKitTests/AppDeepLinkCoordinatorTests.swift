@@ -118,6 +118,7 @@ final class AppDeepLinkCoordinatorTests: XCTestCase {
         let realtime: RealtimeSessionModel
         let realtimeText: RealtimeTextSessionModel
         let modes: DirectModeSelection
+        let presence: TransferPresence
         let coordinator: AppDeepLinkCoordinator
     }
 
@@ -127,11 +128,14 @@ final class AppDeepLinkCoordinatorTests: XCTestCase {
         let realtime = makeRealtime()
         let realtimeText = makeRealtimeText()
         let modes = DirectModeSelection()
+        let presence = TransferPresence()
         return Rig(navigation: navigation, download: download,
-                   realtime: realtime, realtimeText: realtimeText, modes: modes,
+                   realtime: realtime, realtimeText: realtimeText,
+                   modes: modes, presence: presence,
                    coordinator: AppDeepLinkCoordinator(
                     navigation: navigation, download: download,
                     realtime: realtime, realtimeText: realtimeText,
+                    presence: presence,
                     selectRealtimeMode: { mode in
                         modes.select(mode, file: realtime.state, text: realtimeText.state)
                     }))
@@ -479,6 +483,39 @@ final class AppDeepLinkCoordinatorTests: XCTestCase {
         XCTAssertEqual(rig.realtimeText.joinCode, "483920")
         XCTAssertNil(rig.coordinator.waiting)
         XCTAssertEqual(rig.navigation.selectionWrites, 1)
+    }
+
+    /// A surface claim happens synchronously before the task that moves either
+    /// model out of idle. That gap is already a session: a link must wait for
+    /// ownership to be released rather than overwriting the intent about to run.
+    func testEveryPairingLinkWaitsBehindAClaimThatPrecedesModelBusyState() async {
+        let cases: [(URL, TransferMode)] = [
+            (realtimeURL("483920"), .files),
+            (typedRealtimeURL("483920", mode: .text), .text),
+        ]
+        for (url, appliedMode) in cases {
+            let rig = makeRig()
+            XCTAssertTrue(rig.presence.claim(.nearby))
+            XCTAssertEqual(rig.realtime.state, .idle)
+            XCTAssertEqual(rig.realtimeText.state, .idle)
+
+            let pending = link(url)
+            rig.coordinator.deliver(pending)
+
+            XCTAssertEqual(rig.modes.mode, .files)
+            XCTAssertEqual(rig.realtime.joinCode, "")
+            XCTAssertEqual(rig.realtimeText.joinCode, "")
+            XCTAssertEqual(rig.coordinator.waiting, pending)
+
+            rig.presence.release(.nearby)
+            await settleMainActor()
+
+            XCTAssertEqual(rig.modes.mode, appliedMode)
+            XCTAssertEqual(rig.realtime.joinCode, "483920")
+            XCTAssertEqual(rig.realtimeText.joinCode, "483920")
+            XCTAssertNil(rig.coordinator.waiting)
+            XCTAssertEqual(rig.navigation.selectionWrites, 1)
+        }
     }
 
     /// The same claim from the other side: the TEXT half is mid-session and the

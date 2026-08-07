@@ -51,6 +51,12 @@ public final class TransferPresence: ObservableObject {
         self.mode = mode
     }
 
+    /// Ownership boundaries for coordinators that must not prepare a second
+    /// session in the synchronous claim-before-model-start window.
+    var ownershipChanges: AnyPublisher<Bool, Never> {
+        $owner.map { $0 != nil }.removeDuplicates().eraseToAnyPublisher()
+    }
+
     /// Take, or keep, the right to present the session.
     ///
     /// Idempotent for the owner and refused for anyone else. The refusal leaves

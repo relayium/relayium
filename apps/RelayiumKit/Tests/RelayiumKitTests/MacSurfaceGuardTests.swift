@@ -988,7 +988,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         // would never see the download the user is actually running — is a
         // failure rather than something a reviewer has to notice.
         for wiring in ["navigation: routing, download: downloads,",
-                       "realtime: files, realtimeText: text,",
+                       "realtime: files, realtimeText: text, presence: presenting,",
                        "selectRealtimeMode: { mode in presenting.mode = mode }",
                        "_presence = StateObject(wrappedValue: presenting)",
                        "_navigation = StateObject(wrappedValue: routing)",

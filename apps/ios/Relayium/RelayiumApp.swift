@@ -286,7 +286,7 @@ struct RelayiumApp: App {
         // which is why no view on this platform repeats that decision.
         _deepLinkRouting = StateObject(wrappedValue: AppDeepLinkCoordinator(
             navigation: routing, download: downloads,
-            realtime: files, realtimeText: texts,
+            realtime: files, realtimeText: texts, presence: presenting,
             selectRealtimeMode: { mode in
                 modes.select(mode, file: files.state, text: texts.state)
             }))
