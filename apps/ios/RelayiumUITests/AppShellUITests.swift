@@ -144,4 +144,28 @@ final class AppShellUITests: XCTestCase {
         XCTAssertFalse(app.secureTextFields["Confirm password"].exists,
                        "returning to sign in left the registration fields behind")
     }
+
+    func testMalformedReceiveLinkExplainsHowToRecover() {
+        openTask("Receive", title: "Receive files")
+
+        let link = app.textFields["receive.link"]
+        XCTAssertTrue(link.waitForExistence(timeout: 10),
+                      "Receive offers no link field")
+        let open = app.buttons["Open"]
+        XCTAssertTrue(open.exists, "Receive offers no way to inspect a link")
+        XCTAssertFalse(open.isEnabled, "an empty receive link can be opened")
+
+        link.tap()
+        link.typeText("not a link")
+        XCTAssertTrue(open.isEnabled, "a pasted link cannot be inspected")
+        open.tap()
+
+        let guidance = app.staticTexts[
+            "That doesn't look like a Relayium link. It should look like https://relayium.com/d/…#k=…"
+        ]
+        XCTAssertTrue(guidance.waitForExistence(timeout: 10),
+                      "an invalid link does not explain the required Relayium link shape")
+        XCTAssertTrue(link.isEnabled, "an invalid link cannot be corrected in place")
+        XCTAssertTrue(open.exists, "an invalid link leaves no way to try the correction")
+    }
 }

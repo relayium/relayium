@@ -59,6 +59,10 @@ struct ReceiveView: View {
             // notification for it.
             TextField(L10n.t(.downloadLinkPlaceholder), text: $model.linkText, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
+                // Keep the purpose available after the placeholder disappears
+                // behind pasted text, for VoiceOver and runtime acceptance.
+                .accessibilityLabel(L10n.t(.downloadLinkPlaceholder))
+                .accessibilityIdentifier("receive.link")
                 .lineLimit(1...3)
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
