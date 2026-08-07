@@ -41,6 +41,7 @@ struct DirectTextSessionView: View {
                 EmptyView()
             case .failed, .ended, .refused, .unsupported:
                 terminalMessage
+                retainedDraft
                 retainedHistory
             case .joining, .connecting:
                 ProgressView { Text(L10n.t(.textConnecting)) }
@@ -292,6 +293,25 @@ struct DirectTextSessionView: View {
     /// other copy — the model keeps none and the server was never given one — so
     /// a terminal notice that cleared itself would take them with it. Clearing
     /// is a button.
+    @ViewBuilder
+    private var retainedDraft: some View {
+        if !model.draft.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L10n.t(.textUnsentDraftHeading)).font(.headline)
+                Text(L10n.t(.textUnsentDraftBody))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(model.draft)
+                    .font(.body.monospaced())
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+            }
+        }
+    }
+
     @ViewBuilder
     private var retainedHistory: some View {
         if !model.history.isEmpty {

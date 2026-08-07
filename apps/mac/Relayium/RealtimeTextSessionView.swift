@@ -30,6 +30,7 @@ struct RealtimeTextSessionView: View {
                 EmptyView()
             case .failed, .ended, .refused, .unsupported:
                 terminalMessage
+                retainedDraft
                 retainedHistory
             case .joining, .connecting:
                 ProgressView(L10n.t(.textConnecting)).controlSize(.small)
@@ -213,6 +214,24 @@ struct RealtimeTextSessionView: View {
             model.end()
         } else {
             confirmingDraftDiscard = true
+        }
+    }
+
+    @ViewBuilder
+    private var retainedDraft: some View {
+        if !model.draft.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L10n.t(.textUnsentDraftHeading)).font(.headline)
+                Text(L10n.t(.textUnsentDraftBody))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(model.draft)
+                    .font(.body.monospaced())
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+            }
         }
     }
 

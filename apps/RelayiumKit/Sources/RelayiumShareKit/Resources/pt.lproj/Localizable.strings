@@ -287,6 +287,8 @@
 "text.discardDraft.confirmBody" = "Terminar a sessão descarta o texto que ainda não enviou. Não é possível desfazer esta ação.";
 "text.localHistoryHeading" = "Histórico local da sessão";
 "text.localHistoryBody" = "Este histórico não é guardado e só existe na memória da app. Desaparece se o limpar, iniciar outra sessão, sair do Relayium ou o sistema fechar a app.";
+"text.unsentDraftHeading" = "Rascunho não enviado";
+"text.unsentDraftBody" = "Este texto não foi enviado. Copie-o antes de terminar esta sessão.";
 "text.sent" = "Enviada";
 "text.received" = "Recebida";
 "text.notSent" = "Não enviada";

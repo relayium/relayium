@@ -287,6 +287,8 @@
 "text.discardDraft.confirmBody" = "Beim Beenden der Sitzung wird der noch nicht gesendete Text verworfen. Dies kann nicht rückgängig gemacht werden.";
 "text.localHistoryHeading" = "Lokaler Sitzungsverlauf";
 "text.localHistoryBody" = "Dieser Verlauf wird nicht gespeichert und existiert nur im Arbeitsspeicher der App. Er verschwindet, wenn du ihn löschst, eine andere Sitzung startest, Relayium beendest oder das System die App beendet.";
+"text.unsentDraftHeading" = "Nicht gesendeter Entwurf";
+"text.unsentDraftBody" = "Dieser Text wurde nicht gesendet. Kopiere ihn, bevor du diese Sitzung abschließt.";
 "text.sent" = "Gesendet";
 "text.received" = "Empfangen";
 "text.notSent" = "Nicht gesendet";

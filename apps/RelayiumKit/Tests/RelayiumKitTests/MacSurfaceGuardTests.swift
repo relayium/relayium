@@ -389,6 +389,9 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(source.contains("model.discardDraftAndEnd()"))
         XCTAssertTrue(source.contains("L10n.t(.textDiscardDraftConfirmTitle)"))
         XCTAssertTrue(source.contains("L10n.t(.textDiscardDraftConfirmBody)"))
+        XCTAssertTrue(source.contains("terminalMessage\n                retainedDraft"))
+        XCTAssertTrue(source.contains("Text(model.draft)"))
+        XCTAssertTrue(source.contains(".textSelection(.enabled)"))
     }
 
     func testFileMismatchAndMidTransferCancelStateTheirDestructiveCost() throws {

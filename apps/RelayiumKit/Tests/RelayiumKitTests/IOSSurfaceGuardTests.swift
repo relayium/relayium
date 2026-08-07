@@ -684,6 +684,9 @@ final class IOSSurfaceGuardTests: XCTestCase {
             "the confirmation must decorate the whole session view, not an inactive state branch")
         XCTAssertTrue(source.contains("L10n.t(.textDiscardDraftConfirmTitle)"))
         XCTAssertTrue(source.contains("L10n.t(.textDiscardDraftConfirmBody)"))
+        XCTAssertTrue(source.contains("terminalMessage\n                retainedDraft"))
+        XCTAssertTrue(source.contains("Text(model.draft)"))
+        XCTAssertTrue(source.contains(".textSelection(.enabled)"))
     }
 
     func testClearingTheOnlyLocalTextHistoryRequiresDestructiveConfirmation() throws {

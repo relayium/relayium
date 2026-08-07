@@ -284,6 +284,8 @@
 "text.discardDraft.confirmBody" = "세션을 종료하면 아직 보내지 않은 텍스트가 삭제되며 되돌릴 수 없습니다.";
 "text.localHistoryHeading" = "로컬 세션 기록";
 "text.localHistoryBody" = "이 기록은 저장되지 않고 이 앱의 메모리에만 있습니다. 기록을 지우거나 다른 세션을 시작하거나 Relayium을 종료하거나 시스템이 앱을 종료하면 사라집니다.";
+"text.unsentDraftHeading" = "보내지 않은 초안";
+"text.unsentDraftBody" = "이 텍스트는 전송되지 않았습니다. 이 세션을 완료하기 전에 복사하세요.";
 "text.sent" = "보냄";
 "text.received" = "받음";
 "text.notSent" = "보내지 못함";

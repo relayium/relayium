@@ -302,6 +302,8 @@
 "text.discardDraft.confirmBody" = "إنهاء الجلسة يتخلص من النص الذي لم ترسله. لا يمكن التراجع عن ذلك.";
 "text.localHistoryHeading" = "سجل الجلسة المحلي";
 "text.localHistoryBody" = "لا يُحفظ هذا السجل، بل يوجد فقط في ذاكرة التطبيق. يختفي إذا مسحته أو بدأت جلسة أخرى أو أنهيت Relayium أو أغلق النظام التطبيق.";
+"text.unsentDraftHeading" = "مسودة غير مرسلة";
+"text.unsentDraftBody" = "لم يُرسل هذا النص. انسخه قبل إنهاء هذه الجلسة.";
 "text.sent" = "مُرسَلة";
 "text.received" = "مُستلَمة";
 "text.notSent" = "لم تُرسَل";

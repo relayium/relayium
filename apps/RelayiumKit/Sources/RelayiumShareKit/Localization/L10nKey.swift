@@ -554,6 +554,8 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case textDiscardDraftConfirmBody = "text.discardDraft.confirmBody"
     case textLocalHistoryHeading = "text.localHistoryHeading"
     case textLocalHistoryBody = "text.localHistoryBody"
+    case textUnsentDraftHeading = "text.unsentDraftHeading"
+    case textUnsentDraftBody = "text.unsentDraftBody"
     case textSent = "text.sent"
     case textReceived = "text.received"
     case textNotSent = "text.notSent"

@@ -288,6 +288,8 @@
 "text.discardDraft.confirmBody" = "Ending the session discards the text you have not sent. This cannot be undone.";
 "text.localHistoryHeading" = "Local session history";
 "text.localHistoryBody" = "This history is not saved. It exists only in this app's memory and disappears if you clear it, start another session, quit Relayium, or the system closes the app.";
+"text.unsentDraftHeading" = "Unsent draft";
+"text.unsentDraftBody" = "This text was not sent. Copy it before finishing this session.";
 "text.sent" = "Sent";
 "text.received" = "Received";
 "text.notSent" = "Not sent";

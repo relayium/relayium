@@ -287,6 +287,8 @@
 "text.discardDraft.confirmBody" = "Finalizar la sesión descarta el texto que no has enviado. Esta acción no se puede deshacer.";
 "text.localHistoryHeading" = "Historial local de la sesión";
 "text.localHistoryBody" = "Este historial no se guarda y solo existe en la memoria de la app. Desaparece si lo borras, inicias otra sesión, cierras Relayium o el sistema cierra la app.";
+"text.unsentDraftHeading" = "Borrador sin enviar";
+"text.unsentDraftBody" = "Este texto no se envió. Cópialo antes de finalizar esta sesión.";
 "text.sent" = "Enviado";
 "text.received" = "Recibido";
 "text.notSent" = "No enviado";
