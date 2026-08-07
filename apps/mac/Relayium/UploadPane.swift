@@ -122,7 +122,7 @@ struct UploadPane: View {
 
     private var selectionCard: some View {
         SectionCard(title: L10n.t(.uploadHeading)) {
-            FileDropZone(store: selection, isBusy: model.isBusy) {
+            FileDropZone(store: selection, isBusy: { model.isBusy }) {
                 if isEmptySelection {
                     EmptyStateView(symbol: "doc.badge.plus",
                                    title: L10n.t(.storedSendIdleTitle),

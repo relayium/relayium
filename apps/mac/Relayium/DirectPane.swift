@@ -122,7 +122,7 @@ struct DirectPane: View {
 
     private var staging: some View {
         VStack(alignment: .leading, spacing: 6) {
-            FileDropZone(store: selection, isBusy: model.isBusy) {
+            FileDropZone(store: selection, isBusy: { fileAdoptionBusy }) {
                 Text(selection.summary ?? L10n.t(.directDropHint))
                     .font(.caption).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

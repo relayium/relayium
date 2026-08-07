@@ -1287,6 +1287,31 @@ final class MacSurfaceGuardTests: XCTestCase {
             "fileOpenRouting.batch(for: .pairingCode, busy: fileAdoptionBusy)"))
     }
 
+    /// Item-provider resolution suspends after AppKit accepts a drop. A live
+    /// session may start during that wait, so admission at drop time alone does
+    /// not authorize the later selection mutation.
+    func testDelayedDropsRecheckLiveOwnershipBeforeChangingSelection() throws {
+        let zone = try source(named: "FileDropZone.swift")
+        XCTAssertTrue(zone.contains("let isBusy: () -> Bool"))
+        guard let resolve = zone.range(of: "let urls = await droppedFileURLs(providers)"),
+              let recheck = zone.range(of: "guard !isBusy() else { return }",
+                                       range: resolve.lowerBound..<zone.endIndex),
+              let add = zone.range(of: "store.add(urls)",
+                                   range: recheck.lowerBound..<zone.endIndex) else {
+            return XCTFail("the drop target lost its post-suspension admission check")
+        }
+        XCTAssertTrue(resolve.lowerBound < recheck.lowerBound && recheck.lowerBound < add.lowerBound)
+
+        let nearby = try source(named: "NearbyPane.swift")
+        let pairing = try source(named: "DirectPane.swift")
+        XCTAssertTrue(nearby.contains(
+            "FileDropZone(store: selection, isBusy: { fileAdoptionBusy })"))
+        XCTAssertTrue(pairing.contains(
+            "FileDropZone(store: selection, isBusy: { fileAdoptionBusy })"))
+        XCTAssertTrue(try source(named: "UploadPane.swift").contains(
+            "FileDropZone(store: selection, isBusy: { model.isBusy })"))
+    }
+
     /// Claim refusal is a real concurrency result, not an impossible branch:
     /// an inbound offer can win between the last render and an outbound click.
     /// Every macOS start path must stop before touching its shared model.

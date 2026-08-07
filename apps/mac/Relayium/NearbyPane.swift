@@ -135,7 +135,7 @@ struct NearbyPane: View {
     @ViewBuilder
     private var filesToSend: some View {
         VStack(alignment: .leading, spacing: 6) {
-            FileDropZone(store: selection, isBusy: modelBusy) {
+            FileDropZone(store: selection, isBusy: { fileAdoptionBusy }) {
                 Text(selection.summary ?? L10n.t(.nearbyDropHint))
                     .font(.caption).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

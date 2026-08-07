@@ -30,7 +30,10 @@ struct FileDropZone<Label: View>: View {
     /// Drops and clicks are ignored while a transfer owns the selection. The
     /// zone still renders — a target that vanishes mid-drag is worse than one
     /// that declines.
-    let isBusy: Bool
+    /// A live read rather than the value from the render that accepted a drop.
+    /// Resolving item providers is asynchronous; a transfer may start before
+    /// their URLs return.
+    let isBusy: () -> Bool
     @ViewBuilder let label: () -> Label
 
     @State private var isTargeted = false
@@ -38,15 +41,19 @@ struct FileDropZone<Label: View>: View {
     var body: some View {
         RoundedRectangle(cornerRadius: 10)
             .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6]))
-            .foregroundStyle(isTargeted && !isBusy ? Color.accentColor : Color.secondary)
+            .foregroundStyle(isTargeted && !isBusy() ? Color.accentColor : Color.secondary)
             .frame(minHeight: 96)
             .overlay(label().padding(8))
             .contentShape(Rectangle())
-            .onTapGesture { if !isBusy { chooseFilesOrFolders(into: store) } }
+            .onTapGesture { if !isBusy() { chooseFilesOrFolders(into: store) } }
             .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in
-                guard !isBusy else { return false }
+                guard !isBusy() else { return false }
                 Task { @MainActor in
                     let urls = await droppedFileURLs(providers)
+                    // The drop was admitted before the provider load. Recheck
+                    // after that suspension so a session started in between
+                    // cannot mutate the selection it now owns.
+                    guard !isBusy() else { return }
                     // Staging only. A drop must never start a transfer by
                     // itself: on the nearby pane the peer is chosen separately,
                     // and a drop that dialled whoever happened to be selected is
