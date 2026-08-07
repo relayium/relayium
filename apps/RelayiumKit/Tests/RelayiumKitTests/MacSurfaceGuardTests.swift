@@ -195,6 +195,12 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the link field stays editable over a live download")
         XCTAssertTrue(source.contains(".disabled(model.linkText.isEmpty || model.isBusy)"),
                       "Open can replace a live download")
+        let resolving = try XCTUnwrap(source.components(separatedBy: "case .resolving:")
+            .dropFirst().first?.components(separatedBy: "case .ready").first)
+        XCTAssertTrue(resolving.contains("Button(L10n.t(.commonCancel)) { model.cancel() }"),
+                      "a stalled manifest resolution has no user exit")
+        XCTAssertTrue(resolving.contains(".buttonStyle(.bordered)"),
+                      "Cancel is not presented as a task action")
     }
 
     /// Completion owns one result until Done; a second input must not compete

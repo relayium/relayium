@@ -42,6 +42,8 @@ struct DownloadPane: View {
                 EmptyStateView(symbol: "link", title: L10n.t(.downloadIdleHint))
             case .resolving:
                 ProgressView(L10n.t(.downloadResolving)).controlSize(.small)
+                Button(L10n.t(.commonCancel)) { model.cancel() }
+                    .buttonStyle(.bordered)
             case .ready(let manifest, let expiresAt, let burn):
                 let total = manifest.files.reduce(0) { $0 + $1.size }
                 Text(DownloadPresentation.manifestSummary(fileCount: manifest.files.count,

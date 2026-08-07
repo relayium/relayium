@@ -188,6 +188,42 @@ final class CloudDownloadRecoveryTests: XCTestCase {
                       { if case .ready = m.state { return true }; return false })
     }
 
+    /// A metadata request can wait on a network timeout for much longer than a
+    /// person should be trapped on a locked receive surface. Cancel must return
+    /// immediately and a response that arrives afterwards must not resurrect
+    /// the abandoned manifest.
+    func testCancelDuringResolutionReturnsToIdleAndIgnoresTheLateManifest() async throws {
+        let f = try fixture(id: "cancel-resolve",
+                            files: [ManifestFile(name: "late.txt", size: 1)])
+        let gate = RequestGate()
+        StubURLProtocol.router = { _ in
+            gate.hold()
+            return .init(status: 200, body: f.metaBody)
+        }
+        let m = model()
+        m.linkText = f.link
+        m.resolve()
+        await gate.reached()
+        var released = false
+        defer { if !released { gate.release() } }
+
+        guard case .resolving = m.state else {
+            return XCTFail("metadata request never became active: \(m.state)")
+        }
+        m.cancel()
+        XCTAssertEqual(m.state, .idle)
+        XCTAssertFalse(m.isBusy)
+        XCTAssertEqual(m.linkText, f.link, "Cancel should leave the editable link available")
+        XCTAssertTrue(m.sessionFiles.isEmpty)
+        XCTAssertEqual(m.recovery, DownloadRecovery.none)
+
+        gate.release()
+        released = true
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertEqual(m.state, .idle, "a late manifest resurrected the cancelled task")
+        XCTAssertTrue(m.sessionFiles.isEmpty)
+    }
+
     // MARK: - the transfer itself
 
     /// A failure during the blob repeats the DOWNLOAD, into the destination the
