@@ -1327,6 +1327,30 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertFalse(login.contains("session.register(email: draft.email"))
     }
 
+    func testPairingCreateSettlesIntentBeforeStartingAsyncMint() throws {
+        let files = try source(named: "DirectPane.swift")
+        XCTAssertTrue(files.contains(
+            "Button(L10n.t(.directCreateCode)) { createCode(token: token) }"))
+        guard let selection = files.range(of: "guard let expanded = selection.selection"),
+              let claim = files.range(of:
+                "guard presence.beginSession(.pairingCode, mode: .files) else { return }",
+                range: selection.lowerBound..<files.endIndex),
+              let task = files.range(of: "Task { await mintAndWait(token: token) }") else {
+            return XCTFail("file code creation lost its synchronous intent boundary")
+        }
+        XCTAssertTrue(selection.lowerBound < claim.lowerBound && claim.lowerBound < task.lowerBound)
+
+        let text = try source(named: "RealtimeTextPane.swift")
+        XCTAssertTrue(text.contains(
+            "Button(L10n.t(.textCreateCode)) { createCode(token: access.token) }"))
+        guard let textClaim = text.range(of:
+                "guard presence.beginSession(.pairingCode, mode: .text) else { return }"),
+              let textTask = text.range(of: "Task { await mintAndWait(token: token) }") else {
+            return XCTFail("text code creation lost its synchronous intent boundary")
+        }
+        XCTAssertTrue(textClaim.lowerBound < textTask.lowerBound)
+    }
+
     /// The document-type declaration that makes the app a Dock drop target and a
     /// Finder "Open With" entry — and the one line that keeps it from becoming
     /// the Mac's default handler for every file on disk.

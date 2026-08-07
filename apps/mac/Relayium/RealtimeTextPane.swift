@@ -62,7 +62,7 @@ struct RealtimeTextPane: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    Button(L10n.t(.textCreateCode)) { Task { await mintAndWait(token: access.token) } }
+                    Button(L10n.t(.textCreateCode)) { createCode(token: access.token) }
                         .buttonStyle(.borderedProminent)
                 }
             } else {
@@ -135,8 +135,12 @@ struct RealtimeTextPane: View {
         Task { await model.join(code: code) }
     }
 
-    private func mintAndWait(token: String) async {
+    private func createCode(token: String) {
         guard presence.beginSession(.pairingCode, mode: .text) else { return }
+        Task { await mintAndWait(token: token) }
+    }
+
+    private func mintAndWait(token: String) async {
         await model.mintCode(token: token)
         guard case let .showingCode(code, _) = model.state else { return }
         await model.join(code: code, role: .initiator)

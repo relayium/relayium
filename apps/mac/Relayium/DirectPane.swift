@@ -135,7 +135,7 @@ struct DirectPane: View {
                     Button(L10n.t(.commonClear)) { selection.clear() }
                         .buttonStyle(.bordered)
                 }
-                Button(L10n.t(.directCreateCode)) { Task { await mintAndWait(token: token) } }
+                Button(L10n.t(.directCreateCode)) { createCode(token: token) }
                     .buttonStyle(.borderedProminent)
                     // What is missing is named by the drop zone directly above,
                     // and adding it is one drop away — unlike an account, which
@@ -212,7 +212,7 @@ struct DirectPane: View {
         Task { await model.join(code: code) }
     }
 
-    private func mintAndWait(token: String) async {
+    private func createCode(token: String) {
         // Validate and stage before the picker disappears. Besides avoiding a
         // useless minted code for an unreadable selection, this gives minting
         // and handoff one model-owned manifest to keep visible throughout.
@@ -230,6 +230,10 @@ struct DirectPane: View {
         stagingError = nil
         guard presence.beginSession(.pairingCode, mode: .files) else { return }
         model.stageSend(sources: staged.sources, metas: staged.metas)
+        Task { await mintAndWait(token: token) }
+    }
+
+    private func mintAndWait(token: String) async {
         await model.mintCode(token: token)
         guard case let .showingCode(code, _) = model.state else { return }
         Task { await model.join(code: code, role: .initiator) }

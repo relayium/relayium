@@ -2138,7 +2138,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // reach the transport.
         XCTAssertEqual(view.text.components(separatedBy: "session.bearerToken").count - 1, 1,
                        "the credential must be read once, to build the gate")
-        for action in ["await createAndSend()", "await createTextSession()"] {
+        for action in ["createAndSend()", "createTextSession()"] {
             XCTAssertTrue(view.text.contains(action),
                           "the button must call \(action) without capturing a credential")
         }
@@ -2147,9 +2147,11 @@ final class IOSSurfaceGuardTests: XCTestCase {
                 "guard case let .allowed(access) = gate else { return }").count - 1,
             2,
             "both create actions must re-read the live gate at the instant of use")
-        XCTAssertEqual(view.text.components(separatedBy:
-            "mintCode(token: access.token)").count - 1, 2,
-            "both mints must spend the token from that live gate read")
+        for handoff in ["mintAndSendFiles(token: access.token)",
+                        "mintAndJoinText(token: access.token)"] {
+            XCTAssertTrue(view.text.contains(handoff),
+                          "both mints must spend the token from that live gate read")
+        }
         guard let joinCard = view.text.range(of: "private func joinCard("),
               let fileJoin = view.text.range(of: "private func joinToReceiveFiles()"),
               let fileCreate = view.text.range(of: "private func createAndSend()"),
@@ -2955,6 +2957,30 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(form.contains("SignInPresentation.problem(in: submitted)"))
         XCTAssertFalse(form.contains("session.logIn(email: draft.email"))
         XCTAssertFalse(form.contains("session.register(email: draft.email"))
+    }
+
+    func testIOSPairingCreateSettlesIntentBeforeStartingAsyncMint() throws {
+        let direct = try XCTUnwrap(try sources().first { $0.name == "DirectView.swift" }?.text)
+        XCTAssertTrue(direct.contains("Button { createAndSend() } label:"))
+        XCTAssertTrue(direct.contains("Button { createTextSession() } label:"))
+        guard let selection = direct.range(of: "guard let staged = selection.stageForSend()"),
+              let fileClaim = direct.range(of:
+                "guard presence.beginSession(.pairingCode) else { return }",
+                range: selection.lowerBound..<direct.endIndex),
+              let fileTask = direct.range(of:
+                "Task { await mintAndSendFiles(token: access.token) }") else {
+            return XCTFail("iOS file code creation lost its synchronous intent boundary")
+        }
+        XCTAssertTrue(selection.lowerBound < fileClaim.lowerBound && fileClaim.lowerBound < fileTask.lowerBound)
+        guard let textStart = direct.range(of: "private func createTextSession()"),
+              let textClaim = direct.range(of:
+                "guard presence.beginSession(.pairingCode) else { return }",
+                range: textStart.lowerBound..<direct.endIndex),
+              let textTask = direct.range(of:
+                "Task { await mintAndJoinText(token: access.token) }") else {
+            return XCTFail("iOS text code creation lost its synchronous intent boundary")
+        }
+        XCTAssertTrue(textClaim.lowerBound < textTask.lowerBound)
     }
 
     /// The Nearby tab scrolls, like every other screen in this app.

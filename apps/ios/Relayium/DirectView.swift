@@ -265,7 +265,7 @@ struct DirectView: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.large)
-            Button { Task { await createAndSend() } } label: {
+            Button { createAndSend() } label: {
                 Text(L10n.t(.directCreateCode)).frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -323,7 +323,7 @@ struct DirectView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Button { Task { await createTextSession() } } label: {
+            Button { createTextSession() } label: {
                 Text(L10n.t(.textCreateCode)).frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -617,7 +617,7 @@ struct DirectView: View {
     /// sent — too many files, a manifest too large for one frame, a file that
     /// will not open — costs the button rather than a minted code and a peer
     /// waiting on the other end.
-    private func createAndSend() async {
+    private func createAndSend() {
         destinationError = nil
         guard let staged = selection.stageForSend() else { return }
         // Re-read the computed gate at the instant of use. The `.allowed`
@@ -630,7 +630,11 @@ struct DirectView: View {
         guard presence.beginSession(.pairingCode) else { return }
         foreground.sessionStarting()
         file.stageSend(sources: staged.sources, metas: staged.metas)
-        await file.mintCode(token: access.token)
+        Task { await mintAndSendFiles(token: access.token) }
+    }
+
+    private func mintAndSendFiles(token: String) async {
+        await file.mintCode(token: token)
         guard case let .showingCode(code, _) = file.state else { return }
         await file.join(code: code, role: .initiator)
     }
@@ -643,13 +647,17 @@ struct DirectView: View {
         Task { await text.join(code: code) }
     }
 
-    private func createTextSession() async {
+    private func createTextSession() {
         // Same live credential boundary as file create; joining remains outside
         // it and anonymous.
         guard case let .allowed(access) = gate else { return }
         guard presence.beginSession(.pairingCode) else { return }
         foreground.sessionStarting()
-        await text.mintCode(token: access.token)
+        Task { await mintAndJoinText(token: access.token) }
+    }
+
+    private func mintAndJoinText(token: String) async {
+        await text.mintCode(token: token)
         guard case let .showingCode(code, _) = text.state else { return }
         await text.join(code: code, role: .initiator)
     }
