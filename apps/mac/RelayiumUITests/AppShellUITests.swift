@@ -238,6 +238,7 @@ final class AppShellUITests: XCTestCase {
         app.launchArguments = offlineLaunchArguments
             + ["--relayium-ui-testing-terminal-text"]
         app.launch()
+        ensureProductWindowIsOpen()
 
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
@@ -273,6 +274,7 @@ final class AppShellUITests: XCTestCase {
         app.launchArguments = offlineLaunchArguments
             + ["--relayium-ui-testing-terminal-nearby"]
         app.launch()
+        ensureProductWindowIsOpen()
 
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
