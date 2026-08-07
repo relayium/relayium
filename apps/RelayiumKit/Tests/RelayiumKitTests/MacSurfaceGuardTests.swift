@@ -85,10 +85,6 @@ final class MacSurfaceGuardTests: XCTestCase {
         let uiURL = macRoot.deletingLastPathComponent()
             .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
         let ui = try String(contentsOf: uiURL, encoding: .utf8)
-        let app = try source(named: "RelayiumApp.swift")
-        XCTAssertTrue(app.contains("func applicationDidBecomeActive") &&
-                      app.contains("guard UITestMode.isActive else { return }"),
-                      "a restored closed-window state can make hosted launches product-less")
         XCTAssertTrue(ui.contains("app.windows.allElementsBoundByIndex.max") &&
                       ui.contains("$0.frame.width * $0.frame.height"),
                       "runtime checks can mistake an auxiliary window for the product shell")
@@ -99,6 +95,9 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "runtime copy assertions depend on the runner's preferred language")
         XCTAssertTrue(ui.contains("-SUEnableAutomaticChecks") && ui.contains("NO"),
                       "Sparkle's first-launch consent can cover the product window")
+        XCTAssertTrue(ui.contains("app.statusItems.firstMatch") &&
+                      ui.contains("app.menuItems[\"Open Relayium\"]"),
+                      "a restored closed-window state has no real recovery path in the suite")
         XCTAssertTrue(ui.contains("$0.frame.midX < dividingX"),
                       "macOS 15 has no spatial fallback when List drops row identifiers")
         XCTAssertTrue(ui.contains("label == %@ OR value == %@"),
@@ -1387,12 +1386,12 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertEqual(all.map { occurrences(of: "func application(", in: $0.text) }.reduce(0, +), 1,
                        "a second AppKit open callback would be a second entry point")
         XCTAssertTrue(app.contains("func application(_ application: NSApplication, open urls: [URL])"))
-        // THREE occurrences: the definition, the one production Open With call,
-        // and the DEBUG-only UI harness call pinned above. Asserting mere
-        // presence passed while the production call site was deleted, so the
-        // count remains load-bearing rather than decorative.
-        XCTAssertEqual(occurrences(of: "showTheMainWindow()", in: app), 3,
-                       "window recovery must have one production and one test-only caller")
+        // TWO occurrences: the definition and exactly one call. Asserting mere
+        // presence passed while the call site was deleted — the definition line
+        // contains the same spelling — so the count is what makes this guard
+        // load-bearing rather than decorative.
+        XCTAssertEqual(occurrences(of: "showTheMainWindow()", in: app), 2,
+                       "an open with the window closed must bring it back, from exactly one place")
         // Ordered front, never created. A `WindowGroup` would make a second
         // window here, which is the one thing the whole shell design prevents.
         XCTAssertTrue(app.contains("window.makeKeyAndOrderFront(nil)"))

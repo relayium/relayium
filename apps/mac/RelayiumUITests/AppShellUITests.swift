@@ -42,10 +42,34 @@ final class AppShellUITests: XCTestCase {
         app = XCUIApplication()
         app.launchArguments = offlineLaunchArguments
         app.launch()
+        ensureProductWindowIsOpen()
     }
 
     override func tearDownWithError() throws {
         app?.terminate()
+    }
+
+    /// A fresh runner may show Sparkle's one-time consent, while a reused
+    /// runner may restore the deliberate closed-window state from the residency
+    /// test. Resolve either through the controls a person actually sees, then
+    /// begin every product assertion with the real work window in front.
+    private func ensureProductWindowIsOpen() {
+        let sparkleDecline = app.buttons["Don’t Check"]
+        if sparkleDecline.waitForExistence(timeout: 2) { sparkleDecline.click() }
+        if app.windows.allElementsBoundByIndex.contains(where: {
+            $0.frame.width >= 800 && $0.frame.height >= 500
+        }) { return }
+
+        let statusItem = app.statusItems.firstMatch
+        XCTAssertTrue(statusItem.waitForExistence(timeout: 5),
+                      "the resident app has no menu-bar recovery surface")
+        statusItem.click()
+        let open = app.menuItems["Open Relayium"]
+        XCTAssertTrue(open.waitForExistence(timeout: 5),
+                      "the menu-bar surface cannot reopen the product window")
+        open.click()
+        XCTAssertTrue(mainWindow.waitForExistence(timeout: 10),
+                      "Open Relayium did not restore the product window")
     }
 
     /// Destination titles also appear as page headings. Scope navigation to

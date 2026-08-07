@@ -64,15 +64,6 @@ final class AppQuitGuard: NSObject, NSApplicationDelegate {
     /// `applicationShouldTerminate` above.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 
-    /// Repeated UI-test launches inherit the runner's saved close state on
-    /// macOS 15, so a correctly constructed `Window` scene can start ordered
-    /// out. The shipped app keeps normal restoration; only the DEBUG-only test
-    /// process makes its product window observable on each fresh launch.
-    func applicationDidBecomeActive(_ notification: Notification) {
-        guard UITestMode.isActive else { return }
-        DispatchQueue.main.async { [weak self] in self?.showTheMainWindow() }
-    }
-
     /// Finder's **Open With**, and a drop on the Dock icon.
     ///
     /// **The `urls` are empty here, and that is not a bug to work around.**
