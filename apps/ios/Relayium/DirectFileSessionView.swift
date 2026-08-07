@@ -74,7 +74,7 @@ struct DirectFileSessionView: View {
             // screen in this app at once, and "72%" on its own says nothing
             // about which transfer it belongs to.
             ProgressView(value: Double(done), total: Double(max(total, 1))) {
-                Text(L10n.t(.tabDirect))
+                Text(L10n.t(.sessionTransferProgress))
             } currentValueLabel: {
                 Text(L10n.percent(done: done, total: total) ?? L10n.t(.commonStarting))
             }

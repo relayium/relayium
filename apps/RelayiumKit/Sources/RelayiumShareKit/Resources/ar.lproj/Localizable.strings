@@ -181,6 +181,7 @@
 "session.theyMatch" = "متطابقان";
 "session.theyDontMatch" = "غير متطابقين";
 "session.transferComplete" = "اكتمل النقل";
+"session.transferProgress" = "جارٍ نقل الملفات…";
 "session.invalidFileList" = "قائمة الملفات المختارة غير صالحة. اختر الملفات من جديد.";
 "session.peerDisconnected" = "قطع الجهاز الآخر الاتصال.";
 

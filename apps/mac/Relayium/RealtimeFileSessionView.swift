@@ -65,9 +65,11 @@ struct RealtimeFileSessionView: View {
 
     private func transferring(done: Int, total: Int) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            ProgressView(value: total > 0 ? Double(done) / Double(total) : 0)
-            Text(L10n.percent(done: done, total: total) ?? L10n.t(.commonStarting))
-                .font(.caption).foregroundStyle(.secondary)
+            ProgressView(value: Double(done), total: Double(max(total, 1))) {
+                Text(L10n.t(.sessionTransferProgress))
+            } currentValueLabel: {
+                Text(L10n.percent(done: done, total: total) ?? L10n.t(.commonStarting))
+            }
             // Keyed by index: a folder legitimately contains two files with the
             // same leaf name in different subdirectories, and `id: \.name` would
             // collapse them into one row (and warn about duplicate ids). The

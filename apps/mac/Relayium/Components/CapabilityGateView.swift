@@ -52,10 +52,8 @@ struct CapabilityGateView: View {
             case .loading:
                 // Not the sign-in gate: the account may well be there, and the
                 // app simply does not know yet.
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text(L10n.t(.accountRestoring)).foregroundStyle(.secondary)
-                }
+                ProgressView { Text(L10n.t(.accountRestoring)) }
+                    .controlSize(.small)
 
             case .signInRequired:
                 EmptyStateView(symbol: "person.crop.circle.badge.questionmark",

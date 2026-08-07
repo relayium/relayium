@@ -23,10 +23,8 @@ struct AccountDestination: View {
             case .restoring:
                 // Launch only. There is no form to preserve here, so a branch of
                 // its own is free.
-                HStack(spacing: 8) {
-                    ProgressView().controlSize(.small)
-                    Text(L10n.t(.accountRestoring)).foregroundStyle(.secondary)
-                }
+                ProgressView { Text(L10n.t(.accountRestoring)) }
+                    .controlSize(.small)
                 .frame(maxWidth: 720, alignment: .leading)
 
             case .loggedOut, .authenticating, .registering, .failed:

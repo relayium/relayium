@@ -178,6 +178,7 @@
 "session.theyMatch" = "Identiques";
 "session.theyDontMatch" = "Différents";
 "session.transferComplete" = "Transfert terminé";
+"session.transferProgress" = "Transfert des fichiers…";
 "session.invalidFileList" = "La liste de fichiers sélectionnée est invalide. Choisissez à nouveau les fichiers.";
 "session.peerDisconnected" = "L’autre appareil s’est déconnecté.";
 

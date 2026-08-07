@@ -59,6 +59,19 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "VoiceOver and sighted users need the same reconnecting state")
     }
 
+    func testEveryMacProgressIndicatorNamesItsWork() throws {
+        let all = try sources(under: macRoot, atLeast: 30)
+        let bare = all.filter { $0.text.contains("ProgressView()") }.map(\.name)
+        XCTAssertTrue(bare.isEmpty, "unlabelled progress indicators in \(bare)")
+
+        let file = try source(named: "RealtimeFileSessionView.swift")
+        XCTAssertTrue(file.contains("Text(L10n.t(.sessionTransferProgress))"),
+                      "file progress reports a number without naming the work")
+        let text = try source(named: "RealtimeTextSessionView.swift")
+        XCTAssertTrue(text.contains("ProgressView { Text(L10n.t(.textWaitingAccept)) }"),
+                      "the peer-accept wait is unnamed")
+    }
+
     /// Each source's CODE, with whole-line comments dropped — the same loader
     /// `IOSSurfaceGuardTests` uses, and for the same reason: these files explain
     /// what they deliberately do NOT do, so scanning raw text would fail this

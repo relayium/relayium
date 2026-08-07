@@ -178,6 +178,7 @@
 "session.theyMatch" = "一致しています";
 "session.theyDontMatch" = "一致しません";
 "session.transferComplete" = "転送が完了しました";
+"session.transferProgress" = "ファイルを転送中…";
 "session.invalidFileList" = "選択されたファイルリストが不正です。ファイルを選び直してください。";
 "session.peerDisconnected" = "相手のデバイスが切断しました。";
 

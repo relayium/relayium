@@ -178,6 +178,7 @@
 "session.theyMatch" = "一致";
 "session.theyDontMatch" = "不一致";
 "session.transferComplete" = "传输完成";
+"session.transferProgress" = "正在传输文件…";
 "session.invalidFileList" = "所选文件列表无效。请重新选择文件。";
 "session.peerDisconnected" = "对方设备已断开连接。";
 

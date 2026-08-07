@@ -178,6 +178,7 @@
 "session.theyMatch" = "Stimmen überein";
 "session.theyDontMatch" = "Stimmen nicht überein";
 "session.transferComplete" = "Übertragung abgeschlossen";
+"session.transferProgress" = "Dateien werden übertragen …";
 "session.invalidFileList" = "Die ausgewählte Dateiliste ist ungültig. Wähle die Dateien erneut aus.";
 "session.peerDisconnected" = "Das andere Gerät hat die Verbindung getrennt.";
 

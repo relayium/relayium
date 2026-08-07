@@ -255,7 +255,8 @@ struct AccountView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             if management.isLoading && management.devices.isEmpty {
-                ProgressView().controlSize(.small)
+                ProgressView { Text(L10n.t(.accountLoadingDevices)) }
+                    .controlSize(.small)
             } else if management.devices.isEmpty {
                 Text(L10n.t(.accountNoDevices))
                     .font(.caption).foregroundStyle(.secondary)
@@ -313,7 +314,8 @@ struct AccountView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             if management.isLoading && management.files.isEmpty {
-                ProgressView().controlSize(.small)
+                ProgressView { Text(L10n.t(.accountLoadingFiles)) }
+                    .controlSize(.small)
             } else if management.files.isEmpty {
                 Text(L10n.t(.accountNoFiles))
                     .font(.caption).foregroundStyle(.secondary)

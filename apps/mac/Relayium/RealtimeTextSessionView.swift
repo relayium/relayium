@@ -67,14 +67,13 @@ struct RealtimeTextSessionView: View {
 
     private func waiting(_ sas: String) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(L10n.t(.textWaitingAccept))
-                .font(.subheadline.weight(.semibold))
+            ProgressView { Text(L10n.t(.textWaitingAccept)) }
+                .controlSize(.small)
             if verification.requiresSASConfirmation {
                 Text(L10n.t(.textVerifiedPhrase, [L10n.token(sas)]))
                     .font(.caption.monospaced())
                     .textSelection(.enabled)
             }
-            ProgressView().controlSize(.small)
             Button(L10n.t(.commonEndSession)) { model.end() }
         }
     }

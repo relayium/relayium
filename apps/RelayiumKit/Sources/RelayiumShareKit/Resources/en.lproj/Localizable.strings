@@ -179,6 +179,7 @@
 "session.theyMatch" = "They match";
 "session.theyDontMatch" = "They don't match";
 "session.transferComplete" = "Transfer complete";
+"session.transferProgress" = "Transferring files…";
 "session.invalidFileList" = "The selected file list is invalid. Choose the files again.";
 "session.peerDisconnected" = "The other device disconnected.";
 

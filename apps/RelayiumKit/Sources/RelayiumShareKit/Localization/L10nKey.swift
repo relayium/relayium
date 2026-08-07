@@ -345,6 +345,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case sessionTheyMatch = "session.theyMatch"
     case sessionTheyDontMatch = "session.theyDontMatch"
     case sessionTransferComplete = "session.transferComplete"
+    case sessionTransferProgress = "session.transferProgress"
     case sessionInvalidFileList = "session.invalidFileList"
     case sessionPeerDisconnected = "session.peerDisconnected"
 
