@@ -351,6 +351,25 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "Cancel creates an empty Session ended task that still needs Done")
     }
 
+    /// Mismatch, refusal and ending all terminate the live relationship. Their
+    /// macOS controls must carry the same destructive semantics as iOS, while
+    /// Match and Accept remain the only prominent affirmative choices.
+    func testTextSessionTerminationActionsAreVisiblyDestructive() throws {
+        let session = try source(named: "RealtimeTextSessionView.swift")
+        for action in [".sessionTheyDontMatch", ".commonReject"] {
+            XCTAssertEqual(occurrences(of: "Button(L10n.t(\(action)), role: .destructive)",
+                                       in: session), 1,
+                           "\(action) lost its destructive role")
+        }
+        XCTAssertEqual(occurrences(of:
+            "Button(L10n.t(.commonEndSession), role: .destructive)", in: session), 2,
+            "both waiting and open sessions must label termination destructively")
+        XCTAssertEqual(occurrences(of: ".buttonStyle(.bordered)", in: session), 4,
+                       "each destructive session action needs an explicit task-button shape")
+        XCTAssertEqual(occurrences(of: ".buttonStyle(.borderedProminent)", in: session), 3,
+                       "only Match, Accept and the open-session Send action are prominent")
+    }
+
     func testTextCodeWaitingCancelReturnsDirectlyToThePairingEntry() throws {
         let source = try source(named: "RealtimeTextPane.swift")
         let showing = try XCTUnwrap(source.components(

@@ -68,7 +68,8 @@ struct RealtimeTextSessionView: View {
             HStack {
                 Button(L10n.t(.sessionTheyMatch)) { model.confirmSAS() }
                     .buttonStyle(.borderedProminent)
-                Button(L10n.t(.sessionTheyDontMatch)) { model.rejectSAS() }
+                Button(L10n.t(.sessionTheyDontMatch), role: .destructive) { model.rejectSAS() }
+                    .buttonStyle(.bordered)
             }
         }
     }
@@ -82,7 +83,8 @@ struct RealtimeTextSessionView: View {
                     .font(.caption.monospaced())
                     .textSelection(.enabled)
             }
-            Button(L10n.t(.commonEndSession)) { model.end() }
+            Button(L10n.t(.commonEndSession), role: .destructive) { model.end() }
+                .buttonStyle(.bordered)
         }
     }
 
@@ -101,7 +103,8 @@ struct RealtimeTextSessionView: View {
             HStack {
                 Button(L10n.t(.commonAccept)) { model.accept() }
                     .buttonStyle(.borderedProminent)
-                Button(L10n.t(.commonReject)) { model.reject() }
+                Button(L10n.t(.commonReject), role: .destructive) { model.reject() }
+                    .buttonStyle(.bordered)
             }
         }
     }
@@ -173,7 +176,8 @@ struct RealtimeTextSessionView: View {
                 Button(L10n.t(.textClearHistory)) { model.clearHistory() }
                     .disabled(model.history.isEmpty)
                 Spacer()
-                Button(L10n.t(.commonEndSession)) { model.end() }
+                Button(L10n.t(.commonEndSession), role: .destructive) { model.end() }
+                    .buttonStyle(.bordered)
             }
         }
     }
