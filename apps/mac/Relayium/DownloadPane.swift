@@ -23,6 +23,8 @@ struct DownloadPane: View {
                 HStack {
                     TextField(L10n.t(.downloadLinkPlaceholder), text: $model.linkText)
                         .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel(L10n.t(.downloadLinkPlaceholder))
+                        .accessibilityIdentifier("receive.link")
                         .onSubmit { model.resolve() }
                         .disabled(model.isBusy)
                     // Empty means the missing prerequisite is the field beside it,

@@ -614,6 +614,22 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "Cancel is not presented as a task action")
     }
 
+    func testStoredReceiveLinkKeepsItsPurposeAfterInput() throws {
+        let source = try source(named: "DownloadPane.swift")
+        XCTAssertTrue(source.contains(
+            ".accessibilityLabel(L10n.t(.downloadLinkPlaceholder))"),
+            "the link field loses its purpose when its placeholder disappears")
+        XCTAssertTrue(source.contains(".accessibilityIdentifier(\"receive.link\")"),
+                      "runtime acceptance has no stable receive-link control")
+
+        let uiURL = macRoot.deletingLastPathComponent()
+            .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
+        let ui = try String(contentsOf: uiURL, encoding: .utf8)
+        XCTAssertTrue(ui.contains("testMalformedStoredLinkExplainsHowToRecover"))
+        XCTAssertTrue(ui.contains("window.textFields[\"receive.link\"]"))
+        XCTAssertTrue(ui.contains("That doesn't look like a Relayium link."))
+    }
+
     /// Completion owns one result until Done; a second input must not compete
     /// with it. macOS also needs a first-class system handoff for received files,
     /// in addition to Finder reveal and drag-out.

@@ -168,6 +168,42 @@ final class AppShellUITests: XCTestCase {
         }
     }
 
+    /// A bad paste is ordinary recovery, not a dead end. The refusal must say
+    /// what belongs here while leaving the same field and action available for
+    /// correction on the same task.
+    func testMalformedStoredLinkExplainsHowToRecover() {
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+
+        let receive = sidebarDestination("Open a link", in: window)
+        XCTAssertTrue(receive.waitForExistence(timeout: 10))
+        receive.click()
+
+        let link = window.textFields["receive.link"]
+        XCTAssertTrue(link.waitForExistence(timeout: 10))
+        let open = window.buttons["Open"]
+        XCTAssertTrue(open.exists)
+        XCTAssertFalse(open.isEnabled,
+                       "an empty receive field offers an action that cannot succeed")
+
+        link.click()
+        link.typeText("not a link")
+        XCTAssertTrue(open.isEnabled)
+        open.click()
+
+        let guidance = "That doesn't look like a Relayium link. It should look like https://relayium.com/d/…#k=…"
+        XCTAssertTrue(visibleElement(
+            id: "download-error", text: guidance, in: window
+        ).waitForExistence(timeout: 10),
+                      "the refusal does not explain the capability-link shape")
+        XCTAssertTrue(link.exists && link.isEnabled,
+                      "the malformed value cannot be corrected in place")
+        XCTAssertTrue(open.exists,
+                      "the receive action disappeared after a correctable refusal")
+        XCTAssertEqual(window.title, "Open a link",
+                       "a malformed link navigated away from its recovery task")
+    }
+
     /// The exact launch-blocking path reported from the installed app: creating
     /// a pairing-code text session must not be mistaken for unsolicited Nearby
     /// receive, and its handoff must be usable without transcribing six digits.
