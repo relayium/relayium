@@ -1274,6 +1274,18 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "an unqualified consume can discard a newer batch")
     }
 
+    func testQuitGuardIncludesTheOnlyLocalTextHistory() throws {
+        let app = try source(named: "RelayiumApp.swift")
+        XCTAssertTrue(app.contains("final class AppQuitGuard"))
+        XCTAssertTrue(app.contains("var hasTextHistory: (() -> Bool)?"))
+        XCTAssertTrue(app.contains(
+            "quitGuard.hasTextHistory = { !realtimeTextModel.history.isEmpty }"))
+        XCTAssertTrue(app.contains("QuitPresentation.risk("))
+        XCTAssertTrue(app.contains("QuitPresentation.prompt(for: risk)"))
+        XCTAssertFalse(app.contains("L10n.t(.quitCancelAndQuit)"))
+        XCTAssertFalse(app.contains("L10n.t(.quitKeepTransferring)"))
+    }
+
     /// The shell forwards; it does not stage. A shell holding a `SelectionStore`
     /// has a way to re-derive the routing and busy rules the coordinator owns,
     /// which is how the link path grew its inline version in the first place.

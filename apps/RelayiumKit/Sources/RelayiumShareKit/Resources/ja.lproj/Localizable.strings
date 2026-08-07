@@ -51,8 +51,11 @@
 
 "quit.title" = "転送がまだ実行中です";
 "quit.body" = "いま終了すると転送は中止されます。何も保存されず、進行中のアップロードは最初からやり直しになります。";
-"quit.cancelAndQuit" = "転送を中止して終了";
-"quit.keepTransferring" = "転送を続ける";
+"quit.historyTitle" = "ローカルのメッセージ履歴は保存されていません";
+"quit.historyBody" = "いま終了すると、アプリのメモリにあるメッセージは完全に失われます。";
+"quit.transferAndHistoryBody" = "いま終了すると転送が中止され、ローカルのメッセージ履歴も完全に失われます。進行中のアップロードは最初からやり直しになります。";
+"quit.now" = "今すぐ終了";
+"quit.stay" = "Relayiumを使い続ける";
 
 /* MARK: メニューバー */
 "menubar.planUsage" = "%1$@ — %2$@ 使用";

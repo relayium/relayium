@@ -51,8 +51,11 @@
 
 "quit.title" = "아직 전송이 진행 중입니다";
 "quit.body" = "지금 종료하면 전송이 취소됩니다. 아무것도 저장되지 않으며, 진행 중인 업로드는 처음부터 다시 해야 합니다.";
-"quit.cancelAndQuit" = "전송 취소하고 종료";
-"quit.keepTransferring" = "전송 계속하기";
+"quit.historyTitle" = "로컬 메시지 기록이 저장되지 않았습니다";
+"quit.historyBody" = "지금 종료하면 앱 메모리에 있는 메시지가 영구적으로 삭제됩니다.";
+"quit.transferAndHistoryBody" = "지금 종료하면 전송이 취소되고 로컬 메시지 기록이 영구적으로 삭제됩니다. 진행 중인 업로드는 처음부터 다시 해야 합니다.";
+"quit.now" = "지금 종료";
+"quit.stay" = "Relayium에 머무르기";
 
 /* MARK: 메뉴 막대 */
 "menubar.planUsage" = "%1$@ — %2$@ 사용";

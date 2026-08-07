@@ -51,8 +51,11 @@
 
 "quit.title" = "Ainda há uma transferência a decorrer";
 "quit.body" = "Sair agora cancela-a. Nada é guardado, e um envio em curso terá de recomeçar do zero.";
-"quit.cancelAndQuit" = "Cancelar a transferência e sair";
-"quit.keepTransferring" = "Continuar a transferir";
+"quit.historyTitle" = "O histórico local de mensagens não está guardado";
+"quit.historyBody" = "Sair agora elimina permanentemente as mensagens que estão na memória da app.";
+"quit.transferAndHistoryBody" = "Sair agora cancela a transferência e elimina permanentemente o histórico local de mensagens. Um envio em curso terá de recomeçar do zero.";
+"quit.now" = "Sair agora";
+"quit.stay" = "Permanecer no Relayium";
 
 /* MARK: barra de menus */
 "menubar.planUsage" = "%1$@ — %2$@ usados";

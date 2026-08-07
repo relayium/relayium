@@ -52,8 +52,11 @@
 
 "quit.title" = "A transfer is still running";
 "quit.body" = "Quitting now cancels it. Nothing is saved, and an upload in progress will have to start over.";
-"quit.cancelAndQuit" = "Cancel Transfer and Quit";
-"quit.keepTransferring" = "Keep Transferring";
+"quit.historyTitle" = "Local message history is not saved";
+"quit.historyBody" = "Quitting now permanently discards the messages in this app's memory.";
+"quit.transferAndHistoryBody" = "Quitting now cancels the transfer and permanently discards the local message history. An upload in progress will have to start over.";
+"quit.now" = "Quit Now";
+"quit.stay" = "Stay in Relayium";
 
 /* MARK: menu bar */
 "menubar.planUsage" = "%1$@ — %2$@ used";

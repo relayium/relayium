@@ -31,25 +31,28 @@ struct CheckForUpdatesView: View {
     }
 }
 
-/// Refuses a silent exit while a transfer is running.
+/// Refuses a silent exit while work or the only text-history copy is at risk.
 ///
 /// Deferring background `URLSession` to R3 means a transfer dies with the app.
 /// That is a deliberate deferral, so this round owns its consequence rather than
 /// letting a user discover it by losing an upload they watched for two minutes.
 @MainActor
-final class TransferQuitGuard: NSObject, NSApplicationDelegate {
+final class AppQuitGuard: NSObject, NSApplicationDelegate {
     /// Set by the scene once the models exist. A closure rather than references
     /// so the delegate holds no opinion about what a transfer is.
     var isTransferRunning: (() -> Bool)?
+    var hasTextHistory: (() -> Bool)?
     var cancelTransfers: (() -> Void)?
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        guard isTransferRunning?() == true else { return .terminateNow }
+        let risk = QuitPresentation.risk(transferRunning: isTransferRunning?() == true,
+                                         hasTextHistory: hasTextHistory?() == true)
+        guard let prompt = QuitPresentation.prompt(for: risk) else { return .terminateNow }
         let alert = NSAlert()
-        alert.messageText = L10n.t(.quitTitle)
-        alert.informativeText = L10n.t(.quitBody)
-        alert.addButton(withTitle: L10n.t(.quitCancelAndQuit))
-        alert.addButton(withTitle: L10n.t(.quitKeepTransferring))
+        alert.messageText = prompt.title
+        alert.informativeText = prompt.body
+        alert.addButton(withTitle: prompt.quitAction)
+        alert.addButton(withTitle: prompt.stayAction)
         guard alert.runModal() == .alertFirstButtonReturn else { return .terminateCancel }
         cancelTransfers?()
         return .terminateNow
@@ -131,7 +134,7 @@ struct RelayiumApp: App {
         updaterDelegate: nil,
         userDriverDelegate: nil
     )
-    @NSApplicationDelegateAdaptor(TransferQuitGuard.self) private var quitGuard
+    @NSApplicationDelegateAdaptor(AppQuitGuard.self) private var quitGuard
     /// Whether this app is frontmost. Read only to notice a return to `.active`,
     /// which is when a draft the Share extension staged in the meantime becomes
     /// collectable.
@@ -414,6 +417,7 @@ struct RelayiumApp: App {
                         uploadModel.isBusy || downloadModel.isBusy
                             || realtimeModel.isBusy || realtimeTextModel.isBusy
                     }
+                    quitGuard.hasTextHistory = { !realtimeTextModel.history.isEmpty }
                     quitGuard.cancelTransfers = {
                         uploadModel.cancel()
                         downloadModel.cancel()

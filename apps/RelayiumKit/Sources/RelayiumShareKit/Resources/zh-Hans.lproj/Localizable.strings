@@ -51,8 +51,11 @@
 
 "quit.title" = "仍有传输正在进行";
 "quit.body" = "现在退出会取消传输。已传部分不会保存，正在进行的上传必须从头再来。";
-"quit.cancelAndQuit" = "取消传输并退出";
-"quit.keepTransferring" = "继续传输";
+"quit.historyTitle" = "本地消息历史尚未保存";
+"quit.historyBody" = "现在退出会永久丢弃本应用内存中的消息。";
+"quit.transferAndHistoryBody" = "现在退出会取消传输并永久丢弃本地消息历史。正在进行的上传必须从头再来。";
+"quit.now" = "立即退出";
+"quit.stay" = "留在 Relayium";
 
 /* MARK: 菜单栏 */
 "menubar.planUsage" = "%1$@ — 已用 %2$@";
