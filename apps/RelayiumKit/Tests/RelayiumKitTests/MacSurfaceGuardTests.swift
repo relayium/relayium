@@ -77,13 +77,17 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(shell.contains(
             ".accessibilityIdentifier(\"destination-\\(navigation.selection.rawValue)\")"),
             "the detail surface has no stable runtime identity")
+        let sidebar = try source(named: "Shell/SidebarView.swift")
+        XCTAssertTrue(sidebar.contains(
+            ".accessibilityIdentifier(\"sidebar-\\(destination.rawValue)\")"),
+            "sidebar task identity depends on the OS-specific List container")
 
         let uiURL = macRoot.deletingLastPathComponent()
             .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
         let ui = try String(contentsOf: uiURL, encoding: .utf8)
         XCTAssertTrue(ui.contains(
-            "window.outlines[\"Relayium destinations\"].staticTexts[title].firstMatch"),
-            "destination clicks are not scoped to the labelled sidebar")
+            "window.descendants(matching: .any)[\"sidebar-\\(id)\"].firstMatch"),
+            "destination clicks do not use the stable sidebar task identity")
         XCTAssertFalse(ui.contains("window.descendants(matching: .any)[destination]"),
                        "a page heading can still make a sidebar click ambiguous")
         XCTAssertTrue(ui.contains(

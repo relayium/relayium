@@ -346,6 +346,7 @@ struct NearbyPane: View {
                     .font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .accessibilityIdentifier("nearby-session-peer")
         }
     }
 

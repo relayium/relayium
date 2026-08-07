@@ -124,6 +124,11 @@ struct SidebarView: View {
         }
         .padding(.vertical, 2)
         .accessibilityElement(children: .combine)
+        // The AX container for a SwiftUI List changed between macOS 15 and 26
+        // (table vs outline). The task identity must not depend on that private
+        // hierarchy, and it also gives UI automation the same stable row on
+        // every supported system.
+        .accessibilityIdentifier("sidebar-\(destination.rawValue)")
         .accessibilityLabel(live
                             ? L10n.detail([title, L10n.t(.navA11yLiveSession)])
                             : title)

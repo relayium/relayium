@@ -35,7 +35,14 @@ final class AppShellUITests: XCTestCase {
     /// the labelled sidebar outline so a rendered heading cannot turn one
     /// intended click into an ambiguous two-element query.
     private func sidebarDestination(_ title: String, in window: XCUIElement) -> XCUIElement {
-        window.outlines["Relayium destinations"].staticTexts[title].firstMatch
+        let id = [
+            "Nearby": "nearby",
+            "Pairing code": "pairingCode",
+            "Send a link": "storedSend",
+            "Open a link": "storedReceive",
+            "Account": "account",
+        ][title]!
+        return window.descendants(matching: .any)["sidebar-\(id)"].firstMatch
     }
 
     /// The window opens at all. A `Window` scene that fails to build leaves a
@@ -202,7 +209,7 @@ final class AppShellUITests: XCTestCase {
 
         let window = app.windows.firstMatch
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        XCTAssertTrue(window.staticTexts["Session with Studio Mac · 19af02"]
+        XCTAssertTrue(window.descendants(matching: .any)["nearby-session-peer"]
             .waitForExistence(timeout: 10), "the terminal task lost who it was with")
         XCTAssertTrue(window.staticTexts[
             "This name is provided by the other device and is not verified identity."
