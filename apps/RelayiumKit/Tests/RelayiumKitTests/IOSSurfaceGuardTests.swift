@@ -169,6 +169,44 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertFalse(connecting.contains("model.end()"))
     }
 
+    /// Once the entry controls disappear, Cancel or End session is the user's
+    /// only way to regain control. It must still look like a task action rather
+    /// than an incidental text link, across every active direct-session phase.
+    func testActiveDirectSessionsKeepTheirLifecycleActionsDiscoverable() throws {
+        let all = try sources()
+        let files = try XCTUnwrap(all.first { $0.name == "DirectFileSessionView.swift" }?.text)
+        let fileConnecting = try XCTUnwrap(files.components(
+            separatedBy: "case .joining, .connecting:").dropFirst().first?
+            .components(separatedBy: "case let .verifying").first)
+        let fileTransfer = try XCTUnwrap(files.components(
+            separatedBy: "private func transferring").dropFirst().first?
+            .components(separatedBy: "private var completed").first)
+        for phase in [fileConnecting, fileTransfer] {
+            XCTAssertTrue(phase.contains(".buttonStyle(.bordered)"))
+            XCTAssertTrue(phase.contains(".controlSize(.large)"))
+        }
+        XCTAssertTrue(fileTransfer.contains("role: .destructive"),
+                      "cancelling an active write does not communicate its consequence")
+
+        let text = try XCTUnwrap(all.first { $0.name == "DirectTextSessionView.swift" }?.text)
+        let textConnecting = try XCTUnwrap(text.components(
+            separatedBy: "case .joining, .connecting:").dropFirst().first?
+            .components(separatedBy: "case let .verifying").first)
+        let waiting = try XCTUnwrap(text.components(
+            separatedBy: "private func waiting(").dropFirst().first?
+            .components(separatedBy: "private func incomingRequest").first)
+        let open = try XCTUnwrap(text.components(
+            separatedBy: "private func session(").dropFirst().first?
+            .components(separatedBy: "private var composer").first)
+        for phase in [textConnecting, waiting, open] {
+            XCTAssertTrue(phase.contains(".buttonStyle(.bordered)"))
+            XCTAssertTrue(phase.contains(".controlSize(.large)"))
+        }
+        for phase in [waiting, open] {
+            XCTAssertTrue(phase.contains("role: .destructive"))
+        }
+    }
+
     func testTextCodeWaitingCancelReturnsDirectlyToThePairingEntry() throws {
         let all = try sources()
         let source = try XCTUnwrap(all.first { $0.name == "DirectView.swift" }?.text)

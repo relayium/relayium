@@ -43,6 +43,8 @@ struct DirectTextSessionView: View {
             case .joining, .connecting:
                 ProgressView { Text(L10n.t(.textConnecting)) }
                 Button(L10n.t(.commonCancel)) { model.reset() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
             case let .verifying(sas):
                 verify(sas)
             case let .waitingAccept(sas):
@@ -97,7 +99,9 @@ struct DirectTextSessionView: View {
                     .font(.footnote.monospaced())
                     .textSelection(.enabled)
             }
-            Button(L10n.t(.commonEndSession)) { model.end() }
+            Button(L10n.t(.commonEndSession), role: .destructive) { model.end() }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
         }
     }
 
@@ -166,6 +170,8 @@ struct DirectTextSessionView: View {
             Button(L10n.t(.textClearHistory)) { model.clearHistory() }
                 .disabled(model.history.isEmpty)
             Button(L10n.t(.commonEndSession), role: .destructive) { model.end() }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
         }
     }
 

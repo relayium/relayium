@@ -30,6 +30,8 @@ struct DirectFileSessionView: View {
                 ProgressView { Text(L10n.t(.sessionConnecting)) }
                 fileList
                 Button(L10n.t(.commonCancel)) { model.cancel() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
             }
 
         case let .verifying(sas):
@@ -88,7 +90,9 @@ struct DirectFileSessionView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Button(L10n.t(.commonCancel)) { model.cancel() }
+            Button(L10n.t(.commonCancel), role: .destructive) { model.cancel() }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
         }
     }
 
