@@ -342,11 +342,11 @@ struct NearbyPane: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(L10n.t(.nearbySessionWith, [L10n.token(label)]))
                     .font(.headline)
+                    .accessibilityIdentifier("nearby-session-peer")
                 Text(L10n.t(.nearbySessionPeerDisclaimer))
                     .font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .accessibilityIdentifier("nearby-session-peer")
         }
     }
 

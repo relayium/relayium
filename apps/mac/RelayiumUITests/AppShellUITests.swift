@@ -20,10 +20,15 @@ import XCTest
 final class AppShellUITests: XCTestCase {
     private var app: XCUIApplication!
 
+    private var offlineLaunchArguments: [String] {
+        ["--relayium-ui-testing", "-AppleLanguages", "(en)",
+         "-AppleLocale", "en_US"]
+    }
+
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments = ["--relayium-ui-testing"]
+        app.launchArguments = offlineLaunchArguments
         app.launch()
     }
 
@@ -42,7 +47,19 @@ final class AppShellUITests: XCTestCase {
             "Open a link": "storedReceive",
             "Account": "account",
         ][title]!
-        return window.descendants(matching: .any)["sidebar-\(id)"].firstMatch
+        let stable = window.descendants(matching: .any)["sidebar-\(id)"].firstMatch
+        if stable.exists { return stable }
+
+        // macOS 15 does not propagate a combined List row's identifier into
+        // its AX tree. Resolve the visible row by its actual sidebar position,
+        // never by an OS-private table/outline container and never by the page
+        // heading with the same label in the detail half.
+        let dividingX = window.frame.midX
+        if let row = window.staticTexts.matching(identifier: title).allElementsBoundByIndex
+            .first(where: { $0.frame.midX < dividingX }) {
+            return row
+        }
+        return stable
     }
 
     /// The window opens at all. A `Window` scene that fails to build leaves a
@@ -168,8 +185,8 @@ final class AppShellUITests: XCTestCase {
     /// only after it is pressed may Create and Join return.
     func testTerminalTextSessionMustBeDismissedBeforeStartingAgain() {
         app.terminate()
-        app.launchArguments = ["--relayium-ui-testing",
-                               "--relayium-ui-testing-terminal-text"]
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-terminal-text"]
         app.launch()
 
         let window = app.windows.firstMatch
@@ -203,8 +220,8 @@ final class AppShellUITests: XCTestCase {
     /// the very surface that needed to expose Back to devices.
     func testTerminalNearbySessionNamesItsPeerAndReturnsToTheRoster() {
         app.terminate()
-        app.launchArguments = ["--relayium-ui-testing",
-                               "--relayium-ui-testing-terminal-nearby"]
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-terminal-nearby"]
         app.launch()
 
         let window = app.windows.firstMatch

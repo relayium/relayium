@@ -88,6 +88,10 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(ui.contains(
             "window.descendants(matching: .any)[\"sidebar-\\(id)\"].firstMatch"),
             "destination clicks do not use the stable sidebar task identity")
+        XCTAssertTrue(ui.contains("-AppleLanguages") && ui.contains("(en)"),
+                      "runtime copy assertions depend on the runner's preferred language")
+        XCTAssertTrue(ui.contains("$0.frame.midX < dividingX"),
+                      "macOS 15 has no spatial fallback when List drops row identifiers")
         XCTAssertFalse(ui.contains("window.descendants(matching: .any)[destination]"),
                        "a page heading can still make a sidebar click ambiguous")
         XCTAssertTrue(ui.contains(
