@@ -94,7 +94,7 @@ struct DirectView: View {
     /// model is involved at all, so it has no state case to live in, and it is
     /// cleared whenever a new attempt starts so it cannot outlive its cause.
     @State private var destinationError: String?
-    @State private var confirmingTextHistoryDone = false
+    @State private var confirmingLocalTextDone = false
 
     private var gate: AccountGate {
         AccountGate.from(session.state, bearer: session.bearerToken)
@@ -158,16 +158,16 @@ struct DirectView: View {
             selection.chooseFiles(result)
         }
         .confirmationDialog(
-            L10n.t(.textClearHistoryConfirmTitle),
-            isPresented: $confirmingTextHistoryDone,
+            L10n.t(.textDiscardLocalContentConfirmTitle),
+            isPresented: $confirmingLocalTextDone,
             titleVisibility: .visible
         ) {
             Button(L10n.t(.commonDone), role: .destructive) { text.reset() }
             Button(L10n.t(.commonCancel), role: .cancel) {
-                confirmingTextHistoryDone = false
+                confirmingLocalTextDone = false
             }
         } message: {
-            Text(L10n.t(.textClearHistoryConfirmBody))
+            Text(L10n.t(.textDiscardLocalContentConfirmBody))
         }
     }
 
@@ -687,10 +687,10 @@ struct DirectView: View {
     }
 
     private func finishTextOrConfirm() {
-        if text.history.isEmpty {
+        guard text.hasLocalContent else {
             text.reset()
-        } else {
-            confirmingTextHistoryDone = true
+            return
         }
+        confirmingLocalTextDone = true
     }
 }

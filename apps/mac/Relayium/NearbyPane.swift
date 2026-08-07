@@ -34,7 +34,7 @@ struct NearbyPane: View {
 
     @StateObject private var selection = SelectionStore()
     @State private var stagingError: String?
-    @State private var confirmingTextHistoryLeave = false
+    @State private var confirmingLocalTextLeave = false
 
     /// Whether either shared model is actively setting up or transferring.
     private var modelBusy: Bool { fileModel.isBusy || textModel.isBusy }
@@ -74,16 +74,16 @@ struct NearbyPane: View {
             if mode == .text, state == .idle { presence.release(.nearby) }
         }
         .confirmationDialog(
-            L10n.t(.textClearHistoryConfirmTitle),
-            isPresented: $confirmingTextHistoryLeave,
+            L10n.t(.textDiscardLocalContentConfirmTitle),
+            isPresented: $confirmingLocalTextLeave,
             titleVisibility: .visible
         ) {
             Button(L10n.t(.nearbyBackToDevices), role: .destructive) { leaveSession() }
             Button(L10n.t(.commonCancel), role: .cancel) {
-                confirmingTextHistoryLeave = false
+                confirmingLocalTextLeave = false
             }
         } message: {
-            Text(L10n.t(.textClearHistoryConfirmBody))
+            Text(L10n.t(.textDiscardLocalContentConfirmBody))
         }
     }
 
@@ -415,8 +415,8 @@ struct NearbyPane: View {
     }
 
     private func leaveOrConfirm() {
-        if mode == .text, !textModel.history.isEmpty {
-            confirmingTextHistoryLeave = true
+        if mode == .text, textModel.hasLocalContent {
+            confirmingLocalTextLeave = true
         } else {
             leaveSession()
         }

@@ -285,6 +285,8 @@
 "text.clearHistory.confirmBody" = "Ces messages existent uniquement sur cet appareil. Cette action est irréversible.";
 "text.discardDraft.confirmTitle" = "Supprimer le message non envoyé ?";
 "text.discardDraft.confirmBody" = "Mettre fin à la session supprime le texte que vous n’avez pas envoyé. Cette action est irréversible.";
+"text.discardLocalContent.confirmTitle" = "Supprimer le texte local ?";
+"text.discardLocalContent.confirmBody" = "Cette action supprime définitivement l’historique local des messages et tout brouillon non envoyé de cette session. Copiez d’abord ce que vous souhaitez conserver.";
 "text.localHistoryHeading" = "Historique local de la session";
 "text.localHistoryBody" = "Cet historique n’est pas enregistré et n’existe que dans la mémoire de l’app. Il disparaît si vous l’effacez, démarrez une autre session, quittez Relayium ou si le système ferme l’app.";
 "text.unsentDraftHeading" = "Brouillon non envoyé";

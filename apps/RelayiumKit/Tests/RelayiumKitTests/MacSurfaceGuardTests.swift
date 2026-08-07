@@ -239,14 +239,14 @@ final class MacSurfaceGuardTests: XCTestCase {
             "buttonStyle(.link)") ?? true)
     }
 
-    func testPairingDoneCannotDiscardTextHistoryWithoutConfirmation() throws {
+    func testPairingDoneCannotDiscardAnyLocalTextWithoutConfirmation() throws {
         let source = try source(named: "RealtimeTextPane.swift")
-        XCTAssertTrue(source.contains("@State private var confirmingTextHistoryDone = false"))
-        XCTAssertTrue(source.contains("if model.history.isEmpty"))
+        XCTAssertTrue(source.contains("@State private var confirmingLocalTextDone = false"))
+        XCTAssertTrue(source.contains("guard model.hasLocalContent else"))
         XCTAssertTrue(source.contains(
             "Button(L10n.t(.commonDone), role: .destructive) { model.reset() }"))
-        XCTAssertTrue(source.contains("L10n.t(.textClearHistoryConfirmTitle)"))
-        XCTAssertTrue(source.contains("L10n.t(.textClearHistoryConfirmBody)"))
+        XCTAssertTrue(source.contains("L10n.t(.textDiscardLocalContentConfirmTitle)"))
+        XCTAssertTrue(source.contains("L10n.t(.textDiscardLocalContentConfirmBody)"))
     }
 
     func testNearbyFileFailureKeepsTheManifestIdentityUntilBack() throws {
@@ -532,14 +532,14 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "a claimed owner made the terminal exit permanently unreachable")
     }
 
-    func testNearbyTextHistoryCannotBeDiscardedByAnUnconfirmedExit() throws {
+    func testNearbyLocalTextCannotBeDiscardedByAnUnconfirmedExit() throws {
         let source = try source(named: "NearbyPane.swift")
-        XCTAssertTrue(source.contains("@State private var confirmingTextHistoryLeave = false"))
-        XCTAssertTrue(source.contains("if mode == .text, !textModel.history.isEmpty"))
+        XCTAssertTrue(source.contains("@State private var confirmingLocalTextLeave = false"))
+        XCTAssertTrue(source.contains("if mode == .text, textModel.hasLocalContent"))
         XCTAssertTrue(source.contains(
             "Button(L10n.t(.nearbyBackToDevices), role: .destructive) { leaveSession() }"))
-        XCTAssertTrue(source.contains("L10n.t(.textClearHistoryConfirmTitle)"))
-        XCTAssertTrue(source.contains("L10n.t(.textClearHistoryConfirmBody)"))
+        XCTAssertTrue(source.contains("L10n.t(.textDiscardLocalContentConfirmTitle)"))
+        XCTAssertTrue(source.contains("L10n.t(.textDiscardLocalContentConfirmBody)"))
     }
 
     /// Copying ephemeral text changes the system clipboard, but previously gave
@@ -1293,8 +1293,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(app.contains("final class AppQuitGuard"))
         XCTAssertTrue(app.contains("var hasLocalText: (() -> Bool)?"))
         XCTAssertTrue(app.contains("quitGuard.hasLocalText = {"))
-        XCTAssertTrue(app.contains(
-            "!realtimeTextModel.history.isEmpty || !realtimeTextModel.draft.isEmpty"))
+        XCTAssertTrue(app.contains("realtimeTextModel.hasLocalContent"))
         XCTAssertTrue(app.contains("QuitPresentation.risk("))
         XCTAssertTrue(app.contains("QuitPresentation.prompt(for: risk)"))
         XCTAssertFalse(app.contains("L10n.t(.quitCancelAndQuit)"))

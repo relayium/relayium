@@ -152,6 +152,9 @@ public final class RealtimeTextSessionModel: ObservableObject {
         return false
     }
 
+    /// Content that a reset would permanently remove from this process.
+    public var hasLocalContent: Bool { !history.isEmpty || !draft.isEmpty }
+
     public func updateJoinCode(_ raw: String) {
         joinCode = normalizedPairingCode(raw)
     }

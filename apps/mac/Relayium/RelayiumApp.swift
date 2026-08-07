@@ -418,7 +418,7 @@ struct RelayiumApp: App {
                             || realtimeModel.isBusy || realtimeTextModel.isBusy
                     }
                     quitGuard.hasLocalText = {
-                        !realtimeTextModel.history.isEmpty || !realtimeTextModel.draft.isEmpty
+                        realtimeTextModel.hasLocalContent
                     }
                     quitGuard.cancelTransfers = {
                         uploadModel.cancel()

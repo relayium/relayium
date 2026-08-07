@@ -285,6 +285,8 @@
 "text.clearHistory.confirmBody" = "Diese Nachrichten sind nur auf diesem Gerät gespeichert. Das Löschen kann nicht rückgängig gemacht werden.";
 "text.discardDraft.confirmTitle" = "Nicht gesendete Nachricht verwerfen?";
 "text.discardDraft.confirmBody" = "Beim Beenden der Sitzung wird der noch nicht gesendete Text verworfen. Dies kann nicht rückgängig gemacht werden.";
+"text.discardLocalContent.confirmTitle" = "Lokalen Text verwerfen?";
+"text.discardLocalContent.confirmBody" = "Dadurch werden der lokale Nachrichtenverlauf und alle nicht gesendeten Entwürfe dieser Sitzung dauerhaft verworfen. Kopiere vorher alles, was du behalten möchtest.";
 "text.localHistoryHeading" = "Lokaler Sitzungsverlauf";
 "text.localHistoryBody" = "Dieser Verlauf wird nicht gespeichert und existiert nur im Arbeitsspeicher der App. Er verschwindet, wenn du ihn löschst, eine andere Sitzung startest, Relayium beendest oder das System die App beendet.";
 "text.unsentDraftHeading" = "Nicht gesendeter Entwurf";

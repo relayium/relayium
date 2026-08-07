@@ -15,6 +15,37 @@ import XCTest
 /// the machine the tests run on.
 final class LocalizedCopyTests: XCTestCase {
 
+    func testLocalTextDiscardConfirmationNamesEveryCostEverywhere() throws {
+        let permanent: [AppLanguage: String] = [
+            .en: "permanently", .zh: "永久", .ja: "完全", .ko: "영구",
+            .de: "dauerhaft", .fr: "définitivement", .ar: "نهائيًا",
+            .es: "permanentemente", .pt: "permanentemente",
+        ]
+        let history: [AppLanguage: String] = [
+            .en: "history", .zh: "消息历史", .ja: "メッセージ履歴", .ko: "메시지 기록",
+            .de: "Nachrichtenverlauf", .fr: "historique local", .ar: "سجل الرسائل",
+            .es: "historial local", .pt: "histórico local",
+        ]
+        let draft: [AppLanguage: String] = [
+            .en: "unsent draft", .zh: "未发送草稿", .ja: "未送信の下書き", .ko: "보내지 않은 초안",
+            .de: "nicht gesendeten Entwürfe", .fr: "brouillon non envoyé", .ar: "مسودة غير مرسلة",
+            .es: "borrador sin enviar", .pt: "rascunho não enviado",
+        ]
+        let copyFirst: [AppLanguage: String] = [
+            .en: "Copy", .zh: "先复制", .ja: "先にコピー", .ko: "먼저 복사",
+            .de: "Kopiere vorher", .fr: "Copiez d’abord", .ar: "انسخ أولًا",
+            .es: "Copia antes", .pt: "Copie primeiro",
+        ]
+        for language in AppLanguage.allCases {
+            let text = L10n.t(.textDiscardLocalContentConfirmBody, language: language)
+            for (label, table) in [("permanent loss", permanent), ("history", history),
+                                   ("draft", draft), ("copy-first recovery", copyFirst)] {
+                XCTAssertTrue(text.contains(try XCTUnwrap(table[language])),
+                              "discard local text [\(language.rawValue)] dropped \(label): \(text)")
+            }
+        }
+    }
+
     func testLocalTextHistoryNamesItsUnsavedProcessLifetimeEverywhere() throws {
         let notSaved: [AppLanguage: String] = [
             .en: "not saved", .zh: "不会保存", .ja: "保存されず", .ko: "저장되지",

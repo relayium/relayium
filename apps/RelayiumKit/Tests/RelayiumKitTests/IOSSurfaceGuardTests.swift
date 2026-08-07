@@ -2926,24 +2926,24 @@ final class IOSSurfaceGuardTests: XCTestCase {
                       "Back to devices is either exposed before async start or absent after terminal state")
     }
 
-    func testNearbyTextHistoryCannotBeDiscardedByAnUnconfirmedExit() throws {
+    func testNearbyLocalTextCannotBeDiscardedByAnUnconfirmedExit() throws {
         let source = try nearby().text
-        XCTAssertTrue(source.contains("@State private var confirmingTextHistoryLeave = false"))
-        XCTAssertTrue(source.contains("if modes.mode == .text, !text.history.isEmpty"))
+        XCTAssertTrue(source.contains("@State private var confirmingLocalTextLeave = false"))
+        XCTAssertTrue(source.contains("if modes.mode == .text, text.hasLocalContent"))
         XCTAssertTrue(source.contains(
             "Button(L10n.t(.nearbyBackToDevices), role: .destructive) { leaveSession() }"))
-        XCTAssertTrue(source.contains("L10n.t(.textClearHistoryConfirmTitle)"))
-        XCTAssertTrue(source.contains("L10n.t(.textClearHistoryConfirmBody)"))
+        XCTAssertTrue(source.contains("L10n.t(.textDiscardLocalContentConfirmTitle)"))
+        XCTAssertTrue(source.contains("L10n.t(.textDiscardLocalContentConfirmBody)"))
     }
 
-    func testPairingDoneCannotDiscardTextHistoryWithoutConfirmation() throws {
+    func testPairingDoneCannotDiscardAnyLocalTextWithoutConfirmation() throws {
         let source = try direct().text
-        XCTAssertTrue(source.contains("@State private var confirmingTextHistoryDone = false"))
-        XCTAssertTrue(source.contains("if text.history.isEmpty"))
+        XCTAssertTrue(source.contains("@State private var confirmingLocalTextDone = false"))
+        XCTAssertTrue(source.contains("guard text.hasLocalContent else"))
         XCTAssertTrue(source.contains(
             "Button(L10n.t(.commonDone), role: .destructive) { text.reset() }"))
-        XCTAssertTrue(source.contains("L10n.t(.textClearHistoryConfirmTitle)"))
-        XCTAssertTrue(source.contains("L10n.t(.textClearHistoryConfirmBody)"))
+        XCTAssertTrue(source.contains("L10n.t(.textDiscardLocalContentConfirmTitle)"))
+        XCTAssertTrue(source.contains("L10n.t(.textDiscardLocalContentConfirmBody)"))
     }
 
     /// **This slice adds no network capability, and the reason matters.**

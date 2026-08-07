@@ -718,4 +718,18 @@ final class RealtimeTextSessionModelTests: XCTestCase {
         XCTAssertTrue(model.draft.isEmpty)
         guard case .ended = model.state else { return XCTFail("got \(model.state)") }
     }
+
+    func testLocalContentIncludesEitherHistoryOrDraft() async {
+        let model = makeModel()
+        XCTAssertFalse(model.hasLocalContent)
+
+        model.draft = "unsent"
+        XCTAssertTrue(model.hasLocalContent)
+        model.draft = ""
+
+        await openInitiator(model)
+        connection.onText?("received", 29)
+        await settle()
+        XCTAssertTrue(model.hasLocalContent)
+    }
 }

@@ -23,7 +23,7 @@ struct RealtimeTextPane: View {
 
     @EnvironmentObject private var navigation: AppNavigationModel
     @EnvironmentObject private var presence: TransferPresence
-    @State private var confirmingTextHistoryDone = false
+    @State private var confirmingLocalTextDone = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -55,16 +55,16 @@ struct RealtimeTextPane: View {
             }
         }
         .confirmationDialog(
-            L10n.t(.textClearHistoryConfirmTitle),
-            isPresented: $confirmingTextHistoryDone,
+            L10n.t(.textDiscardLocalContentConfirmTitle),
+            isPresented: $confirmingLocalTextDone,
             titleVisibility: .visible
         ) {
             Button(L10n.t(.commonDone), role: .destructive) { model.reset() }
             Button(L10n.t(.commonCancel), role: .cancel) {
-                confirmingTextHistoryDone = false
+                confirmingLocalTextDone = false
             }
         } message: {
-            Text(L10n.t(.textClearHistoryConfirmBody))
+            Text(L10n.t(.textDiscardLocalContentConfirmBody))
         }
     }
 
@@ -169,10 +169,10 @@ struct RealtimeTextPane: View {
     }
 
     private func finishOrConfirm() {
-        if model.history.isEmpty {
+        guard model.hasLocalContent else {
             model.reset()
-        } else {
-            confirmingTextHistoryDone = true
+            return
         }
+        confirmingLocalTextDone = true
     }
 }

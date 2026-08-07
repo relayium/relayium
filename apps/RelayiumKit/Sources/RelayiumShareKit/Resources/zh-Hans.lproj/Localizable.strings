@@ -282,6 +282,8 @@
 "text.clearHistory.confirmBody" = "这些消息仅保存在此设备上。清除后无法恢复。";
 "text.discardDraft.confirmTitle" = "丢弃未发送的消息？";
 "text.discardDraft.confirmBody" = "结束会话会丢弃你尚未发送的文字，且无法恢复。";
+"text.discardLocalContent.confirmTitle" = "丢弃本地文字？";
+"text.discardLocalContent.confirmBody" = "这会永久丢弃此会话中的所有本地消息历史和未发送草稿。请先复制需要保留的内容。";
 "text.localHistoryHeading" = "本地会话历史";
 "text.localHistoryBody" = "这份历史不会保存，只存在于本应用的内存中；清除它、开始另一会话、退出 Relayium 或系统关闭应用后都会消失。";
 "text.unsentDraftHeading" = "未发送的草稿";
