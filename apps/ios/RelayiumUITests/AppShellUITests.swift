@@ -118,4 +118,30 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars["Send files"].waitForExistence(timeout: 10),
                       "the large-file route selected Send without rendering it")
     }
+
+    func testAccountSwitchesToACompleteInAppRegistrationForm() {
+        let accountTab = openTask("Account", title: "Account")
+        let create = app.buttons["New to Relayium? Create an account"]
+        XCTAssertTrue(create.waitForExistence(timeout: 10),
+                      "the sign-in form offers no registration path")
+        create.tap()
+
+        XCTAssertTrue(accountTab.isSelected, "registration navigated away from Account")
+        XCTAssertTrue(app.staticTexts["Create your Relayium account"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.textFields["Name (optional)"].exists)
+        XCTAssertTrue(app.textFields["Email"].exists)
+        XCTAssertTrue(app.secureTextFields["Password"].exists)
+        XCTAssertTrue(app.secureTextFields["Confirm password"].exists)
+        XCTAssertTrue(app.buttons["Create account"].exists)
+        XCTAssertFalse(app.buttons["Create account"].isEnabled,
+                       "an empty registration form can be submitted")
+
+        let back = app.buttons["Back to sign in"]
+        XCTAssertTrue(back.exists, "registration offers no way back to sign in")
+        back.tap()
+        XCTAssertTrue(accountTab.isSelected, "returning to sign in left Account")
+        XCTAssertTrue(app.staticTexts["Welcome back"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.secureTextFields["Confirm password"].exists,
+                       "returning to sign in left the registration fields behind")
+    }
 }
