@@ -1,7 +1,7 @@
 import SwiftUI
 import RelayiumAppKit
 
-/// What a finished transfer offers: reveal, and drag out.
+/// What a finished transfer offers: reveal, system share, and drag out.
 ///
 /// Shared by the realtime session view and the cloud download pane so "the
 /// transfer is over, here is what you got" looks and behaves the same however
@@ -36,9 +36,13 @@ struct ReceivedResultView: View {
                 Button(L10n.t(.receivedRevealInFinder)) {
                     NSWorkspace.shared.activateFileViewerSelecting(payload.revealURLs)
                 }
-                Text(L10n.t(.receivedDragHint))
-                    .font(.caption2).foregroundStyle(.secondary)
+                ShareLink(items: payload.dragURLs) {
+                    Label(L10n.t(.commonShare), systemImage: "square.and.arrow.up")
+                }
             }
+            .buttonStyle(.bordered)
+            Text(L10n.t(.receivedDragHint))
+                .font(.caption2).foregroundStyle(.secondary)
         }
     }
 

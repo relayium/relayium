@@ -180,6 +180,25 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "Open can replace a live download")
     }
 
+    /// Completion owns one result until Done; a second input must not compete
+    /// with it. macOS also needs a first-class system handoff for received files,
+    /// in addition to Finder reveal and drag-out.
+    func testStoredReceiveCompletesWithShareAndAnExplicitDoneBoundary() throws {
+        let pane = try source(named: "DownloadPane.swift")
+        XCTAssertTrue(pane.contains("if !model.isComplete"),
+                      "the old link field remains live over a completed result")
+        let done = try XCTUnwrap(pane.components(separatedBy: "case .done").dropFirst().first)
+            .components(separatedBy: "case .failed").first ?? ""
+        XCTAssertTrue(done.contains("Button(L10n.t(.commonDone)) { model.dismissResult() }"))
+        XCTAssertTrue(done.contains(".buttonStyle(.bordered)"))
+
+        let result = try source(named: "ReceivedResultView.swift")
+        XCTAssertTrue(result.contains("ShareLink(items: payload.dragURLs)"),
+                      "received files have no macOS system Share action")
+        XCTAssertFalse(result.contains("ShareLink(items: payload.revealURLs)"),
+                       "sharing must preserve the container semantics used by drag-out")
+    }
+
     /// A generated stored link is a handoff result, not merely selectable text.
     /// macOS must provide the platform share sheet like iOS does, acknowledge a
     /// deliberate copy, and present the state-changing next-task boundary as a

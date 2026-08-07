@@ -160,6 +160,14 @@ public final class CloudDownloadModel: ObservableObject {
 
     public var isBusy: Bool { Self.isBusy(state) }
 
+    /// A completed receive still owns the result surface until the user says
+    /// they are finished with it. Views use this to keep a second link field
+    /// from competing with Reveal/Share/Done.
+    public var isComplete: Bool {
+        if case .done = state { return true }
+        return false
+    }
+
     /// The same answer as a function of the state alone.
     ///
     /// Needed because `$state` publishes in `willSet`: a subscriber holds the
@@ -372,5 +380,16 @@ public final class CloudDownloadModel: ObservableObject {
         // Stopping is a decision, not a pause: nothing may stay armed behind it.
         recovery = .none
         state = .idle
+    }
+
+    /// Dismiss a completed result without touching the files already written.
+    ///
+    /// Deliberately distinct from Cancel: cancelling live work keeps the link
+    /// available for correction or another attempt, while Done closes the old
+    /// task and returns both native surfaces to a blank new-receive entry point.
+    public func dismissResult() {
+        guard isComplete else { return }
+        linkText = ""
+        cancel()
     }
 }

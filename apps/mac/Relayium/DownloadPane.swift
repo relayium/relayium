@@ -19,18 +19,20 @@ struct DownloadPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                TextField(L10n.t(.downloadLinkPlaceholder), text: $model.linkText)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit { model.resolve() }
-                    .disabled(model.isBusy)
-                // Empty means the missing prerequisite is the field beside it,
-                // and supplying it is one paste away. Busy is different: this
-                // model already owns a writer and Cancel handle, so another
-                // Open must wait rather than replace them.
-                Button(L10n.t(.downloadOpen)) { model.resolve() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(model.linkText.isEmpty || model.isBusy)
+            if !model.isComplete {
+                HStack {
+                    TextField(L10n.t(.downloadLinkPlaceholder), text: $model.linkText)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit { model.resolve() }
+                        .disabled(model.isBusy)
+                    // Empty means the missing prerequisite is the field beside it,
+                    // and supplying it is one paste away. Busy is different: this
+                    // model already owns a writer and Cancel handle, so another
+                    // Open must wait rather than replace them.
+                    Button(L10n.t(.downloadOpen)) { model.resolve() }
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(model.linkText.isEmpty || model.isBusy)
+                }
             }
             switch model.state {
             case .idle:
@@ -82,6 +84,8 @@ struct DownloadPane: View {
                     ReceivedResultView(payload: payload)
                 }
                 PendingFileList(sessionFiles: model.sessionFiles)
+                Button(L10n.t(.commonDone)) { model.dismissResult() }
+                    .buttonStyle(.bordered)
             case .failed(let message):
                 InlineMessage(.failure, message)
                 PendingFileList(sessionFiles: model.sessionFiles)

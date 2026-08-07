@@ -30,7 +30,9 @@ struct ReceiveView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    linkField
+                    if !model.isComplete {
+                        linkField
+                    }
                     if let destinationError {
                         failure(destinationError)
                     }
@@ -227,6 +229,14 @@ struct ReceiveView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.large)
             }
+            Button {
+                destinationError = nil
+                model.dismissResult()
+            } label: {
+                Text(L10n.t(.commonDone)).frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
         }
     }
 

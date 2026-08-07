@@ -354,6 +354,48 @@ final class CloudDownloadModelContainerTests: XCTestCase {
         XCTAssertEqual(m.received?.dragURLs, [container])
     }
 
+    /// Done closes only the UI task. It must not be callable while the user is
+    /// still deciding on a resolved manifest, and after completion it must
+    /// clear the old link/result without deleting the files already delivered.
+    func testDismissingACompletedResultPreservesTheDeliveredFiles() async throws {
+        let key = [UInt8](repeating: 6, count: 32)
+        let m = try makeModel(files: [ManifestFile(name: "kept.txt", size: 3)],
+                              key: key,
+                              contents: ["kept.txt": [7, 8, 9]])
+        let link = "https://relayium.com/d/keep123#k=\(encodeStoreKey(key))"
+        m.linkText = link
+        m.resolve()
+        _ = await waitFor("the manifest to resolve",
+                          { if case .ready = m.state { return true }; return false })
+
+        m.dismissResult()
+        guard case .ready = m.state else {
+            return XCTFail("Done dismissed a result that did not exist: \(m.state)")
+        }
+        XCTAssertEqual(m.linkText, link)
+        XCTAssertFalse(m.isComplete)
+
+        let parent = try tempDir()
+        m.download(into: parent)
+        _ = await waitFor("the download to finish",
+                          { if case .done = m.state { return true }; return false })
+        guard case .done(let urls) = m.state else { return XCTFail("got \(m.state)") }
+        let delivered = try XCTUnwrap(urls.first)
+        XCTAssertTrue(m.isComplete)
+        XCTAssertEqual(try Data(contentsOf: delivered), Data([7, 8, 9]))
+
+        m.dismissResult()
+
+        XCTAssertEqual(m.state, .idle)
+        XCTAssertEqual(m.linkText, "")
+        XCTAssertFalse(m.isComplete)
+        XCTAssertNil(m.received)
+        XCTAssertNil(m.receivedContainer)
+        XCTAssertTrue(m.sessionFiles.isEmpty)
+        XCTAssertEqual(try Data(contentsOf: delivered), Data([7, 8, 9]),
+                       "Done deleted a file that had already been handed to the user")
+    }
+
     // MARK: - the same link received twice into a FIXED destination
     //
     // macOS asks for a folder every time, so receiving the same link twice

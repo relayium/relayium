@@ -382,6 +382,22 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "the first-run receive state must not be a blank remainder")
     }
 
+    /// A finished stored receive remains one inspectable/shareable task until
+    /// Done. The old link field must not invite a replacement over that result,
+    /// and Done must go through the shared model boundary rather than mutating
+    /// view state into a platform-specific lifecycle.
+    func testStoredReceiveCompletionRequiresDoneBeforeAnotherLink() throws {
+        let receive = try XCTUnwrap(try sources().first { $0.name == "ReceiveView.swift" })
+        XCTAssertTrue(receive.text.contains("if !model.isComplete"),
+                      "the old link field remains live over a completed result")
+        let doneStart = try XCTUnwrap(receive.text.range(of: "private func done"))
+        let failureStart = try XCTUnwrap(receive.text.range(of: "private func failure"))
+        let done = receive.text[doneStart.lowerBound..<failureStart.lowerBound]
+        XCTAssertTrue(done.contains("L10n.t(.commonDone)"))
+        XCTAssertTrue(done.contains("model.dismissResult()"))
+        XCTAssertTrue(done.contains("ShareLink(items: payload.dragURLs)"))
+    }
+
     func testRealtimeFileDetailsSurviveTransferAndCompletion() throws {
         let view = try XCTUnwrap(try sources().first { $0.name == "DirectFileSessionView.swift" })
         XCTAssertGreaterThanOrEqual(view.text.components(separatedBy: "fileList").count - 1, 3,
