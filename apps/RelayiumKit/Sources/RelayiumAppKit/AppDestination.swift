@@ -26,7 +26,7 @@ public enum AppRouting {
     public static func destination(for link: AppDeepLink) -> AppDestination {
         switch link {
         case .download: return .storedReceive
-        case .realtime: return .pairingCode
+        case .realtime, .realtimeWithMode: return .pairingCode
         }
     }
 

@@ -328,6 +328,13 @@ final class MacSurfaceGuardTests: XCTestCase {
         }
     }
 
+    func testPairingHandoffPreservesTheModeThatCreatedTheCode() throws {
+        XCTAssertTrue(try source(named: "DirectPane.swift").contains(
+            "productionPairingJoinURL(code: code, mode: .files)"))
+        XCTAssertTrue(try source(named: "RealtimeTextPane.swift").contains(
+            "productionPairingJoinURL(code: code, mode: .text)"))
+    }
+
     /// iOS already locks both controls while resolving/downloading. macOS must
     /// not leave a second Open path live over a task whose writer and Cancel
     /// handle the shared model still owns.
@@ -981,7 +988,9 @@ final class MacSurfaceGuardTests: XCTestCase {
         // would never see the download the user is actually running — is a
         // failure rather than something a reviewer has to notice.
         for wiring in ["navigation: routing, download: downloads,",
-                       "realtime: files, realtimeText: text)",
+                       "realtime: files, realtimeText: text,",
+                       "selectRealtimeMode: { mode in presenting.mode = mode }",
+                       "_presence = StateObject(wrappedValue: presenting)",
                        "_navigation = StateObject(wrappedValue: routing)",
                        "_downloadModel = StateObject(wrappedValue: downloads)",
                        "_realtimeModel = StateObject(wrappedValue: files)",

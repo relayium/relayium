@@ -63,6 +63,10 @@ final class AppDeepLinkCoordinatorTests: XCTestCase {
         URL(string: "https://relayium.com/cross-network#c=\(code)")!
     }
 
+    private func typedRealtimeURL(_ code: String, mode: TransferMode) -> URL {
+        productionPairingJoinURL(code: code, mode: mode)!
+    }
+
     private var codelessRealtimeURL: URL {
         URL(string: "https://relayium.com/cross-network")!
     }
@@ -113,6 +117,7 @@ final class AppDeepLinkCoordinatorTests: XCTestCase {
         let download: CloudDownloadModel
         let realtime: RealtimeSessionModel
         let realtimeText: RealtimeTextSessionModel
+        let modes: DirectModeSelection
         let coordinator: AppDeepLinkCoordinator
     }
 
@@ -121,11 +126,15 @@ final class AppDeepLinkCoordinatorTests: XCTestCase {
         let download = makeDownload(status: downloadStatus)
         let realtime = makeRealtime()
         let realtimeText = makeRealtimeText()
+        let modes = DirectModeSelection()
         return Rig(navigation: navigation, download: download,
-                   realtime: realtime, realtimeText: realtimeText,
+                   realtime: realtime, realtimeText: realtimeText, modes: modes,
                    coordinator: AppDeepLinkCoordinator(
                     navigation: navigation, download: download,
-                    realtime: realtime, realtimeText: realtimeText))
+                    realtime: realtime, realtimeText: realtimeText,
+                    selectRealtimeMode: { mode in
+                        modes.select(mode, file: realtime.state, text: realtimeText.state)
+                    }))
     }
 
     private func link(_ url: URL) -> AppDeepLink {
@@ -236,6 +245,24 @@ final class AppDeepLinkCoordinatorTests: XCTestCase {
         XCTAssertEqual(rig.realtimeText.state, .idle)
         XCTAssertFalse(rig.realtime.isBusy)
         XCTAssertFalse(rig.realtimeText.isBusy)
+    }
+
+    /// A new first-party handoff carries the sender's choice, so opening a text
+    /// QR/link must not strand the receiver on Files. It still only prefills:
+    /// the receiving device owns the final Join tap.
+    func testATypedRealtimeLinkSelectsItsModeAndPrefillsWithoutJoining() {
+        let rig = makeRig()
+        XCTAssertEqual(rig.modes.mode, .files)
+
+        rig.coordinator.deliver(link(typedRealtimeURL("483920", mode: .text)))
+
+        XCTAssertEqual(rig.navigation.selection, .pairingCode)
+        XCTAssertEqual(rig.navigation.selectionWrites, 1)
+        XCTAssertEqual(rig.modes.mode, .text)
+        XCTAssertEqual(rig.realtime.joinCode, "483920")
+        XCTAssertEqual(rig.realtimeText.joinCode, "483920")
+        XCTAssertEqual(rig.realtime.state, .idle)
+        XCTAssertEqual(rig.realtimeText.state, .idle)
     }
 
     /// A code is a string, not an integer. `004291` and `000000` are ordinary
@@ -428,9 +455,35 @@ final class AppDeepLinkCoordinatorTests: XCTestCase {
         XCTAssertEqual(rig.realtimeText.joinCode, "777777")
     }
 
+    /// Mode and code are one product intent. While either direct model owns a
+    /// session, neither half may land early; after it ends they apply together.
+    func testATypedLinkDefersItsModeAndCodeTogetherBehindALiveSession() async {
+        let rig = makeRig()
+        await rig.realtime.mintCode(token: "t")
+        rig.realtime.updateJoinCode("111111")
+        rig.realtimeText.updateJoinCode("111111")
+
+        let typed = link(typedRealtimeURL("483920", mode: .text))
+        rig.coordinator.deliver(typed)
+
+        XCTAssertEqual(rig.modes.mode, .files, "the mode moved before the live session ended")
+        XCTAssertEqual(rig.realtime.joinCode, "111111")
+        XCTAssertEqual(rig.realtimeText.joinCode, "111111")
+        XCTAssertEqual(rig.coordinator.waiting, typed)
+
+        rig.realtime.cancel()
+        await settleMainActor()
+
+        XCTAssertEqual(rig.modes.mode, .text)
+        XCTAssertEqual(rig.realtime.joinCode, "483920")
+        XCTAssertEqual(rig.realtimeText.joinCode, "483920")
+        XCTAssertNil(rig.coordinator.waiting)
+        XCTAssertEqual(rig.navigation.selectionWrites, 1)
+    }
+
     /// The same claim from the other side: the TEXT half is mid-session and the
-    /// file half is idle. Both directions matter because a link carries no hint
-    /// of which one the user is in.
+    /// file half is idle. Both directions matter because a legacy link carries
+    /// no hint of which one the user is in.
     func testALinkDoesNotReplaceALiveTextSession() async {
         let rig = makeRig()
         await rig.realtimeText.mintCode(token: "t")

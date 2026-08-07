@@ -61,6 +61,30 @@ final class AppDeepLinkTests: XCTestCase {
         XCTAssertEqual(parseAppDeepLink(url), .realtime(code: "004291"))
     }
 
+    func testTypedJoinLinksKeepTheCodeInTheFragmentAndRoundTripTheMode() throws {
+        let file = try XCTUnwrap(pairingJoinURL(
+            baseURL: URL(string: "https://relayium.com")!, code: "004291", mode: .files))
+        XCTAssertEqual(file.absoluteString,
+                       "https://relayium.com/cross-network?mode=file#c=004291")
+        XCTAssertEqual(file.query, "mode=file")
+        XCTAssertEqual(file.fragment, "c=004291")
+        XCTAssertEqual(parseAppDeepLink(file),
+                       .realtimeWithMode(code: "004291", mode: .files))
+
+        let text = try XCTUnwrap(productionPairingJoinURL(code: "483920", mode: .text))
+        XCTAssertEqual(text.absoluteString,
+                       "https://relayium.com/cross-network?mode=text#c=483920")
+        XCTAssertEqual(parseAppDeepLink(text),
+                       .realtimeWithMode(code: "483920", mode: .text))
+    }
+
+    func testInvalidModeHintsDegradeToTheLegacyCodeInsteadOfBreakingIt() {
+        for query in ["mode=video", "mode=file&mode=text", "other=text"] {
+            let url = URL(string: "https://relayium.com/cross-network?\(query)#c=483920")!
+            XCTAssertEqual(parseAppDeepLink(url), .realtime(code: "483920"), query)
+        }
+    }
+
     func testRejectsUntrustedOrMalformedHandoffs() {
         let rejected = [
             "http://relayium.com/d/a#k=K",

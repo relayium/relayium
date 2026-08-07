@@ -226,7 +226,8 @@ struct DirectView: View {
             // visible while the sender hands off the code. This is their last
             // chance to verify every file and size before a peer joins.
             PendingFileList(sessionFiles: file.sessionFiles)
-            showing(code: code, expiresAt: expiresAt, heading: L10n.t(.directGiveCode)) {
+            showing(code: code, expiresAt: expiresAt, mode: .files,
+                    heading: L10n.t(.directGiveCode)) {
                 file.cancel()
             }
         case .joining, .connecting, .verifying, .transferring, .completed:
@@ -300,7 +301,8 @@ struct DirectView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.large)
         case let .showingCode(code, expiresAt):
-            showing(code: code, expiresAt: expiresAt, heading: L10n.t(.textGiveCode)) {
+            showing(code: code, expiresAt: expiresAt, mode: .text,
+                    heading: L10n.t(.textGiveCode)) {
                 text.reset()
             }
         case .joining, .connecting, .verifying, .waitingAccept, .incomingRequest, .open:
@@ -421,12 +423,12 @@ struct DirectView: View {
     }
 
     /// The code to read onto the other device, and the wait.
-    private func showing(code: String, expiresAt: Int64, heading: String,
+    private func showing(code: String, expiresAt: Int64, mode: TransferMode, heading: String,
                          cancel: @escaping () -> Void) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(heading).font(.headline)
             PairingCodeText(code: code, style: .pairing)
-            if let joinURL = productionPairingJoinURL(code: code) {
+            if let joinURL = productionPairingJoinURL(code: code, mode: mode) {
                 PairingJoinLinkView(url: joinURL)
             }
             Text(L10n.t(.commonExpires, [

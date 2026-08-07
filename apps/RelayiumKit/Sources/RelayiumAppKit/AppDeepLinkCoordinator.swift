@@ -66,6 +66,7 @@ public final class AppDeepLinkCoordinator: ObservableObject {
     private let download: CloudDownloadModel
     private let realtime: RealtimeSessionModel
     private let realtimeText: RealtimeTextSessionModel
+    private let selectRealtimeMode: @MainActor (TransferMode) -> Void
     /// Live only while a link is waiting, and — see `watchForIdle` — subscribed
     /// to the busy BOUNDARIES rather than to every publish. Both halves matter:
     /// this way a waiting link costs a handful of wake-ups for the whole
@@ -76,11 +77,13 @@ public final class AppDeepLinkCoordinator: ObservableObject {
     public init(navigation: AppNavigationModel,
                 download: CloudDownloadModel,
                 realtime: RealtimeSessionModel,
-                realtimeText: RealtimeTextSessionModel) {
+                realtimeText: RealtimeTextSessionModel,
+                selectRealtimeMode: @escaping @MainActor (TransferMode) -> Void) {
         self.navigation = navigation
         self.download = download
         self.realtime = realtime
         self.realtimeText = realtimeText
+        self.selectRealtimeMode = selectRealtimeMode
     }
 
     /// One link from the OS: navigate now, write to the models now or later.
@@ -145,10 +148,12 @@ public final class AppDeepLinkCoordinator: ObservableObject {
         case let .realtime(code):
             guard code != nil else { return true }
             // BOTH, even though only one of them will end up carrying the
-            // session. The URL does not say whether the sender chose files or
-            // text, so the two fields have to stay in step — and prefilling the
+            // session. A legacy URL does not say whether the sender chose files
+            // or text, so the two fields have to stay in step — and prefilling the
             // idle half while the other half is mid-session would leave the two
             // pickers disagreeing about which code this device is joining.
+            return !realtime.isBusy && !realtimeText.isBusy
+        case .realtimeWithMode:
             return !realtime.isBusy && !realtimeText.isBusy
         }
     }
@@ -169,6 +174,10 @@ public final class AppDeepLinkCoordinator: ObservableObject {
                 realtime.updateJoinCode(code)
                 realtimeText.updateJoinCode(code)
             }
+        case let .realtimeWithMode(code, mode):
+            selectRealtimeMode(mode)
+            realtime.updateJoinCode(code)
+            realtimeText.updateJoinCode(code)
         }
     }
 

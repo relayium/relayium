@@ -3,6 +3,7 @@ import Foundation
 public enum AppDeepLink: Equatable {
     case download(URL)
     case realtime(code: String?)
+    case realtimeWithMode(code: String, mode: TransferMode)
 }
 
 /// Must stay byte-identical to `signal.CodeAlphabet` (Go) and `CODE_ALPHABET`
@@ -31,13 +32,17 @@ public func isCompletePairingCode(_ raw: String) -> Bool {
 /// Keeping this beside the parser makes the round trip testable and prevents
 /// each native surface from inventing its own path or leaking the code into a
 /// query parameter. The fragment is deliberate: it is not sent to the server.
-public func pairingJoinURL(baseURL: URL, code: String) -> URL? {
+/// A mode hint may sit in the query because it is neither secret nor authority;
+/// receivers still validate it and require an explicit Join.
+public func pairingJoinURL(baseURL: URL, code: String, mode: TransferMode? = nil) -> URL? {
     guard isCompletePairingCode(code),
           var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
         return nil
     }
     components.path = "/cross-network"
-    components.query = nil
+    components.queryItems = mode.map {
+        [URLQueryItem(name: "mode", value: $0 == .files ? "file" : "text")]
+    }
     components.percentEncodedFragment = "c=\(code)"
     return components.url
 }
@@ -46,8 +51,8 @@ public func pairingJoinURL(baseURL: URL, code: String) -> URL? {
 ///
 /// Keeping the production origin out of the view layer leaves URL policy in
 /// one shared, testable place.
-public func productionPairingJoinURL(code: String) -> URL? {
-    pairingJoinURL(baseURL: AppEnvironment.productionBaseURL, code: code)
+public func productionPairingJoinURL(code: String, mode: TransferMode? = nil) -> URL? {
+    pairingJoinURL(baseURL: AppEnvironment.productionBaseURL, code: code, mode: mode)
 }
 
 /// Parse only links that the production Associated Domains entitlement can
@@ -78,6 +83,15 @@ public func parseAppDeepLink(_ url: URL) -> AppDeepLink? {
           let raw = items[0].value,
           isCompletePairingCode(raw) else {
         return nil
+    }
+    let modeItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+        .filter { $0.name == "mode" } ?? []
+    if modeItems.count == 1, let value = modeItems[0].value {
+        switch value {
+        case "file": return .realtimeWithMode(code: raw, mode: .files)
+        case "text": return .realtimeWithMode(code: raw, mode: .text)
+        default: break
+        }
     }
     return .realtime(code: raw)
 }

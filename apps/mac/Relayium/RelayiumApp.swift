@@ -205,7 +205,7 @@ struct RelayiumApp: App {
     // window's view tree being torn down and rebuilt. It is not — and cannot be
     // — a defence against a second window; the scene being a unique `Window` is
     // what makes that impossible.
-    @StateObject private var presence = TransferPresence()
+    @StateObject private var presence: TransferPresence
     /// Whether this Mac starts Relayium at login. App-scoped because it is the
     /// settings scene's, and that scene is opened and closed independently of
     /// the main window — a view-scoped object would re-read the system on every
@@ -299,6 +299,8 @@ struct RelayiumApp: App {
             fileModel: files,
             textModel: text,
             receiveModel: receive))
+        let presenting = TransferPresence()
+        _presence = StateObject(wrappedValue: presenting)
         let routing = AppNavigationModel()
         _navigation = StateObject(wrappedValue: routing)
         // Last, because it is built from four objects above and owns none of
@@ -307,7 +309,8 @@ struct RelayiumApp: App {
         // which is why no view on this platform repeats that decision.
         _deepLinkRouting = StateObject(wrappedValue: AppDeepLinkCoordinator(
             navigation: routing, download: downloads,
-            realtime: files, realtimeText: text))
+            realtime: files, realtimeText: text,
+            selectRealtimeMode: { mode in presenting.mode = mode }))
         // Built from the SAME navigation model, so an opened file and a tapped
         // link cannot disagree about where the user is. It takes nothing else:
         // staging a selection touches no transfer model, which is why this one
