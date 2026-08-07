@@ -463,8 +463,10 @@ final class NearbyReceiveTests: XCTestCase {
     /// an unsolicited offer from replacing what the user just started.
     func testAppAdmissionRefusalRejectsBeforeBuildingAResponder() async {
         var admittedKinds: [NearbyReceiveKind] = []
-        receive.shouldAcceptSession = { kind in
+        var admittedPeerIDs: [String] = []
+        receive.shouldAcceptSession = { kind, peerID in
             admittedKinds.append(kind)
+            admittedPeerIDs.append(peerID)
             return false
         }
         channel.sent.removeAll()
@@ -473,6 +475,8 @@ final class NearbyReceiveTests: XCTestCase {
         await settle()
 
         XCTAssertEqual(admittedKinds, [.text])
+        XCTAssertEqual(admittedPeerIDs, ["racing-peer"],
+                       "the app cannot preserve who the admitted session is with")
         XCTAssertEqual(busyReplies().map(\.to), ["racing-peer"])
         XCTAssertTrue(inbound.peerIds.isEmpty, "a refused offer still built a responder")
         XCTAssertEqual(fileModel.state, .idle)

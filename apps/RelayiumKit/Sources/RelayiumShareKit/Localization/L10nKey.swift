@@ -598,6 +598,9 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case nearbyA11yChooseDevice = "nearby.a11yChooseDevice"
     /// %@ — the peer's own device name, never translated.
     case nearbySendTo = "nearby.sendTo"
+    /// %@ — the snapshotted peer label shown throughout an admitted session.
+    case nearbySessionWith = "nearby.sessionWith"
+    case nearbySessionPeerDisclaimer = "nearby.sessionPeerDisclaimer"
     /// %@ — the selection summary sentence.
     case nearbySelectionSendHint = "nearby.selectionSendHint"
     case nearbyAddFilesHint = "nearby.addFilesHint"

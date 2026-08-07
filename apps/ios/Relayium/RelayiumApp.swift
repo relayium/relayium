@@ -265,8 +265,9 @@ struct RelayiumApp: App {
         // a wrong surface is locked. One shared call rather than three writes
         // here, so a later edit to this file cannot reorder them; `AppRouting`
         // owns what it does and `AppRoutingTests` drives it.
-        receive.shouldAcceptSession = { kind in
-            AppRouting.claimIncoming(kind, presence: presenting,
+        receive.shouldAcceptSession = { kind, peerID in
+            AppRouting.claimIncoming(kind, peerLabel: nearby.label(forPeerID: peerID),
+                                     presence: presenting,
                                      modes: modes, navigation: routing)
         }
         _nearbyReceive = StateObject(wrappedValue: receive)

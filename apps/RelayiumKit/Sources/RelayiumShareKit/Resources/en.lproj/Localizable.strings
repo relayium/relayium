@@ -314,6 +314,8 @@
 "nearby.a11yDevices" = "Nearby devices";
 "nearby.a11yChooseDevice" = "Choose this device to send to.";
 "nearby.sendTo" = "Send to %@";
+"nearby.sessionWith" = "Session with %@";
+"nearby.sessionPeerDisclaimer" = "This name is provided by the other device and is not verified identity.";
 "nearby.selectionSendHint" = "%@. Send it straight to that device.";
 "nearby.addFilesHint" = "Add files or folders above, then send them straight to that device.";
 "nearby.textIntent" = "Opens an end-to-end encrypted message session. Nothing is stored on Relayium.";

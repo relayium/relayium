@@ -286,6 +286,7 @@ struct NearbyPane: View {
     @ViewBuilder
     private var session: some View {
         VStack(alignment: .leading, spacing: 10) {
+            sessionPeer
             switch mode {
             case .files:
                 if case let .failed(message) = fileModel.state {
@@ -309,6 +310,19 @@ struct NearbyPane: View {
                     Text(L10n.t(.nearbyLeavingClearsHistory))
                         .font(.caption2).foregroundStyle(.secondary)
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var sessionPeer: some View {
+        if let label = presence.sessionPeerLabel {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(L10n.t(.nearbySessionWith, [L10n.token(label)]))
+                    .font(.headline)
+                Text(L10n.t(.nearbySessionPeerDisclaimer))
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -343,7 +357,7 @@ struct NearbyPane: View {
         // presented here. The claim can only be refused while another
         // destination owns a session. A concurrent inbound offer can win after
         // the last frame rendered, so refusal is enforced here, not by visibility.
-        guard presence.claim(.nearby, mode: mode) else { return }
+        guard presence.claim(.nearby, mode: mode, peerLabel: device.label) else { return }
         fileModel.stageSend(sources: staged.sources, metas: staged.metas)
         Task { await fileModel.connectNearby(peerId: device.id, role: .initiator) }
     }
@@ -354,7 +368,7 @@ struct NearbyPane: View {
             return
         }
         stagingError = nil
-        guard presence.claim(.nearby, mode: mode) else { return }
+        guard presence.claim(.nearby, mode: mode, peerLabel: device.label) else { return }
         Task { await textModel.connectNearby(peerId: device.id, role: .initiator) }
     }
 

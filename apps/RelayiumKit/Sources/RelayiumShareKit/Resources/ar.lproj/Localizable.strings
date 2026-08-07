@@ -328,6 +328,8 @@
 "nearby.a11yDevices" = "الأجهزة القريبة";
 "nearby.a11yChooseDevice" = "اختيار هذا الجهاز للإرسال إليه.";
 "nearby.sendTo" = "إرسال إلى %@";
+"nearby.sessionWith" = "جلسة مع %@";
+"nearby.sessionPeerDisclaimer" = "هذا الاسم مقدّم من الجهاز الآخر وليس هوية موثّقة.";
 "nearby.selectionSendHint" = "%@. أرسِلها مباشرة إلى ذلك الجهاز.";
 "nearby.addFilesHint" = "أضف ملفات أو مجلدات في الأعلى، ثم أرسِلها مباشرة إلى ذلك الجهاز.";
 "nearby.textIntent" = "يفتح جلسة رسائل مُعمّاة من الطرف إلى الطرف. لا يُخزَّن شيء على Relayium.";

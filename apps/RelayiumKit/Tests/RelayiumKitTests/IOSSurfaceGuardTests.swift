@@ -2827,6 +2827,14 @@ final class IOSSurfaceGuardTests: XCTestCase {
         }
     }
 
+    func testNearbySessionKeepsItsPeerVisibleAfterTheRosterDisappears() throws {
+        let view = try nearby()
+        XCTAssertTrue(view.text.contains("presence.sessionPeerLabel"))
+        XCTAssertTrue(view.text.contains("L10n.t(.nearbySessionWith"))
+        XCTAssertTrue(view.text.contains("L10n.t(.nearbySessionPeerDisclaimer)"),
+                      "a peer-supplied label must not be presented as verified identity")
+    }
+
     /// **This slice adds no network capability, and the reason matters.**
     ///
     /// `LanDiscoveryModel` is not Bonjour and does not scan: it joins the hub's

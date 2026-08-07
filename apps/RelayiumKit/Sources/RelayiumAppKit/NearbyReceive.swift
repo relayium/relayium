@@ -114,10 +114,12 @@ public final class NearbyReceiveModel: ObservableObject, NearbyRoomObserver {
     /// action can claim its presentation synchronously and launch its async
     /// connect on the next actor turn. During that narrow gap both models are
     /// still idle. This callback lets the app reject an unsolicited offer that
-    /// would otherwise overwrite the already-claimed attempt. `nil` preserves
-    /// the headless/macOS behavior, where no iOS presentation arbitration is
+    /// would otherwise overwrite the already-claimed attempt. The peer id is
+    /// passed only so the app can snapshot the already-sanitized roster label;
+    /// it remains the transport's routing key and is never treated as identity.
+    /// `nil` preserves headless behavior where no presentation arbitration is
     /// installed.
-    public var shouldAcceptSession: ((NearbyReceiveKind) -> Bool)?
+    public var shouldAcceptSession: ((NearbyReceiveKind, String) -> Bool)?
 
     private var cancellables: Set<AnyCancellable> = []
 
@@ -253,7 +255,7 @@ public final class NearbyReceiveModel: ObservableObject, NearbyRoomObserver {
         // responder is built. A refusal must be visible to the initiator as a
         // tagged busy reply, not as a connection timeout, and must release the
         // synchronous reservation so later offers are still serviceable.
-        guard shouldAcceptSession?(kind) ?? true else {
+        guard shouldAcceptSession?(kind, peerId) ?? true else {
             gate.release()
             signaling.sendSignal(to: peerId,
                                  data: taggedSignal(busySignal(), generation: generation))

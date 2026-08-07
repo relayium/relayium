@@ -439,6 +439,7 @@ struct NearbyView: View {
     private var session: some View {
         VStack(alignment: .leading, spacing: 16) {
             if let notice = foreground.interruption { interruption(notice) }
+            sessionPeer
             switch modes.mode {
             case .files:
                 if case let .failed(message) = file.state { failureLine(message) }
@@ -462,6 +463,20 @@ struct NearbyView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var sessionPeer: some View {
+        if let label = presence.sessionPeerLabel {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L10n.t(.nearbySessionWith, [L10n.token(label)]))
+                    .font(.headline)
+                Text(L10n.t(.nearbySessionPeerDisclaimer))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 
     // MARK: - shared pieces
@@ -535,7 +550,7 @@ struct NearbyView: View {
         // nothing. A refusal means the other tab already owns a session, and
         // staging over its pending batch would be this tab reaching into a
         // transfer it is not even drawing.
-        guard presence.claim(.nearby) else { return }
+        guard presence.claim(.nearby, peerLabel: device.label) else { return }
         foreground.sessionStarting()
         file.stageSend(sources: staged.sources, metas: staged.metas)
         Task { await file.connectNearby(peerId: device.id, role: .initiator) }
@@ -548,7 +563,7 @@ struct NearbyView: View {
             return
         }
         actionError = nil
-        guard presence.claim(.nearby) else { return }
+        guard presence.claim(.nearby, peerLabel: device.label) else { return }
         foreground.sessionStarting()
         Task { await text.connectNearby(peerId: device.id, role: .initiator) }
     }

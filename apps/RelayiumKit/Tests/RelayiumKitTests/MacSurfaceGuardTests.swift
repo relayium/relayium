@@ -316,11 +316,19 @@ final class MacSurfaceGuardTests: XCTestCase {
 
     func testInboundNearbyOfferPassesOwnershipAdmissionBeforeBuildingResponder() throws {
         let app = try source(named: "RelayiumApp.swift")
-        XCTAssertTrue(app.contains("receive.shouldAcceptSession = { kind in"),
+        XCTAssertTrue(app.contains("receive.shouldAcceptSession = { kind, peerID in"),
                       "macOS can build an inbound responder during an outbound claim-before-busy gap")
         XCTAssertTrue(app.contains(
-            "AppRouting.claimIncoming(kind, presence: presenting, navigation: routing)"),
+            "peerLabel: nearby.label(forPeerID: peerID)"),
                       "inbound admission must use the same atomic claim-before-navigation route")
+    }
+
+    func testNearbySessionKeepsItsPeerVisibleAfterTheRosterDisappears() throws {
+        let nearby = try source(named: "NearbyPane.swift")
+        XCTAssertTrue(nearby.contains("presence.sessionPeerLabel"))
+        XCTAssertTrue(nearby.contains("L10n.t(.nearbySessionWith"))
+        XCTAssertTrue(nearby.contains("L10n.t(.nearbySessionPeerDisclaimer)"),
+                      "a peer-supplied label must not be presented as verified identity")
     }
 
     /// Before a text peer connects there is no transcript or result to retain.
@@ -1272,7 +1280,8 @@ final class MacSurfaceGuardTests: XCTestCase {
         let expectations: [(String, String, Int)] = [
             ("DirectPane.swift", "guard presence.claim(.pairingCode, mode: .files) else { return }", 2),
             ("RealtimeTextPane.swift", "guard presence.claim(.pairingCode, mode: .text) else { return }", 2),
-            ("NearbyPane.swift", "guard presence.claim(.nearby, mode: mode) else { return }", 2),
+            ("NearbyPane.swift",
+             "guard presence.claim(.nearby, mode: mode, peerLabel: device.label) else { return }", 2),
         ]
         for (file, guardLine, count) in expectations {
             let source = try source(named: file)

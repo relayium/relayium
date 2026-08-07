@@ -183,6 +183,14 @@ public final class LanDiscoveryModel: ObservableObject {
     )
 
     public var selectedDevice: NearbyDevice? { devices.first { $0.id == selectedId } }
+
+    /// A presentation-only snapshot for an admitted inbound offer. Peer ids are
+    /// scoped to this room and device names are peer-supplied, so callers use
+    /// the result only as a visible label and never as identity or routing.
+    public func label(forPeerID peerID: String) -> String {
+        devices.first { $0.id == peerID }?.label
+            ?? "\(L10n.t(.nearbyUnnamedDevice)) · \(shortPeerID(peerID))"
+    }
     /// A socket exists or is being opened. `reconnecting` is deliberately false:
     /// the roster is empty and unmaintained during the gap, and a UI that claims
     /// otherwise is showing devices that may not be there.

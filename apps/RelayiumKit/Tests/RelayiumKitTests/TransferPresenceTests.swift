@@ -37,6 +37,22 @@ final class TransferPresenceTests: XCTestCase {
         XCTAssertEqual(p.mode, .text)
     }
 
+    func testNearbyClaimRetainsPeerLabelUntilTheSessionIsReleased() {
+        let p = TransferPresence()
+        XCTAssertTrue(p.claim(.nearby, mode: .files, peerLabel: "Studio Mac · 19af02"))
+        XCTAssertEqual(p.sessionPeerLabel, "Studio Mac · 19af02")
+
+        XCTAssertTrue(p.claim(.nearby, mode: .files),
+                      "window reconstruction must keep an already-snapshotted label")
+        XCTAssertEqual(p.sessionPeerLabel, "Studio Mac · 19af02")
+
+        XCTAssertFalse(p.claim(.pairingCode, mode: .text, peerLabel: "Impostor"))
+        XCTAssertEqual(p.sessionPeerLabel, "Studio Mac · 19af02")
+
+        p.release(.nearby)
+        XCTAssertNil(p.sessionPeerLabel)
+    }
+
     func testUserModeSelectionStopsAtTheOwnershipBoundary() {
         let p = TransferPresence(mode: .files)
         p.selectMode(.text)

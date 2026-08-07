@@ -310,6 +310,8 @@
 "nearby.a11yDevices" = "附近设备";
 "nearby.a11yChooseDevice" = "选择这台设备作为发送目标。";
 "nearby.sendTo" = "发送给 %@";
+"nearby.sessionWith" = "与 %@ 的会话";
+"nearby.sessionPeerDisclaimer" = "此名称由对方设备提供，并非经过验证的身份。";
 "nearby.selectionSendHint" = "%@。可直接发送到那台设备。";
 "nearby.addFilesHint" = "先在上方添加文件或文件夹，然后直接发送到那台设备。";
 "nearby.textIntent" = "将打开一个端到端加密的消息会话。Relayium 不存储任何内容。";

@@ -310,6 +310,8 @@
 "nearby.a11yDevices" = "近くのデバイス";
 "nearby.a11yChooseDevice" = "送信先としてこのデバイスを選びます。";
 "nearby.sendTo" = "%@ に送信";
+"nearby.sessionWith" = "%@ とのセッション";
+"nearby.sessionPeerDisclaimer" = "この名前は相手のデバイスが提示したもので、確認済みの身元ではありません。";
 "nearby.selectionSendHint" = "%@。そのデバイスへ直接送れます。";
 "nearby.addFilesHint" = "上でファイルやフォルダを追加してから、そのデバイスへ直接送ってください。";
 "nearby.textIntent" = "エンドツーエンドで暗号化されたメッセージセッションを開きます。Relayium には何も保存されません。";

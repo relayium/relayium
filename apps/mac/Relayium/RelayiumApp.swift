@@ -309,8 +309,10 @@ struct RelayiumApp: App {
         // interval after an outbound action has claimed its surface, so waiting
         // for AppShell's activeKind task would reject navigation only after the
         // inbound attempt had already reached the shared model.
-        receive.shouldAcceptSession = { kind in
-            AppRouting.claimIncoming(kind, presence: presenting, navigation: routing)
+        receive.shouldAcceptSession = { kind, peerID in
+            AppRouting.claimIncoming(kind,
+                                     peerLabel: nearby.label(forPeerID: peerID),
+                                     presence: presenting, navigation: routing)
         }
         // Last, because it is built from four objects above and owns none of
         // them. It navigates exactly once per link, and it is the ONE place that

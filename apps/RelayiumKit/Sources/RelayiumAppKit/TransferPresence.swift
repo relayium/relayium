@@ -43,6 +43,12 @@ public final class TransferPresence: ObservableObject {
     /// cannot clear the session" is enforced rather than agreed.
     @Published public private(set) var owner: AppDestination?
 
+    /// The safe, peer-supplied label snapshotted when a Nearby session is
+    /// admitted. It is presentation context, never identity or a routing key.
+    /// Keeping it here gives the live and terminal session the same lifetime as
+    /// the surface that replaced the roster where the label was first shown.
+    @Published public private(set) var sessionPeerLabel: String?
+
     /// Files or text. User changes go through `selectMode`, while a claim sets
     /// it when a session decides its own kind — an unsolicited incoming one,
     /// which nobody chose a mode for.
@@ -94,8 +100,10 @@ public final class TransferPresence: ObservableObject {
     /// able to repoint a running session's mode out from under the surface that
     /// is drawing it.
     @discardableResult
-    public func claim(_ destination: AppDestination, mode: TransferMode) -> Bool {
-        guard claim(destination) else { return false }
+    public func claim(_ destination: AppDestination,
+                      mode: TransferMode,
+                      peerLabel: String? = nil) -> Bool {
+        guard claim(destination, peerLabel: peerLabel) else { return false }
         self.mode = mode
         return true
     }
@@ -114,9 +122,17 @@ public final class TransferPresence: ObservableObject {
     /// on both: a losing claim that had already moved something would be a
     /// half-applied claim.
     @discardableResult
-    public func claim(_ destination: AppDestination) -> Bool {
+    public func claim(_ destination: AppDestination, peerLabel: String? = nil) -> Bool {
         guard owner == nil || owner == destination else { return false }
-        owner = destination
+        if owner == nil {
+            // Set context before publishing ownership: a view that switches to
+            // its session surface on the owner edge must never render the first
+            // frame without the peer this claim already knows about.
+            sessionPeerLabel = peerLabel
+            owner = destination
+        } else if peerLabel != nil {
+            sessionPeerLabel = peerLabel
+        }
         return true
     }
 
@@ -126,12 +142,14 @@ public final class TransferPresence: ObservableObject {
     public func release(_ destination: AppDestination) {
         guard owner == destination else { return }
         owner = nil
+        sessionPeerLabel = nil
     }
 
     /// Unconditional. For the paths that end every session at once — the quit
     /// guard's cancel, a teardown — where there is no destination to ask.
     public func releaseAll() {
         owner = nil
+        sessionPeerLabel = nil
     }
 
     /// True for exactly one destination while a session is owned, and for none

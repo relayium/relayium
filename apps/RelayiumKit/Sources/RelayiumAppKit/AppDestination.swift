@@ -56,11 +56,12 @@ public enum AppRouting {
     @MainActor
     @discardableResult
     public static func claimIncoming(_ kind: NearbyReceiveKind,
+                                     peerLabel: String? = nil,
                                      presence: TransferPresence,
                                      navigation: AppNavigationModel) -> Bool {
         let destination = destination(forIncoming: kind)
         let mode: TransferMode = kind == .file ? .files : .text
-        guard presence.claim(destination, mode: mode) else { return false }
+        guard presence.claim(destination, mode: mode, peerLabel: peerLabel) else { return false }
         navigation.select(destination)
         return true
     }
@@ -117,6 +118,7 @@ public enum AppRouting {
     @MainActor
     @discardableResult
     public static func claimIncoming(_ kind: NearbyReceiveKind,
+                                     peerLabel: String? = nil,
                                      presence: TransferPresence,
                                      modes: DirectModeSelection,
                                      navigation: AppNavigationModel) -> Bool {
@@ -127,7 +129,8 @@ public enum AppRouting {
         // just claimed an outbound tap, the two realtime models may still be
         // idle until that tap's Task begins; admitting the offer in that gap
         // would let two attempts overwrite the same model.
-        guard presence.owner == nil, presence.claim(destination) else { return false }
+        guard presence.owner == nil,
+              presence.claim(destination, peerLabel: peerLabel) else { return false }
         modes.adopt(forIncoming: kind)
         navigation.select(destination)
         return true

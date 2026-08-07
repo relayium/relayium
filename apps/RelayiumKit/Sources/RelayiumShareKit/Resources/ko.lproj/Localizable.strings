@@ -310,6 +310,8 @@
 "nearby.a11yDevices" = "주변 기기";
 "nearby.a11yChooseDevice" = "보낼 대상으로 이 기기를 선택합니다.";
 "nearby.sendTo" = "%@ 에게 보내기";
+"nearby.sessionWith" = "%@ 님과의 세션";
+"nearby.sessionPeerDisclaimer" = "이 이름은 상대 기기가 제공한 것이며 확인된 신원이 아닙니다.";
 "nearby.selectionSendHint" = "%@. 그 기기로 바로 보낼 수 있습니다.";
 "nearby.addFilesHint" = "위에서 파일이나 폴더를 추가한 다음, 그 기기로 바로 보내세요.";
 "nearby.textIntent" = "종단 간 암호화된 메시지 세션을 엽니다. Relayium에는 아무것도 저장되지 않습니다.";

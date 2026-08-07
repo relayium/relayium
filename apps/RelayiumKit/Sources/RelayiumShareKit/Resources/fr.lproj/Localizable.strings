@@ -313,6 +313,8 @@
 "nearby.a11yDevices" = "Appareils à proximité";
 "nearby.a11yChooseDevice" = "Choisir cet appareil comme destinataire.";
 "nearby.sendTo" = "Envoyer à %@";
+"nearby.sessionWith" = "Session avec %@";
+"nearby.sessionPeerDisclaimer" = "Ce nom est fourni par l’autre appareil et ne constitue pas une identité vérifiée.";
 "nearby.selectionSendHint" = "%@. Envoyez-les directement à cet appareil.";
 "nearby.addFilesHint" = "Ajoutez des fichiers ou des dossiers ci-dessus, puis envoyez-les directement à cet appareil.";
 "nearby.textIntent" = "Ouvre une session de messages chiffrée de bout en bout. Rien n’est stocké sur Relayium.";

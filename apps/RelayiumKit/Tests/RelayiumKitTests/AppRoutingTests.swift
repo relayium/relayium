@@ -106,9 +106,11 @@ final class AppRoutingTests: XCTestCase {
             let nav = AppNavigationModel(selection: .storedReceive)
 
             XCTAssertTrue(AppRouting.claimIncoming(
-                kind, presence: presence, modes: modes, navigation: nav))
+                kind, peerLabel: "Kitchen iPad", presence: presence,
+                modes: modes, navigation: nav))
 
             XCTAssertEqual(presence.owner, .nearby, "\(kind) was left with no surface to draw it")
+            XCTAssertEqual(presence.sessionPeerLabel, "Kitchen iPad")
             XCTAssertEqual(modes.mode, mode, "\(kind) arrived on the other half of the picker")
             XCTAssertEqual(nav.selection, .nearby)
             XCTAssertEqual(nav.selectionWrites, 1)
