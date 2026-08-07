@@ -17,10 +17,27 @@ final class AppShellUITests: XCTestCase {
         app?.terminate()
     }
 
-    func testEveryPrimaryTaskRendersItsOwnScreen() {
+    private func waitForSelection(_ tab: XCUIElement, named name: String) {
+        let selected = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "selected == true"), object: tab)
+        XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 10), .completed,
+                       "\(name) did not become the selected task")
+    }
+
+    @discardableResult
+    private func openTask(_ tabName: String, title: String) -> XCUIElement {
         let tabs = app.tabBars.firstMatch
         XCTAssertTrue(tabs.waitForExistence(timeout: 20), "the primary tab bar did not render")
+        let tab = tabs.buttons[tabName]
+        XCTAssertTrue(tab.waitForExistence(timeout: 10), "the tab bar has no \(tabName) task")
+        tab.tap()
+        waitForSelection(tab, named: tabName)
+        XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: 10),
+                      "\(tabName) selected but its screen did not render")
+        return tab
+    }
 
+    func testEveryPrimaryTaskRendersItsOwnScreen() {
         let destinations = [
             (tab: "Receive", title: "Receive files"),
             (tab: "Send", title: "Send files"),
@@ -29,16 +46,7 @@ final class AppShellUITests: XCTestCase {
             (tab: "Account", title: "Account"),
         ]
         for destination in destinations {
-            let tab = tabs.buttons[destination.tab]
-            XCTAssertTrue(tab.waitForExistence(timeout: 10),
-                          "the tab bar has no \(destination.tab) task")
-            tab.tap()
-            let selected = XCTNSPredicateExpectation(
-                predicate: NSPredicate(format: "selected == true"), object: tab)
-            XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 10), .completed,
-                           "\(destination.tab) did not become the selected task")
-            XCTAssertTrue(app.navigationBars[destination.title].waitForExistence(timeout: 10),
-                          "\(destination.tab) selected but its screen did not render")
+            openTask(destination.tab, title: destination.title)
             if destination.tab == "Nearby" {
                 XCTAssertTrue(app.staticTexts["Nearby receiving: paused"].exists,
                               "the offline acceptance state is not explained")
@@ -46,5 +54,38 @@ final class AppShellUITests: XCTestCase {
                               "the paused state does not offer its matching recovery")
             }
         }
+    }
+
+    func testAccountRemediesRouteToTheAccountTask() {
+        let accountTab = app.tabBars.firstMatch.buttons["Account"]
+
+        openTask("Send", title: "Send files")
+        let sendRemedy = app.buttons["Go to Account"]
+        XCTAssertTrue(sendRemedy.waitForExistence(timeout: 10),
+                      "the signed-out Send task offers no account remedy")
+        sendRemedy.tap()
+        waitForSelection(accountTab, named: "Account")
+        XCTAssertTrue(app.navigationBars["Account"].waitForExistence(timeout: 10))
+
+        openTask("Direct", title: "Direct")
+        let directRemedy = app.buttons["Open Account"]
+        XCTAssertTrue(directRemedy.waitForExistence(timeout: 10),
+                      "the signed-out Direct task offers no account remedy")
+        directRemedy.tap()
+        waitForSelection(accountTab, named: "Account")
+        XCTAssertTrue(app.navigationBars["Account"].waitForExistence(timeout: 10))
+    }
+
+    func testDirectModeChoiceStaysInDirect() {
+        let directTab = openTask("Direct", title: "Direct")
+        let textMode = app.segmentedControls.firstMatch.buttons["Text"]
+        XCTAssertTrue(textMode.waitForExistence(timeout: 10),
+                      "Direct offers no text mode")
+        textMode.tap()
+
+        XCTAssertTrue(directTab.isSelected, "choosing Text navigated away from Direct")
+        XCTAssertTrue(app.navigationBars["Direct"].exists)
+        XCTAssertTrue(app.staticTexts["Start a text session"].waitForExistence(timeout: 10),
+                      "Direct selected Text but did not render the text task")
     }
 }
