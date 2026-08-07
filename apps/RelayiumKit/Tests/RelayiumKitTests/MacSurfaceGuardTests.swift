@@ -1209,6 +1209,23 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertEqual(Set(panes.map(\.destination)).count, panes.count)
     }
 
+    /// Nearby and Pairing claim a surface before their async start moves a
+    /// realtime model to busy. Open With/Dock Drop must treat that ownership as
+    /// busy too, and key the task on the combined answer so release retries it.
+    func testRealtimeOpenedFilesWaitForClaimedSessionOwnershipToClear() throws {
+        let nearby = try source(named: "NearbyPane.swift")
+        XCTAssertTrue(nearby.contains(
+            "private var busy: Bool { presence.owner != nil || fileModel.isBusy || textModel.isBusy }"))
+
+        let pairing = try source(named: "DirectPane.swift")
+        XCTAssertTrue(pairing.contains(
+            "private var fileAdoptionBusy: Bool { presence.owner != nil || model.isBusy }"))
+        XCTAssertTrue(pairing.contains(
+            "FileOpenAdoption(staged: fileOpenRouting.staged, busy: fileAdoptionBusy)"))
+        XCTAssertTrue(pairing.contains(
+            "fileOpenRouting.batch(for: .pairingCode, busy: fileAdoptionBusy)"))
+    }
+
     /// The document-type declaration that makes the app a Dock drop target and a
     /// Finder "Open With" entry — and the one line that keeps it from becoming
     /// the Mac's default handler for every file on disk.

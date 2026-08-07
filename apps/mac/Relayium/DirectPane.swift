@@ -30,6 +30,8 @@ struct DirectPane: View {
     @StateObject private var selection = SelectionStore()
     @State private var stagingError: String?
 
+    private var fileAdoptionBusy: Bool { presence.owner != nil || model.isBusy }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             switch model.state {
@@ -83,7 +85,7 @@ struct DirectPane: View {
         // reasons and by the same rule as Nearby's. Keyed on both the batch and
         // `busy`: a batch that arrived mid-session is never republished, so
         // keying on the batch alone would strand it here.
-        .task(id: FileOpenAdoption(staged: fileOpenRouting.staged, busy: model.isBusy)) {
+        .task(id: FileOpenAdoption(staged: fileOpenRouting.staged, busy: fileAdoptionBusy)) {
             adoptOpenedFiles()
         }
     }
@@ -92,7 +94,7 @@ struct DirectPane: View {
     /// and is free to take it. `add`, not `replace` — the same call the drop
     /// zone makes.
     private func adoptOpenedFiles() {
-        guard let batch = fileOpenRouting.batch(for: .pairingCode, busy: model.isBusy)
+        guard let batch = fileOpenRouting.batch(for: .pairingCode, busy: fileAdoptionBusy)
         else { return }
         selection.add(batch.urls)
         fileOpenRouting.consume(batch)

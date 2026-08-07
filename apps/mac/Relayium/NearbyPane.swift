@@ -35,7 +35,7 @@ struct NearbyPane: View {
     @StateObject private var selection = SelectionStore()
     @State private var stagingError: String?
 
-    private var busy: Bool { fileModel.isBusy || textModel.isBusy }
+    private var busy: Bool { presence.owner != nil || fileModel.isBusy || textModel.isBusy }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
