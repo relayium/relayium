@@ -23,9 +23,14 @@ final class AppShellUITests: XCTestCase {
     /// Sparkle and AppKit may create auxiliary windows before the shell on a
     /// hosted runner. `windows.firstMatch` therefore is not a product window:
     /// it happened to be Relayium locally, but was an auxiliary window on
-    /// macOS 15. SwiftUI propagates the unique `Window` scene id to NSWindow,
-    /// so select that stable product identity rather than creation order.
-    private var mainWindow: XCUIElement { app.windows["main"].firstMatch }
+    /// macOS 15. Newer systems expose the SwiftUI scene id, but macOS 15 does
+    /// not; the cross-version product contract is that Relayium's 860×560 work
+    /// area is the process's largest window. Select by that visible geometry.
+    private var mainWindow: XCUIElement {
+        app.windows.allElementsBoundByIndex.max {
+            $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height
+        } ?? app.windows.firstMatch
+    }
 
     private var offlineLaunchArguments: [String] {
         ["--relayium-ui-testing", "-AppleLanguages", "(en)",

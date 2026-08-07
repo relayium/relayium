@@ -85,7 +85,8 @@ final class MacSurfaceGuardTests: XCTestCase {
         let uiURL = macRoot.deletingLastPathComponent()
             .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
         let ui = try String(contentsOf: uiURL, encoding: .utf8)
-        XCTAssertTrue(ui.contains("app.windows[\"main\"].firstMatch"),
+        XCTAssertTrue(ui.contains("app.windows.allElementsBoundByIndex.max") &&
+                      ui.contains("$0.frame.width * $0.frame.height"),
                       "runtime checks can mistake an auxiliary window for the product shell")
         XCTAssertTrue(ui.contains(
             "window.descendants(matching: .any)[\"sidebar-\\(id)\"].firstMatch"),
