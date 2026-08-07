@@ -602,6 +602,9 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "Copy gives no visible acknowledgement")
         XCTAssertTrue(terminal.contains("copiedLink == link"),
                       "copy acknowledgement can leak into a later result")
+        XCTAssertTrue(terminal.contains(".fixedSize(horizontal: false, vertical: true)"))
+        XCTAssertFalse(terminal.contains(".lineLimit(1)"),
+                       "the stored capability result is visually truncated")
         XCTAssertTrue(terminal.contains("Button(L10n.t(.uploadSendAnother))"))
         XCTAssertFalse(terminal.contains("buttonStyle(.link)"),
                        "Send another is exposed as a navigation Link")

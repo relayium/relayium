@@ -364,6 +364,10 @@ final class IOSSurfaceGuardTests: XCTestCase {
             separatedBy: "Button(L10n.t(.uploadSendAnother))").dropFirst().first)
         XCTAssertTrue(sendAnother.contains(".buttonStyle(.bordered)"))
         XCTAssertTrue(sendAnother.contains(".controlSize(.large)"))
+        XCTAssertTrue(completed.contains("Text(link)"))
+        XCTAssertTrue(completed.contains(".fixedSize(horizontal: false, vertical: true)"))
+        XCTAssertFalse(completed.contains(".lineLimit(1)"),
+                       "the stored capability result is visually truncated")
 
         let receive = try XCTUnwrap(all.first { $0.name == "ReceiveView.swift" }?.text)
         let cancel = try XCTUnwrap(receive.components(

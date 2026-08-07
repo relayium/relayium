@@ -465,8 +465,10 @@ struct SendView: View {
             // paste notification for it besides.
             Text(link)
                 .textSelection(.enabled)
-                .lineLimit(1)
-                .truncationMode(.middle)
+                // This capability URL is the upload result and contains the
+                // only server-absent decryption key. Keep the whole value
+                // inspectable before the user hands it to another person.
+                .fixedSize(horizontal: false, vertical: true)
             ShareLink(item: link) {
                 Text(L10n.t(.commonShare)).frame(maxWidth: .infinity)
             }

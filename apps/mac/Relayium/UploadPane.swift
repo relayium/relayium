@@ -229,7 +229,11 @@ struct UploadPane: View {
             // old fixed "this link is the only copy" line was false on the
             // common path — and it contradicted the warning on the rare one.
             keyNotice(UploadPresentation.keyNotice(warning: keyWarning))
-            Text(link).textSelection(.enabled).lineLimit(1).truncationMode(.middle)
+            // A capability result is not incidental metadata: show the entire
+            // host, object id and fragment key before it is copied or shared.
+            Text(link)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Button(L10n.t(.commonCopy)) {
                     NSPasteboard.general.clearContents()
