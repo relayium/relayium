@@ -169,6 +169,17 @@ final class MacSurfaceGuardTests: XCTestCase {
             "buttonStyle(.link)") ?? true)
     }
 
+    /// iOS already locks both controls while resolving/downloading. macOS must
+    /// not leave a second Open path live over a task whose writer and Cancel
+    /// handle the shared model still owns.
+    func testStoredReceiveCannotOpenAnotherLinkWhileBusy() throws {
+        let source = try source(named: "DownloadPane.swift")
+        XCTAssertTrue(source.contains(".disabled(model.isBusy)"),
+                      "the link field stays editable over a live download")
+        XCTAssertTrue(source.contains(".disabled(model.linkText.isEmpty || model.isBusy)"),
+                      "Open can replace a live download")
+    }
+
     private func occurrences(of needle: String, in text: String) -> Int {
         text.components(separatedBy: needle).count - 1
     }

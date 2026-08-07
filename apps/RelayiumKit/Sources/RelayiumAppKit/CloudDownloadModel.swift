@@ -221,6 +221,11 @@ public final class CloudDownloadModel: ObservableObject {
     /// Resolve the link: parse, fetch meta, decrypt the manifest. No token —
     /// anonymous download is what a share link is.
     public func resolve() {
+        // The views disable Open while work is live, but a stale redraw, Return
+        // key, deep-link caller or future surface must not be able to replace
+        // `task` while the old download keeps writing. One model owns one
+        // foreground task; only Cancel may end it before another resolve.
+        guard !isBusy else { return }
         // Before the parse, so the malformed-link failure below is armed with
         // nothing either: no retry re-parses a string into a different link.
         recovery = .none

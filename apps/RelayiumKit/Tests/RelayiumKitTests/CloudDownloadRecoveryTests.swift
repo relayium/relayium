@@ -488,6 +488,63 @@ final class CloudDownloadRecoveryTests: XCTestCase {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: stale.path), [],
                        "the abandoned destination was written to")
     }
+
+    /// **Adversarial:** changing the field and asking to open another link while
+    /// a blob is in flight must not replace the visible task or its cancellation
+    /// handle. The macOS surface used to allow exactly this; the first writer
+    /// then continued invisibly after `task` was overwritten by the new resolve.
+    func testASecondResolveCannotReplaceAnActiveDownload() async throws {
+        let first = try fixture(id: "busy-first",
+                                files: [ManifestFile(name: "first.txt", size: 3)],
+                                contents: ["first.txt": [1, 2, 3]])
+        let second = try fixture(id: "busy-second",
+                                 files: [ManifestFile(name: "second.txt", size: 1)],
+                                 contents: ["second.txt": [9]])
+        let blobGate = RequestGate()
+        let requests = RequestRecorder()
+        StubURLProtocol.router = { request in
+            requests.record(request)
+            if request.url?.path == "/api/files/busy-first/blob" {
+                blobGate.hold()
+                return .init(status: 200, body: first.blobBody)
+            }
+            if request.url?.path == "/api/files/busy-second/meta" {
+                return .init(status: 200, body: second.metaBody)
+            }
+            return .init(status: 200, body: first.metaBody)
+        }
+
+        let m = model()
+        await resolved(m, first)
+        let parent = try tempDir()
+        m.download(into: parent)
+        await blobGate.reached()
+        var released = false
+        defer { if !released { blobGate.release() } }
+        guard case .downloading = m.state else {
+            return XCTFail("the first download never became active: \(m.state)")
+        }
+
+        let before = requests.requests.count
+        m.linkText = second.link
+        m.resolve()
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        XCTAssertEqual(requests.requests.count, before,
+                       "a second link issued a request over the active download")
+        guard case .downloading = m.state else {
+            return XCTFail("the second link replaced the visible task: \(m.state)")
+        }
+
+        blobGate.release()
+        released = true
+        await waitFor("the original download to finish",
+                      { if case .done = m.state { return true }; return false })
+        guard case .done(let urls) = m.state else { return XCTFail("got \(m.state)") }
+        XCTAssertEqual(m.sessionFiles, [FileMeta(name: "first.txt", size: 3)])
+        XCTAssertEqual(try Data(contentsOf: XCTUnwrap(urls.first)), Data([1, 2, 3]))
+        XCTAssertFalse(requests.requests.contains { $0.url?.path.contains("busy-second") == true })
+    }
 }
 
 /// Counts attempts from URLSession's own thread, where a captured `var` would be

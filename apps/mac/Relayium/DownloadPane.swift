@@ -23,13 +23,14 @@ struct DownloadPane: View {
                 TextField(L10n.t(.downloadLinkPlaceholder), text: $model.linkText)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { model.resolve() }
-                // The one greyed control this surface keeps, and the exception
-                // the rule allows: what is missing is the field immediately
-                // beside it, and supplying it is one paste away — unlike an
-                // account, which is why that gets a gate instead of a grey.
+                    .disabled(model.isBusy)
+                // Empty means the missing prerequisite is the field beside it,
+                // and supplying it is one paste away. Busy is different: this
+                // model already owns a writer and Cancel handle, so another
+                // Open must wait rather than replace them.
                 Button(L10n.t(.downloadOpen)) { model.resolve() }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(model.linkText.isEmpty)
+                    .disabled(model.linkText.isEmpty || model.isBusy)
             }
             switch model.state {
             case .idle:
