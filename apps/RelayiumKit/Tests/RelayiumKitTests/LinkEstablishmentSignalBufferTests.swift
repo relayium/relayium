@@ -482,7 +482,16 @@ final class LinkEstablishmentSignalBufferTests: XCTestCase {
                 .filter { $0.pathExtension == "swift" }
             for file in try XCTUnwrap(files) {
                 scanned += 1
-                guard file.lastPathComponent != "LinkEstablishmentSignalBuffer.swift" else { continue }
+                // The buffer's own file, and the one object accepted as its
+                // owner. `LinkRoomRouter` installs a buffer in the same critical
+                // section as the claim it belongs to — that indivisibility is
+                // what this cut exists for — so it necessarily names one. The
+                // guarantee is unchanged rather than relaxed: the router is
+                // itself unreachable, which
+                // `LinkRoomRouterTests.testTheRouterStaysUnreachableFromProduction`
+                // asserts, so no app composition still reaches a buffer.
+                let owners = ["LinkEstablishmentSignalBuffer.swift", "LinkRoomRouter.swift"]
+                guard !owners.contains(file.lastPathComponent) else { continue }
                 let source = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
                 XCTAssertFalse(source.contains("LinkEstablishmentSignalBuffer("),
                                "\(file.lastPathComponent) constructs a pre-assembly buffer")

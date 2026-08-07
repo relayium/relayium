@@ -1,0 +1,1101 @@
+import WebRTC
+import XCTest
+@testable import RelayiumAppKit
+@testable import RelayiumKit
+
+// MARK: - the doubles
+//
+// Two, and each replaces exactly one thing a unit test cannot have.
+//
+//  - `RouterTransport` is the PeerConnection. Everything between the router and
+//    it — the factory, the attempt, the bridge, the runtime, the coordinator —
+//    is production code, so the establishment this router hands off really
+//    publishes, really fails, and really releases the room it was given.
+//  - `RoutedControl` is the room's seam onto that link. It replaces the runtime
+//    behind `LinkSessionRoomControl` because the question these tests ask is
+//    what the ROUTER forwarded, in what order and how many times, and a forged
+//    leave or a rejected candidate is dropped in silence one layer further down.
+
+private final class RouterTransport: LinkRoutableInitialTransport, @unchecked Sendable {
+    private let slots = NSLock()
+    private let state = NSLock()
+
+    private var _onSAS: ((String) -> Void)?
+    private var _onReady: ((LinkIdentity) -> Void)?
+    private var _onFrame: ((LinkLane, [UInt8]) -> Void)?
+    private var _onError: ((Error) -> Void)?
+    private var _onClose: (() -> Void)?
+
+    var onSAS: ((String) -> Void)? {
+        get { slots.lock(); defer { slots.unlock() }; return _onSAS }
+        set { slots.lock(); defer { slots.unlock() }; _onSAS = newValue }
+    }
+    var onReady: ((LinkIdentity) -> Void)? {
+        get { slots.lock(); defer { slots.unlock() }; return _onReady }
+        set { slots.lock(); defer { slots.unlock() }; _onReady = newValue }
+    }
+    var onFrame: ((LinkLane, [UInt8]) -> Void)? {
+        get { slots.lock(); defer { slots.unlock() }; return _onFrame }
+        set { slots.lock(); defer { slots.unlock() }; _onFrame = newValue }
+    }
+    var onError: ((Error) -> Void)? {
+        get { slots.lock(); defer { slots.unlock() }; return _onError }
+        set { slots.lock(); defer { slots.unlock() }; _onError = newValue }
+    }
+    var onClose: (() -> Void)? {
+        get { slots.lock(); defer { slots.unlock() }; return _onClose }
+        set { slots.lock(); defer { slots.unlock() }; _onClose = newValue }
+    }
+
+    private var _closed = false
+    private var _routed: [(from: String, signal: JSONValue)] = []
+
+    /// Everything the ASSEMBLY handed this transport — which is exactly the one
+    /// initial signal the router consumed on this link's behalf.
+    var routed: [(from: String, signal: JSONValue)] {
+        state.lock(); defer { state.unlock() }; return _routed
+    }
+
+    func start() {}
+    func receive(from: String, signal: JSONValue) {
+        state.lock(); _routed.append((from, signal)); state.unlock()
+    }
+    func send(_ bytes: [UInt8], on lane: LinkLane) throws {}
+    func bufferedAmount(on lane: LinkLane) -> UInt64 { 0 }
+    var isClosed: Bool { state.lock(); defer { state.unlock() }; return _closed }
+    func close() { state.lock(); _closed = true; state.unlock() }
+
+    func publish(_ identity: LinkIdentity) {
+        onSAS?("424242")
+        onReady?(identity)
+    }
+    func fail(_ error: Error = LinkTransportError.peerConnectionFailed) {
+        onError?(error)
+        onClose?()
+    }
+}
+
+/// What the room forwarded to the link it holds, in order.
+private final class RoutedControl: LinkSessionRecoveryControl, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _received: [(from: String, signal: JSONValue)] = []
+    private var _resumeOffers: [(from: String, signal: JSONValue)] = []
+    private var _leaves: [(from: String, to: String, auth: String)] = []
+    private var _departures: [String] = []
+
+    var received: [(from: String, signal: JSONValue)] { lock.withLock { _received } }
+    var resumeOffers: [(from: String, signal: JSONValue)] { lock.withLock { _resumeOffers } }
+    var leaves: [(from: String, to: String, auth: String)] { lock.withLock { _leaves } }
+    var departures: [String] { lock.withLock { _departures } }
+
+    /// Runs INSIDE one forward, which for a replayed candidate is inside the
+    /// buffer's one drain on the main actor. The re-entrancy tests below use it
+    /// to change the world underneath a handoff that is already running.
+    var duringReceive: (() -> Void)?
+
+    func receive(from: String, signal: JSONValue) {
+        lock.withLock { _received.append((from, signal)) }
+        duringReceive?()
+    }
+    func receiveResumeOffer(from: String, signal: JSONValue) {
+        lock.withLock { _resumeOffers.append((from, signal)) }
+    }
+    func receiveLeave(from: String, to: String, auth: String) {
+        lock.withLock { _leaves.append((from, to, auth)) }
+    }
+    func peerDeparted(_ peerId: String) {
+        lock.withLock { _departures.append(peerId) }
+    }
+    func joinRecovery(peerId: String,
+                      _ complete: @escaping (Result<LinkIdentity, Error>) -> Void)
+    -> LinkRecoveryJoin { .unavailable }
+}
+
+/// A re-entrancy hook armed on one thread and fired on another, so the racy
+/// handoff is the lock's rather than the test's.
+private final class Probe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var body: (() -> Void)?
+    func arm(_ body: @escaping () -> Void) { lock.withLock { self.body = body } }
+    func fire() { (lock.withLock { body })?() }
+}
+
+/// Suspends exactly ONE routing inside `canAcceptLink`, and lets every later one
+/// through.
+///
+/// The frame a test holds across an epoch change is one specific frame, but the
+/// predicate holding it is installed for the router's whole life and consulted on
+/// every offer. A gate that suspended every routing would therefore also suspend
+/// the delivery that PROVES the new epoch still admits — which arrives on the
+/// main thread, in a raw semaphore wait no XCTest timeout can end.
+///
+/// So: armed once, consumed once, open from then on. Both waits are bounded as
+/// well, because that is the difference between a gate that is mis-armed and a
+/// suite that never finishes: a routing that never arrives, or one that is never
+/// released, fails the test rather than parking a thread forever.
+private final class OneShotGate: @unchecked Sendable {
+    private let arrived = DispatchSemaphore(value: 0)
+    private let released = DispatchSemaphore(value: 0)
+    private let lock = NSLock()
+    private var claimed = false
+    private var abandoned = false
+
+    /// Whether the held routing was released rather than abandoned at the bound.
+    /// Read from the test body, so no assertion ever runs on the routing thread.
+    var wasReleased: Bool { lock.withLock { !abandoned } }
+
+    /// Called from inside the predicate, on whatever thread is routing. The first
+    /// caller is held; every later one passes straight through.
+    func hold(within seconds: Double = 5) {
+        let mine: Bool = lock.withLock {
+            guard !claimed else { return false }
+            claimed = true
+            return true
+        }
+        guard mine else { return }
+        arrived.signal()
+        if released.wait(timeout: .now() + seconds) == .timedOut {
+            lock.withLock { abandoned = true }
+        }
+    }
+
+    /// Block until the held routing is inside the predicate and undecided.
+    /// Answers false if it never got there.
+    func awaitArrival(within seconds: Double = 5) -> Bool {
+        arrived.wait(timeout: .now() + seconds) == .success
+    }
+
+    /// Let the held routing finish deciding.
+    func release() { released.signal() }
+}
+
+/// Holds every arriving thread until all of them are there.
+///
+/// `LinkAdmission.route` consults `canAcceptLink` BEFORE it reads the phase, and
+/// with its own lock released. Blocking there is what makes "two offers in one
+/// burst were both routed against an idle room" a fact rather than a timing
+/// accident — which is the only condition under which the atomicity of
+/// `admitEstablishment` is exercised at all.
+private final class Barrier: @unchecked Sendable {
+    private let condition = NSCondition()
+    private let expected: Int
+    private var arrived = 0
+
+    init(expected: Int) { self.expected = expected }
+
+    func wait() {
+        condition.lock()
+        arrived += 1
+        if arrived >= expected { condition.broadcast() }
+        while arrived < expected { condition.wait() }
+        condition.unlock()
+    }
+}
+
+@MainActor
+final class LinkRoomRouterTests: XCTestCase {
+
+    // MARK: - fixtures
+
+    private let selfId = "self-room"
+    private var dir: URL!
+
+    override func setUpWithError() throws {
+        dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("link-router-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: dir)
+    }
+
+    private let sendKey = [UInt8](repeating: 0x41, count: 32)
+    private let recvKey = [UInt8](repeating: 0x42, count: 32)
+
+    private func identity(peerId: String, role: Role = .responder) -> LinkIdentity {
+        LinkIdentity(peerId: peerId, role: role, sas: "424242",
+                     codecs: LinkCodecs(sendKey: sendKey, recvKey: recvKey),
+                     authenticationGeneration: 5)
+    }
+
+    // ── the frames a peer really sends ──────────────────────────────────────
+
+    private func offer(_ sdp: String = "v=0 offer") -> JSONValue {
+        linkSDPSignal(kind: "offer", sdp: sdp,
+                      commit: String(repeating: "c", count: 44), caps: [LINK_CAPABILITY])
+    }
+
+    private func candidate(_ id: String) -> JSONValue {
+        .object(["link": .bool(true),
+                 "ice": .object(["candidate": .string("candidate:\(id) 1 udp 1 10.0.0.1 1 typ host"),
+                                 "sdpMid": .string("0"),
+                                 "sdpMLineIndex": .number(0)])])
+    }
+
+    private func leave(_ auth: String = String(repeating: "L", count: LINK_LEAVE_AUTH_LENGTH))
+    -> JSONValue {
+        linkLeaveSignal(auth: auth)
+    }
+
+    private func resumeOffer() -> JSONValue {
+        .object(["resume": .bool(true),
+                 "auth": .string(String(repeating: "a", count: LINK_AUTH_TAG_LENGTH)),
+                 "sdp": .object(["type": .string("offer"), "sdp": .string("v=0 rebuild")])])
+    }
+
+    /// A legacy untagged file offer: what every already-deployed peer sends.
+    private func fileOffer() -> JSONValue {
+        .object(["sdp": .object(["type": .string("offer"), "sdp": .string("v=0 file")])])
+    }
+
+    private func textOffer() -> JSONValue {
+        .object(["text": .bool(true),
+                 "caps": .array([.string(TEXT_CAPABILITY)]),
+                 "sdp": .object(["type": .string("offer"), "sdp": .string("v=0 text")])])
+    }
+
+    /// The legacy ONE-SHOT file resume: the `resume` generation shared with an
+    /// authenticated rebuild, and not an offer.
+    private func legacyResume() -> JSONValue {
+        .object(["resume": .bool(true),
+                 "ice": .object(["candidate": .string("candidate:legacy")])])
+    }
+
+    // ── one room, one socket, one router ────────────────────────────────────
+
+    /// Everything one epoch is made of, so a test can drive the socket the
+    /// router is really listening to.
+    private final class Socket: @unchecked Sendable {
+        let channel = FakeWebSocketChannel()
+        let client: SignalingClient
+        /// What the per-connection slot saw — the stand-in for the establishing
+        /// transport, which claims that slot in its own initializer.
+        private let lock = NSLock()
+        private var _slot: [(from: String, signal: JSONValue)] = []
+        var slot: [(from: String, signal: JSONValue)] { lock.withLock { _slot } }
+
+        init(selfId: String) {
+            client = SignalingClient(channel: channel, name: "self")
+            channel.fireOpen()
+            channel.fireText(Socket.encode(Envelope(type: SignalType.welcome, name: selfId)))
+            _ = client.installSignalHandler { [weak self] from, data in
+                self?.lock.withLock { self?._slot.append((from, data)) }
+            }
+        }
+
+        static func encode(_ envelope: Envelope) -> String {
+            String(data: try! JSONEncoder().encode(envelope), encoding: .utf8)!
+        }
+
+        /// One inbound frame, delivered exactly as the hub delivers one.
+        func deliver(from: String, _ data: JSONValue) {
+            channel.fireText(Socket.encode(Envelope(type: SignalType.signal, from: from, data: data)))
+        }
+
+        /// Every `busy` this side answered, by recipient.
+        var busied: [String] {
+            channel.sent.compactMap { text in
+                guard let envelope = try? JSONDecoder().decode(Envelope.self, from: Data(text.utf8)),
+                      envelope.type == SignalType.signal,
+                      let data = envelope.data, isLinkBusy(data) else { return nil }
+                return envelope.to
+            }
+        }
+    }
+
+    private final class Rig {
+        let router: LinkRoomRouter
+        let session: LinkRoomSession
+        let admission: LinkAdmission
+        let capabilities: PeerCapabilityRegistry
+        var socket: Socket
+        var transports: [RouterTransport] = []
+        var controls: [RoutedControl] = []
+        var peers: [String] = []
+        var roles: [Role] = []
+        var initialSignals: [JSONValue?] = []
+        /// Runs as each control is created, so a test can arm a hook that has to
+        /// fire during the very first forward of an establishment that does not
+        /// exist yet when the test sets it up.
+        var onControl: ((RoutedControl) -> Void)?
+
+        init(router: LinkRoomRouter, session: LinkRoomSession, admission: LinkAdmission,
+             capabilities: PeerCapabilityRegistry, socket: Socket) {
+            self.router = router
+            self.session = session
+            self.admission = admission
+            self.capabilities = capabilities
+            self.socket = socket
+        }
+    }
+
+    /// A router over the real composition below it, and over a real
+    /// `SignalingClient` driven by real inbound envelopes.
+    ///
+    /// - Parameters:
+    ///   - realControl: use the assembly's OWN room control — the real runtime —
+    ///     rather than the recorder. Only the tests that need a link to really
+    ///     publish and really end want this.
+    ///   - admissionTrustsEveryPeer: build the admission with a predicate that
+    ///     accepts anybody, so the ROUTER's own capability gate is the only thing
+    ///     left standing. Production composes both from the same registry; this
+    ///     is how the router's half is exercised rather than its caller's.
+    private func rig(canAcceptLink: @escaping (String) -> Bool = { _ in true },
+                     realControl: Bool = false,
+                     admissionTrustsEveryPeer: Bool = false,
+                     peers: [String] = ["peer-1", "peer-2"]) -> Rig {
+        let capabilities = PeerCapabilityRegistry(linkRoomActive: { true })
+        for peer in peers {
+            capabilities.record(peerId: peer,
+                                signal: .object(["caps": .array([.string(LINK_CAPABILITY)])]))
+        }
+        let admission = LinkAdmission(
+            selfId: { [selfId] in selfId },
+            supportsLink: { peerId in
+                admissionTrustsEveryPeer || capabilities.supports(peerId, LINK_CAPABILITY)
+            },
+            canAcceptLink: canAcceptLink)
+        let socket = Socket(selfId: selfId)
+        let dir = self.dir!
+
+        var built: Rig!
+        let session = LinkRoomSession(admission: admission) { peerId, role, initialSignal in
+            let transport = RouterTransport()
+            let assembly = LinkSessionFactory.make(
+                signaling: socket.client,
+                peerId: peerId,
+                role: role,
+                iceServers: [],
+                iceTransportPolicy: .relay,
+                authenticationGeneration: 5,
+                receiveDirectory: dir,
+                admission: admission,
+                deadlines: LinkDeadlines(),
+                initialSignal: initialSignal,
+                buildInitialTransport: { _, _, _, _, _, _, _ in transport },
+                buildReplacementFactory: { _, _, _, _ in { _ in throw LinkTransportError.notReady } })
+            let control = RoutedControl()
+            built.transports.append(transport)
+            built.controls.append(control)
+            built.peers.append(peerId)
+            built.roles.append(role)
+            built.initialSignals.append(initialSignal)
+            built.onControl?(control)
+            guard !realControl else { return assembly }
+            return LinkSessionAssembly(attempt: assembly.attempt,
+                                       control: LinkSessionRoomControl(runtime: control))
+        }
+        let router = LinkRoomRouter(admission: admission,
+                                    capabilities: capabilities,
+                                    session: session)
+        built = Rig(router: router, session: session, admission: admission,
+                    capabilities: capabilities, socket: socket)
+        router.attach(to: socket.client)
+        return built
+    }
+
+    /// Let every main-actor consumer that is already scheduled run.
+    private func settle(_ turns: Int = 12) async {
+        for _ in 0..<turns { await Task.yield() }
+    }
+
+    // MARK: - 1. one burst, one admission, one busy
+
+    /// The window `admitEstablishment` exists for, driven through the router.
+    ///
+    /// Two peers offer in ONE socket burst — both frames are routed before
+    /// anything reaches the main actor. Exactly one is admitted, and the loser
+    /// is TOLD, once. Without the atomic claim both would be told `establish`
+    /// and the second would either build a second PeerConnection into the same
+    /// pair of lanes or be dropped in silence.
+    func testTwoOffersInOneBurstAdmitOnceAndAnswerOneBusy() async {
+        let r = rig()
+
+        r.socket.deliver(from: "peer-1", offer("v=0 first"))
+        r.socket.deliver(from: "peer-2", offer("v=0 second"))
+
+        XCTAssertEqual(r.admission.phase, .connecting(peerId: "peer-1"),
+                       "the claim is made on the socket queue, before any hop")
+        XCTAssertEqual(r.socket.busied, ["peer-2"], "exactly one loser, told exactly once")
+        await settle()
+        XCTAssertEqual(r.peers, ["peer-1"], "one establishment was assembled")
+        XCTAssertEqual(r.roles, [.responder])
+        XCTAssertEqual(r.session.peerId, "peer-1")
+    }
+
+    /// The same burst, with both frames really routed at once.
+    ///
+    /// The test above is delivered serially, so `route` itself refuses the second
+    /// peer and the claim is never contested. This one holds both routings inside
+    /// `canAcceptLink` until each has been admitted's answer against an IDLE room,
+    /// which is the only state in which `admitEstablishment` decides anything: two
+    /// `establish` answers, one room. Exactly one link is built and exactly one
+    /// peer is told, and which peer wins is deliberately not asserted — the point
+    /// is that the two outcomes partition the room's two candidates.
+    func testTwoConcurrentlyRoutedOffersStillAdmitOnceAndAnswerOneBusy() async {
+        let barrier = Barrier(expected: 2)
+        let r = rig(canAcceptLink: { _ in barrier.wait(); return true })
+        let socket = r.socket
+        let first = Socket.encode(Envelope(type: SignalType.signal,
+                                           from: "peer-1", data: offer("v=0 one")))
+        let second = Socket.encode(Envelope(type: SignalType.signal,
+                                            from: "peer-2", data: offer("v=0 two")))
+
+        let done = expectation(description: "both frames were routed")
+        done.expectedFulfillmentCount = 2
+        DispatchQueue.global().async { socket.channel.fireText(first); done.fulfill() }
+        DispatchQueue.global().async { socket.channel.fireText(second); done.fulfill() }
+        await fulfillment(of: [done], timeout: 5)
+        await settle()
+
+        XCTAssertEqual(r.peers.count, 1, "one room, one establishment")
+        XCTAssertEqual(r.socket.busied.count, 1, "and the loser was told, once")
+        XCTAssertEqual(Set(r.peers).union(r.socket.busied), ["peer-1", "peer-2"],
+                       "the winner and the refused peer are the two that offered")
+        XCTAssertEqual(r.admission.boundPeerId, r.peers[0])
+        XCTAssertEqual(r.session.peerId, r.peers[0])
+    }
+
+    /// Two offers from the SAME peer in one burst are one establishment and no
+    /// busy: `admitEstablishment` is idempotent for the peer it already admitted,
+    /// and telling that peer it is busy would refuse the link this side is
+    /// building for it.
+    func testTwoOffersFromOnePeerAdmitOnceAndAnswerNoBusy() async {
+        let r = rig()
+
+        r.socket.deliver(from: "peer-1", offer("v=0 first"))
+        r.socket.deliver(from: "peer-1", offer("v=0 second"))
+        await settle()
+
+        XCTAssertEqual(r.peers, ["peer-1"], "one establishment")
+        XCTAssertTrue(r.socket.busied.isEmpty, "and the peer we are building for is not refused")
+    }
+
+    // MARK: - 2. nothing is lost in the turn before the assembly exists
+
+    /// The whole reason the buffer is installed in the same critical section as
+    /// the claim: a peer that already has its host candidates sends all of them
+    /// in the turn after its offer, and the assembly does not exist yet.
+    ///
+    /// Every one arrives, in the order the peer sent them, exactly once, and
+    /// AFTER the offer the assembly was handed — an answer or a candidate applied
+    /// before the offer it belongs to is not the same establishment.
+    func testCandidatesArrivingBeforeTheHopReplayInOrderExactlyOnce() async {
+        let r = rig()
+
+        r.socket.deliver(from: "peer-1", offer())
+        r.socket.deliver(from: "peer-1", candidate("1"))
+        r.socket.deliver(from: "peer-1", candidate("2"))
+        r.socket.deliver(from: "peer-1", candidate("3"))
+        XCTAssertTrue(r.transports.isEmpty, "nothing is assembled until the hop")
+        await settle()
+
+        XCTAssertEqual(r.initialSignals, [offer()], "the offer travelled as the initial signal")
+        XCTAssertEqual(r.transports[0].routed.map(\.signal), [offer()],
+                       "and reached the transport once")
+        XCTAssertEqual(r.controls[0].received.map(\.signal),
+                       [candidate("1"), candidate("2"), candidate("3")],
+                       "the chase replayed in arrival order, exactly once")
+        XCTAssertEqual(Set(r.controls[0].received.map(\.from)), ["peer-1"])
+        XCTAssertTrue(r.socket.slot.isEmpty, "and none of it also reached the connection slot")
+    }
+
+    /// Once the buffer has drained there is a link to deliver to, so a candidate
+    /// that arrives afterwards still reaches it — behind everything that was
+    /// replayed ahead of it, and still only once.
+    func testCandidatesArrivingAfterTheDrainStayBehindTheReplay() async {
+        let r = rig()
+        r.socket.deliver(from: "peer-1", offer())
+        r.socket.deliver(from: "peer-1", candidate("1"))
+        await settle()
+
+        r.socket.deliver(from: "peer-1", candidate("2"))
+        await settle()
+
+        XCTAssertEqual(r.controls[0].received.map(\.signal), [candidate("1"), candidate("2")])
+        XCTAssertTrue(r.socket.slot.isEmpty)
+    }
+
+    /// A burst that lands entirely AFTER the buffer opened is still one order.
+    ///
+    /// These do not travel through the buffer — it holds nothing once it has
+    /// drained — so their order is the queue's alone. Nothing in Swift orders two
+    /// `Task { @MainActor in … }` against each other, so a router that hopped per
+    /// frame would deliver this burst in whatever order the executor happened to
+    /// pick, and a peer's candidates would reach the transport shuffled.
+    func testABurstArrivingAfterTheDrainKeepsItsArrivalOrder() async {
+        let r = rig()
+        r.socket.deliver(from: "peer-1", offer())
+        await settle()
+
+        for index in 1...4 { r.socket.deliver(from: "peer-1", candidate("late-\(index)")) }
+        await settle()
+
+        XCTAssertEqual(r.controls[0].received.map(\.signal),
+                       (1...4).map { candidate("late-\($0)") })
+    }
+
+    /// A duplicate offer is not a signal to replay. `LinkAdmission` answers
+    /// `alreadyInFlight` for the peer it is already establishing with, so the
+    /// frame never reaches the buffer — holding it would spend a slot on an SDP
+    /// the establishment has already been handed and then replay it behind the
+    /// candidates that chase the first one.
+    func testADuplicateOfferIsNeitherCapturedNorReplayed() async {
+        let r = rig()
+
+        r.socket.deliver(from: "peer-1", offer("v=0 first"))
+        r.socket.deliver(from: "peer-1", offer("v=0 duplicate"))
+        r.socket.deliver(from: "peer-1", candidate("1"))
+        await settle()
+
+        XCTAssertEqual(r.transports[0].routed.map(\.signal), [offer("v=0 first")],
+                       "one offer reached the transport")
+        XCTAssertEqual(r.controls[0].received.map(\.signal), [candidate("1")],
+                       "and the duplicate was not held, replayed or reordered ahead of the chase")
+        XCTAssertTrue(r.socket.slot.isEmpty, "nor handed to the connection slot")
+    }
+
+    // MARK: - 3. the bound, and what it costs
+
+    /// Past `LINK_PENDING_CANDIDATE_MAX` this establishment is failed closed
+    /// rather than silently truncated — and the room it claimed is FREED on the
+    /// socket queue, so the very next peer is admitted instead of being refused
+    /// on behalf of a link that will never exist.
+    func testOverflowBeforeTheHopFreesTheRoomForTheNextPeer() async {
+        let r = rig()
+        r.socket.deliver(from: "peer-1", offer())
+        for index in 0..<LINK_PENDING_CANDIDATE_MAX {
+            r.socket.deliver(from: "peer-1", candidate("\(index)"))
+        }
+        XCTAssertEqual(r.admission.phase, .connecting(peerId: "peer-1"), "still within the bound")
+
+        r.socket.deliver(from: "peer-1", candidate("overflow"))
+
+        XCTAssertEqual(r.admission.phase, .idle, "the claim was released, synchronously")
+        r.socket.deliver(from: "peer-2", offer())
+        XCTAssertEqual(r.admission.phase, .connecting(peerId: "peer-2"),
+                       "and the next peer is admitted rather than refused")
+        await settle()
+        XCTAssertEqual(r.peers, ["peer-2"], "the doomed establishment was never assembled")
+        XCTAssertEqual(r.session.peerId, "peer-2")
+        XCTAssertEqual(r.socket.busied, [], "and nobody was told busy on its behalf")
+    }
+
+    // MARK: - 4. the socket epoch
+
+    /// A socket replaced before the handoff runs: the claim belongs to an epoch
+    /// that no longer exists, so it is released by the router itself — nothing
+    /// else can, because nothing was ever assembled.
+    func testAnEpochReplacedBeforeTheHopReleasesTheClaimAndAssemblesNothing() async {
+        let r = rig()
+        r.socket.deliver(from: "peer-1", offer())
+        XCTAssertEqual(r.admission.phase, .connecting(peerId: "peer-1"))
+
+        let next = Socket(selfId: selfId)
+        r.router.attach(to: next.client)
+
+        XCTAssertEqual(r.admission.phase, .idle, "released directly, before any hop")
+        await settle()
+        XCTAssertTrue(r.transports.isEmpty, "the stale handoff assembled nothing")
+        XCTAssertNil(r.session.peerId)
+    }
+
+    /// The old socket is not listened to any more. A frame that arrives on it
+    /// after the epoch changed must not claim the room the new epoch owns.
+    func testTheReplacedEpochsSocketIsNoLongerRouted() async {
+        let r = rig()
+        let old = r.socket
+        let next = Socket(selfId: selfId)
+        r.router.attach(to: next.client)
+
+        old.deliver(from: "peer-1", offer())
+        await settle()
+
+        XCTAssertEqual(r.admission.phase, .idle, "the retired socket routes nothing")
+        XCTAssertTrue(r.transports.isEmpty)
+        XCTAssertTrue(old.busied.isEmpty)
+    }
+
+    /// A frame that was ALREADY being routed when the socket was replaced must
+    /// not claim the room the new epoch owns.
+    ///
+    /// Cancelling the interceptor stops the next frame; it cannot stop this one,
+    /// which is inside the closure with its decision half made. It is held there
+    /// by `canAcceptLink` — the one point `LinkAdmission` calls owner code with
+    /// nothing locked — while the epoch turns over underneath it.
+    func testAFrameRoutedAcrossAnEpochChangeClaimsNothing() async {
+        // One routing is held, and only one: the predicate stays installed for
+        // the rest of this test, and the delivery below that proves the new
+        // epoch admits is routed through it on the MAIN thread.
+        let gate = OneShotGate()
+        let r = rig(canAcceptLink: { _ in gate.hold(); return true })
+        let socket = r.socket
+        let inbound = Socket.encode(Envelope(type: SignalType.signal,
+                                             from: "peer-1", data: offer()))
+        let next = Socket(selfId: selfId)
+
+        let routed = expectation(description: "the in-flight frame finished routing")
+        DispatchQueue.global().async { socket.channel.fireText(inbound); routed.fulfill() }
+        XCTAssertTrue(gate.awaitArrival(),   // the frame is inside `route`, undecided
+                      "the in-flight frame reached the accept predicate")
+        r.router.attach(to: next.client)     // and the socket it came from is retired
+        gate.release()                       // now let it finish deciding
+        await fulfillment(of: [routed], timeout: 5)
+        await settle()
+
+        XCTAssertTrue(gate.wasReleased, "the held routing was released, not abandoned")
+        XCTAssertEqual(r.admission.phase, .idle,
+                       "the retired epoch's frame did not take the new epoch's room")
+        XCTAssertTrue(r.transports.isEmpty)
+        next.deliver(from: "peer-2", offer())
+        await settle()
+        XCTAssertEqual(r.admission.phase, .connecting(peerId: "peer-2"))
+    }
+
+    /// The new epoch works, which is what makes the assertion above meaningful.
+    func testTheNewEpochRoutesAndAdmits() async {
+        let r = rig()
+        let next = Socket(selfId: selfId)
+        r.router.attach(to: next.client)
+
+        next.deliver(from: "peer-1", offer())
+        await settle()
+
+        XCTAssertEqual(r.admission.phase, .connecting(peerId: "peer-1"))
+        XCTAssertEqual(r.peers, ["peer-1"])
+    }
+
+    /// The nastiest ordering in this object: the epoch is replaced from INSIDE
+    /// the buffer's one drain, between two replayed candidates.
+    ///
+    /// The establishment that is mid-handoff must be ended — it was assembled, so
+    /// only the room session can end it — and the room must come back free. A
+    /// stale drain must not leave a live link nobody routes to, and must not
+    /// release an admission the next epoch has already claimed.
+    func testAnEpochReplacedDuringTheDrainEndsThatEstablishmentAndFreesTheRoom() async {
+        let r = rig()
+        let next = Socket(selfId: selfId)
+        // Armed BEFORE the establishment exists: the recorder is created inside
+        // the handoff, so this is the only way to be inside the drain when the
+        // epoch changes.
+        var replaced = false
+        r.onControl = { [weak r] control in
+            control.duringReceive = {
+                guard !replaced, let r else { return }
+                replaced = true
+                r.router.attach(to: next.client)
+            }
+        }
+
+        r.socket.deliver(from: "peer-1", offer())
+        r.socket.deliver(from: "peer-1", candidate("1"))
+        r.socket.deliver(from: "peer-1", candidate("2"))
+        r.socket.deliver(from: "peer-1", candidate("3"))
+        await settle()
+
+        XCTAssertTrue(replaced, "the epoch really changed mid-drain")
+        XCTAssertEqual(r.controls[0].received.count, 3,
+                       "the batch already taken was still handed over in one order")
+        XCTAssertEqual(r.admission.phase, .idle, "the mid-handoff establishment was ended")
+        XCTAssertNil(r.session.peerId, "and the room holds nothing")
+
+        next.deliver(from: "peer-2", offer())
+        await settle()
+        XCTAssertEqual(r.admission.phase, .connecting(peerId: "peer-2"),
+                       "the new epoch can admit")
+        XCTAssertEqual(r.peers, ["peer-1", "peer-2"])
+    }
+
+    /// Detaching is the same transition with no successor: the room comes back
+    /// free and the socket stops being routed.
+    func testDetachingReleasesTheRoomAndStopsRouting() async {
+        let r = rig()
+        r.socket.deliver(from: "peer-1", offer())
+
+        r.router.detach()
+
+        XCTAssertEqual(r.admission.phase, .idle)
+        r.socket.deliver(from: "peer-2", offer())
+        await settle()
+        XCTAssertEqual(r.admission.phase, .idle, "nothing is routed after a detach")
+        XCTAssertTrue(r.transports.isEmpty)
+    }
+
+    // MARK: - 5. what the router does NOT claim
+
+    /// A `busy` that arrives while this side is CONNECTING is the peer refusing
+    /// the link being built. Admission ignores it — it only cancels an
+    /// outstanding request — so it must reach the per-connection slot, where the
+    /// establishing transport turns it into a truthful failure instead of a
+    /// deadline.
+    func testAConnectingTimeBusyReachesTheConnectionSlot() async {
+        let r = rig()
+        r.socket.deliver(from: "peer-1", offer())
+        await settle()
+        XCTAssertEqual(r.admission.phase, .connecting(peerId: "peer-1"))
+
+        r.socket.deliver(from: "peer-1", linkBusySignal())
+        await settle()
+
+        XCTAssertEqual(r.socket.slot.count, 1, "the transport was told")
+        XCTAssertTrue(isLinkBusy(r.socket.slot[0].signal))
+        XCTAssertTrue(r.controls[0].received.isEmpty, "and the room did not swallow it")
+    }
+
+    /// Every legacy generation passes through untouched, whatever the peer's
+    /// link capability says. Swallowing one would break a feature that ships
+    /// today: a file transfer, a text conversation, or a one-shot file resume.
+    func testLegacyGenerationsPassThroughUntouched() async {
+        let r = rig()
+        let legacy = [fileOffer(), textOffer(), legacyResume()]
+
+        for signal in legacy { r.socket.deliver(from: "peer-1", signal) }
+        await settle()
+
+        XCTAssertEqual(r.socket.slot.map(\.signal), legacy, "in order, verbatim")
+        XCTAssertEqual(r.admission.phase, .idle, "and none of them admitted anything")
+        XCTAssertTrue(r.transports.isEmpty)
+        XCTAssertTrue(r.socket.busied.isEmpty)
+    }
+
+    /// A peer that has not announced EXACT `link/1` is not this router's
+    /// business at all — its frames reach the slot, and its offer admits
+    /// nothing. This is the predicate that carries the room scope, so it is also
+    /// what keeps a relay from activating link mode where the room forbids it.
+    ///
+    /// Admission is deliberately built to trust every peer here, so the answer
+    /// comes from the router's own gate rather than from the predicate its caller
+    /// happened to supply. Production composes both from this registry; a router
+    /// that leaned on its caller for this would activate link mode the moment one
+    /// caller was assembled differently.
+    func testAPeerWithoutTheExactCapabilityIsNotRoutedAtAll() async {
+        let r = rig(admissionTrustsEveryPeer: true, peers: ["peer-1"])
+        r.capabilities.record(peerId: "peer-2",
+                              signal: .object(["caps": .array([.string("link/2")])]))
+
+        r.socket.deliver(from: "peer-2", offer())
+        await settle()
+
+        XCTAssertEqual(r.admission.phase, .idle)
+        XCTAssertEqual(r.socket.slot.count, 1, "it passed, untouched")
+        XCTAssertTrue(r.socket.busied.isEmpty, "and was not even answered")
+    }
+
+    // MARK: - 6. the leave budget is real
+
+    /// Nine well-shaped forged departures buy at most eight verifications.
+    ///
+    /// Every leave traverses `LinkAdmission.route` FIRST, which is where the
+    /// budget lives. A router that forwarded a leave without routing it would
+    /// make `LINK_LEAVE_MAX_ATTEMPTS` decorative: a flood would buy one HMAC per
+    /// message for as long as it kept sending.
+    func testNineForgedLeavesBuyAtMostEightVerifications() async {
+        let r = rig()
+        r.socket.deliver(from: "peer-1", offer())
+        await settle()
+        r.transports[0].publish(identity(peerId: "peer-1"))
+        await settle()
+        XCTAssertEqual(r.admission.phase, .open(peerId: "peer-1"))
+
+        for index in 0..<9 {
+            r.socket.deliver(from: "peer-1", leave(String(repeating: "\(index)",
+                                                          count: LINK_LEAVE_AUTH_LENGTH)))
+        }
+        await settle()
+
+        XCTAssertEqual(r.controls[0].leaves.count, LINK_LEAVE_MAX_ATTEMPTS,
+                       "eight verifications bought, and the ninth refused")
+        XCTAssertLessThanOrEqual(r.controls[0].leaves.count, LINK_LEAVE_MAX_ATTEMPTS)
+    }
+
+    /// The envelope's local recipient id travels unchanged, because it is part of
+    /// the bytes the tag covers: a leave verified against the wrong `to` is a
+    /// leave a relay could reflect back at its sender.
+    func testALeaveCarriesThisSidesOwnIdUnchanged() async {
+        let r = rig()
+        r.socket.deliver(from: "peer-1", offer())
+        await settle()
+        r.transports[0].publish(identity(peerId: "peer-1"))
+        await settle()
+
+        r.socket.deliver(from: "peer-1", leave())
+        await settle()
+
+        XCTAssertEqual(r.controls[0].leaves.map(\.to), [selfId])
+        XCTAssertEqual(r.controls[0].leaves.map(\.from), ["peer-1"])
+        XCTAssertEqual(r.controls[0].leaves.map(\.auth),
+                       [String(repeating: "L", count: LINK_LEAVE_AUTH_LENGTH)])
+    }
+
+    /// With no `welcome` yet there is no local id, and an empty one would make
+    /// the tag cover the wrong bytes. Nothing is forwarded rather than something
+    /// wrong being verified.
+    func testALeaveIsNotForwardedWithoutALocalId() async throws {
+        let r = rig()
+        // A socket that never received `welcome`: `selfId` is nil on it.
+        let anonymous = FakeWebSocketChannel()
+        let client = SignalingClient(channel: anonymous, name: "self")
+        anonymous.fireOpen()
+        r.router.attach(to: client)
+
+        // The establishment is built on THIS epoch, deliberately: the router must
+        // really be holding one when the leave arrives. Established on the
+        // previous epoch instead, the forward would be refused for having no live
+        // establishment and this test would pass whether or not the local id was
+        // ever looked at.
+        anonymous.fireText(Socket.encode(Envelope(type: SignalType.signal,
+                                                  from: "peer-1", data: offer())))
+        await settle()
+        XCTAssertEqual(r.admission.phase, .connecting(peerId: "peer-1"),
+                       "the anonymous epoch really holds an establishment")
+        r.admission.didOpen(peerId: "peer-1")
+        let control = try XCTUnwrap(r.controls.last)
+
+        anonymous.fireText(Socket.encode(Envelope(type: SignalType.signal,
+                                                  from: "peer-1", data: leave())))
+        await settle()
+
+        XCTAssertTrue(control.leaves.isEmpty, "no local id, no directional payload")
+
+        // And the instant this side HAS a local id the SAME leave is forwarded,
+        // which is what proves the missing id was the only thing that stopped it.
+        anonymous.fireText(Socket.encode(Envelope(type: SignalType.welcome, name: "late-id")))
+        anonymous.fireText(Socket.encode(Envelope(type: SignalType.signal,
+                                                  from: "peer-1", data: leave())))
+        await settle()
+
+        XCTAssertEqual(control.leaves.map(\.to), ["late-id"],
+                       "the id the envelope really carried, unchanged")
+    }
+
+    // MARK: - 7. a rebuild offer routes only after admission
+
+    /// An authenticated rebuild offer is forwarded ONLY when admission says it is
+    /// one: the `resume` generation is shared with a legacy one-shot file resume,
+    /// and this side's own role decides who drives a rebuild.
+    func testARebuildOfferIsForwardedOnlyOnceAdmissionSaysItIsOne() async {
+        let r = rig()
+        r.socket.deliver(from: "peer-1", offer())
+        await settle()
+        r.transports[0].publish(identity(peerId: "peer-1"))
+        await settle()
+
+        // Still connected: a rebuild offer is not this link's business yet.
+        r.socket.deliver(from: "peer-1", resumeOffer())
+        await settle()
+        XCTAssertTrue(r.controls[0].resumeOffers.isEmpty,
+                      "an open link has no gap for a rebuild to fill")
+
+        r.admission.didInterrupt()
+        r.socket.deliver(from: "peer-1", resumeOffer())
+        await settle()
+
+        XCTAssertEqual(r.controls[0].resumeOffers.count, 1)
+        XCTAssertEqual(r.controls[0].resumeOffers[0].from, "peer-1")
+    }
+
+    // MARK: - 8. re-entrancy
+
+    /// `canAcceptLink` is owner code. `LinkAdmission` calls it with its own lock
+    /// released precisely so it can read the room back — and the router must do
+    /// the same with ITS lock, or the two orders deadlock the signalling delivery
+    /// queue the moment a session model implements the obvious predicate.
+    ///
+    /// Run off the main thread with a bounded wait, so a deadlock FAILS instead
+    /// of hanging the suite.
+    func testAReentrantAcceptPredicateDoesNotDeadlockTheRouter() async {
+        let probe = Probe()
+        let r = rig(canAcceptLink: { _ in
+            probe.fire()
+            return true
+        })
+        probe.arm { [admission = r.admission, router = r.router] in
+            _ = admission.phase
+            _ = admission.boundPeerId
+            admission.didRequestTimeOut(peerId: "peer-9")
+            router.detach()
+        }
+
+        let done = expectation(description: "the burst was routed")
+        let socket = r.socket
+        let inbound = Socket.encode(Envelope(type: SignalType.signal,
+                                             from: "peer-1", data: offer()))
+        DispatchQueue.global().async {
+            socket.channel.fireText(inbound)
+            done.fulfill()
+        }
+        await fulfillment(of: [done], timeout: 5)
+        await settle()
+
+        XCTAssertNil(r.session.peerId, "the detach won, and left nothing half-built")
+        XCTAssertEqual(r.admission.phase, .idle, "and nothing is stuck connecting")
+    }
+
+    /// The next establishment can begin from INSIDE the terminal callback of the
+    /// one that just ended — the shape a room owner really has, because the
+    /// signal that starts the next link can arrive in the same turn the last one
+    /// dies. It must produce one link, not two, and must not strand the room.
+    func testTheNextEstablishmentCanStartFromInsideTheTerminalCallback() async {
+        let r = rig(realControl: true)
+        r.socket.deliver(from: "peer-1", offer())
+        await settle()
+        let attempt = r.session.attempt
+        let previous = attempt?.onLifecycle
+        attempt?.onLifecycle = { [weak r] event in
+            previous?(event)
+            guard case .ended = event, let r else { return }
+            r.socket.deliver(from: "peer-2", self.offer("v=0 next"))
+        }
+
+        r.transports[0].fail()
+        await settle()
+
+        XCTAssertEqual(r.admission.phase, .connecting(peerId: "peer-2"))
+        XCTAssertEqual(r.session.peerId, "peer-2")
+        XCTAssertEqual(r.transports.count, 2, "exactly two links, ever")
+        XCTAssertTrue(r.socket.busied.isEmpty, "and the second peer was not refused")
+    }
+
+    /// A peer that comes back after its own establishment failed is admitted
+    /// again rather than answered on behalf of a link that is gone.
+    func testAPeerIsAdmittedAgainAfterItsEstablishmentFailed() async {
+        let r = rig(realControl: true)
+        r.socket.deliver(from: "peer-1", offer())
+        await settle()
+        r.transports[0].fail()
+        await settle()
+        XCTAssertEqual(r.admission.phase, .failed)
+
+        r.socket.deliver(from: "peer-1", offer("v=0 retry"))
+        await settle()
+
+        XCTAssertEqual(r.admission.phase, .connecting(peerId: "peer-1"))
+        XCTAssertEqual(r.transports.count, 2)
+        XCTAssertEqual(r.session.peerId, "peer-1")
+    }
+
+    // MARK: - 9. the boundaries hold
+
+    /// Comments stripped, so a rule about code is not satisfied — or broken — by
+    /// prose.
+    private func code(_ source: String) -> String {
+        source
+            .components(separatedBy: "\n")
+            .map { line -> String in
+                guard let marker = line.range(of: "//") else { return line }
+                return String(line[line.startIndex..<marker.lowerBound])
+            }
+            .joined(separator: "\n")
+    }
+
+    private var appsRoot: URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+    }
+
+    private func appSources() throws -> [(name: String, code: String)] {
+        let roots = [appsRoot.appendingPathComponent("RelayiumKit/Sources"),
+                     appsRoot.appendingPathComponent("ios"),
+                     appsRoot.appendingPathComponent("mac")]
+        var sources: [(String, String)] = []
+        for root in roots {
+            guard FileManager.default.fileExists(atPath: root.path) else { continue }
+            let files = FileManager.default.enumerator(at: root, includingPropertiesForKeys: nil)?
+                .compactMap { $0 as? URL }
+                .filter { $0.pathExtension == "swift" }
+            for file in try XCTUnwrap(files) {
+                sources.append((file.lastPathComponent,
+                                code((try? String(contentsOf: file, encoding: .utf8)) ?? "")))
+            }
+        }
+        XCTAssertGreaterThan(sources.count, 50, "the scan really reached the app sources")
+        return sources
+    }
+
+    private func appSource(_ name: String) throws -> String {
+        let url = appsRoot.appendingPathComponent("RelayiumKit/Sources/RelayiumAppKit/\(name)")
+        let source = code(try String(contentsOf: url, encoding: .utf8))
+        XCTAssertFalse(source.isEmpty, "\(name) must be readable")
+        return source
+    }
+
+    /// Routing a room is not being reachable. Nothing outside the tests
+    /// constructs a router, neither app target names it, and neither flag has
+    /// moved.
+    func testTheRouterStaysUnreachableFromProduction() throws {
+        XCTAssertFalse(LINK_BUILD_SUPPORT)
+        XCTAssertFalse(LINK_TRANSPORT_REPLACEMENT_SUPPORTED)
+
+        for source in try appSources() where source.name != "LinkRoomRouter.swift" {
+            XCTAssertFalse(source.code.contains("LinkRoomRouter("),
+                           "\(source.name) constructs a link room router")
+        }
+    }
+
+    /// Internal, like everything else below this line. A `public` router would be
+    /// reachable from an app target whatever the flags say.
+    func testTheRouterIsInternal() throws {
+        let source = try appSource("LinkRoomRouter.swift")
+        XCTAssertTrue(source.contains("final class LinkRoomRouter"))
+        XCTAssertFalse(source.contains("public "), "nothing here is public API")
+    }
+
+    /// This cut owns inbound routing and nothing else. The request lifecycle, the
+    /// roster and the outbound authenticated leave each have their own retry or
+    /// crypto contract and are reviewed separately; half-making one here is how a
+    /// lost request comes to consume two attempts, or a resume key reaches a
+    /// layer that has no business holding one.
+    func testTheRouterContainsNoRequestRosterOrOutboundSigningScope() throws {
+        let source = try appSource("LinkRoomRouter.swift")
+
+        for forbidden in ["admitRequest", "didBeginRequesting", "didRequestTimeOut",
+                          "linkRequestSignal", "linkLeaveSignal", "signResume",
+                          "resumeAuth", "onPeers", "retain(", "reset()",
+                          "Timer", "DispatchQueue.main.asyncAfter", "Deadline"] {
+            XCTAssertFalse(source.contains(forbidden),
+                           "the router must not name \(forbidden)")
+        }
+    }
+
+    /// The one-link rule is admission's, and the router reads it through
+    /// `route`/`admitEstablishment` alone. A router that re-derived a decision
+    /// from the signal — a second `isLinkOffer` clause, its own role rule —
+    /// would be a second policy that can silently disagree with the
+    /// authoritative one.
+    func testTheRouterDerivesNoDecisionOfItsOwn() throws {
+        let source = try appSource("LinkRoomRouter.swift")
+
+        for forbidden in ["isLinkOffer", "isLinkRequest", "isLinkBusy",
+                          "parsedLinkLeaveAuth", "parseSDP", "parseICE",
+                          "linkRole", "signalGeneration", "peerCaps("] {
+            XCTAssertFalse(source.contains(forbidden),
+                           "the router must not decide \(forbidden) for itself")
+        }
+        XCTAssertTrue(source.contains("admission.route("))
+        XCTAssertTrue(source.contains("admission.admitEstablishment("))
+        XCTAssertTrue(source.contains("LINK_CAPABILITY"))
+    }
+
+    /// The two admission transitions this layer may make, and no third.
+    /// `didBeginEstablishing` is `LinkRoomSession.begin`'s, `didOpen` is the
+    /// runtime's, and every gap transition is the coordinator's; the only release
+    /// the router owns is the claim that never reached `beginAdmitted`.
+    func testTheRouterMakesOnlyTheOneReleaseItOwns() throws {
+        let source = try appSource("LinkRoomRouter.swift")
+
+        XCTAssertEqual(source.components(separatedBy: "admission.didClose()").count - 1, 1,
+                       "one release, for a claim nothing else can free")
+        for forbidden in ["didBeginEstablishing", "didOpen", "didFail", "didInterrupt",
+                          "didReplaceTransport", "didBeginReplacingTransport",
+                          "didEndReplacingTransport"] {
+            XCTAssertFalse(source.contains(forbidden),
+                           "\(forbidden) belongs to another layer")
+        }
+        XCTAssertTrue(source.contains("beginAdmitted("),
+                      "the claim is handed over, never re-announced")
+    }
+}

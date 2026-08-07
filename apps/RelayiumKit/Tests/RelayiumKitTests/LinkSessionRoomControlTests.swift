@@ -308,8 +308,10 @@ final class LinkSessionRoomControlTests: XCTestCase {
         }
     }
 
-    /// The authenticated departure reaches exactly the four objects on the room's
-    /// own path to the link, and nothing else in app targets names it.
+    /// The authenticated departure reaches exactly the room's own path to the
+    /// link, and nothing else in app targets names it. The internal router is the
+    /// signalling entrance to that path; its separate reachability guard keeps it
+    /// out of app composition while this cut remains disabled.
     ///
     /// A view, an `AppEnvironment` or a session model that could call this would
     /// be able to end a link by asserting a tag it has no way to hold — the whole
@@ -317,6 +319,7 @@ final class LinkSessionRoomControlTests: XCTestCase {
     /// holding the key decides.
     func testTheLeaveSeamReachesNothingButTheRoomsOwnPath() throws {
         let expected: Set<String> = ["LinkRecovery.swift",
+                                     "LinkRoomRouter.swift",
                                      "LinkRoomSession.swift",
                                      "LinkSessionRoomControl.swift",
                                      "LinkSessionRuntime.swift"]
