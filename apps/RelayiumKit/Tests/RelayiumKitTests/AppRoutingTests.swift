@@ -79,6 +79,13 @@ final class AppRoutingTests: XCTestCase {
         XCTAssertEqual(presence.mode, .files)
         XCTAssertEqual(nav.selection, .nearby)
         XCTAssertEqual(nav.selectionWrites, 1)
+
+        XCTAssertFalse(AppRouting.claimIncoming(
+            .text, peerLabel: "Second peer", presence: presence, navigation: nav),
+                       "a second offer on Nearby is a new session, not reconstruction")
+        XCTAssertEqual(presence.mode, .files)
+        XCTAssertNil(presence.sessionPeerLabel)
+        XCTAssertEqual(nav.selectionWrites, 1)
     }
 
     @MainActor func testLaterEventWinsAndNeitherClearsTheOther() {

@@ -366,7 +366,7 @@ struct NearbyPane: View {
         // presented here. The claim can only be refused while another
         // destination owns a session. A concurrent inbound offer can win after
         // the last frame rendered, so refusal is enforced here, not by visibility.
-        guard presence.claim(.nearby, mode: mode, peerLabel: device.label) else { return }
+        guard presence.beginSession(.nearby, mode: mode, peerLabel: device.label) else { return }
         fileModel.stageSend(sources: staged.sources, metas: staged.metas)
         Task { await fileModel.connectNearby(peerId: device.id, role: .initiator) }
     }
@@ -377,7 +377,7 @@ struct NearbyPane: View {
             return
         }
         stagingError = nil
-        guard presence.claim(.nearby, mode: mode, peerLabel: device.label) else { return }
+        guard presence.beginSession(.nearby, mode: mode, peerLabel: device.label) else { return }
         Task { await textModel.connectNearby(peerId: device.id, role: .initiator) }
     }
 

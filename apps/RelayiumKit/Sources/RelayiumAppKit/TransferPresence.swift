@@ -136,6 +136,29 @@ public final class TransferPresence: ObservableObject {
         return true
     }
 
+    /// Take ownership for a brand-new session.
+    ///
+    /// Unlike `claim`, this is deliberately not idempotent. SwiftUI can deliver
+    /// a second activation before the first action's asynchronous model start
+    /// publishes busy state. Reusing the reconstruction claim there would let
+    /// two creates, joins or connections enter the same shared model.
+    @discardableResult
+    public func beginSession(_ destination: AppDestination,
+                             mode: TransferMode,
+                             peerLabel: String? = nil) -> Bool {
+        guard owner == nil else { return false }
+        return claim(destination, mode: mode, peerLabel: peerLabel)
+    }
+
+    /// The same new-session boundary for iOS, where mode has one separate
+    /// authority in `DirectModeSelection`.
+    @discardableResult
+    public func beginSession(_ destination: AppDestination,
+                             peerLabel: String? = nil) -> Bool {
+        guard owner == nil else { return false }
+        return claim(destination, peerLabel: peerLabel)
+    }
+
     /// Only the owner can let go. A release from anywhere else is ignored rather
     /// than trusted, so a destination returning to idle cannot blank the surface
     /// that is presenting somebody else's live session.

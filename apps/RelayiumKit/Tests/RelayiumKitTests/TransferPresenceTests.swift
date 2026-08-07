@@ -29,6 +29,18 @@ final class TransferPresenceTests: XCTestCase {
         XCTAssertEqual(p.owner, .nearby)
     }
 
+    func testBeginningANewSessionIsNotIdempotentForTheOwner() {
+        let p = TransferPresence(mode: .files)
+        XCTAssertTrue(p.beginSession(.nearby, mode: .text,
+                                     peerLabel: "First device"))
+        XCTAssertFalse(p.beginSession(.nearby, mode: .files,
+                                      peerLabel: "Second device"),
+                       "a second tap must not start a second session on the same surface")
+        XCTAssertEqual(p.owner, .nearby)
+        XCTAssertEqual(p.mode, .text)
+        XCTAssertEqual(p.sessionPeerLabel, "First device")
+    }
+
     func testASecondDestinationIsRefusedAndChangesNothing() {
         let p = TransferPresence()
         p.claim(.nearby, mode: .text)
@@ -186,5 +198,14 @@ final class TransferPresenceTests: XCTestCase {
         XCTAssertFalse(p.claim(.pairingCode))
         XCTAssertEqual(p.owner, .nearby)
         XCTAssertEqual(p.mode, .files)
+    }
+
+
+    func testBeginningWithoutAModeAlsoRequiresAnUnownedSurface() {
+        let p = TransferPresence(mode: .text)
+        XCTAssertTrue(p.beginSession(.pairingCode))
+        XCTAssertFalse(p.beginSession(.pairingCode))
+        XCTAssertEqual(p.owner, .pairingCode)
+        XCTAssertEqual(p.mode, .text)
     }
 }

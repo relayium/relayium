@@ -61,7 +61,8 @@ public enum AppRouting {
                                      navigation: AppNavigationModel) -> Bool {
         let destination = destination(forIncoming: kind)
         let mode: TransferMode = kind == .file ? .files : .text
-        guard presence.claim(destination, mode: mode, peerLabel: peerLabel) else { return false }
+        guard presence.beginSession(destination, mode: mode,
+                                    peerLabel: peerLabel) else { return false }
         navigation.select(destination)
         return true
     }
@@ -112,9 +113,9 @@ public enum AppRouting {
     ///  - **which tab** — last, so the shell arrives at a surface that is
     ///    already configured.
     ///
-    /// iOS and macOS both call this from pre-responder admission. macOS also
-    /// replays the idempotent claim from AppShell when a closed window is rebuilt
-    /// around an already-live inbound session.
+    /// iOS and macOS both call this from pre-responder admission. A rebuilt
+    /// macOS view reconciles the already-live publication separately; it must
+    /// not make new-session admission idempotent.
     @MainActor
     @discardableResult
     public static func claimIncoming(_ kind: NearbyReceiveKind,
@@ -123,14 +124,7 @@ public enum AppRouting {
                                      modes: DirectModeSelection,
                                      navigation: AppNavigationModel) -> Bool {
         let destination = destination(forIncoming: kind)
-        // This is deliberately stricter than `TransferPresence.claim`, whose
-        // idempotence is useful to a surface reconciling a session it already
-        // owns. An inbound offer is always a *new* session. If Nearby has only
-        // just claimed an outbound tap, the two realtime models may still be
-        // idle until that tap's Task begins; admitting the offer in that gap
-        // would let two attempts overwrite the same model.
-        guard presence.owner == nil,
-              presence.claim(destination, peerLabel: peerLabel) else { return false }
+        guard presence.beginSession(destination, peerLabel: peerLabel) else { return false }
         modes.adopt(forIncoming: kind)
         navigation.select(destination)
         return true

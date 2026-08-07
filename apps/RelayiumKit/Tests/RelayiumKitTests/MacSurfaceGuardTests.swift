@@ -1284,10 +1284,10 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// Every macOS start path must stop before touching its shared model.
     func testEveryOutboundRealtimeStartRequiresItsSurfaceClaim() throws {
         let expectations: [(String, String, Int)] = [
-            ("DirectPane.swift", "guard presence.claim(.pairingCode, mode: .files) else { return }", 2),
-            ("RealtimeTextPane.swift", "guard presence.claim(.pairingCode, mode: .text) else { return }", 2),
+            ("DirectPane.swift", "guard presence.beginSession(.pairingCode, mode: .files) else { return }", 2),
+            ("RealtimeTextPane.swift", "guard presence.beginSession(.pairingCode, mode: .text) else { return }", 2),
             ("NearbyPane.swift",
-             "guard presence.claim(.nearby, mode: mode, peerLabel: device.label) else { return }", 2),
+             "guard presence.beginSession(.nearby, mode: mode, peerLabel: device.label) else { return }", 2),
         ]
         for (file, guardLine, count) in expectations {
             let source = try source(named: file)

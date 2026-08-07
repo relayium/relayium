@@ -2922,6 +2922,19 @@ final class IOSSurfaceGuardTests: XCTestCase {
                       "the screen must say what happens on the other end")
     }
 
+    /// A same-surface double activation lands before either asynchronous model
+    /// necessarily publishes busy. New work must use the strict boundary, not
+    /// the idempotent claim reserved for reconstructing an existing session.
+    func testEveryIOSRealtimeStartRequiresANewSessionClaim() throws {
+        let all = try sources()
+        let direct = try XCTUnwrap(all.first { $0.name == "DirectView.swift" }?.text)
+        let nearby = try XCTUnwrap(all.first { $0.name == "NearbyView.swift" }?.text)
+        XCTAssertEqual(direct.components(separatedBy:
+            "guard presence.beginSession(.pairingCode) else { return }").count - 1, 4)
+        XCTAssertEqual(nearby.components(separatedBy:
+            "guard presence.beginSession(.nearby, peerLabel: device.label) else { return }").count - 1, 2)
+    }
+
     /// The Nearby tab scrolls, like every other screen in this app.
     ///
     /// It is the longest one: an explanation, a status card, a roster of

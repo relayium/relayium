@@ -603,7 +603,7 @@ struct DirectView: View {
         // Claimed before connecting, so the session this is about to start is
         // presented here. A refusal means Nearby already owns one and the card
         // above is already showing that instead.
-        guard presence.claim(.pairingCode) else { return }
+        guard presence.beginSession(.pairingCode) else { return }
         foreground.sessionStarting()
         Task { await file.join(code: file.joinCode) }
     }
@@ -625,7 +625,7 @@ struct DirectView: View {
         // Before anything is written to the shared model: a refused claim means
         // Nearby owns a session, and staging over its pending batch would be
         // this tab reaching into a transfer it is not even drawing.
-        guard presence.claim(.pairingCode) else { return }
+        guard presence.beginSession(.pairingCode) else { return }
         foreground.sessionStarting()
         file.stageSend(sources: staged.sources, metas: staged.metas)
         await file.mintCode(token: access.token)
@@ -634,7 +634,7 @@ struct DirectView: View {
     }
 
     private func joinTextSession() {
-        guard presence.claim(.pairingCode) else { return }
+        guard presence.beginSession(.pairingCode) else { return }
         foreground.sessionStarting()
         Task { await text.join(code: text.joinCode) }
     }
@@ -643,7 +643,7 @@ struct DirectView: View {
         // Same live credential boundary as file create; joining remains outside
         // it and anonymous.
         guard case let .allowed(access) = gate else { return }
-        guard presence.claim(.pairingCode) else { return }
+        guard presence.beginSession(.pairingCode) else { return }
         foreground.sessionStarting()
         await text.mintCode(token: access.token)
         guard case let .showingCode(code, _) = text.state else { return }

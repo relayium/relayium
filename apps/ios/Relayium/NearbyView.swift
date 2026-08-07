@@ -556,7 +556,7 @@ struct NearbyView: View {
         // nothing. A refusal means the other tab already owns a session, and
         // staging over its pending batch would be this tab reaching into a
         // transfer it is not even drawing.
-        guard presence.claim(.nearby, peerLabel: device.label) else { return }
+        guard presence.beginSession(.nearby, peerLabel: device.label) else { return }
         foreground.sessionStarting()
         file.stageSend(sources: staged.sources, metas: staged.metas)
         Task { await file.connectNearby(peerId: device.id, role: .initiator) }
@@ -569,7 +569,7 @@ struct NearbyView: View {
             return
         }
         actionError = nil
-        guard presence.claim(.nearby, peerLabel: device.label) else { return }
+        guard presence.beginSession(.nearby, peerLabel: device.label) else { return }
         foreground.sessionStarting()
         Task { await text.connectNearby(peerId: device.id, role: .initiator) }
     }
