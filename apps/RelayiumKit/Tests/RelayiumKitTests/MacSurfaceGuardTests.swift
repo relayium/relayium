@@ -323,6 +323,14 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "inbound admission must use the same atomic claim-before-navigation route")
     }
 
+    func testAReopenedWindowReconcilesRatherThanReadmittingTheLiveSession() throws {
+        let shell = try source(named: "Shell/AppShellView.swift")
+        XCTAssertTrue(shell.contains("AppRouting.reconcileIncoming(kind,"),
+                      "window reconstruction cannot use strict new-offer admission")
+        XCTAssertFalse(shell.contains("AppRouting.claimIncoming(kind,"),
+                       "the shell must not make an existing session look like a new offer")
+    }
+
     func testNearbySessionKeepsItsPeerVisibleAfterTheRosterDisappears() throws {
         let nearby = try source(named: "NearbyPane.swift")
         XCTAssertTrue(nearby.contains("presence.sessionPeerLabel"))

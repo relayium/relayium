@@ -67,6 +67,24 @@ public enum AppRouting {
         return true
     }
 
+    /// Put an already-published macOS inbound session back on screen.
+    ///
+    /// This is reconstruction, not admission: a closed unique window can be
+    /// reopened while the app-scoped receive model and ownership are still
+    /// live. The owner's idempotent `claim` is required here, while a different
+    /// owner is still refused without moving navigation.
+    @MainActor
+    @discardableResult
+    public static func reconcileIncoming(_ kind: NearbyReceiveKind,
+                                         presence: TransferPresence,
+                                         navigation: AppNavigationModel) -> Bool {
+        let destination = destination(forIncoming: kind)
+        let mode: TransferMode = kind == .file ? .files : .text
+        guard presence.claim(destination, mode: mode) else { return false }
+        navigation.select(destination)
+        return true
+    }
+
     /// Files the OS opened with this app — a Finder **Open With**, or a drop on
     /// the Dock icon.
     ///

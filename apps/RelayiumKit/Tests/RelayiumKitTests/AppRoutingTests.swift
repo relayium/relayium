@@ -88,6 +88,29 @@ final class AppRoutingTests: XCTestCase {
         XCTAssertEqual(nav.selectionWrites, 1)
     }
 
+    @MainActor func testMacIncomingReconstructionRestoresItsExistingSurface() {
+        let presence = TransferPresence(mode: .text)
+        let nav = AppNavigationModel(selection: .account)
+        XCTAssertTrue(presence.claim(.nearby, mode: .files,
+                                     peerLabel: "Kitchen iPad"))
+
+        XCTAssertTrue(AppRouting.reconcileIncoming(
+            .file, presence: presence, navigation: nav))
+        XCTAssertEqual(presence.owner, .nearby)
+        XCTAssertEqual(presence.mode, .files)
+        XCTAssertEqual(presence.sessionPeerLabel, "Kitchen iPad")
+        XCTAssertEqual(nav.selection, .nearby)
+        XCTAssertEqual(nav.selectionWrites, 1)
+
+        presence.release(.nearby)
+        XCTAssertTrue(presence.claim(.pairingCode, mode: .text))
+        nav.select(.pairingCode)
+        XCTAssertFalse(AppRouting.reconcileIncoming(
+            .file, presence: presence, navigation: nav))
+        XCTAssertEqual(nav.selection, .pairingCode)
+        XCTAssertEqual(nav.selectionWrites, 2)
+    }
+
     @MainActor func testLaterEventWinsAndNeitherClearsTheOther() {
         let nav = AppNavigationModel()
         nav.select(AppRouting.destination(forIncoming: .file))

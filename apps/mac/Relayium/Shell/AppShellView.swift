@@ -128,9 +128,9 @@ struct AppShellView: View {
             // Claim BEFORE navigating. Pairing-code and Nearby use the same
             // models, so a mistaken/stale publication must not move the user
             // away from a pairing session that already owns its surface.
-            AppRouting.claimIncoming(kind,
-                                     presence: presence,
-                                     navigation: navigation)
+            AppRouting.reconcileIncoming(kind,
+                                         presence: presence,
+                                         navigation: navigation)
         }
     }
 }
