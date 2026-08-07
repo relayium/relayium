@@ -23,6 +23,7 @@ struct RealtimeTextPane: View {
 
     @EnvironmentObject private var navigation: AppNavigationModel
     @EnvironmentObject private var presence: TransferPresence
+    @State private var confirmingTextHistoryDone = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -36,7 +37,7 @@ struct RealtimeTextPane: View {
                 // retained transcript still belong to this task. Expose only
                 // the explicit cleanup boundary: start controls here would let
                 // a new session replace the history before the user chose Done.
-                Button(L10n.t(.commonDone)) { model.reset() }
+                Button(L10n.t(.commonDone)) { finishOrConfirm() }
                     .buttonStyle(.bordered)
             case .minting:
                 SectionCard(title: L10n.t(.textStartHeading)) {
@@ -52,6 +53,18 @@ struct RealtimeTextPane: View {
                  .incomingRequest, .open:
                 RealtimeTextSessionView(model: model)
             }
+        }
+        .confirmationDialog(
+            L10n.t(.textClearHistoryConfirmTitle),
+            isPresented: $confirmingTextHistoryDone,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.t(.commonDone), role: .destructive) { model.reset() }
+            Button(L10n.t(.commonCancel), role: .cancel) {
+                confirmingTextHistoryDone = false
+            }
+        } message: {
+            Text(L10n.t(.textClearHistoryConfirmBody))
         }
     }
 
@@ -153,5 +166,13 @@ struct RealtimeTextPane: View {
         await model.mintCode(token: token)
         guard case let .showingCode(code, _) = model.state else { return }
         await model.join(code: code, role: .initiator)
+    }
+
+    private func finishOrConfirm() {
+        if model.history.isEmpty {
+            model.reset()
+        } else {
+            confirmingTextHistoryDone = true
+        }
     }
 }

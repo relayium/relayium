@@ -2914,6 +2914,16 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(source.contains("L10n.t(.textClearHistoryConfirmBody)"))
     }
 
+    func testPairingDoneCannotDiscardTextHistoryWithoutConfirmation() throws {
+        let source = try direct().text
+        XCTAssertTrue(source.contains("@State private var confirmingTextHistoryDone = false"))
+        XCTAssertTrue(source.contains("if text.history.isEmpty"))
+        XCTAssertTrue(source.contains(
+            "Button(L10n.t(.commonDone), role: .destructive) { text.reset() }"))
+        XCTAssertTrue(source.contains("L10n.t(.textClearHistoryConfirmTitle)"))
+        XCTAssertTrue(source.contains("L10n.t(.textClearHistoryConfirmBody)"))
+    }
+
     /// **This slice adds no network capability, and the reason matters.**
     ///
     /// `LanDiscoveryModel` is not Bonjour and does not scan: it joins the hub's

@@ -229,7 +229,7 @@ final class MacSurfaceGuardTests: XCTestCase {
             .components(separatedBy: "case .minting:").first ?? ""
         XCTAssertFalse(textTerminal.contains("createCard"))
         XCTAssertFalse(textTerminal.contains("joinCard"))
-        XCTAssertTrue(textTerminal.contains("Button(L10n.t(.commonDone)) { model.reset() }"))
+        XCTAssertTrue(textTerminal.contains("Button(L10n.t(.commonDone)) { finishOrConfirm() }"))
         XCTAssertFalse(textTerminal.contains("buttonStyle(.link)"))
 
         let session = try source(named: "RealtimeFileSessionView.swift")
@@ -237,6 +237,16 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(completed.contains("Button(L10n.t(.commonDone)) { model.cancel() }"))
         XCTAssertFalse(completed.components(separatedBy: "private func verifying").first?.contains(
             "buttonStyle(.link)") ?? true)
+    }
+
+    func testPairingDoneCannotDiscardTextHistoryWithoutConfirmation() throws {
+        let source = try source(named: "RealtimeTextPane.swift")
+        XCTAssertTrue(source.contains("@State private var confirmingTextHistoryDone = false"))
+        XCTAssertTrue(source.contains("if model.history.isEmpty"))
+        XCTAssertTrue(source.contains(
+            "Button(L10n.t(.commonDone), role: .destructive) { model.reset() }"))
+        XCTAssertTrue(source.contains("L10n.t(.textClearHistoryConfirmTitle)"))
+        XCTAssertTrue(source.contains("L10n.t(.textClearHistoryConfirmBody)"))
     }
 
     func testNearbyFileFailureKeepsTheManifestIdentityUntilBack() throws {
@@ -766,8 +776,9 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// "both models are `.idle`", so a terminal surface with no way out holds the
     /// claim for as long as the user leaves it there, and the other destination
     /// stays on its "shown elsewhere" card with no way back. The wiring that
-    /// closes that is one Button per surface, which is exactly the kind of thing
-    /// a later refactor drops without any test noticing.
+    /// closes that is one visible Button per surface, which is exactly the kind
+    /// of thing a later refactor drops without any test noticing. Text also has
+    /// a second Done inside its destructive history confirmation.
     ///
     /// Bounded to the terminal branch on both sides rather than merely present
     /// in the file: a Done offered on `.connecting` or `.open` would abandon a
@@ -777,16 +788,19 @@ final class MacSurfaceGuardTests: XCTestCase {
             (file: "DirectPane.swift",
              begins: "if case let .failed(message) = model.state {",
              ends: Optional<String>.none,
-             dismisses: "Button(L10n.t(.commonDone)) { model.cancel() }"),
+             dismisses: "Button(L10n.t(.commonDone)) { model.cancel() }",
+             doneCount: 1),
             (file: "RealtimeTextPane.swift",
              begins: "case .failed, .ended, .refused, .unsupported:",
              ends: Optional("case .minting:"),
-             dismisses: "Button(L10n.t(.commonDone)) { model.reset() }"),
+             dismisses: "Button(L10n.t(.commonDone)) { finishOrConfirm() }",
+             doneCount: 2),
         ]
         for surface in surfaces {
             let text = try source(named: surface.file)
-            XCTAssertEqual(text.components(separatedBy: ".commonDone").count - 1, 1,
-                           "\(surface.file) must carry exactly one Done")
+            XCTAssertEqual(text.components(separatedBy: ".commonDone").count - 1,
+                           surface.doneCount,
+                           "\(surface.file) lost its visible or confirmation Done")
             XCTAssertTrue(text.contains(surface.dismisses),
                           "\(surface.file) must dismiss with \(surface.dismisses)")
             guard let done = text.range(of: ".commonDone"),

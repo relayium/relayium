@@ -94,6 +94,7 @@ struct DirectView: View {
     /// model is involved at all, so it has no state case to live in, and it is
     /// cleared whenever a new attempt starts so it cannot outlive its cause.
     @State private var destinationError: String?
+    @State private var confirmingTextHistoryDone = false
 
     private var gate: AccountGate {
         AccountGate.from(session.state, bearer: session.bearerToken)
@@ -155,6 +156,18 @@ struct DirectView: View {
             // security scope, which is what keeps the start/stop balance out of
             // SwiftUI's hands entirely.
             selection.chooseFiles(result)
+        }
+        .confirmationDialog(
+            L10n.t(.textClearHistoryConfirmTitle),
+            isPresented: $confirmingTextHistoryDone,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.t(.commonDone), role: .destructive) { text.reset() }
+            Button(L10n.t(.commonCancel), role: .cancel) {
+                confirmingTextHistoryDone = false
+            }
+        } message: {
+            Text(L10n.t(.textClearHistoryConfirmBody))
         }
     }
 
@@ -297,7 +310,7 @@ struct DirectView: View {
         // discard the mode lock promises.
         case .failed, .ended, .refused, .unsupported:
             DirectTextSessionView(model: text)
-            Button(L10n.t(.commonDone)) { text.reset() }
+            Button(L10n.t(.commonDone)) { finishTextOrConfirm() }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
         case .minting:
@@ -671,5 +684,13 @@ struct DirectView: View {
         await text.mintCode(token: token)
         guard case let .showingCode(code, _) = text.state else { return }
         await text.join(code: code, role: .initiator)
+    }
+
+    private func finishTextOrConfirm() {
+        if text.history.isEmpty {
+            text.reset()
+        } else {
+            confirmingTextHistoryDone = true
+        }
     }
 }
