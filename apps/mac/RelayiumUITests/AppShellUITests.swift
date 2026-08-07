@@ -56,6 +56,18 @@ final class AppShellUITests: XCTestCase {
         }
     }
 
+    func testStoppedNearbyDiscoveryAsksForActionWithoutPretendingToWork() {
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let nearby = window.descendants(matching: .any)["Nearby"]
+        XCTAssertTrue(nearby.waitForExistence(timeout: 10))
+        nearby.click()
+
+        XCTAssertTrue(window.buttons["Look again"].waitForExistence(timeout: 10))
+        XCTAssertEqual(window.progressIndicators.count, 0,
+                       "an off listener must not show a spinner beside the manual retry")
+    }
+
     /// Selecting each destination renders something. The regression this catches
     /// is a destination whose body fails to build — which is a blank pane, not a
     /// crash, and is invisible to every other test in this repository.

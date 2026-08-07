@@ -49,6 +49,16 @@ final class MacSurfaceGuardTests: XCTestCase {
         try String(contentsOf: repoRoot.appendingPathComponent(path), encoding: .utf8)
     }
 
+    func testNearbyProgressNamesRealReconnectWorkAndNeverDecoratesLookAgain() throws {
+        let pane = try source(named: "NearbyPane.swift")
+        XCTAssertFalse(pane.contains("ProgressView()"),
+                       "an unlabelled spinner says neither what is running nor whether anything is")
+        XCTAssertTrue(pane.contains("if case .reconnecting = discovery.state"),
+                      "only the state with a scheduled retry may show progress")
+        XCTAssertTrue(pane.contains("ProgressView { Text(L10n.t(.nearbyReconnecting)) }"),
+                      "VoiceOver and sighted users need the same reconnecting state")
+    }
+
     /// Each source's CODE, with whole-line comments dropped — the same loader
     /// `IOSSurfaceGuardTests` uses, and for the same reason: these files explain
     /// what they deliberately do NOT do, so scanning raw text would fail this

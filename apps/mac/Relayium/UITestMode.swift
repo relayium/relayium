@@ -19,10 +19,10 @@ import RelayiumKit
 /// run — a privacy consequence, not a tidiness one, and not something a
 /// `--dry-run` flag on the test would fix.
 ///
-/// Nothing else is faked. The five destinations, the settings scene, every
-/// account-gated surface and all nine languages render exactly as they do
-/// normally; the tests assert the real UI. Only the socket and the notification
-/// registration are skipped, because those are what reach outward.
+/// The five destinations, the settings scene and all nine languages are the real
+/// UI. Residency and notification registration are skipped because they reach
+/// outward; the generated-text-code test additionally injects the deterministic
+/// model below so it can hold a handoff screen without contacting production.
 enum UITestMode {
     #if DEBUG
     /// The argument the UI test target passes. Read once: `ProcessInfo`'s

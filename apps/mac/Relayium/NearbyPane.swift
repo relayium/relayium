@@ -97,7 +97,14 @@ struct NearbyPane: View {
                 HStack {
                     Button(L10n.t(.nearbyLookAgain)) { discovery.start() }
                         .disabled(busy)
-                    ProgressView().controlSize(.small)
+                    // `off` is waiting for the user and must not animate as if
+                    // work were running. A dropped resident socket really does
+                    // retry in the background, so only that state gets a
+                    // labelled progress indicator.
+                    if case .reconnecting = discovery.state {
+                        ProgressView { Text(L10n.t(.nearbyReconnecting)) }
+                            .controlSize(.small)
+                    }
                 }
             }
 
