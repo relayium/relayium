@@ -278,7 +278,7 @@
 "text.clearHistory.confirmTitle" = "ローカル履歴を消去しますか？";
 "text.clearHistory.confirmBody" = "これらのメッセージはこのデバイスにしかありません。消去すると元に戻せません。";
 "text.localHistoryHeading" = "ローカルのセッション履歴";
-"text.localHistoryBody" = "この履歴は、消去するか別のセッションを開始するまで、このアプリのメモリ上にのみ残ります。";
+"text.localHistoryBody" = "この履歴は保存されず、このアプリのメモリ上にのみ存在します。消去する、別のセッションを開始する、Relayiumを終了する、またはシステムがアプリを終了すると消えます。";
 "text.sent" = "送信";
 "text.received" = "受信";
 "text.notSent" = "未送信";

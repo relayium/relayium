@@ -281,7 +281,7 @@
 "text.clearHistory.confirmTitle" = "Lokalen Verlauf löschen?";
 "text.clearHistory.confirmBody" = "Diese Nachrichten sind nur auf diesem Gerät gespeichert. Das Löschen kann nicht rückgängig gemacht werden.";
 "text.localHistoryHeading" = "Lokaler Sitzungsverlauf";
-"text.localHistoryBody" = "Dieser Verlauf bleibt nur im Arbeitsspeicher dieser App, bis du ihn löschst oder eine andere Sitzung startest.";
+"text.localHistoryBody" = "Dieser Verlauf wird nicht gespeichert und existiert nur im Arbeitsspeicher der App. Er verschwindet, wenn du ihn löschst, eine andere Sitzung startest, Relayium beendest oder das System die App beendet.";
 "text.sent" = "Gesendet";
 "text.received" = "Empfangen";
 "text.notSent" = "Nicht gesendet";

@@ -15,6 +15,28 @@ import XCTest
 /// the machine the tests run on.
 final class LocalizedCopyTests: XCTestCase {
 
+    func testLocalTextHistoryNamesItsUnsavedProcessLifetimeEverywhere() throws {
+        let notSaved: [AppLanguage: String] = [
+            .en: "not saved", .zh: "不会保存", .ja: "保存されず", .ko: "저장되지",
+            .de: "nicht gespeichert", .fr: "n’est pas enregistré", .ar: "لا يُحفظ",
+            .es: "no se guarda", .pt: "não é guardado",
+        ]
+        let systemClose: [AppLanguage: String] = [
+            .en: "system closes", .zh: "系统关闭", .ja: "システムがアプリを終了",
+            .ko: "시스템이 앱을 종료", .de: "System die App beendet", .fr: "système ferme",
+            .ar: "أغلق النظام", .es: "sistema cierra", .pt: "sistema fechar",
+        ]
+        for language in AppLanguage.allCases {
+            let text = L10n.t(.textLocalHistoryBody, language: language)
+            XCTAssertTrue(text.contains(try XCTUnwrap(notSaved[language])),
+                          "text.localHistoryBody [\(language.rawValue)] implies persistence: \(text)")
+            XCTAssertTrue(text.contains(try XCTUnwrap(systemClose[language])),
+                          "text.localHistoryBody [\(language.rawValue)] hides process loss: \(text)")
+            XCTAssertTrue(text.contains("Relayium"),
+                          "text.localHistoryBody [\(language.rawValue)] does not name quitting the app")
+        }
+    }
+
     func testCopiedFeedbackIsLocalizedEverywhere() {
         let english = L10n.t(.commonCopied, language: .en)
         XCTAssertEqual(english, "Copied")
