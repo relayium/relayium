@@ -162,6 +162,7 @@
 "direct.giveCode" = "Dê este código ao outro dispositivo";
 "pairing.joinLink" = "Link para entrar";
 "pairing.linkCopied" = "Link copiado";
+"pairing.codeExpiryNote" = "Apenas este código de emparelhamento expira. Uma transferência já iniciada pode continuar.";
 "direct.scanOnPhone" = "Ou leia isto com um telemóvel.";
 "direct.waitingForDevice" = "À espera do outro dispositivo…";
 "direct.chooseFilesFirst" = "Escolha primeiro os ficheiros ou pastas a enviar.";

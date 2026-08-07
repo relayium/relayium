@@ -162,6 +162,7 @@
 "direct.giveCode" = "把这个配对码告诉对方设备";
 "pairing.joinLink" = "加入链接";
 "pairing.linkCopied" = "链接已复制";
+"pairing.codeExpiryNote" = "只有这个配对码会过期。已经开始的传输可以继续。";
 "direct.scanOnPhone" = "也可以用手机扫描。";
 "direct.waitingForDevice" = "正在等待对方设备…";
 "direct.chooseFilesFirst" = "请先选择要发送的文件或文件夹。";

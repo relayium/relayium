@@ -313,6 +313,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case directGiveCode = "direct.giveCode"
     case pairingJoinLink = "pairing.joinLink"
     case pairingLinkCopied = "pairing.linkCopied"
+    case pairingCodeExpiryNote = "pairing.codeExpiryNote"
     case directScanOnPhone = "direct.scanOnPhone"
     case directWaitingForDevice = "direct.waitingForDevice"
     case directChooseFilesFirst = "direct.chooseFilesFirst"

@@ -163,6 +163,7 @@
 "direct.giveCode" = "Give this code to the other device";
 "pairing.joinLink" = "Join link";
 "pairing.linkCopied" = "Link copied";
+"pairing.codeExpiryNote" = "Only this pairing code expires. A transfer that has already started can continue.";
 "direct.scanOnPhone" = "Or scan this on a phone.";
 "direct.waitingForDevice" = "Waiting for the other device…";
 "direct.chooseFilesFirst" = "Choose files or folders to send first.";

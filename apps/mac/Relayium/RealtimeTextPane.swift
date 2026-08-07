@@ -85,6 +85,10 @@ struct RealtimeTextPane: View {
             ]))
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            Text(L10n.t(.pairingCodeExpiryNote))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             if let joinURL = productionPairingJoinURL(code: code) {
                 PairingCodeHandoffView(url: joinURL) { model.reset() }
             }

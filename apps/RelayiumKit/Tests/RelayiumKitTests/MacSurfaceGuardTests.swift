@@ -297,6 +297,17 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(cancel.contains(".buttonStyle(.bordered)"))
     }
 
+    func testPairingExpiryIsNamedAsCodeExpiryNotTransferExpiry() throws {
+        for file in ["DirectPane.swift", "RealtimeTextPane.swift"] {
+            let source = try source(named: file)
+            let handoff = try XCTUnwrap(source.components(
+                separatedBy: "private func showing(code:").dropFirst().first?
+                .components(separatedBy: "// MARK: - join").first)
+            XCTAssertTrue(handoff.contains("L10n.t(.pairingCodeExpiryNote)"),
+                          "\(file) leaves the expiry scope ambiguous")
+        }
+    }
+
     /// iOS already locks both controls while resolving/downloading. macOS must
     /// not leave a second Open path live over a task whose writer and Cancel
     /// handle the shared model still owns.

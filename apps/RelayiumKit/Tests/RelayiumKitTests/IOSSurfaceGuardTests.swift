@@ -230,6 +230,14 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(cancel.contains(".controlSize(.large)"))
     }
 
+    func testPairingExpiryIsNamedAsCodeExpiryNotTransferExpiry() throws {
+        let source = try XCTUnwrap(try sources().first { $0.name == "DirectView.swift" }?.text)
+        let handoff = try XCTUnwrap(source.components(
+            separatedBy: "private func showing(code:").dropFirst().first?
+            .components(separatedBy: "private func interruption").first)
+        XCTAssertTrue(handoff.contains("L10n.t(.pairingCodeExpiryNote)"))
+    }
+
     /// Cold upload recovery locks selection adoption while it reads durable
     /// state. That wait needs the same explicit exit as every other busy phase.
     func testStoredUploadRecoveryCheckCanBeCancelled() throws {

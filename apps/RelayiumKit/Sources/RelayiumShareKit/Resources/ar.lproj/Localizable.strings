@@ -165,6 +165,7 @@
 "direct.giveCode" = "أعطِ هذا الرمز للجهاز الآخر";
 "pairing.joinLink" = "رابط الانضمام";
 "pairing.linkCopied" = "تم نسخ الرابط";
+"pairing.codeExpiryNote" = "تنتهي صلاحية رمز الاقتران هذا فقط. ويمكن متابعة النقل الذي بدأ بالفعل.";
 "direct.scanOnPhone" = "أو امسحه ضوئيًا بهاتف.";
 "direct.waitingForDevice" = "في انتظار الجهاز الآخر…";
 "direct.chooseFilesFirst" = "اختر أولًا الملفات أو المجلدات المراد إرسالها.";

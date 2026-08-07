@@ -162,6 +162,7 @@
 "direct.giveCode" = "이 코드를 상대 기기에 알려주세요";
 "pairing.joinLink" = "참가 링크";
 "pairing.linkCopied" = "링크를 복사했습니다";
+"pairing.codeExpiryNote" = "이 페어링 코드만 만료됩니다. 이미 시작된 전송은 계속할 수 있습니다.";
 "direct.scanOnPhone" = "휴대폰으로 스캔해도 됩니다.";
 "direct.waitingForDevice" = "상대 기기를 기다리는 중…";
 "direct.chooseFilesFirst" = "먼저 보낼 파일이나 폴더를 선택하세요.";

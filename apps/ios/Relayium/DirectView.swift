@@ -434,6 +434,10 @@ struct DirectView: View {
             ]))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
+            Text(L10n.t(.pairingCodeExpiryNote))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             ProgressView { Text(L10n.t(.directWaitingForDevice)) }
             Text(L10n.t(.directKeepBothOpen))
                 .font(.footnote)

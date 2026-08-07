@@ -162,6 +162,7 @@
 "direct.giveCode" = "Gib diesen Code an das andere Gerät weiter";
 "pairing.joinLink" = "Beitrittslink";
 "pairing.linkCopied" = "Link kopiert";
+"pairing.codeExpiryNote" = "Nur dieser Kopplungscode läuft ab. Eine bereits gestartete Übertragung kann fortgesetzt werden.";
 "direct.scanOnPhone" = "Oder scanne dies mit einem Telefon.";
 "direct.waitingForDevice" = "Warten auf das andere Gerät…";
 "direct.chooseFilesFirst" = "Wähle zuerst Dateien oder Ordner zum Senden aus.";
