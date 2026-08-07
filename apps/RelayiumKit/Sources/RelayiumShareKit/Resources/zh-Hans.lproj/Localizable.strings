@@ -327,6 +327,7 @@
 "drop.a11yLabel" = "待发送的文件";
 "drop.a11yHint" = "把文件或文件夹拖到这里，或激活以选择它们。";
 "picker.prompt" = "选择";
+"file.unnamed" = "未命名文件";
 "received.revealInFinder" = "在访达中显示";
 "received.dragHint" = "可把上面任意一项拖到访达或其他应用中。";
 "received.a11yDragHint" = "拖到其他应用即可复制，或使用「在访达中显示」。";

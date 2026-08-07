@@ -330,6 +330,7 @@
 "drop.a11yLabel" = "Fichiers à envoyer";
 "drop.a11yHint" = "Déposez des fichiers ou des dossiers ici, ou activez pour les choisir.";
 "picker.prompt" = "Choisir";
+"file.unnamed" = "Fichier sans nom";
 "received.revealInFinder" = "Afficher dans le Finder";
 "received.dragHint" = "Faites glisser n’importe quel élément ci-dessus vers le Finder ou une autre app.";
 "received.a11yDragHint" = "Faites-le glisser vers une autre app pour le copier, ou utilisez « Afficher dans le Finder ».";

@@ -127,7 +127,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// bounded, sanitized name-and-size list.
     func testEverySendPaneShowsThePendingFileNamesAndSizes() throws {
         let component = try source(named: "PendingFileList.swift")
-        for required in ["safeDisplayName(file.path ?? file.name)",
+        for required in ["FileIdentityPresentation.name(for: file)",
                          "L10n.bytes(Int64(file.size))",
                          "ScrollView", ".frame(maxHeight: 200)"] {
             XCTAssertTrue(component.contains(required), "pending-file list lost \(required)")
@@ -139,6 +139,19 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(try source(named: "UploadPane.swift").components(
             separatedBy: "PendingFileList(sessionFiles: model.sessionFiles)").count - 1, 3,
             "stored upload lost file identities in a running or terminal state")
+    }
+
+    func testEveryMacFileListUsesTheSharedSafeLocalizedIdentity() throws {
+        for name in ["PendingFileList.swift", "RealtimeFileSessionView.swift",
+                     "DownloadPane.swift"] {
+            let text = try source(named: name)
+            XCTAssertTrue(text.contains("FileIdentityPresentation.name(for:"),
+                          "\(name) does not use the shared file identity")
+            XCTAssertFalse(text.contains("safeDisplayName("),
+                           "\(name) can render an empty sanitized name")
+            XCTAssertFalse(text.contains("\"download\""),
+                           "\(name) leaks an English fallback into other languages")
+        }
     }
 
     /// Creating a code removes the picker, but it must not remove the sender's

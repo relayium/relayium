@@ -166,7 +166,7 @@ struct ReceiveView: View {
                 // on.
                 ForEach(Array(manifest.files.enumerated()), id: \.offset) { _, file in
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
-                        Text(safeDisplayName(file.name))
+                        Text(FileIdentityPresentation.name(for: file))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .lineLimit(1)
                             .truncationMode(.middle)

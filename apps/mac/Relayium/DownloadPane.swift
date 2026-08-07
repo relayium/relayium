@@ -55,7 +55,7 @@ struct DownloadPane: View {
                 // on.
                 ForEach(Array(manifest.files.enumerated()), id: \.offset) { _, f in
                     HStack(alignment: .firstTextBaseline, spacing: 12) {
-                        Text(safeDisplayName(f.name))
+                        Text(FileIdentityPresentation.name(for: f))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .lineLimit(1).truncationMode(.middle)
                         Text(L10n.bytes(Int64(f.size))).fixedSize()

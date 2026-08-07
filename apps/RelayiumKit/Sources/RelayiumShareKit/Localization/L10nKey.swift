@@ -620,6 +620,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case dropA11yLabel = "drop.a11yLabel"
     case dropA11yHint = "drop.a11yHint"
     case pickerPrompt = "picker.prompt"
+    case fileUnnamed = "file.unnamed"
     case receivedRevealInFinder = "received.revealInFinder"
     case receivedDragHint = "received.dragHint"
     case receivedA11yDragHint = "received.a11yDragHint"

@@ -330,6 +330,7 @@
 "drop.a11yLabel" = "Zu sendende Dateien";
 "drop.a11yHint" = "Dateien oder Ordner hierher ziehen oder aktivieren, um sie auszuwählen.";
 "picker.prompt" = "Auswählen";
+"file.unnamed" = "Unbenannte Datei";
 "received.revealInFinder" = "Im Finder zeigen";
 "received.dragHint" = "Zieh eines der Objekte oben in den Finder oder eine andere App.";
 "received.a11yDragHint" = "In eine andere App ziehen, um es zu kopieren, oder „Im Finder zeigen“ verwenden.";

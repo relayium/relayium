@@ -327,6 +327,7 @@
 "drop.a11yLabel" = "送信するファイル";
 "drop.a11yHint" = "ここにファイルやフォルダをドロップするか、操作して選択してください。";
 "picker.prompt" = "選択";
+"file.unnamed" = "名称未設定のファイル";
 "received.revealInFinder" = "Finder に表示";
 "received.dragHint" = "上のいずれかの項目を Finder や他のアプリにドラッグできます。";
 "received.a11yDragHint" = "他のアプリにドラッグしてコピーするか、「Finder に表示」を使ってください。";

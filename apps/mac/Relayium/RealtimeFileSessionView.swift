@@ -85,7 +85,7 @@ struct RealtimeFileSessionView: View {
                 LazyVStack(alignment: .leading, spacing: 8) {
                     ForEach(Array(model.sessionFiles.enumerated()), id: \.offset) { _, file in
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
-                            Text(safeDisplayName(file.path ?? file.name))
+                            Text(FileIdentityPresentation.name(for: file))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .textSelection(.enabled)

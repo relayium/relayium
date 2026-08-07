@@ -331,6 +331,7 @@
 "drop.a11yLabel" = "Files to send";
 "drop.a11yHint" = "Drop files or folders here, or activate to choose them.";
 "picker.prompt" = "Choose";
+"file.unnamed" = "Unnamed file";
 "received.revealInFinder" = "Reveal in Finder";
 "received.dragHint" = "Drag any item above into Finder or another app.";
 "received.a11yDragHint" = "Drag to another app to copy it, or use Reveal in Finder.";

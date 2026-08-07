@@ -70,7 +70,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
     func testEverySendSurfaceShowsThePendingFileNamesAndSizes() throws {
         let all = try sources()
         let component = try XCTUnwrap(all.first { $0.name == "PendingFileList.swift" }?.text)
-        for required in ["safeDisplayName(file.path ?? file.name)",
+        for required in ["FileIdentityPresentation.name(for: file)",
                          "L10n.bytes(Int64(file.size))",
                          "ScrollView", ".frame(maxHeight: 220)"] {
             XCTAssertTrue(component.contains(required), "pending-file list lost \(required)")
@@ -84,6 +84,20 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(storedSend.components(separatedBy:
             "PendingFileList(sessionFiles: upload.sessionFiles)").count - 1, 4,
             "stored upload lost file identities in a running or terminal state")
+    }
+
+    func testEveryIOSFileListUsesTheSharedSafeLocalizedIdentity() throws {
+        let all = try sources()
+        for name in ["PendingFileList.swift", "DirectFileSessionView.swift",
+                     "ReceiveView.swift"] {
+            let text = try XCTUnwrap(all.first { $0.name == name }?.text)
+            XCTAssertTrue(text.contains("FileIdentityPresentation.name(for:"),
+                          "\(name) does not use the shared file identity")
+            XCTAssertFalse(text.contains("safeDisplayName("),
+                           "\(name) can render an empty sanitized name")
+            XCTAssertFalse(text.contains("\"download\""),
+                           "\(name) leaks an English fallback into other languages")
+        }
     }
 
     /// The file picker disappears after Create. Minting and the code/QR/link

@@ -25,7 +25,7 @@ struct PendingFileList: View {
                 LazyVStack(alignment: .leading, spacing: 8) {
                     ForEach(Array(files.enumerated()), id: \.offset) { _, file in
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
-                            Text(displayName(file))
+                            Text(FileIdentityPresentation.name(for: file))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .textSelection(.enabled)
@@ -45,8 +45,4 @@ struct PendingFileList: View {
         }
     }
 
-    private func displayName(_ file: FileMeta) -> String {
-        let safe = safeDisplayName(file.path ?? file.name)
-        return safe.isEmpty ? "download" : safe
-    }
 }

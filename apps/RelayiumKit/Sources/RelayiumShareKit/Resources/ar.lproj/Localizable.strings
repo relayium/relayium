@@ -345,6 +345,7 @@
 "drop.a11yLabel" = "ملفات للإرسال";
 "drop.a11yHint" = "أفلِت الملفات أو المجلدات هنا، أو فعِّل لاختيارها.";
 "picker.prompt" = "اختيار";
+"file.unnamed" = "ملف بلا اسم";
 "received.revealInFinder" = "إظهار في Finder";
 "received.dragHint" = "اسحب أي عنصر أعلاه إلى Finder أو إلى تطبيق آخر.";
 "received.a11yDragHint" = "اسحبه إلى تطبيق آخر لنسخه، أو استخدم «إظهار في Finder».";
