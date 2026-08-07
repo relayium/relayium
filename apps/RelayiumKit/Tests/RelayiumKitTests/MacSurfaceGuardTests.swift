@@ -96,6 +96,11 @@ final class MacSurfaceGuardTests: XCTestCase {
         let workflow = try String(contentsOf: workflowURL, encoding: .utf8)
         XCTAssertTrue(workflow.contains("Run macOS product-flow UI smoke"),
                       "CI compiles macOS but never launches its product flows")
+        let signedJob = try XCTUnwrap(workflow.range(of: "  signed-build:"))
+        let runtimeStep = try XCTUnwrap(workflow.range(of:
+            "      - name: Run macOS product-flow UI smoke"))
+        XCTAssertGreaterThan(runtimeStep.lowerBound, signedJob.lowerBound,
+                             "the UI app needs the signed job's certificate and profiles")
         XCTAssertTrue(workflow.contains(
             "xcodebuild -project apps/mac/Relayium.xcodeproj -scheme Relayium"))
         XCTAssertTrue(workflow.contains("-destination 'platform=macOS'"))

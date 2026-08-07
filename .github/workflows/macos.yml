@@ -57,17 +57,6 @@ jobs:
       - name: swift test
         working-directory: apps/RelayiumKit
         run: swift test
-      # A successful compile cannot prove that the App scene opens, sidebar
-      # actions render the intended task, or Pairing Code stays on its owning
-      # surface. The Debug-only launch argument used by this suite keeps the
-      # hosted runner off the public Nearby rendezvous.
-      - name: Run macOS product-flow UI smoke
-        timeout-minutes: 15
-        run: |
-          xcodebuild -project apps/mac/Relayium.xcodeproj -scheme Relayium \
-            -destination 'platform=macOS' \
-            -derivedDataPath "$RUNNER_TEMP/dd-mac-ui" \
-            -only-testing:RelayiumUITests test
       - name: Release script tests
         run: |
           apps/mac/scripts/test-resign-sparkle.sh
@@ -222,6 +211,19 @@ jobs:
           # PROVISIONING_PROFILE_SPECIFIER names "Relayium Mac Share Extension".
           security cms -D -i "$dir/relayium-share.provisionprofile" \
             | plutil -extract Name raw -o - -
+      # A successful compile cannot prove that the App scene opens, sidebar
+      # actions render the intended task, or Pairing Code stays on its owning
+      # surface. This runs here because the app and Share extension entitlements
+      # require the profiles installed above; stripping them for ad-hoc signing
+      # produces a different app that cannot load UI automation. The Debug-only
+      # launch argument keeps the hosted runner off the public Nearby rendezvous.
+      - name: Run macOS product-flow UI smoke
+        timeout-minutes: 15
+        run: |
+          xcodebuild -project apps/mac/Relayium.xcodeproj -scheme Relayium \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/dd-mac-ui" \
+            -only-testing:RelayiumUITests test
       - name: Build (signed, Release)
         run: |
           xcodebuild -project apps/mac/Relayium.xcodeproj -scheme Relayium \
