@@ -20,6 +20,9 @@ struct DirectPane: View {
     /// restoring", "email unverified" and "the credential this app holds is
     /// broken" in the same three greyed pixels; this says which.
     let gate: AccountGate
+    /// Re-reads the parent session at activation time. `gate` is a render-time
+    /// presentation value and must not be treated as a live credential source.
+    let accessNow: () -> AccountAccess?
 
     @EnvironmentObject private var navigation: AppNavigationModel
     @EnvironmentObject private var presence: TransferPresence
@@ -104,8 +107,8 @@ struct DirectPane: View {
 
     private var createCard: some View {
         SectionCard(title: L10n.t(.directSendHeading)) {
-            if case let .allowed(access) = gate {
-                staging(token: access.token)
+            if case .allowed = gate {
+                staging
             } else {
                 // No greyed Create button. The gate names what is true and
                 // renders the one action that resolves it.
@@ -117,7 +120,7 @@ struct DirectPane: View {
         }
     }
 
-    private func staging(token: String) -> some View {
+    private var staging: some View {
         VStack(alignment: .leading, spacing: 6) {
             FileDropZone(store: selection, isBusy: model.isBusy) {
                 Text(selection.summary ?? L10n.t(.directDropHint))
@@ -135,7 +138,7 @@ struct DirectPane: View {
                     Button(L10n.t(.commonClear)) { selection.clear() }
                         .buttonStyle(.bordered)
                 }
-                Button(L10n.t(.directCreateCode)) { createCode(token: token) }
+                Button(L10n.t(.directCreateCode)) { createCode() }
                     .buttonStyle(.borderedProminent)
                     // What is missing is named by the drop zone directly above,
                     // and adding it is one drop away — unlike an account, which
@@ -212,7 +215,7 @@ struct DirectPane: View {
         Task { await model.join(code: code) }
     }
 
-    private func createCode(token: String) {
+    private func createCode() {
         // Validate and stage before the picker disappears. Besides avoiding a
         // useless minted code for an unreadable selection, this gives minting
         // and handoff one model-owned manifest to keep visible throughout.
@@ -228,9 +231,13 @@ struct DirectPane: View {
             return
         }
         stagingError = nil
+        // Rendering an allowed gate and activating its button are different
+        // turns. Refuse if sign-out, expiry or account replacement won between
+        // them; never mint with the bearer captured by the earlier render.
+        guard let access = accessNow() else { return }
         guard presence.beginSession(.pairingCode, mode: .files) else { return }
         model.stageSend(sources: staged.sources, metas: staged.metas)
-        Task { await mintAndWait(token: token) }
+        Task { await mintAndWait(token: access.token) }
     }
 
     private func mintAndWait(token: String) async {

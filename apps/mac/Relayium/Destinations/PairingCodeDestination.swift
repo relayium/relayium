@@ -27,6 +27,22 @@ struct PairingCodeDestination: View {
         return AccountGate.from(session.state, bearer: session.bearerToken)
     }
 
+    /// The gate controls what is rendered; this closure controls what an
+    /// activation may spend. SwiftUI can deliver a click from the previous
+    /// render after the account has changed, so child actions must ask the live
+    /// session again instead of spending the access value captured by a Button.
+    private var accessNow: AccountAccess? {
+        #if DEBUG
+        if UITestMode.isActive {
+            return AccountAccess(token: "ui-test", retentionSecs: 86_400) // nonlocalized: fixture
+        }
+        #endif
+        guard case let .allowed(access) = AccountGate.from(session.state,
+                                                            bearer: session.bearerToken)
+        else { return nil }
+        return access
+    }
+
     var body: some View {
         DestinationScaffold(title: L10n.t(.navPairingCode),
                             subtitle: L10n.t(.navPairingCodeSubtitle)) {
@@ -35,8 +51,10 @@ struct PairingCodeDestination: View {
             } else {
                 modePicker
                 switch presence.mode {
-                case .files: DirectPane(model: fileModel, gate: gate)
-                case .text:  RealtimeTextPane(model: textModel, gate: gate)
+                case .files:
+                    DirectPane(model: fileModel, gate: gate, accessNow: { accessNow })
+                case .text:
+                    RealtimeTextPane(model: textModel, gate: gate, accessNow: { accessNow })
                 }
             }
         }

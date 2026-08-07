@@ -842,7 +842,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         }
         XCTAssertTrue(upload.contains("case .idle:\n            if case .allowed = gate"),
                       "only idle preflight should expose an account gate")
-        XCTAssertTrue(upload.contains("case .picked:\n            if case let .allowed(access) = gate"),
+        XCTAssertTrue(upload.contains("case .picked:\n            if case .allowed = gate"),
                       "only picked preflight should require the upload token")
     }
 
@@ -1330,25 +1330,52 @@ final class MacSurfaceGuardTests: XCTestCase {
     func testPairingCreateSettlesIntentBeforeStartingAsyncMint() throws {
         let files = try source(named: "DirectPane.swift")
         XCTAssertTrue(files.contains(
-            "Button(L10n.t(.directCreateCode)) { createCode(token: token) }"))
+            "Button(L10n.t(.directCreateCode)) { createCode() }"))
         guard let selection = files.range(of: "guard let expanded = selection.selection"),
+              let access = files.range(of: "guard let access = accessNow() else { return }"),
               let claim = files.range(of:
                 "guard presence.beginSession(.pairingCode, mode: .files) else { return }",
                 range: selection.lowerBound..<files.endIndex),
-              let task = files.range(of: "Task { await mintAndWait(token: token) }") else {
+              let task = files.range(of: "Task { await mintAndWait(token: access.token) }") else {
             return XCTFail("file code creation lost its synchronous intent boundary")
         }
-        XCTAssertTrue(selection.lowerBound < claim.lowerBound && claim.lowerBound < task.lowerBound)
+        XCTAssertTrue(selection.lowerBound < access.lowerBound && access.lowerBound < claim.lowerBound
+                      && claim.lowerBound < task.lowerBound)
 
         let text = try source(named: "RealtimeTextPane.swift")
         XCTAssertTrue(text.contains(
-            "Button(L10n.t(.textCreateCode)) { createCode(token: access.token) }"))
-        guard let textClaim = text.range(of:
-                "guard presence.beginSession(.pairingCode, mode: .text) else { return }"),
-              let textTask = text.range(of: "Task { await mintAndWait(token: token) }") else {
+            "Button(L10n.t(.textCreateCode)) { createCode() }"))
+        guard let textAccess = text.range(of: "guard let access = accessNow() else { return }"),
+              let textClaim = text.range(of:
+                "guard presence.beginSession(.pairingCode, mode: .text) else { return }",
+                range: textAccess.lowerBound..<text.endIndex),
+              let textTask = text.range(of: "Task { await mintAndWait(token: access.token) }") else {
             return XCTFail("text code creation lost its synchronous intent boundary")
         }
-        XCTAssertTrue(textClaim.lowerBound < textTask.lowerBound)
+        XCTAssertTrue(textAccess.lowerBound < textClaim.lowerBound && textClaim.lowerBound < textTask.lowerBound)
+    }
+
+    /// Account gating is presentation, not authorization. A button from the
+    /// preceding render may still be delivered after sign-out or credential
+    /// replacement, so every authenticated macOS start re-reads live access.
+    func testAuthenticatedMacStartsDoNotSpendRenderTimeCredentials() throws {
+        let destination = try source(named: "Destinations/PairingCodeDestination.swift")
+        XCTAssertTrue(destination.contains("AccountGate.from(session.state,"))
+        XCTAssertEqual(occurrences(of: "accessNow: { accessNow }", in: destination), 2)
+
+        for pane in ["DirectPane.swift", "RealtimeTextPane.swift"] {
+            let text = try source(named: pane)
+            XCTAssertTrue(text.contains("let accessNow: () -> AccountAccess?"))
+            XCTAssertTrue(text.contains("guard let access = accessNow() else { return }"))
+        }
+
+        let upload = try source(named: "UploadPane.swift")
+        XCTAssertTrue(upload.contains("@EnvironmentObject private var session: AccountSession"))
+        XCTAssertTrue(upload.contains(
+            "guard let token = session.bearerToken, !token.isEmpty,"))
+        XCTAssertTrue(upload.contains(
+            "case .allowed = AccountGate.from(session.state, bearer: token) else"))
+        XCTAssertEqual(occurrences(of: "model.start(token:", in: upload), 1)
     }
 
     /// The document-type declaration that makes the app a Dock drop target and a

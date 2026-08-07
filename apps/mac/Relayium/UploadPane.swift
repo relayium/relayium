@@ -21,6 +21,9 @@ struct UploadPane: View {
     /// navigation model rather than through a callback because this pane is
     /// rendered by exactly one destination.
     @EnvironmentObject private var navigation: AppNavigationModel
+    /// The rendered gate decides the card; the live session decides whether a
+    /// click may spend a bearer. Those can differ for one SwiftUI delivery turn.
+    @EnvironmentObject private var session: AccountSession
     /// Files the OS opened with this app. Read-only here — this pane takes only
     /// the batch addressed to it.
     @EnvironmentObject private var fileOpenRouting: AppFileOpenCoordinator
@@ -80,9 +83,9 @@ struct UploadPane: View {
         case .idle:
             if case .allowed = gate { selectionCard } else { gateCard }
         case .picked:
-            if case let .allowed(access) = gate {
+            if case .allowed = gate {
                 selectionCard
-                optionsCard(token: access.token)
+                optionsCard
             } else {
                 gateCard
             }
@@ -170,7 +173,7 @@ struct UploadPane: View {
     /// The picker's own label is hidden rather than removed: the card title
     /// already says it, and a control with no accessibility label at all would
     /// read as "pop-up button" and nothing else.
-    private func optionsCard(token: String) -> some View {
+    private var optionsCard: some View {
         SectionCard(title: L10n.t(.uploadExpiresAfter)) {
             HStack(spacing: 16) {
                 Picker(L10n.t(.uploadExpiresAfter), selection: $model.ttl) {
@@ -184,10 +187,19 @@ struct UploadPane: View {
             }
             // No `.disabled`: reaching this card at all means a file is chosen
             // and the gate is `.allowed`, so there is nothing left to be missing.
-            Button(L10n.t(.commonSend)) { model.start(token: token) }
+            Button(L10n.t(.commonSend)) { send() }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
         }
+    }
+
+    private func send() {
+        guard let token = session.bearerToken, !token.isEmpty,
+              case .allowed = AccountGate.from(session.state, bearer: token) else {
+            model.fail(L10n.t(.errorCloudUnauthorized))
+            return
+        }
+        model.start(token: token)
     }
 
     // MARK: - running

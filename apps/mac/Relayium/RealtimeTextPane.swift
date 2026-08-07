@@ -17,6 +17,9 @@ struct RealtimeTextPane: View {
     /// replaces could only ever say one thing, and said it even when the real
     /// reason was a broken credential or an unverified address.
     let gate: AccountGate
+    /// Supplies live account access when Create is activated; the gate itself
+    /// belongs to the render that produced the button and can already be stale.
+    let accessNow: () -> AccountAccess?
 
     @EnvironmentObject private var navigation: AppNavigationModel
     @EnvironmentObject private var presence: TransferPresence
@@ -56,13 +59,13 @@ struct RealtimeTextPane: View {
 
     private var createCard: some View {
         SectionCard(title: L10n.t(.textStartHeading)) {
-            if case let .allowed(access) = gate {
+            if case .allowed = gate {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(L10n.t(.textStartBody))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    Button(L10n.t(.textCreateCode)) { createCode(token: access.token) }
+                    Button(L10n.t(.textCreateCode)) { createCode() }
                         .buttonStyle(.borderedProminent)
                 }
             } else {
@@ -135,9 +138,10 @@ struct RealtimeTextPane: View {
         Task { await model.join(code: code) }
     }
 
-    private func createCode(token: String) {
+    private func createCode() {
+        guard let access = accessNow() else { return }
         guard presence.beginSession(.pairingCode, mode: .text) else { return }
-        Task { await mintAndWait(token: token) }
+        Task { await mintAndWait(token: access.token) }
     }
 
     private func mintAndWait(token: String) async {
