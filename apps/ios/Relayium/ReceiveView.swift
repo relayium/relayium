@@ -252,6 +252,8 @@ struct ReceiveView: View {
 
     private var cancelButton: some View {
         Button(L10n.t(.commonCancel), action: model.cancel)
+            .buttonStyle(.bordered)
+            .controlSize(.large)
     }
 
     // MARK: - actions

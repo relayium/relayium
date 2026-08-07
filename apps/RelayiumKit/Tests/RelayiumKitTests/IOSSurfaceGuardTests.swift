@@ -252,6 +252,38 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(checking.contains(".controlSize(.large)"))
     }
 
+    func testStoredTransferLifecycleActionsStayDiscoverable() throws {
+        let all = try sources()
+        let send = try XCTUnwrap(all.first { $0.name == "SendView.swift" }?.text)
+        let preparing = try XCTUnwrap(send.components(
+            separatedBy: "case .preparing:").dropFirst().first?
+            .components(separatedBy: "case let .uploading").first)
+        let restarting = try XCTUnwrap(send.components(
+            separatedBy: "private var restarting:").dropFirst().first?
+            .components(separatedBy: "private func resume").first)
+        let uploading = try XCTUnwrap(send.components(
+            separatedBy: "private func uploading(").dropFirst().first?
+            .components(separatedBy: "private func linkReady").first)
+        let completed = try XCTUnwrap(send.components(
+            separatedBy: "private func linkReady(").dropFirst().first?
+            .components(separatedBy: "private func failure").first)
+        for phase in [preparing, restarting, uploading] {
+            XCTAssertTrue(phase.contains(".buttonStyle(.bordered)"))
+            XCTAssertTrue(phase.contains(".controlSize(.large)"))
+        }
+        let sendAnother = try XCTUnwrap(completed.components(
+            separatedBy: "Button(L10n.t(.uploadSendAnother))").dropFirst().first)
+        XCTAssertTrue(sendAnother.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(sendAnother.contains(".controlSize(.large)"))
+
+        let receive = try XCTUnwrap(all.first { $0.name == "ReceiveView.swift" }?.text)
+        let cancel = try XCTUnwrap(receive.components(
+            separatedBy: "private var cancelButton:").dropFirst().first?
+            .components(separatedBy: "// MARK: - actions").first)
+        XCTAssertTrue(cancel.contains(".buttonStyle(.bordered)"))
+        XCTAssertTrue(cancel.contains(".controlSize(.large)"))
+    }
+
     /// Each source's CODE, with whole-line comments dropped.
     ///
     /// Load-bearing, not tidiness: these files explain what they deliberately do

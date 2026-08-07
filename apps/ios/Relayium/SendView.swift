@@ -207,6 +207,8 @@ struct SendView: View {
             VStack(alignment: .leading, spacing: 12) {
                 ProgressView { Text(L10n.t(.uploadPreparing)) }
                 Button(L10n.t(.commonCancel)) { upload.cancel() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
             }
         case let .uploading(sent, total):
             uploading(sent: sent, total: total)
@@ -281,6 +283,8 @@ struct SendView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button(L10n.t(.commonCancel)) { upload.cancel() }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
         }
     }
 
@@ -415,6 +419,8 @@ struct SendView: View {
                 .fixedSize(horizontal: false, vertical: true)
             PendingFileList(sessionFiles: upload.sessionFiles)
             Button(L10n.t(.commonCancel)) { upload.cancel() }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
         }
     }
 
@@ -463,6 +469,8 @@ struct SendView: View {
             // no selection to go back to, and after an ordinary send there is.
             // The send model owns which.
             Button(L10n.t(.uploadSendAnother)) { selection.resetUpload() }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
         }
     }
 
