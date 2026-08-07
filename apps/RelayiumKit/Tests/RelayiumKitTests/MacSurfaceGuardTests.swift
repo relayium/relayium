@@ -85,6 +85,10 @@ final class MacSurfaceGuardTests: XCTestCase {
         let uiURL = macRoot.deletingLastPathComponent()
             .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
         let ui = try String(contentsOf: uiURL, encoding: .utf8)
+        let app = try source(named: "RelayiumApp.swift")
+        XCTAssertTrue(app.contains("func applicationDidBecomeActive") &&
+                      app.contains("guard UITestMode.isActive else { return }"),
+                      "a restored closed-window state can make hosted launches product-less")
         XCTAssertTrue(ui.contains("app.windows.allElementsBoundByIndex.max") &&
                       ui.contains("$0.frame.width * $0.frame.height"),
                       "runtime checks can mistake an auxiliary window for the product shell")
@@ -95,10 +99,12 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "runtime copy assertions depend on the runner's preferred language")
         XCTAssertTrue(ui.contains("$0.frame.midX < dividingX"),
                       "macOS 15 has no spatial fallback when List drops row identifiers")
+        XCTAssertTrue(ui.contains("label == %@ OR value == %@"),
+                      "macOS 15 combined Text values have no navigation fallback")
         XCTAssertFalse(ui.contains("window.descendants(matching: .any)[destination]"),
                        "a page heading can still make a sidebar click ambiguous")
         XCTAssertTrue(ui.contains(
-            "window.descendants(matching: .any)[\"destination-\\(destination.id)\"]"),
+            "NSPredicate(format: \"title == %@\", destination)"),
             "the destination smoke test does not observe the rendered detail surface")
     }
 

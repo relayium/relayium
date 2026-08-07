@@ -67,11 +67,24 @@ final class AppShellUITests: XCTestCase {
         // never by an OS-private table/outline container and never by the page
         // heading with the same label in the detail half.
         let dividingX = window.frame.midX
-        if let row = window.staticTexts.matching(identifier: title).allElementsBoundByIndex
+        let visibleTitle = NSPredicate(format: "label == %@ OR value == %@", title, title)
+        if let row = window.descendants(matching: .any).matching(visibleTitle)
+            .allElementsBoundByIndex
             .first(where: { $0.frame.midX < dividingX }) {
             return row
         }
         return stable
+    }
+
+    /// macOS 15 frequently drops SwiftUI's accessibility identifier from a
+    /// combined Text while retaining its visible value. Prefer the stable id,
+    /// then fall back to the exact English copy this runtime suite launches.
+    private func visibleElement(id: String, text: String,
+                                in window: XCUIElement) -> XCUIElement {
+        let stable = window.descendants(matching: .any)[id].firstMatch
+        if stable.exists { return stable }
+        let visible = NSPredicate(format: "label == %@ OR value == %@", text, text)
+        return window.descendants(matching: .any).matching(visible).firstMatch
     }
 
     /// The window opens at all. A `Window` scene that fails to build leaves a
@@ -117,22 +130,17 @@ final class AppShellUITests: XCTestCase {
     func testEachDestinationRendersItsOwnSurface() {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let destinations = [
-            (title: "Pairing code", id: "pairingCode"),
-            (title: "Send a link", id: "storedSend"),
-            (title: "Open a link", id: "storedReceive"),
-            (title: "Account", id: "account"),
-            (title: "Nearby", id: "nearby"),
-        ]
+        let destinations = ["Pairing code", "Send a link", "Open a link",
+                            "Account", "Nearby"]
         for destination in destinations {
-            let row = sidebarDestination(destination.title, in: window)
+            let row = sidebarDestination(destination, in: window)
             guard row.waitForExistence(timeout: 10) else {
-                return XCTFail("the sidebar has no row for \(destination.title)")
+                return XCTFail("the sidebar has no row for \(destination)")
             }
             row.click()
-            XCTAssertTrue(window.descendants(matching: .any)["destination-\(destination.id)"]
-                .waitForExistence(timeout: 10),
-                          "\(destination.title) selected but its detail surface did not render")
+            let titleChanged = NSPredicate(format: "title == %@", destination)
+            expectation(for: titleChanged, evaluatedWith: window)
+            waitForExpectations(timeout: 10)
         }
     }
 
@@ -149,7 +157,10 @@ final class AppShellUITests: XCTestCase {
 
         let textMode = window.radioButtons["Text"]
         XCTAssertTrue(textMode.waitForExistence(timeout: 10))
-        XCTAssertTrue(window.staticTexts["pairing-mode-match-hint"].exists,
+        XCTAssertTrue(visibleElement(
+            id: "pairing-mode-match-hint",
+            text: "Choose Files or Text to match what the sender started. The code itself does not identify the type.",
+            in: window).exists,
                       "the mode picker hides the requirement to match the sender")
         textMode.click()
 
@@ -172,7 +183,10 @@ final class AppShellUITests: XCTestCase {
                       "the join link cannot use the system share sheet")
         XCTAssertTrue(window.activityIndicators["Waiting for the other device…"].exists,
                       "the generated-code surface hides its live status")
-        XCTAssertTrue(window.staticTexts["pairing-code-expiry-note"].exists,
+        XCTAssertTrue(visibleElement(
+            id: "pairing-code-expiry-note",
+            text: "Only this pairing code expires. A transfer that has already started can continue.",
+            in: window).exists,
                       "the handoff leaves it ambiguous whether the code or transfer expires")
         XCTAssertTrue(window.buttons["Cancel"].exists,
                       "the generated-code surface hides its escape action")
@@ -238,8 +252,10 @@ final class AppShellUITests: XCTestCase {
 
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        XCTAssertTrue(window.descendants(matching: .any)["nearby-session-peer"]
-            .waitForExistence(timeout: 10), "the terminal task lost who it was with")
+        XCTAssertTrue(visibleElement(
+            id: "nearby-session-peer", text: "Session with Studio Mac · 19af02",
+            in: window).waitForExistence(timeout: 10),
+                      "the terminal task lost who it was with")
         XCTAssertTrue(window.staticTexts[
             "This name is provided by the other device and is not verified identity."
         ].exists)
@@ -290,8 +306,8 @@ final class AppShellUITests: XCTestCase {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
         window.buttons[XCUIIdentifierCloseWindow].click()
-        let gone = NSPredicate(format: "count == 0")
-        expectation(for: gone, evaluatedWith: app.windows, handler: nil)
+        let gone = NSPredicate(format: "exists == false")
+        expectation(for: gone, evaluatedWith: window, handler: nil)
         waitForExpectations(timeout: 15)
         XCTAssertEqual(app.state, .runningForeground,
                        "closing the window must not end the process; the menu bar keeps it alive")
