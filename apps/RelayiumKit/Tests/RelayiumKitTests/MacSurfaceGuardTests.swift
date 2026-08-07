@@ -1289,9 +1289,10 @@ final class MacSurfaceGuardTests: XCTestCase {
     func testQuitGuardIncludesTheOnlyLocalTextHistory() throws {
         let app = try source(named: "RelayiumApp.swift")
         XCTAssertTrue(app.contains("final class AppQuitGuard"))
-        XCTAssertTrue(app.contains("var hasTextHistory: (() -> Bool)?"))
+        XCTAssertTrue(app.contains("var hasLocalText: (() -> Bool)?"))
+        XCTAssertTrue(app.contains("quitGuard.hasLocalText = {"))
         XCTAssertTrue(app.contains(
-            "quitGuard.hasTextHistory = { !realtimeTextModel.history.isEmpty }"))
+            "!realtimeTextModel.history.isEmpty || !realtimeTextModel.draft.isEmpty"))
         XCTAssertTrue(app.contains("QuitPresentation.risk("))
         XCTAssertTrue(app.contains("QuitPresentation.prompt(for: risk)"))
         XCTAssertFalse(app.contains("L10n.t(.quitCancelAndQuit)"))

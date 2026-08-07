@@ -88,9 +88,9 @@ public enum L10nKey: String, CaseIterable, Sendable {
 
     case quitTitle = "quit.title"
     case quitBody = "quit.body"
-    case quitHistoryTitle = "quit.historyTitle"
-    case quitHistoryBody = "quit.historyBody"
-    case quitTransferAndHistoryBody = "quit.transferAndHistoryBody"
+    case quitLocalTextTitle = "quit.localTextTitle"
+    case quitLocalTextBody = "quit.localTextBody"
+    case quitTransferAndLocalTextBody = "quit.transferAndLocalTextBody"
     case quitNow = "quit.now"
     case quitStay = "quit.stay"
 

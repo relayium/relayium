@@ -41,12 +41,12 @@ final class AppQuitGuard: NSObject, NSApplicationDelegate {
     /// Set by the scene once the models exist. A closure rather than references
     /// so the delegate holds no opinion about what a transfer is.
     var isTransferRunning: (() -> Bool)?
-    var hasTextHistory: (() -> Bool)?
+    var hasLocalText: (() -> Bool)?
     var cancelTransfers: (() -> Void)?
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         let risk = QuitPresentation.risk(transferRunning: isTransferRunning?() == true,
-                                         hasTextHistory: hasTextHistory?() == true)
+                                         hasLocalText: hasLocalText?() == true)
         guard let prompt = QuitPresentation.prompt(for: risk) else { return .terminateNow }
         let alert = NSAlert()
         alert.messageText = prompt.title
@@ -417,7 +417,9 @@ struct RelayiumApp: App {
                         uploadModel.isBusy || downloadModel.isBusy
                             || realtimeModel.isBusy || realtimeTextModel.isBusy
                     }
-                    quitGuard.hasTextHistory = { !realtimeTextModel.history.isEmpty }
+                    quitGuard.hasLocalText = {
+                        !realtimeTextModel.history.isEmpty || !realtimeTextModel.draft.isEmpty
+                    }
                     quitGuard.cancelTransfers = {
                         uploadModel.cancel()
                         downloadModel.cancel()

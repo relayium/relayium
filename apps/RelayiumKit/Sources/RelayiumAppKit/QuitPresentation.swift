@@ -7,8 +7,8 @@ import RelayiumShareKit
 public enum QuitRisk: Equatable {
     case none
     case transfer
-    case textHistory
-    case transferAndTextHistory
+    case localText
+    case transferAndLocalText
 }
 
 public struct QuitPrompt: Equatable {
@@ -19,12 +19,12 @@ public struct QuitPrompt: Equatable {
 }
 
 public enum QuitPresentation {
-    public static func risk(transferRunning: Bool, hasTextHistory: Bool) -> QuitRisk {
-        switch (transferRunning, hasTextHistory) {
+    public static func risk(transferRunning: Bool, hasLocalText: Bool) -> QuitRisk {
+        switch (transferRunning, hasLocalText) {
         case (false, false): return .none
         case (true, false): return .transfer
-        case (false, true): return .textHistory
-        case (true, true): return .transferAndTextHistory
+        case (false, true): return .localText
+        case (true, true): return .transferAndLocalText
         }
     }
 
@@ -38,12 +38,12 @@ public enum QuitPresentation {
         case .transfer:
             title = .quitTitle
             body = .quitBody
-        case .textHistory:
-            title = .quitHistoryTitle
-            body = .quitHistoryBody
-        case .transferAndTextHistory:
+        case .localText:
+            title = .quitLocalTextTitle
+            body = .quitLocalTextBody
+        case .transferAndLocalText:
             title = .quitTitle
-            body = .quitTransferAndHistoryBody
+            body = .quitTransferAndLocalTextBody
         }
         return QuitPrompt(title: L10n.t(title, language: language),
                           body: L10n.t(body, language: language),

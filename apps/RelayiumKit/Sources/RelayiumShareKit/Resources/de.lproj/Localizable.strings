@@ -51,9 +51,9 @@
 
 "quit.title" = "Eine Übertragung läuft noch";
 "quit.body" = "Jetzt zu beenden bricht sie ab. Nichts wird gespeichert, und ein laufender Upload muss von vorn beginnen.";
-"quit.historyTitle" = "Lokaler Nachrichtenverlauf ist nicht gespeichert";
-"quit.historyBody" = "Wenn du jetzt beendest, gehen die Nachrichten im Arbeitsspeicher der App unwiderruflich verloren.";
-"quit.transferAndHistoryBody" = "Wenn du jetzt beendest, wird die Übertragung abgebrochen und der lokale Nachrichtenverlauf unwiderruflich verworfen. Ein laufender Upload muss von vorn beginnen.";
+"quit.localTextTitle" = "Lokaler Text ist nicht gespeichert";
+"quit.localTextBody" = "Wenn du jetzt beendest, gehen der lokale Nachrichtenverlauf und jeder ungesendete Entwurf im Arbeitsspeicher der App unwiderruflich verloren.";
+"quit.transferAndLocalTextBody" = "Wenn du jetzt beendest, wird die Übertragung abgebrochen und der lokale Nachrichtenverlauf samt ungesendetem Entwurf unwiderruflich verworfen. Ein laufender Upload muss von vorn beginnen.";
 "quit.now" = "Jetzt beenden";
 "quit.stay" = "In Relayium bleiben";
 

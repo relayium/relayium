@@ -51,9 +51,9 @@
 
 "quit.title" = "Ainda há uma transferência a decorrer";
 "quit.body" = "Sair agora cancela-a. Nada é guardado, e um envio em curso terá de recomeçar do zero.";
-"quit.historyTitle" = "O histórico local de mensagens não está guardado";
-"quit.historyBody" = "Sair agora elimina permanentemente as mensagens que estão na memória da app.";
-"quit.transferAndHistoryBody" = "Sair agora cancela a transferência e elimina permanentemente o histórico local de mensagens. Um envio em curso terá de recomeçar do zero.";
+"quit.localTextTitle" = "O texto local não está guardado";
+"quit.localTextBody" = "Sair agora elimina permanentemente o histórico local de mensagens e qualquer rascunho por enviar na memória da app.";
+"quit.transferAndLocalTextBody" = "Sair agora cancela a transferência e elimina permanentemente o histórico local de mensagens e qualquer rascunho por enviar. Um envio em curso terá de recomeçar do zero.";
 "quit.now" = "Sair agora";
 "quit.stay" = "Permanecer no Relayium";
 

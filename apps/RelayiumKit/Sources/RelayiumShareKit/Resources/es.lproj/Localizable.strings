@@ -51,9 +51,9 @@
 
 "quit.title" = "Todavía hay una transferencia en curso";
 "quit.body" = "Salir ahora la cancela. No se guarda nada, y una subida en curso tendrá que empezar de cero.";
-"quit.historyTitle" = "El historial local de mensajes no está guardado";
-"quit.historyBody" = "Salir ahora descarta de forma permanente los mensajes que están en la memoria de la app.";
-"quit.transferAndHistoryBody" = "Salir ahora cancela la transferencia y descarta de forma permanente el historial local de mensajes. Una subida en curso tendrá que empezar de cero.";
+"quit.localTextTitle" = "El texto local no está guardado";
+"quit.localTextBody" = "Salir ahora descarta de forma permanente el historial local de mensajes y cualquier borrador sin enviar en la memoria de la app.";
+"quit.transferAndLocalTextBody" = "Salir ahora cancela la transferencia y descarta de forma permanente el historial local de mensajes y cualquier borrador sin enviar. Una subida en curso tendrá que empezar de cero.";
 "quit.now" = "Salir ahora";
 "quit.stay" = "Permanecer en Relayium";
 

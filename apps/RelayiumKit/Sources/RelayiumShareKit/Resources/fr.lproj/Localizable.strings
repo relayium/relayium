@@ -51,9 +51,9 @@
 
 "quit.title" = "Un transfert est encore en cours";
 "quit.body" = "Quitter maintenant l’annule. Rien n’est enregistré, et un envoi en cours devra repartir de zéro.";
-"quit.historyTitle" = "L’historique local des messages n’est pas enregistré";
-"quit.historyBody" = "Quitter maintenant supprime définitivement les messages présents dans la mémoire de l’app.";
-"quit.transferAndHistoryBody" = "Quitter maintenant annule le transfert et supprime définitivement l’historique local des messages. Un envoi en cours devra repartir de zéro.";
+"quit.localTextTitle" = "Le texte local n’est pas enregistré";
+"quit.localTextBody" = "Quitter maintenant supprime définitivement l’historique local des messages et tout brouillon non envoyé dans la mémoire de l’app.";
+"quit.transferAndLocalTextBody" = "Quitter maintenant annule le transfert et supprime définitivement l’historique local des messages ainsi que tout brouillon non envoyé. Un envoi en cours devra repartir de zéro.";
 "quit.now" = "Quitter maintenant";
 "quit.stay" = "Rester dans Relayium";
 
