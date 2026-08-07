@@ -239,6 +239,15 @@ final class MacSurfaceGuardTests: XCTestCase {
             "buttonStyle(.link)") ?? true)
     }
 
+    func testNearbyFileFailureKeepsTheManifestIdentityUntilBack() throws {
+        let session = try source(named: "RealtimeFileSessionView.swift")
+        let failed = try XCTUnwrap(session.components(
+            separatedBy: "case .failed:").dropFirst().first?
+            .components(separatedBy: "case .joining").first)
+        XCTAssertTrue(failed.contains("fileList"),
+                      "Nearby failure hides which files failed")
+    }
+
     /// Minting is a locked network wait: the idle controls are gone until the
     /// request settles, so both pairing modes need an explicit way back.
     func testPairingMintingCanBeCancelledInBothModes() throws {

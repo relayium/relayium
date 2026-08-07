@@ -138,6 +138,17 @@ final class IOSSurfaceGuardTests: XCTestCase {
         }
     }
 
+    func testNearbyFileFailureKeepsTheManifestIdentityUntilBack() throws {
+        let session = try XCTUnwrap(try sources().first {
+            $0.name == "DirectFileSessionView.swift"
+        }?.text)
+        let failed = try XCTUnwrap(session.components(
+            separatedBy: "case .failed:").dropFirst().first?
+            .components(separatedBy: "case .joining").first)
+        XCTAssertTrue(failed.contains("fileList"),
+                      "Nearby failure hides which files failed")
+    }
+
     /// Creating a code removes the start controls while a network request owns
     /// the screen. Both file and text modes must still offer an explicit exit.
     func testPairingMintingCanBeCancelledInBothModes() throws {

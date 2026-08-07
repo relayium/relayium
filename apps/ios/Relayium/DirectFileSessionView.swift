@@ -19,8 +19,11 @@ struct DirectFileSessionView: View {
 
     var body: some View {
         switch model.state {
-        case .idle, .failed, .minting, .showingCode:
+        case .idle, .minting, .showingCode:
             EmptyView()
+
+        case .failed:
+            fileList
 
         case .joining, .connecting:
             VStack(alignment: .leading, spacing: 12) {
