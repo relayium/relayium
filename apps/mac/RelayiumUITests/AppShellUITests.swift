@@ -100,7 +100,7 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(pairing.waitForExistence(timeout: 10))
         pairing.click()
 
-        let textMode = window.buttons["Text"]
+        let textMode = window.radioButtons["Text"]
         XCTAssertTrue(textMode.waitForExistence(timeout: 10))
         textMode.click()
 
@@ -108,7 +108,9 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(create.waitForExistence(timeout: 10))
         create.click()
 
-        XCTAssertTrue(window.staticTexts["483920"].waitForExistence(timeout: 10),
+        // SecurityCodeText deliberately exposes digits one by one so
+        // VoiceOver never reads the pairing code as one large number.
+        XCTAssertTrue(window.staticTexts["4 8 3 9 2 0"].waitForExistence(timeout: 10),
                       "the generated pairing code was not visible")
         XCTAssertTrue(window.staticTexts["Join link"].exists,
                       "the generated code has no visible browser handoff")
@@ -116,12 +118,46 @@ final class AppShellUITests: XCTestCase {
                       "the join link cannot be copied")
         XCTAssertTrue(window.buttons["Share"].exists,
                       "the join link cannot use the system share sheet")
-        XCTAssertTrue(window.staticTexts["Waiting for the other device…"].exists,
+        XCTAssertTrue(window.activityIndicators["Waiting for the other device…"].exists,
                       "the generated-code surface hides its live status")
         XCTAssertTrue(window.buttons["Cancel"].exists,
                       "the generated-code surface hides its escape action")
         XCTAssertTrue(window.staticTexts["Pairing code"].exists || window.title == "Pairing code",
                       "creating a pairing-code text session navigated elsewhere")
+    }
+
+    /// A terminal task is not an invitation to start another one on top of it.
+    /// Done is the explicit boundary that releases the old connection/history;
+    /// only after it is pressed may Create and Join return.
+    func testTerminalTextSessionMustBeDismissedBeforeStartingAgain() {
+        app.terminate()
+        app.launchArguments = ["--relayium-ui-testing",
+                               "--relayium-ui-testing-terminal-text"]
+        app.launch()
+
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let pairing = window.descendants(matching: .any)["Pairing code"]
+        XCTAssertTrue(pairing.waitForExistence(timeout: 10))
+        pairing.click()
+        let textMode = window.radioButtons["Text"]
+        XCTAssertTrue(textMode.waitForExistence(timeout: 10))
+        textMode.click()
+        XCTAssertTrue(window.buttons["Create a text code"].waitForExistence(timeout: 10))
+        window.buttons["Create a text code"].click()
+
+        let done = window.links["Done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 10),
+                      "the failed session has no cleanup boundary")
+        XCTAssertFalse(window.buttons["Create a text code"].exists,
+                       "a new create path replaced a terminal session before Done")
+        XCTAssertFalse(window.buttons["Join"].exists,
+                       "a new join path replaced a terminal session before Done")
+
+        done.click()
+        XCTAssertTrue(window.buttons["Create a text code"].waitForExistence(timeout: 10),
+                      "the start controls did not return after cleanup")
+        XCTAssertTrue(window.buttons["Join"].exists)
     }
 
     /// Settings opens as a SECOND window rather than a replacement — the main

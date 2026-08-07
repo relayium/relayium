@@ -29,15 +29,12 @@ struct RealtimeTextPane: View {
                 joinCard
             case .failed, .ended, .refused, .unsupported:
                 RealtimeTextSessionView(model: model)
-                // None of these four is `.idle`, so the session is still owned
-                // and Nearby stays on the "shown elsewhere" card until this is
-                // pressed. Deliberately the only thing that discards the
-                // retained history above: a terminal notice that cleared itself
-                // would take the transcript with it.
+                // None of these four is `.idle`, so the dead connection and
+                // retained transcript still belong to this task. Expose only
+                // the explicit cleanup boundary: start controls here would let
+                // a new session replace the history before the user chose Done.
                 Button(L10n.t(.commonDone)) { model.reset() }
                     .buttonStyle(.link)
-                createCard
-                joinCard
             case .minting:
                 SectionCard(title: L10n.t(.textStartHeading)) {
                     ProgressView(L10n.t(.textCreatingCode)).controlSize(.small)

@@ -31,6 +31,11 @@ enum UITestMode {
     // nonlocalized: a launch argument, never displayed
     static let argument = "--relayium-ui-testing"
     static let isActive = ProcessInfo.processInfo.arguments.contains(argument)
+    /// Holds the text pairing model on a deterministic terminal failure so the
+    /// UI suite can verify that cleanup, not a second start path, owns the page.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let terminalTextArgument = "--relayium-ui-testing-terminal-text"
+    static let showsTerminalText = ProcessInfo.processInfo.arguments.contains(terminalTextArgument)
     #else
     /// In Release the answer is a constant the optimiser folds away, so the
     /// guarded work is unconditional and the argument means nothing.
@@ -57,7 +62,8 @@ enum UITestMode {
 #if DEBUG
 private struct UITestPairClient: PairCodeClient {
     func mint(token: String) async throws -> MintedCode {
-        MintedCode(code: "483920", expiresAt: 4_102_444_800)
+        if UITestMode.showsTerminalText { throw AccountError.network }
+        return MintedCode(code: "483920", expiresAt: 4_102_444_800)
     }
 }
 

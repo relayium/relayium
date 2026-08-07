@@ -33,9 +33,15 @@ struct DirectPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             switch model.state {
-            case .idle, .failed:
+            case .idle:
                 createCard
                 joinCard
+            case .failed:
+                // The failure below still owns its dead connection and may
+                // own a partial receive. Starting again before Done would skip
+                // the cleanup boundary and replace the task the user is still
+                // reading, so the start controls return only after cancel.
+                EmptyView()
             case .minting:
                 SectionCard(title: L10n.t(.directSendHeading)) {
                     ProgressView(L10n.t(.directCreatingCode)).controlSize(.small)
@@ -54,10 +60,7 @@ struct DirectPane: View {
             if case let .failed(message) = model.state {
                 InlineMessage(.failure, message)
                 // `.failed` is not `.idle`, so presence stays owned and Nearby
-                // keeps showing "this session is shown elsewhere" until somebody
-                // clears it. Starting another pairing-code session is not a
-                // dismissal — it is the ONLY way out without this button, and it
-                // is not one a user looking for the other destination would find.
+                // keeps showing "this session is shown elsewhere" until Done.
                 // Cancel rather than a bare state reset: the failure may have
                 // left a partial write to discard.
                 Button(L10n.t(.commonDone)) { model.cancel() }

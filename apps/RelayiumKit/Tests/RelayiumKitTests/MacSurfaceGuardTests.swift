@@ -141,6 +141,26 @@ final class MacSurfaceGuardTests: XCTestCase {
             "stored upload lost file identities in a running or terminal state")
     }
 
+    /// A terminal pairing task still owns cleanup and, for text, the only local
+    /// transcript. It must not expose a second Create/Join path until Done has
+    /// returned the model to idle. iOS already enforces this same boundary.
+    func testPairingTerminalStatesExposeOnlyTheirCleanupBoundary() throws {
+        let files = try source(named: "DirectPane.swift")
+        let fileTerminal = try XCTUnwrap(files.components(separatedBy: "case .failed:").dropFirst().first)
+            .components(separatedBy: "case .minting:").first ?? ""
+        XCTAssertFalse(fileTerminal.contains("createCard"))
+        XCTAssertFalse(fileTerminal.contains("joinCard"))
+        XCTAssertTrue(files.contains("Button(L10n.t(.commonDone)) { model.cancel() }"))
+
+        let text = try source(named: "RealtimeTextPane.swift")
+        let textTerminal = try XCTUnwrap(text.components(
+            separatedBy: "case .failed, .ended, .refused, .unsupported:").dropFirst().first)
+            .components(separatedBy: "case .minting:").first ?? ""
+        XCTAssertFalse(textTerminal.contains("createCard"))
+        XCTAssertFalse(textTerminal.contains("joinCard"))
+        XCTAssertTrue(textTerminal.contains("Button(L10n.t(.commonDone)) { model.reset() }"))
+    }
+
     private func occurrences(of needle: String, in text: String) -> Int {
         text.components(separatedBy: needle).count - 1
     }
