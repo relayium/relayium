@@ -364,7 +364,13 @@ struct RelayiumApp: App {
                 // resolving the folder is idempotent and `startResident` refuses
                 // both a second socket and an override of the user's pause.
                 .task {
-                    if !UITestMode.isActive {
+                    if UITestMode.isActive {
+                        // Keep the acceptance UI internally coherent as well
+                        // as offline: the status, explanation and action all
+                        // describe a deliberate pause instead of an unstarted
+                        // listener with a live-looking Pause button.
+                        residency.pause()
+                    } else {
                         residency.phaseChanged(to: .active)
                     }
                     // Cold launch, including the launch that follows a user

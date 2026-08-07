@@ -70,9 +70,11 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let mode = try XCTUnwrap(try sources().first { $0.name == "UITestMode.swift" }?.text)
         XCTAssertTrue(mode.contains("--relayium-ui-testing"))
         XCTAssertTrue(mode.contains("#if DEBUG"))
-        XCTAssertGreaterThanOrEqual(app.components(
-            separatedBy: "if !UITestMode.isActive").count - 1, 2,
+        XCTAssertEqual(app.components(
+            separatedBy: "if !UITestMode.isActive").count - 1, 1,
             "a UI simulator can still enter the public Nearby room")
+        XCTAssertTrue(app.contains("residency.pause()"),
+                      "the offline UI test state contradicts its own receiving controls")
 
         let uiURL = appsRoot.appendingPathComponent(
             "ios/RelayiumUITests/AppShellUITests.swift")

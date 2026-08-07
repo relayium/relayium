@@ -33,8 +33,18 @@ final class AppShellUITests: XCTestCase {
             XCTAssertTrue(tab.waitForExistence(timeout: 10),
                           "the tab bar has no \(destination.tab) task")
             tab.tap()
+            let selected = XCTNSPredicateExpectation(
+                predicate: NSPredicate(format: "selected == true"), object: tab)
+            XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 10), .completed,
+                           "\(destination.tab) did not become the selected task")
             XCTAssertTrue(app.navigationBars[destination.title].waitForExistence(timeout: 10),
                           "\(destination.tab) selected but its screen did not render")
+            if destination.tab == "Nearby" {
+                XCTAssertTrue(app.staticTexts["Nearby receiving: paused"].exists,
+                              "the offline acceptance state is not explained")
+                XCTAssertTrue(app.buttons["Resume receiving"].exists,
+                              "the paused state does not offer its matching recovery")
+            }
         }
     }
 }
