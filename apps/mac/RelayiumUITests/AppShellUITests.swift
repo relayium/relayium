@@ -146,7 +146,7 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(window.buttons["Create a text code"].waitForExistence(timeout: 10))
         window.buttons["Create a text code"].click()
 
-        let done = window.links["Done"]
+        let done = window.buttons["Done"]
         XCTAssertTrue(done.waitForExistence(timeout: 10),
                       "the failed session has no cleanup boundary")
         XCTAssertFalse(window.buttons["Create a text code"].exists,

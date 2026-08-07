@@ -38,7 +38,7 @@ struct RealtimeFileSessionView: View {
                 if let payload = model.received {
                     ReceivedResultView(payload: payload)
                 }
-                Button(L10n.t(.commonDone)) { model.cancel() }.buttonStyle(.link)
+                Button(L10n.t(.commonDone)) { model.cancel() }.buttonStyle(.bordered)
             }
         }
     }

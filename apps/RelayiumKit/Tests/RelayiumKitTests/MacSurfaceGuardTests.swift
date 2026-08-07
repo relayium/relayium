@@ -151,6 +151,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertFalse(fileTerminal.contains("createCard"))
         XCTAssertFalse(fileTerminal.contains("joinCard"))
         XCTAssertTrue(files.contains("Button(L10n.t(.commonDone)) { model.cancel() }"))
+        XCTAssertFalse(fileTerminal.contains("buttonStyle(.link)"))
 
         let text = try source(named: "RealtimeTextPane.swift")
         let textTerminal = try XCTUnwrap(text.components(
@@ -159,6 +160,13 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertFalse(textTerminal.contains("createCard"))
         XCTAssertFalse(textTerminal.contains("joinCard"))
         XCTAssertTrue(textTerminal.contains("Button(L10n.t(.commonDone)) { model.reset() }"))
+        XCTAssertFalse(textTerminal.contains("buttonStyle(.link)"))
+
+        let session = try source(named: "RealtimeFileSessionView.swift")
+        let completed = try XCTUnwrap(session.components(separatedBy: "case .completed:").dropFirst().first)
+        XCTAssertTrue(completed.contains("Button(L10n.t(.commonDone)) { model.cancel() }"))
+        XCTAssertFalse(completed.components(separatedBy: "private func verifying").first?.contains(
+            "buttonStyle(.link)") ?? true)
     }
 
     private func occurrences(of needle: String, in text: String) -> Int {

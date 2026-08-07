@@ -34,7 +34,7 @@ struct RealtimeTextPane: View {
                 // the explicit cleanup boundary: start controls here would let
                 // a new session replace the history before the user chose Done.
                 Button(L10n.t(.commonDone)) { model.reset() }
-                    .buttonStyle(.link)
+                    .buttonStyle(.bordered)
             case .minting:
                 SectionCard(title: L10n.t(.textStartHeading)) {
                     ProgressView(L10n.t(.textCreatingCode)).controlSize(.small)

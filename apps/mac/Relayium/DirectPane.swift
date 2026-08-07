@@ -64,7 +64,7 @@ struct DirectPane: View {
                 // Cancel rather than a bare state reset: the failure may have
                 // left a partial write to discard.
                 Button(L10n.t(.commonDone)) { model.cancel() }
-                    .buttonStyle(.link)
+                    .buttonStyle(.bordered)
             }
             if let stagingError {
                 InlineMessage(.failure, stagingError)
