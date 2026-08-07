@@ -297,7 +297,11 @@ struct NearbyPane: View {
             }
             if !busy {
                 Button(L10n.t(.nearbyBackToDevices)) { leaveSession() }
-                    .buttonStyle(.link)
+                    // This is not navigation: it tears down the connection,
+                    // removes a partial receive, clears text history and drops
+                    // the staged selection. Match iOS and publish that task
+                    // boundary as a Button to both sighted and VoiceOver users.
+                    .buttonStyle(.bordered)
                 if mode == .text {
                     // Says so rather than surprising: leaving is the one action
                     // here that discards the local history the terminal view is

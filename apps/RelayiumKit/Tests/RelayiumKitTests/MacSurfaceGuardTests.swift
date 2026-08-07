@@ -201,6 +201,23 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "Send another is exposed as a navigation Link")
     }
 
+    /// Leaving Nearby tears down the active task and drops local state. The
+    /// visible control and its accessibility role must describe a Button, as
+    /// the equivalent iOS surface already does, rather than harmless navigation.
+    func testNearbyBackToDevicesKeepsTaskBoundaryButtonSemantics() throws {
+        let source = try source(named: "NearbyPane.swift")
+        let session = try XCTUnwrap(source.components(
+            separatedBy: "private var session").dropFirst().first)
+            .components(separatedBy: "// MARK: - actions").first ?? ""
+        let boundary = try XCTUnwrap(session.components(
+            separatedBy: "Button(L10n.t(.nearbyBackToDevices))").dropFirst().first)
+            .components(separatedBy: "if mode == .text").first ?? ""
+
+        XCTAssertTrue(boundary.contains(".buttonStyle(.bordered)"))
+        XCTAssertFalse(boundary.contains(".buttonStyle(.link)"),
+                       "Back to devices is exposed as a navigation Link")
+    }
+
     private func occurrences(of needle: String, in text: String) -> Int {
         text.components(separatedBy: needle).count - 1
     }
