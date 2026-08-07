@@ -203,7 +203,7 @@ struct DirectPane: View {
     private func join() {
         // Claimed before connecting, so the session this starts is presented
         // here rather than in Nearby, which drives the same model.
-        presence.claim(.pairingCode, mode: .files)
+        guard presence.claim(.pairingCode, mode: .files) else { return }
         Task { await model.join(code: model.joinCode) }
     }
 
@@ -223,7 +223,7 @@ struct DirectPane: View {
             return
         }
         stagingError = nil
-        presence.claim(.pairingCode, mode: .files)
+        guard presence.claim(.pairingCode, mode: .files) else { return }
         model.stageSend(sources: staged.sources, metas: staged.metas)
         await model.mintCode(token: token)
         guard case let .showingCode(code, _) = model.state else { return }

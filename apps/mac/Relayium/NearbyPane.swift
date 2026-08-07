@@ -339,11 +339,12 @@ struct NearbyPane: View {
             return
         }
         stagingError = nil
-        fileModel.stageSend(sources: staged.sources, metas: staged.metas)
         // Claimed before dialling, so the session this is about to start is
         // presented here. The claim can only be refused while another
-        // destination owns a session, and this pane is not on screen then.
-        presence.claim(.nearby, mode: mode)
+        // destination owns a session. A concurrent inbound offer can win after
+        // the last frame rendered, so refusal is enforced here, not by visibility.
+        guard presence.claim(.nearby, mode: mode) else { return }
+        fileModel.stageSend(sources: staged.sources, metas: staged.metas)
         Task { await fileModel.connectNearby(peerId: device.id, role: .initiator) }
     }
 
@@ -353,7 +354,7 @@ struct NearbyPane: View {
             return
         }
         stagingError = nil
-        presence.claim(.nearby, mode: mode)
+        guard presence.claim(.nearby, mode: mode) else { return }
         Task { await textModel.connectNearby(peerId: device.id, role: .initiator) }
     }
 

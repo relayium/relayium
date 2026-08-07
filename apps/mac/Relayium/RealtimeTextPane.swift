@@ -126,12 +126,12 @@ struct RealtimeTextPane: View {
     private func join() {
         // Claimed before connecting, so the session this starts is presented
         // here rather than in Nearby, which drives the same model.
-        presence.claim(.pairingCode, mode: .text)
+        guard presence.claim(.pairingCode, mode: .text) else { return }
         Task { await model.join(code: model.joinCode) }
     }
 
     private func mintAndWait(token: String) async {
-        presence.claim(.pairingCode, mode: .text)
+        guard presence.claim(.pairingCode, mode: .text) else { return }
         await model.mintCode(token: token)
         guard case let .showingCode(code, _) = model.state else { return }
         await model.join(code: code, role: .initiator)

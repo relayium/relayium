@@ -1226,6 +1226,22 @@ final class MacSurfaceGuardTests: XCTestCase {
             "fileOpenRouting.batch(for: .pairingCode, busy: fileAdoptionBusy)"))
     }
 
+    /// Claim refusal is a real concurrency result, not an impossible branch:
+    /// an inbound offer can win between the last render and an outbound click.
+    /// Every macOS start path must stop before touching its shared model.
+    func testEveryOutboundRealtimeStartRequiresItsSurfaceClaim() throws {
+        let expectations: [(String, String, Int)] = [
+            ("DirectPane.swift", "guard presence.claim(.pairingCode, mode: .files) else { return }", 2),
+            ("RealtimeTextPane.swift", "guard presence.claim(.pairingCode, mode: .text) else { return }", 2),
+            ("NearbyPane.swift", "guard presence.claim(.nearby, mode: mode) else { return }", 2),
+        ]
+        for (file, guardLine, count) in expectations {
+            let source = try source(named: file)
+            XCTAssertEqual(occurrences(of: guardLine, in: source), count,
+                           "\(file) can start a shared model after losing ownership")
+        }
+    }
+
     /// The document-type declaration that makes the app a Dock drop target and a
     /// Finder "Open With" entry — and the one line that keeps it from becoming
     /// the Mac's default handler for every file on disk.
