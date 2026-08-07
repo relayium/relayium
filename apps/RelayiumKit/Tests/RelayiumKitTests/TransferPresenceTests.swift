@@ -1,4 +1,5 @@
 import XCTest
+import Combine
 @testable import RelayiumAppKit
 
 /// Who presents the live session.
@@ -49,6 +50,22 @@ final class TransferPresenceTests: XCTestCase {
         p.release(.nearby)
         p.selectMode(.files)
         XCTAssertEqual(p.mode, .files)
+    }
+
+    func testInitialIdleObservationCannotEraseALaterClaimBeforeModelStart() {
+        let p = TransferPresence()
+        let liveness = PassthroughSubject<Bool, Never>()
+        p.observeSessionLiveness(liveness.eraseToAnyPublisher())
+
+        liveness.send(false)
+        XCTAssertTrue(p.claim(.pairingCode, mode: .text))
+        XCTAssertEqual(p.owner, .pairingCode,
+                       "the already-observed idle baseline must not race a fresh claim")
+
+        liveness.send(true)
+        XCTAssertEqual(p.owner, .pairingCode)
+        liveness.send(false)
+        XCTAssertNil(p.owner, "the real live-to-idle edge must release retained ownership")
     }
 
     func testExactlyOneDestinationRendersTheSession() {

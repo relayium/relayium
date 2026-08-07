@@ -18,12 +18,6 @@ struct PairingCodeDestination: View {
 
     private var busy: Bool { fileModel.isBusy || textModel.isBusy }
 
-    /// See `NearbyDestination`: `.idle` on both models is the only state that
-    /// means there is no session anywhere to present.
-    private var anySessionLive: Bool {
-        fileModel.state != .idle || textModel.state != .idle
-    }
-
     private var gate: AccountGate {
         #if DEBUG
         if UITestMode.isActive {
@@ -46,7 +40,6 @@ struct PairingCodeDestination: View {
                 }
             }
         }
-        .task(id: anySessionLive) { if !anySessionLive { presence.releaseAll() } }
     }
 
     /// The same one question the nearby destination asks, reading and writing

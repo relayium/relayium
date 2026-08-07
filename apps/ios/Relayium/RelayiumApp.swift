@@ -252,6 +252,7 @@ struct RelayiumApp: App {
         _directSelection = StateObject(wrappedValue: selecting)
         _directModes = StateObject(wrappedValue: modes)
         let presenting = TransferPresence()
+        presenting.observeSessions(fileModel: files, textModel: texts)
         let routing = AppNavigationModel(selection: .storedReceive)
         _presence = StateObject(wrappedValue: presenting)
         _navigation = StateObject(wrappedValue: routing)

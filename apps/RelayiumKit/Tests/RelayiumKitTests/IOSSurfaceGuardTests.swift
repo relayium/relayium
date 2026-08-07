@@ -2763,11 +2763,14 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// lives in the shell, which is mounted whichever tab is on screen, rather
     /// than in the tab that happens to have claimed it.
     func testOwnershipIsReleasedOnlyWhenBothModelsAreIdle() throws {
+        let app = try XCTUnwrap(try sources().first { $0.name == "RelayiumApp.swift" })
         let root = try XCTUnwrap(try sources().first { $0.name == "RootView.swift" })
-        XCTAssertTrue(root.text.contains("direct.state == .idle && directText.state == .idle"),
-                      "the shell releases ownership on something other than idle")
-        XCTAssertTrue(root.text.contains("presence.releaseAll()"))
-        for name in ["NearbyView.swift", "DirectView.swift"] {
+        XCTAssertTrue(app.text.contains(
+            "presenting.observeSessions(fileModel: files, textModel: texts)"),
+                      "session cleanup must survive tab/root teardown")
+        XCTAssertFalse(root.text.contains("presence.releaseAll()"),
+                       "an initial idle render can erase a claim before model start")
+        for name in ["NearbyView.swift", "DirectView.swift", "RootView.swift"] {
             let view = try XCTUnwrap(try sources().first { $0.name == name })
             XCTAssertFalse(view.text.contains("presence.releaseAll()"),
                            "\(name) releases a session it may not own")

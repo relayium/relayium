@@ -148,14 +148,6 @@ struct RootView: View {
         // sign-in, refreshing rather than cold-starting when a token is held,
         // and guarding every post-await write on its operation generation.
         .task { await session.restore() }
-        // `.idle` on BOTH models is the only state that means there is nothing
-        // left to present. `task(id:)` rather than `onChange` because it also
-        // evaluates once on first appearance, which is what reconciles an
-        // ownership that was already stale rather than only one that becomes
-        // stale while somebody is watching.
-        .task(id: nothingLeftToPresent) {
-            if nothingLeftToPresent { presence.releaseAll() }
-        }
         // A link the OS handed this app. `AppDeepLinkRouter` has already refused
         // anything that is not a relayium.com link this app can serve, so what
         // arrives is one of exactly two shapes — and everything that happens to
@@ -178,12 +170,5 @@ struct RootView: View {
             // this subscription has never seen and `Published` will not re-emit.
             Task { @MainActor in deepLinks.consume(link) }
         }
-    }
-
-    /// Deliberately not `isBusy`. A transfer that finished still owns its
-    /// result view, its share sheet and its transcript, and releasing when the
-    /// bytes stopped would blank the surface the user is still reading.
-    private var nothingLeftToPresent: Bool {
-        direct.state == .idle && directText.state == .idle
     }
 }

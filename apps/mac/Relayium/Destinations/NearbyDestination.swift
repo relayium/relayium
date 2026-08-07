@@ -59,13 +59,6 @@ struct NearbyDestination: View {
         // started and rebuilt — with the mode back at its default — while it is
         // still running.
         .task(id: receive.activeKind) { followIncoming() }
-        // Ownership outlives the view that claimed it, so the one fact that can
-        // make it stale — no session on either model — is reconciled from
-        // whichever direct destination is on screen when it becomes true.
-        // Without this, a session ended from somewhere other than its own
-        // surface would leave the other destination showing the busy card for a
-        // transfer that is no longer running.
-        .task(id: anySessionLive) { if !anySessionLive { presence.releaseAll() } }
     }
 
     /// Explicit intent selection: neither a roster entry nor a pairing code

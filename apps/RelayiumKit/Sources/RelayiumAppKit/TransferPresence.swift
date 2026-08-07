@@ -37,6 +37,7 @@ public enum TransferMode: Equatable, CaseIterable, Sendable {
 /// exists. `mode` is macOS's.
 @MainActor
 public final class TransferPresence: ObservableObject {
+    private var sessionObservation: AnyCancellable?
     /// `nil` when no destination is presenting a session. Private setter: the
     /// only ways in are `claim`, `release` and `releaseAll`, so "a non-owner
     /// cannot clear the session" is enforced rather than agreed.
@@ -64,6 +65,26 @@ public final class TransferPresence: ObservableObject {
     /// session in the synchronous claim-before-model-start window.
     var ownershipChanges: AnyPublisher<Bool, Never> {
         $owner.map { $0 != nil }.removeDuplicates().eraseToAnyPublisher()
+    }
+
+    /// Keep ownership for every live and retained terminal state, then release
+    /// it on the one authoritative transition back to both models being idle.
+    /// This observer is app-scoped: a window or tab may disappear while the
+    /// session ends, and a replacement view must not infer lifecycle from its
+    /// initial idle render.
+    public func observeSessions(fileModel: RealtimeSessionModel,
+                                textModel: RealtimeTextSessionModel) {
+        observeSessionLiveness(Publishers.CombineLatest(fileModel.$state, textModel.$state)
+            .map { file, text in file != .idle || text != .idle }
+            .eraseToAnyPublisher())
+    }
+
+    func observeSessionLiveness(_ liveness: AnyPublisher<Bool, Never>) {
+        sessionObservation = liveness
+            .removeDuplicates()
+            .sink { [weak self] hasLiveSession in
+                if !hasLiveSession { self?.releaseAll() }
+            }
     }
 
     /// Take, or keep, the right to present the session.

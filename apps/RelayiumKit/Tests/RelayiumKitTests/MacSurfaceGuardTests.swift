@@ -302,6 +302,18 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(nearby.components(separatedBy: ".disabled(sessionLocked)").count - 1, 2)
     }
 
+    func testSessionOwnershipCleanupIsAppScopedAndNeverRunsFromInitialViewIdle() throws {
+        let app = try source(named: "RelayiumApp.swift")
+        XCTAssertTrue(app.contains(
+            "presenting.observeSessions(fileModel: files, textModel: text)"))
+        for name in ["Destinations/PairingCodeDestination.swift",
+                     "Destinations/NearbyDestination.swift"] {
+            let destination = try source(named: name)
+            XCTAssertFalse(destination.contains("presence.releaseAll()"),
+                           "\(name) can erase a fresh claim from its initial idle task")
+        }
+    }
+
     /// Before a text peer connects there is no transcript or result to retain.
     /// Cancel should match the file flow and return directly to the start screen.
     func testTextConnectingCancelDoesNotCreateAnEmptyTerminalTask() throws {

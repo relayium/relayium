@@ -300,6 +300,7 @@ struct RelayiumApp: App {
             textModel: text,
             receiveModel: receive))
         let presenting = TransferPresence()
+        presenting.observeSessions(fileModel: files, textModel: text)
         _presence = StateObject(wrappedValue: presenting)
         let routing = AppNavigationModel()
         _navigation = StateObject(wrappedValue: routing)
