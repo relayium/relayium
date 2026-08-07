@@ -78,17 +78,7 @@ struct DirectFileSessionView: View {
             } currentValueLabel: {
                 Text(L10n.percent(done: done, total: total) ?? L10n.t(.commonStarting))
             }
-            // Keyed by index, not by name: a folder legitimately holds two files
-            // with the same leaf name in different subdirectories, and `id:
-            // \.name` would collapse them into one row. The relative path is
-            // what the user needs to read anyway.
-            ForEach(Array(model.incoming.enumerated()), id: \.offset) { _, meta in
-                Text(safeDisplayName(meta.path ?? meta.name))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
+            fileList
             // The foreground-only truth, said while it still matters rather than
             // afterwards as an explanation. There is no background transfer and
             // no resume behind it to soften it.
@@ -108,6 +98,8 @@ struct DirectFileSessionView: View {
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
             }
             .font(.headline)
+
+            fileList
 
             // Only a RECEIVE has a payload, and it is non-nil only in
             // `.completed`, which the model reaches only after
@@ -137,6 +129,29 @@ struct DirectFileSessionView: View {
             Button(L10n.t(.commonDone)) { model.cancel() }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
+        }
+    }
+
+    @ViewBuilder
+    private var fileList: some View {
+        if !model.sessionFiles.isEmpty {
+            LazyVStack(alignment: .leading, spacing: 10) {
+                ForEach(Array(model.sessionFiles.enumerated()), id: \.offset) { _, file in
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        Text(safeDisplayName(file.path ?? file.name))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text(L10n.bytes(Int64(file.size)))
+                            .foregroundStyle(.secondary)
+                            .fixedSize()
+                    }
+                    .font(.footnote)
+                    .accessibilityElement(children: .combine)
+                }
+            }
+            .padding(12)
+            .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 10))
+            .accessibilityElement(children: .contain)
         }
     }
 }

@@ -833,6 +833,7 @@ final class RealtimeSessionModelTests: XCTestCase {
     func testSenderCompletesOnTheCompleteControl() async {
         let m = makeModel()
         m.stageSend(sources: [DataSource(name: "a.txt", bytes: [1, 2, 3])], metas: [FileMeta(name: "a.txt", size: 3)])
+        XCTAssertEqual(m.sessionFiles, [FileMeta(name: "a.txt", size: 3)])
         await m.join(code: "483920", role: .initiator)
         conn.onSAS?("x")
         conn.onOpen?()
@@ -841,6 +842,10 @@ final class RealtimeSessionModelTests: XCTestCase {
         conn.onControl?(.complete)
         await settle()
         guard case .completed = m.state else { return XCTFail("got \(m.state)") }
+        XCTAssertEqual(m.sessionFiles, [FileMeta(name: "a.txt", size: 3)],
+                       "completion hid what the sender just transferred")
+        m.cancel()
+        XCTAssertTrue(m.sessionFiles.isEmpty, "Done must retire the displayed manifest")
     }
 
     /// The peer hanging up after it has confirmed the batch is the normal end of

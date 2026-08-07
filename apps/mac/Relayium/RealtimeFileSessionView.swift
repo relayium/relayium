@@ -31,6 +31,7 @@ struct RealtimeFileSessionView: View {
         case .completed:
             VStack(alignment: .leading, spacing: 8) {
                 Text(L10n.t(.sessionTransferComplete)).font(.subheadline.weight(.semibold))
+                fileList
                 // Only a RECEIVE has a payload. A sender reaches `.completed`
                 // with no URLs of its own, and offering it a drag source would
                 // be offering files it never wrote.
@@ -70,16 +71,35 @@ struct RealtimeFileSessionView: View {
             } currentValueLabel: {
                 Text(L10n.percent(done: done, total: total) ?? L10n.t(.commonStarting))
             }
-            // Keyed by index: a folder legitimately contains two files with the
-            // same leaf name in different subdirectories, and `id: \.name` would
-            // collapse them into one row (and warn about duplicate ids). The
-            // relative path is what the user needs to see anyway.
-            ForEach(Array(model.incoming.enumerated()), id: \.offset) { _, f in
-                Text(safeDisplayName(f.path ?? f.name))
-                    .font(.caption).foregroundStyle(.secondary)
-                    .lineLimit(1).truncationMode(.middle)
-            }
+            fileList
             Button(L10n.t(.commonCancel)) { model.cancel() }
+        }
+    }
+
+    @ViewBuilder
+    private var fileList: some View {
+        if !model.sessionFiles.isEmpty {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 8) {
+                    ForEach(Array(model.sessionFiles.enumerated()), id: \.offset) { _, file in
+                        HStack(alignment: .firstTextBaseline, spacing: 12) {
+                            Text(safeDisplayName(file.path ?? file.name))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .textSelection(.enabled)
+                            Text(L10n.bytes(Int64(file.size)))
+                                .foregroundStyle(.secondary)
+                                .fixedSize()
+                        }
+                        .font(.caption)
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+                .padding(10)
+            }
+            .frame(maxHeight: 200)
+            .background(.quaternary.opacity(0.25), in: RoundedRectangle(cornerRadius: 8))
+            .accessibilityElement(children: .contain)
         }
     }
 }

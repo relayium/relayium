@@ -377,6 +377,15 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "the first-run receive state must not be a blank remainder")
     }
 
+    func testRealtimeFileDetailsSurviveTransferAndCompletion() throws {
+        let view = try XCTUnwrap(try sources().first { $0.name == "DirectFileSessionView.swift" })
+        XCTAssertGreaterThanOrEqual(view.text.components(separatedBy: "fileList").count - 1, 3,
+                                    "the manifest must render while active and after completion")
+        XCTAssertTrue(view.text.contains("model.sessionFiles"))
+        XCTAssertTrue(view.text.contains("L10n.bytes(Int64(file.size))"),
+                      "file identity without size does not meet the send confirmation standard")
+    }
+
     /// A failure a second tap would fix must offer that tap.
     ///
     /// This view rendered a sentence and nothing else for every failure,

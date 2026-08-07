@@ -72,6 +72,15 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the peer-accept wait is unnamed")
     }
 
+    func testRealtimeFileDetailsSurviveTransferAndCompletion() throws {
+        let view = try source(named: "RealtimeFileSessionView.swift")
+        XCTAssertGreaterThanOrEqual(view.components(separatedBy: "fileList").count - 1, 3,
+                                    "the manifest must render while active and after completion")
+        XCTAssertTrue(view.contains("model.sessionFiles"))
+        XCTAssertTrue(view.contains("L10n.bytes(Int64(file.size))"),
+                      "file identity without size does not meet the send confirmation standard")
+    }
+
     /// Each source's CODE, with whole-line comments dropped — the same loader
     /// `IOSSurfaceGuardTests` uses, and for the same reason: these files explain
     /// what they deliberately do NOT do, so scanning raw text would fail this

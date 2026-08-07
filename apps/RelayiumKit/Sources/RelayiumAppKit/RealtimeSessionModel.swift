@@ -197,6 +197,15 @@ public final class RealtimeSessionModel: ObservableObject {
         return receivedPayload(files: urls, container: receivedContainer)
     }
 
+    /// The manifest this surface should keep showing for the whole session.
+    ///
+    /// A sender owns `pendingSend`; a receiver owns `incoming`. Both survive
+    /// through `.completed` until Done/Cancel tears the session down, so the UI
+    /// never loses the answer to “which files?” when the picker disappears.
+    public var sessionFiles: [FileMeta] {
+        pendingSend?.metas ?? incoming
+    }
+
     public func updateJoinCode(_ raw: String) {
         joinCode = normalizedPairingCode(raw)
     }
