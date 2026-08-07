@@ -40,6 +40,35 @@ private final class TextStubICE: ICEConfigClient, @unchecked Sendable {
     }
 }
 
+private actor TextICEGate {
+    private var resultContinuation: CheckedContinuation<ICEConfig, Never>?
+    private var startContinuations: [CheckedContinuation<Void, Never>] = []
+    private var started = false
+
+    func wait() async -> ICEConfig {
+        started = true
+        startContinuations.forEach { $0.resume() }
+        startContinuations = []
+        return await withCheckedContinuation { resultContinuation = $0 }
+    }
+
+    func waitUntilStarted() async {
+        if started { return }
+        await withCheckedContinuation { startContinuations.append($0) }
+    }
+
+    func release() {
+        resultContinuation?.resume(returning: ICEConfig(
+            iceServers: [ICEServerConfig(urls: ["stun:late"])]))
+        resultContinuation = nil
+    }
+}
+
+private final class GatedTextICE: ICEConfigClient, @unchecked Sendable {
+    let gate = TextICEGate()
+    func fetch(code: String) async throws -> ICEConfig { await gate.wait() }
+}
+
 private final class TextStubConnection: RealtimePeerConnection, @unchecked Sendable {
     var onSAS: ((String) -> Void)?
     var onOpen: (() -> Void)?
@@ -145,14 +174,15 @@ final class RealtimeTextSessionModelTests: XCTestCase {
         idleSleep: @escaping @Sendable (UInt64) async -> Void = { nanoseconds in
             try? await Task.sleep(nanoseconds: nanoseconds)
         },
-        pairClient: TextStubPair = TextStubPair()
+        pairClient: TextStubPair = TextStubPair(),
+        iceClient: ICEConfigClient = TextStubICE()
     ) -> RealtimeTextSessionModel {
         clock = 100
         connection = TextStubConnection()
         let peer = connection
         return RealtimeTextSessionModel(
             pairClient: pairClient,
-            iceClient: TextStubICE(),
+            iceClient: iceClient,
             requiresVerification: { verify },
             now: { [weak self] in self?.clock ?? 0 },
             idleSeconds: idleSeconds,
@@ -221,6 +251,26 @@ final class RealtimeTextSessionModelTests: XCTestCase {
         await gate.release(MintedCode(code: "999999", expiresAt: 1_900_000_000))
         await mint.value
         XCTAssertEqual(model.state, .idle, "a late mint response resurrected the cancelled task")
+    }
+
+    func testResetWhileShowingACodeIgnoresTheLateICEConfiguration() async {
+        let ice = GatedTextICE()
+        let model = makeModel(iceClient: ice)
+        await model.mintCode(token: "token")
+        guard case let .showingCode(code, _) = model.state else {
+            return XCTFail("got \(model.state)")
+        }
+
+        let join = Task { await model.join(code: code, role: .initiator) }
+        await ice.gate.waitUntilStarted()
+        guard case .showingCode = model.state else { return XCTFail("got \(model.state)") }
+
+        model.reset()
+        XCTAssertEqual(model.state, .idle)
+        await ice.gate.release()
+        await join.value
+        XCTAssertEqual(model.state, .idle, "late ICE resurrected a cancelled code")
+        XCTAssertFalse(connection.started)
     }
 
     // MARK: - advanced verification OFF (the product default)

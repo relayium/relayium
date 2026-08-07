@@ -86,7 +86,7 @@ struct RealtimeTextPane: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if let joinURL = productionPairingJoinURL(code: code) {
-                PairingCodeHandoffView(url: joinURL) { model.end() }
+                PairingCodeHandoffView(url: joinURL) { model.reset() }
             }
         }
     }

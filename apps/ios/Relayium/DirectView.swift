@@ -283,7 +283,7 @@ struct DirectView: View {
                 .controlSize(.large)
         case let .showingCode(code, expiresAt):
             showing(code: code, expiresAt: expiresAt, heading: L10n.t(.textGiveCode)) {
-                text.end()
+                text.reset()
             }
         case .joining, .connecting, .verifying, .waitingAccept, .incomingRequest, .open:
             DirectTextSessionView(model: text)

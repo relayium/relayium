@@ -214,6 +214,15 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "Cancel creates an empty Session ended task that still needs Done")
     }
 
+    func testTextCodeWaitingCancelReturnsDirectlyToThePairingEntry() throws {
+        let source = try source(named: "RealtimeTextPane.swift")
+        let showing = try XCTUnwrap(source.components(
+            separatedBy: "private func showing(code:").dropFirst().first?
+            .components(separatedBy: "// MARK: - join").first)
+        XCTAssertTrue(showing.contains("PairingCodeHandoffView(url: joinURL) { model.reset() }"))
+        XCTAssertFalse(showing.contains("model.end()"))
+    }
+
     /// iOS already locks both controls while resolving/downloading. macOS must
     /// not leave a second Open path live over a task whose writer and Cancel
     /// handle the shared model still owns.

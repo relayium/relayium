@@ -117,6 +117,16 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertFalse(connecting.contains("model.end()"))
     }
 
+    func testTextCodeWaitingCancelReturnsDirectlyToThePairingEntry() throws {
+        let all = try sources()
+        let source = try XCTUnwrap(all.first { $0.name == "DirectView.swift" }?.text)
+        let showing = try XCTUnwrap(source.components(
+            separatedBy: "case let .showingCode(code, expiresAt):").dropFirst().dropFirst().first?
+            .components(separatedBy: "case .joining, .connecting").first)
+        XCTAssertTrue(showing.contains("text.reset()"))
+        XCTAssertFalse(showing.contains("text.end()"))
+    }
+
     /// Cold upload recovery locks selection adoption while it reads durable
     /// state. That wait needs the same explicit exit as every other busy phase.
     func testStoredUploadRecoveryCheckCanBeCancelled() throws {
