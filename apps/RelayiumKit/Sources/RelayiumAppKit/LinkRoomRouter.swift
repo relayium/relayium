@@ -86,22 +86,24 @@ import RelayiumKit
 ///
 /// Named rather than half-built, because each is its own contract:
 ///
-///  - **The outbound request lifecycle.** Nothing here asks a smaller-id peer to
-///    offer, times that ask out, or retries it. A bounded retry that matches the
-///    Web client's — rather than one where a single lost request consumes two
-///    attempts — is a separate decision, and `LinkAdmission.admitRequest`,
-///    `didBeginRequesting` and `didRequestTimeOut` are its verbs, not this
-///    object's. `requestRefused` is therefore routed and consumed, and the local
-///    reaction to it belongs with the ask that earned it.
-///  - **Roster entry points.** No peer list reaches this object, so a peer that
-///    disappears from the room cancels nothing. Distinguishing a requested peer
-///    that vanished from a server-confirmed departure of the bound peer needs the
-///    roster, and giving this object half of it would produce a router that
-///    cancels the wrong establishment.
 ///  - **The outbound authenticated leave.** This side never announces its own
 ///    departure. Signing one needs the link's resume key, which must not travel
 ///    through an intermediate layer; the coordinator that already holds it is
 ///    where that belongs.
+///
+/// Outbound request timing IS owned here: one immediate request, nine retries at
+/// three-second intervals, and a timeout at thirty seconds with no boundary
+/// retry. The socket epoch and an opaque request token fence every wake-up;
+/// crossing offers atomically retire that timing before handoff, while a timeout
+/// that wins the boundary gets one reroute so admission can answer the late offer
+/// `busy`. Initiators use the same claim/buffer/handoff path without an initial
+/// signal.
+///
+/// Roster and physical departure entry points are also present but deliberately
+/// distinct: roster absence cancels only a pending ask and clears its timeout
+/// debt; `peerLeft` is server authority and ends the exact bound lifecycle.
+/// Composition with the app's existing `onPeers` owner remains a later cut, so
+/// this internal router still does not claim either callback slot itself.
 ///
 /// ## What it is not
 ///
@@ -117,10 +119,11 @@ final class LinkRoomRouter: @unchecked Sendable {
     /// One thing for the main actor to do, in the order this object decided it.
     private enum Work {
         /// Announce nothing, assemble the claimed establishment, drain once.
-        case handoff(token: Int, peerId: String, role: Role, initialSignal: JSONValue)
+        case handoff(token: Int, peerId: String, role: Role, initialSignal: JSONValue?)
         case receive(token: Int, from: String, signal: JSONValue)
         case resumeOffer(token: Int, from: String, signal: JSONValue)
         case leave(token: Int, from: String, to: String, auth: String)
+        case peerDeparted(String)
         /// End whatever the room session holds.
         ///
         /// Deliberately carries NO token. It is queued in the same critical
@@ -151,6 +154,22 @@ final class LinkRoomRouter: @unchecked Sendable {
     private let admission: LinkAdmission
     private let capabilities: PeerCapabilityRegistry
     private let session: LinkRoomSession
+    private let scheduler: LinkRecoveryScheduler
+
+    private final class RequestState {
+        let token: Int
+        let epoch: Int
+        let peerId: String
+        let operation: LinkRequestOperation
+        var timers: [LinkRecoveryTimer] = []
+
+        init(token: Int, epoch: Int, peerId: String, operation: LinkRequestOperation) {
+            self.token = token
+            self.epoch = epoch
+            self.peerId = peerId
+            self.operation = operation
+        }
+    }
 
     private let lock = NSLock()
     /// The socket this router is listening to, and its epoch.
@@ -158,7 +177,11 @@ final class LinkRoomRouter: @unchecked Sendable {
     private var subscription: SignalSubscription?
     private var epoch = 0
     private var live: Establishment?
+    private var request: RequestState?
+    private var timedOutRequestPeers: Set<String> = []
+    private var departingPeerIds: Set<String> = []
     private var nextToken = 0
+    private var nextRequestToken = 0
     private var pending: [Work] = []
     /// Whether a drain owner is running. Cleared only in the critical section
     /// that observed the queue empty, so a wakeup cannot be lost.
@@ -173,10 +196,12 @@ final class LinkRoomRouter: @unchecked Sendable {
     ///   - session: the one owner of the one establishment this router hands off.
     init(admission: LinkAdmission,
          capabilities: PeerCapabilityRegistry,
-         session: LinkRoomSession) {
+         session: LinkRoomSession,
+         scheduler: LinkRecoveryScheduler = LinkDispatchRecoveryScheduler()) {
         self.admission = admission
         self.capabilities = capabilities
         self.session = session
+        self.scheduler = scheduler
     }
 
     // MARK: - the socket epoch
@@ -215,6 +240,12 @@ final class LinkRoomRouter: @unchecked Sendable {
         signaling = client
         let held = live
         live = nil
+        let retiredRequest = retireRequestLocked(as: .cancelled)
+        for peerId in timedOutRequestPeers {
+            _ = admission.forgetRequestTimeout(peerId: peerId)
+        }
+        timedOutRequestPeers.removeAll()
+        departingPeerIds.removeAll()
         // Queued HERE, under the same acquisition that bumped the epoch, so no
         // later handoff can be ordered in front of it.
         let wake = (held?.assembling == true) ? enqueueLocked(.endSession) : false
@@ -222,11 +253,261 @@ final class LinkRoomRouter: @unchecked Sendable {
 
         retired?.cancel()
         if let held { relinquish(held) }
+        finish(retiredRequest, as: .cancelled)
         if wake { wakeDrain() }
         return mine
     }
 
+    // MARK: - outbound request timing
+
+    /// Resolve local intent and, when this side must ask, share one bounded
+    /// request operation across every caller for that peer.
+    func ensure(peerId: String) -> LinkRequestOperation {
+        if let shared = requestOperation(for: peerId) { return shared }
+
+        // Owner callbacks inside `ensure` may read this router back.
+        let intent = admission.ensure(peerId: peerId)
+        switch intent {
+        case .request:
+            return beginRequest(peerId: peerId)
+        case .joinInFlight:
+            // A request may have been installed after the first lookup and
+            // before admission answered.
+            if let shared = requestOperation(for: peerId) { return shared }
+            return immediateRequest(.establishing)
+        case let .establish(role):
+            return beginInitiator(peerId: peerId, role: role)
+        case .existing, .recovering:
+            return immediateRequest(.establishing)
+        case .unsupported, .busy:
+            return immediateRequest(.refused)
+        }
+    }
+
+    private func beginRequest(peerId: String) -> LinkRequestOperation {
+        let operation = LinkRequestOperation()
+
+        lock.lock()
+        if let request, request.peerId == peerId {
+            lock.unlock()
+            return request.operation
+        }
+        guard signaling != nil, admission.admitRequest(peerId: peerId) else {
+            lock.unlock()
+            return immediateRequest(.refused)
+        }
+        nextRequestToken += 1
+        let token = nextRequestToken
+        let state = RequestState(token: token, epoch: epoch,
+                                 peerId: peerId, operation: operation)
+        timedOutRequestPeers.remove(peerId)
+        departingPeerIds.remove(peerId)
+        request = state
+        lock.unlock()
+
+        sendRequest(peerId: peerId, token: token)
+        for attempt in 1...9 {
+            armRequest(after: TimeInterval(attempt * 3), peerId: peerId, token: token) {
+                [weak self] in self?.retryRequest(peerId: peerId, token: token)
+            }
+        }
+        armRequest(after: 30, peerId: peerId, token: token) {
+            [weak self] in self?.timeoutRequest(peerId: peerId, token: token)
+        }
+        return operation
+    }
+
+    private func beginInitiator(peerId: String, role: Role) -> LinkRequestOperation {
+        lock.lock()
+        guard signaling != nil,
+              admission.admitEstablishment(peerId: peerId, role: role) else {
+            lock.unlock()
+            return immediateRequest(.refused)
+        }
+
+        let superseded = live
+        timedOutRequestPeers.remove(peerId)
+        departingPeerIds.remove(peerId)
+        nextToken += 1
+        let token = nextToken
+        live = Establishment(token: token,
+                             epoch: epoch,
+                             peerId: peerId,
+                             buffer: LinkEstablishmentSignalBuffer(peerId: peerId),
+                             assembling: false)
+        var wake = superseded?.assembling == true ? enqueueLocked(.endSession) : false
+        wake = enqueueLocked(.handoff(token: token, peerId: peerId,
+                                      role: role, initialSignal: nil)) || wake
+        lock.unlock()
+
+        superseded?.buffer.retire()
+        if wake { wakeDrain() }
+        return immediateRequest(.establishing)
+    }
+
+    private func requestOperation(for peerId: String) -> LinkRequestOperation? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard request?.peerId == peerId else { return nil }
+        return request?.operation
+    }
+
+    private func immediateRequest(_ outcome: LinkRequestOperation.Outcome)
+    -> LinkRequestOperation {
+        let operation = LinkRequestOperation()
+        operation.settle(outcome)
+        return operation
+    }
+
+    /// A fake scheduler may invoke the body before `schedule` returns. Validate
+    /// on both sides and cancel a handle whose request retired in between.
+    private func armRequest(after delay: TimeInterval,
+                            peerId: String,
+                            token: Int,
+                            _ body: @escaping () -> Void) {
+        lock.lock()
+        let active = request?.peerId == peerId && request?.token == token
+        lock.unlock()
+        guard active else { return }
+
+        let timer = scheduler.schedule(after: delay, body)
+
+        lock.lock()
+        if let request, request.peerId == peerId, request.token == token {
+            request.timers.append(timer)
+            lock.unlock()
+        } else {
+            lock.unlock()
+            timer.cancel()
+        }
+    }
+
+    private func retryRequest(peerId: String, token: Int) {
+        sendRequest(peerId: peerId, token: token)
+    }
+
+    private func sendRequest(peerId: String, token: Int) {
+        lock.lock()
+        guard let request,
+              request.peerId == peerId,
+              request.token == token,
+              request.epoch == epoch,
+              let client = signaling else {
+            lock.unlock()
+            return
+        }
+        lock.unlock()
+        client.sendSignal(to: peerId, data: linkRequestSignal())
+    }
+
+    private func timeoutRequest(peerId: String, token: Int) {
+        lock.lock()
+        guard let request,
+              request.peerId == peerId,
+              request.token == token,
+              request.epoch == epoch,
+              admission.endRequest(peerId: peerId, as: .timedOut) else {
+            lock.unlock()
+            return
+        }
+        self.request = nil
+        timedOutRequestPeers.insert(peerId)
+        let timers = request.timers
+        request.timers.removeAll()
+        lock.unlock()
+
+        timers.forEach { $0.cancel() }
+        request.operation.settle(.timedOut)
+    }
+
+    /// Called with the router lock held. `endRequest` is callback-free.
+    private func retireRequestLocked(as ending: LinkRequestEnding) -> RequestState? {
+        guard let request else { return nil }
+        self.request = nil
+        _ = admission.endRequest(peerId: request.peerId, as: ending)
+        return request
+    }
+
+    private func finish(_ request: RequestState?, as outcome: LinkRequestOperation.Outcome) {
+        guard let request else { return }
+        request.timers.forEach { $0.cancel() }
+        request.timers.removeAll()
+        request.operation.settle(outcome)
+    }
+
+    // MARK: - roster and physical departure
+
+    /// A roster is representative presence, not physical-link authority. It may
+    /// withdraw an ask to a peer that vanished, but never tears down a link that
+    /// another room representative can still carry.
+    func rosterChanged(peerIds: Set<String>) {
+        lock.lock()
+        var retired: RequestState?
+        if let request, !peerIds.contains(request.peerId),
+           admission.endRequest(peerId: request.peerId, as: .cancelled) {
+            self.request = nil
+            retired = request
+        }
+        let absentTimeouts = timedOutRequestPeers.subtracting(peerIds)
+        for peerId in absentTimeouts {
+            _ = admission.forgetRequestTimeout(peerId: peerId)
+            timedOutRequestPeers.remove(peerId)
+        }
+        lock.unlock()
+
+        finish(retired, as: .cancelled)
+    }
+
+    /// A server `left(peer)` frame is physical departure authority. It ends an
+    /// exact pending request or the exact establishment/link bound to that peer;
+    /// unrelated peers are inert.
+    func peerLeft(_ peerId: String) {
+        lock.lock()
+        if timedOutRequestPeers.remove(peerId) != nil {
+            _ = admission.forgetRequestTimeout(peerId: peerId)
+        }
+
+        var retiredRequest: RequestState?
+        if let request, request.peerId == peerId,
+           admission.endRequest(peerId: peerId, as: .cancelled) {
+            self.request = nil
+            retiredRequest = request
+        }
+
+        var departedEstablishment: Establishment?
+        var wake = false
+        if retiredRequest == nil,
+           !departingPeerIds.contains(peerId),
+           admission.boundPeerId == peerId {
+            departingPeerIds.insert(peerId)
+            if let live, live.peerId == peerId {
+                self.live = nil
+                departedEstablishment = live
+                if live.assembling {
+                    wake = enqueueLocked(.peerDeparted(peerId))
+                }
+            } else {
+                // The session may own the link after the router's establishment
+                // record has already been retired by another terminal callback.
+                wake = enqueueLocked(.peerDeparted(peerId))
+            }
+        }
+        lock.unlock()
+
+        finish(retiredRequest, as: .cancelled)
+        if let departedEstablishment { relinquish(departedEstablishment) }
+        if wake { wakeDrain() }
+    }
+
     // MARK: - one inbound frame
+
+    private enum AdmitResult {
+        case disposition(SignalDisposition)
+        /// The request observed before routing was retired before its offer
+        /// could claim the room. Admission must be asked once more so a timeout
+        /// mark can turn that late offer into `busy`.
+        case staleRequest
+    }
 
     private func intercept(from: String, signal: JSONValue, epoch: Int) -> SignalDisposition {
         // The socket that delivered this may already have been replaced; a frame
@@ -235,11 +516,32 @@ final class LinkRoomRouter: @unchecked Sendable {
         // Exact, and room-scoped. Everything below this line is link mode.
         guard capabilities.supports(from, LINK_CAPABILITY) else { return .pass }
 
+        let routedRequestToken = requestToken(for: from, epoch: epoch)
         // Deliberately with nothing of this object's held: `route` consults
         // owner-supplied predicates that may read the room back.
-        switch admission.route(from: from, signal: signal) {
+        let decision = admission.route(from: from, signal: signal)
+        return handle(decision, from: from, signal: signal, epoch: epoch,
+                      routedRequestToken: routedRequestToken, mayReroute: true)
+    }
+
+    private func handle(_ decision: LinkAdmissionDecision,
+                        from: String,
+                        signal: JSONValue,
+                        epoch: Int,
+                        routedRequestToken: Int?,
+                        mayReroute: Bool) -> SignalDisposition {
+        switch decision {
         case let .establish(role):
-            return admit(peerId: from, role: role, initialSignal: signal, epoch: epoch)
+            switch admit(peerId: from, role: role, initialSignal: signal, epoch: epoch,
+                         expectedRequestToken: routedRequestToken) {
+            case let .disposition(disposition):
+                return disposition
+            case .staleRequest:
+                guard mayReroute, isCurrent(epoch) else { return .pass }
+                let current = admission.route(from: from, signal: signal)
+                return handle(current, from: from, signal: signal, epoch: epoch,
+                              routedRequestToken: nil, mayReroute: false)
+            }
 
         case .busy:
             answerBusy(to: from, epoch: epoch)
@@ -254,8 +556,8 @@ final class LinkRoomRouter: @unchecked Sendable {
             return .consume
 
         case .requestRefused:
-            // Admission has already failed the room. Reacting further belongs
-            // with the ask that earned the refusal, which this cut does not make.
+            settleRefusedRequest(peerId: from, epoch: epoch,
+                                 expectedToken: routedRequestToken)
             return .consume
 
         case .resumeOffer:
@@ -274,6 +576,36 @@ final class LinkRoomRouter: @unchecked Sendable {
         }
     }
 
+    private func requestToken(for peerId: String, epoch: Int) -> Int? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard self.epoch == epoch,
+              let request,
+              request.epoch == epoch,
+              request.peerId == peerId else { return nil }
+        return request.token
+    }
+
+    private func settleRefusedRequest(peerId: String, epoch: Int, expectedToken: Int?) {
+        lock.lock()
+        guard self.epoch == epoch,
+              let request,
+              request.peerId == peerId,
+              expectedToken == nil || request.token == expectedToken else {
+            lock.unlock()
+            return
+        }
+        self.request = nil
+        timedOutRequestPeers.remove(peerId)
+        departingPeerIds.remove(peerId)
+        let timers = request.timers
+        request.timers.removeAll()
+        lock.unlock()
+
+        timers.forEach { $0.cancel() }
+        request.operation.settle(.refused)
+    }
+
     // MARK: - claiming the room
 
     /// The indivisible half of the decision: claim, then hold, then queue the
@@ -281,9 +613,23 @@ final class LinkRoomRouter: @unchecked Sendable {
     private func admit(peerId: String,
                        role: Role,
                        initialSignal: JSONValue,
-                       epoch: Int) -> SignalDisposition {
+                       epoch: Int,
+                       expectedRequestToken: Int? = nil) -> AdmitResult {
         lock.lock()
-        guard self.epoch == epoch else { lock.unlock(); return .pass }
+        guard self.epoch == epoch else {
+            lock.unlock()
+            return .disposition(.pass)
+        }
+
+        if let expectedRequestToken {
+            guard let request,
+                  request.peerId == peerId,
+                  request.epoch == epoch,
+                  request.token == expectedRequestToken else {
+                lock.unlock()
+                return .staleRequest
+            }
+        }
 
         // A claim we have already made for this peer and have NOT handed over:
         // two frames of one burst were both read against an idle room. Redoing
@@ -292,7 +638,7 @@ final class LinkRoomRouter: @unchecked Sendable {
         // building for it.
         if let held = live, held.peerId == peerId, !held.assembling {
             lock.unlock()
-            return .consume
+            return .disposition(.consume)
         }
 
         // The only call to admission made under this lock, and the only one that
@@ -302,8 +648,18 @@ final class LinkRoomRouter: @unchecked Sendable {
             // The room went to somebody else between the answer and the claim,
             // which is exactly when this peer is owed a truthful refusal.
             answerBusy(to: peerId, epoch: epoch)
-            return .consume
+            return .disposition(.consume)
         }
+
+        let completedRequest: RequestState?
+        if let request, request.peerId == peerId {
+            self.request = nil
+            completedRequest = request
+        } else {
+            completedRequest = nil
+        }
+        timedOutRequestPeers.remove(peerId)
+        departingPeerIds.remove(peerId)
 
         // Anything still held is superseded by the claim just made. `route`
         // answers `establish` only for a room that is free, and a room is free
@@ -332,8 +688,9 @@ final class LinkRoomRouter: @unchecked Sendable {
         // Retired, never relinquished: the room now belongs to the claim above,
         // and releasing it here would free a room that is taken.
         superseded?.buffer.retire()
+        finish(completedRequest, as: .establishing)
         if wake { wakeDrain() }
-        return .consume
+        return .disposition(.consume)
     }
 
     // MARK: - the frames that chase a consumed offer
@@ -404,7 +761,7 @@ final class LinkRoomRouter: @unchecked Sendable {
             stamped = .resumeOffer(token: held.token, from: from, signal: signal)
         case let .leave(_, from, to, auth):
             stamped = .leave(token: held.token, from: from, to: to, auth: auth)
-        case .handoff, .endSession:
+        case .handoff, .peerDeparted, .endSession:
             lock.unlock()
             return .pass
         }
@@ -494,6 +851,9 @@ final class LinkRoomRouter: @unchecked Sendable {
                 guard token == current else { continue }
                 session.receiveLeave(from: from, to: to, auth: auth)
 
+            case let .peerDeparted(peerId):
+                session.peerDeparted(peerId)
+
             case .endSession:
                 session.end()
             }
@@ -505,7 +865,7 @@ final class LinkRoomRouter: @unchecked Sendable {
     private func handOff(token: Int,
                          peerId: String,
                          role: Role,
-                         initialSignal: JSONValue) {
+                         initialSignal: JSONValue?) {
         lock.lock()
         guard var held = live, held.token == token else { lock.unlock(); return }
         held.assembling = true

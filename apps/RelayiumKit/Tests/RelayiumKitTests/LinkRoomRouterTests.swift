@@ -48,6 +48,7 @@ private final class RouterTransport: LinkRoutableInitialTransport, @unchecked Se
     }
 
     private var _closed = false
+    private var _closeCount = 0
     private var _routed: [(from: String, signal: JSONValue)] = []
 
     /// Everything the ASSEMBLY handed this transport — which is exactly the one
@@ -63,7 +64,10 @@ private final class RouterTransport: LinkRoutableInitialTransport, @unchecked Se
     func send(_ bytes: [UInt8], on lane: LinkLane) throws {}
     func bufferedAmount(on lane: LinkLane) -> UInt64 { 0 }
     var isClosed: Bool { state.lock(); defer { state.unlock() }; return _closed }
-    func close() { state.lock(); _closed = true; state.unlock() }
+    var closeCount: Int { state.lock(); defer { state.unlock() }; return _closeCount }
+    func close() {
+        state.lock(); _closed = true; _closeCount += 1; state.unlock()
+    }
 
     func publish(_ identity: LinkIdentity) {
         onSAS?("424242")
@@ -192,6 +196,59 @@ private final class Barrier: @unchecked Sendable {
     }
 }
 
+private final class RouterScheduler: LinkRecoveryScheduler, @unchecked Sendable {
+    final class Handle: LinkRecoveryTimer, @unchecked Sendable {
+        let delay: TimeInterval
+        let body: () -> Void
+        private let lock = NSLock()
+        private var _cancelled = false
+
+        init(delay: TimeInterval, body: @escaping () -> Void) {
+            self.delay = delay
+            self.body = body
+        }
+
+        var cancelled: Bool { lock.withLock { _cancelled } }
+        func cancel() { lock.withLock { _cancelled = true } }
+    }
+
+    private let lock = NSLock()
+    private var _handles: [Handle] = []
+    private let firesSynchronously: Bool
+    var delays: [TimeInterval] { lock.withLock { _handles.map(\.delay) } }
+
+    init(firesSynchronously: Bool = false) {
+        self.firesSynchronously = firesSynchronously
+    }
+
+    func schedule(after delay: TimeInterval,
+                  _ body: @escaping () -> Void) -> LinkRecoveryTimer {
+        let handle = Handle(delay: delay, body: body)
+        lock.withLock { _handles.append(handle) }
+        if firesSynchronously { body() }
+        return handle
+    }
+
+    func fire(_ delay: TimeInterval, includingCancelled: Bool = false) {
+        let handles = lock.withLock { _handles.filter { $0.delay == delay } }
+        for handle in handles where includingCancelled || !handle.cancelled {
+            handle.body()
+        }
+    }
+}
+
+private final class RequestOperationCollector: @unchecked Sendable {
+    private let lock = NSLock()
+    private var operations: [LinkRequestOperation] = []
+    func append(_ operation: LinkRequestOperation) { lock.withLock { operations.append(operation) } }
+    var snapshot: [LinkRequestOperation] { lock.withLock { operations } }
+}
+
+private final class RoutedSignal: @unchecked Sendable {
+    let value: JSONValue
+    init(_ value: JSONValue) { self.value = value }
+}
+
 @MainActor
 final class LinkRoomRouterTests: XCTestCase {
 
@@ -302,9 +359,18 @@ final class LinkRoomRouterTests: XCTestCase {
                 return envelope.to
             }
         }
+
+        var requested: [String] {
+            channel.sent.compactMap { text in
+                guard let envelope = try? JSONDecoder().decode(Envelope.self, from: Data(text.utf8)),
+                      envelope.type == SignalType.signal,
+                      let data = envelope.data, isLinkRequest(data) else { return nil }
+                return envelope.to
+            }
+        }
     }
 
-    private final class Rig {
+    private final class Rig: @unchecked Sendable {
         let router: LinkRoomRouter
         let session: LinkRoomSession
         let admission: LinkAdmission
@@ -344,7 +410,8 @@ final class LinkRoomRouterTests: XCTestCase {
     private func rig(canAcceptLink: @escaping (String) -> Bool = { _ in true },
                      realControl: Bool = false,
                      admissionTrustsEveryPeer: Bool = false,
-                     peers: [String] = ["peer-1", "peer-2"]) -> Rig {
+                     peers: [String] = ["peer-1", "peer-2"],
+                     scheduler: LinkRecoveryScheduler = LinkDispatchRecoveryScheduler()) -> Rig {
         let capabilities = PeerCapabilityRegistry(linkRoomActive: { true })
         for peer in peers {
             capabilities.record(peerId: peer,
@@ -388,7 +455,8 @@ final class LinkRoomRouterTests: XCTestCase {
         }
         let router = LinkRoomRouter(admission: admission,
                                     capabilities: capabilities,
-                                    session: session)
+                                    session: session,
+                                    scheduler: scheduler)
         built = Rig(router: router, session: session, admission: admission,
                     capabilities: capabilities, socket: socket)
         router.attach(to: socket.client)
@@ -398,6 +466,266 @@ final class LinkRoomRouterTests: XCTestCase {
     /// Let every main-actor consumer that is already scheduled run.
     private func settle(_ turns: Int = 12) async {
         for _ in 0..<turns { await Task.yield() }
+    }
+
+    // MARK: - outbound request timing
+
+    func testRequestSendsImmediatelyRetriesNineTimesAndTimesOutWithoutAThirtiethSecondRetry() {
+        let scheduler = RouterScheduler()
+        let r = rig(scheduler: scheduler)
+        let operation = r.router.ensure(peerId: "peer-1")
+
+        XCTAssertEqual(r.socket.requested, ["peer-1"])
+        XCTAssertEqual(scheduler.delays, [3, 6, 9, 12, 15, 18, 21, 24, 27, 30])
+        for delay in stride(from: 3.0, through: 27.0, by: 3.0) {
+            scheduler.fire(delay)
+        }
+        XCTAssertEqual(r.socket.requested, Array(repeating: "peer-1", count: 10))
+        XCTAssertNil(operation.settledOutcome)
+
+        scheduler.fire(30)
+        XCTAssertEqual(r.socket.requested, Array(repeating: "peer-1", count: 10))
+        XCTAssertEqual(operation.settledOutcome, .timedOut)
+        XCTAssertEqual(r.admission.phase, .failed)
+    }
+
+    func testRepeatedIntentForTheSamePendingPeerSharesTheExactOperation() {
+        let scheduler = RouterScheduler()
+        let r = rig(scheduler: scheduler)
+
+        let first = r.router.ensure(peerId: "peer-1")
+        let second = r.router.ensure(peerId: "peer-1")
+
+        XCTAssertTrue(first === second)
+        XCTAssertEqual(r.socket.requested, ["peer-1"])
+        XCTAssertEqual(scheduler.delays.count, 10)
+    }
+
+    func testConcurrentIntentForTheSamePeerInstallsOneRequestAndOneOperation() {
+        let scheduler = RouterScheduler()
+        let r = rig(scheduler: scheduler)
+        let collected = RequestOperationCollector()
+
+        DispatchQueue.concurrentPerform(iterations: 16) { _ in
+            collected.append(r.router.ensure(peerId: "peer-1"))
+        }
+
+        let operations = collected.snapshot
+        XCTAssertEqual(operations.count, 16)
+        XCTAssertTrue(operations.dropFirst().allSatisfy { $0 === operations[0] })
+        XCTAssertEqual(r.socket.requested, ["peer-1"])
+        XCTAssertEqual(scheduler.delays.count, 10)
+    }
+
+    func testSynchronousSchedulerCallbacksDoNotDeadlockOrAddAThirtySecondRetry() {
+        let scheduler = RouterScheduler(firesSynchronously: true)
+        let r = rig(scheduler: scheduler)
+
+        let operation = r.router.ensure(peerId: "peer-1")
+
+        XCTAssertEqual(operation.settledOutcome, .timedOut)
+        XCTAssertEqual(r.socket.requested, Array(repeating: "peer-1", count: 10))
+        XCTAssertEqual(r.admission.phase, .failed)
+    }
+
+    func testDetachCancelsTheRequestOnceAndStaleTimersCannotSend() {
+        let scheduler = RouterScheduler()
+        let r = rig(scheduler: scheduler)
+        let operation = r.router.ensure(peerId: "peer-1")
+        var outcomes: [LinkRequestOperation.Outcome] = []
+        let observation = operation.observe { outcomes.append($0) }
+
+        r.router.detach()
+        XCTAssertEqual(operation.settledOutcome, .cancelled)
+        XCTAssertEqual(outcomes, [.cancelled])
+        XCTAssertEqual(r.admission.phase, .idle)
+
+        for delay in scheduler.delays {
+            scheduler.fire(delay, includingCancelled: true)
+        }
+        XCTAssertEqual(r.socket.requested, ["peer-1"])
+        XCTAssertEqual(outcomes, [.cancelled])
+        withExtendedLifetime(observation) {}
+    }
+
+    func testPeerOfferSettlesRequestAsEstablishingAndRetiresTimers() async {
+        let scheduler = RouterScheduler()
+        let r = rig(scheduler: scheduler)
+        let operation = r.router.ensure(peerId: "peer-1")
+
+        r.socket.deliver(from: "peer-1", offer())
+        XCTAssertEqual(operation.settledOutcome, .establishing)
+        XCTAssertEqual(r.admission.phase, .connecting(peerId: "peer-1"))
+        XCTAssertTrue(r.socket.busied.isEmpty)
+
+        for delay in scheduler.delays {
+            scheduler.fire(delay, includingCancelled: true)
+        }
+        XCTAssertEqual(r.socket.requested, ["peer-1"])
+        await settle()
+        XCTAssertEqual(r.peers, ["peer-1"])
+    }
+
+    func testPeerBusySettlesRequestAsRefusedAndRetiresTimers() {
+        let scheduler = RouterScheduler()
+        let r = rig(scheduler: scheduler)
+        let operation = r.router.ensure(peerId: "peer-1")
+
+        r.socket.deliver(from: "peer-1", linkBusySignal())
+        XCTAssertEqual(operation.settledOutcome, .refused)
+        XCTAssertEqual(r.admission.phase, .failed)
+
+        for delay in scheduler.delays {
+            scheduler.fire(delay, includingCancelled: true)
+        }
+        XCTAssertEqual(r.socket.requested, ["peer-1"])
+    }
+
+    func testTimeoutWinnerConsumesOneLateOfferAndAnswersBusy() async {
+        let scheduler = RouterScheduler()
+        let gate = OneShotGate()
+        let r = rig(canAcceptLink: { _ in gate.hold(); return true }, scheduler: scheduler)
+        let operation = r.router.ensure(peerId: "peer-1")
+        let delivered = expectation(description: "offer routing completed")
+        let lateOffer = RoutedSignal(offer())
+
+        DispatchQueue.global().async {
+            r.socket.deliver(from: "peer-1", lateOffer.value)
+            delivered.fulfill()
+        }
+        XCTAssertTrue(gate.awaitArrival())
+        scheduler.fire(30)
+        gate.release()
+        await fulfillment(of: [delivered], timeout: 5)
+
+        XCTAssertEqual(operation.settledOutcome, .timedOut)
+        XCTAssertEqual(r.socket.busied, ["peer-1"])
+        XCTAssertEqual(r.admission.phase, .failed)
+        await settle()
+        XCTAssertTrue(r.peers.isEmpty)
+    }
+
+    func testInitiatorIntentClaimsAndHandsOffWithoutAnInitialSignal() async {
+        let r = rig(peers: ["z-peer"])
+
+        let operation = r.router.ensure(peerId: "z-peer")
+        XCTAssertEqual(operation.settledOutcome, .establishing)
+        XCTAssertEqual(r.admission.phase, .connecting(peerId: "z-peer"))
+        await settle()
+
+        XCTAssertEqual(r.peers, ["z-peer"])
+        XCTAssertEqual(r.roles, [.initiator])
+        XCTAssertEqual(r.initialSignals.count, 1)
+        XCTAssertNil(r.initialSignals[0])
+    }
+
+    func testRosterAbsenceCancelsOnlyThePendingRequest() {
+        let scheduler = RouterScheduler()
+        let r = rig(scheduler: scheduler)
+        let operation = r.router.ensure(peerId: "peer-1")
+
+        r.router.rosterChanged(peerIds: ["peer-2"])
+
+        XCTAssertEqual(operation.settledOutcome, .cancelled)
+        XCTAssertEqual(r.admission.phase, .idle)
+        for delay in scheduler.delays {
+            scheduler.fire(delay, includingCancelled: true)
+        }
+        XCTAssertEqual(r.socket.requested, ["peer-1"])
+    }
+
+    func testRosterPresenceKeepsPendingRequestAlive() {
+        let r = rig()
+        let operation = r.router.ensure(peerId: "peer-1")
+
+        r.router.rosterChanged(peerIds: ["peer-1", "peer-2"])
+
+        XCTAssertNil(operation.settledOutcome)
+        XCTAssertEqual(r.admission.phase, .requesting(peerId: "peer-1"))
+    }
+
+    func testRosterAbsenceForgetsTimeoutDebtBeforePeerReturns() async {
+        let scheduler = RouterScheduler()
+        let r = rig(scheduler: scheduler)
+        let operation = r.router.ensure(peerId: "peer-1")
+        scheduler.fire(30)
+        XCTAssertEqual(operation.settledOutcome, .timedOut)
+
+        r.router.rosterChanged(peerIds: ["peer-2"])
+        r.socket.deliver(from: "peer-1", offer())
+        await settle()
+
+        XCTAssertTrue(r.socket.busied.isEmpty)
+        XCTAssertEqual(r.admission.phase, .connecting(peerId: "peer-1"))
+        XCTAssertEqual(r.peers, ["peer-1"])
+    }
+
+    func testRosterAbsenceNeverEndsAnEstablishedHandoff() async {
+        let r = rig()
+        r.socket.deliver(from: "peer-1", offer())
+        await settle()
+
+        r.router.rosterChanged(peerIds: [])
+
+        XCTAssertEqual(r.admission.phase, .connecting(peerId: "peer-1"))
+        XCTAssertEqual(r.session.peerId, "peer-1")
+    }
+
+    func testPhysicalLeftCancelsPendingRequestButUnrelatedPeerIsInert() {
+        let r = rig()
+        let operation = r.router.ensure(peerId: "peer-1")
+
+        r.router.peerLeft("peer-2")
+        XCTAssertNil(operation.settledOutcome)
+        r.router.peerLeft("peer-1")
+
+        XCTAssertEqual(operation.settledOutcome, .cancelled)
+        XCTAssertEqual(r.admission.phase, .idle)
+    }
+
+    func testPhysicalLeftBeforeHandoffReleasesConnectingClaim() async {
+        let r = rig()
+        r.socket.deliver(from: "peer-1", offer())
+        XCTAssertEqual(r.admission.phase, .connecting(peerId: "peer-1"))
+
+        r.router.peerLeft("peer-1")
+        await settle()
+
+        XCTAssertEqual(r.admission.phase, .idle)
+        XCTAssertNil(r.session.peerId)
+        XCTAssertTrue(r.peers.isEmpty)
+    }
+
+    func testPhysicalLeftEndsTheExactOpenLink() async {
+        let r = rig(realControl: true)
+        r.socket.deliver(from: "peer-1", offer())
+        await settle()
+        r.transports[0].publish(identity(peerId: "peer-1"))
+        await settle()
+        XCTAssertEqual(r.admission.phase, .open(peerId: "peer-1"))
+
+        r.router.peerLeft("peer-2")
+        XCTAssertEqual(r.admission.phase, .open(peerId: "peer-1"))
+        r.router.peerLeft("peer-1")
+        await settle()
+
+        XCTAssertEqual(r.admission.boundPeerId, "")
+        XCTAssertNil(r.session.peerId)
+    }
+
+    func testDuplicatePhysicalLeftEndsThePublishedLinkOnce() async {
+        let r = rig(realControl: true)
+        r.socket.deliver(from: "peer-1", offer())
+        await settle()
+        r.transports[0].publish(identity(peerId: "peer-1"))
+        await settle()
+
+        r.router.peerLeft("peer-1")
+        r.router.peerLeft("peer-1")
+        await settle()
+
+        XCTAssertEqual(r.transports[0].closeCount, 1)
+        XCTAssertNil(r.session.peerId)
     }
 
     // MARK: - 1. one burst, one admission, one busy
@@ -1044,18 +1372,21 @@ final class LinkRoomRouterTests: XCTestCase {
         XCTAssertFalse(source.contains("public "), "nothing here is public API")
     }
 
-    /// This cut owns inbound routing and nothing else. The request lifecycle, the
-    /// roster and the outbound authenticated leave each have their own retry or
-    /// crypto contract and are reviewed separately; half-making one here is how a
-    /// lost request comes to consume two attempts, or a resume key reaches a
-    /// layer that has no business holding one.
-    func testTheRouterContainsNoRequestRosterOrOutboundSigningScope() throws {
+    /// Cut B owns request, roster and physical-departure policy. App callback
+    /// composition and authenticated outbound leave remain separate cuts.
+    func testTheRouterContainsCutBButNoAppWiringOrOutboundSigningScope() throws {
         let source = try appSource("LinkRoomRouter.swift")
 
-        for forbidden in ["admitRequest", "didBeginRequesting", "didRequestTimeOut",
-                          "linkRequestSignal", "linkLeaveSignal", "signResume",
-                          "resumeAuth", "onPeers", "retain(", "reset()",
-                          "Timer", "DispatchQueue.main.asyncAfter", "Deadline"] {
+        XCTAssertTrue(source.contains("admitRequest"))
+        XCTAssertTrue(source.contains("linkRequestSignal"))
+        XCTAssertTrue(source.contains("LinkRecoveryScheduler"))
+        XCTAssertTrue(source.contains("func rosterChanged"))
+        XCTAssertTrue(source.contains("func peerLeft"))
+
+        for forbidden in ["didBeginRequesting", "didRequestTimeOut",
+                          "linkLeaveSignal", "signResume",
+                          "resumeAuth", "onPeers", "onPeerLeft", "retain(", "reset()",
+                          "DispatchQueue.main.asyncAfter", "Deadline"] {
             XCTAssertFalse(source.contains(forbidden),
                            "the router must not name \(forbidden)")
         }

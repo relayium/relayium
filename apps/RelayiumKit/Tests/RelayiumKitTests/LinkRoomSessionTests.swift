@@ -658,6 +658,24 @@ final class LinkRoomSessionTests: XCTestCase {
         XCTAssertNil(r.session.peerId)
     }
 
+    /// Before publication there is no recovery coordinator to receive a
+    /// departure. The room session therefore owns retiring this exact attempt.
+    func testADepartureEndsTheMatchingUnpublishedEstablishment() async {
+        let r = rig()
+        r.session.begin(peerId: "peer-1", role: .initiator)
+        XCTAssertEqual(r.admission.phase, .connecting(peerId: "peer-1"))
+
+        r.session.peerDeparted("peer-other")
+        XCTAssertEqual(r.session.peerId, "peer-1", "an unrelated peer is inert")
+
+        r.session.peerDeparted("peer-1")
+        await settle()
+
+        XCTAssertEqual(r.admission.phase, .idle)
+        XCTAssertNil(r.session.peerId)
+        XCTAssertEqual(r.assembled.transports[0].closeCount, 1)
+    }
+
     /// The replay path, end to end: a signal the room routed reaches the
     /// transport of the establishment it holds, verbatim and in order. This is
     /// the seam a router needs to hand over everything that chased the offer it

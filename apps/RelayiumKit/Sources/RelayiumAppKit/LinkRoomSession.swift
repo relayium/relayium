@@ -287,11 +287,17 @@ final class LinkRoomSession {
 
     /// The peer left the room, or announced an authenticated departure.
     ///
-    /// Forwarded to the held link, which ignores it unless it is that link's own
-    /// peer. It does NOT cancel an establishment that has not published — see
-    /// "What it deliberately does NOT do yet".
+    /// A published link owns its terminal transition through the coordinator.
+    /// Before publication there is no coordinator to receive the departure, so
+    /// this session retires its exact matching establishment itself instead of
+    /// leaving the room stuck connecting to a peer the server says is gone.
     func peerDeparted(_ peerId: String) {
-        current?.assembly.control.peerDeparted(peerId)
+        guard let session = current, session.peerId == peerId else { return }
+        guard session.published else {
+            end()
+            return
+        }
+        session.assembly.control.peerDeparted(peerId)
     }
 
     // MARK: - what the link reports
