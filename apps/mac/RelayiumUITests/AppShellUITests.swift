@@ -34,7 +34,7 @@ final class AppShellUITests: XCTestCase {
 
     private var offlineLaunchArguments: [String] {
         ["--relayium-ui-testing", "-AppleLanguages", "(en)",
-         "-AppleLocale", "en_US"]
+         "-AppleLocale", "en_US", "-SUEnableAutomaticChecks", "NO"]
     }
 
     override func setUpWithError() throws {
@@ -103,10 +103,6 @@ final class AppShellUITests: XCTestCase {
     func testEveryDestinationIsReachableFromTheSidebar() {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        // Kept in the hosted log: when an older macOS changes SwiftUI's AX
-        // projection, this one bounded tree makes the compatibility failure
-        // diagnosable without weakening the real interaction gate.
-        print("RELAYIUM_AX_TREE\n\(app.debugDescription)")
         // English is the CI locale; the localized suites cover the other eight.
         for destination in ["Nearby", "Pairing code", "Send a link",
                             "Open a link", "Account"] {

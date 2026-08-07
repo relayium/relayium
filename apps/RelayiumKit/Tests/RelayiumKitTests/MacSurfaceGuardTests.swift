@@ -97,6 +97,8 @@ final class MacSurfaceGuardTests: XCTestCase {
             "destination clicks do not use the stable sidebar task identity")
         XCTAssertTrue(ui.contains("-AppleLanguages") && ui.contains("(en)"),
                       "runtime copy assertions depend on the runner's preferred language")
+        XCTAssertTrue(ui.contains("-SUEnableAutomaticChecks") && ui.contains("NO"),
+                      "Sparkle's first-launch consent can cover the product window")
         XCTAssertTrue(ui.contains("$0.frame.midX < dividingX"),
                       "macOS 15 has no spatial fallback when List drops row identifiers")
         XCTAssertTrue(ui.contains("label == %@ OR value == %@"),
