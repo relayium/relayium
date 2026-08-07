@@ -31,6 +31,10 @@ struct AccountView: View {
     /// property of this screen, not of the account.
     @State private var deviceToRevoke: AccountDevice?
     @State private var fileToDelete: StoredFileSummary?
+    /// Acknowledges the exact stored row whose recovery link was deliberately
+    /// copied. Keep only the server-issued id here: the `#k=` link is itself a
+    /// recovery credential and must not gain a second lifetime in view state.
+    @State private var copiedStoredFileID: String?
     /// Whether the account-deletion confirmation is up. Here for the same
     /// reason as the two above: until the user confirms, nothing has been asked
     /// of the server, so it is a property of this screen.
@@ -98,6 +102,11 @@ struct AccountView: View {
         // does not end the process here. `AccountSignOutCoordinator` observes
         // the signal at app scope instead, before any scene is built.
         .task(id: scope) { await management.load(scope) }
+        .onChange(of: scope) { _ in copiedStoredFileID = nil }
+        .onChange(of: management.files) { files in
+            copiedStoredFileID = AccountPresentation.retainedCopiedFileID(
+                copiedStoredFileID, in: files)
+        }
         .confirmationDialog(
             L10n.t(.accountRevokeTitle, [
                 L10n.token(deviceToRevoke.map { AccountPresentation.deviceName($0) } ?? ""),
@@ -339,11 +348,24 @@ struct AccountView: View {
 
             switch row.link {
             case .available(let link):
-                HStack {
-                    Button(L10n.t(.accountCopyLink)) {
+                HStack(spacing: 8) {
+                    Button {
                         NSPasteboard.general.clearContents()
                         NSPasteboard.general.setString(link, forType: .string)
+                        copiedStoredFileID = row.id
+                    } label: {
+                        Label(L10n.t(copiedStoredFileID == row.id
+                                     ? .commonCopied : .accountCopyLink),
+                              systemImage: copiedStoredFileID == row.id
+                                  ? "checkmark" : "doc.on.doc")
                     }
+                    .accessibilityLabel(AccountPresentation.copyActionLabel(
+                        fileId: row.file.id, copied: copiedStoredFileID == row.id))
+                    ShareLink(item: link) {
+                        Label(L10n.t(.commonShare), systemImage: "square.and.arrow.up")
+                    }
+                    .accessibilityLabel(
+                        AccountPresentation.shareActionLabel(fileId: row.file.id))
                     Spacer()
                     Button(L10n.t(.commonDelete), role: .destructive) { fileToDelete = row.file }
                         .disabled(management.isBusy(row: row.id))

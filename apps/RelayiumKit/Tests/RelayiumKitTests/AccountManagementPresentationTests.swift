@@ -25,6 +25,14 @@ final class AccountManagementPresentationTests: XCTestCase {
                       kind: kind, current: current)
     }
 
+    private func storedRow(_ id: String,
+                           link: StoredLinkAvailability) -> StoredFileRow {
+        StoredFileRow(file: StoredFileSummary(id: id, size: 1, createdAt: 0,
+                                              expiresAt: 1, burnAfterRead: false,
+                                              downloaded: false, downloadCount: 0),
+                      link: link)
+    }
+
     // MARK: - which stored rows can offer a link
 
     /// The single most consequential decision on the screen: a `#k=` link is the
@@ -86,6 +94,23 @@ final class AccountManagementPresentationTests: XCTestCase {
             XCTAssertTrue(text.contains("Relayium"),
                           "\(language.rawValue) dropped the claim about the servers: \(text)")
         }
+    }
+
+    /// A stale success badge is worse than no badge: after a reload, it may sit
+    /// beside a row whose key can no longer be reconstructed. Row identity alone
+    /// is therefore insufficient; the exact row must still be shareable.
+    func testCopyAcknowledgementSurvivesOnlyForTheSameShareableRow() {
+        let available = storedRow("f1", link: .available(link: "https://x/#k=abc"))
+        let other = storedRow("f2", link: .available(link: "https://x/#k=def"))
+        XCTAssertEqual(AccountPresentation.retainedCopiedFileID("f1", in: [available, other]),
+                       "f1")
+        XCTAssertNil(AccountPresentation.retainedCopiedFileID("missing", in: [available]))
+        XCTAssertNil(AccountPresentation.retainedCopiedFileID("f1", in: [other]))
+        XCTAssertNil(AccountPresentation.retainedCopiedFileID(
+            "f1", in: [storedRow("f1", link: .keyNotOnThisMac)]))
+        XCTAssertNil(AccountPresentation.retainedCopiedFileID(
+            "f1", in: [storedRow("f1", link: .keyLookupFailed("locked"))]))
+        XCTAssertNil(AccountPresentation.retainedCopiedFileID(nil, in: [available]))
     }
 
     // MARK: - naming a device
@@ -157,10 +182,17 @@ final class AccountManagementPresentationTests: XCTestCase {
     /// read alike, and each has to name the row it belongs to — a screen of
     /// "Share"/"Delete" pairs is unusable without sight.
     func testTheStoredRowActionsNameTheirFileAndDifferFromEachOther() {
+        let copy = AccountPresentation.copyActionLabel(fileId: "abc123", copied: false,
+                                                       language: .en)
+        let copied = AccountPresentation.copyActionLabel(fileId: "abc123", copied: true,
+                                                         language: .en)
         let share = AccountPresentation.shareActionLabel(fileId: "abc123", language: .en)
         let delete = AccountPresentation.deleteActionLabel(fileId: "abc123", language: .en)
+        XCTAssertTrue(copy.contains("abc123"), copy)
+        XCTAssertTrue(copied.contains("abc123"), copied)
         XCTAssertTrue(share.contains("abc123"), share)
         XCTAssertTrue(delete.contains("abc123"), delete)
+        XCTAssertNotEqual(copy, copied)
         XCTAssertNotEqual(share, delete)
     }
 
@@ -180,6 +212,10 @@ final class AccountManagementPresentationTests: XCTestCase {
                 AccountPresentation.revokeActionLabel(for: device(), language: language),
                 AccountPresentation.revokeActionLabel(for: device(current: true),
                                                       language: language),
+                AccountPresentation.copyActionLabel(fileId: "f", copied: false,
+                                                    language: language),
+                AccountPresentation.copyActionLabel(fileId: "f", copied: true,
+                                                    language: language),
                 AccountPresentation.shareActionLabel(fileId: "f", language: language),
                 AccountPresentation.deleteActionLabel(fileId: "f", language: language),
             ]

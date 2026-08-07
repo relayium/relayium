@@ -251,6 +251,27 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "the view retains a second copy of ephemeral plaintext")
     }
 
+    /// A stored recovery link contains its decryption key. The macOS Account
+    /// row must offer the platform handoff already present on iOS, while an
+    /// optional explicit clipboard action acknowledges the exact row without
+    /// retaining a second copy of that credential.
+    func testAccountStoredLinkHasShareAndRowScopedCopyAcknowledgement() throws {
+        let source = try source(named: "AccountView.swift")
+        XCTAssertTrue(source.contains("@State private var copiedStoredFileID: String?"))
+        XCTAssertTrue(source.contains("ShareLink(item: link)"))
+        XCTAssertTrue(source.contains(
+            "AccountPresentation.shareActionLabel(fileId: row.file.id)"))
+        XCTAssertTrue(source.contains("copiedStoredFileID = row.id"))
+        XCTAssertTrue(source.contains("AccountPresentation.copyActionLabel("))
+        XCTAssertTrue(source.contains(
+            "copiedStoredFileID == row.id\n                                     ? .commonCopied : .accountCopyLink"))
+        XCTAssertTrue(source.contains(".onChange(of: scope)"))
+        XCTAssertTrue(source.contains(".onChange(of: management.files)"))
+        XCTAssertTrue(source.contains("AccountPresentation.retainedCopiedFileID("))
+        XCTAssertFalse(source.contains("@State private var copiedStoredLink:"),
+                       "the view retains a second copy of a recovery credential")
+    }
+
     private func occurrences(of needle: String, in text: String) -> Int {
         text.components(separatedBy: needle).count - 1
     }

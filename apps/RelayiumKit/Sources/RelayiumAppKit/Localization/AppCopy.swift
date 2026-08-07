@@ -149,6 +149,14 @@ public enum AccountPresentation {
                language: language)
     }
 
+    public static func copyActionLabel(fileId: String, copied: Bool,
+                                       language: AppLanguage? = nil) -> String {
+        L10n.detail([
+            L10n.t(copied ? .commonCopied : .accountCopyLink, language: language),
+            L10n.token(fileId, language: language),
+        ], language: language)
+    }
+
     public static func deleteActionLabel(fileId: String,
                                          language: AppLanguage? = nil) -> String {
         L10n.t(.accountDeleteFileLabel, [L10n.token(fileId, language: language)],
@@ -172,6 +180,21 @@ public enum AccountPresentation {
         case .keyLookupFailed(let reason):
             return .lookupFailed(L10n.t(.accountKeyLookupFailed, [reason], language: language))
         }
+    }
+
+    /// Keeps clipboard acknowledgement only while that exact row can still
+    /// provide its recovery link. A reload can delete the row or discover that
+    /// its key is no longer readable; either outcome makes an old “Copied” claim
+    /// misleading even though the server-issued id itself has not changed.
+    public static func retainedCopiedFileID(_ copiedFileID: String?,
+                                            in rows: [StoredFileRow]) -> String? {
+        guard let copiedFileID,
+              rows.contains(where: { row in
+                  guard row.id == copiedFileID else { return false }
+                  if case .available = row.link { return true }
+                  return false
+              }) else { return nil }
+        return copiedFileID
     }
 }
 
