@@ -28,6 +28,7 @@ struct DirectFileSessionView: View {
                 // the only thing on it, and a bare one reads as nothing at all
                 // to VoiceOver.
                 ProgressView { Text(L10n.t(.sessionConnecting)) }
+                fileList
                 Button(L10n.t(.commonCancel)) { model.cancel() }
             }
 
@@ -53,6 +54,7 @@ struct DirectFileSessionView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            fileList
             // Equally weighted on purpose. A visually secondary reject is a
             // reject nobody presses, on the one screen where pressing it is the
             // entire point — so both are full-width and only the confirm is

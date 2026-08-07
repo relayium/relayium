@@ -45,11 +45,17 @@ struct DirectPane: View {
             case .minting:
                 SectionCard(title: L10n.t(.directSendHeading)) {
                     ProgressView(L10n.t(.directCreatingCode)).controlSize(.small)
+                    PendingFileList(sessionFiles: model.sessionFiles)
                     Button(L10n.t(.commonCancel)) { model.cancel() }
                         .buttonStyle(.bordered)
                 }
             case let .showingCode(code, expiresAt):
                 SectionCard(title: L10n.t(.directSendHeading)) {
+                    // The picker is gone, but this is the moment the sender is
+                    // actually handing the code to somebody. Keep the staged
+                    // manifest visible so they can still verify every name and
+                    // size before the peer joins.
+                    PendingFileList(sessionFiles: model.sessionFiles)
                     showing(code: code, expiresAt: expiresAt)
                 }
             case .joining, .connecting, .verifying, .transferring, .completed:
@@ -61,6 +67,7 @@ struct DirectPane: View {
 
             if case let .failed(message) = model.state {
                 InlineMessage(.failure, message)
+                PendingFileList(sessionFiles: model.sessionFiles)
                 // `.failed` is not `.idle`, so presence stays owned and Nearby
                 // keeps showing "this session is shown elsewhere" until Done.
                 // Cancel rather than a bare state reset: the failure may have
@@ -194,16 +201,11 @@ struct DirectPane: View {
     }
 
     private func mintAndWait(token: String) async {
-        presence.claim(.pairingCode, mode: .files)
-        await model.mintCode(token: token)
-        guard case let .showingCode(code, _) = model.state else { return }
-        stageAndJoin(code: code)
-    }
-
-    private func stageAndJoin(code: String) {
+        // Validate and stage before the picker disappears. Besides avoiding a
+        // useless minted code for an unreadable selection, this gives minting
+        // and handoff one model-owned manifest to keep visible throughout.
         guard let expanded = selection.selection else {
             stagingError = selection.error ?? L10n.t(.directChooseFilesFirst)
-            model.cancel()
             return
         }
         let staged: (sources: [PlaintextSource], metas: [FileMeta])
@@ -211,11 +213,13 @@ struct DirectPane: View {
             staged = try stageRealtimeFiles(expanded.files)
         } catch {
             stagingError = ErrorCopy.message(for: error)
-            model.cancel()
             return
         }
         stagingError = nil
+        presence.claim(.pairingCode, mode: .files)
         model.stageSend(sources: staged.sources, metas: staged.metas)
+        await model.mintCode(token: token)
+        guard case let .showingCode(code, _) = model.state else { return }
         Task { await model.join(code: code, role: .initiator) }
     }
 }

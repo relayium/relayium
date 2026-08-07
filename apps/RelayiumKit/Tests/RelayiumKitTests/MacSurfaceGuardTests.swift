@@ -141,6 +141,46 @@ final class MacSurfaceGuardTests: XCTestCase {
             "stored upload lost file identities in a running or terminal state")
     }
 
+    /// Creating a code removes the picker, but it must not remove the sender's
+    /// answer to “what am I about to send?” during minting or while the peer joins.
+    func testFilePairingKeepsTheStagedFileNamesAndSizesVisibleUntilDone() throws {
+        let pane = try source(named: "DirectPane.swift")
+        let minting = try XCTUnwrap(pane.components(
+            separatedBy: "case .minting:").dropFirst().first?
+            .components(separatedBy: "case let .showingCode").first)
+        let showing = try XCTUnwrap(pane.components(
+            separatedBy: "case let .showingCode(code, expiresAt):").dropFirst().first?
+            .components(separatedBy: "case .joining, .connecting").first)
+        for phase in [minting, showing] {
+            XCTAssertTrue(phase.contains("PendingFileList(sessionFiles: model.sessionFiles)"),
+                          "code creation hides the files it is waiting to send")
+        }
+        guard let stage = pane.range(of: "model.stageSend(sources: staged.sources, metas: staged.metas)"),
+              let mint = pane.range(of: "await model.mintCode(token: token)") else {
+            return XCTFail("the file-code action lost staging or minting")
+        }
+        XCTAssertLessThan(stage.lowerBound, mint.lowerBound,
+                          "the manifest must exist before the minting screen replaces the picker")
+
+        let failure = try XCTUnwrap(pane.components(
+            separatedBy: "if case let .failed(message)").dropFirst().first?
+            .components(separatedBy: "if let stagingError").first)
+        XCTAssertTrue(failure.contains("PendingFileList(sessionFiles: model.sessionFiles)"),
+                      "a failed pairing task hides which files failed")
+
+        let session = try source(named: "RealtimeFileSessionView.swift")
+        let connecting = try XCTUnwrap(session.components(
+            separatedBy: "case .joining, .connecting:").dropFirst().first?
+            .components(separatedBy: "case let .verifying").first)
+        let verifying = try XCTUnwrap(session.components(
+            separatedBy: "private func verifying(").dropFirst().first?
+            .components(separatedBy: "private func transferring").first)
+        for phase in [connecting, verifying] {
+            XCTAssertTrue(phase.contains("fileList"),
+                          "a connection phase hides the staged file identity")
+        }
+    }
+
     /// Clearing a staged selection changes the pending send task; it is not a
     /// navigation destination. Keep all three macOS entry points aligned with
     /// the ordinary Button semantics already used on iOS.

@@ -22,6 +22,7 @@ struct RealtimeFileSessionView: View {
         case .joining, .connecting:
             VStack(alignment: .leading, spacing: 8) {
                 ProgressView(L10n.t(.sessionConnecting)).controlSize(.small)
+                fileList
                 Button(L10n.t(.commonCancel)) { model.cancel() }
             }
         case let .verifying(sas):
@@ -53,6 +54,7 @@ struct RealtimeFileSessionView: View {
             Text(L10n.t(.sessionCheckMatchesBody))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            fileList
             // Equally weighted on purpose: a visually secondary reject is a
             // reject nobody presses, on the one screen where pressing it is the
             // entire point.

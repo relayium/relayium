@@ -196,11 +196,13 @@ struct DirectView: View {
                      action: joinToReceiveFiles)
         case let .failed(message):
             failureLine(message)
+            PendingFileList(sessionFiles: file.sessionFiles)
             // `cancel`, not a bare reset: the failure may have left a partial
             // write to discard, and `.failed` still holds the dead connection.
             Button(L10n.t(.commonDone)) { file.cancel() }
         case .minting:
             ProgressView { Text(L10n.t(.directCreatingCode)) }
+            PendingFileList(sessionFiles: file.sessionFiles)
             Button(L10n.t(.commonCancel)) { file.cancel() }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
@@ -210,6 +212,11 @@ struct DirectView: View {
             // a decision to send something else, and making the user find the
             // same folder again is a punishment for the peer being slow. The
             // next Create re-stages from the scope this still holds.
+            //
+            // The picker is also gone here, so keep the model-owned manifest
+            // visible while the sender hands off the code. This is their last
+            // chance to verify every file and size before a peer joins.
+            PendingFileList(sessionFiles: file.sessionFiles)
             showing(code: code, expiresAt: expiresAt, heading: L10n.t(.directGiveCode)) {
                 file.cancel()
             }

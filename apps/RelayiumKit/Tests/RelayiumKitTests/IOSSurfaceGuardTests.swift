@@ -86,6 +86,44 @@ final class IOSSurfaceGuardTests: XCTestCase {
             "stored upload lost file identities in a running or terminal state")
     }
 
+    /// The file picker disappears after Create. Minting and the code/QR/link
+    /// handoff still have to identify the payload until the peer joins or the
+    /// sender cancels.
+    func testFilePairingKeepsTheStagedFileNamesAndSizesVisibleUntilDone() throws {
+        let all = try sources()
+        let direct = try XCTUnwrap(all.first { $0.name == "DirectView.swift" }?.text)
+        let fileMinting = try XCTUnwrap(direct.components(
+            separatedBy: "case .minting:").dropFirst().first?
+            .components(separatedBy: "case let .showingCode").first)
+        let fileShowing = try XCTUnwrap(direct.components(
+            separatedBy: "case let .showingCode(code, expiresAt):").dropFirst().first?
+            .components(separatedBy: "case .joining, .connecting").first)
+        for phase in [fileMinting, fileShowing] {
+            XCTAssertTrue(phase.contains(
+                "PendingFileList(sessionFiles: file.sessionFiles)"),
+                "code creation hides the files it is waiting to send")
+        }
+
+        let fileFailure = try XCTUnwrap(direct.components(
+            separatedBy: "case let .failed(message):").dropFirst().first?
+            .components(separatedBy: "case .minting:").first)
+        XCTAssertTrue(fileFailure.contains(
+            "PendingFileList(sessionFiles: file.sessionFiles)"),
+            "a failed pairing task hides which files failed")
+
+        let session = try XCTUnwrap(all.first { $0.name == "DirectFileSessionView.swift" }?.text)
+        let connecting = try XCTUnwrap(session.components(
+            separatedBy: "case .joining, .connecting:").dropFirst().first?
+            .components(separatedBy: "case let .verifying").first)
+        let verifying = try XCTUnwrap(session.components(
+            separatedBy: "private func verifying(").dropFirst().first?
+            .components(separatedBy: "private func transferring").first)
+        for phase in [connecting, verifying] {
+            XCTAssertTrue(phase.contains("fileList"),
+                          "a connection phase hides the staged file identity")
+        }
+    }
+
     /// Creating a code removes the start controls while a network request owns
     /// the screen. Both file and text modes must still offer an explicit exit.
     func testPairingMintingCanBeCancelledInBothModes() throws {
