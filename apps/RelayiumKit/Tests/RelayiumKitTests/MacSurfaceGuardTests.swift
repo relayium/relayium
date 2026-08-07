@@ -507,6 +507,19 @@ final class MacSurfaceGuardTests: XCTestCase {
             "productionPairingJoinURL(code: code, mode: .text)"))
     }
 
+    func testPairingHandoffShowsTheWholeCurrentLink() throws {
+        let source = try source(named: "QRCode.swift")
+        let link = try XCTUnwrap(source.components(
+            separatedBy: "struct PairingJoinLinkView:").dropFirst().first?
+            .components(separatedBy: "struct PairingCodeHandoffView:").first)
+        XCTAssertTrue(link.contains("Text(url.absoluteString)"))
+        XCTAssertTrue(link.contains(".fixedSize(horizontal: false, vertical: true)"))
+        XCTAssertFalse(link.contains(".lineLimit(1)"),
+                       "the capability link is still visually truncated")
+        XCTAssertTrue(link.contains(".onChange(of: url) { _ in copied = false }"),
+                      "copy feedback can survive onto a replacement link")
+    }
+
     /// iOS already locks both controls while resolving/downloading. macOS must
     /// not leave a second Open path live over a task whose writer and Cancel
     /// handle the shared model still owns.

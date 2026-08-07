@@ -56,8 +56,10 @@ struct PairingJoinLinkView: View {
                 .font(.caption.weight(.semibold))
             Text(url.absoluteString)
                 .font(.caption.monospaced())
-                .lineLimit(1)
-                .truncationMode(.middle)
+                // A generated link is the result the sender hands off. Keep
+                // every component visible instead of replacing its middle with
+                // an ellipsis when the detail pane is narrow.
+                .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
 
             HStack {
@@ -80,6 +82,9 @@ struct PairingJoinLinkView: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
         }
+        // SwiftUI may preserve this subtree while the model publishes a later
+        // code. Copy feedback belongs to one URL, never the component slot.
+        .onChange(of: url) { _ in copied = false }
     }
 }
 

@@ -14,8 +14,10 @@ private struct PairingJoinLinkView: View {
                 .font(.footnote.weight(.semibold))
             Text(url.absoluteString)
                 .font(.footnote.monospaced())
-                .lineLimit(1)
-                .truncationMode(.middle)
+                // The link is a handoff result, not decorative metadata. Let
+                // it wrap so the user can inspect the complete host, mode and
+                // code before copying or sharing it.
+                .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
 
             HStack {
@@ -37,6 +39,10 @@ private struct PairingJoinLinkView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        // This view can retain its structural identity if a later generated
+        // code replaces the URL. Never let yesterday's Copy feedback certify
+        // a link that has not been copied.
+        .onChange(of: url) { _ in copied = false }
     }
 }
 

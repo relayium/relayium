@@ -301,6 +301,19 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(source.contains("productionPairingJoinURL(code: code, mode: mode)"))
     }
 
+    func testPairingHandoffShowsTheWholeCurrentLink() throws {
+        let source = try XCTUnwrap(try sources().first { $0.name == "DirectView.swift" }?.text)
+        let link = try XCTUnwrap(source.components(
+            separatedBy: "private struct PairingJoinLinkView:").dropFirst().first?
+            .components(separatedBy: "/// R3-E:").first)
+        XCTAssertTrue(link.contains("Text(url.absoluteString)"))
+        XCTAssertTrue(link.contains(".fixedSize(horizontal: false, vertical: true)"))
+        XCTAssertFalse(link.contains(".lineLimit(1)"),
+                       "the capability link is still visually truncated")
+        XCTAssertTrue(link.contains(".onChange(of: url) { _ in copied = false }"),
+                      "copy feedback can survive onto a replacement link")
+    }
+
     func testStalePairingCreateRoutesToTheAccountRemedy() throws {
         let source = try XCTUnwrap(try sources().first { $0.name == "DirectView.swift" }?.text)
         for boundary in ["private func createAndSend()", "private func createTextSession()"] {
