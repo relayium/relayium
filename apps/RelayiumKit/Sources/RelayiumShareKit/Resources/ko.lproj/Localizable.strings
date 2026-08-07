@@ -275,6 +275,8 @@
 "text.clipboardNotice" = "복사하면 내용이 시스템 클립보드에 들어가며, 다른 앱이나 클립보드 기록 도구가 이를 보관할 수 있습니다.";
 "text.clipboardNoticeShort" = "복사하면 시스템 클립보드나 클립보드 기록에 내용이 남을 수 있습니다.";
 "text.clearHistory" = "기록 지우기";
+"text.clearHistory.confirmTitle" = "로컬 기록을 지울까요?";
+"text.clearHistory.confirmBody" = "이 메시지는 이 기기에만 있습니다. 지운 후에는 되돌릴 수 없습니다.";
 "text.localHistoryHeading" = "로컬 세션 기록";
 "text.localHistoryBody" = "이 기록은 지우거나 다른 세션을 시작하기 전까지 이 앱의 메모리에만 남습니다.";
 "text.sent" = "보냄";

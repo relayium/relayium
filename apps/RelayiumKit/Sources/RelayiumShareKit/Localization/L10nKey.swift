@@ -545,6 +545,8 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case textClipboardNotice = "text.clipboardNotice"
     case textClipboardNoticeShort = "text.clipboardNoticeShort"
     case textClearHistory = "text.clearHistory"
+    case textClearHistoryConfirmTitle = "text.clearHistory.confirmTitle"
+    case textClearHistoryConfirmBody = "text.clearHistory.confirmBody"
     case textLocalHistoryHeading = "text.localHistoryHeading"
     case textLocalHistoryBody = "text.localHistoryBody"
     case textSent = "text.sent"

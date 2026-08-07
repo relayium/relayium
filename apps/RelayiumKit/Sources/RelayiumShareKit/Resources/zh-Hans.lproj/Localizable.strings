@@ -275,6 +275,8 @@
 "text.clipboardNotice" = "复制会把内容放进系统剪贴板，其他应用或剪贴板历史工具可能会留存它。";
 "text.clipboardNoticeShort" = "复制可能会在系统剪贴板或剪贴板历史中留下内容。";
 "text.clearHistory" = "清除历史";
+"text.clearHistory.confirmTitle" = "清除本地记录？";
+"text.clearHistory.confirmBody" = "这些消息仅保存在此设备上。清除后无法恢复。";
 "text.localHistoryHeading" = "本地会话历史";
 "text.localHistoryBody" = "这份历史只存在于本应用的内存中，直到你清除它或开始另一次会话。";
 "text.sent" = "已发送";

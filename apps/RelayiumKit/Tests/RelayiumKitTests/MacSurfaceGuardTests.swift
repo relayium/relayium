@@ -370,6 +370,18 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "only Match, Accept and the open-session Send action are prominent")
     }
 
+    func testClearingTheOnlyLocalTextHistoryRequiresDestructiveConfirmation() throws {
+        let session = try source(named: "RealtimeTextSessionView.swift")
+        XCTAssertEqual(occurrences(of: "confirmingHistoryClear = true", in: session), 2,
+                       "open and terminal history must enter the same confirmation")
+        XCTAssertEqual(occurrences(of: "model.clearHistory()", in: session), 1,
+                       "history may only be erased by the confirmation action")
+        XCTAssertTrue(session.contains(
+            "Button(L10n.t(.textClearHistory), role: .destructive) { model.clearHistory() }"))
+        XCTAssertTrue(session.contains("L10n.t(.textClearHistoryConfirmTitle)"))
+        XCTAssertTrue(session.contains("L10n.t(.textClearHistoryConfirmBody)"))
+    }
+
     func testTextCodeWaitingCancelReturnsDirectlyToThePairingEntry() throws {
         let source = try source(named: "RealtimeTextPane.swift")
         let showing = try XCTUnwrap(source.components(

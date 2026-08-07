@@ -278,6 +278,8 @@
 "text.clipboardNotice" = "Copier place le contenu dans le presse-papiers du système, où d’autres apps ou des outils d’historique peuvent le conserver.";
 "text.clipboardNoticeShort" = "Copier peut laisser du contenu dans le presse-papiers ou son historique.";
 "text.clearHistory" = "Effacer l’historique";
+"text.clearHistory.confirmTitle" = "Effacer l’historique local ?";
+"text.clearHistory.confirmBody" = "Ces messages existent uniquement sur cet appareil. Cette action est irréversible.";
 "text.localHistoryHeading" = "Historique local de la session";
 "text.localHistoryBody" = "Cet historique ne reste qu’en mémoire dans cette app, jusqu’à ce que vous l’effaciez ou démarriez une autre session.";
 "text.sent" = "Envoyé";

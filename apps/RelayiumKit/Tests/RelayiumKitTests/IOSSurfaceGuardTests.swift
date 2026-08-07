@@ -654,6 +654,17 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "the view retains a second copy of ephemeral plaintext")
     }
 
+    func testClearingTheOnlyLocalTextHistoryRequiresDestructiveConfirmation() throws {
+        let view = try XCTUnwrap(try sources().first { $0.name == "DirectTextSessionView.swift" })
+        XCTAssertEqual(view.text.components(separatedBy: "confirmingHistoryClear = true").count - 1, 2)
+        XCTAssertEqual(view.text.components(separatedBy: "model.clearHistory()").count - 1, 1,
+                       "history may only be erased by the confirmation action")
+        XCTAssertTrue(view.text.contains(
+            "Button(L10n.t(.textClearHistory), role: .destructive) { model.clearHistory() }"))
+        XCTAssertTrue(view.text.contains("L10n.t(.textClearHistoryConfirmTitle)"))
+        XCTAssertTrue(view.text.contains("L10n.t(.textClearHistoryConfirmBody)"))
+    }
+
     func testRealtimeFileDetailsSurviveTransferAndCompletion() throws {
         let view = try XCTUnwrap(try sources().first { $0.name == "DirectFileSessionView.swift" })
         XCTAssertGreaterThanOrEqual(view.text.components(separatedBy: "fileList").count - 1, 3,

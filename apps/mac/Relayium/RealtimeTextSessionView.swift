@@ -20,6 +20,7 @@ struct RealtimeTextSessionView: View {
     /// Presentation state only: keep the acknowledgement tied to one row by
     /// id, never by retaining a second copy of its plaintext body.
     @State private var copiedMessageID: Int?
+    @State private var confirmingHistoryClear = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -50,6 +51,16 @@ struct RealtimeTextSessionView: View {
             guard let copiedMessageID,
                   !history.contains(where: { $0.id == copiedMessageID }) else { return }
             self.copiedMessageID = nil
+        }
+        .confirmationDialog(
+            L10n.t(.textClearHistoryConfirmTitle),
+            isPresented: $confirmingHistoryClear,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.t(.textClearHistory), role: .destructive) { model.clearHistory() }
+            Button(L10n.t(.commonCancel), role: .cancel) { confirmingHistoryClear = false }
+        } message: {
+            Text(L10n.t(.textClearHistoryConfirmBody))
         }
     }
 
@@ -173,7 +184,9 @@ struct RealtimeTextSessionView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack {
-                Button(L10n.t(.textClearHistory)) { model.clearHistory() }
+                Button(L10n.t(.textClearHistory), role: .destructive) {
+                    confirmingHistoryClear = true
+                }
                     .disabled(model.history.isEmpty)
                 Spacer()
                 Button(L10n.t(.commonEndSession), role: .destructive) { model.end() }
@@ -205,7 +218,9 @@ struct RealtimeTextSessionView: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Button(L10n.t(.textClearHistory)) { model.clearHistory() }
+                    Button(L10n.t(.textClearHistory), role: .destructive) {
+                        confirmingHistoryClear = true
+                    }
                 }
             }
         }

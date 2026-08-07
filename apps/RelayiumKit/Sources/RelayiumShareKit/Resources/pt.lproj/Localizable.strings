@@ -278,6 +278,8 @@
 "text.clipboardNotice" = "Copiar coloca o conteúdo na área de transferência do sistema, onde outras apps ou ferramentas de histórico o podem reter.";
 "text.clipboardNoticeShort" = "Copiar pode deixar conteúdo na área de transferência do sistema ou no seu histórico.";
 "text.clearHistory" = "Limpar histórico";
+"text.clearHistory.confirmTitle" = "Limpar o histórico local?";
+"text.clearHistory.confirmBody" = "Estas mensagens existem apenas neste dispositivo. Não é possível desfazer esta ação.";
 "text.localHistoryHeading" = "Histórico local da sessão";
 "text.localHistoryBody" = "Este histórico permanece apenas na memória desta app até o limpar ou iniciar outra sessão.";
 "text.sent" = "Enviada";

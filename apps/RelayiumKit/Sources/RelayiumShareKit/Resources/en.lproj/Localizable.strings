@@ -279,6 +279,8 @@
 "text.clipboardNotice" = "Copying places content on the system clipboard, where other apps or clipboard history tools may retain it.";
 "text.clipboardNoticeShort" = "Copying may leave content in the system clipboard or clipboard history.";
 "text.clearHistory" = "Clear history";
+"text.clearHistory.confirmTitle" = "Clear local history?";
+"text.clearHistory.confirmBody" = "These messages exist only on this device. Clearing them cannot be undone.";
 "text.localHistoryHeading" = "Local session history";
 "text.localHistoryBody" = "This history remains only in this app's memory until you clear it or start another session.";
 "text.sent" = "Sent";

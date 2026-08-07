@@ -293,6 +293,8 @@
 "text.clipboardNotice" = "النسخ يضع المحتوى في حافظة النظام، حيث قد تحتفظ به تطبيقات أخرى أو أدوات سجل الحافظة.";
 "text.clipboardNoticeShort" = "قد يترك النسخ محتوى في حافظة النظام أو في سجلها.";
 "text.clearHistory" = "مسح السجل";
+"text.clearHistory.confirmTitle" = "مسح السجل المحلي؟";
+"text.clearHistory.confirmBody" = "هذه الرسائل موجودة على هذا الجهاز فقط. لا يمكن التراجع عن مسحها.";
 "text.localHistoryHeading" = "سجل الجلسة المحلي";
 "text.localHistoryBody" = "يبقى هذا السجل في ذاكرة هذا التطبيق فقط إلى أن تمسحه أو تبدأ جلسة أخرى.";
 "text.sent" = "مُرسَلة";

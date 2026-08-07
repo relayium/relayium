@@ -278,6 +278,8 @@
 "text.clipboardNotice" = "Beim Kopieren landet der Inhalt in der Zwischenablage des Systems, wo andere Apps oder Verlaufswerkzeuge ihn aufbewahren können.";
 "text.clipboardNoticeShort" = "Kopieren kann Inhalte in der Zwischenablage oder deren Verlauf hinterlassen.";
 "text.clearHistory" = "Verlauf löschen";
+"text.clearHistory.confirmTitle" = "Lokalen Verlauf löschen?";
+"text.clearHistory.confirmBody" = "Diese Nachrichten sind nur auf diesem Gerät gespeichert. Das Löschen kann nicht rückgängig gemacht werden.";
 "text.localHistoryHeading" = "Lokaler Sitzungsverlauf";
 "text.localHistoryBody" = "Dieser Verlauf bleibt nur im Arbeitsspeicher dieser App, bis du ihn löschst oder eine andere Sitzung startest.";
 "text.sent" = "Gesendet";

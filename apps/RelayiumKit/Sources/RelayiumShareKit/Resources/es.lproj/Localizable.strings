@@ -278,6 +278,8 @@
 "text.clipboardNotice" = "Copiar coloca el contenido en el portapapeles del sistema, donde otras apps o herramientas de historial pueden conservarlo.";
 "text.clipboardNoticeShort" = "Copiar puede dejar contenido en el portapapeles del sistema o en su historial.";
 "text.clearHistory" = "Borrar historial";
+"text.clearHistory.confirmTitle" = "¿Borrar el historial local?";
+"text.clearHistory.confirmBody" = "Estos mensajes solo existen en este dispositivo. Esta acción no se puede deshacer.";
 "text.localHistoryHeading" = "Historial local de la sesión";
 "text.localHistoryBody" = "Este historial solo permanece en la memoria de esta app hasta que lo borres o inicies otra sesión.";
 "text.sent" = "Enviado";
