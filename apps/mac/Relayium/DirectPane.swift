@@ -45,6 +45,8 @@ struct DirectPane: View {
             case .minting:
                 SectionCard(title: L10n.t(.directSendHeading)) {
                     ProgressView(L10n.t(.directCreatingCode)).controlSize(.small)
+                    Button(L10n.t(.commonCancel)) { model.cancel() }
+                        .buttonStyle(.bordered)
                 }
             case let .showingCode(code, expiresAt):
                 SectionCard(title: L10n.t(.directSendHeading)) {

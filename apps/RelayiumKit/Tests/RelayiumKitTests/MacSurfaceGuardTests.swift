@@ -186,6 +186,22 @@ final class MacSurfaceGuardTests: XCTestCase {
             "buttonStyle(.link)") ?? true)
     }
 
+    /// Minting is a locked network wait: the idle controls are gone until the
+    /// request settles, so both pairing modes need an explicit way back.
+    func testPairingMintingCanBeCancelledInBothModes() throws {
+        let files = try source(named: "DirectPane.swift")
+        let fileMinting = try XCTUnwrap(files.components(separatedBy: "case .minting:")
+            .dropFirst().first?.components(separatedBy: "case let .showingCode").first)
+        XCTAssertTrue(fileMinting.contains("Button(L10n.t(.commonCancel)) { model.cancel() }"))
+        XCTAssertTrue(fileMinting.contains(".buttonStyle(.bordered)"))
+
+        let text = try source(named: "RealtimeTextPane.swift")
+        let textMinting = try XCTUnwrap(text.components(separatedBy: "case .minting:")
+            .dropFirst().first?.components(separatedBy: "case let .showingCode").first)
+        XCTAssertTrue(textMinting.contains("Button(L10n.t(.commonCancel)) { model.reset() }"))
+        XCTAssertTrue(textMinting.contains(".buttonStyle(.bordered)"))
+    }
+
     /// iOS already locks both controls while resolving/downloading. macOS must
     /// not leave a second Open path live over a task whose writer and Cancel
     /// handle the shared model still owns.

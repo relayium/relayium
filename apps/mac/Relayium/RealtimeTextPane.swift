@@ -38,6 +38,8 @@ struct RealtimeTextPane: View {
             case .minting:
                 SectionCard(title: L10n.t(.textStartHeading)) {
                     ProgressView(L10n.t(.textCreatingCode)).controlSize(.small)
+                    Button(L10n.t(.commonCancel)) { model.reset() }
+                        .buttonStyle(.bordered)
                 }
             case let .showingCode(code, expiresAt):
                 SectionCard(title: L10n.t(.textStartHeading)) {

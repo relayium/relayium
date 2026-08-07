@@ -7,9 +7,34 @@ import XCTest
 private final class StubPair: PairCodeClient, @unchecked Sendable {
     var result = MintedCode(code: "483920", expiresAt: 1800000000)
     var error: Error?
+    var gate: FileMintGate?
     func mint(token: String) async throws -> MintedCode {
+        if let gate { return await gate.wait() }
         if let e = error { throw e }
         return result
+    }
+}
+
+private actor FileMintGate {
+    private var resultContinuation: CheckedContinuation<MintedCode, Never>?
+    private var startContinuations: [CheckedContinuation<Void, Never>] = []
+    private var started = false
+
+    func wait() async -> MintedCode {
+        started = true
+        startContinuations.forEach { $0.resume() }
+        startContinuations = []
+        return await withCheckedContinuation { resultContinuation = $0 }
+    }
+
+    func waitUntilStarted() async {
+        if started { return }
+        await withCheckedContinuation { startContinuations.append($0) }
+    }
+
+    func release(_ result: MintedCode) {
+        resultContinuation?.resume(returning: result)
+        resultContinuation = nil
     }
 }
 
@@ -95,6 +120,21 @@ final class RealtimeSessionModelTests: XCTestCase {
         guard case let .showingCode(code, expiresAt) = m.state else { return XCTFail("got \(m.state)") }
         XCTAssertEqual(code, "483920")
         XCTAssertEqual(expiresAt, 1800000000)
+    }
+
+    func testCancelWhileMintingIgnoresALateCode() async {
+        let m = makeModel()
+        let gate = FileMintGate()
+        pair.gate = gate
+        let mint = Task { await m.mintCode(token: "tok") }
+        await gate.waitUntilStarted()
+        XCTAssertEqual(m.state, .minting)
+
+        m.cancel()
+        XCTAssertEqual(m.state, .idle)
+        await gate.release(MintedCode(code: "999999", expiresAt: 1_900_000_000))
+        await mint.value
+        XCTAssertEqual(m.state, .idle, "a late mint response resurrected the cancelled task")
     }
 
     /// Signed out is not "something went wrong": the copy has to explain that

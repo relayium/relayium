@@ -4,7 +4,34 @@ import XCTest
 
 private final class TextStubPair: PairCodeClient, @unchecked Sendable {
     var result = MintedCode(code: "483920", expiresAt: 1_800_000_000)
-    func mint(token: String) async throws -> MintedCode { result }
+    var gate: TextMintGate?
+    func mint(token: String) async throws -> MintedCode {
+        if let gate { return await gate.wait() }
+        return result
+    }
+}
+
+private actor TextMintGate {
+    private var resultContinuation: CheckedContinuation<MintedCode, Never>?
+    private var startContinuations: [CheckedContinuation<Void, Never>] = []
+    private var started = false
+
+    func wait() async -> MintedCode {
+        started = true
+        startContinuations.forEach { $0.resume() }
+        startContinuations = []
+        return await withCheckedContinuation { resultContinuation = $0 }
+    }
+
+    func waitUntilStarted() async {
+        if started { return }
+        await withCheckedContinuation { startContinuations.append($0) }
+    }
+
+    func release(_ result: MintedCode) {
+        resultContinuation?.resume(returning: result)
+        resultContinuation = nil
+    }
 }
 
 private final class TextStubICE: ICEConfigClient, @unchecked Sendable {
@@ -117,13 +144,14 @@ final class RealtimeTextSessionModelTests: XCTestCase {
         idleSeconds: TimeInterval = 600,
         idleSleep: @escaping @Sendable (UInt64) async -> Void = { nanoseconds in
             try? await Task.sleep(nanoseconds: nanoseconds)
-        }
+        },
+        pairClient: TextStubPair = TextStubPair()
     ) -> RealtimeTextSessionModel {
         clock = 100
         connection = TextStubConnection()
         let peer = connection
         return RealtimeTextSessionModel(
-            pairClient: TextStubPair(),
+            pairClient: pairClient,
             iceClient: TextStubICE(),
             requiresVerification: { verify },
             now: { [weak self] in self?.clock ?? 0 },
@@ -177,6 +205,22 @@ final class RealtimeTextSessionModelTests: XCTestCase {
         await model.join(code: code, role: .initiator)
         XCTAssertTrue(connection.started)
         guard case .connecting = model.state else { return XCTFail("got \(model.state)") }
+    }
+
+    func testResetWhileMintingIgnoresALateCode() async {
+        let pair = TextStubPair()
+        let gate = TextMintGate()
+        pair.gate = gate
+        let model = makeModel(pairClient: pair)
+        let mint = Task { await model.mintCode(token: "token") }
+        await gate.waitUntilStarted()
+        XCTAssertEqual(model.state, .minting)
+
+        model.reset()
+        XCTAssertEqual(model.state, .idle)
+        await gate.release(MintedCode(code: "999999", expiresAt: 1_900_000_000))
+        await mint.value
+        XCTAssertEqual(model.state, .idle, "a late mint response resurrected the cancelled task")
     }
 
     // MARK: - advanced verification OFF (the product default)

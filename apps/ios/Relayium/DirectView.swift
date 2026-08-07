@@ -201,6 +201,9 @@ struct DirectView: View {
             Button(L10n.t(.commonDone)) { file.cancel() }
         case .minting:
             ProgressView { Text(L10n.t(.directCreatingCode)) }
+            Button(L10n.t(.commonCancel)) { file.cancel() }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
         case let .showingCode(code, expiresAt):
             // `cancel` alone. The staged batch inside the model goes with it,
             // but the SELECTION stays: cancelling a code nobody answered is not
@@ -275,6 +278,9 @@ struct DirectView: View {
             Button(L10n.t(.commonDone)) { text.reset() }
         case .minting:
             ProgressView { Text(L10n.t(.textCreatingCode)) }
+            Button(L10n.t(.commonCancel)) { text.reset() }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
         case let .showingCode(code, expiresAt):
             showing(code: code, expiresAt: expiresAt, heading: L10n.t(.textGiveCode)) {
                 text.end()

@@ -86,6 +86,25 @@ final class IOSSurfaceGuardTests: XCTestCase {
             "stored upload lost file identities in a running or terminal state")
     }
 
+    /// Creating a code removes the start controls while a network request owns
+    /// the screen. Both file and text modes must still offer an explicit exit.
+    func testPairingMintingCanBeCancelledInBothModes() throws {
+        let all = try sources()
+        let direct = try XCTUnwrap(all.first { $0.name == "DirectView.swift" }?.text)
+        XCTAssertEqual(direct.components(separatedBy:
+            "Button(L10n.t(.commonCancel)) { file.cancel() }").count - 1, 1)
+        XCTAssertEqual(direct.components(separatedBy:
+            "Button(L10n.t(.commonCancel)) { text.reset() }").count - 1, 1)
+
+        let mintingBlocks = direct.components(separatedBy: "case .minting:").dropFirst()
+        XCTAssertEqual(mintingBlocks.count, 2)
+        for block in mintingBlocks {
+            let body = block.components(separatedBy: "case let .showingCode").first ?? ""
+            XCTAssertTrue(body.contains(".buttonStyle(.bordered)"))
+            XCTAssertTrue(body.contains(".controlSize(.large)"))
+        }
+    }
+
     /// Each source's CODE, with whole-line comments dropped.
     ///
     /// Load-bearing, not tidiness: these files explain what they deliberately do
