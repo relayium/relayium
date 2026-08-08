@@ -2393,16 +2393,22 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // keyboard type, the content type and the normalization to drift, and
         // the drift is silent: a field that works and one that eats a leading
         // digit look identical in a screenshot.
-        for wired in [".keyboardType(.numberPad)", ".textContentType(.oneTimeCode)"] {
+        for wired in ["field.keyboardType = .numberPad",
+                      "field.textContentType = .oneTimeCode"] {
             XCTAssertEqual(view.text.components(separatedBy: wired).count - 1, 1,
-                           "the one join field must carry \(wired), exactly once")
+                           "the one UIKit join field must carry \(wired), exactly once")
         }
         // But each MODEL normalizes its own text, so both are wired to it.
         XCTAssertEqual(view.text.components(separatedBy: "updateJoinCode(").count - 1, 2,
                        "both models must normalize on every change")
         XCTAssertTrue(view.text.contains("let normalizedCode = Binding("))
         XCTAssertTrue(view.text.contains("set: { normalize($0) }"))
-        XCTAssertTrue(view.text.contains("text: normalizedCode"))
+        XCTAssertTrue(view.text.contains("PairingCodeInput(text: normalizedCode"))
+        XCTAssertTrue(view.text.contains("shouldChangeCharactersIn range: NSRange"))
+        XCTAssertTrue(view.text.contains("field.text = normalized"))
+        XCTAssertTrue(view.text.contains("parent.text = normalized"))
+        XCTAssertTrue(view.text.contains("return false"),
+                      "UIKit must not apply the raw edit again after normalization")
         XCTAssertFalse(view.text.contains(".onChange(of: code.wrappedValue)"),
                        "a second state write can race fast typing or AutoFill")
         XCTAssertFalse(view.text.contains("Int("),

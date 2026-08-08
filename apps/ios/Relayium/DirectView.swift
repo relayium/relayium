@@ -46,6 +46,73 @@ private struct PairingJoinLinkView: View {
     }
 }
 
+/// A six-digit field whose visible UIKit value is settled before SwiftUI is
+/// notified. Re-publishing an ObservableObject for every digit can rebuild a
+/// SwiftUI TextField while the keyboard is still delivering one paste or burst
+/// of keystrokes; the remaining input then lands on stale editing state.
+private struct PairingCodeInput: UIViewRepresentable {
+    @Binding var text: String
+    let label: String
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    func makeUIView(context: Context) -> UITextField {
+        let field = UITextField()
+        field.delegate = context.coordinator
+        field.borderStyle = .roundedRect
+        field.keyboardType = .numberPad
+        field.textContentType = .oneTimeCode
+        field.font = .monospacedDigitSystemFont(
+            ofSize: UIFont.preferredFont(forTextStyle: .title3).pointSize,
+            weight: .regular
+        )
+        field.adjustsFontForContentSizeCategory = true
+        field.accessibilityLabel = label
+        return field
+    }
+
+    func updateUIView(_ field: UITextField, context: Context) {
+        context.coordinator.parent = self
+        guard field.text != text else { return }
+        field.text = text
+        if let end = field.position(from: field.beginningOfDocument,
+                                    offset: text.utf16.count) {
+            field.selectedTextRange = field.textRange(from: end, to: end)
+        }
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var parent: PairingCodeInput
+
+        init(parent: PairingCodeInput) { self.parent = parent }
+
+        func textField(_ field: UITextField,
+                       shouldChangeCharactersIn range: NSRange,
+                       replacementString replacement: String) -> Bool {
+            let current = field.text ?? ""
+            guard let editRange = Range(range, in: current) else { return false }
+            let raw = current.replacingCharacters(in: editRange, with: replacement)
+            let normalized = normalizedPairingCode(raw)
+
+            // Set the live control first. SwiftUI may synchronously publish and
+            // render when the binding changes, but it can only reconcile to the
+            // value already displayed here; no remaining input event is lost.
+            field.text = normalized
+            parent.text = normalized
+
+            let rawPrefixEnd = min(range.location + replacement.utf16.count,
+                                   raw.utf16.count)
+            let rawPrefix = String(decoding: raw.utf16.prefix(rawPrefixEnd), as: UTF16.self)
+            let caretOffset = normalizedPairingCode(rawPrefix).utf16.count
+            if let caret = field.position(from: field.beginningOfDocument,
+                                          offset: caretOffset) {
+                field.selectedTextRange = field.textRange(from: caret, to: caret)
+            }
+            return false
+        }
+    }
+}
+
 /// R3-E: transfer straight to another device with six digits, across networks.
 ///
 /// Two things about this screen are structural rather than stylistic, and both
@@ -572,16 +639,7 @@ struct DirectView: View {
         )
         return VStack(alignment: .leading, spacing: 12) {
             Text(L10n.t(.directReceiveHeading)).font(.headline)
-            TextField(L10n.t(.commonCode), text: normalizedCode)
-                .textFieldStyle(.roundedBorder)
-                // A phone keyboard that opens on letters for a six-digit code
-                // makes the user hunt for the number row every time; without the
-                // content type, iOS never offers a code that arrived in a
-                // message.
-                .keyboardType(.numberPad)
-                .textContentType(.oneTimeCode)
-                .font(.title3.monospaced())
-                .accessibilityLabel(L10n.t(.commonCode))
+            PairingCodeInput(text: normalizedCode, label: L10n.t(.commonCode))
             Button(action: action) {
                 Text(L10n.t(.commonJoin)).frame(maxWidth: .infinity)
             }
