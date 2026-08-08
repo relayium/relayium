@@ -124,6 +124,7 @@ func (g *GC) sweep(ctx context.Context) {
 			g.Log.Printf("gc: delete file %s: %v", f.ID, err)
 		}
 	}
+	g.reclaimTaskObjects(ctx, now)
 	g.drainPending(ctx)
 	if g.ReapSessions != nil {
 		g.ReapSessions(now)
@@ -220,6 +221,50 @@ func (g *GC) sweepAccountDeletions(ctx context.Context, now int64) {
 		if err := g.Mailer.SendAccountDeleted(ctx, email); err != nil {
 			g.Log.Printf("gc: send final deletion email for %s: %v", u.ID, err)
 		}
+	}
+}
+
+// reclaimTaskObjects releases the ciphertext of Device Inbox deliveries that
+// can no longer happen (Phase 1D-A).
+//
+// A task-purpose object is invisible by design: no link, no file-list row, no
+// public endpoint. That is exactly why it needs a sweeper — a share the user can
+// see is a share the user can delete, and this one they cannot. The three cases
+// it reclaims are defined once, in SQL, by reclaimableTaskObjectSQL.
+//
+// The ORDER is the safety property, and it is the reverse of the expiry pass
+// above. There, expiry is monotonic, so deleting the blob first is fine. Here
+// the condition can go from true to false — a create binding the object may land
+// between the list and the delete — so the ROW is deleted first, under a
+// conditional statement that re-checks the condition, and the blob only follows
+// once that row is provably gone. The worst case is a retryable orphan blob, not
+// ciphertext destroyed under a live delivery.
+func (g *GC) reclaimTaskObjects(ctx context.Context, now int64) {
+	grace := int64(taskObjectBindGrace / time.Second)
+	objs, err := g.Store.ListReclaimableTaskObjects(ctx, now, grace)
+	if err != nil {
+		g.Log.Printf("gc: list reclaimable task objects: %v", err)
+		return
+	}
+	var reclaimed int
+	for _, f := range objs {
+		ok, err := g.Store.DeleteTaskObjectIfReclaimable(ctx, f.ID, now, grace)
+		if err != nil {
+			g.Log.Printf("gc: reclaim task object %s: %v", f.ID, err)
+			continue
+		}
+		if !ok {
+			continue // bound to a live delivery again since the list; keep it
+		}
+		reclaimed++
+		if err := g.deleteBlob(ctx, f.NodeID, f.BlobKey); err != nil {
+			// Node unreachable: the existing retry queue owns it from here, the
+			// same as every other orphaned blob in this file.
+			_ = g.Store.EnqueueNodeDelete(ctx, f.BlobKey, f.NodeID, now)
+		}
+	}
+	if reclaimed != 0 {
+		g.Log.Printf("gc: inbox task objects reclaimed=%d", reclaimed)
 	}
 }
 

@@ -49,6 +49,13 @@ var (
 	// ErrStoredObjectUnavailable: the referenced Stored Object does not exist
 	// under this account, or has already expired/burned.
 	ErrStoredObjectUnavailable = errors.New("account: referenced stored object is unavailable")
+	// ErrStoredObjectAlreadyBound: a task-purpose Stored Object is already
+	// delivering for another task. It is ciphertext uploaded for ONE delivery,
+	// so a second send has to be a second upload. Deliberately NOT converged
+	// onto the existing task: the caller asked to queue a different delivery,
+	// and answering with someone else's task id would be a lie about what was
+	// queued and to which device.
+	ErrStoredObjectAlreadyBound = errors.New("account: stored object is already bound to a task")
 )
 
 const inboxTaskCols = `id, user_id, target_device_id, source_device_id, idempotency_key,
@@ -183,11 +190,14 @@ func (s *SQLiteStore) CreateInboxTask(ctx context.Context, t InboxTask) (InboxTa
 		encManifest           []byte
 		fileSize, fileExpires int64
 		maxDownloads, burn    int64
+		filePurpose, boundTo  string
 	)
 	err = tx.QueryRowContext(ctx,
-		`SELECT user_id, enc_manifest, size, expires_at, max_downloads, burn_after_read
+		`SELECT user_id, enc_manifest, size, expires_at, max_downloads, burn_after_read,
+		        purpose, inbox_task_id
 		   FROM stored_files WHERE id = ?`, t.StoredFileID).
-		Scan(&fileUser, &encManifest, &fileSize, &fileExpires, &maxDownloads, &burn)
+		Scan(&fileUser, &encManifest, &fileSize, &fileExpires, &maxDownloads, &burn,
+			&filePurpose, &boundTo)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && fileUser != t.UserID) {
 		return InboxTask{}, false, ErrStoredObjectUnavailable
 	}
@@ -200,6 +210,20 @@ func (s *SQLiteStore) CreateInboxTask(ctx context.Context, t InboxTask) (InboxTa
 	// provide. Inbox uploads use unlimited-until-TTL retention instead.
 	if fileExpires <= t.CreatedAt || maxDownloads > 0 || burn != 0 {
 		return InboxTask{}, false, ErrStoredObjectUnavailable
+	}
+	filePurpose = purposeOrShare(filePurpose)
+	if !isValidStoredPurpose(filePurpose) {
+		// Persisted authorization vocabulary is a closed set. A future or
+		// corrupted purpose cannot silently inherit the share-backed task path.
+		return InboxTask{}, false, ErrStoredObjectUnavailable
+	}
+	// A task-purpose object is ciphertext uploaded for ONE delivery. If it is
+	// already bound, refuse here — next to the other statements about what this
+	// object is — rather than only through the conditional UPDATE below. Two
+	// independent guards: this one names the reason at the point a reader looks
+	// for it, and the UPDATE is what still holds under a concurrent create.
+	if filePurpose == StoredPurposeDeviceTask && boundTo != "" {
+		return InboxTask{}, false, ErrStoredObjectAlreadyBound
 	}
 	// The encrypted manifest is COPIED from the object, never accepted from the
 	// request. It is already the manifest that this ciphertext's content key
@@ -227,6 +251,30 @@ func (s *SQLiteStore) CreateInboxTask(ctx context.Context, t InboxTask) (InboxTa
 	}
 	if pending >= inbox.MaxPendingTasksPerDevice {
 		return InboxTask{}, false, ErrInboxQueueFull
+	}
+
+	// Bind a TASK-PURPOSE object to this task, exactly once (Phase 1D-A).
+	//
+	// The conditional UPDATE is the whole mechanism: `inbox_task_id = ''` means
+	// only an unbound object can be taken, so two concurrent creates naming the
+	// same object produce one winner and one ErrStoredObjectAlreadyBound rather
+	// than two deliveries of one ciphertext. It runs inside the create's own
+	// transaction, so a create that fails any later step releases the binding
+	// with it — an object is never left owned by a task that does not exist.
+	//
+	// A SHARE is deliberately left alone (Phase 1B compatibility): it may back
+	// several tasks, it keeps its link, and no task owns it.
+	if filePurpose == StoredPurposeDeviceTask {
+		res, err := tx.ExecContext(ctx,
+			`UPDATE stored_files SET inbox_task_id = ?
+			  WHERE id = ? AND user_id = ? AND purpose = ? AND inbox_task_id = ''`,
+			t.ID, t.StoredFileID, t.UserID, StoredPurposeDeviceTask)
+		if err != nil {
+			return InboxTask{}, false, err
+		}
+		if n, _ := res.RowsAffected(); n != 1 {
+			return InboxTask{}, false, ErrStoredObjectAlreadyBound
+		}
 	}
 
 	if _, err := tx.ExecContext(ctx,
@@ -310,20 +358,62 @@ func (s *SQLiteStore) ListInboxTasks(ctx context.Context, deviceID, userID strin
 	return out, tx.Commit()
 }
 
-// DeleteInboxTask removes one task the account owns.
+// DeleteInboxTask removes one task the account owns, and — only when the task
+// OWNED its ciphertext — the Stored Object with it.
 //
-// It deletes the TASK only. The referenced Stored Object is untouched, because
-// the task never owned it: the object is the account's own stored transfer, with
-// its own link, its own TTL and its own delete control. Deleting the object here
-// would destroy a download link the user may still be using.
-func (s *SQLiteStore) DeleteInboxTask(ctx context.Context, taskID, userID string) (bool, error) {
-	res, err := s.db.ExecContext(ctx,
+// The two cases are genuinely different, which is why this is a branch and not a
+// policy:
+//
+//   - a SHARE is untouched. The task merely referenced it; the object is the
+//     account's own stored transfer with its own link, TTL and delete control,
+//     and destroying it here would break a download link the user may still be
+//     handing out. This is the Phase 1B rule, unchanged.
+//   - a TASK-PURPOSE object is deleted. It exists only for this delivery, has no
+//     link, and is deliberately absent from the account's file list — so leaving
+//     it behind would strand storage the user can neither see nor reclaim, and
+//     the binding index would keep it unusable for anything else forever.
+//
+// The returned StoredFile is the object this call orphaned physically: its row
+// is gone, so the CALLER must drop the blob (and queue a retry if the node is
+// unreachable). A zero value means nothing was released. Doing it in this order
+// — row first, blob second — means a failed blob delete leaks a retryable
+// orphan rather than destroying ciphertext whose row still promises a delivery.
+func (s *SQLiteStore) DeleteInboxTask(ctx context.Context, taskID, userID string) (bool, StoredFile, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, StoredFile{}, err
+	}
+	defer tx.Rollback()
+	// Read the owned object BEFORE the task row goes, since the binding is the
+	// only thing that connects the two.
+	owned, err := scanStoredFile(tx.QueryRowContext(ctx,
+		`SELECT `+storedFileSelectCols+` FROM stored_files
+		  WHERE inbox_task_id = ? AND user_id = ? AND purpose = ?`,
+		taskID, userID, StoredPurposeDeviceTask))
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		owned = StoredFile{}
+	case err != nil:
+		return false, StoredFile{}, err
+	}
+	res, err := tx.ExecContext(ctx,
 		`DELETE FROM inbox_tasks WHERE id = ? AND user_id = ?`, taskID, userID)
 	if err != nil {
-		return false, err
+		return false, StoredFile{}, err
 	}
-	n, _ := res.RowsAffected()
-	return n > 0, nil
+	if n, _ := res.RowsAffected(); n == 0 {
+		// Nothing was deleted (already gone, or not this account's): touch
+		// nothing else, and report no release.
+		return false, StoredFile{}, tx.Commit()
+	}
+	if owned.ID != "" {
+		if _, err := tx.ExecContext(ctx,
+			`DELETE FROM stored_files WHERE id = ? AND user_id = ? AND purpose = ? AND inbox_task_id = ?`,
+			owned.ID, userID, StoredPurposeDeviceTask, taskID); err != nil {
+			return false, StoredFile{}, err
+		}
+	}
+	return true, owned, tx.Commit()
 }
 
 func (s *SQLiteStore) CountPendingInboxTasks(ctx context.Context, deviceID, userID string) (int64, error) {
@@ -699,12 +789,18 @@ func (s *SQLiteStore) AuthorizeInboxTaskBlob(ctx context.Context, taskID, device
 		t.LeaseExpiresAt == 0 || t.LeaseExpiresAt <= now {
 		return InboxTask{}, ErrStaleClaim
 	}
+	// The object must still be a legitimate source for THIS task. For a share
+	// that is the Phase 1B condition unchanged; for a task-purpose object the
+	// binding is checked as well, so ciphertext owned by delivery A can never be
+	// streamed through delivery B — the task id in the path is not, by itself,
+	// authority over whatever row it happens to point at.
 	var available int
 	err = tx.QueryRowContext(ctx,
 		`SELECT 1 FROM stored_files
 		  WHERE id = ? AND user_id = ? AND expires_at > ?
-		    AND max_downloads = 0 AND burn_after_read = 0`,
-		t.StoredFileID, userID, now).Scan(&available)
+		    AND max_downloads = 0 AND burn_after_read = 0
+		    AND (purpose = ? OR (purpose = ? AND inbox_task_id = ?))`,
+		t.StoredFileID, userID, now, StoredPurposeShare, StoredPurposeDeviceTask, t.ID).Scan(&available)
 	if errors.Is(err, sql.ErrNoRows) {
 		state, code := inbox.TaskFailedTerminal, inbox.TaskErrStoredObjectUnavailable
 		if t.ExpiresAt <= now {

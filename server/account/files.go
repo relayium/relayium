@@ -125,10 +125,15 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	}
 
 	st := s.ResolveSettings(r.Context())
-	burn := r.URL.Query().Get("burnAfterRead") == "1"
-	reqTTL, _ := strconv.ParseInt(r.URL.Query().Get("ttl"), 10, 64)
-	reqMaxDL, _ := strconv.ParseInt(r.URL.Query().Get("maxDownloads"), 10, 64)
-	ttl, maxDL := resolveRetention(burn, reqTTL, reqMaxDL, st)
+	// Purpose and retention are resolved together (see resolveUploadRetention):
+	// a task-purpose object must be unlimited-until-TTL, so an explicit
+	// burn/limited request — or an unknown purpose — is refused here rather
+	// than rewritten into something the caller did not ask for.
+	purpose, ttl, maxDL, okp := resolveUploadRetention(r.URL.Query(), st)
+	if !okp {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
 	if capSecs := s.planRetentionCap(r.Context(), u.ID); capSecs > 0 && ttl > capSecs {
 		ttl = capSecs
 	}
@@ -297,7 +302,7 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	sf := StoredFile{
 		ID: id, UserID: u.ID, BlobKey: blobKey, EncManifest: encManifest,
 		Size: size, BurnAfterRead: maxDL == 1, CreatedAt: now, ExpiresAt: now + ttl, NodeID: nodeID,
-		MaxDownloads: maxDL,
+		MaxDownloads: maxDL, Purpose: purpose,
 	}
 	// Atomic, fail-closed storage-cap enforcement + insert. This is what actually
 	// stops N concurrent uploads from collectively busting the plan/global cap
@@ -664,6 +669,15 @@ func (s *Service) handleListFiles(w http.ResponseWriter, r *http.Request, u User
 	}
 	out := make([]map[string]any, 0, len(files))
 	for _, f := range files {
+		// This list is the account's SHARES — the things with a link, a
+		// download count and a delete button. A task-purpose object has none of
+		// those: it is delivery ciphertext owned by one queued task, and
+		// showing it here would offer the user controls that do not apply to it
+		// and disclose that a device transfer is in flight. Its truthful
+		// surface is the task, not the file list.
+		if f.Purpose != StoredPurposeShare {
+			continue
+		}
 		out = append(out, map[string]any{
 			"id":            f.ID,
 			"size":          f.Size,
@@ -699,11 +713,28 @@ func (s *Service) handleDeleteFile(w http.ResponseWriter, r *http.Request, u Use
 	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// liveFile fetches a stored file that exists and has not expired; ok=false maps
-// to a 404 for missing, expired, or store errors (fail closed).
+// liveFile fetches a stored file that exists, has not expired, and is a PUBLIC
+// share; ok=false maps to a 404 for missing, expired, wrong-purpose, or store
+// errors (fail closed).
+//
+// This is the single resolver behind both unauthenticated endpoints
+// (`/api/files/{id}/meta` and `/blob`), which is why the purpose gate lives
+// here: a task-purpose object has no capability-link semantics at all, so there
+// is exactly one place to say so and no second public path that could be
+// updated later and forget.
+//
+// The refusal is unconditional — it is not relaxed for the owner's own session.
+// These endpoints ARE the capability link: the whole contract is that holding
+// the id (plus the fragment key the server never sees) is what grants the read.
+// Making them answer differently for an authenticated caller would mean the
+// public surface had two behaviours, and the sender does not need this route:
+// its ciphertext reaches the target device through the task blob endpoint.
 func (s *Service) liveFile(r *http.Request, id string) (StoredFile, bool) {
 	sf, err := s.store.GetStoredFile(r.Context(), id)
 	if err != nil || s.now().Unix() >= sf.ExpiresAt {
+		return StoredFile{}, false
+	}
+	if sf.Purpose != StoredPurposeShare {
 		return StoredFile{}, false
 	}
 	// A limited-download file whose slots are already spent is gone: treat it as

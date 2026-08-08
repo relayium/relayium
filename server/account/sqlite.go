@@ -734,6 +734,31 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		`CREATE INDEX IF NOT EXISTS idx_inbox_tasks_lease ON inbox_tasks(lease_expires_at) WHERE lease_expires_at > 0`,
 		// Key revocation terminates exactly the tasks sealed to the revoked key.
 		`CREATE INDEX IF NOT EXISTS idx_inbox_tasks_key ON inbox_tasks(target_device_id, target_key_id)`,
+		// Phase 1D-A: what a Stored Object IS, persisted rather than inferred.
+		// 'share' is the capability-link object every existing row is; the
+		// DEFAULT is what makes this migration safe on a live database, and
+		// backfillStoredFilePurpose repairs a crash between the ALTER and the
+		// first write. See taskobject.go.
+		`ALTER TABLE stored_files ADD COLUMN purpose TEXT NOT NULL DEFAULT 'share'`,
+		// The one task a task-purpose object is delivering for. '' = not yet
+		// bound. A share is never bound: it may back several tasks, and it
+		// belongs to its link, not to a delivery.
+		`ALTER TABLE stored_files ADD COLUMN inbox_task_id TEXT NOT NULL DEFAULT ''`,
+		// "At most one task per object", enforced by the DATABASE. The
+		// application's conditional UPDATE already refuses a second binding;
+		// this makes the property survive a future write path that forgets to,
+		// and it is partial so the overwhelming majority of rows (unbound
+		// shares, all sharing '') do not collide.
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_stored_files_binding
+		   ON stored_files(inbox_task_id) WHERE inbox_task_id <> ''`,
+		// GC's reclaim pass asks "which task objects have no reader left". Only
+		// task-purpose rows are candidates, so the index is partial for the same
+		// reason: it must not carry every share in the table.
+		`CREATE INDEX IF NOT EXISTS idx_stored_files_taskobj
+		   ON stored_files(created_at) WHERE purpose = 'device_task'`,
+		// A chunked upload declares its purpose at init and must still have it
+		// at finalize, which may run on a different instance.
+		`ALTER TABLE upload_sessions ADD COLUMN purpose TEXT NOT NULL DEFAULT 'share'`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -788,6 +813,14 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 	// is a no-op; our model guarantees burn_after_read=1 ⟺ max_downloads=1).
 	if _, err := db.ExecContext(context.Background(),
 		`UPDATE stored_files SET max_downloads = 1 WHERE burn_after_read = 1 AND max_downloads = 0`); err != nil {
+		db.Close()
+		return nil, err
+	}
+	// Same shape, same reason, for the Phase 1D-A purpose column: an empty
+	// purpose is a row the ALTER reached but no write ever touched, and it must
+	// read as the share it has always been rather than as an unknown kind of
+	// object the public endpoints would refuse.
+	if err := backfillStoredFilePurpose(context.Background(), db); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -2379,20 +2412,23 @@ func (s *SQLiteStore) TakePasskeyCeremony(ctx context.Context, token string) (ki
 	return kind, session, name, expires, true, nil
 }
 
-const uploadSessionCols = `id, user_id, blob_key, node_id, billable, enc_manifest, ttl, max_dl, max_size, received, created_at, done`
+const uploadSessionCols = `id, user_id, blob_key, node_id, billable, enc_manifest, ttl, max_dl, max_size, received, created_at, done, purpose`
 
 func scanUploadSession(sc rowScanner) (UploadSessionRow, error) {
 	var r UploadSessionRow
 	var billable, done int64
 	var manifest []byte
 	err := sc.Scan(&r.ID, &r.UserID, &r.BlobKey, &r.NodeID, &billable, &manifest,
-		&r.TTL, &r.MaxDL, &r.MaxSize, &r.Received, &r.CreatedAt, &done)
+		&r.TTL, &r.MaxDL, &r.MaxSize, &r.Received, &r.CreatedAt, &done, &r.Purpose)
 	if err != nil {
 		return UploadSessionRow{}, err
 	}
 	r.Billable = billable != 0
 	r.Done = done != 0
 	r.EncManifest = manifest
+	// A session opened before the column existed finalizes as the share it was
+	// started as — the same normalization scanStoredFile applies.
+	r.Purpose = purposeOrShare(r.Purpose)
 	return r, nil
 }
 
@@ -2414,9 +2450,10 @@ func (s *SQLiteStore) CreateUploadSession(ctx context.Context, r UploadSessionRo
 	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO upload_sessions (`+uploadSessionCols+`)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		r.ID, r.UserID, r.BlobKey, r.NodeID, b2i(r.Billable), r.EncManifest,
-		r.TTL, r.MaxDL, r.MaxSize, r.Received, r.CreatedAt, b2i(r.Done)); err != nil {
+		r.TTL, r.MaxDL, r.MaxSize, r.Received, r.CreatedAt, b2i(r.Done),
+		purposeOrShare(r.Purpose)); err != nil {
 		return false, err
 	}
 	return true, tx.Commit()
@@ -2788,24 +2825,33 @@ func scanStoredFile(sc rowScanner) (StoredFile, error) {
 	var burn int
 	var nodeID sql.NullString
 	err := sc.Scan(&f.ID, &f.UserID, &f.BlobKey, &f.EncManifest, &f.Size,
-		&burn, &f.CreatedAt, &f.ExpiresAt, &f.DownloadedAt, &nodeID, &f.MaxDownloads, &f.DownloadCount)
+		&burn, &f.CreatedAt, &f.ExpiresAt, &f.DownloadedAt, &nodeID, &f.MaxDownloads,
+		&f.Purpose, &f.InboxTaskID, &f.DownloadCount)
 	f.BurnAfterRead = burn != 0
 	f.NodeID = nodeID.String
+	// A row the purpose ALTER reached but no write ever touched reads as the
+	// share it has always been. backfillStoredFilePurpose repairs the column on
+	// every boot; this is the same answer for the window before it runs, so no
+	// caller ever has to interpret an empty purpose.
+	if f.Purpose == "" {
+		f.Purpose = StoredPurposeShare
+	}
 	return f, err
 }
 
 // storedFileCols is the INSERT column list (CreateStoredFile). storedFileSelectCols
-// adds download_count and max_downloads, which default on insert (0) and are only
-// ever read back / mutated in place by ClaimDownloadSlot etc.
-const storedFileCols = `id, user_id, blob_key, enc_manifest, size, burn_after_read, created_at, expires_at, downloaded_at, node_id, max_downloads`
+// adds download_count, which defaults on insert (0) and is only ever read back /
+// mutated in place by ClaimDownloadSlot etc.
+const storedFileCols = `id, user_id, blob_key, enc_manifest, size, burn_after_read, created_at, expires_at, downloaded_at, node_id, max_downloads, purpose, inbox_task_id`
 const storedFileSelectCols = storedFileCols + `, download_count`
 
 func (s *SQLiteStore) CreateStoredFile(ctx context.Context, f StoredFile) error {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO stored_files (`+storedFileCols+`)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		f.ID, f.UserID, f.BlobKey, f.EncManifest, f.Size,
-		b2i(f.BurnAfterRead), f.CreatedAt, f.ExpiresAt, f.DownloadedAt, nullStr(f.NodeID), f.MaxDownloads)
+		b2i(f.BurnAfterRead), f.CreatedAt, f.ExpiresAt, f.DownloadedAt, nullStr(f.NodeID), f.MaxDownloads,
+		purposeOrShare(f.Purpose), f.InboxTaskID)
 	return err
 }
 
@@ -2851,9 +2897,10 @@ func (s *SQLiteStore) CreateStoredFileWithinStorageCaps(ctx context.Context, f S
 	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO stored_files (`+storedFileCols+`)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		f.ID, f.UserID, f.BlobKey, f.EncManifest, f.Size,
-		b2i(f.BurnAfterRead), f.CreatedAt, f.ExpiresAt, f.DownloadedAt, nullStr(f.NodeID), f.MaxDownloads); err != nil {
+		b2i(f.BurnAfterRead), f.CreatedAt, f.ExpiresAt, f.DownloadedAt, nullStr(f.NodeID), f.MaxDownloads,
+		purposeOrShare(f.Purpose), f.InboxTaskID); err != nil {
 		return false, "", err
 	}
 	return true, "", tx.Commit()
@@ -3067,6 +3114,64 @@ func (s *SQLiteStore) ListExpiredStoredFiles(ctx context.Context, now int64) ([]
 		out = append(out, f)
 	}
 	return out, rows.Err()
+}
+
+// reclaimableTaskObjectSQL is the ONE definition of "no delivery can read this
+// task object any more". Both the list and the conditional delete below embed
+// it, so the sweep cannot select on one condition and delete on another.
+//
+// The three disjuncts, and why each is safe:
+//
+//   - UNBOUND past the bind grace. The sender uploads and then immediately
+//     binds; an object still unbound an hour later belongs to a send that never
+//     happened. Inside the grace it is kept, because the create that would bind
+//     it may be in flight right now.
+//   - BOUND to a task that is GONE. Nothing can reach the ciphertext: the task
+//     row was the only route to it.
+//   - BOUND to a task that is TERMINAL. saved/expired/revoked/failed_terminal
+//     can never transition again and can never be claimed again, and the blob
+//     endpoint only authorizes a live lease — so no reader remains. The task ROW
+//     survives its retention window regardless, which is what keeps the sender's
+//     UI able to explain what happened.
+//
+// The converse is the important half: while a task exists and is non-terminal,
+// the ciphertext is kept, even long past the bind grace. A device that is
+// offline, retrying, backing off or waiting on a person still has a delivery
+// coming, and deleting under it would turn a slow transfer into a lost one.
+const reclaimableTaskObjectSQL = `purpose = 'device_task' AND (
+	    (inbox_task_id = '' AND created_at <= ?)
+	 OR (inbox_task_id <> '' AND NOT EXISTS (
+	       SELECT 1 FROM inbox_tasks t
+	        WHERE t.id = stored_files.inbox_task_id
+	          AND t.state NOT IN ` + terminalStateSQL + `)))`
+
+func (s *SQLiteStore) ListReclaimableTaskObjects(ctx context.Context, now, bindGrace int64) ([]StoredFile, error) {
+	rows, err := s.reader().QueryContext(ctx,
+		`SELECT `+storedFileSelectCols+` FROM stored_files WHERE `+reclaimableTaskObjectSQL,
+		now-bindGrace)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []StoredFile
+	for rows.Next() {
+		f, err := scanStoredFile(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
+func (s *SQLiteStore) DeleteTaskObjectIfReclaimable(ctx context.Context, id string, now, bindGrace int64) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`DELETE FROM stored_files WHERE id = ? AND `+reclaimableTaskObjectSQL, id, now-bindGrace)
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n == 1, nil
 }
 
 func (s *SQLiteStore) RecordUpload(ctx context.Context, e UploadEvent) error {

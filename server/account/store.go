@@ -374,6 +374,11 @@ type UploadSessionRow struct {
 	Received    int64 // bytes committed to the blob so far
 	CreatedAt   int64
 	Done        bool
+	// Purpose is the StoredFile.Purpose the finalized object will carry. Fixed
+	// at init and persisted, because finalize may run on a different instance
+	// and must not have to re-derive an authorization-relevant decision from a
+	// query string it can no longer see.
+	Purpose string
 }
 
 // StoredFile is one zero-knowledge stored-transfer object's lifecycle row. The
@@ -395,6 +400,16 @@ type StoredFile struct {
 	// after the Nth successful download; 1 = burn-equivalent. BurnAfterRead is
 	// kept for back-compat, but runtime logic is driven off MaxDownloads.
 	MaxDownloads int64
+	// Purpose is what this object IS: StoredPurposeShare (a capability link,
+	// the only kind before Phase 1D-A) or StoredPurposeDeviceTask (ciphertext
+	// that exists only to be delivered to one of the account's own devices and
+	// is never publicly readable). See taskobject.go. Empty on read means a row
+	// written before the column existed; the store normalizes it to `share`.
+	Purpose string
+	// InboxTaskID is the one Device Inbox task a task-purpose object is bound
+	// to, "" while unbound. A share is never bound: it may back several tasks
+	// and it belongs to its link, not to a delivery.
+	InboxTaskID string
 }
 
 // UsageKind selects which per-month meter a RecordMeter call increments.
@@ -1009,9 +1024,12 @@ type Store interface {
 	GetInboxTask(ctx context.Context, taskID, userID string, now int64) (InboxTask, bool, error)
 	// ListInboxTasks returns a device's tasks newest first, account-scoped.
 	ListInboxTasks(ctx context.Context, deviceID, userID string, now int64, limit int) ([]InboxTask, error)
-	// DeleteInboxTask removes one task the account owns. It never touches the
-	// referenced Stored Object: the task borrows that object, it does not own it.
-	DeleteInboxTask(ctx context.Context, taskID, userID string) (bool, error)
+	// DeleteInboxTask removes one task the account owns. A REFERENCED share is
+	// never touched — the task borrows that object, it does not own it — but a
+	// task-purpose Stored Object (Phase 1D-A) is deleted with the task, and
+	// returned so the caller can drop its blob. A zero StoredFile means nothing
+	// was released.
+	DeleteInboxTask(ctx context.Context, taskID, userID string) (deleted bool, released StoredFile, err error)
 	// CountPendingInboxTasks counts a device's unfinished rows, for the
 	// per-device row bound.
 	CountPendingInboxTasks(ctx context.Context, deviceID, userID string) (int64, error)
@@ -1090,6 +1108,16 @@ type Store interface {
 	// earlier deletion becomes failed_terminal/stored_object_unavailable.
 	DeleteStoredFile(ctx context.Context, id string, now int64) error
 	ListExpiredStoredFiles(ctx context.Context, now int64) ([]StoredFile, error)
+	// ListReclaimableTaskObjects returns task-purpose Stored Objects (Phase
+	// 1D-A) that no delivery can legitimately read any more: unbound past the
+	// bind grace, bound to a task that no longer exists, or bound to a task that
+	// is terminal. bindGrace is in seconds.
+	ListReclaimableTaskObjects(ctx context.Context, now, bindGrace int64) ([]StoredFile, error)
+	// DeleteTaskObjectIfReclaimable re-evaluates that same condition under the
+	// writer lock and deletes the row, so a binding that landed between the list
+	// and the delete keeps its ciphertext. ok=false means the object became live
+	// again and the caller must NOT delete its blob.
+	DeleteTaskObjectIfReclaimable(ctx context.Context, id string, now, bindGrace int64) (bool, error)
 	IncDownloadCount(ctx context.Context, id string) error
 	// ClaimDownloadSlot atomically takes one of a file's remaining download
 	// slots: increments download_count only while download_count < max_downloads

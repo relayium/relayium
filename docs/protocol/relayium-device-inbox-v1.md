@@ -1,20 +1,27 @@
 # Relayium Device Inbox v1 — device identity, keys, capabilities, presence
 
-Status: **Phases 1A, 1B and 1C.** This document specifies device enrolment,
+Status: **Phases 1A, 1B, 1C and 1D-A.** This document specifies device enrolment,
 end-to-end public-key registration/rotation/revocation, capability negotiation
 and presence (§1-§10), the encrypted asynchronous task queue with its full
-server-visible state machine (§11-§18), and the obligations of a RECEIVING
-CLIENT (§19-§22). The web/native device UI (1D, 2, 3) is **not** specified here
-and is not implemented. Product source of truth: `DEVICE-INBOX-PRD.md` §6, §8,
-§9, §10, §11.
+server-visible state machine (§11-§18), the obligations of a RECEIVING
+CLIENT (§19-§23), and the SERVER half of the sender: the task-purpose opaque
+upload, its authorization boundaries, binding and cleanup (§24-§28).
+
+The web/native device UI — the Web sender (1D-B) and the native clients (2, 3) —
+is **not** specified here and is not implemented. Product source of truth:
+`DEVICE-INBOX-PRD.md` §6, §8, §9, §10, §11.
 
 Authoritative implementation: `server/internal/inbox/inbox.go` and
 `server/internal/inbox/task.go` (protocol vocabulary and the state machine),
 `server/account/deviceinbox.go` and `server/account/deviceinbox_task.go` (HTTP),
 `server/account/deviceinbox_store.go` and
 `server/account/deviceinbox_task_store.go` (storage),
-`server/internal/inboxclient/` and `server/cmd/relayium/inbox.go` (the CLI
-receiver). Any change here requires changing those and their tests together.
+`server/account/taskobject.go` with `server/account/files.go`,
+`server/account/uploads_resumable.go` and `server/account/gc.go` (the
+task-purpose object: purpose/binding vocabulary, the two upload paths, and the
+reclaim sweep), `server/internal/inboxclient/` and
+`server/cmd/relayium/inbox.go` (the CLI receiver). Any change here requires
+changing those and their tests together.
 
 ## 1. Invariants
 
@@ -346,17 +353,18 @@ same-account encrypted Stored Object (`stored_files`), and inherits from it:
   bounded by the account's existing plan limits, because the object was uploaded
   under them.
 
-A task never *owns* a blob. Deleting a task therefore cannot orphan one, and
+A task never *owns* a share. Deleting a task therefore cannot orphan one, and
 never destroys the download link the object still is. The reference must use an
 **unlimited-until-TTL** Stored Object (`max_downloads = 0`, not burn-after-read):
 a public-link read could otherwise spend the final slot and strand a supposedly
 reliable device delivery. Deleting the object explicitly before TTL atomically
 ends unfinished tasks as `failed_terminal`/`stored_object_unavailable`.
 
-**Not implemented in Phase 1B:** a task-owned opaque ciphertext upload (one
-object created for the queue alone, with no separate share link). It is a real
-part of the product model and is deferred to the sender-integration batch; the
-reference path above is the complete, shipped queue path today.
+**Status:** this by-reference path is unchanged and remains supported. The
+task-owned opaque upload it deferred — one object created for the queue alone,
+with no share link — is specified in **§24–§27 (Phase 1D-A)**. A task may
+therefore be backed by either kind of object, and §24 states exactly where the
+two behave differently.
 
 ## 13. State machine
 
@@ -737,3 +745,187 @@ Exactly one worker may run per state directory, enforced by an advisory file loc
 the kernel releases if the process dies. Central's claim tokens prevent two
 workers from corrupting a TASK, but nothing on the server can stop two local
 processes from racing on one directory.
+
+---
+
+# Phase 1D-A — the task-purpose opaque upload
+
+§12 delivers a task by REFERENCE: it points at a Stored Object the account
+already shared. That works, but it forces the sender to create a public
+capability link for a file it only ever wanted to put on its own laptop. This
+half specifies the other kind of object — ciphertext uploaded for ONE device
+delivery, with no link, which no unauthenticated reader can reach.
+
+Phase 1D-A is the SERVER half only: persistence, the upload paths, the
+authorization boundaries, binding and cleanup. The Web sender that drives it is
+Phase 1D-B.
+
+## 24. Two purposes, one object model
+
+Every `stored_files` row now carries an explicit `purpose`:
+
+| purpose | What it is | Public `meta`/`blob` | In `GET /api/files` | Bound to a task | Deleted with its task |
+|---|---|---|---|---|---|
+| `share` | The capability-link object; the only kind before this phase | yes | yes | never | no |
+| `device_task` | Ciphertext for one Device Inbox delivery | **no — 404** | **no** | exactly once | yes |
+
+The purpose is **persisted, not inferred**. Deriving "is this a delivery?" from
+the existence of a task elsewhere would make an object read as a public share
+during the window between its upload and its task — which is precisely the
+window in which a leaked id would be spent. A row that predates the column reads
+as `share`, which is what it has always been.
+
+Everything a `device_task` object shares with a share, it shares completely: node
+placement, the global disk cap, the daily upload quota (including the
+minimum-billable floor), the per-plan storage and traffic caps, `max_file_size`,
+the write cap, TTL clamping and the plan retention cap, lifetime upload/download
+stats, monthly metering, expiry, and the GC expiry sweep. No second quota is
+invented and none is skipped: the account pays for delivery ciphertext exactly as
+it pays for a share.
+
+What it never gains is capability-link semantics. `liveFile` — the single
+resolver behind both unauthenticated endpoints — refuses a non-`share` object, so
+`GET /api/files/{id}/meta` and `GET /api/files/{id}/blob` are `404` for
+**everyone, including the owner's own authenticated session**. That is not an
+oversight: those endpoints ARE the capability link, and a public surface with a
+second, owner-only behaviour would be a second surface to get wrong. The sender
+does not need them — its ciphertext reaches the device through the task blob
+endpoint. A `device_task` object is likewise absent from the account file list,
+spends no download slot, and cannot be reconciled by a fleet download receipt
+(central never issues a direct-download `302` for one, so a receipt naming its
+blob describes a transfer that never happened).
+
+## 25. Uploading one
+
+Both upload routes take `?purpose=device_task`:
+
+| Method | Path | Notes |
+|---|---|---|
+| `POST` | `/api/files?purpose=device_task` | Single-shot; body is `uint32BE(len) ‖ encManifest ‖ ciphertext` |
+| `POST` | `/api/uploads?purpose=device_task` | Resumable init; `PATCH`/`finalize`/status are unchanged |
+
+Both require `RequireAuth`. There is no unauthenticated way to create one, and
+no request shape that names another account.
+
+Two refusals, both `400`:
+
+- an **unknown purpose**. Unrecognised values are rejected rather than defaulted,
+  so a typo cannot silently produce a public share;
+- `burnAfterRead=1` or `maxDownloads>0` **together with** `purpose=device_task`.
+  The queue requires an unlimited-until-TTL object (§12), so limited retention is
+  a contradiction — refused by name rather than quietly rewritten into retention
+  the caller did not request.
+
+The deployment-wide DEFAULT retention policy is deliberately **not** applied to a
+task upload. That policy governs public shares; on a deployment defaulting to
+burn-after-read it would otherwise produce delivery objects the queue then
+refuses, for a reason the sender can neither see nor change. TTL resolution,
+clamping and the plan retention cap are identical for both purposes.
+
+A resumable session persists its purpose, because `finalize` may run on a
+different instance and must not re-derive an authorization-relevant decision from
+a query string it can no longer see.
+
+## 26. Binding
+
+`POST /api/devices/{id}/inbox/tasks` accepts either kind of object. For a
+`device_task` object it additionally **binds** it, inside the create's own
+transaction:
+
+- the object must belong to the caller's account (a cross-account
+  `storedFileId` is `stored_object_unavailable`, exactly as before — it never
+  discloses that the id exists);
+- it must be **unbound**. An already-bound object is `409`
+  `stored_object_already_bound`;
+- the binding is taken with a conditional `UPDATE … WHERE inbox_task_id = ''`,
+  so of two concurrent creates naming one object exactly one wins;
+- a partial `UNIQUE` index on `inbox_task_id` makes a second binding impossible
+  at the database level even if the application check were bypassed;
+- because it is the create's own transaction, a create that fails any later
+  check releases the binding with it. An object is never left owned by a task
+  that does not exist.
+
+**Idempotency, stated honestly.** A retried create carrying the SAME
+idempotency key converges on the task that already owns the object and returns
+`created: false` — the binding does not move. A DIFFERENT idempotency key naming
+a bound object is refused. Those are genuinely different requests: the second one
+asks to queue another delivery, and answering it with the first task's id would
+misreport what was queued and to which device. One ciphertext, one delivery; a
+second send is a second upload.
+
+A share is never bound. It may back several tasks, keeps its link, and no task
+owns it — the Phase 1B rule, unchanged.
+
+**Reading it back.** `GET …/inbox/tasks/{taskId}/blob` keeps every Phase 1B
+check (device-self, current claim token, live lease, non-terminal state, bounded
+resumable stream) and adds one: a `device_task` object serves **only the task it
+is bound to**. The check is applied at authorization time and again at the point
+bytes leave, so a task row repointed by any means still cannot borrow another
+delivery's ciphertext. Neither guard is load-bearing alone; a test proves the
+property fails only when BOTH are removed.
+
+## 27. Lifetime and cleanup
+
+A `device_task` object is invisible by design — no link, no file-list row, no
+public endpoint. That is exactly why it needs a sweeper: a share the user can see
+is a share the user can delete, and this one they cannot. Three conditions mean
+no legitimate reader remains, and GC reclaims the row and then the blob:
+
+1. **unbound past the bind grace** (one hour). The sender binds moments after the
+   upload finishes, so an object still unbound an hour later belongs to a send
+   that never happened. Inside the grace it is kept, because the create that
+   would bind it may be in flight;
+2. **bound to a task that no longer exists** — cancelled by the owner, cascaded
+   away with its device, or purged with the account. The task row was the only
+   route to the ciphertext;
+3. **bound to a task that is terminal** (`saved`, `expired`, `revoked`,
+   `failed_terminal`). None can transition or be claimed again, and the blob
+   endpoint only authorizes a live lease. The task ROW still survives its own
+   retention window, so the sender's UI can keep explaining what happened.
+
+The converse is the half that protects data: while a task exists and is
+non-terminal, the ciphertext is kept, however long that takes. A device that is
+offline, retrying, backing off or waiting on a person still has a delivery
+coming, and deleting under it would turn a slow transfer into a lost one.
+
+Two ordering rules, both deliberate:
+
+- the reclaim pass deletes the **row first**, under a statement that re-checks
+  the reclaim condition, and only then the blob. Unlike expiry, this condition
+  can go from true to false — a create may bind the object between the sweep's
+  list and its delete — so the conditional delete is what decides. The worst case
+  is a retryable orphan blob, never ciphertext destroyed under a live delivery;
+- `DELETE /api/devices/{id}/inbox/tasks/{taskId}` removes both rows atomically
+  and drops the blob immediately, so cancelling a send returns the quota at once
+  rather than at the next sweep. A share-backed task still deletes the task only.
+
+A blob whose node is unreachable goes onto the existing `pending_node_deletes`
+retry queue, the same as every other orphan; it is never silently dropped.
+
+Deleting the object directly (`DELETE /api/files/{id}`) remains available to its
+owner and keeps its Phase 1B cascade: unfinished referencing tasks become
+`expired` past TTL, or `failed_terminal`/`stored_object_unavailable` when the
+deletion is early.
+
+## 28. Storage (Phase 1D-A)
+
+Two columns on `stored_files`, both added by idempotent `ALTER` with a default,
+so the migration is safe on a live database:
+
+- `purpose TEXT NOT NULL DEFAULT 'share'`;
+- `inbox_task_id TEXT NOT NULL DEFAULT ''`.
+
+`UNIQUE(inbox_task_id) WHERE inbox_task_id <> ''` is the at-most-one-task
+guarantee; a partial index on `purpose = 'device_task'` serves the reclaim sweep
+without carrying every share in the table. `upload_sessions.purpose` carries the
+decision from init to finalize.
+
+Neither column can be a SQLite `CHECK`, because SQLite cannot add one by `ALTER`
+to an existing table. The corresponding invariants — a binding implies
+`device_task`, an unknown purpose is never written — are enforced in the store
+and asserted by test instead. Unknown persisted values also fail closed at both
+task creation and task-blob authorization: only an explicit `share`, or an
+explicit `device_task` bound to that exact task, can back a delivery. `purpose`
+is backfilled from empty to `share` on every boot rather than once, so a crash
+between the `ALTER` and the first write cannot leave rows with a purpose the
+public endpoints would refuse.

@@ -131,10 +131,13 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 	}
 
 	st := s.ResolveSettings(r.Context())
-	burn := r.URL.Query().Get("burnAfterRead") == "1"
-	reqTTL, _ := strconv.ParseInt(r.URL.Query().Get("ttl"), 10, 64)
-	reqMaxDL, _ := strconv.ParseInt(r.URL.Query().Get("maxDownloads"), 10, 64)
-	ttl, maxDL := resolveRetention(burn, reqTTL, reqMaxDL, st)
+	// Same resolution as the single-shot path, from the same helper: the two
+	// upload routes must not be able to disagree about what an object IS.
+	purpose, ttl, maxDL, okp := resolveUploadRetention(r.URL.Query(), st)
+	if !okp {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
 	if capSecs := s.planRetentionCap(r.Context(), u.ID); capSecs > 0 && ttl > capSecs {
 		ttl = capSecs
 	}
@@ -197,7 +200,7 @@ func (s *Service) handleUploadInit(w http.ResponseWriter, r *http.Request, u Use
 
 	row := UploadSessionRow{
 		ID: authx.NewID(), UserID: u.ID, BlobKey: authx.RandToken(), NodeID: nodeID, Billable: billable,
-		EncManifest: encManifest, TTL: ttl, MaxDL: maxDL,
+		EncManifest: encManifest, TTL: ttl, MaxDL: maxDL, Purpose: purpose,
 		MaxSize:   s.sessionWriteCap(r.Context(), u.ID, st.MaxFileSize, billable),
 		CreatedAt: s.now().Unix(),
 	}
@@ -444,7 +447,7 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 	sf := StoredFile{
 		ID: fid, UserID: u.ID, BlobKey: sess.BlobKey, EncManifest: sess.EncManifest,
 		Size: size, BurnAfterRead: sess.MaxDL == 1, CreatedAt: now, ExpiresAt: now + sess.TTL,
-		NodeID: sess.NodeID, MaxDownloads: sess.MaxDL,
+		NodeID: sess.NodeID, MaxDownloads: sess.MaxDL, Purpose: sess.Purpose,
 	}
 	// Atomic, fail-closed storage-cap enforcement + insert (see persistStoredFile).
 	switch reason, err := s.persistStoredFile(r.Context(), sf, sess.Billable); {

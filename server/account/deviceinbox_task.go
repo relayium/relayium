@@ -88,7 +88,11 @@ func (s *Service) handleInboxTaskBlob(w http.ResponseWriter, r *http.Request, u 
 		return
 	}
 	sf, err := s.store.GetStoredFile(r.Context(), task.StoredFileID)
-	if err != nil || sf.UserID != u.ID || sf.ExpiresAt <= s.now().Unix() || sf.MaxDownloads != 0 {
+	// storedObjectServesTask repeats the store's binding condition on the row
+	// actually about to be streamed. AuthorizeInboxTaskBlob already refused a
+	// mismatch, so this is defence in depth at the one place bytes leave.
+	if err != nil || sf.UserID != u.ID || sf.ExpiresAt <= s.now().Unix() || sf.MaxDownloads != 0 ||
+		!storedObjectServesTask(sf, task.ID) {
 		s.writeInboxTaskError(w, ErrStoredObjectUnavailable)
 		return
 	}
@@ -345,14 +349,20 @@ func (s *Service) handleGetInboxTask(w http.ResponseWriter, r *http.Request, u U
 
 // handleDeleteInboxTask cancels/removes one task.
 //
-// It deletes the task row only. The referenced Stored Object is the account's
-// own transfer, with its own link and its own delete control; destroying it here
-// would silently break a download link the user may still be sharing.
+// A task that merely REFERENCED a share deletes the task row only: the object
+// is the account's own transfer, with its own link and delete control, and
+// destroying it here would silently break a link the user may still be sharing.
+//
+// A task that OWNED its ciphertext (a Phase 1D-A task-purpose object) takes it
+// with it — cancelling the send is the only way that ciphertext was ever going
+// to be reachable, so keeping it would strand storage the user cannot see. The
+// store removes both rows atomically and hands back the object so its blob can
+// be dropped here; an unreachable node queues a retry rather than leaking.
 func (s *Service) handleDeleteInboxTask(w http.ResponseWriter, r *http.Request, u User) {
 	if _, ok := s.ownedInboxTask(w, r, u); !ok {
 		return
 	}
-	deleted, err := s.store.DeleteInboxTask(r.Context(), r.PathValue("taskId"), u.ID)
+	deleted, released, err := s.store.DeleteInboxTask(r.Context(), r.PathValue("taskId"), u.ID)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
@@ -360,6 +370,9 @@ func (s *Service) handleDeleteInboxTask(w http.ResponseWriter, r *http.Request, 
 	if !deleted {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
+	}
+	if released.ID != "" {
+		s.dropUploadBlob(r.Context(), released.NodeID, released.BlobKey)
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
@@ -593,6 +606,8 @@ func (s *Service) writeInboxTaskError(w http.ResponseWriter, err error) {
 		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "idempotency_key_conflict"})
 	case errors.Is(err, ErrStoredObjectUnavailable):
 		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "stored_object_unavailable"})
+	case errors.Is(err, ErrStoredObjectAlreadyBound):
+		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "stored_object_already_bound"})
 	case errors.Is(err, ErrInboxQueueFull):
 		httpx.WriteJSON(w, http.StatusTooManyRequests, map[string]any{
 			"error": "inbox_queue_full", "maxPendingTasks": inbox.MaxPendingTasksPerDevice,

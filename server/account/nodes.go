@@ -1005,6 +1005,15 @@ func (s *Service) handleDownloadReceipt(w http.ResponseWriter, r *http.Request) 
 		w.WriteHeader(http.StatusOK)
 		return
 	}
+	// Only a SHARE is ever handed to a node with a signed direct-download URL,
+	// so only a share can have been pre-metered and can owe a refund. A receipt
+	// naming a task-purpose blob describes a download central never authorized;
+	// honouring it would let a node credit an account for bytes nobody was
+	// charged for. ACK so the node stops retrying, reconcile nothing.
+	if sf.Purpose != StoredPurposeShare {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 	served := req.ServedBytes
 	if served < 0 {
 		served = 0
