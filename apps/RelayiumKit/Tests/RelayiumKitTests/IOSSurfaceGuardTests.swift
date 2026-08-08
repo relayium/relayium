@@ -2378,8 +2378,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
             "an unrelated account problem hides that joining still needs no account")
     }
 
-    /// The join field is a six-digit numeric one-time code, normalized on every
-    /// change.
+    /// The join field is a six-digit numeric one-time code, normalized in the
+    /// binding setter before every state write.
     ///
     /// Each clause is a real failure: the default keyboard makes a user hunt for
     /// the number row, no `oneTimeCode` content type means iOS never offers the
@@ -2400,6 +2400,11 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // But each MODEL normalizes its own text, so both are wired to it.
         XCTAssertEqual(view.text.components(separatedBy: "updateJoinCode(").count - 1, 2,
                        "both models must normalize on every change")
+        XCTAssertTrue(view.text.contains("let normalizedCode = Binding("))
+        XCTAssertTrue(view.text.contains("set: { normalize($0) }"))
+        XCTAssertTrue(view.text.contains("text: normalizedCode"))
+        XCTAssertFalse(view.text.contains(".onChange(of: code.wrappedValue)"),
+                       "a second state write can race fast typing or AutoFill")
         XCTAssertFalse(view.text.contains("Int("),
                        "a code is a string; an Int round trip would destroy 004291")
     }

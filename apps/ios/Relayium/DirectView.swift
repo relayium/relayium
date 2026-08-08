@@ -555,9 +555,9 @@ struct DirectView: View {
     /// normalization to drift, and the drift is silent: a field that works and
     /// one that eats a leading digit look identical. Each mode passes its own
     /// model's binding and its own `updateJoinCode`, so the text is normalized
-    /// on every keystroke — which is what keeps `1` typeable as a first digit,
-    /// because `normalizedPairingCode` filters the raw string rather than
-    /// parsing a number.
+    /// in the binding setter before state changes. A second asynchronous
+    /// `onChange` write can race fast typing, paste, or one-time-code AutoFill
+    /// and overwrite newer digits with an older partial value.
     ///
     /// Nothing in here reads the account. That is the point of the whole
     /// destination and it is enforced by `IOSSurfaceGuardTests`.
@@ -566,9 +566,13 @@ struct DirectView: View {
                           canJoin: Bool,
                           showsAnonymousNote: Bool,
                           action: @escaping () -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let normalizedCode = Binding(
+            get: { code.wrappedValue },
+            set: { normalize($0) }
+        )
+        return VStack(alignment: .leading, spacing: 12) {
             Text(L10n.t(.directReceiveHeading)).font(.headline)
-            TextField(L10n.t(.commonCode), text: code)
+            TextField(L10n.t(.commonCode), text: normalizedCode)
                 .textFieldStyle(.roundedBorder)
                 // A phone keyboard that opens on letters for a six-digit code
                 // makes the user hunt for the number row every time; without the
@@ -577,7 +581,6 @@ struct DirectView: View {
                 .keyboardType(.numberPad)
                 .textContentType(.oneTimeCode)
                 .font(.title3.monospaced())
-                .onChange(of: code.wrappedValue) { normalize($0) }
                 .accessibilityLabel(L10n.t(.commonCode))
             Button(action: action) {
                 Text(L10n.t(.commonJoin)).frame(maxWidth: .infinity)
