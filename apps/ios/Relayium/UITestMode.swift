@@ -34,6 +34,11 @@ enum UITestMode {
     /// below is answered entirely in process: no request leaves the device, no
     /// real credential exists, and the bearer is a literal that no server would
     /// accept.
+    /// Holds a chunk upload open so the in-flight surface can be driven.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let stallUploadArgument = "--relayium-ui-testing-stall-upload"
+    static let stallsUpload = ProcessInfo.processInfo.arguments.contains(stallUploadArgument)
+
     // nonlocalized: a test-only launch argument, absent from Release
     static let signedInArgument = "--relayium-ui-testing-signed-in"
     static let isSignedIn = ProcessInfo.processInfo.arguments.contains(signedInArgument)
@@ -127,6 +132,30 @@ enum UITestMode {
         )
     }
 
+
+    /// A staging root of this launch's own, emptied before use.
+    ///
+    /// A cancelled upload stays resumable by design, so its staged bytes outlive
+    /// the process — and therefore outlive the run. Without a root of its own an
+    /// acceptance launch inherits the interrupted job the previous run left, and
+    /// opens on Resume upload instead of a fresh selection. Same rule as the
+    /// keychain: isolating one store is not isolating the app.
+    static func pendingUploadRoot() -> URL? {
+        // Application Support, deliberately. `IOSSurfaceGuardTests` refuses
+        // temporaryDirectory, downloadsDirectory and cachesDirectory anywhere in
+        // these sources, because a received file must never land somewhere the
+        // system can purge or the user cannot find — and that guard reads the
+        // whole file, not just the receive path. A staging root has no business
+        // being an exception to it.
+        guard isActive,
+              let support = try? FileManager.default.url(
+                for: .applicationSupportDirectory, in: .userDomainMask,
+                appropriateFor: nil, create: true) else { return nil }
+        let root = support.appendingPathComponent("uitest-pending", isDirectory: true)
+        try? FileManager.default.removeItem(at: root)
+        return root
+    }
+
     /// The stored-link key store an acceptance launch may use.
     ///
     /// **This is the more consequential half of the keychain isolation.**
@@ -192,8 +221,12 @@ enum UITestMode {
     /// product keeps them.
     static func makeStoredLinkKeyStore() -> StoredLinkKeyStore? { nil }
 
+    /// nil, so a shipped launch always stages where the product stages.
+    static func pendingUploadRoot() -> URL? { nil }
+
     /// false, so a shipped launch can never be told it already holds an account.
     static let isSignedIn = false
+    static let stallsUpload = false
     /// false, so a shipped launch always mints a real code over the network.
     static let showsGeneratedTextCode = false
     static let showsTerminalText = false
@@ -316,6 +349,11 @@ final class UITestAccountTransport: URLProtocol {
             return (200, Data(#"{"id":"obj_uitest","expiresAt":4102444800}"#.utf8))
         }
         if method == "PATCH" {
+            // Held open, never answered, so the task stays in flight long enough
+            // for a person to press Cancel. `stopLoading` is what ends it, which
+            // is exactly what cancelling the upload triggers — so the product
+            // path under test is the real one.
+            if UITestMode.stallsUpload { Thread.sleep(forTimeInterval: 600) }
             let range = request.value(forHTTPHeaderField: "Content-Range") ?? ""
             let received = Self.receivedAfter(contentRange: range)
             return (200, Data("{\"received\":\(received)}".utf8))

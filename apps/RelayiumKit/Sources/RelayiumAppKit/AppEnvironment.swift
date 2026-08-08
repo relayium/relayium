@@ -399,8 +399,13 @@ public enum AppEnvironment {
     /// exactly how they would silently end up with two — which would still work
     /// (both address the same directory) right up until one gained an injected
     /// root and the other did not.
-    public static func makePendingUploadSupport(drafts: SharedDraftStore?) -> PendingUploadSupport {
-        PendingUploadSupport(store: PendingUploadStore(root: PendingUploadStore.defaultRoot()),
+    /// `root` exists so acceptance can stage into a directory of its own. The
+    /// staged job survives a launch by design — that is what makes a cancelled
+    /// upload resumable — which also means it survives from one acceptance run
+    /// into the next unless the runs are given separate roots.
+    public static func makePendingUploadSupport(drafts: SharedDraftStore?,
+                                                root: URL? = nil) -> PendingUploadSupport {
+        PendingUploadSupport(store: PendingUploadStore(root: root ?? PendingUploadStore.defaultRoot()),
                              keys: makePendingUploadKeyStore(),
                              drafts: drafts)
     }

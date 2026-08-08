@@ -810,4 +810,58 @@ final class AppShellUITests: XCTestCase {
                        "the previous result stayed on screen after Send another")
     }
 
+    /// Cancelling an upload in flight returns the task to the user, with nothing
+    /// half-finished left claiming to be a result.
+    ///
+    /// The fixture holds the chunk request open, so the surface under test is
+    /// the real in-flight one and Cancel ends the real request.
+    func testCancellingAnUploadInFlightReturnsTheTask() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pending-fixture",
+               "--relayium-ui-testing-stall-upload"]
+        app.launch()
+
+        openTask("Send", title: "Send files")
+        let chooser = app.buttons["Choose Files or Folders…"]
+        XCTAssertTrue(chooser.waitForExistence(timeout: 15))
+        scrollUntilHittable(chooser)
+        chooser.tap()
+        let browsingTabs = app.tabBars["DOC.browsingModeTabBar"]
+        XCTAssertTrue(browsingTabs.waitForExistence(timeout: 20))
+        browsingTabs.buttons["Browse"].tap()
+        tapInBrowser("On My iPhone")
+        tapInBrowser("Relayium")
+        tapStagedFixture(named: "Relayium product brief")
+        let open = app.buttons["Open"]
+        XCTAssertTrue(open.waitForExistence(timeout: 10))
+        open.tap()
+
+        let send = app.scrollViews.buttons["Send"].firstMatch
+        XCTAssertTrue(send.waitForExistence(timeout: 15))
+        scrollUntilHittable(send, maxSwipes: 10)
+        send.tap()
+
+        let cancel = app.scrollViews.buttons["Cancel"].firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 20),
+                      "an upload in flight cannot be cancelled")
+        // The in-flight surface replaces the page, so the control can sit above
+        // wherever the selection screen was scrolled to. Look upward first.
+        for _ in 0..<6 where !cancel.isHittable { app.swipeDown() }
+        scrollUntilHittable(cancel, maxSwipes: 10)
+        cancel.tap()
+
+        // Cancel does NOT throw the work away: the staged bytes are the user's
+        // own, so the task becomes resumable and discarding is a separate,
+        // explicit choice. What must not survive is a half-finished result
+        // pretending to be a link.
+        XCTAssertTrue(app.buttons["Resume upload"].waitForExistence(timeout: 20),
+                      "a cancelled upload cannot be resumed")
+        XCTAssertTrue(app.buttons["Discard saved copy"].exists,
+                      "a cancelled upload cannot be discarded either")
+        XCTAssertEqual(app.staticTexts.matching(NSPredicate(
+            format: "label CONTAINS %@", "#k=")).count, 0,
+            "a cancelled upload left a capability link on screen")
+    }
+
 }

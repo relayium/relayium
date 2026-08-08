@@ -1640,8 +1640,13 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// carries the separate prefix, never by reusing `keys`.
     func testThePendingUploadKeyIsAStoreOfItsOwn() throws {
         let app = try XCTUnwrap(try sources().first { $0.name == "RelayiumApp.swift" })
-        XCTAssertTrue(app.text.contains("AppEnvironment.makePendingUploadSupport(drafts: drafts)"),
+        // The factory, not an inline assembly. Its argument list is allowed to
+        // grow — acceptance passes a staging root of its own — so this asserts
+        // the call and the draft store it must carry, not the exact layout.
+        XCTAssertTrue(app.text.contains("AppEnvironment.makePendingUploadSupport("),
                       "durable recovery must be wired through the factory, not assembled inline")
+        XCTAssertTrue(app.text.contains("drafts: drafts"),
+                      "durable recovery no longer carries the shared draft store")
         // ONE shared-draft store, reaching both the model that adopts a draft
         // and the model that retires it once a job carrying it is durable. Two
         // would address the same directory and so would not fail — until one of
