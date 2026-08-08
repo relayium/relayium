@@ -1621,6 +1621,24 @@ final class MacSurfaceGuardTests: XCTestCase {
         }
     }
 
+    func testPairingJoinNormalizesAtomicallyInBothModes() throws {
+        for file in ["DirectPane.swift", "RealtimeTextPane.swift"] {
+            let source = try source(named: file)
+            XCTAssertTrue(source.contains("private var normalizedJoinCode: Binding<String>"))
+            XCTAssertTrue(source.contains("set: { model.updateJoinCode($0) }"))
+            XCTAssertTrue(source.contains("text: normalizedJoinCode"))
+            XCTAssertTrue(source.contains(".accessibilityIdentifier(\"pairing.joinCode\")"))
+            XCTAssertFalse(source.contains(".onChange(of: model.joinCode)"),
+                           "\(file) can overwrite fast input with an older partial value")
+        }
+        let uiURL = macRoot.deletingLastPathComponent()
+            .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
+        let ui = try String(contentsOf: uiURL, encoding: .utf8)
+        XCTAssertTrue(ui.contains("testPairingJoinKeepsACompleteCodeActionableInBothModes"))
+        XCTAssertTrue(ui.contains("[(\"Files\", \"123456\"), (\"Text\", \"654321\")]"))
+        XCTAssertTrue(ui.contains("window.textFields[\"pairing.joinCode\"]"))
+    }
+
     func testAccountSubmitSnapshotsTheWholeFormBeforeStartingAsyncWork() throws {
         let login = try source(named: "LoginView.swift")
         XCTAssertTrue(login.contains("let submitted = draft"))

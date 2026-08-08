@@ -363,6 +363,32 @@ final class AppShellUITests: XCTestCase {
                        "the cancelled pairing code remained on screen")
     }
 
+    /// Both pairing modes accept the same six-digit task. Fast entry must be
+    /// canonicalized once without an older partial value replacing later
+    /// digits, and the complete value must make Join actionable.
+    func testPairingJoinKeepsACompleteCodeActionableInBothModes() {
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let pairing = sidebarDestination("Pairing code", in: window)
+        XCTAssertTrue(pairing.waitForExistence(timeout: 10))
+        pairing.click()
+
+        for (mode, code) in [("Files", "123456"), ("Text", "654321")] {
+            let choice = window.radioButtons[mode]
+            XCTAssertTrue(choice.waitForExistence(timeout: 10))
+            choice.click()
+            let field = window.textFields["pairing.joinCode"]
+            XCTAssertTrue(field.waitForExistence(timeout: 10),
+                          "\(mode) has no pairing-code field")
+            field.click()
+            field.typeText(code)
+            XCTAssertEqual(field.value as? String, code,
+                           "\(mode) lost digits during fast entry")
+            XCTAssertTrue(window.buttons["Join"].isEnabled,
+                          "\(mode) cannot join with a complete code")
+        }
+    }
+
     /// A terminal task is not an invitation to start another one on top of it.
     /// Done is the explicit boundary that releases the old connection/history;
     /// only after it is pressed may Create and Join return.

@@ -170,6 +170,16 @@ struct DirectPane: View {
 
     // MARK: - join (needs nothing)
 
+    /// Normalize before the observed model changes. A second `onChange` write
+    /// can arrive after a newer fast-input value and replace it with an older
+    /// partial code.
+    private var normalizedJoinCode: Binding<String> {
+        Binding(
+            get: { model.joinCode },
+            set: { model.updateJoinCode($0) }
+        )
+    }
+
     /// **The one keyboard default on this destination**, and the choice is worth
     /// writing down because create and join sit on screen together: two
     /// `.defaultAction` buttons is an undefined Return, resolved by SwiftUI
@@ -186,12 +196,11 @@ struct DirectPane: View {
     private var joinCard: some View {
         SectionCard(title: L10n.t(.directReceiveHeading)) {
             HStack {
-                TextField(L10n.t(.commonCode), text: $model.joinCode)
+                TextField(L10n.t(.commonCode), text: normalizedJoinCode)
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 140)
-                    // Six digits, normalized on every keystroke by the model —
-                    // which is also what keeps a leading 1 typeable.
-                    .onChange(of: model.joinCode) { model.updateJoinCode($0) }
+                    .accessibilityLabel(L10n.t(.commonCode))
+                    .accessibilityIdentifier("pairing.joinCode")
                 Button(L10n.t(.commonJoin)) { join() }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)

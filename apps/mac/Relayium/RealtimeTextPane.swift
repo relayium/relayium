@@ -114,6 +114,15 @@ struct RealtimeTextPane: View {
 
     // MARK: - join (needs nothing)
 
+    /// Keep normalization in the Binding's one state transition. Following a
+    /// raw write with `onChange` can overwrite a newer paste or fast keystroke.
+    private var normalizedJoinCode: Binding<String> {
+        Binding(
+            get: { model.joinCode },
+            set: { model.updateJoinCode($0) }
+        )
+    }
+
     /// The one keyboard default in the text mode of this destination, chosen for
     /// the reason `DirectPane.joinCard` records at length: create and join are on
     /// screen together, so exactly one of them may own Return, and only join has
@@ -122,12 +131,11 @@ struct RealtimeTextPane: View {
     private var joinCard: some View {
         SectionCard(title: L10n.t(.textJoinHeading)) {
             HStack {
-                TextField(L10n.t(.commonCode), text: $model.joinCode)
+                TextField(L10n.t(.commonCode), text: normalizedJoinCode)
                     .textFieldStyle(.roundedBorder)
                     .frame(maxWidth: 140)
-                    // Six digits, normalized on every keystroke by the model —
-                    // which is also what keeps a leading 1 typeable.
-                    .onChange(of: model.joinCode) { model.updateJoinCode($0) }
+                    .accessibilityLabel(L10n.t(.commonCode))
+                    .accessibilityIdentifier("pairing.joinCode")
                 Button(L10n.t(.commonJoin)) { join() }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
