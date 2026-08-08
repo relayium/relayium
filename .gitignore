@@ -38,3 +38,7 @@ deploy/
 # either the repository root or a package working directory.
 .playwright-cli/
 .worktrees/
+# Screenshots a named Playwright session writes for one investigation. Same
+# category as the session directory above: evidence for a review, reproducible
+# from the wrapper, and specific to the machine that captured it.
+/output/
