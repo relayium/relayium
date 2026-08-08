@@ -626,4 +626,81 @@ final class AppShellUITests: XCTestCase {
                        "a signed-in stored send still offers the signed-out remedy")
     }
 
+
+    /// macOS mirrors a dialog's buttons onto the Touch Bar, so a bare
+    /// `app.buttons["Cancel"]` is ambiguous — the same limit batch 94 hit with
+    /// the open panel's Choose. Scope the dismissal to the sheet that owns it.
+    private func dismissConfirmation(in window: XCUIElement) {
+        let sheetCancel = window.sheets.buttons["Cancel"].firstMatch
+        if sheetCancel.waitForExistence(timeout: 5) { return sheetCancel.click() }
+        let anyCancel = app.buttons.matching(
+            NSPredicate(format: "label == %@", "Cancel")).firstMatch
+        XCTAssertTrue(anyCancel.waitForExistence(timeout: 5),
+                      "the destructive confirmation offers no way out")
+        anyCancel.click()
+    }
+
+    /// Both arms of the revoke confirmation, and the delete confirmation, in the
+    /// running Mac app.
+    ///
+    /// Revoking the credential in your hand signs this app out; revoking another
+    /// one does not. macOS built that sentence inline in the view rather than
+    /// asking the seam a test drives, so the rule existed twice and could be
+    /// corrected in one place while staying wrong here.
+    func testDestructiveConfirmationsNameTheirSubjectAndConsequence() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-signed-in"]
+        app.launch()
+        ensureProductWindowIsOpen()
+
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let account = sidebarDestination("Account", in: window)
+        XCTAssertTrue(account.waitForExistence(timeout: 10))
+        account.click()
+
+        let other = window.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "Kitchen laptop")).firstMatch
+        XCTAssertTrue(other.waitForExistence(timeout: 20),
+                      "no revoke action identifies the other device")
+        other.click()
+        XCTAssertTrue(app.staticTexts[
+            "That device will be signed out and will have to sign in again."
+        ].waitForExistence(timeout: 10),
+            "revoking another device claims the wrong consequence")
+        XCTAssertFalse(app.staticTexts[
+            "This is the device you're using. Revoking it signs this app out immediately."
+        ].exists, "revoking another device threatens to sign this one out")
+        dismissConfirmation(in: window)
+
+        let current = window.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "Studio Mac")).firstMatch
+        XCTAssertTrue(current.waitForExistence(timeout: 10),
+                      "cancelling the confirmation lost the device list")
+        current.click()
+        XCTAssertTrue(app.staticTexts[
+            "This is the device you're using. Revoking it signs this app out immediately."
+        ].waitForExistence(timeout: 10),
+            "revoking this device hides that it signs the app out")
+        dismissConfirmation(in: window)
+
+        // Deleting stored ciphertext is irreversible and takes the object away
+        // from everyone holding the link, so the dialog must say both.
+        let delete = window.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "obj_uitest")).firstMatch
+        XCTAssertTrue(delete.waitForExistence(timeout: 10),
+                      "no delete action identifies the stored object")
+        delete.click()
+        XCTAssertTrue(app.staticTexts["Delete this stored file?"]
+            .waitForExistence(timeout: 10),
+            "the delete confirmation does not say what it deletes")
+        XCTAssertTrue(app.staticTexts[
+            "The encrypted data is erased from the server. Anyone holding the link will get nothing. This cannot be undone."
+        ].exists, "the delete confirmation hides that it is irreversible")
+        dismissConfirmation(in: window)
+        XCTAssertTrue(window.staticTexts["obj_uitest"].waitForExistence(timeout: 10),
+                      "a cancelled delete did not leave the stored object alone")
+    }
+
 }

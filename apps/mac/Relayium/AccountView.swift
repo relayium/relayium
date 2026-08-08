@@ -123,8 +123,13 @@ struct AccountView: View {
             }
             Button(L10n.t(.commonCancel), role: .cancel) { deviceToRevoke = nil }
         } message: {
-            Text(L10n.t(deviceToRevoke?.current == true
-                        ? .accountRevokeThisMac : .accountRevokeOther))
+            // Through the tested seam, not re-derived here. Which consequence a
+            // revoke has is a rule with a test driving it in
+            // `AccountPresentation`; iOS has always asked it that way, and a
+            // second copy in this view is a rule that can be corrected in one
+            // place and stay wrong in the other.
+            Text(AccountPresentation.revokeConsequence(
+                current: deviceToRevoke?.current == true))
         }
         .confirmationDialog(
             L10n.t(.accountDeleteFileTitle),

@@ -49,6 +49,12 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(try source(named: "AccountView.swift").contains(
             "AccountPresentation.revokeActionLabel(for: device)"),
             "macOS revoke reads as the same word on every device row")
+        XCTAssertTrue(try source(named: "AccountView.swift").contains(
+            "AccountPresentation.revokeConsequence(") ,
+            "macOS re-derives the revoke consequence instead of asking the tested seam")
+        XCTAssertFalse(try source(named: "AccountView.swift").contains(
+            "? .accountRevokeThisMac : .accountRevokeOther"),
+            "the revoke consequence rule exists twice and can drift")
         XCTAssertEqual(try source(named: "AccountView.swift").components(
             separatedBy: "AccountPresentation.deleteActionLabel(fileId: row.file.id)").count - 1, 3,
             "a stored-file Delete arm reads as the same word on every row")

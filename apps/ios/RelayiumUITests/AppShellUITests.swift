@@ -455,4 +455,33 @@ final class AppShellUITests: XCTestCase {
                       "a cancelled revoke did not leave the list intact")
     }
 
+    /// Deleting stored ciphertext is irreversible and takes the object away from
+    /// everyone holding the link. The dialog must say both, and cancelling it
+    /// must leave the object alone.
+    func testDeleteConfirmationStatesWhatItErasesAndForWhom() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-signed-in"]
+        app.launch()
+        openTask("Account", title: "Account")
+
+        let delete = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "obj_uitest")).firstMatch
+        XCTAssertTrue(delete.waitForExistence(timeout: 20),
+                      "no delete action identifies the stored object")
+        scrollUntilHittable(delete)
+        delete.tap()
+
+        XCTAssertTrue(app.staticTexts["Delete this stored file?"]
+            .waitForExistence(timeout: 10),
+            "the delete confirmation does not say what it deletes")
+        XCTAssertTrue(app.staticTexts[
+            "The encrypted data is erased from the server. Anyone holding the link will get nothing. This cannot be undone."
+        ].exists, "the delete confirmation hides that it is irreversible")
+
+        dismissConfirmation()
+        XCTAssertTrue(app.staticTexts["obj_uitest"].waitForExistence(timeout: 10),
+                      "a cancelled delete did not leave the stored object alone")
+    }
+
 }
