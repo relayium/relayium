@@ -186,7 +186,15 @@ final class UITestAccountTransport: URLProtocol {
             {"ID":"dev_other","Name":"\(otherDeviceName)","CreatedAt":1740000000,
             "LastSeenAt":1754000000,"Kind":"cli","Current":false}]}
             """, as: DeviceListResponse.self)
-        offer("/api/files", #"{"files":[]}"#, as: StoredFileListResponse.self)
+        // One row, in the state a fresh launch is genuinely in: the key for an
+        // object uploaded from somewhere else was never on this device, so the
+        // link cannot be rebuilt here. That is the row's honest arm, and the one
+        // where no hand-off may be offered at all.
+        offer("/api/files", """
+            {"files":[{"id":"obj_uitest","size":1536,"createdAt":1754000000,
+            "expiresAt":0,"burnAfterRead":false,"downloaded":false,
+            "downloadCount":0}]}
+            """, as: StoredFileListResponse.self)
         return out
     }
 

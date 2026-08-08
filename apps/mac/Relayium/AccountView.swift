@@ -382,6 +382,11 @@ struct AccountView: View {
                     Spacer()
                     Button(L10n.t(.commonDelete), role: .destructive) { fileToDelete = row.file }
                         .disabled(management.isBusy(row: row.id))
+                        // One word on every row, like Revoke above: what has to
+                        // be heard is WHICH stored object this destroys. iOS has
+                        // named it since R3-D.
+                        .accessibilityLabel(
+                            AccountPresentation.deleteActionLabel(fileId: row.file.id))
                 }
             case .keyNotOnThisMac:
                 // The honest version of a disabled button: the key was only ever
@@ -390,10 +395,20 @@ struct AccountView: View {
                 // `.info` rather than `.warning`: nothing went wrong, and nothing
                 // here can be retried into working.
                 InlineMessage(.info, L10n.t(.accountKeyNotOnThisMac))
+                    // One explicit identity per row. A window-wide predicate
+                    // over every descendant times out on macOS — the same limit
+                    // batch 94 hit — and this also gives the explanation a
+                    // stable address for assistive technology.
+                    .accessibilityIdentifier("storedFile.keyAbsent.\(row.file.id)")
                 HStack {
                     Spacer()
                     Button(L10n.t(.commonDelete), role: .destructive) { fileToDelete = row.file }
                         .disabled(management.isBusy(row: row.id))
+                        // One word on every row, like Revoke above: what has to
+                        // be heard is WHICH stored object this destroys. iOS has
+                        // named it since R3-D.
+                        .accessibilityLabel(
+                            AccountPresentation.deleteActionLabel(fileId: row.file.id))
                 }
             case .keyLookupFailed(let message):
                 // Not the same statement as "you don't have the key": this one
@@ -404,6 +419,11 @@ struct AccountView: View {
                     Spacer()
                     Button(L10n.t(.commonDelete), role: .destructive) { fileToDelete = row.file }
                         .disabled(management.isBusy(row: row.id))
+                        // One word on every row, like Revoke above: what has to
+                        // be heard is WHICH stored object this destroys. iOS has
+                        // named it since R3-D.
+                        .accessibilityLabel(
+                            AccountPresentation.deleteActionLabel(fileId: row.file.id))
                 }
             }
 

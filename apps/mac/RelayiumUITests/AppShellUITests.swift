@@ -592,6 +592,30 @@ final class AppShellUITests: XCTestCase {
             NSPredicate(format: "label CONTAINS %@", "Kitchen laptop"))
         XCTAssertGreaterThan(revokes.count, 0,
                              "a revoke action does not identify the row it destroys")
+
+        // A stored object whose key never reached this device. The row must be
+        // identified, explained, and must offer NO link hand-off: a `#k=` link
+        // is the plaintext to anybody holding it, and this device cannot build
+        // one. A disabled-looking Copy would be a worse lie than saying so.
+        XCTAssertTrue(window.staticTexts["obj_uitest"].waitForExistence(timeout: 10),
+                      "the stored object is not identified by the id the server knows")
+        // XCUITest caps a string-identifier query at 128 characters, and this
+        // explanation is deliberately longer than that, so match its opening.
+        let keyAbsent = window.descendants(matching: .any)["storedFile.keyAbsent.obj_uitest"]
+            .firstMatch
+        XCTAssertTrue(keyAbsent.waitForExistence(timeout: 10),
+                      "a rebuildable-looking row does not explain why it is not")
+        // Delete IS offered and must be: removing the ciphertext needs no key.
+        // What must not exist is any way to hand the link on.
+        for handoff in ["Share the link for stored file", "Copy link", "Open"] {
+            XCTAssertEqual(window.buttons.matching(NSPredicate(
+                format: "label BEGINSWITH %@ AND label CONTAINS %@",
+                handoff, "obj_uitest")).count, 0,
+                "a row with no key still offers \(handoff)")
+        }
+        XCTAssertGreaterThan(window.buttons.matching(NSPredicate(
+            format: "label BEGINSWITH %@", "Delete stored file")).count, 0,
+            "a stored object that cannot be linked also cannot be removed")
         XCTAssertFalse(window.staticTexts["Welcome back"].exists,
                        "a signed-in launch still shows the sign-in form")
 

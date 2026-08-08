@@ -211,6 +211,30 @@ final class AppShellUITests: XCTestCase {
         XCTAssertGreaterThan(revokes.count, 0,
                              "a revoke action does not identify the row it destroys")
 
+        // A stored object whose key never reached this device. The row must be
+        // identified, explained, and must offer NO link hand-off: a `#k=` link
+        // is the plaintext to anybody holding it, and this device cannot build
+        // one. A disabled-looking Copy would be a worse lie than saying so.
+        XCTAssertTrue(app.staticTexts["obj_uitest"].waitForExistence(timeout: 10),
+                      "the stored object is not identified by the id the server knows")
+        // XCUITest caps a string-identifier query at 128 characters, and this
+        // explanation is deliberately longer than that, so match its opening.
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(
+            format: "label BEGINSWITH %@",
+            "The key for this file isn't on this device")).firstMatch.exists,
+            "a rebuildable-looking row does not explain why it is not")
+        // Delete IS offered and must be: removing the ciphertext needs no key.
+        // What must not exist is any way to hand the link on.
+        for handoff in ["Share the link for stored file", "Copy link", "Open"] {
+            XCTAssertEqual(app.buttons.matching(NSPredicate(
+                format: "label BEGINSWITH %@ AND label CONTAINS %@",
+                handoff, "obj_uitest")).count, 0,
+                "a row with no key still offers \(handoff)")
+        }
+        XCTAssertGreaterThan(app.buttons.matching(NSPredicate(
+            format: "label BEGINSWITH %@", "Delete stored file")).count, 0,
+            "a stored object that cannot be linked also cannot be removed")
+
         openTask("Send", title: "Send files")
         XCTAssertFalse(app.buttons["Go to Account"].exists,
                        "a signed-in Send task still offers the signed-out remedy")

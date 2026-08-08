@@ -49,6 +49,12 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(try source(named: "AccountView.swift").contains(
             "AccountPresentation.revokeActionLabel(for: device)"),
             "macOS revoke reads as the same word on every device row")
+        XCTAssertEqual(try source(named: "AccountView.swift").components(
+            separatedBy: "AccountPresentation.deleteActionLabel(fileId: row.file.id)").count - 1, 3,
+            "a stored-file Delete arm reads as the same word on every row")
+        XCTAssertTrue(try source(named: "AccountView.swift").contains(
+            #"storedFile.keyAbsent.\(row.file.id)"#),
+            "the key-absent explanation has no stable per-row identity")
 
         let uiURL = macRoot.deletingLastPathComponent()
             .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
