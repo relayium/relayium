@@ -751,4 +751,42 @@ final class AppShellUITests: XCTestCase {
                       "a signed-out stored send no longer offers its account remedy")
     }
 
+    /// Correcting the field clears the refusal with it.
+    ///
+    /// The malformed-link path proves the refusal explains itself and leaves the
+    /// field editable. It does not prove the refusal is not STICKY: guidance
+    /// that outlives the input it described sits beside corrected text telling
+    /// the user they are still wrong.
+    func testCorrectingARefusedStoredLinkClearsTheRefusalWithIt() {
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let receive = sidebarDestination("Open a link", in: window)
+        XCTAssertTrue(receive.waitForExistence(timeout: 10))
+        receive.click()
+
+        let link = window.textFields["receive.link"]
+        XCTAssertTrue(link.waitForExistence(timeout: 10),
+                      "Open a link has no link field")
+        link.click()
+        link.typeText("not a link")
+        window.buttons["Open"].firstMatch.click()
+
+        let guidance = window.staticTexts[
+            "That doesn't look like a Relayium link. It should look like https://relayium.com/d/…#k=…"
+        ]
+        XCTAssertTrue(guidance.waitForExistence(timeout: 10),
+                      "an invalid link does not explain the required shape")
+
+        // Re-resolve: SwiftUI rebuilds the field around the refusal, so the
+        // handle captured before it is stale.
+        let corrected = window.textFields["receive.link"]
+        XCTAssertTrue(corrected.waitForExistence(timeout: 10))
+        corrected.click()
+        app.typeKey("a", modifierFlags: .command)
+        app.typeKey(.delete, modifierFlags: [])
+
+        XCTAssertFalse(guidance.waitForExistence(timeout: 3),
+                       "the refusal outlived the input it described")
+    }
+
 }

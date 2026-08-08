@@ -581,6 +581,34 @@ final class CloudDownloadRecoveryTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: XCTUnwrap(urls.first)), Data([1, 2, 3]))
         XCTAssertFalse(requests.requests.contains { $0.url?.path.contains("busy-second") == true })
     }
+    /// A refusal produced by PARSING the link describes text that no longer
+    /// exists once the user edits it. Leaving it on screen puts stale guidance
+    /// beside corrected input, telling the user they are still wrong.
+    @MainActor
+    func testEditingTheLinkClearsAParseRefusalButKeepsARetryableFailure() async {
+        let download = CloudDownloadModel(
+            client: CloudClient(baseURL: URL(string: "https://example.invalid")!,
+                                session: StubURLProtocol.session()))
+        download.linkText = "not a link"
+        download.resolve()
+        guard case .failed = download.state else {
+            return XCTFail("a malformed link was not refused")
+        }
+
+        download.linkText = "not a lin"
+        XCTAssertEqual(download.state, DownloadState.idle,
+                       "the parse refusal outlived the text it described")
+
+        // A failure the user could retry is about the transfer, not the string,
+        // so it keeps its recovery rather than being erased by a keystroke.
+        download.linkText = "still not a link"
+        download.resolve()
+        guard case .failed = download.state else {
+            return XCTFail("a malformed link was not refused")
+        }
+        XCTAssertEqual(download.recovery, DownloadRecovery.none,
+                       "a parse refusal must arm no retry")
+    }
 }
 
 /// Counts attempts from URLSession's own thread, where a captured `var` would be
@@ -600,4 +628,5 @@ final class AttemptCounter: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         return value
     }
+
 }

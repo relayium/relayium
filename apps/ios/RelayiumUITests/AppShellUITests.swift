@@ -722,4 +722,35 @@ final class AppShellUITests: XCTestCase {
                       "the identified stored send cannot be cleared")
     }
 
+    /// Correcting the field clears the refusal with it.
+    ///
+    /// The malformed-link path already proves the refusal explains itself and
+    /// leaves the field editable. What it does not prove is that the refusal is
+    /// not STICKY: guidance that outlives the input it described sits next to
+    /// corrected text telling the user they are still wrong.
+    func testCorrectingARefusedLinkClearsTheRefusalWithIt() {
+        openTask("Receive", title: "Receive files")
+
+        let link = app.textFields["receive.link"]
+        XCTAssertTrue(link.waitForExistence(timeout: 10))
+        let open = app.buttons["Open"]
+        link.tap()
+        link.typeText("not a link")
+        open.tap()
+
+        let guidance = app.staticTexts[
+            "That doesn't look like a Relayium link. It should look like https://relayium.com/d/…#k=…"
+        ]
+        XCTAssertTrue(guidance.waitForExistence(timeout: 10),
+                      "an invalid link does not explain the required shape")
+
+        link.tap()
+        link.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 12))
+
+        XCTAssertFalse(open.isEnabled,
+                       "an empty link can still be opened after a refusal")
+        XCTAssertFalse(guidance.exists,
+                       "the refusal outlived the input it described")
+    }
+
 }

@@ -108,7 +108,20 @@ enum DownloadPhase: Equatable {
 @MainActor
 public final class CloudDownloadModel: ObservableObject {
     @Published public private(set) var state: DownloadState = .idle
-    @Published public var linkText: String = ""
+    /// Editing the link clears a refusal that was ABOUT the link.
+    ///
+    /// A malformed-link failure describes the exact string that produced it, so
+    /// once that string changes the message is stale — and stale guidance beside
+    /// corrected input tells the user they are still wrong when they are not. A
+    /// failure the user could RETRY is about the transfer rather than the text
+    /// and keeps its recovery, which is what `recovery == .none` distinguishes:
+    /// only a parse refusal arms no retry.
+    @Published public var linkText: String = "" {
+        didSet {
+            guard linkText != oldValue else { return }
+            if case .failed = state, recovery == .none { state = .idle }
+        }
+    }
     /// The directory this download created, if it created one. See
     /// `RealtimeSessionModel.receivedContainer` for why it is not folded into
     /// the state case.
