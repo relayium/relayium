@@ -816,4 +816,55 @@ final class AppShellUITests: XCTestCase {
                        "the refusal outlived the input it described")
     }
 
+    /// A signed-in stored send identifies what it is about to upload, before any
+    /// expiry choice or Send action is made.
+    ///
+    /// Send a link is account-gated, so this destination was unreachable from
+    /// acceptance until the signed-in fixture existed — every earlier
+    /// pending-file path used the anonymous Nearby surface instead.
+    func testASignedInStoredSendNamesTheFileItWouldUpload() throws {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments + ["--relayium-ui-testing-signed-in"]
+        app.launch()
+        ensureProductWindowIsOpen()
+
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let send = sidebarDestination("Send a link", in: window)
+        XCTAssertTrue(send.waitForExistence(timeout: 10))
+        send.click()
+        XCTAssertFalse(window.buttons["Sign in"].exists,
+                       "a signed-in stored send still offers the signed-out remedy")
+
+        let fixture = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Relayium product brief \(UUID().uuidString).txt")
+        try Data(repeating: 0x52, count: 1_536).write(to: fixture, options: .atomic)
+        pendingFileFixture = fixture
+
+        let chooser = window.descendants(matching: .any)["Files to send"].firstMatch
+        XCTAssertTrue(chooser.waitForExistence(timeout: 10),
+                      "a signed-in stored send has no file-selection surface")
+        chooser.click()
+
+        app.typeKey("g", modifierFlags: [.command, .shift])
+        let location = app.textFields.firstMatch
+        XCTAssertTrue(location.waitForExistence(timeout: 10),
+                      "the system picker did not expose Go to Folder")
+        location.typeText(fixture.path)
+        app.typeKey(.return, modifierFlags: [])
+
+        let choose = app.dialogs["open-panel"].buttons["OKButton"]
+        XCTAssertTrue(choose.waitForExistence(timeout: 10),
+                      "the system picker has no confirmation action")
+        choose.click()
+
+        let identity = window.descendants(matching: .any)["pendingFile.0"].firstMatch
+        XCTAssertTrue(identity.waitForExistence(timeout: 10),
+                      "the stored send did not expose what it would upload")
+        XCTAssertTrue(identity.label.contains(fixture.lastPathComponent),
+                      "the stored send shortened or omitted the file name")
+        XCTAssertTrue(identity.label.contains("1.5 KB"),
+                      "the stored send omitted the formatted file size")
+    }
+
 }
