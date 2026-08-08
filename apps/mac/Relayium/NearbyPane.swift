@@ -204,7 +204,10 @@ struct NearbyPane: View {
             // false on the platform that gained this surface — and a user told
             // to look in a folder that does not exist is worse off than one who
             // was told nothing.
-            if !discovery.isPaused {
+            // The same claim as the explanation above, so it follows the same
+            // rendered state rather than the pause flag: an off listener was
+            // still promising a Downloads delivery it could not make.
+            if !(receive.state == .paused || receive.state == .off) {
                 Text(L10n.t(.nearbySavedToDownloads))
                     .font(.caption)
                     .foregroundStyle(.secondary)

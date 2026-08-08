@@ -135,6 +135,34 @@ final class IOSSurfaceGuardTests: XCTestCase {
             "stored upload lost file identities in a running or terminal state")
     }
 
+    /// The status line has always come from `receive.state`, but the explanation
+    /// and the Pause/Resume control came from `residency.isPaused` — a different
+    /// question. `.off` while the user has paused nothing is reachable: any
+    /// destination failure returns before discovery starts, and `resume` on a
+    /// non-resident model lands there too. In that state the card claimed to be
+    /// listening, named where incoming files land, and offered to pause a
+    /// listener that is already off. One source, as on macOS.
+    func testNearbyOffStateOffersOneTruthfulRecovery() throws {
+        let all = try sources()
+        let nearby = try XCTUnwrap(all.first { $0.name == "NearbyView.swift" }?.text)
+        XCTAssertTrue(nearby.contains("switch receive.state"),
+                      "the receiving control is not derived from the rendered state")
+        XCTAssertTrue(nearby.contains("case .connecting, .ready, .reconnecting, .active:"),
+                      "the states that can actually be paused are not stated together")
+        XCTAssertTrue(nearby.contains("receive.state == .paused || receive.state == .off"),
+                      "the explanation still answers a different question than the status")
+        XCTAssertFalse(nearby.contains("L10n.t(residency.isPaused ? .nearbyPausedBody"),
+                       "the explanation is still derived from the pause flag")
+
+        let uiURL = appsRoot.appendingPathComponent(
+            "ios/RelayiumUITests/AppShellUITests.swift")
+        let ui = try String(contentsOf: uiURL, encoding: .utf8)
+        XCTAssertTrue(ui.contains("testStoppedNearbyReceivingAsksForActionWithoutPretendingToWork"),
+                      "no runtime path drives the off state")
+        XCTAssertTrue(ui.contains("app.buttons[\"Pause receiving\"].exists"))
+        XCTAssertTrue(ui.contains("app.buttons[\"Resume receiving\"].exists"))
+    }
+
     /// A pending row answers "what am I about to send?" for someone who cannot
     /// see it, and it is what runtime acceptance binds to. Leaving both to
     /// `.accessibilityElement(children: .combine)` makes the spoken identity a

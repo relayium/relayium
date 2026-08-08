@@ -23,6 +23,18 @@ enum UITestMode {
     static let stagesPendingFixture = ProcessInfo.processInfo.arguments.contains(
         pendingFixtureArgument)
 
+    /// Holds Nearby in the state a destination failure leaves behind: off,
+    /// with no pause anywhere.
+    ///
+    /// It asks the launch to skip both the pause the other acceptance paths
+    /// take and the residency a shipped launch starts — which is not a fourth
+    /// state invented for a test, but exactly the one a model that never became
+    /// resident is already in.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let offReceivingArgument = "--relayium-ui-testing-off-receiving"
+    static let showsOffReceiving = ProcessInfo.processInfo.arguments.contains(
+        offReceivingArgument)
+
     /// 1,536 bytes, so the size the row must render is an exact, unambiguous
     /// `1.5 KB` rather than a value that depends on rounding.
     static let pendingFixtureName = "Relayium product brief.txt" // nonlocalized: a test fixture
@@ -40,6 +52,9 @@ enum UITestMode {
     }
     #else
     static let isActive = false
+    /// Folded to a constant, so a shipped launch always takes the residency
+    /// branch and no argument can hold this device out of the room.
+    static let showsOffReceiving = false
 
     /// In Release the whole idea is absent: the optimiser folds this to an
     /// empty call, and no argument can reach the container.

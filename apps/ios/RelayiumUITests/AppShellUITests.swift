@@ -177,6 +177,42 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(open.exists, "an invalid link leaves no way to try the correction")
     }
 
+    /// The off state a destination failure leaves behind — never resident,
+    /// never paused — rendered by the running app.
+    ///
+    /// The card used to take its status from `receive.state` and everything
+    /// else from `residency.isPaused`, so this state read as: off, but still
+    /// listening, files will be saved here, and here is a Pause button for the
+    /// listener that is already off. Look again, in the roster below, is the
+    /// one recovery that matches it.
+    func testStoppedNearbyReceivingAsksForActionWithoutPretendingToWork() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-off-receiving"]
+        app.launch()
+
+        openTask("Nearby", title: "Nearby")
+
+        XCTAssertTrue(app.staticTexts["Nearby receiving: off"].waitForExistence(timeout: 10),
+                      "the stopped listener does not report itself as off")
+        XCTAssertTrue(app.staticTexts[
+            "This device is not listening for nearby devices. It can still send, and pairing codes still work."
+        ].exists, "the off state claims this device is still listening")
+        XCTAssertFalse(app.staticTexts[
+            "Incoming files are saved in Relayium's own folder, which you can open in the Files app."
+        ].exists, "an off listener still promises to deliver an incoming file")
+        XCTAssertFalse(app.buttons["Pause receiving"].exists,
+                       "an off listener offers the contradictory action to pause")
+        XCTAssertFalse(app.buttons["Resume receiving"].exists,
+                       "an off listener offers to undo a pause nobody took")
+
+        let lookAgain = app.buttons["Look again"]
+        XCTAssertTrue(lookAgain.waitForExistence(timeout: 10),
+                      "the off state leaves no recovery at all")
+        scrollUntilHittable(lookAgain)
+        XCTAssertTrue(lookAgain.isEnabled)
+    }
+
     /// The system document browser is presented as a remote view inside the
     /// app's own element tree, not as a separate `DocumentManagerUICore`
     /// process, so every step below addresses `app`.

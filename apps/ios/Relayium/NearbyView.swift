@@ -241,6 +241,17 @@ struct NearbyView: View {
     /// so this section's job is to say so plainly — including the part that is
     /// uncomfortable. A transfer the user has to discover by finding a file is
     /// worse than one they were told about.
+    /// One question, asked of the state that is actually on screen: is this
+    /// device listening right now?
+    ///
+    /// `residency.isPaused` answers a different one — whether the user turned
+    /// receiving off — and the two disagree. A destination failure returns
+    /// before discovery ever starts, and `resume` on a model that was never
+    /// resident lands in the same place: off, with no pause anywhere.
+    private var isListening: Bool {
+        !(receive.state == .paused || receive.state == .off)
+    }
+
     @ViewBuilder
     private var receiving: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -250,30 +261,38 @@ struct NearbyView: View {
             // The default is no prompt, by the same decision that made advanced
             // verification opt-in. Stating the consequence is not a
             // contradiction of that decision; hiding it would be.
-            Text(L10n.t(residency.isPaused ? .nearbyPausedBody : .nearbyListeningBody))
+            Text(L10n.t(isListening ? .nearbyListeningBody : .nearbyPausedBody))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            if !residency.isPaused {
+            if isListening {
                 // Where an unsolicited file lands, and it is the place this
                 // platform actually has: the app's own folder, published to the
                 // Files app. The Mac's sentence names Downloads, which is a
                 // folder no iOS app has — which is why the location is its own
-                // key rather than part of the paragraph above.
+                // key rather than part of the paragraph above. It is a promise
+                // about delivery, so it is made only while delivery can happen.
                 Text(L10n.t(.nearbySavedToAppFolder))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if residency.isPaused {
+            switch receive.state {
+            case .paused:
                 Button(L10n.t(.nearbyResumeReceiving)) { residency.resume() }
                     .buttonStyle(.bordered)
                     .controlSize(.large)
-            } else {
+            case .connecting, .ready, .reconnecting, .active:
                 Button(L10n.t(.nearbyPauseReceiving)) { residency.pause() }
                     .buttonStyle(.bordered)
                     .controlSize(.large)
                     .disabled(busy)
+            case .off:
+                // Look again, in the roster below, is the one recovery that
+                // matches an off listener. Offering Pause here would be an
+                // action against a state that already holds, and Resume would
+                // undo a pause nobody took.
+                EmptyView()
             }
             // The folder could not be resolved, so this device is deliberately
             // NOT in the room. Retryable, because the cause is something in the

@@ -30,6 +30,19 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(nearby.contains("case .off:"))
         XCTAssertTrue(nearby.contains("case .connecting, .ready, .reconnecting, .active:"))
         XCTAssertTrue(nearby.contains("receive.state == .paused || receive.state == .off"))
+        // The sentence naming where an incoming file lands is the same claim as
+        // the explanation above it, so it follows the same rendered state. Left
+        // on the pause flag it kept promising a Downloads delivery to a listener
+        // that is off — a smaller version of the contradiction this test exists
+        // for. Scope this to the sentence's own condition: the roster's
+        // separate `else if !discovery.isPaused` is a different question, and a
+        // whole-file search for that text would fail on it.
+        let delivery = try XCTUnwrap(nearby.range(of: "nearbySavedToDownloads"))
+        let condition = String(nearby[..<delivery.lowerBound].suffix(220))
+        XCTAssertTrue(condition.contains("if !(receive.state == .paused || receive.state == .off) {"),
+                      "the delivery sentence is not gated on the rendered state")
+        XCTAssertFalse(condition.contains("discovery.isPaused"),
+                       "the delivery sentence is still gated on the pause flag")
         let uiURL = macRoot.deletingLastPathComponent()
             .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
         let ui = try String(contentsOf: uiURL, encoding: .utf8)

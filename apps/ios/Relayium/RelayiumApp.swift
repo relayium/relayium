@@ -366,7 +366,12 @@ struct RelayiumApp: App {
                 .task {
                     // Before anything can be chosen, and a no-op in Release.
                     UITestMode.stagePendingFixture()
-                    if UITestMode.isActive {
+                    if UITestMode.showsOffReceiving {
+                        // Neither. This is the off state a destination failure
+                        // leaves behind — never resident, never paused — and
+                        // the one the receiving card used to describe as a
+                        // listener it could offer to pause.
+                    } else if UITestMode.isActive {
                         // Keep the acceptance UI internally coherent as well
                         // as offline: the status, explanation and action all
                         // describe a deliberate pause instead of an unstarted

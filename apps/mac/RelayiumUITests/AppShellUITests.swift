@@ -157,6 +157,9 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(window.staticTexts[
             "This device is not listening for nearby devices. It can still send, and pairing codes still work."
         ].exists, "the off state claims this Mac is still listening")
+        XCTAssertFalse(window.staticTexts[
+            "Incoming files are written to your Downloads folder."
+        ].exists, "an off listener still promises to deliver an incoming file")
     }
 
     /// A count is not the identity of a send. Drive a real file through the
