@@ -1,5 +1,6 @@
 import PhotosUI
 import SwiftUI
+import UIKit
 import UniformTypeIdentifiers
 import RelayiumAppKit
 
@@ -32,6 +33,9 @@ struct SendView: View {
     /// The Photos picker's binding, reset to empty immediately after each
     /// capture so choosing the SAME items again is a change again.
     @State private var picked: [PhotosPickerItem] = []
+    /// Feedback only. The capability link itself remains owned by the upload
+    /// model and never gains a second lifetime in SwiftUI state.
+    @State private var copiedGeneratedLink = false
 
     var body: some View {
         NavigationStack {
@@ -459,20 +463,30 @@ struct SendView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            // Selectable text and `ShareLink`, never a pasteboard write: an app
-            // that puts things on the clipboard behind the user's back is doing
-            // the thing this product promises not to do, and iOS would raise its
-            // paste notification for it besides.
+            // Visible first, then explicit hand-off choices. Copy is a
+            // user-initiated write; the app still never reads the pasteboard or
+            // writes this credential automatically.
             Text(link)
                 .textSelection(.enabled)
                 // This capability URL is the upload result and contains the
                 // only server-absent decryption key. Keep the whole value
                 // inspectable before the user hands it to another person.
                 .fixedSize(horizontal: false, vertical: true)
-            ShareLink(item: link) {
-                Text(L10n.t(.commonShare)).frame(maxWidth: .infinity)
+            HStack {
+                Button {
+                    UIPasteboard.general.string = link
+                    copiedGeneratedLink = true
+                } label: {
+                    Label(L10n.t(copiedGeneratedLink ? .commonCopied : .commonCopy),
+                          systemImage: copiedGeneratedLink ? "checkmark" : "doc.on.doc")
+                        .frame(maxWidth: .infinity)
+                }
+                ShareLink(item: link) {
+                    Label(L10n.t(.commonShare), systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity)
+                }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.bordered)
             .controlSize(.large)
             Text(L10n.t(.commonExpires, [
                 L10n.date(Date(timeIntervalSince1970: TimeInterval(expiresAt)),
@@ -483,10 +497,14 @@ struct SendView: View {
             // Same reason as Discard above: after a sent shared draft there is
             // no selection to go back to, and after an ordinary send there is.
             // The send model owns which.
-            Button(L10n.t(.uploadSendAnother)) { selection.resetUpload() }
+            Button(L10n.t(.uploadSendAnother)) {
+                copiedGeneratedLink = false
+                selection.resetUpload()
+            }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
         }
+        .onChange(of: link) { _ in copiedGeneratedLink = false }
     }
 
     private func failure(_ text: String) -> some View {
@@ -546,6 +564,7 @@ struct SendView: View {
             upload.fail(L10n.t(.errorCloudUnauthorized))
             return
         }
+        copiedGeneratedLink = false
         upload.start(token: token)
     }
 }

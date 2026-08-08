@@ -408,6 +408,12 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(sendAnother.contains(".controlSize(.large)"))
         XCTAssertTrue(completed.contains("Text(link)"))
         XCTAssertTrue(completed.contains(".fixedSize(horizontal: false, vertical: true)"))
+        XCTAssertTrue(completed.contains("UIPasteboard.general.string = link"),
+                      "the generated capability has no explicit Copy action")
+        XCTAssertTrue(completed.contains("copiedGeneratedLink ? .commonCopied : .commonCopy"),
+                      "Copy provides no acknowledgement for the generated link")
+        XCTAssertTrue(completed.contains("ShareLink(item: link)"),
+                      "Copy replaced rather than supplemented system Share")
         XCTAssertFalse(completed.contains(".lineLimit(1)"),
                        "the stored capability result is visually truncated")
 
@@ -2028,14 +2034,12 @@ final class IOSSurfaceGuardTests: XCTestCase {
         }
     }
 
-    /// The rebuilt link leaves through the share sheet the user opened, and the
-    /// three key states are decided in the tested seam.
+    /// A rebuilt link has the same explicit Copy and Share hand-off as a newly
+    /// generated one, and the three key states are decided in the tested seam.
     ///
-    /// A `#k=` fragment IS the plaintext. Writing one to `UIPasteboard` on the
-    /// app's own initiative would hand it to every app on the device and raise
-    /// iOS's own paste notification besides — which is why the pasteboard stays
-    /// on the deferred-symbol list rather than becoming this slice's affordance.
-    func testTheRebuiltLinkGoesOutThroughTheSystemShareSheetOnly() throws {
+    /// A `#k=` fragment IS the plaintext, so it may be written only by the
+    /// explicit row-scoped Copy action and is never retained in feedback state.
+    func testTheRebuiltLinkHasExplicitCredentialMinimizingHandoff() throws {
         let summary = try XCTUnwrap(try sources().first { $0.name == "AccountSummaryView.swift" })
         XCTAssertTrue(summary.text.contains("AccountPresentation.link(for: row.link)"),
                       "which of the three states a row is in belongs in the tested seam")
@@ -2043,6 +2047,10 @@ final class IOSSurfaceGuardTests: XCTestCase {
                       "the link must leave through the platform's hand-off")
         XCTAssertEqual(summary.text.components(separatedBy: "ShareLink(").count - 1, 1,
                        "one share affordance, in the one arm that has a link")
+        XCTAssertTrue(summary.text.contains("UIPasteboard.general.string = link"))
+        XCTAssertTrue(summary.text.contains("copiedStoredFileID = row.id"))
+        XCTAssertTrue(summary.text.contains("AccountPresentation.copyActionLabel("))
+        XCTAssertTrue(summary.text.contains("AccountPresentation.retainedCopiedFileID("))
         // Both unavailable states are rendered, and rendered differently: one is
         // permanent from this device, the other may be one unlock away.
         for arm in ["case .unavailable(let explanation):", "case .lookupFailed(let explanation):"] {
@@ -2585,11 +2593,14 @@ final class IOSSurfaceGuardTests: XCTestCase {
     func testThePasteboardIsWrittenOnlyInsideAnExplicitCopyActionAndNeverRead() throws {
         let all = try sources()
         let holders = all.filter { $0.text.contains("UIPasteboard") }.map(\.name).sorted()
-        XCTAssertEqual(holders, ["DirectTextSessionView.swift", "DirectView.swift"],
+        XCTAssertEqual(holders, ["AccountSummaryView.swift", "DirectTextSessionView.swift",
+                                 "DirectView.swift", "SendView.swift"],
                        "the pasteboard is reachable from somewhere other than Copy")
         let expectedWrites = [
+            "AccountSummaryView.swift": "UIPasteboard.general.string = link",
             "DirectTextSessionView.swift": "UIPasteboard.general.string = text",
             "DirectView.swift": "UIPasteboard.general.string = url.absoluteString",
+            "SendView.swift": "UIPasteboard.general.string = link",
         ]
         for (name, write) in expectedWrites {
             let view = try XCTUnwrap(all.first { $0.name == name })
@@ -2598,15 +2609,18 @@ final class IOSSurfaceGuardTests: XCTestCase {
             XCTAssertTrue(view.text.contains(write),
                           "\(name) must only write the value its Copy button belongs to")
         }
-        let view = try XCTUnwrap(all.first { $0.name == "DirectTextSessionView.swift" })
         // Every read API, by name. `.string =` above is an assignment; these are
         // the forms that take something OUT.
-        for reader in ["UIPasteboard.general.string)", "UIPasteboard.general.hasStrings",
-                       "UIPasteboard.general.items", "UIPasteboard.general.strings",
-                       "UIPasteboard.general.url", "UIPasteboard.general.changeCount",
-                       "detectPatterns", "value(forPasteboardType"] {
-            XCTAssertFalse(view.text.contains(reader), "the app inspects the clipboard: \(reader)")
+        for view in all {
+            for reader in ["UIPasteboard.general.string)", "UIPasteboard.general.hasStrings",
+                           "UIPasteboard.general.items", "UIPasteboard.general.strings",
+                           "UIPasteboard.general.url", "UIPasteboard.general.changeCount",
+                           "detectPatterns", "value(forPasteboardType"] {
+                XCTAssertFalse(view.text.contains(reader),
+                               "\(view.name) inspects the clipboard: \(reader)")
+            }
         }
+        let view = try XCTUnwrap(all.first { $0.name == "DirectTextSessionView.swift" })
         XCTAssertTrue(view.text.contains("Button {"),
                       "the write must belong to an explicit button action")
         XCTAssertTrue(view.text.contains(

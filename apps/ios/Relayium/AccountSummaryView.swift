@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import RelayiumKit
 import RelayiumAppKit
 
@@ -41,6 +42,9 @@ struct AccountSummaryView: View {
     /// confirms, so it is a property of this screen, not of the account.
     @State private var deviceToRevoke: AccountDevice?
     @State private var fileToDelete: StoredFileSummary?
+    /// Clipboard acknowledgement is keyed only by the server-issued row id.
+    /// The `#k=` capability remains in the model and is not copied into state.
+    @State private var copiedStoredFileID: String?
     /// Whether the account-deletion confirmation is up, for the same reason.
     @State private var confirmingAccountDeletion = false
 
@@ -113,6 +117,11 @@ struct AccountSummaryView: View {
         // this device tends to do next. `AccountSignOutCoordinator` observes the
         // signal at app scope instead.
         .task(id: scope) { await management.load(scope) }
+        .onChange(of: scope) { _ in copiedStoredFileID = nil }
+        .onChange(of: management.files) { files in
+            copiedStoredFileID = AccountPresentation.retainedCopiedFileID(
+                copiedStoredFileID, in: files)
+        }
         // The system's own confirmations, so they are dismissible, readable at
         // every Dynamic Type size and announced the way the platform's users
         // expect. The destructive role is on the button that acts; Cancel is the
@@ -371,10 +380,18 @@ struct AccountSummaryView: View {
                     .buttonStyle(.borderedProminent)
                     .accessibilityLabel(
                         AccountPresentation.openActionLabel(fileId: row.file.id))
-                // The platform's own hand-off, never a pasteboard write: an app
-                // that puts a key on the clipboard behind the user's back is
-                // doing the thing this product promises not to do, and iOS would
-                // raise its paste notification for it besides.
+                Button {
+                    UIPasteboard.general.string = link
+                    copiedStoredFileID = row.id
+                } label: {
+                    Label(L10n.t(copiedStoredFileID == row.id
+                                 ? .commonCopied : .accountCopyLink),
+                          systemImage: copiedStoredFileID == row.id
+                              ? "checkmark" : "doc.on.doc")
+                }
+                .buttonStyle(.bordered)
+                .accessibilityLabel(AccountPresentation.copyActionLabel(
+                    fileId: row.file.id, copied: copiedStoredFileID == row.id))
                 ShareLink(item: link) { Text(L10n.t(.commonShare)) }
                     .buttonStyle(.bordered)
                     .accessibilityLabel(
