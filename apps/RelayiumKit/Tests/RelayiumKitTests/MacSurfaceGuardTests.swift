@@ -1171,6 +1171,8 @@ final class MacSurfaceGuardTests: XCTestCase {
         let gate = try source(named: "Components/CapabilityGateView.swift")
         XCTAssertTrue(gate.contains("Button(L10n.t(.gateCreateAccount)) { onAccount(.register) }"),
                       "Create an account must open the native form on its create half")
+        XCTAssertTrue(gate.contains(".accessibilityIdentifier(\"account.signIn\")"))
+        XCTAssertTrue(gate.contains(".accessibilityIdentifier(\"account.create\")"))
         XCTAssertTrue(gate.contains("Button(L10n.t(.gateOpenAccount)) { onAccount(.signIn) }"),
                       "an unverified address is finished on the Account destination, "
                       + "which owns the resend action — not on a website")
@@ -1184,8 +1186,8 @@ final class MacSurfaceGuardTests: XCTestCase {
         let ui = try String(contentsOf: uiURL, encoding: .utf8)
         XCTAssertTrue(ui.contains("testStoredSendAccountRemediesOpenThePromisedForm"),
                       "the account remedy must be proven through the running app")
-        XCTAssertTrue(ui.contains("window.buttons[\"Sign in\"]"))
-        XCTAssertTrue(ui.contains("window.buttons[\"Create an account\"]"))
+        XCTAssertTrue(ui.contains("[\"account.signIn\"].firstMatch"))
+        XCTAssertTrue(ui.contains("[\"account.create\"].firstMatch"))
         XCTAssertTrue(ui.contains("window.staticTexts[\"Welcome back\"]"))
         XCTAssertTrue(ui.contains("window.staticTexts[\"Create your Relayium account\"]"))
     }

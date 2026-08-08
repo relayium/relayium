@@ -179,10 +179,10 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(send.waitForExistence(timeout: 10))
         send.click()
 
-        let signIn = window.buttons["Sign in"]
+        let signIn = window.descendants(matching: .any)["account.signIn"].firstMatch
         XCTAssertTrue(signIn.waitForExistence(timeout: 10),
                       "signed-out Send offers no sign-in remedy")
-        XCTAssertTrue(window.buttons["Create an account"].exists,
+        XCTAssertTrue(window.descendants(matching: .any)["account.create"].firstMatch.exists,
                       "signed-out Send offers no registration remedy")
         signIn.click()
         XCTAssertEqual(window.title, "Account",
@@ -193,7 +193,7 @@ final class AppShellUITests: XCTestCase {
         let sendAgain = sidebarDestination("Send a link", in: window)
         XCTAssertTrue(sendAgain.waitForExistence(timeout: 10))
         sendAgain.click()
-        let create = window.buttons["Create an account"]
+        let create = window.descendants(matching: .any)["account.create"].firstMatch
         XCTAssertTrue(create.waitForExistence(timeout: 10))
         create.click()
         XCTAssertEqual(window.title, "Account",
