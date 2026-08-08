@@ -3275,4 +3275,22 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertFalse(view.text.contains("foregroundStyle(.red)"),
                        "a failure stated in colour alone")
     }
+    /// The iOS half of the same rule: an acceptance launch may not resolve the
+    /// keychain item the installed product wrote.
+    func testUITestLaunchesUseAnIsolatedKeychainIdentity() throws {
+        let all = try sources()
+        let mode = try XCTUnwrap(all.first { $0.name == "UITestMode.swift" }?.text)
+        let app = try XCTUnwrap(all.first { $0.name == "RelayiumApp.swift" }?.text)
+        XCTAssertTrue(mode.contains("isolatedKeychainConfiguration"),
+                      "the UI-test launch has no keychain identity of its own")
+        XCTAssertTrue(mode.contains("try? store.clear()"),
+                      "an isolated launch inherits the previous path's account")
+        XCTAssertTrue(app.contains("tokenStore: UITestMode.makeTokenStore()"),
+                      "the app does not hand the isolated store to its session")
+        let halves = mode.components(separatedBy: "#else")
+        XCTAssertEqual(halves.count, 2)
+        XCTAssertFalse(try XCTUnwrap(halves.last).contains("isolatedKeychainConfiguration"),
+                       "a shipped build can be pointed at a test keychain identity")
+    }
+
 }

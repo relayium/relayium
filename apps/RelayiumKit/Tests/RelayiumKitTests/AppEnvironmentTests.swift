@@ -369,4 +369,37 @@ final class AppEnvironmentTests: XCTestCase {
         XCTAssertNil(components?.query)
         XCTAssertEqual(components?.fragment?.contains("react_abc"), true)
     }
+    /// A UI-test launch must not be able to read, keep or destroy the credential
+    /// the installed product wrote.
+    ///
+    /// The macOS suite ran signed in on a workstation with Relayium installed —
+    /// the test build and the product build resolve the same keychain item — so
+    /// three signed-out paths failed locally and passed on a runner that happened
+    /// to have no account. Either outcome is the suite measuring the machine.
+    func testTheIsolatedKeychainIdentitySharesNothingWithTheProduct() {
+        let product = AppEnvironment.keychainConfiguration
+        let isolated = AppEnvironment.isolatedKeychainConfiguration(product)
+
+        XCTAssertNotEqual(isolated.service, product.service,
+                          "an isolated launch resolves the product's own keychain item")
+        XCTAssertTrue(isolated.service.hasPrefix(product.service),
+                      "the isolated identity is unrecognisable as this app's")
+        XCTAssertEqual(isolated.account, product.account,
+                       "the account field is the item's shape, not its owner")
+        // An access group is a SHARE. A test identity that joined it would be
+        // reachable from the extensions the product ships.
+        XCTAssertNil(isolated.accessGroup,
+                     "the isolated identity joined the product's access group")
+    }
+
+    func testTheIsolatedIdentityIsStableAndPlatformIndependent() {
+        for platform in [KeychainPlatform.macOS, .iOS] {
+            let product = AppEnvironment.keychainConfiguration(for: platform)
+            let isolated = AppEnvironment.isolatedKeychainConfiguration(product)
+            XCTAssertEqual(isolated, AppEnvironment.isolatedKeychainConfiguration(product),
+                           "the isolated identity is not stable across calls")
+            XCTAssertNotEqual(isolated.service, product.service)
+        }
+    }
+
 }

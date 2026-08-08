@@ -40,6 +40,26 @@ public enum AppEnvironment {
         keychainConfiguration(for: currentKeychainPlatform)
     }
 
+    /// A keychain identity that shares nothing with the installed product.
+    ///
+    /// UI acceptance runs against a build that resolves the same keychain item
+    /// as the shipped app, so on a workstation with Relayium installed the suite
+    /// launched signed in and its signed-out assertions failed — while the same
+    /// assertions passed on a runner that happened to have no account. Both
+    /// results measured the machine rather than the product.
+    ///
+    /// The service is suffixed rather than replaced, so the item is still
+    /// recognisably this app's when someone finds it in Keychain Access. The
+    /// access group is dropped: a group is a SHARE, and a test identity that
+    /// joined it would be reachable from the extensions the product ships.
+    public static func isolatedKeychainConfiguration(
+        _ base: KeychainConfiguration = keychainConfiguration
+    ) -> KeychainConfiguration {
+        KeychainConfiguration(service: base.service + ".uitest", // nonlocalized: a keychain service id
+                              account: base.account,
+                              accessGroup: nil)
+    }
+
     /// Built through the configuration so a test can assert the keychain query
     /// for a platform it is not running on.
     public static func makeTokenStore(
@@ -159,11 +179,15 @@ public enum AppEnvironment {
         return String(decoding: value.prefix { $0 != 0 }, as: UTF8.self)
     }
 
+    /// `tokenStore` is nil for every shipped launch, which resolves the product's
+    /// own keychain identity. It exists so a Debug acceptance launch can hand in
+    /// an isolated one rather than reading whatever account the machine is in.
     @MainActor
-    public static func makeSession(baseURL: URL = productionBaseURL) -> AccountSession {
+    public static func makeSession(baseURL: URL = productionBaseURL,
+                                   tokenStore: TokenStore? = nil) -> AccountSession {
         AccountSession(
             client: AccountClient(baseURL: baseURL),
-            tokenStore: makeTokenStore(),
+            tokenStore: tokenStore ?? makeTokenStore(),
             deviceName: deviceName()
         )
     }

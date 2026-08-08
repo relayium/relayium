@@ -1,4 +1,6 @@
 import Foundation
+import RelayiumAppKit
+import RelayiumKit
 
 /// Keeps simulator UI acceptance from joining the public Nearby rendezvous.
 ///
@@ -40,6 +42,21 @@ enum UITestMode {
     static let pendingFixtureName = "Relayium product brief.txt" // nonlocalized: a test fixture
     private static let pendingFixtureByteCount = 1_536
 
+    /// The keychain an acceptance launch may use — never the item the installed
+    /// product wrote, and emptied before the session restores.
+    ///
+    /// Without this the suite reads whatever account this machine is in, so a
+    /// signed-out assertion passes or fails by the workstation rather than by
+    /// the product. Emptied on every launch as well as isolated, so one path
+    /// cannot inherit an account another path established.
+    static func makeTokenStore() -> TokenStore? {
+        guard isActive else { return nil }
+        let store = AppEnvironment.makeTokenStore(
+            AppEnvironment.isolatedKeychainConfiguration())
+        try? store.clear()
+        return store
+    }
+
     /// Rewritten on every launch that asks for it, so a container surviving
     /// from an earlier run cannot leave a stale name or length behind.
     static func stagePendingFixture() {
@@ -59,5 +76,9 @@ enum UITestMode {
     /// In Release the whole idea is absent: the optimiser folds this to an
     /// empty call, and no argument can reach the container.
     static func stagePendingFixture() {}
+
+    /// nil, so a shipped launch always resolves the product's own keychain
+    /// identity and cannot be pointed at a test one.
+    static func makeTokenStore() -> TokenStore? { nil }
     #endif
 }

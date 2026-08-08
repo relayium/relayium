@@ -281,7 +281,7 @@ struct RelayiumApp: App {
         _uploadModel = StateObject(wrappedValue: uploads)
         _downloadModel = StateObject(wrappedValue: downloads)
         _accountManagement = StateObject(wrappedValue: management)
-        let account = AppEnvironment.makeSession()
+        let account = AppEnvironment.makeSession(tokenStore: UITestMode.makeTokenStore())
         _session = StateObject(wrappedValue: account)
         // Subscribed HERE, in init, and not from a `.task` on any view or scene.
         // That is the whole point: the signal is raised by a network response

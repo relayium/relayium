@@ -41,10 +41,29 @@ enum UITestMode {
     // nonlocalized: a test-only launch argument, absent from Release
     static let terminalNearbyArgument = "--relayium-ui-testing-terminal-nearby"
     static let showsTerminalNearby = ProcessInfo.processInfo.arguments.contains(terminalNearbyArgument)
+    /// The keychain an acceptance launch may use — never the item the installed
+    /// product wrote, and emptied before the session restores.
+    ///
+    /// This Mac has Relayium installed, and the test build resolved the same
+    /// keychain item, so the suite ran signed in and three signed-out paths
+    /// failed here while passing on a runner that happened to have no account.
+    /// Both results measured the machine. Emptied on every launch as well as
+    /// isolated, so one path cannot inherit an account another path established.
+    static func makeTokenStore() -> TokenStore? {
+        guard isActive else { return nil }
+        let store = AppEnvironment.makeTokenStore(
+            AppEnvironment.isolatedKeychainConfiguration())
+        try? store.clear()
+        return store
+    }
     #else
     /// In Release the answer is a constant the optimiser folds away, so the
     /// guarded work is unconditional and the argument means nothing.
     static let isActive = false
+
+    /// nil, so a shipped launch always resolves the product's own keychain
+    /// identity and cannot be pointed at a test one.
+    static func makeTokenStore() -> TokenStore? { nil }
     #endif
 
     #if DEBUG

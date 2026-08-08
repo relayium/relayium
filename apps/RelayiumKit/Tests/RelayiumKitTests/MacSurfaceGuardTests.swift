@@ -2398,4 +2398,23 @@ final class MacSurfaceGuardTests: XCTestCase {
         }
         return passages
     }
+    /// A UI-test launch must resolve its own keychain item, never the one the
+    /// installed product wrote. Without this the suite inherits whatever account
+    /// state the workstation is in, and its signed-out assertions become a
+    /// statement about the machine.
+    func testUITestLaunchesUseAnIsolatedKeychainIdentity() throws {
+        let mode = try source(named: "UITestMode.swift")
+        let app = try source(named: "RelayiumApp.swift")
+        XCTAssertTrue(mode.contains("isolatedKeychainConfiguration"),
+                      "the UI-test launch has no keychain identity of its own")
+        XCTAssertTrue(mode.contains("try? store.clear()"),
+                      "an isolated launch inherits the previous path's account")
+        XCTAssertTrue(app.contains("tokenStore: UITestMode.makeTokenStore()"),
+                      "the app does not hand the isolated store to its session")
+        let halves = mode.components(separatedBy: "#else")
+        XCTAssertEqual(halves.count, 2)
+        XCTAssertFalse(try XCTUnwrap(halves.last).contains("isolatedKeychainConfiguration"),
+                       "a shipped build can be pointed at a test keychain identity")
+    }
+
 }
