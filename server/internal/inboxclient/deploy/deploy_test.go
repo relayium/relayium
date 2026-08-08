@@ -11,7 +11,7 @@ import (
 
 func testParams() Params {
 	return Params{
-		Binary:      "/opt/relayium/bin/relayium",
+		Binary:      "/usr/local/bin/relayium",
 		ConfigDir:   "/var/lib/relayium-inbox/config",
 		StateDir:    "/var/lib/relayium-inbox/config/inbox",
 		ReceiveDir:  "/srv/incoming",
@@ -325,14 +325,14 @@ func TestInstructionsDoNotClaimRootlessSystemInstall(t *testing.T) {
 
 func TestInstructionsShellQuoteMachinePaths(t *testing.T) {
 	p := testParams()
-	p.Binary = "/opt/relayium apps/relayium"
+	p.Binary = "/usr/local/my apps/relayium"
 	p.ConfigDir = "/var/lib/relayium inbox/config"
 	p.ReceiveDir = "/srv/incoming; touch /tmp/not-command"
 	p.LogDir = "/tmp/relayium logs"
 
 	sys := strings.Join(Instructions(SystemdSystem, p), "\n")
 	for _, want := range []string{
-		"'/opt/relayium apps/relayium'",
+		"'/usr/local/my apps/relayium'",
 		"'/var/lib/relayium inbox/config'",
 		"'/srv/incoming; touch /tmp/not-command'",
 	} {
