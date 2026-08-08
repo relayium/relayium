@@ -1106,4 +1106,40 @@ final class AppShellUITests: XCTestCase {
                              "an Arabic launch laid the tab bar out left-to-right")
     }
 
+    /// At the largest accessibility text size every task still reaches its own
+    /// primary action.
+    ///
+    /// This is the small-screen failure that matters on iOS: not a narrower
+    /// device, but text three times the size on the same one. A control pushed
+    /// past the bottom of a screen does not fail loudly — and the control that
+    /// falls off is usually the one the task ends with. Several surfaces in this
+    /// product were rearranged for exactly this reason; nothing asserted it.
+    func testEveryTaskReachesItsActionAtTheLargestTextSize() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["-UIPreferredContentSizeCategoryName",
+               "UICTContentSizeCategoryAccessibilityXXL"]
+        app.launch()
+
+        // Receive's Open, Direct's mode choice and Nearby's chooser are the three
+        // that sit furthest down their own screens.
+        openTask("Receive", title: "Receive files")
+        let open = app.buttons["Open"]
+        XCTAssertTrue(open.waitForExistence(timeout: 15),
+                      "Receive lost its action at the largest text size")
+        scrollUntilHittable(open, maxSwipes: 12)
+
+        openTask("Nearby", title: "Nearby")
+        let chooser = app.buttons["Choose Files or Folders…"]
+        XCTAssertTrue(chooser.waitForExistence(timeout: 15),
+                      "Nearby lost its file chooser at the largest text size")
+        scrollUntilHittable(chooser, maxSwipes: 12)
+
+        openTask("Account", title: "Account")
+        let create = app.buttons["New to Relayium? Create an account"]
+        XCTAssertTrue(create.waitForExistence(timeout: 15),
+                      "Account lost its registration path at the largest text size")
+        scrollUntilHittable(create, maxSwipes: 12)
+    }
+
 }

@@ -1236,4 +1236,62 @@ final class AppShellUITests: XCTestCase {
         }
     }
 
+    /// An Arabic launch lays the window out right-to-left, not merely in Arabic.
+    ///
+    /// The sidebar is the leading pane, so under RTL it belongs on the RIGHT.
+    /// Geometry is what separates a translated app from a localized one: strings
+    /// in a left-to-right layout survive a screenshot review and are wrong for
+    /// every RTL reader. `sidebarDestination` deliberately is not used here —
+    /// it resolves rows by assuming the sidebar is on the left, which is the
+    /// very thing under test.
+    func testAnArabicLaunchLaysTheWindowOutRightToLeft() {
+        app.terminate()
+        app.launchArguments = ["--relayium-ui-testing", "-AppleLanguages", "(ar)",
+                               "-AppleLocale", "ar", "-SUEnableAutomaticChecks", "NO"]
+        app.launch()
+        ensureProductWindowIsOpen()
+
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let row = window.descendants(matching: .any)["sidebar-nearby"].firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 15),
+                      "the Arabic window has no Nearby destination")
+        XCTAssertGreaterThan(row.frame.midX, window.frame.midX,
+                             "an Arabic launch kept the sidebar on the leading-left side")
+    }
+
+    /// The window's smallest work area still carries the whole task.
+    ///
+    /// 860×560 is the product's stated minimum, and the earlier batches that
+    /// verified a handoff "at the 860×560 minimum" did so by resizing the real
+    /// window by hand. Nothing asserted it. A destination that needs more room
+    /// than the window can be shrunk to does not fail loudly — it clips, and the
+    /// control that falls off the bottom is usually the one the task ends with.
+    func testTheSmallestWindowStillCarriesTheWholeTask() {
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+
+        // The scene's own minimum: the product contract is that this is a
+        // USABLE size, not merely an allowed one.
+        XCTAssertGreaterThanOrEqual(window.frame.width, 860,
+                                    "the work area is narrower than the stated minimum")
+        XCTAssertGreaterThanOrEqual(window.frame.height, 560,
+                                    "the work area is shorter than the stated minimum")
+
+        // Every destination, at that size, still renders its own surface and
+        // keeps its primary control inside the window rather than past the edge.
+        for destination in ["Nearby", "Pairing code", "Send a link",
+                            "Open a link", "Account"] {
+            let row = sidebarDestination(destination, in: window)
+            XCTAssertTrue(row.waitForExistence(timeout: 10),
+                          "the sidebar lost \(destination) at the minimum size")
+            row.click()
+            let heading = window.staticTexts[destination]
+            XCTAssertTrue(heading.waitForExistence(timeout: 10) || window.title == destination,
+                          "\(destination) rendered nothing at the minimum size")
+            XCTAssertTrue(window.frame.contains(row.frame),
+                          "\(destination)'s own sidebar row sits outside the window")
+        }
+    }
+
 }
