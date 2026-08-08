@@ -1053,4 +1053,52 @@ final class AppShellUITests: XCTestCase {
                       "returning to Files did not restore its staging surface")
     }
 
+    /// An upload that fails mid-transfer keeps the user's files in front of them.
+    ///
+    /// As with cancelling, macOS builds its upload model without a pending store,
+    /// so the recovery it offers is the selection itself rather than Resume and
+    /// Discard. The claim that matters on both platforms is the same: the work
+    /// is not thrown away and no link is produced from a failure.
+    func testAFailedUploadKeepsTheWorkAndOffersToCarryOn() throws {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-fail-upload"]
+        app.launch()
+        ensureProductWindowIsOpen()
+
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let send = sidebarDestination("Send a link", in: window)
+        XCTAssertTrue(send.waitForExistence(timeout: 10))
+        send.click()
+
+        let fixture = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Relayium product brief \(UUID().uuidString).txt")
+        try Data(repeating: 0x52, count: 1_536).write(to: fixture, options: .atomic)
+        pendingFileFixture = fixture
+
+        let chooser = window.descendants(matching: .any)["Files to send"].firstMatch
+        XCTAssertTrue(chooser.waitForExistence(timeout: 10))
+        chooser.click()
+        app.typeKey("g", modifierFlags: [.command, .shift])
+        let location = app.textFields.firstMatch
+        XCTAssertTrue(location.waitForExistence(timeout: 10))
+        location.typeText(fixture.path)
+        app.typeKey(.return, modifierFlags: [])
+        let choose = app.dialogs["open-panel"].buttons["OKButton"]
+        XCTAssertTrue(choose.waitForExistence(timeout: 10))
+        choose.click()
+
+        let sendAction = window.buttons["Send"]
+        XCTAssertTrue(sendAction.waitForExistence(timeout: 15))
+        sendAction.click()
+
+        let identity = window.descendants(matching: .any)["pendingFile.0"].firstMatch
+        XCTAssertTrue(identity.waitForExistence(timeout: 30),
+                      "a failed upload lost the files the user had chosen")
+        XCTAssertFalse(window.descendants(matching: .any)["storedSend.resultLink"]
+            .firstMatch.exists,
+            "a failed upload produced a capability link anyway")
+    }
+
 }

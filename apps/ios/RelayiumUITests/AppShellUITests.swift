@@ -929,4 +929,49 @@ final class AppShellUITests: XCTestCase {
                       "returning to Files did not restore its staging surface")
     }
 
+    /// An upload that fails mid-transfer keeps the work and offers to carry on.
+    ///
+    /// The staged bytes are already on this device, so a server-side failure is
+    /// recoverable — starting over would spend the user's time and bandwidth
+    /// twice for nothing. Nothing before this drove an upload failure at all;
+    /// the cell was covered only by the signed-out account remedy.
+    func testAFailedUploadKeepsTheWorkAndOffersToCarryOn() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pending-fixture",
+               "--relayium-ui-testing-fail-upload"]
+        app.launch()
+
+        openTask("Send", title: "Send files")
+        let chooser = app.buttons["Choose Files or Folders…"]
+        XCTAssertTrue(chooser.waitForExistence(timeout: 15))
+        scrollUntilHittable(chooser)
+        chooser.tap()
+        let browsingTabs = app.tabBars["DOC.browsingModeTabBar"]
+        XCTAssertTrue(browsingTabs.waitForExistence(timeout: 20))
+        browsingTabs.buttons["Browse"].tap()
+        tapInBrowser("On My iPhone")
+        tapInBrowser("Relayium")
+        tapStagedFixture(named: "Relayium product brief")
+        let open = app.buttons["Open"]
+        XCTAssertTrue(open.waitForExistence(timeout: 10))
+        open.tap()
+
+        let send = app.scrollViews.buttons["Send"].firstMatch
+        XCTAssertTrue(send.waitForExistence(timeout: 15))
+        scrollUntilHittable(send, maxSwipes: 10)
+        send.tap()
+
+        // Resume, not "start again": the recovery on offer has to be the one
+        // that keeps what was already staged.
+        let resume = app.buttons["Resume upload"]
+        XCTAssertTrue(resume.waitForExistence(timeout: 30),
+                      "a failed upload does not offer to carry on")
+        XCTAssertTrue(app.buttons["Discard saved copy"].exists,
+                      "a failed upload cannot be abandoned either")
+        XCTAssertEqual(app.staticTexts.matching(NSPredicate(
+            format: "label CONTAINS %@", "#k=")).count, 0,
+            "a failed upload produced a capability link anyway")
+    }
+
 }

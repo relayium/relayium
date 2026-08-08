@@ -34,6 +34,11 @@ enum UITestMode {
     /// below is answered entirely in process: no request leaves the device, no
     /// real credential exists, and the bearer is a literal that no server would
     /// accept.
+    /// Fails a chunk upload, so the recoverable-failure surface can be driven.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let failUploadArgument = "--relayium-ui-testing-fail-upload"
+    static let failsUpload = ProcessInfo.processInfo.arguments.contains(failUploadArgument)
+
     /// Holds a chunk upload open so the in-flight surface can be driven.
     // nonlocalized: a test-only launch argument, absent from Release
     static let stallUploadArgument = "--relayium-ui-testing-stall-upload"
@@ -233,6 +238,7 @@ enum UITestMode {
     static let isSignedIn = false
     static let answersAccountAPI = false
     static let stallsUpload = false
+    static let failsUpload = false
     /// false, so a shipped launch always mints a real code over the network.
     static let showsGeneratedTextCode = false
     static let showsTerminalText = false
@@ -370,6 +376,10 @@ final class UITestAccountTransport: URLProtocol {
             // is exactly what cancelling the upload triggers — so the product
             // path under test is the real one.
             if UITestMode.stallsUpload { Thread.sleep(forTimeInterval: 600) }
+            // A server-side failure mid-transfer, which is the one an upload can
+            // actually recover from: the staged bytes are still here, so the
+            // product should offer to carry on rather than start over.
+            if UITestMode.failsUpload { return (500, Data(#"{"error":"server"}"#.utf8)) }
             let range = request.value(forHTTPHeaderField: "Content-Range") ?? ""
             let received = Self.receivedAfter(contentRange: range)
             return (200, Data("{\"received\":\(received)}".utf8))
