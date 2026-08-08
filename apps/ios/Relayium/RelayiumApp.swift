@@ -197,7 +197,8 @@ struct RelayiumApp: App {
         // shared-draft surface simply never appears, because nothing can arrive.
         let drafts = AppEnvironment.makeSharedDraftStore()
         let uploads = AppEnvironment.makeUploadModel(
-            keyStore: keys, pending: AppEnvironment.makePendingUploadSupport(drafts: drafts))
+            keyStore: keys, pending: AppEnvironment.makePendingUploadSupport(drafts: drafts),
+            transport: UITestMode.makeAccountTransport())
         let managing = AppEnvironment.makeAccountManagementModel(
             keyStore: keys, transport: UITestMode.makeAccountTransport())
         _management = StateObject(wrappedValue: managing)

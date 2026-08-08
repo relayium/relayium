@@ -271,7 +271,8 @@ struct RelayiumApp: App {
         // implied by two constructors happening to agree.
         let storedKeys = UITestMode.makeStoredLinkKeyStore()
             ?? AppEnvironment.makeStoredLinkKeyStore()
-        let uploads = AppEnvironment.makeUploadModel(keyStore: storedKeys)
+        let uploads = AppEnvironment.makeUploadModel(
+            keyStore: storedKeys, transport: UITestMode.makeAccountTransport())
         let downloads = AppEnvironment.makeDownloadModel()
         let management = AppEnvironment.makeAccountManagementModel(
             keyStore: storedKeys, transport: UITestMode.makeAccountTransport())

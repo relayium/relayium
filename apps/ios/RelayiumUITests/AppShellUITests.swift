@@ -753,4 +753,61 @@ final class AppShellUITests: XCTestCase {
                        "the refusal outlived the input it described")
     }
 
+    /// A stored send that finishes hands the result over, and offers the way to
+    /// start another.
+    ///
+    /// This is the first completion surface acceptance has ever reached on
+    /// either platform: it needs a server to say yes, so nothing before the
+    /// upload fixture could get here. The encryption, chunking, manifest and
+    /// link construction are all production code; only the transport is local.
+    func testACompletedStoredSendHandsOverItsLinkAndOffersAnother() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pending-fixture"]
+        app.launch()
+
+        openTask("Send", title: "Send files")
+        let chooser = app.buttons["Choose Files or Folders…"]
+        XCTAssertTrue(chooser.waitForExistence(timeout: 15))
+        scrollUntilHittable(chooser)
+        chooser.tap()
+
+        let browsingTabs = app.tabBars["DOC.browsingModeTabBar"]
+        XCTAssertTrue(browsingTabs.waitForExistence(timeout: 20))
+        browsingTabs.buttons["Browse"].tap()
+        tapInBrowser("On My iPhone")
+        tapInBrowser("Relayium")
+        tapStagedFixture(named: "Relayium product brief")
+        let open = app.buttons["Open"]
+        XCTAssertTrue(open.waitForExistence(timeout: 10))
+        open.tap()
+
+        // NOT app.buttons["Send"]: the tab bar carries a Send tab with the same
+        // label, and it is the one that matches first.
+        let send = app.scrollViews.buttons["Send"].firstMatch
+        XCTAssertTrue(send.waitForExistence(timeout: 15),
+                      "a chosen file offers no way to send it")
+        scrollUntilHittable(send, maxSwipes: 10)
+        send.tap()
+
+        // The link IS the result and contains the only decryption key, so it has
+        // to be inspectable in full before it is handed to anybody.
+        let link = app.staticTexts.matching(NSPredicate(
+            format: "label CONTAINS %@", "/d/obj_uitest#k=")).firstMatch
+        XCTAssertTrue(link.waitForExistence(timeout: 30),
+                      "a completed upload did not render its capability link")
+        XCTAssertTrue(app.buttons["Copy"].exists, "the result cannot be copied")
+        XCTAssertTrue(app.buttons["Share"].exists, "the result cannot be shared")
+
+        let another = app.buttons["Send another"]
+        XCTAssertTrue(another.waitForExistence(timeout: 10),
+                      "a completed send offers no way to start the next one")
+        scrollUntilHittable(another)
+        another.tap()
+        XCTAssertTrue(chooser.waitForExistence(timeout: 10),
+                      "Send another did not return to a new selection")
+        XCTAssertFalse(link.exists,
+                       "the previous result stayed on screen after Send another")
+    }
+
 }

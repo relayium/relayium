@@ -295,6 +295,44 @@ final class UITestAccountTransport: URLProtocol {
         return out
     }
 
+
+    /// The three-step resumable upload, answered in process.
+    ///
+    /// A stored send is the one flow whose completion surface — the generated
+    /// link, its Copy and Share, and Send another — cannot be reached without a
+    /// server saying yes. Modelling it keeps the encryption, chunking, manifest
+    /// and link construction as production code; only the transport is local.
+    /// `received` is derived from the request's own `Content-Range`, so the
+    /// uploader's resume arithmetic is exercised rather than short-circuited.
+    private func uploadResponse(for url: URL, method: String) -> (Int, Data)? {
+        let path = url.path
+        if path == "/api/uploads", method == "POST" {
+            return (200, Data(#"{"uploadId":"up_uitest","chunkSize":1048576}"#.utf8))
+        }
+        guard path.hasPrefix("/api/uploads/up_uitest") else { return nil }
+        if path.hasSuffix("/finalize"), method == "POST" {
+            // A far-future expiry, so the completion surface never renders an
+            // already-expired link.
+            return (200, Data(#"{"id":"obj_uitest","expiresAt":4102444800}"#.utf8))
+        }
+        if method == "PATCH" {
+            let range = request.value(forHTTPHeaderField: "Content-Range") ?? ""
+            let received = Self.receivedAfter(contentRange: range)
+            return (200, Data("{\"received\":\(received)}".utf8))
+        }
+        if method == "GET" { return (200, Data(#"{"received":0}"#.utf8)) }
+        return nil
+    }
+
+    /// `bytes from-to/total` → `to + 1`, the byte count the server would hold
+    /// after committing exactly what this request carried.
+    static func receivedAfter(contentRange: String) -> Int {
+        guard let slash = contentRange.firstIndex(of: "/"),
+              let dash = contentRange.firstIndex(of: "-") else { return 0 }
+        let to = contentRange[contentRange.index(after: dash)..<slash]
+        return (Int(to) ?? -1) + 1
+    }
+
     override class func canInit(with request: URLRequest) -> Bool {
         request.url?.path.hasPrefix("/api/") ?? false
     }
@@ -302,12 +340,20 @@ final class UITestAccountTransport: URLProtocol {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
+        if let url = request.url,
+           let (status, body) = uploadResponse(for: url, method: request.httpMethod ?? "GET") {
+            return respond(url: url, status: status, body: body)
+        }
         guard let url = request.url, let body = Self.bodies[url.path] else {
             client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
             return
         }
+        respond(url: url, status: 200, body: body)
+    }
+
+    private func respond(url: URL, status: Int, body: Data) {
         let response = HTTPURLResponse(
-            url: url, statusCode: 200, httpVersion: "HTTP/1.1",
+            url: url, statusCode: status, httpVersion: "HTTP/1.1",
             headerFields: ["Content-Type": "application/json"])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: body)

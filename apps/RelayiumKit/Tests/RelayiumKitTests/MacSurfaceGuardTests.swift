@@ -2487,10 +2487,20 @@ final class MacSurfaceGuardTests: XCTestCase {
         let iosApp = try String(
             contentsOf: appsRoot.appendingPathComponent("ios/Relayium/RelayiumApp.swift"),
             encoding: .utf8)
+        // Named rather than counted: every factory that BUILDS a client which
+        // talks to the account API must receive the acceptance transport, and a
+        // fourth one added without it should fail here rather than silently
+        // reach the network. Wiring only the first left devices and stored files
+        // on the real network once already.
         for app in [macApp, iosApp] {
-            XCTAssertEqual(app.components(
-                separatedBy: "transport: UITestMode.makeAccountTransport()").count - 1, 2,
-                "an account client still reaches the network under acceptance")
+            for factory in ["makeSession(", "makeAccountManagementModel(", "makeUploadModel("] {
+                guard let call = app.range(of: factory) else {
+                    return XCTFail("\(factory) is gone — this guard is stale")
+                }
+                let window = String(app[call.lowerBound...].prefix(320))
+                XCTAssertTrue(window.contains("transport: UITestMode.makeAccountTransport()"),
+                              "\(factory) still reaches the network under acceptance")
+            }
         }
 
         let uiURL = macRoot.deletingLastPathComponent()

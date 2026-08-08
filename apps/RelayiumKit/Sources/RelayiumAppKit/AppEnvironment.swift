@@ -419,11 +419,16 @@ public enum AppEnvironment {
     }
 
     @MainActor
+    /// `transport` exists for the same reason as `makeSession`'s: a stored send's
+    /// completion surface cannot be reached without a server saying yes, and
+    /// acceptance must reach it without one. A shipped launch passes nil.
     public static func makeUploadModel(baseURL: URL = productionBaseURL,
                                        keyStore: StoredLinkKeyStore,
-                                       pending: PendingUploadSupport? = nil) -> CloudUploadModel {
+                                       pending: PendingUploadSupport? = nil,
+                                       transport: URLSession? = nil) -> CloudUploadModel {
         CloudUploadModel(
-            uploader: CloudUploader(transport: HTTPResumableTransport(baseURL: baseURL)),
+            uploader: CloudUploader(transport: HTTPResumableTransport(
+                baseURL: baseURL, session: transport ?? .shared)),
             keyStore: keyStore,
             // The origin the link is built from, so a self-hosted build produces
             // links pointing at its own deployment rather than relayium.com.
