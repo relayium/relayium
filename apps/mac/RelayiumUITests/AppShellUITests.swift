@@ -194,7 +194,7 @@ final class AppShellUITests: XCTestCase {
                       "the system picker has no confirmation action")
         choose.click()
 
-        XCTAssertTrue(window.staticTexts["1 file ready, 1.5 KB"]
+        XCTAssertTrue(window.staticTexts["1 file ready · 1.5 KB"]
             .waitForExistence(timeout: 10),
                       "the selected-file summary did not preserve count and total size")
         let identity = NSPredicate(format:
