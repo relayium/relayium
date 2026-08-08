@@ -23,18 +23,22 @@ struct PendingFileList: View {
         if !files.isEmpty {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 8) {
-                    ForEach(Array(files.enumerated()), id: \.offset) { _, file in
+                    ForEach(Array(files.enumerated()), id: \.offset) { index, file in
+                        let name = FileIdentityPresentation.name(for: file)
+                        let size = L10n.bytes(Int64(file.size))
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
-                            Text(FileIdentityPresentation.name(for: file))
+                            Text(name)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .textSelection(.enabled)
-                            Text(L10n.bytes(Int64(file.size)))
+                            Text(size)
                                 .foregroundStyle(.secondary)
                                 .fixedSize()
                         }
                         .font(.caption)
                         .accessibilityElement(children: .combine)
+                        .accessibilityLabel("\(name), \(size)")
+                        .accessibilityIdentifier("pendingFile.\(index)")
                     }
                 }
                 .padding(10)
