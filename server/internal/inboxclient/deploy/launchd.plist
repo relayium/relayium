@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Relayium Device Inbox — launchd LaunchAgent.
+
+  Install to ~/Library/LaunchAgents/com.relayium.inbox.plist and load with
+  `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.relayium.inbox.plist`.
+
+  A LaunchAgent, not a LaunchDaemon: the worker writes into a directory the
+  logged-in user chose and holds that user's credentials, so it belongs to that
+  user's session. A LaunchDaemon would run as root before login and would have
+  neither.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.relayium.inbox</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>@RELAYIUM_BIN@</string>
+    <string>inbox</string>
+    <string>run</string>
+    <string>--config-dir</string>
+    <string>@CONFIG_DIR@</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <!-- Restart only on a non-zero exit: `inbox disable` exits 0 on purpose. -->
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>StandardOutPath</key>
+  <string>@LOG_DIR@/relayium-inbox.log</string>
+  <key>StandardErrorPath</key>
+  <string>@LOG_DIR@/relayium-inbox.err.log</string>
+</dict>
+</plist>

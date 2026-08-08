@@ -1,0 +1,41 @@
+[Unit]
+# Relayium Device Inbox — system-wide service under a DEDICATED user.
+#
+# This unit runs as its own unprivileged account, never as root. A receiver that
+# writes files a remote sender named has no business holding privileges: the
+# blast radius of any bug in it should be one directory owned by one service
+# account, and nothing else on the machine.
+#
+# Creating the account and installing the unit both require root, so they are
+# steps a human runs with sudo — `relayium inbox service` prints them and does
+# not attempt them. See `relayium inbox service systemd-system`.
+Description=Relayium Device Inbox receiver (system)
+Documentation=man:relayium(1)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@SERVICE_USER@
+Group=@SERVICE_USER@
+ExecStart=@RELAYIUM_BIN@ inbox run --config-dir @CONFIG_DIR@
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+# systemd creates and owns /var/lib/relayium-inbox for this unit.
+StateDirectory=relayium-inbox
+StateDirectoryMode=0700
+ReadWritePaths=@STATE_DIR@ @RECEIVE_DIR@
+
+[Install]
+WantedBy=multi-user.target

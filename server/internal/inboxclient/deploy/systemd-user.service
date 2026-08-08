@@ -1,0 +1,34 @@
+[Unit]
+# Relayium Device Inbox — systemd USER service.
+#
+# Install with:   systemctl --user enable --now relayium-inbox
+# and, so it survives logout on a server:  sudo loginctl enable-linger $USER
+#
+# This unit supervises `relayium inbox run` as an ordinary foreground process.
+# The worker never forks, never writes a pid file, and exits 0 on SIGTERM, so
+# systemd's own restart and logging are the whole supervision story.
+Description=Relayium Device Inbox receiver
+Documentation=man:relayium(1)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=@RELAYIUM_BIN@ inbox run --config-dir @CONFIG_DIR@
+# on-failure, not always: `inbox disable` makes the worker exit 0 deliberately,
+# and restarting it then would fight the operator.
+Restart=on-failure
+RestartSec=5s
+# A receiver has no reason to ever gain privileges.
+NoNewPrivileges=yes
+PrivateTmp=yes
+# Everything is read-only except the two directories this worker legitimately
+# writes: its own state and the receive directory chosen with `inbox enable`.
+ProtectSystem=strict
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+ReadWritePaths=@STATE_DIR@ @RECEIVE_DIR@
+
+[Install]
+WantedBy=default.target
