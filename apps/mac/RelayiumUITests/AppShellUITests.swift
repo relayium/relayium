@@ -1101,4 +1101,58 @@ final class AppShellUITests: XCTestCase {
             "a failed upload produced a capability link anyway")
     }
 
+    /// Creating a FILE pairing code stays on Pairing code and shows every
+    /// handoff, with the mode the user actually chose preserved in the link.
+    ///
+    /// The text half of this flow has had a runtime path since the eighth batch.
+    /// The file half — the mode most people reach for — had none, so the link's
+    /// mode parameter was only ever proven for Text.
+    func testCreatingAFilePairingCodeStaysOnPairingAndShowsEveryHandoff() throws {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments + ["--relayium-ui-testing-file-code"]
+        app.launch()
+        ensureProductWindowIsOpen()
+
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let pairing = sidebarDestination("Pairing code", in: window)
+        XCTAssertTrue(pairing.waitForExistence(timeout: 10))
+        pairing.click()
+        window.radioButtons["Files"].click()
+
+        let fixture = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Relayium product brief \(UUID().uuidString).txt")
+        try Data(repeating: 0x52, count: 1_536).write(to: fixture, options: .atomic)
+        pendingFileFixture = fixture
+
+        let chooser = window.descendants(matching: .any)["Files to send"].firstMatch
+        XCTAssertTrue(chooser.waitForExistence(timeout: 10),
+                      "the file pairing mode stages nothing")
+        chooser.click()
+        app.typeKey("g", modifierFlags: [.command, .shift])
+        let location = app.textFields.firstMatch
+        XCTAssertTrue(location.waitForExistence(timeout: 10))
+        location.typeText(fixture.path)
+        app.typeKey(.return, modifierFlags: [])
+        let choose = app.dialogs["open-panel"].buttons["OKButton"]
+        XCTAssertTrue(choose.waitForExistence(timeout: 10))
+        choose.click()
+
+        let create = window.buttons["Create a code"]
+        XCTAssertTrue(create.waitForExistence(timeout: 10),
+                      "a staged file offers no way to create a code")
+        create.click()
+
+        XCTAssertTrue(window.staticTexts["4 8 3 9 2 0"].waitForExistence(timeout: 20),
+                      "the generated pairing code is not visible")
+        XCTAssertTrue(window.staticTexts["Join link"].exists,
+                      "the generated code has no visible browser handoff")
+        XCTAssertTrue(window.staticTexts[
+            "https://relayium.com/cross-network?mode=file#c=483920"
+        ].exists, "the visible handoff did not preserve the created Files mode")
+        XCTAssertTrue(window.buttons["Copy"].exists, "the join link cannot be copied")
+        XCTAssertTrue(window.buttons["Share"].exists,
+                      "the join link cannot use the system share sheet")
+    }
+
 }

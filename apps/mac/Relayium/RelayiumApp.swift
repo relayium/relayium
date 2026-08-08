@@ -248,9 +248,9 @@ struct RelayiumApp: App {
         // came from. Owned by the receive model; the session models only read it.
         let inboundRoom = InboundRoom()
         #if DEBUG
-        let files = UITestMode.showsTerminalNearby
-            ? UITestMode.makeTerminalNearbyFileModel(verification: prefs)
-            : AppEnvironment.makeRealtimeModel(
+        let files = UITestMode.makeTerminalNearbyFileModel(verification: prefs)
+            ?? UITestMode.makeWaitingFileModel(verification: prefs)
+            ?? AppEnvironment.makeRealtimeModel(
                 verification: prefs, nearby: nearby, inboundRoom: inboundRoom)
         let text = UITestMode.isActive
             ? UITestMode.makeRealtimeTextModel(verification: prefs)

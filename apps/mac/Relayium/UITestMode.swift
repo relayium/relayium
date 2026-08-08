@@ -145,6 +145,29 @@ enum UITestMode {
         try? store.clear()
         return store
     }
+
+    /// Holds the FILE pairing surface on its generated code.
+    ///
+    /// The text half of this flow has had a runtime path since batch 8; the file
+    /// half never did, so the mode a user is most likely to pick was the one
+    /// without evidence. Minting succeeds locally and the ICE lookup then waits,
+    /// so the handoff screen holds without a network call.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let fileCodeArgument = "--relayium-ui-testing-file-code"
+    static let showsGeneratedFileCode = ProcessInfo.processInfo.arguments.contains(
+        fileCodeArgument)
+
+    @MainActor
+    static func makeWaitingFileModel(verification: VerificationPreference) -> RealtimeSessionModel? {
+        guard showsGeneratedFileCode else { return nil }
+        return RealtimeSessionModel(
+            pairClient: UITestPairClient(),
+            iceClient: UITestWaitingICEClient(),
+            requiresVerification: { verification.requiresSASConfirmation },
+            makeConnection: { _, _, _ in throw AccountError.network }
+        )
+    }
+
     #else
     /// In Release the answer is a constant the optimiser folds away, so the
     /// guarded work is unconditional and the argument means nothing.
@@ -185,8 +208,11 @@ enum UITestMode {
     }
 
     @MainActor
-    static func makeTerminalNearbyFileModel(verification: VerificationPreference) -> RealtimeSessionModel {
-        RealtimeSessionModel(
+    static func makeTerminalNearbyFileModel(
+        verification: VerificationPreference
+    ) -> RealtimeSessionModel? {
+        guard showsTerminalNearby else { return nil }
+        return RealtimeSessionModel(
             pairClient: UITestPairClient(),
             iceClient: UITestFailingICEClient(),
             requiresVerification: { verification.requiresSASConfirmation },
