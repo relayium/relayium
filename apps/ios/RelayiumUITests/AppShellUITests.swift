@@ -387,4 +387,72 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(confirmation.isEnabled)
         XCTAssertTrue(create.exists, "a local refusal leaves no way to submit a correction")
     }
+
+    /// Leave a destructive confirmation without taking it.
+    ///
+    /// SwiftUI presents `confirmationDialog` as a POPOVER here, and a popover
+    /// deliberately carries no Cancel button: dismissing it by tapping outside
+    /// IS the cancel, which is the platform's convention rather than a missing
+    /// affordance. Prefer a real Cancel where one exists, then fall back to the
+    /// dismiss region UIKit provides for exactly this.
+    private func dismissConfirmation() {
+        let cancel = app.buttons.matching(
+            NSPredicate(format: "label == %@", "Cancel")).firstMatch
+        if cancel.exists { return cancel.tap() }
+        let outside = app.otherElements["PopoverDismissRegion"]
+        XCTAssertTrue(outside.waitForExistence(timeout: 10),
+                      "the destructive confirmation offers no way out")
+        outside.tap()
+    }
+
+    /// A destructive confirmation must name what it destroys AND state the
+    /// consequence that actually applies to that row.
+    ///
+    /// Revoking the credential in your hand signs this app out; revoking another
+    /// one does not. A dialog that carried the wrong sentence would be a
+    /// destructive button lying about itself, and nothing before this drove the
+    /// two arms in the running app.
+    func testRevokeConfirmationNamesTheDeviceAndItsRealConsequence() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-signed-in"]
+        app.launch()
+        openTask("Account", title: "Account")
+
+        let other = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "Kitchen laptop")).firstMatch
+        XCTAssertTrue(other.waitForExistence(timeout: 20),
+                      "no revoke action identifies the other device")
+        scrollUntilHittable(other)
+        other.tap()
+
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(
+            format: "label CONTAINS %@", "Kitchen laptop")).firstMatch
+            .waitForExistence(timeout: 10),
+            "the confirmation does not name the device it would revoke")
+        XCTAssertTrue(app.staticTexts[
+            "That device will be signed out and will have to sign in again."
+        ].exists, "revoking another device claims the wrong consequence")
+        XCTAssertFalse(app.staticTexts[
+            "This is the device you're using. Revoking it signs this app out immediately."
+        ].exists, "revoking another device threatens to sign this one out")
+
+        dismissConfirmation()
+
+        let current = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "Studio Mac")).firstMatch
+        XCTAssertTrue(current.waitForExistence(timeout: 10),
+                      "cancelling the confirmation lost the device list")
+        scrollUntilHittable(current)
+        current.tap()
+
+        XCTAssertTrue(app.staticTexts[
+            "This is the device you're using. Revoking it signs this app out immediately."
+        ].waitForExistence(timeout: 10),
+            "revoking this device hides that it signs the app out")
+        dismissConfirmation()
+        XCTAssertTrue(app.staticTexts["Kitchen laptop"].waitForExistence(timeout: 10),
+                      "a cancelled revoke did not leave the list intact")
+    }
+
 }
