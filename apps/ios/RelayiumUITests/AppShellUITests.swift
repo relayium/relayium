@@ -177,6 +177,32 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(open.exists, "an invalid link leaves no way to try the correction")
     }
 
+    /// A launch that already holds an account renders it, and the tasks that are
+    /// account-gated stop offering their signed-out remedy.
+    ///
+    /// Every signed-in surface in the product was unreachable from acceptance
+    /// until this: the suite could only ever be signed out, so Send a link,
+    /// Account's device and stored-file sections and every completion that
+    /// follows them had no runtime evidence at all. The account is answered by a
+    /// deterministic in-process transport, so this reaches no server and no real
+    /// credential exists anywhere in it.
+    func testASignedInLaunchRendersItsAccountAndUngatesSend() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-signed-in"]
+        app.launch()
+
+        openTask("Account", title: "Account")
+        XCTAssertTrue(app.staticTexts["person@example.com"].waitForExistence(timeout: 20),
+                      "a signed-in launch did not render the account it holds")
+        XCTAssertTrue(app.staticTexts["Signed-in devices"].exists,
+                      "the signed-in account has no device section")
+
+        openTask("Send", title: "Send files")
+        XCTAssertFalse(app.buttons["Go to Account"].exists,
+                       "a signed-in Send task still offers the signed-out remedy")
+    }
+
     /// The off state a destination failure leaves behind — never resident,
     /// never paused — rendered by the running app.
     ///

@@ -25,6 +25,34 @@ enum UITestMode {
     static let stagesPendingFixture = ProcessInfo.processInfo.arguments.contains(
         pendingFixtureArgument)
 
+
+    /// Whether this launch already holds an account.
+    ///
+    /// Every signed-in surface — Send a link, the device and stored-file
+    /// sections, and every completion that follows them — was unreachable from
+    /// acceptance, because the suite could only ever be signed out. The account
+    /// below is answered entirely in process: no request leaves the device, no
+    /// real credential exists, and the bearer is a literal that no server would
+    /// accept.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let signedInArgument = "--relayium-ui-testing-signed-in"
+    static let isSignedIn = ProcessInfo.processInfo.arguments.contains(signedInArgument)
+
+    /// A token store already holding the acceptance bearer, so `restore()` takes
+    /// its normal “found a credential” path rather than a special one.
+    static func makeSignedInTokenStore() -> TokenStore {
+        let store = InMemoryTokenStore()
+        try? store.save(UITestAccountTransport.bearer)
+        return store
+    }
+
+    static func makeAccountTransport() -> URLSession? {
+        guard isSignedIn else { return nil }
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [UITestAccountTransport.self]
+        return URLSession(configuration: configuration)
+    }
+
     /// Holds Nearby in the state a destination failure leaves behind: off,
     /// with no pause anywhere.
     ///
@@ -51,6 +79,7 @@ enum UITestMode {
     /// cannot inherit an account another path established.
     static func makeTokenStore() -> TokenStore? {
         guard isActive else { return nil }
+        if isSignedIn { return makeSignedInTokenStore() }
         let store = AppEnvironment.makeTokenStore(
             AppEnvironment.isolatedKeychainConfiguration())
         try? store.clear()
@@ -80,5 +109,89 @@ enum UITestMode {
     /// nil, so a shipped launch always resolves the product's own keychain
     /// identity and cannot be pointed at a test one.
     static func makeTokenStore() -> TokenStore? { nil }
+
+    /// false, so a shipped launch can never be told it already holds an account.
+    static let isSignedIn = false
+    static func makeAccountTransport() -> URLSession? { nil }
+
     #endif
 }
+
+#if DEBUG
+/// Answers the four account reads in process, for acceptance only.
+///
+/// The bodies are ENCODED FROM THE REAL MODELS rather than written as JSON
+/// literals: a field added to `NativeUser`, `UsageResponse` or `AccountDevice`
+/// then fails to compile here instead of quietly producing a response the app
+/// decodes into something stale. Everything else on the path is production —
+/// the same `AccountClient`, the same decoding, the same `AccountSession`
+/// states, the same views.
+///
+/// An `/api/` path this does not model is REFUSED rather than answered with an
+/// empty 200, so a surface that reaches an endpoint the fixture does not
+/// describe fails loudly instead of rendering a plausible blank.
+final class UITestAccountTransport: URLProtocol {
+    // nonlocalized: a bearer no server would accept
+    static let bearer = "uitest-bearer"
+    // nonlocalized: an acceptance fixture, not a real address
+    static let email = "person@example.com"
+
+    /// JSON literals, each VALIDATED by decoding it through the very model the
+    /// app will decode it into.
+    ///
+    /// The models carry no public memberwise initializer, so this cannot build
+    /// them directly — but validating here keeps the property that matters: if a
+    /// required field is added to `NativeUser` or `UsageResponse`, the decode
+    /// below fails, the entry is dropped, the endpoint is refused, and the
+    /// acceptance path fails loudly. A literal that merely looked plausible
+    /// would instead render a stale account forever.
+    private static var bodies: [String: Data] {
+        var out: [String: Data] = [:]
+        func offer<T: Decodable>(_ path: String, _ json: String, as type: T.Type) {
+            let data = Data(json.utf8)
+            guard (try? JSONDecoder().decode(type, from: data)) != nil else { return }
+            out[path] = data
+        }
+        offer("/api/me", """
+            {"user":{"id":"acct_uitest","email":"\(email)","displayName":"",
+            "hasPassword":true,"emailVerified":true,"linkedMethods":["password"],
+            "onlyOwnNodes":false,"planId":"free","subscriptionStatus":"none",
+            "subscriptionEnd":0,"hasBilling":false,"scheduledPlanId":"","scheduledCycle":"","billingCycle":""}}
+            """, as: MeResponse.self)
+        offer("/api/me/usage", """
+            {"period":"202608","resetsAt":0,
+            "traffic":{"used":0,"cap":5368709120},
+            "storage":{"used":0,"cap":1073741824},
+            "plan":{"id":"free","name":"Free","storageBytes":1073741824,
+            "trafficBytes":5368709120,"retentionSecs":604800,"priceMonthly":0,
+            "priceYearly":0,"isTop":false,"subscriptionStatus":"none",
+            "subscriptionEnd":0,"billingCycle":"","scheduledPlanId":"",
+            "scheduledPlanName":"","scheduledCycle":""}}
+            """, as: UsageResponse.self)
+        offer("/api/devices", #"{"devices":[]}"#, as: DeviceListResponse.self)
+        offer("/api/files", #"{"files":[]}"#, as: StoredFileListResponse.self)
+        return out
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool {
+        request.url?.path.hasPrefix("/api/") ?? false
+    }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        guard let url = request.url, let body = Self.bodies[url.path] else {
+            client?.urlProtocol(self, didFailWithError: URLError(.unsupportedURL))
+            return
+        }
+        let response = HTTPURLResponse(
+            url: url, statusCode: 200, httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "application/json"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+#endif

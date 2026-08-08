@@ -3293,4 +3293,31 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "a shipped build can be pointed at a test keychain identity")
     }
 
+    /// The signed-in acceptance account is answered in process, and none of it
+    /// may exist in a shipped binary.
+    ///
+    /// Its bodies are JSON literals validated by decoding through the very
+    /// models the app decodes into, so a field added to `NativeUser` drops the
+    /// entry, refuses the endpoint and fails the path loudly — which is exactly
+    /// how the two fields missing from the first version were found.
+    func testTheSignedInAcceptanceAccountIsDebugOnlyAndSelfValidating() throws {
+        let mode = try XCTUnwrap(
+            try sources().first { $0.name == "UITestMode.swift" }?.text)
+        XCTAssertTrue(mode.contains("final class UITestAccountTransport: URLProtocol"),
+                      "the signed-in acceptance transport is gone")
+        let transport = try XCTUnwrap(mode.range(of: "final class UITestAccountTransport"))
+        let preamble = String(mode[..<transport.lowerBound])
+        XCTAssertGreaterThan(preamble.components(separatedBy: "#if DEBUG").count - 1,
+                             preamble.components(separatedBy: "#endif").count - 1,
+                             "the acceptance transport is not inside a Debug block")
+        XCTAssertTrue(mode.contains("guard (try? JSONDecoder().decode(type, from: data)) != nil"),
+                      "the fixture bodies are no longer validated against the real models")
+        XCTAssertTrue(mode.contains("didFailWithError: URLError(.unsupportedURL)"),
+                      "an unmodelled endpoint is answered instead of refused")
+        // The bearer is a literal no server would accept, and the address is not
+        // a real one. Neither may drift into something that could reach production.
+        XCTAssertTrue(mode.contains("\"uitest-bearer\""))
+        XCTAssertTrue(mode.contains("\"person@example.com\""))
+    }
+
 }

@@ -168,7 +168,8 @@ struct RelayiumApp: App {
         // as a local first. Same shape as `keys`, `account` and `managing`.
         let downloads = AppEnvironment.makeDownloadModel()
         _download = StateObject(wrappedValue: downloads)
-        let account = AppEnvironment.makeSession(tokenStore: UITestMode.makeTokenStore())
+        let account = AppEnvironment.makeSession(tokenStore: UITestMode.makeTokenStore(),
+                                                 transport: UITestMode.makeAccountTransport())
         _session = StateObject(wrappedValue: account)
         // ONE stored-link key store: the upload model WRITES a key here and the
         // account management model READS it back and removes it with the object.

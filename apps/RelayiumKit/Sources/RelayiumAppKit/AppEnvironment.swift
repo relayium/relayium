@@ -184,9 +184,10 @@ public enum AppEnvironment {
     /// an isolated one rather than reading whatever account the machine is in.
     @MainActor
     public static func makeSession(baseURL: URL = productionBaseURL,
-                                   tokenStore: TokenStore? = nil) -> AccountSession {
+                                   tokenStore: TokenStore? = nil,
+                                   transport: URLSession? = nil) -> AccountSession {
         AccountSession(
-            client: AccountClient(baseURL: baseURL),
+            client: AccountClient(baseURL: baseURL, session: transport ?? .shared),
             tokenStore: tokenStore ?? makeTokenStore(),
             deviceName: deviceName()
         )
