@@ -7,6 +7,8 @@ package httpx
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -24,6 +26,27 @@ const maxJSONBody = 1 << 20
 // to buffer an arbitrarily large request body.
 func DecodeJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
 	return json.NewDecoder(http.MaxBytesReader(w, r.Body, maxJSONBody)).Decode(dst)
+}
+
+// DecodeStrictJSONBody is the versioned-protocol variant of DecodeJSONBody.
+// It rejects unknown fields and trailing JSON values, so a newer client cannot
+// silently believe central understood security-sensitive material that it
+// actually ignored. An empty body returns io.EOF to let endpoints that define
+// an empty request as valid handle that case explicitly.
+func DecodeStrictJSONBody(w http.ResponseWriter, r *http.Request, dst any) error {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxJSONBody))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		return err
+	}
+	var extra any
+	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return errors.New("httpx: multiple JSON values")
+		}
+		return err
+	}
+	return nil
 }
 
 // WriteJSON writes v as a JSON response body with the given status code.

@@ -144,6 +144,81 @@ type Device struct {
 	Kind string
 }
 
+// DeviceInbox is one device's Device Inbox enrolment: the negotiated protocol
+// version, the capabilities it announced, its automatic-receive policy, and its
+// heartbeat-derived presence. One row per device; absent = the device is not
+// enrolled and is not a send target.
+//
+// Presence is stored ONLY as PresenceExpiresAt (plus the raw LastHeartbeatAt for
+// display). There is deliberately no `online` column: a boolean would survive a
+// crashed device, a killed process or a central restart, and the first thing a
+// sender would see is a lie. See inbox.Presence.
+//
+// RevokedAt is set when the device's ACTIVE end-to-end key is revoked. A revoked
+// enrolment is terminal: the device cannot heartbeat, cannot register a new key,
+// and is never a send target. The owner clears it by deleting the enrolment (an
+// explicit re-enrolment) or by deleting the device outright.
+type DeviceInbox struct {
+	DeviceID string
+	UserID   string
+	// Platform ("darwin"/"linux"/"ios"/…) and AppVersion are self-reported
+	// display/diagnostic metadata, bounded but not trusted.
+	Platform   string
+	AppVersion string
+	// ProtocolVersion is the NEGOTIATED version (highest common), not what the
+	// client asked for. 0 is impossible on a stored row: a failed negotiation
+	// stores nothing.
+	ProtocolVersion int
+	// Capabilities is the canonical (deduplicated, sorted) announced set.
+	Capabilities []string
+	// ReceiveCapability is the negotiated member of the inbox.receive.* family.
+	ReceiveCapability string
+	// AutoAccept is off|ask|auto, default off (PRD §8).
+	AutoAccept string
+	// ReceiveDirReady is the device's own last report of whether its configured
+	// receive directory is usable. Reported, never inferred: central has no way
+	// to check a directory on someone else's machine.
+	ReceiveDirReady   bool
+	LastHeartbeatAt   int64
+	PresenceExpiresAt int64
+	RegisteredAt      int64
+	UpdatedAt         int64
+	RevokedAt         int64
+}
+
+// DeviceKey is ONE end-to-end public key in a device's key history. PublicKey is
+// a PUBLIC key and nothing else — there is no private-key field on this struct,
+// no column behind it, and no API that accepts one (zero-knowledge invariant).
+//
+// History is retained rather than overwritten on rotation, because a task queued
+// before a rotation was sealed to the OLDER key: dropping the row would make
+// central unable to say which key a queued task belongs to, and the honest
+// recovery ("this task was sealed to a key you have rotated away from") would
+// become an unexplained failure. Superseded is therefore distinct from revoked:
+//
+//   - SupersededAt != 0 — rotated away from. Not used for NEW tasks; the device
+//     still holds the private key and can drain tasks sealed to it.
+//   - RevokedAt != 0 — compromised or withdrawn. Never usable again, for new or
+//     queued tasks.
+//
+// Generation is a per-device counter starting at 1, unique by DB constraint. It
+// makes a replayed or reordered rotation detectable rather than merely unlikely.
+type DeviceKey struct {
+	ID           string
+	DeviceID     string
+	UserID       string
+	Algorithm    string
+	PublicKey    string
+	Generation   int64
+	CreatedAt    int64
+	SupersededAt int64
+	RevokedAt    int64
+}
+
+// Active reports whether this key may be used to seal a NEW task: the current
+// key of its device and not revoked.
+func (k DeviceKey) Active() bool { return k.SupersededAt == 0 && k.RevokedAt == 0 }
+
 // DeviceAuthRequest is one device-code CLI login flow request (RFC 8628-style).
 // Status transitions pending -> approved -> consumed exactly once each; denied
 // is a terminal dead end. TokenHash is the hash of the CLI bearer token minted
@@ -779,6 +854,50 @@ type Store interface {
 	ListDevices(ctx context.Context, userID string) ([]Device, error)
 	RenameDevice(ctx context.Context, id, userID, name string) error
 	DeleteDevice(ctx context.Context, id, userID string) error
+	// Device Inbox enrolment (Phase 1A). Every method is scoped by userID as
+	// well as deviceID: a device id is guessable, so ownership is re-checked in
+	// the query rather than assumed from whatever authenticated the caller.
+	//
+	// UpsertDeviceInbox creates or updates the enrolment. It deliberately does
+	// NOT touch presence — registering is not evidence of being online — and
+	// refuses a revoked enrolment (ErrDeviceInboxRevoked).
+	UpsertDeviceInbox(ctx context.Context, in DeviceInbox) (DeviceInbox, error)
+	GetDeviceInbox(ctx context.Context, deviceID, userID string) (DeviceInbox, bool, error)
+	// ListDeviceInboxes returns every enrolment for a user, keyed by device id,
+	// so the device list is one query rather than one per row.
+	ListDeviceInboxes(ctx context.Context, userID string) (map[string]DeviceInbox, error)
+	// DeleteDeviceInbox removes the enrolment AND its whole key history. This is
+	// the owner's explicit re-enrolment path out of a revoked state.
+	// byDeviceItself says the caller's bearer is bound to this device row; a
+	// revoked enrolment then yields ErrRevokedSelfClear. The rule is applied
+	// inside the delete transaction so a revoked device cannot race a
+	// check-then-delete and clear its own revocation.
+	DeleteDeviceInbox(ctx context.Context, deviceID, userID string, byDeviceItself bool) (bool, error)
+	// TouchDeviceInboxPresence records a heartbeat. ok=false when there is no
+	// enrolment for this (device, user) or it is revoked — a revoked device must
+	// not be able to resurrect its own presence.
+	TouchDeviceInboxPresence(ctx context.Context, deviceID, userID string, now, expiresAt int64, receiveDirReady bool) (ok bool, err error)
+	// ExpireDeviceInboxPresence is the graceful goodbye: a device shutting down
+	// says so instead of leaving senders to wait out the TTL.
+	ExpireDeviceInboxPresence(ctx context.Context, deviceID, userID string, now int64) (ok bool, err error)
+	// RotateDeviceKey registers a device's first key (previousKeyID == "") or
+	// replaces its current one, as a compare-and-swap against previousKeyID.
+	// Returns ErrStaleKeyRotation when the named predecessor is not the current
+	// key, which is what makes a replayed or reordered rotation fail rather than
+	// silently install an old key.
+	RotateDeviceKey(ctx context.Context, k DeviceKey, previousKeyID string) (DeviceKey, error)
+	// ActiveDeviceKey returns the key new tasks must be sealed to, if any.
+	ActiveDeviceKey(ctx context.Context, deviceID, userID string) (DeviceKey, bool, error)
+	// ActiveDeviceKeys returns the active key per device for a user, keyed by
+	// device id (companion to ListDeviceInboxes for the device list).
+	ActiveDeviceKeys(ctx context.Context, userID string) (map[string]DeviceKey, error)
+	// ListDeviceKeys returns the full history, newest generation first.
+	ListDeviceKeys(ctx context.Context, deviceID, userID string) ([]DeviceKey, error)
+	// RevokeDeviceKey marks one key permanently unusable. Revoking the ACTIVE
+	// key also revokes the enrolment and expires presence in the same
+	// transaction, so there is no window where a keyless device still looks
+	// like a valid send target.
+	RevokeDeviceKey(ctx context.Context, deviceID, userID, keyID string, now int64) (revokedActive, ok bool, err error)
 	// usage (cross-network relay metering)
 	RecordUsage(ctx context.Context, e UsageEvent) error
 	UserUsageTotal(ctx context.Context, userID string) (int64, error)

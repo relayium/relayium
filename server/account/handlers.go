@@ -162,6 +162,23 @@ func (s *Service) routeMux() *http.ServeMux {
 	mux.HandleFunc("POST /api/devices", s.RequireSession(s.handleUpsertDevice))
 	mux.HandleFunc("PATCH /api/devices/{id}", s.RequireAuth(s.handleRenameDevice))
 	mux.HandleFunc("DELETE /api/devices/{id}", s.RequireAuth(s.handleDeleteDevice))
+	// Device Inbox (Phase 1A). All RequireAuth; the device-self vs.
+	// account-scoped split is enforced INSIDE the handlers, not by the wrapper,
+	// because both halves need the same credential resolution and only some of
+	// them additionally require the bearer to be bound to this device row. See
+	// the authorization-model comment at the top of deviceinbox.go.
+	//
+	// Device-self: enrolment, keys, presence — assertions only the machine
+	// holding the private key may make.
+	mux.HandleFunc("PUT /api/devices/{id}/inbox", s.RequireAuth(s.handleRegisterDeviceInbox))
+	mux.HandleFunc("POST /api/devices/{id}/inbox/keys", s.RequireAuth(s.handleRegisterDeviceKey))
+	mux.HandleFunc("POST /api/devices/{id}/inbox/heartbeat", s.RequireAuth(s.handleDeviceInboxHeartbeat))
+	mux.HandleFunc("POST /api/devices/{id}/inbox/offline", s.RequireAuth(s.handleDeviceInboxOffline))
+	// Account-scoped: revocation has to work from a DIFFERENT device than the
+	// one being revoked, which is the entire point of revoking a lost machine.
+	mux.HandleFunc("DELETE /api/devices/{id}/inbox", s.RequireAuth(s.handleDeleteDeviceInbox))
+	mux.HandleFunc("GET /api/devices/{id}/inbox/keys", s.RequireAuth(s.handleListDeviceKeys))
+	mux.HandleFunc("POST /api/devices/{id}/inbox/keys/{keyId}/revoke", s.RequireAuth(s.handleRevokeDeviceKey))
 	mux.HandleFunc("GET /api/ice", s.handleICE)
 	mux.HandleFunc("GET /api/config", s.handleConfig)
 	mux.HandleFunc("GET /api/usage", s.RequireSession(s.handleUsage))
@@ -240,6 +257,12 @@ type deviceView struct {
 	// session, not a device-bound token, so none of these rows is "the device
 	// you are using" in a way that revoking would end.
 	Current bool `json:"Current"`
+	// Inbox is the device's Device Inbox enrolment: presence, negotiated
+	// capabilities and the active public key a sender wraps a content key to.
+	// NULL for a device that has never enrolled (every browser device, and any
+	// CLI/app build predating Phase 1A), which is what makes this field additive
+	// for the existing web client.
+	Inbox *deviceInboxView `json:"Inbox"`
 }
 
 func (s *Service) handleListDevices(w http.ResponseWriter, r *http.Request, u User) {
@@ -248,16 +271,34 @@ func (s *Service) handleListDevices(w http.ResponseWriter, r *http.Request, u Us
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
+	// Two account-scoped queries rather than two per row: this list is rendered
+	// on every visit to the devices page, and a per-device lookup would make it
+	// O(devices) round trips against a single-writer SQLite.
+	inboxes, err := s.store.ListDeviceInboxes(r.Context(), u.ID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	keys, err := s.store.ActiveDeviceKeys(r.Context(), u.ID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
 	currentID := s.bearerDeviceID(r, u.ID)
 	out := make([]deviceView, 0, len(ds))
 	for _, d := range ds {
-		out = append(out, deviceView{
+		v := deviceView{
 			ID: d.ID, UserID: d.UserID, Name: d.Name,
 			CreatedAt: d.CreatedAt, LastSeenAt: d.LastSeenAt, Kind: d.Kind,
 			// currentID is "" for a cookie caller, and device ids are never
 			// empty, so this cannot accidentally mark a row.
 			Current: currentID != "" && d.ID == currentID,
-		})
+		}
+		if in, ok := inboxes[d.ID]; ok {
+			key, hasKey := keys[d.ID]
+			v.Inbox = s.newDeviceInboxView(in, key, hasKey)
+		}
+		out = append(out, v)
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"devices": out})
 }

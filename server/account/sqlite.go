@@ -577,6 +577,77 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
   id INTEGER PRIMARY KEY CHECK (id = 1),
   latest_tag TEXT NOT NULL DEFAULT '', checked_at INTEGER NOT NULL DEFAULT 0,
   dismissed_tag TEXT NOT NULL DEFAULT '', dismissed_at INTEGER NOT NULL DEFAULT 0)`,
+		// Device Inbox Phase 1A. One enrolment row per receiving device, holding
+		// the NEGOTIATED protocol version (never what the client merely asked
+		// for), the capability set it announced, its automatic-receive policy and
+		// its heartbeat-derived presence.
+		//
+		// presence_expires_at is the ONLY presence state. There is deliberately no
+		// `online` column: a stored boolean outlives the process that set it, so a
+		// device killed with SIGKILL — or central restarting — would leave senders
+		// looking at a device that is advertised as available and is not. Presence
+		// is computed at read time from this timestamp (see inbox.Presence), which
+		// makes "went offline" the default rather than something a sweeper has to
+		// remember to do.
+		//
+		// auto_accept DEFAULT 'off' is the PRD §8 product invariant expressed in
+		// the schema: no row can come into existence already permitted to write to
+		// a user's disk.
+		//
+		// ON DELETE CASCADE ties the enrolment to the device row, so DELETE
+		// /api/devices/{id} — the existing "revoke this credential" control —
+		// also removes the inbox enrolment and (below) the key history, with no
+		// second code path to keep in sync. The foreign_keys pragma is on (see
+		// connPragmas), so this is enforced, not decorative.
+		`CREATE TABLE IF NOT EXISTS device_inbox (
+  device_id           TEXT PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
+  user_id             TEXT NOT NULL,
+  platform            TEXT NOT NULL DEFAULT '',
+  app_version         TEXT NOT NULL DEFAULT '',
+  protocol_version    INTEGER NOT NULL DEFAULT 0,
+  capabilities        TEXT NOT NULL DEFAULT '',
+  receive_capability  TEXT NOT NULL DEFAULT '',
+  auto_accept         TEXT NOT NULL DEFAULT 'off',
+  receive_dir_ready   INTEGER NOT NULL DEFAULT 0,
+  last_heartbeat_at   INTEGER NOT NULL DEFAULT 0,
+  presence_expires_at INTEGER NOT NULL DEFAULT 0,
+  registered_at       INTEGER NOT NULL,
+  updated_at          INTEGER NOT NULL,
+  revoked_at          INTEGER NOT NULL DEFAULT 0)`,
+		`CREATE INDEX IF NOT EXISTS idx_device_inbox_user ON device_inbox(user_id)`,
+		// A device's end-to-end PUBLIC key history. Only public keys are ever
+		// stored — there is no column here, and no request field anywhere, that
+		// could carry a private key or a content key.
+		//
+		// History is kept rather than overwritten because a task queued before a
+		// rotation was sealed to the OLDER key. superseded_at ("rotated away
+		// from", the device still holds the private key and can drain those
+		// tasks) is therefore a different state from revoked_at ("never usable
+		// again"), and collapsing them would either strand queued tasks or keep
+		// trusting a withdrawn key.
+		//
+		// The UNIQUE (device_id, generation) index is the rotation's ordering
+		// guarantee: two concurrent rotations cannot both write generation N, so
+		// one of them fails instead of forking the history.
+		`CREATE TABLE IF NOT EXISTS device_keys (
+  id            TEXT PRIMARY KEY,
+  device_id     TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+  user_id       TEXT NOT NULL,
+  algorithm     TEXT NOT NULL,
+  public_key    TEXT NOT NULL,
+  generation    INTEGER NOT NULL,
+  created_at    INTEGER NOT NULL,
+  superseded_at INTEGER NOT NULL DEFAULT 0,
+  revoked_at    INTEGER NOT NULL DEFAULT 0)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_device_keys_generation ON device_keys(device_id, generation)`,
+		// Generation uniqueness orders the history; this partial unique index is
+		// the stronger invariant that makes two current rows impossible even if a
+		// future write path bypasses RotateDeviceKey's CAS.
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_device_keys_active ON device_keys(device_id) WHERE superseded_at = 0`,
+		// Serves both hot reads: the per-device history listing and the "which
+		// key do I seal to" lookup, which filters on superseded_at.
+		`CREATE INDEX IF NOT EXISTS idx_device_keys_device ON device_keys(device_id, superseded_at, generation DESC)`,
+		`CREATE INDEX IF NOT EXISTS idx_device_keys_user ON device_keys(user_id, superseded_at)`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
