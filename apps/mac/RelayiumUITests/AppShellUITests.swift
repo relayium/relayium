@@ -557,4 +557,38 @@ final class AppShellUITests: XCTestCase {
         XCTAssertEqual(app.state, .runningForeground,
                        "closing the window must not end the process; the menu bar keeps it alive")
     }
+    /// A launch that already holds an account renders it, and Send a link stops
+    /// offering the remedy for a state it is no longer in.
+    ///
+    /// Every signed-in macOS surface was unreachable from acceptance until this,
+    /// which on macOS includes a whole sidebar destination. The account is
+    /// answered by a deterministic in-process transport: nothing leaves the
+    /// machine and no real credential exists in it.
+    func testASignedInLaunchRendersItsAccountAndUngatesStoredSend() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-signed-in"]
+        app.launch()
+        ensureProductWindowIsOpen()
+
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let account = sidebarDestination("Account", in: window)
+        XCTAssertTrue(account.waitForExistence(timeout: 10))
+        account.click()
+
+        XCTAssertTrue(window.staticTexts["person@example.com"].waitForExistence(timeout: 20),
+                      "a signed-in launch did not render the account it holds")
+        XCTAssertTrue(window.staticTexts["Signed-in devices"].exists,
+                      "the signed-in account has no device section")
+        XCTAssertFalse(window.staticTexts["Welcome back"].exists,
+                       "a signed-in launch still shows the sign-in form")
+
+        let send = sidebarDestination("Send a link", in: window)
+        XCTAssertTrue(send.waitForExistence(timeout: 10))
+        send.click()
+        XCTAssertFalse(window.buttons["Sign in"].exists,
+                       "a signed-in stored send still offers the signed-out remedy")
+    }
+
 }

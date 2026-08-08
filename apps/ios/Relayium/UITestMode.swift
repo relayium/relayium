@@ -120,10 +120,13 @@ enum UITestMode {
 #if DEBUG
 /// Answers the four account reads in process, for acceptance only.
 ///
-/// The bodies are ENCODED FROM THE REAL MODELS rather than written as JSON
-/// literals: a field added to `NativeUser`, `UsageResponse` or `AccountDevice`
-/// then fails to compile here instead of quietly producing a response the app
-/// decodes into something stale. Everything else on the path is production —
+/// The bodies are JSON literals, each VALIDATED by decoding it through the very
+/// model the app will decode it into. The models carry no public memberwise
+/// initializer, so this cannot construct them directly — but validating keeps
+/// the property that matters: a required field added to `NativeUser` or
+/// `UsageResponse` drops the entry, refuses the endpoint and fails the path
+/// loudly, which is exactly how the two fields missing from the first version
+/// were found. Everything else on the path is production —
 /// the same `AccountClient`, the same decoding, the same `AccountSession`
 /// states, the same views.
 ///

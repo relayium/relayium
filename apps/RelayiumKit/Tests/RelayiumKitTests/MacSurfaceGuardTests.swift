@@ -2417,4 +2417,40 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "a shipped build can be pointed at a test keychain identity")
     }
 
+    /// The macOS half of the signed-in acceptance account, and the one assertion
+    /// that keeps the two platforms from drifting apart.
+    ///
+    /// The transport is duplicated per app on purpose — a URLProtocol that
+    /// fabricates account responses does not belong in a shipping library — so
+    /// the modelled endpoint set is asserted to be identical instead. A platform
+    /// that quietly stopped modelling `/api/files` would render an empty stored
+    /// list that looked like a real empty account.
+    func testTheSignedInAcceptanceAccountMatchesTheOtherPlatform() throws {
+        let mac = try source(named: "UITestMode.swift")
+        let iosURL = appsRoot.appendingPathComponent("ios/Relayium/UITestMode.swift")
+        let ios = try String(contentsOf: iosURL, encoding: .utf8)
+
+        for endpoint in ["/api/me", "/api/me/usage", "/api/devices", "/api/files"] {
+            XCTAssertTrue(mac.contains("\"\(endpoint)\""), "macOS stopped modelling \(endpoint)")
+            XCTAssertTrue(ios.contains("\"\(endpoint)\""), "iOS stopped modelling \(endpoint)")
+        }
+        for required in ["final class UITestAccountTransport: URLProtocol",
+                         "guard (try? JSONDecoder().decode(type, from: data)) != nil",
+                         "didFailWithError: URLError(.unsupportedURL)",
+                         "if isSignedIn { return makeSignedInTokenStore() }"] {
+            XCTAssertTrue(mac.contains(required), "macOS lost \(required)")
+            XCTAssertTrue(ios.contains(required), "iOS lost \(required)")
+        }
+        let halves = mac.components(separatedBy: "#else")
+        XCTAssertEqual(halves.count, 2, "UITestMode lost its Debug/Release split")
+        XCTAssertFalse(try XCTUnwrap(halves.last).contains("--relayium-ui-testing"),
+                       "a shipped build can be told it already holds an account")
+
+        let uiURL = macRoot.deletingLastPathComponent()
+            .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
+        let ui = try String(contentsOf: uiURL, encoding: .utf8)
+        XCTAssertTrue(ui.contains("testASignedInLaunchRendersItsAccountAndUngatesStoredSend"),
+                      "no runtime path drives a signed-in macOS launch")
+    }
+
 }
