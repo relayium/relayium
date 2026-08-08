@@ -2453,6 +2453,20 @@ final class MacSurfaceGuardTests: XCTestCase {
             XCTAssertTrue(mac.contains("\"\(endpoint)\""), "macOS stopped modelling \(endpoint)")
             XCTAssertTrue(ios.contains("\"\(endpoint)\""), "iOS stopped modelling \(endpoint)")
         }
+        // The stored-link keys are the consequential half of the isolation: the
+        // product store resolves the installed app's keychain identity, and the
+        // delete path calls `remove` on it.
+        for required in ["static func makeStoredLinkKeyStore() -> StoredLinkKeyStore?",
+                         "InMemoryStoredLinkKeyStore()"] {
+            XCTAssertTrue(mac.contains(required), "macOS lost \(required)")
+            XCTAssertTrue(ios.contains(required), "iOS lost \(required)")
+        }
+        for app in [try source(named: "RelayiumApp.swift"),
+                    try String(contentsOf: appsRoot.appendingPathComponent(
+                        "ios/Relayium/RelayiumApp.swift"), encoding: .utf8)] {
+            XCTAssertTrue(app.contains("UITestMode.makeStoredLinkKeyStore()"),
+                          "an acceptance launch still reaches the product's stored-link keys")
+        }
         for required in ["final class UITestAccountTransport: URLProtocol",
                          "guard (try? JSONDecoder().decode(type, from: data)) != nil",
                          "didFailWithError: URLError(.unsupportedURL)",

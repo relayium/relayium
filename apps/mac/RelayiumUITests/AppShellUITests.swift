@@ -593,28 +593,31 @@ final class AppShellUITests: XCTestCase {
         XCTAssertGreaterThan(revokes.count, 0,
                              "a revoke action does not identify the row it destroys")
 
-        // A stored object whose key never reached this device. The row must be
-        // identified, explained, and must offer NO link hand-off: a `#k=` link
-        // is the plaintext to anybody holding it, and this device cannot build
-        // one. A disabled-looking Copy would be a worse lie than saying so.
+        // Both arms of a stored row, side by side. A `#k=` link is the plaintext
+        // to anybody holding it, so which arm a row is in is a security fact,
+        // not a convenience one.
         XCTAssertTrue(window.staticTexts["obj_uitest"].waitForExistence(timeout: 10),
                       "the stored object is not identified by the id the server knows")
-        // XCUITest caps a string-identifier query at 128 characters, and this
-        // explanation is deliberately longer than that, so match its opening.
-        let keyAbsent = window.descendants(matching: .any)["storedFile.keyAbsent.obj_uitest"]
+        XCTAssertTrue(window.staticTexts["obj_nokey"].exists,
+                      "the second stored object is missing from the list")
+        for handoff in ["Share the link for stored file", "Copy link", "Open"] {
+            XCTAssertGreaterThan(window.buttons.matching(NSPredicate(
+                format: "label BEGINSWITH %@ AND label CONTAINS %@",
+                handoff, "obj_uitest")).count, 0,
+                "a rebuildable row does not offer \(handoff)")
+        }
+        let keyAbsent = window.descendants(matching: .any)["storedFile.keyAbsent.obj_nokey"]
             .firstMatch
         XCTAssertTrue(keyAbsent.waitForExistence(timeout: 10),
-                      "a rebuildable-looking row does not explain why it is not")
-        // Delete IS offered and must be: removing the ciphertext needs no key.
-        // What must not exist is any way to hand the link on.
+                      "a row that cannot be rebuilt does not explain why")
         for handoff in ["Share the link for stored file", "Copy link", "Open"] {
             XCTAssertEqual(window.buttons.matching(NSPredicate(
                 format: "label BEGINSWITH %@ AND label CONTAINS %@",
-                handoff, "obj_uitest")).count, 0,
+                handoff, "obj_nokey")).count, 0,
                 "a row with no key still offers \(handoff)")
         }
-        XCTAssertGreaterThan(window.buttons.matching(NSPredicate(
-            format: "label BEGINSWITH %@", "Delete stored file")).count, 0,
+        XCTAssertEqual(window.buttons.matching(NSPredicate(
+            format: "label BEGINSWITH %@", "Delete stored file")).count, 2,
             "a stored object that cannot be linked also cannot be removed")
         XCTAssertFalse(window.staticTexts["Welcome back"].exists,
                        "a signed-in launch still shows the sign-in form")
@@ -687,8 +690,12 @@ final class AppShellUITests: XCTestCase {
 
         // Deleting stored ciphertext is irreversible and takes the object away
         // from everyone holding the link, so the dialog must say both.
-        let delete = window.buttons.matching(
-            NSPredicate(format: "label CONTAINS %@", "obj_uitest")).firstMatch
+        // By the delete action itself, not merely by the row's id: a rebuildable
+        // row also carries Open, Copy link and Share, and any of them would
+        // match an id-only query.
+        let delete = window.buttons.matching(NSPredicate(
+            format: "label BEGINSWITH %@ AND label CONTAINS %@",
+            "Delete stored file", "obj_uitest")).firstMatch
         XCTAssertTrue(delete.waitForExistence(timeout: 10),
                       "no delete action identifies the stored object")
         delete.click()

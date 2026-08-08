@@ -269,7 +269,8 @@ struct RelayiumApp: App {
         // instances would still work — they address the same keychain items —
         // but building it once keeps the shared dependency visible rather than
         // implied by two constructors happening to agree.
-        let storedKeys = AppEnvironment.makeStoredLinkKeyStore()
+        let storedKeys = UITestMode.makeStoredLinkKeyStore()
+            ?? AppEnvironment.makeStoredLinkKeyStore()
         let uploads = AppEnvironment.makeUploadModel(keyStore: storedKeys)
         let downloads = AppEnvironment.makeDownloadModel()
         let management = AppEnvironment.makeAccountManagementModel(

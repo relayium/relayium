@@ -1614,8 +1614,16 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// server, not in the manifest, only in the link and in this store.
     func testOneStoredLinkKeyStoreIsSharedByUploadAndManagement() throws {
         let app = try XCTUnwrap(try sources().first { $0.name == "RelayiumApp.swift" })
-        XCTAssertEqual(app.text.components(separatedBy: "makeStoredLinkKeyStore()").count - 1, 1,
-                       "a second key store would be a second source of truth for the keys")
+        // Count the PRODUCT store, not the expression: an acceptance launch
+        // substitutes an in-memory store for it, which is still one store — the
+        // invariant is that both models receive the same `keys` value, not that
+        // the line mentions the factory once.
+        XCTAssertEqual(app.text.components(
+            separatedBy: "AppEnvironment.makeStoredLinkKeyStore()").count - 1, 1,
+            "a second key store would be a second source of truth for the keys")
+        XCTAssertEqual(app.text.components(
+            separatedBy: "UITestMode.makeStoredLinkKeyStore()").count - 1, 1,
+            "the acceptance substitution happens more than once")
         XCTAssertTrue(app.text.contains("AppEnvironment.makeUploadModel(\n            keyStore: keys"),
                       "the upload model must take the shared store")
         XCTAssertTrue(app.text.contains("AppEnvironment.makeAccountManagementModel(\n            keyStore: keys"),

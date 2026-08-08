@@ -68,6 +68,28 @@ enum UITestMode {
         return URLSession(configuration: configuration)
     }
 
+
+    /// The stored-link key store an acceptance launch may use.
+    ///
+    /// **This is the more consequential half of the keychain isolation.**
+    /// `AppEnvironment.makeStoredLinkKeyStore()` resolves the product's own
+    /// keychain identity, so before this an acceptance launch could READ the
+    /// installed app's stored-link keys — and a delete path calls `remove`,
+    /// which would have destroyed real ones. In memory, so it also cannot
+    /// outlive the process.
+    ///
+    /// Seeded only for a signed-in launch, and only for the object the account
+    /// fixture describes, so the rebuildable arm of a stored row has something
+    /// to rebuild from.
+    static func makeStoredLinkKeyStore() -> StoredLinkKeyStore? {
+        guard isActive else { return nil }
+        let store = InMemoryStoredLinkKeyStore()
+        guard isSignedIn else { return store }
+        // nonlocalized: 32 zero bytes, base64url — an acceptance key, never real
+        let key = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        Task { try? await store.save(id: "obj_uitest", keyB64url: key) }
+        return store
+    }
     /// The keychain an acceptance launch may use — never the item the installed
     /// product wrote, and emptied before the session restores.
     ///
@@ -92,6 +114,10 @@ enum UITestMode {
     /// nil, so a shipped launch always resolves the product's own keychain
     /// identity and cannot be pointed at a test one.
     static func makeTokenStore() -> TokenStore? { nil }
+
+    /// nil, so a shipped launch always keeps its stored-link keys where the
+    /// product keeps them.
+    static func makeStoredLinkKeyStore() -> StoredLinkKeyStore? { nil }
 
     /// false, so a shipped launch can never be told it already holds an account.
     static let isSignedIn = false
@@ -222,8 +248,15 @@ final class UITestAccountTransport: URLProtocol {
         // out of a signed-in launch, and an unmodelled endpoint is refused —
         // which would have made a failed sign-out look like a product defect.
         out["/api/auth/logout"] = Data("{}".utf8)
+        // Two objects, one of each arm. A row whose key is on this device can be
+        // handed on; a row whose key never arrived cannot, and must say so. One
+        // row alone would prove only whichever arm it happened to be in.
         offer("/api/files", """
-            {"files":[{"id":"obj_uitest","size":1536,"createdAt":1754000000,
+            {"files":[
+            {"id":"obj_uitest","size":1536,"createdAt":1754000000,
+            "expiresAt":0,"burnAfterRead":false,"downloaded":false,
+            "downloadCount":0},
+            {"id":"obj_nokey","size":4096,"createdAt":1753000000,
             "expiresAt":0,"burnAfterRead":false,"downloaded":false,
             "downloadCount":0}]}
             """, as: StoredFileListResponse.self)

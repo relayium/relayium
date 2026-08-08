@@ -180,7 +180,8 @@ struct RelayiumApp: App {
         // and the key exists nowhere else: not on the server, only in the link
         // and in this store. R3-B made `makeStoredLinkKeyStore` per-platform, so
         // this resolves to com.relayium.app with NO access group and no `#if`.
-        let keys = AppEnvironment.makeStoredLinkKeyStore()
+        let keys = UITestMode.makeStoredLinkKeyStore()
+            ?? AppEnvironment.makeStoredLinkKeyStore()
         // R3-G: the stored-send half gets durable recovery. The bytes are
         // staged into this app's own Application Support directory before a
         // server session exists, so an upload the system interrupts can be
