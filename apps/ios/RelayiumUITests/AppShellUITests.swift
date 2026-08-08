@@ -675,4 +675,51 @@ final class AppShellUITests: XCTestCase {
                        "the released task kept stale peer context on screen")
     }
 
+    /// A signed-in stored send identifies what it is about to upload, before any
+    /// expiry choice or Send action is made.
+    ///
+    /// Send is account-gated, so this cell was unreachable until the acceptance
+    /// account existed: every earlier pending-file path used the anonymous
+    /// Nearby surface instead. The selection runs through the real system
+    /// document browser, so the picker, the security scope and the expansion are
+    /// production code.
+    func testASignedInStoredSendNamesTheFileItWouldUpload() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pending-fixture"]
+        app.launch()
+
+        openTask("Send", title: "Send files")
+        XCTAssertFalse(app.buttons["Go to Account"].exists,
+                       "a signed-in Send task still offers the signed-out remedy")
+
+        let chooser = app.buttons["Choose Files or Folders…"]
+        XCTAssertTrue(chooser.waitForExistence(timeout: 15),
+                      "a signed-in Send task has no file-selection surface")
+        scrollUntilHittable(chooser)
+        chooser.tap()
+
+        let browsingTabs = app.tabBars["DOC.browsingModeTabBar"]
+        XCTAssertTrue(browsingTabs.waitForExistence(timeout: 20),
+                      "choosing files did not present the system document browser")
+        browsingTabs.buttons["Browse"].tap()
+        tapInBrowser("On My iPhone")
+        tapInBrowser("Relayium")
+        tapStagedFixture(named: "Relayium product brief")
+        let open = app.buttons["Open"]
+        XCTAssertTrue(open.waitForExistence(timeout: 10),
+                      "the system browser has no confirmation action")
+        open.tap()
+
+        let identity = app.descendants(matching: .any)["pendingFile.0"].firstMatch
+        XCTAssertTrue(identity.waitForExistence(timeout: 15),
+                      "the stored send did not expose what it would upload")
+        XCTAssertTrue(identity.label.contains("Relayium product brief.txt"),
+                      "the stored send shortened or omitted the file name")
+        XCTAssertTrue(identity.label.contains("1.5 KB"),
+                      "the stored send omitted the formatted file size")
+        XCTAssertTrue(app.buttons["Clear"].exists,
+                      "the identified stored send cannot be cleared")
+    }
+
 }
