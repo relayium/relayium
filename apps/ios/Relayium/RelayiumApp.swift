@@ -245,7 +245,8 @@ struct RelayiumApp: App {
         // read "the current room" would, in the one case that matters — a drop
         // mid-setup — reach a room where that id belongs to somebody else.
         let room = InboundRoom()
-        let files = AppEnvironment.makeRealtimeModel(verification: verifying, nearby: nearby, inboundRoom: room)
+        let files = UITestMode.makeTerminalNearbyFileModel(verification: verifying)
+            ?? AppEnvironment.makeRealtimeModel(verification: verifying, nearby: nearby, inboundRoom: room)
         let texts = UITestMode.makeRealtimeTextModel(verification: verifying)
             ?? AppEnvironment.makeRealtimeTextModel(verification: verifying, nearby: nearby, inboundRoom: room)
         _direct = StateObject(wrappedValue: files)
@@ -260,6 +261,14 @@ struct RelayiumApp: App {
         let routing = AppNavigationModel(selection: .storedReceive)
         _presence = StateObject(wrappedValue: presenting)
         _navigation = StateObject(wrappedValue: routing)
+        #if DEBUG
+        if UITestMode.showsTerminalNearby {
+            presenting.claim(.nearby, mode: .files,
+                             peerLabel: "Studio Mac · 19af02") // nonlocalized: deterministic UI-test fixture
+            routing.select(.nearby)
+            Task { await files.connectNearby(peerId: "ui-nearby-peer", role: .initiator) }
+        }
+        #endif
 
         let receive = AppEnvironment.makeNearbyReceiveModel(
             fileModel: files, textModel: texts, discovery: nearby, inboundRoom: room)

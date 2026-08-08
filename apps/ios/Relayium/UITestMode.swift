@@ -73,6 +73,27 @@ enum UITestMode {
 
 
 
+
+    /// Builds a deterministic failed Nearby file task, so the suite can prove the
+    /// retained terminal surface still exposes the route back to the roster.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let terminalNearbyArgument = "--relayium-ui-testing-terminal-nearby"
+    static let showsTerminalNearby = ProcessInfo.processInfo.arguments.contains(
+        terminalNearbyArgument)
+
+    @MainActor
+    static func makeTerminalNearbyFileModel(
+        verification: VerificationPreference
+    ) -> RealtimeSessionModel? {
+        guard showsTerminalNearby else { return nil }
+        return RealtimeSessionModel(
+            pairClient: UITestPairClient(),
+            iceClient: UITestFailingICEClient(),
+            requiresVerification: { verification.requiresSASConfirmation },
+            makeConnection: { _, _, _ in throw AccountError.network }
+        )
+    }
+
     /// Holds the text pairing model on a deterministic terminal failure, so the
     /// suite can verify that cleanup — not a second start path — owns the page.
     // nonlocalized: a test-only launch argument, absent from Release
@@ -176,6 +197,7 @@ enum UITestMode {
     /// false, so a shipped launch always mints a real code over the network.
     static let showsGeneratedTextCode = false
     static let showsTerminalText = false
+    static let showsTerminalNearby = false
     static func makeAccountTransport() -> URLSession? { nil }
 
     #endif
@@ -303,6 +325,11 @@ private struct UITestPairClient: PairCodeClient {
         if UITestMode.showsTerminalText { throw AccountError.network }
         return MintedCode(code: "483920", expiresAt: 4_102_444_800)
     }
+}
+
+/// Fails immediately, so a Nearby task reaches its terminal state at once.
+private struct UITestFailingICEClient: ICEConfigClient {
+    func fetch(code: String) async throws -> ICEConfig { throw AccountError.network }
 }
 
 /// Waits for the rest of the process, so the generated-code screen holds.

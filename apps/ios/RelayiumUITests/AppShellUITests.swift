@@ -637,4 +637,42 @@ final class AppShellUITests: XCTestCase {
                       "the start controls did not return after cleanup")
     }
 
+    /// A terminal Nearby task keeps both its peer context and a real cleanup
+    /// boundary.
+    ///
+    /// Back to nearby devices is not navigation: it disconnects, drops a partial
+    /// receive and discards the staged selection, so it must remain reachable
+    /// from the retained terminal surface and must actually release it. macOS
+    /// has covered this since batch 12; iOS had no runtime evidence.
+    func testATerminalNearbySessionNamesItsPeerAndReturnsToTheRoster() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-terminal-nearby"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Session with Studio Mac · 19af02"]
+            .waitForExistence(timeout: 20),
+            "the terminal task lost who it was with")
+        XCTAssertTrue(app.staticTexts[
+            "This name is provided by the other device and is not verified identity."
+        ].exists, "the peer name is presented as verified identity")
+
+        let back = app.buttons["Back to nearby devices"]
+        XCTAssertTrue(back.waitForExistence(timeout: 10),
+                      "the retained Nearby owner made its own exit unreachable")
+        scrollUntilHittable(back)
+        back.tap()
+
+        // The discovery section is back. Not "Look again": this launch pauses
+        // receiving, so the paused state's own control is what iOS renders —
+        // asserting the macOS surface here would encode the other platform's
+        // acceptance state as a product requirement.
+        XCTAssertTrue(app.buttons["Resume receiving"].waitForExistence(timeout: 10),
+                      "Back to devices did not release the terminal task")
+        XCTAssertTrue(app.staticTexts["Nearby receiving: paused"].exists,
+                      "the released task did not restore the discovery surface")
+        XCTAssertFalse(app.staticTexts["Session with Studio Mac · 19af02"].exists,
+                       "the released task kept stale peer context on screen")
+    }
+
 }
