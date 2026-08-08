@@ -1,18 +1,20 @@
 # Relayium Device Inbox v1 — device identity, keys, capabilities, presence
 
-Status: **Phases 1A and 1B.** This document specifies device enrolment,
+Status: **Phases 1A, 1B and 1C.** This document specifies device enrolment,
 end-to-end public-key registration/rotation/revocation, capability negotiation
-and presence (§1-§10), and the encrypted asynchronous task queue with its full
-server-visible state machine (§11-§18). The CLI `inbox` commands (1C) and the
-web/native device UI (1D, 2, 3) are **not** specified here and are not
-implemented. Product source of truth: `DEVICE-INBOX-PRD.md` §6, §8, §10, §11.
+and presence (§1-§10), the encrypted asynchronous task queue with its full
+server-visible state machine (§11-§18), and the obligations of a RECEIVING
+CLIENT (§19-§22). The web/native device UI (1D, 2, 3) is **not** specified here
+and is not implemented. Product source of truth: `DEVICE-INBOX-PRD.md` §6, §8,
+§9, §10, §11.
 
 Authoritative implementation: `server/internal/inbox/inbox.go` and
 `server/internal/inbox/task.go` (protocol vocabulary and the state machine),
 `server/account/deviceinbox.go` and `server/account/deviceinbox_task.go` (HTTP),
 `server/account/deviceinbox_store.go` and
-`server/account/deviceinbox_task_store.go` (storage). Any change here requires
-changing those and their tests together.
+`server/account/deviceinbox_task_store.go` (storage),
+`server/internal/inboxclient/` and `server/cmd/relayium/inbox.go` (the CLI
+receiver). Any change here requires changing those and their tests together.
 
 ## 1. Invariants
 
@@ -585,3 +587,153 @@ Constraints, so the invariants do not rest on application code alone:
 
 GC sweeps the queue each pass: reclaim expired leases, expire past TTL, delete
 terminal rows past retention.
+
+---
+
+# Phase 1C — the receiving client
+
+§1-§18 describe what central will accept. This half describes what a device must
+DO to be a correct receiver, because most of the properties users actually care
+about — no overwritten file, no duplicate delivery, no false `saved` — are
+enforced entirely on the device. Central cannot observe any of them.
+
+The reference implementation is the Relayium CLI (`server/internal/inboxclient/`,
+`server/cmd/relayium/inbox.go`); the operator-facing guide is
+`docs/device-inbox-cli.md`. A macOS or iOS client implementing §19-§22 is
+interoperable with it and with the same server.
+
+## 19. Client obligations
+
+1. **Persist before publish.** A generated private key MUST be durable on the
+   device (atomically written, fsynced) BEFORE its public half is registered. The
+   reverse order can publish a key whose private half never reached disk, making
+   every task sealed to it undecryptable by anyone, permanently.
+2. **Retain by generation.** A rotation MUST NOT delete the superseded private
+   key. Central binds a task to the key it was sealed to (§11.4), so dropping the
+   old key strands every task queued before the rotation. Keys are indexed by
+   central's key id, which a claim names in `TargetKeyID`.
+3. **Reconcile, do not regenerate.** If a registration response is lost, the
+   device asks for its key history (`GET …/inbox/keys`) and binds the id central
+   gave the key it already holds. Minting a second key would abandon the first.
+4. **Rotate to recover.** If central's ACTIVE key has no local private half — a
+   restored backup, a wiped state directory — the device compare-and-swaps onto a
+   fresh key (`previousKeyId` = the unusable one). Tasks already sealed to the old
+   key remain undecryptable and are reported
+   `failed_terminal`/`decrypt_failed`; the device does not pretend otherwise.
+5. **Fail closed on negotiation.** A device MUST verify the version, receive
+   capability and key algorithm central selected are ones it actually implements,
+   and stop if not. A 409 from enrolment is "upgrade or stop", never "retry with
+   a default".
+6. **Presence is a claim about now.** A device heartbeats only while it can
+   actually receive. Paused, or with an unusable receive directory, it MUST NOT
+   assert presence, and it MUST report `receiveDirReady` from a check made
+   immediately before the call — a real create-and-remove probe, not an
+   inspection of permission bits.
+7. **Both credentials, every time.** Ciphertext reads and progress reports carry
+   the device bearer AND the current claim token; the claim token travels in the
+   `X-Relayium-Inbox-Claim` header, never in a URL.
+8. **Renew before the deadline.** A working device re-reports its current state
+   periodically (an idempotent no-op that renews the lease). A refused renewal
+   means the lease is gone: the device MUST abandon the task WITHOUT reporting,
+   rather than finish work it is no longer authorised to assert.
+9. **Secrets stay local.** Private keys, the unsealed content key, the manifest,
+   file names and destination paths MUST NOT appear in logs, in error messages,
+   or in any field sent to central. Error reporting is the closed §16 code set.
+
+## 20. The receive pipeline
+
+A conforming device performs, in this order, and produces nothing observable
+until every step before the commit has succeeded:
+
+1. **Unseal** the content key with the private key named by `TargetKeyID`.
+2. **Decrypt and validate** the copied encrypted manifest with that key, and
+   cross-check it: declared plaintext MUST NOT exceed the task's
+   `CiphertextBytes`, because framing and Poly1305 tags make the ciphertext
+   strictly larger.
+3. **Plan** every destination (§21) and make the plan DURABLE before any
+   destination can exist.
+4. **Preflight** free space for the declared total.
+5. **Stream** the ciphertext into a per-task staging area on the same filesystem
+   as the receive directory, authenticating every frame, resuming interrupted
+   transfers from `Range` at a complete frame boundary only.
+6. **Verify** the whole stream: no trailing bytes, total length exactly as
+   declared, and each staged file at exactly its declared size with no executable
+   bit.
+7. Report **`verifying`**.
+8. **Commit** (§22).
+9. Report **`saved`** with `committed: true` — and only from a completed commit.
+
+A failure at any step before 8 MUST leave nothing outside the staging area, which
+is then removed.
+
+## 21. Destination rules
+
+AEAD proves who built a manifest. It does not make its names safe: a name is an
+instruction to the receiving filesystem. A conforming device REFUSES an entry
+whose name is empty, over-long, not valid UTF-8, contains a control byte or a
+backslash, is absolute or drive-qualified, contains an empty, `.` or `..`
+component, has a component ending in a dot or a space, is a Windows reserved
+device name, or is excessively nested. It refuses a MANIFEST in which two entries
+resolve to the same destination, including differing only by case — a
+case-insensitive filesystem would silently collapse them and lose one.
+
+A destination name occupied by ANYTHING — a file, a directory, a socket, a FIFO,
+a device node, or a dangling symlink — is occupied. The device does not write
+through it. Automatic collisions take a deterministic `name (2)`, `name (3)`
+suffix with the extension preserved, searched lowest-first so the same manifest
+against the same directory always yields the same plan; that determinism is what
+lets a resumed task compare its journal against reality.
+
+Directories are created one component at a time, checking each with an lstat
+BEFORE descending: a symlink or a non-directory stops the delivery. A recursive
+"make all parents" call is not sufficient, because it follows an existing
+symlinked component before anything can object.
+
+Received files carry no executable bit on any platform, and their mode is set
+explicitly rather than inherited from the process umask.
+
+## 22. Commit and crash recovery
+
+The commit MUST have no-replace semantics as a single operation. `rename(2)` is
+not acceptable: it replaces its destination silently, so every "check, then
+rename" has a window — minutes wide, since the check happens before the download
+— in which a file created meanwhile is destroyed with no error. `link(2)` fails
+if the destination name is taken by anything, and the kernel makes the test and
+the creation atomic. (This is also why the staging area must be on the same
+filesystem.)
+
+A conforming device keeps a durable per-task journal and follows this order for
+each planned destination:
+
+```text
+link -> fsync the destination directory -> record it in the journal -> unlink the staged source
+```
+
+which makes every crash boundary answerable:
+
+| Crashed after | Recovery |
+|---|---|
+| journalling the plan | discard staging, re-download into the SAME plan (never a recomputed one, which would walk the collision suffix forward and deliver twice) |
+| `link`, before journalling | the staged source survives and shares an inode with the destination, proving the link was this task's; the journal catches up |
+| journalling, before `unlink` | the entry is skipped and the stale source removed |
+| the full commit, before `saved` landed | the task is re-claimed, the receipt recognised, `saved` re-reported with NO re-download and NO re-commit |
+
+A destination that exists and is NOT this task's staged inode is ambiguous. The
+device MUST stop at `attention_required`/`name_conflict`. It never overwrites,
+never merges, and never guesses.
+
+Receipts are retained longer than central's terminal-row retention (§15), so a
+duplicate delivery attempt for a task this device already saved is recognisable
+from local evidence alone.
+
+## 23. Deployment shape
+
+`inbox run` is a foreground process: it does not fork, writes no pid file, logs
+to stdout/stderr, and exits 0 on `SIGTERM`. That single shape serves an
+interactive terminal, a systemd unit, a launchd agent and a container entrypoint;
+supervision, restarts and log handling belong to the supervisor.
+
+Exactly one worker may run per state directory, enforced by an advisory file lock
+the kernel releases if the process dies. Central's claim tokens prevent two
+workers from corrupting a TASK, but nothing on the server can stop two local
+processes from racing on one directory.

@@ -28,12 +28,17 @@ usage:
                                              (in a terminal, approve each new peer on first push)
   relayium id                                print this host's fingerprint
   relayium authorize <fingerprint>          pre-authorize a pusher (for non-interactive serve)
-  relayium login [--server URL]             log in to the cloud (device code flow)
-  relayium logout [--local-only]            revoke and clear cloud credentials
+  relayium login [--server URL] [--config-dir D]
+                                             log in to the cloud (device code flow)
+  relayium logout [--local-only] [--config-dir D]
+                                             revoke and clear cloud credentials
   relayium whoami                           show the logged-in cloud account
   relayium up <path...> [--burn] [--ttl D] [--max-downloads N]
                                              encrypt client-side and upload to the cloud
   relayium down <link-or-code> [destDir]    fetch and decrypt a cloud claim (no login needed)
+  relayium inbox <subcommand>               receive files sent to this device from your account
+                                             (enable --dir, run, status, pause, resume, disable,
+                                              service; see relayium inbox --help)
   relayium update [--check] [--force]       upgrade to the latest release in place
   relayium version                          print the CLI version
 
@@ -43,7 +48,7 @@ flags (after the subcommand):
   --no-resume     disable resuming partial files
   --verify        stop to compare the SAS before sending/opening (send, text)
   --yes           never prompt for SAS confirmation (text; the default, kept for scripts)
-  --config-dir D  identity/trust directory (daemon direct; default ~/.config/relayium)
+  --config-dir D  credential/identity directory (supported subcommands; default ~/.config/relayium)
 `
 
 // duplex adapts a separate reader and writer into one io.ReadWriter (used to
@@ -88,6 +93,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return runUp(args[1:], stdout, stderr)
 	case "down":
 		return runDown(args[1:], stdout, stderr)
+	case "inbox":
+		return runInbox(args[1:], stdout, stderr)
 	case "update":
 		return runUpdate(args[1:], stdout, stderr)
 	case "version", "--version", "-version":

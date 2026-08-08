@@ -31,13 +31,14 @@ func sameServer(a, b string) bool {
 func runLogin(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("login", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	var server string
+	var server, configDir string
 	fs.StringVar(&server, "server", defaultCloudServer, "cloud server base URL")
+	fs.StringVar(&configDir, "config-dir", "", "credential directory (default ~/.config/relayium)")
 	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}
 
-	cfgDir, err := resolveConfigDir("")
+	cfgDir, err := resolveConfigDir(configDir)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -67,11 +68,13 @@ func runLogout(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("logout", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var localOnly bool
+	var configDir string
 	fs.BoolVar(&localOnly, "local-only", false, "clear local credentials without revoking the server token")
+	fs.StringVar(&configDir, "config-dir", "", "credential directory (default ~/.config/relayium)")
 	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}
-	cfgDir, err := resolveConfigDir("")
+	cfgDir, err := resolveConfigDir(configDir)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1

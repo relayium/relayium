@@ -75,6 +75,34 @@ func TestRunLoginHappyPath(t *testing.T) {
 	}
 }
 
+func TestRunLoginHonoursExplicitConfigDir(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/api/cli/device/start":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"user_code": "AAAA-BBBB", "device_code": "dc",
+				"verification_uri": "http://x/device", "interval": 0, "expires_in": 60,
+			})
+		case "/api/cli/device/poll":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"status": "ok", "access_token": "rlm_cli_t", "account_email": "login@example.com",
+			})
+		}
+	}))
+	defer srv.Close()
+
+	explicit := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	var out bytes.Buffer
+	if code := runLogin([]string{"--server", srv.URL, "--config-dir", explicit}, &out, &out); code != 0 {
+		t.Fatalf("login code=%d out=%q", code, out.String())
+	}
+	if _, ok, err := cloud.Load(explicit); err != nil || !ok {
+		t.Fatalf("credential was not saved in --config-dir: ok=%v err=%v", ok, err)
+	}
+}
+
 func TestRunLogoutRevokesBeforeClearing(t *testing.T) {
 	var gotAuth string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
