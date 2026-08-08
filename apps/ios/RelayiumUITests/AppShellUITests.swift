@@ -536,4 +536,46 @@ final class AppShellUITests: XCTestCase {
                       "a signed-out Send task no longer offers its account remedy")
     }
 
+    /// Creating a text pairing code stays on Direct and shows every handoff.
+    ///
+    /// This is the flow the owner's 2026-08-07 review found broken: creating a
+    /// text code jumped to Nearby, and the generated code offered digits and a
+    /// QR but no visible, copyable, shareable join link. macOS has had a runtime
+    /// path for it since; iOS had none, so the platform that produced the
+    /// complaint was the one with no evidence.
+    func testCreatingATextCodeStaysOnDirectAndShowsEveryHandoff() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-text-code"]
+        app.launch()
+
+        let directTab = openTask("Direct", title: "Direct")
+        let textMode = app.segmentedControls.firstMatch.buttons["Text"]
+        XCTAssertTrue(textMode.waitForExistence(timeout: 10), "Direct offers no text mode")
+        textMode.tap()
+
+        let create = app.buttons["Create a text code"]
+        XCTAssertTrue(create.waitForExistence(timeout: 10),
+                      "a signed-in Direct text task cannot create a code")
+        scrollUntilHittable(create)
+        create.tap()
+
+        // Digit by digit, so VoiceOver never reads the pairing code as one
+        // large number the listener has to re-segment.
+        XCTAssertTrue(app.staticTexts["4 8 3 9 2 0"].waitForExistence(timeout: 15),
+                      "the generated pairing code is not visible")
+        XCTAssertTrue(directTab.isSelected,
+                      "creating a text code navigated away from Direct")
+        XCTAssertTrue(app.navigationBars["Direct"].exists)
+
+        XCTAssertTrue(app.staticTexts["Join link"].exists,
+                      "the generated code has no visible browser handoff")
+        XCTAssertTrue(app.staticTexts[
+            "https://relayium.com/cross-network?mode=text#c=483920"
+        ].exists, "the visible handoff did not preserve the created Text mode")
+        XCTAssertTrue(app.buttons["Copy"].exists, "the join link cannot be copied")
+        XCTAssertTrue(app.buttons["Share"].exists,
+                      "the join link cannot use the system share sheet")
+    }
+
 }

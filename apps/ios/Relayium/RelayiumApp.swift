@@ -246,7 +246,8 @@ struct RelayiumApp: App {
         // mid-setup — reach a room where that id belongs to somebody else.
         let room = InboundRoom()
         let files = AppEnvironment.makeRealtimeModel(verification: verifying, nearby: nearby, inboundRoom: room)
-        let texts = AppEnvironment.makeRealtimeTextModel(verification: verifying, nearby: nearby, inboundRoom: room)
+        let texts = UITestMode.makeRealtimeTextModel(verification: verifying)
+            ?? AppEnvironment.makeRealtimeTextModel(verification: verifying, nearby: nearby, inboundRoom: room)
         _direct = StateObject(wrappedValue: files)
         _directText = StateObject(wrappedValue: texts)
         _discovery = StateObject(wrappedValue: nearby)

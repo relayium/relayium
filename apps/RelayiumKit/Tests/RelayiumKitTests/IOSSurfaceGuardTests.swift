@@ -2349,7 +2349,17 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(app.text.contains(
             "AppEnvironment.makeRealtimeTextModel(verification: verifying, nearby: nearby, inboundRoom: room)"),
                       "the text model must be wired to the one room socket")
-        for once in ["makeRealtimeModel(", "makeRealtimeTextModel(", "VerificationPreference(",
+        // `makeRealtimeTextModel(` is counted separately below: an acceptance
+        // launch substitutes a deterministic model for the product one, which is
+        // still ONE model — the invariant is a single owner, not a single
+        // mention of the factory name.
+        XCTAssertEqual(all.map {
+            $0.text.components(separatedBy: "AppEnvironment.makeRealtimeTextModel(").count - 1
+        }.reduce(0, +), 1, "a second product text model owner")
+        XCTAssertEqual(all.map {
+            $0.text.components(separatedBy: "UITestMode.makeRealtimeTextModel(").count - 1
+        }.reduce(0, +), 1, "the acceptance substitution happens more than once")
+        for once in ["makeRealtimeModel(", "VerificationPreference(",
                      "DirectSendSelection(", "DirectModeSelection(",
                      "ForegroundSessionCoordinator(",
                      "makeLanDiscoveryModel(", "InboundRoom(", "makeNearbyReceiveModel(",
@@ -3326,6 +3336,25 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // a real one. Neither may drift into something that could reach production.
         XCTAssertTrue(mode.contains("\"uitest-bearer\""))
         XCTAssertTrue(mode.contains("\"person@example.com\""))
+    }
+
+    /// The pairing-code handoff the owner's 2026-08-07 review found missing, and
+    /// the runtime path that now proves it on the platform that produced the
+    /// complaint.
+    func testTheGeneratedTextCodeKeepsItsVisibleHandoff() throws {
+        let view = try XCTUnwrap(
+            try sources().first { $0.name == "DirectView.swift" }?.text)
+        for required in ["Text(L10n.t(.pairingJoinLink))", "Text(url.absoluteString)",
+                         "UIPasteboard.general.string = url.absoluteString",
+                         "ShareLink(item: url)"] {
+            XCTAssertTrue(view.contains(required),
+                          "the generated pairing code lost \(required)")
+        }
+        let ui = try String(
+            contentsOf: appsRoot.appendingPathComponent(
+                "ios/RelayiumUITests/AppShellUITests.swift"), encoding: .utf8)
+        XCTAssertTrue(ui.contains("testCreatingATextCodeStaysOnDirectAndShowsEveryHandoff"),
+                      "no runtime path drives the iOS pairing-code handoff")
     }
 
 }

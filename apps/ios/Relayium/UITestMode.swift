@@ -71,6 +71,33 @@ enum UITestMode {
     private static let pendingFixtureByteCount = 1_536
 
 
+
+    /// Holds the text pairing surface on its generated code.
+    ///
+    /// The pairing-code handoff is the flow the owner's 2026-08-07 review found
+    /// broken — creating a text code jumped to Nearby and produced no visible
+    /// join link — and iOS had no runtime evidence for it at all while macOS
+    /// did. Minting succeeds locally and the ICE lookup then waits for the rest
+    /// of the process, so the screen stays on the handoff state a person needs
+    /// time to read and share. No network call is made.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let generatedTextCodeArgument = "--relayium-ui-testing-text-code"
+    static let showsGeneratedTextCode = ProcessInfo.processInfo.arguments.contains(
+        generatedTextCodeArgument)
+
+    @MainActor
+    static func makeRealtimeTextModel(
+        verification: VerificationPreference
+    ) -> RealtimeTextSessionModel? {
+        guard showsGeneratedTextCode else { return nil }
+        return RealtimeTextSessionModel(
+            pairClient: UITestPairClient(),
+            iceClient: UITestWaitingICEClient(),
+            requiresVerification: { verification.requiresSASConfirmation },
+            makeConnection: { _, _, _ in throw AccountError.network }
+        )
+    }
+
     /// The stored-link key store an acceptance launch may use.
     ///
     /// **This is the more consequential half of the keychain isolation.**
@@ -138,6 +165,8 @@ enum UITestMode {
 
     /// false, so a shipped launch can never be told it already holds an account.
     static let isSignedIn = false
+    /// false, so a shipped launch always mints a real code over the network.
+    static let showsGeneratedTextCode = false
     static func makeAccountTransport() -> URLSession? { nil }
 
     #endif
@@ -255,5 +284,22 @@ final class UITestAccountTransport: URLProtocol {
     }
 
     override func stopLoading() {}
+}
+#endif
+
+#if DEBUG
+/// Mints deterministically and never opens a connection.
+private struct UITestPairClient: PairCodeClient {
+    func mint(token: String) async throws -> MintedCode {
+        MintedCode(code: "483920", expiresAt: 4_102_444_800)
+    }
+}
+
+/// Waits for the rest of the process, so the generated-code screen holds.
+private struct UITestWaitingICEClient: ICEConfigClient {
+    func fetch(code: String) async throws -> ICEConfig {
+        try await Task.sleep(nanoseconds: 300_000_000_000)
+        throw AccountError.network
+    }
 }
 #endif
