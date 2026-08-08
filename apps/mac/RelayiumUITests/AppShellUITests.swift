@@ -179,7 +179,7 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(send.waitForExistence(timeout: 10))
         send.click()
 
-        let signIn = window.descendants(matching: .any)["account.signIn"].firstMatch
+        let signIn = window.buttons["Sign in"]
         XCTAssertTrue(signIn.waitForExistence(timeout: 10),
                       "signed-out Send offers no sign-in remedy")
         XCTAssertTrue(window.descendants(matching: .any)["account.create"].firstMatch.exists,

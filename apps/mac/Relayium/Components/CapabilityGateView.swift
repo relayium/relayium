@@ -61,7 +61,6 @@ struct CapabilityGateView: View {
                                body: message,
                                actionTitle: L10n.t(.gateSignIn),
                                action: { onAccount(.signIn) })
-                    .accessibilityIdentifier("account.signIn")
                 // Registration is in the app. This used to open relayium.com,
                 // which was the only place an account could be created; it now
                 // opens the same Account destination the button above does, on
