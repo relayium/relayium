@@ -43,6 +43,13 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the delivery sentence is not gated on the rendered state")
         XCTAssertFalse(condition.contains("discovery.isPaused"),
                        "the delivery sentence is still gated on the pause flag")
+        // Found by the fixture the moment the device list stopped being empty:
+        // macOS rendered a bare "Revoke" on every row while iOS had named the
+        // credential since R3-D.
+        XCTAssertTrue(try source(named: "AccountView.swift").contains(
+            "AccountPresentation.revokeActionLabel(for: device)"),
+            "macOS revoke reads as the same word on every device row")
+
         let uiURL = macRoot.deletingLastPathComponent()
             .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
         let ui = try String(contentsOf: uiURL, encoding: .utf8)
@@ -2445,6 +2452,20 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertEqual(halves.count, 2, "UITestMode lost its Debug/Release split")
         XCTAssertFalse(try XCTUnwrap(halves.last).contains("--relayium-ui-testing"),
                        "a shipped build can be told it already holds an account")
+
+        // BOTH factories, on both platforms. The account session and the
+        // management model build separate clients, so wiring only the first one
+        // left devices and stored files going to the real network — a fixture
+        // that looked complete and rendered an empty list instead.
+        let macApp = try source(named: "RelayiumApp.swift")
+        let iosApp = try String(
+            contentsOf: appsRoot.appendingPathComponent("ios/Relayium/RelayiumApp.swift"),
+            encoding: .utf8)
+        for app in [macApp, iosApp] {
+            XCTAssertEqual(app.components(
+                separatedBy: "transport: UITestMode.makeAccountTransport()").count - 1, 2,
+                "an account client still reaches the network under acceptance")
+        }
 
         let uiURL = macRoot.deletingLastPathComponent()
             .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")

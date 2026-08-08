@@ -272,7 +272,8 @@ struct RelayiumApp: App {
         let storedKeys = AppEnvironment.makeStoredLinkKeyStore()
         let uploads = AppEnvironment.makeUploadModel(keyStore: storedKeys)
         let downloads = AppEnvironment.makeDownloadModel()
-        let management = AppEnvironment.makeAccountManagementModel(keyStore: storedKeys)
+        let management = AppEnvironment.makeAccountManagementModel(
+            keyStore: storedKeys, transport: UITestMode.makeAccountTransport())
         _verification = StateObject(wrappedValue: prefs)
         _lanDiscovery = StateObject(wrappedValue: nearby)
         _realtimeModel = StateObject(wrappedValue: files)

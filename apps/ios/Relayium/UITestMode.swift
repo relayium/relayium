@@ -138,6 +138,10 @@ final class UITestAccountTransport: URLProtocol {
     static let bearer = "uitest-bearer"
     // nonlocalized: an acceptance fixture, not a real address
     static let email = "person@example.com"
+    // nonlocalized: an acceptance fixture row, absent from Release
+    static let thisDeviceName = "Studio Mac"
+    // nonlocalized: an acceptance fixture row, absent from Release
+    static let otherDeviceName = "Kitchen laptop"
 
     /// JSON literals, each VALIDATED by decoding it through the very model the
     /// app will decode it into.
@@ -171,7 +175,17 @@ final class UITestAccountTransport: URLProtocol {
             "subscriptionEnd":0,"billingCycle":"","scheduledPlanId":"",
             "scheduledPlanName":"","scheduledCycle":""}}
             """, as: UsageResponse.self)
-        offer("/api/devices", #"{"devices":[]}"#, as: DeviceListResponse.self)
+        // Two rows, one of them this app's own: a list with a single anonymous
+        // entry cannot show that Revoke is per-row, and "Revoke" alone is the
+        // same word on every row — which is right to look at and useless to
+        // hear. `AccountDevice` decodes the server's PascalCase keys.
+        offer("/api/devices", """
+            {"devices":[
+            {"ID":"dev_this","Name":"\(thisDeviceName)","CreatedAt":1750000000,
+            "LastSeenAt":1754600000,"Kind":"app","Current":true},
+            {"ID":"dev_other","Name":"\(otherDeviceName)","CreatedAt":1740000000,
+            "LastSeenAt":1754000000,"Kind":"cli","Current":false}]}
+            """, as: DeviceListResponse.self)
         offer("/api/files", #"{"files":[]}"#, as: StoredFileListResponse.self)
         return out
     }

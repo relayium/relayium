@@ -198,6 +198,19 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Signed-in devices"].exists,
                       "the signed-in account has no device section")
 
+        XCTAssertTrue(app.staticTexts["Studio Mac"].waitForExistence(timeout: 10),
+                      "the signed-in device list did not name this device")
+        XCTAssertTrue(app.staticTexts["Kitchen laptop"].exists,
+                      "the device list dropped a revocable row")
+        XCTAssertTrue(app.staticTexts["This device"].exists,
+                      "nothing distinguishes the device the user is holding")
+        // "Revoke" is the same word on every row. What VoiceOver must hear is
+        // WHICH credential the button would destroy.
+        let revokes = app.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "Kitchen laptop"))
+        XCTAssertGreaterThan(revokes.count, 0,
+                             "a revoke action does not identify the row it destroys")
+
         openTask("Send", title: "Send files")
         XCTAssertFalse(app.buttons["Go to Account"].exists,
                        "a signed-in Send task still offers the signed-out remedy")

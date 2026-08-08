@@ -301,6 +301,11 @@ struct AccountView: View {
                 // device must not freeze the rest of the list.
                 Button(L10n.t(.commonRevoke)) { deviceToRevoke = device }
                     .disabled(management.isBusy(row: device.id))
+                    // The visible label is one word on every row, which is right
+                    // to look at and useless to hear: two devices of the same
+                    // model sign in under the same name routinely. iOS has said
+                    // which credential this destroys since R3-D; macOS did not.
+                    .accessibilityLabel(AccountPresentation.revokeActionLabel(for: device))
             }
             if let error = management.error(forRow: device.id) {
                 InlineMessage(.failure, error)

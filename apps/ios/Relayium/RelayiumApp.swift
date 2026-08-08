@@ -197,7 +197,8 @@ struct RelayiumApp: App {
         let drafts = AppEnvironment.makeSharedDraftStore()
         let uploads = AppEnvironment.makeUploadModel(
             keyStore: keys, pending: AppEnvironment.makePendingUploadSupport(drafts: drafts))
-        let managing = AppEnvironment.makeAccountManagementModel(keyStore: keys)
+        let managing = AppEnvironment.makeAccountManagementModel(
+            keyStore: keys, transport: UITestMode.makeAccountTransport())
         _management = StateObject(wrappedValue: managing)
         // Subscribed HERE, in init, and not from a `.task` on any view. That is
         // the whole point: the signal it watches for is raised by a network

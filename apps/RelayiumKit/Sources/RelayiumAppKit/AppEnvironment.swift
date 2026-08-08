@@ -451,11 +451,15 @@ public enum AppEnvironment {
                                   fetchConfig: { try await client.fetchConfig() })
     }
 
+    /// `transport` exists for the same reason as `makeSession`'s: this model
+    /// reads the account's devices and stored objects, and acceptance needs
+    /// those answered without a server. A shipped launch passes nil.
     @MainActor
     public static func makeAccountManagementModel(baseURL: URL = productionBaseURL,
-                                                  keyStore: StoredLinkKeyStore) -> AccountManagementModel {
+                                                  keyStore: StoredLinkKeyStore,
+                                                  transport: URLSession? = nil) -> AccountManagementModel {
         AccountManagementModel(
-            service: AccountClient(baseURL: baseURL),
+            service: AccountClient(baseURL: baseURL, session: transport ?? .shared),
             keyStore: keyStore,
             // Same origin rule as the upload model's: a rebuilt link has to point
             // at the deployment the object actually lives on.

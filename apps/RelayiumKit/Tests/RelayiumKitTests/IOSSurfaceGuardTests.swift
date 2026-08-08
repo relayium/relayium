@@ -1618,7 +1618,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "a second key store would be a second source of truth for the keys")
         XCTAssertTrue(app.text.contains("AppEnvironment.makeUploadModel(\n            keyStore: keys"),
                       "the upload model must take the shared store")
-        XCTAssertTrue(app.text.contains("AppEnvironment.makeAccountManagementModel(keyStore: keys)"),
+        XCTAssertTrue(app.text.contains("AppEnvironment.makeAccountManagementModel(\n            keyStore: keys"),
                       "and the management model must take the SAME one")
     }
 

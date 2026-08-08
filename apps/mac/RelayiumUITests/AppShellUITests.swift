@@ -581,6 +581,17 @@ final class AppShellUITests: XCTestCase {
                       "a signed-in launch did not render the account it holds")
         XCTAssertTrue(window.staticTexts["Signed-in devices"].exists,
                       "the signed-in account has no device section")
+
+        XCTAssertTrue(window.staticTexts["Studio Mac"].waitForExistence(timeout: 10),
+                      "the signed-in device list did not name this device")
+        XCTAssertTrue(window.staticTexts["Kitchen laptop"].exists,
+                      "the device list dropped a revocable row")
+        XCTAssertTrue(window.staticTexts["This device"].exists,
+                      "nothing distinguishes the device the user is holding")
+        let revokes = window.buttons.matching(
+            NSPredicate(format: "label CONTAINS %@", "Kitchen laptop"))
+        XCTAssertGreaterThan(revokes.count, 0,
+                             "a revoke action does not identify the row it destroys")
         XCTAssertFalse(window.staticTexts["Welcome back"].exists,
                        "a signed-in launch still shows the sign-in form")
 
