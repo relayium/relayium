@@ -19,6 +19,7 @@ import XCTest
 /// the real shell.
 final class AppShellUITests: XCTestCase {
     private var app: XCUIApplication!
+    private var pendingFileFixture: URL?
 
     /// Sparkle and AppKit may create auxiliary windows before the shell on a
     /// hosted runner. `windows.firstMatch` therefore is not a product window:
@@ -47,6 +48,9 @@ final class AppShellUITests: XCTestCase {
 
     override func tearDownWithError() throws {
         app?.terminate()
+        if let pendingFileFixture {
+            try? FileManager.default.removeItem(at: pendingFileFixture)
+        }
     }
 
     /// A fresh runner may show Sparkle's one-time consent, while a reused
@@ -153,6 +157,49 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(window.staticTexts[
             "This device is not listening for nearby devices. It can still send, and pairing codes still work."
         ].exists, "the off state claims this Mac is still listening")
+    }
+
+    /// A count is not the identity of a send. Drive a real file through the
+    /// system picker and require the running product to show both the complete
+    /// name and its formatted size before any device or Send action is chosen.
+    func testPendingSendNamesTheFileAndItsSizeBeforeTransfer() throws {
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let nearby = sidebarDestination("Nearby", in: window)
+        XCTAssertTrue(nearby.waitForExistence(timeout: 10))
+        nearby.click()
+
+        let fixture = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Relayium product brief \(UUID().uuidString).txt")
+        try Data(repeating: 0x52, count: 1_536).write(to: fixture, options: .atomic)
+        pendingFileFixture = fixture
+
+        let chooser = window.descendants(matching: .any)["Files to send"].firstMatch
+        XCTAssertTrue(chooser.waitForExistence(timeout: 10),
+                      "Nearby has no file-selection surface")
+        chooser.click()
+
+        app.typeKey("g", modifierFlags: [.command, .shift])
+        let location = app.textFields.firstMatch
+        XCTAssertTrue(location.waitForExistence(timeout: 10),
+                      "the system picker did not expose Go to Folder")
+        location.typeText(fixture.path)
+        app.typeKey(.return, modifierFlags: [])
+
+        let choose = app.buttons["Choose"]
+        XCTAssertTrue(choose.waitForExistence(timeout: 10),
+                      "the system picker has no confirmation action")
+        choose.click()
+
+        XCTAssertTrue(window.staticTexts["1 file ready, 1.5 KB"]
+            .waitForExistence(timeout: 10),
+                      "the selected-file summary did not preserve count and total size")
+        let identity = NSPredicate(format:
+            "label CONTAINS %@ AND label CONTAINS %@", fixture.lastPathComponent, "1.5 KB")
+        XCTAssertTrue(window.descendants(matching: .any).matching(identity).firstMatch.exists,
+                      "the pending send did not show the complete file name and size")
+        XCTAssertTrue(window.buttons["Clear"].exists,
+                      "the identified pending send cannot be cleared")
     }
 
     /// Selecting each destination renders something. The regression this catches
