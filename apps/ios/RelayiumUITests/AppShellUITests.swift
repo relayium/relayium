@@ -1142,4 +1142,30 @@ final class AppShellUITests: XCTestCase {
         scrollUntilHittable(create, maxSwipes: 12)
     }
 
+    /// The software keyboard's own Go key completes the task.
+    ///
+    /// `submitLabel(.go)` and its `onSubmit` are a promise that the key the
+    /// keyboard shows does what it says. Nothing drove it: a Go key that does
+    /// nothing is invisible in review and is the difference between finishing a
+    /// paste with one thumb and hunting for a button.
+    func testTheKeyboardGoKeyResolvesTheLink() {
+        openTask("Receive", title: "Receive files")
+
+        let link = app.textFields["receive.link"]
+        XCTAssertTrue(link.waitForExistence(timeout: 15))
+        link.tap()
+        link.typeText("not a link")
+        // The real key, not a typed newline: this field is vertical-axis, where
+        // a newline is text rather than a submission.
+        let go = app.keyboards.buttons["go"]
+        XCTAssertTrue(go.waitForExistence(timeout: 10),
+                      "the keyboard does not offer the Go key the field promises")
+        go.tap()
+
+        XCTAssertTrue(app.staticTexts[
+            "That doesn't look like a Relayium link. It should look like https://relayium.com/d/…#k=…"
+        ].waitForExistence(timeout: 10),
+            "the keyboard's Go key did not resolve the link")
+    }
+
 }

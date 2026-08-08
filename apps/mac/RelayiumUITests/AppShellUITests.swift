@@ -1294,4 +1294,52 @@ final class AppShellUITests: XCTestCase {
         }
     }
 
+    /// The keyboard alone completes a task, without reaching for the mouse.
+    ///
+    /// Return in the link field resolves it, and Return in the sign-in form
+    /// submits it. Both are `onSubmit` handlers that no test drove: a control
+    /// that only responds to a click is not a bug anyone SEES, and it is the
+    /// difference between an app someone can use by keyboard and one they
+    /// cannot.
+    func testTheKeyboardAloneCompletesATask() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments + ["--relayium-ui-testing-sign-in"]
+        app.launch()
+        ensureProductWindowIsOpen()
+
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+
+        // 1. A link resolved by Return, never by clicking Open.
+        let receive = sidebarDestination("Open a link", in: window)
+        XCTAssertTrue(receive.waitForExistence(timeout: 10))
+        receive.click()
+        let link = window.textFields["receive.link"]
+        XCTAssertTrue(link.waitForExistence(timeout: 10))
+        link.click()
+        link.typeText("not a link")
+        app.typeKey(.return, modifierFlags: [])
+        XCTAssertTrue(window.staticTexts[
+            "That doesn't look like a Relayium link. It should look like https://relayium.com/d/…#k=…"
+        ].waitForExistence(timeout: 10),
+            "Return in the link field did not resolve it")
+
+        // 2. A sign-in submitted by Return, never by clicking Sign in.
+        let account = sidebarDestination("Account", in: window)
+        XCTAssertTrue(account.waitForExistence(timeout: 10))
+        account.click()
+        let email = window.descendants(matching: .any)["account.email"].firstMatch
+        let password = window.descendants(matching: .any)["account.password"].firstMatch
+        XCTAssertTrue(email.waitForExistence(timeout: 10))
+        XCTAssertTrue(password.waitForExistence(timeout: 10))
+        email.click()
+        email.typeText("person@example.com")
+        password.click()
+        password.typeText("correct horse battery")
+        app.typeKey(.return, modifierFlags: [])
+
+        XCTAssertTrue(window.staticTexts["person@example.com"].waitForExistence(timeout: 20),
+                      "Return in the sign-in form did not submit it")
+    }
+
 }

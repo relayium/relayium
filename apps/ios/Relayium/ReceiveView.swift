@@ -68,6 +68,18 @@ struct ReceiveView: View {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .submitLabel(.go)
+                // `onSubmit` alone is a promise this field cannot keep. On a
+                // vertical-axis TextField the Go key inserts a NEWLINE rather
+                // than submitting, so the key the keyboard advertises did
+                // nothing — and a link is pasted, which makes Go the natural way
+                // to finish. Treat a newline as the submission it was meant to
+                // be, and take it back out of the value so a wrapped link never
+                // carries one.
+                .onChange(of: model.linkText) { value in
+                    guard value.contains("\n") else { return }
+                    model.linkText = value.replacingOccurrences(of: "\n", with: "")
+                    resolve()
+                }
                 .onSubmit(resolve)
                 .disabled(model.isBusy)
             Button(action: resolve) {
