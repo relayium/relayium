@@ -146,6 +146,13 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(window.buttons["Look again"].waitForExistence(timeout: 10))
         XCTAssertEqual(window.progressIndicators.count, 0,
                        "an off listener must not show a spinner beside the manual retry")
+        XCTAssertFalse(window.buttons["Pause receiving"].exists,
+                       "an off listener offers the contradictory action to pause")
+        XCTAssertFalse(window.buttons["Resume receiving"].exists,
+                       "Look again is the one recovery for a listener that never started")
+        XCTAssertTrue(window.staticTexts[
+            "This device is not listening for nearby devices. It can still send, and pairing codes still work."
+        ].exists, "the off state claims this Mac is still listening")
     }
 
     /// Selecting each destination renders something. The regression this catches

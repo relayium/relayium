@@ -24,6 +24,19 @@ import XCTest
 ///     hand across a room; everything else is semantic type. Counting the files
 ///     is what keeps that a rule rather than an intention.
 final class MacSurfaceGuardTests: XCTestCase {
+    func testNearbyOffStateOffersOneTruthfulRecovery() throws {
+        let nearby = try source(named: "NearbyPane.swift")
+        XCTAssertTrue(nearby.contains("switch receive.state"))
+        XCTAssertTrue(nearby.contains("case .off:"))
+        XCTAssertTrue(nearby.contains("case .connecting, .ready, .reconnecting, .active:"))
+        XCTAssertTrue(nearby.contains("receive.state == .paused || receive.state == .off"))
+        let uiURL = macRoot.deletingLastPathComponent()
+            .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
+        let ui = try String(contentsOf: uiURL, encoding: .utf8)
+        XCTAssertTrue(ui.contains("testStoppedNearbyDiscoveryAsksForActionWithoutPretendingToWork"))
+        XCTAssertTrue(ui.contains("window.buttons[\"Pause receiving\"].exists"))
+        XCTAssertTrue(ui.contains("window.buttons[\"Resume receiving\"].exists"))
+    }
 
     /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → …/apps
     private var appsRoot: URL {

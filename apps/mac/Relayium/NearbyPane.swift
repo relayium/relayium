@@ -178,17 +178,23 @@ struct NearbyPane: View {
                 Text(NearbyStatusPresentation.text(for: receive.state))
                     .font(.subheadline.weight(.semibold))
                 Spacer()
-                if discovery.isPaused {
+                switch receive.state {
+                case .paused:
                     Button(L10n.t(.nearbyResumeReceiving)) { discovery.resume() }
-                } else {
+                case .connecting, .ready, .reconnecting, .active:
                     Button(L10n.t(.nearbyPauseReceiving)) { discovery.pause() }
                         .disabled(modelBusy)
+                case .off:
+                    // The matching recovery is Look again below. Offering
+                    // Pause while the status says off is a contradictory action.
+                    EmptyView()
                 }
             }
             // The default is no prompt, by the same decision that made advanced
             // verification opt-in. Stating the consequence is not a contradiction
             // of that decision; hiding it would be.
-            Text(L10n.t(discovery.isPaused ? .nearbyPausedBody : .nearbyListeningBody))
+            Text(L10n.t(receive.state == .paused || receive.state == .off
+                        ? .nearbyPausedBody : .nearbyListeningBody))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
