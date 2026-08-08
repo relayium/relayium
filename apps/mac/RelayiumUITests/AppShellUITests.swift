@@ -186,7 +186,10 @@ final class AppShellUITests: XCTestCase {
         location.typeText(fixture.path)
         app.typeKey(.return, modifierFlags: [])
 
-        let choose = app.buttons["Choose"]
+        // macOS 15 exposes both the panel button and its Touch Bar mirror with
+        // the title "Choose". Scope to the open panel's stable system button
+        // identity so the real confirmation is unambiguous on either OS.
+        let choose = app.dialogs["open-panel"].buttons["OKButton"]
         XCTAssertTrue(choose.waitForExistence(timeout: 10),
                       "the system picker has no confirmation action")
         choose.click()
