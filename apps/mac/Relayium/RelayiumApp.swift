@@ -273,7 +273,8 @@ struct RelayiumApp: App {
             ?? AppEnvironment.makeStoredLinkKeyStore()
         let uploads = AppEnvironment.makeUploadModel(
             keyStore: storedKeys, transport: UITestMode.makeAccountTransport())
-        let downloads = AppEnvironment.makeDownloadModel()
+        let downloads = AppEnvironment.makeDownloadModel(
+            transport: UITestMode.makeAccountTransport())
         let management = AppEnvironment.makeAccountManagementModel(
             keyStore: storedKeys, transport: UITestMode.makeAccountTransport())
         _verification = StateObject(wrappedValue: prefs)

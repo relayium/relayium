@@ -478,7 +478,11 @@ public enum AppEnvironment {
     }
 
     @MainActor
-    public static func makeDownloadModel(baseURL: URL = productionBaseURL) -> CloudDownloadModel {
+    /// `transport` exists for the same reason as the other factories': a stored
+    /// receive cannot reach a result without a server, and acceptance must reach
+    /// one without one. A shipped launch passes nil.
+    public static func makeDownloadModel(baseURL: URL = productionBaseURL,
+                                         transport: URLSession? = nil) -> CloudDownloadModel {
         #if os(iOS)
         // Here rather than at the iOS call site so no future iOS surface can
         // construct a download model that tells the user to choose a folder it
@@ -488,10 +492,12 @@ public enum AppEnvironment {
         // ENOSPC — and defers to `ErrorCopy` for everything else, including the
         // destination errors whose advice really is platform-neutral. See its
         // comment for the case-by-case list.
-        CloudDownloadModel(client: CloudClient(baseURL: baseURL),
+        CloudDownloadModel(client: CloudClient(baseURL: baseURL,
+                                               session: transport ?? .shared),
                            errorCopy: { ReceiveDestinationCopy.message(for: $0) })
         #else
-        CloudDownloadModel(client: CloudClient(baseURL: baseURL))
+        CloudDownloadModel(client: CloudClient(baseURL: baseURL,
+                                               session: transport ?? .shared))
         #endif
     }
 }

@@ -2493,7 +2493,8 @@ final class MacSurfaceGuardTests: XCTestCase {
         // reach the network. Wiring only the first left devices and stored files
         // on the real network once already.
         for app in [macApp, iosApp] {
-            for factory in ["makeSession(", "makeAccountManagementModel(", "makeUploadModel("] {
+            for factory in ["makeSession(", "makeAccountManagementModel(",
+                            "makeUploadModel(", "makeDownloadModel("] {
                 guard let call = app.range(of: factory) else {
                     return XCTFail("\(factory) is gone — this guard is stale")
                 }

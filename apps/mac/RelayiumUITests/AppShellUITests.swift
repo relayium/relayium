@@ -1155,4 +1155,53 @@ final class AppShellUITests: XCTestCase {
                       "the join link cannot use the system share sheet")
     }
 
+    /// A stored link that resolves and downloads, ending on a result the user
+    /// can act on.
+    ///
+    /// Every earlier Open a link path stopped at a refusal. This one carries a
+    /// key that actually decrypts what the fixture serves — the ciphertext is
+    /// produced by the production encryptor — so the manifest, the frame format
+    /// and the key handling are exercised rather than asserted about. The name
+    /// it renders is one the server never sees, which is what makes it evidence
+    /// that the manifest decrypted here.
+    func testOpeningAValidStoredLinkDownloadsAndNamesTheResult() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments + ["--relayium-ui-testing-sign-in"]
+        app.launch()
+        ensureProductWindowIsOpen()
+
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let receive = sidebarDestination("Open a link", in: window)
+        XCTAssertTrue(receive.waitForExistence(timeout: 10))
+        receive.click()
+
+        let link = window.textFields["receive.link"]
+        XCTAssertTrue(link.waitForExistence(timeout: 10))
+        link.click()
+        link.typeText(
+            "https://relayium.com/d/obj_uitest#k=ERERERERERERERERERERERERERERERERERERERERERE")
+        window.buttons["Open"].firstMatch.click()
+
+        // macOS resolves first and then asks WHERE to put it: the download does
+        // not start until the user picks a folder, which is the platform's own
+        // contract and not an extra step invented by the test.
+        let save = window.buttons["Save…"]
+        XCTAssertTrue(save.waitForExistence(timeout: 30),
+                      "a resolved link offers no way to save what it points at")
+        save.click()
+        let saveHere = app.dialogs["open-panel"].buttons["OKButton"]
+        XCTAssertTrue(saveHere.waitForExistence(timeout: 15),
+                      "the destination panel has no confirmation action")
+        saveHere.click()
+
+        // By the row's stable identity, not a window-wide predicate: that query
+        // times out on macOS, the same limit batches 94, 102 and 115 hit.
+        let identity = window.descendants(matching: .any)["pendingFile.0"].firstMatch
+        XCTAssertTrue(identity.waitForExistence(timeout: 40),
+                      "a completed download did not name what it received")
+        XCTAssertTrue(identity.label.contains("brief.txt"),
+                      "the received result is not the file the manifest named")
+    }
+
 }

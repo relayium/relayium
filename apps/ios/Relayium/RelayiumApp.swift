@@ -166,7 +166,8 @@ struct RelayiumApp: App {
         // the end of this initializer needs it: a `@StateObject`'s wrapped value
         // cannot be read from `init`, so anything two objects share has to exist
         // as a local first. Same shape as `keys`, `account` and `managing`.
-        let downloads = AppEnvironment.makeDownloadModel()
+        let downloads = AppEnvironment.makeDownloadModel(
+            transport: UITestMode.makeAccountTransport())
         _download = StateObject(wrappedValue: downloads)
         let account = AppEnvironment.makeSession(tokenStore: UITestMode.makeTokenStore(),
                                                  transport: UITestMode.makeAccountTransport())

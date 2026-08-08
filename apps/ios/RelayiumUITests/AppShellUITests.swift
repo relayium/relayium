@@ -1024,4 +1024,36 @@ final class AppShellUITests: XCTestCase {
                       "the join link cannot use the system share sheet")
     }
 
+    /// A stored link that resolves and downloads, ending on a result the user
+    /// can act on.
+    ///
+    /// Every earlier Open a link path stopped at a refusal. This one carries a
+    /// key that actually decrypts what the fixture serves — the ciphertext is
+    /// produced by the production encryptor — so the manifest, the frame format
+    /// and the key handling are all exercised rather than asserted about.
+    func testOpeningAValidStoredLinkDownloadsAndNamesTheResult() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments + ["--relayium-ui-testing-sign-in"]
+        app.launch()
+
+        openTask("Receive", title: "Receive files")
+        let link = app.textFields["receive.link"]
+        XCTAssertTrue(link.waitForExistence(timeout: 15))
+        link.tap()
+        link.typeText(
+            "https://relayium.com/d/obj_uitest#k=ERERERERERERERERERERERERERERERERERERERERERE")
+
+        let open = app.buttons["Open"]
+        XCTAssertTrue(open.isEnabled, "a complete link cannot be opened")
+        scrollUntilHittable(open)
+        open.tap()
+
+        // The result names the file the manifest carried — the server never saw
+        // that name, so rendering it proves the manifest decrypted here.
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(
+            format: "label CONTAINS %@", "brief.txt")).firstMatch
+            .waitForExistence(timeout: 40),
+            "a completed download did not name what it received")
+    }
+
 }

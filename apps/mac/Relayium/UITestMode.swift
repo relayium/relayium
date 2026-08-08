@@ -355,6 +355,12 @@ final class UITestAccountTransport: URLProtocol {
     /// uploader's resume arithmetic is exercised rather than short-circuited.
     private func uploadResponse(for url: URL, method: String) -> (Int, Data)? {
         let path = url.path
+        if path == "/api/files/obj_uitest/meta", let body = Self.downloadMeta() {
+            return (200, body)
+        }
+        if path == "/api/files/obj_uitest/blob", let body = Self.downloadBlob() {
+            return (200, body)
+        }
         if path == "/api/uploads", method == "POST" {
             return (200, Data(#"{"uploadId":"up_uitest","chunkSize":1048576}"#.utf8))
         }
@@ -389,6 +395,57 @@ final class UITestAccountTransport: URLProtocol {
               let dash = contentRange.firstIndex(of: "-") else { return 0 }
         let to = contentRange[contentRange.index(after: dash)..<slash]
         return (Int(to) ?? -1) + 1
+    }
+
+
+    /// A stored object this device can actually decrypt.
+    ///
+    /// The meta and blob below are produced by the PRODUCTION encryptor from a
+    /// fixed key, so the app's own decryptor has to accept them: if the manifest
+    /// serialization, frame format or key derivation drifts, the download fails
+    /// loudly instead of a fixture quietly agreeing with itself. The key is a
+    /// literal 32 bytes and the link that carries it is built from the same
+    /// value, which is what makes the received result verifiable.
+    // nonlocalized: 32 bytes of 0x11, base64url — an acceptance key, never real
+    static let downloadKeyB64url = "ERERERERERERERERERERERERERERERERERERERERERE"
+    static let downloadFileName = "brief.txt" // nonlocalized: an acceptance fixture
+    private static let downloadPlaintext = [UInt8](repeating: 0x52, count: 1_536)
+
+    private static var downloadKey: [UInt8] {
+        // base64url → bytes, the same decoding the link parser performs.
+        var s = downloadKeyB64url.replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        while s.count % 4 != 0 { s += "=" }
+        return [UInt8](Data(base64Encoded: s) ?? Data())
+    }
+
+    private static func downloadMeta() -> Data? {
+        let manifest = StoredManifest(files: [
+            ManifestFile(name: downloadFileName, size: downloadPlaintext.count),
+        ])
+        guard let ct = try? encryptManifest(key: downloadKey, manifest) else { return nil }
+        // Hand-written, like the other fixture bodies: `StoredFileMeta` carries
+        // no public memberwise initializer, and validating by decoding through
+        // it keeps the drift check the literals elsewhere rely on.
+        let json = """
+            {"encManifest":"\(Data(ct).base64EncodedString())",
+            "size":\(downloadPlaintext.count),"burnAfterRead":false,
+            "expiresAt":4102444800}
+            """
+        let data = Data(json.utf8)
+        guard (try? JSONDecoder().decode(StoredFileMeta.self, from: data)) != nil else {
+            return nil
+        }
+        return data
+    }
+
+    private static func downloadBlob() -> Data? {
+        let encryptor = ChunkEncryptor(
+            key: downloadKey,
+            sources: [DataSource(name: downloadFileName, bytes: downloadPlaintext)])
+        var out = Data()
+        while let frame = ((try? encryptor.next()) ?? nil) { out.append(frame) }
+        return out.isEmpty ? nil : out
     }
 
     override class func canInit(with request: URLRequest) -> Bool {
