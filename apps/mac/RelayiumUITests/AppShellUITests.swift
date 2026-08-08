@@ -867,4 +867,66 @@ final class AppShellUITests: XCTestCase {
                       "the stored send omitted the formatted file size")
     }
 
+    /// A stored send that finishes hands the result over, and offers the way to
+    /// start another.
+    ///
+    /// The macOS half of the first completion surface acceptance can reach. It
+    /// needs a server to say yes, so nothing before the upload fixture could get
+    /// here; the encryption, chunking, manifest and link construction are all
+    /// production code.
+    func testACompletedStoredSendHandsOverItsLinkAndOffersAnother() throws {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments + ["--relayium-ui-testing-signed-in"]
+        app.launch()
+        ensureProductWindowIsOpen()
+
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let send = sidebarDestination("Send a link", in: window)
+        XCTAssertTrue(send.waitForExistence(timeout: 10))
+        send.click()
+
+        let fixture = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Relayium product brief \(UUID().uuidString).txt")
+        try Data(repeating: 0x52, count: 1_536).write(to: fixture, options: .atomic)
+        pendingFileFixture = fixture
+
+        let chooser = window.descendants(matching: .any)["Files to send"].firstMatch
+        XCTAssertTrue(chooser.waitForExistence(timeout: 10))
+        chooser.click()
+        app.typeKey("g", modifierFlags: [.command, .shift])
+        let location = app.textFields.firstMatch
+        XCTAssertTrue(location.waitForExistence(timeout: 10))
+        location.typeText(fixture.path)
+        app.typeKey(.return, modifierFlags: [])
+        let choose = app.dialogs["open-panel"].buttons["OKButton"]
+        XCTAssertTrue(choose.waitForExistence(timeout: 10))
+        choose.click()
+
+        let sendAction = window.buttons["Send"]
+        XCTAssertTrue(sendAction.waitForExistence(timeout: 15),
+                      "a chosen file offers no way to send it")
+        sendAction.click()
+
+        // The link IS the result and carries the only decryption key, so it has
+        // to be inspectable in full before it is handed to anybody.
+        let link = window.descendants(matching: .any)["storedSend.resultLink"].firstMatch
+        XCTAssertTrue(link.waitForExistence(timeout: 30),
+                      "a completed upload did not render its capability link")
+        let shown = (link.value as? String) ?? link.label
+        XCTAssertTrue(shown.contains("/d/obj_uitest#k="),
+                      "the rendered result is not the capability link for this object")
+        XCTAssertTrue(window.buttons["Copy"].exists, "the result cannot be copied")
+        XCTAssertTrue(window.buttons["Share"].exists, "the result cannot be shared")
+
+        let another = window.buttons["Send another"]
+        XCTAssertTrue(another.waitForExistence(timeout: 10),
+                      "a completed send offers no way to start the next one")
+        another.click()
+        XCTAssertTrue(chooser.waitForExistence(timeout: 10),
+                      "Send another did not return to a new selection")
+        XCTAssertFalse(link.exists,
+                       "the previous result stayed on screen after Send another")
+    }
+
 }

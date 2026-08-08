@@ -234,6 +234,11 @@ struct UploadPane: View {
             Text(link)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
+                // One stable address for the result. A window-wide predicate
+                // over every descendant times out on macOS — the same limit
+                // batches 94 and 102 hit — and this also gives assistive
+                // technology something to point at.
+                .accessibilityIdentifier("storedSend.resultLink")
             HStack {
                 Button(L10n.t(.commonCopy)) {
                     NSPasteboard.general.clearContents()
