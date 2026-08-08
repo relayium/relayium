@@ -1342,4 +1342,39 @@ final class AppShellUITests: XCTestCase {
                       "Return in the sign-in form did not submit it")
     }
 
+    /// Share actually opens the system sharing picker.
+    ///
+    /// Every handoff path so far asserted that a Share control EXISTS. A
+    /// `ShareLink` over a value the system refuses renders the same button and
+    /// does nothing when pressed — and on the pairing surface this is how the
+    /// code reaches the other person at all.
+    func testShareOpensTheSystemSharingPicker() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+        app.launch()
+        ensureProductWindowIsOpen()
+
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let pairing = sidebarDestination("Pairing code", in: window)
+        XCTAssertTrue(pairing.waitForExistence(timeout: 10))
+        pairing.click()
+        window.radioButtons["Text"].click()
+        let create = window.buttons["Create a text code"]
+        XCTAssertTrue(create.waitForExistence(timeout: 10))
+        create.click()
+        XCTAssertTrue(window.staticTexts["4 8 3 9 2 0"].waitForExistence(timeout: 20))
+
+        let share = window.buttons["Share"]
+        XCTAssertTrue(share.waitForExistence(timeout: 10),
+                      "the generated code offers no system share")
+        share.click()
+
+        // The picker is a system menu, presented outside the window.
+        let picker = app.menus.firstMatch
+        XCTAssertTrue(picker.waitForExistence(timeout: 20),
+                      "Share did not open the system sharing picker")
+        app.typeKey(.escape, modifierFlags: [])
+    }
+
 }

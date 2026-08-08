@@ -1168,4 +1168,41 @@ final class AppShellUITests: XCTestCase {
             "the keyboard's Go key did not resolve the link")
     }
 
+    /// Share actually opens the system share sheet.
+    ///
+    /// Every handoff path so far asserted that a Share control EXISTS. A
+    /// `ShareLink` whose item is nil, or one built over a value the system
+    /// refuses, renders exactly the same button and does nothing when pressed —
+    /// and this is the control the whole pairing handoff depends on, because it
+    /// is how the code reaches the other person at all.
+    func testShareOpensTheSystemShareSheet() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-text-code"]
+        app.launch()
+
+        openTask("Direct", title: "Direct")
+        app.segmentedControls.firstMatch.buttons["Text"].tap()
+        let create = app.buttons["Create a text code"]
+        XCTAssertTrue(create.waitForExistence(timeout: 15))
+        scrollUntilHittable(create)
+        create.tap()
+        XCTAssertTrue(app.staticTexts["4 8 3 9 2 0"].waitForExistence(timeout: 20))
+
+        let share = app.buttons["Share"]
+        XCTAssertTrue(share.waitForExistence(timeout: 10),
+                      "the generated code offers no system share")
+        scrollUntilHittable(share, maxSwipes: 10)
+        share.tap()
+
+        // The sheet itself, not the button that should have opened it.
+        let sheet = app.otherElements["ActivityListView"]
+        XCTAssertTrue(sheet.waitForExistence(timeout: 20),
+                      "Share did not open the system share sheet")
+
+        // Leave it the way a person would, so the app is not left modal.
+        let close = app.buttons["Close"]
+        if close.waitForExistence(timeout: 5) { close.tap() }
+    }
+
 }
