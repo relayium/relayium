@@ -72,6 +72,14 @@ enum UITestMode {
 
 
 
+
+    /// Holds the text pairing model on a deterministic terminal failure, so the
+    /// suite can verify that cleanup — not a second start path — owns the page.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let terminalTextArgument = "--relayium-ui-testing-terminal-text"
+    static let showsTerminalText = ProcessInfo.processInfo.arguments.contains(
+        terminalTextArgument)
+
     /// Holds the text pairing surface on its generated code.
     ///
     /// The pairing-code handoff is the flow the owner's 2026-08-07 review found
@@ -89,7 +97,7 @@ enum UITestMode {
     static func makeRealtimeTextModel(
         verification: VerificationPreference
     ) -> RealtimeTextSessionModel? {
-        guard showsGeneratedTextCode else { return nil }
+        guard showsGeneratedTextCode || showsTerminalText else { return nil }
         return RealtimeTextSessionModel(
             pairClient: UITestPairClient(),
             iceClient: UITestWaitingICEClient(),
@@ -167,6 +175,7 @@ enum UITestMode {
     static let isSignedIn = false
     /// false, so a shipped launch always mints a real code over the network.
     static let showsGeneratedTextCode = false
+    static let showsTerminalText = false
     static func makeAccountTransport() -> URLSession? { nil }
 
     #endif
@@ -291,7 +300,8 @@ final class UITestAccountTransport: URLProtocol {
 /// Mints deterministically and never opens a connection.
 private struct UITestPairClient: PairCodeClient {
     func mint(token: String) async throws -> MintedCode {
-        MintedCode(code: "483920", expiresAt: 4_102_444_800)
+        if UITestMode.showsTerminalText { throw AccountError.network }
+        return MintedCode(code: "483920", expiresAt: 4_102_444_800)
     }
 }
 

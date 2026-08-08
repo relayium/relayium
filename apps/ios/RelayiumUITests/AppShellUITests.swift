@@ -578,4 +578,63 @@ final class AppShellUITests: XCTestCase {
                       "the join link cannot use the system share sheet")
     }
 
+    /// Cancelling a generated code is the whole exit, not the first half of
+    /// Cancel → Session ended → Done. No transcript exists yet, so manufacturing
+    /// an empty terminal task would make the user dismiss something that never
+    /// happened.
+    func testCancellingAGeneratedTextCodeReturnsDirectlyToTheStartControls() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-text-code"]
+        app.launch()
+
+        openTask("Direct", title: "Direct")
+        app.segmentedControls.firstMatch.buttons["Text"].tap()
+        let create = app.buttons["Create a text code"]
+        XCTAssertTrue(create.waitForExistence(timeout: 10))
+        scrollUntilHittable(create)
+        create.tap()
+        XCTAssertTrue(app.staticTexts["4 8 3 9 2 0"].waitForExistence(timeout: 15))
+
+        let cancel = app.buttons["Cancel"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 10),
+                      "the generated-code surface hides its escape action")
+        cancel.tap()
+
+        XCTAssertTrue(create.waitForExistence(timeout: 10),
+                      "Cancel did not return directly to text-code creation")
+        XCTAssertFalse(app.buttons["Done"].exists,
+                       "Cancel manufactured an empty terminal task requiring Done")
+        XCTAssertFalse(app.staticTexts["4 8 3 9 2 0"].exists,
+                       "the cancelled pairing code remained on screen")
+    }
+
+    /// A terminal task is not an invitation to start another one on top of it.
+    /// Done is the explicit boundary that releases the old session; only after
+    /// it is pressed may Create return.
+    func testATerminalTextSessionMustBeDismissedBeforeStartingAgain() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-terminal-text"]
+        app.launch()
+
+        openTask("Direct", title: "Direct")
+        app.segmentedControls.firstMatch.buttons["Text"].tap()
+        let create = app.buttons["Create a text code"]
+        XCTAssertTrue(create.waitForExistence(timeout: 10))
+        scrollUntilHittable(create)
+        create.tap()
+
+        let done = app.buttons["Done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 15),
+                      "the failed session has no cleanup boundary")
+        XCTAssertFalse(create.exists,
+                       "a new create path replaced a terminal session before Done")
+
+        scrollUntilHittable(done)
+        done.tap()
+        XCTAssertTrue(create.waitForExistence(timeout: 10),
+                      "the start controls did not return after cleanup")
+    }
+
 }
