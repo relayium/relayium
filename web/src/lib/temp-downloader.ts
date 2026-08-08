@@ -163,7 +163,16 @@ export function windowsTempDownloaderScript(link: string, dest: string): string 
   $asset = "relayium_windows_$arch.zip"
   $archive = Join-Path $root $asset
   Invoke-WebRequest -UseBasicParsing -Uri "${base}/$asset" -OutFile $archive
-  $actual = (Get-FileHash -Algorithm SHA256 -Path $archive).Hash.ToLowerInvariant()
+  # Use .NET directly: some minimal Windows PowerShell hosts do not load the
+  # Microsoft.PowerShell.Utility module that provides Get-FileHash.
+  $sha = [Security.Cryptography.SHA256]::Create()
+  $stream = [IO.File]::OpenRead($archive)
+  try {
+    $actual = ([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-', '').ToLowerInvariant()
+  } finally {
+    $stream.Dispose()
+    $sha.Dispose()
+  }
   if ($actual -ne $expected) { throw 'relayium: pinned SHA-256 mismatch - nothing was run' }
   Expand-Archive -LiteralPath $archive -DestinationPath $root
   & (Join-Path $root 'relayium.exe') down ${psQuote(link)} ${psArg(dest)}

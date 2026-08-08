@@ -104,7 +104,9 @@ describe("shell quoting", () => {
     expect(script).toMatch(/^& \{\n/);
     expect(script).toContain("[Net.SecurityProtocolType]::Tls12");
     expect(script).toContain("[Net.ServicePointManager]::SecurityProtocol = $oldSecurityProtocol");
-    expect(script).toContain("Get-FileHash -Algorithm SHA256");
+    expect(script).toContain("[Security.Cryptography.SHA256]::Create()");
+    expect(script).toContain("$sha.ComputeHash($stream)");
+    expect(script).toContain("$stream.Dispose()");
     expect(script).toContain("if ($actual -ne $expected)");
     expect(script).toContain("finally {");
     expect(script).toContain("Remove-Item -LiteralPath $root -Recurse -Force");
