@@ -1,4 +1,5 @@
 import XCTest
+import Carbon.HIToolbox
 
 /// The first automated tests that drive the real app.
 ///
@@ -38,8 +39,33 @@ final class AppShellUITests: XCTestCase {
          "-AppleLocale", "en_US", "-SUEnableAutomaticChecks", "NO"]
     }
 
+    /// The keyboard input source this suite found the machine in.
+    private var previousInputSource: TISInputSource?
+
+    /// Type into the app, not into an input method.
+    ///
+    /// `typeText` synthesizes key events, so a non-ASCII input source gets them
+    /// first: characters become candidates and Return commits the candidate
+    /// instead of the dialog underneath. That is invisible in the failure — the
+    /// panel simply stays modal — and it is why paths that type text failed on a
+    /// workstation with a Chinese input method while passing on an
+    /// English-only runner. Scoped to the suite: the previous source is restored
+    /// in `tearDown`, so the machine's own default is never changed.
+    private func useASCIIKeyboard() {
+        guard let ascii = TISCopyCurrentASCIICapableKeyboardLayoutInputSource()?
+            .takeRetainedValue() else { return }
+        previousInputSource = TISCopyCurrentKeyboardInputSource()?.takeRetainedValue()
+        TISSelectInputSource(ascii)
+    }
+
+    private func restoreInputSource() {
+        if let previousInputSource { TISSelectInputSource(previousInputSource) }
+        previousInputSource = nil
+    }
+
     override func setUpWithError() throws {
         continueAfterFailure = false
+        useASCIIKeyboard()
         app = XCUIApplication()
         app.launchArguments = offlineLaunchArguments
         app.launch()
@@ -48,6 +74,7 @@ final class AppShellUITests: XCTestCase {
 
     override func tearDownWithError() throws {
         app?.terminate()
+        restoreInputSource()
         if let pendingFileFixture {
             try? FileManager.default.removeItem(at: pendingFileFixture)
         }
