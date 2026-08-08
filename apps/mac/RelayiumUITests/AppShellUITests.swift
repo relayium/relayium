@@ -929,4 +929,47 @@ final class AppShellUITests: XCTestCase {
                        "the previous result stayed on screen after Send another")
     }
 
+    /// Signing in through the form turns an empty session into a real one.
+    ///
+    /// Every other account path either started signed out or started already
+    /// signed in. The transition itself — the one a first-time user performs —
+    /// had no runtime evidence on either platform.
+    func testSigningInThroughTheFormOpensTheAccount() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments + ["--relayium-ui-testing-sign-in"]
+        app.launch()
+        ensureProductWindowIsOpen()
+
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let account = sidebarDestination("Account", in: window)
+        XCTAssertTrue(account.waitForExistence(timeout: 10))
+        account.click()
+        XCTAssertTrue(window.staticTexts["Welcome back"].waitForExistence(timeout: 15),
+                      "a signed-out launch did not offer the sign-in form")
+
+        // By identity across any type: macOS classifies a SwiftUI SecureField
+        // inconsistently between the sign-in and registration halves of this
+        // form, and the identifier is the same in both.
+        let email = window.descendants(matching: .any)["account.email"].firstMatch
+        let password = window.descendants(matching: .any)["account.password"].firstMatch
+        XCTAssertTrue(email.waitForExistence(timeout: 10))
+        XCTAssertTrue(password.waitForExistence(timeout: 10))
+        email.click()
+        email.typeText("person@example.com")
+        password.click()
+        password.typeText("correct horse battery")
+
+        let signIn = window.buttons["Sign in"]
+        XCTAssertTrue(signIn.exists, "the completed form cannot be submitted")
+        signIn.click()
+
+        XCTAssertTrue(window.staticTexts["person@example.com"].waitForExistence(timeout: 20),
+                      "signing in did not open the account")
+        XCTAssertTrue(window.staticTexts["Signed-in devices"].exists,
+                      "the opened account has no device section")
+        XCTAssertFalse(window.staticTexts["Welcome back"].exists,
+                       "the sign-in form survived a successful sign-in")
+    }
+
 }

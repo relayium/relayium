@@ -864,4 +864,45 @@ final class AppShellUITests: XCTestCase {
             "a cancelled upload left a capability link on screen")
     }
 
+    /// Signing in through the form turns an empty session into a real one.
+    ///
+    /// Every other account path either started signed out or started already
+    /// signed in. The transition itself — the one a first-time user actually
+    /// performs — had no runtime evidence on either platform.
+    func testSigningInThroughTheFormOpensTheAccount() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments + ["--relayium-ui-testing-sign-in"]
+        app.launch()
+
+        openTask("Account", title: "Account")
+        XCTAssertTrue(app.staticTexts["Welcome back"].waitForExistence(timeout: 15),
+                      "a signed-out launch did not offer the sign-in form")
+
+        let email = app.textFields["account.email"]
+        let password = app.secureTextFields["account.password"]
+        XCTAssertTrue(email.waitForExistence(timeout: 10))
+        XCTAssertTrue(password.exists)
+        email.tap()
+        email.typeText("person@example.com")
+        password.tap()
+        password.typeText("correct horse battery")
+
+        let signIn = app.buttons["Sign in"]
+        XCTAssertTrue(signIn.exists, "the completed form cannot be submitted")
+        scrollUntilHittable(signIn)
+        signIn.tap()
+
+        XCTAssertTrue(app.staticTexts["person@example.com"].waitForExistence(timeout: 20),
+                      "signing in did not open the account")
+        XCTAssertTrue(app.staticTexts["Signed-in devices"].exists,
+                      "the opened account has no device section")
+        XCTAssertFalse(app.staticTexts["Welcome back"].exists,
+                       "the sign-in form survived a successful sign-in")
+
+        // The consequence — an account-gated task losing its remedy — is already
+        // proven by testASignedInLaunchRendersItsAccountAndUngatesSend. Asserting
+        // it again here would only add a tab switch that can fail for reasons
+        // that have nothing to do with signing in.
+    }
+
 }

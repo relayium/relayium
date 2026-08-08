@@ -56,6 +56,11 @@ enum UITestMode {
 
     // nonlocalized: a test-only launch argument, absent from Release
     static let signedInArgument = "--relayium-ui-testing-signed-in"
+    /// Signed OUT, but with the account API answered — so the sign-in form can be
+    /// filled in and succeed. `isSignedIn` seeds a bearer; this one does not.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let signInArgument = "--relayium-ui-testing-sign-in"
+    static let answersAccountAPI = ProcessInfo.processInfo.arguments.contains(signInArgument)
     static let isSignedIn = ProcessInfo.processInfo.arguments.contains(signedInArgument)
 
     /// A token store already holding the acceptance bearer, so `restore()` takes
@@ -67,7 +72,7 @@ enum UITestMode {
     }
 
     static func makeAccountTransport() -> URLSession? {
-        guard isSignedIn else { return nil }
+        guard isSignedIn || answersAccountAPI else { return nil }
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [UITestAccountTransport.self]
         return URLSession(configuration: configuration)
@@ -153,6 +158,7 @@ enum UITestMode {
 
     /// false, so a shipped launch can never be told it already holds an account.
     static let isSignedIn = false
+    static let answersAccountAPI = false
     static let stallsUpload = false
     static func makeAccountTransport() -> URLSession? { nil }
     #endif
@@ -246,6 +252,16 @@ final class UITestAccountTransport: URLProtocol {
             guard (try? JSONDecoder().decode(type, from: data)) != nil else { return }
             out[path] = data
         }
+        // Sign-in. Modelled so the ONE transition acceptance never drove — an
+        // empty session becoming a real one through the form a person fills in —
+        // can be driven without a server. Returns the 6-field login user shape,
+        // not /api/me's 14-field one: a fixture that returned the wrong shape
+        // here would prove the app tolerates a body no server sends.
+        offer("/api/auth/native/login", """
+            {"token":"\(bearer)","user":{"id":"acct_uitest","email":"\(email)",
+            "displayName":"","hasPassword":true,"emailVerified":true,
+            "linkedMethods":["password"]}}
+            """, as: LoginSuccessBody.self)
         offer("/api/me", """
             {"user":{"id":"acct_uitest","email":"\(email)","displayName":"",
             "hasPassword":true,"emailVerified":true,"linkedMethods":["password"],
