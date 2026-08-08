@@ -221,12 +221,24 @@ func TestSystemdVerifyWhereAvailable(t *testing.T) {
 		t.Skipf("systemd-analyze unavailable on %s; structural parsing covers this host", runtime.GOOS)
 	}
 	dir := t.TempDir()
+	p := testParams()
+	// verify checks that ExecStart exists as well as parsing the unit. Point it
+	// at an executable fixture rather than the illustrative /opt path used by
+	// structural tests; otherwise a clean Linux runner fails for a missing local
+	// installation, not for a malformed generated definition.
+	p.Binary = filepath.Join(dir, "relayium")
+	if err := os.WriteFile(p.Binary, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatalf("write executable fixture: %v", err)
+	}
 	for _, k := range []Kind{SystemdUser, SystemdSystem} {
 		path := filepath.Join(dir, string(k)+"-relayium-inbox.service")
-		if err := os.WriteFile(path, []byte(mustRender(t, k, testParams())), 0o600); err != nil {
+		if err := os.WriteFile(path, []byte(mustRender(t, k, p)), 0o600); err != nil {
 			t.Fatalf("write: %v", err)
 		}
-		if out, err := exec.Command(analyze, "verify", path).CombinedOutput(); err != nil {
+		// The generated Documentation= line names Relayium's eventual man page.
+		// Its absence on a CI runner is not a unit syntax error; --man=no keeps
+		// verify focused on the service definition itself.
+		if out, err := exec.Command(analyze, "verify", "--man=no", path).CombinedOutput(); err != nil {
 			t.Fatalf("systemd-analyze verify %s: %v\n%s", k, err, out)
 		}
 	}
