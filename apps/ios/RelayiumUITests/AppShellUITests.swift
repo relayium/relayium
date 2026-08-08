@@ -905,4 +905,28 @@ final class AppShellUITests: XCTestCase {
         // that have nothing to do with signing in.
     }
 
+    /// Nearby's transfer type is two different tasks, not a label.
+    ///
+    /// Files stages a selection before any device is chosen; Text stages nothing
+    /// and must not leave the file surface behind, or the user would be looking
+    /// at a pending send that the mode they picked cannot perform.
+    func testNearbyTransferTypeChangesWhatIsStaged() {
+        openTask("Nearby", title: "Nearby")
+
+        let chooser = app.buttons["Choose Files or Folders…"]
+        XCTAssertTrue(chooser.waitForExistence(timeout: 15),
+                      "Nearby's file mode stages nothing")
+
+        let modes = app.segmentedControls.firstMatch
+        XCTAssertTrue(modes.waitForExistence(timeout: 10),
+                      "Nearby offers no transfer type choice")
+        modes.buttons["Text"].tap()
+        XCTAssertFalse(chooser.waitForExistence(timeout: 3),
+                       "choosing Text left the file staging surface behind")
+
+        modes.buttons["Files"].tap()
+        XCTAssertTrue(chooser.waitForExistence(timeout: 10),
+                      "returning to Files did not restore its staging surface")
+    }
+
 }

@@ -972,4 +972,85 @@ final class AppShellUITests: XCTestCase {
                        "the sign-in form survived a successful sign-in")
     }
 
+    /// Cancelling an upload in flight returns the task to the user, with nothing
+    /// half-finished left claiming to be a result.
+    ///
+    /// The contract differs from iOS ON PURPOSE and the test says so rather than
+    /// copying the other platform's: macOS builds its upload model without a
+    /// pending store, so `.interrupted` falls back to the selection and keeps
+    /// the chosen files in front of the user, instead of offering Resume and
+    /// Discard. Asserting iOS's surface here would invent a requirement.
+    func testCancellingAnUploadInFlightReturnsTheTask() throws {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-stall-upload"]
+        app.launch()
+        ensureProductWindowIsOpen()
+
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let send = sidebarDestination("Send a link", in: window)
+        XCTAssertTrue(send.waitForExistence(timeout: 10))
+        send.click()
+
+        let fixture = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Relayium product brief \(UUID().uuidString).txt")
+        try Data(repeating: 0x52, count: 1_536).write(to: fixture, options: .atomic)
+        pendingFileFixture = fixture
+
+        let chooser = window.descendants(matching: .any)["Files to send"].firstMatch
+        XCTAssertTrue(chooser.waitForExistence(timeout: 10))
+        chooser.click()
+        app.typeKey("g", modifierFlags: [.command, .shift])
+        let location = app.textFields.firstMatch
+        XCTAssertTrue(location.waitForExistence(timeout: 10))
+        location.typeText(fixture.path)
+        app.typeKey(.return, modifierFlags: [])
+        let choose = app.dialogs["open-panel"].buttons["OKButton"]
+        XCTAssertTrue(choose.waitForExistence(timeout: 10))
+        choose.click()
+
+        let sendAction = window.buttons["Send"]
+        XCTAssertTrue(sendAction.waitForExistence(timeout: 15))
+        sendAction.click()
+
+        let cancel = window.buttons["Cancel"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 20),
+                      "an upload in flight cannot be cancelled")
+        cancel.click()
+
+        XCTAssertTrue(chooser.waitForExistence(timeout: 20),
+                      "a cancelled upload did not return the selection")
+        let identity = window.descendants(matching: .any)["pendingFile.0"].firstMatch
+        XCTAssertTrue(identity.waitForExistence(timeout: 10),
+                      "a cancelled upload lost the files the user had chosen")
+        XCTAssertFalse(window.descendants(matching: .any)["storedSend.resultLink"]
+            .firstMatch.exists,
+            "a cancelled upload left a capability link on screen")
+    }
+
+    /// Nearby's transfer type is two different tasks, not a label.
+    func testNearbyTransferTypeChangesWhatIsStaged() {
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let nearby = sidebarDestination("Nearby", in: window)
+        XCTAssertTrue(nearby.waitForExistence(timeout: 10))
+        nearby.click()
+
+        let chooser = window.descendants(matching: .any)["Files to send"].firstMatch
+        XCTAssertTrue(chooser.waitForExistence(timeout: 15),
+                      "Nearby's file mode stages nothing")
+
+        let text = window.radioButtons["Text"]
+        XCTAssertTrue(text.waitForExistence(timeout: 10),
+                      "Nearby offers no transfer type choice")
+        text.click()
+        XCTAssertFalse(chooser.waitForExistence(timeout: 3),
+                       "choosing Text left the file staging surface behind")
+
+        window.radioButtons["Files"].click()
+        XCTAssertTrue(chooser.waitForExistence(timeout: 10),
+                      "returning to Files did not restore its staging surface")
+    }
+
 }
