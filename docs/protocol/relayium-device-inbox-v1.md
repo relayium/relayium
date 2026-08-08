@@ -1,15 +1,18 @@
 # Relayium Device Inbox v1 — device identity, keys, capabilities, presence
 
-Status: **Phase 1A only.** This document specifies device enrolment, end-to-end
-public-key registration/rotation/revocation, capability negotiation and presence.
-The encrypted task queue itself (Phase 1B), the CLI `inbox` commands (1C) and the
+Status: **Phases 1A and 1B.** This document specifies device enrolment,
+end-to-end public-key registration/rotation/revocation, capability negotiation
+and presence (§1-§10), and the encrypted asynchronous task queue with its full
+server-visible state machine (§11-§18). The CLI `inbox` commands (1C) and the
 web/native device UI (1D, 2, 3) are **not** specified here and are not
 implemented. Product source of truth: `DEVICE-INBOX-PRD.md` §6, §8, §10, §11.
 
-Authoritative implementation: `server/internal/inbox/inbox.go` (protocol
-vocabulary), `server/account/deviceinbox.go` (HTTP), `server/account/
-deviceinbox_store.go` (storage). Any change here requires changing those and
-their tests together.
+Authoritative implementation: `server/internal/inbox/inbox.go` and
+`server/internal/inbox/task.go` (protocol vocabulary and the state machine),
+`server/account/deviceinbox.go` and `server/account/deviceinbox_task.go` (HTTP),
+`server/account/deviceinbox_store.go` and
+`server/account/deviceinbox_task_store.go` (storage). Any change here requires
+changing those and their tests together.
 
 ## 1. Invariants
 
@@ -293,3 +296,292 @@ both `REFERENCES devices(id) ON DELETE CASCADE` with the `foreign_keys` pragma
 on, so deleting a device removes its enrolment, its key history and its bearer
 through one existing control. `UNIQUE(device_id, generation)` makes a forked key
 history impossible even under a concurrent rotation.
+
+---
+
+# Phase 1B — the encrypted asynchronous task queue
+
+## 11. Invariants (queue)
+
+1. **Zero knowledge, again.** A task row holds the owning account, the source
+   and target devices, the ciphertext byte count, timestamps, a state, an opaque
+   error token and idempotency metadata — plus two blobs central cannot read:
+   the encrypted manifest and the content key sealed to the target device's
+   public key. There is no column, and no request field, for plaintext, a file
+   or directory name, the target's real path, a content key or a private key.
+2. **A public link never writes to disk.** Every queue endpoint is
+   authenticated, and the target device is always resolved under the caller's
+   own account. A capability link authenticates nothing and reaches none of it.
+   MVP task creation is same-account only (PRD §8).
+3. **Session ≠ device.** A browser session may create, list, read and delete
+   tasks — it is the primary *sender*. Only the machine itself may claim work or
+   assert what it did with a file.
+4. **The key binding is fixed at creation.** A rotation preserves an existing
+   task's claim on the superseded key; revoking that key makes its unfinished
+   tasks terminal `revoked`.
+5. **Exactly one claimant.** Concurrent claims produce one winner; an expired
+   lease returns the work to the pool and makes the previous claimant stale.
+6. **Retries converge.** Duplicate create, claim, progress and `saved` reports
+   never duplicate work or falsify a timestamp.
+7. **`saved` is earned.** It is reachable only from `verifying`, only with an
+   explicit device assertion that authenticated decryption, complete
+   verification and the atomic local commit all succeeded. Ciphertext arriving
+   at central is never `saved`.
+8. **Fail closed on transitions.** An explicit table decides every pair;
+   unknown states, terminal sources and unlisted pairs are all refused.
+
+## 12. The data path: an existing Stored Object, by reference
+
+A task does **not** carry or duplicate ciphertext. It references an existing
+same-account encrypted Stored Object (`stored_files`), and inherits from it:
+
+- the **encrypted manifest**, copied from the object at creation — never taken
+  from the request, so the manifest and the ciphertext cannot disagree;
+- the **ciphertext byte count**, read from the row, so a sender cannot describe
+  its own object dishonestly;
+- the **expiry**. A task cannot outlive the ciphertext it points at, so there is
+  no second retention window and no invented quota. Storage volume is already
+  bounded by the account's existing plan limits, because the object was uploaded
+  under them.
+
+A task never *owns* a blob. Deleting a task therefore cannot orphan one, and
+never destroys the download link the object still is. The reference must use an
+**unlimited-until-TTL** Stored Object (`max_downloads = 0`, not burn-after-read):
+a public-link read could otherwise spend the final slot and strand a supposedly
+reliable device delivery. Deleting the object explicitly before TTL atomically
+ends unfinished tasks as `failed_terminal`/`stored_object_unavailable`.
+
+**Not implemented in Phase 1B:** a task-owned opaque ciphertext upload (one
+object created for the queue alone, with no separate share link). It is a real
+part of the product model and is deferred to the sender-integration batch; the
+reference path above is the complete, shipped queue path today.
+
+## 13. State machine
+
+Server-visible states (PRD §10 items 3-12): `queued`, `notified`,
+`downloading`, `verifying`, `saved`, `attention_required`, `expired`, `revoked`,
+`failed_retryable`, `failed_terminal`.
+
+`encrypting` and `uploading` (PRD §10 items 1-2) are **sender-local**. Central
+cannot observe either, so it stores neither and refuses them *by name* with a
+distinct error rather than as unknown strings. The database `CHECK` constraint
+repeats the server set, so no write path can invent a state.
+
+| From | May become |
+|---|---|
+| `queued` | `notified`, `downloading`, `attention_required`, `expired`, `revoked`, `failed_terminal` |
+| `notified` | `queued`, `downloading`, `attention_required`, `expired`, `revoked`, `failed_terminal` |
+| `downloading` | `verifying`, `queued`, `attention_required`, `failed_retryable`, `failed_terminal`, `expired`, `revoked` |
+| `verifying` | **`saved`**, `queued`, `attention_required`, `failed_retryable`, `failed_terminal`, `expired`, `revoked` |
+| `attention_required` | `queued`, `failed_terminal`, `expired`, `revoked` |
+| `failed_retryable` | `queued`, `failed_terminal`, `expired`, `revoked` |
+| `saved`, `expired`, `revoked`, `failed_terminal` | — terminal |
+
+Reporting the state a task is already in is **not** a transition: it is an
+idempotent no-op. In `downloading` or `verifying`, it renews the lease (a
+progress heartbeat); other non-working states do not acquire a lease;
+terminal, it returns the stored row unchanged, so a retried `saved` gets the
+timestamp of the real commit rather than the retry.
+
+A device may report only `downloading`, `verifying`, `saved`,
+`attention_required`, `failed_retryable`, `failed_terminal`. `expired` and
+`revoked` are central's judgements about time and authorization;
+`queued`/`notified` are central's scheduling — a device that could report
+`queued` could reset its own backoff.
+
+### Who drives each transition
+
+- **create** → `queued` (policy `auto`) or `attention_required` (policy `ask`).
+- **`GET …/inbox/pending`** → `queued` becomes `notified`. In the polling
+  transport the device asking and central answering *is* the notification.
+- **`POST …/inbox/claim`** → `queued`/`notified` become `downloading`, leased.
+- **device report** → `verifying`, `saved`, `attention_required`,
+  `failed_retryable`, `failed_terminal`.
+- **`POST …/tasks/{id}/accept`** → `attention_required` becomes `queued`
+  (accepted) or `failed_terminal`/`user_declined` (declined). Only that state is
+  acceptable, so a device cannot cancel its own live lease to skip a backoff.
+- **lease expiry** → `downloading`/`verifying` return to `queued` with
+  `lease_expired`, the claimant cleared, and a backoff measured from when the
+  lease was *lost*.
+- **backoff elapsed** → `failed_retryable` returns to `queued`.
+- **TTL** → anything unfinished becomes `expired`.
+- **key revocation / enrolment clear** → unfinished tasks become `revoked` with
+  `key_revoked`, in the same transaction as the key change.
+
+## 14. Automatic-receive policy at creation
+
+| Policy | Result |
+|---|---|
+| `off` | `409 auto_receive_disabled`. Nothing is stored: queuing a task the device will never take would be a lie in the sender's UI. |
+| `ask` | `attention_required`. Held until a person at *that* machine accepts. |
+| `auto` | `queued` — but only if the device announced `inbox.autoaccept.v1` **and** last reported a usable receive directory. `auto` with an unusable directory starts `attention_required`, because the honest reason nothing will land is a local problem the user must fix. |
+
+The policy is read inside the create transaction, so a device switched to `off`
+a moment earlier wins the race.
+
+## 15. Claims, leases and idempotency
+
+- A claim mints a **raw claim token**, returned exactly once in the claim
+  response; only `authx.HashToken` of it is stored. Every progress report
+  carries it, and it is matched inside the update transaction.
+- **Device-self** says *this machine*; the **claim token** says *this machine's
+  current worker*. Both are required, because a device with several workers, or
+  one paused and resumed, must not overwrite the progress of whoever holds the
+  task now.
+- **Lease TTL 5 minutes.** It bounds how long a *crashed* claimant strands a
+  task, not how long a download may take: reporting progress renews it. The
+  deadline is enforced on every report and blob request even before a poll or
+  GC pass has reclaimed the row, so an expired worker cannot revive itself.
+  A lease is always capped at the task's own expiry and therefore cannot imply
+  work remains valid beyond the ciphertext TTL.
+- **Reclaim** clears the claimant, so the superseded worker's token stops
+  matching (`409 stale_claim`). The claim path reclaims its own device's stale
+  leases first, so a restarted CLI resumes without waiting for the GC sweep.
+- The claimant hash is **retained** on a terminal row as the record of who
+  finished the task. That is what makes a retried final report idempotent rather
+  than a stale-claim rejection.
+- **Creation idempotency** is `UNIQUE(user_id, idempotency_key)`, enforced by
+  the database. An identical repeat returns `200 {"created": false}` with the
+  original task; the same key with different content is
+  `409 idempotency_key_conflict` — silently returning the first task would tell
+  the sender their *second*, different file was queued.
+
+### Bounds
+
+| Bound | Value | Why |
+|---|---|---|
+| Lease TTL | 5 min | Bounds a crashed claimant, renewed by progress. |
+| Max attempts | 8 | Then `failed_terminal`/`attempts_exhausted`, so a task that can never succeed stops consuming claims. |
+| Retry backoff | 30 s, doubling, capped at 30 min | Bounded on both ends; a flapping device neither hammers central nor burns its TTL. |
+| Pending rows per device | 256 | A row-count abuse bound. Bytes are already bounded by the account's storage plan. |
+| Claim batch | 32 | One call cannot lease a device's whole queue and strand it for the lease TTL. |
+| Terminal-row retention | 7 days | Bounds the table while a sender can still see what happened yesterday. |
+
+None of these is a commercial quota; PRD §13 rules pricing numbers out of scope.
+
+## 16. Error codes (queue)
+
+Device-submittable codes are a **closed set**: `""`, `download_failed`,
+`decrypt_failed`, `verify_failed`, `disk_full`, `permission_denied`,
+`directory_unavailable`, `name_conflict`, `user_declined`, `unsupported`,
+`internal`. There is no free-text field, so a file name or path cannot reach
+central even when a device is reporting exactly why saving failed.
+
+`lease_expired`, `attempts_exhausted`, `key_revoked` and
+`stored_object_unavailable` are written by **central only**; a device submitting
+one is refused, so it cannot forge central's own account of events.
+
+| HTTP | `error` | Client action |
+|---|---|---|
+| 409 | `auto_receive_disabled` | The target has automatic receive off. Ask the user to enable it on that device. |
+| 409 | `device_cannot_receive` | Not enrolled, unsupported version, or no active key. |
+| 409 | `device_inbox_revoked` | Stop. A human must clear it from another device. |
+| 409 | `stale_target_key` | Re-read the device's current key and seal again. |
+| 409 | `idempotency_key_conflict` | The key was reused for different content. Use a fresh key. |
+| 409 | `stored_object_unavailable` | The referenced object is gone, expired, or not yours. |
+| 429 | `inbox_queue_full` | The device has too much unfinished work. Body carries `maxPendingTasks`. |
+| 409 | `stale_claim` | Your lease was reclaimed or superseded. Re-claim; do not retry the report. |
+| 409 | `task_terminal` | The task is finished. Body carries the task. Stop. |
+| 409 | `invalid_transition` | Illegal for the task's current state. |
+| 400 | `sender_local_state` | `encrypting`/`uploading` are yours to track, not central's. |
+| 400 | `saved_not_asserted` | `saved` requires `committed: true`. |
+| 400 | `malformed_wrapped_key` | Canonical base64url of exactly 80 bytes for `x25519-sealedbox-v1`. |
+| 400 | `invalid_error_code` / `invalid_task_state` / `invalid_idempotency_key` | Fix the request. |
+| 404 | — | Not yours, or does not exist. Deliberately indistinguishable. |
+
+## 17. HTTP API (queue)
+
+All routes require `RequireAuth` (session cookie **or** CLI bearer).
+
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| `POST` | `/api/devices/{id}/inbox/tasks` | account | Queue one encrypted delivery |
+| `GET` | `/api/devices/{id}/inbox/tasks` | account | List, newest first (`?limit=`) |
+| `GET` | `/api/devices/{id}/inbox/tasks/{taskId}` | account | Read one |
+| `DELETE` | `/api/devices/{id}/inbox/tasks/{taskId}` | account | Cancel/remove the task (never the object) |
+| `GET` | `/api/devices/{id}/inbox/pending` | device-self | "Is there work"; marks `notified`; leases nothing |
+| `POST` | `/api/devices/{id}/inbox/claim` | device-self | Lease work; the ONLY source of delivery material |
+| `GET` | `/api/devices/{id}/inbox/tasks/{taskId}/blob` | device-self + current claim token | Resumable ciphertext stream; token in `X-Relayium-Inbox-Claim` |
+| `POST` | `/api/devices/{id}/inbox/tasks/{taskId}/report` | device-self + claim token | Progress / saved / failure |
+| `POST` | `/api/devices/{id}/inbox/tasks/{taskId}/accept` | device-self | Resolve `attention_required` |
+
+Device-side verbs live at `…/inbox/pending` and `…/inbox/claim` rather than
+under `…/inbox/tasks/`, so no fixed word can ever shadow a task id.
+
+### `POST /api/devices/{id}/inbox/tasks`
+
+```json
+{ "idempotencyKey": "sender-chosen, ≤128 printable ASCII bytes",
+  "storedFileId": "<an existing same-account Stored Object>",
+  "wrapAlgorithm": "x25519-sealedbox-v1",
+  "wrappedKey": "<base64url, exactly 80 raw bytes>",
+  "targetKeyId": "<the device's CURRENT key id>",
+  "targetKeyGeneration": 1 }
+```
+
+→ `201 {"task": {…}, "created": true}`, or `200 {"created": false}` on a
+converged retry.
+
+There is deliberately **no** field for the manifest, the size, the expiry or the
+state: central derives all four from state it can verify. Request objects are
+strict, so `contentKey`, `fileName`, `destinationPath` and friends are `400`s,
+not silently ignored fields.
+
+### `POST /api/devices/{id}/inbox/claim`
+
+```json
+{ "max": 8 }
+```
+
+→ `200 {"tasks": [{ …task…, "EncManifest": "<base64>", "WrappedKey": "<base64url>",
+"ClaimToken": "<returned once>" }], "leaseSeconds": 300}`
+
+Sent `Cache-Control: private, no-store`. The account-scoped reads never return
+`EncManifest`, `WrappedKey` or `ClaimToken`: a stolen session must not yield
+every queued task's sealed key.
+
+The claimed worker downloads ciphertext from
+`GET …/inbox/tasks/{taskId}/blob` with its device bearer and
+`X-Relayium-Inbox-Claim: <ClaimToken>`. This path supports `Range`, does not
+consume public-link download slots, checks the lease deadline itself, and
+renews the lease when an authorized stream starts.
+
+### `POST /api/devices/{id}/inbox/tasks/{taskId}/report`
+
+```json
+{ "claimToken": "…", "state": "verifying", "errorCode": "", "committed": false }
+```
+
+`state: "saved"` additionally requires `committed: true` — the device stating
+that authenticated decryption, complete verification and the atomic local commit
+all succeeded. Central cannot observe any of that, so its absence is a refusal,
+never an assumption.
+
+## 18. Storage (queue)
+
+`inbox_tasks`, `REFERENCES devices(id) ON DELETE CASCADE`, so
+`DELETE /api/devices/{id}` removes the queue along with the enrolment, the key
+history and the bearer. Account deletion purges the rows by `user_id` as well.
+Neither can orphan a blob: a task borrows a `stored_files` row it does not own,
+and that table keeps its own lifecycle.
+
+`stored_file_id` is deliberately **not** a foreign key. The owner may delete the
+object without a task blocking that control. `DeleteStoredFile` first updates
+unfinished referencing tasks in the same writer transaction: past-TTL rows
+become `expired`; early deletion becomes
+`failed_terminal`/`stored_object_unavailable`; already terminal rows retain
+their historical truth. Then the object row is removed.
+
+Constraints, so the invariants do not rest on application code alone:
+
+- `UNIQUE(user_id, idempotency_key)` — creation idempotency survives a
+  concurrent duplicate the application read would miss.
+- `CHECK (state IN …)` — the closed PRD §10 server set.
+- `CHECK (saved_at = 0 OR state = 'saved')` — no code path can leave a "saved
+  at" timestamp on a task that was never saved.
+- `CHECK (lease_expires_at = 0 OR claim_token_hash <> '')` — a lease always has
+  a holder. The converse is allowed on purpose: the claimant hash outlives its
+  lease on a terminal row, which is what makes a retried final report idempotent.
+
+GC sweeps the queue each pass: reclaim expired leases, expire past TTL, delete
+terminal rows past retention.

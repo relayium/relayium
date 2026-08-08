@@ -219,6 +219,103 @@ type DeviceKey struct {
 // key of its device and not revoked.
 func (k DeviceKey) Active() bool { return k.SupersededAt == 0 && k.RevokedAt == 0 }
 
+// InboxTask is ONE encrypted asynchronous delivery to a device (PRD §6.2).
+//
+// WHAT CENTRAL MAY KNOW, and therefore what this struct is allowed to contain:
+// the owning account, the source and target devices, the ciphertext byte count,
+// timestamps, the state, an opaque error code, and idempotency metadata. Plus
+// exactly two opaque blobs it cannot read — the encrypted manifest and the
+// content key sealed to the target device's public key.
+//
+// WHAT IT MUST NEVER CONTAIN, and has no field for: plaintext content, file or
+// directory names, the target's real filesystem path, the content key, or any
+// device private key. Adding one would be a zero-knowledge regression, not a
+// feature.
+//
+// The ciphertext itself is NOT duplicated here. StoredFileID references an
+// existing same-account Stored Object, so the task reuses the storage, quota,
+// expiry and download paths that already exist rather than creating a second,
+// parallel object lifecycle. That also means a task never OWNS a blob: deleting
+// a task cannot orphan one, because the object's owner is the stored_files row
+// and its normal TTL/GC still governs it.
+type InboxTask struct {
+	ID     string
+	UserID string
+	// TargetDeviceID is the device that will receive. SourceDeviceID is the
+	// device that created the task, or "" when a browser session did — kept for
+	// audit ("which of my machines sent this"), never for authorization.
+	TargetDeviceID string
+	SourceDeviceID string
+	// IdempotencyKey is chosen by the SENDER and unique per account. It is what
+	// makes a retried create converge on one task instead of queueing a second
+	// copy of the same file.
+	IdempotencyKey string
+	// StoredFileID is the same-account encrypted Stored Object holding the
+	// ciphertext. EncManifest is that object's encrypted manifest, carried on
+	// the task so the device gets it with the wrapped key in one response.
+	StoredFileID string
+	EncManifest  []byte
+	// WrappedKey is the task's one-time content key sealed to TargetKeyID with
+	// WrapAlgorithm. Central cannot open it: it never holds the private half.
+	WrapAlgorithm string
+	WrappedKey    string
+	// TargetKeyID/TargetKeyGeneration bind the task to ONE key at creation. A
+	// later rotation does not move the binding — the device still holds that
+	// private key and can drain the task — but revoking that key terminates it,
+	// because nothing can decrypt it any more.
+	TargetKeyID         string
+	TargetKeyGeneration int64
+	// CiphertextBytes is derived from the referenced Stored Object, never from
+	// the sender's claim about it.
+	CiphertextBytes int64
+	State           string
+	// ClaimTokenHash is the hash of the token issued to the current claimant.
+	// Only the hash is stored, like every other bearer in this store. "" = the
+	// task is not leased.
+	ClaimTokenHash string
+	LeaseExpiresAt int64
+	Attempts       int64
+	NextAttemptAt  int64
+	ErrorCode      string
+	CreatedAt      int64
+	UpdatedAt      int64
+	// ExpiresAt is inherited from the referenced Stored Object. The task cannot
+	// outlive the ciphertext it points at, and there is no separate task TTL to
+	// keep consistent with it.
+	ExpiresAt  int64
+	NotifiedAt int64
+	// SavedAt is set ONLY when the target device asserted a completed atomic
+	// commit. A database CHECK keeps it zero on every other state, so no code
+	// path can leave a saved timestamp on a task that was not saved.
+	SavedAt    int64
+	TerminalAt int64
+}
+
+// Leased reports whether the task currently has a claimant.
+func (t InboxTask) Leased() bool { return t.ClaimTokenHash != "" }
+
+// InboxTaskReport is one target device's assertion about a task it holds.
+//
+// RawClaimToken is required on every report and is matched against the stored
+// hash INSIDE the update transaction. That is what makes a stale claimant — a
+// device whose lease expired and was reclaimed, or one that was superseded by a
+// later claim — fail instead of overwriting the state of whoever holds the task
+// now.
+type InboxTaskReport struct {
+	TaskID        string
+	DeviceID      string
+	UserID        string
+	RawClaimToken string
+	To            string
+	ErrorCode     string
+	// SavedAssertion is the device saying, explicitly, that authenticated
+	// decryption, complete verification and the atomic local commit all
+	// succeeded. `saved` is refused without it (ErrSavedNotAsserted), so a
+	// client cannot arrive at "saved" by reporting a state name alone.
+	SavedAssertion bool
+	Now            int64
+}
+
 // DeviceAuthRequest is one device-code CLI login flow request (RFC 8628-style).
 // Status transitions pending -> approved -> consumed exactly once each; denied
 // is a terminal dead end. TokenHash is the hash of the CLI bearer token minted
@@ -871,8 +968,10 @@ type Store interface {
 	// byDeviceItself says the caller's bearer is bound to this device row; a
 	// revoked enrolment then yields ErrRevokedSelfClear. The rule is applied
 	// inside the delete transaction so a revoked device cannot race a
-	// check-then-delete and clear its own revocation.
-	DeleteDeviceInbox(ctx context.Context, deviceID, userID string, byDeviceItself bool) (bool, error)
+	// check-then-delete and clear its own revocation. Unfinished queue tasks for
+	// the device are terminated in the same transaction, because clearing the
+	// key history makes them permanently unopenable.
+	DeleteDeviceInbox(ctx context.Context, deviceID, userID string, byDeviceItself bool, now int64) (bool, error)
 	// TouchDeviceInboxPresence records a heartbeat. ok=false when there is no
 	// enrolment for this (device, user) or it is revoked — a revoked device must
 	// not be able to resurrect its own presence.
@@ -898,6 +997,51 @@ type Store interface {
 	// transaction, so there is no window where a keyless device still looks
 	// like a valid send target.
 	RevokeDeviceKey(ctx context.Context, deviceID, userID, keyID string, now int64) (revokedActive, ok bool, err error)
+	// Device Inbox task queue (Phase 1B). Same scoping rule as above: every
+	// method takes userID and re-checks ownership in the query.
+	//
+	// CreateInboxTask inserts one task, idempotently on (UserID,
+	// IdempotencyKey). A repeat of an IDENTICAL create returns the existing task
+	// with created=false; a repeat with the same key and different content is
+	// ErrIdempotencyKeyConflict, because silently returning the first task would
+	// tell the sender their second, different file was queued.
+	CreateInboxTask(ctx context.Context, t InboxTask) (saved InboxTask, created bool, err error)
+	GetInboxTask(ctx context.Context, taskID, userID string, now int64) (InboxTask, bool, error)
+	// ListInboxTasks returns a device's tasks newest first, account-scoped.
+	ListInboxTasks(ctx context.Context, deviceID, userID string, now int64, limit int) ([]InboxTask, error)
+	// DeleteInboxTask removes one task the account owns. It never touches the
+	// referenced Stored Object: the task borrows that object, it does not own it.
+	DeleteInboxTask(ctx context.Context, taskID, userID string) (bool, error)
+	// CountPendingInboxTasks counts a device's unfinished rows, for the
+	// per-device row bound.
+	CountPendingInboxTasks(ctx context.Context, deviceID, userID string) (int64, error)
+	// NotifyInboxTasks marks a device's queued tasks as notified and returns the
+	// pending set. Device-self: it is the device saying "I am asking", which is
+	// exactly what makes `notified` true.
+	NotifyInboxTasks(ctx context.Context, deviceID, userID string, now int64, limit int) ([]InboxTask, error)
+	// ClaimInboxTasks leases up to max claimable tasks for the target device,
+	// returning each with a freshly minted RAW claim token (returned once; only
+	// its hash is stored). Exactly one concurrent caller can win any given task.
+	// It first reclaims leases that have expired, so a crashed claimant's work
+	// becomes claimable without waiting for a sweep.
+	ClaimInboxTasks(ctx context.Context, deviceID, userID string, now int64, max int) (tasks []InboxTask, rawTokens []string, err error)
+	// AuthorizeInboxTaskBlob validates a device's current task claim before the
+	// encrypted object is streamed. It rejects expired leases and terminal or
+	// non-working tasks, and terminalizes a task whose object disappeared.
+	AuthorizeInboxTaskBlob(ctx context.Context, taskID, deviceID, userID, rawClaimToken string, now int64) (InboxTask, error)
+	// ReportInboxTask applies a device-asserted transition under the claim
+	// token. `to` == current state is an idempotent lease renewal.
+	// savedAssertion must be true for `to == saved`, which is legal only from
+	// `verifying`.
+	ReportInboxTask(ctx context.Context, req InboxTaskReport) (InboxTask, error)
+	// AcceptInboxTask resolves an attention_required task: accept=true queues
+	// it, accept=false terminates it as declined. Device-self, no lease — an
+	// attention_required task is deliberately not leased by anyone.
+	AcceptInboxTask(ctx context.Context, taskID, deviceID, userID string, accept bool, now int64) (InboxTask, error)
+	// SweepInboxTasks is GC's pass: reclaim expired leases, expire tasks past
+	// their TTL, and delete terminal rows past retention. Returns counts for the
+	// log.
+	SweepInboxTasks(ctx context.Context, now, terminalRetention int64) (reclaimed, expired, pruned int64, err error)
 	// usage (cross-network relay metering)
 	RecordUsage(ctx context.Context, e UsageEvent) error
 	UserUsageTotal(ctx context.Context, userID string) (int64, error)
@@ -941,7 +1085,10 @@ type Store interface {
 	// mid-stream, restoring downloaded_at=0 only if it still matches the claim's
 	// timestamp (so a concurrent re-claim is never clobbered).
 	ReleaseBurnDownload(ctx context.Context, id string, claimedAt int64) error
-	DeleteStoredFile(ctx context.Context, id string) error
+	// DeleteStoredFile atomically makes unfinished Inbox tasks truthful before
+	// deleting their backing object. Tasks at the object's TTL become expired;
+	// earlier deletion becomes failed_terminal/stored_object_unavailable.
+	DeleteStoredFile(ctx context.Context, id string, now int64) error
 	ListExpiredStoredFiles(ctx context.Context, now int64) ([]StoredFile, error)
 	IncDownloadCount(ctx context.Context, id string) error
 	// ClaimDownloadSlot atomically takes one of a file's remaining download

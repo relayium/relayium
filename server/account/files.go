@@ -633,7 +633,7 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 				// Node unreachable: record the orphan so GC retries; still remove the row.
 				_ = s.store.EnqueueNodeDelete(ctx, sf.BlobKey, sf.NodeID, s.now().Unix())
 			}
-			_ = s.store.DeleteStoredFile(ctx, sf.ID)
+			_ = s.store.DeleteStoredFile(ctx, sf.ID, s.now().Unix())
 		}
 	} else {
 		_ = s.store.IncDownloadCount(ctx, sf.ID)
@@ -692,7 +692,7 @@ func (s *Service) handleDeleteFile(w http.ResponseWriter, r *http.Request, u Use
 	} else {
 		_ = s.store.EnqueueNodeDelete(r.Context(), sf.BlobKey, sf.NodeID, s.now().Unix())
 	}
-	if err := s.store.DeleteStoredFile(r.Context(), sf.ID); err != nil {
+	if err := s.store.DeleteStoredFile(r.Context(), sf.ID, s.now().Unix()); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}

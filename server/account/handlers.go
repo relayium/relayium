@@ -179,6 +179,11 @@ func (s *Service) routeMux() *http.ServeMux {
 	mux.HandleFunc("DELETE /api/devices/{id}/inbox", s.RequireAuth(s.handleDeleteDeviceInbox))
 	mux.HandleFunc("GET /api/devices/{id}/inbox/keys", s.RequireAuth(s.handleListDeviceKeys))
 	mux.HandleFunc("POST /api/devices/{id}/inbox/keys/{keyId}/revoke", s.RequireAuth(s.handleRevokeDeviceKey))
+	// Device Inbox task queue (Phase 1B). Same wrapper, same in-handler split:
+	// create/list/read/delete are account-scoped (the browser is the primary
+	// sender), while pending/claim/report/accept are device-self because they
+	// assert what a machine is doing with a file. See deviceinbox_task.go.
+	s.registerDeviceInboxTaskRoutes(mux)
 	mux.HandleFunc("GET /api/ice", s.handleICE)
 	mux.HandleFunc("GET /api/config", s.handleConfig)
 	mux.HandleFunc("GET /api/usage", s.RequireSession(s.handleUsage))

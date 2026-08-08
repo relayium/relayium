@@ -242,7 +242,7 @@ func (s *Service) handleDeleteDeviceInbox(w http.ResponseWriter, r *http.Request
 	// Whether the caller IS this device is resolved here; whether that makes the
 	// delete legal is decided inside the store transaction, so a revoked device
 	// cannot win a race against the revocation it is trying to escape.
-	deleted, err := s.store.DeleteDeviceInbox(r.Context(), deviceID, u.ID, s.deviceSelf(r, u.ID, deviceID))
+	deleted, err := s.store.DeleteDeviceInbox(r.Context(), deviceID, u.ID, s.deviceSelf(r, u.ID, deviceID), s.now().Unix())
 	if errors.Is(err, ErrRevokedSelfClear) {
 		httpx.WriteJSON(w, http.StatusForbidden, map[string]string{
 			"error": "revoked_device_cannot_clear_itself",

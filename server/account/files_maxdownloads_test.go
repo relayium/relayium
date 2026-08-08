@@ -121,7 +121,7 @@ func TestClaimDownloadSlot_SlotNumberDrivesDeleteNotRecount(t *testing.T) {
 	}
 	// Simulate handleFileBlob's post-delivery delete gated on THIS claim's slot.
 	if slot3 >= f.MaxDownloads {
-		if err := st.DeleteStoredFile(ctx, f.ID); err != nil {
+		if err := st.DeleteStoredFile(ctx, f.ID, 3); err != nil {
 			t.Fatalf("delete on final slot: %v", err)
 		}
 	}

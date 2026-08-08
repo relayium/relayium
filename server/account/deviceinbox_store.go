@@ -205,7 +205,11 @@ func (s *SQLiteStore) ListDeviceInboxes(ctx context.Context, userID string) (map
 // reading first: the revoked device still holds a working bearer, so a
 // check-then-delete would give it a race to win against a revocation landing at
 // the same moment — which is precisely the scenario revocation exists for.
-func (s *SQLiteStore) DeleteDeviceInbox(ctx context.Context, deviceID, userID string, byDeviceItself bool) (bool, error) {
+// Unfinished queued tasks are terminated in the SAME transaction. Clearing the
+// enrolment destroys the key history, so every task sealed to one of those keys
+// becomes permanently unopenable — including by the device itself. Leaving them
+// `queued` would show the sender a delivery that can never happen.
+func (s *SQLiteStore) DeleteDeviceInbox(ctx context.Context, deviceID, userID string, byDeviceItself bool, now int64) (bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
@@ -235,6 +239,15 @@ func (s *SQLiteStore) DeleteDeviceInbox(ctx context.Context, deviceID, userID st
 	// the API but would be unrecoverable if it did) still cleans up.
 	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM device_keys WHERE device_id = ? AND user_id = ?`, deviceID, userID); err != nil {
+		return false, err
+	}
+	// Every unfinished task for this device, not only those bound to one key:
+	// the whole history just went away, so none of them can be opened again.
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE inbox_tasks
+		    SET state = ?, error_code = ?, lease_expires_at = 0, terminal_at = ?, updated_at = ?
+		  WHERE target_device_id = ? AND user_id = ? AND state NOT IN `+terminalStateSQL,
+		inbox.TaskRevoked, inbox.TaskErrKeyRevoked, now, now, deviceID, userID); err != nil {
 		return false, err
 	}
 	return n > 0, tx.Commit()
@@ -488,6 +501,15 @@ func (s *SQLiteStore) RevokeDeviceKey(ctx context.Context, deviceID, userID, key
 			now, now, deviceID, userID); err != nil {
 			return false, false, err
 		}
+	}
+	// Queued or leased tasks sealed to THIS key end here, in the same
+	// transaction, whether the key was active or superseded. Nothing can open
+	// them any more, so continuing to advertise them as pending deliveries would
+	// be false — and a leased one must stop being advanceable by the claimant
+	// holding it, which is the whole point of revoking a stolen device's key.
+	// Tasks sealed to the device's OTHER, still-valid keys are untouched.
+	if err := terminateTasksForKey(ctx, tx, deviceID, keyID, now); err != nil {
+		return false, false, err
 	}
 	return wasActive, true, tx.Commit()
 }

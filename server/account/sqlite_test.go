@@ -307,7 +307,7 @@ func TestStoredFileCRUDAndExpiry(t *testing.T) {
 	if g, _ := s.GetStoredFile(ctx, "file1"); g.DownloadedAt != 150 {
 		t.Fatalf("downloaded_at = %d, want 150", g.DownloadedAt)
 	}
-	if err := s.DeleteStoredFile(ctx, "file1"); err != nil {
+	if err := s.DeleteStoredFile(ctx, "file1", 150); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 	if _, err := s.GetStoredFile(ctx, "file1"); err != ErrNotFound {

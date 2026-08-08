@@ -15,6 +15,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/relayium/relayium/authx"
+	"github.com/relayium/relayium/internal/inbox"
 )
 
 // SQLiteStore keeps a single writer connection (db) — write-path atomicity
@@ -648,6 +649,91 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// key do I seal to" lookup, which filters on superseded_at.
 		`CREATE INDEX IF NOT EXISTS idx_device_keys_device ON device_keys(device_id, superseded_at, generation DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_device_keys_user ON device_keys(user_id, superseded_at)`,
+		// Device Inbox Phase 1B: the encrypted asynchronous task queue. One row
+		// per delivery to one device.
+		//
+		// WHAT IS HERE: account and device ids, the ciphertext byte count,
+		// timestamps, the state machine, an opaque error token, idempotency and
+		// lease metadata, and exactly two opaque blobs — enc_manifest and
+		// wrapped_key. WHAT IS NOT, and has no column: plaintext, file or
+		// directory names, the target's real path, the content key, a device
+		// private key. wrapped_key is the content key sealed to the device's
+		// PUBLIC key; central holds no private half and cannot open it.
+		//
+		// stored_file_id REFERENCES an existing same-account Stored Object rather
+		// than duplicating the ciphertext, which is what lets this queue inherit
+		// the storage quota, the expiry and the download path that already exist
+		// instead of standing up a second object lifecycle. Deliberately NOT a
+		// foreign key: the object may legitimately be deleted or expire first.
+		// Phase 1B accepts only unlimited-until-TTL objects, and deletion updates
+		// unfinished tasks transactionally before removing the object row. This
+		// keeps the user's delete control while preserving truthful task history.
+		//
+		// ON DELETE CASCADE from devices(id) means the existing
+		// DELETE /api/devices/{id} control removes the queue with the enrolment,
+		// the key history and the bearer, through one path. It cannot orphan a
+		// blob: the task never owns one.
+		//
+		// The three CHECKs are the invariants the application must not be the
+		// only guardian of:
+		//   - state is the closed PRD §10 server-state set. inbox.TaskStates() is
+		//     asserted against this list by a test, so the two cannot drift.
+		//   - saved_at is zero unless the row IS saved. No code path can leave a
+		//     "saved at" timestamp on a task that was never saved, which is the
+		//     one field a UI would use to claim a file landed.
+		//   - a lease deadline requires a claimant, so a phantom lease (a deadline
+		//     with nobody holding it) cannot exist. The converse is deliberately
+		//     allowed: a claimant hash OUTLIVES its lease on a terminal row, as
+		//     the record of who finished the task, which is what lets a device
+		//     retry its own `saved` report and get the original timestamp back
+		//     instead of a stale-claimant rejection.
+		`CREATE TABLE IF NOT EXISTS inbox_tasks (
+  id                    TEXT PRIMARY KEY,
+  user_id               TEXT NOT NULL,
+  target_device_id      TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+  source_device_id      TEXT NOT NULL DEFAULT '',
+  idempotency_key       TEXT NOT NULL,
+  stored_file_id        TEXT NOT NULL,
+  enc_manifest          BLOB NOT NULL,
+  wrap_algorithm        TEXT NOT NULL,
+  wrapped_key           TEXT NOT NULL,
+  target_key_id         TEXT NOT NULL,
+  target_key_generation INTEGER NOT NULL,
+  ciphertext_bytes      INTEGER NOT NULL,
+  state                 TEXT NOT NULL,
+  claim_token_hash      TEXT NOT NULL DEFAULT '',
+  lease_expires_at      INTEGER NOT NULL DEFAULT 0,
+  attempts              INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at       INTEGER NOT NULL DEFAULT 0,
+  error_code            TEXT NOT NULL DEFAULT '',
+  created_at            INTEGER NOT NULL,
+  updated_at            INTEGER NOT NULL,
+  expires_at            INTEGER NOT NULL,
+  notified_at           INTEGER NOT NULL DEFAULT 0,
+  saved_at              INTEGER NOT NULL DEFAULT 0,
+  terminal_at           INTEGER NOT NULL DEFAULT 0,
+  CHECK (state IN ('queued','notified','downloading','verifying','saved',
+                   'attention_required','expired','revoked',
+                   'failed_retryable','failed_terminal')),
+  CHECK (saved_at = 0 OR state = 'saved'),
+  CHECK (lease_expires_at = 0 OR claim_token_hash <> ''),
+  CHECK (idempotency_key <> ''),
+  CHECK (ciphertext_bytes >= 0))`,
+		// The sender's idempotency key, unique per ACCOUNT. Account-scoped rather
+		// than device-scoped so one retried "send this file" cannot become two
+		// tasks by being retried against a different target; and enforced by the
+		// database, so the converge-on-retry behaviour survives a concurrent
+		// duplicate create that the application-level read would miss.
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_inbox_tasks_idem ON inbox_tasks(user_id, idempotency_key)`,
+		// The claim hot path: "which of this device's tasks are claimable now".
+		`CREATE INDEX IF NOT EXISTS idx_inbox_tasks_claim ON inbox_tasks(target_device_id, state, next_attempt_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_inbox_tasks_user ON inbox_tasks(user_id, created_at DESC)`,
+		// The two sweep passes: TTL expiry and lease reclaim. The lease index is
+		// partial because the overwhelming majority of rows are unleased.
+		`CREATE INDEX IF NOT EXISTS idx_inbox_tasks_expires ON inbox_tasks(expires_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_inbox_tasks_lease ON inbox_tasks(lease_expires_at) WHERE lease_expires_at > 0`,
+		// Key revocation terminates exactly the tasks sealed to the revoked key.
+		`CREATE INDEX IF NOT EXISTS idx_inbox_tasks_key ON inbox_tasks(target_device_id, target_key_id)`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -1527,6 +1613,13 @@ func (s *SQLiteStore) PurgeTransientUserData(ctx context.Context, userID string)
 		{`DELETE FROM sessions WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM cli_tokens WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM cli_device_auth WHERE user_id=?`, []any{userID}},
+		// Before devices. REDUNDANT with target_device_id's ON DELETE CASCADE
+		// today, and kept anyway: it is scoped by user_id, so it does not depend
+		// on every task having a live device row, and it survives a future schema
+		// change that drops the cascade. No blob is orphaned either way — a task
+		// references a stored_files row it does not own, and that table is purged
+		// below.
+		{`DELETE FROM inbox_tasks WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM devices WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM magic_tokens WHERE email=(SELECT email FROM users WHERE id=?)`, []any{userID}},
 		{`DELETE FROM stored_files WHERE user_id=?`, []any{userID}},
@@ -1628,6 +1721,8 @@ func (s *SQLiteStore) ArchiveAndPurgeUser(ctx context.Context, userID string, no
 		// FK tables (REFERENCES users(id)) — must precede DELETE FROM users.
 		{`DELETE FROM identities WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM sessions WHERE user_id=?`, []any{userID}},
+		// Device Inbox queue rows, before devices — see PurgeTransientUserData.
+		{`DELETE FROM inbox_tasks WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM devices WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM usage_events WHERE user_id=?`, []any{userID}},
 		// usage_periods carries a user_id column (per-period relay deltas the
@@ -2846,9 +2941,26 @@ func (s *SQLiteStore) ReleaseBurnDownload(ctx context.Context, id string, claime
 	return err
 }
 
-func (s *SQLiteStore) DeleteStoredFile(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, `DELETE FROM stored_files WHERE id = ?`, id)
-	return err
+func (s *SQLiteStore) DeleteStoredFile(ctx context.Context, id string, now int64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE inbox_tasks
+		    SET state = CASE WHEN expires_at <= ? THEN ? ELSE ? END,
+		        error_code = CASE WHEN expires_at <= ? THEN '' ELSE ? END,
+		        lease_expires_at = 0, terminal_at = ?, updated_at = ?
+		  WHERE stored_file_id = ? AND state NOT IN `+terminalStateSQL,
+		now, inbox.TaskExpired, inbox.TaskFailedTerminal,
+		now, inbox.TaskErrStoredObjectUnavailable, now, now, id); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM stored_files WHERE id = ?`, id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // IncDownloadCount bumps a stored file's lifetime download tally by one. Used for

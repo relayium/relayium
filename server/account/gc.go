@@ -5,6 +5,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/relayium/relayium/internal/inbox"
 	"github.com/relayium/relayium/internal/storage"
 )
 
@@ -119,7 +120,7 @@ func (g *GC) sweep(ctx context.Context) {
 		if err := g.deleteBlob(ctx, f.NodeID, f.BlobKey); err != nil {
 			_ = g.Store.EnqueueNodeDelete(ctx, f.BlobKey, f.NodeID, now)
 		}
-		if err := g.Store.DeleteStoredFile(ctx, f.ID); err != nil {
+		if err := g.Store.DeleteStoredFile(ctx, f.ID, now); err != nil {
 			g.Log.Printf("gc: delete file %s: %v", f.ID, err)
 		}
 	}
@@ -161,6 +162,16 @@ func (g *GC) sweep(ctx context.Context) {
 	}
 	if err := g.Store.PurgeExpiredAdminSessions(ctx, now); err != nil {
 		g.Log.Printf("gc: purge expired admin sessions: %v", err)
+	}
+	// Device Inbox queue: reclaim leases whose claimant died, expire tasks past
+	// the TTL they inherited from their Stored Object, and drop terminal rows
+	// past retention. The claim path reclaims its own device's stale leases too,
+	// so this pass is what keeps a device that never comes back from pinning
+	// rows — not the only thing standing between a crashed CLI and its queue.
+	if reclaimed, expired, pruned, err := g.Store.SweepInboxTasks(ctx, now, int64(inbox.TerminalTaskRetention/time.Second)); err != nil {
+		g.Log.Printf("gc: sweep inbox tasks: %v", err)
+	} else if reclaimed != 0 || expired != 0 || pruned != 0 {
+		g.Log.Printf("gc: inbox tasks reclaimed=%d expired=%d pruned=%d", reclaimed, expired, pruned)
 	}
 	g.sweepAccountDeletions(ctx, now)
 }
