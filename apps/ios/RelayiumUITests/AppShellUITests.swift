@@ -974,4 +974,54 @@ final class AppShellUITests: XCTestCase {
             "a failed upload produced a capability link anyway")
     }
 
+    /// Creating a FILE pairing code stays on Direct and shows every handoff,
+    /// with the mode the user actually chose preserved in the link.
+    ///
+    /// macOS proved this one batch earlier and the assertion it produced was not
+    /// the one I would have written from memory: the link carries `mode=file`,
+    /// not `mode=files`. iOS gets the same path rather than inheriting the claim.
+    func testCreatingAFilePairingCodeStaysOnDirectAndShowsEveryHandoff() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-signed-in", "--relayium-ui-testing-pending-fixture",
+               "--relayium-ui-testing-file-code"]
+        app.launch()
+
+        let directTab = openTask("Direct", title: "Direct")
+        let chooser = app.buttons["Choose Files or Folders…"]
+        XCTAssertTrue(chooser.waitForExistence(timeout: 15),
+                      "Direct's file mode stages nothing")
+        scrollUntilHittable(chooser)
+        chooser.tap()
+
+        let browsingTabs = app.tabBars["DOC.browsingModeTabBar"]
+        XCTAssertTrue(browsingTabs.waitForExistence(timeout: 20))
+        browsingTabs.buttons["Browse"].tap()
+        tapInBrowser("On My iPhone")
+        tapInBrowser("Relayium")
+        tapStagedFixture(named: "Relayium product brief")
+        let open = app.buttons["Open"]
+        XCTAssertTrue(open.waitForExistence(timeout: 10))
+        open.tap()
+
+        let create = app.buttons["Create a code"]
+        XCTAssertTrue(create.waitForExistence(timeout: 15),
+                      "a staged file offers no way to create a code")
+        scrollUntilHittable(create, maxSwipes: 10)
+        create.tap()
+
+        XCTAssertTrue(app.staticTexts["4 8 3 9 2 0"].waitForExistence(timeout: 20),
+                      "the generated pairing code is not visible")
+        XCTAssertTrue(directTab.isSelected,
+                      "creating a file code navigated away from Direct")
+        XCTAssertTrue(app.staticTexts["Join link"].exists,
+                      "the generated code has no visible browser handoff")
+        XCTAssertTrue(app.staticTexts[
+            "https://relayium.com/cross-network?mode=file#c=483920"
+        ].exists, "the visible handoff did not preserve the created Files mode")
+        XCTAssertTrue(app.buttons["Copy"].exists, "the join link cannot be copied")
+        XCTAssertTrue(app.buttons["Share"].exists,
+                      "the join link cannot use the system share sheet")
+    }
+
 }

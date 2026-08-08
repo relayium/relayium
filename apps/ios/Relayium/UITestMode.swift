@@ -116,6 +116,28 @@ enum UITestMode {
     static let showsTerminalText = ProcessInfo.processInfo.arguments.contains(
         terminalTextArgument)
 
+
+    /// Holds the FILE pairing surface on its generated code.
+    ///
+    /// The text half of this flow gained a runtime path in batch 107; the file
+    /// half — the mode most people reach for — had none, so the join link's mode
+    /// parameter was only ever proven for Text.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let fileCodeArgument = "--relayium-ui-testing-file-code"
+    static let showsGeneratedFileCode = ProcessInfo.processInfo.arguments.contains(
+        fileCodeArgument)
+
+    @MainActor
+    static func makeWaitingFileModel(verification: VerificationPreference) -> RealtimeSessionModel? {
+        guard showsGeneratedFileCode else { return nil }
+        return RealtimeSessionModel(
+            pairClient: UITestPairClient(),
+            iceClient: UITestWaitingICEClient(),
+            requiresVerification: { verification.requiresSASConfirmation },
+            makeConnection: { _, _, _ in throw AccountError.network }
+        )
+    }
+
     /// Holds the text pairing surface on its generated code.
     ///
     /// The pairing-code handoff is the flow the owner's 2026-08-07 review found
@@ -243,6 +265,7 @@ enum UITestMode {
     static let showsGeneratedTextCode = false
     static let showsTerminalText = false
     static let showsTerminalNearby = false
+    static let showsGeneratedFileCode = false
     static func makeAccountTransport() -> URLSession? { nil }
 
     #endif

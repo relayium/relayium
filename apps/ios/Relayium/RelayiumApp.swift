@@ -249,6 +249,7 @@ struct RelayiumApp: App {
         // mid-setup — reach a room where that id belongs to somebody else.
         let room = InboundRoom()
         let files = UITestMode.makeTerminalNearbyFileModel(verification: verifying)
+            ?? UITestMode.makeWaitingFileModel(verification: verifying)
             ?? AppEnvironment.makeRealtimeModel(verification: verifying, nearby: nearby, inboundRoom: room)
         let texts = UITestMode.makeRealtimeTextModel(verification: verifying)
             ?? AppEnvironment.makeRealtimeTextModel(verification: verifying, nearby: nearby, inboundRoom: room)
