@@ -1151,6 +1151,9 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(ui.contains("testRegistrationProblemKeepsTheDraftCorrectable"))
         XCTAssertTrue(ui.contains("window.secureTextFields[\"account.confirmPassword\"]"))
         XCTAssertTrue(ui.contains("Use at least 8 characters for your password."))
+        XCTAssertTrue(login.contains(".accessibilityIdentifier(\"account.switchMode\")"))
+        XCTAssertTrue(ui.contains("[\"account.switchMode\"].firstMatch"),
+                      "macOS 15 may not expose a link-style Button as a button")
         for (name, text) in try sources(under: macRoot, atLeast: 20)
         where name != "LoginView.swift" && name != "Components/CapabilityGateView.swift" {
             XCTAssertFalse(text.contains("AuthMode"),

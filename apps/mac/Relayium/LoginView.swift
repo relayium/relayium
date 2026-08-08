@@ -127,6 +127,7 @@ struct LoginView: View {
             Button(L10n.t(mode.switchTitleKey)) { switchMode() }
                 .buttonStyle(.link)
                 .disabled(form.isBusy)
+                .accessibilityIdentifier("account.switchMode")
         }
         .padding(28)
         .frame(maxWidth: 380)

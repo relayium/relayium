@@ -214,7 +214,9 @@ final class AppShellUITests: XCTestCase {
         let account = sidebarDestination("Account", in: window)
         XCTAssertTrue(account.waitForExistence(timeout: 10))
         account.click()
-        let chooseRegistration = window.buttons["New to Relayium? Create an account"]
+        let chooseRegistration = window.descendants(matching: .any)[
+            "account.switchMode"
+        ].firstMatch
         XCTAssertTrue(chooseRegistration.waitForExistence(timeout: 10))
         chooseRegistration.click()
 
@@ -253,8 +255,9 @@ final class AppShellUITests: XCTestCase {
         XCTAssertEqual(window.title, "Account",
                        "a registration refusal navigated away from Account")
 
-        let back = window.buttons["Back to sign in"]
+        let back = window.descendants(matching: .any)["account.switchMode"].firstMatch
         XCTAssertTrue(back.exists)
+        XCTAssertEqual(back.label, "Back to sign in")
         back.click()
         XCTAssertTrue(window.staticTexts["Welcome back"].waitForExistence(timeout: 10))
         XCTAssertFalse(window.secureTextFields["account.confirmPassword"].exists,
