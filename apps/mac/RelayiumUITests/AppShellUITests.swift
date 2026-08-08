@@ -168,6 +168,43 @@ final class AppShellUITests: XCTestCase {
         }
     }
 
+    /// A remedy must deliver the task its label promises. Both account actions
+    /// stay inside Relayium, select Account, and open the matching half of the
+    /// form instead of merely landing somewhere account-related.
+    func testStoredSendAccountRemediesOpenThePromisedForm() {
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+
+        let send = sidebarDestination("Send a link", in: window)
+        XCTAssertTrue(send.waitForExistence(timeout: 10))
+        send.click()
+
+        let signIn = window.buttons["Sign in"]
+        XCTAssertTrue(signIn.waitForExistence(timeout: 10),
+                      "signed-out Send offers no sign-in remedy")
+        XCTAssertTrue(window.buttons["Create an account"].exists,
+                      "signed-out Send offers no registration remedy")
+        signIn.click()
+        XCTAssertEqual(window.title, "Account",
+                       "Sign in did not select the Account destination")
+        XCTAssertTrue(window.staticTexts["Welcome back"].waitForExistence(timeout: 10),
+                      "Sign in opened the wrong half of the Account form")
+
+        let sendAgain = sidebarDestination("Send a link", in: window)
+        XCTAssertTrue(sendAgain.waitForExistence(timeout: 10))
+        sendAgain.click()
+        let create = window.buttons["Create an account"]
+        XCTAssertTrue(create.waitForExistence(timeout: 10))
+        create.click()
+        XCTAssertEqual(window.title, "Account",
+                       "Create an account did not select the Account destination")
+        XCTAssertTrue(window.staticTexts["Create your Relayium account"]
+            .waitForExistence(timeout: 10),
+                      "Create an account opened the sign-in half of the form")
+        XCTAssertTrue(window.secureTextFields["account.confirmPassword"].exists,
+                      "the promised registration form is incomplete")
+    }
+
     /// A bad paste is ordinary recovery, not a dead end. The refusal must say
     /// what belongs here while leaving the same field and action available for
     /// correction on the same task.

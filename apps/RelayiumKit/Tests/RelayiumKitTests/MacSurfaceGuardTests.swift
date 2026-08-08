@@ -1179,6 +1179,15 @@ final class MacSurfaceGuardTests: XCTestCase {
                 .contains("onAccount: { navigation.selectAccount(intent: $0) }"),
                           "\(caller) must pass the gate's requested half through to navigation")
         }
+        let uiURL = macRoot.deletingLastPathComponent()
+            .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
+        let ui = try String(contentsOf: uiURL, encoding: .utf8)
+        XCTAssertTrue(ui.contains("testStoredSendAccountRemediesOpenThePromisedForm"),
+                      "the account remedy must be proven through the running app")
+        XCTAssertTrue(ui.contains("window.buttons[\"Sign in\"]"))
+        XCTAssertTrue(ui.contains("window.buttons[\"Create an account\"]"))
+        XCTAssertTrue(ui.contains("window.staticTexts[\"Welcome back\"]"))
+        XCTAssertTrue(ui.contains("window.staticTexts[\"Create your Relayium account\"]"))
     }
 
     /// The check-email screen can act and can leave, exactly as on iOS.
