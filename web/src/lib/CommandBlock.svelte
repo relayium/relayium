@@ -1,6 +1,26 @@
 <script lang="ts">
   // A terminal-window styled code block with a copy-to-clipboard button.
-  let { code, title = "" }: { code: string; title?: string } = $props();
+  //
+  // The labels are props with the previous hard-coded English as defaults: the
+  // CLI page renders inside an English-only layout, but the download page shows
+  // this to whoever the sender sent the link to, in any of the nine languages.
+  // Passing them in beats a second component, and beats making every existing
+  // call site pass strings it has no reason to have.
+  let {
+    code,
+    title = "",
+    copyLabel = "Copy",
+    copiedLabel = "Copied ✓",
+    copyAria = "Copy to clipboard",
+  }: {
+    code: string;
+    title?: string;
+    copyLabel?: string;
+    copiedLabel?: string;
+    /** Accessible name of the copy button. Several blocks can share a page, so
+     *  callers should name WHICH command this one copies. */
+    copyAria?: string;
+  } = $props();
   let copied = $state(false);
   // Ties the scrollable <pre> to the visible title as its accessible name. $props.id()
   // keeps it unique when a page renders several command blocks.
@@ -21,8 +41,8 @@
   <div class="bar">
     <span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>
     {#if title}<span class="title" id={titleId}>{title}</span>{/if}
-    <button class="copy" class:copied onclick={copy} aria-label="Copy to clipboard">
-      {copied ? "Copied ✓" : "Copy"}
+    <button class="copy" class:copied onclick={copy} aria-label={copyAria}>
+      {copied ? copiedLabel : copyLabel}
     </button>
   </div>
   <!-- The block scrolls sideways (overflow-x on <pre>), and a region that can
@@ -34,9 +54,13 @@
        and no second string that could drift from the visible one.
        svelte-ignore fires because <pre> is non-interactive; that rule exists to
        stop fake buttons, and this is the opposite case — WCAG 2.1.1 requires a
-       scrollable region to be reachable by keyboard. -->
+       scrollable region to be reachable by keyboard.
+
+       dir="ltr" because a shell command is not prose: in Arabic the page is
+       laid out RTL, and a bidi-reordered `relayium down '…' .` is a command the
+       reader cannot retype and cannot check against what they are pasting. -->
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-  <pre tabindex="0" role={title ? "group" : undefined} aria-labelledby={title ? titleId : undefined}><code>{code}</code></pre>
+  <pre tabindex="0" dir="ltr" role={title ? "group" : undefined} aria-labelledby={title ? titleId : undefined}><code>{code}</code></pre>
 </div>
 
 <style>

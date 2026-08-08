@@ -8,6 +8,8 @@
   import ThemeSelect from "./ThemeSelect.svelte";
   import { formatRemaining, formatSize } from "./format";
   import { safeSegments } from "./zip";
+  import CommandBlock from "./CommandBlock.svelte";
+  import { RELEASE_PAGE_URL, downCommand, storedLink, tempDownloaderScript, windowsTempDownloaderScript } from "./temp-downloader";
 
   let { id }: { id: string } = $props();
 
@@ -264,6 +266,29 @@
     }),
   );
 
+  // ── 终端那条路 ───────────────────────────────────────────────────────────
+  //
+  // 浏览器下载之外的两条：装了 CLI 的一行命令，和「无需持久安装」的可见序列。
+  // 三件事必须同时成立，缺一条这一段就不该存在：
+  //
+  //  1. 完整链接是在这里**重新拼出来**的。地址栏里的 #k= 在 onMount 第一行就被
+  //     抹掉了，fragKey 是页面活着这段时间里仅存的一份（见那里的注释）。
+  //  2. 拼出来的链接只进入命令文本和剪贴板 —— 绝不能变成 href / src / fetch 的
+  //     一部分。一旦进了地址，它就会以 Referer、access log、CDN 日志的形式离开
+  //     这台机器，零知识承诺当场作废。dest 也一样是本地字符串，不发给任何人。
+  //  3. 引号由 shQuote 上，不是模板字符串顺手加的一对单引号：链接里的 #
+  //     不加引号会被当成注释起点，密钥连同后半段一起被 shell 吃掉。
+  //
+  // 这一段只在 fragKey 非空时渲染 —— 没有密钥的那两屏（noKey / unsupported）
+  // 本来也拼不出可用的命令，给一条缺密钥的命令只会让用户在终端里再失败一次。
+  let dest = $state(".");
+  const fullLink = $derived(
+    fragKey ? storedLink(typeof location === "undefined" ? "" : location.origin, id, fragKey) : "",
+  );
+  const installedCmd = $derived(fullLink ? downCommand(fullLink, dest) : "");
+  const tempScript = $derived(fullLink ? tempDownloaderScript({ link: fullLink, dest }) : "");
+  const windowsScript = $derived(fullLink ? windowsTempDownloaderScript(fullLink, dest) : "");
+
   /** startDownload 的破坏性那一段。单独拆出来只为让 holdRefresh 的释放落在一个
    *  finally 上，而不用给下面每一条 return / catch 各补一次。 */
   async function runDownload() {
@@ -438,6 +463,82 @@
     {:else}
       <button class="btn btn-primary" onclick={download}>{t.download.downloadBtn}</button>
     {/if}
+
+    <!-- 终端那条路。只在手里真有密钥时才出现 —— 没有 fragKey 就拼不出能用的
+         命令，给一条缺密钥的命令等于让用户在终端里再失败一次。
+
+         这里所有链接文本都只是**文本**：唯一的 <a> 指向 GitHub 发布页，而完整
+         链接（含 #k=）只出现在 <code> 里和剪贴板里，从不出现在任何 href/src。
+         DownloadPage.test.ts 逐个属性检查这件事。 -->
+    {#if fragKey}
+      <section class="terminal" aria-labelledby="dl-cli-heading">
+        <h3 id="dl-cli-heading">{t.download.cli.heading}</h3>
+
+        <div class="field">
+          <label for="dl-cli-dest">{t.stored.cliDestLabel}</label>
+          <!-- dir="ltr"：这是一个会被贴进命令里的路径，阿拉伯语页面里也必须按
+               它真正的字节顺序显示，否则用户核对不了自己粘贴的是什么。 -->
+          <input
+            id="dl-cli-dest"
+            type="text"
+            dir="ltr"
+            spellcheck="false"
+            autocapitalize="off"
+            autocorrect="off"
+            bind:value={dest}
+          />
+          <p class="hint">{t.stored.cliDestHint}</p>
+        </div>
+
+        <h4>{t.download.cli.installedTitle}</h4>
+        <p>{t.download.cli.installedIntro}</p>
+        <CommandBlock
+          code={installedCmd}
+          title="relayium down"
+          copyLabel={t.stored.cliCopy}
+          copiedLabel={t.stored.copied}
+          copyAria="{t.stored.cliCopy}: relayium down"
+        />
+
+        <h4>{t.download.cli.tempTitle}</h4>
+        <p>{t.download.cli.tempMeans}</p>
+        <p class="curlnote">{t.download.cli.tempCurlNote}</p>
+        <ol class="steps">
+          {#each t.download.cli.steps as step, i (i)}
+            <li>{step}</li>
+          {/each}
+        </ol>
+        <div class="script">
+          <CommandBlock
+            code={tempScript}
+            title="temporary · verified"
+            copyLabel={t.stored.cliCopy}
+            copiedLabel={t.stored.copied}
+            copyAria="{t.stored.cliCopy}: {t.download.cli.tempTitle}"
+          />
+        </div>
+        <p class="attest">{t.download.cli.verified}</p>
+        <p class="attest">{t.download.cli.keyStaysLocal}</p>
+
+        <h4>{t.download.cli.windowsTitle}</h4>
+        <p>{t.download.cli.windowsNote}</p>
+        <CommandBlock
+          code={windowsScript}
+          title="powershell · pinned SHA-256"
+          copyLabel={t.stored.cliCopy}
+          copiedLabel={t.stored.copied}
+          copyAria="{t.stored.cliCopy}: {t.download.cli.windowsTitle}"
+        />
+        <p>
+          <!-- noreferrer as well as noopener: the address bar no longer holds
+               the fragment, but this is the one outbound navigation on the
+               page and it costs nothing to make that independent of scrubbing. -->
+          <a class="releases" href={RELEASE_PAGE_URL} target="_blank" rel="noopener noreferrer">
+            {t.download.cli.releasesLink}
+          </a>
+        </p>
+      </section>
+    {/if}
   {/if}
 
   <section class="sendcta">
@@ -502,6 +603,52 @@
   .memwarn p { margin: 0 0 var(--space-2); }
   .memwarn .how { color: var(--text); }
   .error { color: var(--danger); } .ok { color: var(--ok); }
+
+  /* 终端那条路。
+     窄屏是硬要求：这一段里最长的一行是 openssl 那条验签命令，比手机屏宽得多。
+     命令块自己用 overflow-x 横向滚（见 CommandBlock 的 <pre>），所以这里只要
+     保证外层容器**允许**自己被压窄 —— min-width: 0 就是那一条：网格/弹性子项
+     的默认 min-width 是 auto，会被里面那条不换行的 <pre> 顶开，于是整页出现
+     横向滚动条，文件列表和下载按钮一起被挤出屏幕。 */
+  .terminal { margin-top: var(--space-7); min-width: 0; }
+  .terminal h3 { font-size: var(--fs-h3); margin: 0 0 var(--space-2); }
+  .terminal h4 {
+    font-size: var(--fs-sm); font-weight: 600; color: var(--text-h);
+    margin: var(--space-5) 0 var(--space-2);
+  }
+  .terminal p { font-size: var(--fs-xs); line-height: 1.6; color: var(--text); margin: 0 0 var(--space-3); }
+  .terminal :global(.term) { margin-bottom: var(--space-3); min-width: 0; }
+
+  .field { margin: 0 0 var(--space-4); }
+  .field label { display: block; font-size: var(--fs-xs); color: var(--text-h); margin-bottom: 5px; }
+  .field input {
+    font: inherit; font-size: var(--fs-sm); font-family: var(--mono);
+    width: 100%; box-sizing: border-box; padding: 7px 10px;
+    border-radius: var(--radius-sm); border: 1px solid var(--border);
+    background: var(--code-bg); color: var(--text-h);
+  }
+  .field input:focus { border-color: var(--accent-border); }
+  .terminal p.hint { margin: 5px 0 0; }
+
+  /* 「普通 curl 只能存密文」那句。它是这一段里唯一一句**否定**性的话，也是最容易
+     被跳过的一句 —— 它必须看起来和步骤同级，而不是脚注。attest 是另外两句
+     供应链断言，同样不能读成装饰性小字。 */
+  .terminal p.curlnote, .terminal p.attest {
+    color: var(--text-h);
+    padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm);
+  }
+  .terminal p.curlnote { background: var(--code-bg); border: 1px solid var(--border); }
+  .terminal p.attest { background: var(--accent-bg); border: 1px solid var(--accent-border); }
+  /* 完整脚本三十多行。手机上它是一千多像素的等宽文字，会把后面的 Windows 指引和
+     发布页链接整个埋掉 —— 而那两块恰恰是 POSIX 块覆盖不到的人唯一能用的东西。
+     给它一个高度上限并纵向可滚；<pre> 本来就是键盘可聚焦的（CommandBlock 的
+     tabindex="0"），所以滚得到的人也包括不用鼠标的人。 */
+  .script :global(pre) { max-height: 24rem; overflow-y: auto; }
+
+  .steps { margin: 0 0 var(--space-3); padding-inline-start: var(--space-5); }
+  .steps li { font-size: var(--fs-xs); line-height: 1.6; color: var(--text); margin-bottom: 6px; }
+  .releases { color: var(--accent-fg); text-decoration: none; font-weight: 500; }
+  .releases:hover { text-decoration: underline; }
 
   .sendcta {
     margin-top: var(--space-7); padding: var(--space-4); border-radius: var(--radius-sm);

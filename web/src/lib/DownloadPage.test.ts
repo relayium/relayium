@@ -66,7 +66,7 @@ import DownloadPage from "./DownloadPage.svelte";
 // against the real module here would never match and the test would pass on the
 // fallback branch it is meant to rule out.
 import { InvalidStoredObjectIdError, StoredDownloadHttpError, DownloadNetworkError } from "./stored-file";
-import { loadLang, messages } from "./i18n.svelte";
+import { loadLang, messages, setLang, LANGS, type Lang } from "./i18n.svelte";
 import { LARGE_DOWNLOAD_WARN_BYTES, SinkTransportError, probeStreamSupport, swStreamReady, pickSaveTarget } from "./filesink";
 import { refreshHolds, resetAppUpdate } from "./app-update.svelte";
 
@@ -100,6 +100,8 @@ async function mountPage(o: {
   metaError?: unknown;
   /** 只让**第一次** fetchMeta 失败，之后照常成功 —— 用来考重试是否真能恢复。 */
   metaErrorOnce?: unknown;
+  /** 渲染语言。默认 en；终端那一段的九语用例逐个换掉它。 */
+  lang?: Lang;
 }) {
   restorePickers = stubPickers(o.canStream);
   manifestFiles.mockReturnValue(o.files);
@@ -107,7 +109,7 @@ async function mountPage(o: {
   if (o.metaError) fetchMeta.mockRejectedValue(o.metaError);
   else if (o.metaErrorOnce) fetchMeta.mockRejectedValueOnce(o.metaErrorOnce).mockResolvedValue(ok);
   else fetchMeta.mockResolvedValue(ok);
-  await loadLang("en");
+  await setLang(o.lang ?? "en");
   target = document.createElement("div");
   document.body.appendChild(target);
   app = mount(DownloadPage, { target, props: { id: "abc" } });
@@ -145,7 +147,10 @@ function deliverDeclaredBytes(files: { name: string; size: number }[]) {
   );
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  // 语言是模块级 $state：九语那一组会把它留在最后一种语言上，下一条用例就在
+  // 那种语言下渲染。每条用例开头打回 en，免得断言依赖执行顺序。
+  await setLang("en");
   injectedTarget = null;
   downloadBlob.mockReset();
   downloadBlob.mockResolvedValue(undefined);
@@ -182,7 +187,10 @@ describe("DownloadPage 大文件内存提示", () => {
     expect(warn!.textContent!.trim().length).toBeGreaterThan(0);
     // 核心断言：提示不是装饰，下载必须真的没启动。
     expect(downloadBlob).not.toHaveBeenCalled();
-    expect(target.querySelector(".bar"), "不应进入 downloading 状态").toBeNull();
+    // `.progress-bar`，不是 `.bar`。原来写的是后者，而进度条那个元素的 class 是
+    // "progress-bar" 一个整词 —— `.bar` 从来就匹配不到它，这条断言一直恒真。
+    // （现在页面上真有 `.bar` 了：命令块的标题栏。）
+    expect(target.querySelector(".progress-bar"), "不应进入 downloading 状态").toBeNull();
   });
 
   it("有流式落盘能力 + 大文件：照常下载，不提示", async () => {
@@ -1210,5 +1218,174 @@ describe("DownloadPage 下载并发闸门", () => {
     await until(() => !!target.querySelector(".ok"));
     expect(downloadBlob, "早退把闸门占住的话，这一次会被静默吃掉").toHaveBeenCalledTimes(1);
     expect(refreshHolds()).toBe(0);
+  });
+});
+
+// --- 终端那一段：无需持久安装的可见序列 --------------------------------------
+//
+// 这一段的产品承诺有三条，每条都能在页面上被悄悄破坏而看不出来：
+//
+//   1. 完整链接（含 #k=）只作为**本地命令的参数**存在。它一旦进了某个 href/src，
+//      就会以 Referer / access log / CDN 日志的形式离开这台机器 —— 页面看上去
+//      一模一样，零知识承诺却已经没了。所以这里逐个属性扫。
+//   2. 命令是**可读**的：可见的分步说明 + 完整脚本，而不是一条 curl | sh。
+//   3. 九种语言都要把「临时执行、不是安装」和「验了签名和校验和」说出来，并且
+//      不管哪种语言，命令本身一个字都不能变。
+
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { RELEASE_PAGE_URL, downCommand, tempDownloaderScript, windowsTempDownloaderScript } from "./temp-downloader";
+
+const ORIGIN = "http://localhost:3000"; // jsdom 的默认 origin
+const FULL_LINK = `${ORIGIN}/d/abc#k=${FRAG_KEY}`;
+
+/** 页面上所有可能变成一次网络请求的地址。命令文本不在其中 —— 它是文本。 */
+function resourceUrls(): string[] {
+  const attrs = ["href", "src", "srcset", "action", "formaction", "poster", "data", "ping", "content"];
+  const out: string[] = [];
+  for (const el of target.querySelectorAll("*")) {
+    for (const a of attrs) {
+      const v = el.getAttribute(a);
+      if (v) out.push(v);
+    }
+  }
+  return out;
+}
+
+function cmdBlocks(): string[] {
+  return [...target.querySelectorAll(".term pre code")].map((c) => c.textContent ?? "");
+}
+
+describe("DownloadPage 终端下载那一段", () => {
+  const files = [{ name: "a.bin", size: SMALL }];
+
+  it("给出装了 CLI 的一行命令和无需安装的完整脚本", async () => {
+    await mountPage({ canStream: true, files });
+    const section = target.querySelector(".terminal");
+    expect(section, "拿到密钥之后就该有终端那一段").not.toBeNull();
+
+    const blocks = cmdBlocks();
+    expect(blocks[0]).toBe(downCommand(FULL_LINK, "."));
+    expect(blocks[1]).toBe(tempDownloaderScript({ link: FULL_LINK, dest: "." }));
+    // 六步说明和脚本里的六段注释是一一对应的：少一步就说明有一步没被解释。
+    expect(section!.querySelectorAll("ol.steps li").length).toBe(6);
+    // 而且它必须真的解释了验签，不是只把脚本贴出来。
+    expect(section!.textContent).toContain("ECDSA");
+  });
+
+  it("完整链接不出现在任何会被请求的地址里", async () => {
+    await mountPage({ canStream: true, files });
+    for (const url of resourceUrls()) {
+      expect(url, `资源地址带上了密钥：${url}`).not.toContain(FRAG_KEY);
+      expect(url, `资源地址带上了 fragment：${url}`).not.toContain("#k=");
+    }
+    // 页面上唯一的外链是发布页，而它是个常量。
+    const hrefs = [...target.querySelectorAll("a[href]")].map((a) => a.getAttribute("href")!);
+    expect(hrefs).toContain(RELEASE_PAGE_URL);
+    // 元数据请求也只拿到 id：密钥从来没进过网络这一层。
+    expect(fetchMeta).toHaveBeenCalledWith("abc");
+    for (const call of fetchMeta.mock.calls) {
+      expect(JSON.stringify(call)).not.toContain(FRAG_KEY);
+    }
+    // 而链接确实在页面上 —— 在命令文本里。否则上面几条会因为「什么都没有」而恒真。
+    expect(cmdBlocks().join("\n")).toContain(FRAG_KEY);
+  });
+
+  it("用户填的目标目录被当成一个 shell 参数，不管里面有什么", async () => {
+    await mountPage({ canStream: true, files });
+    const input = target.querySelector("#dl-cli-dest") as HTMLInputElement;
+    input.value = "my files; rm -rf ~";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    flushSync();
+
+    const dest = "my files; rm -rf ~";
+    const blocks = cmdBlocks();
+    // 逐字等于生成器的输出 —— 也就是说输入框确实是穿过 shArg 才进的命令，而不是
+    // 在模板里被直接拼上去。引号本身对不对由 temp-downloader.test.ts 交给真 shell
+    // 去判（那边用 sh 把它切回 argv）。
+    expect(blocks[0]).toBe(downCommand(FULL_LINK, dest));
+    expect(blocks[1]).toBe(tempDownloaderScript({ link: FULL_LINK, dest }));
+    expect(blocks[2]).toBe(windowsTempDownloaderScript(FULL_LINK, dest));
+    for (const block of blocks) {
+      expect(block, "目标目录没加引号，分号后面那段会被当成命令").toContain(`'${dest}'`);
+      expect(block, "链接后面直接跟了没加引号的目录").not.toContain(`' ${dest}`);
+    }
+  });
+
+  it("没有密钥就不给命令 —— 一条缺密钥的命令只会让人在终端里再失败一次", async () => {
+    parseDownloadKey.mockReturnValue("");
+    await mountPage({ canStream: true, files });
+    expect(target.querySelector(".error"), "该是缺密钥那一屏").not.toBeNull();
+    expect(target.querySelector(".terminal")).toBeNull();
+  });
+
+  it("默认路径不是一条不透明的 curl | sh", async () => {
+    await mountPage({ canStream: true, files });
+    const text = target.querySelector(".terminal")!.textContent!;
+    expect(/curl[^\n]*\|\s*(sh|bash)/.test(cmdBlocks().join("\n")), "页面把管道进 shell 当成了默认路径").toBe(false);
+    // 反面：它必须说清楚这**不是**安装。
+    expect(text.length, "这一段不能只有一个命令块").toBeGreaterThan(400);
+  });
+
+  it("键盘和读屏都用得上：命名分区、有序步骤、每个复制按钮各有其名", async () => {
+    await mountPage({ canStream: true, files });
+    const section = target.querySelector(".terminal")!;
+    const heading = section.querySelector("h3")!;
+    expect(section.getAttribute("aria-labelledby")).toBe(heading.id);
+    expect(heading.textContent!.trim().length).toBeGreaterThan(0);
+    // 标题层级不跳级：页面的 h2 是文件列表，这一段从 h3 起。
+    expect(target.querySelector("h2")).not.toBeNull();
+    expect(section.querySelectorAll("h4").length).toBe(3);
+
+    // 目标目录输入框必须有真正关联的 label。
+    const input = section.querySelector("#dl-cli-dest")!;
+    expect(section.querySelector(`label[for="${input.id}"]`)).not.toBeNull();
+
+    // 三个复制按钮 —— 名字全一样的话，读屏用户听到三个「复制命令」，选不出要哪个。
+    const names = [...section.querySelectorAll("button.copy")].map((b) => b.getAttribute("aria-label"));
+    expect(names.length).toBe(3);
+    expect(new Set(names).size, `复制按钮重名：${names.join(" / ")}`).toBe(3);
+
+    // 命令块可以横向滚，所以必须能被键盘聚焦到；命令始终按字节顺序显示。
+    for (const pre of section.querySelectorAll(".term pre")) {
+      expect(pre.getAttribute("tabindex")).toBe("0");
+      expect(pre.getAttribute("dir")).toBe("ltr");
+    }
+  });
+
+  // 九种语言都渲染一遍。断言分两半：文案确实换了语言（说明这一段没有硬编码英文），
+  // 而命令本身一个字都没变（本地化改的是解释，不是要执行的东西）。
+  for (const { code } of LANGS) {
+    it(`${code}：解释被翻译，命令不被翻译`, async () => {
+      await mountPage({ canStream: true, files, lang: code as Lang });
+      const section = target.querySelector(".terminal");
+      expect(section, `${code} 少了终端那一段`).not.toBeNull();
+      const t = messages[code as Lang];
+
+      expect(section!.textContent).toContain(t.download.cli.tempTitle);
+      expect(section!.textContent).toContain(t.download.cli.tempMeans);
+      expect(section!.querySelectorAll("ol.steps li").length, `${code} 的步骤数不对`).toBe(6);
+
+      const blocks = cmdBlocks();
+      expect(blocks[0], `${code} 把命令也翻译了`).toBe(downCommand(FULL_LINK, "."));
+      expect(blocks[1], `${code} 把脚本也翻译了`).toBe(tempDownloaderScript({ link: FULL_LINK, dest: "." }));
+      expect(blocks[2], `${code} 把 PowerShell 脚本也翻译了`).toBe(windowsTempDownloaderScript(FULL_LINK, "."));
+      for (const url of resourceUrls()) expect(url, `${code}: ${url}`).not.toContain(FRAG_KEY);
+    });
+  }
+});
+
+// 窄屏。jsdom 不做布局，所以这里守的是**规则本身**：命令块横向滚，容器允许被压窄。
+// 少了 min-width: 0，脚本里最长的那行 openssl 命令会把整页顶宽，文件列表和下载
+// 按钮一起被挤出手机屏幕 —— 而这在任何 DOM 断言里都看不出来。
+describe("终端那一段在窄屏下不撑破页面", () => {
+  it("命令块自己横向滚，外层容器允许被压窄", () => {
+    const page = readFileSync(join(import.meta.dirname, "DownloadPage.svelte"), "utf8");
+    const block = readFileSync(join(import.meta.dirname, "CommandBlock.svelte"), "utf8");
+    expect(block, "命令块必须自己横向滚，而不是把页面顶宽").toMatch(/pre\s*\{[^}]*overflow-x:\s*auto/);
+    expect(page, ".terminal 需要 min-width: 0").toMatch(/\.terminal\s*\{[^}]*min-width:\s*0/);
+    expect(page, "命令块在这一页也需要 min-width: 0").toMatch(/\.terminal :global\(\.term\)\s*\{[^}]*min-width:\s*0/);
+    // 这一页的容器一直是 560px + max-width: 100%，终端那一段不能把它改成固定宽度。
+    expect(page).toMatch(/\.dl\s*\{\s*width: 560px; max-width: 100%/);
   });
 });

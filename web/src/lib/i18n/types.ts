@@ -666,6 +666,29 @@ export interface Messages {
     memWarn: (size: string) => string; // 为什么 + 会怎样，带上这批文件的总大小
     memWarnHow: string; // 怎么办：电脑上的 Chrome/Edge，或命令行工具
     memWarnContinue: string; // 按钮：仍要下载
+    // ── 终端下载：两条路，而且它们不是同一个承诺 ──────────────────────────
+    //
+    // installed* 面向「这台机器已经装了 CLI」；temp* 是「无需安装」的诚实版本：
+    // 把官方 CLI 下到临时目录、验签、跑一次、删掉。每种语言都必须同时说清
+    //   (1) 这是临时执行而不是安装，
+    //   (2) 发布签名 + 校验和都验过、任一不过就停，
+    // 并且**不得**暗示普通 curl 能解密这条链接 —— 它做不到：#k= 从不发给服务器，
+    // 服务端也没有内容密钥，curl 拿到的只是密文。i18n-temp-downloader.test.ts
+    // 对九种语言逐条检查这三件事。
+    cli: {
+      heading: string; // 分区标题：也可以在终端里下载
+      installedTitle: string; // 已装 CLI 的那条路
+      installedIntro: string; // 一句话：在要落盘的那台机器上跑，下载不需要登录
+      tempTitle: string; // 无需持久安装
+      tempMeans: string; // 诚实定义：不写系统目录/不要 root/不登录/不留配置和设备身份
+      tempCurlNote: string; // 为什么普通 curl 不成立（只能存密文，解不了）
+      steps: string[]; // 可见的六步，与 tempDownloaderScript 的六段注释一一对应
+      verified: string; // 供应链：checksums.txt 的 ECDSA 签名 + 压缩包 SHA-256
+      keyStaysLocal: string; // #k= 只作为本地进程的参数，不进 URL / 服务端 / 日志
+      windowsTitle: string;
+      windowsNote: string; // POSIX 块覆盖不到 Windows 时的如实指引
+      releasesLink: string; // 指向发布页的链接文案
+    };
   };
   features: { title: string; sub: string; secureLink: string; items: { title: string; desc: string }[] };
   howItWorks: {
