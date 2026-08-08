@@ -204,6 +204,63 @@ final class AppShellUITests: XCTestCase {
                        "a malformed link navigated away from its recovery task")
     }
 
+    /// Account creation is one correctable in-app task. Local validation must
+    /// explain the refusal without erasing secrets, changing destination, or
+    /// forcing the user to begin the form again.
+    func testRegistrationProblemKeepsTheDraftCorrectable() {
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+
+        let account = sidebarDestination("Account", in: window)
+        XCTAssertTrue(account.waitForExistence(timeout: 10))
+        account.click()
+        let chooseRegistration = window.buttons["New to Relayium? Create an account"]
+        XCTAssertTrue(chooseRegistration.waitForExistence(timeout: 10))
+        chooseRegistration.click()
+
+        XCTAssertTrue(window.staticTexts["Create your Relayium account"]
+            .waitForExistence(timeout: 10))
+        XCTAssertTrue(window.textFields["account.name"].exists)
+        let email = window.textFields["account.email"]
+        let password = window.secureTextFields["account.password"]
+        let confirmation = window.secureTextFields["account.confirmPassword"]
+        XCTAssertTrue(email.exists && password.exists && confirmation.exists)
+
+        let create = window.buttons["Create account"]
+        XCTAssertTrue(create.exists)
+        XCTAssertFalse(create.isEnabled,
+                       "an empty registration form can be submitted")
+        email.click()
+        email.typeText("person@example.com")
+        password.click()
+        password.typeText("short")
+        confirmation.click()
+        confirmation.typeText("wrong battery")
+
+        let submittedPassword = password.value as? String
+        let submittedConfirmation = confirmation.value as? String
+        XCTAssertTrue(create.isEnabled)
+        create.click()
+
+        XCTAssertTrue(window.staticTexts["Use at least 8 characters for your password."]
+            .waitForExistence(timeout: 10),
+                      "the local refusal does not explain the password rule")
+        XCTAssertEqual(password.value as? String, submittedPassword,
+                       "the local refusal erased the password")
+        XCTAssertEqual(confirmation.value as? String, submittedConfirmation,
+                       "the local refusal erased the confirmation")
+        XCTAssertTrue(password.isEnabled && confirmation.isEnabled && create.exists)
+        XCTAssertEqual(window.title, "Account",
+                       "a registration refusal navigated away from Account")
+
+        let back = window.buttons["Back to sign in"]
+        XCTAssertTrue(back.exists)
+        back.click()
+        XCTAssertTrue(window.staticTexts["Welcome back"].waitForExistence(timeout: 10))
+        XCTAssertFalse(window.secureTextFields["account.confirmPassword"].exists,
+                       "returning to sign in left registration-only controls behind")
+    }
+
     /// The exact launch-blocking path reported from the installed app: creating
     /// a pairing-code text session must not be mistaken for unsolicited Nearby
     /// receive, and its handoff must be usable without transcribing six digits.

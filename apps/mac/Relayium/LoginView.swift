@@ -164,10 +164,14 @@ struct LoginView: View {
     @ViewBuilder private var displayNameField: some View {
         if #available(macOS 14, *) {
             TextField(L10n.t(.loginDisplayName), text: $draft.displayName)
+                .accessibilityLabel(L10n.t(.loginDisplayName))
+                .accessibilityIdentifier("account.name")
                 .textContentType(.name)
                 .disableAutocorrection(true)
         } else {
             TextField(L10n.t(.loginDisplayName), text: $draft.displayName)
+                .accessibilityLabel(L10n.t(.loginDisplayName))
+                .accessibilityIdentifier("account.name")
                 .disableAutocorrection(true)
         }
     }
@@ -175,10 +179,14 @@ struct LoginView: View {
     @ViewBuilder private var emailField: some View {
         if #available(macOS 14, *), mode == .register {
             TextField(L10n.t(.loginEmail), text: $draft.email)
+                .accessibilityLabel(L10n.t(.loginEmail))
+                .accessibilityIdentifier("account.email")
                 .textContentType(.emailAddress)
                 .disableAutocorrection(true)
         } else {
             TextField(L10n.t(.loginEmail), text: $draft.email)
+                .accessibilityLabel(L10n.t(.loginEmail))
+                .accessibilityIdentifier("account.email")
                 .textContentType(.username)
                 .disableAutocorrection(true)
         }
@@ -187,10 +195,14 @@ struct LoginView: View {
     @ViewBuilder private var passwordField: some View {
         if #available(macOS 14, *), mode == .register {
             SecureField(L10n.t(.loginPassword), text: $draft.password)
+                .accessibilityLabel(L10n.t(.loginPassword))
+                .accessibilityIdentifier("account.password")
                 .textContentType(.newPassword)
                 .onSubmit { passwordReturn() }
         } else {
             SecureField(L10n.t(.loginPassword), text: $draft.password)
+                .accessibilityLabel(L10n.t(.loginPassword))
+                .accessibilityIdentifier("account.password")
                 .textContentType(.password)
                 .onSubmit { passwordReturn() }
         }
@@ -199,11 +211,15 @@ struct LoginView: View {
     @ViewBuilder private var confirmationField: some View {
         if #available(macOS 14, *) {
             SecureField(L10n.t(.loginConfirmPassword), text: $draft.confirmPassword)
+                .accessibilityLabel(L10n.t(.loginConfirmPassword))
+                .accessibilityIdentifier("account.confirmPassword")
                 .textContentType(.newPassword)
                 .focused($confirmFocused)
                 .onSubmit { submit() }
         } else {
             SecureField(L10n.t(.loginConfirmPassword), text: $draft.confirmPassword)
+                .accessibilityLabel(L10n.t(.loginConfirmPassword))
+                .accessibilityIdentifier("account.confirmPassword")
                 .focused($confirmFocused)
                 .onSubmit { submit() }
         }

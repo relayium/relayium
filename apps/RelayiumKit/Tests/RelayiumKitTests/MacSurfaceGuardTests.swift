@@ -1136,6 +1136,21 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the mode is the form's own state")
         XCTAssertTrue(login.contains("SignInPresentation.problem(in: submitted)"),
                       "the substantive checks run before a request goes out")
+        for (label, id) in [
+            (".loginDisplayName", "account.name"),
+            (".loginEmail", "account.email"),
+            (".loginPassword", "account.password"),
+            (".loginConfirmPassword", "account.confirmPassword"),
+        ] {
+            XCTAssertTrue(login.contains(".accessibilityLabel(L10n.t(\(label)))"))
+            XCTAssertTrue(login.contains(".accessibilityIdentifier(\"\(id)\")"))
+        }
+        let uiURL = macRoot.deletingLastPathComponent()
+            .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
+        let ui = try String(contentsOf: uiURL, encoding: .utf8)
+        XCTAssertTrue(ui.contains("testRegistrationProblemKeepsTheDraftCorrectable"))
+        XCTAssertTrue(ui.contains("window.secureTextFields[\"account.confirmPassword\"]"))
+        XCTAssertTrue(ui.contains("Use at least 8 characters for your password."))
         for (name, text) in try sources(under: macRoot, atLeast: 20)
         where name != "LoginView.swift" && name != "Components/CapabilityGateView.swift" {
             XCTAssertFalse(text.contains("AuthMode"),
