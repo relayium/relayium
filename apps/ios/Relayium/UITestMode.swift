@@ -190,6 +190,10 @@ final class UITestAccountTransport: URLProtocol {
         // object uploaded from somewhere else was never on this device, so the
         // link cannot be rebuilt here. That is the row's honest arm, and the one
         // where no hand-off may be offered at all.
+        // Sign-out is a POST with no body. Modelled because it is the one way
+        // out of a signed-in launch, and an unmodelled endpoint is refused —
+        // which would have made a failed sign-out look like a product defect.
+        out["/api/auth/logout"] = Data("{}".utf8)
         offer("/api/files", """
             {"files":[{"id":"obj_uitest","size":1536,"createdAt":1754000000,
             "expiresAt":0,"burnAfterRead":false,"downloaded":false,

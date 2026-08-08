@@ -484,4 +484,43 @@ final class AppShellUITests: XCTestCase {
                       "a cancelled delete did not leave the stored object alone")
     }
 
+    /// Signing out returns the app to the state a first launch is in, and does
+    /// not leave any of the account's own surfaces behind.
+    ///
+    /// This is the one way out of a signed-in session, and until the acceptance
+    /// account existed there was no way to reach it at all.
+    func testSigningOutReturnsToTheSignedOutSurfaces() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-signed-in"]
+        app.launch()
+        openTask("Account", title: "Account")
+
+        XCTAssertTrue(app.staticTexts["person@example.com"].waitForExistence(timeout: 20),
+                      "the signed-in launch did not render the account it holds")
+        let signOut = app.buttons["Sign out"]
+        XCTAssertTrue(signOut.waitForExistence(timeout: 10),
+                      "a signed-in account offers no way out")
+        scrollUntilHittable(signOut)
+        signOut.tap()
+
+        XCTAssertTrue(app.staticTexts["Welcome back"].waitForExistence(timeout: 20),
+                      "signing out did not return to the sign-in form")
+        // Deliberately NOT asserting that the device rows and stored objects are
+        // gone from here. They are — but so is the whole summary view, so such
+        // an assertion passes whether or not the model was cleared: removing
+        // `management.clear` from the sign-out coordinator left it green. An
+        // assertion that cannot fail is worse than none, because it reads as
+        // coverage. Whether the model drops the account is
+        // `AccountSignOutCoordinatorTests`' subject, driven directly.
+        XCTAssertFalse(app.staticTexts["person@example.com"].exists,
+                       "signing out left the account address on screen")
+
+        // The account-gated task must go back to offering its remedy, not to a
+        // half-signed-in surface that would fail on first use.
+        openTask("Send", title: "Send files")
+        XCTAssertTrue(app.buttons["Go to Account"].waitForExistence(timeout: 10),
+                      "a signed-out Send task no longer offers its account remedy")
+    }
+
 }

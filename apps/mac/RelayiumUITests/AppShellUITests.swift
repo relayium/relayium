@@ -703,4 +703,45 @@ final class AppShellUITests: XCTestCase {
                       "a cancelled delete did not leave the stored object alone")
     }
 
+    /// Signing out returns the Mac app to the state a first launch is in, and
+    /// leaves none of the account's own surfaces behind.
+    func testSigningOutReturnsToTheSignedOutSurfaces() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-signed-in"]
+        app.launch()
+        ensureProductWindowIsOpen()
+
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let account = sidebarDestination("Account", in: window)
+        XCTAssertTrue(account.waitForExistence(timeout: 10))
+        account.click()
+
+        XCTAssertTrue(window.staticTexts["person@example.com"].waitForExistence(timeout: 20),
+                      "the signed-in launch did not render the account it holds")
+        let signOut = window.buttons["Sign out"]
+        XCTAssertTrue(signOut.waitForExistence(timeout: 10),
+                      "a signed-in account offers no way out")
+        signOut.click()
+
+        XCTAssertTrue(window.staticTexts["Welcome back"].waitForExistence(timeout: 20),
+                      "signing out did not return to the sign-in form")
+        // Deliberately NOT asserting that the device rows and stored objects are
+        // gone from here. They are — but so is the whole summary view, so such
+        // an assertion passes whether or not the model was cleared: removing
+        // `management.clear` from the sign-out coordinator left it green. An
+        // assertion that cannot fail is worse than none, because it reads as
+        // coverage. Whether the model drops the account is
+        // `AccountSignOutCoordinatorTests`' subject, driven directly.
+        XCTAssertFalse(window.staticTexts["person@example.com"].exists,
+                       "signing out left the account address on screen")
+
+        let send = sidebarDestination("Send a link", in: window)
+        XCTAssertTrue(send.waitForExistence(timeout: 10))
+        send.click()
+        XCTAssertTrue(window.buttons["Sign in"].waitForExistence(timeout: 10),
+                      "a signed-out stored send no longer offers its account remedy")
+    }
+
 }
