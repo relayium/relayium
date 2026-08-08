@@ -1204,4 +1204,36 @@ final class AppShellUITests: XCTestCase {
                       "the received result is not the file the manifest named")
     }
 
+    /// Every shipped language renders, in the running app.
+    ///
+    /// `LocalizedCopyTests` proves the catalogs line up, through the model seams,
+    /// and its own header says its results cannot depend on the machine. What no
+    /// test asserted is that a launch in each language produces a shell whose
+    /// destinations are in that language — a resource not copied into the app,
+    /// or a language the shell never asks for, looks exactly like a correct
+    /// catalog from inside the package.
+    func testEveryShippedLanguageRendersItsOwnShell() {
+        let shipped = [
+            ("en", "Nearby"), ("zh-Hans", "附近设备"), ("ja", "近くのデバイス"),
+            ("ko", "근처 기기"), ("de", "In der Nähe"), ("fr", "À proximité"),
+            ("ar", "الأجهزة القريبة"), ("es", "Cerca"), ("pt", "Por perto"),
+        ]
+        for (code, nearby) in shipped {
+            app.terminate()
+            app.launchArguments = ["--relayium-ui-testing", "-AppleLanguages", "(\(code))",
+                                   "-AppleLocale", code, "-SUEnableAutomaticChecks", "NO"]
+            app.launch()
+            ensureProductWindowIsOpen()
+            let window = mainWindow
+            XCTAssertTrue(window.waitForExistence(timeout: 20),
+                          "\(code) did not produce a window at all")
+            let row = window.descendants(matching: .any)["sidebar-nearby"].firstMatch
+            XCTAssertTrue(row.waitForExistence(timeout: 10),
+                          "\(code) produced a window with no Nearby destination")
+            let shown = (row.value as? String) ?? row.label
+            XCTAssertEqual(shown, nearby,
+                           "\(code) rendered a shell that is not in \(code)")
+        }
+    }
+
 }

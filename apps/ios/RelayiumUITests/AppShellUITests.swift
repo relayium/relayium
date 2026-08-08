@@ -1056,4 +1056,54 @@ final class AppShellUITests: XCTestCase {
             "a completed download did not name what it received")
     }
 
+    /// Every shipped language renders, in the running app.
+    ///
+    /// `LocalizedCopyTests` proves the catalogs line up and that `ErrorCopy` in
+    /// Arabic is Arabic — through the model seams, and its own header says so.
+    /// What no test asserted is that a launch in each language produces a shell
+    /// whose destinations are in that language: a missing bundle, a resource not
+    /// copied into the app, or a language the shell never asks for all look
+    /// exactly like a correct catalog from inside the package.
+    func testEveryShippedLanguageRendersItsOwnShell() {
+        let shipped = [
+            ("en", "Nearby"), ("zh-Hans", "附近设备"), ("ja", "近くのデバイス"),
+            ("ko", "근처 기기"), ("de", "In der Nähe"), ("fr", "À proximité"),
+            ("ar", "الأجهزة القريبة"), ("es", "Cerca"), ("pt", "Por perto"),
+        ]
+        for (code, nearby) in shipped {
+            app.terminate()
+            app.launchArguments = ["--relayium-ui-testing",
+                                   "-AppleLanguages", "(\(code))",
+                                   "-AppleLocale", code]
+            app.launch()
+            let tabs = app.tabBars.firstMatch
+            XCTAssertTrue(tabs.waitForExistence(timeout: 20),
+                          "\(code) did not produce a shell at all")
+            XCTAssertTrue(tabs.buttons[nearby].waitForExistence(timeout: 10),
+                          "\(code) rendered a shell that is not in \(code)")
+        }
+    }
+
+    /// An Arabic launch lays the shell out right-to-left, not merely in Arabic.
+    ///
+    /// Translated strings in a left-to-right layout is the failure mode that
+    /// looks fine in a screenshot review and is wrong for every RTL reader: the
+    /// first destination sits where the last one should. Geometry is what
+    /// distinguishes them, so geometry is what this asserts — by ORDER rather
+    /// than by label, so it cannot pass or fail on a translation changing.
+    func testAnArabicLaunchLaysTheShellOutRightToLeft() {
+        app.terminate()
+        app.launchArguments = ["--relayium-ui-testing",
+                               "-AppleLanguages", "(ar)", "-AppleLocale", "ar"]
+        app.launch()
+
+        let tabs = app.tabBars.firstMatch
+        XCTAssertTrue(tabs.waitForExistence(timeout: 20))
+        let ordered = tabs.buttons.allElementsBoundByIndex
+        XCTAssertGreaterThanOrEqual(ordered.count, 2,
+                                    "the Arabic shell rendered fewer destinations than it has")
+        XCTAssertGreaterThan(ordered[0].frame.minX, ordered[ordered.count - 1].frame.minX,
+                             "an Arabic launch laid the tab bar out left-to-right")
+    }
+
 }
