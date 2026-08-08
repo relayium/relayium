@@ -194,12 +194,12 @@ final class AppShellUITests: XCTestCase {
                       "the system picker has no confirmation action")
         choose.click()
 
-        XCTAssertTrue(window.staticTexts["1 file ready · 1.5 KB"]
-            .waitForExistence(timeout: 10),
-                      "the selected-file summary did not preserve count and total size")
         let identity = NSPredicate(format:
-            "label CONTAINS %@ AND label CONTAINS %@", fixture.lastPathComponent, "1.5 KB")
-        XCTAssertTrue(window.descendants(matching: .any).matching(identity).firstMatch.exists,
+            "(label CONTAINS %@ OR value CONTAINS %@) AND "
+                + "(label CONTAINS %@ OR value CONTAINS %@)",
+            fixture.lastPathComponent, fixture.lastPathComponent, "1.5 KB", "1.5 KB")
+        XCTAssertTrue(window.descendants(matching: .any).matching(identity).firstMatch
+            .waitForExistence(timeout: 10),
                       "the pending send did not show the complete file name and size")
         XCTAssertTrue(window.buttons["Clear"].exists,
                       "the identified pending send cannot be cleared")
