@@ -76,6 +76,24 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(app.contains("residency.pause()"),
                       "the offline UI test state contradicts its own receiving controls")
 
+        // The acceptance fixture writes into the container the app publishes to
+        // Files. Presence in the Debug half is not the invariant — ABSENCE from
+        // the Release half is, because that is the binary a user installs.
+        let halves = mode.components(separatedBy: "#else")
+        XCTAssertEqual(halves.count, 2, "UITestMode lost its Debug/Release split")
+        let debugHalf = try XCTUnwrap(halves.first)
+        let releaseHalf = try XCTUnwrap(halves.last)
+        XCTAssertTrue(debugHalf.contains("--relayium-ui-testing-pending-fixture"),
+                      "the pending-file fixture argument is not in the Debug half")
+        XCTAssertFalse(releaseHalf.contains("--relayium-ui-testing"),
+                       "a shipped build can be steered by a launch argument")
+        XCTAssertFalse(releaseHalf.contains("Data(repeating:"),
+                       "a shipped build writes the acceptance fixture into its container")
+        XCTAssertFalse(releaseHalf.contains("documentDirectory"),
+                       "a shipped build reaches the directory the fixture path uses")
+        XCTAssertTrue(app.contains("UITestMode.stagePendingFixture()"),
+                      "nothing stages the fixture the document-picker path needs")
+
         let uiURL = appsRoot.appendingPathComponent(
             "ios/RelayiumUITests/AppShellUITests.swift")
         let ui = try String(contentsOf: uiURL, encoding: .utf8)
@@ -115,6 +133,23 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(storedSend.components(separatedBy:
             "PendingFileList(sessionFiles: upload.sessionFiles)").count - 1, 4,
             "stored upload lost file identities in a running or terminal state")
+    }
+
+    /// A pending row answers "what am I about to send?" for someone who cannot
+    /// see it, and it is what runtime acceptance binds to. Leaving both to
+    /// `.accessibilityElement(children: .combine)` makes the spoken identity a
+    /// property of how SwiftUI merges descendant text nodes on the OS version
+    /// that happens to be running, and leaves nothing stable to address. macOS
+    /// states both explicitly; iOS must not drift from that.
+    func testEveryPendingFileRowStatesItsOwnAccessibleIdentity() throws {
+        let component = try XCTUnwrap(
+            try sources().first { $0.name == "PendingFileList.swift" }?.text)
+        XCTAssertTrue(component.contains(".accessibilityLabel(\"\\(name), \\(size)\")"),
+                      "a pending row leaves its spoken identity to descendant merging")
+        XCTAssertTrue(component.contains(".accessibilityIdentifier(\"pendingFile.\\(index)\")"),
+                      "a pending row exposes no stable identity to bind acceptance to")
+        XCTAssertTrue(component.contains("ForEach(Array(files.enumerated()), id: \\.offset)"),
+                      "the row index the identity is built from is gone")
     }
 
     /// Waiting share drafts are send choices too. Several can have the same

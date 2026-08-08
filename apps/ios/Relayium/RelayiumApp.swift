@@ -364,6 +364,8 @@ struct RelayiumApp: App {
                 // resolving the folder is idempotent and `startResident` refuses
                 // both a second socket and an override of the user's pause.
                 .task {
+                    // Before anything can be chosen, and a no-op in Release.
+                    UITestMode.stagePendingFixture()
                     if UITestMode.isActive {
                         // Keep the acceptance UI internally coherent as well
                         // as offline: the status, explanation and action all

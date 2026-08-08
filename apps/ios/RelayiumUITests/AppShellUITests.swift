@@ -6,10 +6,18 @@ import XCTest
 final class AppShellUITests: XCTestCase {
     private var app: XCUIApplication!
 
+    /// Every assertion below names a rendered English string, and one of them
+    /// names a byte size the formatter derives from the locale. Pin both rather
+    /// than inherit whatever a runner's simulator was last left in — the same
+    /// thing the macOS suite does.
+    private let offlineLaunchArguments = [
+        "--relayium-ui-testing", "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
+    ]
+
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
-        app.launchArguments = ["--relayium-ui-testing"]
+        app.launchArguments = offlineLaunchArguments
         app.launch()
     }
 
@@ -167,6 +175,79 @@ final class AppShellUITests: XCTestCase {
                       "an invalid link does not explain the required Relayium link shape")
         XCTAssertTrue(link.isEnabled, "an invalid link cannot be corrected in place")
         XCTAssertTrue(open.exists, "an invalid link leaves no way to try the correction")
+    }
+
+    /// The system document browser is presented as a remote view inside the
+    /// app's own element tree, not as a separate `DocumentManagerUICore`
+    /// process, so every step below addresses `app`.
+    private func tapInBrowser(_ label: String, timeout: TimeInterval = 15) {
+        let element = app.descendants(matching: .any)[label].firstMatch
+        guard element.waitForExistence(timeout: timeout) else {
+            return XCTFail("""
+                the system document browser has no "\(label)".
+                \(app.debugDescription)
+                """)
+        }
+        element.tap()
+    }
+
+    /// Files hides a known extension, so match the fixture by the stem it is
+    /// guaranteed to render rather than by a display name the OS may shorten.
+    private func tapStagedFixture(named stem: String, timeout: TimeInterval = 15) {
+        let element = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "label BEGINSWITH %@", stem)).firstMatch
+        guard element.waitForExistence(timeout: timeout) else {
+            return XCTFail("""
+                the staged fixture "\(stem)" is not in the browser.
+                \(app.debugDescription)
+                """)
+        }
+        element.tap()
+    }
+
+    /// Runtime evidence that a chosen file is identified before a recipient or
+    /// a Send action exists at all.
+    ///
+    /// `--relayium-ui-testing-pending-fixture` stages one deterministic file
+    /// inside the app's own Documents directory and does nothing else. The
+    /// picker, the security scope, the expansion and the rendering asserted
+    /// below are production code driven through the real system browser, which
+    /// reaches that directory because the app publishes it to Files.
+    func testPendingSendNamesTheFileAndItsSizeBeforeTransfer() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-pending-fixture"]
+        app.launch()
+
+        openTask("Nearby", title: "Nearby")
+        let chooser = app.buttons["Choose Files or Folders…"]
+        XCTAssertTrue(chooser.waitForExistence(timeout: 10),
+                      "Nearby has no file-selection surface")
+        scrollUntilHittable(chooser)
+        chooser.tap()
+
+        let browsingTabs = app.tabBars["DOC.browsingModeTabBar"]
+        XCTAssertTrue(browsingTabs.waitForExistence(timeout: 20),
+                      "choosing files did not present the system document browser")
+        browsingTabs.buttons["Browse"].tap()
+        tapInBrowser("On My iPhone")
+        tapInBrowser("Relayium")
+        tapStagedFixture(named: "Relayium product brief")
+
+        let open = app.buttons["Open"]
+        XCTAssertTrue(open.waitForExistence(timeout: 10),
+                      "the system browser has no confirmation action")
+        open.tap()
+
+        let identity = app.descendants(matching: .any)["pendingFile.0"].firstMatch
+        XCTAssertTrue(identity.waitForExistence(timeout: 15),
+                      "the pending send did not expose its file identity")
+        XCTAssertTrue(identity.label.contains("Relayium product brief.txt"),
+                      "the pending send shortened or omitted the file name")
+        XCTAssertTrue(identity.label.contains("1.5 KB"),
+                      "the pending send omitted the formatted file size")
+        XCTAssertTrue(app.buttons["Clear"].exists,
+                      "the identified pending send cannot be cleared")
     }
 
     func testRegistrationProblemKeepsTheDraftCorrectable() {
