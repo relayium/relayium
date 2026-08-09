@@ -913,7 +913,7 @@ const es: Messages = {
       verified: "Es la misma firma de versión que verifican relayium update e install.sh: ECDSA P-256 sobre checksums.txt y, además, el SHA-256 del propio archivo. Si falla cualquiera de las dos comprobaciones, no se ejecuta nada.",
       keyStaysLocal: "La clave #k= del enlace se pasa al programa local como argumento. Nunca forma parte de una dirección web, nunca se envía a Relayium y nunca llega a un registro del servidor.",
       windowsTitle: "En Windows",
-      windowsNote: "El bloque POSIX anterior no cubre Windows. Este bloque de PowerShell elige el archivo oficial v0.17.0 para la CPU, verifica su SHA-256 fijado antes de extraerlo, lo ejecuta desde un directorio temporal y elimina ese directorio al terminar:",
+      windowsNote: "El bloque POSIX anterior no cubre Windows. Este bloque de PowerShell elige el archivo oficial v0.18.0 para la CPU, verifica su SHA-256 fijado antes de extraerlo, lo ejecuta desde un directorio temporal y elimina ese directorio al terminar:",
       releasesLink: "Versiones de Relayium →",
     },
   },

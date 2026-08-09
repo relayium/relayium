@@ -93,12 +93,12 @@ describe("shell quoting", () => {
     const script = windowsTempDownloaderScript(LINK, "C:\\it's here");
     // These independent literals deliberately do not import their expected
     // values from the implementation: an accidental pin edit must fail here.
-    expect(WINDOWS_RELEASE).toBe("v0.17.0");
+    expect(WINDOWS_RELEASE).toBe("v0.18.0");
     expect(WINDOWS_SHA256).toEqual({
-      amd64: "db1713357c82ea92ad2c4e19d47a11366eb09ce6bc793e688c68f0523b19356a",
-      arm64: "84d740402a0ed91bf5beff933b25e69f886583d0e38667546d4ce4beec631643",
+      amd64: "8e8a3e807fcfc2883e69b807a874b8e05311c2f4db157961b0e82c7a0e392a33",
+      arm64: "d303b6501a875e9466e89731ea5b8f50183af4db2ce567968dfa054b5f648574",
     });
-    expect(script).toContain("releases/download/v0.17.0/$asset");
+    expect(script).toContain("releases/download/v0.18.0/$asset");
     expect(script).toContain(WINDOWS_SHA256.amd64);
     expect(script).toContain(WINDOWS_SHA256.arm64);
     expect(script).toMatch(/^& \{\n/);

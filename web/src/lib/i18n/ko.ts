@@ -903,7 +903,7 @@ const ko: Messages = {
       verified: "relayium update와 install.sh가 확인하는 것과 같은 릴리스 서명입니다. checksums.txt에 대한 ECDSA P-256, 그리고 아카이브 자체의 SHA-256. 둘 중 하나라도 통과하지 못하면 아무것도 실행되지 않습니다.",
       keyStaysLocal: "링크의 #k= 키는 로컬 프로그램에 인자로 전달됩니다. 웹 주소의 일부가 되지 않고, Relayium으로 전송되지도, 서버 로그에 남지도 않습니다.",
       windowsTitle: "Windows에서는",
-      windowsNote: "위 POSIX 블록은 Windows를 다루지 않습니다. 이 PowerShell 블록은 CPU에 맞는 공식 v0.17.0 아카이브를 선택하고, 압축 해제 전에 고정 SHA-256을 검증한 뒤 임시 디렉터리에서 실행하고 종료 후 삭제합니다:",
+      windowsNote: "위 POSIX 블록은 Windows를 다루지 않습니다. 이 PowerShell 블록은 CPU에 맞는 공식 v0.18.0 아카이브를 선택하고, 압축 해제 전에 고정 SHA-256을 검증한 뒤 임시 디렉터리에서 실행하고 종료 후 삭제합니다:",
       releasesLink: "Relayium 릴리스 →",
     },
   },

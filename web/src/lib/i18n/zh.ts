@@ -903,7 +903,7 @@ const zh: Messages = {
       verified: "这与 relayium update 和 install.sh 验证的是同一个发布签名：对 checksums.txt 的 ECDSA P-256，加上压缩包自身的 SHA-256。任意一项不通过，就什么都不会运行。",
       keyStaysLocal: "链接里的 #k= 密钥只作为参数交给本地程序。它不会进入任何网址，不会发给 Relayium，也不会出现在服务端日志里。",
       windowsTitle: "Windows 上",
-      windowsNote: "上面的 POSIX 块不覆盖 Windows。这个 PowerShell 块会按 CPU 选择官方 v0.17.0 压缩包，在解压前验证固定的 SHA-256，从临时目录运行，并在结束后删除该目录：",
+      windowsNote: "上面的 POSIX 块不覆盖 Windows。这个 PowerShell 块会按 CPU 选择官方 v0.18.0 压缩包，在解压前验证固定的 SHA-256，从临时目录运行，并在结束后删除该目录：",
       releasesLink: "Relayium 发布页 →",
     },
   },

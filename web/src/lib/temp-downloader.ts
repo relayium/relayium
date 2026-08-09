@@ -36,10 +36,10 @@ export const RELEASE_PAGE_URL = `https://github.com/${RELEASE_REPO}/releases/lat
  * explicit, reviewable supply-chain update rather than an unauthenticated
  * download of whatever "latest" happens to mean.
  */
-export const WINDOWS_RELEASE = "v0.17.0";
+export const WINDOWS_RELEASE = "v0.18.0";
 export const WINDOWS_SHA256 = {
-  amd64: "db1713357c82ea92ad2c4e19d47a11366eb09ce6bc793e688c68f0523b19356a",
-  arm64: "84d740402a0ed91bf5beff933b25e69f886583d0e38667546d4ce4beec631643",
+  amd64: "8e8a3e807fcfc2883e69b807a874b8e05311c2f4db157961b0e82c7a0e392a33",
+  arm64: "d303b6501a875e9466e89731ea5b8f50183af4db2ce567968dfa054b5f648574",
 } as const;
 
 /**
