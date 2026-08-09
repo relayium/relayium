@@ -7,9 +7,19 @@ import XCTest
 /// last event wins" a contract rather than a race: nothing else is mutated on
 /// the way, so the result is a function of event order alone.
 final class AppRoutingTests: XCTestCase {
-    func testExactlyFiveDistinctDestinations() {
-        XCTAssertEqual(AppDestination.allCases.count, 5)
-        XCTAssertEqual(Set(AppDestination.allCases.map(\.rawValue)).count, 5)
+    func testExactlySixDistinctDestinations() {
+        XCTAssertEqual(AppDestination.allCases.count, 6)
+        XCTAssertEqual(Set(AppDestination.allCases.map(\.rawValue)).count, 6)
+        // Named rather than counted alone. The count moved when the Device Inbox
+        // became a first-class destination, and a count on its own is satisfied
+        // by any sixth case — including a rename that silently drops this one and
+        // takes the sidebar row, the shell's switch arm and the menu bar's route
+        // with it.
+        XCTAssertTrue(AppDestination.allCases.contains(.deviceInbox),
+                      "the Device Inbox is no longer one of the app's destinations")
+        XCTAssertEqual(AppDestination.deviceInbox.rawValue, "deviceInbox",
+                       "the raw value is the runtime identity of the sidebar row and the "
+                       + "detail surface; renaming it silently breaks every UI query")
     }
     func testDownloadLinkGoesToStoredReceive() {
         let url = URL(string: "https://relayium.com/d/abc#k=zzz")!

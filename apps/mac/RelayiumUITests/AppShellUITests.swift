@@ -100,17 +100,23 @@ final class AppShellUITests: XCTestCase {
                       "the menu-bar recovery action did not restore the product window")
     }
 
+    /// Every destination's visible title and the `AppDestination` raw value the
+    /// product identifies it by. One list, so the suite that walks the sidebar and
+    /// the assertion that names a rendered surface cannot drift into two sets.
+    private static let destinationIDs = [
+        "Nearby": "nearby",
+        "Pairing code": "pairingCode",
+        "Send a link": "storedSend",
+        "Open a link": "storedReceive",
+        "Device Inbox": "deviceInbox",
+        "Account": "account",
+    ]
+
     /// Destination titles also appear as page headings. Scope navigation to
     /// the labelled sidebar outline so a rendered heading cannot turn one
     /// intended click into an ambiguous two-element query.
     private func sidebarDestination(_ title: String, in window: XCUIElement) -> XCUIElement {
-        let id = [
-            "Nearby": "nearby",
-            "Pairing code": "pairingCode",
-            "Send a link": "storedSend",
-            "Open a link": "storedReceive",
-            "Account": "account",
-        ][title]!
+        let id = Self.destinationIDs[title]!
         let stable = window.descendants(matching: .any)["sidebar-\(id)"].firstMatch
         if stable.exists { return stable }
 
@@ -147,17 +153,22 @@ final class AppShellUITests: XCTestCase {
                       "the unique main window did not appear")
     }
 
-    /// All five destinations are in the sidebar, by their accessibility labels.
+    /// All six destinations are in the sidebar, by their accessibility labels.
     ///
     /// By label rather than by index: the order is a design decision that may
     /// change, and a positional assertion would fail on a reorder that harmed
     /// nobody. What must not change is that every capability is reachable.
+    ///
+    /// Signed out, which is the state the list is checked in and the one that
+    /// matters: a row that appears only once somebody has an account cannot be
+    /// what tells them the capability is there. Device Inbox shipped without a
+    /// row at all and was, in practice, missing.
     func testEveryDestinationIsReachableFromTheSidebar() {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
         // English is the CI locale; the localized suites cover the other eight.
         for destination in ["Nearby", "Pairing code", "Send a link",
-                            "Open a link", "Account"] {
+                            "Open a link", "Device Inbox", "Account"] {
             let row = sidebarDestination(destination, in: window)
             XCTAssertTrue(row.waitForExistence(timeout: 10),
                           "the sidebar has no row for \(destination)")
@@ -1277,8 +1288,14 @@ final class AppShellUITests: XCTestCase {
 
         // Every destination, at that size, still renders its own surface and
         // keeps its primary control inside the window rather than past the edge.
+        //
+        // Device Inbox is in this list for the reason it was added to the sidebar
+        // at all: it is the one destination whose content is a grouped `Form`
+        // rather than a stack of cards, so it is the one whose height the
+        // scaffold's non-scrolling mode has to carry, and the minimum window is
+        // where that would clip first.
         for destination in ["Nearby", "Pairing code", "Send a link",
-                            "Open a link", "Account"] {
+                            "Open a link", "Device Inbox", "Account"] {
             let row = sidebarDestination(destination, in: window)
             XCTAssertTrue(row.waitForExistence(timeout: 10),
                           "the sidebar lost \(destination) at the minimum size")
@@ -1286,8 +1303,44 @@ final class AppShellUITests: XCTestCase {
             let heading = window.staticTexts[destination]
             XCTAssertTrue(heading.waitForExistence(timeout: 10) || window.title == destination,
                           "\(destination) rendered nothing at the minimum size")
+            // The heading above can be satisfied by the sidebar row itself, which
+            // carries the same words. The rendered destination cannot: the shell
+            // stamps `destination-<id>` on the detail half only.
+            let id = Self.destinationIDs[destination]!
+            XCTAssertTrue(window.descendants(matching: .any)["destination-\(id)"]
+                .waitForExistence(timeout: 10),
+                          "\(destination)'s row opened no destination at the minimum size")
             XCTAssertTrue(window.frame.contains(row.frame),
                           "\(destination)'s own sidebar row sits outside the window")
+
+            // **The surface is inside the window it opened in.**
+            //
+            // The assertions above were all true of a destination that shipped
+            // unusable: Device Inbox rendered, carried its identifier, and laid
+            // itself out 1326pt tall inside a 612pt window on macOS 26.6.
+            // SwiftUI centres a child that overflows, so the top 251pt — the
+            // heading and the first controls under it — was drawn above the top
+            // edge of the window, where nothing can see or reach it and no
+            // amount of scrolling helps, because the scroll view itself started
+            // there. "It rendered" is not the property that matters at the
+            // smallest size; "it rendered where the window is" is.
+            //
+            // Content BELOW the bottom edge is deliberately not asserted: a
+            // destination whose sections do not fit scrolls, and that is the
+            // designed answer. A surface taller than the whole window is not
+            // scrolling — it is a scroll view that believes it has room it does
+            // not have, and will never offer the rest of itself.
+            for surface in window.descendants(matching: .any)
+                .matching(identifier: "destination-\(id)").allElementsBoundByIndex {
+                XCTAssertGreaterThanOrEqual(
+                    surface.frame.minY, window.frame.minY,
+                    "\(destination) draws \(Int(window.frame.minY - surface.frame.minY))pt "
+                    + "of itself above the top of the window at the minimum size")
+                XCTAssertLessThanOrEqual(
+                    surface.frame.height, window.frame.height,
+                    "\(destination)'s surface is \(Int(surface.frame.height))pt tall in a "
+                    + "\(Int(window.frame.height))pt window, so it cannot scroll to the rest")
+            }
         }
     }
 

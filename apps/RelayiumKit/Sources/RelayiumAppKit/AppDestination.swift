@@ -1,16 +1,23 @@
 import Combine
 import Foundation
 
-/// The five places the app can put on screen. One case per sidebar row, and the
-/// only vocabulary the shell needs in order to decide what to render — which is
-/// what keeps the shell itself ignorant of the account (design invariant: the
+/// The six places the app can put on screen. One case per macOS sidebar row, and
+/// the only vocabulary the shell needs in order to decide what to render — which
+/// is what keeps the shell itself ignorant of the account (design invariant: the
 /// shell never reads `session.state`).
 ///
 /// `String`-backed so a destination has a stable, loggable name; `CaseIterable`
 /// so the sidebar and the tests enumerate the same set rather than two lists
 /// that can drift apart.
+///
+/// **`deviceInbox` is macOS-only, and the iOS tab bar deliberately has no tag for
+/// it.** The enum is shared so the two shells route from one vocabulary rather
+/// than two that can drift, but iOS has no resident receiver to put behind a tab
+/// — `IOSSurfaceGuardTests` therefore refuses any reference to it anywhere under
+/// `apps/ios`, because a `TabView` selection with no matching `.tag` renders
+/// nothing at all.
 public enum AppDestination: String, CaseIterable, Hashable, Sendable {
-    case nearby, pairingCode, storedSend, storedReceive, account
+    case nearby, pairingCode, storedSend, storedReceive, deviceInbox, account
 }
 
 /// Event → destination. Both entry points are pure functions of their own
@@ -97,15 +104,23 @@ public enum AppRouting {
     /// sixth destination has to state whether it sends files rather than
     /// inheriting an answer.
     ///
-    /// `.nearby` is the fallback for the two that cannot, and it is the only
+    /// `.nearby` is the fallback for the three that cannot, and it is the only
     /// defensible one: it is the sole send flow that needs neither an account
     /// nor a code, so dropping files on the Dock while signed out stages them
     /// instead of opening a sign-in wall. Routing to Stored send would make the
     /// app's most native gesture the one place a signed-out user is refused.
+    ///
+    /// **`deviceInbox` states its answer here rather than inheriting one, and the
+    /// answer is that it does not send.** It is the direction files arrive FROM
+    /// the user's own account, and it has no selection, no drop zone and no
+    /// recipient to choose; staging a Finder **Open With** there would put the
+    /// user's files on a surface that will never send them. Someone who opens a
+    /// file while reading their inbox settings is therefore moved to Nearby, the
+    /// same as from Open a link and from Account.
     public static func destination(forOpenedFiles current: AppDestination) -> AppDestination {
         switch current {
         case .nearby, .pairingCode, .storedSend: return current
-        case .storedReceive, .account: return .nearby
+        case .storedReceive, .deviceInbox, .account: return .nearby
         }
     }
 

@@ -485,6 +485,15 @@ struct RelayiumApp: App {
                 .environmentObject(verification)
                 .environmentObject(lanDiscovery)
                 .environmentObject(nearbyReceive)
+                // The receiver and the login-item preference reach the main
+                // window because the Device Inbox is a destination in it now,
+                // not only a settings tab. It is the SAME app-scoped controller
+                // the settings scene and the menu bar render — a second one
+                // would be a second scheduler claiming against one account, and
+                // `InboxSurfaceGuardTests` counts these injections for exactly
+                // that reason.
+                .environmentObject(inbox)
+                .environmentObject(loginItem)
                 .task { await session.restore() }
                 // Files the Share extension staged while this app was closed or
                 // in the background.
@@ -588,6 +597,13 @@ struct RelayiumApp: App {
                 .environmentObject(loginItem)
                 .environmentObject(verification)
                 .environmentObject(inbox)
+                // Both new here, and both for the shared Device Inbox surface:
+                // it reads the session to say WHY there is no account rather than
+                // only that there is none, and it writes the navigation model to
+                // send a signed-out user to the form — in the main window, which
+                // this scene may be the only thing open.
+                .environmentObject(session)
+                .environmentObject(navigation)
         }
 
         // Residency. This is the surface the persistent room socket reports
@@ -601,6 +617,10 @@ struct RelayiumApp: App {
                 .environmentObject(nearbyReceive)
                 .environmentObject(lanDiscovery)
                 .environmentObject(inbox)
+                // The Device Inbox item opens the main window on its
+                // destination, so the menu bar has to be able to select one. It
+                // renders none of them.
+                .environmentObject(navigation)
         }
     }
 }

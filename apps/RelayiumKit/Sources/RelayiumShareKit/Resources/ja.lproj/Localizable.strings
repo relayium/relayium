@@ -100,6 +100,7 @@
 /* MARK: ナビゲーションサイドバー */
 "nav.sectionDirect" = "ダイレクト";
 "nav.sectionLinks" = "リンク";
+"nav.sectionDevice" = "この Mac";
 "nav.nearby" = "近くのデバイス";
 "nav.nearbySubtitle" = "アカウント不要、端末から端末へ。同じネットワーク内のみ";
 "nav.pairingCode" = "ペアリングコード";
@@ -108,6 +109,7 @@
 "nav.storedSendSubtitle" = "大きなファイルを後から受け取り。サインインが必要でプラン上限あり";
 "nav.storedReceive" = "リンクを開く";
 "nav.storedReceiveSubtitle" = "誰かが送ったリンクを開く。アカウント不要、有効期限まで";
+"nav.deviceInboxSubtitle" = "自分のアカウントから送ったファイルが、選んだフォルダに届きます。サインインが必要、ウインドウを閉じていても動作します";
 "nav.account" = "アカウント";
 "nav.accountSubtitle" = "プラン、デバイス、保存済みファイル";
 "nav.a11ySections" = "Relayium の画面一覧";
@@ -582,7 +584,7 @@
 "inbox.pause" = "受信を一時停止";
 "inbox.resume" = "受信を再開";
 "inbox.reveal" = "Finder に表示";
-"inbox.openSettings" = "デバイス受信ボックスの設定を開く";
+"inbox.openDeviceInbox" = "デバイス受信ボックスを開く";
 "inbox.askHeading" = "あなたの回答を待っています";
 "inbox.askExplain" = "承認するまで、ダウンロードも書き込みも行われません。拒否すると、受け取らなかったことが送信者に伝わります。";
 "inbox.askAccept" = "受信する";

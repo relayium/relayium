@@ -51,13 +51,14 @@ struct AppShellView: View {
                 .navigationSplitViewColumnWidth(min: 208, ideal: 224, max: 288)
         } detail: {
             Group {
-                // No `default`: a sixth destination is a compile error here rather
-                // than a sidebar row that opens nothing.
+                // No `default`: a seventh destination is a compile error here
+                // rather than a sidebar row that opens nothing.
                 switch navigation.selection {
                 case .nearby:        NearbyDestination()
                 case .pairingCode:   PairingCodeDestination()
                 case .storedSend:    StoredSendDestination()
                 case .storedReceive: StoredReceiveDestination()
+                case .deviceInbox:   DeviceInboxDestination()
                 case .account:       AccountDestination()
                 }
             }

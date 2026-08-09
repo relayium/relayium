@@ -100,6 +100,7 @@
 /* MARK: 내비게이션 사이드바 */
 "nav.sectionDirect" = "직접 전송";
 "nav.sectionLinks" = "링크";
+"nav.sectionDevice" = "이 Mac";
 "nav.nearby" = "근처 기기";
 "nav.nearbySubtitle" = "계정 없이 기기에서 기기로 — 같은 네트워크에서만";
 "nav.pairingCode" = "페어링 코드";
@@ -108,6 +109,7 @@
 "nav.storedSendSubtitle" = "큰 파일을 나중에 받기 — 로그인 필요, 요금제 한도 적용";
 "nav.storedReceive" = "링크 열기";
 "nav.storedReceiveSubtitle" = "누군가 보낸 링크 열기 — 계정 불필요, 만료 전까지";
+"nav.deviceInboxSubtitle" = "내 계정에서 보낸 파일이 직접 고른 폴더로 도착합니다 — 로그인 필요, 창을 닫아도 계속 작동합니다";
 "nav.account" = "계정";
 "nav.accountSubtitle" = "요금제, 기기, 저장된 파일";
 "nav.a11ySections" = "Relayium 화면";
@@ -582,7 +584,7 @@
 "inbox.pause" = "수신 일시 정지";
 "inbox.resume" = "수신 재개";
 "inbox.reveal" = "Finder에서 보기";
-"inbox.openSettings" = "기기 수신함 설정 열기";
+"inbox.openDeviceInbox" = "기기 수신함 열기";
 "inbox.askHeading" = "응답을 기다리는 중";
 "inbox.askExplain" = "승인하기 전에는 아무것도 내려받거나 쓰지 않습니다. 거절하면 받지 않았다는 사실이 보낸 사람에게 전달됩니다.";
 "inbox.askAccept" = "받기";

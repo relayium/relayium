@@ -100,6 +100,7 @@
 /* MARK: Navigationsleiste */
 "nav.sectionDirect" = "Direkt";
 "nav.sectionLinks" = "Links";
+"nav.sectionDevice" = "Dieser Mac";
 "nav.nearby" = "In der Nähe";
 "nav.nearbySubtitle" = "Ohne Konto, von Gerät zu Gerät — nur im selben Netzwerk";
 "nav.pairingCode" = "Kopplungscode";
@@ -108,6 +109,7 @@
 "nav.storedSendSubtitle" = "Große Dateien, später abgeholt — Anmeldung, Tarifgrenzen gelten";
 "nav.storedReceive" = "Link öffnen";
 "nav.storedReceiveSubtitle" = "Einen zugeschickten Link öffnen — ohne Konto, bis er abläuft";
+"nav.deviceInboxSubtitle" = "Dateien aus deinem eigenen Konto landen in einem Ordner deiner Wahl — anmelden; funktioniert auch bei geschlossenem Fenster";
 "nav.account" = "Konto";
 "nav.accountSubtitle" = "Tarif, Geräte und abgelegte Dateien";
 "nav.a11ySections" = "Relayium-Bereiche";
@@ -591,7 +593,7 @@
 "inbox.pause" = "Empfang pausieren";
 "inbox.resume" = "Empfang fortsetzen";
 "inbox.reveal" = "Im Finder zeigen";
-"inbox.openSettings" = "Einstellungen des Geräte-Posteingangs öffnen";
+"inbox.openDeviceInbox" = "Geräte-Posteingang öffnen";
 "inbox.askHeading" = "Wartet auf deine Antwort";
 "inbox.askExplain" = "Bis du annimmst, wird nichts geladen und nichts geschrieben. Eine Ablehnung teilt dem Absender mit, dass nichts übernommen wurde.";
 "inbox.askAccept" = "Empfangen";

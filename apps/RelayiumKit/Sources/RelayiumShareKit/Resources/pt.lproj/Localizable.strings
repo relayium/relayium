@@ -100,6 +100,7 @@
 /* MARK: barra lateral de navegação */
 "nav.sectionDirect" = "Direto";
 "nav.sectionLinks" = "Ligações";
+"nav.sectionDevice" = "Este Mac";
 "nav.nearby" = "Por perto";
 "nav.nearbySubtitle" = "Sem conta, de aparelho para aparelho — só na mesma rede";
 "nav.pairingCode" = "Código de emparelhamento";
@@ -108,6 +109,7 @@
 "nav.storedSendSubtitle" = "Ficheiros grandes, levantados depois — inicie sessão; limites do plano";
 "nav.storedReceive" = "Abrir uma ligação";
 "nav.storedReceiveSubtitle" = "Abra uma ligação que lhe enviaram — sem conta, até expirar";
+"nav.deviceInboxSubtitle" = "Os ficheiros da sua própria conta chegam a uma pasta à sua escolha — inicie sessão; funciona com a janela fechada";
 "nav.account" = "Conta";
 "nav.accountSubtitle" = "Plano, dispositivos e ficheiros guardados";
 "nav.a11ySections" = "Destinos do Relayium";
@@ -591,7 +593,7 @@
 "inbox.pause" = "Pausar receção";
 "inbox.resume" = "Retomar receção";
 "inbox.reveal" = "Mostrar no Finder";
-"inbox.openSettings" = "Abrir as definições da caixa de entrada do dispositivo";
+"inbox.openDeviceInbox" = "Abrir a caixa de entrada do dispositivo";
 "inbox.askHeading" = "À espera da sua resposta";
 "inbox.askExplain" = "Nada é descarregado nem escrito até aceitar. Recusar informa quem enviou de que nada foi recebido.";
 "inbox.askAccept" = "Receber";

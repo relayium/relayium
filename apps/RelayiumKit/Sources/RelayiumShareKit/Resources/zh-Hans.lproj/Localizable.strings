@@ -100,6 +100,7 @@
 /* MARK: 导航侧栏 */
 "nav.sectionDirect" = "直连";
 "nav.sectionLinks" = "链接";
+"nav.sectionDevice" = "这台 Mac";
 "nav.nearby" = "附近设备";
 "nav.nearbySubtitle" = "免账户，设备之间直传——仅限同一网络";
 "nav.pairingCode" = "配对码";
@@ -108,6 +109,7 @@
 "nav.storedSendSubtitle" = "大文件，稍后再取——需登录，受套餐限制";
 "nav.storedReceive" = "打开链接";
 "nav.storedReceiveSubtitle" = "打开别人发来的链接——无需账户，过期前有效";
+"nav.deviceInboxSubtitle" = "来自你自己账户的文件会送到你选定的文件夹——需要登录；关闭窗口也能接收";
 "nav.account" = "账户";
 "nav.accountSubtitle" = "套餐、设备与已存文件";
 "nav.a11ySections" = "Relayium 功能页";
@@ -582,7 +584,7 @@
 "inbox.pause" = "暂停接收";
 "inbox.resume" = "恢复接收";
 "inbox.reveal" = "在访达中显示";
-"inbox.openSettings" = "打开设备收件箱设置";
+"inbox.openDeviceInbox" = "打开设备收件箱";
 "inbox.askHeading" = "正在等待你的答复";
 "inbox.askExplain" = "在你同意之前，不会下载也不会写入任何内容。拒绝会告知发送方文件未被接收。";
 "inbox.askAccept" = "接收";

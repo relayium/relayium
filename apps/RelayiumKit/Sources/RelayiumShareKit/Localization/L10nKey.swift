@@ -169,7 +169,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
 
     // MARK: - Navigation
     //
-    // The macOS sidebar. Five rows, all visible at once, each with a one-line
+    // The macOS sidebar. Six rows, all visible at once, each with a one-line
     // subtitle — so what a destination does is readable before it is opened
     // rather than after. The subtitles are also the rows' accessibility hints,
     // which is why each one is a sentence and not a fragment.
@@ -178,6 +178,11 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case navSectionDirect = "nav.sectionDirect"
     /// Sidebar section: the two destinations that go through a stored link.
     case navSectionLinks = "nav.sectionLinks"
+    /// Sidebar section: what this Mac itself does while nobody is watching it.
+    /// A section of its own rather than a row under Links, because the Device
+    /// Inbox is neither a link nor a conversation with somebody present — it is
+    /// this machine as a destination.
+    case navSectionDevice = "nav.sectionDevice"
     case navNearby = "nav.nearby"
     /// Says "no account needed" because that is the fact the old shell hid.
     case navNearbySubtitle = "nav.nearbySubtitle"
@@ -187,6 +192,11 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case navStoredSendSubtitle = "nav.storedSendSubtitle"
     case navStoredReceive = "nav.storedReceive"
     case navStoredReceiveSubtitle = "nav.storedReceiveSubtitle"
+    /// The Device Inbox row's subtitle, and therefore its accessibility hint.
+    /// It has no title key of its own: the row renders `inbox.title`, so the
+    /// sidebar, the menu bar, the settings tab and the destination heading
+    /// cannot end up calling one feature four things.
+    case navDeviceInboxSubtitle = "nav.deviceInboxSubtitle"
     case navAccount = "nav.account"
     case navAccountSubtitle = "nav.accountSubtitle"
     /// The sidebar list's accessibility label.
@@ -1068,7 +1078,14 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case inboxPause = "inbox.pause"
     case inboxResume = "inbox.resume"
     case inboxReveal = "inbox.reveal"
-    case inboxOpenSettings = "inbox.openSettings"
+    /// The menu bar's route to the Device Inbox.
+    ///
+    /// It replaces `inbox.openSettings`, and the rename is the point rather than
+    /// tidiness: the item used to promise a settings window, which was the only
+    /// full surface the feature had. It now opens the main window on the Device
+    /// Inbox destination, so a title naming Settings would send the user
+    /// somewhere the click no longer goes.
+    case inboxOpenDeviceInbox = "inbox.openDeviceInbox"
 
     case inboxAskHeading = "inbox.askHeading"
     case inboxAskExplain = "inbox.askExplain"

@@ -1,15 +1,22 @@
 import SwiftUI
 import RelayiumAppKit
 
-/// Five rows, all visible at once, in two sections plus a standalone Account row.
+/// Six rows, all visible at once, in three sections plus a standalone Account row.
 ///
 /// This is the round's central correction. Everything the app can do used to be
 /// either behind a sign-in form the capability did not need or inside a
-/// collapsed `DisclosureGroup` under it; naming all five destinations at all
-/// times is what makes the three anonymous ones findable. Each row carries a
-/// compact subtitle that may wrap, so a destination is understandable before it
-/// is opened rather than after — and that same sentence is the row's
-/// accessibility hint.
+/// collapsed `DisclosureGroup` under it; naming every destination at all times is
+/// what makes the three anonymous ones findable. Each row carries a compact
+/// subtitle that may wrap, so a destination is understandable before it is opened
+/// rather than after — and that same sentence is the row's accessibility hint.
+///
+/// **Device Inbox is a row here for exactly the same reason the other five are.**
+/// It shipped with a resident receiver, a menu-bar line and a complete settings
+/// pane, and was still missing in practice: the only full surface was behind ⌘,
+/// and nothing in the window named the feature at all. It is listed signed out
+/// like everything else — the screen behind it explains what it needs and offers
+/// the way to an account, which is a different thing from hiding the row until
+/// somebody already has one.
 struct SidebarView: View {
     @EnvironmentObject private var navigation: AppNavigationModel
     /// Which destination is presenting the live session — the same object the
@@ -69,6 +76,22 @@ struct SidebarView: View {
                     subtitle: L10n.t(.navStoredReceiveSubtitle))
             } header: {
                 sectionHeader(.navSectionLinks)
+            }
+            // A section of its own rather than a third row under Links, because
+            // the Device Inbox is neither a link nor a conversation with somebody
+            // present: it is this Mac as a destination, running with the window
+            // closed. One row today; a section is what the next resident
+            // capability joins without renaming the group around it.
+            Section {
+                // The title is `inbox.title`, the same key the menu bar, the
+                // settings tab and the destination heading render — so the
+                // feature has one name in the product rather than four.
+                row(.deviceInbox,
+                    symbol: "tray.and.arrow.down",
+                    title: L10n.t(.inboxTitle),
+                    subtitle: L10n.t(.navDeviceInboxSubtitle))
+            } header: {
+                sectionHeader(.navSectionDevice)
             }
             // Standalone rather than in a section of its own: the account is not
             // a transport, and grouping it under a heading would imply it is one

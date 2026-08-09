@@ -946,12 +946,34 @@ final class MacSurfaceGuardTests: XCTestCase {
                        ["Components/SecurityCodeText.swift"])
     }
 
-    func testTheFiveDestinationFilesExist() {
+    func testTheSixDestinationFilesExist() {
         for f in ["NearbyDestination", "PairingCodeDestination", "StoredSendDestination",
-                  "StoredReceiveDestination", "AccountDestination"] {
+                  "StoredReceiveDestination", "DeviceInboxDestination", "AccountDestination"] {
             XCTAssertTrue(FileManager.default.fileExists(
                 atPath: macRoot.appendingPathComponent("Destinations/\(f).swift").path), f)
         }
+    }
+
+    /// **Every destination has a sidebar row, and every sidebar row a destination.**
+    ///
+    /// The two lists are written in two files — the shell's `switch` and the
+    /// sidebar's `row(_:)` calls — and the failure mode is silent in both
+    /// directions: a case the sidebar never names is a screen with no way in
+    /// (which is the entire reason the Device Inbox needed this round), and a row
+    /// with no arm is a compile error only because the `switch` has no `default`.
+    /// Checked against `AppDestination.allCases` so neither list can be the one
+    /// that is right.
+    func testEveryDestinationIsBothASidebarRowAndAShellArm() throws {
+        let sidebar = try source(named: "Shell/SidebarView.swift")
+        let shell = try source(named: "Shell/AppShellView.swift")
+        for destination in AppDestination.allCases {
+            XCTAssertTrue(sidebar.contains("row(.\(destination.rawValue),"),
+                          "the sidebar has no row for \(destination.rawValue)")
+            XCTAssertTrue(shell.contains("case .\(destination.rawValue):"),
+                          "the shell renders nothing for \(destination.rawValue)")
+        }
+        XCTAssertEqual(occurrences(of: "row(.", in: sidebar), AppDestination.allCases.count,
+                       "the sidebar renders a row for something that is not a destination")
     }
 
     /// Constraint 5. `WindowGroup` anywhere means a second window is reachable,
@@ -1081,8 +1103,20 @@ final class MacSurfaceGuardTests: XCTestCase {
         let sidebar = try source(named: "Shell/SidebarView.swift")
         XCTAssertTrue(sidebar.contains(".lineLimit(3)"),
                       "sidebar subtitles must be visible rather than one-line ellipses")
-        XCTAssertEqual(occurrences(of: "sectionHeader(.navSection", in: sidebar), 2,
-                       "both transfer groups need the named accessibility header")
+        // Three now: the two transfer groups and the one this Mac is itself the
+        // destination for. A group without the named header is a heading macOS
+        // promotes to `AXHeading` and then leaves empty.
+        XCTAssertEqual(occurrences(of: "sectionHeader(.navSection", in: sidebar), 3,
+                       "every sidebar group needs the named accessibility header")
+        XCTAssertTrue(sidebar.contains("sectionHeader(.navSectionDevice)"),
+                      "the Device Inbox row sits in an unnamed group")
+        // The row's title is the feature's one name. A `nav.deviceInbox` key of
+        // its own is how the sidebar, the menu bar, the settings tab and the
+        // destination heading end up calling one capability four things.
+        XCTAssertTrue(sidebar.contains("title: L10n.t(.inboxTitle)"),
+                      "the Device Inbox row invented a second name for the feature")
+        XCTAssertTrue(sidebar.contains("subtitle: L10n.t(.navDeviceInboxSubtitle)"),
+                      "the Device Inbox row has no subtitle, so it has no accessibility hint")
         for kept in [".accessibilityElement(children: .ignore)",
                      ".accessibilityLabel(title)",
                      ".accessibilityAddTraits(.isHeader)"] {
@@ -1096,10 +1130,21 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// cannot happen as an accidental scaffold edit.
     func testOnlyStructuredDataDestinationsOptOutOfTheReadingMeasure() throws {
         for file in ["Destinations/NearbyDestination.swift",
-                     "Destinations/AccountDestination.swift"] {
+                     "Destinations/AccountDestination.swift",
+                     // A grouped `Form` of controls, not prose.
+                     "Destinations/DeviceInboxDestination.swift"] {
             XCTAssertTrue(try source(named: file).contains("contentMaxWidth: nil"),
                           "\(file) must let its roster/list use the detail column")
         }
+        // Exactly one destination supplies its own scrolling, and it is the one
+        // whose content is a `Form` — which is already a scroll view. A second
+        // opt-out is a screen whose content silently stops scrolling at all.
+        let optedOut = try ["Nearby", "PairingCode", "StoredSend", "StoredReceive",
+                            "DeviceInbox", "Account"]
+            .filter { try source(named: "Destinations/\($0)Destination.swift")
+                .contains("scrolls: false") }
+        XCTAssertEqual(optedOut, ["DeviceInbox"],
+                       "a destination opted out of the scaffold's scroll view")
         for file in ["Destinations/PairingCodeDestination.swift",
                      "Destinations/StoredSendDestination.swift",
                      "Destinations/StoredReceiveDestination.swift"] {
@@ -1202,8 +1247,27 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(login.contains(".accessibilityIdentifier(\"account.switchMode\")"))
         XCTAssertTrue(ui.contains("[\"account.switchMode\"].firstMatch"),
                       "macOS 15 may not expose a link-style Button as a button")
+        // `DeviceInbox/DeviceInboxSurface.swift` joins the two exemptions for the
+        // reason they exist: it FORWARDS the half a gate asked for, exactly as
+        // `CapabilityGateView` does, and the type annotation on that closure is
+        // the only reason it names `AuthMode` at all. The three send panes stay
+        // outside the exemption because they forward with `$0` and never need
+        // the type — this one is a stored property, which does.
+        //
+        // The exemption is bounded rather than granted: the mode must never
+        // become the surface's own state, and it must never be branched on.
+        // Deciding the form's mode is what this guard forbids; carrying somebody
+        // else's request through is not the same thing.
+        let shared = try source(named: "DeviceInbox/DeviceInboxSurface.swift")
+        XCTAssertTrue(shared.contains("let onAccount: (AuthMode) -> Void"),
+                      "the shared surface no longer forwards the requested half")
+        XCTAssertFalse(shared.contains("@State") && shared.contains("AuthMode"),
+                       "the shared Device Inbox surface holds the form's mode itself")
+        XCTAssertFalse(shared.contains("switch mode"),
+                       "the shared Device Inbox surface branches on the form's mode")
         for (name, text) in try sources(under: macRoot, atLeast: 20)
-        where name != "LoginView.swift" && name != "Components/CapabilityGateView.swift" {
+        where name != "LoginView.swift" && name != "Components/CapabilityGateView.swift"
+            && name != "DeviceInbox/DeviceInboxSurface.swift" {
             XCTAssertFalse(text.contains("AuthMode"),
                            "\(name) must not decide the form's mode")
         }

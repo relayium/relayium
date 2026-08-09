@@ -103,6 +103,7 @@
 /* MARK: شريط التنقل الجانبي */
 "nav.sectionDirect" = "مباشر";
 "nav.sectionLinks" = "الروابط";
+"nav.sectionDevice" = "هذا الـ Mac";
 "nav.nearby" = "الأجهزة القريبة";
 "nav.nearbySubtitle" = "بدون حساب، من جهاز إلى جهاز — على الشبكة نفسها فقط";
 "nav.pairingCode" = "رمز الاقتران";
@@ -111,6 +112,7 @@
 "nav.storedSendSubtitle" = "ملفات كبيرة تُستلَم لاحقًا — يلزم تسجيل الدخول وتنطبق حدود الباقة";
 "nav.storedReceive" = "فتح رابط";
 "nav.storedReceiveSubtitle" = "افتح رابطًا أرسله إليك أحدهم — بدون حساب، قبل انتهاء صلاحيته";
+"nav.deviceInboxSubtitle" = "الملفات المُرسَلة من حسابك تصل إلى مجلد تختاره — سجّل الدخول؛ ويعمل والنافذة مغلقة";
 "nav.account" = "الحساب";
 "nav.accountSubtitle" = "الخطة والأجهزة والملفات المخزّنة";
 "nav.a11ySections" = "وجهات Relayium";
@@ -630,7 +632,7 @@
 "inbox.pause" = "إيقاف الاستقبال مؤقتًا";
 "inbox.resume" = "استئناف الاستقبال";
 "inbox.reveal" = "إظهار في Finder";
-"inbox.openSettings" = "فتح إعدادات صندوق وارد الجهاز";
+"inbox.openDeviceInbox" = "فتح صندوق وارد الجهاز";
 "inbox.askHeading" = "بانتظار ردّك";
 "inbox.askExplain" = "لا يُنزَّل أي شيء ولا يُكتَب حتى تقبل. الرفض يُعلم المُرسِل بأن الملف لم يُستلَم.";
 "inbox.askAccept" = "استقبال";

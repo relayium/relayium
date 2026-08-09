@@ -2864,6 +2864,36 @@ final class IOSSurfaceGuardTests: XCTestCase {
         }
     }
 
+    /// **iOS never selects the macOS-only Device Inbox destination.**
+    ///
+    /// `AppDestination` is deliberately one vocabulary for both shells, so the
+    /// two cannot drift into routing from two enums. The cost of sharing it is
+    /// this: macOS gained a sixth case for a resident receiver iOS does not have,
+    /// and a `TabView` handed a selection with no matching `.tag` renders an
+    /// empty tab — no error, no fallback, just a screen with nothing on it.
+    ///
+    /// The tab set above is checked to name five destinations; this is the other
+    /// half, and it is the half that catches the accident. A `navigation.select`
+    /// or an `AppRouting` answer that reached iOS with `.deviceInbox` in it would
+    /// leave the app on a blank tab the user cannot leave except by tapping
+    /// another one, and nothing in the tab list would look wrong.
+    func testNoIOSSurfaceCanSelectTheMacOnlyDeviceInboxDestination() throws {
+        for (name, text) in try sources() {
+            XCTAssertFalse(text.contains("deviceInbox"),
+                           "\(name) names the macOS-only Device Inbox destination; the iOS "
+                           + "tab bar has no tag for it and would render an empty tab")
+        }
+        // And the shared routing rule keeps iOS out of it by construction: the
+        // only destinations it can produce are ones the tab bar has tags for.
+        for kind in NearbyReceiveKind.allCases {
+            XCTAssertNotEqual(AppRouting.destination(forIncoming: kind), .deviceInbox)
+        }
+        for destination in AppDestination.allCases {
+            XCTAssertNotEqual(AppRouting.destination(forOpenedFiles: destination), .deviceInbox,
+                              "an opened file routes to a destination iOS cannot render")
+        }
+    }
+
     /// **Nearby is anonymous in both directions, and it is enforced by not
     /// naming the account rather than by remembering not to gate it.**
     ///

@@ -19,7 +19,7 @@ import RelayiumKit
 /// run — a privacy consequence, not a tidiness one, and not something a
 /// `--dry-run` flag on the test would fix.
 ///
-/// The five destinations, the settings scene and all nine languages are the real
+/// The six destinations, the settings scene and all nine languages are the real
 /// UI. Residency and notification registration are skipped because they reach
 /// outward; the generated-text-code test additionally injects the deterministic
 /// model below so it can hold a handoff screen without contacting production.
@@ -58,6 +58,30 @@ enum UITestMode {
     // nonlocalized: a test-only launch argument, absent from Release
     static let stallUploadArgument = "--relayium-ui-testing-stall-upload"
     static let stallsUpload = ProcessInfo.processInfo.arguments.contains(stallUploadArgument)
+
+    /// A signed-in launch whose account id the Device Inbox refuses to use.
+    ///
+    /// **The one state where "there is an account" and "the receiver adopted it"
+    /// disagree permanently.** `InboxController.session(_:)` fails closed on an
+    /// id this build will not use as a keychain item name or a defaults key: it
+    /// stops the loop, drops the generation and reports `.failed(.identity)`
+    /// while the session beside it stays perfectly `ready`. Every other
+    /// disagreement between those two facts is one main-actor turn long.
+    ///
+    /// It exists because the Device Inbox surface renders a THIRD branch for it,
+    /// and a branch inferred from a neighbouring state is a branch whose first
+    /// execution is in front of a user. Rendered the obvious ways it is either a
+    /// pane of controls whose setters return immediately, or a capability gate
+    /// handed an `.allowed` it asserts on and draws nothing for.
+    ///
+    /// Nothing is substituted except the account id in the fixture's own
+    /// `/api/me`: the real session, the real bridge, the real controller and the
+    /// real identifier check all run, and the check refuses before any store,
+    /// keychain item or network call is reached.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let unusableAccountArgument = "--relayium-ui-testing-unusable-account"
+    static let hasUnusableAccount = ProcessInfo.processInfo.arguments
+        .contains(unusableAccountArgument)
 
     // nonlocalized: a test-only launch argument, absent from Release
     static let signedInArgument = "--relayium-ui-testing-signed-in"
@@ -274,6 +298,16 @@ private struct UITestFailingICEClient: ICEConfigClient {
 final class UITestAccountTransport: URLProtocol {
     // nonlocalized: a bearer no server would accept
     static let bearer = "uitest-bearer"
+    /// The account this fixture is signed in as.
+    ///
+    /// The second spelling carries a `/`, which `StoredObjectID.checked` refuses
+    /// — so the Device Inbox cannot bind a keychain item, a defaults key or a
+    /// journal directory to it and fails closed. It is a legal `NativeUser.id` as
+    /// far as every other surface is concerned, which is the point: the account
+    /// screen, the device list and the usage meters go on working, and only the
+    /// receiver stops.
+    // nonlocalized: acceptance fixture account ids, absent from Release
+    static var accountID: String { UITestMode.hasUnusableAccount ? "acct/uitest" : "acct_uitest" }
     // nonlocalized: an acceptance fixture, not a real address
     static let email = "person@example.com"
     // nonlocalized: an acceptance fixture row, absent from Release
@@ -303,12 +337,12 @@ final class UITestAccountTransport: URLProtocol {
         // not /api/me's 14-field one: a fixture that returned the wrong shape
         // here would prove the app tolerates a body no server sends.
         offer("/api/auth/native/login", """
-            {"token":"\(bearer)","user":{"id":"acct_uitest","email":"\(email)",
+            {"token":"\(bearer)","user":{"id":"\(accountID)","email":"\(email)",
             "displayName":"","hasPassword":true,"emailVerified":true,
             "linkedMethods":["password"]}}
             """, as: LoginSuccessBody.self)
         offer("/api/me", """
-            {"user":{"id":"acct_uitest","email":"\(email)","displayName":"",
+            {"user":{"id":"\(accountID)","email":"\(email)","displayName":"",
             "hasPassword":true,"emailVerified":true,"linkedMethods":["password"],
             "onlyOwnNodes":false,"planId":"free","subscriptionStatus":"none",
             "subscriptionEnd":0,"hasBilling":false,"scheduledPlanId":"","scheduledCycle":"","billingCycle":""}}

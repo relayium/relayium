@@ -101,6 +101,7 @@
 /* MARK: navigation sidebar */
 "nav.sectionDirect" = "Direct";
 "nav.sectionLinks" = "Links";
+"nav.sectionDevice" = "This Mac";
 "nav.nearby" = "Nearby";
 "nav.nearbySubtitle" = "No account, device to device — same network only";
 "nav.pairingCode" = "Pairing code";
@@ -109,6 +110,7 @@
 "nav.storedSendSubtitle" = "Large files, picked up later — sign in; plan limits apply";
 "nav.storedReceive" = "Open a link";
 "nav.storedReceiveSubtitle" = "Open a link somebody sent — no account, until it expires";
+"nav.deviceInboxSubtitle" = "Files from your own account land in a folder you choose — sign in; works with the window closed";
 "nav.account" = "Account";
 "nav.accountSubtitle" = "Plan, devices and stored files";
 "nav.a11ySections" = "Relayium destinations";
@@ -592,7 +594,7 @@
 "inbox.pause" = "Pause receiving";
 "inbox.resume" = "Resume receiving";
 "inbox.reveal" = "Show in Finder";
-"inbox.openSettings" = "Open Device Inbox settings";
+"inbox.openDeviceInbox" = "Open Device Inbox";
 "inbox.askHeading" = "Waiting for your answer";
 "inbox.askExplain" = "Nothing is downloaded or written until you accept. Declining tells the sender it was not taken.";
 "inbox.askAccept" = "Receive";
