@@ -218,7 +218,11 @@ jobs:
       # produces a different app that cannot load UI automation. The Debug-only
       # launch argument keeps the hosted runner off the public Nearby rendezvous.
       - name: Run macOS product-flow UI smoke
-        timeout-minutes: 15
+        # The suite now includes the eight signed Device Inbox lifecycle flows.
+        # macos-15 runners reached the old 15-minute ceiling twice while the
+        # same exact-source suite passed locally; keep a finite bound without
+        # terminating a healthy full product gate before it can report results.
+        timeout-minutes: 25
         run: |
           xcodebuild -project apps/mac/Relayium.xcodeproj -scheme Relayium \
             -destination 'platform=macOS' \
