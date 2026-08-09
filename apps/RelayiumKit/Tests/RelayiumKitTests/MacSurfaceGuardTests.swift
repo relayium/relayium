@@ -141,8 +141,11 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(ui.contains("-SUEnableAutomaticChecks") && ui.contains("NO"),
                       "Sparkle's first-launch consent can cover the product window")
         XCTAssertTrue(ui.contains("app.statusItems.firstMatch") &&
-                      ui.contains("app.menuItems[\"Open Relayium\"]"),
+                      ui.contains("app.typeKey(\"o\", modifierFlags: [])"),
                       "a restored closed-window state has no real recovery path in the suite")
+        let menu = try source(named: "MenuBarView.swift")
+        XCTAssertTrue(menu.contains(".keyboardShortcut(\"o\", modifiers: [])"),
+                      "menu-bar recovery has no language-independent keyboard action")
         XCTAssertTrue(ui.contains("$0.frame.midX < dividingX"),
                       "macOS 15 has no spatial fallback when List drops row identifiers")
         XCTAssertTrue(ui.contains("label == %@ OR value == %@"),
@@ -168,7 +171,7 @@ final class MacSurfaceGuardTests: XCTestCase {
             "xcodebuild -project apps/mac/Relayium.xcodeproj -scheme Relayium"))
         XCTAssertTrue(workflow.contains("-destination 'platform=macOS'"))
         XCTAssertTrue(workflow.contains("-only-testing:RelayiumUITests test"))
-        XCTAssertTrue(workflow.contains("timeout-minutes: 15"),
+        XCTAssertTrue(workflow.contains("timeout-minutes: 25"),
                       "a hosted desktop failure can occupy the runner indefinitely")
     }
 
