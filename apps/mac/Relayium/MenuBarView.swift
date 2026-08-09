@@ -87,6 +87,9 @@ struct MenuBarView: View {
             activateApp()
             openWindow(id: "main")
         }
+        // The visible title is localized, while this shortcut stays stable in
+        // every language and keeps window recovery keyboard-accessible.
+        .keyboardShortcut("o", modifiers: [])
         Divider()
         // The R1-A acceptance signal, kept reachable: proves the Kit is linked and
         // both native cores initialized in the shipped bundle. `ok`/`FAILED` are

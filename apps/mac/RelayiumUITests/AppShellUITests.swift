@@ -95,12 +95,9 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(statusItem.waitForExistence(timeout: 5),
                       "the resident app has no menu-bar recovery surface")
         statusItem.click()
-        let open = app.menuItems["Open Relayium"]
-        XCTAssertTrue(open.waitForExistence(timeout: 5),
-                      "the menu-bar surface cannot reopen the product window")
-        open.click()
+        app.typeKey("o", modifierFlags: [])
         XCTAssertTrue(mainWindow.waitForExistence(timeout: 10),
-                      "Open Relayium did not restore the product window")
+                      "the menu-bar recovery action did not restore the product window")
     }
 
     /// Destination titles also appear as page headings. Scope navigation to

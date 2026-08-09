@@ -55,10 +55,7 @@ final class DeviceInboxUITests: XCTestCase {
             XCTAssertTrue(statusItem.waitForExistence(timeout: 5),
                           "the resident app has no menu-bar recovery surface")
             statusItem.click()
-            let open = app.menuItems["Open Relayium"]
-            XCTAssertTrue(open.waitForExistence(timeout: 5),
-                          "the menu-bar surface cannot reopen the product window")
-            open.click()
+            app.typeKey("o", modifierFlags: [])
         }
         XCTAssertTrue(mainWindow.waitForExistence(timeout: 20),
                       "the product window did not open")
@@ -306,9 +303,7 @@ final class DeviceInboxUITests: XCTestCase {
         XCTAssertTrue(inboxLine.exists,
                       "the menu bar does not report the Device Inbox with the window closed")
 
-        let open = app.menuItems["Open Relayium"]
-        XCTAssertTrue(open.waitForExistence(timeout: 10))
-        open.click()
+        app.typeKey("o", modifierFlags: [])
         XCTAssertTrue(mainWindow.waitForExistence(timeout: 15),
                       "the menu bar could not reopen the window")
         let productWindows = app.windows.allElementsBoundByIndex
