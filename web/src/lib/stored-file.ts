@@ -22,6 +22,38 @@ export interface UploadResult {
   key: string; // base64url, belongs in the URL fragment only
 }
 
+/** Why this ciphertext exists (protocol §24). `share` is the capability-link
+ *  object — public `meta`/`blob`, listed in the account's files — and is the
+ *  default for every caller that says nothing, which is every share upload.
+ *
+ *  `device_task` is ciphertext uploaded for ONE Device Inbox delivery: no link,
+ *  no file-list row, 404 on the public endpoints even for its owner. It carries
+ *  an authorization decision, so it is sent explicitly on BOTH upload paths and
+ *  a resumable session persists it — `finalize` may run on a different instance
+ *  and must not re-derive it from a query string it can no longer see. */
+export type UploadPurpose = "share" | "device_task";
+
+export interface UploadOptions {
+  burnAfterRead: boolean;
+  ttl: number;
+  /** Omitted means `share`, exactly as the server resolves an absent
+   *  `?purpose=`. Never inferred from anything else. */
+  purpose?: UploadPurpose;
+}
+
+/** The retention/purpose query both upload paths share.
+ *
+ *  `purpose` is appended only when the caller asked for a non-default one, so a
+ *  share upload's request is byte-for-byte what it was before this existed. A
+ *  `device_task` upload additionally must be unlimited-until-TTL — the queue
+ *  refuses a limited object (protocol §12) — and the server refuses the
+ *  contradiction rather than rewriting it, so this never silently drops the
+ *  caller's burn flag. */
+function uploadQuery(opts: UploadOptions): string {
+  const q = `?burnAfterRead=${opts.burnAfterRead ? 1 : 0}&ttl=${opts.ttl}`;
+  return opts.purpose && opts.purpose !== "share" ? `${q}&purpose=${encodeURIComponent(opts.purpose)}` : q;
+}
+
 export interface StoredFileMeta {
   encManifest: string; // base64 (standard)
   size: number;
@@ -163,7 +195,7 @@ export interface UploadProgress {
 /** Encrypt files in-browser and POST the ciphertext; returns the link parts. */
 export async function uploadFile(
   files: File[],
-  opts: { burnAfterRead: boolean; ttl: number },
+  opts: UploadOptions,
   onProgress?: (p: UploadProgress) => void,
   signal?: AbortSignal,
 ): Promise<UploadResult> {
@@ -187,9 +219,8 @@ export async function uploadFile(
 
   // XHR, not fetch: upload.onprogress gives real byte-level upload progress that
   // fetch cannot surface. The body is the same assembled ciphertext Blob.
-  const query = `?burnAfterRead=${opts.burnAfterRead ? 1 : 0}&ttl=${opts.ttl}`;
   const { id, expiresAt } = await postWithProgress(
-    "/api/files" + query,
+    "/api/files" + uploadQuery(opts),
     new Blob(parts),
     signal,
     (loaded, tot) => onProgress?.({ phase: "uploading", sent: loaded, total: tot }),
@@ -224,7 +255,7 @@ const FALLBACK_MAX_CIPHER_BYTES = 64 << 20;
  *  因为单发路径的 2× 峰值会直接把标签页打崩 —— 报错好过崩溃。 */
 export async function uploadFileResumable(
   files: File[],
-  opts: { burnAfterRead: boolean; ttl: number },
+  opts: UploadOptions,
   onProgress?: (p: UploadProgress) => void,
   signal?: AbortSignal,
 ): Promise<UploadResult> {
@@ -265,7 +296,7 @@ export function uploadBufferPeak(): number {
  *  约 2× 密文，1 GiB 上传在手机上必 OOM）。 */
 async function chunkedUpload(
   files: File[],
-  opts: { burnAfterRead: boolean; ttl: number },
+  opts: UploadOptions,
   onProgress?: (p: UploadProgress) => void,
   signal?: AbortSignal,
 ): Promise<UploadResult> {
@@ -280,7 +311,7 @@ async function chunkedUpload(
   // init: hand over the manifest header and the declared ciphertext size.
   const header = new Uint8Array(4);
   new DataView(header.buffer).setUint32(0, encManifest.length);
-  const q = `?burnAfterRead=${opts.burnAfterRead ? 1 : 0}&ttl=${opts.ttl}&size=${cipherSize}`;
+  const q = `${uploadQuery(opts)}&size=${cipherSize}`;
   const init = await uploadJSON("POST", "/api/uploads" + q, new Blob([header, encManifest]), signal);
   // The first thing done with the server's answer, and deliberately before a
   // single file byte is encrypted or sent — the encryptFiles generator below is

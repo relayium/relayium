@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { applyAllowlist, loadAllowlist, parseExpiry } from "./a11y-core.mjs";
-import { FREE_USER_ROUTES, PLANS, PRICING_ROUTES } from "./a11y-fixtures.mjs";
+import { FREE_USER_ROUTES, ME_DEVICES, PLANS, PRICING_ROUTES } from "./a11y-fixtures.mjs";
 import { LOADED_TIERS, TARGETS } from "./a11y-targets.mjs";
 
 const temporary = [];
@@ -151,6 +151,35 @@ describe("scanner target readiness", () => {
     // session), so it cannot leak sideways — but a target that quietly grew one
     // would stop scanning the real, backend-free page.
     const withFixture = TARGETS.filter((t) => t.fixture).map((t) => t.id);
-    expect(withFixture).toEqual(["spa/pricing", "spa/cross-network/account-modal/pricing"]);
+    expect(withFixture).toEqual([
+      "spa/pricing",
+      "spa/me/devices",
+      "spa/me/devices/mobile-dark",
+      "spa/cross-network/account-modal/pricing",
+    ]);
+  });
+
+  it("scans My Devices with rows that actually exist, in both colour schemes", () => {
+    // `.accountdevices` alone would be satisfied by the empty-list branch, where
+    // none of the sender controls exist. The row count comes from the fixture,
+    // so a fixture that stops populating the list fails here rather than
+    // silently scanning an empty section.
+    const light = target("spa/me/devices");
+    const dark = target("spa/me/devices/mobile-dark");
+    for (const t of [light, dark]) {
+      expect(t.url).toBe("/me");
+      expect(t.ready).toBe(".devicelist li");
+      expect(t.readyCount).toBe(ME_DEVICES.devices.length);
+      expect(t.readyCount).toBeGreaterThan(1);
+    }
+    expect(dark.scheme).toBe("dark");
+    expect(light.scheme).toBe("light");
+    // Both a sendable and an unsendable device, or the scan only ever sees one
+    // of the two very different cards.
+    const policies = ME_DEVICES.devices.map((d) => d.Inbox.AutoAccept);
+    expect(policies).toContain("auto");
+    expect(policies).toContain("ask");
+    expect(policies).toContain("off");
+    expect(ME_DEVICES.devices.some((d) => d.Inbox.Revoked)).toBe(true);
   });
 });

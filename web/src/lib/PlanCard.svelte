@@ -90,7 +90,7 @@
 {#if plan}
   <section class="plan-card">
     <div class="head">
-      <h3>{t.billing.currentPlan}</h3>
+      <h2>{t.billing.currentPlan}</h2>
       <span class="badge">{plan.name}{#if cycleLabel} · {cycleLabel}{/if}</span>
     </div>
 
@@ -135,7 +135,10 @@
     margin-bottom: var(--space-3);
   }
   .head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
-  .head h3 { margin: 0; font-size: var(--fs-h3); color: var(--text-h); }
+  /* Rendered as <h2>: on /me this is the first heading after the page <h1>, and
+     every other section here is an <h2> too. The size stays the h3 token — the
+     heading LEVEL is the document outline, not the visual weight. */
+  .head h2 { margin: 0; font-size: var(--fs-h3); color: var(--text-h); }
   /* 本仓没有"按钮前景色"变量：实心 accent 底的地方（Pricing 的 ribbon、Nav 的
      active tab 等）一律硬写 #fff。这里不引入新的颜色字面量，改用同样既有的
      淡底徽章配方（HowItWorks.svelte:48 / HowToSteps.svelte:81），全部走变量。 */

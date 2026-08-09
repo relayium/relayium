@@ -6,7 +6,7 @@
  * 悄悄退化的东西（一个 readySelector 松一点，一整块界面就再也没被扫过），所以它必须
  * 是能被真断言盯住的数据，而不是只能拿正则去猜的源码字符串。
  */
-import { FREE_USER_ROUTES, PLANS, PRICING_ROUTES } from "./a11y-fixtures.mjs";
+import { FREE_USER_ROUTES, ME_DEVICES, ME_ROUTES, PLANS, PRICING_ROUTES } from "./a11y-fixtures.mjs";
 
 export const DESKTOP = { width: 1440, height: 900 };
 export const MOBILE = { width: 390, height: 844 };
@@ -64,6 +64,19 @@ export const TARGETS = [
     note: "真档位网格：h1 之后的第一块内容，heading-order 只在这里才看得见" },
   { id: "spa/apps", url: "/apps", ready: ".apps", viewport: DESKTOP, scheme: "light" },
   { id: "spa/cli", url: "/cli", ready: ".cli", viewport: DESKTOP, scheme: "light" },
+
+  // My Devices as a SENDER directory. 等的是 `.devicelist li`，数量钉死成夹具里的
+  // 行数：等 `.accountdevices` 只能证明区块外壳在，而这一块新增的控件——拖放区、
+  // 发送按钮、状态徽章、常驻活动区域——全都在行里面。四行覆盖四种发送态，能发的
+  // 两行还要额外证明拖放区真的渲染了。
+  { id: "spa/me/devices", url: "/me", ready: ".devicelist li", readyCount: ME_DEVICES.devices.length,
+    viewport: DESKTOP, scheme: "light", fixture: ME_ROUTES,
+    note: "已登录的 My Devices：可发送 / 需批准 / 已关闭 / 已吊销 四种卡片" },
+  // 同一块界面的深色 + 窄屏：卡片在 520px 以下换成两列网格，拖放区改成整宽按钮，
+  // 而对比度是**计算后**的样式——浅色扫过不代表深色扫过。
+  { id: "spa/me/devices/mobile-dark", url: "/me", ready: ".devicelist li", readyCount: ME_DEVICES.devices.length,
+    viewport: MOBILE, scheme: "dark", fixture: ME_ROUTES,
+    note: "同一块界面的深色令牌与窄屏布局" },
 
   // ── 两个动态决策态 ─────────────────────────────────────────────────────
   // 真正的"同意/验证"决策态需要两个 peer 和一台信令服务器，那是后续挂到

@@ -386,6 +386,129 @@ export interface Messages {
     deleteRequested: (email: string) => string; // 只能声称「已请求」，见上
     deleteFailed: string; // 明确的失败，且可重试
   };
+  // Device Inbox, sender half — the My Devices card that sends files to one of
+  // your own machines (DEVICE-INBOX-PRD.md §7, §10;
+  // docs/protocol/relayium-device-inbox-v1.md §§5, 6, 14, 16).
+  //
+  // Two rules govern every string in here, and both are product requirements
+  // rather than style:
+  //
+  //  1. **Presence never reads as permission.** An offline device that is
+  //     properly enrolled is still a valid target: the file queues and lands
+  //     when it comes back. So "offline" copy says *queued*, never *cannot*.
+  //  2. **Never say "sent".** PRD §10 forbids one vague word covering both
+  //     "the ciphertext reached Relayium" and "the target device saved it".
+  //     `stateSaved` is the ONLY string that may claim a file landed, and the
+  //     UI reaches it only from the server's own `saved` plus its commit
+  //     timestamp.
+  //
+  // The `err*` and `sendErr*` families are closed sets copied from protocol
+  // §16. They exist so a server token is never rendered as text: an
+  // unrecognised one falls to `errUnknown`/`sendErrUnknown`.
+  deviceInbox: {
+    sectionHint: string; // one line under the devices heading: what sending to a device means
+    // Presence (protocol §6). Advisory — see rule 1 above.
+    online: string;
+    offline: string;
+    lastSeen: (when: string) => string; // last heartbeat, localized timestamp
+    neverSeen: string; // enrolled but has never heartbeated
+    platformLine: (platform: string, version: string) => string; // "linux · Relayium 0.15.0"
+    // The device owner's automatic-receive policy (protocol §5).
+    policyLabel: string;
+    policyOff: string;
+    policyAsk: string;
+    policyAuto: string;
+    dirReady: string; // its receive folder was usable at the last heartbeat
+    dirNotReady: string; // …and was not
+    // Why a device cannot be sent to. One sentence each, naming what the user
+    // would have to change — the remedies genuinely differ.
+    blockNotEnrolled: string;
+    blockRevoked: string;
+    blockCannotReceive: string;
+    blockUnsupportedKey: string;
+    blockUnsupportedCapability: string;
+    blockReceiveOff: string;
+    blockUnsupported: string; // a device this build cannot describe (unknown policy / unusable id)
+    // True qualifications on a send that IS allowed.
+    caveatQueued: string; // offline: it waits in the queue until that device is back
+    caveatApproval: string; // policy `ask`: someone at that machine must accept
+    caveatDirNotReady: string; // policy `auto`, folder unusable: it waits for a fix
+    // The send affordance. Drag is never required: the button is the primary
+    // control and the drop zone is an addition to it.
+    sendButton: string; // visible label on the choose-files button
+    sendButtonLabel: (name: string) => string; // accessible name — names the device
+    dropHint: string; // "or drop files here"
+    dropActive: string; // shown while a file drag is over this card
+    dropRejected: string; // a drop that carried no ordinary file
+    // Sender-local phases (PRD §10 items 1-2). Central stores neither.
+    phaseEncrypting: (pct: number) => string;
+    phaseUploading: (pct: number) => string;
+    phaseRegistering: string;
+    progressLabel: (name: string) => string; // accessible name of the progress bar
+    cancel: string;
+    cancelLabel: (name: string) => string; // accessible name of the cancel button
+    // Server states (PRD §10 items 3-12 / protocol §13). `uploadedNotSaved`
+    // is the sentence that keeps "queued" from being read as "delivered".
+    uploadedNotSaved: string;
+    stateQueued: string;
+    stateNotified: string;
+    stateDownloading: string;
+    stateVerifying: string;
+    stateSaved: string;
+    stateSavedAt: (when: string) => string; // the commit timestamp the device reported
+    stateAttention: string;
+    stateExpired: string;
+    stateRevoked: string;
+    stateFailedRetryable: string;
+    stateFailedTerminal: string;
+    stateUnknown: string; // a state this build does not know — never rendered raw
+    // Task error tokens (protocol §16), device-submittable plus central's own.
+    errDownloadFailed: string;
+    errDecryptFailed: string;
+    errVerifyFailed: string;
+    errDiskFull: string;
+    errPermissionDenied: string;
+    errDirectoryUnavailable: string;
+    errNameConflict: string;
+    errUserDeclined: string;
+    errUnsupported: string;
+    errInternal: string;
+    errLeaseExpired: string;
+    errAttemptsExhausted: string;
+    errKeyRevoked: string;
+    errStoredObjectUnavailable: string;
+    errUnknown: string;
+    // Why a send did not produce a task: central's create refusals (§16) plus
+    // the failures decided in this browser.
+    sendErrAutoReceiveDisabled: string;
+    sendErrDeviceCannotReceive: string;
+    sendErrDeviceInboxRevoked: string;
+    sendErrStaleTargetKey: string;
+    sendErrIdempotencyConflict: string;
+    sendErrStoredObjectUnavailable: string;
+    sendErrStoredObjectAlreadyBound: string;
+    sendErrQueueFull: string;
+    sendErrUnsupportedKeyAlgorithm: string;
+    sendErrUnsupportedAutoAcceptCapability: string;
+    sendErrMalformedWrappedKey: string;
+    sendErrInvalidIdempotencyKey: string;
+    sendErrTooLarge: string;
+    sendErrQuota: string;
+    sendErrSignedOut: string;
+    sendErrNetwork: string;
+    sendErrCancelled: string;
+    sendErrUnsupportedKey: string;
+    sendErrNoFiles: string;
+    sendErrUnknown: string;
+    // Managing what was queued.
+    cancelTask: string;
+    cancelTaskLabel: (name: string) => string;
+    cancelTaskConfirm: (name: string) => string; // this deletes the queued ciphertext too
+    cancelTaskFailed: string;
+    dismiss: string; // clear a finished/failed send from the card
+    fileSummary: (n: number, size: string) => string; // what this send carries — count and size only
+    privacyNote: string; // names/paths never leave this browser
+  };
   // Shared "why an account?" explainer shown on the two login-gated feature pages
   // (/cross-network, /offline-transfer) and, compact, on the /me login gate.
   why: {

@@ -364,7 +364,7 @@ func (s *Service) handleDeleteInboxTask(w http.ResponseWriter, r *http.Request, 
 	}
 	deleted, released, err := s.store.DeleteInboxTask(r.Context(), r.PathValue("taskId"), u.ID)
 	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
+		s.writeInboxTaskError(w, err)
 		return
 	}
 	if !deleted {
@@ -616,6 +616,8 @@ func (s *Service) writeInboxTaskError(w http.ResponseWriter, err error) {
 		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "stale_claim"})
 	case errors.Is(err, ErrTaskTerminal):
 		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "task_terminal"})
+	case errors.Is(err, ErrInboxTaskInProgress):
+		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "invalid_transition"})
 	case errors.Is(err, inbox.ErrSenderLocalState):
 		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "sender_local_state"})
 	case errors.Is(err, inbox.ErrSavedNotAsserted):

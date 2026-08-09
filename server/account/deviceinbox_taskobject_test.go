@@ -754,6 +754,38 @@ func TestDeletingATaskDeletesTheTaskObjectItOwns(t *testing.T) {
 	}
 }
 
+// The card's queued-state snapshot can become stale while its confirmation is
+// open. Cancellation therefore has to re-check the state in the same database
+// statement that deletes: once the receiver has a lease, neither the task nor
+// its owned ciphertext may disappear underneath it.
+func TestDeletingAnInProgressTaskPreservesItsTaskObject(t *testing.T) {
+	h := newTaskObjectHarness(t)
+	u := h.user(t, "cancel-race@example.test")
+	tg := h.enrolTarget(t, u, "server", inbox.AutoAcceptAuto, true)
+	fileID, task := h.bindTask(t, tg, "send-1", []byte("ciphertext"))
+	key := h.blobKey(t, fileID)
+	taskID := task["ID"].(string)
+
+	claimed, _ := h.claimOne(t, tg)
+	if claimed["ID"] != taskID || claimed["State"] != inbox.TaskDownloading {
+		t.Fatalf("claim = %v/%v, want %s/downloading", claimed["ID"], claimed["State"], taskID)
+	}
+	resp := h.do(t, "DELETE", "/api/devices/"+tg.deviceID+"/inbox/tasks/"+taskID, withBearer(tg.token))
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("delete in-progress task: got %d, want 409", resp.StatusCode)
+	}
+	body := decodeJSONBody(t, resp)
+	if body["error"] != "invalid_transition" {
+		t.Fatalf("delete error = %v, want invalid_transition", body["error"])
+	}
+	if got := h.taskState(t, tg, taskID)["State"]; got != inbox.TaskDownloading {
+		t.Fatalf("task after refused cancellation = %v, want downloading", got)
+	}
+	if !h.fileExists(t, fileID) || !h.blobExists(t, key) {
+		t.Fatal("refused cancellation deleted ciphertext under the active receiver")
+	}
+}
+
 // Deleting a SHARE-backed task still leaves the share alone (Phase 1B).
 func TestDeletingAShareBackedTaskKeepsTheShare(t *testing.T) {
 	h := newTaskObjectHarness(t)

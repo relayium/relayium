@@ -71,6 +71,52 @@ export const FREE_USER_ROUTES = {
 };
 
 /**
+ * 一台真的 Device Inbox 设备（`GET /api/devices` 里的 `Inbox` 子树，协议 §9）。
+ *
+ * 这一块存在的理由和上面 `LOADED_TIERS` 一样：`/me` 的设备卡片只有在设备**真的**
+ * 报了收件箱之后才渲染发送区、状态徽章、可拖放区和常驻的活动区域。没有夹具时
+ * `/api/devices` 在 preview 后面是 404，列表是空的，于是这一整块——包括这一轮新增
+ * 的每一个可交互控件——一次都没被 axe 看过，而扫描仍然全绿。
+ */
+const DEVICE_KEY = { ID: "k1", Algorithm: "x25519-sealedbox-v1", PublicKey: "A".repeat(43), Generation: 1, CreatedAt: 1754000000, SupersededAt: 0, RevokedAt: 0 };
+const inbox = (over) => ({
+  Presence: "online", LastHeartbeatAt: 1754600000, PresenceExpiresAt: 1754600090,
+  HeartbeatIntervalSeconds: 30, ProtocolVersion: 1,
+  Capabilities: ["inbox.receive.v1", "inbox.autoaccept.v1"], ReceiveCapability: "inbox.receive.v1",
+  AutoAccept: "auto", ReceiveDirReady: true, Platform: "linux", AppVersion: "0.15.0",
+  Revoked: false, CanReceive: true, RegisteredAt: 1754000000, Key: DEVICE_KEY, ...over,
+});
+
+/**
+ * 四种发送态各一行，四种都要扫：能发的卡片有拖放区和按钮，不能发的卡片只有一段
+ * 说明文字，两者的对比度、焦点样式和标题层级是分开的东西。撤销按钮在每一行都在。
+ */
+export const ME_DEVICES = {
+  devices: [
+    { ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", Name: "build-server", CreatedAt: 1750000000, LastSeenAt: 1754600000, Kind: "cli", Inbox: inbox() },
+    { ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2", Name: "Lily's MacBook", CreatedAt: 1750000000, LastSeenAt: 1754500000, Kind: "app", Inbox: inbox({ Presence: "offline", AutoAccept: "ask", Platform: "darwin" }) },
+    { ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa3", Name: "old-vps", CreatedAt: 1740000000, LastSeenAt: 0, Kind: "cli", Inbox: inbox({ AutoAccept: "off", Presence: "offline" }) },
+    { ID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa4", Name: "lost-laptop", CreatedAt: 1740000000, LastSeenAt: 1741000000, Kind: "cli", Inbox: inbox({ Revoked: true, CanReceive: false, Presence: "offline" }) },
+  ],
+};
+
+/** `/me`：已登录 + 用量 + 一份有收件箱的设备列表。 */
+export const ME_ROUTES = {
+  "/api/plans": PLANS,
+  "/api/me": { user: FREE_USER },
+  "/api/auth/methods": AUTH_METHODS,
+  "/api/me/usage": {
+    period: "202608", resetsAt: 1756684800,
+    traffic: { used: 1e8, cap: 1e9 }, storage: { used: 2e8, cap: 1e9 },
+    plan: { id: "free", retentionSecs: 86400 },
+  },
+  "/api/stats": { transfers: 4, downloads: 7, uploadBytes: 1e8, downloadBytes: 2e8, relayBytes: 0 },
+  "/api/files": { files: [] },
+  "/api/nodes/mine": { nodes: [] },
+  "/api/devices": ME_DEVICES,
+};
+
+/**
  * 生成注入用的源码。`routes` 是 `pathname → JSON body`，一律 200 + JSON。
  */
 export function apiFixtureScript(routes) {

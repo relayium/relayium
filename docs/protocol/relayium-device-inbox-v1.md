@@ -508,7 +508,7 @@ All routes require `RequireAuth` (session cookie **or** CLI bearer).
 | `POST` | `/api/devices/{id}/inbox/tasks` | account | Queue one encrypted delivery |
 | `GET` | `/api/devices/{id}/inbox/tasks` | account | List, newest first (`?limit=`) |
 | `GET` | `/api/devices/{id}/inbox/tasks/{taskId}` | account | Read one |
-| `DELETE` | `/api/devices/{id}/inbox/tasks/{taskId}` | account | Cancel/remove the task (never the object) |
+| `DELETE` | `/api/devices/{id}/inbox/tasks/{taskId}` | account | Cancel/remove the task; refuses `downloading`/`verifying` so ciphertext cannot disappear under a live receiver |
 | `GET` | `/api/devices/{id}/inbox/pending` | device-self | "Is there work"; marks `notified`; leases nothing |
 | `POST` | `/api/devices/{id}/inbox/claim` | device-self | Lease work; the ONLY source of delivery material |
 | `GET` | `/api/devices/{id}/inbox/tasks/{taskId}/blob` | device-self + current claim token | Resumable ciphertext stream; token in `X-Relayium-Inbox-Claim` |
@@ -897,7 +897,10 @@ Two ordering rules, both deliberate:
   is a retryable orphan blob, never ciphertext destroyed under a live delivery;
 - `DELETE /api/devices/{id}/inbox/tasks/{taskId}` removes both rows atomically
   and drops the blob immediately, so cancelling a send returns the quota at once
-  rather than at the next sweep. A share-backed task still deletes the task only.
+  rather than at the next sweep. The delete predicate refuses `downloading` and
+  `verifying` atomically with the removal: a queued-state UI snapshot may become
+  stale while its confirmation is open, but it still cannot destroy ciphertext
+  under a live lease. A share-backed task still deletes the task only.
 
 A blob whose node is unreachable goes onto the existing `pending_node_deletes`
 retry queue, the same as every other orphan; it is never silently dropped.

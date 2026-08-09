@@ -28,7 +28,7 @@
 
 {#if usage}
   <section class="quota">
-    <h3>{t.quota.title}</h3>
+    <h2>{t.quota.title}</h2>
     {#each [{ key: "traffic", label: t.quota.traffic, b: usage.traffic }, { key: "storage", label: t.quota.storage, b: usage.storage }] as row (row.key)}
       <div class="row">
         <div class="head">
@@ -68,7 +68,8 @@
     border-radius: var(--radius);
     background: var(--social-bg);
   }
-  .quota h3 { margin: 0; font-size: var(--fs-h3); color: var(--text-h); }
+  /* <h2> for the same reason as PlanCard: it is a top-level section of /me. */
+  .quota h2 { margin: 0; font-size: var(--fs-h3); color: var(--text-h); }
   .row { margin-top: var(--space-3); }
   .head { display: flex; justify-content: space-between; gap: var(--space-3); }
   .lbl { color: var(--text-h); }

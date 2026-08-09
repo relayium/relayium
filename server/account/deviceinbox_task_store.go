@@ -46,6 +46,10 @@ var (
 	// ErrTaskTerminal: the task is finished. Reported back to a returning
 	// claimant so it stops retrying, with the terminal state in the response.
 	ErrTaskTerminal = errors.New("account: inbox task is already terminal")
+	// ErrInboxTaskInProgress: the account tried to cancel a task after the target
+	// device acquired its live lease. Deleting then could remove ciphertext under
+	// an active receiver, or race a local commit the server can no longer undo.
+	ErrInboxTaskInProgress = errors.New("account: inbox task is in progress")
 	// ErrStoredObjectUnavailable: the referenced Stored Object does not exist
 	// under this account, or has already expired/burned.
 	ErrStoredObjectUnavailable = errors.New("account: referenced stored object is unavailable")
@@ -396,12 +400,28 @@ func (s *SQLiteStore) DeleteInboxTask(ctx context.Context, taskID, userID string
 	case err != nil:
 		return false, StoredFile{}, err
 	}
+	// Cancellation is atomic with respect to claiming. The Web card only offers
+	// it before work starts, but that UI snapshot can become stale while its
+	// confirmation dialog is open. The state predicate is the authority: once a
+	// receiver holds a live lease, neither its task nor its ciphertext is removed
+	// underneath it.
 	res, err := tx.ExecContext(ctx,
-		`DELETE FROM inbox_tasks WHERE id = ? AND user_id = ?`, taskID, userID)
+		`DELETE FROM inbox_tasks
+		  WHERE id = ? AND user_id = ? AND state NOT IN (?, ?)`,
+		taskID, userID, inbox.TaskDownloading, inbox.TaskVerifying)
 	if err != nil {
 		return false, StoredFile{}, err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
+		var state string
+		err := tx.QueryRowContext(ctx,
+			`SELECT state FROM inbox_tasks WHERE id = ? AND user_id = ?`, taskID, userID).Scan(&state)
+		if err == nil && (state == inbox.TaskDownloading || state == inbox.TaskVerifying) {
+			return false, StoredFile{}, ErrInboxTaskInProgress
+		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return false, StoredFile{}, err
+		}
 		// Nothing was deleted (already gone, or not this account's): touch
 		// nothing else, and report no release.
 		return false, StoredFile{}, tx.Commit()

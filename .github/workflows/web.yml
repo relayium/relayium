@@ -1,13 +1,26 @@
 name: web
+# The path filter also names the SERVER packages the Device Inbox gates below
+# actually execute. Those two jobs run real Go code — the receiver's sealed-box
+# implementation and a whole live server — so a change to either half can break
+# them, and only listing `web/**` would let a server-side change land with a
+# green board while the cross-implementation contract was already broken.
+#
+# Deliberately surgical rather than `server/**`: everything else in the server
+# is covered by its own workflow, and widening this one would re-run the full
+# web suite plus the accessibility scan on every unrelated backend change.
 on:
   push:
-    paths:
+    paths: &paths
       - 'web/**'
+      - 'server/internal/inbox/**'
+      - 'server/internal/inboxclient/**'
+      - 'server/account/deviceinbox*'
+      - 'server/account/taskobject.go'
+      - 'server/account/files.go'
+      - 'server/account/uploads_resumable.go'
       - '.github/workflows/web.yml'
   pull_request:
-    paths:
-      - 'web/**'
-      - '.github/workflows/web.yml'
+    paths: *paths
   workflow_dispatch:
 
 permissions:
@@ -20,6 +33,12 @@ jobs:
     defaults:
       run:
         working-directory: web
+    env:
+      # The runner image happens to ship a Go toolchain, which would make the
+      # sealed-box interoperability suite self-enable inside this Node-only job.
+      # It has its own job below, with a pinned toolchain; opting out here keeps
+      # the decision explicit instead of dependent on the image contents.
+      RELAYIUM_GO_INTEROP: "0"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
@@ -38,6 +57,61 @@ jobs:
       # `incomplete` results are printed and never fail.
       - run: npm run test:a11y
       - run: npm audit --audit-level=high
+
+  # A sealed box produced by the REAL browser implementation, opened by the REAL
+  # Go device implementation, in one run. Both halves execute; nothing here is a
+  # frozen vector or a self round trip. The suite also requires a deliberately
+  # tampered box to FAIL, so a harness that silently stopped proving anything is
+  # itself a red build.
+  sealed-box-interop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - run: npm ci
+      # RELAYIUM_GO_INTEROP=1 (set by the script) makes a skip impossible: if the
+      # toolchain is missing the suite fails instead of quietly reporting green.
+      - run: npm run test:interop
+
+  # Browser -> central -> CLI -> disk, with nothing simulated: a real server on a
+  # temporary database, a real `relayium inbox` worker holding its own X25519
+  # private key, and a real headless Chrome doing the encryption and the drop.
+  # This is the only gate that can show "uploaded is not saved", because it is
+  # the only one with a receiver that has genuinely not saved anything yet.
+  device-inbox-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      - run: npm ci
+      # The script serves web/dist through the real server, so the build has to
+      # exist before it runs — the same ordering constraint as the a11y scan.
+      - run: npm run build
+      - run: npm run test:device-inbox
 
   windows-temporary-downloader:
     runs-on: windows-latest

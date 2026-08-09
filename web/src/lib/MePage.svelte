@@ -15,6 +15,8 @@
   import { reveal, countUp } from "./reveal";
   import PlanCard from "./PlanCard.svelte";
   import QuotaMeters from "./QuotaMeters.svelte";
+  import DeviceCard from "./DeviceCard.svelte";
+  import { DEVICE_REFRESH_MS } from "./device-inbox";
   import { invalidateUsage } from "./usage.svelte";
 
   // 每次进入 /me 都要拿新的用量数字：/me 是懒加载路由（App.svelte 的
@@ -64,7 +66,11 @@
 
   // 账号级、可吊销的持令牌设备。后端一直有这两个接口（列出 + 删除，删设备会级联
   // 删掉它的令牌），丢了笔记本或手机时这是唯一能自救的地方。
-  interface DeviceRow { ID: string; Name: string; CreatedAt: number; LastSeenAt: number; Kind: string }
+  // `Inbox` is the additive Device Inbox subtree (protocol §9): null for every
+  // device that never enrolled, and typed `unknown` here on purpose — this page
+  // does not interpret it, it hands it to DeviceCard, which parses it
+  // defensively in one place.
+  interface DeviceRow { ID: string; Name: string; CreatedAt: number; LastSeenAt: number; Kind: string; Inbox?: unknown }
 
   // 列进来的 Kind，以及它们各自的行内标签。只有这两类：它们持有的是同一种能代表
   // 账号传输/上传的 bearer 令牌（CLI 走 relayium login，App 走原生登录），吊销的
@@ -91,7 +97,13 @@
     if (gen !== deviceSessionGen) return;
     try {
       const res = await fetch("/api/devices", { credentials: "include" });
-      const all: DeviceRow[] = res.ok ? ((await res.json()).devices ?? []) : [];
+      // This function is also the 30-second presence refresh. A transient
+      // failure must preserve the last trustworthy list: clearing it would
+      // unmount every DeviceCard and abort an upload already in progress.
+      // Initial/account-switch loads already clear `devices` before calling us,
+      // so retaining here cannot expose a previous account's rows.
+      if (!res.ok) return;
+      const all: DeviceRow[] = (await res.json()).devices ?? [];
       if (gen !== deviceSessionGen) return;
       // 跨类型统一排序：这个列表唯一的排序承诺是「最近用过的在最上面」，按类型
       // 分组会让它不成立。从未使用过的（LastSeenAt = 0）之间按创建时间倒序。
@@ -99,7 +111,8 @@
         .filter((d) => DEVICE_KINDS.has(d.Kind))
         .sort((a, b) => b.LastSeenAt - a.LastSeenAt || b.CreatedAt - a.CreatedAt);
     } catch {
-      if (gen === deviceSessionGen) devices = [];
+      // Keep the last trustworthy list. Presence may be briefly stale, but an
+      // explicit failed refresh is not evidence that the devices disappeared.
     }
   }
 
@@ -398,13 +411,31 @@
     }
   });
 
+  // 设备在线状态是**会过期**的（presence TTL 90s，心跳 30s）。列表拉过一次就不动的话，
+  // 一台设备下线之后卡片会一直显示"在线"——而这一版的在线状态是要拿来做发送决策的。
+  // 所以加一个有界的定时刷新，并且只在页面可见时发请求：后台标签页里刷新既没人看，
+  // 又是白付的流量。切回前台时立刻补一次，不等下一个整周期。
+  let presenceTick: ReturnType<typeof setInterval> | undefined;
+  function refreshDevicesIfVisible() {
+    if (typeof document !== "undefined" && document.hidden) return;
+    if (!session().user) return;
+    void loadDevices(deviceSessionGen);
+  }
+  function onVisibility() {
+    if (typeof document !== "undefined" && !document.hidden) refreshDevicesIfVisible();
+  }
+
   let tick: ReturnType<typeof setInterval>;
   onMount(async () => {
     await refreshSession();
     tick = setInterval(() => (nowSec = Math.floor(Date.now() / 1000)), 30_000);
+    presenceTick = setInterval(refreshDevicesIfVisible, DEVICE_REFRESH_MS);
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisibility);
   });
   onDestroy(() => {
     clearInterval(tick);
+    if (presenceTick !== undefined) clearInterval(presenceTick);
+    if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility);
     deviceSessionGen++;
     resetDeleteRequest();
   });
@@ -575,21 +606,22 @@
     <section class="accountdevices">
       <h2>{t.me.deviceTitle}</h2>
       <p class="muted">{t.me.deviceIntro}</p>
+      <p class="muted">{t.deviceInbox.sectionHint}</p>
       {#if devices.length === 0}
         <p class="muted">{t.me.deviceEmpty}</p>
       {:else}
         <ul class="devicelist">
+          <!-- Keyed by ID so a background presence refresh replaces the DATA of
+               a row without destroying the card — an in-flight send and its
+               status poll live in that component and must survive the refresh
+               that keeps "online" honest. -->
           {#each devices as d (d.ID)}
-            <li>
-              <span class="devicename">{d.Name}</span>
-              <span class="devicekind">{kindText(d)}</span>
-              <span class="deviceseen" class:never={!d.LastSeenAt}>{lastUsedText(d)}</span>
-              <!-- 可见文字每一行都一样，所以可访问名称必须带上设备名——否则读屏
-                   用户拿到的是一串分不开的"吊销"。 -->
-              <button class="del" aria-label={t.me.deviceRevokeLabel(d.Name, kindText(d))} onclick={() => revokeDevice(d)}>
-                {t.me.deviceRevoke}
-              </button>
-            </li>
+            <DeviceCard
+              device={d}
+              kind={kindText(d)}
+              lastUsed={lastUsedText(d)}
+              onRevoke={() => revokeDevice(d)}
+            />
           {/each}
         </ul>
       {/if}
@@ -617,21 +649,9 @@
 
 <style>
   .accountdevices { margin-top: var(--section-gap); }
+  /* 行本身的样式跟着 <li> 一起搬到了 DeviceCard.svelte —— Svelte 的样式是按组件
+     作用域的，留在这里的 `.devicelist li` 选择器不会命中子组件里的那个 li。 */
   .devicelist { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
-  .devicelist li {
-    display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
-    padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius);
-  }
-  .devicename { flex: 1 1 auto; min-width: 0; color: var(--text-h); font-weight: 500; word-break: break-word; }
-  /* 类型标签跟在设备名后面，做成一枚安静的徽章：它是分类，不是状态，颜色上抢不过
-     "从未使用"那一条。不收缩，免得窄屏上被挤成竖排的单字。 */
-  .devicekind {
-    flex: 0 0 auto; font-size: var(--fs-xs); color: var(--text);
-    padding: 2px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
-  }
-  .deviceseen { font-size: var(--fs-xs); color: var(--text); }
-  /* 从未使用过的设备最值得吊销——给它一点视觉重量，别和其他行糊在一起。 */
-  .deviceseen.never { color: var(--danger); }
 
   /* 注销区块：一条分隔线 + 更大的上边距，把它和上面的日常操作断开。 */
   .danger-zone {
@@ -800,12 +820,6 @@
   .chk:disabled { opacity: .6; cursor: default; }
 
   @media (max-width: 520px) {
-    .devicelist li {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: center;
-    }
-    .devicelist .del { justify-self: end; }
     .exp { margin-inline-start: 0; }
   }
 </style>
