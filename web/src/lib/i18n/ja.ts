@@ -744,7 +744,7 @@ const ja: Messages = {
       verified: "これは relayium update と install.sh が検証するのと同じリリース署名です。checksums.txt に対する ECDSA P-256 と、アーカイブ自身の SHA-256。どちらかが通らなければ何も実行されません。",
       keyStaysLocal: "リンクの #k= 鍵はローカルのプログラムへ引数として渡されます。URL の一部になることはなく、Relayium へ送られることも、サーバーログに残ることもありません。",
       windowsTitle: "Windows では",
-      windowsNote: "上の POSIX ブロックは Windows を対象にしません。この PowerShell ブロックは CPU に合う公式 v0.16.0 アーカイブを選び、展開前に固定 SHA-256 を検証し、一時ディレクトリから実行して終了後に削除します：",
+      windowsNote: "上の POSIX ブロックは Windows を対象にしません。この PowerShell ブロックは CPU に合う公式 v0.17.0 アーカイブを選び、展開前に固定 SHA-256 を検証し、一時ディレクトリから実行して終了後に削除します：",
       releasesLink: "Relayium のリリース →",
     },
   },

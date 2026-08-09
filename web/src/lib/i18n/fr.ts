@@ -745,7 +745,7 @@ const fr: Messages = {
       verified: "C'est la même signature de version que celle vérifiée par relayium update et install.sh : ECDSA P-256 sur checksums.txt, puis le SHA-256 de l'archive elle-même. Si l'un des deux contrôles échoue, rien n'est exécuté.",
       keyStaysLocal: "La clé #k= du lien est transmise au programme local en argument. Elle ne devient jamais une partie d'une adresse web, n'est jamais envoyée à Relayium et n'atteint aucun journal serveur.",
       windowsTitle: "Sous Windows",
-      windowsNote: "Le bloc POSIX ci-dessus ne couvre pas Windows. Ce bloc PowerShell choisit l'archive officielle v0.16.0 adaptée au processeur, vérifie son SHA-256 épinglé avant extraction, l'exécute depuis un répertoire temporaire, puis supprime ce répertoire :",
+      windowsNote: "Le bloc POSIX ci-dessus ne couvre pas Windows. Ce bloc PowerShell choisit l'archive officielle v0.17.0 adaptée au processeur, vérifie son SHA-256 épinglé avant extraction, l'exécute depuis un répertoire temporaire, puis supprime ce répertoire :",
       releasesLink: "Versions de Relayium →",
     },
   },
