@@ -368,18 +368,14 @@ struct RelayiumApp: App {
         // the journal directory, the transport — comes from a single factory, so
         // an acceptance launch substitutes one thing rather than four and cannot
         // half-isolate itself onto the installed product's stores.
-        let receiving = UITestMode.makeInboxController()
-            ?? AppEnvironment.makeInboxController(
-                notifier: InboxNotifier(),
-                // The only path in the product that hands a received path to the
-                // OS, and the controller refuses anything that is not in its own
-                // completed-result list before it gets here.
-                reveal: { urls in
-                    Task { @MainActor in
-                        NSWorkspace.shared.activateFileViewerSelecting(urls)
-                    }
-                },
-                appVersion: Self.appVersion)
+        // The production half moved into a factory when the notifier and the
+        // controller began referring to each other. It stays on the right of `??`
+        // — an autoclosure — so a UI-test launch never evaluates it, never builds
+        // an `InboxNotifier` and never touches `UNUserNotificationCenter`, which
+        // is the outward reach `UITestMode` documents itself as skipping. Written
+        // inline, the notifier would have been constructed in every launch
+        // regardless of which controller won.
+        let receiving = UITestMode.makeInboxController() ?? Self.makeProductionInbox()
         _inbox = StateObject(wrappedValue: receiving)
         // Subscribed HERE, in init, for the reason recorded on the property and
         // on `InboxSessionBridge`: the state change that must stop the loop can
@@ -387,6 +383,66 @@ struct RelayiumApp: App {
         let bridge = InboxSessionBridge(controller: receiving)
         bridge.observe(account.$state, bearer: { account.bearerToken })
         inboxSession = bridge
+    }
+
+    /// The shipped Device Inbox: the real stores, the real transport, and the
+    /// three platform seams the controller is deliberately unable to reach on its
+    /// own.
+    ///
+    /// The notifier and the controller each need the other — the notifier
+    /// measures notification authorization, the controller is what renders it —
+    /// so the callback is attached after both exist. `weak` in both directions:
+    /// the scene owns the controller for the life of the process, and a retain
+    /// cycle here would be one that never breaks.
+    @MainActor
+    private static func makeProductionInbox() -> InboxController {
+        let notifier = InboxNotifier()
+        let receiving = AppEnvironment.makeInboxController(
+            notifier: notifier,
+            // The only path in the product that hands a received path to the
+            // OS, and the controller refuses anything that is not in its own
+            // completed-result list before it gets here.
+            reveal: { urls in
+                Task { @MainActor in
+                    NSWorkspace.shared.activateFileViewerSelecting(urls)
+                }
+            },
+            refreshNotificationPermission: { [weak notifier] in
+                Task { @MainActor in notifier?.refreshPermission() }
+            },
+            // **The only site that opens System Settings, and the URL is built
+            // here from nothing but this app's own identity.**
+            //
+            // The seam takes no parameter, so nothing from a delivery can reach
+            // this call — which is what keeps the ban `InboxSurfaceGuardTests`
+            // places on launching received content intact by construction rather
+            // than merely unbroken by accident. The route refuses anything that
+            // is not bundle-identifier shaped, so that stays true even if a later
+            // call site passes something.
+            //
+            // The route is built in the package, from THIS bundle's own
+            // identifier, because the pane identifier alone does not select an
+            // app: it re-opens Notifications on whichever row it was last left
+            // on, so the bare link would claim to open Relayium's settings and
+            // hand the user Google Chrome's. `InboxNotificationSettingsRoute`
+            // carries that reasoning and is what the execution tests drive.
+            //
+            // A build that cannot name itself yields no URL and the seam reports
+            // false, which the pane renders as the "open it yourself" sentence —
+            // truthful, and better than landing someone on a stranger's row.
+            // `NSWorkspace` reporting false is passed back the same way, so the
+            // pane can say so instead of leaving a button that does nothing.
+            openNotificationSettings: {
+                guard let url = InboxNotificationSettingsRoute
+                    .url(forBundleIdentifier: Bundle.main.bundleIdentifier)
+                else { return false }
+                return NSWorkspace.shared.open(url)
+            },
+            appVersion: Self.appVersion)
+        notifier.onPermission = { [weak receiving] permission in
+            Task { @MainActor in receiving?.updateNotificationPermission(permission) }
+        }
+        return receiving
     }
 
     /// What this build reports when it enrols. Read from the bundle rather than

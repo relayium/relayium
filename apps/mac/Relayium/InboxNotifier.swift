@@ -30,11 +30,37 @@ import RelayiumAppKit
 @MainActor
 final class InboxNotifier: InboxNotifying {
     private let center = UNUserNotificationCenter.current()
+
+    /// Where the measured authorization goes.
+    ///
+    /// Set once, by the scene, to the controller's `updateNotificationPermission`.
+    /// A callback rather than a reference to the controller so this type keeps
+    /// knowing nothing about the inbox beyond the two `Inbox…` values it is
+    /// handed — and so the package half stays drivable by `swift test`.
+    ///
+    /// `@Sendable` because `UNUserNotificationCenter` answers on its own queue;
+    /// the hop back to the main actor is made below rather than assumed here.
+    var onPermission: (@Sendable (InboxNotificationPermission) -> Void)?
     /// Replaced rather than stacked: one problem is one banner, and re-announcing
     /// a DIFFERENT problem should supersede the previous line instead of leaving
     /// two contradictory ones in Notification Centre.
     // nonlocalized: a notification request identifier, never displayed
     private static let attentionIdentifier = "relayium-inbox-attention"
+
+    /// Ask macOS what the authorization is now, and report it.
+    ///
+    /// Asks WITHOUT prompting. `getNotificationSettings` is a read; the prompt is
+    /// still raised only at the moment there is something to announce, which is
+    /// the rule `post` records below. A refresh that prompted would put a system
+    /// dialog in front of anyone who merely opened the settings pane, which is
+    /// the behaviour the deferred prompt was introduced to avoid.
+    func refreshPermission() {
+        guard let onPermission else { return }
+        center.getNotificationSettings { settings in
+            onPermission(InboxNotificationPermission(
+                authorizationStatus: settings.authorizationStatus))
+        }
+    }
 
     nonisolated func deliver(_ notification: InboxNotification) {
         // Hopped rather than called directly: the controller publishes from the
@@ -62,8 +88,18 @@ final class InboxNotifier: InboxNotifying {
         content.sound = .default
         let request = UNNotificationRequest(identifier: identifier, content: content,
                                             trigger: nil)
+        let onPermission = self.onPermission
         center.getNotificationSettings { [center] settings in
-            switch settings.authorizationStatus {
+            // ONE mapping, feeding both the decision below and the Settings
+            // surface. That is the point of routing this through
+            // `InboxNotificationPermission` rather than switching over the raw
+            // status twice: the pane's claim that no banner will be shown and the
+            // fact that no banner is shown are now the same branch, so they
+            // cannot drift apart as either side is edited.
+            let permission = InboxNotificationPermission(
+                authorizationStatus: settings.authorizationStatus)
+            onPermission?(permission)
+            switch permission {
             case .notDetermined:
                 // Asked at the moment there is something to say, and the message
                 // is then delivered rather than dropped.
@@ -74,12 +110,27 @@ final class InboxNotifier: InboxNotifying {
                 // prompt in front of a user who had not yet done anything the
                 // notification relates to.
                 center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+                    // The answer to the prompt is itself a measurement, and the
+                    // most important one there is: a user who says No here is
+                    // exactly the user the Settings pane must stop being silent
+                    // to, and nothing else would ask again until the pane is next
+                    // opened.
+                    onPermission?(granted ? .allowed : .denied)
                     guard granted else { return }
                     center.add(request)
                 }
-            case .authorized, .provisional:
+            case .allowed:
                 center.add(request)
-            default:
+            case .denied:
+                // Dropped, deliberately and knowingly — and no longer silently:
+                // the report above has already told the Device Inbox pane, which
+                // is what turns this into a state a person can see and act on.
+                return
+            case .unmeasured:
+                // Not producible by the mapping above, which is total over
+                // `UNAuthorizationStatus`. Handled rather than defaulted so that
+                // adding a case to the permission forces a decision here instead
+                // of falling into whichever arm happened to be last.
                 return
             }
         }

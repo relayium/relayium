@@ -530,6 +530,13 @@ public enum AppEnvironment {
         journalSubdirectory: String = "device-inbox",
         notifier: InboxNotifying? = nil,
         reveal: @escaping @Sendable ([URL]) -> Void = { _ in },
+        // Defaulted so no existing caller changes, and defaulted to the HONEST
+        // answers rather than the convenient ones: a build that forgets to wire
+        // these leaves the permission `unmeasured`, which renders nothing, and
+        // makes the recovery button report that it could not open System
+        // Settings. Neither default can produce a false claim.
+        refreshNotificationPermission: @escaping @Sendable () -> Void = {},
+        openNotificationSettings: @escaping @Sendable () -> Bool = { false },
         appVersion: String,
         session: URLSession = .shared
     ) -> InboxController {
@@ -545,7 +552,10 @@ public enum AppEnvironment {
             folderStore: folderStore, session: session)
         return InboxController(runtime: InboxRuntime(
             folder: folder, makeEngine: makeEngine, notifier: notifier,
-            reveal: reveal, platform: inboxPlatform, appVersion: appVersion))
+            reveal: reveal,
+            refreshNotificationPermission: refreshNotificationPermission,
+            openNotificationSettings: openNotificationSettings,
+            platform: inboxPlatform, appVersion: appVersion))
     }
 
     /// A local precondition the Device Inbox cannot run without.

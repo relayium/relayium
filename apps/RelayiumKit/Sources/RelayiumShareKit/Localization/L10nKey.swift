@@ -1083,9 +1083,20 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case inboxErrorBookmark = "inbox.errorBookmark"
     case inboxErrorNoFolder = "inbox.errorNoFolder"
     case inboxErrorAskFailed = "inbox.errorAskFailed"
+    case inboxErrorNotificationSettings = "inbox.errorNotificationSettings"
 
     case inboxNotifyTitleSaved = "inbox.notifyTitleSaved"
     case inboxNotifyTitleAttention = "inbox.notifyTitleAttention"
+
+    /// macOS will not show a delivery banner.
+    ///
+    /// The body is the load-bearing half: it has to say that receiving and saving
+    /// are unaffected, because a user who reads only the headline concludes the
+    /// Device Inbox has stopped working when in fact every file is still landing
+    /// in their folder.
+    case inboxBannersBlocked = "inbox.bannersBlocked"
+    case inboxBannersBlockedBody = "inbox.bannersBlockedBody"
+    case inboxOpenNotificationSettings = "inbox.openNotificationSettings"
 
     /// Open at Login is how residency RESUMES after a Mac login. It is
     /// deliberately not presented as evidence that the inbox is ready now, which

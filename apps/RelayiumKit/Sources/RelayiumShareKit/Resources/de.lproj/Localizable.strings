@@ -602,8 +602,12 @@
 "inbox.errorBookmark" = "macOS hat Relayium keine dauerhafte Berechtigung für diesen Ordner erteilt. Versuche einen anderen.";
 "inbox.errorNoFolder" = "Wähle zuerst einen Empfangsordner – es gibt noch keinen Speicherort.";
 "inbox.errorAskFailed" = "Deine Antwort konnte nicht gesendet werden. Prüfe deine Verbindung und versuche es erneut.";
+"inbox.errorNotificationSettings" = "Die Systemeinstellungen konnten nicht geöffnet werden. Öffne sie selbst und gehe zu „Mitteilungen“ und dann zu Relayium.";
 "inbox.notifyTitleSaved" = "Dateien empfangen";
 "inbox.notifyTitleAttention" = "Geräte-Posteingang braucht Aufmerksamkeit";
+"inbox.bannersBlocked" = "Mitteilungs-Banner sind ausgeschaltet";
+"inbox.bannersBlockedBody" = "Dieser Mac empfängt weiterhin Dateien, die an ihn gesendet werden, und speichert sie im gewählten Ordner. Ausgeblendet ist nur das Banner, das sie ankündigt – die letzten Zustellungen stehen weiterhin unten.";
+"inbox.openNotificationSettings" = "Mitteilungseinstellungen öffnen";
 "inbox.loginNote" = "„Bei der Anmeldung öffnen“ sorgt dafür, dass Relayium nach dem Anmelden an diesem Mac wieder empfängt. Es bedeutet nicht, dass der Posteingang jetzt bereit ist.";
 "inbox.savedFiles.one" = "%@ Datei gespeichert";
 "inbox.savedFiles.other" = "%@ Dateien gespeichert";

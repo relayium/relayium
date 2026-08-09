@@ -593,8 +593,12 @@
 "inbox.errorBookmark" = "macOS가 그 폴더에 대한 지속 권한을 Relayium에 주지 않았습니다. 다른 폴더를 시도하세요.";
 "inbox.errorNoFolder" = "먼저 수신 폴더를 선택하세요 — 아직 저장할 곳이 없습니다.";
 "inbox.errorAskFailed" = "응답을 보내지 못했습니다. 연결을 확인한 뒤 다시 시도하세요.";
+"inbox.errorNotificationSettings" = "'시스템 설정'을 열지 못했습니다. 직접 열어 '알림'에서 Relayium을 선택하세요.";
 "inbox.notifyTitleSaved" = "파일을 받았습니다";
 "inbox.notifyTitleAttention" = "기기 수신함에 확인이 필요합니다";
+"inbox.bannersBlocked" = "알림 배너가 꺼져 있습니다";
+"inbox.bannersBlockedBody" = "이 Mac은 보내진 파일을 계속 수신해 선택한 폴더에 저장합니다. 가려진 것은 도착을 알리는 배너뿐이며, 최근 수신 항목은 아래에 표시됩니다.";
+"inbox.openNotificationSettings" = "알림 설정 열기";
 "inbox.loginNote" = "‘로그인 시 열기’는 이 Mac에 로그인한 뒤 Relayium이 다시 수신을 시작하게 합니다. 지금 수신함이 준비되었다는 뜻은 아닙니다.";
 "inbox.savedFiles.other" = "%@개 파일 저장됨";
 "inbox.waitingDeliveries.other" = "%@건의 전송이 응답을 기다리는 중";

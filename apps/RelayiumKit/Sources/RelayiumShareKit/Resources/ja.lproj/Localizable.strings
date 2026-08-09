@@ -593,8 +593,12 @@
 "inbox.errorBookmark" = "macOS がそのフォルダに対する継続的な許可を Relayium に与えませんでした。別のフォルダを試してください。";
 "inbox.errorNoFolder" = "先に受信フォルダを選んでください — 保存先がまだありません。";
 "inbox.errorAskFailed" = "回答を送信できませんでした。接続を確認してから、もう一度試してください。";
+"inbox.errorNotificationSettings" = "「システム設定」を開けませんでした。手動で開き、「通知」から Relayium を選んでください。";
 "inbox.notifyTitleSaved" = "ファイルを受信しました";
 "inbox.notifyTitleAttention" = "デバイス受信ボックスの確認が必要です";
+"inbox.bannersBlocked" = "通知バナーがオフになっています";
+"inbox.bannersBlockedBody" = "この Mac は送られてきたファイルを受信し、選んだフォルダに保存し続けます。隠れているのは到着を知らせるバナーだけで、最近受信したものは下に表示されます。";
+"inbox.openNotificationSettings" = "通知設定を開く";
 "inbox.loginNote" = "「ログイン時に開く」は、この Mac にログインしたあと Relayium が受信を再開できるようにします。受信ボックスが今すぐ使える状態であることを意味するものではありません。";
 "inbox.savedFiles.other" = "%@ 個のファイルを保存しました";
 "inbox.waitingDeliveries.other" = "%@ 件の配信が回答を待っています";

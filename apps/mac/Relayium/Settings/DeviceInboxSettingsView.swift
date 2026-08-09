@@ -31,6 +31,7 @@ struct DeviceInboxSettingsView: View {
         Form {
             if inbox.isSignedIn {
                 statusSection
+                notificationSection
                 askSection
                 folderSection
                 policySection
@@ -46,7 +47,20 @@ struct DeviceInboxSettingsView: View {
         // grant can be revoked while the app runs with nothing notifying it.
         .task {
             inbox.refreshFolder()
+            inbox.refreshNotificationPermission()
             loginItem.refresh()
+        }
+        // The other half of "it updates when authorization changes", and the half
+        // that matters: the user presses the button below, switches Relayium's
+        // notifications back on in System Settings, and comes back to this window.
+        // macOS publishes nothing when that switch moves — there is no
+        // authorization-changed notification to subscribe to — so becoming active
+        // again is the event, and re-asking is the only mechanism there is. The
+        // `.task` above fires once per appearance and would leave a stale warning
+        // on a window that stayed open the whole time.
+        .onReceive(NotificationCenter.default.publisher(
+            for: NSApplication.didBecomeActiveNotification)) { _ in
+            inbox.refreshNotificationPermission()
         }
     }
 
@@ -78,7 +92,11 @@ struct DeviceInboxSettingsView: View {
                     .buttonStyle(.bordered)
                     .accessibilityIdentifier("inbox-recovery")
             }
-            if let error = inbox.settingsError {
+            // Every refused action EXCEPT the notification one. That single
+            // exception is rendered beside the button that produced it in the
+            // section below, because a refusal that appears three sections away
+            // from the control the user just pressed reads as an unrelated fault.
+            if let error = inbox.settingsError, error != .notificationSettingsUnavailable {
                 InlineMessage(.failure, InboxSettingsErrorCopy.message(error))
                     .accessibilityIdentifier("inbox-error")
             }
@@ -148,6 +166,62 @@ struct DeviceInboxSettingsView: View {
         case .retry:        inbox.retryNow()
         case .resume:       inbox.resume()
         case .answer:       break   // never reached; see the guard on the caller
+        }
+    }
+
+    // MARK: - banners
+
+    /// Denied notification authorization, said truthfully.
+    ///
+    /// ## Why this is a section of its own and not a runtime state
+    ///
+    /// It renders beneath the status line rather than inside it because it is a
+    /// different KIND of fact. `InboxRuntimeState` answers "can this Mac take a
+    /// delivery"; the answer here is yes, unchanged — the folder still resolves,
+    /// the policy still stands, the receiver still claims, decrypts and commits.
+    /// What is off is the announcement. Folding this into `.attention` would put
+    /// "needs attention" on the status line of an inbox that is working, which is
+    /// the same untruth as `ready` over a revoked grant, aimed the other way.
+    ///
+    /// ## Why the second sentence is not optional
+    ///
+    /// The observed defect was silence: a denied Mac dropped the banner and said
+    /// nothing anywhere. The obvious repair — a warning — creates the opposite
+    /// failure, because a user reading "notifications are off" in the Device Inbox
+    /// pane reasonably concludes the Device Inbox is not working and stops relying
+    /// on it. So the explanation states that receiving and saving are unaffected,
+    /// and it is asserted at runtime rather than left to whoever edits the copy.
+    ///
+    /// ## Why it only appears while signed in
+    ///
+    /// It is rendered from inside the signed-in branch. Nothing can be delivered
+    /// to a signed-out Mac, so there is no banner to miss and no reason to put a
+    /// system-permission warning in front of someone who has not yet chosen to use
+    /// the feature at all.
+    @ViewBuilder
+    private var notificationSection: some View {
+        if let notice = InboxNotificationPermissionPresentation
+            .notice(for: inbox.notificationPermission) {
+            Section {
+                InlineMessage(.warning, notice.title)
+                    .accessibilityIdentifier("inbox-banners-blocked")
+                caption(notice.explanation)
+                // Not a `.link`: this is the recovery for a stated problem, and
+                // it matches the bordered recovery button the status section
+                // renders for every other actionable state in this pane.
+                Button(notice.actionLabel) { inbox.openNotificationSettings() }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("inbox-open-notification-settings")
+                // The button's own refusal, beside the button. Reached when the
+                // platform will not open its settings at all, which is the one
+                // way this recovery can fail — and failing silently here would
+                // reproduce the defect this section was added to remove.
+                if inbox.settingsError == .notificationSettingsUnavailable {
+                    InlineMessage(.failure, InboxSettingsErrorCopy
+                        .message(.notificationSettingsUnavailable))
+                        .accessibilityIdentifier("inbox-notification-settings-error")
+                }
+            }
         }
     }
 

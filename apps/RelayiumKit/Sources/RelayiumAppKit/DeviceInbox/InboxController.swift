@@ -70,6 +70,12 @@ public enum InboxSettingsError: String, Equatable, Sendable, CaseIterable {
     case noFolderChosen
     /// The accept/decline could not be delivered to central.
     case askResponseFailed
+    /// macOS would not open its own notification settings for this app.
+    ///
+    /// Here for the reason the whole batch exists: the alternative is a button
+    /// that does nothing when pressed, which is indistinguishable from a broken
+    /// product and leaves the user with no idea where to go instead.
+    case notificationSettingsUnavailable
 }
 
 /// What a folder chooser and a status line need to say about the grant.
@@ -124,6 +130,21 @@ public struct InboxRuntime: Sendable {
     /// Show these paths in Finder. A seam so a test can prove that ONLY paths
     /// from a completed receipt ever reach it.
     public var reveal: @Sendable ([URL]) -> Void
+    /// Ask the platform what its notification authorization currently is. The
+    /// answer comes back asynchronously through
+    /// `InboxController.updateNotificationPermission`, because
+    /// `UNUserNotificationCenter` answers on its own queue.
+    public var refreshNotificationPermission: @Sendable () -> Void
+    /// Open this app's own row in the system's notification settings, returning
+    /// whether the platform accepted it.
+    ///
+    /// **It takes nothing.** That is the security property, not an accident of
+    /// convenience: a seam with no parameter is a seam no received file name,
+    /// destination path or task id can be passed into, so the ban
+    /// `InboxSurfaceGuardTests` places on launching received content cannot be
+    /// evaded through this door. The URL it opens is a compile-time constant at
+    /// the one call site that implements it.
+    public var openNotificationSettings: @Sendable () -> Bool
     public var platform: String
     public var appVersion: String
     public var backoff: InboxBackoff
@@ -137,6 +158,8 @@ public struct InboxRuntime: Sendable {
                 notifier: InboxNotifying? = nil,
                 sleeper: InboxSleeping = InboxTaskSleeper(),
                 reveal: @escaping @Sendable ([URL]) -> Void = { _ in },
+                refreshNotificationPermission: @escaping @Sendable () -> Void = {},
+                openNotificationSettings: @escaping @Sendable () -> Bool = { false },
                 platform: String, appVersion: String,
                 backoff: InboxBackoff = InboxBackoff(),
                 resultLimit: Int = 10) {
@@ -145,6 +168,8 @@ public struct InboxRuntime: Sendable {
         self.notifier = notifier
         self.sleeper = sleeper
         self.reveal = reveal
+        self.refreshNotificationPermission = refreshNotificationPermission
+        self.openNotificationSettings = openNotificationSettings
         self.platform = platform
         self.appVersion = appVersion
         self.backoff = backoff
@@ -236,6 +261,14 @@ public final class InboxController: ObservableObject {
     /// Whether the user paused. Sticky across passes and across the window being
     /// closed; cleared only by an explicit resume.
     @Published public private(set) var isPaused = false
+    /// Whether macOS will show a banner when a delivery lands.
+    ///
+    /// Deliberately NOT part of `state`: a denied Mac receives, decrypts and
+    /// commits exactly as before, so folding this into the runtime state would
+    /// make the status line report a broken inbox that is in fact working. It is
+    /// also not account-scoped — see `reset()`, which leaves it alone on purpose.
+    @Published public private(set) var notificationPermission: InboxNotificationPermission
+        = .unmeasured
 
     // MARK: - private state
 
@@ -367,6 +400,12 @@ public final class InboxController: ObservableObject {
         policy = .off
         ledger.reset()
         passToken += 1
+        // `notificationPermission` is deliberately absent. Everything cleared
+        // above belongs to ONE account — its receipts, its questions, its grant,
+        // its answer. Notification authorization belongs to the app and to this
+        // Mac: signing out, switching account or restarting the loop does not
+        // change what macOS will do with a banner, and clearing it here would
+        // blank a true warning at the exact moment a new generation starts.
     }
 
     private func stopLoop() {
@@ -812,6 +851,55 @@ public final class InboxController: ObservableObject {
 
     /// The newest completed delivery, for the menu bar's single Reveal item.
     public var latestResult: InboxReceipt? { results.first }
+
+    // MARK: - notification authorization
+
+    /// Ask the platform again.
+    ///
+    /// Called when the Device Inbox pane appears and every time the app becomes
+    /// active, which is the pair that covers the journey this exists for: the
+    /// user reads the warning, presses the button, changes the switch in System
+    /// Settings, and comes back. macOS publishes no change notification for
+    /// notification authorization, so re-asking at those two moments is the whole
+    /// mechanism — there is no event to subscribe to.
+    ///
+    /// Safe to call on every activation, unlike `refreshFolder`: that one costs a
+    /// real create-and-remove probe inside the user's own folder, while this is an
+    /// asynchronous read that writes nothing anywhere.
+    public func refreshNotificationPermission() {
+        runtime.refreshNotificationPermission()
+    }
+
+    /// The platform's answer, from whatever asked for it.
+    ///
+    /// Not guarded by a generation. This is an app-and-Mac fact rather than an
+    /// account-scoped one, so an answer that arrives across a sign-out is still
+    /// the correct answer — the generation guards exist to stop ONE account's
+    /// work being shown under another's, and this belongs to neither.
+    public func updateNotificationPermission(_ next: InboxNotificationPermission) {
+        guard notificationPermission != next else { return }
+        notificationPermission = next
+        // A refusal saying System Settings could not be opened describes a problem
+        // the user no longer has, and its section is about to disappear anyway.
+        // Leaving it standing would be the stale-message version of exactly the
+        // untruth this state was added to remove. Only that one refusal is
+        // cleared: an unrelated message the user has not read yet is not this
+        // measurement's to discard.
+        if !next.needsAttention, settingsError == .notificationSettingsUnavailable {
+            settingsError = nil
+        }
+    }
+
+    /// Take the user to this app's notification settings.
+    ///
+    /// Reports the refusal rather than swallowing it. A button that does nothing
+    /// when pressed is exactly the defect this batch was opened for, and "System
+    /// Settings would not open" is a sentence a person can act on, while silence
+    /// is not.
+    public func openNotificationSettings() {
+        settingsError = runtime.openNotificationSettings()
+            ? nil : .notificationSettingsUnavailable
+    }
 
     /// Re-measure the grant. Costs a real create-and-remove probe, so it is
     /// called on an explicit action or when a surface appears — never per redraw.

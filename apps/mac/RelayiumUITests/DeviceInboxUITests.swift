@@ -559,6 +559,152 @@ final class DeviceInboxUITests: XCTestCase {
                        "Ask became selected while Automatically was chosen")
     }
 
+    // MARK: - blocked notification banners
+
+    /// The launch every notification test starts from: a working, ready inbox
+    /// whose banners macOS will not show.
+    private func launchWithBlockedBanners(recovering: Bool = false) -> XCUIElement {
+        launch(["--relayium-ui-testing-signed-in", "--relayium-ui-testing-inbox-ready",
+                recovering ? "--relayium-ui-testing-inbox-notifications-recover"
+                           : "--relayium-ui-testing-inbox-notifications-denied"])
+        return openDeviceInboxSettings()
+    }
+
+    /// Wait for the ready status, which is also the proof that the receiver under
+    /// this pane is genuinely running rather than merely rendered.
+    private func waitForReady(in settings: XCUIElement) {
+        let status = element("inbox-status", in: settings)
+        XCTAssertTrue(status.waitForExistence(timeout: 15))
+        let ready = NSPredicate(format: "label CONTAINS[c] %@ OR value CONTAINS[c] %@",
+                                "Ready to receive", "Ready to receive")
+        expectation(for: ready, evaluatedWith: status, handler: nil)
+        waitForExpectations(timeout: 20)
+    }
+
+    /// **The state that shipped silent.**
+    ///
+    /// On the installed build, a Mac whose notification authorization had been
+    /// refused discarded the banner and said nothing: no status, no warning, and
+    /// nothing anywhere in the app that could change it. This is that Mac, and
+    /// what it now says.
+    ///
+    /// The second assertion is the one that keeps the repair from creating a worse
+    /// bug than it fixes. "Notifications are off" alone, in the Device Inbox pane,
+    /// reads as "the Device Inbox is off" — so the surface has to state that files
+    /// are still received and still saved, and the status line beside it has to go
+    /// on saying Ready. A user who stops trusting the feature because of a warning
+    /// about banners has lost more than the banner.
+    func testBlockedBannersSayReceivingStillWorksAndOfferSystemSettings() {
+        let settings = launchWithBlockedBanners()
+
+        let blocked = element("inbox-banners-blocked", in: settings)
+        XCTAssertTrue(blocked.waitForExistence(timeout: 20),
+                      "a Mac that will show no banner says nothing about it")
+        XCTAssertTrue(text(of: blocked).contains("Notification banners are turned off"),
+                      "the warning does not say what is actually switched off")
+
+        let copy = visibleText(in: settings)
+        XCTAssertTrue(copy.contains("still received and saved"),
+                      "the warning does not say that deliveries still arrive and are saved")
+
+        // Still ready. The receiver under this pane is the real one, so this is
+        // the product agreeing that a blocked banner has not stopped anything.
+        waitForReady(in: settings)
+
+        let action = element("inbox-open-notification-settings", in: settings)
+        XCTAssertTrue(action.exists, "there is no way to change it from inside the app")
+        XCTAssertTrue(action.isEnabled, "the only route out of this state is disabled")
+        XCTAssertTrue(action.label.contains("Notification settings"),
+                      "the action does not say where it goes")
+        XCTAssertFalse(element("inbox-notification-settings-error", in: settings).exists,
+                       "a refusal is shown before the button has been pressed")
+
+        // **Leaf discipline, measured rather than assumed.**
+        //
+        // This pane has lost a control to identifier propagation twice: once on
+        // the result row, where the row's identifier renamed the Reveal button
+        // inside it, and once on the Ask section's container, where it renamed all
+        // four answer buttons. Both looked correct on screen and both left a
+        // control unreachable. The warning and the button here sit in one section,
+        // so the same mistake is one edit away, and it is checked the same way the
+        // policy choices are: by counting.
+        XCTAssertEqual(settings.descendants(matching: .any)
+            .matching(identifier: "inbox-open-notification-settings").count, 1,
+                       "the System Settings action does not identify exactly one control")
+        XCTAssertEqual(settings.buttons.matching(identifier: "inbox-banners-blocked").count, 0,
+                       "the warning's identifier propagated onto the recovery button")
+        XCTAssertFalse(action.label.contains("Notification banners are turned off"),
+                       "the button is speaking the warning's copy instead of its own")
+    }
+
+    /// **The button reports a platform that will not open its own settings.**
+    ///
+    /// This launch's opener answers no, which is the one way this recovery can
+    /// fail. Pressing it has to produce a sentence rather than nothing: a control
+    /// that silently does nothing is the same defect as the silently discarded
+    /// banner, and this app has already shipped one recovery button whose action
+    /// was a `break`. Pressing it is also what proves the control is wired at all
+    /// — asserting that it EXISTS passes against a button connected to nothing.
+    func testTheSystemSettingsActionSaysSoWhenThePlatformRefusesIt() {
+        let settings = launchWithBlockedBanners()
+        let action = element("inbox-open-notification-settings", in: settings)
+        XCTAssertTrue(action.waitForExistence(timeout: 20))
+        action.click()
+
+        let refusal = element("inbox-notification-settings-error", in: settings)
+        XCTAssertTrue(refusal.waitForExistence(timeout: 10),
+                      "the action did nothing and said nothing")
+        XCTAssertTrue(text(of: refusal).contains("open System Settings"),
+                      "the refusal does not name what could not be done")
+        // Beside the button that caused it, not three sections away in the status
+        // block where it would read as an unrelated fault.
+        XCTAssertTrue(element("inbox-banners-blocked", in: settings).exists,
+                      "the refusal replaced the state it belongs to")
+        XCTAssertFalse(element("inbox-error", in: settings).exists,
+                       "the refusal was also rendered in the general error slot")
+    }
+
+    /// **The warning goes away when the user fixes it, without a relaunch.**
+    ///
+    /// macOS publishes nothing when notification authorization changes, so the
+    /// pane re-asks instead. This drives the whole journey: the warning is there,
+    /// the button is pressed, the setting changes outside the app, and the pane is
+    /// looked at again.
+    ///
+    /// Pressing the button is load-bearing rather than decorative — this launch's
+    /// fixture only reports `allowed` once the pane's own action has actually run,
+    /// so a button wired to nothing leaves the warning up and fails here.
+    func testAllowingNotificationsRemovesTheWarningWithoutARelaunch() {
+        var settings = launchWithBlockedBanners(recovering: true)
+        let blocked = element("inbox-banners-blocked", in: settings)
+        XCTAssertTrue(blocked.waitForExistence(timeout: 20),
+                      "this launch is supposed to start with banners blocked")
+
+        let action = element("inbox-open-notification-settings", in: settings)
+        XCTAssertTrue(action.exists)
+        action.click()
+        XCTAssertFalse(element("inbox-notification-settings-error", in: settings).exists,
+                       "an opener that succeeded still reported a refusal")
+
+        // Away and back, which is what a person does: the pane re-measures when it
+        // appears, so this is the same code path as returning from System
+        // Settings. The window is closed rather than merely switched away from, so
+        // the assertion cannot pass on a stale view that never re-ran.
+        settings.buttons[XCUIIdentifierCloseWindow].click()
+        let closed = NSPredicate(format: "exists == false")
+        expectation(for: closed, evaluatedWith: blocked, handler: nil)
+        waitForExpectations(timeout: 15)
+        settings = openDeviceInboxSettings()
+
+        // The pane is up and the receiver is running, and the warning is not here.
+        waitForReady(in: settings)
+        XCTAssertFalse(element("inbox-banners-blocked", in: settings).exists,
+                       "the warning survived the user allowing notifications")
+        XCTAssertFalse(element("inbox-open-notification-settings", in: settings).exists,
+                       "the recovery is still offered for a problem that is fixed")
+        XCTAssertFalse(visibleText(in: settings).contains("Notification banners are turned off"))
+    }
+
     /// The menu bar carries the smallest safe control set and NOT the
     /// consequential consents: no folder chooser and no policy control, both of
     /// which belong on a screen with their explanations.

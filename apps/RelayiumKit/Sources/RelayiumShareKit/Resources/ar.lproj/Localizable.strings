@@ -641,8 +641,12 @@
 "inbox.errorBookmark" = "لم يمنح macOS تطبيق Relayium إذنًا دائمًا لذلك المجلد. جرّب مجلدًا آخر.";
 "inbox.errorNoFolder" = "اختر مجلد استقبال أولًا — لا يوجد مكان للحفظ بعد.";
 "inbox.errorAskFailed" = "تعذّر إرسال ردّك. تحقق من اتصالك ثم أعد المحاولة.";
+"inbox.errorNotificationSettings" = "تعذّر فتح «إعدادات النظام». افتحها بنفسك ثم انتقل إلى «الإشعارات» ثم Relayium.";
 "inbox.notifyTitleSaved" = "وصلت ملفات";
 "inbox.notifyTitleAttention" = "صندوق وارد الجهاز يحتاج إلى انتباهك";
+"inbox.bannersBlocked" = "لافتات الإشعارات مُوقَفة";
+"inbox.bannersBlockedBody" = "لا يزال هذا الـ Mac يستقبل الملفات المُرسَلة إليه ويحفظها في المجلد الذي اخترته. المخفي هو اللافتة التي تُعلن عنها فقط، وعمليات الاستلام الأخيرة تظهر في الأسفل.";
+"inbox.openNotificationSettings" = "فتح إعدادات الإشعارات";
 "inbox.loginNote" = "يتيح خيار «الفتح عند تسجيل الدخول» لتطبيق Relayium استئناف الاستقبال بعد تسجيل دخولك إلى هذا الـ Mac. وهو لا يعني أن صندوق الوارد جاهز الآن.";
 "inbox.savedFiles.zero" = "حُفظت %@ ملفات";
 "inbox.savedFiles.one" = "حُفظ %@ ملف";

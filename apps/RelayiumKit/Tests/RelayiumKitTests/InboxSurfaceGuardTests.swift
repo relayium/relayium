@@ -221,6 +221,129 @@ final class InboxSurfaceGuardTests: XCTestCase {
         }
     }
 
+    // MARK: - the notification-settings route
+
+    /// **The seam that opens System Settings can never be handed a path.**
+    ///
+    /// The ban above stops the Device Inbox surfaces from launching anything at
+    /// all, and this is what keeps the one deliberate exception from becoming a
+    /// hole in it. The seam is declared to take NO argument, so there is no
+    /// parameter through which a received file name, a destination path or a task
+    /// id could travel to `NSWorkspace` — the property holds by the type, not by
+    /// the care of whoever writes the next call site.
+    func testTheNotificationSettingsSeamTakesNothingAndOpensOnlyALiteral() throws {
+        let controller = try packageSource("DeviceInbox/InboxController.swift")
+        XCTAssertTrue(controller.contains("public var openNotificationSettings: @Sendable () -> Bool"),
+                      "the System Settings seam no longer refuses to take an argument")
+
+        // The one implementation, in the scene that already owns the other
+        // platform seam. The URL is built in the same expression as the call,
+        // from the route type and this bundle's own identifier — never from a
+        // value that reached the scene from anywhere else.
+        let app = try macSource("RelayiumApp.swift")
+        XCTAssertTrue(app.contains("InboxNotificationSettingsRoute"),
+                      "the notification-settings route lost its deep link")
+        XCTAssertTrue(app.contains(".url(forBundleIdentifier: Bundle.main.bundleIdentifier)"),
+                      "the notification-settings route no longer names THIS app; a "
+                        + "constant or a missing id opens whichever row System "
+                        + "Settings was last left on")
+        let openers = try macSources().filter {
+            $0.text.contains("InboxNotificationSettingsRoute")
+        }.map(\.name)
+        XCTAssertEqual(openers, ["RelayiumApp.swift"],
+                       "the notification settings pane is opened from more than one place")
+        // And the URL itself exists in exactly one place, which is the place the
+        // execution tests can drive. A second copy in the app would be a route
+        // nothing proves selects an app row.
+        for (name, text) in try macSources() {
+            XCTAssertFalse(text.contains("Notifications-Settings.extension"),
+                           "\(name) builds the notification settings URL a second time")
+        }
+    }
+
+    /// **The pane identifier alone is not the route, and this is what would have
+    /// caught the shipped defect.**
+    ///
+    /// The first version of this recovery opened
+    /// `x-apple.systempreferences:com.apple.Notifications-Settings.extension`,
+    /// and on macOS 26.6 that re-opened System Settings on whichever app row it
+    /// was last left on — Google Chrome's, in the observed case — while the
+    /// button claimed to have opened Relayium's. The guard then in place checked
+    /// only that the pane identifier was present, so it passed the wrong target.
+    ///
+    /// The binding is checked end to end instead: the identifier this app is
+    /// actually built with must produce a URL that selects that app's row. An
+    /// identifier the route refuses — one carrying a character macOS allows in a
+    /// product name but not in an identifier, say — would leave every denied Mac
+    /// with a recovery that reports failure, and no unit test over a fixture id
+    /// would notice.
+    func testTheShippedBundleIdentifierProducesARowSelectingRoute() throws {
+        let project = try String(
+            contentsOf: appsRoot.appendingPathComponent("mac/Relayium.xcodeproj/project.pbxproj"),
+            encoding: .utf8)
+        let configured = Set(project.components(separatedBy: "\n").compactMap { line -> String? in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix("PRODUCT_BUNDLE_IDENTIFIER = ") else { return nil }
+            // Xcode writes the value bare or quoted depending on its content;
+            // both forms name the same identifier.
+            return trimmed.dropFirst("PRODUCT_BUNDLE_IDENTIFIER = ".count)
+                .trimmingCharacters(in: CharacterSet(charactersIn: ";\""))
+        })
+        XCTAssertFalse(configured.isEmpty, "no bundle identifier is configured at all")
+        // Every target's identifier must be routable — the app is the one that
+        // matters, and its extensions share its prefix, so a change that broke
+        // the shape would break all of them together.
+        for identifier in configured {
+            guard let url = InboxNotificationSettingsRoute
+                .url(forBundleIdentifier: identifier) else {
+                return XCTFail("the shipped identifier \(identifier) cannot be routed")
+            }
+            XCTAssertTrue(url.absoluteString.hasSuffix("?id=\(identifier)"),
+                          "the route for \(identifier) does not select its row")
+        }
+        // The app itself, named explicitly: the extensions extend it, and the
+        // notification row this recovery opens is the app's.
+        XCTAssertTrue(configured.contains("com.relayium.mac"),
+                      "the macOS app's bundle identifier changed; the notification "
+                        + "recovery's verified route must be re-verified against macOS")
+    }
+
+    /// A blocked banner is NOT an inbox runtime state.
+    ///
+    /// The tempting shortcut is to reuse `.attention`, and it would put "needs
+    /// attention" on the status line of a Mac that is receiving, decrypting and
+    /// committing perfectly — the mirror image of the `ready`-over-a-broken-grant
+    /// untruth the closed state enum exists to prevent. The two axes stay apart,
+    /// and the state enum stays free of any notion of notifications.
+    func testNotificationAuthorizationIsNotFoldedIntoTheRuntimeState() throws {
+        let state = try packageSource("DeviceInbox/InboxRuntimeState.swift")
+        for banned in ["notification", "Notification", "banner", "Banner"] {
+            XCTAssertFalse(state.contains(banned),
+                           "InboxRuntimeState learned about \(banned)")
+        }
+        // And the pane renders it from its own closed presentation rather than
+        // from a second switch over the runtime state.
+        let pane = try macSource("Settings/DeviceInboxSettingsView.swift")
+        XCTAssertTrue(pane.contains("InboxNotificationPermissionPresentation"),
+                      "the pane no longer renders the banner permission from the copy layer")
+        XCTAssertTrue(pane.contains("inbox.refreshNotificationPermission()"),
+                      "the pane never re-measures notification authorization")
+        XCTAssertTrue(pane.contains("NSApplication.didBecomeActiveNotification"),
+                      "the pane cannot notice authorization changed while it stayed open")
+    }
+
+    /// One mapping decides both what the pane says and whether a banner is
+    /// posted, so the claim and the behaviour cannot drift apart.
+    func testTheNotifierAndThePaneShareOneAuthorizationMapping() throws {
+        let notifier = try macSource("InboxNotifier.swift")
+        XCTAssertTrue(notifier.contains("InboxNotificationPermission("),
+                      "the notifier interprets the platform status on its own again")
+        XCTAssertFalse(notifier.contains("settings.authorizationStatus {"),
+                       "the notifier switches over the raw status a second time")
+        XCTAssertTrue(notifier.contains("onPermission"),
+                      "the notifier measures authorization and tells nobody")
+    }
+
     // MARK: - the credential
 
     /// Nothing in the Device Inbox package sources persists or publishes a
@@ -261,14 +384,19 @@ final class InboxSurfaceGuardTests: XCTestCase {
                      "testAWorkingInboxSaysSoWithoutNamingTheDelivery",
                      "testACompletedDeliveryOffersRevealInFinderWithoutNamingTheFile",
                      "testClosingTheWindowLeavesTheInboxRunningAndReopeningMakesNoSecondWindow",
-                     "testTheMenuBarOffersNoFolderGrantAndNoPolicyChange"] {
+                     "testTheMenuBarOffersNoFolderGrantAndNoPolicyChange",
+                     "testBlockedBannersSayReceivingStillWorksAndOfferSystemSettings",
+                     "testTheSystemSettingsActionSaysSoWhenThePlatformRefusesIt",
+                     "testAllowingNotificationsRemovesTheWarningWithoutARelaunch"] {
             XCTAssertTrue(ui.contains(name), "the runtime suite lost \(name)")
         }
         for argument in ["--relayium-ui-testing-inbox-ready",
                          "--relayium-ui-testing-inbox-attention",
                          "--relayium-ui-testing-inbox-ask",
                          "--relayium-ui-testing-inbox-working",
-                         "--relayium-ui-testing-inbox-result"] {
+                         "--relayium-ui-testing-inbox-result",
+                         "--relayium-ui-testing-inbox-notifications-denied",
+                         "--relayium-ui-testing-inbox-notifications-recover"] {
             XCTAssertTrue(ui.contains(argument), "no launch drives \(argument)")
         }
     }

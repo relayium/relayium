@@ -602,8 +602,12 @@
 "inbox.errorBookmark" = "O macOS não deu ao Relayium uma permissão duradoura para essa pasta. Experimente outra.";
 "inbox.errorNoFolder" = "Escolha primeiro uma pasta de receção — ainda não há onde guardar.";
 "inbox.errorAskFailed" = "Não foi possível enviar a sua resposta. Verifique a ligação e tente novamente.";
+"inbox.errorNotificationSettings" = "Não foi possível abrir as Definições do Sistema. Abra-as e vá a «Notificações» e depois a Relayium.";
 "inbox.notifyTitleSaved" = "Ficheiros recebidos";
 "inbox.notifyTitleAttention" = "A caixa de entrada do dispositivo precisa de atenção";
+"inbox.bannersBlocked" = "Os avisos de notificação estão desativados";
+"inbox.bannersBlockedBody" = "Este Mac continua a receber os ficheiros que lhe são enviados e a guardá-los na pasta que escolheu. Só o aviso que os anuncia está oculto; as entregas recentes continuam listadas abaixo.";
+"inbox.openNotificationSettings" = "Abrir definições de notificações";
 "inbox.loginNote" = "«Abrir ao iniciar sessão» faz o Relayium voltar a receber depois de iniciar sessão neste Mac. Não significa que a caixa de entrada esteja pronta agora.";
 "inbox.savedFiles.one" = "%@ ficheiro guardado";
 "inbox.savedFiles.other" = "%@ ficheiros guardados";

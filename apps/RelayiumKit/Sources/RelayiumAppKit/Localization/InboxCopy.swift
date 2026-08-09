@@ -227,6 +227,52 @@ public enum InboxSettingsErrorCopy {
         case .folderBookmarkFailed: return L10n.t(.inboxErrorBookmark, language: language)
         case .noFolderChosen:      return L10n.t(.inboxErrorNoFolder, language: language)
         case .askResponseFailed:   return L10n.t(.inboxErrorAskFailed, language: language)
+        case .notificationSettingsUnavailable:
+            return L10n.t(.inboxErrorNotificationSettings, language: language)
+        }
+    }
+}
+
+/// What a person is told when macOS will not show a banner, and what they are
+/// offered about it.
+public struct InboxNotificationNotice: Equatable, Sendable {
+    /// What is actually true right now.
+    public let title: String
+    /// **The half that stops this being alarming.** Banners are off; receiving is
+    /// not. A warning that said only the first would tell a user their Device
+    /// Inbox is broken when every file sent to this Mac is still landing in their
+    /// folder, and the likeliest response to that is to stop using the feature.
+    public let explanation: String
+    /// The route out.
+    public let actionLabel: String
+
+    public init(title: String, explanation: String, actionLabel: String) {
+        self.title = title
+        self.explanation = explanation
+        self.actionLabel = actionLabel
+    }
+}
+
+/// Whether the banner permission is worth saying anything about, and what.
+///
+/// One entry point returning an optional rather than three parallel functions:
+/// the three strings are only ever rendered together, and a caller that could ask
+/// for the title without asking whether there is anything to report is a caller
+/// that can put a warning on a Mac whose notifications work.
+public enum InboxNotificationPermissionPresentation {
+    public static func notice(for permission: InboxNotificationPermission,
+                              language: AppLanguage? = nil) -> InboxNotificationNotice? {
+        switch permission {
+        case .unmeasured, .notDetermined, .allowed:
+            // Nothing to report, and three different reasons for it: nothing has
+            // asked yet, macOS has not been asked yet, and macOS said yes. None
+            // of them is a problem the user can or should act on.
+            return nil
+        case .denied:
+            return InboxNotificationNotice(
+                title: L10n.t(.inboxBannersBlocked, language: language),
+                explanation: L10n.t(.inboxBannersBlockedBody, language: language),
+                actionLabel: L10n.t(.inboxOpenNotificationSettings, language: language))
         }
     }
 }

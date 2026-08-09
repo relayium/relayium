@@ -602,8 +602,12 @@
 "inbox.errorBookmark" = "macOS n'a pas accordé à Relayium d'autorisation durable pour ce dossier. Essayez-en un autre.";
 "inbox.errorNoFolder" = "Choisissez d'abord un dossier de réception — il n'y a encore nulle part où enregistrer.";
 "inbox.errorAskFailed" = "Votre réponse n'a pas pu être envoyée. Vérifiez votre connexion, puis réessayez.";
+"inbox.errorNotificationSettings" = "Les Réglages Système n'ont pas pu être ouverts. Ouvrez-les vous-même, puis allez dans « Notifications », puis Relayium.";
 "inbox.notifyTitleSaved" = "Fichiers reçus";
 "inbox.notifyTitleAttention" = "La boîte de réception demande votre attention";
+"inbox.bannersBlocked" = "Les bannières de notification sont désactivées";
+"inbox.bannersBlockedBody" = "Ce Mac continue de recevoir les fichiers qui lui sont envoyés et de les enregistrer dans le dossier que vous avez choisi. Seule la bannière qui les annonce est masquée : les réceptions récentes restent listées ci-dessous.";
+"inbox.openNotificationSettings" = "Ouvrir les réglages de notifications";
 "inbox.loginNote" = "« Ouvrir à la connexion » permet à Relayium de recevoir à nouveau après votre connexion à ce Mac. Cela ne signifie pas que la boîte de réception est prête maintenant.";
 "inbox.savedFiles.one" = "%@ fichier enregistré";
 "inbox.savedFiles.other" = "%@ fichiers enregistrés";

@@ -603,8 +603,12 @@
 "inbox.errorBookmark" = "macOS wouldn't give Relayium lasting permission for that folder. Try another one.";
 "inbox.errorNoFolder" = "Choose a receive folder first — there is nowhere to save to yet.";
 "inbox.errorAskFailed" = "Your answer couldn't be sent. Check your connection, then try again.";
+"inbox.errorNotificationSettings" = "Relayium couldn't open System Settings. Open it yourself and go to Notifications, then Relayium.";
 "inbox.notifyTitleSaved" = "Files received";
 "inbox.notifyTitleAttention" = "Device Inbox needs attention";
+"inbox.bannersBlocked" = "Notification banners are turned off";
+"inbox.bannersBlockedBody" = "Files sent to this Mac are still received and saved to the folder you chose. Only the banner that announces them is hidden; recent deliveries are still listed below.";
+"inbox.openNotificationSettings" = "Open Notification settings";
 "inbox.loginNote" = "Open at Login lets Relayium start receiving again after you log in to this Mac. It does not mean the inbox is ready right now.";
 "inbox.savedFiles.one" = "%@ file saved";
 "inbox.savedFiles.other" = "%@ files saved";

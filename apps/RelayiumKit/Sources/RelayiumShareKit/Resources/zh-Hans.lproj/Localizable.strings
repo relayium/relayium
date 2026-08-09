@@ -593,8 +593,12 @@
 "inbox.errorBookmark" = "macOS 没有为该文件夹授予 Relayium 长期权限。请换一个文件夹。";
 "inbox.errorNoFolder" = "请先选择接收文件夹 — 目前还没有保存位置。";
 "inbox.errorAskFailed" = "你的答复未能送出。请检查网络连接后重试。";
+"inbox.errorNotificationSettings" = "无法打开「系统设置」。请自行打开，然后前往「通知」中的 Relayium。";
 "inbox.notifyTitleSaved" = "已接收文件";
 "inbox.notifyTitleAttention" = "设备收件箱需要处理";
+"inbox.bannersBlocked" = "通知横幅已关闭";
+"inbox.bannersBlockedBody" = "这台 Mac 仍会接收发送给它的文件，并保存到你选择的文件夹中。被隐藏的只是提示到达的横幅，最近接收的内容仍会显示在下方。";
+"inbox.openNotificationSettings" = "打开通知设置";
 "inbox.loginNote" = "“登录时打开”让 Relayium 在你登录这台 Mac 后重新开始接收。它并不表示收件箱现在已经就绪。";
 "inbox.savedFiles.other" = "已保存 %@ 个文件";
 "inbox.waitingDeliveries.other" = "%@ 项投递正在等待你的答复";

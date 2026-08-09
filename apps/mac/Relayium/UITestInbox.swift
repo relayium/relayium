@@ -39,11 +39,45 @@ enum UITestInbox {
     static let resultArgument = "--relayium-ui-testing-inbox-result"
     static let askArgument = "--relayium-ui-testing-inbox-ask"
 
+    /// Notification authorization the platform will not produce on demand.
+    ///
+    /// **Why these are substituted at all**, when every other fixture in this file
+    /// insists on driving the real thing: `UNUserNotificationCenter` answers from
+    /// the state of the MACHINE. A runner where someone once allowed Relayium
+    /// reports `authorized`, one where nobody has reports `notDetermined`, and
+    /// there is no API that makes it report `denied` — the only way is a human
+    /// pressing Don't Allow, once, permanently, on that machine. A suite built on
+    /// that would measure the runner rather than the product, which is the exact
+    /// failure `UITestMode` records for the keychain.
+    ///
+    /// So this substitutes the ONE seam the platform owns, and everything above
+    /// it stays real: the same `InboxController`, the same published permission,
+    /// the same copy layer, the same SwiftUI section, the same button. The
+    /// mapping from `UNAuthorizationStatus` that these stand in for is total and
+    /// covered separately by `InboxNotificationPermissionTests`, so the untested
+    /// gap is only the platform call itself.
+    ///
+    /// They are additive to a mode above rather than a mode of their own,
+    /// deliberately: the claim being checked is that a Mac with banners switched
+    /// off still says it is READY to receive, and that is only visible when the
+    /// receiver underneath is genuinely running.
+    // nonlocalized: test-only launch arguments, absent from Release
+    static let notificationsDeniedArgument = "--relayium-ui-testing-inbox-notifications-denied"
+    /// Denied, and repaired: the fixture reports `allowed` once the pane's own
+    /// button has been pressed, standing in for the user changing the switch in
+    /// System Settings and coming back.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let notificationsRecoverArgument = "--relayium-ui-testing-inbox-notifications-recover"
+
     static let showsReady = ProcessInfo.processInfo.arguments.contains(readyArgument)
     static let showsAttention = ProcessInfo.processInfo.arguments.contains(attentionArgument)
     static let showsWorking = ProcessInfo.processInfo.arguments.contains(workingArgument)
     static let showsResult = ProcessInfo.processInfo.arguments.contains(resultArgument)
     static let showsAsk = ProcessInfo.processInfo.arguments.contains(askArgument)
+    static let deniesNotifications = ProcessInfo.processInfo.arguments
+        .contains(notificationsDeniedArgument)
+    static let recoversNotifications = ProcessInfo.processInfo.arguments
+        .contains(notificationsRecoverArgument)
 
     static var isActive: Bool {
         showsReady || showsAttention || showsWorking || showsResult || showsAsk
@@ -81,7 +115,17 @@ enum UITestInbox {
         }
 
         let transport = UITestInboxTransport(mode: mode)
-        return InboxController(runtime: InboxRuntime(
+        // nil unless a launch asked for it, so the eight launches that do not
+        // mention notifications keep the production defaults: nothing reports a
+        // permission, the controller stays `unmeasured`, and the pane renders no
+        // banner section at all.
+        let banners = (deniesNotifications || recoversNotifications)
+            ? UITestBannerPermission(recovers: recoversNotifications) : nil
+        // The seams are part of the runtime the controller is built from, so they
+        // cannot capture the controller directly. The shipped app has the same
+        // ordering problem and resolves it the same way.
+        let box = UITestInboxControllerBox()
+        let controller = InboxController(runtime: InboxRuntime(
             folder: folder,
             makeEngine: { account, _ in
                 InboxReceiveEngine(transport: transport, keys: keys, journals: journals,
@@ -97,9 +141,25 @@ enum UITestInbox {
             // suite fast without starving the UI it exists to look at.
             sleeper: InboxTaskSleeper(),
             reveal: { _ in },
+            // The box is captured STRONGLY and holds the controller weakly, which
+            // is the direction that terminates: the controller owns the runtime,
+            // the runtime owns this closure, and this closure owns the box. Held
+            // the other way round the box is deallocated the moment this factory
+            // returns, and every refresh silently reports to nothing.
+            refreshNotificationPermission: {
+                guard let banners else { return }
+                let next = banners.current
+                Task { @MainActor in box.controller?.updateNotificationPermission(next) }
+            },
+            // Returns the fixture's answer and NEVER opens System Settings. A
+            // suite that launched another app would leave it on screen for every
+            // test after it and would be measuring macOS, not this pane.
+            openNotificationSettings: { banners?.open() ?? false },
             platform: AppEnvironment.inboxPlatform,
             appVersion: "uitest",  // nonlocalized: a build label, never displayed
             backoff: InboxBackoff(idle: 1, afterWork: 1, first: 1, cap: 2, blocked: 1)))
+        box.controller = controller
+        return controller
     }
 
     /// The account the signed-in acceptance fixture holds. Matched to
@@ -133,6 +193,50 @@ enum UITestInbox {
         try? FileManager.default.removeItem(at: directory)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
+    }
+}
+
+/// Holds the controller the two notification seams have to reach.
+///
+/// The seams are built as part of the runtime the controller is initialised
+/// with, so they cannot capture it. Weak, so the box cannot be what keeps a
+/// launch's controller alive.
+@MainActor
+private final class UITestInboxControllerBox {
+    weak var controller: InboxController?
+}
+
+/// The platform's answer about banners, and the user's trip to System Settings,
+/// both faked — and nothing else about the pane is.
+///
+/// `recovers` is the difference between the two launches this file offers. Both
+/// start denied. The recovering one treats a press of the pane's own button as
+/// the user having gone and switched notifications back on, so the NEXT refresh
+/// answers `allowed` — which is what makes "the surface updates when
+/// authorization changes" a property the suite can actually observe rather than
+/// one it has to take on trust. It also makes the press load-bearing: a button
+/// wired to nothing never flips this, and the test fails.
+///
+/// The non-recovering one answers `false` from `open`, which is the platform
+/// refusing to open its own settings. That branch has to be driven somewhere,
+/// because the alternative to reporting it is a button that silently does
+/// nothing — the defect this whole batch exists to remove.
+private final class UITestBannerPermission: @unchecked Sendable {
+    private let lock = NSLock()
+    private let recovers: Bool
+    private var opened = false
+
+    init(recovers: Bool) { self.recovers = recovers }
+
+    var current: InboxNotificationPermission {
+        lock.lock(); defer { lock.unlock() }
+        return recovers && opened ? .allowed : .denied
+    }
+
+    func open() -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        opened = true
+        return recovers
     }
 }
 
