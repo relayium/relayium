@@ -1,15 +1,20 @@
 # Relayium Device Inbox v1 — device identity, keys, capabilities, presence
 
-Status: **Phases 1A, 1B, 1C and 1D-A.** This document specifies device enrolment,
-end-to-end public-key registration/rotation/revocation, capability negotiation
-and presence (§1-§10), the encrypted asynchronous task queue with its full
-server-visible state machine (§11-§18), the obligations of a RECEIVING
-CLIENT (§19-§23), and the SERVER half of the sender: the task-purpose opaque
-upload, its authorization boundaries, binding and cleanup (§24-§28).
+Status: **Phases 1A, 1B, 1C, 1D and 2A.** This document specifies device
+enrolment, end-to-end public-key registration/rotation/revocation, capability
+negotiation and presence (§1-§10), the encrypted asynchronous task queue with its
+full server-visible state machine (§11-§18), the obligations of a RECEIVING
+CLIENT (§19-§23), the SERVER half of the sender: the task-purpose opaque
+upload, its authorization boundaries, binding and cleanup (§24-§28), and the
+NATIVE macOS receiver core (§29-§32).
 
-The web/native device UI — the Web sender (1D-B) and the native clients (2, 3) —
-is **not** specified here and is not implemented. Product source of truth:
-`DEVICE-INBOX-PRD.md` §6, §8, §9, §10, §11.
+The Web sender (Phase 1D-B) is implemented and delivered; its client-side code
+lives in `web/src/lib/device-send.ts`, `web/src/lib/device-seal.ts` and
+`web/src/lib/device-inbox.ts`, and it drives the §24-§28 surface. Its UI is not
+specified here — this document specifies the wire and the receiver, not the
+sender's presentation. The iOS clients (Phase 3) are not specified here and are
+not implemented. Product source of truth: `DEVICE-INBOX-PRD.md` §6, §8, §9, §10,
+§11.
 
 Authoritative implementation: `server/internal/inbox/inbox.go` and
 `server/internal/inbox/task.go` (protocol vocabulary and the state machine),
@@ -20,8 +25,11 @@ Authoritative implementation: `server/internal/inbox/inbox.go` and
 `server/account/uploads_resumable.go` and `server/account/gc.go` (the
 task-purpose object: purpose/binding vocabulary, the two upload paths, and the
 reclaim sweep), `server/internal/inboxclient/` and
-`server/cmd/relayium/inbox.go` (the CLI receiver). Any change here requires
-changing those and their tests together.
+`server/cmd/relayium/inbox.go` (the CLI receiver), and
+`apps/RelayiumKit/Sources/RelayiumKit/DeviceInbox/` with
+`apps/RelayiumKit/Sources/RelayiumAppKit/DeviceInbox/` (the native macOS
+receiver core). Any change here requires changing those and their tests
+together.
 
 ## 1. Invariants
 
@@ -608,7 +616,8 @@ enforced entirely on the device. Central cannot observe any of them.
 The reference implementation is the Relayium CLI (`server/internal/inboxclient/`,
 `server/cmd/relayium/inbox.go`); the operator-facing guide is
 `docs/device-inbox-cli.md`. A macOS or iOS client implementing §19-§22 is
-interoperable with it and with the same server.
+interoperable with it and with the same server. The native macOS receiver
+implements §19-§22 and adds the platform obligations in §29-§32.
 
 ## 19. Client obligations
 
@@ -932,3 +941,131 @@ explicit `device_task` bound to that exact task, can back a delivery. `purpose`
 is backfilled from empty to `share` on every boot rather than once, so a crash
 between the `ALTER` and the first write cannot leave rows with a purpose the
 public endpoints would refuse.
+
+---
+
+# Phase 2A — the native macOS receiver core
+
+§19-§22 state what ANY receiving client must do. This half states what a
+SANDBOXED, user-facing client additionally owes, because three of its
+constraints have no counterpart in the CLI: the credential store is a keychain
+rather than a file, folder access is a revocable grant rather than a path, and a
+single Mac carries several accounts over its life.
+
+Phase 2A is the receiver CORE only: the protocol client, the key custody, the
+folder authorization and the delivery engine. The Settings, menu-bar residency,
+notification, Finder-reveal and login-item surfaces that drive it are Phase 2B
+and are deliberately not specified here.
+
+Implementation: `apps/RelayiumKit/Sources/RelayiumKit/DeviceInbox/`
+(vocabulary, wire models, HTTP client, sealed box) and
+`apps/RelayiumKit/Sources/RelayiumAppKit/DeviceInbox/` (key store, folder
+grant, journal, destination plan, commit, receiver, one-pass engine).
+
+## 29. Key custody on a multi-account device
+
+1. **The keychain, not a file.** The X25519 private-key history lives in the
+   DATA-PROTECTION keychain (`kSecUseDataProtectionKeychain`) with
+   `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`. Both halves of that
+   accessibility are load-bearing. *After first unlock* is what lets a receiver
+   that starts at login work while the Mac is running but locked. *This device
+   only* keeps the key out of an iCloud Keychain sync and out of an encrypted
+   backup restored onto another Mac — a device identity that could be restored
+   elsewhere would let two machines claim to be one device. Without
+   `kSecUseDataProtectionKeychain` the legacy file-based keychain treats
+   `kSecAttrAccessible` as ADVISORY, so the protection is not enforced at all.
+2. **The history is bound to ONE account.** Every read, append, bind and destroy
+   names its account, and the account is composed into the keychain item name
+   through the same identifier rule that guards a URL path component. One
+   account can therefore neither read nor destroy another's keys, and an async
+   operation started under one account resolves against THAT account when it
+   lands — not against whichever account is signed in by then.
+3. **Sign-out is not destruction.** Signing out leaves an account's key history
+   in place, because tasks sealed to those keys may still be queued; only an
+   explicit disable destroys them, and only after central confirms the enrolment
+   is cleared (§19.1, §19.2 unchanged).
+4. **Interoperability is proven by execution.** The native unseal is gated on a
+   sealed box produced by another implementation — the frozen `crypto_box_seal`
+   specification vector the Go receiver also opens, plus a live Go
+   `SealAnonymous` sealed to a key this client minted. Tampering, truncation, a
+   wrong key, a mismatched public/private pair and a non-canonical spelling must
+   all fail.
+
+## 30. The receive folder is a grant, not a path
+
+1. A user-selected directory produces a READ/WRITE security-scoped bookmark,
+   created with `.withSecurityScope` and resolved with `.withSecurityScope`.
+2. Every successful `startAccessingSecurityScopedResource` is balanced by
+   exactly one `stopAccessingSecurityScopedResource`; a start that returns false
+   consumed no extension and owes no stop. The scope is opened ONCE per pass and
+   held across the commit, so no window exists in which staged plaintext is on
+   disk with the scope closed.
+3. A bookmark the system reports STALE is refreshed only after that resolution
+   has been proven writable. Refreshing from an unproven resolution would
+   overwrite the last known-good grant with one that may point somewhere
+   unusable, and there is no way back from that. A refresh that fails KEEPS the
+   old bookmark.
+4. Four outcomes are distinguished and never collapsed: **absent** (no folder
+   chosen), **usable**, **stale-refresh failed**, and **unavailable**
+   (unresolvable, access denied, or not writable). Each is a different thing for
+   a person to do.
+5. Writability is a real create-and-remove probe of a fixed, reserved name — not
+   an inspection of permission bits. A read-only remount, a full disk, an ACL, an
+   immutable flag and a revoked TCC grant all leave the bits looking fine, and
+   `receiveDirReady` (§19.6) decides whether a sender is told their file will
+   land.
+6. **Automatic receive is a separate persisted flag and defaults off** (PRD §8).
+   Choosing a folder is not consent to unattended writes; enabling with no folder
+   chosen is refused. Both the grant and the opt-in are stored per account.
+7. **No usable folder means no receive claim.** A pass with an unusable folder
+   heartbeats with `receiveDirReady: false` and claims nothing — taking a lease
+   this Mac cannot honour would leave the sender watching a task that is not
+   progressing.
+
+## 31. Native commit and recovery
+
+The §20 pipeline and the §22 commit ordering apply unchanged. The platform
+specifics:
+
+- The commit is `linkat(2)` from a per-task staging directory INSIDE the receive
+  folder into a destination directory reached by opening each component
+  `O_NOFOLLOW | O_DIRECTORY` from the previous component's descriptor. A symlink
+  or a non-directory at any component stops the delivery; `EXDEV` — a separate
+  filesystem mounted inside the receive folder — is refused rather than degraded
+  to a copy.
+- The `EEXIST` branch compares `(st_dev, st_ino)` of the destination and the
+  staged source. Equal means this task's own link survived a crash before its
+  journal write, so the bookkeeping is finished. Unequal is
+  `attention_required`/`name_conflict`: never overwritten, never merged.
+- Committed files are `0600` and directories `0700`, set explicitly rather than
+  inherited from the umask, and no committed file carries an executable bit.
+- The journal lives OUTSIDE the receive folder, at `0600` inside a `0700`
+  per-account directory: it holds plaintext file names and absolute
+  destinations, and it must stay readable when the receive folder itself becomes
+  unusable.
+- Manifest names are taken RAW. A display sanitiser that strips control or bidi
+  characters must not run before destination planning: a stripped name is one the
+  device would then create under a name nobody chose. Such a name is REFUSED.
+- Where the CLI refuses a manifest entry whose requested name equals the
+  collision suffix an EARLIER entry was given, the native receiver steps that
+  entry aside to the next free name instead. Both never overwrite; §21's refusal
+  is for two entries that RESOLVE to one destination, which this is not.
+
+## 32. Native reporting
+
+- The closed §16 code set is the only vocabulary. The native client's error type
+  carries no message string at all, so no file name, destination, bearer, claim
+  token or key material has a field to travel in — including into a log line,
+  whose event type likewise admits only ids, protocol states, closed codes and
+  COUNTS.
+- A state central does not accept from a device, and a `saved` without the commit
+  assertion, are refused locally before a request is built.
+- A refused lease renewal is an ABANDON: the delivery stops and reports NOTHING
+  (§19.8). This includes a renewal refused between two destinations of a
+  multi-file commit — the files already placed stay placed and stay journalled.
+- `attention_required` is the state that preserves recovery. A device re-queues
+  only the tasks IT parked for a local blocker that has since cleared
+  (`permission_denied`, `directory_unavailable`, and `disk_full` re-checked
+  against that task's own declared size). A task held under the `ask` policy
+  carries no error code and is never auto-accepted: that question was asked of a
+  person.

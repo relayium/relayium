@@ -79,12 +79,24 @@ public func encryptManifest(key: [UInt8], _ m: StoredManifest) throws -> [UInt8]
     return seal(key: key, seq: 0, plaintext: try manifestJSON(m))
 }
 
-public func decryptManifest(key: [UInt8], _ ct: [UInt8]) throws -> StoredManifest {
+/// Decrypt and validate, keeping every name EXACTLY as the sender wrote it.
+///
+/// `decryptManifest` below strips control and bidi characters for display, which
+/// is right for a name a person is about to read and wrong for a name that is
+/// about to become a filesystem instruction: stripping turns `"a\u{0}b"` into a
+/// name this device would then happily create, when the honest answer is to
+/// REFUSE the manifest. A receiver that plans destinations therefore takes the
+/// raw names and applies its own refusal rules to them.
+public func decryptManifestRaw(key: [UInt8], _ ct: [UInt8]) throws -> StoredManifest {
     guard let pt = open(key: key, seq: 0, ciphertext: ct) else {
         throw StoredWireError.truncatedStream   // auth failure / corrupt manifest
     }
     let m = try JSONDecoder().decode(StoredManifest.self, from: Data(pt))
     do { try validateManifestFiles(m.files) }
     catch { throw StoredWireError.invalidManifest }
-    return StoredManifest(files: sanitizeNames(m.files))
+    return m
+}
+
+public func decryptManifest(key: [UInt8], _ ct: [UInt8]) throws -> StoredManifest {
+    StoredManifest(files: sanitizeNames(try decryptManifestRaw(key: key, ct).files))
 }

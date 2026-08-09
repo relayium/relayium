@@ -43,7 +43,24 @@ public final class StoreDecryptor {
     private var seq: UInt64 = 1
     private var buf: [UInt8] = []
     public private(set) var decryptedBytes: Int = 0
+    /// CIPHERTEXT bytes consumed in COMPLETE, authenticated frames.
+    ///
+    /// This is the only sound resume offset: it advances past a frame only once
+    /// that frame has been decrypted and authenticated, so a `Range` request
+    /// starting here can never re-feed a partial frame and can never skip one.
+    /// The buffered tail of an interrupted frame is deliberately NOT counted —
+    /// it is the part whose authenticity is still unknown.
+    public private(set) var consumedCipher: Int = 0
     public init(key: [UInt8]) { self.key = key }
+
+    /// Drop the buffered tail of an incomplete frame before a resumed read.
+    ///
+    /// Required, not tidiness: a reconnect restarts at `consumedCipher`, so
+    /// whatever partial frame was buffered would be prepended to bytes that
+    /// already contain it and the stream would decode as garbage. Nothing that
+    /// has been authenticated is discarded — `seq`, `decryptedBytes` and
+    /// `consumedCipher` all describe complete frames and are untouched.
+    public func resetBuffer() { buf = [] }
 
     public func push(_ data: [UInt8]) throws -> [[UInt8]] {
         buf += data
@@ -58,6 +75,7 @@ public final class StoreDecryptor {
                 throw StoredWireError.truncatedStream            // auth failure = tamper
             }
             seq += 1; off += 4 + len; decryptedBytes += pt.count
+            consumedCipher += 4 + len
             out.append(pt)
         }
         buf = off < buf.count ? Array(buf[off...]) : []
