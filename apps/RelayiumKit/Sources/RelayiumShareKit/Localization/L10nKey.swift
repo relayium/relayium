@@ -983,6 +983,114 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case errorStoredWireCorrupt = "error.storedWire.corrupt"
     /// %@ — the failing Swift type's name, verbatim, so a bug report is actionable.
     case errorUnknown = "error.unknown"
+
+    // MARK: - Device Inbox (macOS Settings, menu bar, notifications)
+    //
+    // Two rules run through every sentence below and are worth stating once.
+    //
+    //  1. **Nothing here may claim readiness the app cannot back up.** There is a
+    //     separate line for every state, including the awkward ones — no folder,
+    //     a revoked grant, a full disk, paused, offline — because a single
+    //     optimistic label is how a receiver ends up telling a sender it can take
+    //     a file when it cannot.
+    //  2. **No sentence renders a file name or a path.** The notification bodies
+    //     are counts, and the menu bar names no destination at all: a macOS
+    //     notification preview is readable on a locked screen by anyone in the
+    //     room. Only the Settings result list, which is on the user's own screen
+    //     behind their own login, offers Show in Finder.
+
+    case inboxTitle = "inbox.title"
+    case inboxExplain = "inbox.explain"
+    case inboxSignedOut = "inbox.signedOut"
+    case inboxSignedOutBody = "inbox.signedOutBody"
+
+    // The folder grant. Separate from the policy in the copy as well as in the
+    // storage, because the whole product invariant is that they are two
+    // decisions.
+    case inboxFolderHeading = "inbox.folderHeading"
+    case inboxFolderExplain = "inbox.folderExplain"
+    case inboxFolderNone = "inbox.folderNone"
+    case inboxChooseFolder = "inbox.chooseFolder"
+    case inboxChangeFolder = "inbox.changeFolder"
+    case inboxRemoveFolder = "inbox.removeFolder"
+    /// The system folder picker's own message and confirm button.
+    case inboxPickerMessage = "inbox.pickerMessage"
+    case inboxPickerPrompt = "inbox.pickerPrompt"
+
+    case inboxPolicyHeading = "inbox.policyHeading"
+    case inboxPolicyExplain = "inbox.policyExplain"
+    case inboxPolicyOff = "inbox.policyOff"
+    case inboxPolicyAsk = "inbox.policyAsk"
+    case inboxPolicyAuto = "inbox.policyAuto"
+
+    // One line per state. `L10nKey` is `CaseIterable` and the integrity test
+    // walks it, so a state added without its sentence fails the suite rather
+    // than rendering a raw key on somebody's menu bar.
+    case inboxStatusSignedOut = "inbox.statusSignedOut"
+    case inboxStatusLoading = "inbox.statusLoading"
+    case inboxStatusDisabled = "inbox.statusDisabled"
+    case inboxStatusFolderMissing = "inbox.statusFolderMissing"
+    case inboxStatusReadyAuto = "inbox.statusReadyAuto"
+    case inboxStatusReadyAsk = "inbox.statusReadyAsk"
+    case inboxStatusPaused = "inbox.statusPaused"
+    case inboxStatusWorking = "inbox.statusWorking"
+    case inboxStatusOffline = "inbox.statusOffline"
+    /// %@ — an already-formatted duration such as “30 seconds”.
+    case inboxStatusOfflineRetry = "inbox.statusOfflineRetry"
+    /// %@ — a whole number of seconds, already formatted in this language.
+    case inboxRetrySeconds = "inbox.retrySeconds"
+
+    // Why the folder cannot be used, and what to do about it. Four causes, four
+    // different actions; collapsing them is how a stalled inbox looks fine.
+    case inboxFolderAccessDenied = "inbox.folderAccessDenied"
+    case inboxFolderUnresolvable = "inbox.folderUnresolvable"
+    case inboxFolderNotWritable = "inbox.folderNotWritable"
+    case inboxFolderStale = "inbox.folderStale"
+
+    // Why one delivery stopped. The closed device error codes, one sentence each.
+    case inboxBlockedDiskFull = "inbox.blockedDiskFull"
+    case inboxBlockedPermission = "inbox.blockedPermission"
+    case inboxBlockedDirectory = "inbox.blockedDirectory"
+    case inboxBlockedNameConflict = "inbox.blockedNameConflict"
+    case inboxBlockedDownload = "inbox.blockedDownload"
+    case inboxBlockedDecrypt = "inbox.blockedDecrypt"
+    case inboxBlockedVerify = "inbox.blockedVerify"
+    case inboxBlockedDeclined = "inbox.blockedDeclined"
+    case inboxBlockedUnsupported = "inbox.blockedUnsupported"
+    case inboxBlockedInternal = "inbox.blockedInternal"
+
+    // Terminal, per generation.
+    case inboxFailedEnrolment = "inbox.failedEnrolment"
+    case inboxFailedKey = "inbox.failedKey"
+    case inboxFailedIdentity = "inbox.failedIdentity"
+    case inboxFailedUnknown = "inbox.failedUnknown"
+
+    case inboxPause = "inbox.pause"
+    case inboxResume = "inbox.resume"
+    case inboxReveal = "inbox.reveal"
+    case inboxOpenSettings = "inbox.openSettings"
+
+    case inboxAskHeading = "inbox.askHeading"
+    case inboxAskExplain = "inbox.askExplain"
+    case inboxAskAccept = "inbox.askAccept"
+    case inboxAskDecline = "inbox.askDecline"
+
+    case inboxResultsHeading = "inbox.resultsHeading"
+    case inboxResultsEmpty = "inbox.resultsEmpty"
+
+    // Refusals of one user action, distinct from what the inbox IS.
+    case inboxErrorNotWritable = "inbox.errorNotWritable"
+    case inboxErrorBookmark = "inbox.errorBookmark"
+    case inboxErrorNoFolder = "inbox.errorNoFolder"
+    case inboxErrorAskFailed = "inbox.errorAskFailed"
+
+    case inboxNotifyTitleSaved = "inbox.notifyTitleSaved"
+    case inboxNotifyTitleAttention = "inbox.notifyTitleAttention"
+
+    /// Open at Login is how residency RESUMES after a Mac login. It is
+    /// deliberately not presented as evidence that the inbox is ready now, which
+    /// is a different claim and one this checkbox cannot make.
+    case inboxLoginNote = "inbox.loginNote"
 }
 
 /// Keys whose value depends on a count.
@@ -1016,6 +1124,12 @@ public enum PluralKey: String, CaseIterable, Sendable {
     /// and, before the walk, cannot know. The copying label counts staged files
     /// and is measured; this one counts what the sheet handed over and says so.
     case shareItemCount = "share.itemCount"
+    /// %@ — how many files one Device Inbox delivery durably saved. A COUNT,
+    /// never a list: this string reaches a notification banner, which macOS shows
+    /// on a locked screen.
+    case inboxSavedFiles = "inbox.savedFiles"
+    /// %@ — how many deliveries central is holding for the user's answer.
+    case inboxWaitingDeliveries = "inbox.waitingDeliveries"
 
     /// The catalog key for one category of this plural.
     public func key(_ category: PluralCategory) -> String {

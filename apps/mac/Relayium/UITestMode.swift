@@ -157,6 +157,14 @@ enum UITestMode {
     static let showsGeneratedFileCode = ProcessInfo.processInfo.arguments.contains(
         fileCodeArgument)
 
+    /// The Device Inbox controller an acceptance launch may use, or nil.
+    ///
+    /// Delegated to `UITestInbox`, which owns the stub transport and the
+    /// launch-isolated stores. Kept as a call here so every acceptance
+    /// substitution is reachable from one type.
+    @MainActor
+    static func makeInboxController() -> InboxController? { UITestInbox.makeController() }
+
     @MainActor
     static func makeWaitingFileModel(verification: VerificationPreference) -> RealtimeSessionModel? {
         guard showsGeneratedFileCode else { return nil }
@@ -183,6 +191,11 @@ enum UITestMode {
 
     /// nil, so a shipped launch always stages where the product stages.
     static func pendingUploadRoot() -> URL? { nil }
+
+    /// nil, so a shipped launch always builds the real Device Inbox against the
+    /// real keychain, defaults, journal directory and transport.
+    @MainActor
+    static func makeInboxController() -> InboxController? { nil }
 
     /// false, so a shipped launch can never be told it already holds an account.
     static let isSignedIn = false

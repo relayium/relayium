@@ -402,4 +402,14 @@ final class AppEnvironmentTests: XCTestCase {
         }
     }
 
+    func testInboxJournalsAreSeparatedByAccount() throws {
+        let first = try InboxAccountID("accountjournal01")
+        let second = try InboxAccountID("accountjournal02")
+        let a = AppEnvironment.inboxJournalSubdirectory(base: "device-inbox", account: first)
+        let b = AppEnvironment.inboxJournalSubdirectory(base: "device-inbox", account: second)
+        XCTAssertEqual(a, "device-inbox/accounts/accountjournal01")
+        XCTAssertEqual(b, "device-inbox/accounts/accountjournal02")
+        XCTAssertNotEqual(a, b, "two accounts share one durable journal namespace")
+    }
+
 }

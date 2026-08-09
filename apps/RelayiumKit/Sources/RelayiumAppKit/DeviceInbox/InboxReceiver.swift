@@ -109,6 +109,7 @@ public struct InboxReceiver: Sendable {
     /// caller never has to interpret a local error to decide what to tell central.
     @discardableResult
     public func deliver(_ delivery: InboxDelivery) async throws -> Outcome {
+        try Task.checkCancellation()
         let task = delivery.task
 
         var journal: InboxJournal
@@ -157,7 +158,12 @@ public struct InboxReceiver: Sendable {
         // user's directory, so the sender's UI never shows a gap between
         // "downloaded" and "landed".
         do {
+            try Task.checkCancellation()
             try await renew(delivery, state: .verifying)
+            // Cancellation is allowed until the last reversible boundary. Once
+            // the multi-file commit begins it must run to completion; stopping
+            // between links would expose only part of one delivery to the user.
+            try Task.checkCancellation()
         } catch {
             // The staged bytes are complete and verified but nothing is visible
             // yet, so abandoning here costs a re-download and risks nothing.
@@ -328,6 +334,8 @@ public struct InboxReceiver: Sendable {
             } catch let failure as InboxFailure {
                 // Already classified and not retryable within this attempt.
                 throw failure
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
                 if attempt >= streamAttempts { throw InboxClassify.transport(error) }
                 if case InboxError.rangeIgnored = error {
@@ -358,6 +366,7 @@ public struct InboxReceiver: Sendable {
 
     private func streamOnce(_ delivery: InboxDelivery, decryptor: StoreDecryptor,
                             writer: InboxStagingWriter, lastRenew: inout Date) async throws {
+        try Task.checkCancellation()
         let start = Int64(decryptor.consumedCipher)
         let stream: InboxBlobStream
         do {
@@ -374,9 +383,11 @@ public struct InboxReceiver: Sendable {
             default: throw error
             }
         }
+        try Task.checkCancellation()
         guard start == 0 || stream.isPartial else { throw InboxError.rangeIgnored }
 
         for try await chunk in stream.chunks {
+            try Task.checkCancellation()
             let plaintexts: [[UInt8]]
             do { plaintexts = try decryptor.push([UInt8](chunk)) }
             catch { throw InboxClassify.crypto(error) }

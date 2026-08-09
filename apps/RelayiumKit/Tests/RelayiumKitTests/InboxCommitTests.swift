@@ -1,5 +1,8 @@
 import XCTest
 import Darwin
+#if os(macOS)
+import CoreServices
+#endif
 @testable import RelayiumAppKit
 @testable import RelayiumKit
 
@@ -80,6 +83,39 @@ final class InboxCommitTests: XCTestCase {
         XCTAssertEqual(lstat(f.root.appendingPathComponent("a.txt").path, &st), 0)
         XCTAssertEqual(st.st_mode & 0o777, InboxCommit.fileMode)
         XCTAssertEqual(st.st_mode & 0o111, 0)
+    }
+
+    /// PRD §9: a file received onto macOS is external content. The marker must
+    /// already be on the inode when it becomes visible in the receive folder;
+    /// a later best-effort pass would leave an unsafe visibility window.
+    func testACommittedFileCarriesTheMacOSQuarantineMarker() async throws {
+        #if os(macOS)
+        var f = try fixture([("download.bin", [7, 8, 9])])
+        try await commit(&f)
+        let path = f.root.appendingPathComponent("download.bin").path
+        let size = InboxCommit.quarantineAttribute.withCString { attribute in
+            getxattr(path, attribute, nil, 0, 0, 0)
+        }
+        XCTAssertGreaterThan(size, 0, "the committed file is visible without quarantine")
+        var bytes = [UInt8](repeating: 0, count: max(size, 0))
+        let read = InboxCommit.quarantineAttribute.withCString { attribute in
+            bytes.withUnsafeMutableBytes { buffer in
+                getxattr(path, attribute, buffer.baseAddress, buffer.count, 0, 0)
+            }
+        }
+        XCTAssertEqual(read, size)
+        // The raw xattr is an opaque Launch Services encoding: recent macOS
+        // stores the descriptive fields in its quarantine database and puts an
+        // event identifier in the xattr. Read through the same public resource
+        // API used to create it rather than depending on that private encoding.
+        let properties = try f.root.appendingPathComponent("download.bin")
+            .resourceValues(forKeys: [.quarantinePropertiesKey]).quarantineProperties ?? [:]
+        XCTAssertEqual(properties[kLSQuarantineAgentNameKey as String] as? String, "Relayium")
+        XCTAssertEqual(properties[kLSQuarantineAgentBundleIdentifierKey as String] as? String,
+                       "com.relayium.mac")
+        XCTAssertEqual(properties[kLSQuarantineTypeKey as String] as? String,
+                       kLSQuarantineTypeWebDownload as String)
+        #endif
     }
 
     func testCreatedDirectoriesArePrivate() async throws {

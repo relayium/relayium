@@ -23,6 +23,12 @@ struct SettingsView: View {
         TabView {
             GeneralSettingsView()
                 .tabItem { Label(L10n.t(.settingsGeneral), systemImage: "gearshape") }
+            // Its own tab, not a section of General. It is the only settings
+            // surface that decides what this Mac WRITES to disk unattended, it
+            // has a status a person comes back to check, and it carries a result
+            // list — none of which belongs beside two toggles.
+            DeviceInboxSettingsView()
+                .tabItem { Label(L10n.t(.inboxTitle), systemImage: "tray.and.arrow.down") }
             UpdateSettingsView(updater: updater)
                 .tabItem { Label(L10n.t(.settingsUpdates), systemImage: "arrow.triangle.2.circlepath") }
         }

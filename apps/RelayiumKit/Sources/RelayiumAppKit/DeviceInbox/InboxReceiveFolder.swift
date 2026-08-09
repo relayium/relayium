@@ -166,15 +166,40 @@ public final class InboxFolderAccess: @unchecked Sendable {
     deinit { release() }
 }
 
-/// Where the bookmark and the automatic-receive flag are persisted.
+/// Where the bookmark and the receive policy are persisted.
 ///
 /// A seam rather than `UserDefaults` directly, so the account-scoping rule can be
 /// asserted without touching the running user's defaults.
+///
+/// The POLICY, not a boolean, is the stored requirement. `ask` is a third real
+/// answer — "queue work for me, but do not write anything until I say so" — and a
+/// boolean cannot hold it. A store that persisted `Bool` and mapped `ask` onto
+/// either arm would silently turn a held question into unattended writes, or into
+/// a device that refuses the task outright; both are lies about a decision the
+/// user made.
 public protocol InboxFolderStoring: AnyObject, Sendable {
     func bookmarkData(account: InboxAccountID) -> Data?
     func setBookmarkData(_ data: Data?, account: InboxAccountID)
-    func automaticReceive(account: InboxAccountID) -> Bool
-    func setAutomaticReceive(_ enabled: Bool, account: InboxAccountID)
+    func receivePolicy(account: InboxAccountID) -> InboxAutoAccept
+    func setReceivePolicy(_ policy: InboxAutoAccept, account: InboxAccountID)
+    /// A durable outbox bit: central still needs the transition to `off`.
+    /// Persisted because the app may quit or the account may sign out while the
+    /// network request is in flight; an in-memory retry flag loses that truth.
+    func stopAnnouncementPending(account: InboxAccountID) -> Bool
+    func setStopAnnouncementPending(_ pending: Bool, account: InboxAccountID)
+}
+
+extension InboxFolderStoring {
+    /// The Phase 2A spelling, kept as a derived reading of the policy so no call
+    /// site has to know which of the three answers is stored. `auto` and only
+    /// `auto` is unattended receive.
+    public func automaticReceive(account: InboxAccountID) -> Bool {
+        receivePolicy(account: account) == .auto
+    }
+
+    public func setAutomaticReceive(_ enabled: Bool, account: InboxAccountID) {
+        setReceivePolicy(enabled ? .auto : .off, account: account)
+    }
 }
 
 /// The real store: `UserDefaults`, keyed PER ACCOUNT.
@@ -192,8 +217,15 @@ public final class UserDefaultsInboxFolderStore: InboxFolderStoring, @unchecked 
     static func bookmarkKey(_ account: InboxAccountID) -> String {
         "com.relayium.deviceInbox.folderBookmark." + account.value
     }
+    static func policyKey(_ account: InboxAccountID) -> String {
+        "com.relayium.deviceInbox.receivePolicy." + account.value
+    }
+    /// The Phase 2A boolean, read once for migration and never written again.
     static func automaticKey(_ account: InboxAccountID) -> String {
         "com.relayium.deviceInbox.automaticReceive." + account.value
+    }
+    static func stopAnnouncementKey(_ account: InboxAccountID) -> String {
+        "com.relayium.deviceInbox.stopAnnouncementPending." + account.value
     }
 
     public func bookmarkData(account: InboxAccountID) -> Data? {
@@ -205,16 +237,37 @@ public final class UserDefaultsInboxFolderStore: InboxFolderStoring, @unchecked 
         if let data { defaults.set(data, forKey: key) } else { defaults.removeObject(forKey: key) }
     }
 
-    /// Absent reads as FALSE, which is the product invariant rather than a
-    /// convenience: automatic receive is default-off (PRD §8), so a missing key,
-    /// a fresh install and a cleared domain all mean "not enabled". There is no
-    /// spelling of this store's state that turns it on by omission.
-    public func automaticReceive(account: InboxAccountID) -> Bool {
-        defaults.bool(forKey: Self.automaticKey(account))
+    /// Absent reads as `off`, which is the product invariant rather than a
+    /// convenience: receiving is default-off (PRD §8), so a missing key, a fresh
+    /// install and a cleared domain all mean "not enabled". An UNRECOGNISED
+    /// stored value reads as `off` too — a defaults domain written by a newer
+    /// build, or by hand, must not be able to turn unattended writes on through a
+    /// value this build cannot interpret.
+    ///
+    /// The Phase 2A boolean is honoured once, on the way past: a device that had
+    /// automatic receive on before the policy existed keeps it, rather than
+    /// silently going quiet after an update.
+    public func receivePolicy(account: InboxAccountID) -> InboxAutoAccept {
+        if let raw = defaults.string(forKey: Self.policyKey(account)) {
+            return InboxAutoAccept(rawValue: raw) ?? .off
+        }
+        return defaults.bool(forKey: Self.automaticKey(account)) ? .auto : .off
     }
 
-    public func setAutomaticReceive(_ enabled: Bool, account: InboxAccountID) {
-        defaults.set(enabled, forKey: Self.automaticKey(account))
+    public func setReceivePolicy(_ policy: InboxAutoAccept, account: InboxAccountID) {
+        defaults.set(policy.rawValue, forKey: Self.policyKey(account))
+        // The migration source is cleared as it is superseded, so the two can
+        // never disagree about what the user chose.
+        defaults.removeObject(forKey: Self.automaticKey(account))
+    }
+
+    public func stopAnnouncementPending(account: InboxAccountID) -> Bool {
+        defaults.bool(forKey: Self.stopAnnouncementKey(account))
+    }
+
+    public func setStopAnnouncementPending(_ pending: Bool, account: InboxAccountID) {
+        let key = Self.stopAnnouncementKey(account)
+        if pending { defaults.set(true, forKey: key) } else { defaults.removeObject(forKey: key) }
     }
 }
 
@@ -222,7 +275,8 @@ public final class UserDefaultsInboxFolderStore: InboxFolderStoring, @unchecked 
 public final class InMemoryInboxFolderStore: InboxFolderStoring, @unchecked Sendable {
     private let lock = NSLock()
     private var bookmarks: [String: Data] = [:]
-    private var automatic: [String: Bool] = [:]
+    private var policies: [String: InboxAutoAccept] = [:]
+    private var pendingStops: Set<String> = []
 
     public init() {}
 
@@ -236,14 +290,24 @@ public final class InMemoryInboxFolderStore: InboxFolderStoring, @unchecked Send
         if let data { bookmarks[account.value] = data } else { bookmarks[account.value] = nil }
     }
 
-    public func automaticReceive(account: InboxAccountID) -> Bool {
+    public func receivePolicy(account: InboxAccountID) -> InboxAutoAccept {
         lock.lock(); defer { lock.unlock() }
-        return automatic[account.value] ?? false
+        return policies[account.value] ?? .off
     }
 
-    public func setAutomaticReceive(_ enabled: Bool, account: InboxAccountID) {
+    public func setReceivePolicy(_ policy: InboxAutoAccept, account: InboxAccountID) {
         lock.lock(); defer { lock.unlock() }
-        automatic[account.value] = enabled
+        policies[account.value] = policy
+    }
+
+    public func stopAnnouncementPending(account: InboxAccountID) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return pendingStops.contains(account.value)
+    }
+
+    public func setStopAnnouncementPending(_ pending: Bool, account: InboxAccountID) {
+        lock.lock(); defer { lock.unlock() }
+        if pending { pendingStops.insert(account.value) } else { pendingStops.remove(account.value) }
     }
 }
 
@@ -258,24 +322,65 @@ public struct InboxReceiveFolder: Sendable {
         self.bookmarking = bookmarking
     }
 
+    /// Whether this account has ever chosen a folder. Distinct from whether that
+    /// folder works right now, which only `open` can answer.
+    public func hasFolder(account: InboxAccountID) -> Bool {
+        store.bookmarkData(account: account) != nil
+    }
+
+    /// The state alone, for a surface that must DESCRIBE the grant without
+    /// writing anything through it.
+    ///
+    /// The scope is opened and released immediately. It is not free — it does the
+    /// same real create-and-remove probe `open` does — which is exactly why it is
+    /// a named method rather than a habit: settings asks once when it appears and
+    /// once per explicit user action, not on every redraw.
+    public func inspect(account: InboxAccountID) -> InboxFolderState {
+        let opened = open(account: account)
+        opened.access?.release()
+        return opened.state
+    }
+
     /// Whether automatic receive is enabled for this account. Default-off.
     public func isAutomaticReceiveEnabled(account: InboxAccountID) -> Bool {
         store.automaticReceive(account: account)
     }
 
-    /// Enabling automatic receive is a SEPARATE decision from choosing a folder,
-    /// and is refused without one.
+    /// The three-way answer this device announces: `off`, `ask` or `auto`.
+    /// Default-off, for the reason recorded on the store.
+    public func receivePolicy(account: InboxAccountID) -> InboxAutoAccept {
+        store.receivePolicy(account: account)
+    }
+
+    public func stopAnnouncementPending(account: InboxAccountID) -> Bool {
+        store.stopAnnouncementPending(account: account)
+    }
+
+    public func setStopAnnouncementPending(_ pending: Bool, account: InboxAccountID) {
+        store.setStopAnnouncementPending(pending, account: account)
+    }
+
+    /// Choosing to receive is a SEPARATE decision from choosing a folder, and
+    /// both non-`off` answers are refused without one.
     ///
     /// The two could have been one flag. They must not be: a folder grant is an
-    /// authorization the user gave the app, and automatic receive is a decision to
-    /// let other machines use it unattended (PRD §8). Choosing a folder to receive
-    /// into manually is not consent to unattended writes, and a single flag would
-    /// make it one.
-    public func setAutomaticReceive(_ enabled: Bool, account: InboxAccountID) throws {
-        if enabled, store.bookmarkData(account: account) == nil {
+    /// authorization the user gave the app, and receiving is a decision to let
+    /// other machines put files there (PRD §8). Choosing a folder to receive into
+    /// is not consent to that, and a single flag would make it one.
+    ///
+    /// `ask` is refused without a folder for the same reason `auto` is, and it is
+    /// the less obvious half: a device announcing `ask` invites a sender to queue
+    /// work, and there would be nowhere to put it once the user said yes.
+    public func setReceivePolicy(_ policy: InboxAutoAccept, account: InboxAccountID) throws {
+        if policy != .off, store.bookmarkData(account: account) == nil {
             throw InboxFolderError.noFolderChosen
         }
-        store.setAutomaticReceive(enabled, account: account)
+        store.setReceivePolicy(policy, account: account)
+    }
+
+    /// The Phase 2A spelling, unchanged for its callers and tests.
+    public func setAutomaticReceive(_ enabled: Bool, account: InboxAccountID) throws {
+        try setReceivePolicy(enabled ? .auto : .off, account: account)
     }
 
     /// Record a folder the user just chose, after proving this process can
@@ -298,13 +403,13 @@ public struct InboxReceiveFolder: Sendable {
         return url
     }
 
-    /// Forget this account's folder grant AND its automatic-receive opt-in.
+    /// Forget this account's folder grant AND its receive opt-in.
     ///
-    /// Both, together: leaving the flag on with no folder would be a stored "yes"
-    /// waiting to be paired with whatever folder is chosen next.
+    /// Both, together: leaving the policy on with no folder would be a stored
+    /// "yes" waiting to be paired with whatever folder is chosen next.
     public func forget(account: InboxAccountID) {
         store.setBookmarkData(nil, account: account)
-        store.setAutomaticReceive(false, account: account)
+        store.setReceivePolicy(.off, account: account)
     }
 
     /// The read a receive loop makes before every claim, and the only place a

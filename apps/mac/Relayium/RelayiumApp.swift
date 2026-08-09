@@ -214,6 +214,21 @@ struct RelayiumApp: App {
     /// the main window — a view-scoped object would re-read the system on every
     /// open and lose a refusal the user has not yet read.
     @StateObject private var loginItem = LoginItemPreference(service: SystemLoginItem())
+    /// The resident Device Inbox.
+    ///
+    /// App-scoped for the sharpest version of the reason every object above it
+    /// is: this one runs with NO window at all. It claims, decrypts and commits
+    /// deliveries while the user is in another app, and its own settings pane —
+    /// which is where its state is rendered — may never be opened during the
+    /// session in which a file arrives. A window-scoped or scene-scoped
+    /// scheduler would stop the moment the window closed, which is precisely the
+    /// case the whole capability exists for.
+    @StateObject private var inbox: InboxController
+    /// Who the inbox is receiving for. Subscribed in `init` and never from a
+    /// view, because a sign-out, an account switch or a session going
+    /// `unavailable` must cancel the loop even while no window exists — the same
+    /// reasoning, and the same shape, as `AccountSignOutCoordinator`.
+    private let inboxSession: InboxSessionBridge
     /// Drafts the Share extension left in the App Group.
     ///
     /// Not a `@StateObject`: it publishes nothing and holds no state a view
@@ -347,6 +362,39 @@ struct RelayiumApp: App {
         // staging a selection touches no transfer model, which is why this one
         // needs no busy rule of its own.
         _fileOpenRouting = StateObject(wrappedValue: AppFileOpenCoordinator(navigation: routing))
+
+        // The Device Inbox, and the ONE place it is assembled. Everything it
+        // touches — the keychain key history, the folder bookmark and policy,
+        // the journal directory, the transport — comes from a single factory, so
+        // an acceptance launch substitutes one thing rather than four and cannot
+        // half-isolate itself onto the installed product's stores.
+        let receiving = UITestMode.makeInboxController()
+            ?? AppEnvironment.makeInboxController(
+                notifier: InboxNotifier(),
+                // The only path in the product that hands a received path to the
+                // OS, and the controller refuses anything that is not in its own
+                // completed-result list before it gets here.
+                reveal: { urls in
+                    Task { @MainActor in
+                        NSWorkspace.shared.activateFileViewerSelecting(urls)
+                    }
+                },
+                appVersion: Self.appVersion)
+        _inbox = StateObject(wrappedValue: receiving)
+        // Subscribed HERE, in init, for the reason recorded on the property and
+        // on `InboxSessionBridge`: the state change that must stop the loop can
+        // land while no window exists.
+        let bridge = InboxSessionBridge(controller: receiving)
+        bridge.observe(account.$state, bearer: { account.bearerToken })
+        inboxSession = bridge
+    }
+
+    /// What this build reports when it enrols. Read from the bundle rather than
+    /// hard-coded, so a version bump cannot leave the device list claiming the
+    /// previous release.
+    // nonlocalized: an em dash placeholder for a missing bundle value
+    private static var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
     }
 
     var body: some Scene {
@@ -483,6 +531,7 @@ struct RelayiumApp: App {
                 .environment(\.layoutDirection, appLayoutDirection)
                 .environmentObject(loginItem)
                 .environmentObject(verification)
+                .environmentObject(inbox)
         }
 
         // Residency. This is the surface the persistent room socket reports
@@ -495,6 +544,7 @@ struct RelayiumApp: App {
                 .environmentObject(session)
                 .environmentObject(nearbyReceive)
                 .environmentObject(lanDiscovery)
+                .environmentObject(inbox)
         }
     }
 }

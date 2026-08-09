@@ -1,5 +1,8 @@
 import Foundation
 import Darwin
+#if os(macOS)
+import CoreServices
+#endif
 @preconcurrency import RelayiumKit
 
 /// Committing verified bytes into the user's directory.
@@ -53,6 +56,65 @@ public enum InboxCommit {
     public static let fileMode: mode_t = 0o600
     /// Directories created for a received tree are private to the receiving user.
     public static let directoryMode: mode_t = 0o700
+    /// Finder, Gatekeeper and security tools use this attribute to treat a file
+    /// as content obtained from outside the Mac. Received files are never opened
+    /// or executed by Relayium; marking the verified staged inode before it is
+    /// linked into the user's folder preserves that boundary on the final file.
+    public static let quarantineAttribute = "com.apple.quarantine"
+
+    /// Apply the macOS download-source marker to a staged file.
+    ///
+    /// This happens BEFORE `linkat`: a hard link shares the staged inode and its
+    /// extended attributes, so there is no post-commit window in which the file
+    /// is visible without the marker. Failure is fail-closed — the bytes remain
+    /// in the private staging directory and no `saved` receipt can be produced.
+    static func quarantineStaged(parent: Int32, name: String, staging: String,
+                                 now: Date) throws {
+        #if os(macOS)
+        let fd = name.withCString { value in
+            retryOnEINTR { openat(parent, value, O_RDONLY | O_NOFOLLOW | O_CLOEXEC) }
+        }
+        guard fd >= 0 else { throw InboxCommitError.system(errno) }
+        defer { close(fd) }
+
+        // Use Launch Services' supported resource property rather than writing
+        // its private xattr encoding ourselves. Direct `fsetxattr` works in an
+        // unsandboxed package test but is denied in the shipped App Sandbox;
+        // Foundation delegates this system-owned metadata to the right service.
+        // The dictionary remains metadata-only and contains no file/account id.
+        let source = URL(string: "https://relayium.com/")! // nonlocalized: public origin
+        let properties: [String: Any] = [
+            kLSQuarantineAgentNameKey as String: "Relayium", // nonlocalized: product name
+            kLSQuarantineAgentBundleIdentifierKey as String: "com.relayium.mac",
+            kLSQuarantineTimeStampKey as String: now,
+            kLSQuarantineTypeKey as String: kLSQuarantineTypeWebDownload as String,
+            kLSQuarantineOriginURLKey as String: source,
+        ]
+        let stagedURL = URL(fileURLWithPath: staging, isDirectory: true)
+            .appendingPathComponent(name, isDirectory: false)
+        do {
+            try (stagedURL as NSURL).setResourceValue(
+                properties, forKey: .quarantinePropertiesKey)
+        } catch {
+            // `InboxCommitError.system` is explicitly errno-shaped; a Cocoa
+            // error code is a different namespace, so collapse it to EIO.
+            throw InboxCommitError.system(EIO)
+        }
+
+        // Verify the exact already-open, no-follow inode acquired above. This is
+        // both the fail-closed proof and the guard against accidentally marking
+        // a different path object before `linkat` makes this inode visible.
+        let attributeSize = quarantineAttribute.withCString { attribute in
+            fgetxattr(fd, attribute, nil, 0, 0, 0)
+        }
+        guard attributeSize > 0 else {
+            throw InboxCommitError.system(attributeSize < 0 ? errno : EIO)
+        }
+        guard retryOnEINTR({ fsync(fd) }) == 0 else {
+            throw InboxCommitError.system(errno)
+        }
+        #endif
+    }
 
     /// Create every missing component between `root` and `directory`, refusing to
     /// traverse anything that is not a real directory.
@@ -192,6 +254,12 @@ public enum InboxCommit {
                 continue
             }
             try await beforeEach?()
+
+            // PRD §9: macOS receives external content as a download, never as a
+            // locally-authored file. Mark the verified private inode before it
+            // becomes visible at the destination; `linkat` carries the marker.
+            try quarantineStaged(parent: stagingFD, name: staged,
+                                 staging: journal.staging, now: now())
 
             guard let relative = InboxCommit.relativeComponents(of: entry.destination,
                                                                 under: rootPath),

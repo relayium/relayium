@@ -387,6 +387,174 @@ public enum AppEnvironment {
                                    accountPrefix: KeychainStoredLinkKeyStore.pendingUploadPrefix)
     }
 
+    // MARK: - Device Inbox
+    //
+    // Four production stores and one transport, built here rather than in the
+    // scene, for the reason the whole file exists: the acceptance suite has to be
+    // able to point every one of them somewhere else, and a `#if DEBUG` in a view
+    // would leave the shipped app depending on a branch nobody runs.
+
+    /// This account's X25519 private-key history.
+    ///
+    /// The SAME service and access group as every other credential this app
+    /// keeps; what separates it is `KeychainInboxDeviceKeyStore.accountPrefix`,
+    /// so a device key and a stored-object key can never name each other's item.
+    /// Data-protection accessibility and account scoping are decisions of that
+    /// type, asserted in `InboxKeyStoreTests`.
+    public static func makeInboxKeyStore(
+        _ configuration: KeychainConfiguration = keychainConfiguration
+    ) -> KeychainInboxDeviceKeyStore {
+        KeychainInboxDeviceKeyStore(service: configuration.service,
+                                    accessGroup: configuration.accessGroup)
+    }
+
+    /// The receive-folder bookmark and the off/ask/auto policy.
+    ///
+    /// `UserDefaults` and nothing else. Note what is deliberately NOT stored
+    /// here: no bearer, no claim token, no content or private key, no plaintext
+    /// manifest and no file name. A security-scoped bookmark is an authorization
+    /// the user granted this app, and the policy is their own answer; both are
+    /// account-scoped inside the store.
+    public static func makeInboxFolderStore(
+        defaults: UserDefaults = .standard
+    ) -> UserDefaultsInboxFolderStore {
+        UserDefaultsInboxFolderStore(defaults: defaults)
+    }
+
+    /// Where per-task delivery journals live.
+    ///
+    /// Application Support, deliberately: a journal is what makes a crashed
+    /// delivery recoverable and what stops a task being delivered twice, so it
+    /// must not sit anywhere the system may purge. `IOSSurfaceGuardTests` refuses
+    /// `temporaryDirectory`, `cachesDirectory` and `downloadsDirectory` across
+    /// these sources for the same reason.
+    ///
+    /// Returns `nil` when Application Support cannot be created at all, which is
+    /// a broken container rather than a condition to work around — the caller
+    /// fails closed rather than journalling somewhere temporary.
+    public static func makeInboxJournalStore(subdirectory: String = "device-inbox")
+        -> InboxJournalStore? {
+        guard let support = try? FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: true) else { return nil }
+        let directory = support.appendingPathComponent(subdirectory, isDirectory: true)
+        return InboxJournalStore(directory: directory)
+    }
+
+    /// Journals are account-scoped even though central task ids are random.
+    /// Relying on global uniqueness would still let account B inspect or replay
+    /// account A's durable local receipt if a server defect or restored database
+    /// ever reused an id. `InboxAccountID` is already path-safe by construction.
+    static func inboxJournalSubdirectory(base: String, account: InboxAccountID) -> String {
+        base + "/accounts/" + account.value
+    }
+
+    /// The id the ONE bootstrap call is made under.
+    ///
+    /// `InboxClient.currentDevice` deliberately does not use the client's device
+    /// id — it asks which row the CREDENTIAL authenticates as — but the client
+    /// still checks its id at construction, because every other call composes it
+    /// into a URL path. So the bootstrap client is built with a path-safe
+    /// placeholder and thrown away: the real row id is what the working client is
+    /// built with, and there is no window in which a device-scoped request could
+    /// go out under this value.
+    // nonlocalized: a path-safe placeholder identifier, never displayed
+    static let inboxBootstrapDeviceID = "bootstrap"
+
+    /// The device half of `inbox/1`, bound to one credential and one device row.
+    public static func makeInboxTransport(baseURL: URL = productionBaseURL,
+                                          deviceID: String, token: String,
+                                          session: URLSession = .shared) throws
+        -> InboxClient {
+        try InboxClient(baseURL: baseURL, deviceID: deviceID, token: token, session: session)
+    }
+
+    /// The engine factory the controller drives.
+    ///
+    /// The device id is ASKED FOR rather than assumed: it is minted server-side
+    /// when a login is approved, so the only honest way to learn it is to ask
+    /// which row this credential authenticates as. That is also why the factory
+    /// is `async` — and why a credential that no longer maps to a row surfaces as
+    /// `InboxError.noCurrentDevice` here, at generation start, instead of as a
+    /// mysterious claim failure later.
+    public static func makeInboxEngineFactory(
+        baseURL: URL = productionBaseURL,
+        keys: InboxDeviceKeyStoring,
+        journalStore: @escaping @Sendable (InboxAccountID) -> InboxJournalStore?,
+        folderStore: InboxFolderStoring,
+        session: URLSession = .shared
+    ) -> @Sendable (InboxAccountID, String) async throws -> InboxReceiveEngine {
+        let folder = InboxReceiveFolder(store: folderStore)
+        return { account, bearer in
+            guard let journals = journalStore(account) else {
+                throw InboxSupportError.noJournalDirectory
+            }
+            // Resolved with the bearer it was handed and never retained: the
+            // client owns the credential for the life of the generation, and
+            // nothing above it keeps a second copy.
+            let discovery = try InboxClient(baseURL: baseURL, deviceID: inboxBootstrapDeviceID,
+                                            token: bearer, session: session)
+            let row = try await discovery.currentDevice()
+            let client = try InboxClient(baseURL: baseURL, deviceID: row.id,
+                                         token: bearer, session: session)
+            return InboxReceiveEngine(transport: client, keys: keys, journals: journals,
+                                      folder: folder, account: account)
+        }
+    }
+
+    /// What this build calls itself when it enrols.
+    ///
+    /// `macos`, not `darwin`: the CLI receiver on the same Mac already reports
+    /// `runtime.GOOS`, and a person looking at their device list needs to be able
+    /// to tell the two apart. Central bounds this to printable ASCII and does not
+    /// interpret it, so it is a label rather than a protocol value.
+    // nonlocalized: a protocol platform token, never displayed as prose
+    public static let inboxPlatform = "macos"
+
+    /// Assemble the whole resident receiver.
+    ///
+    /// One factory rather than five call sites in the scene, so an acceptance
+    /// launch substitutes ONE thing and cannot half-wire it — the failure
+    /// `WORKFLOW-LEARNINGS` records from the signed-in fixture that replaced the
+    /// session's transport and left the account model talking to production.
+    ///
+    /// A missing journal directory produces a controller that fails closed rather
+    /// than one that receives without a journal: the journal is what makes a
+    /// crashed delivery recoverable and what stops one being delivered twice, so
+    /// receiving without it would trade a visible failure for a silent one.
+    @MainActor
+    public static func makeInboxController(
+        baseURL: URL = productionBaseURL,
+        keychain: KeychainConfiguration = keychainConfiguration,
+        defaults: UserDefaults = .standard,
+        journalSubdirectory: String = "device-inbox",
+        notifier: InboxNotifying? = nil,
+        reveal: @escaping @Sendable ([URL]) -> Void = { _ in },
+        appVersion: String,
+        session: URLSession = .shared
+    ) -> InboxController {
+        let folderStore = makeInboxFolderStore(defaults: defaults)
+        let folder = InboxReceiveFolder(store: folderStore)
+        let keys = makeInboxKeyStore(keychain)
+        let makeEngine = makeInboxEngineFactory(
+            baseURL: baseURL, keys: keys,
+            journalStore: { account in
+                makeInboxJournalStore(subdirectory: inboxJournalSubdirectory(
+                    base: journalSubdirectory, account: account))
+            },
+            folderStore: folderStore, session: session)
+        return InboxController(runtime: InboxRuntime(
+            folder: folder, makeEngine: makeEngine, notifier: notifier,
+            reveal: reveal, platform: inboxPlatform, appVersion: appVersion))
+    }
+
+    /// A local precondition the Device Inbox cannot run without.
+    public enum InboxSupportError: Error, Equatable, Sendable {
+        /// Application Support could not be created, so there is nowhere durable
+        /// to journal a delivery.
+        case noJournalDirectory
+    }
+
     /// Durable recovery for stored uploads.
     ///
     /// iOS only, and deliberately: the process there is suspended and killed by

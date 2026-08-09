@@ -25,7 +25,10 @@ public struct InboxReceiveEngine: Sendable {
     public let folder: InboxReceiveFolder
     public let account: InboxAccountID
     public let now: @Sendable () -> Date
-    public let log: InboxLog?
+    /// `var` so the scheduling shell can attach its own observer to an engine it
+    /// was handed by a factory. Every event is a closed case carrying at most a
+    /// task id, a protocol state, a closed code and counts — see `InboxLogEvent`.
+    public var log: InboxLog?
     /// Passed through to the receiver; see `InboxReceiver.renewInterval`.
     public var renewInterval: TimeInterval
     public var streamAttempts: Int
@@ -33,6 +36,18 @@ public struct InboxReceiveEngine: Sendable {
     /// the receiver AND used by the disk-full requeue, so the two cannot disagree
     /// about whether a parked delivery now fits.
     public var freeBytes: @Sendable (URL) -> Int64?
+    /// Every task central currently holds for this device, as read at the top of
+    /// a pass. The scheduling shell needs it to render an `ask` question and an
+    /// `attention_required` blocker; the engine itself only ever acts on the
+    /// narrow subset `requeueRecovered` describes.
+    ///
+    /// Called with the raw list, before any decision is taken about it, so a
+    /// caller sees what central said rather than what this pass did with it.
+    public var onPending: (@Sendable ([InboxTask]) -> Void)?
+    /// A DURABLE commit, and the only event in the product from which a "saved"
+    /// claim may be built. Emitted after `InboxReceiver.deliver` has returned and
+    /// the journal says completed — never from a claim, a byte count or a report.
+    public var onReceipt: (@Sendable (InboxReceipt) -> Void)?
 
     public init(transport: InboxTransport, keys: InboxDeviceKeyStoring,
                 journals: InboxJournalStore, folder: InboxReceiveFolder,
@@ -65,20 +80,20 @@ public struct InboxReceiveEngine: Sendable {
         case notReceiving(InboxFolderState)
     }
 
-    /// The automatic-receive policy this device announces.
+    /// The receive policy this device announces.
     ///
-    /// `off` unless the user has explicitly enabled automatic receive for THIS
-    /// account. A device that announces `off` makes central refuse task creation
-    /// outright (`auto_receive_disabled`), which is the truthful answer: queuing a
-    /// task this Mac will never take would be a lie in the sender's UI.
+    /// `off` unless the user has explicitly chosen otherwise for THIS account. A
+    /// device that announces `off` makes central refuse task creation outright
+    /// (`auto_receive_disabled`), which is the truthful answer: queuing a task
+    /// this Mac will never take would be a lie in the sender's UI.
     ///
     /// Note what it does NOT depend on: whether the folder is usable right now. An
-    /// enabled device with a broken folder still announces `auto` and reports
+    /// enabled device with a broken folder still announces its policy and reports
     /// `receiveDirReady: false`, so central starts the task in
     /// `attention_required` — "your Mac is set up for this and something is wrong
     /// with the folder", not "your Mac does not do this".
     public var announcedPolicy: InboxAutoAccept {
-        folder.isAutomaticReceiveEnabled(account: account) ? .auto : .off
+        folder.receivePolicy(account: account)
     }
 
     /// Enrol and make this account's device key usable. Run once before passes.
@@ -93,6 +108,39 @@ public struct InboxReceiveEngine: Sendable {
         return try await InboxEnrolment.ensureUsableKey(transport: transport, keys: keys,
                                                         account: account,
                                                         current: result.inbox.key, now: now())
+    }
+
+    /// Answer a task central is holding under the `ask` policy.
+    ///
+    /// The ONLY way a held task is ever resolved. `requeueRecovered` explicitly
+    /// refuses to touch one, so nothing in this engine can answer for the user;
+    /// reaching this method requires a person to have pressed something.
+    public func respond(toAsk taskID: String, accept: Bool) async throws {
+        _ = try await transport.accept(taskID: taskID, accept: accept)
+    }
+
+    /// Tell central this device is no longer taking deliveries.
+    ///
+    /// The counterpart of `prepare`, and it is NOT optional politeness. Central
+    /// keeps the last policy a device announced, so a Mac whose owner switched
+    /// receiving off would go on being offered as an `auto` target: the sender's
+    /// UI would accept the send, the task would be queued, and it would sit there
+    /// until it expired. Announcing `off` makes central refuse the send outright
+    /// (`auto_receive_disabled`), which is the truthful answer.
+    ///
+    /// The enrolment is announced WITHOUT touching the key history. Registering a
+    /// device key is work the user has just said they do not want done.
+    public func announceStopped(platform: String, appVersion: String) async throws {
+        let opened = folder.open(account: account)
+        defer { opened.access?.release() }
+        _ = try await InboxEnrolment.enrol(transport, platform: platform,
+                                           appVersion: appVersion,
+                                           autoAccept: announcedPolicy,
+                                           receiveDirReady: opened.state.canReceive)
+        // Presence is a claim about NOW. This device is about to stop polling,
+        // and a sender watching an "online" Mac that is not listening is exactly
+        // the misleading state PRD §7 refuses.
+        try await transport.goOffline()
     }
 
     /// One pass.
@@ -122,6 +170,7 @@ public struct InboxReceiveEngine: Sendable {
         }
 
         let pending = try await transport.pending(limit: InboxProtocol.claimBatch)
+        onPending?(pending)
         if pending.isEmpty {
             journals.prune(now: now())
             return .idle
@@ -154,8 +203,18 @@ public struct InboxReceiveEngine: Sendable {
         }
 
         do {
-            _ = try await receiver.deliver(delivery)
+            let outcome = try await receiver.deliver(delivery)
+            // BEFORE the report, and deliberately: the files are already durably
+            // on disk at this point, and a report that fails to reach central
+            // must not be able to withhold the user's own evidence that their
+            // delivery landed. The report is retried later from the journal.
+            emitReceipt(taskID: delivery.task.id, isReplay: outcome == .alreadyCommitted)
             await reportSaved(delivery, receiver: receiver)
+        } catch is CancellationError {
+            // A policy change, sign-out or account switch owns
+            // this cancellation. Reporting it as a device/filesystem failure
+            // would mutate central under a generation the user already ended.
+            throw CancellationError()
         } catch let abandon as InboxAbandon {
             // Central already took the task away. Silence is the only safe answer.
             log?(.abandoned(taskID: delivery.task.id, cause: abandon.cause))
@@ -164,6 +223,20 @@ public struct InboxReceiveEngine: Sendable {
             await report(delivery, state: failure.state, code: failure.code)
         }
         return .worked
+    }
+
+    /// Publish the durable commit, reading it back out of the journal.
+    ///
+    /// Read back rather than assembled from the delivery: the journal is what the
+    /// commit itself wrote, entry by entry, so a partially committed task cannot
+    /// produce a receipt naming files that were never created — and a receipt and
+    /// a crash recovery can never disagree about what is on disk.
+    private func emitReceipt(taskID: String, isReplay: Bool) {
+        guard let onReceipt else { return }
+        guard let receipt = InboxReceipt.make(taskID: taskID,
+                                              journal: try? journals.load(taskID),
+                                              isReplay: isReplay) else { return }
+        onReceipt(receipt)
     }
 
     /// Assert the commit, then record that central acknowledged it.
