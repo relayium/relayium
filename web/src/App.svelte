@@ -63,6 +63,7 @@
     me: () => import("./lib/MePage.svelte"),
     cli: () => import("./lib/CliPage.svelte"),
     apps: () => import("./lib/AppsPage.svelte"),
+    "device-inbox": () => import("./lib/DeviceInboxPage.svelte"),
     pricing: () => import("./lib/PricingPage.svelte"),
     "verify-email": () => import("./lib/VerifyEmail.svelte"),
     "reset-password": () => import("./lib/ResetPassword.svelte"),
@@ -427,7 +428,7 @@
   // realtime peer is connected. Never on the download page.
   const surfaceShown = $derived(
     currentRoute() === "download" || currentRoute() === "offline" || currentRoute() === "me" || currentRoute() === "cli"
-    || currentRoute() === "apps"
+    || currentRoute() === "apps" || currentRoute() === "device-inbox"
     || currentRoute() === "pricing" || currentRoute() === "verify-email" || currentRoute() === "reset-password"
     || currentRoute() === "magic-link"
       ? false
@@ -1598,6 +1599,10 @@
   {:else if currentRoute() === "apps"}
     {#await routePage("apps") then { default: AppsPage }}
       <AppsPage />
+    {/await}
+  {:else if currentRoute() === "device-inbox"}
+    {#await routePage("device-inbox") then { default: DeviceInboxPage }}
+      <DeviceInboxPage />
     {/await}
   {:else if currentRoute() === "pricing"}
     {#await routePage("pricing") then { default: PricingPage }}

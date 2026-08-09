@@ -64,6 +64,18 @@ export const TARGETS = [
     note: "真档位网格：h1 之后的第一块内容，heading-order 只在这里才看得见" },
   { id: "spa/apps", url: "/apps", ready: ".apps", viewport: DESKTOP, scheme: "light" },
   { id: "spa/cli", url: "/cli", ready: ".cli", viewport: DESKTOP, scheme: "light" },
+  // /device-inbox waits for the LAST platform section, not for `.dinbox`: the
+  // shell is present before the six sections are, and a target that is satisfied
+  // by the container would scan a hero and call the page clean. Six is the count
+  // the PRD requires the page to name, so the number is the assertion.
+  { id: "spa/device-inbox", url: "/device-inbox", ready: "[data-platform]", readyCount: 6,
+    viewport: DESKTOP, scheme: "light",
+    note: "six platform sections, definition lists, status badges and the signed-out start block" },
+  // Same page, dark tokens and 390px: the badge colours are computed styles, and
+  // the two-column definition list collapses to one below 720px.
+  { id: "spa/device-inbox/mobile-dark", url: "/device-inbox", ready: "[data-platform]", readyCount: 6,
+    viewport: MOBILE, scheme: "dark",
+    note: "the same page's dark tokens and its single-column narrow layout" },
 
   // My Devices as a SENDER directory. 等的是 `.devicelist li`，数量钉死成夹具里的
   // 行数：等 `.accountdevices` 只能证明区块外壳在，而这一块新增的控件——拖放区、

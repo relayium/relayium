@@ -459,7 +459,7 @@ const zh: Messages = {
     noToken: "本页面只能从登录链接进入。",
     home: "返回首页",
   },
-  nav: { footerLegalLabel: "法律", footerGuidesLabel: "资源", primaryLabel: "主导航", footerLabel: "页脚导航", lanTab: "局域网传输", crossTab: "实时传输", offlineTab: "异步传输", cliTab: "CLI", appsTab: "应用" },
+  nav: { footerLegalLabel: "法律", footerGuidesLabel: "资源", primaryLabel: "主导航", footerLabel: "页脚导航", lanTab: "局域网传输", crossTab: "实时传输", offlineTab: "异步传输", cliTab: "CLI", appsTab: "应用", deviceInboxTab: "设备收件箱" },
   crossTitle: "实时传输",
   offlineTitle: "异步传输",
   cli: { subtitle: "在终端里传文件和临时文本 —— 端到端加密，可自托管。" },
@@ -485,6 +485,170 @@ const zh: Messages = {
       mac: { name: "macOS 应用", desc: "真正的原生菜单栏应用（com.relayium.mac）：与附近设备或用配对码互传文件和文本、收发加密链接、管理账号与设备。", cta: "下载 macOS 版" },
       ios: { name: "iOS 应用", desc: "原生 iPhone 与 iPad 应用（com.relayium.app）：无需账号即可打开加密链接，还能与附近设备或用六位配对码互传文件和文本，并管理账号——都在应用打开时进行。" },
     },
+  },
+  deviceInboxPage: {
+    metaTitle: "设备收件箱 —— 从浏览器直达你自己的 Mac、电脑或服务器 · Relayium",
+    metaDesc:
+      "在浏览器里把文件送进你自己那台机器的目录：浏览器端加密，目标离线时进入加密队列，只有那台设备验证并可靠落盘之后才算「已保存」。",
+    heading: "设备收件箱",
+    subhead:
+      "从任意浏览器把文件送到你自己的 Mac、电脑、NAS 或服务器上的一个目录。文件在离开浏览器之前就已加密；设备离线时先排队；只有那台设备回报「已写入磁盘」，才算保存成功。",
+    badges: ["在你的浏览器里完成加密", "你的账户，你的设备", "目标离线时自动排队"],
+    howH2: "它是怎么工作的",
+    howLead:
+      "设备收件箱把你自己的一台机器变成一个可以按名字发送的目的地 —— 不需要分享链接、不需要 U 盘、对面也不需要有人。既不用开端口，也不用记地址：接收端主动向外连接 Relayium，自己来领任务。",
+    howSteps: [
+      "在要接收的那台机器上：登录、选定它可以写入的目录、并在那里打开接收开关。没有在那台机器上做完这一步，任何文件都不会到达。",
+      "在任意浏览器里：登录同一个账户，在「我的设备」中选中这台设备。上传发生之前，浏览器已经完成加密，并把内容密钥封装给了这台设备。",
+      "Relayium 保存的是密文和路由状态。它读不到文件内容、文件名和目标目录，也不持有任何能解开它们的密钥。",
+      "设备领走任务，在本地解密并校验，然后写进你指定的目录 —— 不会再问你一次，也绝不覆盖已经存在的文件。",
+    ],
+    notSavedH3: "上传完成不等于已保存",
+    notSavedBody:
+      "「浏览器上传完了」和「设备把文件写进磁盘了」是两件不同的事，这里绝不用一个含糊的词把它们并成一件。目标离线、正在下载或正在校验时，界面显示的都是「仍在路上」。只有那台设备解密、按 Manifest 校验、并把文件可靠提交进目录之后，才会出现「已保存」。",
+    prereqH2: "开始之前需要什么",
+    prereqAccount:
+      "一个 Relayium 账户。这是 Relayium 里唯一会往你自己磁盘写入的能力，所以它绑定的是账户，而不是任何人都可能拿到的一条链接。",
+    prereqSameAccount:
+      "两端是同一个账户。设备只接受它自己登录的那个账户发来的任务；你没有办法让别人的设备来接收你的文件。",
+    prereqEnable:
+      "接收开关要在设备本机打开。它默认关闭，必须由能接触那台机器的人选好目录并在那里打开 —— 这个选择无法从网页替它做。",
+    prereqOffline:
+      "除此之外不需要别的。设备休眠、离线或正在重启时你照样可以发送：加密任务会留在队列里，等设备回来再投递。",
+    linkBoundaryH3: "分享链接是另一套权限",
+    linkBoundary:
+      "Relayium 的公开下载链接还是原来那个意思：拿到完整链接的人可以手动下载那一个文件，仅此而已。链接永远不能让你的某台设备往磁盘里写东西。这两套权限是刻意分开的，持有链接不会获得任何设备收件箱的访问权。",
+    startH2: "从这里开始",
+    startChecking: "正在检查你的账户……",
+    signedOutLead:
+      "设备收件箱两端都需要账户，所以先从这里开始。登录之后，你配置过的每一台机器都会出现在「我的设备」里，成为一个可以发送的目的地。",
+    signInCta: "登录",
+    createAccountCta: "注册账户",
+    signedInLead: (email) => `已登录：${email}。`,
+    myDevicesCta: "打开我的设备",
+    stateUnknown:
+      "刚才没能查到你的设备列表。这并不说明有没有设备准备好 —— 打开「我的设备」看真实状态。",
+    stateNone:
+      "还没有机器登录过这个账户。按下面的说明配置一台，它就会出现在「我的设备」里，成为可以发送的目的地。",
+    stateNoInbox: (n) =>
+      `已登录的设备：${n} 台。目前还没有任何一台打开设备收件箱 —— 请按下面对应的小节，在那台机器上打开它。`,
+    stateReady: (n) => `可接收的设备：${n} 台。打开「我的设备」，把文件拖到其中一台上。`,
+    setUpServerCta: "配置一台服务器接收端",
+    platformsH2: "你的平台",
+    platformsLead:
+      "六个平台，每个都只写今天真实存在的东西。原生接收端还在计划中的，这里会直说，并给出现在就能走通的路径，而不是摆一个按不动的按钮。",
+    statusAvailable: "现已可用",
+    statusTesting: "测试中",
+    statusPlanned: "计划中",
+    statusLabel: (status) => `状态：${status}`,
+    labelUse: "适用场景",
+    labelSetup: "如何配置",
+    labelFiles: "文件落在哪里",
+    labelResidency: "常驻方式",
+    labelSend: "怎么发给它",
+    labelRecovery: "它不再就绪时",
+    labelStop: "暂停、停止或移除",
+    platforms: {
+      server: {
+        name: "Linux 服务器",
+        use: "一台常开的机器 —— VPS、NAS 或家庭服务器 —— 在没人守着键盘的情况下接收你从浏览器发来的文件。",
+        setup:
+          "先以你自己的身份登录一次，然后下载这个很短的安装脚本，在给它 root 权限之前读一遍。脚本会创建接收目录、建立一个专用的低权限账户、把你的设备凭据拷进去而不打印出来、注册接收密钥、安装一份加固过的 systemd 系统服务，立即启动并设置为开机自启。",
+        files:
+          "默认 /srv/relayium-inbox，除非你用 --dir 指定别的目录。目录属于低权限的 relayium 账户而不是 root，已存在的文件绝不会被覆盖。",
+        residency:
+          "它是真正的系统服务：关掉 SSH 窗口、退出登录、重启都不会影响它，进程崩溃后 systemd 会重新拉起。服务器下线期间，任务在 Relayium 侧等待，等它回来再投递。",
+        send: "在浏览器里打开「我的设备」，把文件拖到这台服务器的卡片上。",
+        recovery:
+          "如果接收目录消失了（比如一个没挂上的卷），worker 不会替你把它重新建出来，而是报告「需要处理」，以免写到缺失的挂载点底下。inbox status 会分别报告目录、凭据、worker 和服务端，这正是把四者区分开的手段。",
+        stop:
+          "systemctl disable --now 只停进程、保留注册；inbox disable 更彻底：先在服务端吊销收件箱，成功之后才删除私钥。",
+      },
+      linux: {
+        name: "Linux 桌面",
+        use: "你自己的工作机，接收到你自己的家目录里 —— 刻意区别于无人值守的服务器方案，那一套跑在家目录之外的独立低权限账户下。",
+        setup:
+          "登录、在家目录里选一个目录、打开收件箱。随后 relayium inbox service systemd-user 会打印出针对这台机器的 unit，以及安装它的具体命令；服务本身不需要 root。",
+        files:
+          "你用 --dir 指定的位置 —— 上面例子里是 ~/Relayium-inbox。收到的文件不会被加上可执行权限，也不会被自动打开、运行或解压。",
+        residency:
+          "用户级服务跟着你的会话跑，退出登录就会停止，除非你为账户开启 linger（那一步需要一次 root）。这就是它和服务器部署之间如实的差别。",
+        send: "在任意登录了同一账户的浏览器里打开「我的设备」。",
+        recovery:
+          "relayium inbox status 会分别报告目录、凭据和 worker；带上目录重新执行 inbox enable 可以重新建立目录授权。",
+        stop:
+          "systemctl --user disable --now 停止服务；inbox disable 会在服务端确认后吊销收件箱并删除私钥。",
+      },
+      macos: {
+        name: "macOS",
+        use: "一台常年在桌上的 Mac，接住你从手机或别处浏览器发过来的东西。",
+        setup:
+          "原生 Mac App 的设备收件箱仍是工程构建，所以这个页面不会给你一个下载按钮。今天在 macOS 上真正可用的，是同一个命令行接收端 + launchd 托管：relayium inbox service launchd 会打印出针对这台 Mac 的 agent 和加载它的命令。",
+        files: "你用 --dir 指定的目录。不覆盖、不解压，收到的文件也不会被自动打开。",
+        residency:
+          "launchd 用户 agent 在你登录期间运行，重启后再次登录时会回来。它不是系统守护进程，无人登录时不会接收。",
+        send: "浏览器里的「我的设备」，或者从登录了同一账户的 iPhone 发送。",
+        recovery:
+          "relayium inbox status 能区分目录问题和凭据问题；目录被移动或权限变了，就带上你想用的目录重新执行 inbox enable。",
+        stop: "launchctl bootout 卸载 agent；inbox disable 吊销收件箱及其密钥。",
+      },
+      windows: {
+        name: "Windows",
+        use: "一台需要把文件收进你指定目录的 Windows 电脑。",
+        setup:
+          "原生托盘接收端 —— 登录、固定目录、开机启动、通知、在资源管理器中显示、暂停与恢复 —— 属于计划中，尚未实现。今天经过验证的是命令行接收端的前台运行：窗口开着才能接收，关掉窗口就结束。没有 Windows 服务，也没有开机启动项。",
+        files: "你用 --dir 指定的目录 —— 上面例子里是 %USERPROFILE%\\Relayium-inbox。",
+        residency:
+          "除了那个开着的窗口之外没有常驻。别把它当成常开接收端：需要常开就先用 Linux 服务器，或者等原生版本。",
+        send: "在任意登录了同一账户的浏览器里打开「我的设备」。",
+        recovery:
+          "relayium inbox status 会分别报出目录、凭据和 worker，这样才能把「目录不见了」和「登录过期了」区分开。",
+        stop:
+          "关掉窗口即可；也可以用 inbox pause 停止领取新任务但保留注册；inbox disable 则吊销收件箱并删除密钥。",
+      },
+      iphone: {
+        name: "iPhone",
+        use: "想把一张照片或一份文档挪到 Mac 或服务器上时，真正握在手里的那台设备。",
+        setup:
+          "原生分享菜单发送和后台接收都在计划中、尚未实现，所以这里暂时没有可安装的东西。今天可行的是：用 Safari 打开 Relayium，登录，然后在「我的设备」里把手机上的文件发给你的 Mac、电脑或服务器。",
+        files:
+          "暂不适用 —— iPhone 目前是发送端。等原生 App 能接收时，文件会落在「文件」App 里一个固定的 Relayium 目录中。",
+        residency:
+          "现在不承诺、将来也不会承诺常驻。iOS 不允许 App 作为通用守护进程一直醒着，所以 iPhone 上的接收会是由系统调度的尽力而为的后台任务 —— 既不会始终在线，也不保证立刻开始。",
+        send: "在手机 Safari 的「我的设备」里，发给任何打开了设备收件箱的设备。",
+        recovery: "iPhone 目前只作发送端，暂不适用。",
+        stop: "iPhone 目前只作发送端，暂不适用。",
+      },
+      android: {
+        name: "Android",
+        use: "和 iPhone 是同一个思路：一步就把手机上的东西送到你自己的机器上。",
+        setup:
+          "原生分享和原生接收端都在计划中、尚未实现。今天：在手机浏览器里打开 Relayium，登录，从「我的设备」发送。",
+        files: "暂不适用 —— Android 目前是发送端。",
+        residency:
+          "现在不作任何常驻承诺。接收端将来必须在 Android 的前台服务和后台任务规则内实现，而很多机型的电池优化会让到达时间只能是尽力而为。这是我们规划时要面对的限制，不是已经交付的能力。",
+        send: "在手机浏览器的「我的设备」里，发给任何打开了设备收件箱的设备。",
+        recovery: "Android 目前只作发送端，暂不适用。",
+        stop: "Android 目前只作发送端，暂不适用。",
+      },
+    },
+    macNoDownload:
+      "这里没有下载按钮是有意的：已签名的 Mac 构建是工程产物，不是公开发布版本。",
+    macDownloadCta: "下载 Mac 版",
+    safetyH2: "不会动摇的边界",
+    safetyPoints: [
+      "Relayium 从不持有能解开你文件的密钥：浏览器完成加密并把内容密钥封装给目标设备，服务端保存的只有密文、大小、时间和路由状态。",
+      "文件名和目录路径都在加密 Manifest 里，Relayium 从不接收它们。",
+      "自动接收在设备本机打开之前一直是关闭的，而且只接受你自己账户发来的任务。",
+      "绝不覆盖、合并或删除已有文件；重名会安全改成一个新名字。",
+      "收到的东西不会被自动打开、执行或解压，也不会被赋予可执行权限。",
+      "下载了一半的文件绝不会被当成完整文件呈现；失败的传输不留下任何残余。",
+      "你随时可以暂停接收、吊销设备或删除排队中的任务。",
+    ],
+    docsH2: "延伸阅读",
+    docsServerGuide: "完整服务器指南：安装、日志、崩溃与重启",
+    docsCli: "全部 CLI 模式，包括设备收件箱命令",
+    docsMyDevices: "我的设备 —— 你的发送目标",
   },
   cliPage: {
     metaTitle: "Relayium 命令行——在终端里加密传文件与文本",

@@ -8,6 +8,7 @@
     resendVerification, forgotPassword, unlinkIdentity,
   } from "./auth.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
+  import { loginIntent } from "./login.svelte";
   import { navigate } from "./router.svelte";
   import Icon from "./Icon.svelte";
   import Pricing from "./Pricing.svelte";
@@ -95,6 +96,14 @@
       forgotBusy = false;
       forgotSent = false;
     }
+  });
+
+  // Honour the panel the opener asked for. Read separately from the reset effect
+  // above so it runs on the OPEN edge, after that one has cleared `mode` back to
+  // "login" on the previous close. Only `open` and the intent are read, so a user
+  // who switches to "Create an account" inside the modal is not yanked back.
+  $effect(() => {
+    if (open) mode = loginIntent();
   });
 
   let pwBusy = $state(false);

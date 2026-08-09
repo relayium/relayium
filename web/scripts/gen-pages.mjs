@@ -120,7 +120,7 @@ const MODES = [
 // English-only SPA routes: served by the per-route shells
 // (vite-plugin-route-shells.ts), not by a generated directory — hence no
 // trailing slash.
-const SPA_PAGES = [{ path: "/pricing" }, { path: "/cli" }];
+const SPA_PAGES = [{ path: "/pricing" }, { path: "/cli" }, { path: "/device-inbox" }];
 
 /** Every generated page, as [{ path, html }]. Exported so the site-graph test
  *  can check the real output (duplicate titles, orphans, dead internal links)

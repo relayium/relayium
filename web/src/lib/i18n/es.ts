@@ -459,7 +459,7 @@ const es: Messages = {
     noToken: "A esta página solo se llega desde un enlace de acceso.",
     home: "Volver al inicio",
   },
-  nav: { footerLegalLabel: "Aviso legal", footerGuidesLabel: "Recursos", primaryLabel: "Navegación principal", footerLabel: "Navegación de pie de página", lanTab: "LAN", crossTab: "Tiempo real", offlineTab: "Asíncrono", cliTab: "CLI", appsTab: "Apps" },
+  nav: { footerLegalLabel: "Aviso legal", footerGuidesLabel: "Recursos", primaryLabel: "Navegación principal", footerLabel: "Navegación de pie de página", lanTab: "LAN", crossTab: "Tiempo real", offlineTab: "Asíncrono", cliTab: "CLI", appsTab: "Apps", deviceInboxTab: "Buzón de dispositivo" },
   crossTitle: "Transferencia en tiempo real",
   offlineTitle: "Transferencia asíncrona",
   cli: { subtitle: "Transfiere archivos y texto efímero desde tu terminal — cifrado de extremo a extremo, autoalojable." },
@@ -490,6 +490,175 @@ const es: Messages = {
       mac: { name: "App de macOS", desc: "Una auténtica app nativa en la barra de menús (com.relayium.mac): archivos y texto con dispositivos cercanos o por código de emparejamiento, enlaces cifrados para enviar y abrir, y gestión de cuenta y dispositivos.", cta: "Descargar para macOS" },
       ios: { name: "App de iOS", desc: "Una app nativa para iPhone y iPad (com.relayium.app): abre un enlace cifrado sin cuenta, envía archivos y texto a dispositivos cercanos o con un código de seis dígitos, y gestiona tu cuenta — mientras la app está abierta." },
     },
+  },
+  deviceInboxPage: {
+    metaTitle: "Buzón de dispositivo — del navegador a tu propio Mac, PC o servidor · Relayium",
+    metaDesc:
+      "Envía un archivo desde el navegador a una carpeta de una máquina tuya. Relayium lo cifra en el navegador, lo pone en cola mientras el dispositivo está sin conexión y solo lo llama guardado cuando ese dispositivo lo ha verificado y escrito de forma duradera en disco.",
+    heading: "Buzón de dispositivo",
+    subhead:
+      "Envía un archivo desde cualquier navegador a una carpeta de tu propio Mac, PC, NAS o servidor. Se cifra antes de salir del navegador, espera en la cola mientras el dispositivo está sin conexión y solo se considera guardado cuando ese dispositivo confirma que lo escribió en disco.",
+    badges: [
+      "Cifrado en tu navegador",
+      "Tu cuenta, tus dispositivos",
+      "Se pone en cola si el destino está sin conexión",
+    ],
+    howH2: "Cómo funciona",
+    howLead:
+      "El buzón de dispositivo convierte una máquina tuya en un destino al que envías por su nombre: sin enlace compartido, sin memoria USB y sin nadie al otro lado. No hay puerto que abrir ni dirección que recordar: la máquina receptora sale hacia Relayium y recoge su propio trabajo.",
+    howSteps: [
+      "En la máquina que debe recibir: inicia sesión, elige la carpeta en la que puede escribir y activa la recepción allí. Nada llega hasta que eso se haya hecho en esa máquina.",
+      "En cualquier navegador: inicia sesión en la misma cuenta y elige el dispositivo en Mis dispositivos. Tu navegador cifra los archivos y sella la clave de contenido para ese dispositivo antes de subir nada.",
+      "Relayium guarda el texto cifrado y el estado de enrutamiento. No puede leer el archivo, ni su nombre, ni la carpeta de destino, y no tiene ninguna clave que pueda abrirlos.",
+      "El dispositivo recoge la tarea, la descifra y la verifica en local, y la escribe en la carpeta que elegiste, sin volver a preguntarte y sin sobrescribir nunca un archivo que ya esté allí.",
+    ],
+    notSavedH3: "Subido no es guardado",
+    notSavedBody:
+      "«El navegador terminó de subir» y «el dispositivo escribió el archivo en disco» son dos resultados distintos, y aquí nunca comparten una palabra cómoda. Mientras el destino está sin conexión, descargando o verificando, la transferencia se muestra como todavía en camino. Guardado aparece solo después de que ese dispositivo haya descifrado el archivo, lo haya contrastado con su manifiesto y lo haya confirmado de forma duradera en la carpeta.",
+    prereqH2: "Qué hace falta antes",
+    prereqAccount:
+      "Una cuenta de Relayium. Esta es la única parte de Relayium que escribe en tu propio disco, así que va ligada a una cuenta y no a un enlace que cualquiera podría tener.",
+    prereqSameAccount:
+      "La misma cuenta en ambos extremos. Un dispositivo solo acepta trabajo de la cuenta en la que ha iniciado sesión; no hay forma de hacer que el dispositivo de otra persona reciba lo tuyo.",
+    prereqEnable:
+      "La recepción activada en el propio dispositivo. Está desactivada hasta que alguien con acceso a esa máquina elige una carpeta y la activa allí: esa decisión no se puede tomar por él desde la web.",
+    prereqOffline:
+      "Nada más. Si el dispositivo está suspendido, sin conexión o reiniciándose, puedes enviar igual: la tarea cifrada espera en la cola y se entrega cuando el dispositivo vuelve.",
+    linkBoundaryH3: "Un enlace compartido es otro permiso",
+    linkBoundary:
+      "Los enlaces de descarga públicos de Relayium siguen siendo lo que eran: quien tenga el enlace completo puede descargar ese archivo a mano, y nada más. Un enlace nunca puede hacer que uno de tus dispositivos escriba en disco. Los dos permisos están separados a propósito, y tener un enlace no da acceso a ningún buzón de dispositivo.",
+    startH2: "Empieza aquí",
+    startChecking: "Comprobando tu cuenta…",
+    signedOutLead:
+      "El buzón de dispositivo necesita cuenta en ambos extremos, así que se empieza por aquí. Al iniciar sesión, cada máquina que hayas configurado aparece en Mis dispositivos como un destino al que enviar.",
+    signInCta: "Iniciar sesión",
+    createAccountCta: "Crear una cuenta",
+    signedInLead: (email) => `Sesión iniciada como ${email}.`,
+    myDevicesCta: "Abrir Mis dispositivos",
+    stateUnknown:
+      "Ahora mismo no pudimos consultar tus dispositivos. Eso no dice nada sobre si alguno está listo: abre Mis dispositivos para ver el estado real.",
+    stateNone:
+      "Todavía no hay ninguna máquina con sesión iniciada en esta cuenta. Configura una con las instrucciones de abajo y aparecerá en Mis dispositivos como destino.",
+    stateNoInbox: (n) =>
+      `Dispositivos con sesión iniciada: ${n}. Ninguno tiene aún el buzón activado: actívalo en la propia máquina siguiendo su sección de abajo.`,
+    stateReady: (n) => `Dispositivos listos para recibir: ${n}. Abre Mis dispositivos y suelta un archivo en uno de ellos.`,
+    setUpServerCta: "Configurar un servidor receptor",
+    platformsH2: "Tu plataforma",
+    platformsLead:
+      "Seis plataformas, cada una con lo que existe hoy de verdad. Donde el receptor nativo todavía está planificado, esta página lo dice y señala el camino que funciona ahora, en lugar de mostrar un botón que no hace nada.",
+    statusAvailable: "Disponible ya",
+    statusTesting: "En pruebas",
+    statusPlanned: "Planificado",
+    statusLabel: (status) => `Estado: ${status}`,
+    labelUse: "Para qué sirve",
+    labelSetup: "Cómo configurarlo",
+    labelFiles: "Dónde acaban los archivos",
+    labelResidency: "Cómo se mantiene activo",
+    labelSend: "Cómo enviarle algo",
+    labelRecovery: "Si deja de estar listo",
+    labelStop: "Pausar, detener o quitar",
+    platforms: {
+      server: {
+        name: "Servidor Linux",
+        use: "Una máquina siempre encendida — un VPS, un NAS, un servidor doméstico — que debe recoger los archivos que envías desde el navegador sin que nadie esté ante su teclado.",
+        setup:
+          "Inicia sesión una vez con tu propio usuario, luego descarga el breve instalador y léelo antes de darle permisos de root. Crea la carpeta de recepción, prepara una cuenta dedicada de pocos privilegios, copia en ella tus credenciales de dispositivo sin imprimirlas, registra la clave de recepción, instala una unidad de sistema systemd endurecida, la arranca de inmediato y la habilita para el siguiente reinicio.",
+        files:
+          "/srv/relayium-inbox salvo que pases otro --dir. La carpeta pertenece a la cuenta sin privilegios relayium y no a root, y un archivo existente nunca se sobrescribe.",
+        residency:
+          "Es un servicio de sistema de verdad: sobrevive a cerrar la ventana SSH, a cerrar sesión y a reiniciar, y systemd lo vuelve a arrancar tras un fallo. Mientras el servidor está apagado, las tareas esperan en Relayium y se entregan cuando vuelve.",
+        send: "Abre Mis dispositivos en el navegador y suelta archivos en la tarjeta de este servidor.",
+        recovery:
+          "Si la carpeta de recepción desaparece —por ejemplo, un volumen sin montar—, el worker no la recrea y avisa de que requiere atención en lugar de escribir bajo el punto de montaje ausente. inbox status informa por separado de la carpeta, la credencial, el worker y el servidor, que es lo que permite distinguir los cuatro casos.",
+        stop:
+          "systemctl disable --now detiene el proceso y conserva el registro; inbox disable va más allá: revoca primero el buzón en el servidor y solo después borra las claves privadas.",
+      },
+      linux: {
+        name: "Escritorio Linux",
+        use: "Tu propia estación de trabajo recibiendo en tu carpeta personal; deliberadamente distinto del despliegue de servidor sin supervisión, que corre bajo una cuenta aparte de pocos privilegios fuera de cualquier carpeta personal.",
+        setup:
+          "Inicia sesión, elige una carpeta dentro de tu directorio personal y activa el buzón. Después, relayium inbox service systemd-user imprime una unidad para esta máquina y los comandos exactos para instalarla; el servicio en sí no necesita root.",
+        files:
+          "Donde apuntaste --dir: arriba, ~/Relayium-inbox. Los archivos recibidos no reciben permiso de ejecución y nunca se abren, ejecutan ni descomprimen por ti.",
+        residency:
+          "Un servicio de usuario corre mientras dura tu sesión y se detiene al cerrarla, salvo que actives el lingering para tu cuenta, lo que sí requiere root una vez. Esa es la diferencia honesta con el despliegue de servidor.",
+        send: "Mis dispositivos, en cualquier navegador con sesión iniciada en la misma cuenta.",
+        recovery:
+          "relayium inbox status informa por separado de la carpeta, la credencial y el worker; volver a ejecutar inbox enable con una carpeta restablece el permiso sobre el directorio.",
+        stop:
+          "systemctl --user disable --now detiene el servicio; inbox disable revoca el buzón y borra las claves privadas cuando el servidor lo confirma.",
+      },
+      macos: {
+        name: "macOS",
+        use: "Un Mac que se queda en tu escritorio y recoge lo que le envías desde el teléfono o desde un navegador en otro sitio.",
+        setup:
+          "El buzón de la app nativa de Mac sigue siendo una compilación de ingeniería, así que esta página no te la entrega. Lo que funciona hoy en macOS es el mismo receptor de línea de comandos supervisado por launchd: relayium inbox service launchd imprime un agente para este Mac y los comandos que lo cargan.",
+        files:
+          "La carpeta que pasaste a --dir. Nada se sobrescribe, nada se descomprime y un archivo recibido nunca se abre por ti.",
+        residency:
+          "Un agente de usuario de launchd corre mientras tienes la sesión iniciada y vuelve tras un reinicio en cuanto vuelves a entrar. No es un demonio del sistema y no recibe mientras nadie tiene sesión abierta.",
+        send: "Mis dispositivos en un navegador, o desde un iPhone con sesión iniciada en la misma cuenta.",
+        recovery:
+          "relayium inbox status distingue un problema de carpeta de uno de credenciales. Si moviste la carpeta o cambiaron sus permisos, vuelve a ejecutar inbox enable con la carpeta que quieras.",
+        stop: "launchctl bootout descarga el agente; inbox disable revoca el buzón y sus claves.",
+      },
+      windows: {
+        name: "Windows",
+        use: "Un PC con Windows que debe recibir archivos en una carpeta que tú elijas.",
+        setup:
+          "El receptor nativo en la bandeja del sistema —inicio de sesión, carpeta fija, arranque al iniciar sesión, notificaciones, mostrar en el Explorador, pausar y reanudar— está planificado y no construido. Lo verificado hoy es el receptor de línea de comandos en primer plano: recibe mientras la ventana siga abierta y termina al cerrarla. No hay servicio de Windows ni entrada de inicio automático.",
+        files: "La carpeta que pasaste a --dir: arriba, %USERPROFILE%\\Relayium-inbox.",
+        residency:
+          "Ninguna más allá de esa ventana abierta. No lo trates como un receptor permanente: para eso, usa hoy un servidor Linux o espera a la app nativa.",
+        send: "Mis dispositivos, en cualquier navegador con sesión iniciada en la misma cuenta.",
+        recovery:
+          "relayium inbox status nombra por separado la carpeta, la credencial y el worker, para poder distinguir una carpeta que falta de una sesión caducada.",
+        stop:
+          "Cierra la ventana, o usa inbox pause para dejar de aceptar trabajo nuevo conservando el registro; inbox disable revoca el buzón y borra sus claves.",
+      },
+      iphone: {
+        name: "iPhone",
+        use: "El dispositivo que de verdad tienes en la mano cuando quieres pasar una foto o un documento a tu Mac o a tu servidor.",
+        setup:
+          "El envío nativo desde la hoja de compartir y la recepción en segundo plano están planificados, no construidos, así que aquí todavía no hay nada que instalar. Lo que funciona hoy: abre Relayium en Safari, inicia sesión y usa Mis dispositivos para enviar archivos desde el teléfono a tu Mac, PC o servidor.",
+        files:
+          "Todavía no aplica: hoy el iPhone es el emisor. Cuando la app nativa pueda recibir, los archivos irán a una carpeta fija de Relayium dentro de Archivos.",
+        residency:
+          "No se promete ninguna, y no la habrá. iOS no permite que una app siga despierta como demonio de propósito general, así que recibir en el iPhone será trabajo en segundo plano de mejor esfuerzo programado por el sistema: nunca permanente ni con inicio inmediato garantizado.",
+        send: "Mis dispositivos en Safari, desde el teléfono, a cualquier dispositivo con el buzón activado.",
+        recovery: "No aplica mientras el iPhone sea solo emisor.",
+        stop: "No aplica mientras el iPhone sea solo emisor.",
+      },
+      android: {
+        name: "Android",
+        use: "La misma idea que en el iPhone: sacar algo del teléfono y ponerlo en una máquina tuya, en un paso.",
+        setup:
+          "Compartir nativo y un receptor nativo están planificados, no construidos. Hoy: abre Relayium en el navegador del móvil, inicia sesión y envía desde Mis dispositivos.",
+        files: "Todavía no aplica: hoy Android es el emisor.",
+        residency:
+          "No se promete ninguna. Un receptor tendría que caber dentro de las reglas de servicios en primer plano y trabajo en segundo plano de Android, y la optimización de batería de muchos teléfonos haría que el momento de llegada fuese de mejor esfuerzo. Es una restricción que estamos planificando, no algo ya entregado.",
+        send: "Mis dispositivos en el navegador del móvil, a cualquier dispositivo con el buzón activado.",
+        recovery: "No aplica mientras Android sea solo emisor.",
+        stop: "No aplica mientras Android sea solo emisor.",
+      },
+    },
+    macNoDownload:
+      "Que aquí no haya botón de descarga es intencionado: la compilación firmada de Mac es un artefacto de ingeniería, no una publicación pública.",
+    macDownloadCta: "Descargar la app de Mac",
+    safetyH2: "Límites que no se mueven",
+    safetyPoints: [
+      "Relayium nunca tiene una clave capaz de abrir tus archivos: el navegador los cifra y sella la clave de contenido para el dispositivo de destino; el servidor guarda texto cifrado, tamaños, marcas de tiempo y estado de enrutamiento.",
+      "Los nombres de archivo y las rutas de carpeta viajan dentro del manifiesto cifrado. Relayium nunca los recibe.",
+      "La recepción automática está desactivada hasta que alguien la activa en el dispositivo, y solo se acepta trabajo de tu propia cuenta.",
+      "Un archivo existente nunca se sobrescribe, fusiona ni borra; ante un nombre repetido se asigna un nombre nuevo seguro.",
+      "Nada de lo recibido se abre, ejecuta ni descomprime, y los archivos recibidos no se hacen ejecutables.",
+      "Un archivo descargado a medias nunca se presenta como completo, y una transferencia fallida no deja nada detrás.",
+      "Puedes pausar la recepción, revocar un dispositivo o borrar tareas en cola cuando quieras.",
+    ],
+    docsH2: "Seguir leyendo",
+    docsServerGuide: "Guía completa de servidor: instalación, registros, fallos y reinicios",
+    docsCli: "Todos los modos del CLI, incluidos los comandos del buzón",
+    docsMyDevices: "Mis dispositivos — tus destinos de envío",
   },
   cliPage: {
     metaTitle: "CLI de Relayium — transferencia cifrada de archivos y texto desde la terminal",

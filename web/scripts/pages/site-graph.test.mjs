@@ -13,7 +13,7 @@ import { buildShells } from "./shells.mjs";
 import crossNetwork from "./content/cross-network.mjs";
 import offlineTransfer from "./content/offline-transfer.mjs";
 import apps from "./content/apps.mjs";
-import { pricing, cli } from "./content/spa-pages.mjs";
+import { pricing, cli, deviceInbox } from "./content/spa-pages.mjs";
 import { CLI_ARTICLES } from "./content/cli-articles.mjs";
 
 const pages = buildAllPages();
@@ -26,6 +26,7 @@ const shells = buildShells({
   ],
   pricing,
   cli,
+  deviceInbox,
   cliArticles: CLI_ARTICLES,
 });
 
@@ -104,9 +105,9 @@ describe("no internal link points somewhere that redirects or 404s", () => {
   });
 });
 
-describe("/pricing and /cli reach the static graph", () => {
-  it("both are in the sitemap and linked", () => {
-    for (const u of ["/pricing", "/cli"]) {
+describe("the English-only SPA routes reach the static graph", () => {
+  it("each is in the sitemap and linked", () => {
+    for (const u of ["/pricing", "/cli", "/device-inbox"]) {
       expect(sitemapPaths, u).toContain(u);
       expect(linkTargets.has(u), `${u} is linked from a static page`).toBe(true);
     }

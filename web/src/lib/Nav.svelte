@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { currentRoute, navigate, CROSS_PATH, OFFLINE_PATH, CLI_PATH, APPS_PATH, type Route } from "./router.svelte";
+  import {
+    currentRoute, navigate,
+    LAN_PATH, CROSS_PATH, OFFLINE_PATH, CLI_PATH, APPS_PATH, DEVICE_INBOX_PATH,
+    type Route,
+  } from "./router.svelte";
   import { lang, setLang, LANGS, messages, type Lang, type Messages } from "./i18n.svelte";
   import { loginOpen, setLoginOpen } from "./login.svelte";
   import ThemeSelect from "./ThemeSelect.svelte";
@@ -7,25 +11,35 @@
   import Logo from "./Logo.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
-  const tabs: { id: Route; label: () => string }[] = [
-    { id: "lan", label: () => t.nav.lanTab },
-    { id: "cross", label: () => t.nav.crossTab },
-    { id: "offline", label: () => t.nav.offlineTab },
-    { id: "cli", label: () => t.nav.cliTab },
-    { id: "apps", label: () => t.nav.appsTab },
+  // The href moved into the tab record. It used to be a five-branch ternary in
+  // the template, which is exactly the shape that quietly gains a wrong branch
+  // when a sixth destination is added: one list, one place to be wrong.
+  const tabs: { id: Route; href: string; label: () => string }[] = [
+    { id: "lan", href: LAN_PATH, label: () => t.nav.lanTab },
+    { id: "cross", href: CROSS_PATH, label: () => t.nav.crossTab },
+    { id: "offline", href: OFFLINE_PATH, label: () => t.nav.offlineTab },
+    { id: "device-inbox", href: DEVICE_INBOX_PATH, label: () => t.nav.deviceInboxTab },
+    { id: "cli", href: CLI_PATH, label: () => t.nav.cliTab },
+    { id: "apps", href: APPS_PATH, label: () => t.nav.appsTab },
   ];
 
   // The account control only appears on the login-gated flows (async storage,
-  // realtime pairing, pricing, personal center) — the same set that needs an
-  // account for its primary action. Rendering it here folds it into the nav bar
-  // so it no longer sits on a lonely row of its own.
+  // realtime pairing, pricing, personal center, Device Inbox) — the same set
+  // that needs an account for its primary action. Rendering it here folds it
+  // into the nav bar so it no longer sits on a lonely row of its own.
+  //
+  // /device-inbox belongs here for the same reason /pricing does: its own
+  // "Sign in" / "Create an account" buttons open THIS control's modal, so
+  // without it those buttons would have nothing to open.
   const showAccount = $derived(
-    currentRoute() === "cross" || currentRoute() === "offline" || currentRoute() === "pricing" || currentRoute() === "me",
+    currentRoute() === "cross" || currentRoute() === "offline" || currentRoute() === "pricing"
+    || currentRoute() === "me" || currentRoute() === "device-inbox",
   );
 
-  // Mobile mode rail. The five tabs keep their natural width and the row scrolls
+  // Mobile mode rail. The six tabs keep their natural width and the row scrolls
   // instead of compressing every label into an unreadable sliver (zh/ko labels
-  // used to paint over each other at 320–390px).
+  // used to paint over each other at 320–390px). Device Inbox made the row wider
+  // in every locale, which is what the scroll and the edge fade are for.
   let rail = $state<HTMLDivElement | undefined>(undefined);
   // Only fade the rail's edges while it actually overflows — an unconditional
   // mask dims the first/last pill in locales whose labels fit (e.g. en at 390px),
@@ -77,7 +91,8 @@
   <div class="tabs" class:overflowing={railOverflows} bind:this={rail}>
     {#each tabs as tab (tab.id)}
       <a
-        href={tab.id === "cross" ? CROSS_PATH : tab.id === "offline" ? OFFLINE_PATH : tab.id === "cli" ? CLI_PATH : tab.id === "apps" ? APPS_PATH : "/"}
+        href={tab.href}
+        data-nav={tab.id}
         class="tab"
         class:active={currentRoute() === tab.id}
         aria-current={currentRoute() === tab.id ? "page" : undefined}
@@ -143,7 +158,7 @@
   @media (max-width: 1099px) {
     /* Row 1: brand on the left, the utility group (lang · theme · account)
        pushed to the right. Row 2: the mode tabs, full width. No lonely rows.
-       Five destinations, two selects and nine languages do not honestly fit one
+       Six destinations, two selects and nine languages do not honestly fit one
        320px row — the defect was equal-width compression, not the second row. */
     .topnav { flex-wrap: wrap; gap: 8px; row-gap: 10px; }
     /* Hidden from sight, NOT from the accessibility tree. `display: none` took
@@ -196,7 +211,7 @@
       -webkit-mask-image: linear-gradient(to right, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%);
       mask-image: linear-gradient(to right, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%);
     }
-    /* Natural width — never truncate one of five primary destinations. */
+    /* Natural width — never truncate one of six primary destinations. */
     .tab { flex: none; padding-inline: var(--space-3); scroll-snap-align: center; }
     /* Native selects size themselves from their longest option, not just the
        selected label. Japanese's longest theme label used to make the utility

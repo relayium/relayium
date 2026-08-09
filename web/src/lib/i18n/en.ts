@@ -459,7 +459,7 @@ const en: Messages = {
     noToken: "This page is only reachable from a sign-in link.",
     home: "Back to home",
   },
-  nav: { footerLegalLabel: "Legal", footerGuidesLabel: "Resources", primaryLabel: "Main", footerLabel: "Footer", lanTab: "LAN", crossTab: "Realtime", offlineTab: "Async", cliTab: "CLI", appsTab: "Apps" },
+  nav: { footerLegalLabel: "Legal", footerGuidesLabel: "Resources", primaryLabel: "Main", footerLabel: "Footer", lanTab: "LAN", crossTab: "Realtime", offlineTab: "Async", cliTab: "CLI", appsTab: "Apps", deviceInboxTab: "Device Inbox" },
   crossTitle: "Realtime transfer",
   offlineTitle: "Async transfer",
   cli: { subtitle: "Transfer files and ephemeral text from your terminal — end-to-end encrypted, self-hostable." },
@@ -501,6 +501,175 @@ const en: Messages = {
         desc: "A native iPhone & iPad app (com.relayium.app): open an encrypted link with no account, send files and text to nearby devices or by six-digit code, and manage your account — while the app is open.",
       },
     },
+  },
+  deviceInboxPage: {
+    metaTitle: "Device Inbox — browser to your own Mac, PC or server · Relayium",
+    metaDesc:
+      "Send a file from your browser into a folder on a machine you own. Relayium encrypts it in the browser, queues it while that device is offline, and calls it saved only after the device has verified and durably written it to disk.",
+    heading: "Device Inbox",
+    subhead:
+      "Send a file from any browser to a folder on your own Mac, PC, NAS or server. It is encrypted before it leaves the browser, it waits in a queue while the device is offline, and it is only ever called saved once that device says it wrote the file to disk.",
+    badges: [
+      "Encrypted in your browser",
+      "Your account, your devices",
+      "Queues while the target is offline",
+    ],
+    howH2: "How it works",
+    howLead:
+      "Device Inbox turns a machine you own into a destination you can send to by name — no share link, no USB stick, nobody at the other keyboard. There is no port to open and no address to remember: the receiving machine dials out to Relayium and collects its own work.",
+    howSteps: [
+      "On the machine that should receive: sign in, choose the folder it may write to, and switch receiving on there. Nothing arrives until that has been done on that machine.",
+      "In any browser: sign in to the same account and pick the device in My Devices. Your browser encrypts the files and seals the content key to that device before anything is uploaded.",
+      "Relayium stores ciphertext and routing state. It cannot read the file, its name or the folder it is bound for, and it holds no key that could open it.",
+      "The device collects the task, decrypts and verifies it locally, and writes it into the folder you chose — without asking you again, and without ever overwriting a file that is already there.",
+    ],
+    notSavedH3: "Uploaded is not saved",
+    notSavedBody:
+      "\"Your browser finished uploading\" and \"the device wrote the file to disk\" are two different results, and they never share one comfortable word here. While the target is offline, downloading or verifying, the transfer is shown as still on its way. Saved appears only after that device has decrypted the file, checked it against its manifest and committed it durably to the folder.",
+    prereqH2: "What it needs before it works",
+    prereqAccount:
+      "A Relayium account. This is the one part of Relayium that writes to your own disk, so it is tied to an account rather than to a link anyone could hold.",
+    prereqSameAccount:
+      "The same account on both ends. A device only accepts work from the account it is signed in to; there is no way to make someone else's device receive from you.",
+    prereqEnable:
+      "Receiving switched on at the device itself. It is off until someone with access to that machine picks a folder and turns it on there — that choice cannot be made for it from the web.",
+    prereqOffline:
+      "Nothing else. If the device is asleep, offline or mid-reboot you can still send: the encrypted task waits in the queue and is delivered when the device comes back.",
+    linkBoundaryH3: "A share link is a different permission",
+    linkBoundary:
+      "Relayium's public download links stay exactly what they were: whoever holds the full link can download that one file by hand. A link can never make one of your devices write to disk. The two permissions are deliberately separate, and holding a link gives no access to any device inbox.",
+    startH2: "Start here",
+    startChecking: "Checking your account…",
+    signedOutLead:
+      "Device Inbox needs an account on both ends, so this is where it begins. Once you are signed in, every machine you have set up appears in My Devices as a place you can send to.",
+    signInCta: "Sign in",
+    createAccountCta: "Create an account",
+    signedInLead: (email) => `Signed in as ${email}.`,
+    myDevicesCta: "Open My Devices",
+    stateUnknown:
+      "We could not check your devices just now. That says nothing about whether any of them are ready — open My Devices to see the real state.",
+    stateNone:
+      "No machine has signed in to this account yet. Set one up with the instructions below and it will appear in My Devices as a place you can send to.",
+    stateNoInbox: (n) =>
+      `Signed-in devices: ${n}. None of them has Device Inbox switched on yet — turn it on at the machine itself, using its section below.`,
+    stateReady: (n) => `Devices ready to receive: ${n}. Open My Devices and drop a file on one of them.`,
+    setUpServerCta: "Set up a server receiver",
+    platformsH2: "Your platform",
+    platformsLead:
+      "Six platforms, each with what actually exists today. Where a native receiver is still planned, this page says so and points at the path that works now instead of showing a button that does nothing.",
+    statusAvailable: "Available now",
+    statusTesting: "In testing",
+    statusPlanned: "Planned",
+    statusLabel: (status) => `Status: ${status}`,
+    labelUse: "What it's for",
+    labelSetup: "Set it up",
+    labelFiles: "Where files land",
+    labelResidency: "Staying on",
+    labelSend: "Sending to it",
+    labelRecovery: "If it stops being ready",
+    labelStop: "Pause, stop or remove",
+    platforms: {
+      server: {
+        name: "Linux server",
+        use: "An always-on box — a VPS, a NAS, a home server — that should collect files from your browser while nobody is at its keyboard.",
+        setup:
+          "Sign in once as yourself, then download the short installer and read it before it gets root. It creates the receive folder, makes a dedicated low-privilege account, copies your device credential into it without printing it, enrols the receive key, installs a hardened systemd system unit, starts it immediately and enables it for the next reboot.",
+        files:
+          "/srv/relayium-inbox unless you pass a different --dir. The folder belongs to the unprivileged relayium account rather than to root, and an existing file is never overwritten.",
+        residency:
+          "It is a real system service: it survives a closed SSH window, a logout and a reboot, and systemd restarts it after a crash. While the server is down, tasks wait at Relayium and are delivered when it returns.",
+        send: "Open My Devices in your browser and drop files on this server's card.",
+        recovery:
+          "If the receive folder disappears — an unmounted volume, say — the worker refuses to recreate it and reports that it needs attention instead of writing underneath the missing mount. inbox status reports the folder, the credential, the worker and the server separately, which is what tells the four apart.",
+        stop:
+          "systemctl disable --now stops the process and keeps the enrolment; inbox disable is the stronger one, revoking the inbox centrally first and deleting the private keys only after that succeeds.",
+      },
+      linux: {
+        name: "Linux desktop",
+        use: "Your own workstation, receiving into your own home directory — deliberately not the unattended server setup, which runs as a separate low-privilege account outside any home folder.",
+        setup:
+          "Sign in, choose a folder in your home directory and enable the inbox. relayium inbox service systemd-user then prints a unit for this machine and the exact commands to install it; the service itself needs no root.",
+        files:
+          "Wherever you pointed --dir — ~/Relayium-inbox above. Received files are not given the executable bit and are never opened, run or unpacked for you.",
+        residency:
+          "A user service runs while your session does, and stops when you log out unless you enable lingering for your account, which does need root once. That is the honest difference between this and the server deployment.",
+        send: "My Devices, in any browser signed in to the same account.",
+        recovery:
+          "relayium inbox status reports the folder, the credential and the worker separately; re-running inbox enable with a folder re-establishes the directory permission.",
+        stop:
+          "systemctl --user disable --now stops the service; inbox disable revokes the inbox and deletes the private keys once central confirms.",
+      },
+      macos: {
+        name: "macOS",
+        use: "A Mac that stays on your desk and collects what you send it from your phone or from a browser somewhere else.",
+        setup:
+          "The native Mac app's Device Inbox is still an engineering build, so this page does not hand you one. What works on macOS today is the same command-line receiver supervised by launchd: relayium inbox service launchd prints an agent for this Mac and the commands that load it.",
+        files:
+          "The folder you passed to --dir. Nothing is overwritten, nothing is unpacked, and a received file is never opened for you.",
+        residency:
+          "A launchd user agent runs while you are logged in and comes back after a restart once you log in again. It is not a system daemon and does not receive while nobody is logged in.",
+        send: "My Devices in a browser, or from an iPhone signed in to the same account.",
+        recovery:
+          "relayium inbox status tells a folder problem from a credential problem; if the folder was moved or its permissions changed, re-run inbox enable with the folder you want.",
+        stop: "launchctl bootout unloads the agent; inbox disable revokes the inbox and its keys.",
+      },
+      windows: {
+        name: "Windows",
+        use: "A Windows PC that should receive files into a folder you choose.",
+        setup:
+          "The native tray receiver — sign-in, a fixed folder, start at login, notifications, reveal in Explorer, pause and resume — is planned and not built. What is verified today is the command-line receiver running in the foreground: it receives while the window stays open, and closing that window ends it. There is no Windows service and no startup entry.",
+        files: "The folder you passed to --dir — %USERPROFILE%\\Relayium-inbox above.",
+        residency:
+          "None beyond that open window. Do not treat this as an always-on receiver: for that, use a Linux server today or wait for the native app.",
+        send: "My Devices, in any browser signed in to the same account.",
+        recovery:
+          "relayium inbox status names the folder, the credential and the worker separately, so a missing folder can be told from an expired sign-in.",
+        stop:
+          "Close the window, or use inbox pause to stop accepting new work while keeping the enrolment; inbox disable revokes the inbox and deletes its keys.",
+      },
+      iphone: {
+        name: "iPhone",
+        use: "The device you actually have in your hand when you want to move a photo or a document onto your Mac or your server.",
+        setup:
+          "The native share-sheet sender and background receiving are planned, not built, so there is nothing to install here yet. What works today: open Relayium in Safari, sign in, and use My Devices to send files from the phone to your Mac, PC or server.",
+        files:
+          "Not applicable yet — iPhone is a sender today. When the native app can receive, its files will land in a fixed Relayium folder in Files.",
+        residency:
+          "None is claimed, and none will be. iOS does not let an app stay awake as a general-purpose daemon, so receiving on iPhone will be best-effort background work scheduled by the system — never always-on, never guaranteed to be immediate.",
+        send: "My Devices in Safari, from the phone, to any device that has Device Inbox switched on.",
+        recovery: "Not applicable while iPhone is a sender only.",
+        stop: "Not applicable while iPhone is a sender only.",
+      },
+      android: {
+        name: "Android",
+        use: "The same idea as iPhone: get something off the phone and onto a machine you own, in one step.",
+        setup:
+          "Native sharing and a native receiver are planned, not built. Today: open Relayium in your mobile browser, sign in, and send from My Devices.",
+        files: "Not applicable yet — Android is a sender today.",
+        residency:
+          "None is claimed. A receiver would have to live within Android's foreground-service and background-work rules, and battery optimisation on many phones would make timing best-effort. That is a constraint we are planning around, not something already shipped.",
+        send: "My Devices in your mobile browser, to any device that has Device Inbox switched on.",
+        recovery: "Not applicable while Android is a sender only.",
+        stop: "Not applicable while Android is a sender only.",
+      },
+    },
+    macNoDownload:
+      "There is no download button here on purpose: the signed Mac build is an engineering artifact, not a public release.",
+    macDownloadCta: "Download the Mac app",
+    safetyH2: "Boundaries that do not move",
+    safetyPoints: [
+      "Relayium never holds a key that can open your files: the browser encrypts them and seals the content key to the target device, and the server keeps ciphertext, sizes, timestamps and routing state.",
+      "File names and folder paths travel inside the encrypted manifest. Relayium never receives them.",
+      "Automatic receiving is off until someone at the device turns it on, and only work from your own account is accepted.",
+      "An existing file is never overwritten, merged or deleted; a name collision is given a safe new name.",
+      "Nothing received is opened, executed or unpacked, and received files are not made executable.",
+      "A partly downloaded file is never presented as a complete one, and a failed transfer leaves nothing behind.",
+      "You can pause receiving, revoke a device or delete queued work at any time.",
+    ],
+    docsH2: "Read more",
+    docsServerGuide: "Full server guide: install, logs, crashes and reboots",
+    docsCli: "Every CLI mode, including the Device Inbox commands",
+    docsMyDevices: "My Devices — your send targets",
   },
   cliPage: {
     metaTitle: "Relayium CLI — encrypted file and text transfer from the terminal",

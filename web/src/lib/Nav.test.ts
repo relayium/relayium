@@ -2,7 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mount, unmount, flushSync } from "svelte";
 import Nav from "./Nav.svelte";
 import { loadLang } from "./i18n.svelte";
-import { navigate, syncRouteFromLocation, CROSS_PATH, OFFLINE_PATH, CLI_PATH, APPS_PATH } from "./router.svelte";
+import {
+  navigate, syncRouteFromLocation,
+  CROSS_PATH, OFFLINE_PATH, CLI_PATH, APPS_PATH, DEVICE_INBOX_PATH,
+} from "./router.svelte";
 
 let target: HTMLDivElement;
 let app: unknown;
@@ -21,6 +24,11 @@ function stubAccountFetches() {
 }
 
 beforeEach(async () => {
+  // Unconditional, not per-test: the nav now renders Account on FIVE routes, and
+  // any test that navigates to one mounts a component whose onMount fetches
+  // /api/me. Without the stub that is an unhandled rejection attributed to
+  // whichever test happens to be running when it lands.
+  stubAccountFetches();
   await loadLang("en");
   history.pushState({}, "", "/");
   syncRouteFromLocation();
@@ -45,11 +53,13 @@ const tabs = () => [...target.querySelectorAll<HTMLAnchorElement>(".tabs a.tab")
 const current = () => target.querySelectorAll(".tabs [aria-current='page']");
 
 describe("Nav destinations", () => {
-  it("renders all five destinations as real links, never as fake tabs", () => {
+  it("renders all six destinations as real links, never as fake tabs", () => {
     const links = tabs();
-    expect(links.length).toBe(5);
+    expect(links.length).toBe(6);
+    // Device Inbox is a PRIMARY destination (PRD §12), so it sits in the rail
+    // with the other five rather than being reachable only from a device card.
     expect(links.map((a) => new URL(a.href).pathname)).toEqual([
-      "/", CROSS_PATH, OFFLINE_PATH, CLI_PATH, APPS_PATH,
+      "/", CROSS_PATH, OFFLINE_PATH, DEVICE_INBOX_PATH, CLI_PATH, APPS_PATH,
     ]);
     for (const a of links) {
       expect(a.tagName).toBe("A");
@@ -64,15 +74,37 @@ describe("Nav destinations", () => {
   });
 
   it("still marks exactly one link current after a route change", () => {
-    navigate("cli");
+    navigate("device-inbox");
     flushSync();
     expect(current().length).toBe(1);
     expect(current()[0]).toBe(tabs()[3]);
 
-    navigate("apps");
+    navigate("cli");
     flushSync();
     expect(current().length).toBe(1);
     expect(current()[0]).toBe(tabs()[4]);
+
+    navigate("apps");
+    flushSync();
+    expect(current().length).toBe(1);
+    expect(current()[0]).toBe(tabs()[5]);
+  });
+
+  // Every destination has to be operable from the keyboard, and Device Inbox is
+  // the one that was added last — the branchy href expression it replaced is
+  // exactly where a new destination silently gets the wrong URL.
+  it("reaches Device Inbox by keyboard and marks it current", () => {
+    const link = tabs()[3];
+    expect(link.tagName).toBe("A");
+    expect(link.tabIndex).toBe(0); // a real anchor with an href: focusable, no tabindex needed
+    link.focus();
+    expect(document.activeElement).toBe(link);
+    link.click();
+    flushSync();
+    expect(location.pathname).toBe(DEVICE_INBOX_PATH);
+    expect(current().length).toBe(1);
+    expect(current()[0]).toBe(tabs()[3]);
+    expect(tabs()[3].getAttribute("aria-current")).toBe("page");
   });
 
   // The mobile rail scrolls, so the current destination can start offscreen.
@@ -87,7 +119,7 @@ describe("Nav destinations", () => {
     navigate("apps");
     flushSync();
     expect(spy).toHaveBeenCalled();
-    expect(spy.mock.instances.at(-1)).toBe(tabs()[4]);
+    expect(spy.mock.instances.at(-1)).toBe(tabs()[5]);
     expect(spy.mock.calls.at(-1)![0]).toEqual({ block: "nearest", inline: "nearest" });
   });
 
@@ -113,7 +145,6 @@ describe("Nav utility controls", () => {
   // account. Pricing must include it: otherwise its "Sign in to upgrade"
   // recovery text has no executable action on that route.
   it("shows the account control only on the login-gated routes", () => {
-    stubAccountFetches();
     expect(target.querySelector(".account")).toBeNull();
 
     navigate("cli");
@@ -121,6 +152,13 @@ describe("Nav utility controls", () => {
     expect(target.querySelector(".account")).toBeNull();
 
     navigate("cross");
+    flushSync();
+    expect(target.querySelector(".account")).not.toBeNull();
+
+    // Device Inbox requires an account for its primary action, and its own
+    // "Sign in" / "Create an account" buttons open THIS control's modal — the
+    // page would offer two dead buttons without it.
+    navigate("device-inbox");
     flushSync();
     expect(target.querySelector(".account")).not.toBeNull();
 

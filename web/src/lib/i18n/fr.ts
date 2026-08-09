@@ -459,7 +459,7 @@ const fr: Messages = {
     noToken: "Cette page n'est accessible que depuis un lien de connexion.",
     home: "Retour à l'accueil",
   },
-  nav: { footerLegalLabel: "Mentions légales", footerGuidesLabel: "Ressources", primaryLabel: "Navigation principale", footerLabel: "Navigation de pied de page", lanTab: "LAN", crossTab: "Temps réel", offlineTab: "Asynchrone", cliTab: "CLI", appsTab: "Applis" },
+  nav: { footerLegalLabel: "Mentions légales", footerGuidesLabel: "Ressources", primaryLabel: "Navigation principale", footerLabel: "Navigation de pied de page", lanTab: "LAN", crossTab: "Temps réel", offlineTab: "Asynchrone", cliTab: "CLI", appsTab: "Applis", deviceInboxTab: "Boîte appareil" },
   crossTitle: "Transfert en temps réel",
   offlineTitle: "Transfert asynchrone",
   cli: { subtitle: "Transférez des fichiers et du texte éphémère depuis votre terminal — chiffré de bout en bout, auto-hébergeable." },
@@ -490,6 +490,175 @@ const fr: Messages = {
       mac: { name: "Appli macOS", desc: "Une vraie appli native dans la barre de menus (com.relayium.mac) : fichiers et texte avec les appareils à proximité ou par code d'appairage, envoi et ouverture de liens chiffrés, gestion du compte et des appareils.", cta: "Télécharger pour macOS" },
       ios: { name: "Appli iOS", desc: "Une appli native iPhone et iPad (com.relayium.app) : ouvrez un lien chiffré sans compte, envoyez fichiers et texte aux appareils à proximité ou par code à six chiffres, gérez votre compte — tant que l'appli est ouverte." },
     },
+  },
+  deviceInboxPage: {
+    metaTitle: "Boîte de réception d'appareil — du navigateur vers votre Mac, PC ou serveur · Relayium",
+    metaDesc:
+      "Envoyez un fichier depuis votre navigateur dans un dossier d'une machine qui vous appartient. Relayium le chiffre dans le navigateur, le met en file d'attente quand l'appareil est hors ligne, et ne parle d'enregistrement qu'une fois que cet appareil l'a vérifié et écrit durablement sur son disque.",
+    heading: "Boîte de réception d'appareil",
+    subhead:
+      "Envoyez un fichier depuis n'importe quel navigateur vers un dossier de votre Mac, PC, NAS ou serveur. Il est chiffré avant de quitter le navigateur, il attend dans la file tant que l'appareil est hors ligne, et il n'est déclaré enregistré que lorsque cet appareil confirme l'avoir écrit sur son disque.",
+    badges: [
+      "Chiffré dans votre navigateur",
+      "Votre compte, vos appareils",
+      "Mis en file d'attente si la cible est hors ligne",
+    ],
+    howH2: "Comment ça marche",
+    howLead:
+      "La boîte de réception d'appareil transforme une machine qui vous appartient en destination que vous désignez par son nom : pas de lien de partage, pas de clé USB, personne à l'autre bout. Aucun port à ouvrir, aucune adresse à retenir — c'est la machine réceptrice qui sort vers Relayium et vient chercher son propre travail.",
+    howSteps: [
+      "Sur la machine qui doit recevoir : connectez-vous, choisissez le dossier où elle a le droit d'écrire, et activez la réception là-bas. Rien n'arrive tant que ce n'est pas fait sur cette machine.",
+      "Dans n'importe quel navigateur : connectez-vous au même compte et choisissez l'appareil dans Mes appareils. Votre navigateur chiffre les fichiers et scelle la clé de contenu pour cet appareil avant le moindre envoi.",
+      "Relayium conserve le chiffré et l'état d'acheminement. Il ne peut lire ni le fichier, ni son nom, ni le dossier de destination, et ne détient aucune clé capable de les ouvrir.",
+      "L'appareil récupère la tâche, la déchiffre et la vérifie localement, puis l'écrit dans le dossier choisi — sans vous redemander quoi que ce soit et sans jamais écraser un fichier déjà présent.",
+    ],
+    notSavedH3: "Envoyé n'est pas enregistré",
+    notSavedBody:
+      "« Le navigateur a fini d'envoyer » et « l'appareil a écrit le fichier sur son disque » sont deux résultats différents, et ils ne partagent jamais ici un mot commode. Tant que la cible est hors ligne, en téléchargement ou en vérification, le transfert est affiché comme encore en route. Enregistré n'apparaît qu'après que l'appareil a déchiffré le fichier, l'a vérifié face à son manifeste et l'a validé durablement dans le dossier.",
+    prereqH2: "Ce qu'il faut avant que ça marche",
+    prereqAccount:
+      "Un compte Relayium. C'est la seule partie de Relayium qui écrit sur votre propre disque : elle est donc liée à un compte, et non à un lien que n'importe qui pourrait détenir.",
+    prereqSameAccount:
+      "Le même compte des deux côtés. Un appareil n'accepte que le travail envoyé depuis le compte auquel il est connecté ; rien ne permet de faire recevoir l'appareil de quelqu'un d'autre.",
+    prereqEnable:
+      "La réception activée sur l'appareil lui-même. Elle est désactivée jusqu'à ce qu'une personne ayant accès à cette machine y choisisse un dossier et l'active — ce choix ne peut pas être fait à sa place depuis le web.",
+    prereqOffline:
+      "Rien d'autre. Si l'appareil dort, est hors ligne ou redémarre, vous pouvez quand même envoyer : la tâche chiffrée attend dans la file et est livrée au retour de l'appareil.",
+    linkBoundaryH3: "Un lien de partage est une autre permission",
+    linkBoundary:
+      "Les liens de téléchargement publics de Relayium restent exactement ce qu'ils étaient : qui détient le lien complet peut télécharger ce fichier à la main, et rien de plus. Un lien ne peut jamais faire écrire l'un de vos appareils sur son disque. Les deux permissions sont volontairement séparées, et détenir un lien ne donne aucun accès à une boîte de réception d'appareil.",
+    startH2: "Commencer ici",
+    startChecking: "Vérification de votre compte…",
+    signedOutLead:
+      "La boîte de réception d'appareil demande un compte des deux côtés : c'est donc par là que ça commence. Une fois connecté, chaque machine que vous avez configurée apparaît dans Mes appareils comme une destination.",
+    signInCta: "Se connecter",
+    createAccountCta: "Créer un compte",
+    signedInLead: (email) => `Connecté en tant que ${email}.`,
+    myDevicesCta: "Ouvrir Mes appareils",
+    stateUnknown:
+      "Impossible de consulter vos appareils à l'instant. Cela ne dit rien sur le fait qu'un appareil soit prêt ou non — ouvrez Mes appareils pour voir l'état réel.",
+    stateNone:
+      "Aucune machine ne s'est encore connectée à ce compte. Configurez-en une avec les instructions ci-dessous et elle apparaîtra dans Mes appareils comme destination.",
+    stateNoInbox: (n) =>
+      `Appareils connectés : ${n}. Aucun n'a encore la boîte de réception activée — activez-la sur la machine elle-même, en suivant sa section ci-dessous.`,
+    stateReady: (n) => `Appareils prêts à recevoir : ${n}. Ouvrez Mes appareils et déposez un fichier sur l'un d'eux.`,
+    setUpServerCta: "Configurer un serveur récepteur",
+    platformsH2: "Votre plateforme",
+    platformsLead:
+      "Six plateformes, chacune avec ce qui existe réellement aujourd'hui. Là où le récepteur natif est encore prévu, la page le dit et indique le chemin qui fonctionne maintenant, plutôt qu'un bouton qui ne fait rien.",
+    statusAvailable: "Disponible",
+    statusTesting: "En test",
+    statusPlanned: "Prévu",
+    statusLabel: (status) => `Statut : ${status}`,
+    labelUse: "À quoi ça sert",
+    labelSetup: "Mise en place",
+    labelFiles: "Où arrivent les fichiers",
+    labelResidency: "Fonctionnement continu",
+    labelSend: "Lui envoyer un fichier",
+    labelRecovery: "S'il n'est plus prêt",
+    labelStop: "Suspendre, arrêter, retirer",
+    platforms: {
+      server: {
+        name: "Serveur Linux",
+        use: "Une machine toujours allumée — VPS, NAS, serveur domestique — censée récupérer les fichiers envoyés depuis votre navigateur alors que personne n'est devant son clavier.",
+        setup:
+          "Connectez-vous une fois en votre nom, puis téléchargez le court script d'installation et lisez-le avant de lui donner les droits root. Il crée le dossier de réception, met en place un compte dédié à faibles privilèges, y copie vos identifiants d'appareil sans les afficher, enregistre la clé de réception, installe une unité systemd système durcie, la démarre aussitôt et l'active pour le prochain redémarrage.",
+        files:
+          "/srv/relayium-inbox, sauf si vous passez un autre --dir. Le dossier appartient au compte non privilégié relayium et non à root, et un fichier existant n'est jamais écrasé.",
+        residency:
+          "C'est un vrai service système : il survit à la fermeture d'une session SSH, à une déconnexion et à un redémarrage, et systemd le relance après un plantage. Pendant que le serveur est éteint, les tâches attendent chez Relayium et sont livrées à son retour.",
+        send: "Ouvrez Mes appareils dans votre navigateur et déposez des fichiers sur la carte de ce serveur.",
+        recovery:
+          "Si le dossier de réception disparaît — un volume non monté, par exemple —, le worker refuse de le recréer et signale qu'une intervention est nécessaire au lieu d'écrire sous le point de montage manquant. inbox status rapporte séparément le dossier, les identifiants, le worker et le serveur : c'est ce qui permet de distinguer les quatre.",
+        stop:
+          "systemctl disable --now arrête le processus et conserve l'enrôlement ; inbox disable va plus loin, en révoquant d'abord la boîte côté serveur et en supprimant les clés privées seulement ensuite.",
+      },
+      linux: {
+        name: "Bureau Linux",
+        use: "Votre poste de travail, qui reçoit dans votre propre dossier personnel — délibérément différent de l'installation serveur sans surveillance, qui tourne sous un compte séparé à faibles privilèges, hors de tout dossier personnel.",
+        setup:
+          "Connectez-vous, choisissez un dossier dans votre répertoire personnel et activez la boîte. relayium inbox service systemd-user affiche ensuite une unité pour cette machine et les commandes exactes pour l'installer ; le service lui-même ne demande pas root.",
+        files:
+          "Là où pointe --dir — ~/Relayium-inbox ci-dessus. Les fichiers reçus ne reçoivent pas le bit d'exécution et ne sont jamais ouverts, lancés ou décompressés pour vous.",
+        residency:
+          "Un service utilisateur tourne tant que votre session dure et s'arrête à la déconnexion, sauf si vous activez le lingering pour votre compte, ce qui demande root une fois. C'est la différence honnête avec le déploiement serveur.",
+        send: "Mes appareils, dans n'importe quel navigateur connecté au même compte.",
+        recovery:
+          "relayium inbox status rapporte séparément le dossier, les identifiants et le worker ; relancer inbox enable avec un dossier rétablit l'autorisation sur le répertoire.",
+        stop:
+          "systemctl --user disable --now arrête le service ; inbox disable révoque la boîte et supprime les clés privées une fois la confirmation centrale obtenue.",
+      },
+      macos: {
+        name: "macOS",
+        use: "Un Mac qui reste sur votre bureau et récupère ce que vous lui envoyez depuis votre téléphone ou depuis un navigateur ailleurs.",
+        setup:
+          "La boîte de réception de l'application Mac native est encore une version d'ingénierie : cette page ne vous en propose donc pas. Ce qui fonctionne aujourd'hui sur macOS, c'est le même récepteur en ligne de commande supervisé par launchd — relayium inbox service launchd affiche un agent pour ce Mac et les commandes qui le chargent.",
+        files:
+          "Le dossier passé à --dir. Rien n'est écrasé, rien n'est décompressé, et un fichier reçu n'est jamais ouvert à votre place.",
+        residency:
+          "Un agent utilisateur launchd tourne pendant que vous êtes connecté et revient après un redémarrage dès que vous vous reconnectez. Ce n'est pas un démon système : il ne reçoit pas tant que personne n'est connecté.",
+        send: "Mes appareils dans un navigateur, ou depuis un iPhone connecté au même compte.",
+        recovery:
+          "relayium inbox status distingue un problème de dossier d'un problème d'identifiants. Si le dossier a été déplacé ou ses droits modifiés, relancez inbox enable avec le dossier voulu.",
+        stop: "launchctl bootout décharge l'agent ; inbox disable révoque la boîte et ses clés.",
+      },
+      windows: {
+        name: "Windows",
+        use: "Un PC Windows qui doit recevoir des fichiers dans un dossier de votre choix.",
+        setup:
+          "Le récepteur natif dans la zone de notification — connexion, dossier fixe, démarrage à l'ouverture de session, notifications, afficher dans l'Explorateur, pause et reprise — est prévu et n'est pas construit. Ce qui est vérifié aujourd'hui, c'est le récepteur en ligne de commande au premier plan : il reçoit tant que la fenêtre reste ouverte, et se termine quand vous la fermez. Il n'y a ni service Windows ni entrée de démarrage.",
+        files: "Le dossier passé à --dir — %USERPROFILE%\\Relayium-inbox ci-dessus.",
+        residency:
+          "Aucun au-delà de cette fenêtre ouverte. Ne le prenez pas pour un récepteur permanent : pour cela, utilisez aujourd'hui un serveur Linux ou attendez l'application native.",
+        send: "Mes appareils, dans n'importe quel navigateur connecté au même compte.",
+        recovery:
+          "relayium inbox status nomme séparément le dossier, les identifiants et le worker, ce qui permet de distinguer un dossier manquant d'une connexion expirée.",
+        stop:
+          "Fermez la fenêtre, ou utilisez inbox pause pour cesser d'accepter de nouvelles tâches tout en conservant l'enrôlement ; inbox disable révoque la boîte et supprime ses clés.",
+      },
+      iphone: {
+        name: "iPhone",
+        use: "L'appareil que vous avez réellement en main quand il faut déplacer une photo ou un document vers votre Mac ou votre serveur.",
+        setup:
+          "L'envoi natif depuis la feuille de partage et la réception en arrière-plan sont prévus, pas construits : il n'y a donc encore rien à installer ici. Ce qui marche aujourd'hui : ouvrez Relayium dans Safari, connectez-vous, et utilisez Mes appareils pour envoyer des fichiers du téléphone vers votre Mac, PC ou serveur.",
+        files:
+          "Sans objet pour l'instant — l'iPhone est aujourd'hui l'émetteur. Quand l'application native saura recevoir, les fichiers arriveront dans un dossier Relayium fixe, dans Fichiers.",
+        residency:
+          "Aucune n'est promise et aucune ne le sera. iOS n'autorise pas une application à rester éveillée comme un démon généraliste : la réception sur iPhone sera donc un travail d'arrière-plan au mieux, planifié par le système — jamais permanent, jamais garanti immédiat.",
+        send: "Mes appareils dans Safari, depuis le téléphone, vers tout appareil dont la boîte de réception est activée.",
+        recovery: "Sans objet tant que l'iPhone n'est qu'émetteur.",
+        stop: "Sans objet tant que l'iPhone n'est qu'émetteur.",
+      },
+      android: {
+        name: "Android",
+        use: "La même idée que pour l'iPhone : sortir quelque chose du téléphone vers une machine qui vous appartient, en une étape.",
+        setup:
+          "Le partage natif et un récepteur natif sont prévus, pas construits. Aujourd'hui : ouvrez Relayium dans votre navigateur mobile, connectez-vous et envoyez depuis Mes appareils.",
+        files: "Sans objet pour l'instant — Android est aujourd'hui l'émetteur.",
+        residency:
+          "Aucune n'est promise. Un récepteur devrait tenir dans les règles Android des services de premier plan et du travail en arrière-plan, et l'optimisation de batterie de nombreux téléphones rendrait le moment de livraison approximatif. C'est une contrainte que nous anticipons, pas une fonctionnalité déjà livrée.",
+        send: "Mes appareils dans votre navigateur mobile, vers tout appareil dont la boîte de réception est activée.",
+        recovery: "Sans objet tant qu'Android n'est qu'émetteur.",
+        stop: "Sans objet tant qu'Android n'est qu'émetteur.",
+      },
+    },
+    macNoDownload:
+      "L'absence de bouton de téléchargement ici est volontaire : la version Mac signée est un artefact d'ingénierie, pas une publication publique.",
+    macDownloadCta: "Télécharger l'app Mac",
+    safetyH2: "Des limites qui ne bougent pas",
+    safetyPoints: [
+      "Relayium ne détient jamais de clé capable d'ouvrir vos fichiers : le navigateur les chiffre et scelle la clé de contenu pour l'appareil cible ; le serveur ne garde que du chiffré, des tailles, des horodatages et l'état d'acheminement.",
+      "Les noms de fichiers et les chemins de dossiers voyagent dans le manifeste chiffré. Relayium ne les reçoit jamais.",
+      "La réception automatique reste désactivée tant que personne ne l'active sur l'appareil, et seul le travail venant de votre propre compte est accepté.",
+      "Un fichier existant n'est jamais écrasé, fusionné ni supprimé ; en cas de nom identique, un nouveau nom sûr est attribué.",
+      "Rien de ce qui est reçu n'est ouvert, exécuté ou décompressé, et les fichiers reçus ne sont pas rendus exécutables.",
+      "Un fichier partiellement téléchargé n'est jamais présenté comme complet, et un transfert échoué ne laisse rien derrière lui.",
+      "Vous pouvez à tout moment suspendre la réception, révoquer un appareil ou supprimer des tâches en attente.",
+    ],
+    docsH2: "Pour aller plus loin",
+    docsServerGuide: "Guide serveur complet : installation, journaux, plantages et redémarrages",
+    docsCli: "Tous les modes du CLI, y compris les commandes de la boîte de réception",
+    docsMyDevices: "Mes appareils — vos destinations d'envoi",
   },
   cliPage: {
     metaTitle: "CLI Relayium — transfert de fichiers et de texte chiffré depuis le terminal",

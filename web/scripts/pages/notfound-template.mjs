@@ -17,6 +17,7 @@ const LINKS = [
   ["/", "Relayium home — send a file now"],
   ["/cross-network", "Cross-network transfer"],
   ["/offline-transfer", "Encrypted download links"],
+  ["/device-inbox", "Device Inbox — send to your own computer or server"],
   ["/apps", "Apps: web, CLI, macOS, iOS"],
   ["/cli", "Relayium CLI"],
   ["/guides/", "Guides"],

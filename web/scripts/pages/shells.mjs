@@ -1,15 +1,16 @@
 // web/scripts/pages/shells.mjs — per-route static shells for the English SPA
 // routes.
 //
-// The problem this solves: /cross-network, /offline-transfer, /apps, /pricing
-// and /cli are English SPA routes, so the bytes a crawler receives were
+// The problem this solves: /cross-network, /offline-transfer, /apps, /pricing,
+// /cli and /device-inbox are English SPA routes, so the bytes a crawler
+// receives were
 // index.html — whose <head> hardcodes the HOMEPAGE's title, description,
 // canonical ("https://relayium.com/") and hreflang cluster, and whose <noscript>
 // block is the homepage's prose. The SPA rewrites all of that after boot
 // (App.svelte + page-meta.ts), so a JS-executing crawler sees the right thing
 // and everything else — most AI/answer-engine crawlers, Bing's second pass,
-// link unfurlers — sees a duplicate of the homepage at five distinct URLs, three
-// of which the sitemap actively submits. The eight localized twins
+// link unfurlers — sees a duplicate of the homepage at every one of those
+// URLs, all of which the sitemap actively submits. The eight localized twins
 // (/zh/cross-network/ …) were static and correct the whole time; only English,
 // the original, was broken.
 //
@@ -160,6 +161,10 @@ function proseBody(doc, { links = [], langSlug = null } = {}) {
   p.push(
     `<p><a href="/">Relayium home</a> · <a href="/guides/">Guides</a> · ` +
       `<a href="/apps">Apps</a> · <a href="${PRICING_URL}">Pricing</a> · <a href="/cli">CLI</a> · ` +
+      // The only inbound link to /device-inbox from the static graph. Without
+      // it the route would sit in the sitemap linked from nowhere — the
+      // "Discovered - currently not indexed" shape site-graph.test.mjs guards.
+      `<a href="/device-inbox">Device Inbox</a> · ` +
       `<a href="/privacy/">Privacy</a> · <a href="/terms/">Terms</a> · <a href="/security/">Security</a> · ` +
       // The only inbound link to the English /releases/. The eight localized
       // twins are linked from their own landing and legal pages; the English
@@ -201,7 +206,7 @@ const NOINDEX_ROUTES = [
  * TypeScript, and pulling it into the vite-config project breaks that project's
  * resolution), so shells.test.mjs asserts the equality instead.
  */
-export function buildShells({ modes = [], pricing, cli, cliArticles = [] }) {
+export function buildShells({ modes = [], pricing, cli, deviceInbox, cliArticles = [] }) {
   const out = [];
   for (const { def, slug } of modes) {
     const doc = def.langs[DEFAULT_LANG];
@@ -212,9 +217,9 @@ export function buildShells({ modes = [], pricing, cli, cliArticles = [] }) {
       body: proseBody(doc, { langSlug: slug }),
     });
   }
-  // /pricing and /cli exist only in English, so they get a self-referential
-  // canonical and no hreflang cluster — pointing an alternate at a page that
-  // doesn't exist is worse than having none.
+  // /pricing, /cli and /device-inbox exist only in English, so they get a
+  // self-referential canonical and no hreflang cluster — pointing an alternate
+  // at a page that doesn't exist is worse than having none.
   out.push({
     file: "pricing.html",
     head: indexableHead(pricing, { route: "/pricing" }),
@@ -224,6 +229,13 @@ export function buildShells({ modes = [], pricing, cli, cliArticles = [] }) {
     file: "cli.html",
     head: indexableHead(cli, { route: "/cli" }),
     body: proseBody(cli, { links: cliArticles }),
+  });
+  // /device-inbox is the sixth primary destination and English-only for the same
+  // reason: there is no /zh/device-inbox/ directory to point an alternate at.
+  out.push({
+    file: "device-inbox.html",
+    head: indexableHead(deviceInbox, { route: "/device-inbox" }),
+    body: proseBody(deviceInbox),
   });
   for (const r of NOINDEX_ROUTES) {
     const doc = { title: `${r.hero} · ${SITE.name}`, description: r.pitch, hero: { h1: r.hero, pitch: r.pitch } };

@@ -137,6 +137,25 @@ describe("scanner target readiness", () => {
     expect(last.readyCount).toBe(PLANS.length);
   });
 
+  it("scans /device-inbox at the section count the PRD requires, not at its shell", () => {
+    // `.dinbox` exists from the first paint; the six platform sections, their
+    // definition lists and their status badges are the content worth scanning.
+    // A container selector would report a clean page having looked at a hero.
+    for (const id of ["spa/device-inbox", "spa/device-inbox/mobile-dark"]) {
+      const t = target(id);
+      expect(t.ready, id).toBe("[data-platform]");
+      expect(t.readyCount, id).toBe(6);
+      // No fixture: signed out is the state a first-time visitor arrives in, and
+      // it is the state whose two account buttons have to pass a scan.
+      expect(t.fixture, id).toBeUndefined();
+    }
+    // Both colour schemes and both layouts — badge colours are computed styles,
+    // and the definition list changes shape below 720px.
+    expect(target("spa/device-inbox").scheme).toBe("light");
+    expect(target("spa/device-inbox/mobile-dark").scheme).toBe("dark");
+    expect(target("spa/device-inbox/mobile-dark").viewport.width).toBeLessThan(700);
+  });
+
   it("keeps the signed-out account dialog as its own target", () => {
     // Two embeddings, two contexts. The signed-out dialog is the login form; it
     // must not be quietly replaced by the signed-in one.

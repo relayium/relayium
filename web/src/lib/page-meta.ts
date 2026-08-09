@@ -1,5 +1,5 @@
 import type { Route } from "./router.svelte";
-import { CROSS_PATH, OFFLINE_PATH, PRICING_PATH, APPS_PATH, CLI_PATH } from "./router.svelte";
+import { CROSS_PATH, OFFLINE_PATH, PRICING_PATH, APPS_PATH, CLI_PATH, DEVICE_INBOX_PATH } from "./router.svelte";
 import type { Messages } from "./i18n/types";
 
 export interface PageMeta {
@@ -26,6 +26,16 @@ export function pageMeta(
   // HTML; without this branch the SPA overwrote that back to "/" on boot, which
   // is exactly what a rendering crawler reads.
   if (route === "cli") return { title: m.cliPage.metaTitle, description: m.cliPage.metaDesc, canonicalPath: CLI_PATH };
+  // Public product route: it gets its own canonical, and its title/description
+  // must match the static shell byte for byte (shells.mjs), or a rendering
+  // crawler and a non-rendering one read two different pages at one URL.
+  if (route === "device-inbox") {
+    return {
+      title: m.deviceInboxPage.metaTitle,
+      description: m.deviceInboxPage.metaDesc,
+      canonicalPath: DEVICE_INBOX_PATH,
+    };
+  }
   if (route === "verify-email") return { title: `${m.verifyEmail.title} · Relayium`, description: m.verifyEmail.confirmPrompt, canonicalPath: null };
   if (route === "reset-password") return { title: `${m.resetPassword.title} · Relayium`, description: m.resetPassword.lead, canonicalPath: null };
   if (route === "magic-link") return { title: `${m.magicLink.title} · Relayium`, description: m.magicLink.lead, canonicalPath: null };

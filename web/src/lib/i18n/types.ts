@@ -2,6 +2,7 @@
 // precache 覆盖），于是本文件也进了 tsconfig.node.json 的 nodenext 程序，那里的相对
 // 导入必须带扩展名。这是纯类型导入，打包时整条被抹掉。
 import type { SameLength, PICK_MODES, FLAG_ROWS, TRUST_FILES, GUIDES } from "../cli-page-data.js";
+import type { InboxPlatformId } from "../device-inbox-platforms.js";
 
 // Pure i18n types and locale-independent helpers. No message data and no
 // runtime state live here, so language tables and the reactive facade can both
@@ -599,6 +600,12 @@ export interface Messages {
      *  exactly the way the top nav and the page footer used to. */
     footerLegalLabel: string; footerGuidesLabel: string;
     lanTab: string; crossTab: string; offlineTab: string; cliTab: string; appsTab: string;
+    /** Sixth primary destination: /device-inbox. It is a product entry point of
+     *  the same rank as the other five (PRD §12), not a page reachable only from
+     *  a device card, so it gets a nav label rather than a link buried in prose.
+     *  Keep it SHORT — six labels share one row, and nine languages have to fit
+     *  a 320px rail without any of them being truncated. */
+    deviceInboxTab: string;
   };
   // Full page headings for the cross/offline pages. The nav.*Tab strings are the
   // short pill labels; these are the descriptive <h1> titles.
@@ -625,6 +632,105 @@ export interface Messages {
       mac: { name: string; desc: string; cta: string };
       ios: { name: string; desc: string }; // no cta — coming soon
     };
+  };
+  // /device-inbox — the public, first-class entry point for Device Inbox
+  // (DeviceInboxPage.svelte). PRD §12 requires this to be a product page, not a
+  // marketing stub: it has to explain the model, state the prerequisites, give a
+  // signed-out visitor an executable way in, give a signed-in one their real next
+  // step, and describe six named platforms with an honest status each.
+  //
+  // Two invariants are enforced by i18n-device-inbox-page.test.ts because losing
+  // either in one translation is a lie only that language's readers would see:
+  //
+  //  1. **Upload is not save** (PRD §10). `notSavedBody` is the sentence that
+  //     keeps "the ciphertext reached Relayium" apart from "the device wrote the
+  //     file to disk".
+  //  2. **A public download link is a different permission** (PRD §8). A
+  //     capability link lets a holder download by hand; it can never make a
+  //     device write to disk. `linkBoundary` carries that.
+  //
+  // Commands, paths and unit names are NOT here — they are locale-invariant and
+  // live in device-inbox-platforms.ts.
+  deviceInboxPage: {
+    metaTitle: string; // <title> for /device-inbox (page-meta.ts + shells.mjs)
+    metaDesc: string; // <meta description> for /device-inbox
+    heading: string; // <h1>
+    subhead: string;
+    badges: string[]; // rendered by iteration; no index pairing
+    // ── What it is ────────────────────────────────────────────────────────
+    howH2: string;
+    howLead: string;
+    howSteps: string[]; // iterated; the browser → own folder walkthrough
+    notSavedH3: string;
+    notSavedBody: string;
+    // ── Before it can work ────────────────────────────────────────────────
+    prereqH2: string;
+    prereqAccount: string; // the receiving machine needs an account …
+    prereqSameAccount: string; // … the same account as the sender, in the MVP
+    prereqEnable: string; // … and receiving must be switched on AT the device
+    prereqOffline: string; // offline is a queue, not a refusal
+    linkBoundaryH3: string;
+    linkBoundary: string; // a share link never writes to a device
+    // ── Start (account-aware; the half that is not a static article) ──────
+    startH2: string;
+    startChecking: string;
+    signedOutLead: string;
+    signInCta: string;
+    createAccountCta: string;
+    signedInLead: (email: string) => string;
+    myDevicesCta: string;
+    /** `/api/devices` did not answer. Says so — and must NOT be worded as "no
+     *  devices" or "ready", because the page does not know which is true. */
+    stateUnknown: string;
+    stateNone: string;
+    stateNoInbox: (n: number) => string;
+    stateReady: (n: number) => string;
+    /** In-page link from the start block down to the server section. */
+    setUpServerCta: string;
+    // ── Platforms ─────────────────────────────────────────────────────────
+    platformsH2: string;
+    platformsLead: string;
+    statusAvailable: string;
+    statusTesting: string;
+    statusPlanned: string;
+    /** Accessible prefix for the badge, e.g. "Status: available now". */
+    statusLabel: (status: string) => string;
+    labelUse: string;
+    labelSetup: string;
+    labelFiles: string;
+    labelResidency: string;
+    labelSend: string;
+    labelRecovery: string;
+    labelStop: string;
+    /** Keyed by InboxPlatformId, so adding a platform to
+     *  device-inbox-platforms.ts is a compile error in all nine locales until
+     *  each one has written the section. */
+    platforms: Record<
+      InboxPlatformId,
+      {
+        name: string;
+        use: string; // what this platform is FOR
+        setup: string; // prose around the command block, or the truthful path
+        files: string; // where received files land
+        residency: string; // does it survive logout / reboot / backgrounding
+        send: string; // how you send TO it today
+        recovery: string; // what to do when permission or the folder is lost
+        stop: string; // pause / stop / revoke
+      }
+    >;
+    /** Why the macOS section has no download button while the app is an
+     *  engineering build. Shown only while native-releases.json is unavailable. */
+    macNoDownload: string;
+    /** Label of the macOS download link, used only if the release manifest
+     *  actually carries a build. */
+    macDownloadCta: string;
+    // ── Boundaries + further reading ──────────────────────────────────────
+    safetyH2: string;
+    safetyPoints: string[]; // iterated
+    docsH2: string;
+    docsServerGuide: string;
+    docsCli: string;
+    docsMyDevices: string;
   };
   // /cli docs page body. Command blocks stay literal English (code); only prose
   // and labels are localised.

@@ -1,7 +1,8 @@
-// web/scripts/pages/content/spa-pages.mjs — English copy for the two SPA routes
-// that have no localized static twin: /pricing and /cli. Both are public pages
-// (the router calls /pricing "public marketing"), both were invisible to any
-// crawler that doesn't run JavaScript, and neither was in the sitemap.
+// web/scripts/pages/content/spa-pages.mjs — English copy for the SPA routes
+// that have no localized static twin: /pricing, /cli and /device-inbox. All are
+// public pages (the router calls /pricing "public marketing"), all were
+// invisible to any crawler that doesn't run JavaScript, and none was in the
+// sitemap before it was added here.
 //
 // Same doc shape as the mode pages (cross-network.mjs et al.) so shells.mjs can
 // render all of them through one prose renderer. Copy mirrors
@@ -173,4 +174,106 @@ export const cli = {
     ],
   },
   learnHeading: "CLI guides",
+};
+
+export const deviceInbox = {
+  // title/description mirror deviceInboxPage.metaTitle / metaDesc exactly — see
+  // the note on `pricing` above. shells.test.mjs asserts the equality, because
+  // the SPA overwrites the served <head> on boot and a mismatch means a
+  // rendering crawler and a non-rendering one read two different pages.
+  title: "Device Inbox — browser to your own Mac, PC or server · Relayium",
+  description:
+    "Send a file from your browser into a folder on a machine you own. Relayium encrypts it in the browser, queues it while that device is offline, and calls it saved only after the device has verified and durably written it to disk.",
+  hero: {
+    h1: "Device Inbox",
+    pitch:
+      "Send a file from any browser to a folder on your own Mac, PC, NAS or server. It is encrypted before it leaves the browser, it waits in a queue while the device is offline, and it is only ever called saved once that device says it wrote the file to disk.",
+    cta: "Set up a device inbox",
+  },
+  how: {
+    heading: "How it works",
+    steps: [
+      "On the machine that should receive: sign in, choose the folder it may write to, and switch receiving on there. Nothing arrives until that has been done on that machine.",
+      "In any browser: sign in to the same account and pick the device in My Devices. Your browser encrypts the files and seals the content key to that device before anything is uploaded.",
+      "Relayium stores ciphertext and routing state. It cannot read the file, its name or the folder it is bound for, and it holds no key that could open it.",
+      "The device collects the task, decrypts and verifies it locally, and writes it into the folder you chose — without asking you again, and without ever overwriting a file that is already there.",
+      "Uploaded is not saved: while the target is offline, downloading or verifying, the transfer is still on its way. Saved appears only after that device has decrypted the file, checked it against its manifest and committed it durably to the folder.",
+    ],
+  },
+  why: {
+    heading: "Your platform",
+    items: [
+      {
+        title: "Linux server — available now",
+        desc: "An always-on VPS, NAS or home server. Sign in once, download the short installer and read it before it gets root: it creates /srv/relayium-inbox, makes a dedicated low-privilege account, enrols the receive key and installs a hardened systemd system unit that starts now and after every reboot. Files land in /srv/relayium-inbox, nothing existing is overwritten, and systemctl status, journalctl, inbox pause/resume and inbox disable control it.",
+      },
+      {
+        title: "Linux desktop — available now",
+        desc: "Your own workstation receiving into your own home directory, via the CLI and a systemd --user service. Deliberately not the unattended server deployment: a user service stops when you log out unless you enable lingering, which needs root once.",
+      },
+      {
+        title: "macOS — in testing",
+        desc: "The native Mac app's Device Inbox is still an engineering build, so there is no download here. What works on macOS today is the same command-line receiver supervised by launchd, which runs while you are logged in and returns after a restart once you log in again.",
+      },
+      {
+        title: "Windows — planned",
+        desc: "The native tray receiver is planned and not built. What is verified today is the command-line receiver in the foreground: it receives while the terminal window stays open and ends when you close it. There is no Windows service and no startup entry.",
+      },
+      {
+        title: "iPhone — planned",
+        desc: "The native share-sheet sender and background receiving are planned, not built. Today an iPhone signs in to relayium.com in Safari and sends from My Devices to a Mac, PC or server. Receiving on iOS will be best-effort background work scheduled by the system — never always-on and never guaranteed to be immediate.",
+      },
+      {
+        title: "Android — planned",
+        desc: "Native sharing and a native receiver are planned, not built. Today an Android phone signs in in its mobile browser and sends from My Devices. A future receiver would have to live within Android's foreground-service and background-work rules, and battery optimisation would make timing best-effort.",
+      },
+    ],
+  },
+  compare: {
+    heading: "What it needs, and what it never does",
+    items: [
+      {
+        title: "An account on both ends, and receiving switched on at the device",
+        body: "Device Inbox is the one part of Relayium that writes to your own disk, so it is tied to an account rather than to a link anyone could hold. A device only accepts work from the account it is signed in to, and receiving stays off until someone with access to that machine picks a folder and turns it on there. If the device is asleep or offline you can still send: the encrypted task waits in the queue and is delivered when it comes back.",
+      },
+      {
+        title: "A share link is a different permission",
+        body: "Relayium's public download links stay exactly what they were: whoever holds the full link can download that one file by hand. A link can never make one of your devices write to disk. The two permissions are deliberately separate, and holding a link gives no access to any device inbox.",
+      },
+      {
+        title: "Boundaries that do not move",
+        body: "Relayium never holds a key that can open your files, and file names and folder paths travel inside the encrypted manifest it never receives. An existing file is never overwritten, merged or deleted — a name collision gets a safe new name. Nothing received is opened, executed or unpacked, and received files are not made executable. A partly downloaded file is never presented as a complete one. You can pause receiving, revoke a device or delete queued work at any time.",
+      },
+    ],
+  },
+  faq: {
+    heading: "Frequently asked questions",
+    items: [
+      {
+        q: "Do I need an account?",
+        a: "Yes, on both ends, and it has to be the same account. This is the only part of Relayium that writes to a disk you own, so it is tied to an account rather than to a link. There is no way to make someone else's device receive from you.",
+      },
+      {
+        q: "What happens if the target device is offline?",
+        a: "You can still send. The encrypted task waits in the queue at Relayium and is delivered when the device comes back online. An offline device is a valid target, not a refusal.",
+      },
+      {
+        q: "Does 'uploaded' mean the file is on my machine?",
+        a: "No, and Relayium never merges the two. While the target is offline, downloading or verifying, the transfer is shown as still on its way. Saved appears only after that device has decrypted the file, verified it against its manifest and committed it durably to the folder you chose.",
+      },
+      {
+        q: "Can someone with a share link write to my device?",
+        a: "No. A public download link lets whoever holds it download that one file by hand, and nothing more. Automatic receiving only accepts work from your own account, and only after someone at the device switched it on.",
+      },
+      {
+        q: "Which platforms can receive today?",
+        a: "Linux servers, through the published installer and a low-privilege systemd system service, and Linux desktops through the CLI and a systemd --user service. macOS can run the same command-line receiver under launchd while the native app's Device Inbox is still in testing. Windows can run the receiver in the foreground only. iPhone and Android are senders today; their native clients are planned.",
+      },
+      {
+        q: "Can Relayium read my files or their names?",
+        a: "No. Your browser encrypts the files and seals the content key to the target device before anything is uploaded. File names and folder paths are inside the encrypted manifest. The server keeps ciphertext, sizes, timestamps and routing state, and holds no key that could open any of it.",
+      },
+    ],
+  },
+  learnHeading: "Read more",
 };

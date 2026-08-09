@@ -234,7 +234,8 @@ export function buildSitemap(docs, { home = true, landing = null, articles = [],
       urls.push({ loc: absUrl(urlPath(slug, lang)), lastmod: def.updated, priority: "0.8", changefreq: "weekly" });
     }
   }
-  // English-only SPA routes (/pricing, /cli). They have no localized twin and no
+  // English-only SPA routes (/pricing, /cli, /device-inbox). They have no
+  // localized twin and no
   // generated directory, so they carry no trailing slash and no hreflang cluster
   // — but they are public pages, and leaving them out of the sitemap is why
   // /pricing had zero coverage while the router called it "public marketing".

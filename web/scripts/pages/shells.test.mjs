@@ -5,7 +5,7 @@ import { buildShells, applyShell, HEAD_MARKERS, BODY_MARKERS } from "./shells.mj
 import crossNetwork from "./content/cross-network.mjs";
 import offlineTransfer from "./content/offline-transfer.mjs";
 import apps from "./content/apps.mjs";
-import { pricing, cli } from "./content/spa-pages.mjs";
+import { pricing, cli, deviceInbox } from "./content/spa-pages.mjs";
 import { CLI_ARTICLES } from "./content/cli-articles.mjs";
 import en from "../../src/lib/i18n/en";
 
@@ -24,6 +24,7 @@ const shells = buildShells({
   ],
   pricing,
   cli,
+  deviceInbox,
   cliArticles: CLI_ARTICLES,
 });
 const byFile = Object.fromEntries(shells.map((s) => [s.file, s]));
@@ -54,6 +55,7 @@ describe("buildShells", () => {
         "cli.html",
         "cross-network.html",
         "d.html",
+        "device-inbox.html",
         "magic-link.html",
         "me.html",
         "offline-transfer.html",
@@ -74,6 +76,7 @@ describe("buildShells", () => {
       "apps.html": "https://relayium.com/apps",
       "pricing.html": "https://relayium.com/pricing",
       "cli.html": "https://relayium.com/cli",
+      "device-inbox.html": "https://relayium.com/device-inbox",
     };
     for (const [file, canonical] of Object.entries(want)) {
       expect(byFile[file].head, file).toContain(`<link rel="canonical" href="${canonical}" />`);
@@ -89,9 +92,9 @@ describe("buildShells", () => {
   });
 
   it("gives the English-only routes no hreflang cluster", () => {
-    // /pricing and /cli have no localized page; an alternate pointing at a URL
-    // that 404s is worse than none.
-    for (const f of ["pricing.html", "cli.html"]) {
+    // /pricing, /cli and /device-inbox have no localized page; an alternate
+    // pointing at a URL that 404s is worse than none.
+    for (const f of ["pricing.html", "cli.html", "device-inbox.html"]) {
       expect(byFile[f].head, f).not.toContain("hreflang=");
     }
   });
@@ -129,6 +132,7 @@ describe("buildShells", () => {
       "offline-transfer.html": [en.titleOffline, en.descOffline],
       "apps.html": [en.appsPage.metaTitle, en.appsPage.metaDesc],
       "cli.html": [en.cliPage.metaTitle, en.cliPage.metaDesc],
+      "device-inbox.html": [en.deviceInboxPage.metaTitle, en.deviceInboxPage.metaDesc],
       "pricing.html": [`${en.pricingPage.title} · Relayium`, en.pricingPage.subtitle],
       "verify-email.html": [`${en.verifyEmail.title} · Relayium`, en.verifyEmail.confirmPrompt],
       "reset-password.html": [`${en.resetPassword.title} · Relayium`, en.resetPassword.lead],
@@ -138,6 +142,32 @@ describe("buildShells", () => {
       expect(byFile[file].head, file).toContain(`<title>${esc(title)}</title>`);
       expect(byFile[file].head, file).toContain(`<meta name="description" content="${esc(description)}" />`);
     }
+  });
+
+  // /device-inbox is a product page, not a stub: without JavaScript a crawler
+  // (or a reader) must still get the model, the account prerequisite, the
+  // upload-is-not-saved distinction, the share-link boundary and an honest
+  // status for all six platforms. Asserted on the SHELL body, because that is
+  // the only thing a non-rendering client ever sees.
+  it("gives /device-inbox a crawlable body that carries the product facts", () => {
+    const body = byFile["device-inbox.html"].body;
+    expect(body).toContain("<h1>Device Inbox</h1>");
+    // Every platform the PRD requires the page to name, separately.
+    for (const name of ["Linux server", "Linux desktop", "macOS", "Windows", "iPhone", "Android"]) {
+      expect(body, name).toContain(name);
+    }
+    // …each with a status, and none of the three planned ones claiming to exist.
+    expect(body).toContain("available now");
+    expect(body).toContain("in testing");
+    expect((body.match(/— planned/g) ?? []).length).toBe(3);
+    // The two claims this page is not allowed to blur.
+    expect(body).toContain("Uploaded is not saved");
+    expect(body).toContain("A link can never make one of your devices write to disk");
+    // The account prerequisite and the offline queue.
+    expect(body).toMatch(/same account/i);
+    expect(body).toMatch(/waits in the queue/i);
+    // No download CTA for the engineering-build Mac app.
+    expect(body).not.toMatch(/\.dmg/i);
   });
 
   it("emits FAQPage structured data where the doc has an FAQ", () => {

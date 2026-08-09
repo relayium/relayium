@@ -10,14 +10,15 @@ import offlineTransfer from "./scripts/pages/content/offline-transfer.mjs";
 // @ts-expect-error — see above.
 import apps from "./scripts/pages/content/apps.mjs";
 // @ts-expect-error — see above.
-import { pricing, cli } from "./scripts/pages/content/spa-pages.mjs";
+import { pricing, cli, deviceInbox } from "./scripts/pages/content/spa-pages.mjs";
 // @ts-expect-error — see above.
 import { CLI_ARTICLES } from "./scripts/pages/content/cli-articles.mjs";
 
 /**
  * Emits one HTML file per English SPA route (`cross-network.html`,
- * `pricing.html`, …) next to `index.html`, each being the same built shell with
- * its SEO-HEAD/SEO-BODY regions swapped for that route's own metadata and prose.
+ * `pricing.html`, `device-inbox.html`, …) next to `index.html`, each being the
+ * same built shell with its SEO-HEAD/SEO-BODY regions swapped for that route's
+ * own metadata and prose.
  * See scripts/pages/shells.mjs for why, and the production nginx config (now
  * in the private relayium-ops repo; see docs/self-hosting.md for self-hosting)
  * for the `try_files $uri $uri.html` rule that serves them.
@@ -48,6 +49,7 @@ export function routeShellsPlugin(): Plugin {
         ],
         pricing,
         cli,
+        deviceInbox,
         cliArticles: CLI_ARTICLES,
       });
       for (const shell of shells) {

@@ -63,6 +63,10 @@ jobs:
       # 404s in eight locales, an anchor the SPA never scrolls to, and a CTA
       # styled as a heading.
       - run: npm run test:device-discovery
+      # A separate findability journey for the first-class Device Inbox route:
+      # / → Device Inbox → server setup/account action at desktop, 390px and RTL.
+      # Keep it as its own step so a discovery failure cannot hide this signal.
+      - run: npm run test:device-inbox-entry
       - run: npm audit --audit-level=high
 
   # A sealed box produced by the REAL browser implementation, opened by the REAL

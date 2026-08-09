@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
-  routeFromLocation as rfl, downloadId, CROSS_PATH, CLI_PATH, APPS_PATH,
+  routeFromLocation as rfl, downloadId, CROSS_PATH, CLI_PATH, APPS_PATH, DEVICE_INBOX_PATH,
   VERIFY_EMAIL_PATH, RESET_PASSWORD_PATH, MAGIC_PATH,
   navigate, currentRoute, setNavGuard, syncRouteFromLocation,
 } from "./router.svelte";
@@ -44,6 +44,22 @@ describe("routeFromLocation offline page", () => {
   });
   it("a pairing code still wins over the offline path", () => {
     expect(rfl("/offline-transfer", "#c=424242")).toBe("cross");
+  });
+});
+
+describe("routeFromLocation device-inbox page", () => {
+  it("is device-inbox on the /device-inbox path", () => {
+    expect(rfl(DEVICE_INBOX_PATH, "")).toBe("device-inbox");
+  });
+  it("a pairing code still wins over /device-inbox", () => {
+    // A join link must land the recipient on the realtime page no matter which
+    // route the URL otherwise names.
+    expect(rfl(DEVICE_INBOX_PATH, "#c=424242")).toBe("cross");
+  });
+  it("does not swallow the guide URL that merely starts the same way", () => {
+    // /guides/device-inbox-server/ is a static page, not this SPA route.
+    expect(rfl("/guides/device-inbox-server/", "")).toBe("lan");
+    expect(rfl("/device-inbox/", "")).toBe("lan");
   });
 });
 

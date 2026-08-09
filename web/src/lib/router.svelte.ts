@@ -7,7 +7,7 @@
 import { parseCodeParam, CROSS_PATH, DOWNLOAD_PREFIX } from "./transfer-link";
 import { clearRoom } from "./room.svelte";
 
-export type Route = "lan" | "cross" | "offline" | "download" | "me" | "cli" | "apps" | "pricing" | "verify-email" | "reset-password" | "magic-link";
+export type Route = "lan" | "cross" | "offline" | "download" | "me" | "cli" | "apps" | "device-inbox" | "pricing" | "verify-email" | "reset-password" | "magic-link";
 
 /** Path of the LAN / same-network transfer page. It is the site root, so this
  *  constant exists to name it rather than to compute it: copy that links the
@@ -23,6 +23,13 @@ export const CLI_PATH = "/cli";
 
 /** Apps / downloads hub: web, CLI, and (coming soon) native macOS/iOS. Marketing page. */
 export const APPS_PATH = "/apps";
+
+/** Device Inbox: the public entry point for "browser → a folder on a machine I
+ *  own". A first-class destination alongside the other five (PRD §12), not a
+ *  page hidden behind a device card, so it is a real route with a real nav link.
+ *  English-only, like /cli and /pricing — see page-meta.ts's CLUSTERED_PATHS for
+ *  why a localized alternate that 404s is worse than none. */
+export const DEVICE_INBOX_PATH = "/device-inbox";
 
 /** Pricing / plans page (public marketing + in-app upgrade/downgrade). */
 export const PRICING_PATH = "/pricing";
@@ -56,6 +63,7 @@ export function routeFromLocation(pathname: string, hash: string): Route {
   if (pathname === ME_PATH) return "me";
   if (pathname === CLI_PATH) return "cli";
   if (pathname === APPS_PATH) return "apps";
+  if (pathname === DEVICE_INBOX_PATH) return "device-inbox";
   if (pathname === PRICING_PATH) return "pricing";
   if (pathname === VERIFY_EMAIL_PATH) return "verify-email";
   if (pathname === RESET_PASSWORD_PATH) return "reset-password";
@@ -128,6 +136,7 @@ function commitNavigation(r: Route): void {
     : r === "me" ? ME_PATH
     : r === "cli" ? CLI_PATH
     : r === "apps" ? APPS_PATH
+    : r === "device-inbox" ? DEVICE_INBOX_PATH
     : r === "pricing" ? PRICING_PATH
     : r === "verify-email" ? VERIFY_EMAIL_PATH
     : r === "reset-password" ? RESET_PASSWORD_PATH
