@@ -328,7 +328,7 @@ func TestInstructionsShellQuoteMachinePaths(t *testing.T) {
 	p.Binary = "/usr/local/my apps/relayium"
 	p.ConfigDir = "/var/lib/relayium inbox/config"
 	p.ReceiveDir = "/srv/incoming; touch /tmp/not-command"
-	p.LogDir = "/tmp/relayium logs"
+	p.LogDir = "/tmp/relayium logs; touch /tmp/not-command"
 
 	sys := strings.Join(Instructions(SystemdSystem, p), "\n")
 	for _, want := range []string{
@@ -341,11 +341,29 @@ func TestInstructionsShellQuoteMachinePaths(t *testing.T) {
 		}
 	}
 	launchd := strings.Join(Instructions(Launchd, p), "\n")
-	if !strings.Contains(launchd, "'/tmp/relayium logs'") {
+	if !strings.Contains(launchd, "'/tmp/relayium logs; touch /tmp/not-command'") {
 		t.Fatalf("launchd instructions do not shell-quote the log directory:\n%s", launchd)
+	}
+	wantWatch := "tail -f '/tmp/relayium logs; touch /tmp/not-command/relayium-inbox.log' " +
+		"'/tmp/relayium logs; touch /tmp/not-command/relayium-inbox.err.log'"
+	if !strings.Contains(launchd, wantWatch) {
+		t.Fatalf("launchd watch command must shell-quote and follow both stdout and stderr logs:\n%s", launchd)
 	}
 	if got := shellQuote("it's here"); got != "'it'\"'\"'s here'" {
 		t.Fatalf("single quote escaping = %q", got)
+	}
+}
+
+func TestLaunchdInstructionsWatchOperationalErrors(t *testing.T) {
+	p := testParams()
+	got := strings.Join(Instructions(Launchd, p), "\n")
+	want := "tail -f " + shellQuote(p.LogDir+"/relayium-inbox.log") + " " +
+		shellQuote(p.LogDir+"/relayium-inbox.err.log")
+	if !strings.Contains(got, want) {
+		t.Fatalf("launchd watch command =\n%s\nwant command %q", got, want)
+	}
+	if strings.Contains(got, "tail -f "+shellQuote(p.LogDir+"/relayium-inbox.log")+"\n") {
+		t.Fatalf("launchd instructions retain the old stdout-only watch command:\n%s", got)
 	}
 }
 

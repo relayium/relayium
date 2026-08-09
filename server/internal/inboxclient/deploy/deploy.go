@@ -188,6 +188,8 @@ func Instructions(k Kind, p Params) []string {
 			"sudo journalctl -u relayium-inbox.service -f",
 		}
 	case Launchd:
+		stdoutLog := shellQuote(p.LogDir + "/relayium-inbox.log")
+		stderrLog := shellQuote(p.LogDir + "/relayium-inbox.err.log")
 		return []string{
 			"# 1. Save the agent above (no root needed):",
 			"mkdir -p ~/Library/LaunchAgents " + logDir,
@@ -196,7 +198,7 @@ func Instructions(k Kind, p Params) []string {
 			"plutil -lint ~/Library/LaunchAgents/com.relayium.inbox.plist",
 			"launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.relayium.inbox.plist",
 			"# 3. Watch it:",
-			"tail -f " + shellQuote(p.LogDir+"/relayium-inbox.log"),
+			"tail -f " + stdoutLog + " " + stderrLog,
 			"# To stop:",
 			"launchctl bootout gui/$(id -u)/com.relayium.inbox",
 		}
