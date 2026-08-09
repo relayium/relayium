@@ -263,13 +263,39 @@ struct DeviceInboxSettingsView: View {
                 set: { inbox.setPolicy($0) }
             )) {
                 ForEach(InboxAutoAccept.allCases, id: \.self) { policy in
-                    Text(InboxPolicyPresentation.label(for: policy)).tag(policy)
+                    // On the LEAVES, the rule this file has now learned three
+                    // ways. The result row and the Ask section learned it as
+                    // propagation: an identifier on a container SwiftUI merges
+                    // into one element renames the controls inside it. A `Picker`
+                    // fails the opposite way and is worth naming separately,
+                    // because the symptom looks like success. It builds a real
+                    // AXRadioGroup with real children, and the identifier lands on
+                    // the GROUP and stops there — measured on macOS 26.6,
+                    // `inbox-policy` matched exactly one element while all three
+                    // radio buttons carried an empty identifier.
+                    //
+                    // So the container read as correct in every check anyone
+                    // wrote, and no choice inside it could be named at all: the
+                    // only handle on one was its displayed English copy. The one
+                    // assertion the suite could make was "the group exists",
+                    // which is equally true of a picker nobody can operate.
+                    //
+                    // These three identifiers are what let a person or a tool say
+                    // WHICH choice, and the distance between two of them is the
+                    // distance between holding a delivery and writing it to disk
+                    // unattended.
+                    Text(InboxPolicyPresentation.label(for: policy))
+                        .tag(policy)
+                        .accessibilityIdentifier("inbox-policy-\(policy.rawValue)")
                 }
             }
             .pickerStyle(.inline)
-            .accessibilityIdentifier("inbox-policy")
         } header: {
+            // The section's own marker moved here when it came off the picker
+            // above, matching the Ask section: a header `Text` is a leaf, so it
+            // names the section without reaching into the controls inside it.
             Text(L10n.t(.inboxPolicyHeading))
+                .accessibilityIdentifier("inbox-policy")
         } footer: {
             caption(L10n.t(.inboxPolicyExplain))
         }

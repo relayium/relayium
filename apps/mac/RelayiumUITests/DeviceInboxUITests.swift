@@ -38,6 +38,30 @@ final class DeviceInboxUITests: XCTestCase {
         } ?? app.windows.firstMatch
     }
 
+    /// The settings scene, identified by the shipped `.frame(width: 520)`
+    /// contract rather than by index: with the product window closed the
+    /// settings window is the ONLY window, so "the second window" does not
+    /// identify it, and the MenuBarExtra's own status-item window is smaller.
+    private var settingsWindow: XCUIElement? {
+        app.windows.allElementsBoundByIndex
+            .first { $0.frame.width >= 400 && $0.frame.width < 800 }
+    }
+
+    /// Wait for the settings scene itself to appear.
+    ///
+    /// A window COUNT is deliberately not the condition. With the product window
+    /// closed this process still reports windows of its own, so "the count
+    /// reached one" can be satisfied by something that is not Settings and would
+    /// let the assertion below race the scene being built.
+    private func waitForSettingsWindow(timeout: TimeInterval) -> XCUIElement? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let settings = settingsWindow { return settings }
+            Thread.sleep(forTimeInterval: 0.25)
+        }
+        return settingsWindow
+    }
+
     private func launch(_ extraArguments: [String]) {
         app.launchArguments = offlineLaunchArguments + extraArguments
         app.launch()
@@ -79,16 +103,24 @@ final class DeviceInboxUITests: XCTestCase {
         let twoWindows = NSPredicate(format: "count >= 2")
         expectation(for: twoWindows, evaluatedWith: app.windows, handler: nil)
         waitForExpectations(timeout: 20)
+        return selectDeviceInboxPane()
+    }
 
+    /// Find the settings scene among the process's windows and put the Device
+    /// Inbox pane on screen.
+    ///
+    /// Split out of `openDeviceInboxSettings` so the menu-bar entry point can be
+    /// held to the SAME proof as the app-menu one: it is not enough for a window
+    /// to appear, it has to be the settings scene with this pane in it.
+    @discardableResult
+    private func selectDeviceInboxPane() -> XCUIElement {
         // Do not identify this as merely "not the main element". XCUIElement
         // queries can rebind after a second scene appears (observed on the
         // hosted Xcode 16.4 runner), making an element captured before opening
         // Settings compare unequal to the same product window afterward. The
         // shipped scene contract is spatial: Settings is 520 points wide and
         // the product window is at least 800 points wide.
-        let settings = app.windows.allElementsBoundByIndex
-            .first { $0.frame.width >= 400 && $0.frame.width < 800 }
-            ?? app.windows.element(boundBy: 1)
+        let settings = settingsWindow ?? app.windows.element(boundBy: 1)
 
         // A settings window REMEMBERS its last tab, so it may already be here —
         // and the tab control is not a radio button on every macOS: measured on
@@ -316,6 +348,215 @@ final class DeviceInboxUITests: XCTestCase {
             .filter { $0.frame.width >= 800 && $0.frame.height >= 500 }
         XCTAssertEqual(productWindows.count, 1,
                        "reopening produced a second window rendering the same state twice")
+    }
+
+    /// **The menu-bar route to Settings, clicked.**
+    ///
+    /// This is the state the item exists for and the one nothing covered: the
+    /// window is closed, so the menu bar is the only surface there is, and the
+    /// app is not frontmost when the click arrives. Asserting that the item is
+    /// PRESENT — which is all the suite did — passes against a button wired to
+    /// nothing, and that is exactly what shipped: on macOS 26.6 the item was
+    /// there and produced no window.
+    ///
+    /// Every window is closed first, deliberately. `Settings` is a lazily built
+    /// scene, so an already-open settings window would let a no-op action look
+    /// like a success, and the product window would supply a responder chain the
+    /// real failing case does not have.
+    func testTheMenuBarOpensSettingsWithEveryWindowClosed() {
+        launch(["--relayium-ui-testing-signed-in", "--relayium-ui-testing-inbox-ready"])
+        let window = mainWindow
+        window.buttons[XCUIIdentifierCloseWindow].click()
+        let gone = NSPredicate(format: "exists == false")
+        expectation(for: gone, evaluatedWith: window, handler: nil)
+        waitForExpectations(timeout: 15)
+        XCTAssertNil(settingsWindow,
+                     "a settings window was already open, so this proves nothing")
+        XCTAssertEqual(app.state, .runningForeground,
+                       "closing the window ended the process the menu bar lives in")
+
+        let statusItem = app.statusItems.firstMatch
+        XCTAssertTrue(statusItem.waitForExistence(timeout: 10),
+                      "the resident app has no menu-bar surface")
+        statusItem.click()
+        let openSettings = app.menuItems.allElementsBoundByIndex
+            .first { $0.title.contains("Open Device Inbox settings") }
+        XCTAssertNotNil(openSettings, "the menu bar has no route to Device Inbox settings")
+        openSettings?.click()
+
+        // The scene, not merely "a window": width is the shipped contract and
+        // the pane below is what the item promises to show.
+        guard let settings = waitForSettingsWindow(timeout: 20) else {
+            return XCTFail("clicking Open Device Inbox settings opened no settings window")
+        }
+        XCTAssertEqual(settings.frame.width, 520, accuracy: 1,
+                       "the window that opened is not the 520-point settings scene")
+        // Held to the same proof as the app-menu route: the shared helper fails
+        // unless the Device Inbox pane itself is selectable and on screen, so a
+        // settings window that opened on some other tab is not a pass.
+        selectDeviceInboxPane()
+    }
+
+    // MARK: - the three-way policy
+
+    /// The three choices, addressed the way the product identifies them.
+    private func policyChoice(_ policy: String, in settings: XCUIElement) -> XCUIElement {
+        element("inbox-policy-\(policy)", in: settings)
+    }
+
+    /// **Each receiving choice is its own control.**
+    ///
+    /// Whatever the section did before, it could not be checked. The container
+    /// element existed and the section rendered, so every assertion anyone wrote
+    /// passed; none of them could name a single choice.
+    ///
+    /// Two separate observations sit behind this test, and they do not agree, so
+    /// both are recorded rather than merged:
+    ///
+    /// - Acceptance review reported that on the INSTALLED Developer ID build on
+    ///   macOS 26.6, the radio group's three children all reported the same name
+    ///   "Receiving", the same selected value and the same activation point.
+    /// - Measured here on macOS 26.6 against a locally signed DEBUG build, they
+    ///   did not: the three buttons carried distinct labels, distinct values and
+    ///   distinct frames. What they carried instead was NO identifier at all —
+    ///   `inbox-policy` resolved to exactly one element, the group, and stopped
+    ///   there. A `Picker` does not propagate an identifier down the way the
+    ///   containers elsewhere in this file do; it strands it on the group.
+    ///
+    /// The repair covers both, which is why the assertions below are wider than
+    /// the reproduction. Distinct identifiers fix the gap that WAS reproduced,
+    /// and distinct names, distinct activation points and a single selection
+    /// would fail loudly if the reported collapse ever appears here — including
+    /// on a configuration or an assistive-technology path this suite cannot
+    /// launch. One of these three choices authorizes unattended writes to the
+    /// user's disk, so "you cannot tell which one you are choosing" is the defect
+    /// whether it arrives as a shared name or as no name at all.
+    func testEachReceivingPolicyChoiceIsSeparatelyIdentifiable() {
+        launch(["--relayium-ui-testing-signed-in", "--relayium-ui-testing-inbox-ready"])
+        let settings = openDeviceInboxSettings()
+
+        let off = policyChoice("off", in: settings)
+        XCTAssertTrue(off.waitForExistence(timeout: 15),
+                      "the Off choice has no identity of its own")
+        let ask = policyChoice("ask", in: settings)
+        let auto = policyChoice("auto", in: settings)
+        XCTAssertTrue(ask.exists, "the Ask every time choice has no identity of its own")
+        XCTAssertTrue(auto.exists, "the Automatically choice has no identity of its own")
+
+        // The spoken names. Each must carry its OWN copy — the property the
+        // installed build was reported to have lost, where all three said
+        // "Receiving". It held in this launch before the repair as well, so this
+        // is the guard against the reported collapse, not a reproduction of it.
+        XCTAssertTrue(text(of: off).contains("Off"),
+                      "the Off choice does not say what it is")
+        XCTAssertTrue(text(of: ask).contains("Ask every time"),
+                      "the Ask choice does not say what it is")
+        XCTAssertTrue(text(of: auto).contains("Receive automatically from my account"),
+                      "the unattended-write choice does not say what it is")
+        // Stated as a set, so two choices collapsing into one name fails here even
+        // if the substrings above happen to be satisfied by a shared string.
+        XCTAssertEqual(Set([off.label, ask.label, auto.label]).count, 3,
+                       "the three receiving choices share a spoken name")
+
+        // Three separate activation points. Two controls that report the same
+        // point are one control to anything driving this pane.
+        let points = [off, ask, auto].map { CGPoint(x: $0.frame.midX, y: $0.frame.midY) }
+        XCTAssertEqual(Set(points.map { "\($0.x)x\($0.y)" }).count, 3,
+                       "the receiving choices share an activation point")
+
+        // Exactly one is selected, and it is the one the fixture stored. A picker
+        // whose children all report the group's value cannot answer this.
+        XCTAssertTrue(isSelected(auto),
+                      "the stored Automatically policy is not reported as selected")
+        XCTAssertFalse(isSelected(off), "Off is reported selected alongside Automatically")
+        XCTAssertFalse(isSelected(ask), "Ask is reported selected alongside Automatically")
+
+        // One identifier, one element. This is the assertion that actually fails
+        // when the container identifier comes back: restoring
+        // `.accessibilityIdentifier("inbox-policy")` on the `Picker` was measured
+        // to take `inbox-policy` from one match to two — the section heading and
+        // the radio group — while `element(_:in:)` resolves by `firstMatch` and
+        // would go on returning whichever of them the query happened to order
+        // first. That is how the section marker silently stops meaning the
+        // section, and it is the state the pane shipped in.
+        for choice in ["off", "ask", "auto"] {
+            let matches = settings.descendants(matching: .any)
+                .matching(identifier: "inbox-policy-\(choice)").count
+            XCTAssertEqual(matches, 1,
+                           "inbox-policy-\(choice) does not identify exactly one control")
+        }
+        // And the section marker names the SECTION, not the controls: it is on a
+        // header leaf precisely so it cannot reach into them.
+        XCTAssertEqual(settings.descendants(matching: .any)
+            .matching(identifier: "inbox-policy").count, 1,
+                       "the policy section marker matches more than the section heading")
+        XCTAssertEqual(settings.radioButtons.matching(identifier: "inbox-policy").count, 0,
+                       "the section marker propagated onto the receiving choices")
+    }
+
+    /// A radio button reports its selection in `value` as 1/0 on macOS, while
+    /// `isSelected` is the AppKit-side trait. Read both, because which one carries
+    /// it varies by macOS version — the same label/value split this file records
+    /// for the settings tab control.
+    private func isSelected(_ element: XCUIElement) -> Bool {
+        if element.isSelected { return true }
+        let value = element.value.map { String(describing: $0) } ?? ""
+        return value == "1" || value == "true"
+    }
+
+    /// **Choosing Automatically actually turns receiving on.**
+    ///
+    /// Distinguishable is not the same as actionable, and the reason to insist on
+    /// both is that the failing build had a picker that LOOKED settable. So this
+    /// drives the real consent boundary: switch receiving Off, watch the running
+    /// controller report Off, then choose Automatically with the folder still
+    /// granted and watch it report that it is ready to receive.
+    ///
+    /// The status line is the assertion target on purpose. It is rendered from
+    /// `InboxController.state`, not from the picker's own binding, so it can only
+    /// change if the click reached the controller and the controller accepted the
+    /// policy — which is the thing the store refuses to do without a folder.
+    func testChoosingAutomaticallyTurnsReceivingOnWithAGrantedFolder() {
+        launch(["--relayium-ui-testing-signed-in", "--relayium-ui-testing-inbox-ready"])
+        let settings = openDeviceInboxSettings()
+
+        let status = element("inbox-status", in: settings)
+        XCTAssertTrue(status.waitForExistence(timeout: 15))
+        let ready = NSPredicate(format: "label CONTAINS[c] %@ OR value CONTAINS[c] %@",
+                                "Ready to receive", "Ready to receive")
+        expectation(for: ready, evaluatedWith: status, handler: nil)
+        waitForExpectations(timeout: 20)
+        XCTAssertTrue(element("inbox-folder", in: settings).exists,
+                      "this fixture is supposed to start with a granted folder")
+
+        // Off first, so the Automatically click below has something to change.
+        // Starting from the fixture's stored `auto` and clicking `auto` would
+        // assert nothing: a picker wired to nothing would pass it.
+        let off = policyChoice("off", in: settings)
+        XCTAssertTrue(off.waitForExistence(timeout: 15),
+                      "the Off choice has no identity of its own")
+        off.click()
+        let switchedOff = NSPredicate(format: "NOT (label CONTAINS[c] %@ OR value CONTAINS[c] %@)",
+                                      "Ready to receive", "Ready to receive")
+        expectation(for: switchedOff, evaluatedWith: status, handler: nil)
+        waitForExpectations(timeout: 20)
+        XCTAssertTrue(isSelected(off), "Off was clicked and did not become the selection")
+
+        // And back on. The folder grant was never touched, so the store has no
+        // reason to refuse — and the status returning to ready is the running
+        // controller agreeing, not the picker redrawing itself.
+        let auto = policyChoice("auto", in: settings)
+        XCTAssertTrue(auto.exists, "the Automatically choice has no identity of its own")
+        auto.click()
+        expectation(for: ready, evaluatedWith: status, handler: nil)
+        waitForExpectations(timeout: 20)
+        XCTAssertTrue(isSelected(auto),
+                      "Automatically was clicked and did not become the selection")
+        XCTAssertFalse(isSelected(off),
+                       "Off stayed selected after Automatically was chosen")
+        // The consent is one choice, not an accumulation of them.
+        XCTAssertFalse(isSelected(policyChoice("ask", in: settings)),
+                       "Ask became selected while Automatically was chosen")
     }
 
     /// The menu bar carries the smallest safe control set and NOT the

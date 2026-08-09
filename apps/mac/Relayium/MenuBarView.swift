@@ -78,13 +78,20 @@ struct MenuBarView: View {
                 inbox.reveal(latest)
             }
         }
-        Button(L10n.t(.inboxOpenSettings)) { openInboxSettings() }
+        // Split by OS version rather than branching inside one action, because
+        // the supported API is a SwiftUI environment action and an `@Environment`
+        // property cannot be declared conditionally — see `OpenInboxSettingsButton`.
+        if #available(macOS 14.0, *) {
+            OpenInboxSettingsButton()
+        } else {
+            Button(L10n.t(.inboxOpenSettings)) { openInboxSettingsLegacy() }
+        }
         Divider()
         // The window can be closed while the app keeps running, so this is the
         // only way back to it — including back to a session that arrived while
         // it was closed. Spec'd in "Menu-bar residency".
         Button(L10n.t(isReceiving ? .menubarOpenToSeeTransfer : .menubarOpen)) {
-            activateApp()
+            MenuBarActivation.activateApp()
             openWindow(id: "main")
         }
         // The visible title is localized, while this shortcut stays stable in
@@ -121,31 +128,76 @@ struct MenuBarView: View {
         }
     }
 
-    /// Open ⌘, from the menu bar.
+    /// Open ⌘, from the menu bar, on macOS 13 only.
     ///
-    /// `showSettingsWindow:` on macOS 14+, `showPreferencesWindow:` below it.
-    /// The app deploys to 13.0, so the older selector is still needed — and it
-    /// no longer exists on 14, which is why this is a version check rather than
-    /// one call with a fallback.
-    private func openInboxSettings() {
-        activateApp()
-        if #available(macOS 14.0, *) {
-            // nonlocalized: an AppKit selector, never displayed
-            NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
-        } else {
-            // nonlocalized: an AppKit selector, never displayed
-            NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+    /// `showPreferencesWindow:` is an undocumented AppKit selector reached
+    /// through the responder chain, and macOS 14 renamed it. It is kept ONLY
+    /// because 13 is the deployment target and has no `openSettings`; every
+    /// macOS this product is actually run on takes the supported path above.
+    /// It is unverified — no macOS 13 machine is available here — which is
+    /// precisely why it is confined to the version that has no alternative
+    /// rather than left as the shared implementation.
+    private func openInboxSettingsLegacy() {
+        MenuBarActivation.activateApp()
+        // nonlocalized: an AppKit selector, never displayed
+        NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
+    }
+}
+
+/// The menu bar's route to ⌘, on macOS 14 and later.
+///
+/// **Its own view because of one language rule with a product consequence.**
+/// `openSettings` is macOS 14+, and an `@Environment` property cannot be
+/// declared under `if #available` — so a view that must also compile for the
+/// 13.0 deployment target cannot hold it. Extracting the button is what lets
+/// the supported API be used at all without raising the deployment target.
+///
+/// **Why not the selector this replaced.** `MenuBarView` previously called
+/// `NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)`.
+/// That is an undocumented selector dispatched through the responder chain, and
+/// on macOS 26.6 nothing in this app's chain answers it. Measured here: the
+/// click produced NO window with the product window closed, and a throwaway
+/// diagnostic during the same session showed it produced none with the window
+/// OPEN and the app frontmost either — so this was never a window-state or
+/// activation problem, and the item had not worked on that OS in any state.
+/// `sendAction` reports that as a discarded `false` while the menu closes
+/// looking like it acted, which is why it shipped: the item was present, and
+/// presence was all the suite asserted.
+///
+/// `testTheMenuBarOpensSettingsWithEveryWindowClosed` is the committed
+/// regression, and it pins the harder of the two cases — no product window means
+/// no responder chain to borrow.
+///
+/// `openSettings` is the documented replacement Apple added in macOS 14 for
+/// exactly this call, and it addresses the `Settings` scene directly instead of
+/// hoping a responder implements a private method.
+@available(macOS 14.0, *)
+private struct OpenInboxSettingsButton: View {
+    @Environment(\.openSettings) private var openSettings
+
+    var body: some View {
+        Button(L10n.t(.inboxOpenSettings)) {
+            MenuBarActivation.activateApp()
+            openSettings()
         }
     }
+}
 
-    /// Clicking a menu-bar item does not bring the app forward, so the reopened
-    /// window would otherwise appear behind whatever the user was using.
+/// Bringing the app forward, shared by the menu-bar actions.
+///
+/// A type rather than a method on `MenuBarView`, because the settings button
+/// above is a separate view for the availability reason recorded on it and
+/// needs the same behaviour.
+private enum MenuBarActivation {
+    /// Clicking a menu-bar item does not bring the app forward, so a window
+    /// opened from one would otherwise appear behind whatever the user was
+    /// using.
     ///
-    /// `NSApp.activate()` is macOS 14+ and this app deploys to 13.0, so the older
-    /// call is still needed — and it is deprecated in 14, which would warn. Putting
-    /// it in a declaration that is itself marked deprecated is what silences that
-    /// without silencing anything else.
-    private func activateApp() {
+    /// `NSApp.activate()` is macOS 14+ and this app deploys to 13.0, so the
+    /// older call is still needed — and it is deprecated in 14, which would
+    /// warn. Putting it in a declaration that is itself marked deprecated is
+    /// what silences that without silencing anything else.
+    static func activateApp() {
         if #available(macOS 14.0, *) {
             NSApp.activate()
         } else {
@@ -155,7 +207,7 @@ struct MenuBarView: View {
 
     // nonlocalized: compiler diagnostic, never rendered
     @available(macOS, deprecated: 14.0, message: "Only reachable on macOS 13.")
-    private func activateAppLegacy() {
+    private static func activateAppLegacy() {
         NSApp.activate(ignoringOtherApps: true)
     }
 }
