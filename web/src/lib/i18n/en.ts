@@ -754,7 +754,7 @@ const en: Messages = {
       verified: "That is the same release signature relayium update and install.sh verify: ECDSA P-256 over checksums.txt, then the archive's own SHA-256. If either check fails, nothing is run.",
       keyStaysLocal: "The link's #k= key is handed to the local program as an argument. It never becomes part of a web address, is never sent to Relayium, and never reaches a server log.",
       windowsTitle: "On Windows",
-      windowsNote: "The POSIX block above does not cover Windows. This PowerShell block selects the official v0.15.0 archive for your CPU, verifies its pinned SHA-256 before extraction, runs it from a temporary directory, and deletes that directory afterward:",
+      windowsNote: "The POSIX block above does not cover Windows. This PowerShell block selects the official v0.16.0 archive for your CPU, verifies its pinned SHA-256 before extraction, runs it from a temporary directory, and deletes that directory afterward:",
       releasesLink: "Relayium releases →",
     },
   },
