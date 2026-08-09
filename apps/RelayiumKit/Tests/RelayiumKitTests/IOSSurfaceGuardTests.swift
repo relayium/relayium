@@ -85,6 +85,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let releaseHalf = try XCTUnwrap(halves.last)
         XCTAssertTrue(debugHalf.contains("--relayium-ui-testing-pending-fixture"),
                       "the pending-file fixture argument is not in the Debug half")
+        XCTAssertTrue(debugHalf.contains("--relayium-ui-testing-valid-download-link"),
+                      "the deterministic stored-link fixture is not in the Debug half")
         XCTAssertFalse(releaseHalf.contains("--relayium-ui-testing"),
                        "a shipped build can be steered by a launch argument")
         XCTAssertFalse(releaseHalf.contains("Data(repeating:"),
@@ -93,6 +95,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "a shipped build reaches the directory the fixture path uses")
         XCTAssertTrue(app.contains("UITestMode.stagePendingFixture()"),
                       "nothing stages the fixture the document-picker path needs")
+        XCTAssertTrue(app.contains("UITestMode.prefillValidDownloadLink(in: downloads)"),
+                      "the encrypted-link acceptance fixture never reaches the receive model")
 
         let uiURL = appsRoot.appendingPathComponent(
             "ios/RelayiumUITests/AppShellUITests.swift")

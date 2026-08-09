@@ -168,6 +168,7 @@ struct RelayiumApp: App {
         // as a local first. Same shape as `keys`, `account` and `managing`.
         let downloads = AppEnvironment.makeDownloadModel(
             transport: UITestMode.makeAccountTransport())
+        UITestMode.prefillValidDownloadLink(in: downloads)
         _download = StateObject(wrappedValue: downloads)
         let account = AppEnvironment.makeSession(tokenStore: UITestMode.makeTokenStore(),
                                                  transport: UITestMode.makeAccountTransport())

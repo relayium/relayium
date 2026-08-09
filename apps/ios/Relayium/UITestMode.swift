@@ -53,6 +53,28 @@ enum UITestMode {
     static let answersAccountAPI = ProcessInfo.processInfo.arguments.contains(signInArgument)
     static let isSignedIn = ProcessInfo.processInfo.arguments.contains(signedInArgument)
 
+    /// Prefills the one long stored link whose acceptance path is about
+    /// metadata retrieval and manifest decryption, not keyboard event delivery.
+    ///
+    /// The full UI suite runs on a shared simulator under heavy load. Injecting
+    /// this 79-character value with `XCUIElement.typeText` dropped or delayed
+    /// characters there while the dedicated keyboard/invalid-link tests stayed
+    /// responsible for editing and submission. Keeping the fixture here makes
+    /// the encrypted-link path deterministic without adding a shipped deep-link
+    /// or clipboard shortcut.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let validDownloadLinkArgument = "--relayium-ui-testing-valid-download-link"
+    // nonlocalized: 32 bytes of 0x11, base64url — an acceptance key, never real
+    static let downloadKeyB64url = "ERERERERERERERERERERERERERERERERERERERERERE"
+
+    @MainActor
+    static func prefillValidDownloadLink(in model: CloudDownloadModel) {
+        guard ProcessInfo.processInfo.arguments.contains(validDownloadLinkArgument) else {
+            return
+        }
+        model.linkText = "https://relayium.com/d/obj_uitest#k=\(downloadKeyB64url)"
+    }
+
     /// A token store already holding the acceptance bearer, so `restore()` takes
     /// its normal “found a credential” path rather than a special one.
     static func makeSignedInTokenStore() -> TokenStore {
@@ -268,6 +290,27 @@ enum UITestMode {
     static let showsGeneratedFileCode = false
     static func makeAccountTransport() -> URLSession? { nil }
 
+    /// nil, so shipped launches always construct the production realtime
+    /// models and cannot select an acceptance-only terminal or waiting state.
+    @MainActor
+    static func makeTerminalNearbyFileModel(
+        verification: VerificationPreference
+    ) -> RealtimeSessionModel? { nil }
+
+    @MainActor
+    static func makeWaitingFileModel(
+        verification: VerificationPreference
+    ) -> RealtimeSessionModel? { nil }
+
+    @MainActor
+    static func makeRealtimeTextModel(
+        verification: VerificationPreference
+    ) -> RealtimeTextSessionModel? { nil }
+
+    /// Folded to a no-op; no launch argument can prefill a shipped receive.
+    @MainActor
+    static func prefillValidDownloadLink(in model: CloudDownloadModel) {}
+
     #endif
 }
 
@@ -429,20 +472,19 @@ final class UITestAccountTransport: URLProtocol {
 
     /// A stored object this device can actually decrypt.
     ///
-    /// The meta and blob below are produced by the PRODUCTION encryptor from a
-    /// fixed key, so the app's own decryptor has to accept them: if the manifest
-    /// serialization, frame format or key derivation drifts, the download fails
-    /// loudly instead of a fixture quietly agreeing with itself. The key is a
-    /// literal 32 bytes and the link that carries it is built from the same
-    /// value, which is what makes the received result verifiable.
-    // nonlocalized: 32 bytes of 0x11, base64url — an acceptance key, never real
-    static let downloadKeyB64url = "ERERERERERERERERERERERERERERERERERERERERERE"
+    /// The metadata manifest and optional blob below are produced by the
+    /// PRODUCTION encryptor from a fixed key. The iOS runtime test exercises the
+    /// metadata/manifest half: if serialization or key handling drifts, opening
+    /// the link fails loudly instead of a fixture quietly agreeing with itself.
+    /// Blob framing and disk completion are covered by `CloudDownloadModelTests`
+    /// and by macOS's runtime test, which actually presses Save. The key is a
+    /// literal 32 bytes and the link carries that same value.
     static let downloadFileName = "brief.txt" // nonlocalized: an acceptance fixture
     private static let downloadPlaintext = [UInt8](repeating: 0x52, count: 1_536)
 
     private static var downloadKey: [UInt8] {
         // base64url → bytes, the same decoding the link parser performs.
-        var s = downloadKeyB64url.replacingOccurrences(of: "-", with: "+")
+        var s = UITestMode.downloadKeyB64url.replacingOccurrences(of: "-", with: "+")
             .replacingOccurrences(of: "_", with: "/")
         while s.count % 4 != 0 { s += "=" }
         return [UInt8](Data(base64Encoded: s) ?? Data())

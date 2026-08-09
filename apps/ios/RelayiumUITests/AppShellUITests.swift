@@ -747,9 +747,16 @@ final class AppShellUITests: XCTestCase {
         link.tap()
         link.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: 12))
 
-        XCTAssertFalse(open.isEnabled,
+        // SwiftUI exposes the placeholder as this text field's accessibility
+        // value once it is empty, so the button's derived enabled state is the
+        // reliable runtime proof that the deletion reached the model.
+        let disabled = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND enabled == false"), object: open)
+        XCTAssertEqual(XCTWaiter.wait(for: [disabled], timeout: 10), .completed,
                        "an empty link can still be opened after a refusal")
-        XCTAssertFalse(guidance.exists,
+        let cleared = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == false"), object: guidance)
+        XCTAssertEqual(XCTWaiter.wait(for: [cleared], timeout: 10), .completed,
                        "the refusal outlived the input it described")
     }
 
@@ -1024,36 +1031,44 @@ final class AppShellUITests: XCTestCase {
                       "the join link cannot use the system share sheet")
     }
 
-    /// A stored link that resolves and downloads, ending on a result the user
-    /// can act on.
+    /// A stored link that resolves to the real pre-download manifest surface.
     ///
     /// Every earlier Open a link path stopped at a refusal. This one carries a
-    /// key that actually decrypts what the fixture serves — the ciphertext is
-    /// produced by the production encryptor — so the manifest, the frame format
-    /// and the key handling are all exercised rather than asserted about.
-    func testOpeningAValidStoredLinkDownloadsAndNamesTheResult() {
+    /// key that actually decrypts what the fixture serves — the manifest
+    /// ciphertext is produced by the production encryptor — so metadata,
+    /// manifest decryption and key handling are exercised rather than asserted
+    /// about. Blob framing and disk completion belong to
+    /// `CloudDownloadModelTests` and macOS's runtime save test; this test has
+    /// never tapped Receive and must not claim that it does.
+    func testOpeningAValidStoredLinkDecryptsAndNamesTheManifest() {
         app.terminate()
-        app.launchArguments = offlineLaunchArguments + ["--relayium-ui-testing-sign-in"]
+        app.launchArguments = offlineLaunchArguments + [
+            "--relayium-ui-testing-sign-in",
+            "--relayium-ui-testing-valid-download-link",
+        ]
         app.launch()
 
         openTask("Receive", title: "Receive files")
         let link = app.textFields["receive.link"]
         XCTAssertTrue(link.waitForExistence(timeout: 15))
-        link.tap()
-        link.typeText(
-            "https://relayium.com/d/obj_uitest#k=ERERERERERERERERERERERERERERERERERERERERERE")
+        XCTAssertEqual(link.value as? String,
+                       "https://relayium.com/d/obj_uitest#k=ERERERERERERERERERERERERERERERERERERERERERE",
+                       "the deterministic encrypted-link fixture did not reach the real field")
 
         let open = app.buttons["Open"]
         XCTAssertTrue(open.isEnabled, "a complete link cannot be opened")
         scrollUntilHittable(open)
         open.tap()
 
-        // The result names the file the manifest carried — the server never saw
-        // that name, so rendering it proves the manifest decrypted here.
+        // The ready result names the file the manifest carried — the server
+        // never saw that name, so rendering it proves the manifest decrypted
+        // here. Download-to-disk behaviour is covered by the model/writer suite;
+        // this runtime path stops before writing into a persistent simulator
+        // container that a later CI attempt would inherit.
         XCTAssertTrue(app.staticTexts.matching(NSPredicate(
             format: "label CONTAINS %@", "brief.txt")).firstMatch
             .waitForExistence(timeout: 40),
-            "a completed download did not name what it received")
+            "the decrypted manifest did not name what the link contains")
     }
 
     /// Every shipped language renders, in the running app.
