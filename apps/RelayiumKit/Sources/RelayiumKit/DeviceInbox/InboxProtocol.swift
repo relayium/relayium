@@ -216,4 +216,20 @@ public enum InboxRejection: String, Equatable, Sendable, CaseIterable {
     case storedObjectUnavailable = "stored_object_unavailable"
     case autoReceiveDisabled = "auto_receive_disabled"
     case deviceCannotReceive = "device_cannot_receive"
+    // The four a SENDER's create can be refused with. Named rather than left as
+    // raw strings because a sender must branch on them and the branches are not
+    // interchangeable: one is recoverable by resealing, one means somebody
+    // else's task owns these bytes, and the remaining two are dead ends.
+    /// The target rotated its key between the read and the create. Recoverable
+    /// exactly once, by re-reading the device and resealing the same content key.
+    case staleTargetKey = "stale_target_key"
+    /// This idempotency key already names a task describing a DIFFERENT send.
+    /// Never a convergence — central refuses rather than silently returning the
+    /// first task, so a caller cannot mistake one delivery for another.
+    case idempotencyKeyConflict = "idempotency_key_conflict"
+    /// The stored object is already bound to some other task. The bytes are not
+    /// this send's to release.
+    case storedObjectAlreadyBound = "stored_object_already_bound"
+    /// The target already has as many pending tasks as central will hold.
+    case inboxQueueFull = "inbox_queue_full"
 }

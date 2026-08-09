@@ -118,10 +118,49 @@ public struct PendingUploadPlan: Codable, Equatable {
     /// It is minted before any network work, and it survives every mutation
     /// below because each of them reads the current plan and changes one field.
     public var createIdempotencyKey: String?
+    /// The sealed content key carried by task creation.
+    ///
+    /// Sealed boxes are randomized: sealing the same content key to the same
+    /// device twice produces different bytes. Central includes this value in
+    /// its idempotency comparison, so it must be written before the first
+    /// create and reused after a crash or lost response. Otherwise a safe retry
+    /// would look like a different request under the same idempotency key.
+    ///
+    /// Optional and additive so plans written before native sending existed
+    /// continue to decode. An old plan seals once and persists the result before
+    /// its first create under this build.
+    public var targetWrappedKey: String?
+    /// The Inbox task central definitively minted for this job, once one exists.
+    ///
+    /// Written the moment a create returns — BEFORE the staged bytes, the
+    /// content key or this plan are removed — and never rewritten to a
+    /// different value. That ordering is what makes a crash during cleanup
+    /// recoverable: the next launch reads this field, knows the delivery is
+    /// already queued, and finishes tidying up instead of starting a send.
+    ///
+    /// Optional and additive, with the version deliberately NOT bumped, for the
+    /// reasons written above `sourceDraftId`.
+    public var deviceTaskId: String?
+    /// Whether this send has already spent its ONE refresh-and-reseal.
+    ///
+    /// Durable rather than a loop counter on purpose. A rotation discovered
+    /// mid-send may be answered by re-reading the device and sealing the same
+    /// content key to its new current key exactly once; a force-quit between
+    /// two create attempts must not hand the next launch a fresh budget, or
+    /// "at most one reseal" quietly becomes "one per launch" and a device
+    /// rotating in a loop would be chased forever.
+    ///
+    /// Read through `targetKeyWasResealed`, never directly, so absent and false
+    /// cannot be told apart by a call site.
+    public var targetKeyResealed: Bool?
 
     /// The purpose to act on. Absent means `share`: the only thing a plan
     /// written before this field existed could have been.
     public var effectivePurpose: UploadPurpose { purpose ?? .share }
+
+    /// Whether the one refresh-and-reseal has been spent. Absent means no: a
+    /// plan written before this field existed had never resealed anything.
+    public var targetKeyWasResealed: Bool { targetKeyResealed ?? false }
 
     /// The coherent device target, when this is a device send.
     ///
@@ -162,6 +201,21 @@ public struct PendingUploadTarget: Equatable, Sendable {
         self.keyId = keyId
         self.keyGeneration = keyGeneration
         self.createIdempotencyKey = createIdempotencyKey
+    }
+
+    /// The durable half of a chosen `InboxSendTarget`.
+    ///
+    /// The public key is deliberately NOT carried across. What is recorded is
+    /// the key's IDENTITY — id and generation — because the seal reads the
+    /// device's current key at send time and compares it against these two
+    /// fields. Persisting the key bytes instead would make a rotation
+    /// invisible: the plan would happily reseal to a key central has already
+    /// superseded, and the delivery would land on a device that cannot open it.
+    public init(_ target: InboxSendTarget,
+                createIdempotencyKey: String = InboxIdempotencyKey.mint()) {
+        self.init(deviceId: target.deviceID, keyId: target.keyID,
+                  keyGeneration: target.keyGeneration,
+                  createIdempotencyKey: createIdempotencyKey)
     }
 
     /// The same rule `PendingUploadStore.valid` applies on read, so a target
@@ -384,7 +438,8 @@ public final class PendingUploadStore: @unchecked Sendable {
                                          targetDeviceId: target?.deviceId,
                                          targetKeyId: target?.keyId,
                                          targetKeyGeneration: target?.keyGeneration,
-                                         createIdempotencyKey: target?.createIdempotencyKey)
+                                         createIdempotencyKey: target?.createIdempotencyKey,
+                                         targetWrappedKey: nil)
             try write(plan)                 // LAST: this is what makes the job complete
             return plan
         } catch {
@@ -427,6 +482,29 @@ public final class PendingUploadStore: @unchecked Sendable {
             .filter { $0.accountId == accountId && !$0.retired && $0.finalizedStoredId == nil }
             .sorted { $0.createdAt > $1.createdAt }
             .first { (try? verifyStaging($0)) != nil }
+    }
+
+    /// The device delivery this account still has work outstanding on.
+    ///
+    /// Deliberately NOT `plan(for:)` with a filter. The two answer different
+    /// questions and disagree on exactly one condition: `plan(for:)` offers an
+    /// upload the user could resume, so it excludes a job whose object the
+    /// server already has. A delivery is the opposite — a finalized object with
+    /// no task yet is precisely the state the orchestrator exists to finish, and
+    /// offering it as a resumable upload would invite re-uploading bytes that
+    /// are already paid for.
+    ///
+    /// A retired delivery is excluded: the user discarded it, and the tombstone
+    /// outranks the outstanding work.
+    public func deviceSendPlans(for accountId: String?) -> [PendingUploadPlan] {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let accountId, !accountId.isEmpty else { return [] }
+        return plans()
+            .filter { $0.accountId == accountId && $0.effectivePurpose == .deviceTask
+                && !$0.retired }
+            .sorted { $0.createdAt > $1.createdAt }
+            .filter { (try? verifyStaging($0)) != nil }
     }
 
     private func plans() -> [PendingUploadPlan] {
@@ -513,9 +591,25 @@ public final class PendingUploadStore: @unchecked Sendable {
                               plan.createIdempotencyKey != nil]
         switch plan.effectivePurpose {
         case .share:
+            // The delivery-progress fields are refused here for exactly the
+            // reason the target fields are: a share plan carrying them is two
+            // builds disagreeing about what this job is, and ignoring the extra
+            // keys would resume it as a public object while something else on
+            // this device still believed it was a delivery.
             return fields.allSatisfy { !$0 }
+                && plan.deviceTaskId == nil && plan.targetKeyResealed == nil
+                && plan.targetWrappedKey == nil
         case .deviceTask:
             guard fields.allSatisfy({ $0 }), let target = plan.target else { return false }
+            if let wrapped = plan.targetWrappedKey,
+               (try? InboxKeyMaterial.decode(wrapped,
+                                             expecting: InboxProtocol.sealedBoxBytes)) == nil {
+                return false
+            }
+            // A task id that could not become a poll/cancel path component is a
+            // delivery nothing could ever act on.
+            if let taskId = plan.deviceTaskId,
+               (try? StoredObjectID.checked(taskId)) != taskId { return false }
             // A device delivery may never be burn-after-read: the queue refuses
             // a limited object, so such a plan could not be uploaded at all.
             return target.isWellFormed && !plan.burnAfterRead
@@ -589,15 +683,117 @@ public final class PendingUploadStore: @unchecked Sendable {
         return updated
     }
 
+    /// Record the task central definitively minted for this delivery.
+    ///
+    /// Called BEFORE any cleanup, so the window in which a crash could lose the
+    /// only local record of a live delivery is the single atomic plan write
+    /// below rather than the whole tidy-up.
+    ///
+    /// Recording the SAME id again succeeds and changes nothing — that is how a
+    /// retried cleanup gets through. Recording a DIFFERENT one is refused: one
+    /// job's ciphertext is owned by one task, and a plan naming two of them
+    /// could not decide which to cancel or which to believe.
+    @discardableResult
+    public func setDeviceTask(id: String, for plan: PendingUploadPlan) throws -> PendingUploadPlan {
+        lock.lock()
+        defer { lock.unlock() }
+        let checked = try StoredObjectID.checked(id)
+        guard let current = currentPlan(jobId: plan.jobId), !current.retired,
+              current.effectivePurpose == .deviceTask else {
+            throw PendingUploadError.stagingMissing
+        }
+        if let existing = current.deviceTaskId {
+            guard existing == checked else { throw PendingUploadError.unusableSelection }
+            return current
+        }
+        var updated = current
+        updated.deviceTaskId = checked
+        try write(updated)
+        return updated
+    }
+
+    /// Persist the randomized sealed box before the first create request.
+    ///
+    /// Re-recording the same value is a no-op. A different value is refused:
+    /// once a create may have left this process, changing the wrapped key would
+    /// make central's idempotency comparison reject the retry.
+    @discardableResult
+    public func setTargetWrappedKey(_ wrappedKey: String,
+                                    for plan: PendingUploadPlan) throws -> PendingUploadPlan {
+        lock.lock()
+        defer { lock.unlock() }
+        _ = try InboxKeyMaterial.decode(wrappedKey, expecting: InboxProtocol.sealedBoxBytes)
+        guard let current = currentPlan(jobId: plan.jobId), !current.retired,
+              current.effectivePurpose == .deviceTask, current.deviceTaskId == nil else {
+            throw PendingUploadError.stagingMissing
+        }
+        if let existing = current.targetWrappedKey {
+            guard existing == wrappedKey else { throw PendingUploadError.unusableSelection }
+            return current
+        }
+        var updated = current
+        updated.targetWrappedKey = wrappedKey
+        try write(updated)
+        return updated
+    }
+
+    /// Spend this send's ONE refresh-and-reseal, recording the key identity the
+    /// content key has just been sealed to.
+    ///
+    /// Everything else about the job is left exactly as it was — the content
+    /// key, the staged bytes, the finalized object and the creation idempotency
+    /// key all survive, because a reseal changes only WHO can open the delivery,
+    /// never WHAT is being delivered or WHICH task will own it.
+    ///
+    /// Refused once a task exists: after a create has succeeded the target key
+    /// is central's record, not this plan's decision.
+    @discardableResult
+    public func resealTargetKey(id: String, generation: Int64, wrappedKey: String,
+                                for plan: PendingUploadPlan) throws -> PendingUploadPlan {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let current = currentPlan(jobId: plan.jobId), !current.retired,
+              current.effectivePurpose == .deviceTask, current.deviceTaskId == nil else {
+            throw PendingUploadError.stagingMissing
+        }
+        // Checked before anything is written, so a refused reseal does not spend
+        // the budget it was refused for.
+        guard !current.targetKeyWasResealed else { throw PendingUploadError.unusableSelection }
+        let checked = try StoredObjectID.checked(id)
+        guard generation > 0 else { throw PendingUploadError.unusableSelection }
+        _ = try InboxKeyMaterial.decode(wrappedKey, expecting: InboxProtocol.sealedBoxBytes)
+        var updated = current
+        updated.targetKeyId = checked
+        updated.targetKeyGeneration = generation
+        updated.targetKeyResealed = true
+        // Key identity, reseal budget and randomized sealed box are one atomic
+        // decision. A crash may observe the old trio or the new trio, never a
+        // new key identity paired with the previous key's box.
+        updated.targetWrappedKey = wrappedKey
+        try write(updated)
+        return updated
+    }
+
     /// Persist the destructive choice before removing bytes. If removal is
     /// interrupted, launch sweep sees this marker and finishes the cleanup
     /// instead of offering the job again.
+    ///
+    /// A finalized SHARE may not be retired, and that refusal is deliberate: the
+    /// object exists, the user holds the only copy of its key in the link they
+    /// were shown, and turning that back into a discard would delete bytes they
+    /// believe they have.
+    ///
+    /// A finalized DELIVERY has none of those properties. It has no link, no
+    /// file-list row and no key the user holds — it is reachable only through
+    /// the task that owns it — so a cancelled or definitively refused delivery
+    /// has to be tombstonable, or its invisible staged bytes could never be
+    /// released and the job would be offered to the orchestrator forever.
     @discardableResult
     public func markRetired(_ plan: PendingUploadPlan) throws -> PendingUploadPlan {
         lock.lock()
         defer { lock.unlock() }
         guard let current = currentPlan(jobId: plan.jobId),
-              current.finalizedStoredId == nil else {
+              current.finalizedStoredId == nil || current.effectivePurpose == .deviceTask else {
             throw PendingUploadError.stagingMissing
         }
         var updated = current
@@ -652,7 +848,13 @@ public final class PendingUploadStore: @unchecked Sendable {
                   let plan = try? JSONDecoder().decode(PendingUploadPlan.self, from: data),
                   valid(plan, directoryName: entry.lastPathComponent),
                   !plan.retired,
-                  plan.finalizedStoredId == nil,
+                  // A finalized SHARE is finished: the object is on the server,
+                  // the user has the link, and the job is nothing but leftovers.
+                  // A finalized DELIVERY is the opposite — its ciphertext is up
+                  // and its task still has to be created — so sweeping it would
+                  // destroy the one idempotency key that could converge that
+                  // create, and strand paid storage the account cannot see.
+                  plan.finalizedStoredId == nil || plan.effectivePurpose == .deviceTask,
                   (try? verifyStaging(plan)) != nil
             else {
                 try? fileManager.removeItem(at: entry)

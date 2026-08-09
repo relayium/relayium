@@ -414,6 +414,41 @@ func TestCreatingATaskBindsItsTaskPurposeObject(t *testing.T) {
 	}
 }
 
+func TestOwnerFileDeleteCannotRemoveAnUnboundTaskObject(t *testing.T) {
+	h := newTaskObjectHarness(t)
+	u := h.user(t, "delete-unbound@example.test")
+	tg := h.enrolTarget(t, u, "server", inbox.AutoAcceptAuto, true)
+	fileID := h.uploadTaskObject(t, tg.token, []byte("ciphertext"))
+	blobKey := h.blobKey(t, fileID)
+
+	resp := h.do(t, "DELETE", "/api/files/"+fileID, withBearer(tg.token))
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("delete unbound task object: got %d, want 404", resp.StatusCode)
+	}
+	if !h.fileExists(t, fileID) || !h.blobExists(t, blobKey) {
+		t.Fatal("generic share delete removed a Device Inbox object")
+	}
+}
+
+func TestOwnerFileDeleteCannotRemoveABoundTaskObject(t *testing.T) {
+	h := newTaskObjectHarness(t)
+	u := h.user(t, "delete-bound@example.test")
+	tg := h.enrolTarget(t, u, "server", inbox.AutoAcceptAuto, true)
+	fileID, task := h.bindTask(t, tg, "send-1", []byte("ciphertext"))
+	blobKey := h.blobKey(t, fileID)
+
+	resp := h.do(t, "DELETE", "/api/files/"+fileID, withBearer(tg.token))
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("delete bound task object: got %d, want 404", resp.StatusCode)
+	}
+	if !h.fileExists(t, fileID) || !h.blobExists(t, blobKey) {
+		t.Fatal("generic file delete removed a live task's ciphertext")
+	}
+	if got, want := h.boundTaskID(t, fileID), task["ID"].(string); got != want {
+		t.Fatalf("binding after refused delete = %q, want %q", got, want)
+	}
+}
+
 func TestABoundTaskObjectCannotBeSentTwice(t *testing.T) {
 	h := newTaskObjectHarness(t)
 	u := h.user(t, "rebind@example.test")

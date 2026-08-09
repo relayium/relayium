@@ -12,10 +12,16 @@ final class StubTransport: ResumableTransport, @unchecked Sendable {
     var failNextPatch = false
     var initError: Error?
     var finalizeResult = UploadResult(id: "fid", expiresAt: 4242)
+    /// Every purpose an init was asked for, in order. The purpose decides the
+    /// object's authorization model, so "which one actually left" is an
+    /// assertion rather than a detail.
+    var purposes: [UploadPurpose] = []
+    var initCount: Int { purposes.count }
 
     func initUpload(header: [UInt8], purpose: UploadPurpose, burnAfterRead: Bool, ttl: Int,
                     size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
         if let e = initError { throw e }
+        purposes.append(purpose)
         return ("up1", chunkSize)
     }
 

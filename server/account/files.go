@@ -698,6 +698,15 @@ func (s *Service) handleDeleteFile(w http.ResponseWriter, r *http.Request, u Use
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
+	// This is the account's SHARE delete route. Device Inbox objects are never
+	// deleted here — not even when a preceding read says one is unbound — because
+	// a concurrent task create could bind it between that read and blob removal.
+	// Their task lifecycle and bounded orphan collector own deletion instead.
+	// Unknown purposes fail closed rather than inheriting share semantics.
+	if sf.Purpose != StoredPurposeShare {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
 	if bs, berr := s.blobFor(r.Context(), sf.NodeID); berr == nil {
 		if derr := bs.Delete(r.Context(), sf.BlobKey); derr != nil {
 			// Node unreachable: record the orphan so GC retries; still remove the row.
