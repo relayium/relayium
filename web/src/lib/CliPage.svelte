@@ -158,12 +158,27 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
     </div>
   </div>
 
-  <!-- Device Inbox. First of the mode cards and visually marked, because it is
-       the recommended answer to "get this file onto my server" and the only
-       mode whose sending half lives in the browser. It shipped invisible: the
-       page below never mentioned it, so nobody found it. The id is the anchor
-       My Devices links back to. -->
-  <div class="mode featured" id="device-inbox">
+  <!-- Cloud (async, account) -->
+  <div class="mode" data-cli-mode="up / down">
+    <div class="mode-head">
+      <span class="g" aria-hidden="true">☁️</span>
+      <h2>{t.cliPage.cloudH2}</h2>
+      <span class="tag">{t.cliPage.cloudTag}</span>
+    </div>
+    <p>{t.cliPage.cloudIntro}</p>
+    <CommandBlock code={loginCmd} title="login" />
+    <p>{t.cliPage.cloudLoginNote}</p>
+    <p>{t.cliPage.cloudBody}</p>
+    <CommandBlock code={upCmd} title="up · from the first machine" />
+    <CommandBlock code={downCmd} title="down · on the second machine" />
+    <p>{t.cliPage.cloudInteropNote}</p>
+    <p>{t.cliPage.cloudPrivacyNote}</p>
+  </div>
+
+  <!-- Device Inbox remains visually marked because it is the recommended answer
+       to "get this file onto my server" and the only mode whose sending half
+       lives in the browser. The id is the anchor My Devices links back to. -->
+  <div class="mode featured" id="device-inbox" data-cli-mode="inbox">
     <div class="mode-head">
       <span class="g" aria-hidden="true">📥</span>
       <h2>{t.cliPage.inboxH2}</h2>
@@ -201,19 +216,23 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
     </p>
   </div>
 
-  <!-- Mode 1 -->
-  <div class="mode">
+  <!-- Text (ephemeral messages) -->
+  <div class="mode" data-cli-mode="text">
     <div class="mode-head">
-      <span class="g" aria-hidden="true">🔑</span>
-      <h2>{t.cliPage.mode1Title}</h2>
-      <span class="tag free">{t.cliPage.mode1Tag}</span>
+      <span class="g" aria-hidden="true">💬</span>
+      <h2>{t.cliPage.textH2}</h2>
+      <span class="tag">{t.cliPage.textTag}</span>
     </div>
-    <p>{t.cliPage.mode1Body}</p>
-    <CommandBlock code={sshCmd} title="push / pull" />
+    <p>{t.cliPage.textIntro}</p>
+    <CommandBlock code={textCmd} title="text · mint and join" />
+    <p>{t.cliPage.textPipeNote}</p>
+    <CommandBlock code={textPipeCmd} title="text · exact bytes" />
+    <p>{t.cliPage.textSasNote}</p>
+    <p>{t.cliPage.textLimitNote}</p>
   </div>
 
-  <!-- Mode 2 -->
-  <div class="mode">
+  <!-- Mode 2: send / receive -->
+  <div class="mode" data-cli-mode="send / receive">
     <div class="mode-head">
       <span class="g" aria-hidden="true">🔗</span>
       <h2>{t.cliPage.mode2Title}</h2>
@@ -223,8 +242,19 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
     <CommandBlock code={codeCmd} title="send / receive" />
   </div>
 
-  <!-- Mode 3 -->
-  <div class="mode">
+  <!-- Mode 1: push / pull -->
+  <div class="mode" data-cli-mode="push / pull">
+    <div class="mode-head">
+      <span class="g" aria-hidden="true">🔑</span>
+      <h2>{t.cliPage.mode1Title}</h2>
+      <span class="tag free">{t.cliPage.mode1Tag}</span>
+    </div>
+    <p>{t.cliPage.mode1Body}</p>
+    <CommandBlock code={sshCmd} title="push / pull" />
+  </div>
+
+  <!-- Mode 3: daemon direct -->
+  <div class="mode" data-cli-mode="daemon direct">
     <div class="mode-head">
       <span class="g" aria-hidden="true"><Icon name="network" size={22} /></span>
       <h2>{t.cliPage.mode3Title}</h2>
@@ -248,42 +278,10 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
   </div>
 
   <!-- Sync -->
-  <div class="block">
+  <div class="block" data-cli-mode="sync">
     <h2>{t.cliPage.syncH2}</h2>
     <p>{t.cliPage.syncNote}</p>
     <CommandBlock code={syncCmd} title="sync a folder" />
-  </div>
-
-  <!-- Text (ephemeral messages) -->
-  <div class="mode">
-    <div class="mode-head">
-      <span class="g" aria-hidden="true">💬</span>
-      <h2>{t.cliPage.textH2}</h2>
-      <span class="tag">{t.cliPage.textTag}</span>
-    </div>
-    <p>{t.cliPage.textIntro}</p>
-    <CommandBlock code={textCmd} title="text · mint and join" />
-    <p>{t.cliPage.textPipeNote}</p>
-    <CommandBlock code={textPipeCmd} title="text · exact bytes" />
-    <p>{t.cliPage.textSasNote}</p>
-    <p>{t.cliPage.textLimitNote}</p>
-  </div>
-
-  <!-- Cloud (async, account) -->
-  <div class="mode">
-    <div class="mode-head">
-      <span class="g" aria-hidden="true">☁️</span>
-      <h2>{t.cliPage.cloudH2}</h2>
-      <span class="tag">{t.cliPage.cloudTag}</span>
-    </div>
-    <p>{t.cliPage.cloudIntro}</p>
-    <CommandBlock code={loginCmd} title="login" />
-    <p>{t.cliPage.cloudLoginNote}</p>
-    <p>{t.cliPage.cloudBody}</p>
-    <CommandBlock code={upCmd} title="up · from the first machine" />
-    <CommandBlock code={downCmd} title="down · on the second machine" />
-    <p>{t.cliPage.cloudInteropNote}</p>
-    <p>{t.cliPage.cloudPrivacyNote}</p>
   </div>
 
   <!-- Guides -->

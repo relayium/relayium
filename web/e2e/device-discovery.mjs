@@ -135,9 +135,13 @@ async function checkCliPage(browser, base, view) {
   const bad = await tab.evaluate(VISIBLE("#device-inbox"));
   if (bad) throw new Error(`${view.id}: the Device Inbox section is ${bad}`);
 
-  // 它必须是**第一张**模式卡：这一批的整个理由就是它以前根本没出现在页面上。
-  const first = await tab.evaluate(`document.querySelectorAll(".mode")[0]?.id ?? ""`);
-  if (first !== "device-inbox") throw new Error(`${view.id}: first mode card is "${first}", not the Device Inbox`);
+  const order = await tab.evaluate(
+    `[...document.querySelectorAll("[data-cli-mode]")].map((e) => e.getAttribute("data-cli-mode"))`,
+  );
+  const expected = ["up / down", "inbox", "text", "send / receive", "push / pull", "daemon direct", "sync"];
+  if (JSON.stringify(order) !== JSON.stringify(expected)) {
+    throw new Error(`${view.id}: CLI mode order is ${JSON.stringify(order)}, expected ${JSON.stringify(expected)}`);
+  }
 
   const ctaBad = await tab.evaluate(VISIBLE("#device-inbox .cta a"));
   if (ctaBad) throw new Error(`${view.id}: the My Devices CTA is ${ctaBad}`);
@@ -160,7 +164,7 @@ async function checkCliPage(browser, base, view) {
   // CTA 真的把人带到 My Devices，而不只是长得像个链接。
   await tab.evaluate(`document.querySelector("#device-inbox .cta a").click()`);
   await tab.waitFor(`location.pathname.endsWith("/me")`, `${view.id}: CTA navigates to /me`);
-  ok(`${view.id}: /cli leads with Device Inbox and its CTA reaches My Devices`);
+  ok(`${view.id}: /cli uses the product-priority order and the Inbox CTA reaches My Devices`);
 }
 
 async function checkMyDevices(browser, base, view) {

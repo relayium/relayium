@@ -44,11 +44,11 @@ describe("/cli 上的设备收件箱一节", () => {
     expect(section, "My Devices 的「去设置」链接指向 /cli#device-inbox，这个锚点必须存在").toBeTruthy();
   });
 
-  it("排在其他模式卡片之前 —— 它是推荐路径，不是第七种并列选项", async () => {
+  it("正文按产品负责人指定的优先级介绍，同时保留 inbox 推荐样式", async () => {
     const target = await render();
-    const modes = [...target.querySelectorAll(".mode")];
-    expect(modes[0].id).toBe("device-inbox");
-    expect(modes[0].classList.contains("featured")).toBe(true);
+    const order = [...target.querySelectorAll("[data-cli-mode]")].map((node) => node.getAttribute("data-cli-mode"));
+    expect(order).toEqual(["up / down", "inbox", "text", "send / receive", "push / pull", "daemon direct", "sync"]);
+    expect(target.querySelector("#device-inbox")?.classList.contains("featured")).toBe(true);
   });
 
   it("四步都在，而且每一步的命令都是真存在的", async () => {
@@ -108,14 +108,15 @@ describe("/cli 上的设备收件箱一节", () => {
 });
 
 describe("模式选择器", () => {
-  it("收件箱是选择器里的第一张卡", () => {
-    expect(PICK_MODES[0].title).toBe("inbox");
+  it("按产品负责人指定的优先级排列", () => {
+    expect(PICK_MODES.map((mode) => mode.title)).toEqual([
+      "up / down", "inbox", "text", "send / receive", "push / pull", "daemon direct", "sync",
+    ]);
   });
 
-  it("每种语言的第一条说明讲的都是收件箱那张卡", () => {
-    // pickWhen 和 PICK_MODES 是**按下标**配对的。这一批把 inbox 插到了数组开头，
-    // 而 SameLength 只保证长度相等——某一种语言忘了同步插入，它之后的每一条解释
-    // 都会静默串位，类型检查一个字都不会说。
+  it("每种语言的第二条说明讲的都是收件箱那张卡", () => {
+    // pickWhen 和 PICK_MODES 是**按下标**配对的。产品顺序改变时，SameLength 只保证
+    // 长度相等；这条语义断言防止某一种语言仍留在旧顺序，导致后续解释全部串位。
     const claims: Record<keyof typeof locales, RegExp> = {
       en: /server or NAS/i,
       zh: /服务器或 NAS/,
@@ -130,8 +131,8 @@ describe("模式选择器", () => {
     for (const [code, m] of Object.entries(locales) as [keyof typeof locales, Messages][]) {
       expect(m.cliPage.pickWhen, `${code}: pickWhen 与 PICK_MODES 不等长`).toHaveLength(PICK_MODES.length);
       expect(
-        m.cliPage.pickWhen[0],
-        `${code}: 第一条说明讲的不是收件箱 —— 插入位置串了，后面每一条都跟着错位`,
+        m.cliPage.pickWhen[1],
+        `${code}: 第二条说明讲的不是收件箱 —— 优先级重排后文案串位了`,
       ).toMatch(claims[code]);
     }
   });

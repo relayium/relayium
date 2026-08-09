@@ -24,18 +24,17 @@ export type SameLength<T extends readonly unknown[]> = { -readonly [K in keyof T
  *
  * ⚠️ 这个数组和 pickWhen **按下标配对**。往中间插一项，九份语言文件里那之后的每一条
  * 解释都会串位——而 SameLength 只管长度，串位它一个字都不会说。所以新增项要么追加到
- * 末尾，要么像 inbox 这次一样：插到开头的同时，九份 pickWhen 全部同步插到开头，并由
- * i18n-device-inbox.test.ts 里那条「inbox 那一格必须在讲收件箱」的断言兜底。 */
+ * 末尾，要么在调整产品优先级时同步重排九份 pickWhen，并由
+ * CliPage.device-inbox.test.ts 的完整顺序与逐项语义断言兜底。 */
 export const PICK_MODES = [
-  // Device Inbox 排第一：它是"Web 往自己的服务器/NAS 发文件"这件事的推荐路径，
-  // 也是唯一一个不要求两端同时在线的模式。
+  // 这是产品负责人指定的介绍优先级；概览和正文必须保持一致。
+  { g: "☁️", title: "up / down", cmd: "relayium up … / down <link>" },
   { g: "📥", title: "inbox", cmd: "relayium inbox enable --dir ~/inbox" },
-  { g: "🔑", title: "push / pull", cmd: "relayium push … user@host:path" },
-  { g: "🔗", title: "send / receive", cmd: "relayium send … / receive <code>" },
   { g: "💬", title: "text", cmd: "relayium text [code]" },
+  { g: "🔗", title: "send / receive", cmd: "relayium send … / receive <code>" },
+  { g: "🔑", title: "push / pull", cmd: "relayium push … user@host:path" },
   { g: "network", title: "daemon direct", cmd: "relayium push … relayium://host" },
   { g: "🔁", title: "sync", cmd: "relayium sync … relayium://host" },
-  { g: "☁️", title: "up / down", cmd: "relayium up … / down <link>" },
 ] as const;
 
 /** flag 参考表的前两列（flag 本身、作用于哪些子命令）。第三列在 t.cliPage.flagMeanings。 */

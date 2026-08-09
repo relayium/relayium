@@ -180,7 +180,7 @@ describe("the sitemap", () => {
     for (const lang of LANGS) {
       expect(xml, lang).toContain(`<loc>https://relayium.com${urlPath("releases", lang)}</loc>`);
     }
-    expect(xml.match(/<lastmod>2026-08-03<\/lastmod>/g)).toHaveLength(LANGS.length);
+    expect(xml.match(new RegExp(`<lastmod>${releases.updated}</lastmod>`, "g"))).toHaveLength(LANGS.length);
   });
 
   it("does not claim the yearly changefreq the legal pages use", () => {
