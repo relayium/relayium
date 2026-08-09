@@ -68,7 +68,6 @@ final class DeviceInboxUITests: XCTestCase {
     /// assertion measured XCUITest rather than the scene.
     @discardableResult
     private func openDeviceInboxSettings() -> XCUIElement {
-        let main = mainWindow
         let appMenu = app.menuBarItems.element(boundBy: 1)
         XCTAssertTrue(appMenu.waitForExistence(timeout: 10))
         appMenu.click()
@@ -81,8 +80,15 @@ final class DeviceInboxUITests: XCTestCase {
         expectation(for: twoWindows, evaluatedWith: app.windows, handler: nil)
         waitForExpectations(timeout: 20)
 
+        // Do not identify this as merely "not the main element". XCUIElement
+        // queries can rebind after a second scene appears (observed on the
+        // hosted Xcode 16.4 runner), making an element captured before opening
+        // Settings compare unequal to the same product window afterward. The
+        // shipped scene contract is spatial: Settings is 520 points wide and
+        // the product window is at least 800 points wide.
         let settings = app.windows.allElementsBoundByIndex
-            .first { $0 != main && $0.frame.width > 100 } ?? app.windows.element(boundBy: 1)
+            .first { $0.frame.width >= 400 && $0.frame.width < 800 }
+            ?? app.windows.element(boundBy: 1)
 
         // A settings window REMEMBERS its last tab, so it may already be here —
         // and the tab control is not a radio button on every macOS: measured on
