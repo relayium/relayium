@@ -51,6 +51,7 @@ import guidesWhatIsP2pFileTransfer from "./pages/content/articles/guides-what-is
 import guidesIsItSafe from "./pages/content/articles/guides-is-it-safe.mjs";
 import guidesOwnNode from "./pages/content/articles/guides-own-node.mjs";
 import howtoSendTextBetweenDevices from "./pages/content/articles/howto-send-text-between-devices.mjs";
+import guidesDeviceInboxServer from "./pages/content/articles/guides-device-inbox-server.mjs";
 import {
   buildLegalPages,
   buildLandingPages,
@@ -108,6 +109,7 @@ export const articles = [
   guidesIsItSafe,
   guidesOwnNode,
   howtoSendTextBetweenDevices,
+  guidesDeviceInboxServer,
 ];
 
 const MODES = [

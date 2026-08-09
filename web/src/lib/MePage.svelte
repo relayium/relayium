@@ -71,7 +71,7 @@
   // device that never enrolled, and typed `unknown` here on purpose — this page
   // does not interpret it, it hands it to DeviceCard, which parses it
   // defensively in one place.
-  interface DeviceRow { ID: string; Name: string; CreatedAt: number; LastSeenAt: number; Kind: string; Inbox?: unknown }
+  interface DeviceRow { ID: string; Name: string; CreatedAt: number; LastSeenAt: number; LastIP?: string; Kind: string; Inbox?: unknown }
 
   // 列进来的 Kind，以及它们各自的行内标签。只有这两类：它们持有的是同一种能代表
   // 账号传输/上传的 bearer 令牌（CLI 走 relayium login，App 走原生登录），吊销的

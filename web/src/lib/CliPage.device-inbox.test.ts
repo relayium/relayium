@@ -61,10 +61,10 @@ describe("/cli 上的设备收件箱一节", () => {
       "relayium update --check",
       "relayium inbox --help",
       "relayium login --device-name",
-      "relayium inbox enable --dir",
+      "sudo sh inbox-server-install.sh --dir /srv/relayium-inbox",
       "relayium inbox run",
       "relayium inbox status",
-      "relayium inbox service systemd-user",
+      "relayium inbox service systemd-system",
     ]) {
       expect(text, `收件箱一节没有提到 \`${cmd}\``).toContain(cmd);
     }
@@ -79,6 +79,18 @@ describe("/cli 上的设备收件箱一节", () => {
     expect(cta!.textContent).toMatch(/My Devices/);
     // 未登录的人点进去会看到登录门。文案必须先说出来，而不是让他们撞上去。
     expect(section.textContent).toMatch(/signed in to Relayium/i);
+  });
+
+  it("Linux 主流程是可审阅的一键常驻脚本，完整指南留在站内", async () => {
+    const target = await render();
+    const section = target.querySelector("#device-inbox") as HTMLElement;
+    const text = section.textContent ?? "";
+    expect(text).toContain("inbox-server-install.sh");
+    expect(text).toContain("sudo sh inbox-server-install.sh --dir /srv/relayium-inbox");
+    expect(text).toMatch(/after reboot/i);
+    const docs = [...section.querySelectorAll("a")].find((a) => a.getAttribute("href")?.includes("device-inbox-server"));
+    expect(docs, "完整指南仍然把普通用户赶到 GitHub，而不是站内文章").toBeTruthy();
+    expect(docs!.getAttribute("href")).toBe("/guides/device-inbox-server/");
   });
 
   it("不承诺官方容器镜像", async () => {

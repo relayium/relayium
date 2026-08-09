@@ -117,6 +117,7 @@ type deviceRow struct {
 	CreatedAt  int64
 	LastSeenAt int64
 	Kind       string
+	LastIP     string
 	Current    bool
 }
 
@@ -137,6 +138,7 @@ func withBearer(token string) func(*http.Request) {
 
 func TestListDevicesAcceptsABearerAndMarksItsOwnDevice(t *testing.T) {
 	h := newDeviceHarness(t)
+	h.svc.SetClientIP(func(*http.Request) string { return "203.0.113.19" })
 	uid := h.user(t, "bearer@example.com")
 	token := h.bearer(t, uid, "Ada's Mac")
 	// A second credential, so "current" has to identify one row rather than
@@ -159,6 +161,11 @@ func TestListDevicesAcceptsABearerAndMarksItsOwnDevice(t *testing.T) {
 	}
 	if len(current) != 1 || current[0] != "Ada's Mac" {
 		t.Fatalf("current devices = %v, want exactly [Ada's Mac]", current)
+	}
+	for _, d := range devices {
+		if d.Name == "Ada's Mac" && (d.LastIP != "203.0.113.19" || d.LastSeenAt == 0) {
+			t.Fatalf("current CLI lacks its server-observed address/use time: %+v", d)
+		}
 	}
 }
 
@@ -203,7 +210,7 @@ func TestListDevicesKeepsTheFieldNamesTheWebAlreadyReads(t *testing.T) {
 	if len(raw.Devices) != 1 {
 		t.Fatalf("got %d devices, want 1", len(raw.Devices))
 	}
-	for _, key := range []string{"ID", "Name", "Kind", "CreatedAt", "LastSeenAt", "Current"} {
+	for _, key := range []string{"ID", "Name", "Kind", "CreatedAt", "LastSeenAt", "LastIP", "Current"} {
 		if _, ok := raw.Devices[0][key]; !ok {
 			t.Errorf("device response is missing %q", key)
 		}

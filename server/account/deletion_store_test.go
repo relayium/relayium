@@ -46,7 +46,7 @@ func TestPurgeTransientUserData(t *testing.T) {
 	if err := st.CreateDeviceAuth(ctx, DeviceAuthRequest{UserCode: "WDJB-MJHT", DeviceCodeHash: authx.HashToken("dev"), Status: "pending", CreatedAt: 1, ExpiresAt: 1 << 40}); err != nil {
 		t.Fatalf("create device auth: %v", err)
 	}
-	if _, ok, err := st.ApproveDeviceAuth(ctx, "WDJB-MJHT", u.ID, authx.HashToken("clitok"), "rlm_cli_raw", 2); err != nil || !ok {
+	if _, _, ok, err := st.ApproveDeviceAuth(ctx, "WDJB-MJHT", u.ID, authx.HashToken("clitok"), "rlm_cli_raw", 2); err != nil || !ok {
 		t.Fatalf("approve device auth: ok=%v err=%v", ok, err)
 	}
 	// A user-owned node + a node_token bound to the user.

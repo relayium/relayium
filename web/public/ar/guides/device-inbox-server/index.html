@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>إعداد Device Inbox على خادم Linux يعمل دائمًا · Relayium</title>
+    <meta name="description" content="ثبّت Device Inbox كخدمة systemd محدودة الصلاحيات لاستقبال الملفات من المتصفح حتى بعد إعادة التشغيل." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ar/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/device-inbox-server/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Relayium" />
+    <meta property="og:title" content="إعداد Device Inbox على خادم Linux يعمل دائمًا" />
+    <meta property="og:description" content="ثبّت Device Inbox كخدمة systemd محدودة الصلاحيات لاستقبال الملفات من المتصفح حتى بعد إعادة التشغيل." />
+    <meta property="og:url" content="https://relayium.com/ar/guides/device-inbox-server/" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Relayium — end-to-end encrypted file and text transfer" />
+    <meta property="og:locale" content="ar_AR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="إعداد Device Inbox على خادم Linux يعمل دائمًا" />
+    <meta name="twitter:description" content="ثبّت Device Inbox كخدمة systemd محدودة الصلاحيات لاستقبال الملفات من المتصفح حتى بعد إعادة التشغيل." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"إعداد Device Inbox على خادم Linux يعمل دائمًا","description":"ثبّت Device Inbox كخدمة systemd محدودة الصلاحيات لاستقبال الملفات من المتصفح حتى بعد إعادة التشغيل.","inLanguage":"ar","datePublished":"2026-08-09","dateModified":"2026-08-09","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ar/guides/device-inbox-server/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ar/"},{"@type":"ListItem","position":2,"name":"الأدلة","item":"https://relayium.com/ar/guides/"},{"@type":"ListItem","position":3,"name":"إعداد Device Inbox على خادم Linux يعمل دائمًا"}]},{"@type":"FAQPage","inLanguage":"ar","mainEntity":[{"@type":"Question","name":"هل يرى Relayium أسماء الملفات أو النص الواضح؟","acceptedAnswer":{"@type":"Answer","text":"لا. يشفّر المتصفح البيان والملف ويغلق مفتاح المحتوى للجهاز المختار. لا يحتفظ المركز إلا بالنص المشفر وحالة التوجيه."}},{"@type":"Question","name":"لماذا لا نستخدم /root/inbox؟","acceptedAnswer":{"@type":"Answer","text":"تعمل الخدمة الموصى بها دون root وتمنع الوصول إلى مجلدات المستخدمين. يمنحها /srv/relayium-inbox مساحة كتابة واحدة محدودة."}},{"@type":"Question","name":"هل يمكن التثبيت يدويًا؟","acceptedAnswer":{"@type":"Answer","text":"نعم. يطبع relayium inbox service systemd-user أو systemd-system الوحدة والأوامر الخاصة بالجهاز، كما توجد إرشادات launchd وcontainer."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
+.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
+.crumbs [aria-current]{color:var(--text)}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ar">Relayium</a></header>
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/ar/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ar/guides/">الأدلة</a> <span aria-hidden="true">›</span> <span aria-current="page">إعداد Device Inbox على خادم Linux يعمل دائمًا</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
+      <h1>إعداد Device Inbox على خادم Linux يعمل دائمًا</h1>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">آخر تحديث: <bdi>2026-08-09</bdi></p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/device-inbox-server/">English</a><a href="/zh/guides/device-inbox-server/">中文</a><a href="/ja/guides/device-inbox-server/">日本語</a><a href="/ko/guides/device-inbox-server/">한국어</a><a href="/de/guides/device-inbox-server/">Deutsch</a><a href="/fr/guides/device-inbox-server/">Français</a><a href="/ar/guides/device-inbox-server/" aria-current="true">العربية</a><a href="/es/guides/device-inbox-server/">Español</a><a href="/pt/guides/device-inbox-server/">Português</a></nav>
+      <p class="lead">يرسل Device Inbox الملف من «أجهزتي» في المتصفح إلى خادمك أو جهاز NAS أو محطة العمل. يشفّره المتصفح، ولا يفكّه ويحفظه إلا الجهاز المستهدف.</p>
+      <p class="lead">يجب أن يستمر مستقبِل الخادم بعد إغلاق SSH وإعادة التشغيل. ينشئ المثبّت الموصى به المجلد وخدمة systemd فعلية. أما inbox run فللتشخيص في الواجهة أو للحاويات فقط.</p>
+      <h2>تثبيت المستقبِل الدائم</h2>
+      <p>سجّل الدخول مرة كمشغّل، ثم نزّل النص القصير وافحصه قبل منحه صلاحيات root. ينسخ بيانات الاعتماد دون عرضها، وينشئ حساب relayium مخصصًا، ويسجل مفتاح الاستقبال، ثم يثبت الوحدة المقوّاة ويشغلها الآن وبعد إعادة التشغيل.</p>
+      <pre><code>relayium update
+relayium login --device-name prod-backup-1
+
+# Download, inspect, then install the always-on service:
+curl -fsSLO https://relayium.com/inbox-server-install.sh
+less inbox-server-install.sh
+sudo sh inbox-server-install.sh --dir /srv/relayium-inbox</code></pre>
+      <ul><li>المجلد الموصى به هو /srv/relayium-inbox. لا تصل الخدمة المقوّاة إلى /root أو المجلد المنزلي لمستخدم آخر.</li><li>تعود ملكية الملفات والمفتاح الخاص إلى الحساب المخصص محدود الصلاحيات، لا إلى root.</li><li>لا تُنقل حالة استقبال قديمة إلى أرشيف مؤرخ قابل للاستعادة إلا بعد نجاح تشغيل الخدمة الجديدة.</li></ul>
+      <h2>فحص الخدمة والسجلات والملفات</h2>
+      <p>تفحص الأوامر العملية والسجلات وحالة Relayium المحلية/المركزية والمجلد كلًا على حدة. لا تكفي حالة systemd الخضراء لإثبات صلاحية الحساب والمفتاح والمجلد.</p>
+      <pre><code>sudo systemctl status relayium-inbox.service
+sudo journalctl -u relayium-inbox.service -f
+sudo -u relayium relayium inbox status --config-dir /var/lib/relayium-inbox/config
+ls -la /srv/relayium-inbox</code></pre>
+      <ul><li>تصل الملفات إلى /srv/relayium-inbox ما لم تمرر --dir مختلفًا.</li><li>لا تُستبدل الملفات الموجودة؛ يحصل الاسم المتكرر على رقم آمن، ولا يُفتح المحتوى أو يُنفذ أو يُستخرج تلقائيًا.</li><li>تعرض «أجهزتي» الاسم القابل للتعديل وآخر IP رآه الخادم، وقد يكون عنوان NAT أو VPN.</li></ul>
+      <h2>السلوك عند انقطاع الاتصال أو التعطل</h2>
+      <p>تنتظر المهمة المشفرة في Relayium أثناء غياب الخادم. الرفع لا يعني الحفظ؛ لا تظهر حالة الحفظ إلا بعد فك موثّق والتحقق والكتابة الدائمة.</p>
+      <ul><li>يعيد systemd تشغيل العامل بعد فشل العملية وبعد إعادة تشغيل الخادم.</li><li>يبقى التنزيل الجزئي في مساحة تجهيز خاصة ولا يظهر كملف مكتمل.</li><li>يجعل السجل الدائم التعطل بعد الحفظ متكررًا بأمان: يُبلغ عن الحفظ نفسه دون إنشاء نسخة.</li><li>إذا اختفى المجلد لاحقًا فلا يعيد العامل إنشاءه تحت نقطة تركيب غائبة، بل يبلغ أن الأمر يحتاج إلى تدخل.</li></ul>
+      <h2>الإيقاف المؤقت أو الاستئناف أو الإزالة</h2>
+      <p>شغّل أوامر الإدارة بالحساب ومجلد الإعداد نفسيهما. يحتفظ pause بالمفاتيح والطابور، ويتابع resume، ويحذف disable الحالة المركزية أولًا ثم المفاتيح الخاصة.</p>
+      <pre><code>sudo -u relayium relayium inbox pause --config-dir /var/lib/relayium-inbox/config
+sudo -u relayium relayium inbox resume --config-dir /var/lib/relayium-inbox/config
+sudo -u relayium relayium inbox disable --config-dir /var/lib/relayium-inbox/config</code></pre>
+      <ul><li>لا تستخدم inbox run داخل نافذة SSH كإعداد دائم؛ سيتوقف عند إغلاقها.</li><li>يوقف systemctl disable --now العملية فقط. استخدم inbox disable لإلغاء صندوق الاستقبال ومفاتيحه أيضًا.</li></ul>
+      <h2>الأسئلة الشائعة</h2>
+      <h3>هل يرى Relayium أسماء الملفات أو النص الواضح؟</h3>
+      <p>لا. يشفّر المتصفح البيان والملف ويغلق مفتاح المحتوى للجهاز المختار. لا يحتفظ المركز إلا بالنص المشفر وحالة التوجيه.</p>
+      <h3>لماذا لا نستخدم /root/inbox؟</h3>
+      <p>تعمل الخدمة الموصى بها دون root وتمنع الوصول إلى مجلدات المستخدمين. يمنحها /srv/relayium-inbox مساحة كتابة واحدة محدودة.</p>
+      <h3>هل يمكن التثبيت يدويًا؟</h3>
+      <p>نعم. يطبع relayium inbox service systemd-user أو systemd-system الوحدة والأوامر الخاصة بالجهاز، كما توجد إرشادات launchd وcontainer.</p>
+      <div class="ctacard">
+        <p>عندما تعرض الخدمة ready أرسل ملفًا من بطاقة جهازك.</p>
+        <a class="cta" href="/me">فتح أجهزتي</a>
+      </div>
+      <h2>تابع القراءة</h2>
+      <ul class="related"><li><a href="/ar/guides/transfer-files-from-terminal/">انقل الملفات والنصوص من الطرفية باستخدام Relayium CLI</a></li><li><a href="/ar/guides/run-relayium-as-an-always-on-service/">شغّل Relayium كخدمة استقبال دائمة التشغيل</a></li><li><a href="/ar/guides/how-relayium-encrypts-your-files/">كيف يُشفِّر Relayium ملفاتك من الطرف إلى الطرف</a></li><li><a href="/ar/how-to/automate-server-backups/">أتمتة النسخ الاحتياطي المُشفَّر للخادم باستخدام مهمة cron</a></li><li><a href="/ar/">Relayium</a></li></ul>
+      </main>
+      <footer>
+        <a href="/?lang=ar">← Relayium</a>
+        <a href="/ar/apps/">التطبيقات</a>
+        <a href="/ar/guides/">الأدلة</a>
+        <a href="/ar/privacy/">الخصوصية</a>
+        <a href="/pricing">الأسعار</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

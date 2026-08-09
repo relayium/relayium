@@ -69,12 +69,19 @@ relayium inbox --help       # this build has Device Inbox if this prints`;
 #     This machine will appear in My Devices as: prod-backup-1
 
 # omit --device-name and it registers this host's own name`;
-  const inboxEnableCmd = `relayium inbox enable --dir ~/inbox   # the opt-in, made HERE — nothing remote can set it
-relayium inbox run                    # the receiver, in the foreground (--once for one pass)
-relayium inbox status                 # folder, credential, worker, and what the server thinks`;
-  const inboxServiceCmd = `# prints a unit for THIS machine; it installs nothing itself
-relayium inbox service systemd-user > relayium-inbox.service
-#   also: systemd-system (dedicated account, needs root) · launchd · container`;
+  const inboxEnableCmd = `# Linux server: download, inspect, then install the always-on service
+curl -fsSLO https://relayium.com/inbox-server-install.sh
+less inbox-server-install.sh
+sudo sh inbox-server-install.sh --dir /srv/relayium-inbox
+
+# creates the directory, uses a low-privilege account, starts now + after reboot`;
+  const inboxServiceCmd = `relayium inbox status   # folder, credential, worker, and server truth
+
+# foreground is for diagnostics or your own container only
+relayium inbox run
+
+# advanced/manual definitions: systemd-user, systemd-system, launchd, container
+relayium inbox service systemd-system`;
   const upCmd = `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…
 
@@ -212,7 +219,7 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
     <p>{t.cliPage.inboxQueueNote}</p>
     <p>{t.cliPage.inboxPrivacyNote}</p>
     <p class="alt">
-      <a href={`${repo}/blob/main/docs/device-inbox-cli.md`}>{t.cliPage.inboxDocs}</a>
+      <a href={guideUrl("guides/device-inbox-server/")}>{t.cliPage.inboxDocs}</a>
     </p>
   </div>
 

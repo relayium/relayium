@@ -224,7 +224,7 @@ func (s *Service) handleDeviceApprove(w http.ResponseWriter, r *http.Request, u 
 	// leave a phantom "CLI" device in the user's list or an orphaned cli_token.
 	raw := "rlm_cli_" + authx.RandToken()
 	h := authx.HashToken(raw)
-	name, ok, err := s.store.ApproveDeviceAuth(ctx, in.UserCode, u.ID, h, raw, now)
+	name, requestIP, ok, err := s.store.ApproveDeviceAuth(ctx, in.UserCode, u.ID, h, raw, now)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
@@ -249,6 +249,7 @@ func (s *Service) handleDeviceApprove(w http.ResponseWriter, r *http.Request, u 
 	// retry (5s poll interval) self-heals. No rollback machinery needed.
 	dev, err := s.store.UpsertDevice(ctx, Device{
 		ID: authx.NewID(), UserID: u.ID, Name: name, Kind: "cli", CreatedAt: now,
+		LastIP: canonicalDeviceIP(requestIP),
 	})
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)

@@ -43,6 +43,23 @@ final class DeviceInboxUITests: XCTestCase {
         app.launch()
         let sparkleDecline = app.buttons["Don’t Check"]
         if sparkleDecline.waitForExistence(timeout: 2) { sparkleDecline.click() }
+
+        // A hosted runner can restore the last deliberate closed-window state.
+        // Relayium remains alive in that state by design, so process launch is
+        // not proof that its work window is visible. Recover through the same
+        // menu-bar action a person uses, matching AppShellUITests.
+        if !app.windows.allElementsBoundByIndex.contains(where: {
+            $0.frame.width >= 800 && $0.frame.height >= 500
+        }) {
+            let statusItem = app.statusItems.firstMatch
+            XCTAssertTrue(statusItem.waitForExistence(timeout: 5),
+                          "the resident app has no menu-bar recovery surface")
+            statusItem.click()
+            let open = app.menuItems["Open Relayium"]
+            XCTAssertTrue(open.waitForExistence(timeout: 5),
+                          "the menu-bar surface cannot reopen the product window")
+            open.click()
+        }
         XCTAssertTrue(mainWindow.waitForExistence(timeout: 20),
                       "the product window did not open")
     }

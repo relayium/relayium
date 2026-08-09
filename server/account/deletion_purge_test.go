@@ -111,7 +111,7 @@ func TestArchiveAndPurgeUserClearsEveryLinkedTable(t *testing.T) {
 	if err := st.CreateDeviceAuth(ctx, DeviceAuthRequest{UserCode: "WDJB-MJHT", DeviceCodeHash: authx.HashToken("dev"), Status: "pending", CreatedAt: 1, ExpiresAt: 1 << 40}); err != nil {
 		t.Fatalf("create device auth: %v", err)
 	}
-	if _, ok, err := st.ApproveDeviceAuth(ctx, "WDJB-MJHT", u.ID, authx.HashToken("approvedtok"), "rlm_cli_raw", 2); err != nil || !ok {
+	if _, _, ok, err := st.ApproveDeviceAuth(ctx, "WDJB-MJHT", u.ID, authx.HashToken("approvedtok"), "rlm_cli_raw", 2); err != nil || !ok {
 		t.Fatalf("approve device auth: ok=%v err=%v", ok, err)
 	}
 	if err := st.RecordUsage(ctx, UsageEvent{AllocID: authx.NewID(), Token: "t", UserID: u.ID, RelayedBytes: 10, RecordedAt: 1}); err != nil {

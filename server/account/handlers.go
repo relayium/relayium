@@ -256,6 +256,7 @@ type deviceView struct {
 	Name       string `json:"Name"`
 	CreatedAt  int64  `json:"CreatedAt"`
 	LastSeenAt int64  `json:"LastSeenAt"`
+	LastIP     string `json:"LastIP"`
 	Kind       string `json:"Kind"`
 	// Current marks the device whose bearer token authenticated THIS request,
 	// so a native client can label it and warn before revoking itself. False
@@ -295,7 +296,7 @@ func (s *Service) handleListDevices(w http.ResponseWriter, r *http.Request, u Us
 	for _, d := range ds {
 		v := deviceView{
 			ID: d.ID, UserID: d.UserID, Name: d.Name,
-			CreatedAt: d.CreatedAt, LastSeenAt: d.LastSeenAt, Kind: d.Kind,
+			CreatedAt: d.CreatedAt, LastSeenAt: d.LastSeenAt, LastIP: d.LastIP, Kind: d.Kind,
 			// currentID is "" for a cookie caller, and device ids are never
 			// empty, so this cannot accidentally mark a row.
 			Current: currentID != "" && d.ID == currentID,

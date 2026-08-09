@@ -371,6 +371,7 @@ export interface Messages {
     deviceEmpty: string;
     deviceEmptyHint: string; // 空列表下面的下一步：怎么让一台机器出现在这里
     deviceLastUsed: (when: string) => string;
+    deviceIP: (ip: string) => string; // server-observed hint; may be NAT/VPN
     // "自登录以来没用过"，不是光秃秃的"从未使用"。刚批准完的令牌本来就还没用过，
     // 而旧文案把那种正常状态说成了像是出了错。
     deviceNotUsedSinceSignIn: string;
@@ -692,8 +693,9 @@ export interface Messages {
     //
     // Everything here must describe commands that EXIST. No official container
     // image is published (an image is a supply-chain artifact needing its own
-    // signing and provenance), and `inbox run` is a plain foreground process
-    // that forks nothing — so neither may be implied.
+    // signing and provenance). Linux servers use the inspectable installer for
+    // a resident low-privilege systemd service; `inbox run` remains the explicit
+    // foreground diagnostic/container entrypoint.
     inboxH2: string;
     inboxTag: string; // "recommended" badge
     inboxIntro: string;
@@ -701,7 +703,7 @@ export interface Messages {
     inboxStep1Body: string;
     inboxStep2Label: string; // relayium login (+ --device-name)
     inboxStep2Body: string;
-    inboxStep3Label: string; // inbox enable --dir, then run / status
+    inboxStep3Label: string; // install the resident receiver, then status
     inboxStep3Body: string;
     inboxStep4Label: string; // send from My Devices in the browser
     inboxStep4Body: string;

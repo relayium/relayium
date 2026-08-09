@@ -1,6 +1,7 @@
 package account
 
 import (
+	"net"
 	"net/http"
 	"strings"
 
@@ -37,8 +38,22 @@ func (s *Service) UserFromAuth(r *http.Request) (User, bool) {
 	if gerr != nil || u.DeletedAt != 0 {
 		return User{}, false
 	}
-	_ = s.store.TouchCLIToken(r.Context(), hash, s.now().Unix())
+	_ = s.store.TouchCLIToken(r.Context(), hash, s.now().Unix(), canonicalDeviceIP(s.clientIP(r)))
 	return u, true
+}
+
+// canonicalDeviceIP bounds the account-facing hint to one actual address. It
+// rejects forwarded-header text, ports and hostnames; the trusted-proxy-aware
+// extractor has already decided which hop is the client.
+func canonicalDeviceIP(raw string) string {
+	ip := net.ParseIP(strings.TrimSpace(raw))
+	if ip == nil {
+		return ""
+	}
+	if v4 := ip.To4(); v4 != nil {
+		return v4.String()
+	}
+	return ip.String()
 }
 
 // bearerDeviceID returns the device row that ACTUALLY AUTHENTICATED this

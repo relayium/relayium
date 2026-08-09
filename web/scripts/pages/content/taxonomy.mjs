@@ -60,6 +60,7 @@ export const TAXONOMY = {
   "guides/back-up-a-server-over-ssh": ["cli", 60],
   "how-to/automate-server-backups": ["cli", 70],
   "guides/push-to-cloud-pull-on-another-computer": ["cli", 80],
+  "guides/device-inbox-server": ["cli", 15],
 
   // Self-hosting and operations — you are running the thing, not using it.
   "guides/self-host-relayium": ["selfhost", 10],
@@ -85,4 +86,3 @@ export const TAXONOMY = {
   "compare/scp": ["compare", 110],
   "compare/rsync": ["compare", 120],
 };
-

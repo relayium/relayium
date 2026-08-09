@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Configurer Device Inbox sur un serveur Linux toujours actif · Relayium</title>
+    <meta name="description" content="Installer Device Inbox comme service systemd peu privilégié et recevoir depuis le navigateur même après un redémarrage." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/fr/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/device-inbox-server/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Relayium" />
+    <meta property="og:title" content="Configurer Device Inbox sur un serveur Linux toujours actif" />
+    <meta property="og:description" content="Installer Device Inbox comme service systemd peu privilégié et recevoir depuis le navigateur même après un redémarrage." />
+    <meta property="og:url" content="https://relayium.com/fr/guides/device-inbox-server/" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Relayium — end-to-end encrypted file and text transfer" />
+    <meta property="og:locale" content="fr_FR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Configurer Device Inbox sur un serveur Linux toujours actif" />
+    <meta name="twitter:description" content="Installer Device Inbox comme service systemd peu privilégié et recevoir depuis le navigateur même après un redémarrage." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Configurer Device Inbox sur un serveur Linux toujours actif","description":"Installer Device Inbox comme service systemd peu privilégié et recevoir depuis le navigateur même après un redémarrage.","inLanguage":"fr","datePublished":"2026-08-09","dateModified":"2026-08-09","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/fr/guides/device-inbox-server/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/fr/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/fr/guides/"},{"@type":"ListItem","position":3,"name":"Configurer Device Inbox sur un serveur Linux toujours actif"}]},{"@type":"FAQPage","inLanguage":"fr","mainEntity":[{"@type":"Question","name":"Relayium voit-il les noms ou le contenu en clair ?","acceptedAnswer":{"@type":"Answer","text":"Non. Le navigateur chiffre manifeste et octets, puis scelle la clé pour l'appareil choisi. Le serveur central ne conserve que le chiffré et l'état de routage."}},{"@type":"Question","name":"Pourquoi ne pas utiliser /root/inbox ?","acceptedAnswer":{"@type":"Answer","text":"Le service recommandé fonctionne volontairement sans root et sans accès aux dossiers personnels. /srv/relayium-inbox lui donne une seule zone d'écriture bien délimitée."}},{"@type":"Question","name":"Puis-je faire l'installation manuellement ?","acceptedAnswer":{"@type":"Answer","text":"Oui. relayium inbox service systemd-user ou systemd-system imprime une unité adaptée et ses commandes. Des descriptions launchd et container existent aussi. Le script examiné est simplement le chemin Linux le plus court."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
+.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
+.crumbs [aria-current]{color:var(--text)}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=fr">Relayium</a></header>
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/fr/">Relayium</a> <span aria-hidden="true">›</span> <a href="/fr/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Configurer Device Inbox sur un serveur Linux toujours actif</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
+      <h1>Configurer Device Inbox sur un serveur Linux toujours actif</h1>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Dernière mise à jour: <bdi>2026-08-09</bdi></p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/device-inbox-server/">English</a><a href="/zh/guides/device-inbox-server/">中文</a><a href="/ja/guides/device-inbox-server/">日本語</a><a href="/ko/guides/device-inbox-server/">한국어</a><a href="/de/guides/device-inbox-server/">Deutsch</a><a href="/fr/guides/device-inbox-server/" aria-current="true">Français</a><a href="/ar/guides/device-inbox-server/">العربية</a><a href="/es/guides/device-inbox-server/">Español</a><a href="/pt/guides/device-inbox-server/">Português</a></nav>
+      <p class="lead">Device Inbox envoie un fichier depuis Mes appareils dans le navigateur vers votre serveur, NAS ou poste de travail. Le navigateur le chiffre et seule la machine cible le déchiffre et l&#39;enregistre.</p>
+      <p class="lead">Un récepteur de serveur doit survivre à la fermeture de SSH et au redémarrage. L&#39;installateur recommandé crée le dossier et un vrai service systemd. inbox run reste réservé au diagnostic au premier plan ou au conteneur.</p>
+      <h2>Installer le récepteur permanent</h2>
+      <p>Connectez d&#39;abord la machine, puis téléchargez et examinez le script avant de lui accorder les droits root. Il copie l&#39;identifiant sans l&#39;afficher, crée un compte relayium dédié, inscrit la clé, installe l&#39;unité renforcée, la démarre et l&#39;active au redémarrage.</p>
+      <pre><code>relayium update
+relayium login --device-name prod-backup-1
+
+# Download, inspect, then install the always-on service:
+curl -fsSLO https://relayium.com/inbox-server-install.sh
+less inbox-server-install.sh
+sudo sh inbox-server-install.sh --dir /srv/relayium-inbox</code></pre>
+      <ul><li>Le dossier conseillé est /srv/relayium-inbox. Le service renforcé ne peut pas accéder à /root ni au dossier personnel d&#39;un autre utilisateur.</li><li>Les fichiers reçus et la clé privée appartiennent au compte dédié peu privilégié, pas à root.</li><li>Un ancien état de premier plan est déplacé vers une archive horodatée et récupérable uniquement après le démarrage réussi du service.</li></ul>
+      <h2>Vérifier service, journaux et fichiers</h2>
+      <p>Ces commandes vérifient séparément le processus, ses journaux, l&#39;état local et distant de Relayium et le dossier. Un état systemd vert ne prouve pas à lui seul que compte, clé et dossier sont utilisables.</p>
+      <pre><code>sudo systemctl status relayium-inbox.service
+sudo journalctl -u relayium-inbox.service -f
+sudo -u relayium relayium inbox status --config-dir /var/lib/relayium-inbox/config
+ls -la /srv/relayium-inbox</code></pre>
+      <ul><li>Sans autre option --dir, les fichiers arrivent dans /srv/relayium-inbox.</li><li>Aucun fichier existant n&#39;est écrasé. Un conflit reçoit un numéro sûr et le contenu n&#39;est ni ouvert, ni exécuté, ni extrait automatiquement.</li><li>Mes appareils affiche le libellé modifiable et la dernière IP observée par le serveur, qui peut être celle d&#39;un NAT ou d&#39;un VPN.</li></ul>
+      <h2>Comportement hors ligne ou après incident</h2>
+      <p>La tâche chiffrée attend pendant que le serveur est hors ligne. Téléversé ne signifie jamais enregistré. Ce dernier état apparaît seulement après déchiffrement authentifié, vérification et écriture durable.</p>
+      <ul><li>systemd relance le worker après un incident et au redémarrage du serveur.</li><li>Un téléchargement partiel reste dans une zone privée et n&#39;apparaît jamais comme fichier terminé.</li><li>Le journal durable rend un incident après validation idempotent. Le redémarrage confirme le même enregistrement sans dupliquer le fichier.</li><li>Si le dossier disparaît, le worker ne le recrée pas sous un volume démonté et signale qu&#39;une intervention est nécessaire.</li></ul>
+      <h2>Suspendre, reprendre ou supprimer</h2>
+      <p>Exécutez les commandes avec le même compte de service et le même dossier de configuration. pause garde clés et file, resume continue et disable efface d&#39;abord l&#39;état central avant les clés privées.</p>
+      <pre><code>sudo -u relayium relayium inbox pause --config-dir /var/lib/relayium-inbox/config
+sudo -u relayium relayium inbox resume --config-dir /var/lib/relayium-inbox/config
+sudo -u relayium relayium inbox disable --config-dir /var/lib/relayium-inbox/config</code></pre>
+      <ul><li>N&#39;utilisez pas inbox run dans une fenêtre SSH comme installation permanente. Sa fermeture arrête le processus.</li><li>systemctl disable --now arrête seulement le processus. Utilisez inbox disable pour révoquer aussi la boîte et ses clés.</li></ul>
+      <h2>Questions fréquentes</h2>
+      <h3>Relayium voit-il les noms ou le contenu en clair ?</h3>
+      <p>Non. Le navigateur chiffre manifeste et octets, puis scelle la clé pour l&#39;appareil choisi. Le serveur central ne conserve que le chiffré et l&#39;état de routage.</p>
+      <h3>Pourquoi ne pas utiliser /root/inbox ?</h3>
+      <p>Le service recommandé fonctionne volontairement sans root et sans accès aux dossiers personnels. /srv/relayium-inbox lui donne une seule zone d&#39;écriture bien délimitée.</p>
+      <h3>Puis-je faire l&#39;installation manuellement ?</h3>
+      <p>Oui. relayium inbox service systemd-user ou systemd-system imprime une unité adaptée et ses commandes. Des descriptions launchd et container existent aussi. Le script examiné est simplement le chemin Linux le plus court.</p>
+      <div class="ctacard">
+        <p>Quand le service indique ready, envoyez un fichier depuis votre fiche d&#39;appareil.</p>
+        <a class="cta" href="/me">Ouvrir Mes appareils</a>
+      </div>
+      <h2>Continuer la lecture</h2>
+      <ul class="related"><li><a href="/fr/guides/transfer-files-from-terminal/">Transférer fichiers et texte depuis le terminal avec la CLI Relayium</a></li><li><a href="/fr/guides/run-relayium-as-an-always-on-service/">Faire tourner Relayium en service de réception permanent</a></li><li><a href="/fr/guides/how-relayium-encrypts-your-files/">Comment Relayium chiffre vos fichiers de bout en bout</a></li><li><a href="/fr/how-to/automate-server-backups/">Automatiser les sauvegardes serveur chiffrées avec une tâche cron</a></li><li><a href="/fr/">Relayium</a></li></ul>
+      </main>
+      <footer>
+        <a href="/?lang=fr">← Relayium</a>
+        <a href="/fr/apps/">Applis</a>
+        <a href="/fr/guides/">Guides</a>
+        <a href="/fr/privacy/">Confidentialité</a>
+        <a href="/pricing">Tarifs</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

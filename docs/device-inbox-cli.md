@@ -54,8 +54,9 @@ The opt-in. Automatic receive is **off** until you run this, and there is no way
 for a sender, a share link or a task to turn it on — it is a decision made at
 this machine.
 
-It checks the directory is real and writable (by creating and removing a probe
-file, not by reading permission bits), enrols the device with its protocol
+If the explicitly named directory does not exist, `enable` creates it at 0700;
+there is no separate `mkdir` prerequisite. It then checks the directory is real
+and writable (by creating and removing a probe file, not by reading permission bits), enrols the device with its protocol
 version and capabilities, generates an X25519 key pair, **writes the private key
 to disk before publishing the public half**, and records the configuration.
 
@@ -199,6 +200,21 @@ auto-accepted.
 
 ## Running it as a service
 
+For an ordinary Linux server, the product path is the inspectable installer:
+
+```sh
+curl -fsSLO https://relayium.com/inbox-server-install.sh
+less inbox-server-install.sh
+sudo sh inbox-server-install.sh --dir /srv/relayium-inbox
+```
+
+It creates a dedicated unprivileged `relayium` account, copies the already
+approved device credential without printing it, creates the receive directory,
+enrols the receive key under that account, installs the hardened systemd unit,
+starts it immediately and enables it after reboot. Its public, localized product
+guide is at `https://relayium.com/guides/device-inbox-server`; this file remains
+the source-level reference.
+
 `relayium inbox run` is a plain foreground process. It never forks, writes no pid
 file, logs to stdout/stderr, and exits 0 on `SIGTERM` — which is what systemd,
 launchd and a container entrypoint all want.
@@ -216,11 +232,10 @@ thing.
 | `launchd` | a per-user LaunchAgent (not a root LaunchDaemon) |
 | `container` | notes for using `inbox run` as an entrypoint |
 
-The system-wide install requires root — creating the account, writing to
-`/etc/systemd/system`, reloading systemd. **The CLI does not do any of it.** It
-prints the exact `sudo` commands for a human to run, including enrolling *as the
-service account* so the credential and the private key belong to the user that
-will run the worker.
+The manual system-wide install requires root — creating the account, writing to
+`/etc/systemd/system`, reloading systemd. `relayium inbox service` itself does
+not perform those actions; it prints the exact commands. The installer above is
+the reviewed orchestration of those same explicit steps.
 
 There is **no official Relayium container image**. An image is a supply-chain
 artifact needing its own signing, SBOM and provenance; publishing an unsigned one

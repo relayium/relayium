@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Set up Device Inbox on an always-on Linux server · Relayium</title>
+    <meta name="description" content="Receive browser-sent files on your own Linux server with Relayium Device Inbox: a low-privilege systemd service, reboot persistence, status, logs and crash behavior." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/device-inbox-server/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Relayium" />
+    <meta property="og:title" content="Set up Device Inbox on an always-on Linux server" />
+    <meta property="og:description" content="Receive browser-sent files on your own Linux server with Relayium Device Inbox: a low-privilege systemd service, reboot persistence, status, logs and crash behavior." />
+    <meta property="og:url" content="https://relayium.com/guides/device-inbox-server/" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Relayium — end-to-end encrypted file and text transfer" />
+    <meta property="og:locale" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Set up Device Inbox on an always-on Linux server" />
+    <meta name="twitter:description" content="Receive browser-sent files on your own Linux server with Relayium Device Inbox: a low-privilege systemd service, reboot persistence, status, logs and crash behavior." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"Set up Device Inbox on an always-on Linux server","description":"Receive browser-sent files on your own Linux server with Relayium Device Inbox: a low-privilege systemd service, reboot persistence, status, logs and crash behavior.","inLanguage":"en","datePublished":"2026-08-09","dateModified":"2026-08-09","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/guides/device-inbox-server/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/"},{"@type":"ListItem","position":2,"name":"Guides","item":"https://relayium.com/guides/"},{"@type":"ListItem","position":3,"name":"Set up Device Inbox on an always-on Linux server"}]},{"@type":"FAQPage","inLanguage":"en","mainEntity":[{"@type":"Question","name":"Does Relayium see file names or plaintext?","acceptedAnswer":{"@type":"Answer","text":"No. The browser encrypts the manifest and file bytes and seals the content key to the selected device. Central stores ciphertext and routing state only."}},{"@type":"Question","name":"Why not receive into /root/inbox?","acceptedAnswer":{"@type":"Answer","text":"The recommended service deliberately runs without root and with home-directory access blocked. /srv/relayium-inbox gives it one narrow writable area."}},{"@type":"Question","name":"Can I install it manually?","acceptedAnswer":{"@type":"Answer","text":"Yes. relayium inbox service systemd-user or systemd-system prints a machine-specific unit and commands; launchd and container descriptions also exist. The inspected installer is the shorter Linux server path."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
+.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
+.crumbs [aria-current]{color:var(--text)}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/">Relayium</a> <span aria-hidden="true">›</span> <a href="/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Set up Device Inbox on an always-on Linux server</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
+      <h1>Set up Device Inbox on an always-on Linux server</h1>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">Last updated: <bdi>2026-08-09</bdi></p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/device-inbox-server/" aria-current="true">English</a><a href="/zh/guides/device-inbox-server/">中文</a><a href="/ja/guides/device-inbox-server/">日本語</a><a href="/ko/guides/device-inbox-server/">한국어</a><a href="/de/guides/device-inbox-server/">Deutsch</a><a href="/fr/guides/device-inbox-server/">Français</a><a href="/ar/guides/device-inbox-server/">العربية</a><a href="/es/guides/device-inbox-server/">Español</a><a href="/pt/guides/device-inbox-server/">Português</a></nav>
+      <p class="lead">Device Inbox sends a file from My Devices in your browser to a server, NAS or workstation you own. The browser encrypts it; only that machine decrypts and saves it.</p>
+      <p class="lead">A server receiver must survive a closed SSH window and a reboot. The recommended installer below creates the folder and installs a real systemd service; inbox run is only the foreground diagnostic/container entrypoint.</p>
+      <h2>Install the resident receiver</h2>
+      <p>Run login once as the operator, then download and inspect the short installer before giving it root access. The script copies the device credential without printing it, creates a dedicated relayium account, enrols its receive key, installs the hardened unit, starts it now and enables it after reboot.</p>
+      <pre><code>relayium update
+relayium login --device-name prod-backup-1
+
+# Download, inspect, then install the always-on service:
+curl -fsSLO https://relayium.com/inbox-server-install.sh
+less inbox-server-install.sh
+sudo sh inbox-server-install.sh --dir /srv/relayium-inbox</code></pre>
+      <ul><li>The recommended receive directory is /srv/relayium-inbox. The hardened service cannot access /root or another user&#39;s home directory.</li><li>The installer uses a dedicated low-privilege account; received files and the private receive key are not owned by root.</li><li>If you previously enabled a foreground inbox, its old local state is moved to a timestamped, recoverable archive only after the service starts successfully.</li></ul>
+      <h2>Check the service, logs and files</h2>
+      <p>These four commands distinguish a running process, its recent logs, Relayium&#39;s local/server truth and the directory itself. A green systemd state alone is not proof that the account, key and folder are usable.</p>
+      <pre><code>sudo systemctl status relayium-inbox.service
+sudo journalctl -u relayium-inbox.service -f
+sudo -u relayium relayium inbox status --config-dir /var/lib/relayium-inbox/config
+ls -la /srv/relayium-inbox</code></pre>
+      <ul><li>Files land in /srv/relayium-inbox unless you passed a different --dir to the installer.</li><li>Existing files are never overwritten. Name collisions get a safe numbered name; received content is never opened, executed or extracted.</li><li>The My Devices row shows the editable label and the last server-observed IP, which may be a NAT or VPN address.</li></ul>
+      <h2>What happens when the server is offline or crashes</h2>
+      <p>The encrypted task waits at Relayium while the server is offline. Uploaded is not shown as saved: saved appears only after authenticated decryption, verification and durable local commit.</p>
+      <ul><li>systemd restarts the worker after a process failure and starts it after reboot.</li><li>A partial download remains private staging data and is never exposed as a completed file.</li><li>A durable journal makes a crash after commit idempotent: restart reports the same save without duplicating the file.</li><li>If the chosen directory disappears later, the worker does not recreate it; this avoids writing beneath a missing mount and reports attention required instead.</li></ul>
+      <h2>Pause, resume or remove receiving</h2>
+      <p>Run administrative inbox commands as the same service account and config directory. pause keeps keys and queued work; resume continues; disable clears central first and deletes private keys only after that succeeds.</p>
+      <pre><code>sudo -u relayium relayium inbox pause --config-dir /var/lib/relayium-inbox/config
+sudo -u relayium relayium inbox resume --config-dir /var/lib/relayium-inbox/config
+sudo -u relayium relayium inbox disable --config-dir /var/lib/relayium-inbox/config</code></pre>
+      <ul><li>Do not use inbox run in an SSH window as the permanent server setup; closing the window stops it.</li><li>Use systemctl disable --now relayium-inbox.service only to stop the process. Use inbox disable when you also intend to revoke the inbox and its keys.</li></ul>
+      <h2>Frequently asked questions</h2>
+      <h3>Does Relayium see file names or plaintext?</h3>
+      <p>No. The browser encrypts the manifest and file bytes and seals the content key to the selected device. Central stores ciphertext and routing state only.</p>
+      <h3>Why not receive into /root/inbox?</h3>
+      <p>The recommended service deliberately runs without root and with home-directory access blocked. /srv/relayium-inbox gives it one narrow writable area.</p>
+      <h3>Can I install it manually?</h3>
+      <p>Yes. relayium inbox service systemd-user or systemd-system prints a machine-specific unit and commands; launchd and container descriptions also exist. The inspected installer is the shorter Linux server path.</p>
+      <div class="ctacard">
+        <p>Once the service reports ready, send a file from your own device card.</p>
+        <a class="cta" href="/me">Open My Devices</a>
+      </div>
+      <h2>Continue reading</h2>
+      <ul class="related"><li><a href="/guides/transfer-files-from-terminal/">Transfer files and text from the terminal with the Relayium CLI</a></li><li><a href="/guides/run-relayium-as-an-always-on-service/">Run Relayium as an always-on receive service</a></li><li><a href="/guides/how-relayium-encrypts-your-files/">How Relayium encrypts your files end-to-end</a></li><li><a href="/how-to/automate-server-backups/">Automate encrypted server backups with a cron job</a></li><li><a href="/">Relayium</a></li></ul>
+      </main>
+      <footer>
+        <a href="/">← Relayium</a>
+        <a href="/apps">Apps</a>
+        <a href="/guides/">Guides</a>
+        <a href="/privacy/">Privacy</a>
+        <a href="/pricing">Pricing</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

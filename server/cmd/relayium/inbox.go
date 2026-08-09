@@ -150,7 +150,7 @@ func runInboxEnable(args []string, stdout, stderr io.Writer) int {
 	// receive directory that does not exist, is not a directory, or cannot be
 	// written must not become an enrolment that tells senders their files will
 	// land.
-	resolved, err := resolveReceiveDir(dir)
+	resolved, created, err := resolveReceiveDir(dir)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1
@@ -204,13 +204,19 @@ func runInboxEnable(args []string, stdout, stderr io.Writer) int {
 
 	fmt.Fprintf(stdout, "Device Inbox enabled on %q (%s)\n", sess.device.Name, sess.device.ID)
 	fmt.Fprintf(stdout, "  receiving into: %s\n", resolved)
+	if created {
+		fmt.Fprintln(stdout, "  directory:      created by Relayium (mode 0700)")
+	}
 	fmt.Fprintf(stdout, "  account:        %s (%s)\n", sess.creds.AccountEmail, sess.creds.Server)
 	fmt.Fprintf(stdout, "  protocol:       v%d, %s\n", res.ProtocolVersion, res.ReceiveCapability)
 	fmt.Fprintf(stdout, "  public key:     generation %d (%s)\n", key.Generation, key.Algorithm)
 	fmt.Fprintln(stderr)
-	fmt.Fprintln(stderr, "Nothing is received until a worker is running. Start one with:")
+	fmt.Fprintln(stderr, "Nothing is received until a worker is running.")
+	fmt.Fprintln(stderr, "For a Linux server, install the always-on service (recommended):")
+	fmt.Fprintln(stderr, "  https://relayium.com/inbox-server-install.sh")
+	fmt.Fprintln(stderr, "For diagnostics or a container foreground process only:")
 	fmt.Fprintln(stderr, "  relayium inbox run")
-	fmt.Fprintln(stderr, "and to keep it running across reboots:")
+	fmt.Fprintln(stderr, "Manual service definitions:")
 	fmt.Fprintln(stderr, "  relayium inbox service systemd-user   # or systemd-system, launchd, container")
 	return 0
 }
@@ -222,23 +228,35 @@ func runInboxEnable(args []string, stdout, stderr io.Writer) int {
 // ancestor link from silently redirecting every future delivery: the worker
 // commits into the path it was given, and re-checks on every heartbeat that the
 // path is still a real directory it can write.
-func resolveReceiveDir(dir string) (string, error) {
+func resolveReceiveDir(dir string) (string, bool, error) {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
+	created := false
 	fi, err := os.Stat(abs)
+	if errors.Is(err, os.ErrNotExist) {
+		// --dir is the local operator's explicit write opt-in. Creating the named
+		// directory here removes a needless first-run trap; the worker itself
+		// still NEVER recreates a directory that later disappears, because that
+		// could write onto an unmounted volume's underlying filesystem.
+		if err := os.MkdirAll(abs, 0o700); err != nil {
+			return "", false, fmt.Errorf("create receive directory %s: %w", abs, err)
+		}
+		created = true
+		fi, err = os.Stat(abs)
+	}
 	if err != nil {
-		return "", fmt.Errorf("receive directory %s: %w (create it first)", abs, err)
+		return "", false, fmt.Errorf("receive directory %s: %w", abs, err)
 	}
 	if !fi.IsDir() {
-		return "", fmt.Errorf("receive directory %s is not a directory", abs)
+		return "", false, fmt.Errorf("receive directory %s is not a directory", abs)
 	}
 	resolved, err := filepath.EvalSymlinks(abs)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
-	return resolved, nil
+	return resolved, created, nil
 }
 
 // warnIfRoot says what running as root will actually do. It does not refuse:

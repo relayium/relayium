@@ -148,7 +148,7 @@ would reasonably ask:
 
 - **Byte counts are the metered quantity, not access logs.** There's no table
   of "user X downloaded file Y at time Z from IP W" for ordinary transfers.
-  `download_receipts` (`sqlite.go:429`) exists, but it's a 24-hour dedup table
+  `download_receipts` (`sqlite.go:436`) exists, but it's a 24-hour dedup table
   keyed by an opaque per-download nonce — its purpose is to stop a replayed
   receipt from double-crediting a node's bandwidth accounting, not to log who
   downloaded what.

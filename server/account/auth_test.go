@@ -9,6 +9,21 @@ import (
 	"github.com/relayium/relayium/authx"
 )
 
+func TestCanonicalDeviceIPRejectsAnythingButOneAddress(t *testing.T) {
+	for in, want := range map[string]string{
+		"203.0.113.9":           "203.0.113.9",
+		"2001:0db8::1":          "2001:db8::1",
+		"203.0.113.9:443":       "",
+		"203.0.113.9, 10.0.0.1": "",
+		"server.example":        "",
+		"":                      "",
+	} {
+		if got := canonicalDeviceIP(in); got != want {
+			t.Errorf("canonicalDeviceIP(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 // TestRequireAuthBearer proves RequireAuth accepts a valid CLI bearer token
 // (Task 5's cli_tokens, looked up via hashToken/GetCLITokenUser) and rejects
 // an unknown/bad one with 401 — the cookie path is covered separately by the

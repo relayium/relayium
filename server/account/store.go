@@ -139,6 +139,11 @@ type Device struct {
 	Name       string
 	CreatedAt  int64
 	LastSeenAt int64
+	// LastIP is the last server-observed network address of this credential.
+	// It contains an IP only (never a port or forwarded-header text) and is
+	// visible only to the owning account as an identification hint. It may be a
+	// NAT or VPN address, so the UI must not present it as a precise location.
+	LastIP string
 	// Kind distinguishes the device's platform: "" / "browser" (default) or
 	// "cli" for a device registered via the device-code CLI login flow.
 	Kind string
@@ -1366,7 +1371,7 @@ type Store interface {
 	// denied, expired, or unknown code) — nothing is written. deviceName is
 	// the label that exact row carried, read in the same transaction as the
 	// transition; '' means a pre-label CLI started the flow.
-	ApproveDeviceAuth(ctx context.Context, userCode, userID, tokenHash, rawToken string, at int64) (deviceName string, ok bool, err error)
+	ApproveDeviceAuth(ctx context.Context, userCode, userID, tokenHash, rawToken string, at int64) (deviceName, clientIP string, ok bool, err error)
 	// ConsumeDeviceAuth atomically transitions an approved request to
 	// consumed exactly once, returning the raw one-time token stashed by
 	// ApproveDeviceAuth and blanking pending_token so it never lingers at
@@ -1377,7 +1382,7 @@ type Store interface {
 	// cli_tokens (long-lived hashed CLI bearer tokens; prefix "rlm_cli_")
 	CreateCLIToken(ctx context.Context, t CLIToken) error
 	GetCLITokenUser(ctx context.Context, tokenHash string) (userID, deviceID string, ok bool, err error)
-	TouchCLIToken(ctx context.Context, tokenHash string, at int64) error
+	TouchCLIToken(ctx context.Context, tokenHash string, at int64, clientIP string) error
 	DeleteCLIToken(ctx context.Context, tokenHash string) error
 	// plans (billing phase-1)
 	ListPlans(ctx context.Context) ([]Plan, error)

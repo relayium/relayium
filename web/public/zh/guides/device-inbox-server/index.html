@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>在常开的 Linux 服务器上设置设备收件箱 · Relayium</title>
+    <meta name="description" content="用 Relayium 设备收件箱把浏览器文件送到自己的 Linux 服务器：低权限 systemd 常驻、开机自启、状态、日志与崩溃恢复。" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/zh/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/device-inbox-server/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Relayium" />
+    <meta property="og:title" content="在常开的 Linux 服务器上设置设备收件箱" />
+    <meta property="og:description" content="用 Relayium 设备收件箱把浏览器文件送到自己的 Linux 服务器：低权限 systemd 常驻、开机自启、状态、日志与崩溃恢复。" />
+    <meta property="og:url" content="https://relayium.com/zh/guides/device-inbox-server/" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Relayium — end-to-end encrypted file and text transfer" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="在常开的 Linux 服务器上设置设备收件箱" />
+    <meta name="twitter:description" content="用 Relayium 设备收件箱把浏览器文件送到自己的 Linux 服务器：低权限 systemd 常驻、开机自启、状态、日志与崩溃恢复。" />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"在常开的 Linux 服务器上设置设备收件箱","description":"用 Relayium 设备收件箱把浏览器文件送到自己的 Linux 服务器：低权限 systemd 常驻、开机自启、状态、日志与崩溃恢复。","inLanguage":"zh-Hans","datePublished":"2026-08-09","dateModified":"2026-08-09","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/zh/guides/device-inbox-server/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/zh/"},{"@type":"ListItem","position":2,"name":"使用指南","item":"https://relayium.com/zh/guides/"},{"@type":"ListItem","position":3,"name":"在常开的 Linux 服务器上设置设备收件箱"}]},{"@type":"FAQPage","inLanguage":"zh-Hans","mainEntity":[{"@type":"Question","name":"Relayium 能看到文件名或明文吗？","acceptedAnswer":{"@type":"Answer","text":"不能。浏览器会加密清单和文件字节，并把内容密钥封装给目标设备；中心只保存密文和路由状态。"}},{"@type":"Question","name":"为什么不放在 /root/inbox？","acceptedAnswer":{"@type":"Answer","text":"推荐服务刻意不用 root，并禁止访问用户 home。/srv/relayium-inbox 只给它一个边界清晰的可写区域。"}},{"@type":"Question","name":"可以手工安装吗？","acceptedAnswer":{"@type":"Answer","text":"可以。relayium inbox service systemd-user 或 systemd-system 会打印本机专用 unit 和命令，也有 launchd/container 说明；上面的可审阅脚本只是 Linux 服务器更短的路径。"}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
+.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
+.crumbs [aria-current]{color:var(--text)}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=zh">Relayium</a></header>
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/zh/">Relayium</a> <span aria-hidden="true">›</span> <a href="/zh/guides/">使用指南</a> <span aria-hidden="true">›</span> <span aria-current="page">在常开的 Linux 服务器上设置设备收件箱</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
+      <h1>在常开的 Linux 服务器上设置设备收件箱</h1>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">最后更新: <bdi>2026-08-09</bdi></p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/device-inbox-server/">English</a><a href="/zh/guides/device-inbox-server/" aria-current="true">中文</a><a href="/ja/guides/device-inbox-server/">日本語</a><a href="/ko/guides/device-inbox-server/">한국어</a><a href="/de/guides/device-inbox-server/">Deutsch</a><a href="/fr/guides/device-inbox-server/">Français</a><a href="/ar/guides/device-inbox-server/">العربية</a><a href="/es/guides/device-inbox-server/">Español</a><a href="/pt/guides/device-inbox-server/">Português</a></nav>
+      <p class="lead">设备收件箱会把你在浏览器「我的设备」里发送的文件送到自己的服务器、NAS 或工作机。浏览器负责加密，只有目标机器能够解密并写入磁盘。</p>
+      <p class="lead">服务器接收端必须在 SSH 窗口关闭和重启后继续工作。下面的推荐安装脚本会创建目录并安装真正的 systemd 服务；inbox run 只用于前台排错或容器入口。</p>
+      <h2>安装常驻接收服务</h2>
+      <p>先以管理员身份登录一次，再下载并检查短脚本，确认后才给它 root 权限。脚本不会打印凭据；它会创建独立 relayium 低权限账号、登记接收密钥、安装加固后的 unit、立即启动并设置开机自启。</p>
+      <pre><code>relayium update
+relayium login --device-name prod-backup-1
+
+# Download, inspect, then install the always-on service:
+curl -fsSLO https://relayium.com/inbox-server-install.sh
+less inbox-server-install.sh
+sudo sh inbox-server-install.sh --dir /srv/relayium-inbox</code></pre>
+      <ul><li>推荐接收目录是 /srv/relayium-inbox。加固服务不能访问 /root 或其他用户的 home。</li><li>接收文件和私钥由独立低权限账号持有，不归 root 进程。</li><li>如果以前开过前台收件箱，只有在新服务成功启动后，旧状态才会移到带时间戳、可恢复的归档目录。</li></ul>
+      <h2>检查服务、日志和文件</h2>
+      <p>下面四条命令分别核对进程、近期日志、Relayium 本地/服务端真实状态和落盘目录。systemd 显示绿色并不等于账号、密钥和目录一定可用。</p>
+      <pre><code>sudo systemctl status relayium-inbox.service
+sudo journalctl -u relayium-inbox.service -f
+sudo -u relayium relayium inbox status --config-dir /var/lib/relayium-inbox/config
+ls -la /srv/relayium-inbox</code></pre>
+      <ul><li>未另传 --dir 时，文件落在 /srv/relayium-inbox。</li><li>绝不覆盖已有文件；重名会安全编号。收到的内容不会自动打开、执行或解压。</li><li>「我的设备」会同时显示可编辑备注名和服务端最近观察到的 IP；它可能是 NAT 或 VPN 地址。</li></ul>
+      <h2>服务器离线或崩溃时会怎样</h2>
+      <p>服务器离线时，加密任务会在 Relayium 等待。「密文已上传」不等于「已保存」；只有完成认证解密、校验和持久落盘后才显示已保存。</p>
+      <ul><li>进程异常后 systemd 会重启，服务器重启后也会自动启动。</li><li>未完成下载只存在于私有暂存区，不会暴露成完整文件。</li><li>持久日志让提交后的崩溃保持幂等：重启后只补报同一次保存，不会复制文件。</li><li>如果目录之后消失，worker 不会擅自重建，以免写到掉线挂载点下面；它会改为报告需要处理。</li></ul>
+      <h2>暂停、恢复或移除接收</h2>
+      <p>管理命令必须使用同一个服务账号和配置目录。pause 保留密钥和队列；resume 继续；disable 先清除服务端，再在成功后删除私钥。</p>
+      <pre><code>sudo -u relayium relayium inbox pause --config-dir /var/lib/relayium-inbox/config
+sudo -u relayium relayium inbox resume --config-dir /var/lib/relayium-inbox/config
+sudo -u relayium relayium inbox disable --config-dir /var/lib/relayium-inbox/config</code></pre>
+      <ul><li>不要把 SSH 窗口里的 inbox run 当作永久方案；窗口关闭它就停止。</li><li>systemctl disable --now 只停止进程；如果还要撤销收件箱和密钥，请用 inbox disable。</li></ul>
+      <h2>常见问题</h2>
+      <h3>Relayium 能看到文件名或明文吗？</h3>
+      <p>不能。浏览器会加密清单和文件字节，并把内容密钥封装给目标设备；中心只保存密文和路由状态。</p>
+      <h3>为什么不放在 /root/inbox？</h3>
+      <p>推荐服务刻意不用 root，并禁止访问用户 home。/srv/relayium-inbox 只给它一个边界清晰的可写区域。</p>
+      <h3>可以手工安装吗？</h3>
+      <p>可以。relayium inbox service systemd-user 或 systemd-system 会打印本机专用 unit 和命令，也有 launchd/container 说明；上面的可审阅脚本只是 Linux 服务器更短的路径。</p>
+      <div class="ctacard">
+        <p>服务显示 ready 后，就可以从自己的设备卡片发送文件。</p>
+        <a class="cta" href="/me">打开「我的设备」</a>
+      </div>
+      <h2>继续阅读</h2>
+      <ul class="related"><li><a href="/zh/guides/transfer-files-from-terminal/">用 Relayium CLI 从终端传输文件与文本</a></li><li><a href="/zh/guides/run-relayium-as-an-always-on-service/">把 Relayium 变成常驻接收服务</a></li><li><a href="/zh/guides/how-relayium-encrypts-your-files/">Relayium 如何对文件端到端加密</a></li><li><a href="/zh/how-to/automate-server-backups/">用 cron 任务自动化加密的服务器备份</a></li><li><a href="/zh/">Relayium</a></li></ul>
+      </main>
+      <footer>
+        <a href="/?lang=zh">← Relayium</a>
+        <a href="/zh/apps/">应用</a>
+        <a href="/zh/guides/">使用指南</a>
+        <a href="/zh/privacy/">隐私政策</a>
+        <a href="/pricing">定价</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

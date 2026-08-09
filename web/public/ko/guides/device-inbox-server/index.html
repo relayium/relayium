@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>항상 켜진 Linux 서버에 Device Inbox 설정 · Relayium</title>
+    <meta name="description" content="낮은 권한의 systemd 서비스로 Device Inbox를 설치해 재부팅 뒤에도 브라우저에서 내 서버로 파일을 받습니다." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://relayium.com/ko/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/device-inbox-server/" />
+    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/device-inbox-server/" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Relayium" />
+    <meta property="og:title" content="항상 켜진 Linux 서버에 Device Inbox 설정" />
+    <meta property="og:description" content="낮은 권한의 systemd 서비스로 Device Inbox를 설치해 재부팅 뒤에도 브라우저에서 내 서버로 파일을 받습니다." />
+    <meta property="og:url" content="https://relayium.com/ko/guides/device-inbox-server/" />
+    <meta property="og:image" content="https://relayium.com/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Relayium — end-to-end encrypted file and text transfer" />
+    <meta property="og:locale" content="ko_KR" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="항상 켜진 Linux 서버에 Device Inbox 설정" />
+    <meta name="twitter:description" content="낮은 권한의 systemd 서비스로 Device Inbox를 설치해 재부팅 뒤에도 브라우저에서 내 서버로 파일을 받습니다." />
+    <meta name="twitter:image" content="https://relayium.com/og-image.jpg" />
+    <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article","headline":"항상 켜진 Linux 서버에 Device Inbox 설정","description":"낮은 권한의 systemd 서비스로 Device Inbox를 설치해 재부팅 뒤에도 브라우저에서 내 서버로 파일을 받습니다.","inLanguage":"ko","datePublished":"2026-08-09","dateModified":"2026-08-09","image":"https://relayium.com/og-image.jpg","mainEntityOfPage":"https://relayium.com/ko/guides/device-inbox-server/","author":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}},"publisher":{"@type":"Organization","name":"Relayium","url":"https://relayium.com/","logo":{"@type":"ImageObject","url":"https://relayium.com/icon-512.png","width":512,"height":512}}},{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Relayium","item":"https://relayium.com/ko/"},{"@type":"ListItem","position":2,"name":"가이드","item":"https://relayium.com/ko/guides/"},{"@type":"ListItem","position":3,"name":"항상 켜진 Linux 서버에 Device Inbox 설정"}]},{"@type":"FAQPage","inLanguage":"ko","mainEntity":[{"@type":"Question","name":"Relayium이 파일 이름이나 평문을 볼 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"아니요. 브라우저가 매니페스트와 파일을 암호화하고 콘텐츠 키를 대상 기기에만 봉인합니다. 중앙에는 암호문과 라우팅 상태만 저장됩니다."}},{"@type":"Question","name":"왜 /root/inbox를 사용하지 않나요?","acceptedAnswer":{"@type":"Answer","text":"권장 서비스는 의도적으로 root가 아니며 홈 디렉터리 접근도 차단합니다. /srv/relayium-inbox만 제한된 쓰기 영역으로 사용합니다."}},{"@type":"Question","name":"수동으로 설치할 수 있나요?","acceptedAnswer":{"@type":"Answer","text":"예. relayium inbox service systemd-user 또는 systemd-system이 기기별 unit과 명령을 출력하며 launchd와 container 설명도 제공합니다."}}]}]}</script>
+    <style>
+:root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--text:#9ca3af;--text-h:#f3f4f6;--bg:#16171d;--border:#2e303a;--card:rgba(47,48,58,.5);--accent:#c084fc;--accent-fg:#c084fc;--accent-action:#7c3aed;--accent-action-deep:#4f46e5}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:17px/1.6 system-ui,'Segoe UI',Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:760px;margin:0 auto;padding:0 20px 64px}
+header{display:flex;align-items:center;gap:10px;padding:22px 0;border-bottom:1px solid var(--border)}
+header .logo{width:30px;height:30px;line-height:30px;text-align:center;border-radius:8px;color:#fff;background:linear-gradient(135deg,var(--accent),#6d28d9)}
+header a{color:var(--text-h);text-decoration:none;font-weight:600}
+h1{color:var(--text-h);font-size:34px;letter-spacing:-.5px;margin:36px 0 6px}
+h2{color:var(--text-h);font-size:23px;margin:38px 0 10px}
+h3{color:var(--text-h);font-size:18px;margin:22px 0 4px}
+.updated{color:var(--text);font-size:14px;margin:0 0 8px}
+.lead{font-size:19px}
+p{margin:12px 0}ul{margin:12px 0;padding-inline-start:22px}li{margin:6px 0}
+pre{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;margin:16px 0}
+pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;color:var(--text-h);white-space:pre;line-height:1.6}
+.langbar{display:flex;flex-wrap:wrap;gap:6px 12px;margin:16px 0 8px;font-size:13.5px}
+.langbar a{color:var(--accent-fg);text-decoration:none}.langbar a[aria-current]{color:var(--text);font-weight:600}
+.ctacard{margin:40px 0 8px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--card)}
+.ctacard p{margin:0 0 14px}
+.cta{display:inline-block;padding:14px 28px;border-radius:10px;color:#fff;font-weight:600;font-size:17px;text-decoration:none;background:linear-gradient(135deg,var(--accent-action),var(--accent-action-deep))}
+.related{list-style:none;padding:0}.related a{color:var(--accent-fg);text-decoration:none}
+.crumbs{margin:18px 0 0;font-size:13.5px;color:var(--text)}
+.crumbs a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
+.crumbs [aria-current]{color:var(--text)}
+footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
+footer a{color:var(--text-h);text-decoration:none}
+</style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ko">Relayium</a></header>
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">항상 켜진 Linux 서버에 Device Inbox 설정</span></nav>
+      <!-- The breadcrumb sits outside the main landmark; the language bar sits
+           inside it, after the h1, because that is where it renders visually.
+           Both are labelled <nav> landmarks in their own right, so either side of
+           the boundary satisfies the "content lives in a landmark" rule. -->
+      <main>
+      <h1>항상 켜진 Linux 서버에 Device Inbox 설정</h1>
+      <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
+           bidi algorithm lays those runs out right-to-left inside the Arabic
+           page, so "2026-07-31" rendered as "31-07-2026" — the same day in a
+           different convention, arrived at by accident rather than by choice,
+           and disagreeing with the dateModified in this page's own JSON-LD.
+           See rtl-head-isolation.test.mjs, which pins every date on every
+           generated Arabic page. -->
+      <p class="updated">마지막 업데이트: <bdi>2026-08-09</bdi></p>
+      <nav class="langbar" aria-label="Language"><a href="/guides/device-inbox-server/">English</a><a href="/zh/guides/device-inbox-server/">中文</a><a href="/ja/guides/device-inbox-server/">日本語</a><a href="/ko/guides/device-inbox-server/" aria-current="true">한국어</a><a href="/de/guides/device-inbox-server/">Deutsch</a><a href="/fr/guides/device-inbox-server/">Français</a><a href="/ar/guides/device-inbox-server/">العربية</a><a href="/es/guides/device-inbox-server/">Español</a><a href="/pt/guides/device-inbox-server/">Português</a></nav>
+      <p class="lead">Device Inbox는 브라우저의 내 기기에서 내가 소유한 서버, NAS 또는 워크스테이션으로 파일을 보냅니다. 브라우저가 암호화하며 대상 기기만 복호화하고 저장합니다.</p>
+      <p class="lead">서버 수신기는 SSH 창을 닫거나 재부팅해도 계속 동작해야 합니다. 권장 설치 프로그램은 폴더와 실제 systemd 서비스를 만듭니다. inbox run은 전경 진단 또는 컨테이너 진입점입니다.</p>
+      <h2>상주 수신 서비스 설치</h2>
+      <p>운영자 계정으로 한 번 로그인한 뒤 짧은 스크립트를 내려받아 검토하고 root 권한으로 실행하세요. 자격 증명을 출력하지 않고 전용 relayium 계정으로 복사하며 수신 키를 등록하고 강화된 unit을 즉시 시작해 재부팅 후에도 활성화합니다.</p>
+      <pre><code>relayium update
+relayium login --device-name prod-backup-1
+
+# Download, inspect, then install the always-on service:
+curl -fsSLO https://relayium.com/inbox-server-install.sh
+less inbox-server-install.sh
+sudo sh inbox-server-install.sh --dir /srv/relayium-inbox</code></pre>
+      <ul><li>권장 수신 경로는 /srv/relayium-inbox입니다. 강화된 서비스는 /root나 다른 사용자의 홈에 접근할 수 없습니다.</li><li>수신 파일과 개인 키는 root가 아니라 전용 저권한 계정이 소유합니다.</li><li>기존 전경 수신 상태는 새 서비스가 성공적으로 시작된 뒤에만 시간 표시가 있는 복구 가능한 보관 경로로 이동합니다.</li></ul>
+      <h2>서비스·로그·파일 확인</h2>
+      <p>아래 명령은 프로세스, 최근 로그, Relayium의 로컬/서버 상태, 실제 디렉터리를 각각 확인합니다. systemd가 정상이라고 해서 계정, 키, 폴더가 모두 사용 가능하다는 뜻은 아닙니다.</p>
+      <pre><code>sudo systemctl status relayium-inbox.service
+sudo journalctl -u relayium-inbox.service -f
+sudo -u relayium relayium inbox status --config-dir /var/lib/relayium-inbox/config
+ls -la /srv/relayium-inbox</code></pre>
+      <ul><li>다른 --dir을 지정하지 않으면 파일은 /srv/relayium-inbox에 저장됩니다.</li><li>기존 파일을 덮어쓰지 않습니다. 이름이 겹치면 안전한 번호를 붙이며 받은 내용을 자동으로 열거나 실행하거나 압축 해제하지 않습니다.</li><li>내 기기에는 수정 가능한 이름과 서버가 마지막으로 확인한 IP가 표시됩니다. NAT 또는 VPN 주소일 수 있습니다.</li></ul>
+      <h2>오프라인 또는 충돌 시 동작</h2>
+      <p>서버가 오프라인이면 암호화된 작업은 Relayium에서 기다립니다. 업로드와 저장 완료는 다르며 인증 복호화, 검증, 영구 저장 뒤에만 저장됨으로 표시됩니다.</p>
+      <ul><li>프로세스 오류 뒤 systemd가 worker를 다시 시작하고 서버 재부팅 후에도 시작합니다.</li><li>부분 다운로드는 비공개 준비 영역에만 남고 완료 파일로 노출되지 않습니다.</li><li>영구 저널 덕분에 커밋 직후 충돌해도 재시작 시 같은 저장을 보고하며 파일을 중복 만들지 않습니다.</li><li>수신 폴더가 나중에 사라지면 마운트 해제된 경로 아래에 쓰지 않도록 worker가 다시 만들지 않고 조치 필요 상태를 보고합니다.</li></ul>
+      <h2>일시 중지·재개·제거</h2>
+      <p>관리 명령은 같은 서비스 계정과 설정 디렉터리로 실행합니다. pause는 키와 대기 작업을 유지하고 resume은 계속하며 disable은 중앙 상태를 먼저 지운 뒤 개인 키를 삭제합니다.</p>
+      <pre><code>sudo -u relayium relayium inbox pause --config-dir /var/lib/relayium-inbox/config
+sudo -u relayium relayium inbox resume --config-dir /var/lib/relayium-inbox/config
+sudo -u relayium relayium inbox disable --config-dir /var/lib/relayium-inbox/config</code></pre>
+      <ul><li>SSH 창의 inbox run을 영구 설정으로 사용하지 마세요. 창을 닫으면 중지됩니다.</li><li>systemctl disable --now는 프로세스만 중지합니다. 수신함과 키도 해지하려면 inbox disable을 사용하세요.</li></ul>
+      <h2>자주 묻는 질문</h2>
+      <h3>Relayium이 파일 이름이나 평문을 볼 수 있나요?</h3>
+      <p>아니요. 브라우저가 매니페스트와 파일을 암호화하고 콘텐츠 키를 대상 기기에만 봉인합니다. 중앙에는 암호문과 라우팅 상태만 저장됩니다.</p>
+      <h3>왜 /root/inbox를 사용하지 않나요?</h3>
+      <p>권장 서비스는 의도적으로 root가 아니며 홈 디렉터리 접근도 차단합니다. /srv/relayium-inbox만 제한된 쓰기 영역으로 사용합니다.</p>
+      <h3>수동으로 설치할 수 있나요?</h3>
+      <p>예. relayium inbox service systemd-user 또는 systemd-system이 기기별 unit과 명령을 출력하며 launchd와 container 설명도 제공합니다.</p>
+      <div class="ctacard">
+        <p>서비스가 ready이면 내 기기 카드에서 파일을 보내세요.</p>
+        <a class="cta" href="/me">내 기기 열기</a>
+      </div>
+      <h2>계속 읽기</h2>
+      <ul class="related"><li><a href="/ko/guides/transfer-files-from-terminal/">Relayium CLI로 터미널에서 파일과 텍스트 전송하기</a></li><li><a href="/ko/guides/run-relayium-as-an-always-on-service/">Relayium을 상시 실행되는 수신 서비스로 운영하기</a></li><li><a href="/ko/guides/how-relayium-encrypts-your-files/">Relayium이 파일을 종단간 암호화하는 방식</a></li><li><a href="/ko/how-to/automate-server-backups/">cron 작업으로 암호화된 서버 백업 자동화하기</a></li><li><a href="/ko/">Relayium</a></li></ul>
+      </main>
+      <footer>
+        <a href="/?lang=ko">← Relayium</a>
+        <a href="/ko/apps/">앱</a>
+        <a href="/ko/guides/">가이드</a>
+        <a href="/ko/privacy/">개인정보 처리방침</a>
+        <a href="/pricing">요금제</a>
+        <a href="https://github.com/relayium/relayium">GitHub</a>
+      </footer>
+    </div>
+  </body>
+</html>

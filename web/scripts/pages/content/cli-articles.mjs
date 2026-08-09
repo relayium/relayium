@@ -10,6 +10,7 @@ import cliSyncLargeFolder from "./articles/cli-sync-large-folder.mjs";
 import cliCloudAsync from "./articles/cli-cloud-async.mjs";
 import guidesReceiveFromCli from "./articles/guides-receive-from-cli.mjs";
 import howtoAutomateServerBackups from "./articles/howto-automate-server-backups.mjs";
+import guidesDeviceInboxServer from "./articles/guides-device-inbox-server.mjs";
 
 const ARTICLES = [
   cliGettingStarted,
@@ -20,6 +21,7 @@ const ARTICLES = [
   cliCloudAsync,
   guidesReceiveFromCli,
   howtoAutomateServerBackups,
+  guidesDeviceInboxServer,
 ];
 
 export const CLI_ARTICLES = ARTICLES.map((a) => ({ slug: a.slug, title: a.langs.en.title }));

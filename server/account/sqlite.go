@@ -78,7 +78,8 @@ CREATE TABLE IF NOT EXISTS devices (
   user_id      TEXT NOT NULL REFERENCES users(id),
   name         TEXT NOT NULL,
   created_at   INTEGER NOT NULL,
-  last_seen_at INTEGER NOT NULL DEFAULT 0
+  last_seen_at INTEGER NOT NULL DEFAULT 0,
+  last_ip      TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS usage_events (
   alloc_id      TEXT PRIMARY KEY,
@@ -351,6 +352,10 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// device-code CLI login flow: distinguishes a CLI-registered device
 		// ("cli") from the default browser device. Existing rows default to ''.
 		`ALTER TABLE devices ADD COLUMN kind TEXT NOT NULL DEFAULT ''`,
+		// Last server-observed address for account-owner device identification.
+		// Empty preserves existing devices; only authenticated CLI/app requests
+		// populate it, and callers canonicalize it to an IP without a port.
+		`ALTER TABLE devices ADD COLUMN last_ip TEXT NOT NULL DEFAULT ''`,
 		// Account self-deletion lifecycle: deleted_at marks a pending-deletion
 		// request, purge_after is the GC hard-delete deadline, purge_reminder_sent
 		// tracks the one-time pre-purge reminder email. 0 = active/not scheduled
@@ -2037,15 +2042,16 @@ func (s *SQLiteStore) DeleteSpentEmailTokens(ctx context.Context, now int64) err
 	return err
 }
 
-const deviceCols = `id, user_id, name, created_at, last_seen_at, kind`
+const deviceCols = `id, user_id, name, created_at, last_seen_at, kind, last_ip`
 
 func (s *SQLiteStore) UpsertDevice(ctx context.Context, d Device) (Device, error) {
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO devices (`+deviceCols+`)
-		 VALUES (?, ?, ?, ?, ?, ?)
-		 ON CONFLICT(id) DO UPDATE SET name = excluded.name, kind = excluded.kind
+		 VALUES (?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(id) DO UPDATE SET name = excluded.name, kind = excluded.kind,
+		 last_ip = CASE WHEN excluded.last_ip <> '' THEN excluded.last_ip ELSE devices.last_ip END
 		 WHERE devices.user_id = excluded.user_id`,
-		d.ID, d.UserID, d.Name, d.CreatedAt, d.LastSeenAt, d.Kind)
+		d.ID, d.UserID, d.Name, d.CreatedAt, d.LastSeenAt, d.Kind, d.LastIP)
 	if err != nil {
 		return Device{}, err
 	}
@@ -2053,7 +2059,7 @@ func (s *SQLiteStore) UpsertDevice(ctx context.Context, d Device) (Device, error
 	err = s.db.QueryRowContext(ctx,
 		`SELECT `+deviceCols+` FROM devices WHERE id = ? AND user_id = ?`,
 		d.ID, d.UserID,
-	).Scan(&out.ID, &out.UserID, &out.Name, &out.CreatedAt, &out.LastSeenAt, &out.Kind)
+	).Scan(&out.ID, &out.UserID, &out.Name, &out.CreatedAt, &out.LastSeenAt, &out.Kind, &out.LastIP)
 	return out, err
 }
 
@@ -2067,7 +2073,7 @@ func (s *SQLiteStore) ListDevices(ctx context.Context, userID string) ([]Device,
 	var out []Device
 	for rows.Next() {
 		var d Device
-		if err := rows.Scan(&d.ID, &d.UserID, &d.Name, &d.CreatedAt, &d.LastSeenAt, &d.Kind); err != nil {
+		if err := rows.Scan(&d.ID, &d.UserID, &d.Name, &d.CreatedAt, &d.LastSeenAt, &d.Kind, &d.LastIP); err != nil {
 			return nil, err
 		}
 		out = append(out, d)
@@ -4320,40 +4326,40 @@ func (s *SQLiteStore) GetDeviceAuthByCodeHash(ctx context.Context, hash string) 
 // after a request it did not approve — the one thing binding the label to the
 // pending request is supposed to prevent. An empty name means a pre-label CLI
 // started the flow; the caller substitutes the historical name.
-func (s *SQLiteStore) ApproveDeviceAuth(ctx context.Context, userCode, userID, tokenHash, rawToken string, at int64) (string, bool, error) {
+func (s *SQLiteStore) ApproveDeviceAuth(ctx context.Context, userCode, userID, tokenHash, rawToken string, at int64) (string, string, bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
 	defer tx.Rollback()
-	var name string
+	var name, clientIP string
 	err = tx.QueryRowContext(ctx,
-		`SELECT device_name FROM cli_device_auth
-		  WHERE user_code=? AND status='pending' AND expires_at > ?`, userCode, at).Scan(&name)
+		`SELECT device_name, client_ip FROM cli_device_auth
+		  WHERE user_code=? AND status='pending' AND expires_at > ?`, userCode, at).Scan(&name, &clientIP)
 	if err == sql.ErrNoRows {
-		return "", false, nil
+		return "", "", false, nil
 	}
 	if err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
 	res, err := tx.ExecContext(ctx,
 		`UPDATE cli_device_auth SET status='approved', user_id=?, token_hash=?, pending_token=?
 		  WHERE user_code=? AND status='pending' AND expires_at > ?`,
 		userID, tokenHash, rawToken, userCode, at)
 	if err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
 	if n != 1 {
-		return "", false, nil
+		return "", "", false, nil
 	}
 	if err := tx.Commit(); err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
-	return name, true, nil
+	return name, clientIP, true, nil
 }
 
 // ConsumeDeviceAuth marks an approved request consumed exactly once and returns
@@ -4418,10 +4424,26 @@ func (s *SQLiteStore) GetCLITokenUser(ctx context.Context, tokenHash string) (st
 	return userID, deviceID, true, nil
 }
 
-func (s *SQLiteStore) TouchCLIToken(ctx context.Context, tokenHash string, at int64) error {
-	_, err := s.db.ExecContext(ctx,
-		`UPDATE cli_tokens SET last_seen_at = ? WHERE token_hash = ?`, at, tokenHash)
-	return err
+func (s *SQLiteStore) TouchCLIToken(ctx context.Context, tokenHash string, at int64, clientIP string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE cli_tokens SET last_seen_at = ? WHERE token_hash = ?`, at, tokenHash); err != nil {
+		return err
+	}
+	// Keep the account-facing device row useful too. Previously only the token
+	// row was touched, so My Devices truthfully but unhelpfully said “Never
+	// used” forever. A blank/invalid IP must not erase the last good hint.
+	if _, err := tx.ExecContext(ctx, `UPDATE devices
+		SET last_seen_at = ?, last_ip = CASE WHEN ? <> '' THEN ? ELSE last_ip END
+		WHERE id = (SELECT device_id FROM cli_tokens WHERE token_hash = ?)`,
+		at, clientIP, clientIP, tokenHash); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // DeleteCLIToken revokes exactly one bearer credential. Logout uses the hash

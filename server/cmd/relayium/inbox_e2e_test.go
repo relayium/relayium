@@ -513,8 +513,9 @@ func TestInboxStatusReportsTruthWithoutSecrets(t *testing.T) {
 }
 
 // TestInboxEnableRequiresAnExplicitUsableDirectory. Automatic receive is
-// default-off and the directory is the opt-in; a missing --dir, a non-existent
-// path and a file must all be refused BEFORE anything is announced to central.
+// default-off and the directory is the opt-in. A missing --dir and a file must
+// be refused BEFORE anything is announced to central; an explicitly named
+// missing directory is created for the operator.
 func TestInboxEnableRequiresAnExplicitUsableDirectory(t *testing.T) {
 	e := newInboxEnv(t)
 
@@ -523,9 +524,17 @@ func TestInboxEnableRequiresAnExplicitUsableDirectory(t *testing.T) {
 	} else if !strings.Contains(stderr, "--dir") {
 		t.Fatalf("stderr does not name the missing flag:\n%s", stderr)
 	}
-	if code, _, _ := e.run("enable", "--dir", filepath.Join(e.receive, "nope"), "--config-dir", e.cfgDir); code == 0 {
-		t.Fatal("enable succeeded with a non-existent directory")
+	created := filepath.Join(e.receive, "new", "nested")
+	stdout, _ := e.mustRun("enable", "--dir", created, "--config-dir", e.cfgDir)
+	if fi, err := os.Stat(created); err != nil || !fi.IsDir() {
+		t.Fatalf("enable did not create the explicit receive directory: %v", err)
 	}
+	if !strings.Contains(stdout, "created by Relayium") {
+		t.Fatalf("enable did not tell the operator it created the directory:\n%s", stdout)
+	}
+	// Reset the enrolment so the file-refusal assertion below proves it did not
+	// replace the accepted local configuration.
+	e.mustRun("disable", "--config-dir", e.cfgDir)
 	file := filepath.Join(e.receive, "afile")
 	if err := os.WriteFile(file, []byte("x"), 0o600); err != nil {
 		t.Fatalf("write: %v", err)
@@ -533,7 +542,7 @@ func TestInboxEnableRequiresAnExplicitUsableDirectory(t *testing.T) {
 	if code, _, _ := e.run("enable", "--dir", file, "--config-dir", e.cfgDir); code == 0 {
 		t.Fatal("enable succeeded with a file as the receive directory")
 	}
-	// Nothing may have been enrolled by any of those failures.
+	// The file failure must not have re-enrolled the device.
 	if _, in := e.deviceInbox(); in != nil {
 		t.Fatalf("a failed enable still enrolled the device: %+v", in)
 	}

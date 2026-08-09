@@ -97,6 +97,12 @@ export const RELATED = {
     "compare/scp",
     "guides/sync-a-large-folder-between-servers",
   ],
+  "guides/device-inbox-server": [
+    "guides/transfer-files-from-terminal",
+    "guides/run-relayium-as-an-always-on-service",
+    "guides/how-relayium-encrypts-your-files",
+    "how-to/automate-server-backups",
+  ],
   "guides/bring-your-own-node": [
     "guides/self-host-relayium",
     "guides/run-relayium-as-an-always-on-service",
@@ -129,9 +135,9 @@ export const RELATED = {
   ],
   "guides/run-relayium-as-an-always-on-service": [
     "guides/receive-files-from-the-command-line",
+    "guides/device-inbox-server",
     "guides/server-to-server-transfers",
     "how-to/automate-server-backups",
-    "guides/bring-your-own-node",
   ],
   "guides/self-host-relayium": [
     "guides/bring-your-own-node",

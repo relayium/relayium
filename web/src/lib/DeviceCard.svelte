@@ -43,6 +43,7 @@
     Name: string;
     CreatedAt: number;
     LastSeenAt: number;
+    LastIP?: string;
     Kind: string;
     Inbox?: unknown;
   }
@@ -628,6 +629,10 @@
     <span class="devicesigned">{signedIn}</span>
     <span class="dot" aria-hidden="true">·</span>
     <span class="deviceseen">{lastUsed}</span>
+    {#if device.Kind === "cli" && device.LastIP}
+      <span class="dot" aria-hidden="true">·</span>
+      <span class="deviceip">{t.me.deviceIP(device.LastIP)}</span>
+    {/if}
   </p>
 
   {#if renameError}

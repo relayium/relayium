@@ -14,12 +14,12 @@ func TestDeviceAuthApproveConsumeOnce(t *testing.T) {
 	if err := st.CreateDeviceAuth(ctx, req); err != nil {
 		t.Fatal(err)
 	}
-	_, ok, err := st.ApproveDeviceAuth(ctx, "WDJB-MJHT", "u1", authx.HashToken("tok"), "rlm_cli_raw", 2)
+	_, _, ok, err := st.ApproveDeviceAuth(ctx, "WDJB-MJHT", "u1", authx.HashToken("tok"), "rlm_cli_raw", 2)
 	if err != nil || !ok {
 		t.Fatalf("approve: %v %v", ok, err)
 	}
 	// second approve on same code must fail (already approved)
-	_, ok2, _ := st.ApproveDeviceAuth(ctx, "WDJB-MJHT", "u1", authx.HashToken("tok"), "rlm_cli_raw", 3)
+	_, _, ok2, _ := st.ApproveDeviceAuth(ctx, "WDJB-MJHT", "u1", authx.HashToken("tok"), "rlm_cli_raw", 3)
 	if ok2 {
 		t.Fatal("double approve should fail")
 	}
@@ -54,8 +54,15 @@ func TestCLITokenLookup(t *testing.T) {
 	if ok2 {
 		t.Fatal("unknown token must not resolve")
 	}
-	if err := st.TouchCLIToken(ctx, authx.HashToken("t"), 99); err != nil {
+	if err := st.TouchCLIToken(ctx, authx.HashToken("t"), 99, "203.0.113.9"); err != nil {
 		t.Fatalf("touch: %v", err)
+	}
+	devices, err := st.ListDevices(ctx, u.ID)
+	if err != nil || len(devices) != 1 {
+		t.Fatalf("list touched device: %v %+v", err, devices)
+	}
+	if devices[0].LastSeenAt != 99 || devices[0].LastIP != "203.0.113.9" {
+		t.Fatalf("device hint was not touched with its credential: %+v", devices[0])
 	}
 }
 

@@ -17,7 +17,7 @@ const DEVICES = {
   devices: [
     // ID 里带空格和斜杠：吊销要走路径拼接，没编码就会打到别的路径上。
     { ID: "d app/1", Name: "Lily's MacBook", CreatedAt: 1_700_200_000, LastSeenAt: 1_700_300_000, Kind: "app" },
-    { ID: "d-cli-1", Name: "work-laptop", CreatedAt: 1_700_000_000, LastSeenAt: 1_700_100_000, Kind: "cli" },
+    { ID: "d-cli-1", Name: "work-laptop", CreatedAt: 1_700_000_000, LastSeenAt: 1_700_100_000, LastIP: "203.0.113.19", Kind: "cli" },
     { ID: "d-app-2", Name: "Lily's iPhone", CreatedAt: 1_699_000_000, LastSeenAt: 1_700_050_000, Kind: "app" },
     { ID: "d-cli-2", Name: "old-vps", CreatedAt: 1_690_000_000, LastSeenAt: 0, Kind: "cli" },
     { ID: "d-app-3", Name: "spare iPad", CreatedAt: 1_695_000_000, LastSeenAt: 0, Kind: "app" },
@@ -150,6 +150,7 @@ describe("MePage 的账号设备列表", () => {
     expect(names).toContain("Lily's iPhone");
     expect(names).toContain("work-laptop");
     expect(names).toContain("old-vps");
+    expect(rowFor(target, "work-laptop")?.textContent).toContain("Last seen from IP 203.0.113.19");
     unmount(app);
   });
 
