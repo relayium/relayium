@@ -1,8 +1,10 @@
 # `relayium inbox` — the CLI Device Inbox receiver
 
-Status: **Phase 1C.** The receiving half is implemented and covered by tests. The
-*sending* half is not: there is no Web "My Devices" drag-and-drop target yet
-(Phase 1D), so today a task has to be queued through the API. This document
+Status: **Phase 1D delivered.** Both halves exist. This document is the
+*receiving* half — the `relayium inbox` commands that run on the machine files
+land on. The *sending* half is the Web one: sign in at relayium.com, open
+**My Devices** (`/me`), and each enrolled device gets a **Send files** button
+and a drop target. `/cli` introduces the whole flow end to end. This document
 describes what exists, and says so where something does not.
 
 Product source of truth: `DEVICE-INBOX-PRD.md` §7.1, §8, §9, §10.
@@ -16,6 +18,11 @@ account. Once you explicitly enable its inbox and choose a directory, files sent
 from your own account are downloaded, decrypted, verified and saved there
 automatically — including files sent while the machine was offline, which queue
 and land when it comes back.
+
+`relayium login --device-name <label>` chooses what that machine is called in
+My Devices; without it the host's own name is registered. The terminal prints
+the exact label before you approve the login in the browser, and the label can
+be changed later from the account page.
 
 Relayium never sees the plaintext, the file names, the directory structure, the
 content key or this device's private key. The content key is sealed to a public
@@ -221,9 +228,6 @@ would be worse than publishing none. Phase 4 owns it.
 
 ## What is deliberately not here yet
 
-- **No Web sender.** Phase 1D adds the My Devices presence display and the
-  click/drop encrypted send. Until then a task must be queued through
-  `POST /api/devices/{id}/inbox/tasks`.
 - **No `ask` policy in the CLI.** `enable` announces `auto`. There is no
   interactive per-task prompt, so a device that would need one is not offered.
 - **Cross-restart resume is per task, not per byte.** An interrupted download

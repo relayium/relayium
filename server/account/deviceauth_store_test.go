@@ -14,12 +14,12 @@ func TestDeviceAuthApproveConsumeOnce(t *testing.T) {
 	if err := st.CreateDeviceAuth(ctx, req); err != nil {
 		t.Fatal(err)
 	}
-	ok, err := st.ApproveDeviceAuth(ctx, "WDJB-MJHT", "u1", authx.HashToken("tok"), "rlm_cli_raw", 2)
+	_, ok, err := st.ApproveDeviceAuth(ctx, "WDJB-MJHT", "u1", authx.HashToken("tok"), "rlm_cli_raw", 2)
 	if err != nil || !ok {
 		t.Fatalf("approve: %v %v", ok, err)
 	}
 	// second approve on same code must fail (already approved)
-	ok2, _ := st.ApproveDeviceAuth(ctx, "WDJB-MJHT", "u1", authx.HashToken("tok"), "rlm_cli_raw", 3)
+	_, ok2, _ := st.ApproveDeviceAuth(ctx, "WDJB-MJHT", "u1", authx.HashToken("tok"), "rlm_cli_raw", 3)
 	if ok2 {
 		t.Fatal("double approve should fail")
 	}

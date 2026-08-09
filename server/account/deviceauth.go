@@ -2,11 +2,14 @@ package account
 
 import (
 	"crypto/rand"
+	"errors"
+	"io"
 	"net/http"
 	"time"
 
 	"github.com/relayium/relayium/authx"
 	"github.com/relayium/relayium/httpx"
+	"github.com/relayium/relayium/internal/devicelabel"
 )
 
 // deviceCodeTTL bounds how long an unclaimed device-code request stays valid
@@ -53,6 +56,23 @@ func (s *Service) handleDeviceStart(w http.ResponseWriter, r *http.Request) {
 		httpx.WriteJSON(w, http.StatusTooManyRequests, map[string]string{"error": "too many requests"})
 		return
 	}
+	// The label is OPTIONAL and the body may be absent entirely: a pre-label CLI
+	// posts a zero-length body, which decodes as io.EOF. Treating that as a bad
+	// request would break `relayium login` for every installed CLI the moment
+	// this deployed, so EOF alone means "no label".
+	//
+	// Every OTHER decode failure IS refused. Ignoring them would keep minting
+	// device codes for bodies nobody could parse, including one past
+	// DecodeJSONBody's size limit — where MaxBytesReader has already marked the
+	// response oversized and answering 200 would be a lie the client cannot act
+	// on.
+	var in struct {
+		DeviceName string `json:"device_name"`
+	}
+	if err := httpx.DecodeJSONBody(w, r, &in); err != nil && !errors.Is(err, io.EOF) {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
 	now := s.now().Unix()
 	deviceCode := authx.RandToken()
 	userCode := genUserCode()
@@ -67,6 +87,11 @@ func (s *Service) handleDeviceStart(w http.ResponseWriter, r *http.Request) {
 		// unfamiliar IP/agent (or a stale request) is a chance to catch it.
 		ClientIP:  s.clientIP(r),
 		UserAgent: truncateUA(r.UserAgent()),
+		// Sanitized here rather than trusted: the CLI applies the same function
+		// before printing the label, so for an honest client this is a no-op and
+		// the terminal and the account agree. For a hostile one it is the only
+		// thing standing between a bidi override and a revoke confirmation.
+		DeviceName: devicelabel.Sanitize(in.DeviceName),
 	}
 	if err := s.store.CreateDeviceAuth(r.Context(), req); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -117,6 +142,9 @@ func (s *Service) handleDevicePending(w http.ResponseWriter, r *http.Request, _ 
 		"started_at": req.CreatedAt,
 		"client_ip":  req.ClientIP,
 		"user_agent": req.UserAgent,
+		// The label this request will register, so the human approving it sees
+		// the same identity their terminal printed. Already sanitized at start.
+		"device_name": req.DeviceName,
 	})
 }
 
@@ -196,7 +224,7 @@ func (s *Service) handleDeviceApprove(w http.ResponseWriter, r *http.Request, u 
 	// leave a phantom "CLI" device in the user's list or an orphaned cli_token.
 	raw := "rlm_cli_" + authx.RandToken()
 	h := authx.HashToken(raw)
-	ok, err := s.store.ApproveDeviceAuth(ctx, in.UserCode, u.ID, h, raw, now)
+	name, ok, err := s.store.ApproveDeviceAuth(ctx, in.UserCode, u.ID, h, raw, now)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
@@ -205,12 +233,22 @@ func (s *Service) handleDeviceApprove(w http.ResponseWriter, r *http.Request, u 
 		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_or_expired_code"})
 		return
 	}
+	// The label comes from the row that was just approved, not from this
+	// request: the browser must not be able to name a device something the
+	// terminal never showed. '' is a pre-label CLI, which keeps the name every
+	// CLI device has always had. Re-sanitized because a row could predate a
+	// change to the rules — persisting a label no current CLI could produce
+	// would put an unfilterable string into a destructive confirmation.
+	name = devicelabel.Sanitize(name)
+	if name == "" {
+		name = devicelabel.Fallback
+	}
 	// Only now that the code is validated do we persist the device + token. A
 	// poll could observe pending_token in the microsecond window before these
 	// commit; that's benign — the token row is created regardless, so a CLI
 	// retry (5s poll interval) self-heals. No rollback machinery needed.
 	dev, err := s.store.UpsertDevice(ctx, Device{
-		ID: authx.NewID(), UserID: u.ID, Name: "CLI", Kind: "cli", CreatedAt: now,
+		ID: authx.NewID(), UserID: u.ID, Name: name, Kind: "cli", CreatedAt: now,
 	})
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)

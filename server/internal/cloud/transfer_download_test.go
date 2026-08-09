@@ -81,9 +81,18 @@ func TestNewClientNoBlanketTimeout(t *testing.T) {
 	if c.HTTP.Timeout != 0 {
 		t.Fatalf("NewClient set a blanket Client.Timeout=%v; it caps streaming transfers and must be 0", c.HTTP.Timeout)
 	}
-	tr, ok := c.HTTP.Transport.(*http.Transport)
+	// The client wraps its transport to stamp the CLI's User-Agent on every
+	// request. Unwrap rather than accept either shape: if the wrapper ever
+	// disappears the approval page silently goes back to showing
+	// "Go-http-client/2.0", and if the *http.Transport underneath it is
+	// replaced with a default one the streaming invariant above is gone.
+	ua, ok := c.HTTP.Transport.(*uaTransport)
 	if !ok {
-		t.Fatalf("expected *http.Transport, got %T", c.HTTP.Transport)
+		t.Fatalf("expected the User-Agent transport, got %T", c.HTTP.Transport)
+	}
+	tr, ok := ua.base.(*http.Transport)
+	if !ok {
+		t.Fatalf("expected *http.Transport under the User-Agent transport, got %T", ua.base)
 	}
 	if tr.ResponseHeaderTimeout == 0 {
 		t.Fatal("expected a ResponseHeaderTimeout to bound time-to-first-byte in place of the blanket timeout")

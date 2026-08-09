@@ -14,6 +14,7 @@
   import { formatSize } from "./format";
   import { hasFiles, filesFromDataTransfer } from "./drag";
   import { confirmDialog } from "./confirm-dialog.svelte";
+  import { DEVICE_NAME_MAX, normalizeDeviceName } from "./device-identity";
   import {
     parseDeviceInbox,
     sendAvailability,
@@ -52,11 +53,76 @@
     kind: string;
     /** Localized "last used …" line for the bearer credential (not the inbox). */
     lastUsed: string;
+    /** Localized "signed in …" — when this credential was approved. */
+    signedIn: string;
+    /** Localized short id fragment ("ID ends 3f21a9"), "" when the id is too
+     *  short to shorten. It is what tells two identically named rows apart. */
+    deviceRef: string;
     onRevoke: () => void;
+    /** Persist a new label. Resolves with what happened, so the row can say
+     *  "that name can't be used" and "the request failed" differently — the
+     *  first is the user's to fix, the second is worth retrying. */
+    onRename: (name: string) => Promise<RenameOutcome>;
   }
 
-  const { device, kind, lastUsed, onRevoke }: Props = $props();
+  export type RenameOutcome = "ok" | "rejected" | "failed";
+
+  const { device, kind, lastUsed, signedIn, deviceRef, onRevoke, onRename }: Props = $props();
   const t = $derived<Messages>(messages[lang()]);
+
+  // ── rename ───────────────────────────────────────────────────────────────
+  // Inline, on the row, using the account-scoped PATCH the API has always had.
+  // Duplicate labels stay legal: two machines really can both be "backup", and
+  // `deviceRef` is what distinguishes them.
+  let renaming = $state(false);
+  let renameDraft = $state("");
+  let renameError = $state<RenameOutcome | null>(null);
+  let renameBusy = $state(false);
+
+  function startRename() {
+    renameDraft = device.Name;
+    renameError = null;
+    renaming = true;
+  }
+
+  function cancelRename() {
+    renaming = false;
+    renameBusy = false;
+    renameError = null;
+  }
+
+  /** Autofocus + select the draft when the field appears. Selecting matters:
+   *  the common rename is replacing a generic "CLI", not editing it. */
+  function focusRename(node: HTMLInputElement) {
+    node.focus();
+    node.select();
+  }
+
+  async function submitRename(e: Event) {
+    e.preventDefault();
+    if (renameBusy) return;
+    const next = normalizeDeviceName(renameDraft);
+    // Unchanged or empty is a cancel, not a request. Sending the same name
+    // would spend a round trip to achieve nothing; sending an empty one would
+    // be refused by central anyway, and reporting that as an error would blame
+    // the user for closing an editor.
+    if (next === "" || next === device.Name) {
+      cancelRename();
+      return;
+    }
+    renameBusy = true;
+    renameError = null;
+    const outcome = await onRename(next);
+    renameBusy = false;
+    if (outcome === "ok") {
+      renaming = false;
+      return;
+    }
+    // The editor STAYS OPEN with the draft intact. Closing it on failure would
+    // throw away what the user typed and leave them looking at the old name
+    // with no explanation.
+    renameError = outcome;
+  }
 
   // Read straight from the session rather than taken as a prop. Two accounts can
   // hold a device with the same id, and the list is keyed by id — so a sign-out
@@ -131,6 +197,15 @@
     dropRejected = false;
     fileCount = 0;
     fileBytes = 0;
+    // The rename editor goes too. The page clears `devices` on an account
+    // switch, which unmounts every card — but this component owns the guard
+    // precisely because it must not depend on the page remembering to. A
+    // half-typed name for somebody else's device, left in an open field, is
+    // exactly the leak the account watcher exists to prevent.
+    renaming = false;
+    renameBusy = false;
+    renameError = null;
+    renameDraft = "";
   }
 
   // Plain `let`, not `$state`: it is only ever read and written inside the
@@ -503,9 +578,63 @@
 </script>
 
 <li class:sendable={avail.sendable} class:has-inbox={!!inbox}>
-  <span class="devicename">{device.Name}</span>
+  {#if renaming}
+    <form class="renameform" onsubmit={submitRename}>
+      <!-- svelte-ignore a11y_autofocus -->
+      <input
+        class="renameinput"
+        type="text"
+        bind:value={renameDraft}
+        maxlength={DEVICE_NAME_MAX}
+        disabled={renameBusy}
+        aria-label={t.me.deviceRenameField(device.Name)}
+        aria-invalid={renameError !== null}
+        onkeydown={(e) => { if (e.key === "Escape") cancelRename(); }}
+        use:focusRename
+      />
+      <button class="chk" type="submit" disabled={renameBusy}>{t.me.deviceRenameSave}</button>
+      <button class="chk" type="button" disabled={renameBusy} onclick={cancelRename}>{t.me.deviceRenameCancel}</button>
+    </form>
+  {:else}
+    <span class="devicename">{device.Name}</span>
+  {/if}
   <span class="devicekind">{kind}</span>
-  <span class="deviceseen" class:never={!device.LastSeenAt}>{lastUsed}</span>
+  <!-- A fragment of the opaque id, never the whole thing. It is the only part
+       of the row that stays distinct when two machines share a label. -->
+  {#if deviceRef}<span class="deviceref">{deviceRef}</span>{/if}
+
+  <div class="rowactions">
+    <!-- Hidden while the editor is open: pressing it again would call
+         startRename and silently reset the draft the user is in the middle of
+         typing. The editor has its own Save and Cancel. -->
+    {#if !renaming}
+      <button class="chk" aria-label={t.me.deviceRenameLabel(device.Name)} onclick={startRename}>
+        {t.me.deviceRename}
+      </button>
+    {/if}
+    <!-- Sibling of the send zone, never inside it. -->
+    <button
+      class="del"
+      aria-label={t.me.deviceRevokeLabel(device.Name, kind, deviceRef, signedIn)}
+      onclick={onRevoke}
+    >{t.me.deviceRevoke}</button>
+  </div>
+
+  <!-- Second line: when this credential was approved, and whether it has been
+       used since. Both are here for the rows that predate device labels —
+       they have no hostname to recover, and these two facts plus the id
+       fragment are what make them tellable apart without a backfill. -->
+  <p class="devicemeta">
+    <span class="devicesigned">{signedIn}</span>
+    <span class="dot" aria-hidden="true">·</span>
+    <span class="deviceseen">{lastUsed}</span>
+  </p>
+
+  {#if renameError}
+    <p class="renameerr" role="status" aria-live="polite">
+      {renameError === "rejected" ? t.me.deviceRenameRejected : t.me.deviceRenameFailed}
+    </p>
+  {/if}
 
   {#if inbox}
     <!-- Presence is shown next to the policy, never instead of it: "online" and
@@ -528,11 +657,6 @@
       <span class="inboxmeta">{t.deviceInbox.platformLine(inbox.Platform || "—", inbox.AppVersion || "—")}</span>
     {/if}
   {/if}
-
-  <!-- Sibling of the send zone, never inside it. -->
-  <button class="del" aria-label={t.me.deviceRevokeLabel(device.Name, kind)} onclick={onRevoke}>
-    {t.me.deviceRevoke}
-  </button>
 
   {#if inbox}
     <div class="inboxblock">
@@ -638,22 +762,55 @@
     padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius);
   }
   .devicename { flex: 1 1 auto; min-width: 0; color: var(--text-h); font-weight: 500; word-break: break-word; }
-  /* 类型标签跟在设备名后面，做成一枚安静的徽章：它是分类，不是状态，颜色上抢不过
-     "从未使用"那一条。不收缩，免得窄屏上被挤成竖排的单字。 */
-  .devicekind {
+  /* 类型标签跟在设备名后面，做成一枚安静的徽章：它是分类，不是状态。不收缩，免得
+     窄屏上被挤成竖排的单字。 */
+  .devicekind, .deviceref {
     flex: 0 0 auto; font-size: var(--fs-xs); color: var(--text);
     padding: 2px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm);
   }
-  .deviceseen { font-size: var(--fs-xs); color: var(--text); }
-  /* 从未使用过的设备最值得吊销——给它一点视觉重量，别和其他行糊在一起。 */
-  .deviceseen.never { color: var(--danger); }
-  .del {
+  /* ID 尾号用等宽：它是一小截标识符，用户会拿它和另一行逐字比对。 */
+  .deviceref { font-family: var(--mono); }
+  /* 第二行：登录时间 + 自登录以来用没用过。整行占满，所以名字、徽章和两个按钮不会
+     被挤成窄条——这也是窄屏上唯一需要的布局规则。 */
+  .devicemeta {
+    flex: 1 0 100%; margin: 0;
+    display: flex; flex-wrap: wrap; gap: var(--space-2);
+    font-size: var(--fs-xs); color: var(--text);
+  }
+  .devicemeta .dot { opacity: .6; }
+  /* 按钮成组，推到行尾。用 margin-inline-start 而不是网格：这一行的元素数量随
+     "有没有 ID 尾号"变化，固定列数的网格会在某些行上错位。 */
+  .rowactions {
+    flex: 0 0 auto; margin-inline-start: auto;
+    display: flex; gap: var(--space-2); flex-wrap: wrap;
+  }
+  .chk, .del {
     font: inherit; font-size: var(--fs-xs); background: none; cursor: pointer;
     border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text);
     padding: 2px 10px; transition: border-color .13s, color .13s;
   }
+  .chk:hover:not(:disabled) { border-color: var(--accent-border); color: var(--accent-fg); }
+  .chk:disabled { opacity: .6; cursor: default; }
   .del:hover { border-color: var(--danger); color: var(--danger); }
-  .del:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .chk:focus-visible, .del:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* 改名：就地替换设备名那一格，宽度跟着它走。 */
+  .renameform {
+    flex: 1 1 260px; min-width: 0;
+    display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center;
+  }
+  .renameinput {
+    flex: 1 1 140px; min-width: 0;
+    font: inherit; font-size: var(--fs-sm); color: var(--text-h);
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 2px 8px;
+  }
+  .renameinput:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .renameinput[aria-invalid="true"] { border-color: var(--danger); }
+  .renameerr {
+    flex: 1 0 100%; margin: 0;
+    font-size: var(--fs-xs); line-height: 1.6; max-width: 68ch; color: var(--danger);
+  }
 
   /* The row keeps the layout it always had; the inbox block is a full-width
      second line under it, so an enrolled device does not squeeze the name,
@@ -748,15 +905,11 @@
   }
 
   @media (max-width: 520px) {
-    li {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: center;
-    }
-    .del { justify-self: end; }
-    /* The row is a two-column grid at this width; the inbox block has to span
-       both or it lands beside the revoke button. */
-    .inboxblock { grid-column: 1 / -1; }
+    /* The row stays a wrapping flex line at every width — it used to become a
+       two-column grid here, which only worked while the row had exactly a
+       name, a badge and one button in it. The actions now take a full line of
+       their own rather than being squeezed beside a wrapped device name. */
+    .rowactions { flex: 1 0 100%; margin-inline-start: 0; }
     .sendzone { flex-direction: column; align-items: stretch; }
     .sendbtn { width: 100%; }
   }

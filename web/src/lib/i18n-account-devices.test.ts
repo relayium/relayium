@@ -29,6 +29,8 @@ type Code = keyof typeof locales;
 // 用户起的名字，故意带上撇号和非 ASCII：它要原样穿过每一种语言的模板。
 const NAME = "Lily's MacBook — 家里那台";
 const WHEN = "2026-08-04 10:00";
+// 一小截设备 ID：同名两行就靠它区分，所以每种语言都得把它原样带进可访问名称和确认框。
+const REF = "3f21a9";
 
 type Claims = {
   /** 这门语言里的「App」。词形不止一种（App / 应用 / アプリ…），所以用正则。 */
@@ -117,12 +119,22 @@ function rendered(m: Messages) {
     deviceIntro: m.me.deviceIntro,
     deviceEmpty: m.me.deviceEmpty,
     deviceLastUsed: m.me.deviceLastUsed(WHEN),
-    deviceNeverUsed: m.me.deviceNeverUsed,
+    deviceNotUsedSinceSignIn: m.me.deviceNotUsedSinceSignIn,
+    deviceSignedIn: m.me.deviceSignedIn(WHEN),
+    deviceRef: m.me.deviceRef(REF),
     deviceRevoke: m.me.deviceRevoke,
-    deviceRevokeLabel: m.me.deviceRevokeLabel(NAME, m.me.deviceKindApp),
-    deviceConfirmRevoke: m.me.deviceConfirmRevoke(NAME),
+    deviceRevokeLabel: m.me.deviceRevokeLabel(NAME, m.me.deviceKindApp, m.me.deviceRef(REF), m.me.deviceSignedIn(WHEN)),
+    deviceConfirmRevoke: m.me.deviceConfirmRevoke(NAME, m.me.deviceKindApp, m.me.deviceRef(REF), m.me.deviceSignedIn(WHEN)),
     deviceKindApp: m.me.deviceKindApp,
     deviceKindCli: m.me.deviceKindCli,
+    deviceEmptyHint: m.me.deviceEmptyHint,
+    deviceRename: m.me.deviceRename,
+    deviceRenameLabel: m.me.deviceRenameLabel(NAME),
+    deviceRenameField: m.me.deviceRenameField(NAME),
+    deviceRenameSave: m.me.deviceRenameSave,
+    deviceRenameCancel: m.me.deviceRenameCancel,
+    deviceRenameRejected: m.me.deviceRenameRejected,
+    deviceRenameFailed: m.me.deviceRenameFailed,
   };
 }
 
@@ -138,10 +150,9 @@ describe("账号设备区块的文案在每种语言里都覆盖 App 和 CLI", (
         expect(text, `${code}.me.${key} 漏了模板占位符`).not.toContain("${");
       }
       // 设备名是用户数据：两处带名字的都必须原样嵌进译文里。
-      for (const key of ["deviceRevokeLabel", "deviceConfirmRevoke"] as const) {
+      for (const key of ["deviceRevokeLabel", "deviceConfirmRevoke", "deviceRenameLabel", "deviceRenameField"] as const) {
         expect(r[key], `${code}.me.${key} 把设备名弄丢了`).toContain(NAME);
       }
-      expect(r.deviceRevokeLabel, `${code}.me.deviceRevokeLabel 漏了设备类型`).toContain(r.deviceKindApp);
     });
 
     it(`${code}: 标题、导语、空状态都说全了 App 和 CLI 两类`, () => {
@@ -192,10 +203,53 @@ describe("账号设备区块的文案在每种语言里都覆盖 App 和 CLI", (
       });
     }
 
+    it(`${code}: 吊销的可访问名称与确认框都带齐了区分身份的四样`, () => {
+      // 两行同名是允许的（改名之前它们**全都**叫 CLI）。所以这两句话必须同时说出
+      // 标签、类型、ID 尾号和登录时间；少任何一样，用户就无从判断那个不可撤销的
+      // 按钮会断掉哪一台。
+      for (const key of ["deviceRevokeLabel", "deviceConfirmRevoke"] as const) {
+        expect(r[key], `${code}.me.${key} 漏了设备名`).toContain(NAME);
+        expect(r[key], `${code}.me.${key} 漏了类型`).toContain(r.deviceKindApp);
+        expect(r[key], `${code}.me.${key} 漏了 ID 尾号`).toContain(REF);
+        expect(r[key], `${code}.me.${key} 漏了登录时间`).toContain(WHEN);
+      }
+    });
+
+    it(`${code}: 「自登录以来没用过」不是「从未使用」那种故障说法`, () => {
+      // 刚批准完的令牌本来就还没用过。旧文案把这种正常状态说得像出了错，用户会
+      // 因此去吊销一台自己刚刚登录好的机器。
+      expect(r.deviceNotUsedSinceSignIn, `${code}.me.deviceNotUsedSinceSignIn 是空的`).toBeTruthy();
+      expect(r.deviceSignedIn, `${code}.me.deviceSignedIn 没把时间带进去`).toContain(WHEN);
+      expect(r.deviceRef, `${code}.me.deviceRef 没把 ID 尾号带进去`).toContain(REF);
+    });
+
+    it(`${code}: 改名那一组文案齐全，且失败与被拒是两句话`, () => {
+      expect(r.deviceRenameLabel, `${code}.me.deviceRenameLabel 没指名哪一台`).toContain(NAME);
+      expect(r.deviceRenameField, `${code}.me.deviceRenameField 没指名哪一台`).toContain(NAME);
+      // 可访问名称必须含可见文字（WCAG 2.5.3 Label in Name）。
+      expect(
+        r.deviceRenameLabel.toLowerCase(),
+        `${code}: 可访问名称里没有可见的「${r.deviceRename}」`,
+      ).toContain(r.deviceRename.toLowerCase());
+      // 「这个名字不能用」是用户能改的事，「请求失败了」值得重试——混成一句话，
+      // 用户就会对着一个网络故障反复改名字。
+      expect(
+        r.deviceRenameRejected,
+        `${code}: 名字被拒和请求失败是同一句话`,
+      ).not.toBe(r.deviceRenameFailed);
+    });
+
+    it(`${code}: 空状态给得出下一步`, () => {
+      // 空列表只说「没有设备」等于把用户留在原地：这一条得说出怎么让一台机器出现。
+      expect(r.deviceEmptyHint, `${code}.me.deviceEmptyHint 是空的`).toBeTruthy();
+      expect(r.deviceEmptyHint, `${code}: 空状态提示没提 relayium login`).toMatch(/relayium login/);
+    });
+
     it(`${code}: 只说 CLI 的旧键没有残留`, () => {
       // 旧键留着就会有人继续读它，那份只说 CLI 的文案也就继续在某个角落生效。
-      for (const stale of ["cliTitle", "cliIntro", "cliEmpty", "cliRevoke", "cliConfirmRevoke", "cliLastUsed", "cliNeverUsed"]) {
-        expect(stale in m.me, `${code}.me.${stale} 还在，只说 CLI 的旧文案没清干净`).toBe(false);
+      // deviceNeverUsed 同理：它那句「从未使用」是被这一批明确取代掉的。
+      for (const stale of ["cliTitle", "cliIntro", "cliEmpty", "cliRevoke", "cliConfirmRevoke", "cliLastUsed", "cliNeverUsed", "deviceNeverUsed"]) {
+        expect(stale in m.me, `${code}.me.${stale} 还在，被取代的旧文案没清干净`).toBe(false);
       }
     });
   }

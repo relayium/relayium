@@ -16,6 +16,7 @@
     "test:e2e:share-target": "node e2e/share-target.mjs",
     "test:a11y": "node e2e/a11y-scan.mjs",
     "test:device-inbox": "node e2e/device-inbox.mjs",
+    "test:device-discovery": "node e2e/device-discovery.mjs",
     "test:interop": "RELAYIUM_GO_INTEROP=1 vitest run src/lib/device-seal.interop.test.ts"
   },
   "devDependencies": {

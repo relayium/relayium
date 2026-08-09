@@ -28,8 +28,10 @@ usage:
                                              (in a terminal, approve each new peer on first push)
   relayium id                                print this host's fingerprint
   relayium authorize <fingerprint>          pre-authorize a pusher (for non-interactive serve)
-  relayium login [--server URL] [--config-dir D]
+  relayium login [--server URL] [--config-dir D] [--device-name LABEL]
                                              log in to the cloud (device code flow)
+                                             (the label names this machine in My Devices;
+                                              defaults to this host's name)
   relayium logout [--local-only] [--config-dir D]
                                              revoke and clear cloud credentials
   relayium whoami                           show the logged-in cloud account

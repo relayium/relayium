@@ -192,10 +192,14 @@ describe("MePage 的账号设备列表", () => {
     unmount(app);
   });
 
-  it("从未使用过的设备明确标出来 —— 那种最值得吊销", async () => {
+  it("登录后没用过的设备说的是「自登录以来没用过」，不是「从未使用」", async () => {
     stubFetch();
     const { target, app } = await render();
-    expect(target.textContent).toContain("never used");
+    // 刚批准完的令牌本来就还没用过。旧文案「never used」把这种正常状态说得像出了
+    // 错，而这一列的用途是决定要不要吊销——说错了，用户就会去断掉一台自己刚登录
+    // 好的机器。
+    expect(target.textContent).toContain("Not used since sign-in");
+    expect(target.textContent, "旧的故障感说法还留在页面上").not.toMatch(/never used/i);
     unmount(app);
   });
 

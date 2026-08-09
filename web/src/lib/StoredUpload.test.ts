@@ -92,6 +92,29 @@ describe("StoredUpload 大文件提醒", () => {
   });
 });
 
+describe("StoredUpload 上传成功后的终端取回入口", () => {
+  it("同时展示已安装 CLI 和无需持久安装两条路", async () => {
+    await mountUpload();
+    await pick([1024]);
+
+    expect(target.textContent).toContain("If the Relayium CLI is already installed");
+    const temporary = target.querySelector("details.temp-cli") as HTMLDetailsElement | null;
+    expect(temporary, "发送结果里没有无需安装入口").not.toBeNull();
+    expect(temporary!.querySelector("summary")?.textContent).toContain("No persistent install");
+    expect(temporary!.textContent).toContain("Plain curl can only save the ciphertext");
+  });
+
+  it("临时脚本带完整密钥链接、校验步骤和自动清理，Windows 也有独立脚本", async () => {
+    await mountUpload();
+    await pick([1024]);
+
+    const blocks = [...target.querySelectorAll("pre")].map((node) => node.textContent ?? "");
+    expect(blocks.some((code) => code.includes("relayium down 'https://relayium.com/d/abc#k=zzz'"))).toBe(true);
+    expect(blocks.some((code) => code.includes("openssl dgst") && code.includes("trap 'rm -rf"))).toBe(true);
+    expect(blocks.some((code) => code.includes("relayium.exe") && code.includes("Remove-Item"))).toBe(true);
+  });
+});
+
 // 刷新会把这次上传整个丢掉，连带那把只存在于本机内存里的零知识密钥（要等上传成功
 // 才 rememberUploadKey）。这条路完全在 workspace 之外，warnsOnLeave 看不见它，所以
 // 全站更新提示条只能靠这个显式闸门知道「现在不能刷」。

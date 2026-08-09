@@ -28,7 +28,9 @@
  *      covered separately by the sender and server suites.
  *
  * Plus the interaction paths a component test cannot reach: a genuine DOM drop
- * carrying real `File` objects, and keyboard activation of the send button.
+ * carrying real `File` objects, keyboard activation of the send button, and the
+ * ordinary stored-upload result exposing both terminal download paths — including
+ * the verified temporary CLI route on a 390px viewport.
  *
  * Isolated and self-cleaning: every path is under one temporary directory, the
  * account is created by this script, and the whole tree is removed at the end.
@@ -350,6 +352,50 @@ async function main() {
       throw new Error(`a second worker pass duplicated the delivery: ${JSON.stringify(after)}`);
     }
     ok("a repeated worker pass delivered nothing twice");
+
+    // ── product entry: an ordinary link upload explains BOTH CLI paths ─────
+    // This is the sender's page, not the recipient /d/ page. The owner found
+    // the no-persistent-install route only existed after opening the recipient
+    // link, so the person who just created the link had no way to tell anyone
+    // it existed. Exercise the real upload against the same real central and
+    // inspect the built UI at phone width.
+    await tab.send("Emulation.setDeviceMetricsOverride", {
+      width: 390, height: 844, deviceScaleFactor: 1, mobile: true,
+    });
+    await tab.send("Page.navigate", { url: `${BASE}/offline-transfer` });
+    await tab.waitFor("!!document.querySelector('.stored .pick')", "stored upload picker");
+    await tab.evaluate(`(() => {
+      const zone = document.querySelector('.stored .pick');
+      const dt = new DataTransfer();
+      dt.items.add(new File([new TextEncoder().encode('temporary downloader product path')], 'terminal-path.txt'));
+      zone.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+      return true;
+    })()`);
+    await tab.waitFor("!!document.querySelector('.stored details.temp-cli')", "sender result no-install entry", 60_000);
+    const terminalResult = await tab.evaluate(`(() => {
+      const details = document.querySelector('.stored details.temp-cli');
+      const summary = details?.querySelector('summary');
+      const before = summary?.getBoundingClientRect();
+      details.open = true;
+      const blocks = [...details.querySelectorAll('pre')].map((e) => e.textContent ?? '');
+      const leaked = [...document.querySelectorAll('.stored a[href], .stored img[src]')]
+        .some((e) => (e.getAttribute('href') ?? e.getAttribute('src') ?? '').includes('#k='));
+      return {
+        summary: summary?.textContent?.trim() ?? '',
+        visible: !!before && before.width > 0 && before.height > 0 && before.right <= document.documentElement.clientWidth + 1,
+        saysCiphertext: /ciphertext/i.test(details.textContent ?? ''),
+        posix: blocks.some((s) => s.includes('openssl dgst') && s.includes("trap 'rm -rf") && s.includes('#k=')),
+        windows: blocks.some((s) => s.includes('relayium.exe') && s.includes('Remove-Item') && s.includes('#k=')),
+        leaked,
+      };
+    })()`);
+    if (!terminalResult.visible || !terminalResult.summary) {
+      throw new Error(`sender no-install entry is not discoverable at 390px: ${JSON.stringify(terminalResult)}`);
+    }
+    if (!terminalResult.saysCiphertext || !terminalResult.posix || !terminalResult.windows || terminalResult.leaked) {
+      throw new Error(`sender terminal guidance is incomplete or leaks the key: ${JSON.stringify(terminalResult)}`);
+    }
+    ok("stored-upload result exposes installed and verified temporary CLI paths at 390px");
 
     if (tab.errors.length) throw new Error(`page console errors:\n${tab.errors.join("\n")}`);
   } finally {

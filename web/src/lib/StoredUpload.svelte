@@ -12,6 +12,8 @@
   import { session } from "./auth.svelte";
   import { fetchUsage } from "./usage.svelte";
   import { allowedTtls, clampTtl } from "./ttl-options";
+  import CommandBlock from "./CommandBlock.svelte";
+  import { downCommand, tempDownloaderScript, windowsTempDownloaderScript } from "./temp-downloader";
 
   const t = $derived<Messages>(messages[lang()]);
 
@@ -69,20 +71,15 @@
   let expiresAt = $state(0); // unix seconds of the generated link, 0 until ready
   let err = $state("");
   const linkCopy = copyFeedback();
-  const cmdCopy = copyFeedback();
   let dest = $state("."); // download destination for the `relayium down` command builder
   let qrDataUrl = $state("");
 
-  // A shell-safe download command the recipient can paste on another machine.
-  // The link is single-quoted so the `#k=…` fragment isn't swallowed as a
-  // comment; the destination is only quoted when it contains characters a
-  // shell would otherwise split or interpret (a pasted pwd with spaces, say).
-  function shellQuote(s: string): string {
-    if (s === "") return ".";
-    if (/^[\w@%+=:,./-]+$/.test(s)) return s;
-    return "'" + s.replace(/'/g, "'\\''") + "'";
-  }
-  const downCmd = $derived(`relayium down '${link}' ${shellQuote(dest.trim())}`);
+  // Keep the sender result and recipient download page on the same quoting and
+  // verified temporary-run implementation. The capability link remains text in
+  // a command block; it is never put in href/src where its key could leak.
+  const downCmd = $derived(link ? downCommand(link, dest) : "");
+  const tempScript = $derived(link ? tempDownloaderScript({ link, dest }) : "");
+  const windowsScript = $derived(link ? windowsTempDownloaderScript(link, dest) : "");
   let controller: AbortController | null = null; // in-flight upload, so it can be cancelled
 
   $effect(() => {
@@ -177,7 +174,6 @@
   }
 
   const copy = () => linkCopy.copy(link);
-  const copyCmd = () => cmdCopy.copy(downCmd);
 </script>
 
 <section class="stored">
@@ -230,17 +226,51 @@
     {#if qrDataUrl}<img class="qr" src={qrDataUrl} alt="QR" width="192" height="192" />{/if}
 
     <div class="cli">
-      <p class="cli-h">{t.stored.cliHeading}</p>
-      <p class="cli-intro">{t.stored.cliIntro}</p>
+      <p class="cli-h">{t.download.cli.heading}</p>
       <label class="cli-dest">
         <span>{t.stored.cliDestLabel}</span>
         <input bind:value={dest} placeholder="." spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" />
       </label>
       <p class="cli-hint">{t.stored.cliDestHint}</p>
-      <div class="cli-cmd">
-        <code>{downCmd}</code>
-        <button class="btn btn-ghost" onclick={copyCmd}>{cmdCopy.value ? t.stored.copied : t.stored.cliCopy}</button>
-      </div>
+
+      <h4>{t.download.cli.installedTitle}</h4>
+      <p class="cli-intro">{t.download.cli.installedIntro}</p>
+      <CommandBlock
+        code={downCmd}
+        title="relayium down"
+        copyLabel={t.stored.cliCopy}
+        copiedLabel={t.stored.copied}
+        copyAria="{t.stored.cliCopy}: relayium down"
+      />
+
+      <details class="temp-cli">
+        <summary>{t.download.cli.tempTitle}</summary>
+        <p class="cli-intro">{t.download.cli.tempMeans}</p>
+        <p class="curlnote">{t.download.cli.tempCurlNote}</p>
+        <ol class="steps">
+          {#each t.download.cli.steps as step, i (i)}
+            <li>{step}</li>
+          {/each}
+        </ol>
+        <CommandBlock
+          code={tempScript}
+          title="temporary · verified"
+          copyLabel={t.stored.cliCopy}
+          copiedLabel={t.stored.copied}
+          copyAria="{t.stored.cliCopy}: {t.download.cli.tempTitle}"
+        />
+        <p class="attest">{t.download.cli.verified}</p>
+        <p class="attest">{t.download.cli.keyStaysLocal}</p>
+        <h4>{t.download.cli.windowsTitle}</h4>
+        <p class="cli-intro">{t.download.cli.windowsNote}</p>
+        <CommandBlock
+          code={windowsScript}
+          title="powershell · pinned SHA-256"
+          copyLabel={t.stored.cliCopy}
+          copiedLabel={t.stored.copied}
+          copyAria="{t.stored.cliCopy}: {t.download.cli.windowsTitle}"
+        />
+      </details>
     </div>
   {/if}
 </section>
@@ -278,6 +308,7 @@
 
   .cli { margin-top: var(--space-4); padding-top: var(--space-4); border-top: 1px solid var(--border); }
   .cli-h { margin: 0; font-size: var(--fs-sm); color: var(--text-h); font-weight: 600; }
+  .cli h4 { margin: var(--space-4) 0 0; font-size: var(--fs-xs); color: var(--text-h); }
   .cli-intro { margin: var(--space-2) 0 0; font-size: var(--fs-xs); color: var(--text); line-height: 1.5; }
   .cli-dest { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-3); font-size: var(--fs-xs); color: var(--text); }
   .cli-dest span { flex: none; }
@@ -286,14 +317,10 @@
     border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg); color: var(--text-h);
   }
   .cli-hint { margin: var(--space-2) 0 0; font-size: var(--fs-xs); color: var(--text); line-height: 1.5; }
-  .cli-cmd {
-    display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-3);
-    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
-    border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--code-bg);
-  }
-  .cli-cmd code {
-    flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: var(--fs-xs); color: var(--text-h);
-  }
-  .cli-cmd .btn { flex: none; padding: var(--space-2) var(--space-3); white-space: nowrap; }
+  .cli :global(.term) { margin-top: var(--space-3); }
+  .temp-cli { margin-top: var(--space-4); border-top: 1px solid var(--border); padding-top: var(--space-4); }
+  .temp-cli summary { cursor: pointer; color: var(--text-h); font-size: var(--fs-xs); font-weight: 600; }
+  .curlnote, .attest, .steps { font-size: var(--fs-xs); line-height: 1.55; color: var(--text); }
+  .curlnote { padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--code-bg); }
+  .steps { padding-inline-start: var(--space-5); }
 </style>

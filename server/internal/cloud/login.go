@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -19,6 +20,16 @@ type Client struct {
 	Server string
 	HTTP   *http.Client
 	Token  string
+
+	// DeviceName is the account-visible label a device-code login asks central
+	// to register for this machine (DeviceStart sends it; nothing else reads
+	// it). Empty behaves exactly like a pre-label CLI, which is what keeps a new
+	// CLI working against an old server and vice versa.
+	//
+	// It is a field rather than a Login parameter so DeviceStart's signature
+	// stays stable, and it is DESCRIPTIVE ONLY: central sanitizes it again on
+	// arrival and never authorizes anything on it.
+	DeviceName string
 
 	// Progress, if set, is called during Upload and Download with the number of
 	// plaintext bytes transferred so far and the total (from the manifest / the
@@ -60,9 +71,51 @@ func NewClient(server string) *Client {
 	tr.ResponseHeaderTimeout = 30 * time.Second
 	return &Client{
 		Server: server,
-		HTTP:   &http.Client{Transport: tr},
+		HTTP:   &http.Client{Transport: &uaTransport{base: tr}},
 		sleep:  time.Sleep,
 	}
+}
+
+// userAgent is the bounded identifier every request from this package carries.
+// Set once by the CLI through SetClientVersion; the package cannot compose it
+// itself because the release version is stamped into package main by the
+// linker.
+//
+// It exists so the browser approval page can say what is asking for access
+// instead of "Go-http-client/2.0". Like every other thing a client says about
+// itself, it is descriptive and spoofable — never an authentication signal.
+var userAgent = "relayium-cli/unknown (" + runtime.GOOS + "; " + runtime.GOARCH + ")"
+
+// SetClientVersion records the CLI release version in the User-Agent. Called
+// once from the CLI's entry point.
+func SetClientVersion(v string) {
+	// Bounded and single-line: this string is stored by central and rendered on
+	// an approval page. A version injected at link time is not attacker
+	// controlled, but it is not validated either, and the cost of being sure is
+	// one function call.
+	v = strings.Join(strings.Fields(v), "-")
+	if v == "" {
+		v = "unknown"
+	}
+	if len(v) > 32 {
+		v = v[:32]
+	}
+	userAgent = "relayium-cli/" + v + " (" + runtime.GOOS + "; " + runtime.GOARCH + ")"
+}
+
+// uaTransport stamps userAgent on every request the cloud client makes.
+//
+// A transport rather than a line in each request builder: there are four of
+// them today, and the one that gets added later without the header is exactly
+// the one whose origin a user would want to see on the approval page.
+type uaTransport struct{ base http.RoundTripper }
+
+func (t *uaTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// A RoundTripper must not modify the request it is handed — the same
+	// *Request is reused on redirect and retry.
+	clone := req.Clone(req.Context())
+	clone.Header.Set("User-Agent", userAgent)
+	return t.base.RoundTrip(clone)
 }
 
 // DeviceStart is the response from POST /api/cli/device/start.
@@ -72,6 +125,14 @@ type DeviceStart struct {
 	DeviceCode      string
 	Interval        int
 	ExpiresIn       int
+}
+
+// deviceStartRequest is the optional body of POST /api/cli/device/start. The
+// label is bound to the pending request here, before the browser sees it, so
+// the identity a human approves is the identity that gets persisted — and so
+// the terminal can print it while they decide.
+type deviceStartRequest struct {
+	DeviceName string `json:"device_name,omitempty"`
 }
 
 type deviceStartResponse struct {
@@ -126,7 +187,10 @@ func (c *Client) postJSON(ctx context.Context, path string, body any, out any) e
 // DeviceStart calls POST /api/cli/device/start.
 func (c *Client) DeviceStart(ctx context.Context) (DeviceStart, error) {
 	var resp deviceStartResponse
-	if err := c.postJSON(ctx, "/api/cli/device/start", nil, &resp); err != nil {
+	// A server that predates labels ignores the extra field, and one that
+	// postdates it treats an absent field as "no label" — so neither direction
+	// of a mixed-version fleet needs to know which side it is talking to.
+	if err := c.postJSON(ctx, "/api/cli/device/start", deviceStartRequest{DeviceName: c.DeviceName}, &resp); err != nil {
 		return DeviceStart{}, err
 	}
 	return DeviceStart{

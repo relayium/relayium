@@ -10,6 +10,7 @@ import (
 
 	"github.com/relayium/relayium/authx"
 	"github.com/relayium/relayium/httpx"
+	"github.com/relayium/relayium/internal/devicelabel"
 )
 
 const sessionCookie = "relayium_session"
@@ -317,11 +318,20 @@ func (s *Service) handleUpsertDevice(w http.ResponseWriter, r *http.Request, u U
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	// Sanitized, not refused: this is the browser's own self-registration, and
+	// failing it would leave the caller with no device at all. A name that
+	// sanitizes away entirely is still a bad request — storing "" would produce
+	// a nameless row nobody can identify in the revoke confirmation.
+	name := devicelabel.Sanitize(in.Name)
+	if name == "" {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
 	if in.ID == "" {
 		in.ID = authx.NewID()
 	}
 	d, err := s.store.UpsertDevice(r.Context(), Device{
-		ID: in.ID, UserID: u.ID, Name: in.Name, CreatedAt: s.now().Unix(),
+		ID: in.ID, UserID: u.ID, Name: name, CreatedAt: s.now().Unix(),
 	})
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -338,7 +348,22 @@ func (s *Service) handleRenameDevice(w http.ResponseWriter, r *http.Request, u U
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	if err := s.store.RenameDevice(r.Context(), r.PathValue("id"), u.ID, in.Name); err != nil {
+	// REFUSED rather than silently sanitized, unlike the CLI's start request and
+	// the browser's self-registration. This one is a person typing into a field
+	// and pressing save; quietly storing something other than what they typed —
+	// a pasted name with an invisible bidi mark, a 300-character paste — leaves
+	// them looking at a row whose name they did not choose. Whitespace is the
+	// one thing normalized without comment, because trailing spaces are not a
+	// decision anybody made.
+	if !devicelabel.Acceptable(in.Name) {
+		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_device_name"})
+		return
+	}
+	name := devicelabel.Sanitize(in.Name)
+	if err := s.store.RenameDevice(r.Context(), r.PathValue("id"), u.ID, name); errors.Is(err, ErrNotFound) {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	} else if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}

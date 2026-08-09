@@ -20,8 +20,16 @@
  */
 export type SameLength<T extends readonly unknown[]> = { -readonly [K in keyof T]: string };
 
-/** "该用哪种模式"的几张卡片。文案（什么时候用）在 t.cliPage.pickWhen。 */
+/** "该用哪种模式"的几张卡片。文案（什么时候用）在 t.cliPage.pickWhen。
+ *
+ * ⚠️ 这个数组和 pickWhen **按下标配对**。往中间插一项，九份语言文件里那之后的每一条
+ * 解释都会串位——而 SameLength 只管长度，串位它一个字都不会说。所以新增项要么追加到
+ * 末尾，要么像 inbox 这次一样：插到开头的同时，九份 pickWhen 全部同步插到开头，并由
+ * i18n-device-inbox.test.ts 里那条「inbox 那一格必须在讲收件箱」的断言兜底。 */
 export const PICK_MODES = [
+  // Device Inbox 排第一：它是"Web 往自己的服务器/NAS 发文件"这件事的推荐路径，
+  // 也是唯一一个不要求两端同时在线的模式。
+  { g: "📥", title: "inbox", cmd: "relayium inbox enable --dir ~/inbox" },
   { g: "🔑", title: "push / pull", cmd: "relayium push … user@host:path" },
   { g: "🔗", title: "send / receive", cmd: "relayium send … / receive <code>" },
   { g: "💬", title: "text", cmd: "relayium text [code]" },
@@ -32,9 +40,9 @@ export const PICK_MODES = [
 
 /** flag 参考表的前两列（flag 本身、作用于哪些子命令）。第三列在 t.cliPage.flagMeanings。 */
 export const FLAG_ROWS = [
-  { flag: "--dir <d>", who: "serve" },
+  { flag: "--dir <d>", who: "serve, inbox enable" },
   { flag: "--port <n>", who: "serve, relayium://" },
-  { flag: "--once", who: "serve" },
+  { flag: "--once", who: "serve, inbox run" },
   { flag: "--no-resume", who: "push / pull / serve" },
   { flag: "--config-dir <d>", who: "serve / push / sync / id / authorize" },
   { flag: "-i <file>", who: "push / pull / sync" },
@@ -48,6 +56,7 @@ export const FLAG_ROWS = [
   { flag: "--ttl <dur>", who: "up" },
   { flag: "--max-downloads <n>", who: "up" },
   { flag: "--server <url>", who: "login / up / down / send / receive / text" },
+  { flag: "--device-name <label>", who: "login" },
 ] as const;
 
 /** 本地信任材料的文件名。说明在 t.cliPage.fileDescs。 */

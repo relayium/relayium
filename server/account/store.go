@@ -332,6 +332,13 @@ type DeviceAuthRequest struct {
 	ConsumedAt     int64  // 0 = not yet consumed
 	ClientIP       string // origin of the CLI that started the flow (for the approval page)
 	UserAgent      string // CLI's User-Agent, truncated
+	// DeviceName is the account-visible label the CLI asked to register,
+	// already sanitized (internal/devicelabel). It is bound here at start so the
+	// browser approves the same identity that gets persisted, and so a person
+	// can match the pending request to the terminal in front of them.
+	// Descriptive and spoofable — never an authentication signal. '' = a
+	// pre-label CLI; approval substitutes the historical "CLI" name.
+	DeviceName string
 }
 
 // CLIToken is a long-lived hashed bearer credential minted at the end of a
@@ -1356,8 +1363,10 @@ type Store interface {
 	// approved (WHERE status='pending' AND unexpired), stashing the raw
 	// one-time CLI token in pending_token for the next poll to collect.
 	// ok=false if the request wasn't pending/unexpired (already approved,
-	// denied, expired, or unknown code) — nothing is written.
-	ApproveDeviceAuth(ctx context.Context, userCode, userID, tokenHash, rawToken string, at int64) (ok bool, err error)
+	// denied, expired, or unknown code) — nothing is written. deviceName is
+	// the label that exact row carried, read in the same transaction as the
+	// transition; '' means a pre-label CLI started the flow.
+	ApproveDeviceAuth(ctx context.Context, userCode, userID, tokenHash, rawToken string, at int64) (deviceName string, ok bool, err error)
 	// ConsumeDeviceAuth atomically transitions an approved request to
 	// consumed exactly once, returning the raw one-time token stashed by
 	// ApproveDeviceAuth and blanking pending_token so it never lingers at

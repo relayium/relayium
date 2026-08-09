@@ -4,7 +4,7 @@
   import { session, refreshSession } from "./auth.svelte";
   import { setLoginOpen } from "./login.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
-  import { navigate } from "./router.svelte";
+  import { navigate, CLI_PATH } from "./router.svelte";
   import { formatSize, formatRemaining } from "./format";
   import { nodeRunCommand, nodePortsCommand } from "./nodes";
   import { buildDownloadLink } from "./stored-file";
@@ -15,8 +15,9 @@
   import { reveal, countUp } from "./reveal";
   import PlanCard from "./PlanCard.svelte";
   import QuotaMeters from "./QuotaMeters.svelte";
-  import DeviceCard from "./DeviceCard.svelte";
-  import { DEVICE_REFRESH_MS } from "./device-inbox";
+  import DeviceCard, { type RenameOutcome } from "./DeviceCard.svelte";
+  import { DEVICE_REFRESH_MS, parseDeviceInbox } from "./device-inbox";
+  import { deviceSuffix } from "./device-identity";
   import { invalidateUsage } from "./usage.svelte";
 
   // 每次进入 /me 都要拿新的用量数字：/me 是懒加载路由（App.svelte 的
@@ -119,7 +120,9 @@
   async function revokeDevice(d: DeviceRow) {
     const gen = deviceSessionGen;
     // 确认框指名要吊销的是哪一台：一屏里可能有好几行，可见文字又都是同一个"吊销"。
-    if (!(await confirmDialog(t.me.deviceConfirmRevoke(d.Name)))) return;
+    // 名字**不足以**指名——两台机器可以同名，而且改名之前它们全都叫 "CLI"。所以这句
+    // 话要带上类型、ID 尾号和登录时间；真正被删的始终是那一行的完整 ID。
+    if (!(await confirmDialog(t.me.deviceConfirmRevoke(d.Name, kindText(d), refText(d), signedInText(d))))) return;
     if (gen !== deviceSessionGen) return;
     try {
       const res = await fetch(`/api/devices/${encodeURIComponent(d.ID)}`, {
@@ -140,11 +143,61 @@
     return DEVICE_KINDS.get(d.Kind)?.() ?? "";
   }
 
-  /** 最后使用时间。0 = 登录后一次都没用过——那种设备最值得吊销，所以单独说清楚。 */
+  /** 最后使用时间。0 不是"从未使用"那种故障感的说法——刚批准完的令牌本来就还没用过，
+   *  说成「自登录以来没用过」才是它真正的意思。 */
   function lastUsedText(d: DeviceRow): string {
-    if (!d.LastSeenAt) return t.me.deviceNeverUsed;
+    if (!d.LastSeenAt) return t.me.deviceNotUsedSinceSignIn;
     return t.me.deviceLastUsed(new Date(d.LastSeenAt * 1000).toLocaleString(lang()));
   }
+
+  /** 这枚凭据是什么时候被批准的。对那些没有标签、全叫 "CLI" 的老行来说，这是不需要
+   *  回填数据库就能拿到的两个区分依据之一。 */
+  function signedInText(d: DeviceRow): string {
+    return t.me.deviceSignedIn(new Date(d.CreatedAt * 1000).toLocaleString(lang()));
+  }
+
+  /** 另一个：设备 ID 的短后缀。ID 太短切不出东西时返回空串，由行内决定不渲染。 */
+  function refText(d: DeviceRow): string {
+    const suffix = deviceSuffix(d.ID);
+    return suffix ? t.me.deviceRef(suffix) : "";
+  }
+
+  /** 行内改名，走本来就有的 PATCH /api/devices/{id}。
+   *
+   *  返回值分三种而不是一个布尔：服务端说这个名字不能用（控制字符、方向覆盖、太长）
+   *  是**用户能改**的事，请求本身失败则值得重试，两句话不该混成一句。 */
+  async function renameDevice(d: DeviceRow, name: string): Promise<RenameOutcome> {
+    const gen = deviceSessionGen;
+    try {
+      const res = await fetch(`/api/devices/${encodeURIComponent(d.ID)}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (gen !== deviceSessionGen) return "failed";
+      if (res.status === 400) return "rejected";
+      if (!res.ok) return "failed";
+      // 改的是当下这份 `devices`，不是发起时的快照——等请求期间列表可能已经被
+      // 后台的 presence 刷新换过一轮了。
+      devices = devices.map((x) => (x.ID === d.ID ? { ...x, Name: name } : x));
+      return "ok";
+    } catch {
+      return "failed"; // 离线/断线：fetch 直接 reject，不会走到 !res.ok
+    }
+  }
+
+  /** 有没有哪一台真的开了收件箱。全是"没开"时，页面必须自己说清楚为什么一个
+   *  「发送文件」按钮都看不见——这正是这个功能上线后没人找得到的原因。 */
+  const anyInboxEnrolled = $derived(devices.some((d) => parseDeviceInbox(d.Inbox) !== null));
+
+  /** 去 /cli 上「设备收件箱」那一节。
+   *
+   *  **不加语言前缀。** `/cli` 是 SPA 路由，语言来自 localStorage；带前缀的
+   *  `/ar/cli` 根本不存在（构建产物里只有 /ar/apps、/ar/cross-network 这些静态页），
+   *  九种语言里有八种会 404。页内其他去 /cli 的入口（Nav、AppsPage、CliCallout）
+   *  用的也都是裸 CLI_PATH。 */
+  const cliInboxHref = `${CLI_PATH}#device-inbox`;
 
   // "My Nodes" — BYO relay node section.
   let nodes = $state<NodeRow[]>([]);
@@ -607,9 +660,22 @@
       <h2>{t.me.deviceTitle}</h2>
       <p class="muted">{t.me.deviceIntro}</p>
       <p class="muted">{t.deviceInbox.sectionHint}</p>
+      <!-- Where the send control comes from. The feature shipped with no
+           explanation anywhere: a signed-in owner with three CLI devices saw
+           no send affordance and nothing saying why not. -->
+      <p class="muted">{t.deviceInbox.sendWhere}</p>
       {#if devices.length === 0}
         <p class="muted">{t.me.deviceEmpty}</p>
+        <p class="muted">{t.me.deviceEmptyHint}</p>
+        <p class="setup"><a href={cliInboxHref}>{t.deviceInbox.setupCta} →</a></p>
       {:else}
+        {#if !anyInboxEnrolled}
+          <!-- Devices exist, none can receive. Without this the page is silent
+               about the difference between "no inbox yet" and "this feature
+               does not exist", and the owner has no way to tell which. -->
+          <p class="muted">{t.deviceInbox.noneEnrolled}</p>
+          <p class="setup"><a href={cliInboxHref}>{t.deviceInbox.setupCta} →</a></p>
+        {/if}
         <ul class="devicelist">
           <!-- Keyed by ID so a background presence refresh replaces the DATA of
                a row without destroying the card — an in-flight send and its
@@ -620,7 +686,10 @@
               device={d}
               kind={kindText(d)}
               lastUsed={lastUsedText(d)}
+              signedIn={signedInText(d)}
+              deviceRef={refText(d)}
               onRevoke={() => revokeDevice(d)}
+              onRename={(name) => renameDevice(d, name)}
             />
           {/each}
         </ul>
@@ -652,6 +721,10 @@
   /* 行本身的样式跟着 <li> 一起搬到了 DeviceCard.svelte —— Svelte 的样式是按组件
      作用域的，留在这里的 `.devicelist li` 选择器不会命中子组件里的那个 li。 */
   .devicelist { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+  /* 通往 /cli 上「设备收件箱」那一节的入口。空列表和"一台都没开收件箱"两种状态下
+     都要有——这两种状态才是用户真正卡住的地方。 */
+  .setup { margin: var(--space-2) 0 0; font-size: var(--fs-sm); }
+  .setup a { color: var(--accent-fg); }
 
   /* 注销区块：一条分隔线 + 更大的上边距，把它和上面的日常操作断开。 */
   .danger-zone {

@@ -68,6 +68,7 @@ function task(over: Partial<InboxTaskView> = {}): InboxTaskView {
 }
 
 const revoked = vi.fn();
+const renamed = vi.fn(async () => "ok" as const);
 let host: ReturnType<typeof mount> | null = null;
 let dialog: ReturnType<typeof mount> | null = null;
 let target: HTMLElement;
@@ -81,7 +82,10 @@ function render(over: Record<string, unknown> = {}, props: Record<string, unknow
       device: { ID: DEVICE_ID, Name: "work-laptop", CreatedAt: 1, LastSeenAt: 2, Kind: "cli", Inbox: over === null ? null : inbox(over) },
       kind: "CLI",
       lastUsed: "Last used yesterday",
+      signedIn: "Signed in on Tuesday",
+      deviceRef: "ID ends abc123",
       onRevoke: revoked,
+      onRename: renamed,
       ...props,
     },
   });

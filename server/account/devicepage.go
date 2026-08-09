@@ -79,6 +79,15 @@ function loadDetails() {
       var line = document.createElement('div');
       line.innerHTML = '<b>Login request</b> started ' + relTime(d.started_at);
       box.appendChild(line);
+      // The label this login will register, so the name that appears in My
+      // Devices is one the person saw in their own terminal first. textContent,
+      // never innerHTML: the label is client-supplied, and central's
+      // sanitization bounds what it can contain, not what it can look like.
+      if (d.device_name) {
+        var named = document.createElement('div');
+        named.textContent = 'will appear in My Devices as “' + d.device_name + '”';
+        box.appendChild(named);
+      }
       var origin = document.createElement('div');
       origin.className = 'muted';
       origin.textContent = 'from ' + (d.client_ip || 'unknown IP') + (d.user_agent ? ' · ' + d.user_agent : '');

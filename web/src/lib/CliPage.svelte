@@ -1,6 +1,7 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
-  import { navigate, PRICING_PATH } from "./router.svelte";
+  import { navigate, PRICING_PATH, ME_PATH } from "./router.svelte";
   import CommandBlock from "./CommandBlock.svelte";
   import Icon from "./Icon.svelte";
   import { PICK_MODES, FLAG_ROWS, TRUST_FILES, GUIDES } from "./cli-page-data";
@@ -56,6 +57,24 @@ cat snippet.py | relayium text 483920
 # optional: stop to compare the verification code first (needs a terminal)
 relayium text 483920 --verify`;
   const loginCmd = "relayium login   # opens relayium.com/device — enter the code to bind this machine";
+  // Device Inbox. Every command here exists today (server/cmd/relayium/inbox.go,
+  // update.go); nothing in this section may imply a background daemon the CLI
+  // does not implement or a container image Relayium does not publish.
+  const inboxUpdateCmd = `# on the machine that will RECEIVE
+relayium update --check     # is there a newer release?
+relayium update             # install it in place
+relayium inbox --help       # this build has Device Inbox if this prints`;
+  const inboxLoginCmd = `relayium login --device-name prod-backup-1
+#   → Open https://relayium.com/device and enter code: WDJB-MJHT
+#     This machine will appear in My Devices as: prod-backup-1
+
+# omit --device-name and it registers this host's own name`;
+  const inboxEnableCmd = `relayium inbox enable --dir ~/inbox   # the opt-in, made HERE — nothing remote can set it
+relayium inbox run                    # the receiver, in the foreground (--once for one pass)
+relayium inbox status                 # folder, credential, worker, and what the server thinks`;
+  const inboxServiceCmd = `# prints a unit for THIS machine; it installs nothing itself
+relayium inbox service systemd-user > relayium-inbox.service
+#   also: systemd-system (dedicated account, needs root) · launchd · container`;
   const upCmd = `relayium up ./report.pdf
 #   → https://relayium.com/d/7fK2p…#k=Xr8s…
 
@@ -66,6 +85,28 @@ relayium up ./report.pdf --max-downloads 5   # allow 5 downloads`;
   const downCmd = `# on another machine — no login needed
 relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
   const guideUrl = (slug: string) => (lang() === "en" ? `/${slug}` : `/${lang()}/${slug}`);
+
+  // Land on the section the link named, not on the top of a long page.
+  //
+  // The browser's own fragment handling cannot do this here: the SPA shell's
+  // <body> is empty when the document loads, so `#device-inbox` does not exist
+  // at the moment Chrome looks for it, and it gives up. Verified in a real
+  // browser (e2e/device-discovery.mjs) — before this, My Devices' "set up a
+  // device inbox" link dropped the reader at the install instructions, which is
+  // the same place they were already lost.
+  //
+  // Focus moves with the scroll. Scrolling alone leaves a keyboard or screen
+  // reader user at the document start while the sighted view has jumped: the
+  // next Tab would go to the nav, not into what they asked to read.
+  onMount(() => {
+    const id = location.hash.slice(1);
+    if (!id) return;
+    const target = document.getElementById(id);
+    if (!target) return;
+    target.setAttribute("tabindex", "-1");
+    target.scrollIntoView({ block: "start" });
+    target.focus({ preventScroll: true });
+  });
 </script>
 
 <section class="cli page-enter">
@@ -115,6 +156,49 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
         </div>
       {/each}
     </div>
+  </div>
+
+  <!-- Device Inbox. First of the mode cards and visually marked, because it is
+       the recommended answer to "get this file onto my server" and the only
+       mode whose sending half lives in the browser. It shipped invisible: the
+       page below never mentioned it, so nobody found it. The id is the anchor
+       My Devices links back to. -->
+  <div class="mode featured" id="device-inbox">
+    <div class="mode-head">
+      <span class="g" aria-hidden="true">📥</span>
+      <h2>{t.cliPage.inboxH2}</h2>
+      <span class="tag rec">{t.cliPage.inboxTag}</span>
+    </div>
+    <p>{t.cliPage.inboxIntro}</p>
+    <ol class="steps">
+      <li>
+        <strong>{t.cliPage.inboxStep1Label}</strong> {t.cliPage.inboxStep1Body}
+        <CommandBlock code={inboxUpdateCmd} title="receiver · install or update" />
+      </li>
+      <li>
+        <strong>{t.cliPage.inboxStep2Label}</strong> {t.cliPage.inboxStep2Body}
+        <CommandBlock code={inboxLoginCmd} title="receiver · sign in and name it" />
+      </li>
+      <li>
+        <strong>{t.cliPage.inboxStep3Label}</strong> {t.cliPage.inboxStep3Body}
+        <CommandBlock code={inboxEnableCmd} title="receiver · enable, run, check" />
+      </li>
+      <li>
+        <strong>{t.cliPage.inboxStep4Label}</strong> {t.cliPage.inboxStep4Body}
+        <p class="cta">
+          <a href={ME_PATH} onclick={(e) => { e.preventDefault(); navigate("me"); }}>{t.cliPage.inboxCta}</a>
+        </p>
+        <p class="alt">{t.cliPage.inboxCtaHint}</p>
+      </li>
+    </ol>
+    <p>{t.cliPage.inboxServiceNote}</p>
+    <CommandBlock code={inboxServiceCmd} title="receiver · keep it running" />
+    <p class="alt">{t.cliPage.inboxNoImageNote}</p>
+    <p>{t.cliPage.inboxQueueNote}</p>
+    <p>{t.cliPage.inboxPrivacyNote}</p>
+    <p class="alt">
+      <a href={`${repo}/blob/main/docs/device-inbox-cli.md`}>{t.cliPage.inboxDocs}</a>
+    </p>
   </div>
 
   <!-- Mode 1 -->
@@ -424,6 +508,50 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
     color: var(--ok);
     border-color: var(--ok-border);
     background: var(--ok-bg);
+  }
+  /* "Recommended" is the accent, not the success green: it is a suggestion
+     about which mode to pick, not a statement that something is free. */
+  .tag.rec {
+    color: var(--accent-fg);
+    border-color: var(--accent-border);
+    background: var(--social-bg);
+  }
+  /* The featured card is the first thing under the picker and has to read as
+     the answer, not as one of six equals. A left accent rule rather than a
+     tinted fill: the card holds four command blocks, and a background wash
+     behind them fights the code styling in both themes. */
+  .mode.featured {
+    border-color: var(--accent-border);
+    border-inline-start: 3px solid var(--accent);
+  }
+  /* The emphasis is on the LINK, not on the paragraph around it. A bolded <p>
+     followed by ordinary text is what axe's p-as-heading rule flags, and it is
+     right to: a screen-reader user gets a visual hierarchy that is not in the
+     document. Giving the anchor a button's affordance says "this is the action"
+     without pretending to be a heading. */
+  .cta {
+    margin: var(--space-3) 0 var(--space-2);
+  }
+  .cta a {
+    display: inline-block;
+    color: var(--accent-fg);
+    text-decoration: none;
+    border: 1px solid var(--accent-border);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-4);
+    transition: background-color 0.13s;
+  }
+  .cta a:hover {
+    background: var(--social-bg);
+  }
+  .cta a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .cta a {
+      transition: none;
+    }
   }
 
   .steps {

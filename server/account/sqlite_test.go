@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"strings"
 	"sync"
@@ -140,10 +141,11 @@ func TestDeviceRegistryScopedToUser(t *testing.T) {
 		t.Fatalf("u1 device mutated by u2 hijack attempt: %+v", l)
 	}
 	// u2 cannot rename or delete u1's device.
-	if err := s.RenameDevice(ctx, "dev1", u2.ID, "hacked"); err == nil {
-		if l, _ := s.ListDevices(ctx, u1.ID); l[0].Name == "hacked" {
-			t.Fatalf("u2 renamed u1's device")
-		}
+	if err := s.RenameDevice(ctx, "dev1", u2.ID, "hacked"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("cross-account rename error = %v, want ErrNotFound", err)
+	}
+	if l, _ := s.ListDevices(ctx, u1.ID); l[0].Name == "hacked" {
+		t.Fatalf("u2 renamed u1's device")
 	}
 	_ = s.DeleteDevice(ctx, "dev1", u2.ID)
 	if l, _ := s.ListDevices(ctx, u1.ID); len(l) != 1 {

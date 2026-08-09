@@ -359,16 +359,38 @@ export interface Messages {
     //
     // 文案不能只说 CLI：那样原生 App 的登录在用户眼里就成了「不在这个列表里」，
     // 而确认框里的「CLI 令牌」也会对着一台 App 设备说出错误的后果。
+    //
+    // 每一行还必须**能被认出来**（DECISION-LOG 2026-08-04）。`relayium login` 从前
+    // 给每台设备起的名字都叫 "CLI"，于是三台服务器就是三行一模一样的
+    // `CLI / CLI / 从未使用 / 吊销`，用户没法判断那个不可撤销的按钮会断掉哪一台。
+    // 所以一行要同时说出：标签、类型、设备 ID 的短后缀、登录时间、以及"自登录以来
+    // 用过没有"。后缀和登录时间是给**老行**用的——它们没有历史主机名可查，也不该为
+    // 此做一次数据库回填。
     deviceTitle: string;
     deviceIntro: string;
     deviceEmpty: string;
+    deviceEmptyHint: string; // 空列表下面的下一步：怎么让一台机器出现在这里
     deviceLastUsed: (when: string) => string;
-    deviceNeverUsed: string;
+    // "自登录以来没用过"，不是光秃秃的"从未使用"。刚批准完的令牌本来就还没用过，
+    // 而旧文案把那种正常状态说成了像是出了错。
+    deviceNotUsedSinceSignIn: string;
+    deviceSignedIn: (when: string) => string; // 这枚凭据是什么时候被批准的
+    deviceRef: (suffix: string) => string; // 设备 ID 的短后缀——**只有**这一小截，永不显示完整 ID
     deviceRevoke: string; // 每行都一样的可见按钮文字
-    deviceRevokeLabel: (name: string, kind: string) => string; // 可访问名称——指名设备与登录类型
-    deviceConfirmRevoke: (name: string) => string; // 指名道姓，且对两类凭据都说得对
+    // 可访问名称与确认框都要带齐「标签 + 类型 + 后缀 + 登录时间」：同名两行时，
+    // 这四样里后三样才是真正能区分它们的东西。
+    deviceRevokeLabel: (name: string, kind: string, ref: string, signedIn: string) => string;
+    deviceConfirmRevoke: (name: string, kind: string, ref: string, signedIn: string) => string;
     deviceKindApp: string; // 行内类型标签：原生 App 登录
     deviceKindCli: string; // 行内类型标签：CLI 登录
+    // 行内改名。走的是本来就有的 PATCH /api/devices/{id}；重名是允许的，靠后缀区分。
+    deviceRename: string; // 可见按钮文字
+    deviceRenameLabel: (name: string) => string; // 可访问名称——指名要改哪一台
+    deviceRenameField: (name: string) => string; // 输入框的可访问名称
+    deviceRenameSave: string;
+    deviceRenameCancel: string;
+    deviceRenameRejected: string; // 服务端说这个名字不能用（控制字符、方向覆盖、太长）
+    deviceRenameFailed: string; // 请求没成功，名字没有变——可以重试
     actionFailed: string; // generic "the request failed" notice for the write actions on this page
     // 账户注销入口。服务端的双重确认流程（POST /api/account/delete/request 只发一封
     // 确认邮件，真正的删除发生在邮件里的链接被打开之后）早就有了，法律文本也已经写明
@@ -407,6 +429,14 @@ export interface Messages {
   // unrecognised one falls to `errUnknown`/`sendErrUnknown`.
   deviceInbox: {
     sectionHint: string; // one line under the devices heading: what sending to a device means
+    // Where the send control comes from. The feature shipped invisible: a
+    // signed-in owner with three CLI devices saw no send affordance anywhere
+    // and no explanation of why, because the control only exists on an
+    // enrolled row and nothing said so. These three strings are that
+    // explanation, and they are a product requirement rather than a hint.
+    sendWhere: string; // when and where the "Send files" control appears
+    noneEnrolled: string; // devices exist, none has an inbox turned on yet
+    setupCta: string; // link text to the /cli Device Inbox instructions
     // Presence (protocol §6). Advisory — see rule 1 above.
     online: string;
     offline: string;
@@ -656,6 +686,32 @@ export interface Messages {
     cloudLoginNote: string;
     cloudInteropNote: string;
     cloudPrivacyNote: string;
+    // Device Inbox — the recommended way to get a file from the Web onto a
+    // server or NAS you own. It is the only CLI mode that does not need both
+    // ends online at once, and the only one whose sending half is a browser.
+    //
+    // Everything here must describe commands that EXIST. No official container
+    // image is published (an image is a supply-chain artifact needing its own
+    // signing and provenance), and `inbox run` is a plain foreground process
+    // that forks nothing — so neither may be implied.
+    inboxH2: string;
+    inboxTag: string; // "recommended" badge
+    inboxIntro: string;
+    inboxStep1Label: string; // install/update the CLI on the receiving machine
+    inboxStep1Body: string;
+    inboxStep2Label: string; // relayium login (+ --device-name)
+    inboxStep2Body: string;
+    inboxStep3Label: string; // inbox enable --dir, then run / status
+    inboxStep3Body: string;
+    inboxStep4Label: string; // send from My Devices in the browser
+    inboxStep4Body: string;
+    inboxServiceNote: string; // keeping it running: systemd/launchd/container entrypoint
+    inboxNoImageNote: string; // there is no official Relayium container image
+    inboxQueueNote: string; // offline devices queue; "uploaded" is not "saved"
+    inboxPrivacyNote: string; // sealed to a key only that machine holds
+    inboxCta: string; // link text → My Devices
+    inboxCtaHint: string; // the account gating, stated truthfully
+    inboxDocs: string; // link text → the full CLI receiver document
     // `relayium text` — ephemeral encrypted messages between two machines.
     textH2: string;
     textTag: string;

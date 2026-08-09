@@ -326,10 +326,10 @@ noted at `account/gc.go:49-52`.
 | Download-receipt dedup rows | 24 hours | `receiptRetention`, `account/gc.go:17`, applied at `account/gc.go:135` |
 | Admin audit trail (`admin_audit`) | 2 years by default, admin-overridable (`-audit-retention-days` / `RELAYIUM_AUDIT_RETENTION_DAYS`, `main.go:150`) | `auditRetentionDefault`, `account/gc.go:53`, applied at `account/gc.go:141` |
 | Monthly relay/traffic history (`usage_events`, `usage_periods`, `usage_monthly`) | **Not pruned by age at all** while the account is active — this is the billing history the quota math depends on | No prune call for these tables exists in `GC.sweep`; confirmed by reading the full sweep function |
-| Account + all of the above, on deletion | A grace period after a self-deletion request (`-account-grace-days` / `RELAYIUM_ACCOUNT_GRACE_DAYS`, default 30 days, `main.go:138`), then hard-purged | `ArchiveAndPurgeUser`, `account/sqlite.go:1717` |
+| Account + all of the above, on deletion | A grace period after a self-deletion request (`-account-grace-days` / `RELAYIUM_ACCOUNT_GRACE_DAYS`, default 30 days, `main.go:138`), then hard-purged | `ArchiveAndPurgeUser`, `account/sqlite.go:1725` |
 
 **What "hard-purged" actually does**, read directly from
-`ArchiveAndPurgeUser` (`account/sqlite.go:1717-1800`): the user's monthly
+`ArchiveAndPurgeUser` (`account/sqlite.go:1725-1808`): the user's monthly
 stored-transfer totals are folded into `usage_archive` — **period totals
 only, with no user ID retained** (`sqlite.go:1741-1746`) — and then every
 user-linked row (sessions, devices, identities, `usage_events`,

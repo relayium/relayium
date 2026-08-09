@@ -5,11 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/relayium/relayium/internal/cloud"
+	"github.com/relayium/relayium/internal/devicelabel"
 )
 
 // defaultCloudServer is the first-party account-bound cloud server that
@@ -24,6 +26,31 @@ func sameServer(a, b string) bool {
 	return strings.TrimRight(a, "/") == strings.TrimRight(b, "/")
 }
 
+// osHostname is os.Hostname, indirected so the lookup-failure branch below is
+// reachable from a test. A machine that cannot name itself is rare and entirely
+// plausible (a container with no UTS name, a stripped environment), and it must
+// end in a working login rather than a crash or a blank device row.
+var osHostname = os.Hostname
+
+// defaultDeviceName is the label a login registers when the user did not choose
+// one: this host's own name, which is the thing they will recognise in My
+// Devices. It is NOT shortened or prettified — a `.local` suffix or a full
+// FQDN is what the machine calls itself, and guessing at a nicer form would
+// make the printed label unpredictable. `--device-name` exists for anyone who
+// wants something else, including anyone who does not want an internal
+// hostname in their account.
+func defaultDeviceName() string {
+	h, err := osHostname()
+	if err != nil {
+		return devicelabel.Fallback
+	}
+	// A trailing dot is the DNS root, not part of the name.
+	if label := devicelabel.Sanitize(strings.TrimSuffix(h, ".")); label != "" {
+		return label
+	}
+	return devicelabel.Fallback
+}
+
 // runLogin drives the CLI device-code login flow: it asks the server for a
 // user code + verification URL, prints them so the human can approve in a
 // browser, then blocks until approval (or denial/expiry) and persists the
@@ -31,9 +58,10 @@ func sameServer(a, b string) bool {
 func runLogin(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("login", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	var server, configDir string
+	var server, configDir, deviceName string
 	fs.StringVar(&server, "server", defaultCloudServer, "cloud server base URL")
 	fs.StringVar(&configDir, "config-dir", "", "credential directory (default ~/.config/relayium)")
+	fs.StringVar(&deviceName, "device-name", "", "label for this machine in My Devices (default: this host's name)")
 	if err := parseArgs(fs, args); err != nil {
 		return 2
 	}
@@ -44,11 +72,32 @@ func runLogin(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	notify := func(start cloud.DeviceStart) {
-		fmt.Fprintf(stderr, "Open %s and enter code: %s\n", start.VerificationURI, start.UserCode)
+	// An EXPLICIT label that sanitizes away is an error, not a silent fallback:
+	// the user asked for a specific name, and quietly registering the hostname
+	// instead would put a machine in their account under a name they did not
+	// choose. An absent flag falls back, because that is what a default is.
+	label := devicelabel.Sanitize(deviceName)
+	if deviceName != "" && label == "" {
+		fmt.Fprintln(stderr, "--device-name has no usable characters after removing control and invisible ones")
+		return 2
+	}
+	if label == "" {
+		label = defaultDeviceName()
 	}
 
-	creds, err := cloud.NewClient(server).Login(context.Background(), notify)
+	notify := func(start cloud.DeviceStart) {
+		fmt.Fprintf(stderr, "Open %s and enter code: %s\n", start.VerificationURI, start.UserCode)
+		// The exact label central was asked to bind to THIS request, printed
+		// before approval so the row that appears in My Devices is one the
+		// person already saw here. Central sanitizes with the same function, so
+		// what is printed is what is stored.
+		fmt.Fprintf(stderr, "This machine will appear in My Devices as: %s\n", label)
+		fmt.Fprintln(stderr, "(run `relayium login --device-name <label>` to choose a different one)")
+	}
+
+	client := cloud.NewClient(server)
+	client.DeviceName = label
+	creds, err := client.Login(context.Background(), notify)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return 1

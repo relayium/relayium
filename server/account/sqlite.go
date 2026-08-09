@@ -195,7 +195,8 @@ CREATE TABLE IF NOT EXISTS cli_device_auth (
   expires_at       INTEGER NOT NULL,
   consumed_at      INTEGER NOT NULL DEFAULT 0,
   client_ip        TEXT NOT NULL DEFAULT '', -- origin of the CLI that started the flow, shown on /device to help spot phishing
-  user_agent       TEXT NOT NULL DEFAULT ''
+  user_agent       TEXT NOT NULL DEFAULT '',
+  device_name      TEXT NOT NULL DEFAULT ''  -- account-visible label the CLI asked to register; '' = a pre-label CLI
 );
 CREATE INDEX IF NOT EXISTS idx_cli_device_auth_expires ON cli_device_auth(expires_at);
 CREATE TABLE IF NOT EXISTS cli_tokens (
@@ -759,6 +760,13 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// A chunked upload declares its purpose at init and must still have it
 		// at finalize, which may run on a different instance.
 		`ALTER TABLE upload_sessions ADD COLUMN purpose TEXT NOT NULL DEFAULT 'share'`,
+		// The account-visible label a `relayium login` asks to register, carried
+		// from the start request through approval so the browser approves the
+		// same identity that is ultimately persisted. '' is what a pre-label CLI
+		// sends and what every existing row gets; approval substitutes the
+		// historical "CLI" name there, so no backfill is needed and a mixed-
+		// version fleet keeps working. See deviceauth.go.
+		`ALTER TABLE cli_device_auth ADD COLUMN device_name TEXT NOT NULL DEFAULT ''`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -2068,9 +2076,19 @@ func (s *SQLiteStore) ListDevices(ctx context.Context, userID string) ([]Device,
 }
 
 func (s *SQLiteStore) RenameDevice(ctx context.Context, id, userID, name string) error {
-	_, err := s.db.ExecContext(ctx,
+	res, err := s.db.ExecContext(ctx,
 		`UPDATE devices SET name = ? WHERE id = ? AND user_id = ?`, name, id, userID)
-	return err
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *SQLiteStore) DeleteDevice(ctx context.Context, id, userID string) error {
@@ -4248,19 +4266,19 @@ func (s *SQLiteStore) ListActiveFleetTokens(ctx context.Context) ([]FleetToken, 
 // deviceAuthCols is shared by CreateDeviceAuth's INSERT and the two lookup
 // SELECTs; pending_token is deliberately excluded from the public struct (it
 // is a DB-internal handoff field) but still needs its own default on INSERT.
-const deviceAuthCols = `user_code, device_code_hash, status, user_id, token_hash, created_at, expires_at, consumed_at, client_ip, user_agent`
+const deviceAuthCols = `user_code, device_code_hash, status, user_id, token_hash, created_at, expires_at, consumed_at, client_ip, user_agent, device_name`
 
 func (s *SQLiteStore) CreateDeviceAuth(ctx context.Context, r DeviceAuthRequest) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO cli_device_auth (`+deviceAuthCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		r.UserCode, r.DeviceCodeHash, r.Status, r.UserID, r.TokenHash, r.CreatedAt, r.ExpiresAt, r.ConsumedAt, r.ClientIP, r.UserAgent)
+		`INSERT INTO cli_device_auth (`+deviceAuthCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		r.UserCode, r.DeviceCodeHash, r.Status, r.UserID, r.TokenHash, r.CreatedAt, r.ExpiresAt, r.ConsumedAt, r.ClientIP, r.UserAgent, r.DeviceName)
 	return err
 }
 
 func scanDeviceAuth(sc rowScanner) (DeviceAuthRequest, error) {
 	var r DeviceAuthRequest
 	err := sc.Scan(&r.UserCode, &r.DeviceCodeHash, &r.Status, &r.UserID, &r.TokenHash,
-		&r.CreatedAt, &r.ExpiresAt, &r.ConsumedAt, &r.ClientIP, &r.UserAgent)
+		&r.CreatedAt, &r.ExpiresAt, &r.ConsumedAt, &r.ClientIP, &r.UserAgent, &r.DeviceName)
 	return r, err
 }
 
@@ -4295,16 +4313,47 @@ func (s *SQLiteStore) GetDeviceAuthByCodeHash(ctx context.Context, hash string) 
 // success (stale/expired/already-approved/denied/unknown codes all report
 // ok=false, nothing written). The raw one-time token is stashed in
 // pending_token for ConsumeDeviceAuth to hand back on the CLI's next poll.
-func (s *SQLiteStore) ApproveDeviceAuth(ctx context.Context, userCode, userID, tokenHash, rawToken string, at int64) (bool, error) {
-	res, err := s.db.ExecContext(ctx,
+//
+// It also returns the label that row carried, in the SAME transaction as the
+// transition. Reading it separately would let a second request reuse the code
+// between the read and the update, and the caller would then name the device
+// after a request it did not approve — the one thing binding the label to the
+// pending request is supposed to prevent. An empty name means a pre-label CLI
+// started the flow; the caller substitutes the historical name.
+func (s *SQLiteStore) ApproveDeviceAuth(ctx context.Context, userCode, userID, tokenHash, rawToken string, at int64) (string, bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return "", false, err
+	}
+	defer tx.Rollback()
+	var name string
+	err = tx.QueryRowContext(ctx,
+		`SELECT device_name FROM cli_device_auth
+		  WHERE user_code=? AND status='pending' AND expires_at > ?`, userCode, at).Scan(&name)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	res, err := tx.ExecContext(ctx,
 		`UPDATE cli_device_auth SET status='approved', user_id=?, token_hash=?, pending_token=?
 		  WHERE user_code=? AND status='pending' AND expires_at > ?`,
 		userID, tokenHash, rawToken, userCode, at)
 	if err != nil {
-		return false, err
+		return "", false, err
 	}
 	n, err := res.RowsAffected()
-	return n == 1, err
+	if err != nil {
+		return "", false, err
+	}
+	if n != 1 {
+		return "", false, nil
+	}
+	if err := tx.Commit(); err != nil {
+		return "", false, err
+	}
+	return name, true, nil
 }
 
 // ConsumeDeviceAuth marks an approved request consumed exactly once and returns
