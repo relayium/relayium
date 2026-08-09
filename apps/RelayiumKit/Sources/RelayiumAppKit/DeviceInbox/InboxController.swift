@@ -638,7 +638,14 @@ public final class InboxController: ObservableObject {
             case .unsupportedByServer, .unknownProtocolValue:
                 return fail(.enrolmentRefused)
             case .malformedResponse, .rangeIgnored, .stateNotDeviceReportable,
-                 .savedNotAsserted:
+                 .savedNotAsserted,
+                 // Sender-side refusals. This RECEIVER never builds a create,
+                 // so reaching one here means a client bug rather than a
+                 // condition another pass could clear — enumerated rather than
+                 // swept under a `default:` so the next case added to
+                 // `InboxError` is a compile error here, not a silent `unknown`.
+                 .invalidIdempotencyKey, .invalidWrappedKey,
+                 .unsupportedWrapAlgorithm, .invalidKeyGeneration:
                 return fail(.unknown)
             }
         }

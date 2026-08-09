@@ -4,7 +4,7 @@ import XCTest
 private final class FailingInitTransport: ResumableTransport, @unchecked Sendable {
     let error: Error
     init(error: Error) { self.error = error }
-    func initUpload(header: [UInt8], burnAfterRead: Bool, ttl: Int,
+    func initUpload(header: [UInt8], purpose: UploadPurpose, burnAfterRead: Bool, ttl: Int,
                     size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
         throw error
     }

@@ -54,6 +54,13 @@ public enum InboxKeyError: Error, Equatable, Sendable {
     /// would refuse. Never silently retried: publishing an unusable public key
     /// would make every task sealed to it undecryptable by anybody.
     case generationFailed
+    /// The sealing primitive failed, or produced a box this protocol version
+    /// does not define.
+    ///
+    /// Separate from `generationFailed` because the remedy differs: that one
+    /// says this device cannot mint an identity, this one says a SEND could not
+    /// be wrapped. Carries nothing, for the same reason as every case above.
+    case sealFailed
 }
 
 public enum InboxKeyMaterial {
@@ -184,6 +191,47 @@ public enum InboxKeyMaterial {
             throw InboxKeyError.generationFailed
         }
         return kp
+    }
+
+    // MARK: - sealing
+
+    /// Wrap a 32-byte AES-256-GCM content key to a TARGET device's announced
+    /// public key, producing the `wrappedKey` a task create carries.
+    ///
+    /// The sender-side inverse of `unsealContentKey`, and deliberately written
+    /// beside it: the two halves of one primitive drifting apart is how a
+    /// delivery becomes undecryptable on a machine that reports no error.
+    ///
+    /// The target key goes through `validatePublicKey`, which is central's own
+    /// order of checks — unknown algorithm, non-canonical base64url, wrong
+    /// length, low-order point. The last one is the reason this cannot be a
+    /// bare `crypto_box_seal`: a low-order target key parses, is the right
+    /// length, and drives the X25519 exchange to the all-zero shared secret, so
+    /// the "sealed" content key would be recoverable by anybody who saw the
+    /// queue row. A sender that skipped this check would publish the user's file
+    /// key to the world while every status in the UI stayed green.
+    ///
+    /// The content key is length-checked EXACTLY, before any crypto runs. What
+    /// is wrapped is fixed by this protocol version, and a short key must fail
+    /// here rather than produce a box the receiver refuses hours later with an
+    /// error that reads as corruption.
+    ///
+    /// The RESULT is length-checked too, and returned as canonical base64url —
+    /// the same spelling rule the receiver decodes with, so one key has one
+    /// spelling on both sides of the queue.
+    ///
+    /// Nothing here logs, persists or formats the content key: it arrives as
+    /// bytes, leaves as a sealed box, and the errors carry no associated values.
+    public static func sealContentKey(algorithm: String, targetPublicKey: String,
+                                      contentKey: [UInt8]) throws -> String {
+        let recipient = try validatePublicKey(algorithm: algorithm, encoded: targetPublicKey)
+        guard contentKey.count == 32 else { throw InboxKeyError.malformedKeyMaterial }
+        ensureInboxSodium()
+        guard let sealed = sodium.box.seal(message: contentKey, recipientPublicKey: recipient),
+              sealed.count == InboxProtocol.sealedBoxBytes else {
+            throw InboxKeyError.sealFailed
+        }
+        return encode(sealed)
     }
 
     // MARK: - unsealing

@@ -13,7 +13,7 @@ final class StubTransport: ResumableTransport, @unchecked Sendable {
     var initError: Error?
     var finalizeResult = UploadResult(id: "fid", expiresAt: 4242)
 
-    func initUpload(header: [UInt8], burnAfterRead: Bool, ttl: Int,
+    func initUpload(header: [UInt8], purpose: UploadPurpose, burnAfterRead: Bool, ttl: Int,
                     size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
         if let e = initError { throw e }
         return ("up1", chunkSize)
@@ -42,7 +42,7 @@ final class RetainingTransport: ResumableTransport, @unchecked Sendable {
     var retained: [Data] = []
     private var committedCount = 0
 
-    func initUpload(header: [UInt8], burnAfterRead: Bool, ttl: Int,
+    func initUpload(header: [UInt8], purpose: UploadPurpose, burnAfterRead: Bool, ttl: Int,
                     size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
         ("up1", chunkSize)
     }
@@ -199,7 +199,7 @@ private final class DribblingTransport: ResumableTransport, @unchecked Sendable 
     var chunkSize = 64 * 1024
     private var committed = 0
 
-    func initUpload(header: [UInt8], burnAfterRead: Bool, ttl: Int,
+    func initUpload(header: [UInt8], purpose: UploadPurpose, burnAfterRead: Bool, ttl: Int,
                     size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
         ("up1", chunkSize)
     }

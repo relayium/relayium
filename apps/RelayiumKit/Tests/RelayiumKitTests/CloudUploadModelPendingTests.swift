@@ -31,7 +31,7 @@ final class CloudUploadModelPendingTests: XCTestCase {
         var onInit: (() -> Void)?
         private(set) var inits = 0
         private(set) var patches = 0
-        func initUpload(header: [UInt8], burnAfterRead: Bool, ttl: Int,
+        func initUpload(header: [UInt8], purpose: UploadPurpose, burnAfterRead: Bool, ttl: Int,
                         size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
             inits += 1
             onInit?()
@@ -53,7 +53,7 @@ final class CloudUploadModelPendingTests: XCTestCase {
     /// whole slice exists for: the job must survive it.
     private final class DroppingTransport: ResumableTransport, @unchecked Sendable {
         private(set) var touched = false
-        func initUpload(header: [UInt8], burnAfterRead: Bool, ttl: Int,
+        func initUpload(header: [UInt8], purpose: UploadPurpose, burnAfterRead: Bool, ttl: Int,
                         size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
             ("upload-1", 1 << 20)
         }
@@ -72,7 +72,7 @@ final class CloudUploadModelPendingTests: XCTestCase {
     /// A transport that must never be called — the auto-resume tripwire.
     private final class ForbiddenTransport: ResumableTransport, @unchecked Sendable {
         private(set) var calls = 0
-        func initUpload(header: [UInt8], burnAfterRead: Bool, ttl: Int,
+        func initUpload(header: [UInt8], purpose: UploadPurpose, burnAfterRead: Bool, ttl: Int,
                         size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
             calls += 1
             return ("no", 1 << 20)
@@ -107,7 +107,7 @@ final class CloudUploadModelPendingTests: XCTestCase {
 
     private final class FinalizeGatedTransport: ResumableTransport, @unchecked Sendable {
         let gate = FinalizeGate()
-        func initUpload(header: [UInt8], burnAfterRead: Bool, ttl: Int,
+        func initUpload(header: [UInt8], purpose: UploadPurpose, burnAfterRead: Bool, ttl: Int,
                         size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
             ("upload-1", 1 << 20)
         }

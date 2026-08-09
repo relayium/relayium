@@ -53,7 +53,7 @@ private final class IdentifierTransport: ResumableTransport, @unchecked Sendable
     private(set) var finalizeCalls = 0
     private var committed = 0
 
-    func initUpload(header: [UInt8], burnAfterRead: Bool, ttl: Int,
+    func initUpload(header: [UInt8], purpose: UploadPurpose, burnAfterRead: Bool, ttl: Int,
                     size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
         (initId, chunkSize)
     }
@@ -82,7 +82,7 @@ private final class IdentifierTransport: ResumableTransport, @unchecked Sendable
 /// A server with no `/api/uploads` — the only thing that legitimately reaches
 /// the single-shot fallback.
 private struct NoResumableEndpointTransport: ResumableTransport {
-    func initUpload(header: [UInt8], burnAfterRead: Bool, ttl: Int,
+    func initUpload(header: [UInt8], purpose: UploadPurpose, burnAfterRead: Bool, ttl: Int,
                     size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
         throw CloudError.server(status: 404)
     }

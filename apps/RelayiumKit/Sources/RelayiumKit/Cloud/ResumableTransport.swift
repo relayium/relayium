@@ -52,7 +52,13 @@ func tooManyRequestsError(retryAfter: String?, body: String) -> CloudError {
 /// The four calls of the resumable upload protocol, behind a protocol so the
 /// chunk loop can be tested without a server.
 public protocol ResumableTransport {
-    func initUpload(header: [UInt8], burnAfterRead: Bool, ttl: Int,
+    /// `purpose` is a REQUIREMENT rather than a defaulted argument, and
+    /// deliberately so: Swift forbids default values in a protocol requirement,
+    /// but even if it did not, a conformer that silently inherited `share`
+    /// would publish a device delivery as a public object. Every conformer,
+    /// including every test fake, has to say which one it is sending.
+    func initUpload(header: [UInt8], purpose: UploadPurpose,
+                    burnAfterRead: Bool, ttl: Int,
                     size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int)
     /// `bytes` is a slice of the caller's packing buffer and shares its storage.
     /// Implementations must not copy it — that copy is the whole memory problem.
@@ -78,11 +84,29 @@ public struct HTTPResumableTransport: ResumableTransport {
         self.session = session
     }
 
-    public func initUpload(header: [UInt8], burnAfterRead: Bool, ttl: Int,
+    public func initUpload(header: [UInt8], purpose: UploadPurpose,
+                           burnAfterRead: Bool, ttl: Int,
                            size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
+        // Refused, never rewritten. The server refuses this pair too
+        // (`resolveUploadRetention`), but discovering it there costs the whole
+        // staging pass, and quietly clearing the flag instead would hand the
+        // caller an object with retention it did not ask for.
+        //
+        // `server(status: 0)` is this file's existing spelling for a local
+        // invariant that broke — the same one `CloudUploader.pump` uses when
+        // its own offsets stop making sense — and this combination is
+        // unreachable through a validated pending plan.
+        guard purpose.allowsBurnAfterRead || !burnAfterRead else {
+            throw CloudError.server(status: 0)
+        }
         var comps = URLComponents(url: baseURL.appendingPathComponent("api/uploads"),
                                   resolvingAgainstBaseURL: false)!
-        comps.queryItems = [.init(name: "burnAfterRead", value: burnAfterRead ? "1" : "0"),
+        // Always sent, for both purposes. The web sender omits a default
+        // `share` and the server backfills it; a native client that relied on
+        // that would be one refactor away from a delivery uploaded as a public
+        // object, and the request is the only place that decision is visible.
+        comps.queryItems = [.init(name: "purpose", value: purpose.rawValue),
+                            .init(name: "burnAfterRead", value: burnAfterRead ? "1" : "0"),
                             .init(name: "ttl", value: String(ttl)),
                             .init(name: "size", value: String(size))]
         var req = URLRequest(url: comps.url!)

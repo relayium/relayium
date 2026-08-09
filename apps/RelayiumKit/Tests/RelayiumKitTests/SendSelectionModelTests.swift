@@ -8,7 +8,7 @@ import Combine
 /// An upload that starts and never finishes on its own, so `.uploading` is a
 /// state a test can hold still and act against.
 private final class HangingTransport: ResumableTransport, @unchecked Sendable {
-    func initUpload(header: [UInt8], burnAfterRead: Bool, ttl: Int,
+    func initUpload(header: [UInt8], purpose: UploadPurpose, burnAfterRead: Bool, ttl: Int,
                     size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
         try await Task.sleep(nanoseconds: 60 * NSEC_PER_SEC)
         return ("u", 1 << 20)

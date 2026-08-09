@@ -31,7 +31,7 @@ final class CloudUploaderResumeTests: XCTestCase {
 
         init(committed: Int) { self.committed = committed }
 
-        func initUpload(header: [UInt8], burnAfterRead: Bool, ttl: Int,
+        func initUpload(header: [UInt8], purpose: UploadPurpose, burnAfterRead: Bool, ttl: Int,
                         size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
             initCalls.append(header)
             // Deliberately small, so a single test payload spans several
@@ -123,7 +123,7 @@ final class CloudUploaderResumeTests: XCTestCase {
         let uploader = CloudUploader(transport: transport)
 
         _ = try await uploader.resume(sources: sources(), key: key, uploadId: "upload-1",
-                                      uploadChunkSize: 64 * 1024,
+                                      uploadChunkSize: 64 * 1024, purpose: .share,
                                       burnAfterRead: false, ttl: 3600, token: "t",
                                       onUploadSession: { _, _ in }, onProgress: { _, _ in })
 
@@ -142,7 +142,7 @@ final class CloudUploaderResumeTests: XCTestCase {
         let uploader = CloudUploader(transport: transport)
 
         _ = try await uploader.resume(sources: sources(), key: key, uploadId: "upload-1",
-                                      uploadChunkSize: 64 * 1024,
+                                      uploadChunkSize: 64 * 1024, purpose: .share,
                                       burnAfterRead: false, ttl: 3600, token: "t",
                                       onUploadSession: { _, _ in }, onProgress: { _, _ in })
 
@@ -162,7 +162,7 @@ final class CloudUploaderResumeTests: XCTestCase {
         let uploader = CloudUploader(transport: transport)
 
         _ = try await uploader.resume(sources: sources(), key: key, uploadId: "upload-1",
-                                      uploadChunkSize: 64 * 1024,
+                                      uploadChunkSize: 64 * 1024, purpose: .share,
                                       burnAfterRead: false, ttl: 3600, token: "t",
                                       onUploadSession: { _, _ in }, onProgress: { _, _ in })
 
@@ -179,7 +179,7 @@ final class CloudUploaderResumeTests: XCTestCase {
         let uploader = CloudUploader(transport: transport)
 
         _ = try await uploader.resume(sources: sources(), key: key, uploadId: "upload-1",
-                                      uploadChunkSize: 64 * 1024,
+                                      uploadChunkSize: 64 * 1024, purpose: .share,
                                       burnAfterRead: false, ttl: 3600, token: "t",
                                       onUploadSession: { _, _ in }, onProgress: { _, _ in })
 
@@ -194,7 +194,7 @@ final class CloudUploaderResumeTests: XCTestCase {
         let uploader = CloudUploader(transport: transport)
 
         _ = try await uploader.resume(sources: sources(), key: key, uploadId: "upload-1",
-                                      uploadChunkSize: 64 * 1024,
+                                      uploadChunkSize: 64 * 1024, purpose: .share,
                                       burnAfterRead: false, ttl: 3600, token: "t",
                                       onUploadSession: { _, _ in }, onProgress: { _, _ in })
 
@@ -209,7 +209,7 @@ final class CloudUploaderResumeTests: XCTestCase {
         let uploader = CloudUploader(transport: transport)
 
         _ = try await uploader.resume(sources: sources(), key: key, uploadId: "upload-1",
-                                      uploadChunkSize: 64 * 1024,
+                                      uploadChunkSize: 64 * 1024, purpose: .share,
                                       burnAfterRead: false, ttl: 3600, token: "t",
                                       onUploadSession: { id, chunkSize in
                                           XCTAssertEqual(id, "upload-1")
@@ -229,7 +229,7 @@ final class CloudUploaderResumeTests: XCTestCase {
         let uploader = CloudUploader(transport: transport)
 
         _ = try await uploader.resume(sources: sources(), key: key, uploadId: nil,
-                                      uploadChunkSize: nil,
+                                      uploadChunkSize: nil, purpose: .share,
                                       burnAfterRead: false, ttl: 3600, token: "t",
                                       onUploadSession: { _, _ in }, onProgress: { _, _ in })
 
@@ -258,7 +258,7 @@ final class CloudUploaderResumeTests: XCTestCase {
         private(set) var body = Data()
         private(set) var offsetQueries = 0
 
-        func initUpload(header: [UInt8], burnAfterRead: Bool, ttl: Int,
+        func initUpload(header: [UInt8], purpose: UploadPurpose, burnAfterRead: Bool, ttl: Int,
                         size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
             initCalls.append(header)
             return ("upload-2", 64 * 1024)
@@ -286,7 +286,7 @@ final class CloudUploaderResumeTests: XCTestCase {
         var reported: [String] = []
 
         let outcome = try await uploader.resume(sources: sources(), key: key, uploadId: "upload-1",
-                                                uploadChunkSize: 64 * 1024,
+                                                uploadChunkSize: 64 * 1024, purpose: .share,
                                                 burnAfterRead: false, ttl: 3600, token: "t",
                                                 onUploadSession: { id, _ in reported.append(id) },
                                                 onProgress: { _, _ in })
@@ -322,7 +322,7 @@ final class CloudUploaderResumeTests: XCTestCase {
         private(set) var finalized = false
         init(offset: Int) { self.offset = offset }
 
-        func initUpload(header: [UInt8], burnAfterRead: Bool, ttl: Int,
+        func initUpload(header: [UInt8], purpose: UploadPurpose, burnAfterRead: Bool, ttl: Int,
                         size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
             ("upload-1", 64 * 1024)
         }
@@ -345,7 +345,7 @@ final class CloudUploaderResumeTests: XCTestCase {
 
         do {
             _ = try await uploader.resume(sources: sources(), key: key, uploadId: "upload-1",
-                                          uploadChunkSize: 64 * 1024,
+                                          uploadChunkSize: 64 * 1024, purpose: .share,
                                           burnAfterRead: false, ttl: 3600, token: "t",
                                           onUploadSession: { _, _ in }, onProgress: { _, _ in })
             XCTFail("an unalignable offset must not be uploaded through")
@@ -362,7 +362,7 @@ final class CloudUploaderResumeTests: XCTestCase {
 
         do {
             _ = try await uploader.resume(sources: sources(), key: key, uploadId: "upload-1",
-                                          uploadChunkSize: 64 * 1024,
+                                          uploadChunkSize: 64 * 1024, purpose: .share,
                                           burnAfterRead: false, ttl: 3600, token: "t",
                                           onUploadSession: { _, _ in }, onProgress: { _, _ in })
             XCTFail("a negative offset must not be uploaded through")
@@ -380,7 +380,7 @@ final class CloudUploaderResumeTests: XCTestCase {
         let uploader = CloudUploader(transport: transport)
 
         let outcome = try await uploader.resume(sources: sources(), key: key, uploadId: "upload-1",
-                                                uploadChunkSize: 64 * 1024,
+                                                uploadChunkSize: 64 * 1024, purpose: .share,
                                                 burnAfterRead: false, ttl: 3600, token: "t",
                                                 onUploadSession: { _, _ in }, onProgress: { _, _ in })
 
@@ -398,7 +398,7 @@ final class CloudUploaderResumeTests: XCTestCase {
         var reported: [String] = []
 
         _ = try await uploader.resume(sources: sources(), key: key, uploadId: nil,
-                                      uploadChunkSize: nil,
+                                      uploadChunkSize: nil, purpose: .share,
                                       burnAfterRead: false, ttl: 3600, token: "t",
                                       onUploadSession: { id, _ in reported.append(id) },
                                       onProgress: { _, _ in })
@@ -415,7 +415,7 @@ final class CloudUploaderResumeTests: XCTestCase {
 
         do {
             _ = try await uploader.resume(sources: sources(), key: key, uploadId: nil,
-                                          uploadChunkSize: nil,
+                                          uploadChunkSize: nil, purpose: .share,
                                           burnAfterRead: false, ttl: 3600, token: "t",
                                           onUploadSession: { _, _ in throw Expected.writeFailed },
                                           onProgress: { _, _ in })

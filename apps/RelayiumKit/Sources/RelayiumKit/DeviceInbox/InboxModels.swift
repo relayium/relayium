@@ -176,6 +176,7 @@ public struct InboxDeviceRow: Equatable, Sendable, Decodable {
 public struct InboxTask: Equatable, Sendable {
     public let id: String
     public let targetDeviceID: String
+    public let idempotencyKey: String
     public let storedFileID: String
     public let state: InboxTaskState
     public let errorCode: InboxTaskErrorCode
@@ -189,7 +190,8 @@ public struct InboxTask: Equatable, Sendable {
     public let savedAt: Int64
     public let isTerminal: Bool
 
-    public init(id: String, targetDeviceID: String = "", storedFileID: String = "",
+    public init(id: String, targetDeviceID: String = "", idempotencyKey: String = "",
+                storedFileID: String = "",
                 state: InboxTaskState, errorCode: InboxTaskErrorCode = .device(.none),
                 ciphertextBytes: Int64 = 0,
                 wrapAlgorithm: String = InboxProtocol.keyAlgorithm,
@@ -198,6 +200,7 @@ public struct InboxTask: Equatable, Sendable {
                 savedAt: Int64 = 0, isTerminal: Bool? = nil) {
         self.id = id
         self.targetDeviceID = targetDeviceID
+        self.idempotencyKey = idempotencyKey
         self.storedFileID = storedFileID
         self.state = state
         self.errorCode = errorCode
@@ -215,7 +218,8 @@ public struct InboxTask: Equatable, Sendable {
 
 extension InboxTask: Decodable {
     fileprivate enum CodingKeys: String, CodingKey {
-        case id = "ID", targetDeviceID = "TargetDeviceID", storedFileID = "StoredFileID"
+        case id = "ID", targetDeviceID = "TargetDeviceID"
+        case idempotencyKey = "IdempotencyKey", storedFileID = "StoredFileID"
         case state = "State", errorCode = "ErrorCode", ciphertextBytes = "CiphertextBytes"
         case wrapAlgorithm = "WrapAlgorithm", targetKeyID = "TargetKeyID"
         case targetKeyGeneration = "TargetKeyGeneration", attempts = "Attempts"
@@ -239,6 +243,10 @@ extension InboxTask: Decodable {
         }
         errorCode = code
         targetDeviceID = try c.decode(String.self, forKey: .targetDeviceID)
+        // Older receiver fixtures and pre-sender servers did not expose this
+        // account-only field. Receiver reads remain backward-compatible, while
+        // `InboxSenderClient.createTask` requires an exact non-empty match.
+        idempotencyKey = try c.decodeIfPresent(String.self, forKey: .idempotencyKey) ?? ""
         storedFileID = try c.decode(String.self, forKey: .storedFileID)
         ciphertextBytes = try c.decode(Int64.self, forKey: .ciphertextBytes)
         wrapAlgorithm = try c.decode(String.self, forKey: .wrapAlgorithm)

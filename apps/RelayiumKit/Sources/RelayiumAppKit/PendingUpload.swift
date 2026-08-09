@@ -76,7 +76,102 @@ public struct PendingUploadPlan: Codable, Equatable {
     /// then.
     public var sourceDraftId: String?
 
+    /// What this job is uploading FOR.
+    ///
+    /// **Optional, and the version is deliberately NOT bumped**, for exactly the
+    /// reasons written above `sourceDraftId`: a plan from the previous build has
+    /// no such key and reads back as nil, and a plan this build writes for an
+    /// ordinary share encodes nothing, so a share plan stays byte-identical.
+    /// Bumping instead would make every interrupted upload on every existing
+    /// install unresumable.
+    ///
+    /// nil means `share` — the only thing a plan predating this field could have
+    /// been. Read it through `effectivePurpose`, never directly, so no call site
+    /// can treat "absent" as "unknown".
+    ///
+    /// An unrecognised raw value is a DECODE failure rather than a default: a
+    /// purpose written by a future build describes an authorization model this
+    /// one cannot honour, and resuming it as a share is the specific mistake
+    /// that would publish a device delivery.
+    public var purpose: UploadPurpose?
+    /// The device this job is being delivered to. Present exactly when
+    /// `effectivePurpose` is `.deviceTask`; see `PendingUploadTarget`.
+    public var targetDeviceId: String?
+    /// The identity and generation of the target public key this job's content
+    /// key was sealed to. Both are recorded so a resume can tell "the same key"
+    /// from "the key rotated while we were uploading" without re-reading the
+    /// device row — and so a reseal is a decision made against a recorded fact
+    /// rather than against whatever the device list says at the moment of retry.
+    public var targetKeyId: String?
+    public var targetKeyGeneration: Int64?
+    /// The sender's creation-idempotency key, minted ONCE when this plan is
+    /// written and never again.
+    ///
+    /// This is the field the whole durable-device-send design turns on. Central
+    /// converges repeated creates carrying the same key onto exactly one task,
+    /// so a create whose answer was lost — to a suspension, a force quit, a
+    /// crash, a reaped upload session, or a network failure after the request
+    /// left — can be retried safely. Minting a fresh key on retry instead would
+    /// queue the same ciphertext as a SECOND delivery, and the user would see
+    /// the file arrive twice with no way to tell which one to keep.
+    ///
+    /// It is minted before any network work, and it survives every mutation
+    /// below because each of them reads the current plan and changes one field.
+    public var createIdempotencyKey: String?
+
+    /// The purpose to act on. Absent means `share`: the only thing a plan
+    /// written before this field existed could have been.
+    public var effectivePurpose: UploadPurpose { purpose ?? .share }
+
+    /// The coherent device target, when this is a device send.
+    ///
+    /// All-or-nothing by construction: it is nil unless the purpose is
+    /// `.deviceTask` AND every one of the four fields is present. A partially
+    /// populated plan never reaches here — `PendingUploadStore.valid` refuses it
+    /// outright — so a caller cannot be handed half a target.
+    public var target: PendingUploadTarget? {
+        guard effectivePurpose == .deviceTask,
+              let targetDeviceId, let targetKeyId, let targetKeyGeneration,
+              let createIdempotencyKey else { return nil }
+        return PendingUploadTarget(deviceId: targetDeviceId, keyId: targetKeyId,
+                                   keyGeneration: targetKeyGeneration,
+                                   createIdempotencyKey: createIdempotencyKey)
+    }
+
     public var totalBytes: Int { files.reduce(0) { $0 + $1.size } }
+}
+
+/// Where a device send is going, and the key that makes its create idempotent.
+///
+/// One value rather than four loose fields so the set travels together. The
+/// plan stores them separately because JSON optionality is per-key and a nested
+/// object would change the encoding of a share plan; the coherence rule that
+/// makes them one thing lives in `PendingUploadStore.valid`.
+public struct PendingUploadTarget: Equatable, Sendable {
+    public let deviceId: String
+    public let keyId: String
+    public let keyGeneration: Int64
+    /// Defaulted to a freshly minted key, so a caller that has no reason to
+    /// choose one cannot forget to. Either way it is written into the plan
+    /// before the first byte of network work and never rotated afterwards.
+    public let createIdempotencyKey: String
+
+    public init(deviceId: String, keyId: String, keyGeneration: Int64,
+                createIdempotencyKey: String = InboxIdempotencyKey.mint()) {
+        self.deviceId = deviceId
+        self.keyId = keyId
+        self.keyGeneration = keyGeneration
+        self.createIdempotencyKey = createIdempotencyKey
+    }
+
+    /// The same rule `PendingUploadStore.valid` applies on read, so a target
+    /// that could not be persisted is refused before a byte is staged.
+    var isWellFormed: Bool {
+        (try? StoredObjectID.checked(deviceId)) == deviceId
+            && (try? StoredObjectID.checked(keyId)) == keyId
+            && keyGeneration > 0
+            && InboxIdempotencyKey.isValid(createIdempotencyKey)
+    }
 }
 
 public enum PendingUploadError: Error, Equatable {
@@ -151,13 +246,15 @@ public final class PendingUploadStore: @unchecked Sendable {
     /// Stage a selection: copy it, then describe it.
     public func prepare(files: [SelectedFile], accountId: String,
                         burnAfterRead: Bool, ttl: Int,
-                        sourceDraftId: String? = nil) throws -> PendingUploadPlan {
+                        sourceDraftId: String? = nil,
+                        target: PendingUploadTarget? = nil) throws -> PendingUploadPlan {
         // Through `stageCloudFiles`, so the sources are the same descriptor-
         // pinned ones the uploader would have used. The pin is what makes these
         // the bytes the user consented to: a path looked up a second time is
         // the lookup that can lie.
         try prepare(sources: try stageCloudFiles(files), accountId: accountId,
-                    burnAfterRead: burnAfterRead, ttl: ttl, sourceDraftId: sourceDraftId)
+                    burnAfterRead: burnAfterRead, ttl: ttl,
+                    sourceDraftId: sourceDraftId, target: target)
     }
 
     /// The real preparation, taking already-pinned sources.
@@ -166,7 +263,8 @@ public final class PendingUploadStore: @unchecked Sendable {
     /// cannot reopen anything, because it is handed no path to reopen.
     public func prepare(sources: [PlaintextSource], accountId: String,
                         burnAfterRead: Bool, ttl: Int,
-                        sourceDraftId: String? = nil) throws -> PendingUploadPlan {
+                        sourceDraftId: String? = nil,
+                        target: PendingUploadTarget? = nil) throws -> PendingUploadPlan {
         lock.lock()
         defer { lock.unlock() }
         guard !sources.isEmpty, sources.count <= MAX_FILES else {
@@ -174,6 +272,19 @@ public final class PendingUploadStore: @unchecked Sendable {
         }
         guard !accountId.isEmpty, ttl > 0 else {
             throw PendingUploadError.unusableSelection
+        }
+        // Checked before a byte is copied, for the same reason the draft id is:
+        // a target that would not validate on read is one no resume could ever
+        // act on, so the job would stage the user's bytes and then be swept.
+        if let target {
+            guard target.isWellFormed else { throw PendingUploadError.unusableSelection }
+            // The server refuses burn-after-read on a task-purpose object
+            // rather than rewriting it, so a plan that recorded the pair would
+            // be a staged job whose every upload attempt 400s.
+            guard !burnAfterRead else { throw PendingUploadError.unusableSelection }
+            guard ttl == UploadPurpose.deviceTaskTTLSeconds else {
+                throw PendingUploadError.unusableSelection
+            }
         }
         // Checked before a byte is copied. A draft id that would not validate on
         // read is one recovery could never act on, so a job carrying it would be
@@ -258,12 +369,22 @@ public final class PendingUploadStore: @unchecked Sendable {
                                                  staged: stagedName))
             }
 
+            // `purpose` stays nil for a share so the encoded plan is
+            // byte-identical to what the previous build wrote. The device
+            // fields are minted here, LAST before the write and therefore
+            // before any network work — the idempotency key in particular
+            // exists on disk before a create could ever be attempted.
             let plan = PendingUploadPlan(version: PendingUploadPlan.currentVersion,
                                          jobId: jobId, accountId: accountId,
                                          files: entries, burnAfterRead: burnAfterRead, ttl: ttl,
                                          createdAt: Int64(Date().timeIntervalSince1970),
                                          uploadId: nil, uploadChunkSize: nil, retired: false,
-                                         finalizedStoredId: nil, sourceDraftId: sourceDraftId)
+                                         finalizedStoredId: nil, sourceDraftId: sourceDraftId,
+                                         purpose: target == nil ? nil : .deviceTask,
+                                         targetDeviceId: target?.deviceId,
+                                         targetKeyId: target?.keyId,
+                                         targetKeyGeneration: target?.keyGeneration,
+                                         createIdempotencyKey: target?.createIdempotencyKey)
             try write(plan)                 // LAST: this is what makes the job complete
             return plan
         } catch {
@@ -347,6 +468,8 @@ public final class PendingUploadStore: @unchecked Sendable {
         // other copy of those files staged forever with nothing able to name it.
         if let source = plan.sourceDraftId, !SharedDraftID.isValid(source) { return false }
 
+        guard validTargetMetadata(plan) else { return false }
+
         switch (plan.uploadId, plan.uploadChunkSize) {
         case (nil, nil): break
         case let (.some(id), .some(chunkSize)):
@@ -365,6 +488,39 @@ public final class PendingUploadStore: @unchecked Sendable {
             total = next
         }
         return total < Int.max / 2
+    }
+
+    /// The device metadata is coherent as a SET, in both directions.
+    ///
+    /// A device send needs all four fields and needs each of them usable; a
+    /// share must carry none of them. Both halves are refusals rather than
+    /// repairs, and each prevents a distinct real failure:
+    ///
+    ///  - a device plan missing its idempotency key would mint a fresh one on
+    ///    the retry that needed the old one, and deliver the same bytes twice;
+    ///  - a device plan missing its target key id or generation could not tell
+    ///    a rotation from the key it sealed to, so it would either reseal
+    ///    needlessly or send a box the target can no longer open;
+    ///  - a SHARE plan carrying target metadata is a plan two builds disagree
+    ///    about. Ignoring the extra fields would resume it as a public object
+    ///    while something else on this device still believed it was a delivery.
+    ///
+    /// Refusing makes the job unresumable and sweepable, which is the honest
+    /// outcome: the staged bytes are still the user's, and nothing was sent.
+    private func validTargetMetadata(_ plan: PendingUploadPlan) -> Bool {
+        let fields: [Bool] = [plan.targetDeviceId != nil, plan.targetKeyId != nil,
+                              plan.targetKeyGeneration != nil,
+                              plan.createIdempotencyKey != nil]
+        switch plan.effectivePurpose {
+        case .share:
+            return fields.allSatisfy { !$0 }
+        case .deviceTask:
+            guard fields.allSatisfy({ $0 }), let target = plan.target else { return false }
+            // A device delivery may never be burn-after-read: the queue refuses
+            // a limited object, so such a plan could not be uploaded at all.
+            return target.isWellFormed && !plan.burnAfterRead
+                && plan.ttl == UploadPurpose.deviceTaskTTLSeconds
+        }
     }
 
     @discardableResult

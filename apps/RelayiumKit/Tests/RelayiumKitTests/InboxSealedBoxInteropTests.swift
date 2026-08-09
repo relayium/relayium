@@ -74,13 +74,22 @@ final class InboxSealedBoxInteropTests: XCTestCase {
 
     @discardableResult
     private func runGoSeal(in directory: URL) throws -> (status: Int32, output: String) {
+        try runGo("TestSwiftSealedBoxSeal", in: directory)
+    }
+
+    /// Run ONE named Go test against a shared temporary directory.
+    ///
+    /// Named rather than a package-wide run so each phase's exit status means
+    /// exactly one thing — which is what the negative controls read.
+    @discardableResult
+    private func runGo(_ test: String, in directory: URL) throws -> (status: Int32, output: String) {
         guard let go = goExecutable() else {
             throw XCTSkip("no Go toolchain")   // nonlocalized: skip reason, never rendered
         }
         let process = Process()
         process.executableURL = go
         process.arguments = ["test", "-tags", "swiftinterop", "-count=1",
-                             "-run", "^TestSwiftSealedBoxSeal$", "./internal/inboxclient/"]
+                             "-run", "^\(test)$", "./internal/inboxclient/"]
         process.currentDirectoryURL = serverDirectory
         var environment = ProcessInfo.processInfo.environment
         environment["RELAYIUM_INTEROP_DIR"] = directory.path
@@ -207,5 +216,105 @@ final class InboxSealedBoxInteropTests: XCTestCase {
             FileManager.default.fileExists(
                 atPath: directory.appendingPathComponent("go-box.json").path),
             "a refused key still produced a sealed box")
+    }
+
+    // MARK: - the sender direction: Swift seals, Go opens
+
+    /// A per-run directory, removed when the test ends.
+    private func interopDirectory(_ label: String) throws -> URL {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("relayium-swift-send-\(label)-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+        return directory
+    }
+
+    /// Phase 1: Go mints the recipient key and the expected content key.
+    private func mintGoRecipient(in directory: URL) throws -> (publicKey: String,
+                                                               contentKey: String) {
+        let phase = try runGo("TestSwiftSealedBoxMintRecipient", in: directory)
+        XCTAssertEqual(phase.status, 0, "the Go mint phase failed:\n\(phase.output)")
+        let data = try Data(contentsOf: directory.appendingPathComponent("go-recipient.json"))
+        let file = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: String])
+        XCTAssertEqual(file["mintedBy"], "relayium-go",
+                       "go-recipient.json was not produced by the Go implementation")
+        XCTAssertEqual(file["algorithm"], InboxProtocol.keyAlgorithm)
+        return (try XCTUnwrap(file["publicKey"]), try XCTUnwrap(file["contentKey"]))
+    }
+
+    /// Phase 2: hand Go a box for it to open.
+    private func writeSwiftBox(_ directory: URL, wrappedKey: String) throws {
+        let payload: [String: String] = [
+            "algorithm": InboxProtocol.keyAlgorithm,
+            "wrappedKey": wrappedKey,
+            "sealedBy": "relayium-swift",
+        ]
+        try JSONSerialization.data(withJSONObject: payload)
+            .write(to: directory.appendingPathComponent("swift-box.json"))
+    }
+
+    /// The assertion the native SENDER exists for: a box produced by the real
+    /// `InboxKeyMaterial.sealContentKey` is opened by the real Go
+    /// implementation, in another process, back to the exact content key GO
+    /// chose before Swift computed anything.
+    func testTheSwiftSenderSealsAKeyTheGoReceiverOpens() throws {
+        try XCTSkipUnless(try shouldRun(), "Go interop not enabled")   // nonlocalized: skip reason
+
+        let directory = try interopDirectory("open")
+        let recipient = try mintGoRecipient(in: directory)
+
+        let wrapped = try InboxKeyMaterial.sealContentKey(
+            algorithm: InboxProtocol.keyAlgorithm,
+            targetPublicKey: recipient.publicKey,
+            contentKey: try InboxKeyMaterial.decode(recipient.contentKey, expecting: 32))
+        // Canonical, exact length, before Go is asked anything — so a failure in
+        // the open phase is about the CRYPTO rather than about the spelling.
+        XCTAssertEqual(try InboxKeyMaterial.decode(wrapped,
+                                                   expecting: InboxProtocol.sealedBoxBytes).count,
+                       InboxProtocol.sealedBoxBytes)
+        try writeSwiftBox(directory, wrappedKey: wrapped)
+
+        let openPhase = try runGo("TestSwiftSealedBoxOpen", in: directory)
+        XCTAssertEqual(openPhase.status, 0,
+                       "the Go receiver could not open the native sender's box:\n\(openPhase.output)")
+    }
+
+    /// The control that makes the direction above trustworthy: the Go OPEN
+    /// phase must EXIT NON-ZERO when the box is tampered with, and when it was
+    /// sealed to a different target.
+    ///
+    /// Without it, a harness that silently failed to run Go — a wrong path, a
+    /// build error swallowed, a stale `swift-box.json` — would be
+    /// indistinguishable from a passing interoperability test
+    /// (WORKFLOW-LEARNINGS, 2026-08-08).
+    func testTheGoOpenPhaseFailsOnATamperedBoxAndOnTheWrongTarget() throws {
+        try XCTSkipUnless(try shouldRun(), "Go interop not enabled")   // nonlocalized: skip reason
+
+        // 1. A single flipped bit in a box that is otherwise exactly right.
+        let tamperDirectory = try interopDirectory("tamper")
+        let tamperRecipient = try mintGoRecipient(in: tamperDirectory)
+        let good = try InboxKeyMaterial.sealContentKey(
+            algorithm: InboxProtocol.keyAlgorithm,
+            targetPublicKey: tamperRecipient.publicKey,
+            contentKey: try InboxKeyMaterial.decode(tamperRecipient.contentKey, expecting: 32))
+        var raw = try InboxKeyMaterial.decode(good, expecting: InboxProtocol.sealedBoxBytes)
+        raw[raw.count - 1] ^= 0x01
+        try writeSwiftBox(tamperDirectory, wrappedKey: InboxKeyMaterial.encode(raw))
+        let tampered = try runGo("TestSwiftSealedBoxOpen", in: tamperDirectory)
+        XCTAssertNotEqual(tampered.status, 0,
+                          "the Go phase opened a tampered box:\n\(tampered.output)")
+
+        // 2. A perfectly valid box, sealed to somebody else.
+        let wrongDirectory = try interopDirectory("wrong-target")
+        let wrongRecipient = try mintGoRecipient(in: wrongDirectory)
+        let other = try InboxKeyMaterial.generateKeyPair()
+        let misdirected = try InboxKeyMaterial.sealContentKey(
+            algorithm: InboxProtocol.keyAlgorithm,
+            targetPublicKey: InboxKeyMaterial.encode(other.publicKey),
+            contentKey: try InboxKeyMaterial.decode(wrongRecipient.contentKey, expecting: 32))
+        try writeSwiftBox(wrongDirectory, wrappedKey: misdirected)
+        let wrongTarget = try runGo("TestSwiftSealedBoxOpen", in: wrongDirectory)
+        XCTAssertNotEqual(wrongTarget.status, 0,
+                          "the Go phase opened a box sealed to another device:\n\(wrongTarget.output)")
     }
 }

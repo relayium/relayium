@@ -10,7 +10,7 @@ private func sized(_ bytes: Int, name: String) -> URL {
 }
 
 private final class NoopTransport: ResumableTransport, @unchecked Sendable {
-    func initUpload(header: [UInt8], burnAfterRead: Bool, ttl: Int,
+    func initUpload(header: [UInt8], purpose: UploadPurpose, burnAfterRead: Bool, ttl: Int,
                     size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
         ("u", 1 << 20)
     }

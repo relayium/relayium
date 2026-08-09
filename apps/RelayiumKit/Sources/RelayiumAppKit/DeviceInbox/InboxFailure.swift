@@ -173,7 +173,12 @@ public enum InboxClassify {
         case let e as InboxKeyError:
             switch e {
             case .unseal, .unsupportedAlgorithm, .malformedKeyMaterial,
-                 .unusablePublicKey, .generationFailed:
+                 .unusablePublicKey, .generationFailed,
+                 // Sender-side only, and terminal for the same reason as the
+                 // rest: nothing about this delivery's key material changes
+                 // between attempts. Enumerated rather than defaulted so a new
+                 // key error has to be classified deliberately.
+                 .sealFailed:
                 return .terminal(.decryptFailed, .wrappedKeyUnusable)
             }
         case let e as StoredWireError:

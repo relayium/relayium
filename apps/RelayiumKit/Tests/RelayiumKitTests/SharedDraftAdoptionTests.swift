@@ -32,7 +32,7 @@ final class SharedDraftAdoptionTests: XCTestCase {
     // MARK: - doubles and helpers
 
     private final class OKTransport: ResumableTransport, @unchecked Sendable {
-        func initUpload(header: [UInt8], burnAfterRead: Bool, ttl: Int,
+        func initUpload(header: [UInt8], purpose: UploadPurpose, burnAfterRead: Bool, ttl: Int,
                         size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
             ("upload-1", 1 << 20)
         }
@@ -48,7 +48,7 @@ final class SharedDraftAdoptionTests: XCTestCase {
     }
 
     private final class DroppingTransport: ResumableTransport, @unchecked Sendable {
-        func initUpload(header: [UInt8], burnAfterRead: Bool, ttl: Int,
+        func initUpload(header: [UInt8], purpose: UploadPurpose, burnAfterRead: Bool, ttl: Int,
                         size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
             ("upload-1", 1 << 20)
         }

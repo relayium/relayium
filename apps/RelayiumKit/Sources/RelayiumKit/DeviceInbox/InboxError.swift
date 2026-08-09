@@ -60,6 +60,26 @@ public enum InboxError: Error, Equatable, Sendable {
     /// `saved` was named without the explicit commit assertion. Central cannot
     /// observe a local commit, so its absence is a refusal, never an assumption.
     case savedNotAsserted
+    /// A sender-minted creation key central would refuse: empty, longer than
+    /// the protocol bound, or carrying a byte outside printable ASCII.
+    ///
+    /// Refused locally rather than left to the 400, because this key is the
+    /// ONLY thing that converges a retried create onto one task. A send that
+    /// discovered its key was unusable after the ciphertext was uploaded would
+    /// have no way to retry safely.
+    case invalidIdempotencyKey
+    /// A `wrappedKey` that is not canonical base64url of exactly
+    /// `InboxProtocol.sealedBoxBytes`. Central applies the identical check; this
+    /// one means a malformed box never becomes a request at all.
+    case invalidWrappedKey
+    /// A wrap algorithm token this build does not implement, named by the
+    /// CALLER. Distinct from `unsupportedByServer(field: .keyAlgorithm)`, which
+    /// is central naming one — the two have different culprits and different
+    /// remedies.
+    case unsupportedWrapAlgorithm
+    /// A target key generation that cannot identify a key: central mints these
+    /// from 1 upward, so zero or negative means the device row was never read.
+    case invalidKeyGeneration
 
     /// The rejection token, when this is an `api` failure central named.
     public var rejection: InboxRejection? {

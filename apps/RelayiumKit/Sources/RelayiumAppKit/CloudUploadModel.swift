@@ -371,6 +371,10 @@ public final class CloudUploadModel: ObservableObject {
             let outcome = try await uploader.resume(
                 sources: sources, key: key, uploadId: plan.uploadId,
                 uploadChunkSize: plan.uploadChunkSize,
+                // From the plan, never from this model's own state: a resume
+                // may run in a process that never saw the send being started,
+                // and the purpose decides the object's authorization model.
+                purpose: plan.effectivePurpose,
                 burnAfterRead: plan.burnAfterRead, ttl: plan.ttl, token: token,
                 onUploadSession: { [weak self] id, chunkSize in
                     // Persisted from the uploader's own context, before bytes

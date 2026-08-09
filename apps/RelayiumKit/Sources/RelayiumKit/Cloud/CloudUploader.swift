@@ -65,7 +65,14 @@ public final class CloudUploader {
         return header
     }
 
-    public func upload(sources: [PlaintextSource], burnAfterRead: Bool, ttl: Int,
+    /// `purpose` defaults to `.share`, which is what this entry point has always
+    /// done and what every current caller means. The default is intentional
+    /// rather than incidental: this path generates its own content key and hands
+    /// back a `#k=` capability, which is a public share by definition. A device
+    /// delivery goes through `resume`, where the purpose comes from the durable
+    /// plan and is never inferred.
+    public func upload(sources: [PlaintextSource], purpose: UploadPurpose = .share,
+                       burnAfterRead: Bool, ttl: Int,
                        token: String,
                        onProgress: @escaping (_ sent: Int, _ total: Int) -> Void) async throws -> UploadOutcome {
         let raw = generateStoreKey()
@@ -73,7 +80,8 @@ public final class CloudUploader {
         let total = try Self.checkedCipherSize(sources.map(\.size))
 
         let (issuedId, chunkSize) = try await transport.initUpload(
-            header: header, burnAfterRead: burnAfterRead, ttl: ttl, size: total, token: token)
+            header: header, purpose: purpose, burnAfterRead: burnAfterRead,
+            ttl: ttl, size: total, token: token)
         // The first thing this function does with the server's answer, and
         // deliberately before any file bytes are encrypted or sent — the
         // encryptor below is not even constructed yet. `uploadId` is appended as
@@ -121,8 +129,14 @@ public final class CloudUploader {
     /// An offset outside `0...total` is refused rather than guessed at: it
     /// means the session is not the one this plan describes, and continuing
     /// would splice a misplaced stream into somebody's blob.
+    ///
+    /// `purpose` has NO default here. A resumed job's purpose is a property of
+    /// the durable plan, and the one thing this function must never do is
+    /// re-open a reaped device delivery as a public share — which is exactly
+    /// what an inherited `.share` default would do, silently, on the path where
+    /// nobody is watching.
     public func resume(sources: [PlaintextSource], key: [UInt8], uploadId: String?,
-                       uploadChunkSize: Int?,
+                       uploadChunkSize: Int?, purpose: UploadPurpose,
                        burnAfterRead: Bool, ttl: Int, token: String,
                        onUploadSession: (String, Int) throws -> Void,
                        onProgress: @escaping (_ sent: Int, _ total: Int) -> Void) async throws -> UploadOutcome {
@@ -149,8 +163,13 @@ public final class CloudUploader {
         }
 
         if session == nil {
+            // The reaped-session path. It carries the SAME purpose as the plan
+            // that opened the original session: the replacement object has to
+            // be the same kind of object, or a delivery that was interrupted
+            // for long enough becomes a public share on retry.
             let (issuedId, chunkSize) = try await transport.initUpload(
-                header: header, burnAfterRead: burnAfterRead, ttl: ttl, size: total, token: token)
+                header: header, purpose: purpose, burnAfterRead: burnAfterRead,
+                ttl: ttl, size: total, token: token)
             guard validUploadChunkSize(chunkSize) else { throw CloudError.decoding }
             session = (try StoredObjectID.checked(issuedId), chunkSize)
             committed = 0
@@ -352,6 +371,12 @@ extension CloudUploader {
     /// `/api/uploads`. `singleShot` receives the same inputs and does the
     /// whole-file upload; it is a closure so this type keeps no opinion about
     /// where the plaintext comes from.
+    ///
+    /// SHARE ONLY, and it says so by passing `.share` explicitly below rather
+    /// than by inheriting a default. The fallback it wraps is the legacy
+    /// whole-file endpoint, which has no purpose parameter at all — so a device
+    /// delivery routed through here would fall back into creating a public
+    /// object. A device send must use `resume` with a durable plan.
     public func uploadResumable(
         sources: [PlaintextSource],
         singleShot: (_ burnAfterRead: Bool, _ ttl: Int, _ token: String) async throws -> SingleShotResult,
@@ -359,7 +384,8 @@ extension CloudUploader {
         onProgress: @escaping (_ sent: Int, _ total: Int) -> Void
     ) async throws -> UploadOutcome {
         do {
-            return try await upload(sources: sources, burnAfterRead: burnAfterRead,
+            return try await upload(sources: sources, purpose: .share,
+                                    burnAfterRead: burnAfterRead,
                                     ttl: ttl, token: token, onProgress: onProgress)
         } catch is CancellationError {
             throw CancellationError()
