@@ -103,12 +103,14 @@
 "nav.sectionLinks" = "Links";
 "nav.sectionDevice" = "This Mac";
 "nav.nearby" = "Nearby";
-"nav.pairingCode" = "Pairing code";
 "nav.pairingCodeSubtitle" = "Text and small files across networks — both sides online";
+"nav.lanTransfer" = "LAN Transfer";
+"nav.lanTransferSubtitle" = "Messages and files with a device on this network — direct, no account; both sides online";
+"nav.crossNetwork" = "Cross-network Transfer";
+"nav.crossNetworkSubtitle" = "Messages and files with a device anywhere, using a six-digit code — same network not required; both sides online";
 "nav.storedSend" = "Send a link";
 "nav.storedSendSubtitle" = "Large files, picked up later — sign in; plan limits apply";
 "nav.storedReceive" = "Open a link";
-"nav.storedReceiveSubtitle" = "Open a link somebody sent — no account, until it expires";
 "nav.deviceInboxSubtitle" = "Files from your own account land in a folder you choose — sign in; works with the window closed";
 "nav.account" = "Account";
 "nav.accountSubtitle" = "Plan, devices and stored files";
@@ -612,9 +614,9 @@
 "inbox.waitingDeliveries.one" = "%@ delivery waiting for your answer";
 "inbox.waitingDeliveries.other" = "%@ deliveries waiting for your answer";
 
-/* MARK: macOS Workspace */
-"nav.workspace" = "Workspace";
-"nav.workspaceSubtitle" = "Messages and files with one device — same network or across networks with a code; both sides online";
+/* MARK: macOS transfer destinations */
+"crossNetwork.explain" = "The two devices do not need to be on the same network. One side creates a six-digit code, the other types it in, and Relayium's rendezvous service introduces them; both sides only have to be online at the same time.";
+"transfer.busyElsewhere" = "Another transfer is open in Relayium. Finish or leave it before starting one here.";
 "workspace.sameNetworkHeading" = "Same network";
 "workspace.pairingHeading" = "Pairing code";
 "workspace.stagingHeading" = "Files and folders";

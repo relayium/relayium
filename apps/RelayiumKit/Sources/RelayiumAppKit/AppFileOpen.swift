@@ -119,11 +119,18 @@ public final class AppFileOpenCoordinator: ObservableObject {
         guard !urls.isEmpty else { return }
         let destination = AppRouting.destination(forOpenedFiles: navigation.selection)
         navigation.select(destination)
-        // Merged under the destination decided *now*. A second batch arriving
-        // while the first still waits therefore moves with the user rather than
-        // being stranded on a surface they have since left — and the merge keeps
-        // the first batch alive, because both are files they asked to send.
-        var merged = (staged?.destination == destination ? staged?.urls : nil) ?? []
+        // Merged under the destination decided *now*. The two macOS transfer
+        // routes are separate connection screens but one staging context, so a
+        // second Dock drop after switching LAN ↔ pairing keeps the first batch
+        // alive. Stored Send remains a separate product and never absorbs or
+        // donates a waiting transfer batch.
+        let sharesTransferContext = staged.map {
+            AppDestination.macTransferRoutes.contains($0.destination)
+                && AppDestination.macTransferRoutes.contains(destination)
+        } ?? false
+        var merged = (staged?.destination == destination || sharesTransferContext)
+            ? staged?.urls ?? []
+            : []
         var seen = Set(merged.map(\.path))
         for url in urls where seen.insert(url.path).inserted {
             merged.append(url)
@@ -146,14 +153,13 @@ public final class AppFileOpenCoordinator: ObservableObject {
         batch(forAnyOf: [destination], busy: busy)
     }
 
-    /// The same rule for a surface that renders more than one destination.
+    /// The same rule for destinations that share one staging context.
     ///
-    /// macOS draws `.nearby` and `.pairingCode` as ONE Workspace screen, so the
-    /// batch addressed to either belongs to the pane that is on screen. Asking
-    /// twice with the single-destination overload would be two reads of one
-    /// answer with a `consume` between them; asking once keeps "which pane is
-    /// this for" a single decision, exactly as `OpenedFiles` carrying its own
-    /// destination was meant to.
+    /// The single implementation both overloads are expressed in, so "which
+    /// pane is this batch for" is one decision rather than two reads of one
+    /// answer with a `consume` between them. The two transfer screens each ask
+    /// for the same transfer-route set because they share an app-scoped staging
+    /// context even though they render different connection methods.
     ///
     /// It does NOT widen who may take a batch: the addressed set is the caller's
     /// own surface, and a batch addressed to `.storedSend` is still refused here.

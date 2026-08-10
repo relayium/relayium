@@ -102,12 +102,14 @@
 "nav.sectionLinks" = "링크";
 "nav.sectionDevice" = "이 Mac";
 "nav.nearby" = "근처 기기";
-"nav.pairingCode" = "페어링 코드";
 "nav.pairingCodeSubtitle" = "네트워크를 넘어 텍스트와 작은 파일 — 양쪽 모두 온라인";
+"nav.lanTransfer" = "LAN 전송";
+"nav.lanTransferSubtitle" = "같은 네트워크에 있는 기기와 메시지·파일 — 직접 연결, 계정 불필요; 양쪽 모두 온라인";
+"nav.crossNetwork" = "네트워크 간 전송";
+"nav.crossNetworkSubtitle" = "여섯 자리 코드로 어디에 있는 기기와도 메시지·파일 — 같은 네트워크일 필요 없이, 양쪽 모두 온라인";
 "nav.storedSend" = "링크 보내기";
 "nav.storedSendSubtitle" = "큰 파일을 나중에 받기 — 로그인 필요, 요금제 한도 적용";
 "nav.storedReceive" = "링크 열기";
-"nav.storedReceiveSubtitle" = "누군가 보낸 링크 열기 — 계정 불필요, 만료 전까지";
 "nav.deviceInboxSubtitle" = "내 계정에서 보낸 파일이 직접 고른 폴더로 도착합니다 — 로그인 필요, 창을 닫아도 계속 작동합니다";
 "nav.account" = "계정";
 "nav.accountSubtitle" = "요금제, 기기, 저장된 파일";
@@ -600,9 +602,9 @@
 "inbox.savedFiles.other" = "%@개 파일 저장됨";
 "inbox.waitingDeliveries.other" = "%@건의 전송이 응답을 기다리는 중";
 
-/* MARK: macOS Workspace */
-"nav.workspace" = "작업 공간";
-"nav.workspaceSubtitle" = "기기 한 대와 메시지·파일 — 같은 네트워크에서, 또는 코드로 네트워크를 넘어; 양쪽 모두 온라인";
+/* MARK: macOS transfer destinations */
+"crossNetwork.explain" = "두 기기가 같은 네트워크에 있을 필요는 없습니다. 한쪽이 여섯 자리 코드를 만들고 다른 쪽이 입력하면 Relayium의 랑데부 서비스가 두 기기를 이어 줍니다. 양쪽이 동시에 온라인이기만 하면 됩니다.";
+"transfer.busyElsewhere" = "Relayium에서 다른 전송이 열려 있습니다. 여기서 새로 시작하기 전에 그 전송을 끝내거나 나가세요.";
 "workspace.sameNetworkHeading" = "같은 네트워크";
 "workspace.pairingHeading" = "페어링 코드";
 "workspace.stagingHeading" = "파일 및 폴더";

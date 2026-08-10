@@ -105,12 +105,14 @@
 "nav.sectionLinks" = "الروابط";
 "nav.sectionDevice" = "هذا الـ Mac";
 "nav.nearby" = "الأجهزة القريبة";
-"nav.pairingCode" = "رمز الاقتران";
 "nav.pairingCodeSubtitle" = "نصوص وملفات صغيرة عبر الشبكات — مع اتصال الطرفين";
+"nav.lanTransfer" = "النقل عبر الشبكة المحلية";
+"nav.lanTransferSubtitle" = "رسائل وملفات مع جهاز على الشبكة نفسها — مباشرة وبدون حساب؛ مع اتصال الطرفين";
+"nav.crossNetwork" = "النقل عبر الشبكات";
+"nav.crossNetworkSubtitle" = "رسائل وملفات مع جهاز في أي مكان برمز من ستة أرقام — لا يلزم أن تكون الشبكة نفسها؛ مع اتصال الطرفين";
 "nav.storedSend" = "إرسال رابط";
 "nav.storedSendSubtitle" = "ملفات كبيرة تُستلَم لاحقًا — يلزم تسجيل الدخول وتنطبق حدود الباقة";
 "nav.storedReceive" = "فتح رابط";
-"nav.storedReceiveSubtitle" = "افتح رابطًا أرسله إليك أحدهم — بدون حساب، قبل انتهاء صلاحيته";
 "nav.deviceInboxSubtitle" = "الملفات المُرسَلة من حسابك تصل إلى مجلد تختاره — سجّل الدخول؛ ويعمل والنافذة مغلقة";
 "nav.account" = "الحساب";
 "nav.accountSubtitle" = "الخطة والأجهزة والملفات المخزّنة";
@@ -658,9 +660,9 @@
 "inbox.waitingDeliveries.many" = "%@ عملية توصيل بانتظار ردّك";
 "inbox.waitingDeliveries.other" = "%@ عملية توصيل بانتظار ردّك";
 
-/* MARK: macOS Workspace */
-"nav.workspace" = "مساحة العمل";
-"nav.workspaceSubtitle" = "رسائل وملفات مع جهاز واحد — على الشبكة نفسها أو عبر الشبكات برمز؛ يلزم اتصال الطرفين";
+/* MARK: macOS transfer destinations */
+"crossNetwork.explain" = "لا يلزم أن يكون الجهازان على الشبكة نفسها. ينشئ أحد الطرفين رمزًا من ستة أرقام ويكتبه الطرف الآخر، فتُعرّف خدمة الالتقاء في Relayium الطرفين ببعضهما؛ يكفي أن يكون الطرفان متصلين في الوقت نفسه.";
+"transfer.busyElsewhere" = "هناك عملية نقل أخرى مفتوحة في Relayium. أنهِها أو غادرها قبل بدء واحدة هنا.";
 "workspace.sameNetworkHeading" = "الشبكة نفسها";
 "workspace.pairingHeading" = "رمز الاقتران";
 "workspace.stagingHeading" = "الملفات والمجلدات";

@@ -169,14 +169,17 @@ public enum L10nKey: String, CaseIterable, Sendable {
 
     // MARK: - Navigation
     //
-    // The macOS sidebar. Six rows, all visible at once, each with a one-line
+    // The macOS sidebar. Five rows, all visible at once, each with a one-line
     // subtitle — so what a destination does is readable before it is opened
     // rather than after. The subtitles are also the rows' accessibility hints,
     // which is why each one is a sentence and not a fragment.
+    //
+    // They are also, since the page headings went, the ONLY place a destination
+    // is named and explained. Nothing on the screen itself repeats them.
 
     /// Sidebar section: the two destinations where the other person is present.
     case navSectionDirect = "nav.sectionDirect"
-    /// Sidebar section: the two destinations that go through a stored link.
+    /// Sidebar section: the destinations that go through a stored link.
     case navSectionLinks = "nav.sectionLinks"
     /// Sidebar section: what this Mac itself does while nobody is watching it.
     /// A section of its own rather than a row under Links, because the Device
@@ -184,16 +187,18 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// this machine as a destination.
     case navSectionDevice = "nav.sectionDevice"
     case navNearby = "nav.nearby"
-    case navPairingCode = "nav.pairingCode"
     case navPairingCodeSubtitle = "nav.pairingCodeSubtitle"
     case navStoredSend = "nav.storedSend"
     case navStoredSendSubtitle = "nav.storedSendSubtitle"
+    /// The Open a link screen's window title. **No subtitle key**, because it
+    /// has no sidebar row: it is reached by a `relayium.com` download link the
+    /// OS handed this app, not browsed to, so there is no row for a subtitle to
+    /// explain.
     case navStoredReceive = "nav.storedReceive"
-    case navStoredReceiveSubtitle = "nav.storedReceiveSubtitle"
     /// The Device Inbox row's subtitle, and therefore its accessibility hint.
     /// It has no title key of its own: the row renders `inbox.title`, so the
-    /// sidebar, the menu bar, the settings tab and the destination heading
-    /// cannot end up calling one feature four things.
+    /// sidebar, the menu bar and the window title cannot end up calling one
+    /// feature three things.
     case navDeviceInboxSubtitle = "nav.deviceInboxSubtitle"
     case navAccount = "nav.account"
     case navAccountSubtitle = "nav.accountSubtitle"
@@ -205,20 +210,50 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// The sidebar footer's heading. Background receive — what makes this Mac
     /// reachable — reports its own state beneath it.
     case navResidency = "nav.residency"
-    /// The macOS Workspace row. It replaced two rows — Nearby and Pairing code —
-    /// that were two ways to reach one peer rather than two products, so the
-    /// title names the place and the subtitle names both ways of getting there.
-    case navWorkspace = "nav.workspace"
-    case navWorkspaceSubtitle = "nav.workspaceSubtitle"
+    /// The macOS LAN Transfer row: the other device is on this network.
+    ///
+    /// Its subtitle carries the limitation that rules the destination out —
+    /// both sides have to be online at the same time — because that is what a
+    /// person needs before committing to a live transport.
+    case navLanTransfer = "nav.lanTransfer"
+    case navLanTransferSubtitle = "nav.lanTransferSubtitle"
+    /// The macOS Cross-network Transfer row: the other device is anywhere.
+    ///
+    /// Its subtitle has one more job than the others. The single question
+    /// separating these two destinations is whether the devices must share a
+    /// network, so this one says outright that they need not — and the screen
+    /// repeats it in `crossNetwork.explain`, because a sidebar hint is not where
+    /// somebody looks to confirm it.
+    case navCrossNetwork = "nav.crossNetwork"
+    case navCrossNetworkSubtitle = "nav.crossNetworkSubtitle"
 
-    // MARK: - Workspace (macOS)
+    /// The Cross-network Transfer screen's own explanation, beside the pairing
+    /// controls — the counterpart to `nearby.explain` on the LAN screen.
+    case crossNetworkExplain = "crossNetwork.explain"
+
+    /// Why a transfer screen's controls are inert.
+    ///
+    /// One `TransferPresence` arbitrates one session between the two transfer
+    /// destinations, so the screen that does NOT own it has every control
+    /// disabled. A greyed control with no stated reason is the dead end this
+    /// app's design rules forbid, and it is a reason the user can act on: the
+    /// sidebar marks the row the session is on.
+    case transferBusyElsewhere = "transfer.busyElsewhere"
+
+    // MARK: - Transfer surfaces (macOS)
     //
-    // One destination, two connection methods, one live session. The copy here
-    // carries one obligation the rest of the app does not: the surface is
-    // unified and the shipped wire is not, so three of these strings exist
-    // purely to say what a connection can and cannot carry. They are deliberately
-    // plain about it — a user who is told "messages need their own connection"
-    // can act; one who finds a composer that silently does nothing cannot.
+    // Two destinations, one connection method each, one live session between
+    // them. The copy here carries one obligation the rest of the app does not:
+    // the surfaces are unified per method and the shipped wire is not, so three
+    // of these strings exist purely to say what a connection can and cannot
+    // carry. They are deliberately plain about it — a user who is told
+    // "messages need their own connection" can act; one who finds a composer
+    // that silently does nothing cannot.
+    //
+    // The `workspace.` prefix is the namespace these strings shipped under and
+    // is deliberately left alone: it names nothing on screen, and renaming
+    // thirty keys across nine catalogs to rename a namespace is churn with a
+    // translation-loss risk and no user-visible result.
 
     case workspaceSameNetworkHeading = "workspace.sameNetworkHeading"
     case workspacePairingHeading = "workspace.pairingHeading"

@@ -102,12 +102,14 @@
 "nav.sectionLinks" = "リンク";
 "nav.sectionDevice" = "この Mac";
 "nav.nearby" = "近くのデバイス";
-"nav.pairingCode" = "ペアリングコード";
 "nav.pairingCodeSubtitle" = "ネットワークを越えてテキストと小さめのファイル。双方がオンラインで";
+"nav.lanTransfer" = "LAN 転送";
+"nav.lanTransferSubtitle" = "同じネットワークにあるデバイスとメッセージやファイルを — 直接、アカウント不要。双方がオンラインで";
+"nav.crossNetwork" = "ネットワーク越しの転送";
+"nav.crossNetworkSubtitle" = "6桁のコードで、どこにあるデバイスとでもメッセージやファイルを — 同じネットワークでなくても利用可能。双方がオンラインで";
 "nav.storedSend" = "リンクを送る";
 "nav.storedSendSubtitle" = "大きなファイルを後から受け取り。サインインが必要でプラン上限あり";
 "nav.storedReceive" = "リンクを開く";
-"nav.storedReceiveSubtitle" = "誰かが送ったリンクを開く。アカウント不要、有効期限まで";
 "nav.deviceInboxSubtitle" = "自分のアカウントから送ったファイルが、選んだフォルダに届きます。サインインが必要、ウインドウを閉じていても動作します";
 "nav.account" = "アカウント";
 "nav.accountSubtitle" = "プラン、デバイス、保存済みファイル";
@@ -600,9 +602,9 @@
 "inbox.savedFiles.other" = "%@ 個のファイルを保存しました";
 "inbox.waitingDeliveries.other" = "%@ 件の配信が回答を待っています";
 
-/* MARK: macOS Workspace */
-"nav.workspace" = "ワークスペース";
-"nav.workspaceSubtitle" = "1台のデバイスとメッセージやファイルを — 同じネットワーク、またはコードでネットワークをまたいで。双方がオンラインである必要があります";
+/* MARK: macOS transfer destinations */
+"crossNetwork.explain" = "2台のデバイスが同じネットワークにある必要はありません。一方が6桁のコードを作成し、もう一方がそれを入力すると、Relayium のランデブーサービスが両者を引き合わせます。双方が同時にオンラインであれば利用できます。";
+"transfer.busyElsewhere" = "Relayium で別の転送が開いています。ここで新しく始める前に、その転送を終えるか終了してください。";
 "workspace.sameNetworkHeading" = "同じネットワーク";
 "workspace.pairingHeading" = "ペアリングコード";
 "workspace.stagingHeading" = "ファイルとフォルダ";

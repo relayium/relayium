@@ -181,6 +181,29 @@ enum UITestMode {
     static let showsGeneratedFileCode = ProcessInfo.processInfo.arguments.contains(
         fileCodeArgument)
 
+    /// A `relayium.com` link this launch should be handed at startup.
+    ///
+    /// **The only way the suite can reach Open a link, and deliberately so.**
+    /// That destination has no sidebar row: it is where a link the OS hands this
+    /// app is opened, not somewhere a person browses to. A test-only "select
+    /// this destination" switch would prove the screen renders while proving
+    /// nothing about the route that actually reaches it — so this hands the URL
+    /// to `AppDeepLinkRouter.open`, the same entry point `onOpenURL` uses, and
+    /// everything after it is production: the parser, the coordinator, the
+    /// routing decision and the shell arm.
+    ///
+    /// The value follows the flag as the next argument. A URL the parser refuses
+    /// is simply refused, exactly as it would be from the OS.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let openLinkArgument = "--relayium-ui-testing-open-link"
+    static var launchDeepLink: URL? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard isActive,
+              let flag = arguments.firstIndex(of: openLinkArgument),
+              arguments.index(after: flag) < arguments.endIndex else { return nil }
+        return URL(string: arguments[arguments.index(after: flag)])
+    }
+
     /// The Device Inbox controller an acceptance launch may use, or nil.
     ///
     /// Delegated to `UITestInbox`, which owns the stub transport and the
@@ -244,6 +267,9 @@ enum UITestMode {
     /// real keychain, defaults, journal directory and transport.
     @MainActor
     static func makeInboxController() -> InboxController? { nil }
+
+    /// nil, so a shipped launch can never be handed a link by its own arguments.
+    static var launchDeepLink: URL? { nil }
 
     /// false, so a shipped launch can never be told it already holds an account.
     static let isSignedIn = false

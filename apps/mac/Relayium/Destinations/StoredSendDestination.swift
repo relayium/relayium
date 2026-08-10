@@ -30,8 +30,7 @@ struct StoredSendDestination: View {
     }
 
     var body: some View {
-        DestinationScaffold(title: L10n.t(.navStoredSend),
-                            subtitle: L10n.t(.navStoredSendSubtitle)) {
+        DestinationScaffold(title: L10n.t(.navStoredSend)) {
             UploadPane(model: model, gate: gate)
         }
         // `task(id:)` rather than `onChange(of:initial:)`, which is macOS 14 —

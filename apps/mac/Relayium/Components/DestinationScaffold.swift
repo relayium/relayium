@@ -1,11 +1,26 @@
 import SwiftUI
 
-/// The frame every destination is built in: a title, an optional subtitle, and a
-/// body that usually scrolls.
+/// The frame every destination is built in: padding, a reading measure, and the
+/// window's title — with the body deliberately starting at the first thing the
+/// destination actually has to say.
 ///
-/// It owns the padding, the reading measure and the `navigationTitle` so six
-/// screens cannot drift apart — the failure this round exists to correct was
-/// five surfaces each inventing their own spacing inside a 380pt window.
+/// ## No page heading, on any browseable destination
+///
+/// Each screen used to open with its own `largeTitle` and a one-line subtitle,
+/// and both were a verbatim second printing of the sidebar row that had just
+/// been clicked: the same name, the same sentence, three lines of the window's
+/// height, above every screen, forever. On a Mac the sidebar IS the title bar
+/// for the detail column — it is on screen at the same time, permanently, with
+/// the selected row highlighted — so a heading that repeats it tells the user
+/// nothing they are not already looking at.
+///
+/// So the sidebar is the single browseable source of a destination's name and
+/// its compact explanation (and, being the row's `accessibilityHint`, its
+/// spoken one), `navigationTitle` keeps naming the window for Mission Control,
+/// window menus and VoiceOver's window chrome, and the content-specific labels
+/// inside a destination — `SectionCard` titles, form section headers — stay
+/// exactly as they were. They say what a *part* of a screen is, which the
+/// sidebar never claimed to.
 ///
 /// The 720pt cap is a reading measure, not a compatibility floor: the gate
 /// explanations and the verification copy run to several lines, and prose set at
@@ -13,8 +28,9 @@ import SwiftUI
 /// genuinely wants the rest of the width — a device roster, a file list — opts
 /// out and constrains only its prose locally.
 struct DestinationScaffold<Content: View>: View {
+    /// The window's title. Rendered by `navigationTitle` only — never inside the
+    /// content — which is the whole of the rule above.
     let title: String
-    let subtitle: String?
     /// Most destinations are prose/forms and stay at the reading measure. A
     /// roster or account list benefits from the remaining window width, so its
     /// destination opts out and constrains only its prose locally.
@@ -25,37 +41,18 @@ struct DestinationScaffold<Content: View>: View {
     /// which is all of them but one. The Device Inbox renders a grouped `Form`,
     /// and a `Form` is already a scroll view: nesting it inside another one gives
     /// the destination two scrollers over one list of sections, where the outer
-    /// one has nothing to scroll and swallows the gesture at the edges. The
-    /// heading is laid out identically either way, so the two modes differ in
-    /// exactly one thing.
+    /// one has nothing to scroll and swallows the gesture at the edges.
     let scrolls: Bool
     @ViewBuilder let content: () -> Content
 
     init(title: String,
-         subtitle: String? = nil,
          contentMaxWidth: CGFloat? = 720,
          scrolls: Bool = true,
          @ViewBuilder content: @escaping () -> Content) {
         self.title = title
-        self.subtitle = subtitle
         self.contentMaxWidth = contentMaxWidth
         self.scrolls = scrolls
         self.content = content
-    }
-
-    private var heading: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.largeTitle)
-                .accessibilityAddTraits(.isHeader)
-            if let subtitle {
-                Text(subtitle)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .frame(maxWidth: 720, alignment: .leading)
     }
 
     /// The destination's own content at whichever measure it asked for.
@@ -68,57 +65,44 @@ struct DestinationScaffold<Content: View>: View {
         Group {
             if scrolls {
                 ScrollView {
+                    // The `VStack` is load-bearing even with the heading gone:
+                    // a destination's body is a `ViewBuilder`, and most of them
+                    // hand over several views (a card and a note, a pane and the
+                    // verification setting). Those arrive as a `TupleView`,
+                    // which has no layout of its own — the stack is what puts
+                    // them in a column with one spacing rule instead of leaving
+                    // the arrangement to whatever encloses them.
                     VStack(alignment: .leading, spacing: 20) {
-                        heading
                         measuredContent
                     }
                     .padding(24)
-                    // Leading rather than centred: the sidebar is on the leading
-                    // edge, and a measure that drifts to the middle of a wide
-                    // window reads as a web page rather than as a Mac app.
+                    // Leading rather than centred: the sidebar is on the
+                    // leading edge, and a measure that drifts to the middle
+                    // of a wide window reads as a web page rather than as a
+                    // Mac app.
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             } else {
-                // **Two deliberate pieces, and the destination is unusable
-                // without either.** What shipped in the first draft of this mode
-                // was `VStack { heading; Form }` with no height constraint, and
-                // it was measured on macOS 26.6 at the shipped 860x560 minimum
-                // to lay the detail column out 1326pt tall inside 560pt of
-                // window. SwiftUI centres an overflowing child, so the top 251pt
-                // — the heading, the first section header, and the sign-in,
-                // create-account and Open Account buttons under it — sat ABOVE
-                // the top of the window: not visible, and not clickable. The
-                // primary account actions of a destination that is deliberately
-                // shown signed out were the part that fell off.
+                // **An exact height, and the destination is unusable without
+                // it.** A grouped `Form` with no height constraint was measured
+                // on macOS 26.6 to lay the detail column out 1326pt tall inside
+                // 560pt of window at the shipped minimum size. SwiftUI centres
+                // an overflowing child, so the top of it — the first section
+                // header and the sign-in, create-account and Open Account
+                // buttons under it — sat ABOVE the top of the window: not
+                // visible, and not clickable.
                 //
-                // `GeometryReader` + an exact `.frame(height:)` is what bounds
-                // it. A grouped `Form` was measured to IGNORE an inexact
-                // proposal: `maxHeight: .infinity` around the stack changed the
-                // reported height by nothing at all, because that modifier
-                // offers a height and then reports whatever the child insisted
-                // on. An exact frame is a size the child is given rather than
-                // offered, and the same `Form` then reported 455pt and scrolled
-                // its own overflow like any other scroll view.
-                //
-                // The heading is a safe-area INSET rather than a stack row for
-                // the other half of the same reason: it leaves the content
-                // itself at the root, so this destination is one scroll view
-                // exactly like the other five instead of a stack wrapped around
-                // one. It also pins the title while the sections scroll under
-                // it, which is what a settings-shaped Mac screen does anyway.
+                // `maxHeight: .infinity` fixes nothing here: that modifier
+                // OFFERS a height and then reports whatever the child insisted
+                // on, and the reported height changed by zero. An exact frame is
+                // a size the child is given rather than offered, and the same
+                // `Form` then reported 455pt and scrolled its own overflow like
+                // any other scroll view.
                 GeometryReader { proxy in
+                    // No padding in this mode: a grouped `Form` already insets
+                    // its own sections, and padding it again would leave the one
+                    // non-scrolling destination visibly narrower than the rest.
                     measuredContent
-                        .safeAreaInset(edge: .top, spacing: 12) {
-                            // The padding goes on the heading alone. The content
-                            // owns its own insets in this mode — a grouped `Form`
-                            // already insets its sections — and padding it again
-                            // would leave the one non-scrolling destination
-                            // visibly narrower than the other five.
-                            heading
-                                .padding(.horizontal, 24)
-                                .padding(.top, 24)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
                         .frame(width: proxy.size.width, height: proxy.size.height,
                                alignment: .topLeading)
                 }

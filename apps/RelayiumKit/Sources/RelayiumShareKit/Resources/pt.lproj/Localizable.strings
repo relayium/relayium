@@ -102,12 +102,14 @@
 "nav.sectionLinks" = "Ligações";
 "nav.sectionDevice" = "Este Mac";
 "nav.nearby" = "Por perto";
-"nav.pairingCode" = "Código de emparelhamento";
 "nav.pairingCodeSubtitle" = "Texto e ficheiros pequenos entre redes — ambos online";
+"nav.lanTransfer" = "Transferência na rede local";
+"nav.lanTransferSubtitle" = "Mensagens e ficheiros com um dispositivo na mesma rede — direto, sem conta; ambos online";
+"nav.crossNetwork" = "Transferência entre redes";
+"nav.crossNetworkSubtitle" = "Mensagens e ficheiros com um dispositivo em qualquer lugar, com um código de seis dígitos — mesma rede não obrigatória; ambos online";
 "nav.storedSend" = "Enviar uma ligação";
 "nav.storedSendSubtitle" = "Ficheiros grandes, levantados depois — inicie sessão; limites do plano";
 "nav.storedReceive" = "Abrir uma ligação";
-"nav.storedReceiveSubtitle" = "Abra uma ligação que lhe enviaram — sem conta, até expirar";
 "nav.deviceInboxSubtitle" = "Os ficheiros da sua própria conta chegam a uma pasta à sua escolha — inicie sessão; funciona com a janela fechada";
 "nav.account" = "Conta";
 "nav.accountSubtitle" = "Plano, dispositivos e ficheiros guardados";
@@ -611,9 +613,9 @@
 "inbox.waitingDeliveries.one" = "%@ entrega à espera da sua resposta";
 "inbox.waitingDeliveries.other" = "%@ entregas à espera da sua resposta";
 
-/* MARK: macOS Workspace */
-"nav.workspace" = "Espaço de trabalho";
-"nav.workspaceSubtitle" = "Mensagens e ficheiros com um dispositivo — mesma rede ou entre redes com um código; ambos online";
+/* MARK: macOS transfer destinations */
+"crossNetwork.explain" = "Os dois dispositivos não têm de estar na mesma rede. Um lado cria um código de seis dígitos, o outro escreve-o e o serviço de encontro da Relayium liga-os; basta que ambos estejam online ao mesmo tempo.";
+"transfer.busyElsewhere" = "Há outra transferência aberta no Relayium. Termine-a ou saia dela antes de começar uma aqui.";
 "workspace.sameNetworkHeading" = "Mesma rede";
 "workspace.pairingHeading" = "Código de emparelhamento";
 "workspace.stagingHeading" = "Ficheiros e pastas";

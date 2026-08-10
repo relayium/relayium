@@ -25,7 +25,7 @@ import XCTest
 ///     is what keeps that a rule rather than an intention.
 final class MacSurfaceGuardTests: XCTestCase {
     func testNearbyOffStateOffersOneTruthfulRecovery() throws {
-        let nearby = try source(named: workspaceConnect)
+        let nearby = try source(named: lanConnect)
         XCTAssertTrue(nearby.contains("switch receive.state"))
         XCTAssertTrue(nearby.contains("case .off:"))
         XCTAssertTrue(nearby.contains("case .connecting, .ready, .reconnecting, .active:"))
@@ -70,23 +70,36 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(ui.contains("window.buttons[\"Resume receiving\"].exists"))
     }
 
-    /// The three macOS files this round created, named once so a rename is one
-    /// edit rather than forty. The Workspace replaced `NearbyPane`, `DirectPane`,
-    /// `RealtimeTextPane`, `NearbyDestination` and `PairingCodeDestination`; the
-    /// invariants those five carried did not go anywhere, so most of the guards
-    /// below are the same assertions pointed at these.
-    private let workspaceDestination = "Destinations/WorkspaceDestination.swift"
-    private let workspaceConnect = "Workspace/WorkspaceConnectPane.swift"
-    private let workspaceSession = "Workspace/WorkspaceSessionPane.swift"
+    /// The macOS transfer files, named once so a rename is one edit rather than
+    /// forty.
+    ///
+    /// Two destinations, one connect pane each, and three files they share: the
+    /// legacy session pane, the unified `link/1` pane and the staging section.
+    /// The invariants the one merged Workspace carried did not go anywhere, so
+    /// most of the guards below are the same assertions pointed at these — split
+    /// between the two connect panes where the control they check now lives on
+    /// exactly one of them.
+    private let lanDestination = "Destinations/LanTransferDestination.swift"
+    private let crossDestination = "Destinations/CrossNetworkTransferDestination.swift"
+    private let lanConnect = "Transfer/LanConnectPane.swift"
+    private let crossConnect = "Transfer/CrossNetworkConnectPane.swift"
+    private let transferSession = "Transfer/TransferSessionPane.swift"
+    private let transferStaging = "Transfer/TransferStagingSection.swift"
 
-    /// The five surfaces that no longer exist. Asserted as absences, because a
+    /// The surfaces that no longer exist. Asserted as absences, because a
     /// half-finished revert — the new files plus one of the old ones still
-    /// compiled in — is exactly the state that reintroduces the second sidebar
-    /// row nobody would notice in a diff.
+    /// compiled in — is exactly the state that reintroduces a sidebar row nobody
+    /// would notice in a diff. The last four are this batch's: the merged
+    /// Workspace, and the Device Inbox settings tab that is now a destination.
     private let retiredSurfaces = ["NearbyPane.swift", "DirectPane.swift",
                                    "RealtimeTextPane.swift",
                                    "Destinations/NearbyDestination.swift",
-                                   "Destinations/PairingCodeDestination.swift"]
+                                   "Destinations/PairingCodeDestination.swift",
+                                   "Destinations/WorkspaceDestination.swift",
+                                   "Workspace/WorkspaceConnectPane.swift",
+                                   "Workspace/WorkspaceSessionPane.swift",
+                                   "Workspace/WorkspaceLinkPane.swift",
+                                   "Settings/DeviceInboxSettingsView.swift"]
 
     /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → …/apps
     private var appsRoot: URL {
@@ -113,7 +126,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     }
 
     func testNearbyProgressNamesRealReconnectWorkAndNeverDecoratesLookAgain() throws {
-        let pane = try source(named: workspaceConnect)
+        let pane = try source(named: lanConnect)
         XCTAssertFalse(pane.contains("ProgressView()"),
                        "an unlabelled spinner says neither what is running nor whether anything is")
         XCTAssertTrue(pane.contains("if case .reconnecting = discovery.state"),
@@ -256,7 +269,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                          "ScrollView", ".frame(maxHeight: 200)"] {
             XCTAssertTrue(component.contains(required), "pending-file list lost \(required)")
         }
-        for pane in [workspaceConnect, "UploadPane.swift"] {
+        for pane in [transferStaging, "UploadPane.swift"] {
             XCTAssertTrue(try source(named: pane).contains("PendingFileList(files:"),
                           "\(pane) regressed to a count-only selection")
         }
@@ -292,7 +305,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// Creating a code removes the picker, but it must not remove the sender's
     /// answer to “what am I about to send?” during minting or while the peer joins.
     func testFilePairingKeepsTheStagedFileNamesAndSizesVisibleUntilDone() throws {
-        let pane = try source(named: workspaceSession)
+        let pane = try source(named: transferSession)
         let minting = try XCTUnwrap(pane.components(
             separatedBy: "case .minting:").dropFirst().first?
             .components(separatedBy: "case let .showingCode").first)
@@ -303,17 +316,19 @@ final class MacSurfaceGuardTests: XCTestCase {
             XCTAssertTrue(phase.contains("PendingFileList(sessionFiles: fileModel.sessionFiles)"),
                           "code creation hides the files it is waiting to send")
         }
-        // The manifest must exist before the minting screen replaces the picker,
-        // and the staging step now lives on the connect pane — which is exactly
-        // where the picker it replaces lives.
-        let connect = try source(named: workspaceConnect)
-        guard let stage = connect.range(
-                of: "fileModel.stageSend(sources: staged.sources, metas: staged.metas)"),
-              let mint = connect.range(of: "await fileModel.mintCode(token: token)") else {
+        // The batch is expanded and opened BEFORE anything asynchronous starts,
+        // which is what stops a code being minted for a selection that cannot be
+        // read — and what gives minting and handoff one manifest to keep visible.
+        let connect = try source(named: crossConnect)
+        guard let create = connect.range(of: "private func createCode(mode: TransferMode) {"),
+              let stage = connect.range(of: "guard let ready = stage() else { return }",
+                                        range: create.lowerBound..<connect.endIndex),
+              let mint = connect.range(of: "await fileModel.mintCode(token: token)",
+                                       range: stage.upperBound..<connect.endIndex) else {
             return XCTFail("the file-code action lost staging or minting")
         }
         XCTAssertLessThan(stage.lowerBound, mint.lowerBound,
-                          "the manifest must exist before the minting screen replaces the picker")
+                          "a code can be minted for a selection that cannot be read")
 
         let session = try source(named: "RealtimeFileSessionView.swift")
         let connecting = try XCTUnwrap(session.components(
@@ -332,7 +347,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// navigation destination. Keep all three macOS entry points aligned with
     /// the ordinary Button semantics already used on iOS.
     func testEverySendPanePresentsClearAsAnActionButton() throws {
-        for pane in [workspaceConnect, "UploadPane.swift"] {
+        for pane in [transferStaging, "UploadPane.swift"] {
             let source = try source(named: pane)
             let clear = try XCTUnwrap(source.components(
                 separatedBy: "Button(L10n.t(.commonClear)) { selection.clear() }").dropFirst().first,
@@ -352,13 +367,13 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// for text, the only local transcript. It must not expose a second
     /// create/join path until the user has crossed the cleanup boundary.
     ///
-    /// The Workspace makes that STRUCTURAL rather than per-state: the connect
-    /// controls live in a different view, and the destination renders exactly one
-    /// of the two panes. So the assertions are (1) the session pane names no
-    /// connect control at all, and (2) the destination's branch is the whole
-    /// reason it cannot.
+    /// Both transfer destinations make that STRUCTURAL rather than per-state:
+    /// the connect controls live in a different view, and each destination
+    /// renders exactly one pane. So the assertions are (1) the session pane
+    /// names no connect control at all, and (2) each destination's `switch` over
+    /// `TransferSurfacePane` is the whole reason it cannot.
     func testPairingTerminalStatesExposeOnlyTheirCleanupBoundary() throws {
-        let session = try source(named: workspaceSession)
+        let session = try source(named: transferSession)
         for connectControl in ["createControls", "joinControls", "roster", "deviceRow",
                                "normalizedJoinCode", "CapabilityGateView"] {
             XCTAssertFalse(session.contains(connectControl),
@@ -369,12 +384,20 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertFalse(session.contains("buttonStyle(.link)"),
                        "a task mutation is presented as navigation")
 
-        let destination = try source(named: workspaceDestination)
-        XCTAssertTrue(destination.contains("if ownsSession || hasRetainedSession {"),
-                      "the destination no longer chooses exactly one pane")
-        XCTAssertTrue(destination.contains("WorkspaceSessionPane(")
-                      && destination.contains("WorkspaceConnectPane("),
-                      "the destination must render both phases of the one task")
+        for (name, connectPane) in [(lanDestination, "LanConnectPane("),
+                                    (crossDestination, "CrossNetworkConnectPane(")] {
+            let destination = try source(named: name)
+            XCTAssertTrue(destination.contains("switch pane {")
+                          && destination.contains("case .connect:")
+                          && destination.contains("case .legacySession:")
+                          && destination.contains("case .link:"),
+                          "\(name) no longer chooses exactly one pane")
+            XCTAssertTrue(destination.contains("TransferSessionPane(route: route,")
+                          && destination.contains(connectPane),
+                          "\(name) must render both phases of the one task")
+            XCTAssertTrue(destination.contains("TransferSurfacePresentation.pane(route: route,"),
+                          "\(name) decides which pane to draw without asking ownership")
+        }
 
         let fileSession = try source(named: "RealtimeFileSessionView.swift")
         let completed = try XCTUnwrap(fileSession.components(
@@ -389,7 +412,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// once per pane — which is also why the confirmation's destructive button is
     /// now the leave verb rather than Done.
     func testPairingDoneCannotDiscardAnyLocalTextWithoutConfirmation() throws {
-        let source = try source(named: workspaceSession)
+        let source = try source(named: transferSession)
         XCTAssertTrue(source.contains("@State private var confirmingLocalTextLeave = false"))
         XCTAssertTrue(source.contains("if mode == .text, textModel.hasLocalContent"))
         XCTAssertTrue(source.contains(
@@ -408,7 +431,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(failed.contains("fileList"),
                       "a failed transfer hides which files failed")
 
-        let pane = try source(named: workspaceSession)
+        let pane = try source(named: transferSession)
         let lane = try XCTUnwrap(pane.components(
             separatedBy: "case .failed(let message):").dropFirst().first?
             .components(separatedBy: "case .joining, .connecting").first)
@@ -425,7 +448,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         // One pane, one rule, for both routes — which is the point of the merge:
         // the pairing half and the same-network half used to answer this
         // separately, and separately is how two answers drift.
-        let pane = try source(named: workspaceSession)
+        let pane = try source(named: transferSession)
         XCTAssertTrue(pane.contains(
             "RealtimeFileSessionView(model: fileModel, onDone: finishCompletedFileTransfer)"))
         XCTAssertTrue(pane.contains("if fileModel.received == nil { selection.clear() }"))
@@ -439,7 +462,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// Minting is a locked network wait: the idle controls are gone until the
     /// request settles, so both pairing modes need an explicit way back.
     func testPairingMintingCanBeCancelledInBothModes() throws {
-        let pane = try source(named: workspaceSession)
+        let pane = try source(named: transferSession)
         let fileMinting = try XCTUnwrap(pane.components(separatedBy: "case .minting:")
             .dropFirst().first?.components(separatedBy: "case let .showingCode").first)
         XCTAssertTrue(fileMinting.contains("Button(L10n.t(.commonCancel)) { fileModel.cancel() }"))
@@ -505,14 +528,23 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// arrives, and ownership is taken synchronously before either model can
     /// publish a non-idle state.
     func testDirectChoicesLockAtClaimBeforeTheModelsBecomeBusy() throws {
-        let destination = try source(named: workspaceDestination)
-        XCTAssertTrue(destination.contains(
-            "presence.owner != nil || hasRetainedSession"),
-            "the lock reads busy flags that lag the synchronous claim")
-        XCTAssertTrue(destination.contains(
-            "set: { if !sessionLocked { verification.requiresSASConfirmation = $0 } }"),
+        for name in [lanDestination, crossDestination] {
+            let destination = try source(named: name)
+            XCTAssertTrue(destination.contains(
+                "TransferSurfacePresentation.acceptsNewSession(\n            owner: presence.owner, sessionIsLiveOrRetained: sessionIsLiveOrRetained)"),
+                "\(name)'s lock reads busy flags that lag the synchronous claim")
+            XCTAssertTrue(destination.contains(
+                "VerificationSetting(locked: sessionLocked, preference: verification)"),
+                "\(name) does not lock the verification default with the session")
+        }
+        // The setting's own file re-checks the lock in the setter as well as
+        // disabling the control: a click delivered from the previous render can
+        // land after a claim, and `.disabled` alone would not stop it.
+        let setting = try source(named: "Components/VerificationSetting.swift")
+        XCTAssertTrue(setting.contains(
+            "set: { if !locked { preference.requiresSASConfirmation = $0 } }"),
             "verification can change after claim but before handshake state appears")
-        XCTAssertTrue(destination.contains(".disabled(sessionLocked)"))
+        XCTAssertTrue(setting.contains(".disabled(locked)"))
     }
 
     func testSessionOwnershipCleanupIsAppScopedAndNeverRunsFromInitialViewIdle() throws {
@@ -526,18 +558,22 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertFalse(app.contains(
             "presenting.observeSessions(fileModel: files, textModel: text)\n"),
             "a second liveness subscription would race the first")
-        for name in [workspaceDestination, workspaceConnect, workspaceSession] {
+        for name in [lanDestination, crossDestination, lanConnect, crossConnect,
+                     transferSession] {
             let destination = try source(named: name)
             XCTAssertFalse(destination.contains("presence.releaseAll()"),
                            "\(name) can erase a fresh claim from its initial idle task")
         }
-        // Only the owner may let go, and with two routes drawing one surface the
-        // owner has to be ASKED rather than assumed.
-        let session = try source(named: workspaceSession)
-        XCTAssertTrue(session.contains("guard let owner = presence.owner,")
-                      && session.contains("AppDestination.macWorkspaceRoutes.contains(owner)")
-                      && session.contains("presence.release(owner)"),
-                      "the Workspace releases a route it may not own")
+        // Only the owner may let go, and with two destinations over one set of
+        // models the pane must name ITS OWN route rather than release whatever
+        // the presence object currently holds — a stale view rebuilt on the
+        // other transfer screen would otherwise blank a live session.
+        let session = try source(named: transferSession)
+        XCTAssertTrue(session.contains("let route: AppDestination")
+                      && session.contains("presence.release(route)"),
+                      "the session pane releases a route it may not own")
+        XCTAssertFalse(session.contains("presence.release(owner)"),
+                       "the session pane releases whichever route happens to own the session")
     }
 
     func testInboundNearbyOfferPassesOwnershipAdmissionBeforeBuildingResponder() throws {
@@ -558,7 +594,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     }
 
     func testNearbySessionKeepsItsPeerVisibleAfterTheRosterDisappears() throws {
-        let pane = try source(named: workspaceSession)
+        let pane = try source(named: transferSession)
         XCTAssertTrue(pane.contains("presence.sessionPeerLabel"))
         XCTAssertTrue(pane.contains("L10n.t(.nearbySessionWith"))
         XCTAssertTrue(pane.contains("L10n.t(.nearbySessionPeerDisclaimer)"),
@@ -568,7 +604,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         // inventing a name for somebody nobody named.
         XCTAssertTrue(pane.contains("L10n.t(.workspaceSessionWithCode)"),
                       "a code-reached session renders no header at all")
-        XCTAssertEqual(occurrences(of: ".accessibilityIdentifier(\"workspace-session-peer\")",
+        XCTAssertEqual(occurrences(of: ".accessibilityIdentifier(\"transfer-session-peer\")",
                                    in: pane), 2,
                        "both header shapes need the same stable runtime identity")
     }
@@ -655,7 +691,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// no transcript and no connection. Cancelling returns straight to the
     /// connect phase, in both lanes, through each model's own reset/cancel.
     func testTextCodeWaitingCancelReturnsDirectlyToThePairingEntry() throws {
-        let source = try source(named: workspaceSession)
+        let source = try source(named: transferSession)
         let text = try XCTUnwrap(source.components(
             separatedBy: "private var textLane:").dropFirst().first?
             .components(separatedBy: "private func codeHandoff").first)
@@ -683,7 +719,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// One handoff builder for both lanes now, so the expiry scope cannot be
     /// stated correctly in one and ambiguously in the other.
     func testPairingExpiryIsNamedAsCodeExpiryNotTransferExpiry() throws {
-        let source = try source(named: workspaceSession)
+        let source = try source(named: transferSession)
         let handoff = try XCTUnwrap(source.components(
             separatedBy: "private func codeHandoff(").dropFirst().first?
             .components(separatedBy: "// MARK: - what this connection carries").first)
@@ -698,7 +734,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// minted for. That is the one thing that makes a link-driven join
     /// unambiguous where a typed code cannot be.
     func testPairingHandoffPreservesTheModeThatCreatedTheCode() throws {
-        let pane = try source(named: workspaceSession)
+        let pane = try source(named: transferSession)
         XCTAssertTrue(pane.contains("productionPairingJoinURL(code: code, mode: mode)"),
                       "the handoff link must carry the lane it was minted for")
         XCTAssertTrue(pane.contains("mode: .files,") && pane.contains("mode: .text,"),
@@ -828,7 +864,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// visible control and its accessibility role must describe a Button, as
     /// the equivalent iOS surface already does, rather than harmless navigation.
     func testNearbyBackToDevicesKeepsTaskBoundaryButtonSemantics() throws {
-        let source = try source(named: workspaceSession)
+        let source = try source(named: transferSession)
         let exit = try XCTUnwrap(source.components(
             separatedBy: "private var exit: some View").dropFirst().first)
             .components(separatedBy: "// MARK: - actions").first ?? ""
@@ -838,7 +874,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "Leave this session is exposed as a navigation Link")
         XCTAssertTrue(exit.contains("if hasRetainedSession && !modelBusy"),
                       "a claimed owner made the terminal exit permanently unreachable")
-        XCTAssertTrue(exit.contains(".accessibilityIdentifier(\"workspace-leave-session\")"),
+        XCTAssertTrue(exit.contains(".accessibilityIdentifier(\"transfer-leave-session\")"),
                       "the one exit has no stable runtime identity")
         // Exactly one exit for the whole surface. Two — one per lane, as the two
         // panes this replaced had — is what let "Back to devices" and "Done"
@@ -848,7 +884,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     }
 
     func testNearbyLocalTextCannotBeDiscardedByAnUnconfirmedExit() throws {
-        let source = try source(named: workspaceSession)
+        let source = try source(named: transferSession)
         XCTAssertTrue(source.contains("@State private var confirmingLocalTextLeave = false"))
         XCTAssertTrue(source.contains("if mode == .text, textModel.hasLocalContent"))
         XCTAssertTrue(source.contains(
@@ -1066,7 +1102,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the displayed code must stay isolated in RTL copy")
         XCTAssertEqual(code.components(separatedBy: "pairing-code-value").count - 1, 1)
         XCTAssertEqual(code.components(separatedBy: "verification-code-value").count - 1, 1)
-        XCTAssertFalse(try source(named: "Workspace/WorkspaceLinkPane.swift")
+        XCTAssertFalse(try source(named: "Transfer/TransferLinkPane.swift")
             .contains("link-sas"),
                        "a caller wrapper split the verification identifier from its label")
     }
@@ -1080,15 +1116,16 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "UI acceptance still reaches the production pairing ICE client")
     }
 
-    /// Five destination files, one per `MacSurface`, and the five the Workspace
-    /// replaced are gone rather than merely unreferenced.
+    /// One destination file per `MacSurface` — six, because the hidden one still
+    /// has a screen — and every retired surface gone rather than merely
+    /// unreferenced.
     ///
     /// The absence half is the load-bearing one. A revert that left
-    /// `NearbyDestination.swift` on disk would compile — the project group is
-    /// filesystem-synchronized — and would put the second row back in the
-    /// sidebar the moment anybody added a `row(.nearby,` line, with no diff
-    /// against this file to explain it.
-    func testTheFiveDestinationFilesExist() {
+    /// `WorkspaceDestination.swift` on disk would compile — the project group is
+    /// filesystem-synchronized — and would put the merged row back the moment
+    /// anybody added a `row(.workspace,` line, with no diff against this file to
+    /// explain it.
+    func testEverySurfaceHasItsDestinationFileAndNoRetiredOneSurvives() {
         for surface in MacSurface.allCases {
             let name = surface.rawValue.prefix(1).uppercased() + surface.rawValue.dropFirst()
             XCTAssertTrue(FileManager.default.fileExists(
@@ -1111,32 +1148,38 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// with no arm is a compile error only because the `switch` has no `default`.
     /// Checked against `AppDestination.allCases` so neither list can be the one
     /// that is right.
-    /// Checked against `MacSurface.allCases` rather than `AppDestination`, and
-    /// that substitution IS this round: `.nearby` and `.pairingCode` are two
-    /// routes into one screen, so the sidebar owes the user one row for them and
-    /// the shell owes one arm.
+    /// Checked against `MacSurface.browseable` for the rows and
+    /// `MacSurface.allCases` for the arms, and the difference between those two
+    /// lists IS this batch: every surface must be renderable, and exactly one of
+    /// them — Open a link — must not be browseable.
     ///
-    /// The count assertion is what makes the merge stick. Adding a second direct
-    /// row back — under any name — fails here rather than shipping.
+    /// The count assertion is what makes the inventory stick. A sixth row, under
+    /// any name, fails here rather than shipping.
     func testEveryDestinationIsBothASidebarRowAndAShellArm() throws {
         let sidebar = try source(named: "Shell/SidebarView.swift")
         let shell = try source(named: "Shell/AppShellView.swift")
         for surface in MacSurface.allCases {
-            XCTAssertTrue(sidebar.contains("row(.\(surface.rawValue),"),
-                          "the sidebar has no row for \(surface.rawValue)")
             XCTAssertTrue(shell.contains("case .\(surface.rawValue):"),
                           "the shell renders nothing for \(surface.rawValue)")
+            let hasRow = sidebar.contains("row(.\(surface.rawValue),")
+            XCTAssertEqual(hasRow, surface.isBrowseable,
+                           "\(surface.rawValue) has a sidebar row it should not, or lacks one")
         }
-        XCTAssertEqual(occurrences(of: "row(.", in: sidebar), MacSurface.allCases.count,
-                       "the sidebar renders a row for something that is not a macOS surface")
-        XCTAssertEqual(MacSurface.allCases.count, 5)
-        // Every destination reaches a surface, and the two direct routes reach
-        // the same one. Derived from the enum rather than restated, so a seventh
-        // destination cannot be added without answering the question.
-        XCTAssertEqual(Set(AppDestination.macWorkspaceRoutes.map(\.macSurface)), [.workspace])
+        XCTAssertEqual(occurrences(of: "row(.", in: sidebar), MacSurface.browseable.count,
+                       "the sidebar renders a row for something it should not offer")
+        XCTAssertEqual(MacSurface.browseable.count, 5)
+        XCTAssertEqual(MacSurface.allCases.count, 6)
+        XCTAssertFalse(sidebar.contains("row(.storedReceive,"),
+                       "Open a link is an ordinary sidebar row again")
+        // Every destination reaches a surface, and no two share one. Derived
+        // from the enum rather than restated, so a seventh destination cannot be
+        // added without answering the question.
         XCTAssertEqual(Set(AppDestination.allCases.map(\.macSurface)),
                        Set(MacSurface.allCases),
                        "a macOS surface exists that no destination can reach")
+        XCTAssertEqual(Set(AppDestination.allCases.map(\.macSurface)).count,
+                       AppDestination.allCases.count,
+                       "two destinations were merged into one macOS screen")
         for surface in MacSurface.allCases {
             XCTAssertEqual(surface.route.macSurface, surface,
                            "\(surface.rawValue)'s row selects a route that draws something else")
@@ -1176,55 +1219,60 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// gate has a reason to render one, and neither of these has a half that
     /// needs an account.
     func testAnonymousDestinationsHoldNoAccountReference() throws {
-        let text = try source(named: "Destinations/StoredReceiveDestination.swift")
-        for symbol in ["AccountSession", "bearerToken", "session.state", "AccountGate"] {
-            XCTAssertFalse(text.contains(symbol),
-                           "StoredReceiveDestination must not depend on an account: \(symbol)")
+        // LAN Transfer joins this list with the split, and that is one of the
+        // things the split buys: same-network transfer in both directions needs
+        // no account, and now the whole destination that offers it holds no
+        // account reference at all. Minting a code — the one direct action that
+        // spends an account — moved to the other screen with its gate.
+        for name in ["Destinations/StoredReceiveDestination.swift",
+                     lanDestination, lanConnect] {
+            let text = try source(named: name)
+            for symbol in ["AccountSession", "bearerToken", "session.state", "AccountGate"] {
+                XCTAssertFalse(text.contains(symbol),
+                               "\(name) must not depend on an account: \(symbol)")
+            }
         }
     }
 
-    /// **The Workspace has an account-backed half now, and exactly one.**
+    /// **Exactly one account-backed half, on the destination that spends the
+    /// account.**
     ///
-    /// It holds `AccountSession` because minting a pairing code reserves relay
-    /// capacity billed to whoever created it. Everything else on the surface —
-    /// both directions of same-network transfer, and joining a code somebody
-    /// else created — reaches the transport with no credential at all, so the
-    /// gate must wrap the create controls and nothing else.
+    /// Cross-network Transfer holds `AccountSession` because minting a pairing
+    /// code reserves relay capacity billed to whoever created it. Joining a code
+    /// somebody else created reaches the transport with no credential at all, so
+    /// the gate must wrap the create controls and nothing else.
     ///
     /// That is checked positionally rather than by presence, because "the file
     /// contains a gate" is true of the correct and the broken version alike. The
-    /// gate has to sit inside the pairing card, after the roster, and the join
-    /// controls have to sit outside it.
-    func testTheWorkspaceGatesOnlyTheHalfThatSpendsAnAccount() throws {
-        let connect = try source(named: workspaceConnect)
+    /// gate has to sit above the join controls, and the join controls have to
+    /// sit outside it.
+    func testTheCrossNetworkScreenGatesOnlyTheHalfThatSpendsAnAccount() throws {
+        let connect = try source(named: crossConnect)
         XCTAssertEqual(occurrences(of: "CapabilityGateView(", in: connect), 1,
                        "a second gate on this surface is a second account wall")
-        guard let sameNetwork = connect.range(of: "private var sameNetwork: some View"),
-              let gate = connect.range(of: "CapabilityGateView(gate: gate,"),
+        guard let gate = connect.range(of: "CapabilityGateView(gate: gate,"),
               let join = connect.range(of: "private var joinControls: some View") else {
             return XCTFail("the connect pane no longer has the shape this guards")
         }
-        XCTAssertLessThan(sameNetwork.lowerBound, gate.lowerBound,
-                          "same-network transfer must not sit behind the account gate")
         XCTAssertLessThan(gate.upperBound, join.lowerBound,
                           "joining somebody else's code must not sit behind the account gate")
         // The gate wraps the create half only — `if case .allowed` selects
         // between the create controls and the gate, and nothing else.
         XCTAssertTrue(connect.contains("if case .allowed = gate {\n                    createControls\n                } else {"),
                       "the account gate no longer selects exactly the create controls")
-        // Neither the roster nor the join field may consult the account at all.
-        for anonymous in ["private var receiving: some View",
-                          "private var roster: some View",
-                          "private var joinControls: some View"] {
-            guard let start = connect.range(of: anonymous) else {
-                return XCTFail("the connect pane lost \(anonymous)")
-            }
-            let body = connect[start.upperBound...].prefix(1200)
-            for symbol in ["gate", "accessNow", "session.state", "bearerToken"] {
-                XCTAssertFalse(body.contains(symbol),
-                               "\(anonymous) consults the account: \(symbol)")
-            }
+        // The join field may not consult the account at all.
+        guard let start = connect.range(of: "private var joinControls: some View") else {
+            return XCTFail("the connect pane lost its join controls")
         }
+        let body = connect[start.upperBound...].prefix(1200)
+        for symbol in ["gate", "accessNow", "session.state", "bearerToken"] {
+            XCTAssertFalse(body.contains(symbol),
+                           "the join controls consult the account: \(symbol)")
+        }
+        // And the LAN screen has no gate at all — there is nothing on it that
+        // spends an account.
+        XCTAssertFalse(try source(named: lanConnect).contains("CapabilityGateView("),
+                       "the same-network screen grew an account wall")
     }
 
     /// Every terminal surface can be dismissed, and the exit is unreachable
@@ -1243,7 +1291,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// is why it is gated on `!modelBusy` and why the mid-transfer Cancel stays
     /// the destructive control inside `RealtimeFileSessionView`.
     func testEveryPairingCodeTerminalSurfaceCarriesExactlyOneDone() throws {
-        let pane = try source(named: workspaceSession)
+        let pane = try source(named: transferSession)
         guard let exit = pane.range(of: "private var exit: some View"),
               let gated = pane.range(of: "if hasRetainedSession && !modelBusy {",
                                      range: exit.lowerBound..<pane.endIndex),
@@ -1314,20 +1362,140 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the Device Inbox row invented a second name for the feature")
         XCTAssertTrue(sidebar.contains("subtitle: L10n.t(.navDeviceInboxSubtitle)"),
                       "the Device Inbox row has no subtitle, so it has no accessibility hint")
+        // Every row has one, because the sidebar is now the ONLY place a
+        // destination is explained: the page headings that used to repeat these
+        // sentences are gone.
+        XCTAssertEqual(occurrences(of: "subtitle: L10n.t(", in: sidebar),
+                       MacSurface.browseable.count,
+                       "a sidebar row lost the compact explanation that is now its only one")
         for kept in [".accessibilityElement(children: .ignore)",
                      ".accessibilityLabel(title)",
                      ".accessibilityAddTraits(.isHeader)"] {
             XCTAssertTrue(sidebar.contains(kept), "the section header lost \(kept)")
         }
-        // The merged row keeps a title and a subtitle like every other one, and
-        // the subtitle has to name BOTH ways of reaching a peer — it is the only
-        // place the sidebar can still say that a pairing code lives here.
-        XCTAssertTrue(sidebar.contains("title: L10n.t(.navWorkspace)"))
-        XCTAssertTrue(sidebar.contains("subtitle: L10n.t(.navWorkspaceSubtitle)"))
-        for retired in ["navNearby", "navNearbySubtitle", "navPairingCode",
-                        "navPairingCodeSubtitle"] {
+        // Two transfer rows, each with its own name and its own sentence. The
+        // cross-network subtitle is the one that has to carry the distinction
+        // between them, because "which of these two do I want" is answered by
+        // whether the devices share a network.
+        XCTAssertTrue(sidebar.contains("title: L10n.t(.navLanTransfer)"))
+        XCTAssertTrue(sidebar.contains("subtitle: L10n.t(.navLanTransferSubtitle)"))
+        XCTAssertTrue(sidebar.contains("title: L10n.t(.navCrossNetwork)"))
+        XCTAssertTrue(sidebar.contains("subtitle: L10n.t(.navCrossNetworkSubtitle)"))
+        for retired in ["navWorkspace", "navWorkspaceSubtitle", "navStoredReceiveSubtitle"] {
             XCTAssertFalse(sidebar.contains(retired),
-                           "the sidebar still names a row this round merged: \(retired)")
+                           "the sidebar still names a row this batch removed: \(retired)")
+        }
+    }
+
+    // MARK: - the sidebar row is not printed twice
+
+    /// **No destination opens with its own title and subtitle.**
+    ///
+    /// Every screen used to: a `largeTitle` and a one-line caption, both copied
+    /// verbatim from the sidebar row that had just been clicked, at the top of
+    /// every destination forever. On a Mac the sidebar is on screen at the same
+    /// time with that row highlighted, so the heading told the reader nothing
+    /// they were not already looking at and cost three lines of a 560pt-tall
+    /// window on all six screens.
+    ///
+    /// Checked in three places, because there are three ways to put it back:
+    /// the scaffold could render one again, a destination could pass one, or a
+    /// destination could draw its own inside its content. The last is the one a
+    /// screenshot review would call a nice touch.
+    ///
+    /// What is deliberately still allowed: `navigationTitle` (window chrome,
+    /// Mission Control and VoiceOver's window name) and `SectionCard` titles,
+    /// which say what a PART of a screen is — something the sidebar never
+    /// claimed to.
+    func testNoDestinationPrintsItsSidebarRowAsAPageHeading() throws {
+        let scaffold = try source(named: "Components/DestinationScaffold.swift")
+        XCTAssertTrue(scaffold.contains(".navigationTitle(title)"),
+                      "the window lost its title along with the heading")
+        XCTAssertFalse(scaffold.contains("Text(title)"),
+                       "the scaffold prints the destination's name in its body again")
+        XCTAssertFalse(scaffold.contains("let subtitle"),
+                       "the scaffold accepts an introductory subtitle again")
+        XCTAssertFalse(scaffold.contains("private var heading"),
+                       "the scaffold grew a page heading again")
+
+        for surface in MacSurface.allCases {
+            let name = surface.rawValue.prefix(1).uppercased() + surface.rawValue.dropFirst()
+            let file = "Destinations/\(name)Destination.swift"
+            let text = try source(named: file)
+            XCTAssertTrue(text.contains("DestinationScaffold(title: L10n.t("),
+                          "\(file) no longer names the window")
+            XCTAssertFalse(text.contains("subtitle:"),
+                           "\(file) passes an introductory subtitle again")
+        }
+
+        // And nothing anywhere in the app draws a display-sized title of its
+        // own. Comments are stripped by the loader, so the sentence explaining
+        // this rule in the scaffold does not satisfy it.
+        for (name, text) in try sources(under: macRoot, atLeast: 30) {
+            XCTAssertFalse(text.contains(".largeTitle"),
+                           "\(name) draws a page heading of its own")
+        }
+    }
+
+    // MARK: - Settings is not a second home for a destination
+
+    /// **The Device Inbox tab is gone; the Device Inbox is not.**
+    ///
+    /// It had a settings tab because Settings was once its only full surface.
+    /// It has been a first-class destination and a menu-bar route since the
+    /// shell round, and keeping the tab meant one capability with two complete
+    /// screens reached by two different verbs — the exact drift the shared
+    /// `DeviceInboxSurface` exists to prevent, reintroduced at the host level.
+    ///
+    /// Every assertion here has a matching negative: removing the tab must not
+    /// remove the feature, its resident behaviour or its way back into the
+    /// window.
+    func testSettingsLostTheDeviceInboxTabAndNothingElseLostTheDeviceInbox() throws {
+        let settings = try source(named: "Settings/SettingsView.swift")
+        XCTAssertEqual(occurrences(of: ".tabItem {", in: settings), 2,
+                       "the settings window no longer has exactly General and Updates")
+        XCTAssertTrue(settings.contains("GeneralSettingsView()")
+                      && settings.contains("UpdateSettingsView(updater: updater)"))
+        XCTAssertFalse(settings.contains("DeviceInboxSettingsView"),
+                       "the Device Inbox settings tab is back")
+        XCTAssertFalse(settings.contains("inboxTitle"),
+                       "a settings tab still names the Device Inbox")
+        // General keeps the one residency control, exactly once. (Its
+        // `notFound` behaviour is deliberately untouched by this batch.)
+        XCTAssertEqual(occurrences(of: "L10n.t(.settingsOpenAtLogin)", in: settings), 1,
+                       "the Open at Login control was removed or duplicated")
+
+        // The destination and the menu-bar route are both still there.
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: macRoot.appendingPathComponent(
+                "Destinations/DeviceInboxDestination.swift").path),
+            "the Device Inbox destination went with its settings tab")
+        let menu = try source(named: "MenuBarView.swift")
+        XCTAssertTrue(menu.contains("navigation.select(.deviceInbox)")
+                      && menu.contains("openWindow(id: \"main\")"),
+                      "the menu bar lost its route into the Device Inbox")
+        XCTAssertTrue(menu.contains("InboxStatusPresentation.text(for: inbox.state)"),
+                      "the menu bar lost the resident status line")
+
+        // Exactly one host renders the shared surface now.
+        let hosts = try sources(under: macRoot, atLeast: 30)
+            .filter { $0.text.contains("DeviceInboxSurface {") }.map(\.name)
+        XCTAssertEqual(hosts, ["Destinations/DeviceInboxDestination.swift"],
+                       "the shared Device Inbox surface has more than one host again")
+
+        // …and the settings scene no longer carries what only that tab read.
+        let app = try source(named: "RelayiumApp.swift")
+        XCTAssertEqual(occurrences(of: ".environmentObject(inbox)", in: app), 2,
+                       "the main window and the menu bar are the two inbox hosts")
+        guard let settingsScene = app.range(of: "Settings {"),
+              let menuScene = app.range(of: "MenuBarExtra(") else {
+            return XCTFail("RelayiumApp no longer has the shape this checks")
+        }
+        let sceneBody = String(app[settingsScene.upperBound..<menuScene.lowerBound])
+        for absent in [".environmentObject(inbox)", ".environmentObject(session)",
+                       ".environmentObject(navigation)"] {
+            XCTAssertFalse(sceneBody.contains(absent),
+                           "the settings scene still injects \(absent) for a tab it no longer has")
         }
     }
 
@@ -1336,7 +1504,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// destinations with wide structured data, so making every screen stretch
     /// cannot happen as an accidental scaffold edit.
     func testOnlyStructuredDataDestinationsOptOutOfTheReadingMeasure() throws {
-        for file in [workspaceDestination,
+        for file in [lanDestination, crossDestination,
                      "Destinations/AccountDestination.swift",
                      // A grouped `Form` of controls, not prose.
                      "Destinations/DeviceInboxDestination.swift"] {
@@ -1346,8 +1514,8 @@ final class MacSurfaceGuardTests: XCTestCase {
         // Exactly one destination supplies its own scrolling, and it is the one
         // whose content is a `Form` — which is already a scroll view. A second
         // opt-out is a screen whose content silently stops scrolling at all.
-        let optedOut = try ["Workspace", "StoredSend", "StoredReceive",
-                            "DeviceInbox", "Account"]
+        let optedOut = try ["LanTransfer", "CrossNetworkTransfer", "StoredSend",
+                            "StoredReceive", "DeviceInbox", "Account"]
             .filter { try source(named: "Destinations/\($0)Destination.swift")
                 .contains("scrolls: false") }
         XCTAssertEqual(optedOut, ["DeviceInbox"],
@@ -1357,10 +1525,10 @@ final class MacSurfaceGuardTests: XCTestCase {
             XCTAssertFalse(try source(named: file).contains("contentMaxWidth: nil"),
                            "\(file) should keep the prose/form reading measure")
         }
-        // The Workspace opts its ROSTER out and constrains its prose locally:
+        // LAN Transfer opts its ROSTER out and constrains its prose locally:
         // the destination takes the width, and every paragraph on it is still
         // capped at the reading measure.
-        let connect = try source(named: workspaceConnect)
+        let connect = try source(named: lanConnect)
         XCTAssertTrue(connect.contains(".frame(maxWidth: .infinity, alignment: .leading)"),
                       "the roster's container must accept the available width")
         XCTAssertGreaterThanOrEqual(
@@ -1499,7 +1667,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(gate.contains("Button(L10n.t(.gateOpenAccount)) { onAccount(.signIn) }"),
                       "an unverified address is finished on the Account destination, "
                       + "which owns the resend action — not on a website")
-        for caller in ["UploadPane.swift", workspaceConnect] {
+        for caller in ["UploadPane.swift", crossConnect] {
             XCTAssertTrue(try source(named: caller)
                 .contains("onAccount: { navigation.selectAccount(intent: $0) }"),
                           "\(caller) must pass the gate's requested half through to navigation")
@@ -1823,73 +1991,100 @@ final class MacSurfaceGuardTests: XCTestCase {
                            "the shell stages opened files itself: \(reaching)")
         }
         let app = try source(named: "RelayiumApp.swift")
-        for reaching in ["AppRouting.destination(forOpenedFiles", "SelectionStore",
-                         "selection.add("] {
+        for reaching in ["AppRouting.destination(forOpenedFiles", "selection.add(",
+                         "transferSelection.add(", "transferSelection.replace("] {
             XCTAssertFalse(app.contains(reaching),
                            "RelayiumApp stages opened files itself: \(reaching)")
         }
+        // It OWNS the one staged selection — app-scoped so a batch survives both
+        // the window closing and the user switching between the two transfer
+        // destinations — and owning a store is not staging into one. Exactly one
+        // mention, so a second store (or a write) fails here.
+        XCTAssertEqual(occurrences(of: "SelectionStore", in: app), 1,
+                       "the app builds a second staged selection, or writes to the one it owns")
+        XCTAssertTrue(app.contains(
+            "@StateObject private var transferSelection = SelectionStore()"),
+            "the shared staged batch is no longer app-scoped, so switching "
+            + "connection methods discards what the user picked")
     }
 
-    /// Exactly the three panes that can send files adopt a batch, each for its
-    /// own destination, and none of them re-derives when it may.
+    /// Exactly the three panes that can send files adopt a batch, and none of
+    /// them re-derives when it may. The transfer pair asks for its shared route
+    /// set; Stored Send remains exact to its independent destination.
     ///
     /// The negative half is the load-bearing one. A pane that read `staged`
     /// directly would be a second copy of the busy rule — and the copy that
     /// contradicts the disabled drop zone beside it.
     func testOnlyTheThreeSendPanesAdoptOpenedFilesAndNoneReDerivesTheRule() throws {
-        // Two panes now, and the Workspace's ask is the SET of its own routes.
-        // `AppRouting.destination(forOpenedFiles:)` still addresses a batch to
-        // `.nearby` or `.pairingCode` — untouched, and iOS-shared — so a Dock
-        // drop that lands while a pairing-code deep link owns the selection is
-        // still addressed to a route this one screen renders.
-        let panes: [(file: String, destination: String)] = [
-            (workspaceConnect, "forAnyOf: AppDestination.macWorkspaceRoutes"),
-            ("UploadPane.swift", "for: .storedSend"),
-        ]
+        let panes = [lanConnect, crossConnect, "UploadPane.swift"]
+        for (file, route) in [(lanConnect, "AppDestination.nearby"),
+                              (crossConnect, "AppDestination.pairingCode")] {
+            XCTAssertTrue(try source(named: file).contains("private let route = \(route)"),
+                          "\(file) does not name the one route it stages for")
+        }
         for pane in panes {
-            let text = try source(named: pane.file)
-            XCTAssertTrue(text.contains("fileOpenRouting.batch(\(pane.destination),"),
-                          "\(pane.file) must ask the coordinator for its own destination's batch")
+            let text = try source(named: pane)
             XCTAssertTrue(text.contains("selection.add(batch.urls)"),
-                          "\(pane.file) must append rather than replace what the user already picked")
+                          "\(pane) must append rather than replace what the user already picked")
             XCTAssertTrue(text.contains("fileOpenRouting.consume(batch)"),
-                          "\(pane.file) must consume the batch it staged")
+                          "\(pane) must consume the batch it staged")
             // Keyed on BOTH facts. Keyed on the batch alone, one that arrived
             // mid-transfer is never republished and therefore never lands.
             XCTAssertTrue(text.contains("FileOpenAdoption(staged: fileOpenRouting.staged, busy:"),
-                          "\(pane.file) must re-ask adoption when either the batch or busy changes")
+                          "\(pane) must re-ask adoption when either the batch or busy changes")
         }
+        for pane in [lanConnect, crossConnect] {
+            XCTAssertTrue(try source(named: pane).contains(
+                "forAnyOf: AppDestination.macTransferRoutes, busy: sessionLocked"),
+                "\(pane) must adopt either route from the shared transfer staging context")
+        }
+        XCTAssertTrue(try source(named: "UploadPane.swift").contains(
+            "fileOpenRouting.batch(for: .storedSend, busy: model.isBusy)"),
+            "Stored Send must not absorb a direct-transfer batch")
 
         // Nobody else touches the coordinator's state, and nobody reads `staged`
         // to decide for themselves.
         let all = try sources(under: macRoot, atLeast: 20)
         let adopters = all.filter { $0.text.contains("fileOpenRouting.batch(") }
-        XCTAssertEqual(Set(adopters.map(\.name)), Set(panes.map(\.file)),
+        XCTAssertEqual(Set(adopters.map(\.name)), Set(panes),
                        "exactly the three send panes may adopt opened files")
-        for file in all where !panes.map(\.file).contains(file.name) {
+        for file in all where !panes.contains(file.name) {
             XCTAssertFalse(file.text.contains("fileOpenRouting.consume("),
                            "\(file.name) consumes a batch it did not stage")
         }
-        // Three destinations, three panes, no two claiming the same one.
-        XCTAssertEqual(Set(panes.map(\.destination)).count, panes.count)
     }
 
-    /// Nearby and Pairing claim a surface before their async start moves a
+    /// Both transfer screens claim a surface before their async start moves a
     /// realtime model to busy. Open With/Dock Drop must treat that ownership as
     /// busy too, and key the task on the combined answer so release retries it.
+    ///
+    /// The combined answer is `sessionLocked`, computed once per destination
+    /// from `TransferSurfacePresentation.acceptsNewSession` — which reads ANY
+    /// owner, not only this screen's, because a claim on the other transfer
+    /// destination is equally a reason not to mutate a selection behind the user.
     func testRealtimeOpenedFilesWaitForClaimedSessionOwnershipToClear() throws {
-        let connect = try source(named: workspaceConnect)
-        XCTAssertTrue(connect.contains(
-            "private var fileAdoptionBusy: Bool { presence.owner != nil || modelBusy }"))
-        XCTAssertTrue(connect.contains(
-            "FileOpenAdoption(staged: fileOpenRouting.staged, busy: fileAdoptionBusy)"))
-        XCTAssertTrue(connect.contains(
-            "fileOpenRouting.batch(forAnyOf: AppDestination.macWorkspaceRoutes,"))
-        XCTAssertTrue(connect.contains("busy: fileAdoptionBusy)"))
-        // `presence.owner` is ANY owner, not just this surface's: a stored-send
-        // claim is still a reason not to mutate a selection behind the user.
-        XCTAssertFalse(connect.contains("presence.rendersSession("),
-                       "adoption must stop for every claim, not only this one's")
+        for name in [lanDestination, crossDestination] {
+            let destination = try source(named: name)
+            XCTAssertTrue(destination.contains("owner: presence.owner,"),
+                          "\(name)'s lock ignores ownership and reads busy flags alone")
+            XCTAssertFalse(destination.contains("presence.rendersSession("),
+                           "adoption must stop for every claim, not only this one's")
+        }
+        for name in [lanConnect, crossConnect] {
+            let connect = try source(named: name)
+            XCTAssertTrue(connect.contains("let sessionLocked: Bool"),
+                          "\(name) re-derives the lock instead of taking the tested answer")
+            // A screen whose every control is disabled has to say why. The
+            // session it is waiting on is on the other transfer destination,
+            // which the user cannot see from here — a greyed control with no
+            // stated reason is the dead end this app's rules forbid.
+            XCTAssertTrue(connect.contains("if sessionLocked {")
+                          && connect.contains("InlineMessage(.info, L10n.t(.transferBusyElsewhere))"),
+                          "\(name) disables every control without saying why")
+            XCTAssertTrue(connect.contains(
+                "FileOpenAdoption(staged: fileOpenRouting.staged, busy: sessionLocked)"))
+            XCTAssertTrue(connect.contains("busy: sessionLocked)"))
+        }
     }
 
     /// Item-provider resolution suspends after AppKit accepts a drop. A live
@@ -1907,11 +2102,25 @@ final class MacSurfaceGuardTests: XCTestCase {
         }
         XCTAssertTrue(resolve.lowerBound < recheck.lowerBound && recheck.lowerBound < add.lowerBound)
 
-        let connect = try source(named: workspaceConnect)
-        XCTAssertTrue(connect.contains(
-            "FileDropZone(store: selection, isBusy: { fileAdoptionBusy })"))
-        XCTAssertEqual(occurrences(of: "FileDropZone(", in: connect), 1,
-                       "one surface, one drop target — two would be two selections")
+        let staging = try source(named: transferStaging)
+        XCTAssertTrue(staging.contains("FileDropZone(store: selection, isBusy: isBusy)"))
+        XCTAssertTrue(staging.contains("let isBusy: () -> Bool"),
+                      "the staging section snapshots busy at render instead of re-reading it")
+        XCTAssertEqual(occurrences(of: "FileDropZone(", in: staging), 1,
+                       "one staging section, one drop target — two would be two selections")
+        XCTAssertEqual(occurrences(of: ".disabled(isBusy())", in: staging), 2,
+                       "choose and clear must both obey the same live session lock")
+        // And exactly one staging section on each screen, driven by the same
+        // lock the connect controls use.
+        for name in [lanConnect, crossConnect] {
+            let connect = try source(named: name)
+            XCTAssertEqual(occurrences(
+                of: "TransferStagingSection(selection: selection, isBusy: { sessionLocked })",
+                in: connect), 1,
+                "\(name) must stage through the one shared section, at the one lock")
+            XCTAssertFalse(connect.contains("FileDropZone("),
+                           "\(name) grew a second drop target")
+        }
         XCTAssertTrue(try source(named: "UploadPane.swift").contains(
             "FileDropZone(store: selection, isBusy: { model.isBusy })"))
     }
@@ -1924,40 +2133,52 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// than read from a picker is the whole mode-picker removal: there is no
     /// moment at which an intent exists without ownership behind it.
     func testEveryOutboundRealtimeStartRequiresItsSurfaceClaim() throws {
-        let connect = try source(named: workspaceConnect)
-        let claims = [
-            "guard presence.beginSession(.nearby, mode: .text, peerLabel: live.label) else { return }",
-            "guard presence.beginSession(.nearby, mode: .files, peerLabel: live.label) else { return }",
-            "guard presence.beginSession(.pairingCode, mode: mode) else { return }",
-            "guard presence.beginSession(.pairingCode, mode: .files) else { return }",
-            "guard presence.beginSession(.pairingCode, mode: .text) else { return }",
+        let lan = try source(named: lanConnect)
+        let cross = try source(named: crossConnect)
+        // Each claim names `route` — the file's own destination, declared once —
+        // rather than a literal, so a start path cannot claim the other screen's
+        // route while rendering on this one.
+        let lanClaims = [
+            "guard presence.beginSession(route, mode: .text, peerLabel: live.label) else { return }",
+            "guard presence.beginSession(route, mode: .files, peerLabel: live.label) else { return }",
+        ]
+        let crossClaims = [
+            "guard presence.beginSession(route, mode: mode) else { return }",
+            "guard presence.beginSession(route, mode: .files) else { return }",
+            "guard presence.beginSession(route, mode: .text) else { return }",
         ]
         // The two unified-link starts. They take the mode-less claim, because a
         // link has no files-or-text mode to arbitrate — and each RELEASES the
         // claim when the link refuses, which the mode-carrying legacy paths do
         // not need because their models publish a failure state instead.
-        let linkClaims = [
-            "guard presence.beginSession(.nearby, peerLabel: live.label) else { return }",
-        ]
-        for claim in linkClaims {
-            XCTAssertEqual(occurrences(of: claim, in: connect), 2,
-                           "both link starts claim the surface before connecting")
-        }
-        XCTAssertEqual(occurrences(of: "presence.release(.nearby)", in: connect), 2,
+        XCTAssertEqual(occurrences(
+            of: "guard presence.beginSession(route, peerLabel: live.label) else { return }",
+            in: lan), 2,
+            "both link starts claim the surface before connecting")
+        XCTAssertEqual(occurrences(of: "presence.release(route)", in: lan), 2,
                        "a refused link must hand the surface back rather than strand it")
-        for claim in claims {
-            XCTAssertEqual(occurrences(of: claim, in: connect), 1,
-                           "the Workspace can start a shared model after losing ownership: \(claim)")
+        for (claim, text, name) in lanClaims.map({ ($0, lan, lanConnect) })
+            + crossClaims.map({ ($0, cross, crossConnect) }) {
+            XCTAssertEqual(occurrences(of: claim, in: text), 1,
+                           "\(name) can start a shared model after losing ownership: \(claim)")
         }
         // Every start is behind one. A bare `Task { await` that no claim
         // precedes is the regression this counts.
-        XCTAssertEqual(occurrences(of: "presence.beginSession(", in: connect),
-                       claims.count + 2,
-                       "a start path exists with no ownership claim, or a claim with no start")
+        XCTAssertEqual(occurrences(of: "presence.beginSession(", in: lan),
+                       lanClaims.count + 2,
+                       "a LAN start path exists with no ownership claim, or the reverse")
+        XCTAssertEqual(occurrences(of: "presence.beginSession(", in: cross),
+                       crossClaims.count,
+                       "a pairing start path exists with no ownership claim, or the reverse")
+        // Neither screen may claim the other's route.
+        XCTAssertFalse(lan.contains("beginSession(.pairingCode"),
+                       "the same-network screen claims the pairing-code route")
+        XCTAssertFalse(cross.contains("beginSession(.nearby"),
+                       "the pairing-code screen claims the same-network route")
     }
 
     func testPairingJoinSnapshotsAValidatedCodeBeforeClaimAndTask() throws {
-        let source = try source(named: workspaceConnect)
+        let source = try source(named: crossConnect)
         for model in ["fileModel", "textModel"] {
             XCTAssertTrue(source.contains("let code = \(model).joinCode"))
             XCTAssertTrue(source.contains("guard \(model).canJoin else { return }"))
@@ -1977,7 +2198,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// about to join — the same class of drift the old two-pane split had, moved
     /// one level down and made unrepresentable instead.
     func testPairingJoinNormalizesAtomicallyInBothModes() throws {
-        let source = try source(named: workspaceConnect)
+        let source = try source(named: crossConnect)
         XCTAssertTrue(source.contains("private var normalizedJoinCode: Binding<String>"))
         XCTAssertTrue(source.contains("fileModel.updateJoinCode($0)"))
         XCTAssertTrue(source.contains("textModel.updateJoinCode($0)"))
@@ -1992,7 +2213,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         let uiURL = macRoot.deletingLastPathComponent()
             .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
         let ui = try String(contentsOf: uiURL, encoding: .utf8)
-        XCTAssertTrue(ui.contains("testWorkspaceJoinKeepsACompleteCodeActionableForBothVerbs"))
+        XCTAssertTrue(ui.contains("testCrossNetworkJoinKeepsACompleteCodeActionableForBothVerbs"))
         XCTAssertTrue(ui.contains("window.textFields[\"pairing.joinCode\"]"))
     }
 
@@ -2013,7 +2234,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// work. One `createCode(mode:)` now, so the ordering is stated once instead
     /// of twice with a chance to disagree.
     func testPairingCreateSettlesIntentBeforeStartingAsyncMint() throws {
-        let connect = try source(named: workspaceConnect)
+        let connect = try source(named: crossConnect)
         XCTAssertTrue(connect.contains(
             "Button(L10n.t(.workspaceCreateMessageCode)) { createCode(mode: .text) }"))
         XCTAssertTrue(connect.contains(
@@ -2024,7 +2245,7 @@ final class MacSurfaceGuardTests: XCTestCase {
               let access = connect.range(of: "guard let access = accessNow() else {",
                                          range: staged.lowerBound..<connect.endIndex),
               let claim = connect.range(of:
-                "guard presence.beginSession(.pairingCode, mode: mode) else { return }",
+                "guard presence.beginSession(route, mode: mode) else { return }",
                 range: access.lowerBound..<connect.endIndex),
               let task = connect.range(
                 of: "Task { await mintAndWatch(mode: .files, token: access.token, staged: staged) }",
@@ -2046,12 +2267,12 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// preceding render may still be delivered after sign-out or credential
     /// replacement, so every authenticated macOS start re-reads live access.
     func testAuthenticatedMacStartsDoNotSpendRenderTimeCredentials() throws {
-        let destination = try source(named: workspaceDestination)
+        let destination = try source(named: crossDestination)
         XCTAssertTrue(destination.contains("AccountGate.from(session.state,"))
         XCTAssertEqual(occurrences(of: "accessNow: { accessNow }", in: destination), 1,
                        "one surface, one live-access seam")
 
-        let connect = try source(named: workspaceConnect)
+        let connect = try source(named: crossConnect)
         XCTAssertTrue(connect.contains("let accessNow: () -> AccountAccess?"))
         XCTAssertTrue(connect.contains("guard let access = accessNow() else {"))
         XCTAssertFalse(connect.contains("AccountGate.from("),
@@ -2067,12 +2288,12 @@ final class MacSurfaceGuardTests: XCTestCase {
     }
 
     func testStalePairingCreateRoutesToTheAccountRemedy() throws {
-        let pane = try source(named: workspaceConnect)
+        let pane = try source(named: crossConnect)
         let staleGate = try XCTUnwrap(pane.components(
             separatedBy: "guard let access = accessNow() else {").dropFirst().first?
             .components(separatedBy: "return").first)
         XCTAssertTrue(staleGate.contains("navigation.selectAccount(intent: .signIn)"),
-                      "the Workspace silently swallowed a stale Create activation")
+                      "the pairing screen silently swallowed a stale Create activation")
     }
 
     /// The document-type declaration that makes the app a Dock drop target and a
@@ -2358,12 +2579,15 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the live marker must be derived through TransferPresence")
         XCTAssertTrue(sidebar.contains("fileModel.isBusy || textModel.isBusy"),
                       "activity must come from the session models, not from a cached flag")
-        // The Workspace row asks about BOTH of its routes: `TransferPresence`
-        // still arbitrates per route, so a pairing-code session would go
-        // unmarked if the row only asked about the one its click selects.
+        // One route per row again, and the marker follows the owner — so the
+        // marked row is the one the session is actually on and following it
+        // lands the user on the transfer rather than on a screen that has to
+        // explain where it went.
         XCTAssertTrue(sidebar.contains(
-            "AppDestination.macWorkspaceRoutes.contains {"),
-            "the Workspace row can miss a session owned by its other route")
+            "presence.announcesRunningTransfer(surface.route, sessionIsBusy: busy)"),
+            "the live marker is no longer derived from the row's own route")
+        XCTAssertFalse(sidebar.contains("macWorkspaceRoutes"),
+                       "a row still asks about a route it does not render")
         XCTAssertFalse(sidebar.contains("surface == .storedSend"),
                        "the marker must not be hard-coded to one surface")
         XCTAssertFalse(sidebar.contains("receive.activeKind"),
@@ -2414,8 +2638,8 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// precondition at all; the file verb sits beside it, bordered, disabled
     /// until something is staged. The pairing card mirrors that: the message
     /// code is prominent, the file code is not.
-    func testTheWorkspaceLeadsWithTheMessageIntentAndKeepsFileActionsBesideIt() throws {
-        let connect = try source(named: workspaceConnect)
+    func testTheTransferScreensLeadWithTheMessageIntentAndKeepFileActionsBesideIt() throws {
+        let connect = try source(named: lanConnect)
         let messageAction = try XCTUnwrap(connect.range(
             of: "Button(L10n.t(.workspaceSendMessage)) { startMessage(with: device) }"))
         let fileAction = try XCTUnwrap(connect.range(
@@ -2427,28 +2651,54 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the default intent is not the prominent one")
         XCTAssertFalse(messageStyling.contains(".disabled(selection.isEmpty"),
                        "the message intent must not require a staged selection")
-        XCTAssertTrue(connect.contains(".disabled(selection.isEmpty || modelBusy)"),
+        XCTAssertTrue(connect.contains(".disabled(selection.isEmpty || sessionLocked)"),
                       "the file action must state its own precondition")
 
-        // Both verbs, and both connection methods, carry stable runtime
-        // identities — this is what the UI suite proves ONE screen offers.
-        for identifier in ["workspace-send-message", "workspace-send-files",
-                           "workspace-create-message-code", "workspace-create-file-code",
-                           "workspace-join-messages", "workspace-join-files",
-                           "workspace-choose-files", "workspace-staging-optional"] {
+        // Every verb carries a stable runtime identity, and the two screens'
+        // identities are DISJOINT — which is how the UI suite proves that each
+        // connection method is on its own destination rather than both on one.
+        let cross = try source(named: crossConnect)
+        let staging = try source(named: transferStaging)
+        for identifier in ["lan-send-message", "lan-send-files"] {
             XCTAssertTrue(connect.contains(".accessibilityIdentifier(\"\(identifier)\")"),
-                          "the Workspace lost its \(identifier) control")
+                          "the LAN screen lost its \(identifier) control")
+            XCTAssertFalse(cross.contains(identifier),
+                           "the pairing screen offers a same-network control: \(identifier)")
+        }
+        for identifier in ["cross-network-create-message-code", "cross-network-create-file-code",
+                           "cross-network-join-messages", "cross-network-join-files",
+                           "cross-network-explain"] {
+            XCTAssertTrue(cross.contains(".accessibilityIdentifier(\"\(identifier)\")"),
+                          "the pairing screen lost its \(identifier) control")
+            XCTAssertFalse(connect.contains(identifier),
+                           "the LAN screen offers a pairing control: \(identifier)")
+        }
+        for identifier in ["transfer-choose-files", "transfer-staging-optional"] {
+            XCTAssertTrue(staging.contains(".accessibilityIdentifier(\"\(identifier)\")"),
+                          "the staging section lost its \(identifier) control")
+        }
+        // Neither screen names the other's connection method at all. This is the
+        // owner's correction stated as a source property: one destination, one
+        // connection method, and no second way of connecting beside it.
+        for banned in ["workspacePairingHeading", "createControls", "joinControls",
+                       "pairing.joinCode"] {
+            XCTAssertFalse(connect.contains(banned),
+                           "the LAN screen still offers the pairing method: \(banned)")
+        }
+        for banned in ["workspaceSameNetworkHeading", "discovery.", "roster", "deviceRow"] {
+            XCTAssertFalse(cross.contains(banned),
+                           "the pairing screen still offers same-network discovery: \(banned)")
         }
 
-        // The pairing card leads with messages too.
-        let createMessage = try XCTUnwrap(connect.range(
+        // The pairing screen leads with messages too.
+        let createMessage = try XCTUnwrap(cross.range(
             of: "Button(L10n.t(.workspaceCreateMessageCode)) { createCode(mode: .text) }"))
-        let createFile = try XCTUnwrap(connect.range(
+        let createFile = try XCTUnwrap(cross.range(
             of: "Button(L10n.t(.workspaceCreateFileCode)) { createCode(mode: .files) }"))
         XCTAssertLessThan(createMessage.lowerBound, createFile.lowerBound)
-        let joinMessages = try XCTUnwrap(connect.range(
+        let joinMessages = try XCTUnwrap(cross.range(
             of: "Button(L10n.t(.workspaceJoinMessages)) { join(mode: .text) }"))
-        let joinFiles = try XCTUnwrap(connect.range(
+        let joinFiles = try XCTUnwrap(cross.range(
             of: "Button(L10n.t(.workspaceJoinFiles)) { join(mode: .files) }"))
         XCTAssertLessThan(joinMessages.lowerBound, joinFiles.lowerBound)
     }
@@ -2459,22 +2709,22 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// negotiation has selected that session pane, it names the lane the
     /// connection does NOT have. The connect phase cannot make that claim for a
     /// pairing code whose peer is not known yet.
-    func testTheWorkspaceStatesTheOneLaneLimitOnlyAfterCapabilityIsKnown() throws {
-        let connect = try source(named: workspaceConnect)
-        XCTAssertFalse(connect.contains(".accessibilityIdentifier(\"workspace-one-connection-note\")"),
+    func testTheTransferScreensStateTheOneLaneLimitOnlyAfterCapabilityIsKnown() throws {
+        let connect = try source(named: crossConnect)
+        XCTAssertFalse(connect.contains("one-connection-note"),
                        "the connect phase guesses a pairing peer's capability")
 
-        let session = try source(named: workspaceSession)
+        let session = try source(named: transferSession)
         XCTAssertTrue(session.contains(
             "L10n.t(mode == .text ? .workspaceMessagesOnlyNote : .workspaceFilesOnlyNote)"),
             "a live session no longer names the lane it does not have")
-        XCTAssertTrue(session.contains(".accessibilityIdentifier(\"workspace-lane-note\")"))
+        XCTAssertTrue(session.contains(".accessibilityIdentifier(\"transfer-lane-note\")"))
         XCTAssertTrue(session.contains("if peerCapabilityIsKnown { laneNote }"),
                       "the lane warning is shown before a pairing peer is classified")
         XCTAssertTrue(session.contains("case .idle, .minting, .showingCode, .failed:"),
                       "a no-peer failure is described as a classified legacy connection")
-        XCTAssertTrue(session.contains("workspace-waiting-pairing-peer"))
-        XCTAssertTrue(session.contains("workspace-cancel-pairing-watch"))
+        XCTAssertTrue(session.contains("transfer-waiting-pairing-peer"))
+        XCTAssertTrue(session.contains("transfer-cancel-pairing-watch"))
         guard let laneNote = session.range(of: "private var laneNote: some View"),
               let body = session.range(of: "var body: some View") else {
             return XCTFail("the session pane no longer has the shape this guards")
@@ -2494,7 +2744,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// The failure this prevents is the tempting one: a single note above both
     /// sections, which is necessarily a stale claim about one of them.
     func testTheConnectPhaseStatesTheRightLimitPerDevice() throws {
-        let connect = try source(named: workspaceConnect)
+        let connect = try source(named: lanConnect)
 
         // Per device, branching on the peer's own announcement.
         XCTAssertTrue(connect.contains("""
@@ -2503,18 +2753,14 @@ final class MacSurfaceGuardTests: XCTestCase {
                                         : .workspaceOneConnectionNote))
 """), "the device actions no longer state what THAT device's connection carries")
         XCTAssertTrue(connect.contains(
-            ".accessibilityIdentifier(\"workspace-device-connection-note\")"))
+            ".accessibilityIdentifier(\"lan-device-connection-note\")"))
 
         // A pairing code has no peer yet, so neither connection-shape claim is
-        // made until negotiation selects a session pane.
-        guard let pairing = connect.range(of: "private var pairingCode: some View"),
-              let create = connect.range(of: "private var createControls: some View") else {
-            return XCTFail("the connect pane no longer has the shape this guards")
-        }
-        let pairingBody = String(connect[pairing.lowerBound..<create.lowerBound])
-        XCTAssertFalse(pairingBody.contains("workspaceOneConnectionNote"),
+        // made on that screen until negotiation selects a session pane.
+        let cross = try source(named: crossConnect)
+        XCTAssertFalse(cross.contains("workspaceOneConnectionNote"),
                        "pairing-code setup guessed a legacy peer")
-        XCTAssertFalse(pairingBody.contains("linkOneConnectionNote"),
+        XCTAssertFalse(cross.contains("linkOneConnectionNote"),
                        "pairing-code setup guessed a link-capable peer")
     }
 
@@ -2530,13 +2776,15 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// is typing a code into, and either as the default would fire on the
     /// keystroke that ends the other one. Prominence still belongs to each card's
     /// own primary; the keyboard default is the narrower claim.
-    func testJoinIsTheOnlyKeyboardDefaultOnTheWorkspace() throws {
-        let text = try source(named: workspaceConnect)
+    func testJoinIsTheOnlyKeyboardDefaultOnTheTransferScreens() throws {
+        let text = try source(named: crossConnect)
         XCTAssertEqual(occurrences(of: ".keyboardShortcut(.defaultAction)", in: text), 1,
-                       "the Workspace must not offer two competing default buttons")
+                       "the pairing screen must not offer two competing default buttons")
         assertDefaultAction(attachesTo: "Button(L10n.t(.workspaceJoinMessages))",
-                            in: text, named: workspaceConnect)
-        XCTAssertTrue(text.contains(".disabled(!textModel.canJoin)"),
+                            in: text, named: crossConnect)
+        XCTAssertFalse(try source(named: lanConnect).contains(".keyboardShortcut(.defaultAction)"),
+                       "the same-network screen competes for the window's default action")
+        XCTAssertTrue(text.contains(".disabled(!textModel.canJoin || sessionLocked)"),
                       "the default action must stay inert until six digits are in")
         XCTAssertTrue(text.contains("fileModel.updateJoinCode($0)")
                       && text.contains("textModel.updateJoinCode($0)"),
@@ -2544,7 +2792,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         // And exactly one on this surface's other file: the session pane must
         // not inherit a default from the phase that started it, because Return
         // over a transfer in flight has nothing safe to mean.
-        for name in [workspaceDestination, workspaceSession] {
+        for name in [lanDestination, crossDestination, transferSession] {
             XCTAssertFalse(try source(named: name).contains(".keyboardShortcut(.defaultAction)"),
                            "\(name) competes for the window's default action")
         }
@@ -2854,6 +3102,48 @@ final class MacSurfaceGuardTests: XCTestCase {
                                "\(path) still asserts the old floor: \(spelling)")
             }
         }
+    }
+
+    /// **No document still describes the merged Workspace or a browseable Open
+    /// a link.**
+    ///
+    /// A stale sentence in a README is not a cosmetic problem here: these three
+    /// documents are what a reader takes as the statement of what the product
+    /// IS, and each of them named the sidebar row by row. A description of a
+    /// screen that no longer exists is worse than no description, because it is
+    /// the version a reader will go looking for and fail to find.
+    ///
+    /// Asserted in both directions — the old names gone AND the new ones present
+    /// — because deleting the sentence would pass a test that only checked for
+    /// absence, and would leave the documents silent about the change the owner
+    /// asked for.
+    func testNoDocumentStillDescribesTheMergedWorkspaceOrABrowseableOpenLink() throws {
+        for path in claimSurfaces {
+            let text = flattened(try claimSurfaceText(path))
+            for stale in ["Workspace — one peer", "Workspace is one row",
+                          "one Workspace", "Workspace, Send a link",
+                          "a live Workspace", "sidebar names all five destinations"] {
+                XCTAssertFalse(text.contains(stale),
+                               "\(path) still describes the merged Workspace: \(stale)")
+            }
+        }
+        // The two documents that describe the sidebar describe the sidebar that
+        // exists: two transfer destinations, and Open a link reachable rather
+        // than listed.
+        for path in ["README.md", "apps/README.md"] {
+            let text = flattened(try claimSurfaceText(path))
+            XCTAssertTrue(text.contains("LAN Transfer"),
+                          "\(path) does not name the same-network destination")
+            XCTAssertTrue(text.contains("Cross-network Transfer"),
+                          "\(path) does not name the pairing-code destination")
+            XCTAssertFalse(text.contains("Open a link, Device Inbox"),
+                           "\(path) still lists Open a link as a sidebar row")
+        }
+        let apps = flattened(try claimSurfaceText("apps/README.md"))
+        XCTAssertTrue(apps.contains("five destinations"),
+                      "apps/README.md no longer counts the browseable rows")
+        XCTAssertTrue(apps.localizedCaseInsensitiveContains("deep link"),
+                      "apps/README.md does not say how Open a link is reached")
     }
 
     /// Wording that overstates what is distributed, without ever using a word the

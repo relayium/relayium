@@ -14,9 +14,10 @@ import XCTest
 /// rather than merely indirect: opening the settings scene and then finding a tab
 /// whose control type varies by macOS left the pane unselected, and the failure
 /// moved between tests, which is the signature of shared setup rather than of any
-/// one product behaviour. Settings still renders the identical surface, and
-/// `InboxSurfaceGuardTests` proves it does from the source — one file, two thin
-/// hosts, no second copy of a control that could disagree.
+/// one product behaviour. Settings no longer renders this surface at all: the
+/// destination replaced the tab rather than joining it, and
+/// `InboxSurfaceGuardTests` proves from the source that exactly one host is
+/// left, so there is no second copy of a control that could disagree.
 ///
 /// Each launch below substitutes exactly one thing, the transport, and lets the
 /// real enrolment, key store, sealed box, decryptor, planner, `linkat` commit and
@@ -58,10 +59,10 @@ final class DeviceInboxUITests: XCTestCase {
     /// and then selecting a tab whose control type varies by macOS version, and
     /// that setup was measured to fail on the hosted runner and locally, moving
     /// between tests — the pane simply never came up. It was never the product
-    /// under test either: the Device Inbox now has a first-class destination, and
-    /// `InboxSurfaceGuardTests.testBothDeviceInboxEntriesRenderTheOneSharedSurface`
-    /// proves by source that the settings tab renders that same one surface, which
-    /// is a stronger statement than a second runtime pass over a copy of it.
+    /// under test either: the Device Inbox has a first-class destination, and
+    /// with this batch the settings tab is gone entirely —
+    /// `InboxSurfaceGuardTests.testTheDeviceInboxDestinationIsTheOneHostOfTheSharedSurface`
+    /// proves by source that one host is left.
     private var settingsWindow: XCUIElement? {
         app.windows.allElementsBoundByIndex
             .first { $0.frame.width >= 400 && $0.frame.width < 800 }
@@ -250,13 +251,16 @@ final class DeviceInboxUITests: XCTestCase {
                       "the destination never says what Device Inbox does")
         XCTAssertFalse(copy.contains("Open Device Inbox settings"),
                        "the destination forwards the user to Settings instead of working")
-        // The other four destinations are still reachable beside it. Nearby
-        // and pairing code are intentionally one Workspace row on macOS.
-        for other in ["sidebar-workspace", "sidebar-storedSend",
-                      "sidebar-storedReceive", "sidebar-account"] {
+        // The other four browseable destinations are still reachable beside it.
+        // `storedReceive` is deliberately absent: Open a link is reached by a
+        // link the OS hands the app, not by a row.
+        for other in ["sidebar-lanTransfer", "sidebar-crossNetworkTransfer",
+                      "sidebar-storedSend", "sidebar-account"] {
             XCTAssertTrue(element(other, in: window).exists,
                           "adding the Device Inbox row displaced \(other)")
         }
+        XCTAssertFalse(element("sidebar-storedReceive", in: window).exists,
+                       "Open a link is an ordinary sidebar row again")
     }
 
     /// **Signed out, the destination is useful rather than merely present.**

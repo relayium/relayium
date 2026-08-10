@@ -51,23 +51,27 @@ struct AppShellView: View {
                 .navigationSplitViewColumnWidth(min: 208, ideal: 224, max: 288)
         } detail: {
             Group {
-                // Switched on the SURFACE rather than on the destination, and
-                // that indirection is the whole shape of this round: `.nearby`
-                // and `.pairingCode` are still two routes — iOS renders them as
-                // two tabs, deep links and incoming sessions still select them
-                // by name — and on macOS they are two ways into one screen.
+                // Switched on the SURFACE rather than on the destination. The
+                // two are one-to-one today, and the indirection still earns its
+                // place: `MacSurface` is where macOS says which screens exist
+                // and which of them the sidebar offers, and `storedReceive` is
+                // the case that proves it — it has an arm here and no row there.
                 //
-                // No `default`, exactly as before: a sixth macOS surface is a
-                // compile error here rather than a sidebar row that opens
-                // nothing, and a seventh destination is a compile error in
-                // `AppDestination.macSurface` rather than a screen that never
-                // opens.
+                // No `default`: a seventh macOS surface is a compile error here
+                // rather than a sidebar row that opens nothing, and a seventh
+                // destination is a compile error in `AppDestination.macSurface`
+                // rather than a screen that never opens.
                 switch navigation.selection.macSurface {
-                case .workspace:     WorkspaceDestination()
-                case .storedSend:    StoredSendDestination()
-                case .storedReceive: StoredReceiveDestination()
-                case .deviceInbox:   DeviceInboxDestination()
-                case .account:       AccountDestination()
+                case .lanTransfer:          LanTransferDestination()
+                case .crossNetworkTransfer: CrossNetworkTransferDestination()
+                case .storedSend:           StoredSendDestination()
+                // Reachable, never browseable. A `relayium.com` download link
+                // the OS handed this app selects `.storedReceive`, and this is
+                // the arm that draws it; removing the sidebar row removed the
+                // way to WANDER here, not the way to arrive.
+                case .storedReceive:        StoredReceiveDestination()
+                case .deviceInbox:          DeviceInboxDestination()
+                case .account:              AccountDestination()
                 }
             }
             // Stable and nonlocalized. The UI suite must observe the detail

@@ -1,54 +1,92 @@
 import Foundation
 
-/// What the macOS window actually renders — one case per sidebar row.
+/// What the macOS window actually renders — one case per screen the shell can
+/// draw, and one list saying which of them the user may browse to.
 ///
-/// `AppDestination` is the ROUTING vocabulary both platforms share, and it is
-/// deliberately left alone here: iOS renders `.nearby` and `.pairingCode` as two
-/// separate tabs, and changing the enum to suit one platform's shell would be a
-/// redesign of the other's. What macOS needed instead is a second, narrower
-/// answer — *which screen draws this destination* — and on macOS the two direct
-/// routes draw the same screen.
+/// `AppDestination` is the ROUTING vocabulary both platforms share and is
+/// deliberately left alone here: iOS renders its own tabs from it, and changing
+/// the enum to suit one platform's shell would be a redesign of the other's.
+/// What macOS needs is a second, narrower answer — *which screen draws this
+/// destination, and is that screen something the sidebar offers* — and those two
+/// questions are what this type exists for.
 ///
-/// So this type exists for exactly one reason: **`nearby` and `pairingCode` are
-/// two ways to reach one peer, not two products.** They always drove the same
-/// `RealtimeSessionModel` and `RealtimeTextSessionModel`, took turns owning the
-/// one `TransferPresence`, and each spent half its screen explaining that the
-/// session was somewhere else. Collapsing them at the *surface* layer removes
-/// that explanation entirely without touching a routing decision, a deep link,
-/// an incoming-session claim or the iOS tab bar.
+/// ## The two transfer screens are two destinations again
+///
+/// They were briefly one row called Workspace, on the argument that a pairing
+/// code and same-network discovery are "two ways to reach one peer, not two
+/// products". The owner's answer is that they are two products to the person
+/// using them: one requires being on the same network and the other explicitly
+/// does not, which is the first thing somebody needs to know and the one thing a
+/// merged row could not say without a paragraph. So `lanTransfer` and
+/// `crossNetworkTransfer` are two rows, two screens, and one connection method
+/// each — while `TransferPresence` still arbitrates a single live session
+/// between the routes underneath them, exactly as before.
 ///
 /// `String`-backed and `CaseIterable` for the same reasons `AppDestination` is:
 /// a stable, loggable name that UI automation can address, and one list the
 /// sidebar and the shell both enumerate rather than two that can drift.
 public enum MacSurface: String, CaseIterable, Hashable, Sendable {
-    /// Same-network discovery and pairing-code create/join, in one place, with
-    /// one live session between them.
-    case workspace
+    /// Same-network discovery and direct transfer. No account, no code.
+    case lanTransfer
+    /// Pairing code. The devices do **not need** to share a network.
+    case crossNetworkTransfer
     case storedSend
+    /// Opening a stored link somebody sent. **Not browseable** — see
+    /// `browseable` below.
     case storedReceive
     case deviceInbox
     case account
 
+    /// The five rows the sidebar lists, in the order it lists them.
+    ///
+    /// **`storedReceive` is deliberately absent, and its absence is a product
+    /// decision rather than an oversight.** Opening a stored link is something
+    /// the OS hands this app — a `relayium.com` download link the user followed
+    /// somewhere else — not somewhere a person sets out to go. It kept a sidebar
+    /// row that answered "what do I do here?" with "paste a link you already
+    /// have", and every route that actually delivers one (`AppDeepLink`,
+    /// `AccountView`'s stored-file rows) selects `.storedReceive` directly and
+    /// still renders it. So the screen stays reachable and stops being browseable.
+    ///
+    /// Written as the ordered list the sidebar renders rather than as a
+    /// predicate over `allCases`, so "which rows, in which order" is one
+    /// statement in one place. `isBrowseable` is derived from it, never the
+    /// other way round.
+    public static let browseable: [MacSurface] = [
+        .lanTransfer, .crossNetworkTransfer, .storedSend, .deviceInbox, .account,
+    ]
+
+    /// Whether the sidebar offers this surface at all.
+    public var isBrowseable: Bool { Self.browseable.contains(self) }
+
     /// The destination a click on this row selects.
     ///
-    /// The Workspace's canonical route is `.nearby`, and that is not arbitrary:
-    /// it is the one route that needs no account and no code, so a selection
-    /// made by the sidebar, by a Dock drop or by a fresh launch lands on the
-    /// half of the surface that always works. A pairing-code deep link still
-    /// selects `.pairingCode` and still arrives here — see `macSurface` — so
-    /// nothing about link routing depends on this choice.
+    /// One route each now: the two transfer surfaces no longer share a canonical
+    /// route, because they no longer share a screen. A pairing-code deep link
+    /// still selects `.pairingCode` and arrives at `crossNetworkTransfer`; an
+    /// unsolicited same-network session still selects `.nearby` and arrives at
+    /// `lanTransfer`.
     public var route: AppDestination {
         switch self {
-        case .workspace:      return .nearby
-        case .storedSend:     return .storedSend
-        case .storedReceive:  return .storedReceive
-        case .deviceInbox:    return .deviceInbox
-        case .account:        return .account
+        case .lanTransfer:          return .nearby
+        case .crossNetworkTransfer: return .pairingCode
+        case .storedSend:           return .storedSend
+        case .storedReceive:        return .storedReceive
+        case .deviceInbox:          return .deviceInbox
+        case .account:              return .account
         }
     }
 }
 
 public extension AppDestination {
+    /// The two routes that share one transfer staging context on macOS.
+    ///
+    /// They remain separate screens and connection methods. The set exists only
+    /// for OS-opened file batches: a batch dragged to the Dock must remain
+    /// available if the user changes from LAN to pairing code before adopting
+    /// it, just as the app-scoped `SelectionStore` does after adoption.
+    static let macTransferRoutes: Set<AppDestination> = [.nearby, .pairingCode]
+
     /// Which macOS surface draws this destination.
     ///
     /// **No `default`**, exactly as `AppRouting`'s switches have none: a seventh
@@ -56,20 +94,12 @@ public extension AppDestination {
     /// inheriting an answer, and the compiler is what asks.
     var macSurface: MacSurface {
         switch self {
-        case .nearby, .pairingCode: return .workspace
-        case .storedSend:           return .storedSend
-        case .storedReceive:        return .storedReceive
-        case .deviceInbox:          return .deviceInbox
-        case .account:              return .account
+        case .nearby:        return .lanTransfer
+        case .pairingCode:   return .crossNetworkTransfer
+        case .storedSend:    return .storedSend
+        case .storedReceive: return .storedReceive
+        case .deviceInbox:   return .deviceInbox
+        case .account:       return .account
         }
     }
-
-    /// The two routes that macOS renders as one Workspace.
-    ///
-    /// Kept as a named set rather than open-coded at each call site so "is this
-    /// the Workspace's session" is one predicate. `TransferPresence` still owns
-    /// exactly one of the two at a time — that arbitration is unchanged and
-    /// still load-bearing for iOS — and on macOS the Workspace draws the session
-    /// whichever of them holds it.
-    static let macWorkspaceRoutes: Set<AppDestination> = [.nearby, .pairingCode]
 }

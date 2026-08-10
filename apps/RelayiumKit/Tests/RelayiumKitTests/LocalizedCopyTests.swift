@@ -971,9 +971,15 @@ final class LocalizedCopyTests: XCTestCase {
     /// tell apart from another one, in that language only. English is where the
     /// copy is written, so English is the one place a collision would be noticed
     /// by hand; the other eight are why this is a test.
+    ///
+    /// These are the five BROWSEABLE rows, which is why `nav.storedReceive` is
+    /// not among them: Open a link has a window title and no row. The two
+    /// transfer names are the pair most at risk — they are the ones a merge
+    /// argued were the same thing — so a language that renders them identically
+    /// fails here rather than shipping two rows a reader cannot tell apart.
     func testDestinationNamesAreDistinctInEveryLanguage() {
-        let keys: [L10nKey] = [.navNearby, .navPairingCode, .navStoredSend,
-                               .navStoredReceive, .navAccount]
+        let keys: [L10nKey] = [.navLanTransfer, .navCrossNetwork, .navStoredSend,
+                               .inboxTitle, .navAccount]
         for language in AppLanguage.allCases {
             let names = keys.map { L10n.t($0, language: language) }
             XCTAssertFalse(names.contains(where: \.isEmpty), language.rawValue)
@@ -998,13 +1004,13 @@ final class LocalizedCopyTests: XCTestCase {
     /// is that somebody read each translation and confirmed the limitation is
     /// still in it, in a form that language actually uses.
     ///
-    /// **The Workspace row changed which limitation is decisive, and this table
-    /// changed with it.** Nearby's caption had to say *only* this network,
-    /// because picking that row ruled cross-network out. One row now offers both
-    /// routes, so "same network only" would be false — what still rules the whole
-    /// destination out is that it is a LIVE transport: both sides have to be
-    /// online at the same time. That is the fact the merged caption carries, and
-    /// the large-file negative below applies to it for the same reason.
+    /// **Two transfer rows again, so each caption carries two facts.** Both are
+    /// live transports, so both must say that the two sides have to be online at
+    /// the same time, and neither may recommend itself for large files — that is
+    /// the stored path. What separates them is the network requirement, and it
+    /// is the first thing somebody choosing between the two rows needs: the LAN
+    /// caption says *this network*, and the cross-network caption says outright
+    /// that no shared network is needed. A merged row could carry neither.
     func testSidebarSubtitlesKeepTheDecisiveLimitation() throws {
         let bothOnline: [AppLanguage: String] = [
             .en: "both sides online", .zh: "双方须同时在线", .ja: "双方がオンライン",
@@ -1016,33 +1022,70 @@ final class LocalizedCopyTests: XCTestCase {
             .ko: "큰 파일", .de: "Große Dateien", .fr: "Gros fichiers",
             .ar: "ملفات كبيرة", .es: "Archivos grandes", .pt: "Ficheiros grandes",
         ]
-        let noAccount: [AppLanguage: String] = [
-            .en: "no account", .zh: "无需账户", .ja: "アカウント不要",
-            .ko: "계정 불필요", .de: "ohne Konto", .fr: "sans compte",
-            .ar: "بدون حساب", .es: "sin cuenta", .pt: "sem conta",
+        // The network requirement, per language, in the form each one uses. The
+        // point of writing them down by hand is that somebody read every
+        // translation and confirmed the distinction is really in it.
+        let thisNetwork: [AppLanguage: String] = [
+            .en: "on this network", .zh: "同一网络", .ja: "同じネットワーク",
+            .ko: "같은 네트워크", .de: "im selben Netzwerk", .fr: "sur le même réseau",
+            .ar: "على الشبكة نفسها", .es: "en la misma red", .pt: "na mesma rede",
+        ]
+        let networkNotRequiredCaption: [AppLanguage: String] = [
+            .en: "same network not required", .zh: "不要求同一网络",
+            .ja: "同じネットワークでなくても", .ko: "같은 네트워크일 필요 없이",
+            .de: "gleiches Netzwerk nicht erforderlich", .fr: "même réseau non requis",
+            .ar: "لا يلزم أن تكون الشبكة نفسها", .es: "no requiere la misma red",
+            .pt: "mesma rede não obrigatória",
+        ]
+        let networkNotRequiredExplanation: [AppLanguage: String] = [
+            .en: "do not need to be on the same network", .zh: "不要求处于同一网络",
+            .ja: "同じネットワークにある必要はありません",
+            .ko: "같은 네트워크에 있을 필요는 없습니다",
+            .de: "nicht im selben Netzwerk", .fr: "pas besoin d’être sur le même réseau",
+            .ar: "لا يلزم أن يكون الجهازان على الشبكة نفسها",
+            .es: "no tienen que estar en la misma red",
+            .pt: "não têm de estar na mesma rede",
         ]
         for language in AppLanguage.allCases {
-            let workspace = L10n.t(.navWorkspaceSubtitle, language: language)
+            let lan = L10n.t(.navLanTransferSubtitle, language: language)
+            let cross = L10n.t(.navCrossNetworkSubtitle, language: language)
             let send = L10n.t(.navStoredSendSubtitle, language: language)
-            let receive = L10n.t(.navStoredReceiveSubtitle, language: language)
 
-            XCTAssertTrue(workspace.contains(try XCTUnwrap(bothOnline[language])),
-                          "\(language.rawValue) workspace hides that both sides must stay online: \(workspace)")
+            for (name, caption) in [("LAN", lan), ("cross-network", cross)] {
+                XCTAssertTrue(caption.contains(try XCTUnwrap(bothOnline[language])),
+                              "\(language.rawValue) \(name) hides that both sides must "
+                              + "stay online: \(caption)")
+                // The large-file path is the stored one. A live-transport caption
+                // that advertised large files would put the reader on a transport
+                // that requires both sessions to remain active. Temporary
+                // transport drops may resume; closing the session is the boundary.
+                XCTAssertFalse(caption.localizedCaseInsensitiveContains(
+                    try XCTUnwrap(largeFiles[language])),
+                    "\(language.rawValue) \(name) recommends itself for large files: \(caption)")
+            }
             XCTAssertTrue(send.contains(try XCTUnwrap(largeFiles[language])),
                           "\(language.rawValue) stored send no longer claims the large-file path: \(send)")
-            XCTAssertTrue(receive.contains(try XCTUnwrap(noAccount[language])),
-                          "\(language.rawValue) stored receive drops the anonymous half: \(receive)")
 
-            // The large-file path is the stored one. A Workspace caption that
-            // also advertised large files would put the reader on a live
-            // transport that requires both sessions to remain active. Temporary
-            // transport drops may resume; closing the session is the boundary.
-            XCTAssertFalse(workspace.localizedCaseInsensitiveContains(try XCTUnwrap(largeFiles[language])),
-                           "\(language.rawValue) workspace recommends itself for large files: \(workspace)")
+            // The one fact that tells the two transfer rows apart, in both
+            // directions: the LAN row names the network requirement, the
+            // cross-network row denies it — and says so on its own screen too,
+            // because a sidebar hint is not where somebody confirms it.
+            XCTAssertTrue(lan.contains(try XCTUnwrap(thisNetwork[language])),
+                          "\(language.rawValue) LAN caption drops the network requirement: \(lan)")
+            XCTAssertTrue(cross.contains(try XCTUnwrap(networkNotRequiredCaption[language])),
+                          "\(language.rawValue) cross-network caption does not say a shared "
+                          + "network is unnecessary: \(cross)")
+            let explain = L10n.t(.crossNetworkExplain, language: language)
+            XCTAssertTrue(explain.contains(try XCTUnwrap(networkNotRequiredExplanation[language])),
+                          "\(language.rawValue) cross-network screen does not repeat that "
+                          + "no shared network is needed: \(explain)")
 
-            for (key, rendered) in [(L10nKey.navWorkspaceSubtitle, workspace),
-                                    (.navStoredSendSubtitle, send),
-                                    (.navStoredReceiveSubtitle, receive)] {
+            for (key, rendered) in [(L10nKey.navLanTransferSubtitle, lan),
+                                    (.navCrossNetworkSubtitle, cross),
+                                    (.navLanTransfer, L10n.t(.navLanTransfer, language: language)),
+                                    (.navCrossNetwork, L10n.t(.navCrossNetwork, language: language)),
+                                    (.crossNetworkExplain, explain),
+                                    (.navStoredSendSubtitle, send)] {
                 XCTAssertNotEqual(rendered, key.rawValue,
                                   "\(key.rawValue) [\(language.rawValue)] fell back to the key")
                 if language != .en {

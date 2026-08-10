@@ -102,12 +102,14 @@
 "nav.sectionLinks" = "Links";
 "nav.sectionDevice" = "Dieser Mac";
 "nav.nearby" = "In der Nähe";
-"nav.pairingCode" = "Kopplungscode";
 "nav.pairingCodeSubtitle" = "Text und kleine Dateien netzübergreifend — beide Seiten online";
+"nav.lanTransfer" = "LAN-Übertragung";
+"nav.lanTransferSubtitle" = "Nachrichten und Dateien mit einem Gerät im selben Netzwerk — direkt, ohne Konto; beide Seiten online";
+"nav.crossNetwork" = "Netzübergreifende Übertragung";
+"nav.crossNetworkSubtitle" = "Nachrichten und Dateien mit einem Gerät überall, per sechsstelligem Code — gleiches Netzwerk nicht erforderlich; beide Seiten online";
 "nav.storedSend" = "Link senden";
 "nav.storedSendSubtitle" = "Große Dateien, später abgeholt — Anmeldung, Tarifgrenzen gelten";
 "nav.storedReceive" = "Link öffnen";
-"nav.storedReceiveSubtitle" = "Einen zugeschickten Link öffnen — ohne Konto, bis er abläuft";
 "nav.deviceInboxSubtitle" = "Dateien aus deinem eigenen Konto landen in einem Ordner deiner Wahl — anmelden; funktioniert auch bei geschlossenem Fenster";
 "nav.account" = "Konto";
 "nav.accountSubtitle" = "Tarif, Geräte und abgelegte Dateien";
@@ -611,9 +613,9 @@
 "inbox.waitingDeliveries.one" = "%@ Zustellung wartet auf deine Antwort";
 "inbox.waitingDeliveries.other" = "%@ Zustellungen warten auf deine Antwort";
 
-/* MARK: macOS Workspace */
-"nav.workspace" = "Arbeitsbereich";
-"nav.workspaceSubtitle" = "Nachrichten und Dateien mit einem Gerät — gleiches Netzwerk oder netzübergreifend mit Code; beide Seiten online";
+/* MARK: macOS transfer destinations */
+"crossNetwork.explain" = "Die Geräte müssen sich nicht im selben Netzwerk befinden. Eine Seite erstellt einen sechsstelligen Code, die andere gibt ihn ein, und der Rendezvous-Dienst von Relayium bringt beide zusammen; beide Seiten müssen nur gleichzeitig online sein.";
+"transfer.busyElsewhere" = "In Relayium ist bereits eine Übertragung geöffnet. Beenden oder verlassen Sie sie, bevor Sie hier eine neue starten.";
 "workspace.sameNetworkHeading" = "Gleiches Netzwerk";
 "workspace.pairingHeading" = "Kopplungscode";
 "workspace.stagingHeading" = "Dateien und Ordner";

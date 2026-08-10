@@ -358,6 +358,33 @@ public enum AppEnvironment {
         )
     }
 
+    #if os(iOS)
+    /// iOS uses nearby discovery but does not compose the macOS `link/1`
+    /// workspace. Keep the fallback handle inside the shared factory so the iOS
+    /// target neither names nor accidentally starts owning that surface; the
+    /// session model's room-connection closure retains the handle for exactly
+    /// as long as the model graph lives.
+    @MainActor
+    public static func makeRealtimeModel(baseURL: URL = productionBaseURL,
+                                         verification: VerificationPreference,
+                                         nearby: LanDiscoveryModel,
+                                         inboundRoom: InboundRoom) -> RealtimeSessionModel {
+        makeRealtimeModel(
+            baseURL: baseURL, verification: verification, nearby: nearby,
+            inboundRoom: inboundRoom, pairingRoom: LinkRoomHandle())
+    }
+
+    @MainActor
+    public static func makeRealtimeTextModel(baseURL: URL = productionBaseURL,
+                                             verification: VerificationPreference,
+                                             nearby: LanDiscoveryModel,
+                                             inboundRoom: InboundRoom) -> RealtimeTextSessionModel {
+        makeRealtimeTextModel(
+            baseURL: baseURL, verification: verification, nearby: nearby,
+            inboundRoom: inboundRoom, pairingRoom: LinkRoomHandle())
+    }
+    #endif
+
     // MARK: - the unified link (macOS only)
     //
     // Compiled out on iOS for the reason `LinkWorkspaceModel.swift` records: an
@@ -365,7 +392,7 @@ public enum AppEnvironment {
     // composes nothing that can.
     #if os(macOS)
 
-    /// The Workspace's `link/1` owner, wired to the SAME room socket and the
+    /// The transfer surfaces' `link/1` owner, wired to the SAME room socket and the
     /// SAME capability registry the discovery model owns.
     ///
     /// Registered through `addRoomObserver` rather than `observer`, so the

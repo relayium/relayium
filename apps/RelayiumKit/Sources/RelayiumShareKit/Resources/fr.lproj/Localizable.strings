@@ -102,12 +102,14 @@
 "nav.sectionLinks" = "Liens";
 "nav.sectionDevice" = "Ce Mac";
 "nav.nearby" = "À proximité";
-"nav.pairingCode" = "Code d’association";
 "nav.pairingCodeSubtitle" = "Texte et petits fichiers entre réseaux — les deux en ligne";
+"nav.lanTransfer" = "Transfert sur le réseau local";
+"nav.lanTransferSubtitle" = "Messages et fichiers avec un appareil sur le même réseau — en direct, sans compte ; les deux en ligne";
+"nav.crossNetwork" = "Transfert entre réseaux";
+"nav.crossNetworkSubtitle" = "Messages et fichiers avec un appareil où qu’il soit, via un code à six chiffres — même réseau non requis ; les deux en ligne";
 "nav.storedSend" = "Envoyer un lien";
 "nav.storedSendSubtitle" = "Gros fichiers, récupérés plus tard — connexion, limites de l’offre";
 "nav.storedReceive" = "Ouvrir un lien";
-"nav.storedReceiveSubtitle" = "Ouvrir un lien reçu — sans compte, jusqu’à son expiration";
 "nav.deviceInboxSubtitle" = "Les fichiers envoyés depuis votre compte arrivent dans un dossier de votre choix — connectez-vous ; fonctionne fenêtre fermée";
 "nav.account" = "Compte";
 "nav.accountSubtitle" = "Forfait, appareils et fichiers stockés";
@@ -611,9 +613,9 @@
 "inbox.waitingDeliveries.one" = "%@ livraison attend votre réponse";
 "inbox.waitingDeliveries.other" = "%@ livraisons attendent votre réponse";
 
-/* MARK: macOS Workspace */
-"nav.workspace" = "Espace de travail";
-"nav.workspaceSubtitle" = "Messages et fichiers avec un appareil — même réseau ou d’un réseau à l’autre avec un code ; les deux en ligne";
+/* MARK: macOS transfer destinations */
+"crossNetwork.explain" = "Les deux appareils n’ont pas besoin d’être sur le même réseau. Un côté crée un code à six chiffres, l’autre le saisit, et le service de rendez-vous de Relayium les met en relation ; il suffit que les deux soient en ligne en même temps.";
+"transfer.busyElsewhere" = "Un autre transfert est ouvert dans Relayium. Terminez-le ou quittez-le avant d’en démarrer un ici.";
 "workspace.sameNetworkHeading" = "Même réseau";
 "workspace.pairingHeading" = "Code d’association";
 "workspace.stagingHeading" = "Fichiers et dossiers";

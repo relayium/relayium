@@ -2,13 +2,13 @@ import SwiftUI
 import RelayiumAppKit
 import RelayiumKit
 
-/// The Workspace once it holds a real `link/1`: **one** connection, verified
-/// once, carrying an always-visible composer and as many file or folder batches
-/// as the user wants.
+/// A transfer destination once it holds a real `link/1`: **one** connection,
+/// verified once, carrying an always-visible composer and as many file or folder
+/// batches as the user wants.
 ///
 /// ## What this replaces
 ///
-/// `WorkspaceSessionPane` renders the shipped legacy wire, which carries a file
+/// `TransferSessionPane` renders the shipped legacy wire, which carries a file
 /// transfer *or* an ephemeral conversation and says so in one sentence
 /// (`workspace.messagesOnlyNote` / `workspace.filesOnlyNote`). Those notes were
 /// the bounded honesty of the surface-convergence batch. They are still correct
@@ -16,10 +16,11 @@ import RelayiumKit
 /// that a peer which announced exact `link/1` no longer gets them, because on
 /// that connection they are no longer true.
 ///
-/// The two panes never appear together. `WorkspaceDestination` asks
-/// `LinkWorkspaceModel.hasSession` first, and a link session and a legacy
-/// session cannot both exist — `LinkWorkspaceModel.shouldAcceptLink` and the
-/// legacy `NearbyReceiveModel.shouldAcceptSession` both resolve through the same
+/// The two panes never appear together. The owning destination asks
+/// `LinkWorkspaceModel.hasSession` through `TransferSurfacePresentation.pane`,
+/// and a link session and a legacy session cannot both exist —
+/// `LinkWorkspaceModel.shouldAcceptLink` and the legacy
+/// `NearbyReceiveModel.shouldAcceptSession` both resolve through the same
 /// `TransferPresence` owner.
 ///
 /// ## The order on screen, and why
@@ -38,7 +39,7 @@ import RelayiumKit
 /// 4. **The transfers**, in the order they became known, inbound and outbound in
 ///    one list because the lane numbers them in one space.
 /// 5. **The exit**, which is the only thing that ends the link.
-struct WorkspaceLinkPane: View {
+struct TransferLinkPane: View {
     @ObservedObject var link: LinkWorkspaceModel
 
     @State private var draft = ""
@@ -286,7 +287,8 @@ struct WorkspaceLinkPane: View {
 
     /// One picker, one batch, sent on the SAME link — no code, no new digits.
     ///
-    /// A private `SelectionStore` rather than the Workspace's own: this batch is
+    /// A private `SelectionStore` rather than the destination's shared one: this
+    /// batch is
     /// not staging, it is a send the user has already committed to, and writing
     /// it into the shared store would replace a selection they may still want
     /// for a different device.

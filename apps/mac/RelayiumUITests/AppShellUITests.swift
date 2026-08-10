@@ -80,6 +80,42 @@ final class AppShellUITests: XCTestCase {
         }
     }
 
+    /// Relaunch this app the way the OS hands it a stored link, and return the
+    /// product window.
+    ///
+    /// **The only route to Open a link, and the point of the test rather than a
+    /// workaround.** That destination has no sidebar row: it is where a link the
+    /// OS delivers is opened, not somewhere to browse to. The launch argument
+    /// hands the URL to the same `AppDeepLinkRouter.open` that `onOpenURL` feeds,
+    /// so the parser, the coordinator, the routing decision and the shell arm
+    /// under test are all production code.
+    private func openStoredLink(_ link: String,
+                                extraArguments: [String] = []) -> XCUIElement {
+        app.terminate()
+        app = XCUIApplication()
+        app.launchArguments = offlineLaunchArguments + extraArguments
+            + ["--relayium-ui-testing-open-link", link]
+        app.launch()
+        ensureProductWindowIsOpen()
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        XCTAssertTrue(window.descendants(matching: .any)["destination-storedReceive"]
+            .firstMatch.waitForExistence(timeout: 20),
+                      "an OS-delivered stored link did not open the destination that "
+                      + "no longer has a sidebar row")
+        return window
+    }
+
+    /// Empty the receive field, whatever the link that opened it left in there.
+    private func clearReceiveField(in window: XCUIElement) -> XCUIElement {
+        let link = window.textFields["receive.link"]
+        XCTAssertTrue(link.waitForExistence(timeout: 20))
+        link.click()
+        app.typeKey("a", modifierFlags: .command)
+        app.typeKey(.delete, modifierFlags: [])
+        return link
+    }
+
     /// A fresh runner may show Sparkle's one-time consent, while a reused
     /// runner may restore the deliberate closed-window state from the residency
     /// test. Resolve either through the controls a person actually sees, then
@@ -100,25 +136,44 @@ final class AppShellUITests: XCTestCase {
                       "the menu-bar recovery action did not restore the product window")
     }
 
-    /// Every destination's visible title and the `MacSurface` raw value the
-    /// product identifies it by. One list, so the suite that walks the sidebar and
-    /// the assertion that names a rendered surface cannot drift into two sets.
+    /// Every BROWSEABLE destination's visible title and the `MacSurface` raw
+    /// value the product identifies it by. One list, so the suite that walks the
+    /// sidebar and the assertion that names a rendered surface cannot drift into
+    /// two sets.
     ///
-    /// **Five, not six.** Nearby and Pairing code are one Workspace row: they
-    /// were two ways to reach one peer, not two products, and both routes still
-    /// exist in `AppDestination` for iOS. Keyed on the surface, so this suite
-    /// asserts the screen the user actually sees.
+    /// **Five rows, and Open a link is not one of them.** That destination is
+    /// reached by a `relayium.com` link the OS hands the app, so this suite
+    /// reaches it the same way — see `openStoredLink(_:)` — rather than by a
+    /// row it deliberately does not have.
+    ///
+    /// The two transfer rows are two destinations again: same network and
+    /// pairing code have opposite preconditions, and each screen shows only its
+    /// own connection method.
     private static let destinationIDs = [
-        "Workspace": "workspace",
+        "LAN Transfer": "lanTransfer",
+        "Cross-network Transfer": "crossNetworkTransfer",
         "Send a link": "storedSend",
-        "Open a link": "storedReceive",
         "Device Inbox": "deviceInbox",
         "Account": "account",
     ]
 
-    /// Destination titles also appear as page headings. Scope navigation to
-    /// the labelled sidebar outline so a rendered heading cannot turn one
-    /// intended click into an ambiguous two-element query.
+    /// A `relayium.com` stored link that resolves against the in-process
+    /// fixture, and one that does not.
+    ///
+    /// Both are handed to the app at launch, which is the only route to Open a
+    /// link. The failing one exists so the refusal paths below can start from a
+    /// settled screen with an editable field instead of racing a resolution.
+    // nonlocalized: acceptance fixture links, never real
+    private static let resolvableStoredLink =
+        "https://relayium.com/d/obj_uitest#k=ERERERERERERERERERERERERERERERERERERERERERE"
+    // nonlocalized: acceptance fixture links, never real
+    private static let unresolvableStoredLink =
+        "https://relayium.com/d/obj_absent#k=ERERERERERERERERERERERERERERERERERERERERERE"
+
+    /// Destinations no longer print their row as a page heading, but the window
+    /// title carries the same words. Scope navigation to the labelled sidebar
+    /// outline so nothing else with that label can turn one intended click into
+    /// an ambiguous two-element query.
     private func sidebarDestination(_ title: String, in window: XCUIElement) -> XCUIElement {
         let id = Self.destinationIDs[title]!
         let stable = window.descendants(matching: .any)["sidebar-\(id)"].firstMatch
@@ -149,6 +204,20 @@ final class AppShellUITests: XCTestCase {
         return window.descendants(matching: .any).matching(visible).firstMatch
     }
 
+    /// The same resolution for a sentence too long to assert whole.
+    ///
+    /// A paragraph is copy somebody will reword; the CLAIM inside it is the
+    /// contract. Matching on the claim keeps the test about the promise rather
+    /// than about the punctuation around it.
+    private func visibleElement(id: String, contains fragment: String,
+                                in window: XCUIElement) -> XCUIElement {
+        let stable = window.descendants(matching: .any)[id].firstMatch
+        if stable.exists { return stable }
+        let visible = NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@",
+                                  fragment, fragment)
+        return window.descendants(matching: .any).matching(visible).firstMatch
+    }
+
     /// The window opens at all. A `Window` scene that fails to build leaves a
     /// running process with nothing on screen, and the menu-bar extra keeps that
     /// process alive — so "it launched" is not evidence.
@@ -157,7 +226,8 @@ final class AppShellUITests: XCTestCase {
                       "the unique main window did not appear")
     }
 
-    /// All six destinations are in the sidebar, by their accessibility labels.
+    /// All five browseable destinations are in the sidebar, by their
+    /// accessibility labels — and the hidden one is not.
     ///
     /// By label rather than by index: the order is a design decision that may
     /// change, and a positional assertion would fail on a reorder that harmed
@@ -171,18 +241,25 @@ final class AppShellUITests: XCTestCase {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
         // English is the CI locale; the localized suites cover the other eight.
-        for destination in ["Workspace", "Send a link",
-                            "Open a link", "Device Inbox", "Account"] {
+        for destination in ["LAN Transfer", "Cross-network Transfer", "Send a link",
+                            "Device Inbox", "Account"] {
             let row = sidebarDestination(destination, in: window)
             XCTAssertTrue(row.waitForExistence(timeout: 10),
                           "the sidebar has no row for \(destination)")
         }
+        // …and exactly those five. Open a link is reached by an OS-delivered
+        // link, so a row for it is the regression this batch removed.
+        XCTAssertFalse(window.descendants(matching: .any)["sidebar-storedReceive"]
+            .firstMatch.exists,
+                       "Open a link is an ordinary sidebar row again")
+        XCTAssertFalse(window.staticTexts["Open a link"].exists,
+                       "the sidebar still names Open a link")
     }
 
     func testStoppedNearbyDiscoveryAsksForActionWithoutPretendingToWork() {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let nearby = sidebarDestination("Workspace", in: window)
+        let nearby = sidebarDestination("LAN Transfer", in: window)
         XCTAssertTrue(nearby.waitForExistence(timeout: 10))
         nearby.click()
 
@@ -207,7 +284,7 @@ final class AppShellUITests: XCTestCase {
     func testPendingSendNamesTheFileAndItsSizeBeforeTransfer() throws {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let nearby = sidebarDestination("Workspace", in: window)
+        let nearby = sidebarDestination("LAN Transfer", in: window)
         XCTAssertTrue(nearby.waitForExistence(timeout: 10))
         nearby.click()
 
@@ -253,8 +330,8 @@ final class AppShellUITests: XCTestCase {
     func testEachDestinationRendersItsOwnSurface() {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let destinations = ["Send a link", "Open a link",
-                            "Account", "Workspace"]
+        let destinations = ["Send a link", "Device Inbox", "Account",
+                            "LAN Transfer", "Cross-network Transfer"]
         for destination in destinations {
             let row = sidebarDestination(destination, in: window)
             guard row.waitForExistence(timeout: 10) else {
@@ -308,21 +385,18 @@ final class AppShellUITests: XCTestCase {
     /// what belongs here while leaving the same field and action available for
     /// correction on the same task.
     func testMalformedStoredLinkExplainsHowToRecover() {
-        let window = mainWindow
-        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        // Arrived at the way this destination is reached at all: a link the OS
+        // handed the app. This one names an object the fixture does not serve,
+        // so the screen settles on a refusal with an editable field rather than
+        // racing a resolution.
+        let window = openStoredLink(Self.unresolvableStoredLink)
 
-        let receive = sidebarDestination("Open a link", in: window)
-        XCTAssertTrue(receive.waitForExistence(timeout: 10))
-        receive.click()
-
-        let link = window.textFields["receive.link"]
-        XCTAssertTrue(link.waitForExistence(timeout: 10))
+        let link = clearReceiveField(in: window)
         let open = window.buttons["Open"]
         XCTAssertTrue(open.exists)
         XCTAssertFalse(open.isEnabled,
                        "an empty receive field offers an action that cannot succeed")
 
-        link.click()
         link.typeText("not a link")
         XCTAssertTrue(open.isEnabled)
         open.click()
@@ -338,6 +412,11 @@ final class AppShellUITests: XCTestCase {
                       "the receive action disappeared after a correctable refusal")
         XCTAssertEqual(window.title, "Open a link",
                        "a malformed link navigated away from its recovery task")
+        // The window still names the destination even though no row does — the
+        // title is what a hidden destination has instead of a heading.
+        XCTAssertFalse(window.descendants(matching: .any)["sidebar-storedReceive"]
+            .firstMatch.exists,
+                       "reaching Open a link by link put a row in the sidebar")
     }
 
     /// Account creation is one correctable in-app task. Local validation must
@@ -407,14 +486,14 @@ final class AppShellUITests: XCTestCase {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
 
-        let pairing = sidebarDestination("Workspace", in: window)
+        let pairing = sidebarDestination("Cross-network Transfer", in: window)
         XCTAssertTrue(pairing.waitForExistence(timeout: 10))
         pairing.click()
 
         // No mode picker to set first: the verb carries the kind. This is the
         // runtime half of `testNoSegmentedModePickerSurvivesAnywhereOnMacOS`.
         XCTAssertEqual(window.radioButtons.count, 0,
-                       "the Workspace still offers a segmented transfer-type choice")
+                       "the pairing screen still offers a segmented transfer-type choice")
 
         let create = window.buttons["Create a code for messages"]
         XCTAssertTrue(create.waitForExistence(timeout: 10))
@@ -446,9 +525,9 @@ final class AppShellUITests: XCTestCase {
                       "the handoff leaves it ambiguous whether the code or transfer expires")
         XCTAssertTrue(window.buttons["Cancel"].exists,
                       "the generated-code surface hides its escape action")
-        XCTAssertTrue(window.staticTexts["Workspace"].exists || window.title == "Workspace",
-                      "creating a pairing-code message session navigated elsewhere")
-        XCTAssertFalse(window.descendants(matching: .any)["workspace-lane-note"]
+        XCTAssertEqual(window.title, "Cross-network Transfer",
+                       "creating a pairing-code message session navigated elsewhere")
+        XCTAssertFalse(window.descendants(matching: .any)["transfer-lane-note"]
             .firstMatch.exists,
                        "the handoff guessed a one-lane peer before anybody joined")
 
@@ -472,16 +551,16 @@ final class AppShellUITests: XCTestCase {
     /// the joiner states which, and both statements have to be reachable from
     /// the one complete code. Fast entry must be canonicalized once without an
     /// older partial value replacing later digits.
-    func testWorkspaceJoinKeepsACompleteCodeActionableForBothVerbs() {
+    func testCrossNetworkJoinKeepsACompleteCodeActionableForBothVerbs() {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let workspace = sidebarDestination("Workspace", in: window)
-        XCTAssertTrue(workspace.waitForExistence(timeout: 10))
-        workspace.click()
+        let cross = sidebarDestination("Cross-network Transfer", in: window)
+        XCTAssertTrue(cross.waitForExistence(timeout: 10))
+        cross.click()
 
         let field = window.textFields["pairing.joinCode"]
         XCTAssertTrue(field.waitForExistence(timeout: 10),
-                      "the Workspace has no pairing-code field")
+                      "Cross-network Transfer has no pairing-code field")
         XCTAssertFalse(window.buttons["Join messages"].isEnabled,
                        "an empty code left a join verb actionable")
         XCTAssertFalse(window.buttons["Join files"].isEnabled,
@@ -499,10 +578,10 @@ final class AppShellUITests: XCTestCase {
                       "a complete code cannot join a file transfer")
 
         window.buttons["Join messages"].click()
-        XCTAssertTrue(window.descendants(matching: .any)["workspace-waiting-pairing-peer"]
+        XCTAssertTrue(window.descendants(matching: .any)["transfer-waiting-pairing-peer"]
             .firstMatch.waitForExistence(timeout: 10),
-                      "joining a code leaves a blank Workspace while it waits")
-        let cancel = window.descendants(matching: .any)["workspace-cancel-pairing-watch"]
+                      "joining a code leaves a blank screen while it waits")
+        let cancel = window.descendants(matching: .any)["transfer-cancel-pairing-watch"]
             .firstMatch
         XCTAssertTrue(cancel.exists, "a pairing-room wait has no escape")
         cancel.click()
@@ -510,47 +589,133 @@ final class AppShellUITests: XCTestCase {
                       "cancelling the pairing-room wait did not return to joining")
     }
 
-    /// **One screen offers both ways to connect, and leads with the message.**
+    /// **Each transfer destination offers exactly one way to connect.**
     ///
-    /// The regression this catches is the one the merge exists to prevent: a
-    /// later edit that puts the pairing-code half back on a screen of its own, or
-    /// that makes connecting depend on staging files first.
-    func testTheWorkspaceOffersBothConnectionMethodsAndLeadsWithMessages() {
+    /// This is the owner's correction, at runtime: the two connection methods
+    /// were merged onto one screen, and neither could then be described without
+    /// describing the other. LAN Transfer shows the roster and no pairing
+    /// controls at all; Cross-network Transfer shows the code and no roster.
+    /// Both keep the files and folders they will carry inside their own flow.
+    func testLanTransferOffersOnlySameNetworkConnecting() {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let workspace = sidebarDestination("Workspace", in: window)
-        XCTAssertTrue(workspace.waitForExistence(timeout: 10))
-        workspace.click()
+        let lan = sidebarDestination("LAN Transfer", in: window)
+        XCTAssertTrue(lan.waitForExistence(timeout: 10))
+        lan.click()
 
-        // Same-network discovery.
+        // Same-network discovery, and no page heading repeating the row.
         XCTAssertTrue(window.buttons["Look again"].waitForExistence(timeout: 10),
-                      "the Workspace lost same-network discovery")
-        // Pairing-code create AND join, on the same screen.
-        XCTAssertTrue(window.buttons["Create a code for messages"].exists,
-                      "the Workspace lost pairing-code creation")
-        XCTAssertTrue(window.buttons["Create a code for files"].exists,
-                      "the Workspace lost the file half of pairing-code creation")
-        XCTAssertTrue(window.textFields["pairing.joinCode"].exists,
-                      "the Workspace lost pairing-code joining")
-        // File and folder actions sit alongside, and are optional.
+                      "LAN Transfer lost same-network discovery")
+        XCTAssertEqual(window.title, "LAN Transfer",
+                       "the window no longer names the destination it is on")
+
+        // Not one pairing control anywhere on this screen.
+        XCTAssertFalse(window.buttons["Create a code for messages"].exists,
+                       "LAN Transfer still offers pairing-code creation")
+        XCTAssertFalse(window.buttons["Create a code for files"].exists,
+                       "LAN Transfer still offers pairing-code creation")
+        XCTAssertFalse(window.textFields["pairing.joinCode"].exists,
+                       "LAN Transfer still offers pairing-code joining")
+
+        // File and folder actions sit inside this destination's own flow, and
+        // are optional.
         XCTAssertTrue(window.descendants(matching: .any)["Files to send"].firstMatch.exists,
-                      "the Workspace lost its file and folder staging")
+                      "LAN Transfer lost its file and folder staging")
         XCTAssertTrue(visibleElement(
-            id: "workspace-staging-optional",
+            id: "transfer-staging-optional",
             text: "Optional. You can connect first and choose files afterwards — a message needs nothing at all.",
             in: window).exists,
-                      "the Workspace no longer says staging is optional")
+                      "LAN Transfer no longer says staging is optional")
+    }
+
+    func testCrossNetworkTransferOffersOnlyPairingCodeConnectingAndLeadsWithMessages() {
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let cross = sidebarDestination("Cross-network Transfer", in: window)
+        XCTAssertTrue(cross.waitForExistence(timeout: 10))
+        cross.click()
+
+        // Pairing-code create AND join.
+        XCTAssertTrue(window.buttons["Create a code for messages"].waitForExistence(timeout: 10),
+                      "Cross-network Transfer lost pairing-code creation")
+        XCTAssertTrue(window.buttons["Create a code for files"].exists,
+                      "Cross-network Transfer lost the file half of pairing-code creation")
+        XCTAssertTrue(window.textFields["pairing.joinCode"].exists,
+                      "Cross-network Transfer lost pairing-code joining")
+        XCTAssertEqual(window.title, "Cross-network Transfer",
+                       "the window no longer names the destination it is on")
+
+        // The one thing this destination exists to say, said on the destination
+        // rather than only in the sidebar hint.
+        XCTAssertTrue(visibleElement(
+            id: "cross-network-explain", contains: "do not need to be on the same network",
+            in: window).exists,
+                      "the pairing screen does not say a shared network is unnecessary")
+
+        // No same-network discovery here at all.
+        XCTAssertFalse(window.buttons["Look again"].exists,
+                       "Cross-network Transfer still offers same-network discovery")
+        XCTAssertFalse(window.buttons["Pause receiving"].exists,
+                       "Cross-network Transfer still carries the residency control")
+
+        // Its own staging, inside its own flow.
+        XCTAssertTrue(window.descendants(matching: .any)["Files to send"].firstMatch.exists,
+                      "Cross-network Transfer lost its file and folder staging")
         // No peer exists yet, so the surface must not guess whether this will
         // become a unified link or a legacy one-lane session.
-        XCTAssertFalse(window.descendants(matching: .any)["workspace-one-connection-note"]
+        XCTAssertFalse(window.descendants(matching: .any)["lan-device-connection-note"]
             .firstMatch.exists,
-                       "the Workspace claimed a legacy limit before knowing the peer")
+                       "the pairing screen claimed a legacy limit before knowing the peer")
         // Creating a message code needs nothing staged; creating a file code
         // does. That asymmetry IS message-first.
         XCTAssertTrue(window.buttons["Create a code for messages"].isEnabled,
                       "the default intent requires a staged selection")
         XCTAssertFalse(window.buttons["Create a code for files"].isEnabled,
                        "a file code can be created with nothing to send")
+    }
+
+    /// A live session is on the destination that owns it, and on no other.
+    ///
+    /// Two screens over one set of models is exactly the shape that renders one
+    /// transfer twice, each copy with its own exit. `TransferSurfacePresentation`
+    /// refuses that by construction and `MacSurfaceTests` drives the rules; this
+    /// is the running app agreeing with them.
+    func testALiveSessionIsVisibleOnlyOnTheDestinationThatOwnsIt() {
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let cross = sidebarDestination("Cross-network Transfer", in: window)
+        XCTAssertTrue(cross.waitForExistence(timeout: 10))
+        cross.click()
+        let create = window.buttons["Create a code for messages"]
+        XCTAssertTrue(create.waitForExistence(timeout: 10))
+        create.click()
+        XCTAssertTrue(window.descendants(matching: .any)["pairing-code-value"]
+            .firstMatch.waitForExistence(timeout: 20),
+                      "the generated pairing code was not visible")
+
+        // The other transfer destination shows its own connect controls, never
+        // this session — and cannot start a competing one.
+        let lan = sidebarDestination("LAN Transfer", in: window)
+        XCTAssertTrue(lan.waitForExistence(timeout: 10))
+        lan.click()
+        XCTAssertTrue(window.buttons["Look again"].waitForExistence(timeout: 10),
+                      "the other destination did not return to its own connect phase")
+        XCTAssertFalse(window.descendants(matching: .any)["pairing-code-value"]
+            .firstMatch.exists,
+                       "one session is rendered on both transfer destinations")
+        XCTAssertFalse(window.buttons["Look again"].isEnabled,
+                       "the other destination can start a session over a live one")
+        let transferChooser = window.descendants(matching: .any)["transfer-choose-files"].firstMatch
+        XCTAssertTrue(transferChooser.exists,
+                      "the other destination lost its shared staged selection")
+        XCTAssertFalse(transferChooser.isEnabled,
+                       "the other destination can mutate staging during a live session")
+
+        // …and the session is still there when its owner comes back.
+        cross.click()
+        XCTAssertTrue(window.descendants(matching: .any)["pairing-code-value"]
+            .firstMatch.waitForExistence(timeout: 10),
+                      "leaving and returning discarded the live session")
     }
 
     /// A terminal task is not an invitation to start another one on top of it.
@@ -570,9 +735,9 @@ final class AppShellUITests: XCTestCase {
 
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let workspace = sidebarDestination("Workspace", in: window)
-        XCTAssertTrue(workspace.waitForExistence(timeout: 10))
-        workspace.click()
+        let cross = sidebarDestination("Cross-network Transfer", in: window)
+        XCTAssertTrue(cross.waitForExistence(timeout: 10))
+        cross.click()
         XCTAssertTrue(window.buttons["Create a code for messages"].waitForExistence(timeout: 10))
         window.buttons["Create a code for messages"].click()
 
@@ -606,7 +771,7 @@ final class AppShellUITests: XCTestCase {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
         XCTAssertTrue(visibleElement(
-            id: "workspace-session-peer", text: "Session with Studio Mac · 19af02",
+            id: "transfer-session-peer", text: "Session with Studio Mac · 19af02",
             in: window).waitForExistence(timeout: 10),
                       "the terminal task lost who it was with")
         XCTAssertTrue(window.staticTexts[
@@ -866,16 +1031,8 @@ final class AppShellUITests: XCTestCase {
     /// that outlives the input it described sits beside corrected text telling
     /// the user they are still wrong.
     func testCorrectingARefusedStoredLinkClearsTheRefusalWithIt() {
-        let window = mainWindow
-        XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let receive = sidebarDestination("Open a link", in: window)
-        XCTAssertTrue(receive.waitForExistence(timeout: 10))
-        receive.click()
-
-        let link = window.textFields["receive.link"]
-        XCTAssertTrue(link.waitForExistence(timeout: 10),
-                      "Open a link has no link field")
-        link.click()
+        let window = openStoredLink(Self.unresolvableStoredLink)
+        let link = clearReceiveField(in: window)
         link.typeText("not a link")
         window.buttons["Open"].firstMatch.click()
 
@@ -1110,8 +1267,8 @@ final class AppShellUITests: XCTestCase {
             "a cancelled upload left a capability link on screen")
     }
 
-    /// **Staging is available at all times, and never a precondition of
-    /// connecting.**
+    /// **Staging is available whenever the transfer pipeline is free, and never
+    /// a precondition of connecting.**
     ///
     /// This replaces the old "transfer type changes what is staged" test, which
     /// asserted the behaviour of the segmented picker this round removed: the
@@ -1120,19 +1277,19 @@ final class AppShellUITests: XCTestCase {
     /// property that matters now is the opposite one — the drop zone, the picker
     /// button and the message verb are on screen together, and none of them is
     /// gated on the others.
-    func testWorkspaceStagingIsAlwaysAvailableAndNeverGatesConnecting() {
+    func testTransferStagingIsAlwaysAvailableAndNeverGatesConnecting() {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let workspace = sidebarDestination("Workspace", in: window)
-        XCTAssertTrue(workspace.waitForExistence(timeout: 10))
-        workspace.click()
+        let cross = sidebarDestination("Cross-network Transfer", in: window)
+        XCTAssertTrue(cross.waitForExistence(timeout: 10))
+        cross.click()
 
         let chooser = window.descendants(matching: .any)["Files to send"].firstMatch
         XCTAssertTrue(chooser.waitForExistence(timeout: 15),
-                      "the Workspace stages nothing")
-        XCTAssertTrue(window.descendants(matching: .any)["workspace-choose-files"]
+                      "the destination stages nothing")
+        XCTAssertTrue(window.descendants(matching: .any)["transfer-choose-files"]
             .firstMatch.exists,
-                      "the Workspace has no explicit file and folder picker")
+                      "the destination has no explicit file and folder picker")
         XCTAssertEqual(window.radioButtons.count, 0,
                        "a transfer-type picker can still hide the staging surface")
         // Connecting is reachable with nothing staged: the message verbs are the
@@ -1203,7 +1360,7 @@ final class AppShellUITests: XCTestCase {
 
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let pairing = sidebarDestination("Workspace", in: window)
+        let pairing = sidebarDestination("Cross-network Transfer", in: window)
         XCTAssertTrue(pairing.waitForExistence(timeout: 10))
         pairing.click()
 
@@ -1214,7 +1371,7 @@ final class AppShellUITests: XCTestCase {
 
         let chooser = window.descendants(matching: .any)["Files to send"].firstMatch
         XCTAssertTrue(chooser.waitForExistence(timeout: 10),
-                      "the Workspace stages nothing")
+                      "the pairing screen stages nothing")
         chooser.click()
         app.typeKey("g", modifierFlags: [.command, .shift])
         let location = app.textFields.firstMatch
@@ -1255,23 +1412,11 @@ final class AppShellUITests: XCTestCase {
     /// it renders is one the server never sees, which is what makes it evidence
     /// that the manifest decrypted here.
     func testOpeningAValidStoredLinkDownloadsAndNamesTheResult() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments + ["--relayium-ui-testing-sign-in"]
-        app.launch()
-        ensureProductWindowIsOpen()
-
-        let window = mainWindow
-        XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let receive = sidebarDestination("Open a link", in: window)
-        XCTAssertTrue(receive.waitForExistence(timeout: 10))
-        receive.click()
-
-        let link = window.textFields["receive.link"]
-        XCTAssertTrue(link.waitForExistence(timeout: 10))
-        link.click()
-        link.typeText(
-            "https://relayium.com/d/obj_uitest#k=ERERERERERERERERERERERERERERERERERERERERERE")
-        window.buttons["Open"].firstMatch.click()
+        // Delivered by the OS, resolved by the app: with no sidebar row, this is
+        // the whole route, and it is the one a person actually takes — they
+        // follow a link somebody sent them.
+        let window = openStoredLink(Self.resolvableStoredLink,
+                                    extraArguments: ["--relayium-ui-testing-sign-in"])
 
         // macOS resolves first and then asks WHERE to put it: the download does
         // not start until the user picks a folder, which is the platform's own
@@ -1304,12 +1449,12 @@ final class AppShellUITests: XCTestCase {
     /// catalog from inside the package.
     func testEveryShippedLanguageRendersItsOwnShell() {
         let shipped = [
-            ("en", "Workspace"), ("zh-Hans", "工作区"), ("ja", "ワークスペース"),
-            ("ko", "작업 공간"), ("de", "Arbeitsbereich"), ("fr", "Espace de travail"),
-            ("ar", "مساحة العمل"), ("es", "Espacio de trabajo"),
-            ("pt", "Espaço de trabalho"),
+            ("en", "LAN Transfer"), ("zh-Hans", "局域网传输"), ("ja", "LAN 転送"),
+            ("ko", "LAN 전송"), ("de", "LAN-Übertragung"),
+            ("fr", "Transfert sur le réseau local"), ("ar", "النقل عبر الشبكة المحلية"),
+            ("es", "Transferencia en red local"), ("pt", "Transferência na rede local"),
         ]
-        for (code, workspace) in shipped {
+        for (code, lanTransfer) in shipped {
             app.terminate()
             app.launchArguments = ["--relayium-ui-testing", "-AppleLanguages", "(\(code))",
                                    "-AppleLocale", code, "-SUEnableAutomaticChecks", "NO"]
@@ -1318,11 +1463,11 @@ final class AppShellUITests: XCTestCase {
             let window = mainWindow
             XCTAssertTrue(window.waitForExistence(timeout: 20),
                           "\(code) did not produce a window at all")
-            let row = window.descendants(matching: .any)["sidebar-workspace"].firstMatch
+            let row = window.descendants(matching: .any)["sidebar-lanTransfer"].firstMatch
             XCTAssertTrue(row.waitForExistence(timeout: 10),
-                          "\(code) produced a window with no Workspace destination")
+                          "\(code) produced a window with no LAN Transfer destination")
             let shown = (row.value as? String) ?? row.label
-            XCTAssertEqual(shown, workspace,
+            XCTAssertEqual(shown, lanTransfer,
                            "\(code) rendered a shell that is not in \(code)")
         }
     }
@@ -1344,9 +1489,9 @@ final class AppShellUITests: XCTestCase {
 
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let row = window.descendants(matching: .any)["sidebar-workspace"].firstMatch
+        let row = window.descendants(matching: .any)["sidebar-lanTransfer"].firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 15),
-                      "the Arabic window has no Workspace destination")
+                      "the Arabic window has no LAN Transfer destination")
         XCTAssertGreaterThan(row.frame.midX, window.frame.midX,
                              "an Arabic launch kept the sidebar on the leading-left side")
     }
@@ -1377,18 +1522,20 @@ final class AppShellUITests: XCTestCase {
         // rather than a stack of cards, so it is the one whose height the
         // scaffold's non-scrolling mode has to carry, and the minimum window is
         // where that would clip first.
-        for destination in ["Workspace", "Send a link",
-                            "Open a link", "Device Inbox", "Account"] {
+        for destination in ["LAN Transfer", "Cross-network Transfer", "Send a link",
+                            "Device Inbox", "Account"] {
             let row = sidebarDestination(destination, in: window)
             XCTAssertTrue(row.waitForExistence(timeout: 10),
                           "the sidebar lost \(destination) at the minimum size")
             row.click()
-            let heading = window.staticTexts[destination]
-            XCTAssertTrue(heading.waitForExistence(timeout: 10) || window.title == destination,
-                          "\(destination) rendered nothing at the minimum size")
-            // The heading above can be satisfied by the sidebar row itself, which
-            // carries the same words. The rendered destination cannot: the shell
-            // stamps `destination-<id>` on the detail half only.
+            // The WINDOW title, not a heading in the body: no destination prints
+            // its sidebar row a second time any more.
+            expectation(for: NSPredicate(format: "title == %@", destination),
+                        evaluatedWith: window)
+            waitForExpectations(timeout: 10)
+            // A title can also be satisfied by the sidebar row's own words. The
+            // rendered destination cannot: the shell stamps `destination-<id>`
+            // on the detail half only.
             let id = Self.destinationIDs[destination]!
             XCTAssertTrue(window.descendants(matching: .any)["destination-\(id)"]
                 .waitForExistence(timeout: 10),
@@ -1435,21 +1582,14 @@ final class AppShellUITests: XCTestCase {
     /// difference between an app someone can use by keyboard and one they
     /// cannot.
     func testTheKeyboardAloneCompletesATask() {
-        app.terminate()
-        app.launchArguments = offlineLaunchArguments + ["--relayium-ui-testing-sign-in"]
-        app.launch()
-        ensureProductWindowIsOpen()
-
-        let window = mainWindow
-        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        // Opened on the link destination, because that is the only way to it —
+        // and the account half below is then reached by an ordinary sidebar
+        // click from there, which is also the route a person has.
+        let window = openStoredLink(Self.unresolvableStoredLink,
+                                    extraArguments: ["--relayium-ui-testing-sign-in"])
 
         // 1. A link resolved by Return, never by clicking Open.
-        let receive = sidebarDestination("Open a link", in: window)
-        XCTAssertTrue(receive.waitForExistence(timeout: 10))
-        receive.click()
-        let link = window.textFields["receive.link"]
-        XCTAssertTrue(link.waitForExistence(timeout: 10))
-        link.click()
+        let link = clearReceiveField(in: window)
         link.typeText("not a link")
         app.typeKey(.return, modifierFlags: [])
         XCTAssertTrue(window.staticTexts[
@@ -1489,7 +1629,7 @@ final class AppShellUITests: XCTestCase {
 
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let pairing = sidebarDestination("Workspace", in: window)
+        let pairing = sidebarDestination("Cross-network Transfer", in: window)
         XCTAssertTrue(pairing.waitForExistence(timeout: 10))
         pairing.click()
         let create = window.buttons["Create a code for messages"]

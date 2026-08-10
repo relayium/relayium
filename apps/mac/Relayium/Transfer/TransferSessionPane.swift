@@ -2,10 +2,14 @@ import SwiftUI
 import RelayiumAppKit
 import RelayiumKit
 
-/// The Workspace once it has a peer — or is minting the code that will get one.
+/// A transfer destination once it has a peer — or is minting the code that will
+/// get one.
 ///
-/// One surface, one exit, and one honest statement of what this connection can
-/// carry.
+/// One pane, one exit, and one honest statement of what this connection can
+/// carry. Rendered by **whichever** transfer destination owns the session, and
+/// only by that one: LAN Transfer and Cross-network Transfer share every model
+/// underneath, so a pane keyed on model state rather than on ownership would
+/// draw one session on two screens, each copy with its own exit.
 ///
 /// ## Why this does not render a composer beside a file transfer
 ///
@@ -24,7 +28,7 @@ import RelayiumKit
 ///
 /// **That sentence did not go away when `link/1` shipped; it stopped being
 /// universal.** A peer that announced exact `link/1` in the same-network room is
-/// rendered by `WorkspaceLinkPane`, where one connection really does carry both
+/// rendered by `TransferLinkPane`, where one connection really does carry both
 /// lanes and the note is replaced by `link.oneConnectionNote`. Everything this
 /// pane still draws — every older Web build, every native client on the shipped
 /// wire, the CLI, and a pairing-code peer that did not announce exact `link/1`
@@ -36,7 +40,16 @@ import RelayiumKit
 /// cancellable in both lanes, a shown code keeps its manifest and its expiry
 /// note, a failed batch keeps the file identities that failed, and leaving a
 /// conversation with local content asks first.
-struct WorkspaceSessionPane: View {
+struct TransferSessionPane: View {
+    /// The route of the destination drawing this pane — `.nearby` for LAN
+    /// Transfer, `.pairingCode` for Cross-network Transfer.
+    ///
+    /// Passed in rather than derived from `presence.owner`, because it is what
+    /// the release below must be checked AGAINST. Reading the owner and then
+    /// releasing it would let this pane give up a session belonging to the other
+    /// destination — the exact stale-view bug `TransferPresence.release` refuses
+    /// per destination in order to prevent.
+    let route: AppDestination
     @ObservedObject var fileModel: RealtimeSessionModel
     @ObservedObject var textModel: RealtimeTextSessionModel
     @ObservedObject var selection: SelectionStore
@@ -100,7 +113,7 @@ struct WorkspaceSessionPane: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(L10n.t(.nearbySessionWith, [L10n.token(label)]))
                     .font(.headline)
-                    .accessibilityIdentifier("workspace-session-peer")
+                    .accessibilityIdentifier("transfer-session-peer")
                 Text(L10n.t(.nearbySessionPeerDisclaimer))
                     .font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -110,7 +123,7 @@ struct WorkspaceSessionPane: View {
             // how the peer was reached rather than inventing a name for them.
             Text(L10n.t(.workspaceSessionWithCode))
                 .font(.headline)
-                .accessibilityIdentifier("workspace-session-peer")
+                .accessibilityIdentifier("transfer-session-peer")
         }
     }
 
@@ -223,10 +236,10 @@ struct WorkspaceSessionPane: View {
         VStack(alignment: .leading, spacing: 8) {
             ProgressView(L10n.t(.directWaitingForDevice))
                 .controlSize(.small)
-                .accessibilityIdentifier("workspace-waiting-pairing-peer")
+                .accessibilityIdentifier("transfer-waiting-pairing-peer")
             Button(L10n.t(.commonCancel)) { cancelPairingWatch() }
                 .buttonStyle(.bordered)
-                .accessibilityIdentifier("workspace-cancel-pairing-watch")
+                .accessibilityIdentifier("transfer-cancel-pairing-watch")
         }
     }
 
@@ -239,7 +252,7 @@ struct WorkspaceSessionPane: View {
     /// Minting and showing a code happen before there is a peer to classify.
     /// Once the legacy model advances beyond those states, the pairing-room
     /// negotiation has selected this one-lane path; a `link/1` peer is rendered
-    /// by `WorkspaceLinkPane` instead.
+    /// by `TransferLinkPane` instead.
     private var peerCapabilityIsKnown: Bool {
         switch mode {
         case .files:
@@ -269,7 +282,7 @@ struct WorkspaceSessionPane: View {
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: 720, alignment: .leading)
-            .accessibilityIdentifier("workspace-lane-note")
+            .accessibilityIdentifier("transfer-lane-note")
     }
 
     // MARK: - the exit
@@ -284,7 +297,7 @@ struct WorkspaceSessionPane: View {
                     // the staged selection. Publish that task boundary as a
                     // Button to both sighted and VoiceOver users.
                     .buttonStyle(.bordered)
-                    .accessibilityIdentifier("workspace-leave-session")
+                    .accessibilityIdentifier("transfer-leave-session")
                 if mode == .text {
                     // Says so rather than surprising: leaving is the one action
                     // here that discards the local history the terminal view is
@@ -333,14 +346,15 @@ struct WorkspaceSessionPane: View {
         }
     }
 
-    /// Release whichever of the two workspace routes actually holds the session.
+    /// Release **this destination's own route**, and only that.
     ///
-    /// Never `releaseAll()`: only the owner may let go, and asking for the owner
-    /// by name is what keeps a stale view from blanking a surface that is
-    /// presenting somebody else's live session.
+    /// Never `releaseAll()`, and never `presence.owner`: only the owner may let
+    /// go, and naming this pane's own route is what keeps a stale view — one
+    /// rebuilt on the other transfer destination while a session is running here
+    /// — from blanking a surface that is presenting somebody else's live
+    /// session. `TransferPresence.release` refuses a non-owner, so passing the
+    /// route rather than the owner turns that refusal into the check.
     private func releaseOwner() {
-        guard let owner = presence.owner,
-              AppDestination.macWorkspaceRoutes.contains(owner) else { return }
-        presence.release(owner)
+        presence.release(route)
     }
 }

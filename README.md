@@ -250,11 +250,14 @@ pairing code requires sign-in; joining with that code does not.
   out right to left), and a signed Sparkle update foundation. Signing in still
   goes out to the browser for device approval — that is not a native Sign in
   with Apple, which only the iOS app has. Its single window is a desktop shell
-  whose sidebar names every destination at once — Workspace, Send a link,
-  Open a link, Device Inbox, Account — so the capabilities that need no account
-  (same-network sending and receiving, joining someone else's pairing code, and
-  opening a link somebody sent) are reachable without signing in; an account is asked
-  for only where it is actually required, with the reason stated. Files reach it
+  whose sidebar names five destinations at once — LAN Transfer, Cross-network
+  Transfer, Send a link, Device Inbox, Account — so the capabilities that need no
+  account (same-network sending and receiving, and joining someone else's pairing
+  code) are reachable without signing in; an account is asked for only where it
+  is actually required, with the reason stated. Opening a stored link somebody
+  sent needs no account either and has no row of its own: it is a link the OS
+  hands the app, so it opens when a supported `relayium.com` link is followed
+  rather than being somewhere to browse to. Files reach it
   from outside the app three ways — dropped on the Dock icon, opened from
   Finder's **Open With**, or sent through a Share extension; the Share extension
   is registered by installing the app but, like every new third-party sharing

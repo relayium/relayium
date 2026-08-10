@@ -202,6 +202,15 @@ struct RelayiumApp: App {
     // are: it follows the resident room socket, so an open link has to survive
     // the unique window being closed and rebuilt.
     @StateObject private var linkWorkspace: LinkWorkspaceModel
+    /// The one staged batch both transfer destinations share.
+    ///
+    /// App-scoped rather than owned by a destination, and that is what keeps the
+    /// two transfer screens from costing the user anything: files staged on LAN
+    /// Transfer are still staged after deciding to use a pairing code instead,
+    /// and after the session that sent them tears its own screen down. A store
+    /// per destination is how somebody picks a folder, changes their mind about
+    /// how to connect, and finds the other screen empty.
+    @StateObject private var transferSelection = SelectionStore()
     @StateObject private var notifications: TransferNotificationCenter
     // Which destination is on screen. App-scoped rather than `@State` so the
     // selection survives the window's view tree being torn down and rebuilt: the
@@ -573,6 +582,7 @@ struct RelayiumApp: App {
                 .environmentObject(lanDiscovery)
                 .environmentObject(nearbyReceive)
                 .environmentObject(linkWorkspace)
+                .environmentObject(transferSelection)
                 // The receiver and the login-item preference reach the main
                 // window because the Device Inbox is a destination in it now,
                 // not only a settings tab. It is the SAME app-scoped controller
@@ -605,6 +615,16 @@ struct RelayiumApp: App {
                     // staged before a cold launch would otherwise wait for the
                     // user to switch away and back.
                     fileOpens.open(sharedDrafts.collect())
+                }
+                .task {
+                    // A link the UI suite launched this process with, handed to
+                    // the SAME router `onOpenURL` feeds. It is the only way that
+                    // suite can reach Open a link, which has no sidebar row —
+                    // and routing it through the real entry point is the point:
+                    // the parser, the coordinator and the shell arm are all
+                    // production. `launchDeepLink` is nil in Release.
+                    guard let link = UITestMode.launchDeepLink else { return }
+                    _ = deepLinks.open(link)
                 }
                 .task {
                     // Both idempotent, and both app-scoped rather than
@@ -679,19 +699,17 @@ struct RelayiumApp: App {
         // roots, for the reason recorded on `appLayoutDirection`: the catalogs
         // live in a package bundle, so SwiftUI does not mirror an Arabic UI on
         // its own.
+        // Two panes now: the login item and the verification default, and
+        // updates. The Device Inbox tab left with this batch — it is a
+        // destination in the main window and a menu-bar route, and a settings
+        // copy of it was a second complete screen for one capability. So this
+        // scene injects exactly what its two panes read: nothing about the
+        // account, the navigation model or the receiver.
         Settings {
             SettingsView(updater: updaterController.updater)
                 .environment(\.layoutDirection, appLayoutDirection)
                 .environmentObject(loginItem)
                 .environmentObject(verification)
-                .environmentObject(inbox)
-                // Both new here, and both for the shared Device Inbox surface:
-                // it reads the session to say WHY there is no account rather than
-                // only that there is none, and it writes the navigation model to
-                // send a signed-out user to the form — in the main window, which
-                // this scene may be the only thing open.
-                .environmentObject(session)
-                .environmentObject(navigation)
         }
 
         // Residency. This is the surface the persistent room socket reports

@@ -13,6 +13,14 @@ import SwiftUI
 ///  - **Updates** replaces a lone "Check for Updates…" menu item that could
 ///    neither report when it last looked nor be turned off.
 ///
+/// **The Device Inbox tab is gone, and the Device Inbox is not.** It had a tab
+/// here because Settings was once the only full surface it had; it is a
+/// first-class main-window destination and a menu-bar route now, and keeping a
+/// third entry meant one capability with two complete screens, one of which the
+/// user reached by a different verb. Nothing about the resident receiver, its
+/// folder, its policy or its menu-bar line changed — only where the surface is
+/// reached from.
+///
 /// What is deliberately absent: language (it follows the system, by design), and
 /// where received files are written (that is a transport-path change, not a
 /// preference this window can honestly present yet).
@@ -23,12 +31,6 @@ struct SettingsView: View {
         TabView {
             GeneralSettingsView()
                 .tabItem { Label(L10n.t(.settingsGeneral), systemImage: "gearshape") }
-            // Its own tab, not a section of General. It is the only settings
-            // surface that decides what this Mac WRITES to disk unattended, it
-            // has a status a person comes back to check, and it carries a result
-            // list — none of which belongs beside two toggles.
-            DeviceInboxSettingsView()
-                .tabItem { Label(L10n.t(.inboxTitle), systemImage: "tray.and.arrow.down") }
             UpdateSettingsView(updater: updater)
                 .tabItem { Label(L10n.t(.settingsUpdates), systemImage: "arrow.triangle.2.circlepath") }
         }

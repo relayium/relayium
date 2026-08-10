@@ -102,12 +102,14 @@
 "nav.sectionLinks" = "链接";
 "nav.sectionDevice" = "这台 Mac";
 "nav.nearby" = "附近设备";
-"nav.pairingCode" = "配对码";
 "nav.pairingCodeSubtitle" = "跨网络发送文本和小文件——双方须同时在线";
+"nav.lanTransfer" = "局域网传输";
+"nav.lanTransferSubtitle" = "与同一网络内的设备互传消息和文件——直连，无需账户；双方须同时在线";
+"nav.crossNetwork" = "跨网络传输";
+"nav.crossNetworkSubtitle" = "用六位配对码与任意位置的设备互传消息和文件——不要求同一网络；双方须同时在线";
 "nav.storedSend" = "发送链接";
 "nav.storedSendSubtitle" = "大文件，稍后再取——需登录，受套餐限制";
 "nav.storedReceive" = "打开链接";
-"nav.storedReceiveSubtitle" = "打开别人发来的链接——无需账户，过期前有效";
 "nav.deviceInboxSubtitle" = "来自你自己账户的文件会送到你选定的文件夹——需要登录；关闭窗口也能接收";
 "nav.account" = "账户";
 "nav.accountSubtitle" = "套餐、设备与已存文件";
@@ -600,9 +602,9 @@
 "inbox.savedFiles.other" = "已保存 %@ 个文件";
 "inbox.waitingDeliveries.other" = "%@ 项投递正在等待你的答复";
 
-/* MARK: macOS Workspace */
-"nav.workspace" = "工作区";
-"nav.workspaceSubtitle" = "与一台设备互传消息和文件 —— 同一网络，或用配对码跨网络；双方须同时在线";
+/* MARK: macOS transfer destinations */
+"crossNetwork.explain" = "两台设备不要求处于同一网络。一方创建六位配对码，另一方输入，Relayium 的会合服务会连接两端；只需双方同时在线。";
+"transfer.busyElsewhere" = "Relayium 中已有一个传输在进行。请先完成或离开它，再从这里开始新的传输。";
 "workspace.sameNetworkHeading" = "同一网络";
 "workspace.pairingHeading" = "配对码";
 "workspace.stagingHeading" = "文件和文件夹";

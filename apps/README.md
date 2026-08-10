@@ -93,43 +93,67 @@ menu bar, the receive socket and any running transfer alive
 (`applicationShouldTerminateAfterLastWindowClosed` returns `false`). There is no
 File ▸ New Window. Minimum window: **860×560**.
 
-Its content is a `NavigationSplitView` whose sidebar names all five destinations
-at once, each with a compact subtitle that wraps when needed and is also its
+Its content is a `NavigationSplitView` whose sidebar names five destinations at
+once, each with a compact subtitle that wraps when needed and is also its
 accessibility hint:
 
 | section | destination | account |
 |---|---|---|
-| Direct | Workspace — one peer, reached on this network or with a pairing code | not needed, except to *create* a code |
+| Direct | LAN Transfer — a device on this network, reached directly | not needed |
+| Direct | Cross-network Transfer — a device anywhere, reached with a pairing code | needed to *create* a code, not to join one |
 | Links | Send a link — store an encrypted file | needed |
-| Links | Open a link — receive one somebody sent | not needed |
+| This Mac | Device Inbox — files from your own account, received with the window closed | needed |
 | — | Account — plan, devices, stored files | is the sign-in *and* the sign-up |
 
-**Workspace is one row for two routes, not one route.** `AppDestination` still
-has `.nearby` and `.pairingCode` — iOS renders them as two tabs, and deep links,
-incoming sessions and Dock drops still address them by name — and
-`AppDestination.macSurface` maps both onto the one screen macOS draws. What that
-merge removes is the segmented Files/Text picker that used to sit above both of
-them: each connect action now states its own kind, and a message is the default
-intent because it needs nothing staged.
+**The sidebar is the only place a destination is named and explained.** No
+screen opens with a page heading repeating the row that was just clicked: the
+row is on screen at the same time, highlighted, so the heading said nothing the
+reader was not already looking at. The window still carries a `navigationTitle`,
+and section labels inside a screen — which say what a *part* of it is — stay.
 
-It does **not** remove the wire's own limit. One realtime connection carries a
-file transfer *or* an ephemeral text session, never both, so a live Workspace
-session renders the lane it actually has and says in one sentence that the other
-kind needs a session of its own. The `link/1` stack that would lift that is in
-`RelayiumKit` and switched off (`LINK_BUILD_SUPPORT`); nothing here advertises or
-depends on it.
+**Open a link is reachable, not browseable.** It has no row: opening a stored
+link somebody sent is something the OS hands this app, not somewhere a person
+sets out for. `AppDeepLink` still selects `.storedReceive` for a supported
+`relayium.com` download link and the shell still draws that destination, and
+`MacSurface.browseable` is the one list that says which surfaces the sidebar
+offers. A Finder **Open With** or a Dock drop never lands there.
+
+**LAN Transfer and Cross-network Transfer are two destinations for two
+preconditions.** They were briefly one row called Workspace. Underneath they
+still share every model and one `TransferPresence` — `AppDestination` keeps
+`.nearby` and `.pairingCode`, iOS renders them as two tabs, and deep links,
+incoming sessions and Dock drops still address them by name — but the two are
+opposite where it matters to somebody choosing: one needs the same network and no
+account, the other needs an account to mint a code and explicitly no shared
+network. Each screen shows only its own connection method, with the files and
+folders it will carry staged inside that flow rather than beside it, and one
+app-scoped `SelectionStore` shared between them so changing your mind about how
+to connect does not discard what to send. What neither screen has is the
+segmented Files/Text picker that used to sit above both: each connect action
+states its own kind, and a message is the default intent because it needs nothing
+staged.
+
+`TransferSurfacePresentation` is what keeps two screens over one set of models
+honest: a session is drawn by the route that OWNS it and by no other, and both
+screens refuse to start one while anything is live or retained anywhere.
+
+It does **not** remove the wire's own limit. One legacy realtime connection
+carries a file transfer *or* an ephemeral text session, never both, so a live
+legacy session renders the lane it actually has and says in one sentence that the
+other kind needs a session of its own. A peer that announces exact `link/1` gets
+one connection for both, and the sentence with it.
 
 A sidebar footer reports whether this Mac can be reached right now; pause and
-resume stay in the Workspace and in the menu bar rather than gaining a third site.
+resume stay on LAN Transfer and in the menu bar rather than gaining a third site.
 
 The shell itself never reads the account session — `MacSurfaceGuardTests`
-asserts that by name, and asserts that the stored-receive destination file
-mentions neither `AccountSession` nor `bearerToken`. That is what keeps the four
-anonymous capabilities reachable without a sign-in form in front of them. The
-Workspace does hold an `AccountSession`, for exactly one half of itself, and the
-guard checks that positionally rather than by presence: the gate must sit *after*
-the same-network roster and *before* the join controls, so neither of the two
-anonymous halves can drift behind it. The account-backed halves render an
+asserts that by name, and asserts that the stored-receive and LAN Transfer
+destination files mention neither `AccountSession` nor `bearerToken`. That is
+what keeps the anonymous capabilities reachable without a sign-in form in front
+of them. Cross-network Transfer does hold an `AccountSession`, for exactly one
+half of itself, and the guard checks that positionally rather than by presence:
+the gate must sit *before* the join controls, so joining somebody else's code
+cannot drift behind it. The account-backed halves render an
 `AccountGate` in place, stating why an account is needed and offering sign-in,
 beside the half that needs none. A
 capability that is unavailable for want of an account says so and offers the

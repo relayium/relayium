@@ -3,27 +3,32 @@ import RelayiumAppKit
 
 /// Five rows, all visible at once, in three sections plus a standalone Account row.
 ///
-/// **Nearby and Pairing code used to be two of them and are now one, named
-/// Workspace.** They were never two products — same models, same
-/// `TransferPresence`, and each row spending half its screen saying the session
-/// was on the other one. What the sidebar owes the user is the set of places the
-/// app can be, and "the same peer, reached a different way" is not one of them.
-/// The two routes still exist in `AppDestination` because iOS renders them as
-/// two tabs; `MacSurface` is what makes them one row here.
+/// **The sidebar is now the ONLY place a destination is named and explained.**
+/// Every screen used to reprint its row's title and subtitle as a page heading,
+/// which said nothing a user looking at the highlighted row did not already
+/// know. So the rows carry that weight alone: a title, a compact subtitle that
+/// may wrap, and that same sentence as the row's accessibility hint — a
+/// destination understandable before it is opened rather than after.
 ///
-/// This is the round's central correction. Everything the app can do used to be
-/// either behind a sign-in form the capability did not need or inside a
-/// collapsed `DisclosureGroup` under it; naming every destination at all times is
-/// what makes the three anonymous ones findable. Each row carries a compact
-/// subtitle that may wrap, so a destination is understandable before it is opened
-/// rather than after — and that same sentence is the row's accessibility hint.
+/// **LAN Transfer and Cross-network Transfer are two rows.** They were briefly
+/// one, called Workspace, on the argument that they are two ways to reach one
+/// peer rather than two products. Underneath they still share every model and
+/// one `TransferPresence`; on screen they do not, because their preconditions
+/// are opposite — the same network and no account, versus an account to mint a
+/// code without requiring a shared network — and that difference is the first thing a
+/// person choosing between them needs.
 ///
-/// **Device Inbox is a row here for exactly the same reason the other five are.**
-/// It shipped with a resident receiver, a menu-bar line and a complete settings
-/// pane, and was still missing in practice: the only full surface was behind ⌘,
-/// and nothing in the window named the feature at all. It is listed signed out
-/// like everything else — the screen behind it explains what it needs and offers
-/// the way to an account, which is a different thing from hiding the row until
+/// **Open a link is deliberately not a row.** It is where a link the OS handed
+/// this app is opened, not somewhere to set out for; the destination is still
+/// rendered whenever a supported deep link selects it, and `MacSurface.browseable`
+/// is the one list that says which surfaces are offered here.
+///
+/// **Device Inbox is a row for the same reason the other four are.** It shipped
+/// with a resident receiver, a menu-bar line and a complete settings pane, and
+/// was still missing in practice: the only full surface was behind ⌘, and
+/// nothing in the window named the feature at all. It is listed signed out like
+/// everything else — the screen behind it explains what it needs and offers the
+/// way to an account, which is a different thing from hiding the row until
 /// somebody already has one.
 struct SidebarView: View {
     @EnvironmentObject private var navigation: AppNavigationModel
@@ -54,12 +59,15 @@ struct SidebarView: View {
     /// `List` single-selection is an optional binding; a deselection (which the
     /// sidebar has no gesture for) is simply ignored rather than blanking the
     /// detail column.
-    /// **Normalised to the surface, not to the destination.** A pairing-code
-    /// deep link selects `.pairingCode`, an unsolicited session selects
-    /// `.nearby`, and both draw the Workspace — so the row that must look
-    /// selected is the Workspace's, whichever route got there. Writing back goes
+    /// **Normalised to the surface, not to the destination.** Writing back goes
     /// through the surface's own `route`, so a click still produces exactly one
     /// ordinary `select(_:)`.
+    ///
+    /// A destination with no row of its own — Open a link, arrived at by deep
+    /// link — maps to a `MacSurface` that no row is tagged with, so `List`
+    /// highlights nothing. That is the correct answer rather than a gap: the
+    /// user is somewhere the sidebar does not offer, and pretending a row is
+    /// selected would name the wrong one.
     private var selection: Binding<MacSurface?> {
         Binding(get: { navigation.selection.macSurface },
                 set: { if let surface = $0 { navigation.select(surface.route) } })
@@ -68,10 +76,14 @@ struct SidebarView: View {
     var body: some View {
         List(selection: selection) {
             Section {
-                row(.workspace,
+                row(.lanTransfer,
                     symbol: "dot.radiowaves.left.and.right",
-                    title: L10n.t(.navWorkspace),
-                    subtitle: L10n.t(.navWorkspaceSubtitle))
+                    title: L10n.t(.navLanTransfer),
+                    subtitle: L10n.t(.navLanTransferSubtitle))
+                row(.crossNetworkTransfer,
+                    symbol: "number.circle",
+                    title: L10n.t(.navCrossNetwork),
+                    subtitle: L10n.t(.navCrossNetworkSubtitle))
             } header: {
                 sectionHeader(.navSectionDirect)
             }
@@ -80,10 +92,6 @@ struct SidebarView: View {
                     symbol: "link.badge.plus",
                     title: L10n.t(.navStoredSend),
                     subtitle: L10n.t(.navStoredSendSubtitle))
-                row(.storedReceive,
-                    symbol: "arrow.down.doc",
-                    title: L10n.t(.navStoredReceive),
-                    subtitle: L10n.t(.navStoredReceiveSubtitle))
             } header: {
                 sectionHeader(.navSectionLinks)
             }
@@ -183,17 +191,13 @@ struct SidebarView: View {
     /// `nav.a11yLiveSession` — "A transfer is running here" — while the user
     /// read "Transfer complete". Both facts are needed, and each is taken from
     /// the object that owns it rather than copied into a third.
-    /// The Workspace row asks about BOTH of its routes, because either of them
-    /// may be the one `TransferPresence` handed the session to — that
-    /// arbitration is unchanged, and iOS still depends on it. Every other row
-    /// asks about the single destination it renders.
+    ///
+    /// One route per row again, which is what makes the marker useful: with the
+    /// two transfer destinations separated, the marked row is the one the
+    /// session is actually on, so following it lands the user on the transfer
+    /// rather than on a screen that has to explain where it went.
     private func hasLiveSession(_ surface: MacSurface) -> Bool {
         let busy = fileModel.isBusy || textModel.isBusy
-        if surface == .workspace {
-            return AppDestination.macWorkspaceRoutes.contains {
-                presence.announcesRunningTransfer($0, sessionIsBusy: busy)
-            }
-        }
         return presence.announcesRunningTransfer(surface.route, sessionIsBusy: busy)
     }
 

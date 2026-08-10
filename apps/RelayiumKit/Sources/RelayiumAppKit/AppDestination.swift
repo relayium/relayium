@@ -1,10 +1,11 @@
 import Combine
 import Foundation
 
-/// The six places the app can put on screen. One case per macOS sidebar row, and
-/// the only vocabulary the shell needs in order to decide what to render — which
-/// is what keeps the shell itself ignorant of the account (design invariant: the
-/// shell never reads `session.state`).
+/// The six routing destinations the app can put on screen. macOS maps them to
+/// five browseable sidebar rows plus one hidden deep-link destination through
+/// `MacSurface`; this is the only vocabulary the shell needs to decide what to
+/// render, which keeps the shell itself ignorant of the account (design
+/// invariant: the shell never reads `session.state`).
 ///
 /// `String`-backed so a destination has a stable, loggable name; `CaseIterable`
 /// so the sidebar and the tests enumerate the same set rather than two lists

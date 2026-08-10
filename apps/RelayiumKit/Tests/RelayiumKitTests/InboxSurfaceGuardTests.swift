@@ -91,16 +91,19 @@ final class InboxSurfaceGuardTests: XCTestCase {
                        "a second bridge would be a second, competing session mapping")
         XCTAssertEqual(occurrences(of: "InboxController(runtime:", in: app), 0,
                        "the scene assembles the controller itself instead of using the factory")
-        // All three surfaces render the SAME object. Two controllers would be two
-        // schedulers claiming against one account — and the third injection is
-        // the main window, which gained the Device Inbox destination.
-        XCTAssertEqual(occurrences(of: ".environmentObject(inbox)", in: app), 3,
-                       "the main window, the menu bar and Settings must share one controller")
-        // The same for the login-item preference, which the residency control
-        // inside the shared surface binds to. Two preferences would be two
+        // Both surfaces render the SAME object. Two controllers would be two
+        // schedulers claiming against one account. Two rather than three since
+        // the settings tab left: the main window, which holds the Device Inbox
+        // destination, and the menu bar, which is the only surface visible while
+        // the window is closed.
+        XCTAssertEqual(occurrences(of: ".environmentObject(inbox)", in: app), 2,
+                       "the main window and the menu bar must share one controller")
+        // The same for the login-item preference. It reaches the main window for
+        // the Device Inbox destination's residency control and the settings
+        // scene for the Open at Login switch. Two preferences would be two
         // answers to a question `SMAppService` has only one of.
         XCTAssertEqual(occurrences(of: ".environmentObject(loginItem)", in: app), 2,
-                       "the two Device Inbox hosts must share one login-item preference")
+                       "the two login-item hosts must share one preference")
     }
 
     func testNoViewBuildsASecondControllerOrASecondObserver() throws {
@@ -114,40 +117,39 @@ final class InboxSurfaceGuardTests: XCTestCase {
 
     // MARK: - one surface, two entries
 
-    /// **The destination and the settings tab render the same file.**
+    /// **One host renders the shared surface, and it is the destination.**
     ///
     /// The Device Inbox was, for a whole delivery, reachable only through ⌘, —
     /// every gate green about a capability that was in practice absent, because
-    /// nothing in the main window named it. The repair is a first-class
-    /// destination, and the obvious way to build one is a second view with the
-    /// same controls in it. That is how the two surfaces start telling the user
-    /// different things: one gains a state the other never learned, or one keeps
-    /// a refusal the other drops.
+    /// nothing in the main window named it. The repair was a first-class
+    /// destination beside the settings tab, with `DeviceInboxSurface` shared so
+    /// the two could not drift.
     ///
-    /// So both hosts are checked to be thin — they choose where the account
-    /// actions go and nothing else — and every control is checked to live in the
-    /// one file they share.
-    func testBothDeviceInboxEntriesRenderTheOneSharedSurface() throws {
-        for host in ["Settings/DeviceInboxSettingsView.swift",
-                     "Destinations/DeviceInboxDestination.swift"] {
-            let source = try macSource(host)
-            XCTAssertTrue(source.contains("DeviceInboxSurface"),
-                          "\(host) does not render the shared Device Inbox surface")
-            // Every consequential control, by name. A host that grew one of these
-            // is a host that can disagree with the other about it.
-            for control in ["NSOpenPanel", "inbox.setPolicy", "inbox.chooseFolder",
-                            "inbox.removeFolder", "inbox.reveal", "inbox.pause",
-                            "inbox.respond", "InboxStatusPresentation",
-                            "inbox.openNotificationSettings"] {
-                XCTAssertFalse(source.contains(control),
-                               "\(host) renders \(control) itself instead of sharing it")
-            }
+    /// The settings tab has now gone, and the drift risk goes with it: one
+    /// capability with two complete screens reached by two different verbs is
+    /// what the owner asked to be rid of. What must NOT change is the surface —
+    /// the destination stays thin, deciding only where its account actions go,
+    /// and every consequential control stays in the one file it renders.
+    func testTheDeviceInboxDestinationIsTheOneHostOfTheSharedSurface() throws {
+        let host = "Destinations/DeviceInboxDestination.swift"
+        let source = try macSource(host)
+        XCTAssertTrue(source.contains("DeviceInboxSurface"),
+                      "\(host) does not render the shared Device Inbox surface")
+        // Every consequential control, by name. A host that grew one of these is
+        // a host that has started reimplementing the surface.
+        for control in ["NSOpenPanel", "inbox.setPolicy", "inbox.chooseFolder",
+                        "inbox.removeFolder", "inbox.reveal", "inbox.pause",
+                        "inbox.respond", "InboxStatusPresentation",
+                        "inbox.openNotificationSettings"] {
+            XCTAssertFalse(source.contains(control),
+                           "\(host) renders \(control) itself instead of sharing it")
         }
-        // And exactly two hosts. A third would be a third place to keep in step.
+        // And exactly one host. A second would be a second place to keep in step
+        // — which is how this capability ended up with a settings screen nobody
+        // could find and a destination nobody had built.
         let hosts = try macSources().filter { $0.text.contains("DeviceInboxSurface {") }
             .map(\.name).sorted()
-        XCTAssertEqual(hosts, ["Destinations/DeviceInboxDestination.swift",
-                               "Settings/DeviceInboxSettingsView.swift"],
+        XCTAssertEqual(hosts, ["Destinations/DeviceInboxDestination.swift"],
                        "the shared Device Inbox surface has grown another host")
     }
 
@@ -170,24 +172,17 @@ final class InboxSurfaceGuardTests: XCTestCase {
                       + "cannot answer that differently for the same button")
         XCTAssertFalse(surface.contains("NSWorkspace"),
                        "the signed-out Device Inbox opens a website for account work")
-        // Both hosts route to the native form, on the half the button promised.
+        // The host routes to the native form, on the half the button promised.
         // A `select(.account)` alone lands "Create an account" on a sign-in form.
+        //
+        // It needs no `openWindow`: this host only exists inside the main
+        // window, so the Account destination it selects is one row away. The
+        // settings tab that DID need to open a window is gone.
         let destination = try macSource("Destinations/DeviceInboxDestination.swift")
         XCTAssertTrue(destination.contains("navigation.selectAccount(intent: intent)"),
                       "the destination's account actions do not carry the requested half")
-        let settings = try macSource("Settings/DeviceInboxSettingsView.swift")
-        XCTAssertTrue(settings.contains("navigation.selectAccount(intent: intent)"),
-                      "the settings tab's account actions do not carry the requested half")
-        XCTAssertTrue(settings.contains("openWindow(id: \"main\")"),
-                      "the settings tab selects an Account destination in a window it "
-                      + "never opens, so the click appears to do nothing")
-        guard let action = settings.range(of: "navigation.selectAccount(intent: intent)"),
-              let open = settings.range(of: "openWindow(id: \"main\")") else {
-            return XCTFail("the settings host no longer has the shape this checks")
-        }
-        XCTAssertTrue(action.upperBound < open.lowerBound,
-                      "the window is opened before the destination is selected, so it "
-                      + "renders the previous surface and moves under the user")
+        XCTAssertFalse(destination.contains("openWindow(id: \"main\")"),
+                       "a destination inside the main window asks for it to be opened")
     }
 
     /// **A dead control is not offered.**
@@ -315,11 +310,14 @@ final class InboxSurfaceGuardTests: XCTestCase {
                            || text.contains("showSettingsWindow"),
                            "\(name) dispatches an undocumented settings selector")
         }
-        // And the ⌘, tab is still there. Settings is allowed to keep the surface;
-        // what it may not be is the only entry.
-        XCTAssertTrue(try macSource("Settings/SettingsView.swift")
+        // And ⌘, no longer carries the surface at all. The destination replaced
+        // it rather than joining it: two complete screens for one capability,
+        // reached by two different verbs, is what the owner asked to be rid of.
+        // What the menu bar still owes is the route INTO the destination, which
+        // is asserted above.
+        XCTAssertFalse(try macSource("Settings/SettingsView.swift")
             .contains("DeviceInboxSettingsView()"),
-                      "the settings tab was removed rather than joined by a destination")
+                      "the settings tab is back beside the destination")
     }
 
     // MARK: - what is never rendered
@@ -330,10 +328,9 @@ final class InboxSurfaceGuardTests: XCTestCase {
     func testNoInboxSurfaceRendersANameAPathOrAnIdentifier() throws {
         let surfaces = ["DeviceInbox/DeviceInboxSurface.swift", "MenuBarView.swift",
                         "InboxNotifier.swift",
-                        // Both hosts too. They are thin today, and this is the
-                        // ban a host would be most tempted to break first — a
-                        // "you received X" heading above the shared form.
-                        "Settings/DeviceInboxSettingsView.swift",
+                        // The host too. It is thin today, and this is the ban a
+                        // host would be most tempted to break first — a "you
+                        // received X" heading above the shared form.
                         "Destinations/DeviceInboxDestination.swift"]
         for name in surfaces {
             let source = try macSource(name)

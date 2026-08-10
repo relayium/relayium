@@ -102,12 +102,14 @@
 "nav.sectionLinks" = "Enlaces";
 "nav.sectionDevice" = "Este Mac";
 "nav.nearby" = "Cerca";
-"nav.pairingCode" = "Código de emparejamiento";
 "nav.pairingCodeSubtitle" = "Texto y archivos pequeños entre redes: ambos en línea";
+"nav.lanTransfer" = "Transferencia en red local";
+"nav.lanTransferSubtitle" = "Mensajes y archivos con un dispositivo en la misma red: directo, sin cuenta; ambos en línea";
+"nav.crossNetwork" = "Transferencia entre redes";
+"nav.crossNetworkSubtitle" = "Mensajes y archivos con un dispositivo en cualquier lugar, con un código de seis dígitos: no requiere la misma red; ambos en línea";
 "nav.storedSend" = "Enviar un enlace";
 "nav.storedSendSubtitle" = "Archivos grandes, recogidos después: inicia sesión; límites del plan";
 "nav.storedReceive" = "Abrir un enlace";
-"nav.storedReceiveSubtitle" = "Abre un enlace que te enviaron: sin cuenta, hasta que caduque";
 "nav.deviceInboxSubtitle" = "Los archivos de tu propia cuenta llegan a una carpeta que tú eliges: inicia sesión; funciona con la ventana cerrada";
 "nav.account" = "Cuenta";
 "nav.accountSubtitle" = "Plan, dispositivos y archivos guardados";
@@ -611,9 +613,9 @@
 "inbox.waitingDeliveries.one" = "%@ entrega esperando tu respuesta";
 "inbox.waitingDeliveries.other" = "%@ entregas esperando tu respuesta";
 
-/* MARK: macOS Workspace */
-"nav.workspace" = "Espacio de trabajo";
-"nav.workspaceSubtitle" = "Mensajes y archivos con un dispositivo: misma red o entre redes con un código; ambos en línea";
+/* MARK: macOS transfer destinations */
+"crossNetwork.explain" = "Los dos dispositivos no tienen que estar en la misma red. Un lado crea un código de seis dígitos, el otro lo escribe y el servicio de encuentro de Relayium los pone en contacto; basta con que ambos estén en línea a la vez.";
+"transfer.busyElsewhere" = "Hay otra transferencia abierta en Relayium. Termínala o sal de ella antes de empezar una aquí.";
 "workspace.sameNetworkHeading" = "Misma red";
 "workspace.pairingHeading" = "Código de emparejamiento";
 "workspace.stagingHeading" = "Archivos y carpetas";

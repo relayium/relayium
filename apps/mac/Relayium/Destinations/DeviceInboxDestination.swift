@@ -2,7 +2,7 @@ import SwiftUI
 import RelayiumAppKit
 
 /// Files sent to this Mac from the owner's own account — a first-class sidebar
-/// destination, beside Nearby, Pairing code, Send a link, Open a link and
+/// destination, beside LAN Transfer, Cross-network Transfer, Send a link and
 /// Account.
 ///
 /// **Why this exists at all.** Every technical gate this capability had was
@@ -11,7 +11,8 @@ import RelayiumAppKit
 /// full surface was a settings window the user had to already know to open, and
 /// the menu-bar item that promised a route sent them there rather than into the
 /// product. PRD §12 states the requirement in the same terms: a first-class macOS
-/// sidebar entry, not a card buried in Settings.
+/// sidebar entry, not a card buried in Settings. The ⌘, pane has since gone
+/// entirely: this is the surface, and the menu bar is the way back to it.
 ///
 /// **The row stays visible signed out**, which is the other half of the same
 /// point. A destination that appears only once you have an account cannot be what
@@ -32,7 +33,6 @@ struct DeviceInboxDestination: View {
         // a `Form` scrolls itself, so wrapping it in the scaffold's `ScrollView`
         // would nest two scroll views around one list of sections.
         DestinationScaffold(title: L10n.t(.inboxTitle),
-                            subtitle: L10n.t(.navDeviceInboxSubtitle),
                             contentMaxWidth: nil,
                             scrolls: false) {
             DeviceInboxSurface { intent in

@@ -22,7 +22,8 @@ extension RealtimeConnection: RealtimePeerConnection {}
 /// It holds the socket STRONGLY, and that is what makes the legacy fallback
 /// safe: `LinkWorkspaceModel` stops routing the room and hands it over, and the
 /// connection built on it needs the socket to outlive the model's own attempt.
-/// The app releases it when the Workspace returns to its connect phase.
+/// The app releases it when the owning transfer surface returns to its connect
+/// phase.
 @MainActor
 public final class LinkRoomHandle {
     public internal(set) var signaling: SignalingClient?
