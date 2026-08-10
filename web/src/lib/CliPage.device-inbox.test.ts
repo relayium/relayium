@@ -70,13 +70,16 @@ describe("/cli 上的设备收件箱一节", () => {
     }
   });
 
-  it("有通往 My Devices 的 CTA，而且把账号门槛说清楚了", async () => {
+  // CTA 指向 /device-inbox 而不是 /me：发送控件现在就在设备收件箱页上，改名和吊销
+  // 才是 /me 的事。这一步讲的是「从网页发送」，把人送去 /me 等于多绕一跳。
+  it("有通往设备收件箱页的 CTA，而且把账号门槛说清楚了", async () => {
     const target = await render();
     const section = target.querySelector("#device-inbox") as HTMLElement;
     const cta = section.querySelector(".cta a") as HTMLAnchorElement | null;
-    expect(cta, "没有通往 My Devices 的入口").toBeTruthy();
-    expect(cta!.getAttribute("href")).toBe("/me");
-    expect(cta!.textContent).toMatch(/My Devices/);
+    expect(cta, "没有通往设备收件箱页的入口").toBeTruthy();
+    expect(cta!.getAttribute("href")).toBe("/device-inbox");
+    expect(cta!.textContent).toMatch(/Device Inbox/);
+    expect(cta!.textContent, "CTA 仍然把人指向 My Devices").not.toMatch(/My Devices/);
     // 未登录的人点进去会看到登录门。文案必须先说出来，而不是让他们撞上去。
     expect(section.textContent).toMatch(/signed in to Relayium/i);
   });

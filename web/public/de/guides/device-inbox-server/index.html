@@ -85,7 +85,7 @@ footer a{color:var(--text-h);text-decoration:none}
            generated Arabic page. -->
       <p class="updated">Zuletzt aktualisiert: <bdi>2026-08-09</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/device-inbox-server/">English</a><a href="/zh/guides/device-inbox-server/">中文</a><a href="/ja/guides/device-inbox-server/">日本語</a><a href="/ko/guides/device-inbox-server/">한국어</a><a href="/de/guides/device-inbox-server/" aria-current="true">Deutsch</a><a href="/fr/guides/device-inbox-server/">Français</a><a href="/ar/guides/device-inbox-server/">العربية</a><a href="/es/guides/device-inbox-server/">Español</a><a href="/pt/guides/device-inbox-server/">Português</a></nav>
-      <p class="lead">Device Inbox sendet eine Datei von „Meine Geräte“ im Browser an deinen eigenen Server, dein NAS oder deinen Arbeitsplatzrechner. Der Browser verschlüsselt sie; nur das Zielgerät entschlüsselt und speichert sie.</p>
+      <p class="lead">Device Inbox sendet eine Datei von der Device-Inbox-Seite im Browser an deinen eigenen Server, dein NAS oder deinen Arbeitsplatzrechner. Der Browser verschlüsselt sie; nur das Zielgerät entschlüsselt und speichert sie.</p>
       <p class="lead">Ein Server-Empfänger muss ein geschlossenes SSH-Fenster und Neustarts überstehen. Der empfohlene Installer erstellt den Ordner und einen echten systemd-Dienst. inbox run ist nur für Diagnose im Vordergrund oder Container gedacht.</p>
       <h2>Dauerhaften Empfänger installieren</h2>
       <p>Melde die Maschine einmal als Betreiber an, lade dann das kurze Skript herunter und prüfe es, bevor du ihm Root-Rechte gibst. Es kopiert die Zugangsdaten ohne Ausgabe, erstellt ein eigenes relayium-Konto, registriert den Empfangsschlüssel und startet die gehärtete Unit sofort sowie nach Neustarts.</p>
@@ -121,8 +121,8 @@ sudo -u relayium relayium inbox disable --config-dir /var/lib/relayium-inbox/con
       <h3>Kann ich manuell installieren?</h3>
       <p>Ja. relayium inbox service systemd-user oder systemd-system gibt eine maschinenspezifische Unit und Befehle aus; Beschreibungen für launchd und container sind ebenfalls vorhanden.</p>
       <div class="ctacard">
-        <p>Sobald der Dienst ready meldet, sende eine Datei über deine Gerätekarte.</p>
-        <a class="cta" href="/me">Meine Geräte öffnen</a>
+        <p>Sobald der Dienst ready meldet, sende eine Datei über seine Karte in Device Inbox.</p>
+        <a class="cta" href="/device-inbox">Device Inbox öffnen</a>
       </div>
       <h2>Weiterlesen</h2>
       <ul class="related"><li><a href="/de/guides/transfer-files-from-terminal/">Dateien und Text mit der Relayium CLI vom Terminal übertragen</a></li><li><a href="/de/guides/run-relayium-as-an-always-on-service/">Relayium als dauerhaft laufenden Empfangsdienst betreiben</a></li><li><a href="/de/guides/how-relayium-encrypts-your-files/">Wie Relayium deine Dateien Ende-zu-Ende verschlüsselt</a></li><li><a href="/de/how-to/automate-server-backups/">Verschlüsselte Server-Backups mit einem Cron-Job automatisieren</a></li><li><a href="/de/">Relayium</a></li></ul>

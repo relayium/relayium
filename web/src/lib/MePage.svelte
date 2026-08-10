@@ -15,9 +15,16 @@
   import { reveal, countUp } from "./reveal";
   import PlanCard from "./PlanCard.svelte";
   import QuotaMeters from "./QuotaMeters.svelte";
-  import DeviceCard, { type RenameOutcome } from "./DeviceCard.svelte";
+  import DeviceSendList from "./DeviceSendList.svelte";
+  import { type RenameOutcome } from "./DeviceCard.svelte";
   import { DEVICE_REFRESH_MS, parseDeviceInbox } from "./device-inbox";
-  import { deviceSuffix } from "./device-identity";
+  import {
+    deviceKindLabel,
+    deviceRefText,
+    deviceSignedInText,
+    supportedDevices,
+    type DeviceRow,
+  } from "./device-list";
   import { invalidateUsage } from "./usage.svelte";
 
   // 每次进入 /me 都要拿新的用量数字：/me 是懒加载路由（App.svelte 的
@@ -67,28 +74,9 @@
 
   // 账号级、可吊销的持令牌设备。后端一直有这两个接口（列出 + 删除，删设备会级联
   // 删掉它的令牌），丢了笔记本或手机时这是唯一能自救的地方。
-  // `Inbox` is the additive Device Inbox subtree (protocol §9): null for every
-  // device that never enrolled, and typed `unknown` here on purpose — this page
-  // does not interpret it, it hands it to DeviceCard, which parses it
-  // defensively in one place.
-  interface DeviceRow { ID: string; Name: string; CreatedAt: number; LastSeenAt: number; LastIP?: string; Kind: string; Inbox?: unknown }
-
-  // 列进来的 Kind，以及它们各自的行内标签。只有这两类：它们持有的是同一种能代表
-  // 账号传输/上传的 bearer 令牌（CLI 走 relayium login，App 走原生登录），吊销的
-  // 后果对两者是同一句话。
   //
-  // 浏览器那一类不列：本机自动登记，持有的是会话 cookie 而不是能拷走的令牌。空
-  // Kind 和将来才出现的新 Kind 同样不列——这一版说不清楚吊销它们意味着什么，与其
-  // 给一个含义不明的破坏性按钮，不如不给。
-  //
-  // Map 而不是普通对象：Kind 是从服务端拿来的字符串，拿对象查表就得用 `in` 或
-  // `?.` 判断，两者都会走到 Object.prototype 上——Kind = "toString"/"constructor"
-  // 会被当成已知类型放行，还会把行内标签渲染成一个内置函数。Map 只有自有键。
-  const DEVICE_KINDS = new Map<string, () => string>([
-    ["app", () => t.me.deviceKindApp],
-    ["cli", () => t.me.deviceKindCli],
-  ]);
-
+  // 行的类型、要列哪些 Kind、怎么排序，全在 device-list.ts：/device-inbox 现在渲染
+  // 的是同一批行，两个页面对"哪些设备存在"必须只有一个答案。
   let devices = $state<DeviceRow[]>([]);
   // 设备请求属于哪一段登录会话。账号切换、登出后再登录同一账号，甚至组件销毁，
   // 都会换一个代号；旧列表/旧吊销请求的迟到响应因此不能改写当前页面。
@@ -104,13 +92,9 @@
       // Initial/account-switch loads already clear `devices` before calling us,
       // so retaining here cannot expose a previous account's rows.
       if (!res.ok) return;
-      const all: DeviceRow[] = (await res.json()).devices ?? [];
+      const all: unknown[] = (await res.json()).devices ?? [];
       if (gen !== deviceSessionGen) return;
-      // 跨类型统一排序：这个列表唯一的排序承诺是「最近用过的在最上面」，按类型
-      // 分组会让它不成立。从未使用过的（LastSeenAt = 0）之间按创建时间倒序。
-      devices = all
-        .filter((d) => DEVICE_KINDS.has(d.Kind))
-        .sort((a, b) => b.LastSeenAt - a.LastSeenAt || b.CreatedAt - a.CreatedAt);
+      devices = supportedDevices(all);
     } catch {
       // Keep the last trustworthy list. Presence may be briefly stale, but an
       // explicit failed refresh is not evidence that the devices disappeared.
@@ -122,7 +106,15 @@
     // 确认框指名要吊销的是哪一台：一屏里可能有好几行，可见文字又都是同一个"吊销"。
     // 名字**不足以**指名——两台机器可以同名，而且改名之前它们全都叫 "CLI"。所以这句
     // 话要带上类型、ID 尾号和登录时间；真正被删的始终是那一行的完整 ID。
-    if (!(await confirmDialog(t.me.deviceConfirmRevoke(d.Name, kindText(d), refText(d), signedInText(d))))) return;
+    // 确认框里的四项和行里显示的是同一批字串（device-list.ts），不是这里另写一份：
+    // 两边描述得不一样，就是"删错了那一台"唯一可能发生的地方。
+    const described = t.me.deviceConfirmRevoke(
+      d.Name,
+      deviceKindLabel(d.Kind, t),
+      deviceRefText(d, t),
+      deviceSignedInText(d, t, lang()),
+    );
+    if (!(await confirmDialog(described))) return;
     if (gen !== deviceSessionGen) return;
     try {
       const res = await fetch(`/api/devices/${encodeURIComponent(d.ID)}`, {
@@ -136,30 +128,6 @@
     } catch {
       if (gen === deviceSessionGen) failed();
     }
-  }
-
-  /** 行内类型标签：App 还是 CLI。两类持有同等权限的令牌，用户得能一眼分开。 */
-  function kindText(d: DeviceRow): string {
-    return DEVICE_KINDS.get(d.Kind)?.() ?? "";
-  }
-
-  /** 最后使用时间。0 不是"从未使用"那种故障感的说法——刚批准完的令牌本来就还没用过，
-   *  说成「自登录以来没用过」才是它真正的意思。 */
-  function lastUsedText(d: DeviceRow): string {
-    if (!d.LastSeenAt) return t.me.deviceNotUsedSinceSignIn;
-    return t.me.deviceLastUsed(new Date(d.LastSeenAt * 1000).toLocaleString(lang()));
-  }
-
-  /** 这枚凭据是什么时候被批准的。对那些没有标签、全叫 "CLI" 的老行来说，这是不需要
-   *  回填数据库就能拿到的两个区分依据之一。 */
-  function signedInText(d: DeviceRow): string {
-    return t.me.deviceSignedIn(new Date(d.CreatedAt * 1000).toLocaleString(lang()));
-  }
-
-  /** 另一个：设备 ID 的短后缀。ID 太短切不出东西时返回空串，由行内决定不渲染。 */
-  function refText(d: DeviceRow): string {
-    const suffix = deviceSuffix(d.ID);
-    return suffix ? t.me.deviceRef(suffix) : "";
   }
 
   /** 行内改名，走本来就有的 PATCH /api/devices/{id}。
@@ -676,23 +644,15 @@
           <p class="muted">{t.deviceInbox.noneEnrolled}</p>
           <p class="setup"><a href={cliInboxHref}>{t.deviceInbox.setupCta} →</a></p>
         {/if}
-        <ul class="devicelist">
-          <!-- Keyed by ID so a background presence refresh replaces the DATA of
-               a row without destroying the card — an in-flight send and its
-               status poll live in that component and must survive the refresh
-               that keeps "online" honest. -->
-          {#each devices as d (d.ID)}
-            <DeviceCard
-              device={d}
-              kind={kindText(d)}
-              lastUsed={lastUsedText(d)}
-              signedIn={signedInText(d)}
-              deviceRef={refText(d)}
-              onRevoke={() => revokeDevice(d)}
-              onRename={(name) => renameDevice(d, name)}
-            />
-          {/each}
-        </ul>
+        <!-- manage: this IS the credential page. /device-inbox renders the same
+             rows with it off — it is for sending, and revoke belongs here. -->
+        <DeviceSendList
+          {devices}
+          manage
+          label={t.me.deviceTitle}
+          onRevoke={revokeDevice}
+          onRename={renameDevice}
+        />
       {/if}
     </section>
 
@@ -718,9 +678,8 @@
 
 <style>
   .accountdevices { margin-top: var(--section-gap); }
-  /* 行本身的样式跟着 <li> 一起搬到了 DeviceCard.svelte —— Svelte 的样式是按组件
-     作用域的，留在这里的 `.devicelist li` 选择器不会命中子组件里的那个 li。 */
-  .devicelist { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+  /* 列表和行的样式都跟着元素搬进了 DeviceSendList / DeviceCard —— Svelte 的样式是
+     按组件作用域的，留在这里的 `.devicelist` 选择器不会命中子组件里的那个 ul。 */
   /* 通往 /cli 上「设备收件箱」那一节的入口。空列表和"一台都没开收件箱"两种状态下
      都要有——这两种状态才是用户真正卡住的地方。 */
   .setup { margin: var(--space-2) 0 0; font-size: var(--fs-sm); }

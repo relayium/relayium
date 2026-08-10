@@ -20,17 +20,30 @@
  *         fetched and proven to be a real page)
  *      →  signed out: the account dialog actually opens, on the half the button
  *         promised
- *      →  signed in: a state-appropriate next step and a working My Devices route
+ *      →  signed in: THIS account's real devices, on this page, with a working
+ *         send control on each one that can receive — exercised by a genuine
+ *         file drop and by keyboard activation of the picker, WITHOUT navigating
+ *         anywhere. My Devices is checked as what it now is: a secondary route
+ *         for renaming and revoking.
+ *
+ * It used to end by clicking through to /me, because that was where the send
+ * controls lived. That is no longer the primary path and is no longer asserted
+ * as one — a passing test for a journey the product does not want people to walk
+ * is worse than no test, because it defends the detour.
  *
  * No real backend: /api/* is answered by the same fixture injection the a11y
- * scan uses. What is under test is the web product, not the server.
+ * scan uses. The drop therefore encrypts and uploads for real and the upload is
+ * refused by `vite preview`, which is exactly the point of the assertion made
+ * about it: the card must report an honest failure and must never claim
+ * delivery. A real central, a real receiver and a real file on disk are
+ * device-inbox.mjs's job.
  */
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { apiFixtureScript, ME_ROUTES } from "./a11y-fixtures.mjs";
+import { apiFixtureScript, ME_DEVICES, ME_ROUTES } from "./a11y-fixtures.mjs";
 import { argFlag, fail, launchBrowser, newTab, ok, sleep, withWatchdog } from "./harness.mjs";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
@@ -52,6 +65,26 @@ const PLATFORMS = ["server", "linux", "macos", "windows", "iphone", "android"];
  *  so the signed-out run injects nothing and lets the request 404 through
  *  preview, which auth.svelte treats as no session. */
 const SIGNED_IN_ROUTES = ME_ROUTES;
+
+/** The fixture's four devices, split the way the page must split them: two that
+ *  can be sent to (online+automatic, offline+ask) and two that cannot
+ *  (receiving off, enrolment revoked). Derived from the fixture rather than
+ *  hard-coded, so adding a row there cannot silently weaken this. */
+const SENDABLE = ME_DEVICES.devices.filter(
+  (d) => d.Inbox && !d.Inbox.Revoked && d.Inbox.CanReceive && d.Inbox.AutoAccept !== "off",
+);
+const UNSENDABLE = ME_DEVICES.devices.filter((d) => !SENDABLE.includes(d));
+
+/** Observe, never replace: a record of every `input.click()` so keyboard
+ *  activation of the send button is provable without opening an OS picker. */
+const PAGE_HOOKS = `
+  window.__inbox = { picker: 0 };
+  const realClick = HTMLInputElement.prototype.click;
+  HTMLInputElement.prototype.click = function () {
+    if (this.type === "file") { window.__inbox.picker++; return; }
+    return realClick.call(this);
+  };
+`;
 
 let preview = null;
 
@@ -88,10 +121,11 @@ const VIEWS = [
   { id: "arabic-rtl", width: 1440, height: 900, lang: "ar", rtl: true },
 ];
 
-async function openTab(browser, base, view, path, routes) {
+async function openTab(browser, base, view, path, routes, extra = "") {
   const tab = await newTab(browser, base + path, [
     routes ? apiFixtureScript(routes) : "",
     `try { localStorage.setItem("relayium-lang", ${JSON.stringify(view.lang)}); } catch {}`,
+    extra,
   ].filter(Boolean).join("\n"));
   await tab.send("Emulation.setDeviceMetricsOverride", {
     width: view.width, height: view.height, deviceScaleFactor: 1, mobile: view.width < 700,
@@ -252,6 +286,9 @@ async function checkPage(tab, base, view) {
   if (guide.status !== 200) throw new Error(`${view.id}: ${guideHref} answered ${guide.status}`);
   const guideHtml = await guide.text();
   if (!/<h1[^>]*>/.test(guideHtml)) throw new Error(`${view.id}: ${guideHref} is not a rendered guide page`);
+  if (!/<a class="cta" href="\/device-inbox">/.test(guideHtml)) {
+    throw new Error(`${view.id}: ${guideHref} still sends the reader away from Device Inbox to operate it`);
+  }
 
   if (view.rtl) {
     const dir = await tab.evaluate(`getComputedStyle(document.querySelector(".dinbox")).direction`);
@@ -315,13 +352,20 @@ async function checkSignedOut(tab, view) {
   ok(`${view.id}: both signed-out controls open the real account dialog`);
 }
 
-/** Signed in: a state-appropriate next step, and My Devices actually reached. */
+/**
+ * Signed in: this account's own devices, operable HERE.
+ *
+ * The whole point of the change this guards: a signed-in owner reaches a working
+ * send target without a second navigation. So every assertion below happens on
+ * /device-inbox, and the only thing done to /me is confirming that the secondary
+ * management route still resolves.
+ */
 async function checkSignedIn(browser, base, view) {
-  const tab = await openTab(browser, base, view, "/device-inbox", SIGNED_IN_ROUTES);
+  const tab = await openTab(browser, base, view, "/device-inbox", SIGNED_IN_ROUTES, PAGE_HOOKS);
   await tab.waitFor(`!!document.querySelector('[data-di="next-step"]')`, `${view.id}: the signed-in next step`);
 
   const state = await tab.evaluate(`document.querySelector('[data-di="start"]').getAttribute("data-state")`);
-  // The fixture holds one device that can receive plus three that cannot, so
+  // The fixture holds two devices that can receive plus two that cannot, so
   // "ready" is the only correct answer. "checking" or "unknown" here would mean
   // the page never resolved the account it is signed in to.
   if (state !== "ready") throw new Error(`${view.id}: signed-in state is ${state}, expected ready`);
@@ -330,14 +374,121 @@ async function checkSignedIn(browser, base, view) {
   const lead = await tab.evaluate(`document.querySelector(".start .lead").textContent`);
   if (!lead.includes("@")) throw new Error(`${view.id}: the start block does not name the signed-in account`);
 
-  const badCta = await tab.evaluate(VISIBLE('[data-di="my-devices"]'));
-  if (badCta) throw new Error(`${view.id}: the My Devices action is ${badCta}`);
+  // ── the rows themselves, on this page ──────────────────────────────────
+  await tab.waitFor(
+    `document.querySelectorAll('[data-di="devices"] li').length === ${ME_DEVICES.devices.length}`,
+    `${view.id}: every supported device of this account is listed on the page`,
+  );
+  const rows = await tab.evaluate(`
+    [...document.querySelectorAll('[data-di="devices"] li')].map((li) => ({
+      name: li.querySelector(".devicename")?.textContent ?? "",
+      sendzone: !!li.querySelector(".sendzone"),
+      button: !!li.querySelector("button.sendbtn"),
+      blocked: (li.querySelector(".inboxblocked")?.textContent ?? "").trim(),
+      revoke: !!li.querySelector("button.del"),
+      ref: (li.querySelector(".deviceref")?.textContent ?? "").trim(),
+    }))
+  `);
+  for (const d of SENDABLE) {
+    const row = rows.find((r) => r.name === d.Name);
+    if (!row) throw new Error(`${view.id}: no row for the sendable device ${d.Name}`);
+    if (!row.sendzone || !row.button) {
+      throw new Error(`${view.id}: ${d.Name} can receive but has no send control on this page`);
+    }
+  }
+  for (const d of UNSENDABLE) {
+    const row = rows.find((r) => r.name === d.Name);
+    if (!row) throw new Error(`${view.id}: the unsendable device ${d.Name} was dropped from the list`);
+    if (row.sendzone) throw new Error(`${view.id}: ${d.Name} cannot receive but was offered a drop target`);
+    if (!row.blocked) throw new Error(`${view.id}: ${d.Name} is unsendable with no reason given`);
+  }
+  // Identity survives the embedding: two machines can share a label, and the id
+  // fragment is what tells a send target apart from its namesake.
+  if (!rows.every((r) => r.ref)) {
+    throw new Error(`${view.id}: a row lost its id fragment: ${JSON.stringify(rows.map((r) => r.ref))}`);
+  }
+  // Credential management does NOT: revoke is irreversible and would sit beside
+  // a drop target.
+  if (rows.some((r) => r.revoke)) {
+    throw new Error(`${view.id}: a destructive revoke control reached the send surface`);
+  }
+
+  // Every send control is actually on screen at this width — at 390px and in
+  // Arabic as much as at 1440px. A drop target that overflows the viewport is
+  // not a drop target.
+  const zoneVisible = await tab.evaluate(`(() => {
+    const zones = [...document.querySelectorAll('[data-di="devices"] .sendzone')];
+    if (!zones.length) return "no send zone at all";
+    for (const z of zones) {
+      const r = z.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) return "a send zone is zero-sized";
+      if (r.right > document.documentElement.clientWidth + 1) return "a send zone overflows the viewport";
+    }
+    return "";
+  })()`);
+  if (zoneVisible) throw new Error(`${view.id}: ${zoneVisible}`);
+
+  // ── keyboard reaches the picker, on this page ──────────────────────────
+  await tab.evaluate(`document.querySelector('[data-di="devices"] button.sendbtn').focus(); true`);
+  if (!(await tab.evaluate(`document.activeElement?.classList.contains("sendbtn")`))) {
+    throw new Error(`${view.id}: the send button would not take keyboard focus`);
+  }
+  for (const type of ["keyDown", "char", "keyUp"]) {
+    await tab.send("Input.dispatchKeyEvent", {
+      type, key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13,
+      text: type === "char" ? "\r" : undefined,
+    });
+  }
+  if (!(await tab.evaluate(`window.__inbox.picker`))) {
+    throw new Error(`${view.id}: Enter on the focused send button did not open the file picker`);
+  }
+
+  // ── a genuine file drop, from this page ────────────────────────────────
+  // Real File objects from the page's own realm, on the real drop target. The
+  // browser encrypts and tries to upload for real; `vite preview` has no upload
+  // endpoint, so what is asserted is that the card SAYS something true about
+  // the failure rather than staying silent or claiming delivery.
+  await tab.evaluate(`(() => {
+    const zone = document.querySelector('[data-di="devices"] .sendzone');
+    const dt = new DataTransfer();
+    dt.items.add(new File([new TextEncoder().encode("device inbox in-page drop")], "in-page.txt"));
+    zone.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true }));
+    return true;
+  })()`);
+  // `.bad` is the class the card uses for a settled failure, so waiting for it
+  // rather than for "any text" means this cannot be satisfied by catching a
+  // mid-flight "Encrypting…" and calling that a reported outcome.
+  await tab.waitFor(
+    `(document.querySelector('[data-di="devices"] .sendstatus.bad')?.textContent ?? "").trim().length > 0`,
+    `${view.id}: the drop ran through encryption and upload and reported an honest failure`,
+    30_000,
+  );
+  const outcome = await tab.evaluate(
+    `document.querySelector('[data-di="devices"] .sendstatus').textContent.trim()`,
+  );
+  // Nothing was ever saved anywhere here, so no wording that implies it may
+  // appear. `.sendstatus.ok` is the class the card uses for a real delivery.
+  const claimed = await tab.evaluate(
+    `!!document.querySelector('[data-di="devices"] .sendstatus.ok')`,
+  );
+  if (claimed) throw new Error(`${view.id}: the card claimed delivery for a send that never landed: ${outcome}`);
+  // The file name must never reach the DOM — the manifest is encrypted.
+  if (await tab.evaluate(`document.body.textContent.includes("in-page.txt")`)) {
+    throw new Error(`${view.id}: a dropped file name appeared on the page`);
+  }
+
+  // ── the secondary route, still a route ─────────────────────────────────
+  const badManage = await tab.evaluate(VISIBLE('[data-di="my-devices"]'));
+  if (badManage) throw new Error(`${view.id}: the manage-devices link is ${badManage}`);
   await tab.evaluate(`document.querySelector('[data-di="my-devices"]').click()`);
-  await tab.waitFor(`location.pathname === "/me"`, `${view.id}: My Devices is reached`);
+  await tab.waitFor(`location.pathname === "/me"`, `${view.id}: My Devices is still reachable for management`);
   await tab.waitFor(`document.querySelectorAll(".devicelist li").length > 0`, `${view.id}: the device list renders`);
+  if (!(await tab.evaluate(`!!document.querySelector(".devicelist li button.del")`))) {
+    throw new Error(`${view.id}: /me no longer offers revoke — management has nowhere left to happen`);
+  }
 
   if (tab.errors.length) throw new Error(`${view.id}: page errors — ${tab.errors.join(" / ")}`);
-  ok(`${view.id}: signed in → a true next step → My Devices`);
+  ok(`${view.id}: signed in → real devices, a real drop and a keyboard picker, all without leaving the page`);
 }
 
 await withWatchdog("device-inbox-entry", GLOBAL_TIMEOUT_MS, async () => {

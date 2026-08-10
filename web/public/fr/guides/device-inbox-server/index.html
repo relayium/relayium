@@ -85,7 +85,7 @@ footer a{color:var(--text-h);text-decoration:none}
            generated Arabic page. -->
       <p class="updated">Dernière mise à jour: <bdi>2026-08-09</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/device-inbox-server/">English</a><a href="/zh/guides/device-inbox-server/">中文</a><a href="/ja/guides/device-inbox-server/">日本語</a><a href="/ko/guides/device-inbox-server/">한국어</a><a href="/de/guides/device-inbox-server/">Deutsch</a><a href="/fr/guides/device-inbox-server/" aria-current="true">Français</a><a href="/ar/guides/device-inbox-server/">العربية</a><a href="/es/guides/device-inbox-server/">Español</a><a href="/pt/guides/device-inbox-server/">Português</a></nav>
-      <p class="lead">Device Inbox envoie un fichier depuis Mes appareils dans le navigateur vers votre serveur, NAS ou poste de travail. Le navigateur le chiffre et seule la machine cible le déchiffre et l&#39;enregistre.</p>
+      <p class="lead">Device Inbox envoie un fichier depuis sa propre page dans le navigateur vers votre serveur, NAS ou poste de travail. Le navigateur le chiffre et seule la machine cible le déchiffre et l&#39;enregistre.</p>
       <p class="lead">Un récepteur de serveur doit survivre à la fermeture de SSH et au redémarrage. L&#39;installateur recommandé crée le dossier et un vrai service systemd. inbox run reste réservé au diagnostic au premier plan ou au conteneur.</p>
       <h2>Installer le récepteur permanent</h2>
       <p>Connectez d&#39;abord la machine, puis téléchargez et examinez le script avant de lui accorder les droits root. Il copie l&#39;identifiant sans l&#39;afficher, crée un compte relayium dédié, inscrit la clé, installe l&#39;unité renforcée, la démarre et l&#39;active au redémarrage.</p>
@@ -121,8 +121,8 @@ sudo -u relayium relayium inbox disable --config-dir /var/lib/relayium-inbox/con
       <h3>Puis-je faire l&#39;installation manuellement ?</h3>
       <p>Oui. relayium inbox service systemd-user ou systemd-system imprime une unité adaptée et ses commandes. Des descriptions launchd et container existent aussi. Le script examiné est simplement le chemin Linux le plus court.</p>
       <div class="ctacard">
-        <p>Quand le service indique ready, envoyez un fichier depuis votre fiche d&#39;appareil.</p>
-        <a class="cta" href="/me">Ouvrir Mes appareils</a>
+        <p>Quand le service indique ready, envoyez un fichier depuis sa fiche dans Device Inbox.</p>
+        <a class="cta" href="/device-inbox">Ouvrir Device Inbox</a>
       </div>
       <h2>Continuer la lecture</h2>
       <ul class="related"><li><a href="/fr/guides/transfer-files-from-terminal/">Transférer fichiers et texte depuis le terminal avec la CLI Relayium</a></li><li><a href="/fr/guides/run-relayium-as-an-always-on-service/">Faire tourner Relayium en service de réception permanent</a></li><li><a href="/fr/guides/how-relayium-encrypts-your-files/">Comment Relayium chiffre vos fichiers de bout en bout</a></li><li><a href="/fr/how-to/automate-server-backups/">Automatiser les sauvegardes serveur chiffrées avec une tâche cron</a></li><li><a href="/fr/">Relayium</a></li></ul>

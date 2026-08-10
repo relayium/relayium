@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
-  import { navigate, PRICING_PATH, ME_PATH } from "./router.svelte";
+  import { navigate, PRICING_PATH, DEVICE_INBOX_PATH } from "./router.svelte";
   import CommandBlock from "./CommandBlock.svelte";
   import Icon from "./Icon.svelte";
   import { PICK_MODES, FLAG_ROWS, TRUST_FILES, GUIDES } from "./cli-page-data";
@@ -207,8 +207,14 @@ relayium down 'https://relayium.com/d/7fK2p…#k=Xr8s…' ./dest`;
       </li>
       <li>
         <strong>{t.cliPage.inboxStep4Label}</strong> {t.cliPage.inboxStep4Body}
+        <!-- /device-inbox, not /me: the send controls are on the Device Inbox
+             page itself, and My Devices is where a credential is renamed or
+             revoked. Sending someone to /me to send a file would be one more
+             hop to reach the thing this step is describing. -->
         <p class="cta">
-          <a href={ME_PATH} onclick={(e) => { e.preventDefault(); navigate("me"); }}>{t.cliPage.inboxCta}</a>
+          <a href={DEVICE_INBOX_PATH} onclick={(e) => { e.preventDefault(); navigate("device-inbox"); }}>
+            {t.cliPage.inboxCta}
+          </a>
         </p>
         <p class="alt">{t.cliPage.inboxCtaHint}</p>
       </li>

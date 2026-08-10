@@ -1,8 +1,10 @@
 <script lang="ts">
-  // /device-inbox — the public, first-class entry point for Device Inbox.
+  // /device-inbox — the public, first-class entry point for Device Inbox, and
+  // the place the feature is actually OPERATED.
   //
-  // This is not a marketing stub with a link to the docs. It has to do four
-  // things the PRD (§12) names explicitly:
+  // This is not a marketing stub with a link to the docs, and it is no longer a
+  // census with a link to My Devices either. It has to do five things the PRD
+  // (§12) names explicitly:
   //
   //  1. Explain the model: browser → a folder on a machine YOU own, encrypted
   //     before it leaves the browser, queued while that machine is offline, and
@@ -11,10 +13,20 @@
   //     explicitly switched on at the device — and keep a public share link
   //     visibly separate from the permission to write to a disk.
   //  3. Give a signed-out visitor something executable (the real Account modal,
-  //     not a paragraph telling them to sign in) and a signed-in one their own
-  //     next step, derived from their actual device list.
+  //     not a paragraph telling them to sign in), and a signed-in one THEIR OWN
+  //     DEVICES with a working send control on each one that has an inbox. The
+  //     journey ends here; /me is for renaming and revoking credentials.
   //  4. Name six platforms with an honest status each, and show NO command and
   //     NO button for a native product that does not exist.
+  //  5. Never invent a device state. "Checking", "we could not find out",
+  //     "you have none", "you have some but none can receive" and "here are N
+  //     you can send to" are five different answers and get five different
+  //     sentences.
+  //
+  // The rows, the send zone, the crypto, the polling and the cancel are NOT
+  // implemented here: they are DeviceSendList → DeviceCard → device-send.ts,
+  // the same components My Devices renders, with credential management switched
+  // off. This file owns the data and the five states, nothing else.
   //
   // The locale-invariant half — statuses, commands, paths — is in
   // device-inbox-platforms.ts; every sentence around it is in the nine locale
@@ -24,7 +36,8 @@
   import { navigate, ME_PATH, CLI_PATH } from "./router.svelte";
   import { session, refreshSession } from "./auth.svelte";
   import { setLoginOpen } from "./login.svelte";
-  import { parseDeviceInbox, sendAvailability, DEVICE_REFRESH_MS } from "./device-inbox";
+  import { DEVICE_REFRESH_MS } from "./device-inbox";
+  import { censusOf, supportedDevices, type DeviceRow } from "./device-list";
   import {
     INBOX_PLATFORMS,
     SERVER_GUIDE_SLUG,
@@ -34,6 +47,7 @@
     type PlatformStatus,
   } from "./device-inbox-platforms";
   import CommandBlock from "./CommandBlock.svelte";
+  import DeviceSendList from "./DeviceSendList.svelte";
   import releases from "../../native-releases.json";
 
   type MacRelease = { available: boolean; downloadUrl: string | null };
@@ -48,22 +62,16 @@
     macRelease?: MacRelease;
     /** Resolves to the raw device rows, or null when the account's devices
      *  could not be determined. Null is NOT an empty list — see `startState`. */
-    fetchDevices?: () => Promise<DeviceRow[] | null>;
+    fetchDevices?: () => Promise<unknown[] | null>;
   } = $props();
 
   const t = $derived<Messages>(messages[lang()]);
 
-  interface DeviceRow {
-    ID: string;
-    Kind: string;
-    Inbox?: unknown;
-  }
-
-  async function defaultFetchDevices(): Promise<DeviceRow[] | null> {
+  async function defaultFetchDevices(): Promise<unknown[] | null> {
     try {
       const res = await fetch("/api/devices", { credentials: "include" });
       if (!res.ok) return null;
-      const body = (await res.json()) as { devices?: DeviceRow[] };
+      const body = (await res.json()) as { devices?: unknown[] };
       return body.devices ?? [];
     } catch {
       return null; // offline / DNS / CORS — an absence of knowledge, not an empty account
@@ -72,13 +80,18 @@
 
   // ── Account-aware state ──────────────────────────────────────────────────
   //
-  // Three flags rather than one nullable census, because "not asked yet",
+  // Separate flags rather than one nullable list, because "not asked yet",
   // "asked and failed" and "asked and got an answer" have to stay apart. A
   // failed request rendered as "no devices" (or as "ready") is the false
   // device-ready claim this page is not allowed to make.
+  let devices = $state<DeviceRow[]>([]);
   let devicesLoaded = $state(false);
   let devicesFailed = $state(false);
-  let census = $state<DeviceCensus>({ total: 0, withInbox: 0 });
+  /** A REFRESH failed while a trustworthy list was already on screen. Its own
+   *  flag, not `devicesFailed`: the rows are still the last thing the server
+   *  actually said, and throwing them away would unmount a card mid-upload. */
+  let refreshFailed = $state(false);
+  const census = $derived<DeviceCensus>(censusOf(devices));
   /** Which sign-in the in-flight request belongs to; a late answer from a
    *  previous account must not repaint the current one. */
   let deviceGen = 0;
@@ -90,27 +103,39 @@
     // forever — a spinner that never resolves is a claim about nothing, and the
     // effect that called this would reject unhandled. A throw means the same
     // thing a non-ok response means: we do not know.
-    let rows: DeviceRow[] | null = null;
+    let rows: unknown[] | null = null;
     try {
       rows = await fetchDevices();
     } catch {
       rows = null;
     }
     if (gen !== deviceGen) return;
-    if (rows === null) {
-      devicesFailed = true;
-      devicesLoaded = false;
+    if (rows === null || !Array.isArray(rows)) {
+      // Two different failures, and conflating them is what this branch exists
+      // to prevent. With nothing loaded yet the honest answer is "we do not
+      // know" — never "you have none". With a list already on screen, the last
+      // successful answer is still the best available truth: the rows stay,
+      // presence may be briefly stale, and a note says so. Clearing them would
+      // destroy every card, and with it any send running inside one.
+      if (devicesLoaded) refreshFailed = true;
+      else devicesFailed = true;
       return;
     }
-    census = {
-      total: rows.length,
-      // "Ready to receive" is decided by the same function the send controls
-      // use (device-inbox.ts), not by a second, looser rule that could call a
-      // revoked or key-less device ready on this page alone.
-      withInbox: rows.filter((d) => sendAvailability(d.ID, parseDeviceInbox(d.Inbox)).sendable).length,
-    };
+    // `supportedDevices` is what /me lists too, so both pages agree on which
+    // rows exist, in which order, before either says anything about them.
+    devices = supportedDevices(rows);
     devicesLoaded = true;
     devicesFailed = false;
+    refreshFailed = false;
+  }
+
+  /** Everything this account could see, dropped. Called on sign-out and on an
+   *  account switch, BEFORE any request for the new account can land. */
+  function clearDevices() {
+    devices = [];
+    devicesLoaded = false;
+    devicesFailed = false;
+    refreshFailed = false;
   }
 
   // Load once per signed-in account, and re-load if a sign-in happens while the
@@ -121,17 +146,13 @@
     if (uid && uid !== loadedFor) {
       loadedFor = uid;
       const gen = ++deviceGen;
-      devicesLoaded = false;
-      devicesFailed = false;
-      census = { total: 0, withInbox: 0 };
+      clearDevices();
       void loadDevices(gen);
     }
     if (!uid && loadedFor) {
       loadedFor = "";
       deviceGen++;
-      devicesLoaded = false;
-      devicesFailed = false;
-      census = { total: 0, withInbox: 0 };
+      clearDevices();
     }
   });
 
@@ -139,10 +160,31 @@
   // every rune in this file stops compiling.
   const step = $derived(startState(devicesLoaded, devicesFailed, census));
 
-  // Presence expires (90s TTL against a 30s heartbeat), so a count fetched once
-  // and never refreshed would keep claiming a device is ready long after it
+  /** Retry after a failed lookup. The one state whose remedy is a request, so
+   *  it is the one state that gets a button instead of a sentence alone. */
+  function retryDevices() {
+    if (!session().user) return;
+    const gen = ++deviceGen;
+    devicesFailed = false;
+    void loadDevices(gen);
+  }
+
+  // Presence expires (90s TTL against a 30s heartbeat), so a list fetched once
+  // and never refreshed would keep claiming a device is online long after it
   // stopped being. Bounded, and only while the tab is actually visible.
   let presenceTick: ReturnType<typeof setInterval> | undefined;
+
+  function refreshIfVisible() {
+    if (typeof document !== "undefined" && document.hidden) return;
+    if (!session().user) return;
+    void loadDevices(deviceGen);
+  }
+
+  /** Coming back to the tab refreshes immediately rather than waiting out the
+   *  rest of an interval that did not run while it was hidden. */
+  function onVisibility() {
+    if (typeof document !== "undefined" && !document.hidden) refreshIfVisible();
+  }
 
   onMount(() => {
     // A page whose whole point is an account has to know whether it has one.
@@ -150,11 +192,8 @@
     // unhandled rejection here would leave the page stuck on "checking".
     void refreshSession().catch(() => {});
 
-    presenceTick = setInterval(() => {
-      if (typeof document !== "undefined" && document.hidden) return;
-      if (!session().user) return;
-      void loadDevices(deviceGen);
-    }, DEVICE_REFRESH_MS);
+    presenceTick = setInterval(refreshIfVisible, DEVICE_REFRESH_MS);
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVisibility);
 
     // Land on the section the link named. The SPA shell's <body> is empty when
     // the document loads, so the browser's own fragment handling has already
@@ -172,6 +211,7 @@
 
     return () => {
       if (presenceTick !== undefined) clearInterval(presenceTick);
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility);
       deviceGen++;
     };
   });
@@ -246,8 +286,10 @@
     </div>
   </div>
 
-  <!-- Start: the half of the page that is not an article. Signed out, it opens
-       the real Account modal; signed in, it reports this account's own state. -->
+  <!-- Start: the operational half of the page, and the whole journey for a
+       signed-in owner. Signed out it opens the real Account modal; signed in it
+       renders this account's own devices, each with the send control that
+       actually works, and says which of the five states it is in. -->
   <div class="block start" id="start" data-di="start" data-state={session().user ? step : "signed-out"}>
     <h2>{t.deviceInboxPage.startH2}</h2>
 
@@ -260,11 +302,41 @@
         {:else if step === "no-inbox"}{t.deviceInboxPage.stateNoInbox(census.total)}
         {:else}{t.deviceInboxPage.stateReady(census.withInbox)}{/if}
       </p>
+
+      <!-- The rows. Rendered whenever the account HAS devices, sendable or not:
+           a machine that cannot receive is not missing, it is a machine with a
+           reason, and the card carries that reason. Hiding it would leave the
+           owner comparing a count against a list that does not include it. -->
+      {#if devices.length > 0}
+        <div class="devices" data-di="devices">
+          <h3 class="devicesh">{t.deviceInboxPage.devicesH3}</h3>
+          <DeviceSendList {devices} label={t.deviceInboxPage.devicesH3} />
+        </div>
+      {/if}
+
+      <!-- A refresh that failed while the rows above are still on screen. They
+           are the last thing the server actually said, so they stay; this says
+           what may now be stale about them rather than pretending otherwise.
+           Only with rows: on an empty account there is no presence to have gone
+           stale, and the sentence would describe devices that are not there. -->
+      {#if refreshFailed && devices.length > 0}
+        <p class="stale" data-di="stale" role="status" aria-live="polite">{t.deviceInboxPage.refreshFailed}</p>
+      {/if}
+
       <p class="actions">
-        <a class="cta" href={ME_PATH} data-di="my-devices" onclick={goMyDevices}>{t.deviceInboxPage.myDevicesCta}</a>
+        {#if step === "unknown"}
+          <button class="cta" type="button" data-di="retry" onclick={retryDevices}>
+            {t.deviceInboxPage.retryCta}
+          </button>
+        {/if}
         {#if step !== "ready"}
           <a class="cta ghost" href="#platform-server" data-di="setup-server">{t.deviceInboxPage.setUpServerCta}</a>
         {/if}
+        <!-- Secondary, and deliberately not a send path: renaming and revoking
+             are credential management, and this page's rows do not offer them. -->
+        <a class="manage" href={ME_PATH} data-di="my-devices" onclick={goMyDevices}>
+          {t.deviceInboxPage.manageDevicesCta}
+        </a>
       </p>
     {:else}
       <p class="lead">{t.deviceInboxPage.signedOutLead}</p>
@@ -339,8 +411,11 @@
           <dt>{t.deviceInboxPage.labelSend}</dt>
           <dd>
             <p>{copy(p).send}</p>
+            <!-- Back UP this page to the block that does it, not off to another
+                 route. The send target for this platform is the card in the
+                 start block, once this account has such a device. -->
             <p class="alt">
-              <a href={ME_PATH} data-di={`send-${p.id}`} onclick={goMyDevices}>{t.deviceInboxPage.myDevicesCta}</a>
+              <a href="#start" data-di={`send-${p.id}`}>{t.deviceInboxPage.sendHereCta}</a>
             </p>
           </dd>
 
@@ -502,6 +577,23 @@
     color: var(--text-h);
     margin-bottom: var(--space-4);
   }
+  /* The operational block sits between the state sentence and the actions, and
+     gets room of its own: it contains drop targets, and a drop target crowded
+     against a paragraph reads as decoration. */
+  .devices {
+    margin: 0 0 var(--space-5);
+  }
+  .devicesh {
+    font-size: var(--fs-h3);
+    color: var(--text-h);
+    margin: 0;
+  }
+  .stale {
+    margin: 0 0 var(--space-4);
+    font-size: var(--fs-sm);
+    color: var(--danger);
+    max-width: 68ch;
+  }
   .actions {
     display: flex;
     flex-wrap: wrap;
@@ -528,9 +620,17 @@
     background: var(--social-bg);
     border-color: var(--accent-border);
   }
-  .cta:focus-visible {
+  .cta:focus-visible,
+  .manage:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
+  }
+  /* Secondary by construction: a plain link beside the filled actions, so it
+     cannot be mistaken for the way to send something. */
+  .manage {
+    align-self: center;
+    font-size: var(--fs-sm);
+    color: var(--accent-fg);
   }
 
   /* Platform sections */

@@ -44,6 +44,14 @@ type Claims = {
   enableThere: RegExp;
   /** Offline means the task WAITS. */
   queues: RegExp;
+  /** This locale's name for the My Devices page.
+   *
+   *  Used NEGATIVELY, on the sentences that tell a signed-in owner how to send:
+   *  sending happens on /device-inbox itself now, and copy that still routes
+   *  them to another page is a detour only speakers of that language ever walk.
+   *  A single English regex would pass vacuously in eight of nine locales — the
+   *  exact failure this file's header warns about. */
+  myDevices: RegExp;
 };
 
 const claims: Record<Code, Claims> = {
@@ -52,54 +60,63 @@ const claims: Record<Code, Claims> = {
     linkBoundary: /never make one of your devices write to disk/i,
     enableThere: /cannot be made for it from the web/i,
     queues: /waits in the queue/i,
+    myDevices: /My Devices/i,
   },
   zh: {
     notSaved: /设备把文件写进磁盘/,
     linkBoundary: /永远不能让你的某台设备往磁盘里写/,
     enableThere: /无法从网页替它做/,
     queues: /留在队列里/,
+    myDevices: /我的设备/,
   },
   ja: {
     notSaved: /ディスクに書き込んだ/,
     linkBoundary: /ディスク書き込みをさせることは決してありません/,
     enableThere: /ウェブ側から代行することはできません/,
     queues: /キューで待ち/,
+    myDevices: /My Devices|マイデバイス/,
   },
   ko: {
     notSaved: /디스크에 파일을 쓴/,
     linkBoundary: /디스크 기록을 시키는 일은 결코 없습니다/,
     enableThere: /웹에서 대신해 줄 수는 없습니다/,
     queues: /대기열에서 기다리다가/,
+    myDevices: /My Devices|내 기기/,
   },
   de: {
     notSaved: /die Datei geschrieben/i,
     linkBoundary: /niemals eines deiner Geräte dazu bringen, auf die Festplatte zu schreiben/i,
     enableThere: /kann das Web nicht stellvertretend treffen/i,
     queues: /wartet in der Warteschlange/i,
+    myDevices: /Meine Geräte/i,
   },
   fr: {
     notSaved: /écrit le fichier sur son disque/i,
     linkBoundary: /jamais faire écrire l'un de vos appareils sur son disque/i,
     enableThere: /ne peut pas être fait à sa place depuis le web/i,
     queues: /attend dans la file/i,
+    myDevices: /Mes appareils/i,
   },
   ar: {
     notSaved: /كتب الجهاز الملف على القرص/,
     linkBoundary: /أن يجعل أحد أجهزتك يكتب على القرص أبدًا/,
     enableThere: /لا يمكن اتخاذه نيابة عنه من الويب/,
     queues: /تنتظر المهمة المشفّرة في الطابور/,
+    myDevices: /أجهزتي/,
   },
   es: {
     notSaved: /el dispositivo escribió el archivo en disco/i,
     linkBoundary: /nunca puede hacer que uno de tus dispositivos escriba en disco/i,
     enableThere: /no se puede tomar por él desde la web/i,
     queues: /espera en la cola/i,
+    myDevices: /Mis dispositivos/i,
   },
   pt: {
     notSaved: /o dispositivo gravou o arquivo em disco/i,
     linkBoundary: /nunca pode fazer um dispositivo seu gravar em disco/i,
     enableThere: /não pode ser feita pela web em nome dele/i,
     queues: /espera na fila/i,
+    myDevices: /Meus dispositivos/i,
   },
 };
 
@@ -150,6 +167,36 @@ describe.each(CODES)("%s /device-inbox copy", (code) => {
     expect(Object.keys(d.platforms).sort()).toEqual([...REQUIRED_PLATFORM_IDS].sort());
   });
 
+  // The page IS the send surface now. Every sentence that answers "how do I
+  // send to this thing" has to answer it with this page — the whole point of
+  // moving the controls here is that the journey stops needing a second one.
+  it("never routes a send through My Devices", () => {
+    const sendCopy = [
+      d.signedOutLead,
+      d.stateNone,
+      d.stateUnknown,
+      d.stateReady(2),
+      d.stateNoInbox(2),
+      d.howSteps[1],
+      d.sendHereCta,
+      ...REQUIRED_PLATFORM_IDS.map((id) => d.platforms[id].send),
+      ...REQUIRED_PLATFORM_IDS.map((id) => d.platforms[id].setup),
+    ];
+    for (const [i, s] of sendCopy.entries()) {
+      expect(s, `${code} sendCopy[${i}] still sends the reader to another page`).not.toMatch(c.myDevices);
+    }
+  });
+
+  // The other half, so the rule above cannot be satisfied by deleting the link:
+  // /me still has a job — renaming and revoking — and this page still says so.
+  it("keeps a secondary route to the page that manages credentials", () => {
+    expect(d.manageDevicesCta.trim().length).toBeGreaterThan(0);
+    expect(d.docsMyDevices.trim().length).toBeGreaterThan(0);
+    for (const s of [d.devicesH3, d.retryCta, d.refreshFailed]) {
+      expect(s.trim().length, `${code} is missing an operational-block string`).toBeGreaterThan(0);
+    }
+  });
+
   it("carries every list the page iterates, non-empty", () => {
     for (const [name, list] of [
       ["badges", d.badges],
@@ -198,7 +245,8 @@ describe("the nine locales are nine translations, not nine copies of English", (
         d.metaTitle, d.metaDesc, d.heading, d.subhead, d.howLead, d.notSavedH3, d.notSavedBody,
         d.prereqAccount, d.prereqSameAccount, d.prereqEnable, d.prereqOffline,
         d.linkBoundaryH3, d.linkBoundary, d.startH2, d.startChecking, d.signedOutLead,
-        d.signInCta, d.createAccountCta, d.myDevicesCta, d.stateUnknown, d.stateNone,
+        d.signInCta, d.createAccountCta, d.stateUnknown, d.stateNone,
+        d.devicesH3, d.manageDevicesCta, d.sendHereCta, d.retryCta, d.refreshFailed,
         d.setUpServerCta, d.platformsH2, d.platformsLead,
         d.statusAvailable, d.statusTesting, d.statusPlanned,
         d.labelUse, d.labelSetup, d.labelFiles, d.labelResidency, d.labelSend,

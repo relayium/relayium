@@ -508,7 +508,7 @@ const de: Messages = {
       "Der Geräte-Posteingang macht aus einem Rechner, der dir gehört, ein Ziel, das du beim Namen ansprechen kannst — ohne Freigabelink, ohne USB-Stick, ohne jemanden auf der anderen Seite. Es gibt keinen Port zu öffnen und keine Adresse zu merken: Der empfangende Rechner baut die Verbindung nach außen zu Relayium auf und holt sich seine Aufgaben selbst.",
     howSteps: [
       "Auf dem Rechner, der empfangen soll: anmelden, den Ordner wählen, in den er schreiben darf, und den Empfang dort einschalten. Vorher kommt nichts an.",
-      "In einem beliebigen Browser: mit demselben Konto anmelden und das Gerät unter Meine Geräte auswählen. Dein Browser verschlüsselt die Dateien und versiegelt den Inhaltsschlüssel für dieses Gerät, bevor irgendetwas hochgeladen wird.",
+      "In einem beliebigen Browser: mit demselben Konto anmelden und das Gerät auf dieser Seite auswählen. Dein Browser verschlüsselt die Dateien und versiegelt den Inhaltsschlüssel für dieses Gerät, bevor irgendetwas hochgeladen wird.",
       "Relayium speichert Geheimtext und Routing-Zustand. Der Dateiinhalt, der Dateiname und der Zielordner bleiben unlesbar, und es existiert dort kein Schlüssel, der sie öffnen könnte.",
       "Das Gerät holt die Aufgabe ab, entschlüsselt und prüft sie lokal und schreibt sie in den gewählten Ordner — ohne noch einmal nachzufragen und ohne jemals eine vorhandene Datei zu überschreiben.",
     ],
@@ -530,18 +530,23 @@ const de: Messages = {
     startH2: "Hier beginnen",
     startChecking: "Konto wird geprüft …",
     signedOutLead:
-      "Der Geräte-Posteingang braucht auf beiden Seiten ein Konto, deshalb fängt es hier an. Nach der Anmeldung erscheint jeder eingerichtete Rechner unter Meine Geräte als Ziel, an das du senden kannst.",
+      "Der Geräte-Posteingang braucht auf beiden Seiten ein Konto, deshalb fängt es hier an. Nach der Anmeldung erscheint jeder eingerichtete Rechner direkt hier, jeder empfangsbereite mit einem eigenen Sende-Bedienelement.",
     signInCta: "Anmelden",
     createAccountCta: "Konto erstellen",
     signedInLead: (email) => `Angemeldet als ${email}.`,
-    myDevicesCta: "Meine Geräte öffnen",
+    devicesH3: "Deine Geräte",
+    manageDevicesCta: "Geräte verwalten (umbenennen, widerrufen) →",
+    sendHereCta: "Von dieser Seite aus senden ↑",
+    retryCta: "Erneut prüfen",
+    refreshFailed:
+      "Gerade ließ sich nicht aktualisieren, deshalb kann veraltet sein, ob diese Geräte online sind. Die Liste selbst ist die letzte Antwort des Servers, und Senden funktioniert weiterhin.",
     stateUnknown:
-      "Deine Geräte ließen sich gerade nicht abfragen. Das sagt nichts darüber aus, ob eines empfangsbereit ist — den tatsächlichen Stand zeigt Meine Geräte.",
+      "Deine Geräte ließen sich gerade nicht abfragen. Das sagt nichts darüber aus, ob eines empfangsbereit ist — es heißt nur, dass noch keine Antwort vorliegt.",
     stateNone:
-      "Es hat sich noch kein Rechner an diesem Konto angemeldet. Richte einen nach der Anleitung unten ein, dann erscheint er unter Meine Geräte als Ziel.",
+      "Es hat sich noch kein Rechner an diesem Konto angemeldet. Richte einen nach der Anleitung unten ein, dann erscheint er hier als Ziel.",
     stateNoInbox: (n) =>
       `Angemeldete Geräte: ${n}. Bei keinem davon ist der Geräte-Posteingang eingeschaltet — schalte ihn am Rechner selbst ein, nach dem passenden Abschnitt unten.`,
-    stateReady: (n) => `Empfangsbereite Geräte: ${n}. Öffne Meine Geräte und leg eine Datei auf einem davon ab.`,
+    stateReady: (n) => `Empfangsbereite Geräte: ${n}. Leg unten Dateien auf einem davon ab oder nutze seine Schaltfläche „Dateien senden“.`,
     setUpServerCta: "Server-Empfänger einrichten",
     platformsH2: "Deine Plattform",
     platformsLead:
@@ -567,7 +572,7 @@ const de: Messages = {
           "/srv/relayium-inbox, sofern du kein anderes --dir angibst. Der Ordner gehört dem unprivilegierten Konto relayium, nicht root, und eine vorhandene Datei wird nie überschrieben.",
         residency:
           "Es ist ein echter Systemdienst: Er übersteht ein geschlossenes SSH-Fenster, eine Abmeldung und einen Neustart, und systemd startet ihn nach einem Absturz neu. Während der Server aus ist, warten die Aufgaben bei Relayium und werden nach der Rückkehr zugestellt.",
-        send: "Öffne Meine Geräte im Browser und leg Dateien auf der Karte dieses Servers ab.",
+        send: "Melde dich auf dieser Seite an und leg Dateien oben auf der Karte dieses Servers ab.",
         recovery:
           "Verschwindet der Empfangsordner — etwa weil ein Datenträger nicht eingehängt ist —, legt der Worker ihn nicht neu an, sondern meldet Handlungsbedarf, statt unter den fehlenden Mount zu schreiben. inbox status meldet Ordner, Anmeldedaten, Worker und Server getrennt; genau das unterscheidet die vier Fälle.",
         stop:
@@ -582,7 +587,7 @@ const de: Messages = {
           "Wohin du --dir gesetzt hast — oben ~/Relayium-inbox. Empfangene Dateien bekommen kein Ausführungsrecht und werden nicht für dich geöffnet, gestartet oder entpackt.",
         residency:
           "Ein Benutzerdienst läuft, solange deine Sitzung läuft, und endet mit der Abmeldung — es sei denn, du aktivierst Lingering für dein Konto, wofür einmal Root nötig ist. Das ist der ehrliche Unterschied zur Server-Variante.",
-        send: "Meine Geräte in jedem Browser, der an demselben Konto angemeldet ist.",
+        send: "Diese Seite in jedem Browser, der an demselben Konto angemeldet ist.",
         recovery:
           "relayium inbox status meldet Ordner, Anmeldedaten und Worker getrennt; ein erneutes inbox enable mit einem Ordner setzt die Verzeichnisberechtigung neu.",
         stop:
@@ -597,7 +602,7 @@ const de: Messages = {
           "Der Ordner, den du an --dir übergeben hast. Nichts wird überschrieben, nichts entpackt, und eine empfangene Datei wird nie für dich geöffnet.",
         residency:
           "Ein launchd-Benutzeragent läuft, solange du angemeldet bist, und kehrt nach einem Neustart zurück, sobald du dich wieder anmeldest. Er ist kein Systemdienst und empfängt nicht, während niemand angemeldet ist.",
-        send: "Meine Geräte im Browser oder von einem iPhone, das an demselben Konto angemeldet ist.",
+        send: "Diese Seite im Browser oder von einem iPhone, das an demselben Konto angemeldet ist.",
         recovery:
           "relayium inbox status unterscheidet ein Ordnerproblem von einem Anmeldeproblem. Wurde der Ordner verschoben oder haben sich seine Rechte geändert, führe inbox enable mit dem gewünschten Ordner erneut aus.",
         stop: "launchctl bootout entlädt den Agent; inbox disable widerruft den Posteingang und seine Schlüssel.",
@@ -610,7 +615,7 @@ const de: Messages = {
         files: "Der Ordner, den du an --dir übergeben hast — oben %USERPROFILE%\\Relayium-inbox.",
         residency:
           "Keiner über dieses offene Fenster hinaus. Das ist kein Dauerempfänger: Dafür nimmst du heute einen Linux-Server oder wartest auf die native App.",
-        send: "Meine Geräte in jedem Browser, der an demselben Konto angemeldet ist.",
+        send: "Diese Seite in jedem Browser, der an demselben Konto angemeldet ist.",
         recovery:
           "relayium inbox status benennt Ordner, Anmeldedaten und Worker getrennt, sodass sich ein fehlender Ordner von einer abgelaufenen Anmeldung unterscheiden lässt.",
         stop:
@@ -620,12 +625,12 @@ const de: Messages = {
         name: "iPhone",
         use: "Das Gerät, das man tatsächlich in der Hand hat, wenn ein Foto oder ein Dokument auf den Mac oder den Server soll.",
         setup:
-          "Das native Senden aus dem Teilen-Menü und der Empfang im Hintergrund sind geplant, nicht gebaut — hier gibt es also noch nichts zu installieren. Was heute geht: Relayium in Safari öffnen, anmelden und über Meine Geräte Dateien vom Telefon an den eigenen Mac, PC oder Server schicken.",
+          "Das native Senden aus dem Teilen-Menü und der Empfang im Hintergrund sind geplant, nicht gebaut — hier gibt es also noch nichts zu installieren. Was heute geht: Relayium in Safari öffnen, anmelden und von dieser Seite aus Dateien vom Telefon an den eigenen Mac, PC oder Server schicken.",
         files:
           "Noch nicht zutreffend — das iPhone ist heute die sendende Seite. Sobald die native App empfangen kann, landen Dateien in einem festen Relayium-Ordner in Dateien.",
         residency:
           "Es wird keiner behauptet und keiner geben. iOS lässt eine App nicht als allgemeinen Hintergrunddienst wach bleiben; Empfangen auf dem iPhone wird deshalb vom System eingeplante Hintergrundarbeit nach bestem Bemühen sein — nie dauerhaft an und nie garantiert sofort.",
-        send: "Meine Geräte in Safari, vom Telefon aus, an jedes Gerät mit eingeschaltetem Geräte-Posteingang.",
+        send: "Diese Seite in Safari, vom Telefon aus, an jedes Gerät mit eingeschaltetem Geräte-Posteingang.",
         recovery: "Nicht zutreffend, solange das iPhone nur sendet.",
         stop: "Nicht zutreffend, solange das iPhone nur sendet.",
       },
@@ -633,11 +638,11 @@ const de: Messages = {
         name: "Android",
         use: "Dieselbe Idee wie beim iPhone: etwas in einem Schritt vom Telefon auf einen eigenen Rechner bringen.",
         setup:
-          "Natives Teilen und ein nativer Empfänger sind geplant, nicht gebaut. Heute: Relayium im mobilen Browser öffnen, anmelden und aus Meine Geräte senden.",
+          "Natives Teilen und ein nativer Empfänger sind geplant, nicht gebaut. Heute: Relayium im mobilen Browser öffnen, anmelden und von dieser Seite aus senden.",
         files: "Noch nicht zutreffend — Android ist heute die sendende Seite.",
         residency:
           "Es wird keiner behauptet. Ein Empfänger müsste innerhalb der Regeln für Vordergrunddienste und Hintergrundarbeit von Android bleiben, und die Akkuoptimierung vieler Telefone macht den Zeitpunkt zu einer Frage des besten Bemühens. Das ist eine Randbedingung der Planung, nichts bereits Ausgeliefertes.",
-        send: "Meine Geräte im mobilen Browser, an jedes Gerät mit eingeschaltetem Geräte-Posteingang.",
+        send: "Diese Seite im mobilen Browser, an jedes Gerät mit eingeschaltetem Geräte-Posteingang.",
         recovery: "Nicht zutreffend, solange Android nur sendet.",
         stop: "Nicht zutreffend, solange Android nur sendet.",
       },
@@ -658,7 +663,7 @@ const de: Messages = {
     docsH2: "Weiterlesen",
     docsServerGuide: "Vollständige Server-Anleitung: Installation, Logs, Abstürze, Neustarts",
     docsCli: "Alle CLI-Modi, einschließlich der Geräte-Posteingang-Befehle",
-    docsMyDevices: "Meine Geräte — deine Sendeziele",
+    docsMyDevices: "Meine Geräte — ein Gerät umbenennen oder widerrufen",
   },
   cliPage: {
     metaTitle: "Relayium CLI — verschlüsselte Datei- und Textübertragung im Terminal",
@@ -767,7 +772,7 @@ const de: Messages = {
       "Ende-zu-Ende-verschlüsselt: der Schlüssel steckt nur im #k=-Fragment des Links und erreicht den Server nie, der Chiffretext (samt Dateinamen) speichert. Verlierst du den Link, ist die Datei unwiederbringlich.",
     inboxH2: "Geräte-Posteingang – vom Browser auf den eigenen Server",
     inboxTag: "empfohlen · Konto nötig",
-    inboxIntro: "So kommt eine Datei von dieser Website auf einen Server, ein NAS oder einen Rechner, der dir gehört. Die Maschine meldet sich einmal an und wählt einen Ordner; danach ziehst du Dateien unter „Meine Geräte“ darauf, und sie kommen an – verschlüsselt in deinem Browser, entschlüsselt nur dort. Es ist der einzige Modus hier, bei dem nicht beide Seiten gleichzeitig online sein müssen.",
+    inboxIntro: "So kommt eine Datei von dieser Website auf einen Server, ein NAS oder einen Rechner, der dir gehört. Die Maschine meldet sich einmal an und wählt einen Ordner; danach ziehst du Dateien auf der Seite „Geräte-Posteingang“ darauf, und sie kommen an – verschlüsselt in deinem Browser, entschlüsselt nur dort. Es ist der einzige Modus hier, bei dem nicht beide Seiten gleichzeitig online sein müssen.",
     inboxStep1Label: "Die CLI auf der empfangenden Maschine installieren oder aktualisieren.",
     inboxStep1Body: "relayium update --check meldet nur, ob es eine neuere Version gibt; relayium update installiert sie an Ort und Stelle. Der Geräte-Posteingang braucht einen Build mit dem Befehl inbox – relayium inbox --help ist der schnellste Weg, das zu prüfen.",
     inboxStep2Label: "Auf dieser Maschine anmelden.",
@@ -775,12 +780,12 @@ const de: Messages = {
     inboxStep3Label: "Einen Ordner wählen und mit dem Empfang beginnen.",
     inboxStep3Body: "Auf einem Linux-Server wird das Installationsskript heruntergeladen, geprüft und einmal ausgeführt. Es erstellt den gewählten Ordner, übergibt das angemeldete Gerät an ein eigenes Konto mit geringen Rechten, startet den Empfänger sofort und aktiviert ihn nach Neustarts. Kein Absender, Freigabelink oder Auftrag kann diese lokale Zustimmung erteilen.",
     inboxStep4Label: "Von dieser Website aus senden.",
-    inboxStep4Body: "Melde dich hier an und öffne „Meine Geräte“: Die Maschine hat jetzt eine Schaltfläche „Dateien senden“ und ein Ablageziel. Dateien werden im Browser verschlüsselt und mit einem Schlüssel versiegelt, den nur diese Maschine besitzt. Der Status sagt, wann sie wirklich gespeichert wurden – nicht bloß, wann der Upload fertig war.",
+    inboxStep4Body: "Melde dich hier an und öffne „Geräte-Posteingang“: Die Maschine hat jetzt eine Schaltfläche „Dateien senden“ und ein Ablageziel. Dateien werden im Browser verschlüsselt und mit einem Schlüssel versiegelt, den nur diese Maschine besitzt. Der Status sagt, wann sie wirklich gespeichert wurden – nicht bloß, wann der Upload fertig war.",
     inboxServiceNote: "Für Linux-Server ist das obige Skript der empfohlene Weg; es installiert einen nach Neustarts aktiven systemd-Dienst. status zeigt Ordner, Zugangsdaten, Worker und Serverzustand. run dient nur der Diagnose im Vordergrund oder als Container-Einstieg. Fortgeschrittene können mit inbox service weiterhin systemd-user-, systemd-system-, launchd- oder container-Definitionen erzeugen.",
     inboxNoImageNote: "Es gibt kein offizielles Relayium-Container-Image. Ein veröffentlichtes Image ist ein Lieferketten-Artefakt mit eigenem Signatur- und Herkunftsbedarf, und ein unsigniertes wäre schlimmer als gar keines – die Container-Hinweise beschreiben deshalb, wie du inbox run als Entrypoint deines eigenen Images verwendest.",
     inboxQueueNote: "Ist die Maschine offline, wartet die Datei in einer verschlüsselten Warteschlange und kommt an, sobald die Maschine zurück ist. Bis diese Maschine meldet, dass sie die Datei auf die Platte geschrieben hat, sagt der Status, dass der Geheimtext hochgeladen ist – nie, dass er angekommen ist.",
     inboxPrivacyNote: "Relayium sieht weder Klartext noch Dateinamen noch Ordnerstruktur. Der Inhaltsschlüssel ist mit einem öffentlichen Schlüssel versiegelt, den diese Maschine veröffentlicht hat; die andere Hälfte hat nur sie.",
-    inboxCta: "Meine Geräte öffnen →",
+    inboxCta: "Geräte-Posteingang öffnen →",
     inboxCtaHint: "Du musst in diesem Browser bei Relayium angemeldet sein, und die empfangende Maschine muss im selben Konto angemeldet sein.",
     inboxDocs: "Vollständige Referenz der Empfängerseite: Befehle, Ablageort, Verhalten nach einem Absturz →",
     textH2: "text — flüchtige Nachrichten",

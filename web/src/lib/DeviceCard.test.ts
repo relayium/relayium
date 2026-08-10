@@ -177,6 +177,45 @@ describe("the row it has always been", () => {
   });
 });
 
+// The same row, embedded on a page that sends rather than one that manages
+// credentials (/device-inbox). Revoke is irreversible and would sit one
+// mis-aimed click from a drop target; rename persists a label. Neither belongs
+// on a surface whose own copy says credentials are managed elsewhere.
+describe("with credential management switched off", () => {
+  it("shows no revoke and no rename, and keeps the send target", async () => {
+    render({}, { manage: false });
+    await settle();
+    expect(q("button.del"), "a destructive revoke reached a send-only surface").toBeNull();
+    expect(q(".rowactions"), "an empty action strip still reads as controls").toBeNull();
+    expect(target.textContent, "credential-management vocabulary leaked in").not.toMatch(/Rename|Revoke/i);
+    // What the row is FOR here is untouched.
+    expect(q(".sendzone")).not.toBeNull();
+    expect(q("button.sendbtn")).not.toBeNull();
+  });
+
+  it("still identifies the device — name, kind, id fragment, sign-in and IP", async () => {
+    // Identity is not management: two machines can share a label, and the
+    // fragment plus the sign-in time is what tells a send target apart from its
+    // namesake. Dropping them would make the send picker ambiguous.
+    render({}, { manage: false, device: { ID: DEVICE_ID, Name: "work-laptop", CreatedAt: 1, LastSeenAt: 2, Kind: "cli", LastIP: "203.0.113.7", Inbox: inbox() } });
+    await settle();
+    expect(q(".devicename")!.textContent).toBe("work-laptop");
+    expect(q(".devicekind")!.textContent).toBe("CLI");
+    expect(q(".deviceref")!.textContent).toBe("ID ends abc123");
+    expect(q(".devicesigned")!.textContent).toContain("Signed in on Tuesday");
+    expect(q(".deviceip")!.textContent).toContain("203.0.113.7");
+  });
+
+  it("cannot be talked into a rename editor by a missing handler", async () => {
+    // manage:true with no onRename would otherwise render a button that opens an
+    // editor whose Save can never persist anything.
+    render({}, { manage: true, onRename: undefined });
+    await settle();
+    expect([...target.querySelectorAll("button.chk")].some((b) => /rename/i.test(b.textContent ?? ""))).toBe(false);
+    expect(q("button.del"), "revoke has its own handler and must survive").not.toBeNull();
+  });
+});
+
 describe("what the card claims about a device", () => {
   it("an online auto device with a ready folder offers a send target and no caveat", async () => {
     render();

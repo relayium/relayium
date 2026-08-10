@@ -85,7 +85,7 @@ footer a{color:var(--text-h);text-decoration:none}
            generated Arabic page. -->
       <p class="updated">最后更新: <bdi>2026-08-09</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/device-inbox-server/">English</a><a href="/zh/guides/device-inbox-server/" aria-current="true">中文</a><a href="/ja/guides/device-inbox-server/">日本語</a><a href="/ko/guides/device-inbox-server/">한국어</a><a href="/de/guides/device-inbox-server/">Deutsch</a><a href="/fr/guides/device-inbox-server/">Français</a><a href="/ar/guides/device-inbox-server/">العربية</a><a href="/es/guides/device-inbox-server/">Español</a><a href="/pt/guides/device-inbox-server/">Português</a></nav>
-      <p class="lead">设备收件箱会把你在浏览器「我的设备」里发送的文件送到自己的服务器、NAS 或工作机。浏览器负责加密，只有目标机器能够解密并写入磁盘。</p>
+      <p class="lead">设备收件箱会把你在浏览器「设备收件箱」页面发送的文件送到自己的服务器、NAS 或工作机。浏览器负责加密，只有目标机器能够解密并写入磁盘。</p>
       <p class="lead">服务器接收端必须在 SSH 窗口关闭和重启后继续工作。下面的推荐安装脚本会创建目录并安装真正的 systemd 服务；inbox run 只用于前台排错或容器入口。</p>
       <h2>安装常驻接收服务</h2>
       <p>先以管理员身份登录一次，再下载并检查短脚本，确认后才给它 root 权限。脚本不会打印凭据；它会创建独立 relayium 低权限账号、登记接收密钥、安装加固后的 unit、立即启动并设置开机自启。</p>
@@ -121,8 +121,8 @@ sudo -u relayium relayium inbox disable --config-dir /var/lib/relayium-inbox/con
       <h3>可以手工安装吗？</h3>
       <p>可以。relayium inbox service systemd-user 或 systemd-system 会打印本机专用 unit 和命令，也有 launchd/container 说明；上面的可审阅脚本只是 Linux 服务器更短的路径。</p>
       <div class="ctacard">
-        <p>服务显示 ready 后，就可以从自己的设备卡片发送文件。</p>
-        <a class="cta" href="/me">打开「我的设备」</a>
+        <p>服务显示 ready 后，就可以在「设备收件箱」页面从设备卡片发送文件。</p>
+        <a class="cta" href="/device-inbox">打开「设备收件箱」</a>
       </div>
       <h2>继续阅读</h2>
       <ul class="related"><li><a href="/zh/guides/transfer-files-from-terminal/">用 Relayium CLI 从终端传输文件与文本</a></li><li><a href="/zh/guides/run-relayium-as-an-always-on-service/">把 Relayium 变成常驻接收服务</a></li><li><a href="/zh/guides/how-relayium-encrypts-your-files/">Relayium 如何对文件端到端加密</a></li><li><a href="/zh/how-to/automate-server-backups/">用 cron 任务自动化加密的服务器备份</a></li><li><a href="/zh/">Relayium</a></li></ul>

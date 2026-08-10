@@ -3,8 +3,9 @@
 Status: **Phase 1D delivered.** Both halves exist. This document is the
 *receiving* half — the `relayium inbox` commands that run on the machine files
 land on. The *sending* half is the Web one: sign in at relayium.com, open
-**My Devices** (`/me`), and each enrolled device gets a **Send files** button
-and a drop target. `/cli` introduces the whole flow end to end. This document
+**Device Inbox** (`/device-inbox`), and each enrolled device appears there with a
+**Send files** button and a drop target when receiving is enabled. `/cli`
+introduces the whole flow end to end. This document
 describes what exists, and says so where something does not.
 
 Product source of truth: `DEVICE-INBOX-PRD.md` §7.1, §8, §9, §10.

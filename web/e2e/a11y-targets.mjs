@@ -76,6 +76,14 @@ export const TARGETS = [
   { id: "spa/device-inbox/mobile-dark", url: "/device-inbox", ready: "[data-platform]", readyCount: 6,
     viewport: MOBILE, scheme: "dark",
     note: "the same page's dark tokens and its single-column narrow layout" },
+  // 登录态的 /device-inbox。等的是 `[data-di="devices"] li`，数量钉死成夹具里的行数：
+  // 这一页的操作区——发送按钮、拖放区、状态徽章、常驻活动区域、"不能发"的说明——
+  // 全在行里面，等外壳只能证明文章部分在。它和 /me 是同一批组件的两种配置（这一边
+  // 关掉了改名/吊销），两种配置的焦点样式和对比度是分开的东西，所以两格都要扫。
+  { id: "spa/device-inbox/signed-in", url: "/device-inbox",
+    ready: '[data-di="devices"] li', readyCount: ME_DEVICES.devices.length,
+    viewport: DESKTOP, scheme: "light", fixture: ME_ROUTES,
+    note: "已登录的设备收件箱：页内可发送 / 需批准 / 已关闭 / 已吊销 四种卡片" },
 
   // My Devices as a SENDER directory. 等的是 `.devicelist li`，数量钉死成夹具里的
   // 行数：等 `.accountdevices` 只能证明区块外壳在，而这一块新增的控件——拖放区、

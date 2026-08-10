@@ -85,7 +85,7 @@ footer a{color:var(--text-h);text-decoration:none}
            generated Arabic page. -->
       <p class="updated">آخر تحديث: <bdi>2026-08-09</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/device-inbox-server/">English</a><a href="/zh/guides/device-inbox-server/">中文</a><a href="/ja/guides/device-inbox-server/">日本語</a><a href="/ko/guides/device-inbox-server/">한국어</a><a href="/de/guides/device-inbox-server/">Deutsch</a><a href="/fr/guides/device-inbox-server/">Français</a><a href="/ar/guides/device-inbox-server/" aria-current="true">العربية</a><a href="/es/guides/device-inbox-server/">Español</a><a href="/pt/guides/device-inbox-server/">Português</a></nav>
-      <p class="lead">يرسل Device Inbox الملف من «أجهزتي» في المتصفح إلى خادمك أو جهاز NAS أو محطة العمل. يشفّره المتصفح، ولا يفكّه ويحفظه إلا الجهاز المستهدف.</p>
+      <p class="lead">يرسل Device Inbox الملف من صفحته في المتصفح إلى خادمك أو جهاز NAS أو محطة العمل. يشفّره المتصفح، ولا يفكّه ويحفظه إلا الجهاز المستهدف.</p>
       <p class="lead">يجب أن يستمر مستقبِل الخادم بعد إغلاق SSH وإعادة التشغيل. ينشئ المثبّت الموصى به المجلد وخدمة systemd فعلية. أما inbox run فللتشخيص في الواجهة أو للحاويات فقط.</p>
       <h2>تثبيت المستقبِل الدائم</h2>
       <p>سجّل الدخول مرة كمشغّل، ثم نزّل النص القصير وافحصه قبل منحه صلاحيات root. ينسخ بيانات الاعتماد دون عرضها، وينشئ حساب relayium مخصصًا، ويسجل مفتاح الاستقبال، ثم يثبت الوحدة المقوّاة ويشغلها الآن وبعد إعادة التشغيل.</p>
@@ -121,8 +121,8 @@ sudo -u relayium relayium inbox disable --config-dir /var/lib/relayium-inbox/con
       <h3>هل يمكن التثبيت يدويًا؟</h3>
       <p>نعم. يطبع relayium inbox service systemd-user أو systemd-system الوحدة والأوامر الخاصة بالجهاز، كما توجد إرشادات launchd وcontainer.</p>
       <div class="ctacard">
-        <p>عندما تعرض الخدمة ready أرسل ملفًا من بطاقة جهازك.</p>
-        <a class="cta" href="/me">فتح أجهزتي</a>
+        <p>عندما تعرض الخدمة ready أرسل ملفًا من بطاقته في Device Inbox.</p>
+        <a class="cta" href="/device-inbox">فتح Device Inbox</a>
       </div>
       <h2>تابع القراءة</h2>
       <ul class="related"><li><a href="/ar/guides/transfer-files-from-terminal/">انقل الملفات والنصوص من الطرفية باستخدام Relayium CLI</a></li><li><a href="/ar/guides/run-relayium-as-an-always-on-service/">شغّل Relayium كخدمة استقبال دائمة التشغيل</a></li><li><a href="/ar/guides/how-relayium-encrypts-your-files/">كيف يُشفِّر Relayium ملفاتك من الطرف إلى الطرف</a></li><li><a href="/ar/how-to/automate-server-backups/">أتمتة النسخ الاحتياطي المُشفَّر للخادم باستخدام مهمة cron</a></li><li><a href="/ar/">Relayium</a></li></ul>

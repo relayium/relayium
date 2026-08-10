@@ -85,7 +85,7 @@ footer a{color:var(--text-h);text-decoration:none}
            generated Arabic page. -->
       <p class="updated">Última actualización: <bdi>2026-08-09</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/device-inbox-server/">English</a><a href="/zh/guides/device-inbox-server/">中文</a><a href="/ja/guides/device-inbox-server/">日本語</a><a href="/ko/guides/device-inbox-server/">한국어</a><a href="/de/guides/device-inbox-server/">Deutsch</a><a href="/fr/guides/device-inbox-server/">Français</a><a href="/ar/guides/device-inbox-server/">العربية</a><a href="/es/guides/device-inbox-server/" aria-current="true">Español</a><a href="/pt/guides/device-inbox-server/">Português</a></nav>
-      <p class="lead">Device Inbox envía un archivo desde Mis dispositivos en el navegador a tu servidor, NAS o equipo de trabajo. El navegador lo cifra; solo la máquina de destino puede descifrarlo y guardarlo.</p>
+      <p class="lead">Device Inbox envía un archivo desde su propia página en el navegador a tu servidor, NAS o equipo de trabajo. El navegador lo cifra; solo la máquina de destino puede descifrarlo y guardarlo.</p>
       <p class="lead">El receptor debe seguir activo al cerrar SSH y después de reiniciar. El instalador recomendado crea la carpeta y un servicio systemd real. inbox run queda para diagnósticos en primer plano o contenedores.</p>
       <h2>Instalar el receptor permanente</h2>
       <p>Inicia sesión una vez como operador, descarga y revisa el script antes de darle permisos root. Copia la credencial sin mostrarla, crea una cuenta relayium dedicada, registra la clave de recepción e instala, inicia y habilita la unidad reforzada.</p>
@@ -121,8 +121,8 @@ sudo -u relayium relayium inbox disable --config-dir /var/lib/relayium-inbox/con
       <h3>¿Puedo instalarlo manualmente?</h3>
       <p>Sí. relayium inbox service systemd-user o systemd-system imprime la unidad y los comandos de esta máquina; también hay descripciones para launchd y container.</p>
       <div class="ctacard">
-        <p>Cuando el servicio indique ready, envía un archivo desde tu tarjeta de dispositivo.</p>
-        <a class="cta" href="/me">Abrir Mis dispositivos</a>
+        <p>Cuando el servicio indique ready, envía un archivo desde su tarjeta en Device Inbox.</p>
+        <a class="cta" href="/device-inbox">Abrir Device Inbox</a>
       </div>
       <h2>Seguir leyendo</h2>
       <ul class="related"><li><a href="/es/guides/transfer-files-from-terminal/">Transfiere archivos y texto desde la terminal con la CLI de Relayium</a></li><li><a href="/es/guides/run-relayium-as-an-always-on-service/">Ejecuta Relayium como un servicio de recepción siempre activo</a></li><li><a href="/es/guides/how-relayium-encrypts-your-files/">Cómo Relayium cifra tus archivos de extremo a extremo</a></li><li><a href="/es/how-to/automate-server-backups/">Automatiza copias de seguridad cifradas del servidor con una tarea cron</a></li><li><a href="/es/">Relayium</a></li></ul>

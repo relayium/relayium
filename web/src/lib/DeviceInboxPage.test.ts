@@ -1,17 +1,20 @@
-// /device-inbox — the page, as a product surface rather than as an article.
+// /device-inbox — the page, as the surface the feature is OPERATED on.
 //
 // The assertions here are the ones the PRD makes non-negotiable (§8, §10, §12).
-// They fall into three groups:
+// They fall into four groups:
 //
 //  1. **Six named platforms, honestly badged**, and no invented executable
 //     control for a native product that does not exist. A testing/planned native
 //     section may show only a separately shipped, explicitly limited fallback.
 //  2. **A start block that changes with the account.** Signed out it must offer
-//     something that executes; signed in it must say something about THIS
-//     account; and a failed /api/devices must not be rendered as either "no
+//     something that executes and ask for nothing; signed in it must render THIS
+//     account's actual devices with the real send control on each one that can
+//     receive, and a failed /api/devices must not be rendered as either "no
 //     devices" or "ready" (WORKFLOW-LEARNINGS 2026-08-09: a failed background
 //     refresh must not erase — or invent — trustworthy state).
-//  3. **The two boundaries in prose**: uploaded is not saved, and a share link
+//  3. **The journey ends here.** No step of sending a file requires navigating
+//     to /me, and the rows on this page carry no revoke or rename.
+//  4. **The two boundaries in prose**: uploaded is not saved, and a share link
 //     is not permission to write to a disk.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mount, unmount, flushSync } from "svelte";
@@ -19,8 +22,23 @@ import DeviceInboxPage from "./DeviceInboxPage.svelte";
 import { loadLang, messages } from "./i18n.svelte";
 import { refreshSession } from "./auth.svelte";
 import { loginOpen, loginIntent, setLoginOpen } from "./login.svelte";
-import { CAP_RECEIVE_V1, INBOX_KEY_ALGORITHM } from "./device-inbox";
+import { CAP_RECEIVE_V1, DEVICE_REFRESH_MS, INBOX_KEY_ALGORITHM } from "./device-inbox";
 import { REQUIRED_PLATFORM_IDS } from "./device-inbox-platforms";
+
+// The network half of a send is mocked: this suite is about what the PAGE hands
+// to the card. device-send.test.ts owns the wire format and the crypto, and
+// DeviceCard.test.ts owns what the card does with them.
+const sendSpy = vi.fn();
+const fetchTaskSpy = vi.fn();
+
+vi.mock("./device-send", async (orig) => {
+  const real = await orig<typeof import("./device-send")>();
+  return {
+    ...real,
+    sendFilesToDevice: (...args: unknown[]) => sendSpy(...args),
+    fetchInboxTask: (...args: unknown[]) => fetchTaskSpy(...args),
+  };
+});
 
 const ZERO_KEY = "A".repeat(43);
 const USER = { id: "u1", email: "owner@example.com", displayName: "Owner", hasPassword: true };
@@ -49,11 +67,37 @@ function inbox(over: Record<string, unknown> = {}) {
   };
 }
 
-const READY_DEVICE = { ID: "0123456789abcdef0123456789aaa111", Kind: "cli", Inbox: inbox() };
-const BARE_DEVICE = { ID: "0123456789abcdef0123456789bbb222", Kind: "cli", Inbox: null };
+const READY_DEVICE = {
+  ID: "0123456789abcdef0123456789aaa111", Name: "build-server",
+  CreatedAt: 1_690_000_000, LastSeenAt: 1_700_000_000, Kind: "cli", Inbox: inbox(),
+};
+const BARE_DEVICE = {
+  ID: "0123456789abcdef0123456789bbb222", Name: "old-vps",
+  CreatedAt: 1_690_000_000, LastSeenAt: 1_699_000_000, Kind: "cli", Inbox: null,
+};
 // Enrolled, but centrally revoked: it must NOT be counted as ready. This is the
 // row that a looser "has an Inbox subtree" rule would have called ready.
-const REVOKED_DEVICE = { ID: "0123456789abcdef0123456789ccc333", Kind: "cli", Inbox: inbox({ Revoked: true }) };
+const REVOKED_DEVICE = {
+  ID: "0123456789abcdef0123456789ccc333", Name: "lost-laptop",
+  CreatedAt: 1_690_000_000, LastSeenAt: 1_698_000_000, Kind: "cli", Inbox: inbox({ Revoked: true }),
+};
+// A kind this build cannot describe. Listed by neither page: it holds a session
+// cookie rather than a carryable token, and it never enrols an inbox.
+const BROWSER_DEVICE = {
+  ID: "0123456789abcdef0123456789ddd444", Name: "this browser",
+  CreatedAt: 1_690_000_000, LastSeenAt: 1_700_000_001, Kind: "browser", Inbox: null,
+};
+
+/** A drop carrying real `File`s. jsdom has no FileList constructor and its
+ *  DataTransfer carries no files, so the list is built by hand. */
+function dropOn(zone: Element, files: File[]) {
+  const list: Record<string | number, unknown> = { item: (i: number) => files[i] ?? null };
+  files.forEach((f, i) => (list[i] = f));
+  list.length = files.length;
+  const e = new Event("drop", { bubbles: true, cancelable: true }) as DragEvent;
+  Object.defineProperty(e, "dataTransfer", { value: { files: list, items: [], types: ["Files"] } });
+  zone.dispatchEvent(e);
+}
 
 let currentUser: typeof USER | null = null;
 const mounted: { app: Record<string, unknown>; target: HTMLElement }[] = [];
@@ -74,6 +118,14 @@ function render(props: Record<string, unknown> = {}) {
 beforeEach(async () => {
   await loadLang("en");
   currentUser = null;
+  sendSpy.mockReset();
+  fetchTaskSpy.mockReset();
+  fetchTaskSpy.mockResolvedValue(undefined);
+  sendSpy.mockResolvedValue({
+    ID: "aaaabbbbccccddddeeeeffff00001111",
+    State: "queued", ErrorCode: "", CiphertextBytes: 1, SavedAt: 0, TerminalAt: 0,
+    Terminal: false, ExpiresAt: 0, CreatedAt: 0, UpdatedAt: 0, TargetKeyID: "k1", TargetKeyGeneration: 1,
+  });
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
@@ -259,48 +311,41 @@ describe("the start block, signed out", () => {
     expect(fetchDevices).not.toHaveBeenCalled();
     expect(root.querySelector('[data-di="next-step"]')).toBeNull();
     expect(root.querySelector('[data-di="my-devices"]')).toBeNull();
+    // Not merely "no rows": no list, no send control, nothing that would imply
+    // a signed-out visitor has devices at all.
+    expect(root.querySelector('[data-di="devices"]')).toBeNull();
+    expect(root.querySelector(".sendzone")).toBeNull();
   });
 });
 
-describe("the start block, signed in", () => {
-  async function signedIn(props: Record<string, unknown> = {}) {
+async function signedIn(props: Record<string, unknown> = {}) {
+  currentUser = USER;
+  await refreshSession();
+  const root = render(props);
+  // One microtask for the fetch, then flush the effect it settles.
+  await Promise.resolve();
+  await Promise.resolve();
+  flushSync();
+  return root;
+}
+
+const rowsOf = (root: HTMLElement) => [...root.querySelectorAll('[data-di="devices"] li')];
+const rowFor = (root: HTMLElement, name: string) =>
+  rowsOf(root).find((r) => r.textContent?.includes(name))!;
+
+describe("the five things the signed-in block may say", () => {
+  it("says it is still checking, and claims nothing while it does", async () => {
+    // A pending lookup is not an empty account. Rendering "no devices" here —
+    // even for one frame — tells someone with three servers to go set one up.
     currentUser = USER;
     await refreshSession();
-    const root = render(props);
-    // One microtask for the fetch, then flush the effect it settles.
-    await Promise.resolve();
+    const root = render({ fetchDevices: () => new Promise<never[]>(() => {}) });
     await Promise.resolve();
     flushSync();
-    return root;
-  }
-
-  it("names the account and offers My Devices", async () => {
-    const root = await signedIn({ fetchDevices: async () => [READY_DEVICE] });
-    expect(root.querySelector(".start .lead")!.textContent).toContain(USER.email);
-    const cta = root.querySelector<HTMLAnchorElement>('[data-di="my-devices"]')!;
-    expect(cta.getAttribute("href")).toBe("/me");
-  });
-
-  it("counts only devices that could actually receive", async () => {
-    const root = await signedIn({
-      fetchDevices: async () => [READY_DEVICE, BARE_DEVICE, REVOKED_DEVICE],
-    });
-    expect(root.querySelector('[data-di="start"]')!.getAttribute("data-state")).toBe("ready");
-    expect(root.querySelector('[data-di="next-step"]')!.textContent!.trim()).toBe(en().stateReady(1));
-  });
-
-  it("says so when devices exist but none has an inbox, and offers the setup jump", async () => {
-    const root = await signedIn({ fetchDevices: async () => [BARE_DEVICE, REVOKED_DEVICE] });
-    expect(root.querySelector('[data-di="start"]')!.getAttribute("data-state")).toBe("no-inbox");
-    expect(root.querySelector('[data-di="next-step"]')!.textContent!.trim()).toBe(en().stateNoInbox(2));
-    expect(root.querySelector<HTMLAnchorElement>('[data-di="setup-server"]')!.getAttribute("href"))
-      .toBe("#platform-server");
-  });
-
-  it("says so when the account has no devices at all", async () => {
-    const root = await signedIn({ fetchDevices: async () => [] });
-    expect(root.querySelector('[data-di="start"]')!.getAttribute("data-state")).toBe("none");
-    expect(root.querySelector('[data-di="next-step"]')!.textContent!.trim()).toBe(en().stateNone);
+    expect(root.querySelector('[data-di="start"]')!.getAttribute("data-state")).toBe("checking");
+    expect(root.querySelector('[data-di="next-step"]')!.textContent!.trim()).toBe(en().startChecking);
+    expect(root.querySelector('[data-di="devices"]')).toBeNull();
+    expect(root.querySelector('[data-di="retry"]')).toBeNull();
   });
 
   // The one that matters most: a failed lookup is an absence of knowledge. It
@@ -314,11 +359,12 @@ describe("the start block, signed in", () => {
     expect(next).toBe(en().stateUnknown);
     expect(next).not.toBe(en().stateNone);
     expect(next).not.toContain(en().stateReady(1));
-    // The escape hatch stays: My Devices knows the real state.
-    expect(root.querySelector('[data-di="my-devices"]')).not.toBeNull();
+    // No invented rows, and no send control aimed at a device we cannot name.
+    expect(root.querySelector('[data-di="devices"]')).toBeNull();
+    expect(root.querySelector(".sendzone")).toBeNull();
   });
 
-  // Found by this test: an injected fetcher that REJECTS used to escape
+  // Found by an earlier round: an injected fetcher that REJECTS used to escape
   // loadDevices entirely, so the effect rejected unhandled and the block sat on
   // "checking…" forever — a spinner that resolves to nothing. A throw now means
   // exactly what a non-ok response means.
@@ -331,5 +377,241 @@ describe("the start block, signed in", () => {
     const start = root.querySelector('[data-di="start"]')!;
     expect(start.getAttribute("data-state")).toBe("unknown");
     expect(root.querySelector('[data-di="next-step"]')!.textContent!.trim()).toBe(en().stateUnknown);
+  });
+
+  it("treats a malformed successful device payload as unknown", async () => {
+    // A 200 response is not trustworthy merely because it parsed as JSON. If a
+    // rolling deployment or server regression changes `devices` away from an
+    // array, the page must not throw or turn that shape into an empty account.
+    const root = await signedIn({
+      fetchDevices: async () => "not-an-array" as unknown as unknown[],
+    });
+    const start = root.querySelector('[data-di="start"]')!;
+    expect(start.getAttribute("data-state")).toBe("unknown");
+    expect(root.querySelector('[data-di="next-step"]')!.textContent!.trim()).toBe(en().stateUnknown);
+    expect(root.querySelector('[data-di="devices"]')).toBeNull();
+  });
+
+  it("offers a retry that can actually resolve the unknown", async () => {
+    // The remedy for "we do not know" is asking again, so this is the one state
+    // that gets a control rather than only a sentence.
+    let answer: unknown[] | null = null;
+    const root = await signedIn({ fetchDevices: async () => answer });
+    expect(root.querySelector('[data-di="start"]')!.getAttribute("data-state")).toBe("unknown");
+
+    answer = [READY_DEVICE];
+    root.querySelector<HTMLButtonElement>('[data-di="retry"]')!.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    flushSync();
+    expect(root.querySelector('[data-di="start"]')!.getAttribute("data-state")).toBe("ready");
+    expect(rowsOf(root)).toHaveLength(1);
+  });
+
+  it("says so when the account has no devices at all", async () => {
+    const root = await signedIn({ fetchDevices: async () => [] });
+    expect(root.querySelector('[data-di="start"]')!.getAttribute("data-state")).toBe("none");
+    expect(root.querySelector('[data-di="next-step"]')!.textContent!.trim()).toBe(en().stateNone);
+    expect(root.querySelector('[data-di="devices"]')).toBeNull();
+    expect(root.querySelector<HTMLAnchorElement>('[data-di="setup-server"]')!.getAttribute("href"))
+      .toBe("#platform-server");
+  });
+
+  it("lists devices that exist but cannot receive, each with its own reason", async () => {
+    const root = await signedIn({ fetchDevices: async () => [BARE_DEVICE, REVOKED_DEVICE] });
+    expect(root.querySelector('[data-di="start"]')!.getAttribute("data-state")).toBe("no-inbox");
+    expect(root.querySelector('[data-di="next-step"]')!.textContent!.trim()).toBe(en().stateNoInbox(2));
+    // Present, not hidden: "you have two devices, neither can receive" is only
+    // checkable by the owner if both are on screen with their reasons.
+    expect(rowsOf(root)).toHaveLength(2);
+    expect(root.querySelector(".sendzone"), "an unsendable device was given a drop target").toBeNull();
+    expect(rowFor(root, "lost-laptop").querySelector(".inboxblocked")!.textContent).toMatch(/was revoked/i);
+    // A device that never enrolled has no inbox block at all — that IS its
+    // reason, and inventing a sentence for it would be noise.
+    expect(rowFor(root, "old-vps").querySelector(".inboxblock")).toBeNull();
+    expect(root.querySelector<HTMLAnchorElement>('[data-di="setup-server"]')).not.toBeNull();
+  });
+
+  it("counts only devices that could actually receive, and shows the rest anyway", async () => {
+    const root = await signedIn({
+      fetchDevices: async () => [READY_DEVICE, BARE_DEVICE, REVOKED_DEVICE],
+    });
+    expect(root.querySelector('[data-di="start"]')!.getAttribute("data-state")).toBe("ready");
+    expect(root.querySelector('[data-di="next-step"]')!.textContent!.trim()).toBe(en().stateReady(1));
+    expect(rowsOf(root)).toHaveLength(3);
+    expect(root.querySelectorAll(".sendzone")).toHaveLength(1);
+  });
+
+  it("lists only device kinds this build can describe", async () => {
+    const root = await signedIn({ fetchDevices: async () => [READY_DEVICE, BROWSER_DEVICE] });
+    expect(rowsOf(root)).toHaveLength(1);
+    expect(root.textContent).not.toContain("this browser");
+    // …and the count agrees with the list, rather than with the raw response.
+    expect(root.querySelector('[data-di="next-step"]')!.textContent!.trim()).toBe(en().stateReady(1));
+  });
+});
+
+describe("sending, without leaving this page", () => {
+  it("puts the real send control on every device that can receive", async () => {
+    const root = await signedIn({ fetchDevices: async () => [READY_DEVICE] });
+    const row = rowFor(root, "build-server");
+    expect(row.querySelector(".sendzone"), "the ready device has no drop target").not.toBeNull();
+    const btn = row.querySelector<HTMLButtonElement>("button.sendbtn")!;
+    expect(btn.getAttribute("aria-label")).toContain("build-server");
+  });
+
+  it("a real drop starts a real send, from this page, to that device", async () => {
+    const root = await signedIn({ fetchDevices: async () => [READY_DEVICE] });
+    const files = [new File(["hello"], "notes.txt"), new File(["x"], "b.bin")];
+    dropOn(rowFor(root, "build-server").querySelector(".sendzone")!, files);
+    // The send walks several awaits before central's answer becomes a task.
+    for (let i = 0; i < 6; i++) await Promise.resolve();
+    flushSync();
+
+    expect(sendSpy, "the drop did not reach the send pipeline").toHaveBeenCalledTimes(1);
+    const [target, sent] = sendSpy.mock.calls[0] as [{ deviceID: string; publicKey: string }, File[]];
+    expect(target.deviceID).toBe(READY_DEVICE.ID);
+    expect(target.publicKey).toBe(ZERO_KEY);
+    expect(sent).toEqual(files);
+    // And it reports what happened, in the card's persistent live region.
+    expect(root.querySelector(".sendstatus")!.textContent).toMatch(/Uploaded to Relayium/i);
+  });
+
+  it("choosing files with the button reaches the same pipeline", async () => {
+    const root = await signedIn({ fetchDevices: async () => [READY_DEVICE] });
+    const row = rowFor(root, "build-server");
+    const input = row.querySelector<HTMLInputElement>("input.filepick")!;
+    const file = new File(["picked"], "picked.txt");
+    Object.defineProperty(input, "files", { value: [file], configurable: true });
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    await Promise.resolve();
+    flushSync();
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+    expect((sendSpy.mock.calls[0] as [unknown, File[]])[1]).toEqual([file]);
+  });
+
+  it("names the account, and keeps My Devices as a secondary management route only", async () => {
+    const root = await signedIn({ fetchDevices: async () => [READY_DEVICE] });
+    expect(root.querySelector(".start .lead")!.textContent).toContain(USER.email);
+    const manage = root.querySelector<HTMLAnchorElement>('[data-di="my-devices"]')!;
+    expect(manage.getAttribute("href")).toBe("/me");
+    expect(manage.textContent!.trim()).toBe(en().manageDevicesCta);
+    // Not a call to action next to the send controls: it must not be styled as
+    // one of the primary buttons.
+    expect(manage.classList.contains("cta")).toBe(false);
+  });
+
+  it("carries no destructive or credential control on any row", async () => {
+    // Revoke is irreversible and would sit beside a drop target; rename
+    // persists a label. Both belong to /me, which this page links to.
+    const root = await signedIn({
+      fetchDevices: async () => [READY_DEVICE, BARE_DEVICE, REVOKED_DEVICE],
+    });
+    const block = root.querySelector('[data-di="devices"]')!;
+    expect(block.querySelector("button.del")).toBeNull();
+    expect(block.querySelector(".rowactions")).toBeNull();
+    // Asserted against the real labels rather than the words: "This device's
+    // inbox was revoked" is an explanation the row SHOULD carry, and a blanket
+    // /revoke/i ban would forbid the sentence while permitting the button.
+    const labels = [messages.en.me.deviceRename, messages.en.me.deviceRevoke];
+    const buttons = [...block.querySelectorAll("button")].map((b) => b.textContent!.trim());
+    for (const label of labels) {
+      expect(buttons, `a credential control (${label}) reached the send surface`).not.toContain(label);
+    }
+    // The aria-labels carry the same vocabulary, and are what a screen reader
+    // would hear even if the visible text were trimmed away.
+    const aria = [...block.querySelectorAll("[aria-label]")].map((e) => e.getAttribute("aria-label")!);
+    expect(aria.some((a) => a.includes(messages.en.me.deviceRevoke))).toBe(false);
+  });
+
+  it("points each platform section back at this page, never at /me", async () => {
+    const root = await signedIn({ fetchDevices: async () => [READY_DEVICE] });
+    for (const id of REQUIRED_PLATFORM_IDS) {
+      const link = root.querySelector<HTMLAnchorElement>(`[data-di="send-${id}"]`)!;
+      expect(link, id).not.toBeNull();
+      expect(link.getAttribute("href"), id).toBe("#start");
+    }
+  });
+});
+
+describe("keeping a trustworthy list across a presence refresh", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** Signed in, with fake timers already installed. */
+  async function mounted(fetchDevices: () => Promise<unknown[] | null>) {
+    currentUser = USER;
+    await refreshSession();
+    const root = render({ fetchDevices });
+    await vi.advanceTimersByTimeAsync(5);
+    flushSync();
+    return root;
+  }
+
+  it("refreshes presence on a bounded timer, in place, keeping the same rows", async () => {
+    let presence = "online";
+    let calls = 0;
+    const root = await mounted(async () => {
+      calls++;
+      return [{ ...READY_DEVICE, Inbox: inbox({ Presence: presence }) }];
+    });
+    expect(calls).toBe(1);
+    expect(rowFor(root, "build-server").textContent).toContain("Online");
+
+    presence = "offline";
+    await vi.advanceTimersByTimeAsync(DEVICE_REFRESH_MS + 100);
+    flushSync();
+    expect(calls, "presence went stale — the list was never refreshed").toBe(2);
+    expect(rowFor(root, "build-server").textContent).toContain("Offline");
+    // Still sendable: an offline device is a queue, not a refusal.
+    expect(rowFor(root, "build-server").querySelector(".sendzone")).not.toBeNull();
+  });
+
+  it("a failed refresh preserves the rows and does not abort a send in flight", async () => {
+    // The failure this test exists for: clearing the list on a transient error
+    // unmounts every card, and with it the upload running inside one.
+    let report!: (p: { phase: string; sent: number; total: number }) => void;
+    sendSpy.mockImplementation((_t: unknown, _f: unknown, opts: { onProgress: typeof report }) => {
+      report = opts.onProgress;
+      return new Promise(() => {}); // never settles: the send stays in flight
+    });
+    let ok = true;
+    const root = await mounted(async () => (ok ? [READY_DEVICE] : null));
+
+    dropOn(rowFor(root, "build-server").querySelector(".sendzone")!, [new File(["x"], "a.bin")]);
+    await vi.advanceTimersByTimeAsync(5);
+    report({ phase: "uploading", sent: 50, total: 100 });
+    await vi.advanceTimersByTimeAsync(5);
+    flushSync();
+    expect(root.querySelector(".sendstatus")!.textContent).toContain("50%");
+
+    ok = false;
+    await vi.advanceTimersByTimeAsync(DEVICE_REFRESH_MS + 100);
+    flushSync();
+
+    const start = root.querySelector('[data-di="start"]')!;
+    expect(start.getAttribute("data-state"), "a failed refresh became 'we know nothing'").toBe("ready");
+    expect(rowsOf(root), "a failed refresh removed the last trustworthy list").toHaveLength(1);
+    expect(root.querySelector(".sendstatus")!.textContent, "a failed refresh aborted the send")
+      .toContain("50%");
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+    // …and it says the presence above may now be out of date, rather than
+    // quietly presenting stale rows as fresh.
+    expect(root.querySelector('[data-di="stale"]')!.textContent).toBe(en().refreshFailed);
+  });
+
+  it("signing out drops the rows entirely", async () => {
+    const root = await mounted(async () => [READY_DEVICE]);
+    expect(rowsOf(root)).toHaveLength(1);
+    currentUser = null;
+    await refreshSession();
+    await vi.advanceTimersByTimeAsync(5);
+    flushSync();
+    expect(root.querySelector('[data-di="devices"]'), "another session's device stayed on screen").toBeNull();
+    expect(root.querySelector('[data-di="start"]')!.getAttribute("data-state")).toBe("signed-out");
   });
 });

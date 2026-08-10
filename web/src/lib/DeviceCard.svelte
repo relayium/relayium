@@ -59,16 +59,37 @@
     /** Localized short id fragment ("ID ends 3f21a9"), "" when the id is too
      *  short to shorten. It is what tells two identically named rows apart. */
     deviceRef: string;
-    onRevoke: () => void;
+    /** Whether this row manages the CREDENTIAL as well as presenting it.
+     *
+     *  `false` is not a cosmetic trim. /device-inbox renders the same row to
+     *  answer one question — "can I send a file to this machine, and what will
+     *  happen to it" — and revoke is an irreversible action about a different
+     *  question, sitting one mis-aimed click from a drop target. Off there, on
+     *  in My Devices, which is the page that exists to manage credentials.
+     *
+     *  Rename goes with it: an editor that persists a label is credential
+     *  management too, and leaving it behind would put "Rename"/"Revoke"
+     *  vocabulary on a surface whose own copy says to manage devices elsewhere. */
+    manage?: boolean;
+    /** Required when `manage` is true; ignored otherwise. */
+    onRevoke?: () => void;
     /** Persist a new label. Resolves with what happened, so the row can say
      *  "that name can't be used" and "the request failed" differently — the
-     *  first is the user's to fix, the second is worth retrying. */
-    onRename: (name: string) => Promise<RenameOutcome>;
+     *  first is the user's to fix, the second is worth retrying.
+     *
+     *  Required when `manage` is true; ignored otherwise. */
+    onRename?: (name: string) => Promise<RenameOutcome>;
   }
 
   export type RenameOutcome = "ok" | "rejected" | "failed";
 
-  const { device, kind, lastUsed, signedIn, deviceRef, onRevoke, onRename }: Props = $props();
+  const { device, kind, lastUsed, signedIn, deviceRef, manage = true, onRevoke, onRename }: Props = $props();
+
+  // Each control is gated on its own handler as well as on `manage`: a caller
+  // that asks for management without supplying one would otherwise render a
+  // button that does nothing, which is worse than the missing button.
+  const canRevoke = $derived(manage && !!onRevoke);
+  const canRename = $derived(manage && !!onRename);
   const t = $derived<Messages>(messages[lang()]);
 
   // ── rename ───────────────────────────────────────────────────────────────
@@ -113,7 +134,7 @@
     }
     renameBusy = true;
     renameError = null;
-    const outcome = await onRename(next);
+    const outcome = onRename ? await onRename(next) : "failed";
     renameBusy = false;
     if (outcome === "ok") {
       renaming = false;
@@ -579,7 +600,7 @@
 </script>
 
 <li class:sendable={avail.sendable} class:has-inbox={!!inbox}>
-  {#if renaming}
+  {#if renaming && canRename}
     <form class="renameform" onsubmit={submitRename}>
       <!-- svelte-ignore a11y_autofocus -->
       <input
@@ -604,22 +625,29 @@
        of the row that stays distinct when two machines share a label. -->
   {#if deviceRef}<span class="deviceref">{deviceRef}</span>{/if}
 
-  <div class="rowactions">
-    <!-- Hidden while the editor is open: pressing it again would call
-         startRename and silently reset the draft the user is in the middle of
-         typing. The editor has its own Save and Cancel. -->
-    {#if !renaming}
-      <button class="chk" aria-label={t.me.deviceRenameLabel(device.Name)} onclick={startRename}>
-        {t.me.deviceRename}
-      </button>
-    {/if}
-    <!-- Sibling of the send zone, never inside it. -->
-    <button
-      class="del"
-      aria-label={t.me.deviceRevokeLabel(device.Name, kind, deviceRef, signedIn)}
-      onclick={onRevoke}
-    >{t.me.deviceRevoke}</button>
-  </div>
+  <!-- The whole group is absent, not disabled, when this row does not manage the
+       credential: an empty action strip would still take its layout slot and
+       still read as "there are controls here". -->
+  {#if canRevoke || canRename}
+    <div class="rowactions">
+      <!-- Hidden while the editor is open: pressing it again would call
+           startRename and silently reset the draft the user is in the middle of
+           typing. The editor has its own Save and Cancel. -->
+      {#if canRename && !renaming}
+        <button class="chk" aria-label={t.me.deviceRenameLabel(device.Name)} onclick={startRename}>
+          {t.me.deviceRename}
+        </button>
+      {/if}
+      <!-- Sibling of the send zone, never inside it. -->
+      {#if canRevoke}
+        <button
+          class="del"
+          aria-label={t.me.deviceRevokeLabel(device.Name, kind, deviceRef, signedIn)}
+          onclick={onRevoke}
+        >{t.me.deviceRevoke}</button>
+      {/if}
+    </div>
+  {/if}
 
   <!-- Second line: when this credential was approved, and whether it has been
        used since. Both are here for the rows that predate device labels —
@@ -635,7 +663,7 @@
     {/if}
   </p>
 
-  {#if renameError}
+  {#if renameError && canRename}
     <p class="renameerr" role="status" aria-live="polite">
       {renameError === "rejected" ? t.me.deviceRenameRejected : t.me.deviceRenameFailed}
     </p>

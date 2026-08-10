@@ -32,6 +32,13 @@
  * ordinary stored-upload result exposing both terminal download paths — including
  * the verified temporary CLI route on a 390px viewport.
  *
+ * The browser half runs on the Device Inbox page, not /me. That is the page the
+ * product tells people to send from, so it is the page this proves can do it:
+ * the drop, the queue, the worker's commit and the browser observing `saved`
+ * all happen without ever visiting My Devices. /me renders the same components
+ * with credential management switched on, and keeps its own coverage in the
+ * component suites and the accessibility scan.
+ *
  * Isolated and self-cleaning: every path is under one temporary directory, the
  * account is created by this script, and the whole tree is removed at the end.
  * It never touches production and holds no production data.
@@ -231,26 +238,34 @@ const PAGE_HOOKS = `
   };
 `;
 
-async function openMe(browser, cookie) {
+/** Everything below happens inside the Device Inbox page's own operational
+ *  block, so a selector that accidentally matched some other list would fail
+ *  rather than quietly test a different surface. */
+const BLOCK = '[data-di="devices"]';
+
+async function openDeviceInbox(browser, cookie) {
   const tab = await newTab(browser, "about:blank", PAGE_HOOKS);
   const [name, value] = cookie.split("=");
   await tab.send("Network.enable", {});
   await tab.send("Network.setCookie", { name, value, domain: "127.0.0.1", path: "/" });
-  await tab.send("Page.navigate", { url: `${BASE}/me` });
-  await tab.waitFor("!!document.querySelector('.devicelist li .sendzone')", "the device card to offer a send target");
+  await tab.send("Page.navigate", { url: `${BASE}/device-inbox` });
+  await tab.waitFor(
+    `!!document.querySelector('${BLOCK} li .sendzone')`,
+    "the Device Inbox page itself to offer a send target",
+  );
   return tab;
 }
 
 /** A real DOM drop: a `DataTransfer` built in the page, carrying a real `File`. */
 const dropScript = (name, body) => `(async () => {
-  const zone = document.querySelector('.devicelist li .sendzone');
+  const zone = document.querySelector('${BLOCK} li .sendzone');
   const dt = new DataTransfer();
   dt.items.add(new File([new TextEncoder().encode(${JSON.stringify(body)})], ${JSON.stringify(name)}));
   zone.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
   return true;
 })()`;
 
-const statusScript = "document.querySelector('.devicelist li .sendstatus')?.textContent?.trim() ?? ''";
+const statusScript = `document.querySelector('${BLOCK} li .sendstatus')?.textContent?.trim() ?? ''`;
 
 // ── the run ───────────────────────────────────────────────────────────────
 
@@ -271,18 +286,30 @@ async function main() {
 
   const { browser, close } = await launchBrowser({ debugPort: DEBUG_PORT, keep: KEEP });
   try {
-    const tab = await openMe(browser, cookie);
+    const tab = await openDeviceInbox(browser, cookie);
+
+    // ── 0. the journey needs no second page ──────────────────────────────
+    // Asserted before anything else, because everything after it is only
+    // meaningful if this page is where the work happens. The page must also
+    // carry no revoke here: it is one mis-aimed click from a drop target, and
+    // it belongs to My Devices.
+    if (await tab.evaluate(`!!document.querySelector('${BLOCK} li button.del')`)) {
+      throw new Error("a destructive revoke control is sitting on the send surface");
+    }
+    if (await tab.evaluate(`location.pathname !== "/device-inbox"`)) {
+      throw new Error("the send target was only reachable after leaving /device-inbox");
+    }
 
     // ── 2. offline queues ────────────────────────────────────────────────
     // No worker is running, so the device never heartbeated: it is offline and
     // must still be a valid target.
-    const offlineText = await tab.evaluate("document.querySelector('.devicelist li').textContent");
+    const offlineText = await tab.evaluate(`document.querySelector('${BLOCK} li').textContent`);
     if (!/Offline/.test(offlineText)) throw new Error(`card does not say the device is offline: ${offlineText}`);
     if (!/queue/i.test(offlineText)) throw new Error("card does not say the file will queue while offline");
-    ok("an offline device is still offered as a target, and says the file queues");
+    ok("an offline device is still offered as a target on /device-inbox, and says the file queues");
 
     // ── keyboard reaches the picker ──────────────────────────────────────
-    await tab.evaluate("document.querySelector('.devicelist li .sendbtn').focus(); true");
+    await tab.evaluate(`document.querySelector('${BLOCK} li .sendbtn').focus(); true`);
     const focused = await tab.evaluate("document.activeElement?.classList.contains('sendbtn')");
     if (!focused) throw new Error("the send button did not take keyboard focus");
     for (const type of ["keyDown", "char", "keyUp"]) {

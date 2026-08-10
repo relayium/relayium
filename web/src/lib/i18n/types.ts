@@ -678,7 +678,20 @@ export interface Messages {
     signInCta: string;
     createAccountCta: string;
     signedInLead: (email: string) => string;
-    myDevicesCta: string;
+    /** Heading over the account's own device rows, which carry the send
+     *  controls. This block is the primary journey; /me is not on the path. */
+    devicesH3: string;
+    /** Secondary link to /me. Names what /me is FOR — renaming and revoking —
+     *  because the rows here deliberately carry neither. */
+    manageDevicesCta: string;
+    /** In-page link from a platform section back up to the send block. */
+    sendHereCta: string;
+    /** The one state whose remedy is another request. */
+    retryCta: string;
+    /** A background presence refresh failed while rows were already on screen.
+     *  They stay — they are the last thing the server actually said — and this
+     *  says what may be stale about them. */
+    refreshFailed: string;
     /** `/api/devices` did not answer. Says so — and must NOT be worded as "no
      *  devices" or "ready", because the page does not know which is true. */
     stateUnknown: string;

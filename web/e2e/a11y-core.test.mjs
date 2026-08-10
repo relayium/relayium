@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { applyAllowlist, loadAllowlist, parseExpiry } from "./a11y-core.mjs";
-import { FREE_USER_ROUTES, ME_DEVICES, PLANS, PRICING_ROUTES } from "./a11y-fixtures.mjs";
+import { FREE_USER_ROUTES, ME_DEVICES, ME_ROUTES, PLANS, PRICING_ROUTES } from "./a11y-fixtures.mjs";
 import { LOADED_TIERS, TARGETS } from "./a11y-targets.mjs";
 
 const temporary = [];
@@ -172,10 +172,24 @@ describe("scanner target readiness", () => {
     const withFixture = TARGETS.filter((t) => t.fixture).map((t) => t.id);
     expect(withFixture).toEqual([
       "spa/pricing",
+      "spa/device-inbox/signed-in",
       "spa/me/devices",
       "spa/me/devices/mobile-dark",
       "spa/cross-network/account-modal/pricing",
     ]);
+  });
+
+  it("scans the signed-in Device Inbox, where the send controls now live", () => {
+    // The operational block only exists for an account with devices, so without
+    // a fixture this page is scanned as an article and every control on it —
+    // drop zone, send button, live region, blocked-reason text — goes unseen.
+    // Waiting on the ROWS rather than on the block is what makes that true: the
+    // block's shell renders before the rows do.
+    const t = target("spa/device-inbox/signed-in");
+    expect(t.url).toBe("/device-inbox");
+    expect(t.ready).toBe('[data-di="devices"] li');
+    expect(t.readyCount).toBe(ME_DEVICES.devices.length);
+    expect(t.fixture).toBe(ME_ROUTES);
   });
 
   it("scans My Devices with rows that actually exist, in both colour schemes", () => {

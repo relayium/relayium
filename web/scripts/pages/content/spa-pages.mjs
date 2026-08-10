@@ -194,7 +194,7 @@ export const deviceInbox = {
     heading: "How it works",
     steps: [
       "On the machine that should receive: sign in, choose the folder it may write to, and switch receiving on there. Nothing arrives until that has been done on that machine.",
-      "In any browser: sign in to the same account and pick the device in My Devices. Your browser encrypts the files and seals the content key to that device before anything is uploaded.",
+      "In any browser: sign in to the same account and pick the device on this page. Your browser encrypts the files and seals the content key to that device before anything is uploaded.",
       "Relayium stores ciphertext and routing state. It cannot read the file, its name or the folder it is bound for, and it holds no key that could open it.",
       "The device collects the task, decrypts and verifies it locally, and writes it into the folder you chose — without asking you again, and without ever overwriting a file that is already there.",
       "Uploaded is not saved: while the target is offline, downloading or verifying, the transfer is still on its way. Saved appears only after that device has decrypted the file, checked it against its manifest and committed it durably to the folder.",
@@ -221,11 +221,11 @@ export const deviceInbox = {
       },
       {
         title: "iPhone — planned",
-        desc: "The native share-sheet sender and background receiving are planned, not built. Today an iPhone signs in to relayium.com in Safari and sends from My Devices to a Mac, PC or server. Receiving on iOS will be best-effort background work scheduled by the system — never always-on and never guaranteed to be immediate.",
+        desc: "The native share-sheet sender and background receiving are planned, not built. Today an iPhone signs in to relayium.com in Safari and sends from this page to a Mac, PC or server. Receiving on iOS will be best-effort background work scheduled by the system — never always-on and never guaranteed to be immediate.",
       },
       {
         title: "Android — planned",
-        desc: "Native sharing and a native receiver are planned, not built. Today an Android phone signs in in its mobile browser and sends from My Devices. A future receiver would have to live within Android's foreground-service and background-work rules, and battery optimisation would make timing best-effort.",
+        desc: "Native sharing and a native receiver are planned, not built. Today an Android phone signs in in its mobile browser and sends from this page. A future receiver would have to live within Android's foreground-service and background-work rules, and battery optimisation would make timing best-effort.",
       },
     ],
   },

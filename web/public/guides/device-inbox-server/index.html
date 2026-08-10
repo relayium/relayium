@@ -85,7 +85,7 @@ footer a{color:var(--text-h);text-decoration:none}
            generated Arabic page. -->
       <p class="updated">Last updated: <bdi>2026-08-09</bdi></p>
       <nav class="langbar" aria-label="Language"><a href="/guides/device-inbox-server/" aria-current="true">English</a><a href="/zh/guides/device-inbox-server/">中文</a><a href="/ja/guides/device-inbox-server/">日本語</a><a href="/ko/guides/device-inbox-server/">한국어</a><a href="/de/guides/device-inbox-server/">Deutsch</a><a href="/fr/guides/device-inbox-server/">Français</a><a href="/ar/guides/device-inbox-server/">العربية</a><a href="/es/guides/device-inbox-server/">Español</a><a href="/pt/guides/device-inbox-server/">Português</a></nav>
-      <p class="lead">Device Inbox sends a file from My Devices in your browser to a server, NAS or workstation you own. The browser encrypts it; only that machine decrypts and saves it.</p>
+      <p class="lead">Device Inbox sends a file from its own page in your browser to a server, NAS or workstation you own. The browser encrypts it; only that machine decrypts and saves it.</p>
       <p class="lead">A server receiver must survive a closed SSH window and a reboot. The recommended installer below creates the folder and installs a real systemd service; inbox run is only the foreground diagnostic/container entrypoint.</p>
       <h2>Install the resident receiver</h2>
       <p>Run login once as the operator, then download and inspect the short installer before giving it root access. The script copies the device credential without printing it, creates a dedicated relayium account, enrols its receive key, installs the hardened unit, starts it now and enables it after reboot.</p>
@@ -121,8 +121,8 @@ sudo -u relayium relayium inbox disable --config-dir /var/lib/relayium-inbox/con
       <h3>Can I install it manually?</h3>
       <p>Yes. relayium inbox service systemd-user or systemd-system prints a machine-specific unit and commands; launchd and container descriptions also exist. The inspected installer is the shorter Linux server path.</p>
       <div class="ctacard">
-        <p>Once the service reports ready, send a file from your own device card.</p>
-        <a class="cta" href="/me">Open My Devices</a>
+        <p>Once the service reports ready, send a file from its card on Device Inbox.</p>
+        <a class="cta" href="/device-inbox">Open Device Inbox</a>
       </div>
       <h2>Continue reading</h2>
       <ul class="related"><li><a href="/guides/transfer-files-from-terminal/">Transfer files and text from the terminal with the Relayium CLI</a></li><li><a href="/guides/run-relayium-as-an-always-on-service/">Run Relayium as an always-on receive service</a></li><li><a href="/guides/how-relayium-encrypts-your-files/">How Relayium encrypts your files end-to-end</a></li><li><a href="/how-to/automate-server-backups/">Automate encrypted server backups with a cron job</a></li><li><a href="/">Relayium</a></li></ul>
