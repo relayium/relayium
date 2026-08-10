@@ -6,7 +6,7 @@
  *
  * 为什么必须是真浏览器：这一批修的是**发现性**，而发现性只在渲染之后才存在。jsdom
  * 能证明某个字符串在 DOM 里，证明不了它在 390px 上没有被挤出屏幕、证明不了阿拉伯语
- * 下整行没有倒过来读、也证明不了那个 CTA 真的能把人带到 My Devices。
+ * 下整行没有倒过来读、也证明不了那个 CTA 真的能把人带到 Device Inbox。
  *
  * 三种视角，同一组断言：桌面 1440×900、窄屏 390×844、阿拉伯语 RTL。
  *
@@ -144,7 +144,7 @@ async function checkCliPage(browser, base, view) {
   }
 
   const ctaBad = await tab.evaluate(VISIBLE("#device-inbox .cta a"));
-  if (ctaBad) throw new Error(`${view.id}: the My Devices CTA is ${ctaBad}`);
+  if (ctaBad) throw new Error(`${view.id}: the Device Inbox CTA is ${ctaBad}`);
 
   if (view.rtl) {
     const dir = await tab.evaluate(`getComputedStyle(document.querySelector("#device-inbox")).direction`);
@@ -161,10 +161,10 @@ async function checkCliPage(browser, base, view) {
     }
   }
 
-  // CTA 真的把人带到 My Devices，而不只是长得像个链接。
+  // CTA 真的把人带到现在可以直接操作的 Device Inbox，而不只是长得像个链接。
   await tab.evaluate(`document.querySelector("#device-inbox .cta a").click()`);
-  await tab.waitFor(`location.pathname.endsWith("/me")`, `${view.id}: CTA navigates to /me`);
-  ok(`${view.id}: /cli uses the product-priority order and the Inbox CTA reaches My Devices`);
+  await tab.waitFor(`location.pathname.endsWith("/device-inbox")`, `${view.id}: CTA navigates to /device-inbox`);
+  ok(`${view.id}: /cli uses the product-priority order and the CTA reaches Device Inbox`);
 }
 
 async function checkMyDevices(browser, base, view) {
