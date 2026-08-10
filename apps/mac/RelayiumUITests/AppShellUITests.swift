@@ -422,8 +422,12 @@ final class AppShellUITests: XCTestCase {
 
         // SecurityCodeText deliberately exposes digits one by one so
         // VoiceOver never reads the pairing code as one large number.
-        XCTAssertTrue(window.staticTexts["4 8 3 9 2 0"].waitForExistence(timeout: 10),
+        let generatedCode = window.descendants(matching: .any)["pairing-code-value"]
+            .firstMatch
+        XCTAssertTrue(generatedCode.waitForExistence(timeout: 10),
                       "the generated pairing code was not visible")
+        XCTAssertEqual(generatedCode.label, "4 8 3 9 2 0",
+                       "VoiceOver no longer reads the pairing code digit by digit")
         XCTAssertTrue(window.staticTexts["Join link"].exists,
                       "the generated code has no visible browser handoff")
         let expectedLink = "https://relayium.com/cross-network?mode=text#c=483920"
@@ -444,13 +448,9 @@ final class AppShellUITests: XCTestCase {
                       "the generated-code surface hides its escape action")
         XCTAssertTrue(window.staticTexts["Workspace"].exists || window.title == "Workspace",
                       "creating a pairing-code message session navigated elsewhere")
-        // The bounded honesty of this batch, on screen: a live connection says
-        // which lane it does NOT have rather than showing a dead composer.
-        XCTAssertTrue(visibleElement(
-            id: "workspace-lane-note",
-            text: "This session carries messages, not files. Sending files needs a session of its own — leave this one to start it.",
-            in: window).exists,
-                      "a live session does not say what it can carry")
+        XCTAssertFalse(window.descendants(matching: .any)["workspace-lane-note"]
+            .firstMatch.exists,
+                       "the handoff guessed a one-lane peer before anybody joined")
 
         // No conversation or transcript exists yet. Cancel must be the whole
         // exit, not the first half of Cancel -> Session ended -> Done.
@@ -461,7 +461,8 @@ final class AppShellUITests: XCTestCase {
                       "Cancel did not restore the pairing-code join path")
         XCTAssertFalse(window.buttons["Done"].exists,
                        "Cancel manufactured an empty terminal task requiring Done")
-        XCTAssertFalse(window.staticTexts["4 8 3 9 2 0"].exists,
+        XCTAssertFalse(window.descendants(matching: .any)["pairing-code-value"]
+            .firstMatch.exists,
                        "the cancelled pairing code remained on screen")
     }
 
@@ -496,6 +497,17 @@ final class AppShellUITests: XCTestCase {
                       "a complete code cannot join a message session")
         XCTAssertTrue(window.buttons["Join files"].isEnabled,
                       "a complete code cannot join a file transfer")
+
+        window.buttons["Join messages"].click()
+        XCTAssertTrue(window.descendants(matching: .any)["workspace-waiting-pairing-peer"]
+            .firstMatch.waitForExistence(timeout: 10),
+                      "joining a code leaves a blank Workspace while it waits")
+        let cancel = window.descendants(matching: .any)["workspace-cancel-pairing-watch"]
+            .firstMatch
+        XCTAssertTrue(cancel.exists, "a pairing-room wait has no escape")
+        cancel.click()
+        XCTAssertTrue(window.textFields["pairing.joinCode"].waitForExistence(timeout: 10),
+                      "cancelling the pairing-room wait did not return to joining")
     }
 
     /// **One screen offers both ways to connect, and leads with the message.**
@@ -528,13 +540,11 @@ final class AppShellUITests: XCTestCase {
             text: "Optional. You can connect first and choose files afterwards — a message needs nothing at all.",
             in: window).exists,
                       "the Workspace no longer says staging is optional")
-        // And it states, before anything is connected, what one connection can
-        // carry. Deleting this sentence is what the link/1 batch will do.
-        XCTAssertTrue(visibleElement(
-            id: "workspace-one-connection-note",
-            text: "One connection carries messages or files, not both. Sending the other kind opens a new connection, with a new verification code.",
-            in: window).exists,
-                      "the Workspace no longer states its one-lane limit")
+        // No peer exists yet, so the surface must not guess whether this will
+        // become a unified link or a legacy one-lane session.
+        XCTAssertFalse(window.descendants(matching: .any)["workspace-one-connection-note"]
+            .firstMatch.exists,
+                       "the Workspace claimed a legacy limit before knowing the peer")
         // Creating a message code needs nothing staged; creating a file code
         // does. That asymmetry IS message-first.
         XCTAssertTrue(window.buttons["Create a code for messages"].isEnabled,
@@ -1120,7 +1130,8 @@ final class AppShellUITests: XCTestCase {
         let chooser = window.descendants(matching: .any)["Files to send"].firstMatch
         XCTAssertTrue(chooser.waitForExistence(timeout: 15),
                       "the Workspace stages nothing")
-        XCTAssertTrue(window.buttons["Choose files or folders"].exists,
+        XCTAssertTrue(window.descendants(matching: .any)["workspace-choose-files"]
+            .firstMatch.exists,
                       "the Workspace has no explicit file and folder picker")
         XCTAssertEqual(window.radioButtons.count, 0,
                        "a transfer-type picker can still hide the staging surface")
@@ -1221,7 +1232,8 @@ final class AppShellUITests: XCTestCase {
                       "a staged batch left the file-code action inert")
         create.click()
 
-        XCTAssertTrue(window.staticTexts["4 8 3 9 2 0"].waitForExistence(timeout: 20),
+        XCTAssertTrue(window.descendants(matching: .any)["pairing-code-value"]
+            .firstMatch.waitForExistence(timeout: 20),
                       "the generated pairing code is not visible")
         XCTAssertTrue(window.staticTexts["Join link"].exists,
                       "the generated code has no visible browser handoff")
@@ -1483,7 +1495,8 @@ final class AppShellUITests: XCTestCase {
         let create = window.buttons["Create a code for messages"]
         XCTAssertTrue(create.waitForExistence(timeout: 10))
         create.click()
-        XCTAssertTrue(window.staticTexts["4 8 3 9 2 0"].waitForExistence(timeout: 20))
+        XCTAssertTrue(window.descendants(matching: .any)["pairing-code-value"]
+            .firstMatch.waitForExistence(timeout: 20))
 
         let share = window.buttons["Share"]
         XCTAssertTrue(share.waitForExistence(timeout: 10),

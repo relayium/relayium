@@ -21,15 +21,17 @@ import RelayiumKit
 /// A device that announced exact `link/1` gets `WorkspaceLinkPane`: ONE
 /// authenticated connection, verified once, carrying an always-visible composer
 /// and as many file or folder batches as the user wants. Everything else —
-/// every older Web build, every native client on the shipped wire, the CLI, and
-/// every pairing-code session on this platform — keeps `WorkspaceSessionPane`
-/// and its one honest sentence about carrying messages *or* files.
+/// every older Web build, every native client on the shipped wire, and the CLI
+/// — keeps `WorkspaceSessionPane` and its one honest sentence about carrying
+/// messages *or* files. A pairing-code room makes the same capability decision
+/// after its peer appears: exact `link/1` promotes it to the unified pane;
+/// otherwise its already-open room is handed to this legacy pane.
 ///
-/// The two are never on screen together and neither is a fallback for the
-/// other: `LinkWorkspaceModel.canLink` is `PeerCapabilityRegistry.supports`
-/// with exact matching, and a peer that does not answer it is not part of this
-/// feature at all. Pairing-code rooms are deliberately outside it — see
-/// `linkRoomActive(isCodelessRoom:)` for the reason and the revisit trigger.
+/// The two are never on screen together. For a codeless same-network room,
+/// `LinkWorkspaceModel.canLink` is `PeerCapabilityRegistry.supports` with exact
+/// matching and there is no speculative fallback. Pairing-code rooms instead
+/// use their own capability registry and bounded legacy fallback window; see
+/// `LinkWorkspaceModel.watchPairingCode`.
 ///
 /// ## Routing
 ///

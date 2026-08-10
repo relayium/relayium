@@ -300,8 +300,16 @@ struct RelayiumApp: App {
         // the shipped interceptor keeps its position in the socket's routing
         // order. Built here rather than in a view because an open link outlives
         // the window.
+        #if DEBUG
+        let unified = UITestMode.isActive
+            ? UITestMode.makeLinkWorkspaceModel(
+                verification: prefs, nearby: nearby, pairingRoom: pairingRoom)
+            : AppEnvironment.makeLinkWorkspaceModel(
+                verification: prefs, nearby: nearby, pairingRoom: pairingRoom)
+        #else
         let unified = AppEnvironment.makeLinkWorkspaceModel(
             verification: prefs, nearby: nearby, pairingRoom: pairingRoom)
+        #endif
         // The one place a watched code becomes an ordinary legacy session. The
         // socket is already open and already the room's; this only chooses which
         // model runs on it, from the verb the user pressed.

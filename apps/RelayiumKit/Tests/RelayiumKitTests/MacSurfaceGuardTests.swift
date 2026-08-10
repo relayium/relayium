@@ -1053,6 +1053,29 @@ final class MacSurfaceGuardTests: XCTestCase {
                        ["Components/SecurityCodeText.swift"])
     }
 
+    func testTheDisplayedCodeIsSelectableAndSpokenAsDigits() throws {
+        let code = try source(named: "Components/SecurityCodeText.swift")
+        XCTAssertTrue(code.contains("design: .monospaced"))
+        XCTAssertTrue(code.contains(".textSelection(.enabled)"))
+        XCTAssertTrue(code.contains(".accessibilityLabel(spokenCode)"))
+        XCTAssertTrue(code.contains("joined(separator: \" \")"),
+                      "VoiceOver must read pairing-code digits one at a time")
+        XCTAssertTrue(code.contains("L10n.token(code)"),
+                      "the displayed code must stay isolated in RTL copy")
+        XCTAssertEqual(code.components(separatedBy: "pairing-code-value").count - 1, 1)
+        XCTAssertFalse(code.contains("verification-code-value"),
+                       "the inner code view overwrites verification task identifiers")
+    }
+
+    func testUITestPairingRoomsUseTheOfflineLinkFixture() throws {
+        let mode = try source(named: "UITestMode.swift")
+        XCTAssertTrue(mode.contains("static func makeLinkWorkspaceModel"))
+        XCTAssertTrue(mode.contains("iceClient: UITestWaitingICEClient()"))
+        let app = try source(named: "RelayiumApp.swift")
+        XCTAssertTrue(app.contains("UITestMode.makeLinkWorkspaceModel("),
+                      "UI acceptance still reaches the production pairing ICE client")
+    }
+
     /// Five destination files, one per `MacSurface`, and the five the Workspace
     /// replaced are gone rather than merely unreferenced.
     ///
@@ -2428,49 +2451,41 @@ final class MacSurfaceGuardTests: XCTestCase {
 
     /// **Never claim that one legacy connection carries both lanes.**
     ///
-    /// The surface is unified; the shipped wire is not. So the connect phase
-    /// says it once before anything is connected, and the session phase says it
-    /// again from inside, naming the lane this connection does NOT have. Both
-    /// sentences are asserted here because the temptation a unified screen
-    /// creates is to quietly drop them and render a dead composer instead.
-    ///
-    /// The `link/1` integration batch narrowed this guard rather than deleting
-    /// it. The sentence is still TRUE — for a pairing-code room in every case,
-    /// and for a same-network peer that did not announce exact `link/1` — so
-    /// what has to hold now is that it appears exactly where it is true and
-    /// nowhere else. `testTheConnectPhaseStatesTheRightLimitPerDevice` below
-    /// owns the other half.
-    func testTheWorkspaceStatesTheOneLaneLimitInBothPhases() throws {
+    /// The surface is unified; a legacy session is not. Once capability
+    /// negotiation has selected that session pane, it names the lane the
+    /// connection does NOT have. The connect phase cannot make that claim for a
+    /// pairing code whose peer is not known yet.
+    func testTheWorkspaceStatesTheOneLaneLimitOnlyAfterCapabilityIsKnown() throws {
         let connect = try source(named: workspaceConnect)
-        XCTAssertTrue(connect.contains("InlineMessage(.info, L10n.t(.workspaceOneConnectionNote))"),
-                      "the connect phase no longer states what one connection carries")
-        XCTAssertTrue(connect.contains(".accessibilityIdentifier(\"workspace-one-connection-note\")"))
+        XCTAssertFalse(connect.contains(".accessibilityIdentifier(\"workspace-one-connection-note\")"),
+                       "the connect phase guesses a pairing peer's capability")
 
         let session = try source(named: workspaceSession)
         XCTAssertTrue(session.contains(
             "L10n.t(mode == .text ? .workspaceMessagesOnlyNote : .workspaceFilesOnlyNote)"),
             "a live session no longer names the lane it does not have")
         XCTAssertTrue(session.contains(".accessibilityIdentifier(\"workspace-lane-note\")"))
-        // The note is unconditional within a session: gating it on a state would
-        // be the same omission, one branch deep.
+        XCTAssertTrue(session.contains("if peerCapabilityIsKnown { laneNote }"),
+                      "the lane warning is shown before a pairing peer is classified")
+        XCTAssertTrue(session.contains("case .idle, .minting, .showingCode, .failed:"),
+                      "a no-peer failure is described as a classified legacy connection")
+        XCTAssertTrue(session.contains("workspace-waiting-pairing-peer"))
+        XCTAssertTrue(session.contains("workspace-cancel-pairing-watch"))
         guard let laneNote = session.range(of: "private var laneNote: some View"),
               let body = session.range(of: "var body: some View") else {
             return XCTFail("the session pane no longer has the shape this guards")
         }
         XCTAssertLessThan(body.lowerBound, laneNote.lowerBound)
-        XCTAssertTrue(session.contains("laneNote\n            exit"),
+        XCTAssertTrue(session.contains("if peerCapabilityIsKnown { laneNote }\n            exit"),
                       "the lane note must sit with the exit rather than inside one lane")
     }
 
     /// **The connect phase says the right thing about the DEVICE, not about the
     /// screen.**
     ///
-    /// Two claims live here and they contradict each other if either is put in
-    /// the wrong place. A pairing-code room really does carry messages OR files,
-    /// whatever the peer can speak, because there is no shared room socket for a
-    /// link to live on — so its note is unconditional. A same-network device
-    /// carries whichever its own announcement earns, so its note is a branch on
-    /// `device.supportsLink` and nothing else.
+    /// A pairing-code peer is not known on the connect phase, so that section
+    /// makes neither claim. A same-network device carries whichever its own
+    /// announcement earns, so its note is a branch on `device.supportsLink`.
     ///
     /// The failure this prevents is the tempting one: a single note above both
     /// sections, which is necessarily a stale claim about one of them.
@@ -2486,16 +2501,17 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(connect.contains(
             ".accessibilityIdentifier(\"workspace-device-connection-note\")"))
 
-        // And the unified claim is never made about a pairing code.
+        // A pairing code has no peer yet, so neither connection-shape claim is
+        // made until negotiation selects a session pane.
         guard let pairing = connect.range(of: "private var pairingCode: some View"),
               let create = connect.range(of: "private var createControls: some View") else {
             return XCTFail("the connect pane no longer has the shape this guards")
         }
         let pairingBody = String(connect[pairing.lowerBound..<create.lowerBound])
-        XCTAssertTrue(pairingBody.contains("L10n.t(.workspaceOneConnectionNote)"),
-                      "the pairing-code section must keep its one-lane sentence")
+        XCTAssertFalse(pairingBody.contains("workspaceOneConnectionNote"),
+                       "pairing-code setup guessed a legacy peer")
         XCTAssertFalse(pairingBody.contains("linkOneConnectionNote"),
-                       "a pairing code cannot carry a unified link on this platform")
+                       "pairing-code setup guessed a link-capable peer")
     }
 
     /// Create and join sit on one screen, so only one control can be the keyboard

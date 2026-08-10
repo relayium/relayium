@@ -27,8 +27,8 @@ import RelayiumKit
 /// rendered by `WorkspaceLinkPane`, where one connection really does carry both
 /// lanes and the note is replaced by `link.oneConnectionNote`. Everything this
 /// pane still draws — every older Web build, every native client on the shipped
-/// wire, the CLI, and every pairing-code session on this platform — genuinely
-/// has the limitation, so it keeps saying so.
+/// wire, the CLI, and a pairing-code peer that did not announce exact `link/1`
+/// — genuinely has the limitation, so it keeps saying so.
 ///
 /// ## What it inherited unchanged
 ///
@@ -42,6 +42,7 @@ struct WorkspaceSessionPane: View {
     @ObservedObject var selection: SelectionStore
 
     @EnvironmentObject private var presence: TransferPresence
+    @EnvironmentObject private var link: LinkWorkspaceModel
 
     @State private var confirmingLocalTextLeave = false
 
@@ -56,11 +57,15 @@ struct WorkspaceSessionPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             sessionPeer
-            switch mode {
-            case .files: fileLane
-            case .text:  textLane
+            if waitingOnJoinedCode {
+                waitingForPairingPeer
+            } else {
+                switch mode {
+                case .files: fileLane
+                case .text:  textLane
+                }
             }
-            laneNote
+            if peerCapabilityIsKnown { laneNote }
             exit
         }
         .frame(maxWidth: 720, alignment: .leading)
@@ -203,9 +208,61 @@ struct WorkspaceSessionPane: View {
 
     // MARK: - what this connection carries
 
-    /// One sentence, always present while a session is, naming the lane this
+    /// Joining watches the unified room before either legacy model starts. Give
+    /// that real network wait a visible status and an escape rather than a pane
+    /// containing only its heading.
+    private var waitingOnJoinedCode: Bool {
+        guard case .watching = link.connection else { return false }
+        switch mode {
+        case .files: return fileModel.state == .idle
+        case .text: return textModel.state == .idle
+        }
+    }
+
+    private var waitingForPairingPeer: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ProgressView(L10n.t(.directWaitingForDevice))
+                .controlSize(.small)
+                .accessibilityIdentifier("workspace-waiting-pairing-peer")
+            Button(L10n.t(.commonCancel)) { cancelPairingWatch() }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("workspace-cancel-pairing-watch")
+        }
+    }
+
+    private func cancelPairingWatch() {
+        link.leave()
+        link.dismiss()
+        releaseOwner()
+    }
+
+    /// Minting and showing a code happen before there is a peer to classify.
+    /// Once the legacy model advances beyond those states, the pairing-room
+    /// negotiation has selected this one-lane path; a `link/1` peer is rendered
+    /// by `WorkspaceLinkPane` instead.
+    private var peerCapabilityIsKnown: Bool {
+        switch mode {
+        case .files:
+            switch fileModel.state {
+            case .joining, .connecting, .verifying, .transferring, .completed:
+                return true
+            case .idle, .minting, .showingCode, .failed:
+                return false
+            }
+        case .text:
+            switch textModel.state {
+            case .joining, .connecting, .verifying, .waitingAccept,
+                 .incomingRequest, .open, .ended, .refused, .unsupported:
+                return true
+            case .idle, .minting, .showingCode, .failed:
+                return false
+            }
+        }
+    }
+
+    /// One sentence, present once a legacy peer is known, naming the lane this
     /// connection does NOT have. It is the bounded honesty of this batch: the
-    /// surface is unified, the wire underneath still is not.
+    /// surface is unified, the legacy wire underneath still is not.
     private var laneNote: some View {
         Text(L10n.t(mode == .text ? .workspaceMessagesOnlyNote : .workspaceFilesOnlyNote))
             .font(.caption)

@@ -287,13 +287,10 @@ struct WorkspaceConnectPane: View {
                 }
                 Divider()
                 joinControls
-                // Unconditional here, and it is not a copy of the per-device
-                // note above: a pairing-code room has no shared room socket for
-                // a link to live on, so this half really does carry messages OR
-                // files whatever the peer can speak. See
-                // `linkRoomActive(isCodelessRoom:)`.
-                InlineMessage(.info, L10n.t(.workspaceOneConnectionNote))
-                    .accessibilityIdentifier("workspace-one-connection-note")
+                // The peer is not known yet, so neither the unified-link claim
+                // nor the legacy one-lane warning is true here. Once a peer
+                // appears, capability negotiation selects the link pane or the
+                // legacy session pane; each states its actual connection shape.
             }
         }
     }

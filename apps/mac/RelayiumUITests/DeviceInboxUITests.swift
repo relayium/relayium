@@ -250,8 +250,9 @@ final class DeviceInboxUITests: XCTestCase {
                       "the destination never says what Device Inbox does")
         XCTAssertFalse(copy.contains("Open Device Inbox settings"),
                        "the destination forwards the user to Settings instead of working")
-        // The other five destinations are still reachable beside it.
-        for other in ["sidebar-nearby", "sidebar-pairingCode", "sidebar-storedSend",
+        // The other four destinations are still reachable beside it. Nearby
+        // and pairing code are intentionally one Workspace row on macOS.
+        for other in ["sidebar-workspace", "sidebar-storedSend",
                       "sidebar-storedReceive", "sidebar-account"] {
             XCTAssertTrue(element(other, in: window).exists,
                           "adding the Device Inbox row displaced \(other)")
@@ -643,8 +644,8 @@ final class DeviceInboxUITests: XCTestCase {
         let window = mainWindow
         // Somewhere else first, so "it opened on the Device Inbox" cannot be
         // satisfied by the destination the app happened to launch on.
-        let nearby = element("sidebar-nearby", in: window)
-        if nearby.waitForExistence(timeout: 10) { nearby.click() }
+        let workspace = element("sidebar-workspace", in: window)
+        if workspace.waitForExistence(timeout: 10) { workspace.click() }
         window.buttons[XCUIIdentifierCloseWindow].click()
         let gone = NSPredicate(format: "exists == false")
         expectation(for: gone, evaluatedWith: window, handler: nil)

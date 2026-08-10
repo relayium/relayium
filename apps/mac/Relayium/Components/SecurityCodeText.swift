@@ -34,7 +34,19 @@ struct SecurityCodeText: View {
     let code: String
     let style: Style
 
+    @ViewBuilder
     var body: some View {
+        switch style {
+        case .pairing:
+            codeText.accessibilityIdentifier("pairing-code-value")
+        case .verification:
+            // Verification call sites name the surrounding task (for example
+            // `link-sas`); do not overwrite that identifier on the inner Text.
+            codeText
+        }
+    }
+
+    private var codeText: some View {
         Text(L10n.token(code))
             .font(.system(size: style.size, weight: .semibold, design: .monospaced))
             .textSelection(.enabled)

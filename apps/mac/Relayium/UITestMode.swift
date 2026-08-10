@@ -200,6 +200,30 @@ enum UITestMode {
         )
     }
 
+    /// Keeps the unified pairing-room watcher deterministic and offline.
+    ///
+    /// The legacy models already use `UITestWaitingICEClient`, but `link/1`
+    /// owns a separate ICE read before it opens the room. Leaving that client
+    /// live makes an offline acceptance launch replace a valid generated code
+    /// with `roomUnavailable` according to runner network timing.
+    @MainActor
+    static func makeLinkWorkspaceModel(verification: VerificationPreference,
+                                       nearby: LanDiscoveryModel,
+                                       pairingRoom: LinkRoomHandle) -> LinkWorkspaceModel {
+        let model = LinkWorkspaceModel(
+            capabilities: nearby.capabilities,
+            receiveDirectory: { FileManager.default.temporaryDirectory },
+            requiresVerification: { verification.requiresSASConfirmation },
+            iceClient: UITestWaitingICEClient(),
+            connectPairingSocket: { _ in
+                // nonlocalized: test-only invariant failure, never rendered
+                preconditionFailure("the waiting UI-test ICE client cannot open a socket")
+            },
+            pairingRoomHandle: pairingRoom)
+        nearby.addRoomObserver(model)
+        return model
+    }
+
     #else
     /// In Release the answer is a constant the optimiser folds away, so the
     /// guarded work is unconditional and the argument means nothing.
