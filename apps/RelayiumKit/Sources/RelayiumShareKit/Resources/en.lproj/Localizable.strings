@@ -635,3 +635,47 @@
 "workspace.filesOnlyNote" = "This session carries files, not messages. Sending a message needs a session of its own — leave this one to start it.";
 "workspace.leaveSession" = "Leave this session";
 "workspace.sessionWithCode" = "Connected with a pairing code";
+/* MARK: - The unified link (link/1)
+   One connection carrying messages and repeated file/folder batches behind one
+   verification. Reachable only while such a link is live or has just ended. */
+"link.composerPlaceholder" = "Write a message";
+"link.send" = "Send";
+"link.sendFile" = "Send file";
+"link.sendFolder" = "Send folder";
+"link.oneConnectionNote" = "One connection, verified once. Messages and as many files or folders as you like, without reconnecting.";
+"link.waitingForPeer" = "Waiting for the other device to accept messages. Your message will send as soon as it does.";
+"link.messagesDeclined" = "The other device declined messages. Your text is still here — files are unaffected.";
+"link.notReady" = "This connection isn't ready for that yet.";
+"link.conversationRequest" = "The other device wants to start a conversation.";
+"link.acceptMessages" = "Accept messages";
+"link.declineMessages" = "Decline";
+"link.verifyTitle" = "Compare this code";
+"link.verifyBody" = "Read it aloud to the other device. It is asked once for this connection — every message and every file after it uses the same one.";
+"link.verifyMatches" = "They match";
+"link.verifyDiffers" = "They don't match";
+"link.verifyHoldingFiles" = "Your files are staged and will not be sent until you confirm.";
+"link.connecting" = "Connecting…";
+"link.requesting" = "Asking the other device to connect…";
+"link.openWith" = "Connected with %@";
+"link.signalingLost" = "This Mac left the discovery room, but this connection is still working. If it drops, it cannot be restored — start again from the device list.";
+"link.endedRefused" = "The other device is already busy with another connection.";
+"link.endedTimedOut" = "The other device didn't answer.";
+"link.endedUnavailable" = "This Mac is already busy with another session.";
+"link.endedFailed" = "The connection failed. Nothing further can be sent on it — start again from the device list.";
+"link.endedClosed" = "The connection ended.";
+"link.endedVerificationRejected" = "You said the codes did not match, so the connection was closed. Nothing was sent.";
+"link.endedRoomLost" = "The discovery room went away before the connection was ready.";
+"link.endedRelayExpired" = "This connection reached the time limit of the relay it was using. Create a new code to carry on.";
+"link.endedRoomUnavailable" = "That code could not be joined.";
+"link.relayExpiringSoon" = "This connection is relayed and is close to the time limit of the relay it was issued. Finish up, then create a new code.";
+"link.transfersHeading" = "Files";
+"link.batchOffered" = "Waiting for you to accept";
+"link.batchQueued" = "Queued";
+"link.batchTransferring" = "Sending";
+"link.batchFinished" = "Done";
+"link.batchReceived" = "Saved";
+"link.batchFailed" = "Failed";
+"link.batchArmed" = "Staged, waiting for verification";
+"link.acceptFiles" = "Accept files";
+"link.declineFiles" = "Decline";
+"link.historyIsLocal" = "This conversation is only on these two devices and is discarded when the connection ends.";

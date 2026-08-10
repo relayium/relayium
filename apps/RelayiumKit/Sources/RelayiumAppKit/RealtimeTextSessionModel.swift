@@ -54,6 +54,13 @@ public final class RealtimeTextSessionModel: ObservableObject {
     private let makeNearbyConnection: @MainActor (_ peerId: String, _ role: Role, _ ice: ICEConfig) async throws -> RealtimePeerConnection
     /// The inbound half: a responder for a text offer that arrived on its own.
     private let makeInboundConnection: @MainActor (_ peerId: String, _ ice: ICEConfig) async throws -> RealtimePeerConnection
+    /// The pairing-code variant: a room this process ALREADY holds a socket for,
+    /// because `LinkPairingRoom` opened it so a `link/1` could live there. The
+    /// peer id, the role and the ICE configuration are the room's, resolved
+    /// before this is called, which is why none of them is fetched here. See
+    /// `RealtimeConnectionFactory.connectInRoom` for why the socket is handed
+    /// over rather than reopened.
+    private let makeRoomConnection: @MainActor (_ peerId: String, _ role: Role, _ iceServers: ICEConfig) async throws -> RealtimePeerConnection
     /// How long a nearby connect waits for the chosen device to answer.
     private let nearbyAnswerTimeout: TimeInterval
     /// Read when the SAS lands, not captured at init: the user may flip the
@@ -94,6 +101,12 @@ public final class RealtimeTextSessionModel: ObservableObject {
                 makeInboundConnection: @escaping @MainActor (String, ICEConfig) async throws -> RealtimePeerConnection = { _, _ in
                     throw NearbyError.notScanning
                 },
+                makeRoomConnection: @escaping @MainActor (String, Role, ICEConfig) async throws -> RealtimePeerConnection = { _, _, _ in
+                    // A client with no pairing room refuses rather than dialling
+                    // one it does not have — the same shape, and the same
+                    // reason, as the two nearby defaults above.
+                    throw NearbyError.notScanning
+                },
                 makeConnection: @escaping (String, Role, ICEConfig) async throws -> RealtimePeerConnection) {
         self.pairClient = pairClient
         self.iceClient = iceClient
@@ -104,6 +117,7 @@ public final class RealtimeTextSessionModel: ObservableObject {
         self.nearbyAnswerTimeout = nearbyAnswerTimeout
         self.makeNearbyConnection = makeNearbyConnection
         self.makeInboundConnection = makeInboundConnection
+        self.makeRoomConnection = makeRoomConnection
         self.makeConnection = makeConnection
         self.lastRefill = now()
     }
@@ -230,6 +244,36 @@ public final class RealtimeTextSessionModel: ObservableObject {
             } else {
                 state = .failed(ErrorCopy.message(for: error))
             }
+        }
+    }
+
+    /// Take over a pairing-code room whose peer turned out NOT to speak
+    /// `link/1`, and run this device's ordinary conversation on it.
+    ///
+    /// The file model's `adoptRoom` records why the socket is handed over rather
+    /// than reopened. The one difference here is the capability handshake:
+    /// `connectInRoom` still waits for exact `text/1` before it offers, because
+    /// a peer that does not speak that either is not a text peer and a
+    /// speculative offer is read by an older client as a file transfer.
+    public func adoptRoom(peerId: String, role: Role, config: ICEConfig) async {
+        beginAttempt()
+        let g = generation
+        self.role = role
+        // The code is the room's, and it is already spent: this connection is
+        // being built on the socket that joined it, so nothing here may
+        // blacklist it on a later reject.
+        activeCode = ""
+        state = .connecting
+        do {
+            let peer = try await makeRoomConnection(peerId, role, config)
+            guard g == generation else { peer.close(); return }
+            wire(peer, generation: g)
+            connection = peer
+            peer.start()
+            armAnswerTimeout()
+        } catch {
+            guard g == generation else { return }
+            state = .failed(ErrorCopy.message(for: error))
         }
     }
 

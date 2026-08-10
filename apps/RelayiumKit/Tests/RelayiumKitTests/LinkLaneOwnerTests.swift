@@ -1337,16 +1337,16 @@ final class LinkLaneOwnerTests: XCTestCase {
         }
     }
 
-    /// Still unreachable from production, and neither feature flag has moved.
-    ///
     /// Exactly ONE object may construct a lane owner — `LinkSessionRuntime`,
     /// which assembles it at the only moment it may be built, inside the initial
-    /// transport's publication. That is not a hole in this rule: the runtime is
-    /// itself unreachable, and `LinkSessionRuntimeTests` pins that with the same
-    /// scan over the same sources plus the iOS and macOS targets. So the chain
-    /// from a UI to a lane owner is still broken, one link further along.
-    func testTheOwnerStaysUnreachableFromProduction() throws {
-        XCTAssertFalse(LINK_BUILD_SUPPORT)
+    /// transport's publication. The scan prevents a second construction path;
+    /// production reachability on macOS does not weaken that single-owner rule.
+    func testTheOwnerKeepsOneConstructionPath() throws {
+        // `LINK_BUILD_SUPPORT` is deliberately NOT asserted here. This suite's
+        // subject is not the flag, and its value is per platform: a claim about
+        // it in nineteen unrelated files is nineteen places to get the iOS
+        // branch wrong. `PeerCapabilityRegistryTests` owns that contract, value
+        // and source both.
         XCTAssertFalse(LINK_TRANSPORT_REPLACEMENT_SUPPORTED)
 
         let entitled: Set<String> = ["LinkLaneOwner.swift", "LinkSessionRuntime.swift"]

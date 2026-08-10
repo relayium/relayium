@@ -1,6 +1,8 @@
 import XCTest
 
-/// Every target of one app ships one version.
+/// Every target of one platform app ships one version. macOS and iOS release
+/// independently, so this guard deliberately does not couple their version
+/// numbers.
 ///
 /// **This is a real rejection, not tidiness.** An app extension whose
 /// `CFBundleShortVersionString` or `CFBundleVersion` differs from its containing
@@ -59,28 +61,16 @@ final class BundleVersionTests: XCTestCase {
 
     /// macOS: the app and its Share extension.
     func testTheMacAppAndItsExtensionShipOneVersion() throws {
-        // Eight: the app, the Share extension, the UI test bundle, and the
-        // project-level Debug/Release pair each carry the settings.
-        let marketing = try settings("mac", "MARKETING_VERSION")
-        XCTAssertEqual(Set(marketing), ["1.0"],
-                       "a macOS target disagrees about the version: \(marketing)")
-        let build = try settings("mac", "CURRENT_PROJECT_VERSION")
-        XCTAssertEqual(Set(build), ["1"],
-                       "a macOS target disagrees about the build number: \(build)")
+        // Six: the app, Share extension and UI test bundle, each in Debug and
+        // Release. The extension must match the containing app; keeping the UI
+        // host aligned avoids a different version during release automation.
+        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.1", occurrences: 6)
+        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "2", occurrences: 6)
     }
 
     /// iOS: the app and its Share extension, both Debug and Release.
     func testTheIOSAppAndItsExtensionShipOneVersion() throws {
         try assertOneVersion("ios", key: "MARKETING_VERSION", expected: "1.0", occurrences: 4)
         try assertOneVersion("ios", key: "CURRENT_PROJECT_VERSION", expected: "1", occurrences: 4)
-    }
-
-    /// And the two platforms agree with each other, because they are one product
-    /// released together. A user comparing the Mac app to the iPhone app should
-    /// not find two different 1.x numbers for the same behaviour.
-    func testBothPlatformsShipTheSameVersion() throws {
-        let mac = Set(try settings("mac", "MARKETING_VERSION"))
-        let ios = Set(try settings("ios", "MARKETING_VERSION"))
-        XCTAssertEqual(mac, ios, "macOS and iOS disagree about the product version")
     }
 }

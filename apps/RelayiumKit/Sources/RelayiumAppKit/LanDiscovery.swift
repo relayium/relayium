@@ -76,6 +76,26 @@ public protocol NearbyRoomObserver: AnyObject {
     func roomDidConnect(_ signaling: SignalingClient)
     /// The socket is gone — dropped, paused or stopped.
     func roomDidDisconnect()
+    /// The room's OTHER devices, as this model currently lists them.
+    ///
+    /// Representative presence, not physical-link authority: a device can leave
+    /// this list because a handoff moved its advertised id to another of its
+    /// connections. An observer may withdraw an ask to an id that vanished; it
+    /// must not tear down a session on one.
+    func roomRosterChanged(peerIds: Set<String>)
+    /// The hub said one peer's signalling connection actually closed.
+    ///
+    /// The one signal that IS definitive permission to end what is bound to that
+    /// id. Deliberately separate from the roster for exactly that reason.
+    func roomPeerLeft(_ peerId: String)
+}
+
+public extension NearbyRoomObserver {
+    /// Defaulted, because the observer this protocol was written for — the
+    /// background-receive listener — has no use for either: it answers offers
+    /// and owns no per-peer lifecycle. Only the link router does.
+    func roomRosterChanged(peerIds: Set<String>) {}
+    func roomPeerLeft(_ peerId: String) {}
 }
 
 /// Turns a raw room roster into the list the user picks from.
@@ -162,6 +182,67 @@ public final class LanDiscoveryModel: ObservableObject {
     /// Re-subscribed on every socket. Weak: the observer (the receive model)
     /// outlives individual sockets and must not be kept alive by this one.
     public weak var observer: NearbyRoomObserver?
+
+    /// Everything else that has to re-subscribe on every socket.
+    ///
+    /// A SECOND registry rather than turning `observer` into a list, and the
+    /// asymmetry is deliberate: background receive is the one observer whose
+    /// interceptor must keep its existing position in the socket's routing
+    /// order, because that order decides which router sees a legacy offer
+    /// first. Everything added here is registered strictly after it, so adding
+    /// an observer cannot reorder a shipped path.
+    ///
+    /// Weak, for the same reason `observer` is: `LinkWorkspaceModel` outlives
+    /// individual sockets and must not be kept alive by one. Entries whose
+    /// observer has gone are dropped on the next room edge rather than in a
+    /// timer — the list has at most a couple of entries for the life of the
+    /// process, so there is nothing to reclaim eagerly.
+    private var additionalObservers: [WeakRoomObserver] = []
+
+    private struct WeakRoomObserver {
+        weak var value: NearbyRoomObserver?
+    }
+
+    /// Observe every socket this model opens, from now on.
+    ///
+    /// Idempotent by identity: registering the same object twice would give it
+    /// two subscriptions on one socket, and the second one's interceptor would
+    /// see frames the first had already consumed.
+    ///
+    /// It does NOT retroactively announce the socket that is already open. A
+    /// caller that registers mid-room is told about the room on the next
+    /// `roomDidConnect`, which is the same contract `observer` has always had —
+    /// and the app registers both before residency starts.
+    public func addRoomObserver(_ observer: NearbyRoomObserver) {
+        additionalObservers.removeAll { $0.value == nil }
+        guard !additionalObservers.contains(where: { $0.value === observer }) else { return }
+        additionalObservers.append(WeakRoomObserver(value: observer))
+    }
+
+    /// The one place both registries are announced to, in one fixed order.
+    private func announceRoomConnected(_ socket: SignalingClient) {
+        observer?.roomDidConnect(socket)
+        additionalObservers.removeAll { $0.value == nil }
+        for entry in additionalObservers { entry.value?.roomDidConnect(socket) }
+    }
+
+    private func announceRoomDisconnected() {
+        observer?.roomDidDisconnect()
+        additionalObservers.removeAll { $0.value == nil }
+        for entry in additionalObservers { entry.value?.roomDidDisconnect() }
+    }
+
+    private func announceRoster(_ peerIds: Set<String>) {
+        observer?.roomRosterChanged(peerIds: peerIds)
+        additionalObservers.removeAll { $0.value == nil }
+        for entry in additionalObservers { entry.value?.roomRosterChanged(peerIds: peerIds) }
+    }
+
+    private func announcePeerLeft(_ peerId: String) {
+        observer?.roomPeerLeft(peerId)
+        additionalObservers.removeAll { $0.value == nil }
+        for entry in additionalObservers { entry.value?.roomPeerLeft(peerId) }
+    }
 
     /// What each peer in the room says it can speak.
     ///
@@ -324,6 +405,16 @@ public final class LanDiscoveryModel: ObservableObject {
         socket.onClose = { [weak self] in
             Task { @MainActor in self?.apply(g) { $0.dropped() } }
         }
+        // The hub's physical-departure frame, which nothing claimed before. It
+        // is NOT derivable from `onPeers`: a representative handoff removes an
+        // id from the roster while the device is still there, and ending a
+        // session on that would be a bug. Forwarded rather than acted on here —
+        // this model lists devices and owns no per-peer lifecycle.
+        socket.onPeerLeft = { [weak self] peerId in
+            Task { @MainActor in
+                self?.apply(g) { model in model.announcePeerLeft(peerId) }
+            }
+        }
         // Registered before the observer's own subscription, and deliberately as
         // a listener rather than an interceptor: a capability hello is not this
         // model's to claim, it is only this model's to notice.
@@ -341,7 +432,7 @@ public final class LanDiscoveryModel: ObservableObject {
         // `teardown()` above has already ended the previous room for the
         // announcer, so this only has to arm the new one's retries.
         scheduleCapsRetries()
-        observer?.roomDidConnect(socket)
+        announceRoomConnected(socket)
     }
 
     /// Bounded, and tied to this socket epoch. The hello is unacknowledged, so
@@ -379,7 +470,7 @@ public final class LanDiscoveryModel: ObservableObject {
         announcer.roomChanged()
         client?.close()
         client = nil
-        observer?.roomDidDisconnect()
+        announceRoomDisconnected()
         roster = []
         selfId = ""
         devices = []
@@ -428,7 +519,9 @@ public final class LanDiscoveryModel: ObservableObject {
         // one — see `LinkCapabilityAnnouncer`. Departed peers are dropped from
         // the registry in the same call.
         if !selfId.isEmpty, !roster.isEmpty {
-            announcer.rosterChanged(peerIds: devices.map(\.id))
+            let peerIds = devices.map(\.id)
+            announcer.rosterChanged(peerIds: peerIds)
+            announceRoster(Set(peerIds))
         }
         // A device that left must not leave a selection pointing at nothing:
         // the next Send would dial a peer id the room no longer contains, and
@@ -450,7 +543,7 @@ public final class LanDiscoveryModel: ObservableObject {
         capsSubscription = nil
         announcer.roomChanged()
         client = nil
-        observer?.roomDidDisconnect()
+        announceRoomDisconnected()
         roster = []
         selfId = ""
         devices = []

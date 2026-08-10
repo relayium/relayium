@@ -283,7 +283,11 @@ final class LinkSessionRoomControlTests: XCTestCase {
     /// would be a second handle on one link, made by something that is not the
     /// assembly and therefore cannot know whether an attempt owns it.
     func testTheControlStaysUnreachableFromProduction() throws {
-        XCTAssertFalse(LINK_BUILD_SUPPORT)
+        // `LINK_BUILD_SUPPORT` is deliberately NOT asserted here. This suite's
+        // subject is not the flag, and its value is per platform: a claim about
+        // it in nineteen unrelated files is nineteen places to get the iOS
+        // branch wrong. `PeerCapabilityRegistryTests` owns that contract, value
+        // and source both.
         XCTAssertFalse(LINK_TRANSPORT_REPLACEMENT_SUPPORTED)
 
         for source in try appSources() where source.name != "LinkSessionFactory.swift" {

@@ -17,19 +17,19 @@ import RelayiumKit
 /// Unified: navigation, the connection methods, the staged selection, the
 /// verification setting, the live session and its exit.
 ///
-/// **Not unified: the wire.** The shipped realtime protocol carries a file
-/// transfer *or* an ephemeral text session on one connection, never both — see
-/// `docs/protocol/relayium-text-v1.md`, where the two live on separate
-/// signalling generations and each side ignores the other's. So this surface
-/// never claims otherwise: while a session is live it renders exactly the lane
-/// that session actually has, and says in one sentence that the other kind needs
-/// a connection of its own. Presenting a dead composer beside a running file
-/// transfer would be a nicer picture of a product that does not exist yet.
+/// **The wire is unified for a peer that can speak it, and only for that peer.**
+/// A device that announced exact `link/1` gets `WorkspaceLinkPane`: ONE
+/// authenticated connection, verified once, carrying an always-visible composer
+/// and as many file or folder batches as the user wants. Everything else —
+/// every older Web build, every native client on the shipped wire, the CLI, and
+/// every pairing-code session on this platform — keeps `WorkspaceSessionPane`
+/// and its one honest sentence about carrying messages *or* files.
 ///
-/// The `link/1` stack that removes that limitation exists in `RelayiumKit` and
-/// is switched off (`LINK_BUILD_SUPPORT`), with no native interop evidence and
-/// no transport-replacement support. Turning it on is its own batch; nothing in
-/// this file depends on it, advertises it, or pretends to.
+/// The two are never on screen together and neither is a fallback for the
+/// other: `LinkWorkspaceModel.canLink` is `PeerCapabilityRegistry.supports`
+/// with exact matching, and a peer that does not answer it is not part of this
+/// feature at all. Pairing-code rooms are deliberately outside it — see
+/// `linkRoomActive(isCodelessRoom:)` for the reason and the revisit trigger.
 ///
 /// ## Routing
 ///
@@ -45,6 +45,10 @@ struct WorkspaceDestination: View {
     @EnvironmentObject private var receive: NearbyReceiveModel
     @EnvironmentObject private var fileModel: RealtimeSessionModel
     @EnvironmentObject private var textModel: RealtimeTextSessionModel
+    /// The unified `link/1`, for peers that announced it. Asked FIRST below:
+    /// a link session and a legacy session cannot coexist, and the link is the
+    /// one that can be running while both legacy models read idle.
+    @EnvironmentObject private var link: LinkWorkspaceModel
     /// Held for ONE half of this surface: minting a pairing code reserves relay
     /// capacity billed to whoever created it. Same-network transfer in both
     /// directions, and joining somebody else's code, stay account-free and are
@@ -82,7 +86,9 @@ struct WorkspaceDestination: View {
         DestinationScaffold(title: L10n.t(.navWorkspace),
                             subtitle: L10n.t(.navWorkspaceSubtitle),
                             contentMaxWidth: nil) {
-            if ownsSession || hasRetainedSession {
+            if link.hasSession {
+                WorkspaceLinkPane(link: link)
+            } else if ownsSession || hasRetainedSession {
                 WorkspaceSessionPane(fileModel: fileModel,
                                      textModel: textModel,
                                      selection: selection)
@@ -91,6 +97,7 @@ struct WorkspaceDestination: View {
                                      receive: receive,
                                      fileModel: fileModel,
                                      textModel: textModel,
+                                     link: link,
                                      selection: selection,
                                      gate: gate,
                                      accessNow: { accessNow })
@@ -154,7 +161,7 @@ struct WorkspaceDestination: View {
     }
 
     private var sessionLocked: Bool {
-        presence.owner != nil || hasRetainedSession
+        presence.owner != nil || hasRetainedSession || link.hasSession
     }
 
     /// Puts an incoming session on screen in the mode that can render it.

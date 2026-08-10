@@ -10,6 +10,31 @@ extension RealtimeConnection: RealtimePeerConnection {}
 /// This is the async half `RealtimeSessionModel` cannot do itself: connect to
 /// signaling, wait for the other device to appear on the code, and only then
 /// construct a connection — there is no peer id before that.
+/// The socket for the pairing code this process is currently in, and nothing
+/// else.
+///
+/// The same idiom as `InboundRoom`, for the same reason: a peer id only means
+/// something inside the room that issued it, so a builder must be handed THE
+/// socket the peer was seen on rather than "whichever one is current". It is a
+/// separate holder because the two rooms have separate lifetimes — a code room
+/// exists for one code, the inbound room for one unsolicited attempt.
+///
+/// It holds the socket STRONGLY, and that is what makes the legacy fallback
+/// safe: `LinkWorkspaceModel` stops routing the room and hands it over, and the
+/// connection built on it needs the socket to outlive the model's own attempt.
+/// The app releases it when the Workspace returns to its connect phase.
+@MainActor
+public final class LinkRoomHandle {
+    public internal(set) var signaling: SignalingClient?
+    public init() {}
+
+    /// Close and forget the room, if there is one. Idempotent.
+    public func release() {
+        signaling?.close()
+        signaling = nil
+    }
+}
+
 public enum RealtimeConnectionFactory {
     public enum FactoryError: Error, Equatable {
         /// Nobody joined the code before the wait ran out.
@@ -409,6 +434,110 @@ public enum RealtimeConnectionFactory {
         let connection = build(signaling, peerId, role,
                                nearbyICEServers(config.iceServers),
                                false,        // never relay-only: STUN-only, host candidates are the point
+                               mode.generation,
+                               mode.localCapabilities)
+        connectionTookOver = true
+        for (from, data) in pending.drain() {
+            signaling.onSignal?(from, data)
+        }
+        return connection
+    }
+
+    // MARK: - a room somebody else already owns
+
+    /// Build a LEGACY connection on a socket this process already holds for a
+    /// pairing code.
+    ///
+    /// ## Why this exists
+    ///
+    /// `make` above opens its own socket, waits for a peer and builds a
+    /// connection, all in one call. That is the right shape when nothing else is
+    /// in the room — and the wrong one the moment `link/1` is in play, because
+    /// then something already IS: `LinkPairingRoom` owns the code's socket so a
+    /// link can live on it, and it has to be able to hand that socket to the
+    /// legacy path when the peer turns out not to speak `link/1`.
+    ///
+    /// The alternative — closing the link's socket and letting `make` open a
+    /// second one — breaks the peer, and not subtly. A legacy creator resolves
+    /// `firstPeer` on the id we joined with and offers to it; leaving and
+    /// rejoining earns a NEW id, so that offer goes to nobody and the peer waits
+    /// out its own timeout with no error to show. One socket, handed over, is
+    /// what makes the fallback invisible to the other side.
+    ///
+    /// ## What differs from `connectNearby`
+    ///
+    /// Exactly two things, and both are about the room rather than the shape:
+    ///
+    ///  - **The ICE configuration is used as issued.** `nearbyICEServers` exists
+    ///    to strip TURN from a code-less room, where there is no code to bill
+    ///    relayed bytes to. A pairing code IS that authorisation, so its
+    ///    credentials travel.
+    ///  - **Relay-only when a relay was issued**, which is the same rule `make`
+    ///    applies: a cross-network room must not spend the ICE timeout trying
+    ///    direct candidates it will not get.
+    ///
+    /// Everything else is `connectNearby`'s, deliberately: the buffer-and-replay
+    /// across the construction window, the tokenised slot claim that gives back
+    /// only this attempt's handler, the bounded one-way capability retries in
+    /// text mode, and the refusal to close a socket this call does not own.
+    public static func connectInRoom(signaling: SignalingClient,
+                                     peerId: String,
+                                     role: Role,
+                                     config: ICEConfig,
+                                     mode: Mode = .file,
+                                     capabilityTimeout: TimeInterval = 5)
+        async throws -> RealtimePeerConnection {
+        try await connectInRoom(signaling: signaling, peerId: peerId, role: role,
+                                config: config, mode: mode,
+                                capabilityTimeout: capabilityTimeout,
+                                build: liveConnection)
+    }
+
+    /// The same seam the other entry points have, for the same reason.
+    static func connectInRoom(signaling: SignalingClient,
+                              peerId: String,
+                              role: Role,
+                              config: ICEConfig,
+                              mode: Mode,
+                              capabilityTimeout: TimeInterval,
+                              build: ConnectionBuilder) async throws -> RealtimePeerConnection {
+        guard !peerId.isEmpty else { throw FactoryError.noPeerAppeared }
+
+        let pending = PendingSignals()
+        let capabilities = PeerCapabilities()
+        let temporarySlot = signaling.installSignalHandler { from, data in
+            capabilities.record(peerId: from, signal: data)
+            pending.append((from, data))
+        }
+        // The socket belongs to the room, not to this call: a failed attempt
+        // must leave it joined, exactly as `connectNearby` leaves the discovery
+        // model's. Only this attempt's claim on the slot is given back.
+        var connectionTookOver = false
+        defer {
+            if !connectionTookOver { signaling.removeSignalHandler(temporarySlot) }
+        }
+
+        if mode == .text {
+            signaling.sendSignal(to: peerId, data: capsField(mode.localCapabilities))
+            let capabilityRetry = Task {
+                for delay: UInt64 in [250_000_000, 1_000_000_000] {
+                    try? await Task.sleep(nanoseconds: delay)
+                    guard !Task.isCancelled else { return }
+                    signaling.sendSignal(to: peerId, data: capsField(mode.localCapabilities))
+                }
+            }
+            let supported = await waitForCapability(TEXT_CAPABILITY,
+                                                    peerId: peerId,
+                                                    in: capabilities,
+                                                    timeout: capabilityTimeout)
+            capabilityRetry.cancel()
+            guard supported else { throw FactoryError.unsupportedPeer }
+            signaling.sendSignal(to: peerId, data: capsField(mode.localCapabilities))
+        }
+
+        let connection = build(signaling, peerId, role,
+                               config.iceServers,
+                               hasTURN(config.iceServers),
                                mode.generation,
                                mode.localCapabilities)
         connectionTookOver = true

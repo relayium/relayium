@@ -255,6 +255,79 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// the peer was reached rather than inventing a name for them.
     case workspaceSessionWithCode = "workspace.sessionWithCode"
 
+    // MARK: - The unified link
+    //
+    // Copy for a `link/1` session: ONE connection carrying messages and repeated
+    // file/folder batches behind ONE verification. Every string here is reachable
+    // only while such a link is live or has just ended — a legacy session keeps
+    // the one-lane notes above, and the two sets are never on screen together.
+
+    /// The composer's placeholder. Present from the moment the link opens,
+    /// because pressing Send is what opens the conversation.
+    case linkComposerPlaceholder = "link.composerPlaceholder"
+    case linkSend = "link.send"
+    /// Under the composer: the two file verbs, side by side with it rather than
+    /// behind a mode.
+    case linkSendFile = "link.sendFile"
+    case linkSendFolder = "link.sendFolder"
+    /// The claim the whole batch exists to make, stated once inside a live link.
+    case linkOneConnectionNote = "link.oneConnectionNote"
+    /// While the peer is being asked to accept the first message.
+    case linkWaitingForPeer = "link.waitingForPeer"
+    /// The peer declined messages. The draft is handed back, not lost.
+    case linkMessagesDeclined = "link.messagesDeclined"
+    /// A command arrived before the link could take it.
+    case linkNotReady = "link.notReady"
+    /// The peer is asking to start a conversation on the open link.
+    case linkConversationRequest = "link.conversationRequest"
+    case linkAcceptMessages = "link.acceptMessages"
+    case linkDeclineMessages = "link.declineMessages"
+
+    /// The one verification boundary, and the promise that it is the only one.
+    case linkVerifyTitle = "link.verifyTitle"
+    case linkVerifyBody = "link.verifyBody"
+    case linkVerifyMatches = "link.verifyMatches"
+    case linkVerifyDiffers = "link.verifyDiffers"
+    /// What is being held while the digits are unanswered.
+    case linkVerifyHoldingFiles = "link.verifyHoldingFiles"
+
+    /// Connection states, each naming what the user can do next.
+    case linkConnecting = "link.connecting"
+    case linkRequesting = "link.requesting"
+    case linkOpenWith = "link.openWith"
+    /// The room socket is gone but the link is not. Truthful about both halves.
+    case linkSignalingLost = "link.signalingLost"
+
+    /// Terminal reasons. One per observed transition, never a guess.
+    case linkEndedRefused = "link.endedRefused"
+    case linkEndedTimedOut = "link.endedTimedOut"
+    case linkEndedUnavailable = "link.endedUnavailable"
+    case linkEndedFailed = "link.endedFailed"
+    case linkEndedClosed = "link.endedClosed"
+    case linkEndedVerificationRejected = "link.endedVerificationRejected"
+    case linkEndedRoomLost = "link.endedRoomLost"
+    /// A relayed link reached the bound its TURN credential stated. Not a
+    /// failure: the allocation the server issued has a lifetime, and the remedy
+    /// is a new code rather than a retry that would end the same way.
+    case linkEndedRelayExpired = "link.endedRelayExpired"
+    case linkEndedRoomUnavailable = "link.endedRoomUnavailable"
+    /// The last few minutes of a relayed link, said once while it still works.
+    case linkRelayExpiringSoon = "link.relayExpiringSoon"
+
+    /// The transfer list inside a link.
+    case linkTransfersHeading = "link.transfersHeading"
+    case linkBatchOffered = "link.batchOffered"
+    case linkBatchQueued = "link.batchQueued"
+    case linkBatchTransferring = "link.batchTransferring"
+    case linkBatchFinished = "link.batchFinished"
+    case linkBatchReceived = "link.batchReceived"
+    case linkBatchFailed = "link.batchFailed"
+    case linkBatchArmed = "link.batchArmed"
+    case linkAcceptFiles = "link.acceptFiles"
+    case linkDeclineFiles = "link.declineFiles"
+    /// The whole conversation is local to this window and goes when it does.
+    case linkHistoryIsLocal = "link.historyIsLocal"
+
     // MARK: - Capability gates
     //
     // What `CapabilityGateView` renders when a feature genuinely needs an

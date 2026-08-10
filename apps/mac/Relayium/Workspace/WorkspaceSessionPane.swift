@@ -20,9 +20,15 @@ import RelayiumKit
 ///
 /// So this pane draws the lane the session actually has, and states in one
 /// sentence — `workspace.messagesOnlyNote` / `workspace.filesOnlyNote` — that the
-/// other kind needs a connection of its own. That sentence is the bounded
-/// limitation this batch deliberately did not hide, and it is what the `link/1`
-/// integration batch deletes when one link really does carry both lanes.
+/// other kind needs a connection of its own.
+///
+/// **That sentence did not go away when `link/1` shipped; it stopped being
+/// universal.** A peer that announced exact `link/1` in the same-network room is
+/// rendered by `WorkspaceLinkPane`, where one connection really does carry both
+/// lanes and the note is replaced by `link.oneConnectionNote`. Everything this
+/// pane still draws — every older Web build, every native client on the shipped
+/// wire, the CLI, and every pairing-code session on this platform — genuinely
+/// has the limitation, so it keeps saying so.
 ///
 /// ## What it inherited unchanged
 ///

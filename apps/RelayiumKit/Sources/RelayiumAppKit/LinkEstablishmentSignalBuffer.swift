@@ -89,7 +89,7 @@ enum LinkSignalCapture: Equatable {
 /// replay has finished it holds nothing again and says `ready`, because a
 /// transport that exists is a transport that can be delivered to directly.
 ///
-/// Internal, and unreachable from production: nothing outside the tests
+/// Internal to the link establishment path: nothing outside that path
 /// constructs one, and both Link flags are still false.
 final class LinkEstablishmentSignalBuffer: @unchecked Sendable {
 

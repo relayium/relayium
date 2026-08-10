@@ -23,7 +23,7 @@ import RelayiumKit
 /// string. Turning a reason into words is a later slice's job, and a message
 /// baked in here would be one this type could not localize and a view could not
 /// override.
-enum LinkSessionConnectionPhase: Equatable {
+public enum LinkSessionConnectionPhase: Equatable {
     /// Working on it. `sas` is the digits to compare, once there are any.
     case establishing(sas: String?)
     /// Both lanes are open under one authenticated identity.
@@ -46,7 +46,7 @@ enum LinkSessionConnectionPhase: Equatable {
 /// identity for a list whose entries are otherwise free to repeat — two
 /// identical bodies really are two messages, and a view that de-duplicated them
 /// by content would hide the second one.
-struct LinkTextMessage: Equatable, Identifiable {
+public struct LinkTextMessage: Equatable, Identifiable {
 
     /// Who said it.
     ///
@@ -57,16 +57,16 @@ struct LinkTextMessage: Equatable, Identifiable {
     /// stream — so an `incoming` entry is created from the event stream and an
     /// `outgoing` one only from `recordOutgoing`, which the attempt owner calls
     /// once the runtime has accepted a send. Nothing here fabricates either.
-    enum Direction: Equatable {
+    public enum Direction: Equatable {
         case incoming
         case outgoing
     }
 
     /// Model-local, monotonic, and never reused. See the note above.
-    let id: Int
-    let direction: Direction
+    public let id: Int
+    public let direction: Direction
     /// Exactly what crossed the lane: no trimming, no normalisation.
-    let body: String
+    public let body: String
 }
 
 /// The `@MainActor` projection of ONE attempt's connection lifecycle and of its
@@ -124,23 +124,23 @@ struct LinkTextMessage: Equatable, Identifiable {
 /// exactly the boundary that cannot promise isolation. Delivering into a model
 /// that has gone is already a no-op.
 @MainActor
-final class LinkSessionPresentationModel: ObservableObject {
+public final class LinkSessionPresentationModel: ObservableObject {
 
     /// The connection. Everything a view asks below is a reading of this and of
     /// the three text properties.
-    @Published private(set) var phase: LinkSessionConnectionPhase = .establishing(sas: nil)
+    @Published public private(set) var phase: LinkSessionConnectionPhase = .establishing(sas: nil)
 
     // MARK: - the TEXT lane
 
     /// The conversation the user is looking at, exactly as the driver states it.
     /// The driver emits `status` only on a real change, so this is a mirror
     /// rather than a second state machine.
-    @Published private(set) var textStatus: LinkTextStatus = .idle
+    @Published public private(set) var textStatus: LinkTextStatus = .idle
 
     /// The transcript, oldest first. Append-only for the life of the attempt:
     /// an ordinary conversation `ended` or `refused` closes a conversation, not
     /// the history of one, and the same link can open another.
-    @Published private(set) var textMessages: [LinkTextMessage] = []
+    @Published public private(set) var textMessages: [LinkTextMessage] = []
 
     /// Why the lane failed, as the typed value the driver reported and no more.
     /// Turning it into words is a later slice's job — a message baked in here
@@ -149,7 +149,7 @@ final class LinkSessionPresentationModel: ObservableObject {
     /// `nil` while the lane has failed is a real state, not a placeholder: a
     /// lane can reach `failed` through a plain status change, which carries no
     /// error, before the driver's own `failed` arrives with one.
-    @Published private(set) var textFailure: LinkTextDriverError?
+    @Published public private(set) var textFailure: LinkTextDriverError?
 
     /// Next `LinkTextMessage.id`. Monotonic for this model's whole life and
     /// never reset, including across conversations.
@@ -157,7 +157,7 @@ final class LinkSessionPresentationModel: ObservableObject {
 
     /// Nothing to wire. Events arrive through `apply`, which the attempt that
     /// owns this model calls for every event its one bridge delivers.
-    init() {}
+    public init() {}
 
     // MARK: - what a view asks
 
@@ -165,7 +165,7 @@ final class LinkSessionPresentationModel: ObservableObject {
     /// attempt is over: `ended` carries no identity, and a screen that kept
     /// showing digits for a finished session would be inviting a comparison
     /// against nothing.
-    var sas: String? {
+    public var sas: String? {
         switch phase {
         case let .establishing(sas): return sas
         case let .open(_, sas): return sas
@@ -174,17 +174,17 @@ final class LinkSessionPresentationModel: ObservableObject {
     }
 
     /// The authenticated peer, once there is one.
-    var peerId: String? {
+    public var peerId: String? {
         guard case let .open(peerId, _) = phase else { return nil }
         return peerId
     }
 
-    var isOpen: Bool {
+    public var isOpen: Bool {
         guard case .open = phase else { return false }
         return true
     }
 
-    var isEnded: Bool {
+    public var isEnded: Bool {
         guard case .ended = phase else { return false }
         return true
     }
@@ -196,7 +196,7 @@ final class LinkSessionPresentationModel: ObservableObject {
     /// It is also the terminal guard `applyText` reads, which is why it is a
     /// reading of `textStatus` rather than of `textFailure` — a bare
     /// `status(.failed)` has no error to read.
-    var isTextFailed: Bool { textStatus == .failed }
+    public var isTextFailed: Bool { textStatus == .failed }
 
     /// Whether a composer may accept typing.
     ///
@@ -206,15 +206,15 @@ final class LinkSessionPresentationModel: ObservableObject {
     /// session refuse one. This is an enablement fact only — nothing here sends,
     /// and the driver still owns every limit that decides whether a particular
     /// message is accepted.
-    var canSendText: Bool { isOpen && textStatus == .open }
+    public var canSendText: Bool { isOpen && textStatus == .open }
 
     /// The peer asked for a conversation and this side has not answered. What a
     /// consent prompt appears on, so it is gated on the link too: a request on
     /// an attempt that is over is not something a user can still accept.
-    var hasIncomingTextRequest: Bool { isOpen && textStatus == .incomingRequest }
+    public var hasIncomingTextRequest: Bool { isOpen && textStatus == .incomingRequest }
 
     /// This side asked and the peer has not answered.
-    var isWaitingForTextAccept: Bool { isOpen && textStatus == .waitingAccept }
+    public var isWaitingForTextAccept: Bool { isOpen && textStatus == .waitingAccept }
 
     // MARK: - the projection
 

@@ -696,14 +696,24 @@ final class LinkSessionFactoryTests: XCTestCase {
     /// Both flags are still false and nothing calls the factory: no view, no
     /// app target, no environment. Assembly existing is not assembly being
     /// reachable, and this slice is deliberately only the first.
-    func testTheFactoryStaysUnreachableFromProduction() throws {
-        XCTAssertFalse(LINK_BUILD_SUPPORT)
+    func testTheFactoryHasExactlyOneProductionCaller() throws {
+        // `LINK_BUILD_SUPPORT` is deliberately NOT asserted here. This suite's
+        // subject is not the flag, and its value is per platform: a claim about
+        // it in nineteen unrelated files is nineteen places to get the iOS
+        // branch wrong. `PeerCapabilityRegistryTests` owns that contract, value
+        // and source both.
         XCTAssertFalse(LINK_TRANSPORT_REPLACEMENT_SUPPORTED)
 
+        // ONE production caller, and it is named. A second would be a second
+        // set of ingredients for one link — a different socket, a different ICE
+        // configuration or a different receive directory — and nothing would
+        // fail until a user's transfer did.
+        var callers: [String] = []
         for source in try appSources() where source.name != "LinkSessionFactory.swift" {
-            XCTAssertFalse(source.code.contains("LinkSessionFactory"),
-                           "\(source.name) reaches for the link session factory")
+            if source.code.contains("LinkSessionFactory") { callers.append(source.name) }
         }
+        XCTAssertEqual(callers, ["LinkWorkspaceModel.swift"],
+                       "exactly one production caller may reach the link session factory")
     }
 
     /// ONE assembly, structurally. The factory is the only app source that

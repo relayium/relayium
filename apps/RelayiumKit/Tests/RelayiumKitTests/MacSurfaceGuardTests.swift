@@ -517,8 +517,15 @@ final class MacSurfaceGuardTests: XCTestCase {
 
     func testSessionOwnershipCleanupIsAppScopedAndNeverRunsFromInitialViewIdle() throws {
         let app = try source(named: "RelayiumApp.swift")
+        // The link is the THIRD liveness source, in the SAME subscription. A
+        // separate observer would release the surface the instant a link
+        // started: a link uses neither legacy model, so both read idle for its
+        // whole life.
         XCTAssertTrue(app.contains(
-            "presenting.observeSessions(fileModel: files, textModel: text)"))
+            "presenting.observeSessions(fileModel: files, textModel: text, link: unified)"))
+        XCTAssertFalse(app.contains(
+            "presenting.observeSessions(fileModel: files, textModel: text)\n"),
+            "a second liveness subscription would race the first")
         for name in [workspaceDestination, workspaceConnect, workspaceSession] {
             let destination = try source(named: name)
             XCTAssertFalse(destination.contains("presence.releaseAll()"),
@@ -1898,13 +1905,27 @@ final class MacSurfaceGuardTests: XCTestCase {
             "guard presence.beginSession(.pairingCode, mode: .files) else { return }",
             "guard presence.beginSession(.pairingCode, mode: .text) else { return }",
         ]
+        // The two unified-link starts. They take the mode-less claim, because a
+        // link has no files-or-text mode to arbitrate — and each RELEASES the
+        // claim when the link refuses, which the mode-carrying legacy paths do
+        // not need because their models publish a failure state instead.
+        let linkClaims = [
+            "guard presence.beginSession(.nearby, peerLabel: live.label) else { return }",
+        ]
+        for claim in linkClaims {
+            XCTAssertEqual(occurrences(of: claim, in: connect), 2,
+                           "both link starts claim the surface before connecting")
+        }
+        XCTAssertEqual(occurrences(of: "presence.release(.nearby)", in: connect), 2,
+                       "a refused link must hand the surface back rather than strand it")
         for claim in claims {
             XCTAssertEqual(occurrences(of: claim, in: connect), 1,
                            "the Workspace can start a shared model after losing ownership: \(claim)")
         }
         // Every start is behind one. A bare `Task { await` that no claim
         // precedes is the regression this counts.
-        XCTAssertEqual(occurrences(of: "presence.beginSession(", in: connect), claims.count,
+        XCTAssertEqual(occurrences(of: "presence.beginSession(", in: connect),
+                       claims.count + 2,
                        "a start path exists with no ownership claim, or a claim with no start")
     }
 
@@ -1913,8 +1934,12 @@ final class MacSurfaceGuardTests: XCTestCase {
         for model in ["fileModel", "textModel"] {
             XCTAssertTrue(source.contains("let code = \(model).joinCode"))
             XCTAssertTrue(source.contains("guard \(model).canJoin else { return }"))
-            XCTAssertTrue(source.contains("Task { await \(model).join(code: code) }"))
-            XCTAssertFalse(source.contains("Task { await \(model).join(code: \(model).joinCode) }"),
+            // The join itself now runs inside `watch`'s fallback closure — the
+            // room is watched for a `link/1` peer first — but the SNAPSHOT rule
+            // is unchanged and is what this guards: the code is read once,
+            // validated, and then only the local `code` is used.
+            XCTAssertTrue(source.contains("await \(model).join(code: code)"))
+            XCTAssertFalse(source.contains("\(model).join(code: \(model).joinCode)"),
                            "the join reads mutable input after taking ownership")
         }
     }
@@ -1974,10 +1999,12 @@ final class MacSurfaceGuardTests: XCTestCase {
               let claim = connect.range(of:
                 "guard presence.beginSession(.pairingCode, mode: mode) else { return }",
                 range: access.lowerBound..<connect.endIndex),
-              let task = connect.range(of: "Task { await mintAndJoinFiles(token: access.token) }",
-                                       range: claim.lowerBound..<connect.endIndex),
-              let textTask = connect.range(of: "Task { await mintAndJoinText(token: access.token) }",
-                                           range: claim.lowerBound..<connect.endIndex) else {
+              let task = connect.range(
+                of: "Task { await mintAndWatch(mode: .files, token: access.token, staged: staged) }",
+                range: claim.lowerBound..<connect.endIndex),
+              let textTask = connect.range(
+                of: "Task { await mintAndWatch(mode: .text, token: access.token, staged: nil) }",
+                range: claim.lowerBound..<connect.endIndex) else {
             return XCTFail("code creation lost its synchronous intent boundary")
         }
         XCTAssertLessThan(task.lowerBound, textTask.lowerBound)
@@ -2407,9 +2434,12 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// sentences are asserted here because the temptation a unified screen
     /// creates is to quietly drop them and render a dead composer instead.
     ///
-    /// This guard is the one the `link/1` integration batch DELETES, and that is
-    /// deliberate: when a link really does carry both lanes, these three strings
-    /// become false and this test is what says so.
+    /// The `link/1` integration batch narrowed this guard rather than deleting
+    /// it. The sentence is still TRUE — for a pairing-code room in every case,
+    /// and for a same-network peer that did not announce exact `link/1` — so
+    /// what has to hold now is that it appears exactly where it is true and
+    /// nowhere else. `testTheConnectPhaseStatesTheRightLimitPerDevice` below
+    /// owns the other half.
     func testTheWorkspaceStatesTheOneLaneLimitInBothPhases() throws {
         let connect = try source(named: workspaceConnect)
         XCTAssertTrue(connect.contains("InlineMessage(.info, L10n.t(.workspaceOneConnectionNote))"),
@@ -2430,6 +2460,42 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertLessThan(body.lowerBound, laneNote.lowerBound)
         XCTAssertTrue(session.contains("laneNote\n            exit"),
                       "the lane note must sit with the exit rather than inside one lane")
+    }
+
+    /// **The connect phase says the right thing about the DEVICE, not about the
+    /// screen.**
+    ///
+    /// Two claims live here and they contradict each other if either is put in
+    /// the wrong place. A pairing-code room really does carry messages OR files,
+    /// whatever the peer can speak, because there is no shared room socket for a
+    /// link to live on — so its note is unconditional. A same-network device
+    /// carries whichever its own announcement earns, so its note is a branch on
+    /// `device.supportsLink` and nothing else.
+    ///
+    /// The failure this prevents is the tempting one: a single note above both
+    /// sections, which is necessarily a stale claim about one of them.
+    func testTheConnectPhaseStatesTheRightLimitPerDevice() throws {
+        let connect = try source(named: workspaceConnect)
+
+        // Per device, branching on the peer's own announcement.
+        XCTAssertTrue(connect.contains("""
+            InlineMessage(.info, L10n.t(device.supportsLink
+                                        ? .linkOneConnectionNote
+                                        : .workspaceOneConnectionNote))
+"""), "the device actions no longer state what THAT device's connection carries")
+        XCTAssertTrue(connect.contains(
+            ".accessibilityIdentifier(\"workspace-device-connection-note\")"))
+
+        // And the unified claim is never made about a pairing code.
+        guard let pairing = connect.range(of: "private var pairingCode: some View"),
+              let create = connect.range(of: "private var createControls: some View") else {
+            return XCTFail("the connect pane no longer has the shape this guards")
+        }
+        let pairingBody = String(connect[pairing.lowerBound..<create.lowerBound])
+        XCTAssertTrue(pairingBody.contains("L10n.t(.workspaceOneConnectionNote)"),
+                      "the pairing-code section must keep its one-lane sentence")
+        XCTAssertFalse(pairingBody.contains("linkOneConnectionNote"),
+                       "a pairing code cannot carry a unified link on this platform")
     }
 
     /// Create and join sit on one screen, so only one control can be the keyboard

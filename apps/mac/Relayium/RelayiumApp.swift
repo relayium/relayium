@@ -1,6 +1,10 @@
 import SwiftUI
 import Sparkle
 import RelayiumAppKit
+// For the two protocol values the pairing-code fallback carries — the room's
+// deterministic `Role` and the `ICEConfig` its code was issued — which reach
+// this scene as themselves rather than as anything it re-derives.
+import RelayiumKit
 
 /// Keeps the SwiftUI command enabled state in sync with Sparkle's updater.
 ///
@@ -194,6 +198,10 @@ struct RelayiumApp: App {
     // Background receive and the notifications it needs are app-scoped for the
     // same reason the transfer models are: both have to outlive the window.
     @StateObject private var nearbyReceive: NearbyReceiveModel
+    // The unified `link/1`. App-scoped for the same reason the transport models
+    // are: it follows the resident room socket, so an open link has to survive
+    // the unique window being closed and rebuilt.
+    @StateObject private var linkWorkspace: LinkWorkspaceModel
     @StateObject private var notifications: TransferNotificationCenter
     // Which destination is on screen. App-scoped rather than `@State` so the
     // selection survives the window's view tree being torn down and rebuilt: the
@@ -262,23 +270,62 @@ struct RelayiumApp: App {
         // two models' inbound builders cannot reach for a room the offer never
         // came from. Owned by the receive model; the session models only read it.
         let inboundRoom = InboundRoom()
+        // The pairing code's ONE socket. `LinkWorkspaceModel` opens it, watches
+        // it for a `link/1` peer, and — when the peer speaks the older wire —
+        // leaves it here for the legacy connection to be built on rather than
+        // closing it and making the peer's already-sent offer land on nobody.
+        let pairingRoom = LinkRoomHandle()
         #if DEBUG
         let files = UITestMode.makeTerminalNearbyFileModel(verification: prefs)
             ?? UITestMode.makeWaitingFileModel(verification: prefs)
             ?? AppEnvironment.makeRealtimeModel(
-                verification: prefs, nearby: nearby, inboundRoom: inboundRoom)
+                verification: prefs, nearby: nearby, inboundRoom: inboundRoom,
+                pairingRoom: pairingRoom)
         let text = UITestMode.isActive
             ? UITestMode.makeRealtimeTextModel(verification: prefs)
             : AppEnvironment.makeRealtimeTextModel(
-                verification: prefs, nearby: nearby, inboundRoom: inboundRoom)
+                verification: prefs, nearby: nearby, inboundRoom: inboundRoom,
+                pairingRoom: pairingRoom)
         #else
         let files = AppEnvironment.makeRealtimeModel(
-            verification: prefs, nearby: nearby, inboundRoom: inboundRoom)
+            verification: prefs, nearby: nearby, inboundRoom: inboundRoom,
+            pairingRoom: pairingRoom)
         let text = AppEnvironment.makeRealtimeTextModel(
-            verification: prefs, nearby: nearby, inboundRoom: inboundRoom)
+            verification: prefs, nearby: nearby, inboundRoom: inboundRoom,
+            pairingRoom: pairingRoom)
         #endif
         let receive = AppEnvironment.makeNearbyReceiveModel(
             fileModel: files, textModel: text, discovery: nearby, inboundRoom: inboundRoom)
+        // Registered on the SAME discovery model, after background receive, so
+        // the shipped interceptor keeps its position in the socket's routing
+        // order. Built here rather than in a view because an open link outlives
+        // the window.
+        let unified = AppEnvironment.makeLinkWorkspaceModel(
+            verification: prefs, nearby: nearby, pairingRoom: pairingRoom)
+        // The one place a watched code becomes an ordinary legacy session. The
+        // socket is already open and already the room's; this only chooses which
+        // model runs on it, from the verb the user pressed.
+        // Installed below, once `presenting` exists: the fallback has to move
+        // the surface's mode as well as start the session, and that object is
+        // built a few lines further down.
+        let adoptLegacy: (String, Role, ICEConfig, TransferMode,
+                          TransferPresence) -> Void = { peerID, role, config, mode, presence in
+            // The mode the user pressed decides which legacy model runs, and the
+            // surface has to follow it: the pane renders one lane at a time.
+            presence.claim(AppDestination.pairingCode, mode: mode)
+            switch mode {
+            case .files:
+                Task { await files.adoptRoom(peerId: peerID, role: role, config: config) }
+            case .text:
+                Task { await text.adoptRoom(peerId: peerID, role: role, config: config) }
+            }
+        }
+        // A batch armed while the room was still being watched. The legacy file
+        // model stages its own, so it is handed over rather than enqueued twice.
+        unified.onLegacyFallbackBatch = { metas, sources in
+            guard !metas.isEmpty else { return }
+            files.stageSend(sources: sources, metas: metas)
+        }
         // One key store for the whole app: the upload model writes a key here,
         // the account model reads it back and removes it with the object. Two
         // instances would still work — they address the same keychain items —
@@ -297,6 +344,7 @@ struct RelayiumApp: App {
         _realtimeModel = StateObject(wrappedValue: files)
         _realtimeTextModel = StateObject(wrappedValue: text)
         _nearbyReceive = StateObject(wrappedValue: receive)
+        _linkWorkspace = StateObject(wrappedValue: unified)
         _uploadModel = StateObject(wrappedValue: uploads)
         _downloadModel = StateObject(wrappedValue: downloads)
         _accountManagement = StateObject(wrappedValue: management)
@@ -327,7 +375,10 @@ struct RelayiumApp: App {
             textModel: text,
             receiveModel: receive))
         let presenting = TransferPresence()
-        presenting.observeSessions(fileModel: files, textModel: text)
+        // The link is the THIRD liveness source. Without it, a link session
+        // would be released the instant it started: it uses neither legacy
+        // model, so both of them read idle for its whole life.
+        presenting.observeSessions(fileModel: files, textModel: text, link: unified)
         _presence = StateObject(wrappedValue: presenting)
         let routing = AppNavigationModel()
         _navigation = StateObject(wrappedValue: routing)
@@ -341,6 +392,34 @@ struct RelayiumApp: App {
                                      peerLabel: nearby.label(forPeerID: peerID),
                                      presence: presenting, navigation: routing)
         }
+        // The authoritative gate for an UNSOLICITED link, on the main actor.
+        // Same arbitration as the legacy one above, through the same
+        // `TransferPresence`, which is what makes "a link session and a legacy
+        // session cannot coexist" true rather than merely intended. Navigation
+        // follows, so a link that arrives while the user is on another
+        // destination is not invisible.
+        unified.shouldAcceptLink = { peerID in
+            guard presenting.beginSession(.nearby,
+                                          peerLabel: nearby.label(forPeerID: peerID))
+            else { return false }
+            routing.select(.nearby)
+            return true
+        }
+        // The advisory mirror the socket's delivery queue reads. Written from
+        // the one authoritative fact — whether anything owns the surface — so it
+        // cannot drift from the gate above by more than the hop it is
+        // documented to lag by.
+        unified.adoptLegacyRoom = { [weak presenting] peerID, role, config, mode in
+            guard let presenting else { return }
+            adoptLegacy(peerID, role, config, mode, presenting)
+        }
+        unified.observeAvailability(
+            presenting.$owner.map { $0 == nil }.eraseToAnyPublisher())
+        // The same ownership fact closes a room that was handed to the legacy
+        // path: nothing owns the surface means that session is over, and the
+        // code's socket has nobody left to serve.
+        unified.observeSurfaceIdle(
+            presenting.$owner.map { $0 == nil }.eraseToAnyPublisher())
         #if DEBUG
         if UITestMode.showsTerminalNearby {
             presenting.claim(.nearby, mode: .files,
@@ -485,6 +564,7 @@ struct RelayiumApp: App {
                 .environmentObject(verification)
                 .environmentObject(lanDiscovery)
                 .environmentObject(nearbyReceive)
+                .environmentObject(linkWorkspace)
                 // The receiver and the login-item preference reach the main
                 // window because the Device Inbox is a destination in it now,
                 // not only a settings tab. It is the SAME app-scoped controller

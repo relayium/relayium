@@ -97,6 +97,13 @@ public final class RealtimeSessionModel: ObservableObject {
     /// role parameter, because there is only one role an unsolicited offer can
     /// be answered in.
     private let makeInboundConnection: @MainActor (_ peerId: String, _ iceServers: ICEConfig) async throws -> RealtimePeerConnection
+    /// The pairing-code variant: a room this process ALREADY holds a socket for,
+    /// because `LinkPairingRoom` opened it so a `link/1` could live there. The
+    /// peer id and the ICE configuration are the room's, resolved before this is
+    /// called, which is why neither is fetched here. See
+    /// `RealtimeConnectionFactory.connectInRoom` for why the socket is handed
+    /// over rather than reopened.
+    private let makeRoomConnection: @MainActor (_ peerId: String, _ role: Role, _ iceServers: ICEConfig) async throws -> RealtimePeerConnection
     /// How long a nearby connect waits for the chosen device to answer.
     private let nearbyAnswerTimeout: TimeInterval
     private let sleep: @Sendable (UInt64) async -> Void
@@ -142,6 +149,12 @@ public final class RealtimeSessionModel: ObservableObject {
                 makeInboundConnection: @escaping @MainActor (String, ICEConfig) async throws -> RealtimePeerConnection = { _, _ in
                     throw NearbyError.notScanning
                 },
+                makeRoomConnection: @escaping @MainActor (String, Role, ICEConfig) async throws -> RealtimePeerConnection = { _, _, _ in
+                    // A client with no pairing room refuses rather than dialling
+                    // one it does not have — the same shape, and the same
+                    // reason, as the two nearby defaults above.
+                    throw NearbyError.notScanning
+                },
                 makeConnection: @escaping (String, Role, ICEConfig) async throws -> RealtimePeerConnection) {
         self.pairClient = pairClient
         self.iceClient = iceClient
@@ -150,6 +163,7 @@ public final class RealtimeSessionModel: ObservableObject {
         self.sleep = sleep ?? realSleep
         self.makeNearbyConnection = makeNearbyConnection
         self.makeInboundConnection = makeInboundConnection
+        self.makeRoomConnection = makeRoomConnection
         self.makeConnection = makeConnection
     }
 
@@ -305,6 +319,41 @@ public final class RealtimeSessionModel: ObservableObject {
             connection = c
             c.start()
             armAnswerTimeout(generation: g)
+        } catch {
+            guard g == generation else { return }
+            state = .failed(ErrorCopy.message(for: error))
+        }
+    }
+
+
+    /// Take over a pairing-code room whose peer turned out NOT to speak
+    /// `link/1`, and run this device's ordinary file session on it.
+    ///
+    /// The socket is `LinkPairingRoom`'s and stays its: this call builds a
+    /// connection on it and nothing here opens, closes or rejoins one. The peer
+    /// id came from that room's roster and the role from the verb the user
+    /// pressed — creating a code offers, joining one answers — so neither is
+    /// re-derived. The ICE configuration is the one the room already fetched for
+    /// the code, credentials included, because a pairing code is exactly the
+    /// authorisation that pays for relayed bytes.
+    ///
+    /// Everything after the connection exists is the ordinary session: the same
+    /// wiring, the same SAS gate, the same staged batch. A user who reached here
+    /// sees the session they asked for; what they do not see is that the room
+    /// was watched for a link first.
+    public func adoptRoom(peerId: String, role: Role, config: ICEConfig) async {
+        // The same retire the outbound nearby path makes, and for the same
+        // reason: a staged selection is what this call is about to send, so only
+        // a dead connection goes.
+        retirePreviousConnection()
+        let g = generation
+        state = .connecting
+        do {
+            let c = try await makeRoomConnection(peerId, role, config)
+            guard g == generation else { c.close(); return }
+            wire(c, generation: g)
+            connection = c
+            c.start()
         } catch {
             guard g == generation else { return }
             state = .failed(ErrorCopy.message(for: error))

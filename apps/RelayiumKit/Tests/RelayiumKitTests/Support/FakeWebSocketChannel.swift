@@ -44,3 +44,16 @@ final class FakeWebSocketChannel: WebSocketChannel {
         onClose?()
     }
 }
+
+extension FakeWebSocketChannel {
+    /// Deliver one hub frame, encoded exactly as the server would.
+    ///
+    /// `fireText` takes a string, which every caller was building by hand; this
+    /// is the same thing with the encoding in one place, so a test cannot
+    /// accidentally assert against a frame shape the client never sees.
+    func fire(_ envelope: Envelope) {
+        guard let data = try? JSONEncoder().encode(envelope),
+              let text = String(data: data, encoding: .utf8) else { return }
+        fireText(text)
+    }
+}

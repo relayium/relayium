@@ -124,43 +124,104 @@ final class PeerCapabilityRegistryTests: XCTestCase {
 
     // MARK: - the gate on this incomplete foundation
 
-    /// THE regression gate for this batch, stated as one executable claim: this
-    /// build cannot advertise `link/1` and cannot route it, in any room.
+    /// THE regression gate for the delivered scope, stated as one executable
+    /// claim: on macOS this build implements `link/1` and announces and routes
+    /// it in EVERY room; on any other platform it does neither, anywhere.
     ///
-    /// Everything above deliberately drives an INJECTED room predicate, because
-    /// that is the only way to test the protocol at all while the feature is
-    /// source-disabled. This test is the counterweight: it reads the real
-    /// constant and the real composed predicate, so a change that flips
-    /// `LINK_BUILD_SUPPORT` — or that quietly stops `linkRoomActive` from
-    /// consulting it — fails here rather than shipping a half-built `link/1` to
-    /// a real room.
-    ///
-    /// It is a gate, not an opinion about the feature: enabling `link/1` is
-    /// meant to mean editing this expectation together with the constant, once
-    /// byte-exact active-file transport recovery and the production driver and
-    /// UI exist.
-    func testThisBuildNeitherAdvertisesNorRoutesLink() {
+    /// Both halves matter and both used to be wrong in the other direction. The
+    /// room half was code-less-only while a pairing code had no room object
+    /// above `RealtimeConnectionFactory`; `LinkPairingRoom` gave it one, with the
+    /// socket shared by the link and by the legacy fallback, and `RelayDeadline`
+    /// bounded the credential a relayed link runs on. The platform half is the
+    /// one that must never be widened by accident: `RelayiumKit` is linked by
+    /// both apps and `LanDiscoveryModel` announces on both, so a cross-platform
+    /// `true` would have an iPhone inviting peers into a link it cannot answer.
+    func testThisBuildAdvertisesLinkOnEveryRoomOnMacOSAndNowhereElse() {
+        #if os(macOS)
+        XCTAssertTrue(LINK_BUILD_SUPPORT,
+                      "macOS composes link/1 through LinkWorkspaceModel")
+        #else
         XCTAssertFalse(LINK_BUILD_SUPPORT,
-                       "link/1 is not implemented end to end in this build")
-        // Both room kinds, because the build flag is the outer term: a code-less
-        // LAN room is exactly the room the feature would otherwise be live in.
-        XCTAssertFalse(linkRoomActive(isCodelessRoom: true),
-                       "the code-less room must stay inactive while the build cannot honour link/1")
-        XCTAssertFalse(linkRoomActive(isCodelessRoom: false))
+                       "no other platform composes link/1, so none may announce it")
+        #endif
 
+        // Every room, on this platform's answer — the parameter is where a
+        // future room kind states its own, not a scope this batch still applies.
         for isCodelessRoom in [true, false] {
             let active = linkRoomActive(isCodelessRoom: isCodelessRoom)
-            XCTAssertEqual(advertisedLinkCapabilities(linkRoomActive: active), [TEXT_CAPABILITY])
-            XCTAssertEqual(peerCaps(from: linkCapsHello(linkRoomActive: active)), [TEXT_CAPABILITY])
+            XCTAssertEqual(active, LINK_BUILD_SUPPORT,
+                           "the room rule is the build rule, room: \(isCodelessRoom)")
+            XCTAssertEqual(advertisedLinkCapabilities(linkRoomActive: active),
+                           active ? [TEXT_CAPABILITY, LINK_CAPABILITY] : [TEXT_CAPABILITY])
+            XCTAssertEqual(peerCaps(from: linkCapsHello(linkRoomActive: active)),
+                           active ? [TEXT_CAPABILITY, LINK_CAPABILITY] : [TEXT_CAPABILITY])
 
-            // And the routing predicate refuses even a peer that loudly claims
-            // it — which is what a relay-forged roster entry looks like.
-            let r = PeerCapabilityRegistry(linkRoomActive: { linkRoomActive(isCodelessRoom: isCodelessRoom) })
-            XCTAssertTrue(r.record(peerId: "p1", signal: capsSignalValue([TEXT_CAPABILITY, LINK_CAPABILITY])))
-            XCTAssertFalse(r.supports("p1", LINK_CAPABILITY),
-                           "this build must never route link/1, code-less room: \(isCodelessRoom)")
-            XCTAssertTrue(r.supports("p1", TEXT_CAPABILITY), "text/1 is unaffected by the gate")
+            let registry = PeerCapabilityRegistry(
+                linkRoomActive: { linkRoomActive(isCodelessRoom: isCodelessRoom) })
+            XCTAssertTrue(registry.record(peerId: "p1",
+                                          signal: capsSignalValue([TEXT_CAPABILITY, LINK_CAPABILITY])))
+            XCTAssertEqual(registry.supports("p1", LINK_CAPABILITY), active)
+            XCTAssertTrue(registry.supports("p1", TEXT_CAPABILITY),
+                          "text/1 is unaffected by the link scope")
         }
+
+        // Exactness is the whole downgrade boundary, and it did not move.
+        let legacy = PeerCapabilityRegistry(linkRoomActive: { true })
+        XCTAssertTrue(legacy.record(peerId: "old", signal: capsSignalValue([TEXT_CAPABILITY])))
+        XCTAssertFalse(legacy.supports("old", LINK_CAPABILITY),
+                       "a peer that announced only text/1 is legacy in every room")
+        let future = PeerCapabilityRegistry(linkRoomActive: { true })
+        XCTAssertTrue(future.record(peerId: "next",
+                                    signal: capsSignalValue([TEXT_CAPABILITY, "link/2"])))
+        XCTAssertFalse(future.supports("next", LINK_CAPABILITY),
+                       "link/2 is a different wire and must never be read as this one")
+    }
+
+    /// The platform gate, pinned as SOURCE as well as value.
+    ///
+    /// The test above can only ever run on macOS, so on its own it proves
+    /// nothing about the iOS build. This reads the constant's own definition and
+    /// requires the conditional to be there — which is the only thing that stops
+    /// a later edit from collapsing it to one cross-platform `true` and shipping
+    /// an announcement iOS cannot honour.
+    func testTheBuildFlagIsCompiledPerPlatform() throws {
+        let source = try registrySource()
+        // The exact three lines, in order, with nothing between them: the
+        // conditional IS the guarantee, so a partial match would let an edit
+        // leave the directive standing while both branches said true.
+        let expected = """
+        #if os(macOS)
+        public let LINK_BUILD_SUPPORT = true
+        #else
+        public let LINK_BUILD_SUPPORT = false
+        #endif
+        """.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+        let lines = source.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+        guard let start = lines.firstIndex(of: expected[0]) else {
+            return XCTFail("LINK_BUILD_SUPPORT must be compiled per platform")
+        }
+        XCTAssertEqual(Array(lines[start..<min(start + expected.count, lines.count)]),
+                       expected,
+                       "LINK_BUILD_SUPPORT must be true on macOS and false everywhere else")
+    }
+
+    /// The constant's own file, read raw: this assertion is ABOUT the
+    /// preprocessor directives, so a comment-stripping reader would be reading
+    /// something other than what compiles.
+    private func registrySource() throws -> String {
+        let url = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/RelayiumKit/Realtime/PeerCapabilityRegistry.swift")
+        return try String(contentsOf: url, encoding: .utf8)
+    }
+
+    /// Transport replacement is a SEPARATE decision and this batch did not make
+    /// it. A link whose transport dies is terminal, and the Workspace says so
+    /// rather than implying a recovery no code performs.
+    func testTransportReplacementRemainsUnsupported() {
+        XCTAssertFalse(LINK_TRANSPORT_REPLACEMENT_SUPPORTED)
     }
 
     /// One expression feeds both the roster hello and the per-connection SDP

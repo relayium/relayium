@@ -459,13 +459,17 @@ final class LinkEstablishmentSignalBufferTests: XCTestCase {
                        "every signal was accounted for exactly once")
     }
 
-    // MARK: - 7. unreachable from production
+    // MARK: - 7. one construction path
 
-    /// Holding a peer's signalling is not being reachable. Nothing outside the
-    /// tests constructs one, neither app target names it, and neither flag has
-    /// moved — so no build ever admits a `link/1` peer in the first place.
-    func testTheBufferStaysUnreachableFromProduction() throws {
-        XCTAssertFalse(LINK_BUILD_SUPPORT)
+    /// Holding a peer's signalling is not a second ownership boundary. Only the
+    /// link establishment path may construct this buffer, including in the
+    /// macOS production Workspace.
+    func testTheBufferKeepsOneConstructionPath() throws {
+        // `LINK_BUILD_SUPPORT` is deliberately NOT asserted here. This suite's
+        // subject is not the flag, and its value is per platform: a claim about
+        // it in nineteen unrelated files is nineteen places to get the iOS
+        // branch wrong. `PeerCapabilityRegistryTests` owns that contract, value
+        // and source both.
         XCTAssertFalse(LINK_TRANSPORT_REPLACEMENT_SUPPORTED)
 
         let appsRoot = URL(fileURLWithPath: #filePath)

@@ -474,7 +474,11 @@ final class LinkSessionPresentationTextTests: XCTestCase {
     /// running it a second time here would double a whole-tree walk to restate
     /// the same fact.
     func testTheTextProjectionShipsBehindTheSameClosedFlags() {
-        XCTAssertFalse(LINK_BUILD_SUPPORT)
+        // `LINK_BUILD_SUPPORT` is deliberately NOT asserted here. This suite's
+        // subject is not the flag, and its value is per platform: a claim about
+        // it in nineteen unrelated files is nineteen places to get the iOS
+        // branch wrong. `PeerCapabilityRegistryTests` owns that contract, value
+        // and source both.
         XCTAssertFalse(LINK_TRANSPORT_REPLACEMENT_SUPPORTED)
     }
 }

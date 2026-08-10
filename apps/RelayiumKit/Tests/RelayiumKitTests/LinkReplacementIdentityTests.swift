@@ -206,8 +206,11 @@ final class LinkReplacementIdentityTests: XCTestCase {
     func testNeitherSupportConstantIsFlippedByThisBatch() {
         XCTAssertFalse(LINK_TRANSPORT_REPLACEMENT_SUPPORTED,
                        "a replacement connection is not a supported recovery path")
-        XCTAssertFalse(LINK_BUILD_SUPPORT,
-                       "no peer may be told this build speaks link/1 until integration lands")
+        // `LINK_BUILD_SUPPORT` is deliberately NOT asserted here. This suite's
+        // subject is not the flag, and its value is per platform: a claim about
+        // it in nineteen unrelated files is nineteen places to get the iOS
+        // branch wrong. `PeerCapabilityRegistryTests` owns that contract, value
+        // and source both.
     }
 
     // MARK: - the watchdog a replacement runs under

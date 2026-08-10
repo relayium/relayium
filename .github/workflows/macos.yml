@@ -67,8 +67,11 @@ jobs:
   # that breaks it has to fail here rather than the next time somebody opens
   # Xcode. Unsigned and simulator-only: this is compile evidence, not a release
   # path, and there is nothing to distribute. No secrets, so it runs on fork
-  # pull requests like `test` does.
+  # pull requests like `test` does. A manual macOS release and an explicitly
+  # marked macOS-only push skip this job: those flows must not compile or package
+  # iOS, while ordinary app changes retain the shared-package compatibility gate.
   ios-build:
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && !contains(github.event.head_commit.message, '[macos-only]'))
     runs-on: macos-15
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

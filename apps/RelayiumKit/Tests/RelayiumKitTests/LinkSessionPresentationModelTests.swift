@@ -416,16 +416,19 @@ final class LinkSessionPresentationModelTests: XCTestCase {
             .deletingLastPathComponent()
     }
 
-    /// Nothing but its ONE owner — `LinkSessionAttempt` — constructs one, and
-    /// neither feature flag has moved. This is a presentation projection for a
-    /// transport no shipping build speaks, and the attempt is in turn built by
-    /// nothing outside the tests; `LinkSessionAttemptTests` pins that half.
+    /// Nothing but its ONE owner — `LinkSessionAttempt` — constructs one. The
+    /// macOS production Workspace reaches that attempt without adding a second
+    /// lifetime for this projection.
     ///
     /// The exclusion is the invariant, not a concession to it: a second builder
     /// would be a second lifetime for one screen — two objects able to retire, or
     /// to fail to retire, the same attempt.
-    func testTheModelStaysUnreachableFromProduction() throws {
-        XCTAssertFalse(LINK_BUILD_SUPPORT)
+    func testTheModelKeepsOneConstructionPath() throws {
+        // `LINK_BUILD_SUPPORT` is deliberately NOT asserted here. This suite's
+        // subject is not the flag, and its value is per platform: a claim about
+        // it in nineteen unrelated files is nineteen places to get the iOS
+        // branch wrong. `PeerCapabilityRegistryTests` owns that contract, value
+        // and source both.
         XCTAssertFalse(LINK_TRANSPORT_REPLACEMENT_SUPPORTED)
 
         let roots = [appsRoot.appendingPathComponent("RelayiumKit/Sources"),

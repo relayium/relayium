@@ -385,11 +385,19 @@ final class Receiver {
         let inboundRoom = InboundRoom()
         fileModel = AppEnvironment.makeRealtimeModel(
             baseURL: baseURL, verification: verification,
-            nearby: discovery, inboundRoom: inboundRoom)
+            nearby: discovery, inboundRoom: inboundRoom,
+            // This harness drives the same-network path only; it never joins a
+            // code, so the pairing room stays empty and the fallback builder
+            // simply refuses.
+            pairingRoom: LinkRoomHandle())
         fileModel.saveDirectory = saveDirectory
         textModel = AppEnvironment.makeRealtimeTextModel(
             baseURL: baseURL, verification: verification,
-            nearby: discovery, inboundRoom: inboundRoom)
+            nearby: discovery, inboundRoom: inboundRoom,
+            // This harness drives the same-network path only; it never joins a
+            // code, so the pairing room stays empty and the fallback builder
+            // simply refuses.
+            pairingRoom: LinkRoomHandle())
         receive = AppEnvironment.makeNearbyReceiveModel(
             fileModel: fileModel, textModel: textModel,
             discovery: discovery, inboundRoom: inboundRoom)

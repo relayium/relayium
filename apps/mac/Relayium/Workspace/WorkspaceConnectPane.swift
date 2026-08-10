@@ -20,10 +20,19 @@ import RelayiumKit
 /// an intent you may express before or after picking how to connect.
 ///
 /// That the *kind* still has to be decided at the moment of connecting is not a
-/// presentation choice: the shipped wire puts a file transfer and an ephemeral
-/// text session on separate signalling generations, and a peer that receives the
-/// wrong one waits for a manifest that never arrives. So the choice is attached
-/// to the verb the user presses, which is the last honest place for it.
+/// presentation choice on the legacy wire: it puts a file transfer and an
+/// ephemeral text session on separate signalling generations, and a peer that
+/// receives the wrong one waits for a manifest that never arrives. So for a
+/// legacy peer the choice is attached to the verb the user presses, which is the
+/// last honest place for it.
+///
+/// **For a peer that announced exact `link/1` the kind is not a choice at all.**
+/// Both verbs open the SAME connection: `Send a message` opens it with nothing
+/// staged, `Send files` opens it with the staged batch armed, and everything
+/// afterwards happens inside `WorkspaceLinkPane` without another code or another
+/// verification. The two buttons stay because they are two intents, not two
+/// transports — and the note below them stops claiming a limitation that peer
+/// does not have.
 ///
 /// ## Account asymmetry, unchanged
 ///
@@ -36,6 +45,10 @@ struct WorkspaceConnectPane: View {
     @ObservedObject var receive: NearbyReceiveModel
     @ObservedObject var fileModel: RealtimeSessionModel
     @ObservedObject var textModel: RealtimeTextSessionModel
+    /// The unified `link/1`. Consulted per DEVICE rather than per action: a peer
+    /// that announced it takes one connection for both verbs, and one that did
+    /// not keeps the two legacy paths untouched.
+    @ObservedObject var link: LinkWorkspaceModel
     /// The surface's one staged batch — owned by `WorkspaceDestination`, so it
     /// survives this pane being replaced by the session it starts.
     @ObservedObject var selection: SelectionStore
@@ -50,7 +63,7 @@ struct WorkspaceConnectPane: View {
 
     @State private var actionError: String?
 
-    private var modelBusy: Bool { fileModel.isBusy || textModel.isBusy }
+    private var modelBusy: Bool { fileModel.isBusy || textModel.isBusy || link.hasSession }
     /// Open With and Dock Drop also stop in the synchronous claim-before-start
     /// interval, without turning that ownership fact into permanent session busy.
     private var fileAdoptionBusy: Bool { presence.owner != nil || modelBusy }
@@ -60,9 +73,6 @@ struct WorkspaceConnectPane: View {
             sameNetwork
             pairingCode
             staging
-            InlineMessage(.info, L10n.t(.workspaceOneConnectionNote))
-                .frame(maxWidth: 720, alignment: .leading)
-                .accessibilityIdentifier("workspace-one-connection-note")
             InlineMessage(.info, L10n.t(.nearbyNoAccountNeeded))
                 .frame(maxWidth: 720, alignment: .leading)
             if let actionError {
@@ -247,6 +257,15 @@ struct WorkspaceConnectPane: View {
             Text(L10n.t(.nearbyAcceptanceNote))
                 .font(.caption2).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            // What THIS device's connection will carry, attached to that device
+            // rather than to the screen. The two verbs above open one connection
+            // for a peer that announced exact `link/1` and two separate ones for
+            // a peer that did not, and only the peer decides which — so a note
+            // above both sections could only ever be right about one of them.
+            InlineMessage(.info, L10n.t(device.supportsLink
+                                        ? .linkOneConnectionNote
+                                        : .workspaceOneConnectionNote))
+                .accessibilityIdentifier("workspace-device-connection-note")
         }
         .frame(maxWidth: 720, alignment: .leading)
     }
@@ -268,6 +287,13 @@ struct WorkspaceConnectPane: View {
                 }
                 Divider()
                 joinControls
+                // Unconditional here, and it is not a copy of the per-device
+                // note above: a pairing-code room has no shared room socket for
+                // a link to live on, so this half really does carry messages OR
+                // files whatever the peer can speak. See
+                // `linkRoomActive(isCodelessRoom:)`.
+                InlineMessage(.info, L10n.t(.workspaceOneConnectionNote))
+                    .accessibilityIdentifier("workspace-one-connection-note")
             }
         }
     }
@@ -393,6 +419,17 @@ struct WorkspaceConnectPane: View {
             return
         }
         actionError = nil
+        // Asked at ACTIVATION rather than at render: an announcement can arrive,
+        // or a room can end, between the frame that drew this button and the
+        // press. `canLink` is the exact-capability predicate and the only thing
+        // that decides which of the two products this peer gets.
+        guard !link.canLink(peerId: live.id) else {
+            guard presence.beginSession(.nearby, peerLabel: live.label) else { return }
+            if !link.connect(peerId: live.id, peerLabel: live.label) {
+                presence.release(.nearby)
+            }
+            return
+        }
         guard presence.beginSession(.nearby, mode: .text, peerLabel: live.label) else { return }
         Task { await textModel.connectNearby(peerId: live.id, role: .initiator) }
     }
@@ -410,6 +447,16 @@ struct WorkspaceConnectPane: View {
         // Claimed before dialling, so the session this starts is presented here.
         // A concurrent inbound offer can win after the last frame rendered, so
         // refusal is enforced here, not by visibility.
+        guard !link.canLink(peerId: live.id) else {
+            guard presence.beginSession(.nearby, peerLabel: live.label) else { return }
+            // ARMED, not sent: the batch crosses the verification boundary with
+            // everything else, and `LinkWorkspaceModel` is what releases it.
+            if !link.connect(peerId: live.id, peerLabel: live.label,
+                             files: staged.metas, sources: staged.sources) {
+                presence.release(.nearby)
+            }
+            return
+        }
         guard presence.beginSession(.nearby, mode: .files, peerLabel: live.label) else { return }
         fileModel.stageSend(sources: staged.sources, metas: staged.metas)
         Task { await fileModel.connectNearby(peerId: live.id, role: .initiator) }
@@ -439,10 +486,9 @@ struct WorkspaceConnectPane: View {
         switch mode {
         case .files:
             guard let staged else { return }
-            fileModel.stageSend(sources: staged.sources, metas: staged.metas)
-            Task { await mintAndJoinFiles(token: access.token) }
+            Task { await mintAndWatch(mode: .files, token: access.token, staged: staged) }
         case .text:
-            Task { await mintAndJoinText(token: access.token) }
+            Task { await mintAndWatch(mode: .text, token: access.token, staged: nil) }
         }
     }
 
@@ -456,13 +502,19 @@ struct WorkspaceConnectPane: View {
             guard fileModel.canJoin else { return }
             actionError = nil
             guard presence.beginSession(.pairingCode, mode: .files) else { return }
-            Task { await fileModel.join(code: code) }
+            // A joiner ANSWERS on the legacy wire, so `.responder` is what the
+            // fallback must use. Watched first, exactly as a minted code is.
+            watch(code: code, legacyRole: .responder, mode: .files, staged: nil) {
+                await fileModel.join(code: code)
+            }
         case .text:
             let code = textModel.joinCode
             guard textModel.canJoin else { return }
             actionError = nil
             guard presence.beginSession(.pairingCode, mode: .text) else { return }
-            Task { await textModel.join(code: code) }
+            watch(code: code, legacyRole: .responder, mode: .text, staged: nil) {
+                await textModel.join(code: code)
+            }
         }
     }
 
@@ -482,16 +534,60 @@ struct WorkspaceConnectPane: View {
         }
     }
 
-    private func mintAndJoinFiles(token: String) async {
-        await fileModel.mintCode(token: token)
-        guard case let .showingCode(code, _) = fileModel.state else { return }
-        Task { await fileModel.join(code: code, role: .initiator) }
+    /// Mint the code, then WATCH the room it names for a peer that speaks
+    /// `link/1` — and let the legacy path take the room if none does.
+    ///
+    /// Minting stays where it was, on the model whose state the code, the QR and
+    /// the expiry are rendered from: `LinkWorkspaceModel` never mints, and while
+    /// it is only watching, `hasSession` is false so that surface stays on
+    /// screen unchanged.
+    ///
+    /// The creator is the offerer on the legacy wire, so `.initiator` is what
+    /// the fallback must use. A LINK computes its own role from the two room
+    /// ids and ignores this one.
+    private func mintAndWatch(mode: TransferMode,
+                              token: String,
+                              staged: (sources: [PlaintextSource], metas: [FileMeta])?) async {
+        switch mode {
+        case .files:
+            await fileModel.mintCode(token: token)
+            guard case let .showingCode(code, _) = fileModel.state else { return }
+            watch(code: code, legacyRole: .initiator, mode: .files, staged: staged) {
+                // The legacy fallback for a FILE code stages the batch itself —
+                // `onLegacyFallbackBatch` hands it back — so nothing is staged
+                // before the room has answered.
+                await fileModel.join(code: code, role: .initiator)
+            }
+        case .text:
+            await textModel.mintCode(token: token)
+            guard case let .showingCode(code, _) = textModel.state else { return }
+            watch(code: code, legacyRole: .initiator, mode: .text, staged: nil) {
+                await textModel.join(code: code, role: .initiator)
+            }
+        }
     }
 
-    private func mintAndJoinText(token: String) async {
-        await textModel.mintCode(token: token)
-        guard case let .showingCode(code, _) = textModel.state else { return }
-        await textModel.join(code: code, role: .initiator)
+    /// Watch a code, or fall straight back when this build cannot.
+    ///
+    /// `legacyStart` is the path that shipped before this batch, and it runs
+    /// unchanged when the link model refuses the room — a client with no pairing
+    /// socket factory, or one already holding a session. That is what keeps
+    /// "pairing code works" true regardless of which half answers.
+    private func watch(code: String,
+                       legacyRole: Role,
+                       mode: TransferMode,
+                       staged: (sources: [PlaintextSource], metas: [FileMeta])?,
+                       legacyStart: @escaping () async -> Void) {
+        let watched = link.watchPairingCode(code,
+                                            legacyRole: legacyRole,
+                                            mode: mode,
+                                            files: staged?.metas ?? [],
+                                            sources: staged?.sources ?? [])
+        guard !watched else { return }
+        if let staged, mode == .files {
+            fileModel.stageSend(sources: staged.sources, metas: staged.metas)
+        }
+        Task { await legacyStart() }
     }
 
     /// Stage a batch the OS opened, if this surface is free to take it.

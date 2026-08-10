@@ -871,17 +871,24 @@ final class LinkRoomSessionTests: XCTestCase {
         return source
     }
 
-    /// Owning a lifecycle is not being reachable. Nothing outside the tests
-    /// constructs a room session, neither app target names it, and neither flag
-    /// has moved.
-    func testTheRoomSessionStaysUnreachableFromProduction() throws {
-        XCTAssertFalse(LINK_BUILD_SUPPORT)
+    /// ONE production owner, and it is named — see the router's equivalent for
+    /// why this guard changed shape rather than being deleted.
+    func testTheRoomSessionHasExactlyOneProductionOwner() throws {
+        // `LINK_BUILD_SUPPORT` is deliberately NOT asserted here. This suite's
+        // subject is not the flag, and its value is per platform: a claim about
+        // it in nineteen unrelated files is nineteen places to get the iOS
+        // branch wrong. `PeerCapabilityRegistryTests` owns that contract, value
+        // and source both.
         XCTAssertFalse(LINK_TRANSPORT_REPLACEMENT_SUPPORTED)
 
+        // ONE production owner, and it is named — see the router's equivalent
+        // for why the property changed shape rather than being deleted.
+        var owners: [String] = []
         for source in try appSources() where source.name != "LinkRoomSession.swift" {
-            XCTAssertFalse(source.code.contains("LinkRoomSession("),
-                           "\(source.name) constructs a link room session")
+            if source.code.contains("LinkRoomSession(") { owners.append(source.name) }
         }
+        XCTAssertEqual(owners, ["LinkWorkspaceModel.swift"],
+                       "exactly one production owner may construct a link room session")
     }
 
     /// ONE admission transition belongs to this layer, and it is the

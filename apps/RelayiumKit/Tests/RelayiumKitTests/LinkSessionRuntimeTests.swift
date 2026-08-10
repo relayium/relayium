@@ -385,7 +385,8 @@ final class LinkSessionRuntimeTests: XCTestCase {
     /// that allocates an attempt without waiting for an offer.
     private func harness(role: Role = .initiator,
                          receiveDirectory: URL? = nil,
-                         factoryFails: Bool = false) -> Harness {
+                         factoryFails: Bool = false,
+                         holdsRecoveryWindow: Bool = true) -> Harness {
         let codecs = LinkCodecs(sendKey: sendKey, recvKey: recvKey)
         let identity = LinkIdentity(peerId: "peer-b", role: role, sas: "424242",
                                     codecs: codecs, authenticationGeneration: 2)
@@ -408,6 +409,11 @@ final class LinkSessionRuntimeTests: XCTestCase {
                 return replacement
             },
             admission: admission,
+            // This suite's SUBJECT is the recovery gap, so it DEFAULTS to keeping
+            // the window that production declines. One test below flips it back
+            // to the production value, so the suite still states what actually
+            // ships.
+            holdsRecoveryWindow: holdsRecoveryWindow,
             onEvent: { events.append($0) })
         return Harness(runtime: runtime, transport: transport, identity: identity,
                        codecs: codecs, peer: RealtimeSender(sessionKey: recvKey),
@@ -1999,11 +2005,56 @@ final class LinkSessionRuntimeTests: XCTestCase {
         XCTAssertFalse(source.isEmpty, "the runtime source must be readable")
         XCTAssertFalse(source.contains("onFrame ="),
                        "the frame route is the file driver's and the coordinator's, never this one's")
-        for piecemeal in ["coordinator.onTransportLost =", "coordinator.onAttach =",
-                          "coordinator.onFrame =", "coordinator.onEnded ="] {
+        // Three of the four hooks are still untouchable: taking one would REPLACE
+        // what `bind` installed atomically, and the lane owner would never hear
+        // the report it needs to suspend a lane with.
+        for piecemeal in ["coordinator.onAttach =", "coordinator.onFrame =",
+                          "coordinator.onEnded ="] {
             XCTAssertFalse(source.contains(piecemeal),
                            "\(piecemeal) would take a hook the lane owner installed atomically")
         }
+        // `onTransportLost` is the ONE exception, and it is a composition rather
+        // than a replacement: `narrowRecoveryWindow` reads the owner's hook once,
+        // calls it on every report — preserving the suspension of BOTH lanes and
+        // any throw — and only narrows the answer to false when this build will
+        // never attach a replacement. Pinned to that exact shape, because a
+        // future edit that stopped calling the owner would silently stop
+        // suspending the lanes.
+        XCTAssertEqual(source.components(separatedBy: "coordinator.onTransportLost =").count - 1, 1,
+                       "exactly one composition of the transport-lost hook")
+        XCTAssertTrue(source.contains("let suspendLanes = coordinator.onTransportLost"),
+                      "the owner's hook must be read once, outside the coordinator's lock")
+        XCTAssertTrue(source.contains("_ = try suspendLanes?(ready)"),
+                      "the owner's hook must still run, with its throw preserved")
+        XCTAssertTrue(source.contains("guard !holdsRecoveryWindow else { return }"),
+                      "the narrowing must be a product decision, not an unconditional one")
+    }
+
+    /// The production default is to DECLINE the window, and a runtime that
+    /// declines it is terminal the moment its transport dies.
+    ///
+    /// This is the counterweight to `holdsRecoveryWindow: true` in this suite's
+    /// own rig: everything else here drives the gap deliberately, and without
+    /// this the suite would no longer state what production actually does.
+    func testProductionDeclinesTheRecoveryWindowAndEndsAtOnce() throws {
+        XCTAssertFalse(LINK_TRANSPORT_REPLACEMENT_SUPPORTED,
+                       "this test states what a build WITHOUT replacement does")
+        let h = harness(holdsRecoveryWindow: LINK_TRANSPORT_REPLACEMENT_SUPPORTED)
+        h.runtime.start()
+        h.transport.publish(h.identity)
+
+        // A clean close, which is the shape that used to open a ninety-second
+        // window nothing could ever close.
+        h.transport.die(error: nil)
+
+        // Nil rather than `.ended`: the runtime discards the coordinator with the
+        // link, so "no gap to be in" is the honest reading. What matters is that
+        // it is never `.interrupted`.
+        XCTAssertNotEqual(h.runtime.recoveryPhase, .interrupted,
+                          "a build that cannot rebuild must not sit in a gap")
+        XCTAssertTrue(h.runtime.isEnded, "it is terminal instead, at once")
+        XCTAssertEqual(h.admission.phase, .idle,
+                       "and the room is released rather than held interrupted")
     }
 
     /// ONE admission transition, and it is `didOpen`.
@@ -2070,12 +2121,14 @@ final class LinkSessionRuntimeTests: XCTestCase {
                        "`onEvent` is called from `deliver` and from nowhere else")
     }
 
-    /// Still unreachable from production: the ONLY thing that constructs one is
-    /// `LinkSessionFactory`, which nothing outside the tests reaches, and
-    /// neither feature flag has moved. `LinkSessionFactoryTests` owns the guard
-    /// that the factory itself stays unreachable.
-    func testTheRuntimeStaysUnreachableFromProduction() throws {
-        XCTAssertFalse(LINK_BUILD_SUPPORT)
+    /// The ONLY thing that constructs one is `LinkSessionFactory`. Production
+    /// reachability on macOS must not create a second runtime construction path.
+    func testTheRuntimeKeepsOneConstructionPath() throws {
+        // `LINK_BUILD_SUPPORT` is deliberately NOT asserted here. This suite's
+        // subject is not the flag, and its value is per platform: a claim about
+        // it in nineteen unrelated files is nineteen places to get the iOS
+        // branch wrong. `PeerCapabilityRegistryTests` owns that contract, value
+        // and source both.
         XCTAssertFalse(LINK_TRANSPORT_REPLACEMENT_SUPPORTED)
 
         let roots = [appsRoot.appendingPathComponent("RelayiumKit/Sources"),

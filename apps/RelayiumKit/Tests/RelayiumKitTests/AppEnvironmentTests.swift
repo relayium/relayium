@@ -265,7 +265,7 @@ final class AppEnvironmentTests: XCTestCase {
         let room = InboundRoom()
         let model = AppEnvironment.makeRealtimeModel(
             verification: VerificationPreference(defaults: defaults),
-            nearby: nearby, inboundRoom: room)
+            nearby: nearby, inboundRoom: room, pairingRoom: LinkRoomHandle())
         // Not scanning, so this still fails — but through the discovery model's
         // own refusal, which is the path that exists only on macOS.
         await model.connectNearby(peerId: "peer-1")
@@ -295,10 +295,16 @@ final class AppEnvironmentTests: XCTestCase {
         let defaults = VerificationPreference(
             defaults: UserDefaults(suiteName: "r3f-\(UUID().uuidString)")!)
         let room = InboundRoom()
+        // This test drives residency and the same-network path; no code is
+        // joined, so the pairing room stays empty and its fallback builder
+        // simply refuses.
+        let pairing = LinkRoomHandle()
         let file = AppEnvironment.makeRealtimeModel(verification: defaults,
-                                                    nearby: discovery, inboundRoom: room)
+                                                    nearby: discovery, inboundRoom: room,
+                                                    pairingRoom: pairing)
         let text = AppEnvironment.makeRealtimeTextModel(verification: defaults,
-                                                        nearby: discovery, inboundRoom: room)
+                                                        nearby: discovery, inboundRoom: room,
+                                                        pairingRoom: pairing)
         let receive = AppEnvironment.makeNearbyReceiveModel(
             fileModel: file, textModel: text, discovery: discovery, inboundRoom: room)
 
@@ -344,10 +350,13 @@ final class AppEnvironmentTests: XCTestCase {
         let defaults = VerificationPreference(
             defaults: UserDefaults(suiteName: "r3f-\(UUID().uuidString)")!)
         let room = InboundRoom()
+        let pairing = LinkRoomHandle()
         let file = AppEnvironment.makeRealtimeModel(verification: defaults,
-                                                    nearby: discovery, inboundRoom: room)
+                                                    nearby: discovery, inboundRoom: room,
+                                                    pairingRoom: pairing)
         let text = AppEnvironment.makeRealtimeTextModel(verification: defaults,
-                                                        nearby: discovery, inboundRoom: room)
+                                                        nearby: discovery, inboundRoom: room,
+                                                        pairingRoom: pairing)
         let receive = AppEnvironment.makeNearbyReceiveModel(
             fileModel: file, textModel: text, discovery: discovery, inboundRoom: room)
 

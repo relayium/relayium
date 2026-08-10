@@ -553,6 +553,52 @@ final class IOSSurfaceGuardTests: XCTestCase {
         }
     }
 
+    /// **iOS composes no `link/1`, and cannot.**
+    ///
+    /// `RelayiumKit` and `RelayiumAppKit` are linked by both apps, and
+    /// `LanDiscoveryModel` — which sends the roster-level announcement — ships
+    /// on both. So "iOS does not use it" has to be a property of the binary
+    /// rather than of what anybody remembered not to call: an iOS build that
+    /// announced `link/1` would invite a macOS or Web peer into a two-lane link
+    /// and then fail the establishment it had asked for.
+    ///
+    /// Two halves, and both are needed. `LINK_BUILD_SUPPORT` is compiled per
+    /// platform — `PeerCapabilityRegistryTests` pins that against the constant's
+    /// own source — and every object that COMPOSES the protocol is compiled out
+    /// of the iOS build, which is what this checks.
+    func testTheiOSTargetNamesNothingThatComposesALink() throws {
+        for (name, text) in try sources(under: iosRoot, atLeast: 12) {
+            for symbol in ["LinkWorkspaceModel", "LinkSessionFactory", "LinkRoomRouter",
+                           "LinkRoomSession", "LinkSessionAttempt", "LinkSessionRuntime",
+                           "LinkPairingRoom", "LinkRoomHandle", "watchPairingCode"] {
+                XCTAssertFalse(text.contains(symbol),
+                               "\(name) names \(symbol): iOS must compose no link/1")
+            }
+        }
+    }
+
+    /// And the composition itself is behind `#if os(macOS)`, so an iOS build
+    /// could not name it even if a source tried.
+    func testTheLinkCompositionIsCompiledOutOfNonMacOSBuilds() throws {
+        for name in ["LinkWorkspaceModel.swift"] {
+            let raw = try String(contentsOf: appKitRoot.appendingPathComponent(name),
+                                 encoding: .utf8)
+            XCTAssertTrue(raw.contains("#if os(macOS)"),
+                          "\(name) must be compiled out of every non-macOS build")
+            XCTAssertTrue(raw.hasSuffix("#endif\n"),
+                          "\(name)'s platform guard must cover the whole file")
+        }
+        // The two shared files that reach it do the same, locally.
+        let environment = try String(contentsOf: appKitRoot.appendingPathComponent("AppEnvironment.swift"),
+                                     encoding: .utf8)
+        XCTAssertTrue(environment.contains("#if os(macOS)"),
+                      "the link factory must not exist in an iOS build")
+        let presence = try String(contentsOf: appKitRoot.appendingPathComponent("TransferPresence.swift"),
+                                  encoding: .utf8)
+        XCTAssertTrue(presence.contains("#if os(macOS)"),
+                      "the link-aware liveness overload must not exist in an iOS build")
+    }
+
     func testNoDeferredFeatureIsReferenced() throws {
         // A later slice owns this. A reference means either a dead control or a
         // capability claimed before it works.

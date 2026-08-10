@@ -307,6 +307,39 @@ final class NearbyConnectionFactoryTests: XCTestCase {
         XCTAssertTrue(announcements.allSatisfy { $0.to == "chosen-7" },
                       "a capability hello must be addressed, never broadcast to the room")
     }
+
+    /// A pairing-code legacy fallback must build on the socket already joined by
+    /// the unified Workspace, preserve its TURN authorization, and replay a
+    /// signal that lands during construction. Opening a second socket here would
+    /// change this process's peer id and strand the other side's offer.
+    func testConnectInRoomUsesTheOwnedSocketAndCarriesIssuedTURN() async throws {
+        let (ch, sig) = openSocket()
+        let record = NearbyBuildRecord()
+        let config = ICEConfig(iceServers: [
+            ICEServerConfig(urls: ["stun:stun.example:3478"]),
+            ICEServerConfig(urls: ["turn:relay.example:3478"],
+                            username: "issued-user", credential: "issued-secret"),
+        ])
+
+        let connection = try await RealtimeConnectionFactory.connectInRoom(
+            signaling: sig, peerId: "legacy-peer", role: .responder,
+            config: config, mode: .file, capabilityTimeout: 1,
+            build: { signaling, peerId, _, servers, relayOnly, generation, caps in
+                record.note(peerId: peerId, servers: servers, relayOnly: relayOnly,
+                            generation: generation, capabilities: caps)
+                ch.fireText(#"{"type":"signal","from":"legacy-peer","data":{"sdp":{"type":"offer","sdp":"v=0"}}}"#)
+                return ReplayRecorder(signaling: signaling)
+            }) as! ReplayRecorder
+
+        XCTAssertTrue(connection.received.count == 1,
+                      "the already-arriving legacy offer must be replayed")
+        XCTAssertEqual(record.peerId, "legacy-peer")
+        XCTAssertEqual(record.servers, config.iceServers,
+                       "the code-authorized TURN credentials must be preserved")
+        XCTAssertEqual(record.relayOnly, true)
+        XCTAssertEqual(record.generation, .file)
+        XCTAssertFalse(ch.closed, "the room owns this socket")
+    }
 }
 
 // MARK: - the session models' nearby path

@@ -542,6 +542,27 @@ public final class LinkSessionRuntime: @unchecked Sendable {
     private let scheduler: LinkRecoveryScheduler
     private let replacementFactory: LinkReplacementFactory
     private let admission: LinkAdmission?
+    /// Whether this link may spend `LINK_RECOVERY_WINDOW` waiting for a rebuild.
+    ///
+    /// **This is a product decision, and this is the layer that composes the
+    /// product.** `LinkRecoveryCoordinator` and `LinkLaneOwner` implement
+    /// recovery completely and their suites drive it with real replacements;
+    /// gating it inside either of them would delete the mechanism's testability
+    /// along with the feature. What `LINK_TRANSPORT_REPLACEMENT_SUPPORTED`
+    /// records is that the SHIPPED feature is incomplete — no durable file-wire
+    /// owner, no END acknowledgement timing, no ICE restart, no native↔Web
+    /// evidence — so a window opened here can only ever expire.
+    ///
+    /// And an expiring window is not a neutral wait. Everything above this layer
+    /// spends it believing the link is alive: a screen that keeps saying
+    /// connected, a composer that keeps accepting typing, and a user told ninety
+    /// seconds later that none of it happened. Declining the window turns that
+    /// into the truthful terminal state the transport already reached.
+    ///
+    /// Defaulted from the constant so production cannot forget it, and injected
+    /// so `LinkSessionRuntimeTests` — whose subject IS the gap — can keep
+    /// exercising it.
+    private let holdsRecoveryWindow: Bool
     private let onEvent: (LinkSessionRuntimeEvent) -> Void
 
     /// - Parameters:
@@ -576,6 +597,7 @@ public final class LinkSessionRuntime: @unchecked Sendable {
                 scheduler: LinkRecoveryScheduler = LinkDispatchRecoveryScheduler(),
                 replacementFactory: @escaping LinkReplacementFactory,
                 admission: LinkAdmission? = nil,
+                            holdsRecoveryWindow: Bool = LINK_TRANSPORT_REPLACEMENT_SUPPORTED,
                 onEvent: @escaping (LinkSessionRuntimeEvent) -> Void) {
         self.init(transport: transport,
                   route: nil,
@@ -583,6 +605,7 @@ public final class LinkSessionRuntime: @unchecked Sendable {
                   scheduler: scheduler,
                   replacementFactory: replacementFactory,
                   admission: admission,
+                  holdsRecoveryWindow: holdsRecoveryWindow,
                   onEvent: onEvent)
     }
 
@@ -596,6 +619,7 @@ public final class LinkSessionRuntime: @unchecked Sendable {
                      scheduler: LinkRecoveryScheduler = LinkDispatchRecoveryScheduler(),
                      replacementFactory: @escaping LinkReplacementFactory,
                      admission: LinkAdmission? = nil,
+                     holdsRecoveryWindow: Bool = LINK_TRANSPORT_REPLACEMENT_SUPPORTED,
                      onEvent: @escaping (LinkSessionRuntimeEvent) -> Void) {
         self.init(transport: transport,
                   // Captured strongly, and that is not a second owner: this
@@ -608,6 +632,7 @@ public final class LinkSessionRuntime: @unchecked Sendable {
                   scheduler: scheduler,
                   replacementFactory: replacementFactory,
                   admission: admission,
+                  holdsRecoveryWindow: holdsRecoveryWindow,
                   onEvent: onEvent)
     }
 
@@ -617,8 +642,10 @@ public final class LinkSessionRuntime: @unchecked Sendable {
                  scheduler: LinkRecoveryScheduler,
                  replacementFactory: @escaping LinkReplacementFactory,
                  admission: LinkAdmission?,
+                 holdsRecoveryWindow: Bool,
                  onEvent: @escaping (LinkSessionRuntimeEvent) -> Void) {
         self.transport = transport
+        self.holdsRecoveryWindow = holdsRecoveryWindow
         self.route = route
         self.receiveDirectory = receiveDirectory
         self.scheduler = scheduler
@@ -739,6 +766,7 @@ public final class LinkSessionRuntime: @unchecked Sendable {
             // separated those two constructions into a trap inside a publication
             // callback, on a queue with a peer waiting on the other end.
             try owner.bind(to: coordinator)
+            narrowRecoveryWindow(coordinator)
         } catch {
             // `bind` throws BEFORE it installs anything, so this coordinator has
             // no owner hooks and cannot end the lanes — what it does do is close
@@ -1281,6 +1309,36 @@ public final class LinkSessionRuntime: @unchecked Sendable {
     /// A SNAPSHOT, and only ever that: by the time a caller acts on it another
     /// thread may have moved on. See "What it deliberately does NOT report" for
     /// why this is a read rather than an event.
+    /// Refuse the recovery window when this build cannot use it.
+    ///
+    /// It COMPOSES the owner's hook rather than taking it, and the difference is
+    /// the whole reason this is allowed to exist beside `bind`'s atomic install:
+    /// the lane owner's answer is still called, on every report, with its throw
+    /// preserved — so both lanes are still suspended, which is what stops a
+    /// driver writing into a transport that is gone, and a policy failure still
+    /// reaches the coordinator as one. Only the ANSWER is narrowed, from "there
+    /// is work a replacement could resume" to "this build will not attempt one".
+    ///
+    /// The coordinator reads `false` as the owner declining to recover and ends
+    /// the link at once, choosing `.closed` or `.failed` from whether the dead
+    /// transport carried an error — the same terminal reason the expiring window
+    /// would have produced, without the ninety seconds of false "open".
+    ///
+    /// The owner's hook is read ONCE, here, and captured by value. Reading it
+    /// from inside the wrapper would re-enter the coordinator's lock while the
+    /// coordinator is holding it to run the hook.
+    ///
+    /// Installed inside the same `do` as `bind`, before publication, so no gap
+    /// can be in flight while it is written.
+    private func narrowRecoveryWindow(_ coordinator: LinkRecoveryCoordinator) {
+        guard !holdsRecoveryWindow else { return }
+        let suspendLanes = coordinator.onTransportLost
+        coordinator.onTransportLost = { ready in
+            _ = try suspendLanes?(ready)
+            return false
+        }
+    }
+
     public var recoveryPhase: LinkRecoveryPhase? { coordinator?.phase }
 
     /// This runtime is over. Terminal.

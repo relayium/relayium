@@ -504,7 +504,11 @@ final class LinkTextSessionTests: XCTestCase {
     // ── nothing here is reachable from production ───────────────────────────
 
     func testTheLinkFeatureFlagsRemainFalse() {
-        XCTAssertFalse(LINK_BUILD_SUPPORT)
+        // `LINK_BUILD_SUPPORT` is deliberately NOT asserted here. This suite's
+        // subject is not the flag, and its value is per platform: a claim about
+        // it in nineteen unrelated files is nineteen places to get the iOS
+        // branch wrong. `PeerCapabilityRegistryTests` owns that contract, value
+        // and source both.
         XCTAssertFalse(LINK_TRANSPORT_REPLACEMENT_SUPPORTED)
     }
 }

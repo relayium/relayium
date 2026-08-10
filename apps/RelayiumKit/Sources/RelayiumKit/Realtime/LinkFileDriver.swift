@@ -257,11 +257,10 @@ public enum LinkFileDriverEvent: Equatable, Sendable {
 ///
 /// ## What it is not
 ///
-/// It is unreachable from production. `LINK_BUILD_SUPPORT` and
-/// `LINK_TRANSPORT_REPLACEMENT_SUPPORTED` are both still false, nothing
-/// constructs one, and it owns no UI, no admission, no picker and no filesystem
-/// — destination selection is the later AppKit factory's (see
-/// `LinkFileDestination`).
+/// It owns no UI, no admission, no picker and no filesystem — destination
+/// selection is the AppKit factory's (see `LinkFileDestination`). Production
+/// construction is macOS-only through the unified Workspace; transport
+/// replacement remains disabled until the replacement path is supported.
 public final class LinkFileDriver: @unchecked Sendable {
 
     // MARK: - owned synchronization

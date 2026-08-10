@@ -267,7 +267,8 @@ public enum AppEnvironment {
     public static func makeRealtimeModel(baseURL: URL = productionBaseURL,
                                         verification: VerificationPreference,
                                         nearby: LanDiscoveryModel,
-                                        inboundRoom: InboundRoom) -> RealtimeSessionModel {
+                                        inboundRoom: InboundRoom,
+                                        pairingRoom: LinkRoomHandle) -> RealtimeSessionModel {
         RealtimeSessionModel(
             pairClient: HTTPPairClient(baseURL: baseURL),
             iceClient: HTTPICEClient(baseURL: baseURL),
@@ -294,6 +295,17 @@ public enum AppEnvironment {
                 return try RealtimeConnectionFactory.acceptNearby(
                     signaling: signaling, peerId: peerId, config: servers)
             },
+            // The pairing-code fallback: a room `LinkWorkspaceModel` joined,
+            // watched for a `link/1` peer, and handed over when the peer turned
+            // out to speak the older wire. The socket is the one that joined the
+            // code — see `RealtimeConnectionFactory.connectInRoom` for why
+            // reopening it would strand a creator that had already offered.
+            makeRoomConnection: { peerId, role, config in
+                guard let signaling = pairingRoom.signaling else { throw NearbyError.notScanning }
+                return try await RealtimeConnectionFactory.connectInRoom(
+                    signaling: signaling, peerId: peerId, role: role,
+                    config: config, mode: .file)
+            },
             makeConnection: { code, role, servers in
                 try await RealtimeConnectionFactory.make(
                     code: code, role: role, config: servers,
@@ -305,7 +317,8 @@ public enum AppEnvironment {
     public static func makeRealtimeTextModel(baseURL: URL = productionBaseURL,
                                             verification: VerificationPreference,
                                             nearby: LanDiscoveryModel,
-                                            inboundRoom: InboundRoom) -> RealtimeTextSessionModel {
+                                            inboundRoom: InboundRoom,
+                                            pairingRoom: LinkRoomHandle) -> RealtimeTextSessionModel {
         RealtimeTextSessionModel(
             pairClient: HTTPPairClient(baseURL: baseURL),
             iceClient: HTTPICEClient(baseURL: baseURL),
@@ -321,6 +334,17 @@ public enum AppEnvironment {
                 return try RealtimeConnectionFactory.acceptNearby(
                     signaling: signaling, peerId: peerId, config: servers, mode: .text)
             },
+            // The pairing-code fallback: a room `LinkWorkspaceModel` joined,
+            // watched for a `link/1` peer, and handed over when the peer turned
+            // out to speak the older wire. The socket is the one that joined the
+            // code — see `RealtimeConnectionFactory.connectInRoom` for why
+            // reopening it would strand a creator that had already offered.
+            makeRoomConnection: { peerId, role, config in
+                guard let signaling = pairingRoom.signaling else { throw NearbyError.notScanning }
+                return try await RealtimeConnectionFactory.connectInRoom(
+                    signaling: signaling, peerId: peerId, role: role,
+                    config: config, mode: .text)
+            },
             makeConnection: { code, role, servers in
                 try await RealtimeConnectionFactory.make(
                     code: code,
@@ -333,6 +357,70 @@ public enum AppEnvironment {
             }
         )
     }
+
+    // MARK: - the unified link (macOS only)
+    //
+    // Compiled out on iOS for the reason `LinkWorkspaceModel.swift` records: an
+    // announcement is a promise about what this process can answer, and iOS
+    // composes nothing that can.
+    #if os(macOS)
+
+    /// The Workspace's `link/1` owner, wired to the SAME room socket and the
+    /// SAME capability registry the discovery model owns.
+    ///
+    /// Registered through `addRoomObserver` rather than `observer`, so the
+    /// background-receive interceptor keeps its existing position in the
+    /// socket's routing order and this one is strictly after it. Neither
+    /// competes for a frame: `inboundOfferGeneration` refuses a `link`
+    /// generation outright, and the link router passes every legacy one.
+    ///
+    /// `receiveDirectory` defaults to Downloads, which is where the legacy
+    /// nearby receive already writes, so a user who has been receiving files
+    /// from this room keeps finding them in the same place. It is resolved per
+    /// link rather than captured, because the answer is a snapshot the
+    /// application owns.
+    @MainActor
+    public static func makeLinkWorkspaceModel(baseURL: URL = productionBaseURL,
+                                              verification: VerificationPreference,
+                                              nearby: LanDiscoveryModel,
+                                              pairingRoom: LinkRoomHandle,
+                                              receiveDirectory: (() -> URL)? = nil)
+        -> LinkWorkspaceModel {
+        let model = LinkWorkspaceModel(
+            capabilities: nearby.capabilities,
+            receiveDirectory: receiveDirectory ?? defaultLinkReceiveDirectory,
+            // Read per link rather than captured, for the reason the realtime
+            // factories record: flipping the preference must take effect on the
+            // next connection, not the next launch.
+            requiresVerification: { verification.requiresSASConfirmation },
+            iceClient: HTTPICEClient(baseURL: baseURL),
+            // The pairing room's own socket. One per code, opened here and owned
+            // by the model for the whole life of that code — including across
+            // the legacy fallback, which builds its connection on this very
+            // socket rather than opening a second one.
+            connectPairingSocket: { code in
+                SignalingClient.connect(wsBase: RealtimeConnectionFactory.signalingBase(baseURL),
+                                        code: code,
+                                        name: deviceName())
+            },
+            // The SAME handle both legacy models read their fallback socket
+            // from. Two would be two rooms, and the fallback would build on the
+            // one nobody joined.
+            pairingRoomHandle: pairingRoom)
+        nearby.addRoomObserver(model)
+        model.resolvePeerLabel { [weak nearby] peerId in
+            nearby?.label(forPeerID: peerId) ?? peerId
+        }
+        return model
+    }
+
+    /// The same directory the legacy nearby receive writes into.
+    public static func defaultLinkReceiveDirectory() -> URL {
+        FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+    }
+
+    #endif
 
     /// Background receive, wired to the one room socket the discovery model
     /// owns. Registering itself as the observer is what makes the listener

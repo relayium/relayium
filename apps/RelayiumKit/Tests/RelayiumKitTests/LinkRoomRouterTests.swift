@@ -1351,17 +1351,31 @@ final class LinkRoomRouterTests: XCTestCase {
         return source
     }
 
-    /// Routing a room is not being reachable. Nothing outside the tests
-    /// constructs a router, neither app target names it, and neither flag has
-    /// moved.
-    func testTheRouterStaysUnreachableFromProduction() throws {
-        XCTAssertFalse(LINK_BUILD_SUPPORT)
+    /// ONE production owner, and it is named.
+    ///
+    /// The property this used to assert — "nothing constructs a router" —
+    /// became false when the Workspace was wired, and pretending otherwise
+    /// would be the weakest kind of green. What has to stay true is that
+    /// exactly one thing does, so a second room owner cannot appear and route
+    /// the same socket twice.
+    func testTheRouterHasExactlyOneProductionOwner() throws {
+        // `LINK_BUILD_SUPPORT` is deliberately NOT asserted here. This suite's
+        // subject is not the flag, and its value is per platform: a claim about
+        // it in nineteen unrelated files is nineteen places to get the iOS
+        // branch wrong. `PeerCapabilityRegistryTests` owns that contract, value
+        // and source both.
         XCTAssertFalse(LINK_TRANSPORT_REPLACEMENT_SUPPORTED)
 
+        // ONE production owner, and it is named. The property this used to
+        // assert — "nothing constructs one" — became false when the Workspace
+        // was wired; what has to stay true is that exactly one thing does, so a
+        // second room owner cannot appear and route the same socket twice.
+        var owners: [String] = []
         for source in try appSources() where source.name != "LinkRoomRouter.swift" {
-            XCTAssertFalse(source.code.contains("LinkRoomRouter("),
-                           "\(source.name) constructs a link room router")
+            if source.code.contains("LinkRoomRouter(") { owners.append(source.name) }
         }
+        XCTAssertEqual(owners, ["LinkWorkspaceModel.swift"],
+                       "exactly one production owner may construct a link room router")
     }
 
     /// Internal, like everything else below this line. A `public` router would be

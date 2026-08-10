@@ -12,7 +12,7 @@ import RelayiumKit
 /// whose direction disagrees with the batch it names belongs to a batch this
 /// projection does not have, and applying it to the one that happens to share
 /// the number is the single mistake that could corrupt two transfers at once.
-enum LinkFileBatchDirection: Equatable {
+public enum LinkFileBatchDirection: Equatable {
     case inbound
     case outbound
 }
@@ -30,7 +30,7 @@ enum LinkFileBatchDirection: Equatable {
 /// `finalize`, which is the moment the bytes stop being a transfer and become
 /// the user's files — carries the paths, so a `received` state synthesised from
 /// `ok: true` would be a screen offering to reveal files it cannot name.
-enum LinkFileBatchState: Equatable {
+public enum LinkFileBatchState: Equatable {
     /// Inbound: the peer's manifest is waiting for this user's answer.
     case offered
     /// Outbound: the runtime accepted the enqueue and nothing has left yet.
@@ -51,7 +51,7 @@ enum LinkFileBatchState: Equatable {
 
     /// Whether a result has already been decided. The guard every later report
     /// passes through.
-    var isTerminal: Bool {
+    public var isTerminal: Bool {
         switch self {
         case .offered, .queued, .transferring: return false
         case .finished, .received, .failed: return true
@@ -70,24 +70,24 @@ enum LinkFileBatchState: Equatable {
 /// side's for an outbound one. Nothing here trims a name, rewrites a path or
 /// re-orders an entry. `path` in particular decides the shape of what lands on
 /// disk, and this layer is not where that is decided.
-struct LinkFileBatch: Equatable, Identifiable {
+public struct LinkFileBatch: Equatable, Identifiable {
 
     /// The driver's batch number.
-    let id: Int
-    let direction: LinkFileBatchDirection
+    public let id: Int
+    public let direction: LinkFileBatchDirection
     /// The manifest, exactly as it was announced or enqueued.
-    let files: [FileMeta]
+    public let files: [FileMeta]
     /// The manifest's own total, computed once and saturating — see
     /// `LinkFilePresentationModel.total(of:)` for why a peer's numbers may not
     /// be added naively.
-    let totalBytes: Int
+    public let totalBytes: Int
 
     /// The whole manifest's durable prefix (inbound) or produced frontier
     /// (outbound), exactly as the driver last reported it. Monotonic.
-    fileprivate(set) var transferredBytes: Int = 0
-    fileprivate(set) var state: LinkFileBatchState
+    public fileprivate(set) var transferredBytes: Int = 0
+    public fileprivate(set) var state: LinkFileBatchState
 
-    var isTerminal: Bool { state.isTerminal }
+    public var isTerminal: Bool { state.isTerminal }
 
     /// The bar, or nil when there is nothing to draw one against.
     ///
@@ -97,14 +97,14 @@ struct LinkFileBatch: Equatable, Identifiable {
     /// actually moved is a fact worth being able to see — and only the fraction
     /// derived from it is clamped, because a bar past its end or before its
     /// start renders as garbage.
-    var fractionCompleted: Double? {
+    public var fractionCompleted: Double? {
         guard totalBytes > 0 else { return nil }
         return min(1, max(0, Double(transferredBytes) / Double(totalBytes)))
     }
 
     /// Where the files landed, once a commit proved it. Nil in every other
     /// state, including `finished`.
-    var receivedFiles: [URL]? {
+    public var receivedFiles: [URL]? {
         guard case let .received(files, _) = state else { return nil }
         return files
     }
@@ -112,7 +112,7 @@ struct LinkFileBatch: Equatable, Identifiable {
     /// The folder this batch created for itself. Nil for a flat batch AND for a
     /// batch that has not committed, which a caller distinguishes by looking at
     /// `state` rather than at this.
-    var receivedContainer: URL? {
+    public var receivedContainer: URL? {
         guard case let .received(_, container) = state else { return nil }
         return container
     }
@@ -204,13 +204,13 @@ struct LinkFileBatch: Equatable, Identifiable {
 /// attempt is its owner's act, and doing it from a deallocation would run
 /// actor-isolated cleanup on whichever thread released the last reference.
 @MainActor
-final class LinkFilePresentationModel: ObservableObject {
+public final class LinkFilePresentationModel: ObservableObject {
 
     /// Every batch this attempt knows about, in the order it became known.
     ///
     /// One list rather than two, because the id space is one and a view that
     /// wants them apart has `inbound` and `outbound` below.
-    @Published private(set) var batches: [LinkFileBatch] = []
+    @Published public private(set) var batches: [LinkFileBatch] = []
 
     /// Why the file lane failed, as the typed value the driver reported and no
     /// more. Turning it into words is a later slice's job — a message baked in
@@ -221,26 +221,26 @@ final class LinkFilePresentationModel: ObservableObject {
     /// FILE lane has exactly one terminal report and it always carries an error,
     /// so `isFileLaneFailed` is a reading of this rather than a second flag that
     /// could disagree with it.
-    @Published private(set) var laneFailure: LinkFileDriverError?
+    @Published public private(set) var laneFailure: LinkFileDriverError?
 
     /// The whole attempt is over. Terminal, and absorbing for this projection.
-    @Published private(set) var isSessionEnded = false
+    @Published public private(set) var isSessionEnded = false
 
     // MARK: - what a view asks
 
     /// This lane is over. Deliberately NOT the same question as the session's:
     /// a file lane that failed closed leaves a live link carrying a live
     /// conversation, and a screen has to be able to say both.
-    var isFileLaneFailed: Bool { laneFailure != nil }
+    public var isFileLaneFailed: Bool { laneFailure != nil }
 
-    var inbound: [LinkFileBatch] { batches.filter { $0.direction == .inbound } }
-    var outbound: [LinkFileBatch] { batches.filter { $0.direction == .outbound } }
+    public var inbound: [LinkFileBatch] { batches.filter { $0.direction == .inbound } }
+    public var outbound: [LinkFileBatch] { batches.filter { $0.direction == .outbound } }
 
     /// The peer's manifests waiting for this user's answer. What a consent
     /// prompt appears on.
-    var offers: [LinkFileBatch] { batches.filter { $0.state == .offered } }
+    public var offers: [LinkFileBatch] { batches.filter { $0.state == .offered } }
 
-    func batch(_ id: Int) -> LinkFileBatch? { batches.first { $0.id == id } }
+    public func batch(_ id: Int) -> LinkFileBatch? { batches.first { $0.id == id } }
 
     // MARK: - the projection
 

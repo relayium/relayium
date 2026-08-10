@@ -85,6 +85,9 @@ public final class TransferPresence: ObservableObject {
             .eraseToAnyPublisher())
     }
 
+    /// The ONE liveness subscription, whichever overload above supplied it.
+    /// Shared rather than duplicated per platform, so "exactly one thing
+    /// releases the surface" is structural.
     func observeSessionLiveness(_ liveness: AnyPublisher<Bool, Never>) {
         sessionObservation = liveness
             .removeDuplicates()
@@ -92,6 +95,40 @@ public final class TransferPresence: ObservableObject {
                 if !hasLiveSession { self?.releaseAll() }
             }
     }
+
+    // The unified link is macOS-only — see `LinkWorkspaceModel.swift` — so the
+    // overload that knows about it is too. iOS keeps the two-model observation
+    // above, unchanged, and cannot accidentally acquire a third liveness source
+    // for a product it does not build.
+    #if os(macOS)
+
+    /// The same observation with the unified link included.
+    ///
+    /// A THIRD publisher rather than a separate observer, and that is the whole
+    /// point: this object keeps exactly one liveness subscription, and a second
+    /// one would let a link's claim be released the instant both legacy models
+    /// reported idle — which they always are while a link is running, because a
+    /// link uses neither of them.
+    ///
+    /// `hasSession` rather than "is open": a link that ended keeps its
+    /// transcript, its committed batches and its terminal reason on screen, so
+    /// ownership must survive the transport exactly as a `.completed` legacy
+    /// receive's does. `dismiss()` is what gives it up.
+    public func observeSessions(fileModel: RealtimeSessionModel,
+                                textModel: RealtimeTextSessionModel,
+                                link: LinkWorkspaceModel) {
+        let legacy = Publishers.CombineLatest(fileModel.$state, textModel.$state)
+            .map { file, text in file != .idle || text != .idle }
+        observeSessionLiveness(Publishers.CombineLatest(legacy, link.$connection)
+            .map { legacyLive, connection in
+                if legacyLive { return true }
+                if case .idle = connection { return false }
+                return true
+            }
+            .eraseToAnyPublisher())
+    }
+
+    #endif
 
     /// Take, or keep, the right to present the session.
     ///

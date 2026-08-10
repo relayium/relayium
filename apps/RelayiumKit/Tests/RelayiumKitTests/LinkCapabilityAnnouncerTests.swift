@@ -66,7 +66,7 @@ final class LinkCapabilityAnnouncerTests: XCTestCase {
     /// frame level: wired to the REAL composed predicate rather than an injected
     /// one, this build puts no hello on the wire in any room. `link/1` cannot be
     /// announced from a build that cannot honour it.
-    func testThisBuildAnnouncesNothingAnywhere() {
+    func testThisBuildAnnouncesInEveryRoomItsPlatformAllows() {
         for isCodelessRoom in [true, false] {
             let recorder = Recorder()
             let active = { linkRoomActive(isCodelessRoom: isCodelessRoom) }
@@ -77,9 +77,30 @@ final class LinkCapabilityAnnouncerTests: XCTestCase {
             )
             announcer.rosterChanged(peerIds: ["p1", "p2"])
             for _ in 0..<LINK_CAPS_ANNOUNCE_ATTEMPTS { announcer.retryTick() }
-            XCTAssertTrue(recorder.sent.isEmpty,
-                          "no roster frame may be sent, code-less room: \(isCodelessRoom)")
+
+            guard LINK_BUILD_SUPPORT else {
+                // A platform that cannot answer a link must not invite one, and
+                // the SILENCE is the load-bearing half.
+                XCTAssertTrue(recorder.sent.isEmpty,
+                              "a build without link/1 may not greet anybody, room: \(isCodelessRoom)")
+                continue
+            }
+            XCTAssertFalse(recorder.sent.isEmpty,
+                           "every room must greet its peers, room: \(isCodelessRoom)")
+            for (_, caps) in recorder.sent {
+                XCTAssertEqual(caps, [TEXT_CAPABILITY, LINK_CAPABILITY])
+            }
         }
+    }
+
+    /// A room whose rule says no is still silent, whatever the build says. The
+    /// predicate is injected here because that is the only way to exercise the
+    /// refusal on a platform whose real answer is yes.
+    func testARoomThatForbidsLinkIsSilent() {
+        let (announcer, recorder, _) = make(linkRoomActive: false)
+        announcer.rosterChanged(peerIds: ["p1", "p2"])
+        for _ in 0..<LINK_CAPS_ANNOUNCE_ATTEMPTS { announcer.retryTick() }
+        XCTAssertTrue(recorder.sent.isEmpty)
     }
 
     // MARK: - bounded retries

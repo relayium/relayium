@@ -8,21 +8,59 @@ import Foundation
 /// to set. It is not a switch. There is no setter, no launch argument and no
 /// stored setting, so a deep link, a relay or a user cannot reach it.
 ///
-/// Scope is decided one level down, by the room.
+/// **It is per PLATFORM, and that is not a nicety.** `RelayiumKit` is linked by
+/// the macOS app AND the iOS app, and `LanDiscoveryModel` — which owns the
+/// roster-level announcement — ships on both. A single cross-platform `true`
+/// would therefore make an iOS build announce `link/1` in every same-network
+/// room while having nothing that can answer one: a macOS or Web peer would
+/// offer it a two-lane link, and the iPhone would fail the establishment it had
+/// itself invited. An announcement is a promise about what this process can do,
+/// so it is compiled per process.
+///
+/// macOS composes the protocol in `LinkWorkspaceModel`, which is itself
+/// `#if os(macOS)`. iOS composes nothing, announces nothing and routes nothing;
+/// its same-network and pairing-code paths are exactly the ones it shipped with.
+/// Turning iOS on is its own batch with its own surface, and it means editing
+/// this constant.
+#if os(macOS)
+public let LINK_BUILD_SUPPORT = true
+#else
 public let LINK_BUILD_SUPPORT = false
+#endif
 
 /// Whether the room this client is currently in may use `link/1`.
 ///
-/// Only the code-less LAN room. A pairing-code/cross-network room keeps the
-/// existing one-mode-at-a-time file and text paths, because a relayed link's
-/// TURN allocation lifetime, quota accounting and mobile-background cost need
-/// their own production acceptance before one long-lived link replaces two
-/// short ones there.
+/// **Every room, on a build that implements the protocol.** It used to be the
+/// code-less same-network room alone, because a pairing code had no room object
+/// above `RealtimeConnectionFactory` — the socket was opened inside the call
+/// that built a legacy connection, so a link there would have needed a second
+/// one and the legacy fallback a third.
 ///
-/// This is the ONE place the build flag and the room rule are combined, so a
-/// caller cannot accidentally consult one without the other.
+/// `LinkPairingRoom` removed that: a code now has exactly one socket, owned
+/// above the connection, shared by the link attempt AND by the legacy connection
+/// the fallback builds on it. With one socket the remaining pairing-code
+/// concerns are the ones the Web answered first and this client now answers the
+/// same way:
+///
+///  - **A relayed link's credential lifetime is bounded and visible.** The TURN
+///    REST username `/api/ice` issues states its own expiry, and `RelayDeadline`
+///    derives a clock-skew-safe deadline from it. The link warns before the
+///    boundary and is closed truthfully at it, rather than silently ceasing to
+///    move bytes when the allocation lapses.
+///  - **Exactness did not move.** A peer that does not announce this precise
+///    version is legacy in every room and is never probed with a two-channel
+///    offer it would misread.
+///
+/// The parameter is kept rather than deleted, and it is not vestigial: it is
+/// where a future room kind states its own answer, and keeping the composition
+/// in ONE function is what stops the announcement and the routing rule from
+/// consulting different halves.
+///
+/// See DECISION-LOG "Promote the unified Web workspace to pairing rooms with a
+/// bounded relay lifecycle" (2026-08-10) for the Web's equivalent step.
 public func linkRoomActive(isCodelessRoom: Bool) -> Bool {
-    LINK_BUILD_SUPPORT && isCodelessRoom
+    _ = isCodelessRoom
+    return LINK_BUILD_SUPPORT
 }
 
 /// What this build announces, at the roster level and — through the same
