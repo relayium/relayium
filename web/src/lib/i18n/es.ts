@@ -592,7 +592,7 @@ const es: Messages = {
         name: "macOS",
         use: "Un Mac que se queda en tu escritorio y recoge lo que le envías desde el teléfono o desde un navegador en otro sitio.",
         setup:
-          "El buzón de la app nativa de Mac sigue siendo una compilación de ingeniería, así que esta página no te la entrega. Lo que funciona hoy en macOS es el mismo receptor de línea de comandos supervisado por launchd: relayium inbox service launchd imprime un agente para este Mac y los comandos que lo cargan.",
+          "Lo que esta página configura en macOS es el receptor de línea de comandos supervisado por launchd: relayium inbox service launchd imprime un agente para este Mac y los comandos que lo cargan.",
         files:
           "La carpeta que pasaste a --dir. Nada se sobrescribe, nada se descomprime y un archivo recibido nunca se abre por ti.",
         residency:
@@ -643,7 +643,7 @@ const es: Messages = {
       },
     },
     macNoDownload:
-      "Que aquí no haya botón de descarga es intencionado: la compilación firmada de Mac es un artefacto de ingeniería, no una publicación pública.",
+      "Aquí todavía no hay botón de descarga: esta página ofrecerá la app de Mac en cuanto los metadatos de publicación del sitio indiquen que existe.",
     macDownloadCta: "Descargar la app de Mac",
     safetyH2: "Límites que no se mueven",
     safetyPoints: [

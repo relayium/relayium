@@ -56,6 +56,38 @@ function gitTags() {
   }
 }
 
+/** `v1.2.3` — the command-line release namespace this page lists. */
+const CLI_TAG = /^v\d+\.\d+\.\d+$/;
+/** `macos-v1.0` — a native release, deliberately NOT in the list. */
+const NATIVE_TAG = /^macos-v\d+(?:\.\d+){1,2}$/;
+
+/**
+ * Sort a tag table into the three things a tag can be.
+ *
+ * Until 2026-08-10 every tag in this repository was a `v*` command-line release
+ * and "the list equals `git tag`" was exactly right. Publishing macOS 1.0 added
+ * `macos-v1.0`, which this page must not list — it ships neither of the two
+ * binaries a `v*` tag publishes — so an unfiltered comparison would now fail in
+ * every full clone, and the obvious repair (list it) would put a version on the
+ * page that means something different from every other row.
+ *
+ * `unknown` is the part that matters. Filtering by "looks like a CLI tag" and
+ * discarding the rest would also silently discard the FIRST `ios-v…` tag, which
+ * is precisely the moment someone has to decide what this page says about it.
+ * So anything that is neither namespace is surfaced and fails below.
+ */
+function partitionTags(tags) {
+  const listed = {};
+  const native = [];
+  const unknown = [];
+  for (const [tag, date] of Object.entries(tags)) {
+    if (CLI_TAG.test(tag)) listed[tag] = date;
+    else if (NATIVE_TAG.test(tag)) native.push(tag);
+    else unknown.push(tag);
+  }
+  return { listed, native, unknown };
+}
+
 describe("the release list is internally consistent", () => {
   it("every entry is a version tag and an ISO date", () => {
     for (const r of releases.releases) {
@@ -96,18 +128,53 @@ describe("the release list is internally consistent", () => {
 describe("git tags are the source of truth", () => {
   const tags = gitTags();
 
-  it.skipIf(tags === null)("lists every tag in this repository, with its date", () => {
+  it.skipIf(tags === null)("lists every command-line release tag, with its date", () => {
     // The failure this exists for: a release is cut (auto-release.yml tags from
     // main on a schedule, so it happens without anyone typing `git tag`) and the
     // page silently stops listing the newest version.
     const listed = Object.fromEntries(releases.releases.map((r) => [r.version, r.date]));
-    expect(listed).toEqual(tags);
+    expect(listed).toEqual(partitionTags(tags).listed);
+  });
+
+  it.skipIf(tags === null)("accounts for every tag it does not list", () => {
+    const { native, unknown } = partitionTags(tags);
+    // A namespace nobody has decided about yet. Fail here rather than let the
+    // filter above swallow it.
+    expect(unknown, "tags in an unrecognised namespace").toEqual([]);
+    // And a native release may never appear as a row: the rows mean "this
+    // version publishes the CLI and the node", which macos-v1.0 does not.
+    const rows = new Set(releases.releases.map((r) => r.version));
+    for (const tag of native) expect(rows.has(tag), `${tag} must not be listed`).toBe(false);
   });
 
   it.runIf(tags === null)("says so when git could not be asked", () => {
     // Not a silent pass: this environment cannot check the invariant above, and
     // the test list should show that rather than 100% green.
     expect(tags).toBeNull();
+  });
+});
+
+// The partition above decides what the check can see, and in a clone that has
+// not fetched `macos-v1.0` every branch of it is unreachable — the real tag
+// table is all `v*`, so "accounts for every tag it does not list" would pass
+// without ever classifying anything. These drive it directly, so the rule is
+// tested wherever this suite runs rather than only where the tags happen to be.
+describe("which tags this page is responsible for", () => {
+  it("lists command-line releases and holds back native ones", () => {
+    const { listed, native, unknown } = partitionTags({
+      "v0.18.0": "2026-08-09",
+      "macos-v1.0": "2026-08-10",
+      "macos-v1.1.2": "2026-09-01",
+    });
+    expect(listed).toEqual({ "v0.18.0": "2026-08-09" });
+    expect(native).toEqual(["macos-v1.0", "macos-v1.1.2"]);
+    expect(unknown).toEqual([]);
+  });
+
+  it("refuses to quietly drop a namespace nobody has ruled on", () => {
+    // The first iOS release tag must stop this suite and force the decision,
+    // not vanish into a filter.
+    expect(partitionTags({ "ios-v1.0": "2026-09-01" }).unknown).toEqual(["ios-v1.0"]);
   });
 });
 
@@ -155,6 +222,62 @@ describe("the generated pages", () => {
       expect(byLang[lang], lang).toContain(
         `<link rel="canonical" href="https://relayium.com${urlPath("releases", lang)}" />`,
       );
+    }
+  });
+});
+
+// What this page says about the two native apps, in the nine languages a reader
+// actually reads. They are in different states as of 2026-08-10 and the page has
+// to carry both: macOS is published as its own GitHub Release, iOS is not
+// published anywhere. The old copy said one true sentence about both of them,
+// and it went false the moment the first one shipped.
+//
+// Per locale rather than one alternation, because the assertions are positive:
+// a union would be satisfied by any locale's sentence, so nine pages carrying
+// the English wording — or eight carrying nothing — would pass.
+describe("what /releases says about the native apps", () => {
+  /** "…and not a Mac App Store listing." Relayium ships no App Store build. */
+  const NOT_APP_STORE = {
+    en: /not a Mac App Store listing/,
+    zh: /不是 Mac App Store 上架版本/,
+    ja: /Mac App Store 版ではありません/,
+    ko: /Mac App Store 등록이 아닙니다/,
+    de: /kein Mac-App-Store-Eintrag/,
+    fr: /non une fiche sur le Mac App Store/,
+    ar: /وليس إدراجًا في Mac App Store/,
+    es: /no una ficha en la Mac App Store/,
+    pt: /não uma listagem na Mac App Store/,
+  };
+
+  /** iOS is still an engineering build, and the page has to keep saying so. */
+  const IOS_UNRELEASED = {
+    en: /iOS app is an engineering build and has not been released publicly/,
+    zh: /iOS 应用仍是开发版，尚未公开发布/,
+    ja: /iOS アプリは開発ビルドであり、まだ公開されていません/,
+    ko: /iOS 앱은 개발 빌드이며 아직 공개 릴리스가 아닙니다/,
+    de: /iOS-App ist ein Entwicklungs-Build und wurde nicht öffentlich veröffentlicht/,
+    fr: /application iOS reste une version d'ingénierie, non diffusée publiquement/,
+    ar: /تطبيق iOS فنسخة تطوير لم تُنشر للعموم/,
+    es: /aplicación de iOS es una compilación de ingeniería y no se ha publicado/,
+    pt: /app de iOS é um build de engenharia e não foi publicado/,
+  };
+
+  it("names the exact macOS release tag in every locale", () => {
+    for (const lang of LANGS) {
+      const bullet = releases.langs[lang].sections[0].bullets[1];
+      // The tag is the checkable part: a reader can paste it after
+      // /releases/tag/ and land on the artifact this sentence describes.
+      expect(bullet, `${lang} does not name the macOS release tag`).toContain("macos-v1.0");
+      expect(bullet, `${lang} does not rule out the Mac App Store`).toMatch(NOT_APP_STORE[lang]);
+      expect(bullet, `${lang} stops saying the iOS app is unreleased`).toMatch(IOS_UNRELEASED[lang]);
+    }
+  });
+
+  it("carries that sentence into the rendered page", () => {
+    // The bullet exists in the content module; this is the half that proves the
+    // template renders it, in the locale's own page.
+    for (const lang of LANGS) {
+      expect(byLang[lang], lang).toContain("macos-v1.0");
     }
   });
 });

@@ -1,9 +1,17 @@
-<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
-  <channel>
-    <title>Relayium for macOS updates</title>
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
     <link>https://relayium.com/apps</link>
     <description>Signed Relayium updates for macOS.</description>
     <language>en</language>
-  </channel>
+<title>Relayium for macOS updates</title>
+        <item>
+            <title>1.0</title>
+            <pubDate>Mon, 10 Aug 2026 02:44:25 +0000</pubDate>
+            <sparkle:version>1</sparkle:version>
+            <sparkle:shortVersionString>1.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/relayium/relayium/releases/download/macos-v1.0/Relayium.dmg" length="23160310" type="application/octet-stream" sparkle:edSignature="oMvWJyrYA2AVtlird7lSGVZuUujwJ9N2fqE92sCNV2X50l0biX8ez5paeXUYEc890l5CRfTMX93Bk3ZGmwjqAA=="/>
+        </item>
+    </channel>
 </rss>

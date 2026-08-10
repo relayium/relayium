@@ -43,13 +43,15 @@ or server-side history, though either endpoint can retain received text — one 
 **65,536 UTF-8 bytes**, delivered byte for byte,
 and anything larger is a file.
 
-Relayium is in **active, pre-1.0 development**. The production web app and CLI
-are live. A universal macOS app has passed Developer ID signing, Apple
-notarization, and Gatekeeper validation on an earlier build; it remains an
-**engineering build** being prepared for a first public release, with nothing
-to download from the site yet. The iOS app runs its transfer,
-nearby and account workflows in the foreground, and is likewise **not public**:
-there is no App Store listing and nothing to download.
+The production web app and CLI are live, and the CLI and node binaries are still
+in **pre-1.0 versioning** (`v0.x`). The macOS app is on its own track and has
+reached **1.0**: a universal, Developer ID-signed, Apple-notarized and stapled
+build, published as a direct download from its own GitHub Release,
+[`macos-v1.0`](https://github.com/relayium/relayium/releases/tag/macos-v1.0).
+There is no Mac App Store listing; a Developer ID download is the channel.
+The iOS app runs its transfer, nearby and account workflows in the
+foreground and is **not public**: there is no App Store listing and nothing to
+download.
 
 > 👉 **Try it now: [relayium.com](https://relayium.com/)** — use two devices on
 > the same LAN without an account, or sign in to create a cross-network pairing
@@ -67,8 +69,8 @@ is **how seriously we take end-to-end encryption**:
   (SAS)**: turn on *advanced verification* (off by default) and two humans can compare it out of band to
   detect a key-swapping server.
 - **A protocol, not just a page.** The crypto layer is deliberately decoupled
-  from transport. It already backs the shipped CLI, the macOS engineering
-  build, and the iOS app now under development (see
+  from transport. It already backs the shipped CLI, the released macOS 1.0 app,
+  and the iOS app now under development (see
   [Delivery status](#delivery-status)).
 
 ## Features
@@ -237,7 +239,7 @@ pairing code requires sign-in; joining with that code does not.
 - **CLI and nodes — live:** published binaries provide pairing-code file/text
   transfer, encrypted upload/download links, SSH and daemon-direct transfer,
   folder sync, self-hosting, and managed relay/storage nodes.
-- **macOS — engineering build, not public:** the universal app supports account
+- **macOS — 1.0, published as a direct download:** the universal app supports account
   registration and sign-in with device and stored-file management, six-digit
   pairing-code transfer of files and text, folder transfer, nearby sending and
   passive receiving, encrypted stored links to send and open, notifications and
@@ -258,11 +260,15 @@ pairing code requires sign-in; joining with that code does not.
   window with automatic update checks, the last check and the running version,
   and an *Open at login* switch that reports what macOS actually did with it —
   including the "registered, waiting for your approval" state a checkbox cannot
-  express. A DMG of an
-  earlier build is Developer ID-signed, accepted by Apple notarization,
-  stapled, and Gatekeeper-validated. Public release, the Mac App Store and the
-  website download switch are all still pending, and the release-readiness
-  manifest is still unapproved — nothing on the site offers this app yet.
+  express. The 1.0 DMG is universal, Developer ID-signed, accepted by Apple
+  notarization, stapled and Gatekeeper-validated, and is attached to the
+  [`macos-v1.0`](https://github.com/relayium/relayium/releases/tag/macos-v1.0)
+  GitHub Release with its SHA-256 published beside it; in-app updates come from
+  the signed Sparkle appcast at `https://relayium.com/apps/macos/appcast.xml`.
+  A Developer ID download **is** the distribution channel here — there is no Mac
+  App Store listing. Whether relayium.com's own **/apps** page offers that
+  download is a separate switch, driven by `web/native-releases.json`, which the
+  release workflow delivers to `main` together with the appcast.
 - **iOS — in development, not public:** a native SwiftUI app now exists at
   [`apps/ios`](apps/ios) and builds against the same shared Swift package. Five
   tabs divide it, and which ones need an account is structural rather than a
@@ -310,9 +316,12 @@ pairing code requires sign-in; joining with that code does not.
   no download to install. The link association itself is verified by the OS at
   install time, so it is one of the things that still needs a real device rather
   than a simulator.
-- **Next:** complete the native core product on both platforms first, and verify
-  that completeness independently — distribution comes after it, not alongside
-  it. On iOS the core is still bounded by what this build cannot do: background
+- **Next:** macOS has been through that sequence — the core was completed, the
+  build was reviewed and installed by hand, and only then was 1.0 published as a
+  Developer ID download. iOS has not, and the order is the same for it:
+  complete the native core product and verify that completeness independently;
+  distribution comes after it, not alongside it. On iOS the core is still
+  bounded by what this build cannot do: background
   execution — which keeps realtime sessions foreground-only and leaves a stored
   upload waiting for the user to reopen the app and resume it by hand — plus
   notifications and push. Universal-link routing is
@@ -322,14 +331,15 @@ pairing code requires sign-in; joining with that code does not.
   Group has to be registered on the developer portal and carried by both
   provisioning profiles, and only a signed install can show what the real share
   sheet offers, what providers vend for a shared folder, and whether returning to
-  the app puts the waiting share in front of the user as intended. macOS
-  is further along and is held to the same bar rather than to its own. Both
-  then need hands-on real-device QA and an explicit native-versus-web workflow
-  audit, and neither has had either yet. Only once
-  that verification passes do the distribution steps follow — TestFlight,
-  in-app purchase, App Store and Mac App Store submission, and the website's
-  download switch. Persistent device identity, broader protocol documentation,
-  and additional distribution formats remain future work.
+  the app puts the waiting share in front of the user as intended. It then needs
+  hands-on real-device QA and an explicit native-versus-web workflow audit, and
+  it has had neither yet. Only once that verification passes do the iOS
+  distribution steps follow — TestFlight, in-app purchase and App Store
+  submission. There is no Mac App Store listing today: macOS currently ships as
+  a Developer ID download, and native Sign in with Apple on the Mac would be the
+  thing that made an App Store track worth reopening. Persistent
+  device identity, broader protocol documentation, and additional distribution
+  formats remain future work.
 
 **Self-hosting:** a root [`Dockerfile`](Dockerfile) + [`docker-compose.yml`](docker-compose.yml) build a
 single self-contained image (`docker compose up -d --build`). See [`docs/self-hosting.md`](docs/self-hosting.md).

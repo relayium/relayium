@@ -2341,38 +2341,96 @@ final class MacSurfaceGuardTests: XCTestCase {
     // MARK: - what the repository's own documents may claim
 
     /// Constraint 14, and `PROJECT-GOVERNANCE.md` § "Native product launch
-    /// definition". The owner has installed the notarized build and approved
-    /// 1.0, so the gate this guard holds is no longer "is it ready" — it is
-    /// "does the artifact a reader could go and download actually EXIST yet".
-    /// Until the GitHub Release is published there is nothing to download, so a
-    /// document that reads as an announcement is a truthfulness regression
-    /// exactly as it was before approval: signed, notarized, approved and green
-    /// still is not distributed.
+    /// definition". This guard has now passed through all three of its states,
+    /// and the third is the one it is in:
     ///
-    /// The list below is therefore deliberately UNCHANGED by approval, and must
-    /// stay that way while these documents are pre-publication. What approval
-    /// moved is recorded in the manifest and asserted by
-    /// `testTheReadinessManifestRecordsTheOwnersApproval`; the two are separate
-    /// facts and are kept in separate tests so that flipping one can never be
-    /// mistaken for licence to write the other.
+    ///  1. Before approval it banned every distribution claim, because signed,
+    ///     notarized and green is still "in development".
+    ///  2. After the owner approved 1.0 it kept banning them, because approval
+    ///     is permission to publish and there was still nothing to download.
+    ///  3. On 2026-08-10 the immutable GitHub Release `macos-v1.0` was published
+    ///     at this exact commit, with a Developer ID-signed, Apple-notarized,
+    ///     stapled `Relayium.dmg` and its SHA-256 attached. A reader can now go
+    ///     and fetch it, so "available for download" is a FACT about macOS, and
+    ///     a ban on saying it would make these documents lie in the other
+    ///     direction.
     ///
-    /// Phrases, not the word "launch". A bare-word ban would fail on
-    /// `apps/README.md`'s "Launch the built app after a build", on this plan's
-    /// own launch-gap register, and on every honest sentence about what is still
-    /// missing — a guard that has to be disabled to write the truth protects
-    /// nothing. Each entry below is a claim that cannot be made truthfully about
-    /// this tree in any context.
-    func testNoPublicDistributionClaimInDocsBeforeTheReleaseExists() throws {
-        let claims = ["now launched", "publicly available", "generally available",
-                      "production release", "the macos app is complete",
-                      "ready for launch", "available for download",
-                      "available on the mac app store", "has launched",
-                      "is now live", "download it at"]
+    /// What survives every state is the set of claims that were never true and
+    /// are not true now. Relayium has no Mac App Store listing — the macOS app
+    /// is a Developer ID download — and the iOS app is published nowhere at all.
+    /// Those are the two ways this repository could still overstate itself, so
+    /// those are what stays banned.
+    ///
+    /// Phrases, not bare words. `apps/README.md` legitimately explains why
+    /// `apps/` is Apache-2.0 ("so these clients can ship through the App Store")
+    /// and that native Apple sign-in on the Mac "waits for a Mac App Store
+    /// track". Banning "app store" would fail on both, and a guard that has to
+    /// be disabled to write the truth protects nothing.
+    ///
+    /// And a substring cannot tell a claim from its DENIAL. The first version of
+    /// this list banned "through the mac app store" and immediately failed on
+    /// *"It is not distributed through the Mac App Store"* — the truest sentence
+    /// in the file. Only unambiguously affirmative spellings are banned here;
+    /// the real protection against the opposite mistake is
+    /// `testTheDocsDenyAMacAppStoreListing` below, which REQUIRES the denial to
+    /// be present. A document cannot start claiming an App Store listing without
+    /// deleting a sentence that is asserted somewhere else.
+    func testNoClaimSurfaceClaimsAnAppStoreOrAPublicIOSRelease() throws {
+        let claims = ["available on the mac app store", "listed on the mac app store",
+                      "get it on the mac app store", "download it from the mac app store",
+                      "ships through the mac app store", "published to the mac app store",
+                      "the ios app is publicly available", "download the ios app",
+                      "the ios app has launched", "the ios app is now live",
+                      "ios app is available for download"]
         for path in claimSurfaces {
             let text = try claimSurfaceText(path).lowercased()
             for claim in claims {
-                XCTAssertFalse(text.contains(claim), "\(path) claims launch: \(claim)")
+                XCTAssertFalse(text.contains(claim), "\(path) claims distribution: \(claim)")
             }
+        }
+    }
+
+    /// The denial, required rather than merely permitted — see above for why the
+    /// ban list alone cannot carry this.
+    ///
+    /// Relayium distributes macOS as a Developer ID download. Saying so is not
+    /// pedantry: Gatekeeper, the update mechanism, the entitlements the app may
+    /// hold and what a reader should be suspicious of all differ between the two
+    /// channels, and a reader who assumes App Store review stood behind this
+    /// download has been misled by omission.
+    func testTheDocsDenyAMacAppStoreListing() throws {
+        for path in ["README.md", "apps/README.md"] {
+            XCTAssertTrue(flattened(try claimSurfaceText(path)).lowercased()
+                .contains("no mac app store listing"),
+                          "\(path) must say plainly that there is no Mac App Store listing")
+        }
+    }
+
+    /// The positive half, and the reason the ban list above could be relaxed
+    /// without the documents quietly going vague instead.
+    ///
+    /// A reader has to be able to check this. So the claim surfaces must name
+    /// the exact immutable tag — `macos-v1.0`, which resolves to one GitHub
+    /// Release and one DMG — rather than say "released" and leave the reader to
+    /// find out where. They must also say what the artifact IS (Developer
+    /// ID-signed and Apple-notarized), because "there is a download" and "the
+    /// download is one Gatekeeper will run" are different promises.
+    ///
+    /// Deliberately not asserted here: anything about relayium.com. Whether the
+    /// `/apps` page offers the download is a different fact, owned by
+    /// `web/native-releases.json` and its own dual-state tests, and a Swift
+    /// guard that conflated the two would go red every time the site and the
+    /// release moved in separate commits — which is exactly how they move.
+    func testTheDocsNameTheMacOSReleaseAReaderCanActuallyFetch() throws {
+        for path in ["README.md", "apps/README.md"] {
+            let text = try claimSurfaceText(path)
+            XCTAssertTrue(text.contains("macos-v1.0"),
+                          "\(path) must name the exact release tag a reader can fetch")
+            let lowered = flattened(text).lowercased()
+            XCTAssertTrue(lowered.contains("developer id-signed"),
+                          "\(path) must say what the published artifact is signed with")
+            XCTAssertTrue(lowered.contains("notarized"),
+                          "\(path) must say the published artifact is notarized")
         }
     }
 
@@ -2402,13 +2460,26 @@ final class MacSurfaceGuardTests: XCTestCase {
 
     /// The other direction, and the one a ban list cannot give: the status has to
     /// be stated, not merely left unclaimed. A reader who never reaches the
-    /// blocker list should still not close `apps/README.md` believing the macOS
-    /// app shipped.
-    func testTheDocsStateTheEngineeringBuildStatusOutright() throws {
-        XCTAssertTrue(try claimSurfaceText("apps/README.md").contains("engineering build"),
-                      "apps/README.md must say what this result is")
-        XCTAssertTrue(try claimSurfaceText("README.md").contains("engineering build"),
-                      "the root README must say what this result is")
+    /// blocker list should still not close `apps/README.md` believing everything
+    /// in it shipped.
+    ///
+    /// Retargeted at iOS when macOS 1.0 shipped. Before that, "contains the
+    /// words engineering build" was a fair proxy for the whole directory,
+    /// because both apps were one. Now the phrase is still present in both files
+    /// — in the macOS slice history, which is dated — so the old assertion would
+    /// have stayed green while saying nothing about the app it was written for.
+    /// Bind it to the sentence that is actually load-bearing: iOS is not
+    /// published, said in the same breath as the word.
+    func testTheDocsStateTheIOSEngineeringBuildStatusOutright() throws {
+        let apps = flattened(try claimSurfaceText("apps/README.md"))
+        XCTAssertTrue(apps.contains("The iOS app and its share extension are engineering builds and are published nowhere."),
+                      "apps/README.md must say outright that iOS is unpublished")
+        XCTAssertTrue(apps.contains("**In development and not public**"),
+                      "the iOS section must keep its own status line")
+
+        let root = flattened(try claimSurfaceText("README.md"))
+        XCTAssertTrue(root.contains("The iOS app runs its transfer, nearby and account workflows in the foreground and is **not public**"),
+                      "the root README must say outright that iOS is unpublished")
     }
 
     /// Decision 5 moved the window floor from 380 pt to 860×560, and three
@@ -2464,9 +2535,20 @@ final class MacSurfaceGuardTests: XCTestCase {
             XCTAssertFalse(flattened(try claimSurfaceText(path)).contains(phrase),
                            "\(path) still carries stale wording: \(phrase)")
         }
-        XCTAssertTrue(flattened(try claimSurfaceText("apps/README.md"))
-            .contains("The macOS build in this directory is not publicly distributed"),
-                      "apps/README.md must say precisely what is not distributed")
+        // Superseded by the release itself. This used to require the sentence
+        // *"The macOS build in this directory is not publicly distributed"*,
+        // which was the precise thing to say while it was true and is now the
+        // one sentence in this file that would be false. What the narrowness was
+        // FOR survives: the statement has to be about a named thing rather than
+        // about `apps/` as a whole, because the two apps in it are no longer in
+        // the same state. So the requirement moves rather than disappearing —
+        // macOS says what it published, iOS says it published nothing, and
+        // neither sentence is allowed to speak for the other.
+        let apps = flattened(try claimSurfaceText("apps/README.md"))
+        XCTAssertTrue(apps.contains("**Status: released as 1.0.**"),
+                      "apps/README.md must state the macOS status precisely")
+        XCTAssertTrue(apps.contains("The iOS app and its share extension are engineering builds and are published nowhere."),
+                      "apps/README.md must scope that status to macOS and say what iOS is")
 
         let readiness = flattened(try claimSurfaceText("apps/mac/release-readiness.json"))
         XCTAssertTrue(readiness.contains("Current-tree signed Debug QA repeated a live receive"),

@@ -583,7 +583,7 @@ const ko: Messages = {
         name: "macOS",
         use: "책상 위에 늘 놓여 있으면서 휴대폰이나 다른 곳의 브라우저에서 보낸 것을 받아 두는 Mac.",
         setup:
-          "네이티브 Mac 앱의 기기 수신함은 아직 엔지니어링 빌드라서 이 페이지에서 내려 주지 않습니다. 오늘 macOS에서 동작하는 것은 같은 명령줄 수신기를 launchd로 상주시키는 방법입니다. relayium inbox service launchd가 이 Mac용 에이전트와 로드 명령을 출력합니다.",
+          "이 페이지가 macOS에서 설정해 주는 것은 launchd로 상주시키는 명령줄 수신기입니다. relayium inbox service launchd가 이 Mac용 에이전트와 로드 명령을 출력합니다.",
         files: "--dir로 지정한 폴더. 덮어쓰지 않고 풀지 않으며, 받은 파일이 자동으로 열리지도 않습니다.",
         residency:
           "launchd 사용자 에이전트는 로그인해 있는 동안 돌고, 재시작 뒤 다시 로그인하면 돌아옵니다. 시스템 데몬이 아니므로 아무도 로그인하지 않은 동안에는 받지 않습니다.",
@@ -633,7 +633,7 @@ const ko: Messages = {
       },
     },
     macNoDownload:
-      "여기에 다운로드 버튼이 없는 것은 의도한 것입니다. 서명된 Mac 빌드는 엔지니어링 산출물이지 공개 릴리스가 아닙니다.",
+      "아직 여기에는 다운로드 버튼이 없습니다. 사이트가 게시한 릴리스 메타데이터에 Mac 앱이 올라오면 이 페이지에서 바로 제공합니다.",
     macDownloadCta: "Mac 앱 다운로드",
     safetyH2: "움직이지 않는 경계",
     safetyPoints: [

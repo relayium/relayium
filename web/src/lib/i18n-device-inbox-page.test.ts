@@ -240,6 +240,38 @@ describe("the nine locales are nine translations, not nine copies of English", (
   });
 });
 
+// A truthfulness rule, so it belongs in every language rather than in the
+// English master.
+//
+// The first version of this check lived in the English-only block below and
+// passed while a deliberately reverted German sentence still called the shipped
+// app an Entwicklungs-Build — the exact failure this file's header warns about,
+// reproduced by the test written to prevent it. Negative direction, so one
+// alternation over all nine locales is the strict reading: no locale may say it
+// in its own words, and none may say it in somebody else's either.
+describe("no locale calls the released macOS app a pre-release artifact", () => {
+  const STALE =
+    /engineering build|engineering artifact|工程构建|工程产物|エンジニアリングビルド|エンジニアリング成果物|엔지니어링 빌드|엔지니어링 산출물|Entwicklungs-Build|Entwicklungsartefakt|version d'ingénierie|artefact d'ingénierie|نسخة هندسية|أثر هندسي|compilación de ingeniería|artefacto de ingeniería|compilação de engenharia|artefato de engenharia/i;
+
+  it("keeps the macOS copy free of it in all nine", () => {
+    for (const code of CODES) {
+      const d = locales[code].deviceInboxPage;
+      const mac = [d.platforms.macos.use, d.platforms.macos.setup, d.macNoDownload].join("\n");
+      expect(mac, `${code} still calls the released Mac app a pre-release build`)
+        .not.toMatch(STALE);
+    }
+  });
+
+  it("still names the launchd receiver in all nine", () => {
+    // The other half: the sentence has to keep saying what it DOES set up, so
+    // the rule above cannot be satisfied by deleting the explanation.
+    for (const code of CODES) {
+      expect(locales[code].deviceInboxPage.platforms.macos.setup, code)
+        .toContain("relayium inbox service launchd");
+    }
+  });
+});
+
 // The page's own honesty rules, expressed against the English master. The other
 // eight are translations of these sentences; the cross-locale checks above are
 // what keep them from drifting into something else.
@@ -272,10 +304,22 @@ describe("English keeps the availability boundaries it is the master of", () => 
     expect(w.residency).not.toMatch(/always[- ]on receiver\b(?!.{0,30}\bnot\b|:)/i);
   });
 
-  it("keeps the macOS app an engineering build rather than a release", () => {
-    expect(d.platforms.macos.setup).toMatch(/engineering build/i);
-    expect(d.macNoDownload).toMatch(/not a public release/i);
-    // No store, no notarization claim: neither is a state this page can prove.
+  it("explains the launchd receiver without claiming what it cannot prove", () => {
+    // Inverted on 2026-08-10, when macos-v1.0 was published. This used to
+    // REQUIRE "engineering build" here, which was the honest thing to say right
+    // up until the release existed and then became the one false sentence on a
+    // page whose whole argument is that it does not overstate anything.
+    //
+    // What this page sets up did not change: the command-line receiver under
+    // launchd, which is the one that runs unattended whether or not the app is
+    // installed. What it may no longer do is explain that choice by calling the
+    // shipped app unreleased. The "no longer" half is checked across all nine
+    // locales below, not here — see the note on that test.
+    expect(d.platforms.macos.setup).toContain("relayium inbox service launchd");
+
+    // Still true, and still worth pinning: this page proves neither of these,
+    // and the release surfaces that DO prove them are the ones allowed to say
+    // so. There is also no Mac App Store listing to claim.
     const mac = [d.platforms.macos.setup, d.macNoDownload].join("\n");
     expect(mac).not.toMatch(/app\s*store/i);
     expect(mac).not.toMatch(/notariz/i);

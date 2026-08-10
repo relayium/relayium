@@ -592,7 +592,7 @@ const de: Messages = {
         name: "macOS",
         use: "Ein Mac, der auf dem Schreibtisch stehen bleibt und einsammelt, was vom Telefon oder aus einem Browser anderswo geschickt wird.",
         setup:
-          "Der Geräte-Posteingang der nativen Mac-App ist noch ein Entwicklungs-Build, deshalb gibt diese Seite keinen heraus. Was heute auf macOS funktioniert, ist derselbe Kommandozeilen-Empfänger unter launchd: relayium inbox service launchd gibt einen Agent für diesen Mac und die Befehle zum Laden aus.",
+          "Was diese Seite auf macOS einrichtet, ist der Kommandozeilen-Empfänger unter launchd: relayium inbox service launchd gibt einen Agent für diesen Mac und die Befehle zum Laden aus.",
         files:
           "Der Ordner, den du an --dir übergeben hast. Nichts wird überschrieben, nichts entpackt, und eine empfangene Datei wird nie für dich geöffnet.",
         residency:
@@ -643,7 +643,7 @@ const de: Messages = {
       },
     },
     macNoDownload:
-      "Dass hier keine Download-Schaltfläche steht, ist Absicht: Der signierte Mac-Build ist ein Entwicklungsartefakt, keine öffentliche Veröffentlichung.",
+      "Hier steht noch keine Download-Schaltfläche: Diese Seite bietet die Mac-App an, sobald die veröffentlichten Release-Metadaten der Website eine nennen.",
     macDownloadCta: "Mac-App herunterladen",
     safetyH2: "Grenzen, die sich nicht verschieben",
     safetyPoints: [

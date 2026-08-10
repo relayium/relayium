@@ -11,13 +11,20 @@ describe("public repository status", () => {
     expect(readme).toContain("status-active%20development");
     expect(readme).toContain("The production web app and CLI");
     expect(readme).toContain("## Delivery status");
-    expect(readme).toContain("**macOS — engineering build, not public:**");
+    expect(readme).toContain("**macOS — 1.0, published as a direct download:**");
     expect(readme).toContain("**iOS — in development, not public:**");
-    // Distribution truth, matched by shape rather than by one exact sentence:
-    // neither native app is offered anywhere, and saying so must survive an
-    // ordinary rewrite of the surrounding prose.
+    // Distribution truth, matched by shape rather than by one exact sentence, so
+    // it survives an ordinary rewrite of the surrounding prose.
+    //
+    // The two native apps stopped being in the same state on 2026-08-10. This
+    // used to require `Public release[^.]*still pending`, one sentence standing
+    // for both of them, and that sentence went false the day the first one
+    // shipped. Now each is asserted for what it actually is: macOS names the
+    // immutable tag a reader can fetch and denies the App Store channel it does
+    // not use, and iOS keeps saying it is offered nowhere.
     // Markdown wraps these sentences, so match across the line breaks.
-    expect(readme).toMatch(/Public release[^.]*still pending/);
+    expect(readme).toContain("macos-v1.0");
+    expect(readme).toMatch(/no Mac App Store listing/);
     expect(readme).toMatch(/no download\s+to\s+install/);
     expect(readme).toMatch(/no App\s+Store\s+release/);
     // R3-D/E/F shipped the iOS realtime, nearby and account-management work the

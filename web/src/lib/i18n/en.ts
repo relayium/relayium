@@ -603,7 +603,7 @@ const en: Messages = {
         name: "macOS",
         use: "A Mac that stays on your desk and collects what you send it from your phone or from a browser somewhere else.",
         setup:
-          "The native Mac app's Device Inbox is still an engineering build, so this page does not hand you one. What works on macOS today is the same command-line receiver supervised by launchd: relayium inbox service launchd prints an agent for this Mac and the commands that load it.",
+          "What this page sets up on macOS is the command-line receiver supervised by launchd: relayium inbox service launchd prints an agent for this Mac and the commands that load it.",
         files:
           "The folder you passed to --dir. Nothing is overwritten, nothing is unpacked, and a received file is never opened for you.",
         residency:
@@ -654,7 +654,7 @@ const en: Messages = {
       },
     },
     macNoDownload:
-      "There is no download button here on purpose: the signed Mac build is an engineering artifact, not a public release.",
+      "No download button here yet: this page offers the Mac app as soon as the site's published release metadata says there is one.",
     macDownloadCta: "Download the Mac app",
     safetyH2: "Boundaries that do not move",
     safetyPoints: [

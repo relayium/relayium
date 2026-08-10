@@ -47,10 +47,10 @@ describe("drainSharedFiles", () => {
     history.replaceState(null, "", "/?share-target=tok123&keep=1");
     const store = stubCaches({
       "/__shared__/tok123/count": new Response("2"),
-      "/__shared__/tok123/0": new Response(new Blob(["hello"]), {
+      "/__shared__/tok123/0": new Response(new TextEncoder().encode("hello"), {
         headers: { "content-type": "text/plain", "x-name": encodeURIComponent("a.txt") },
       }),
-      "/__shared__/tok123/1": new Response(new Blob(["<x>"]), {
+      "/__shared__/tok123/1": new Response(new TextEncoder().encode("<x>"), {
         headers: { "content-type": "image/svg+xml", "x-name": encodeURIComponent("图 片.svg") },
       }),
     });

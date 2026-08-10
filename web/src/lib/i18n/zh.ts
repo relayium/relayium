@@ -583,7 +583,7 @@ const zh: Messages = {
         name: "macOS",
         use: "一台常年在桌上的 Mac，接住你从手机或别处浏览器发过来的东西。",
         setup:
-          "原生 Mac App 的设备收件箱仍是工程构建，所以这个页面不会给你一个下载按钮。今天在 macOS 上真正可用的，是同一个命令行接收端 + launchd 托管：relayium inbox service launchd 会打印出针对这台 Mac 的 agent 和加载它的命令。",
+          "这个页面在 macOS 上帮你配置的，是由 launchd 托管的命令行接收端：relayium inbox service launchd 会打印出针对这台 Mac 的 agent 和加载它的命令。",
         files: "你用 --dir 指定的目录。不覆盖、不解压，收到的文件也不会被自动打开。",
         residency:
           "launchd 用户 agent 在你登录期间运行，重启后再次登录时会回来。它不是系统守护进程，无人登录时不会接收。",
@@ -633,7 +633,7 @@ const zh: Messages = {
       },
     },
     macNoDownload:
-      "这里没有下载按钮是有意的：已签名的 Mac 构建是工程产物，不是公开发布版本。",
+      "这里暂时没有下载按钮：一旦站点发布的版本元数据里有 Mac 版，这个页面就会给出下载。",
     macDownloadCta: "下载 Mac 版",
     safetyH2: "不会动摇的边界",
     safetyPoints: [

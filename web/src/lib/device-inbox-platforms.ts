@@ -107,10 +107,16 @@ sudo loginctl enable-linger "$USER"
 systemctl --user disable --now relayium-inbox.service   # stop the process
 relayium inbox disable                                  # revoke inbox + keys`;
 
-// macOS. The native app's Device Inbox is an engineering build (see
-// native-releases.json, still available:false), so this section offers the one
-// receiver that exists on macOS today: the same CLI, supervised by launchd.
-// `relayium inbox service launchd` prints the agent and its exact commands.
+// macOS. This section sets up the CLI receiver supervised by launchd, because
+// that is the one that runs unattended on any Mac whether or not the native app
+// is installed. `relayium inbox service launchd` prints the agent and its exact
+// commands.
+//
+// It used to say the native app's Device Inbox was an engineering build. That
+// stopped being true when macos-v1.0 was published, and it was never the real
+// reason for this choice — an unattended launchd agent is. Whether the page
+// offers the app as a download is a separate switch, read from
+// native-releases.json by DeviceInboxPage.svelte's `macDownloadable`.
 const MACOS_SETUP = `relayium login --device-name my-mac
 relayium inbox enable --dir ~/Relayium-inbox
 
