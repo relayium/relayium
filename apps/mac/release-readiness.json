@@ -1,5 +1,5 @@
 {
-  "approved": false,
+  "approved": true,
   "capabilities": [
     {
       "id": "realtime-files-cross-network",
