@@ -97,6 +97,13 @@ function world(opts: WorldOpts = {}) {
 
 const picked = (name: string) => [{ file: new File(["payload"], name) }];
 
+/** REAL elapsed milliseconds — the injected clock is frozen at 0 here — after
+ *  which an offer that has not landed is a stall rather than a slow machine.
+ *  Far above the sub-millisecond this takes in practice, and under vitest's own
+ *  5s timeout so the failure is the waitingAccept assertion, not an anonymous
+ *  timeout. */
+const FIXTURE_STALL_MS = 2_000;
+
 /**
  * A batch waiting for the peer's accept: real lane work, so the link is worth
  * recovering and `needsRecovery()` is true at the gap. It also holds the idle
@@ -109,9 +116,15 @@ const picked = (name: string) => [{ file: new File(["payload"], name) }];
  */
 async function inFlightBatch(mixed: MixedSession) {
   mixed.file.enqueue("b", picked("held.txt"));
-  // Advancing by zero runs only what is already due, so the credential timers
-  // this file is about stay exactly where they were armed.
-  for (let i = 0; i < 64 && mixed.file.send?.status !== "waitingAccept"; i++) {
+  // Wait on the CONDITION, not on a fixed number of turns. The offer only
+  // reaches waitingAccept once WebCrypto has sealed its manifest, and that
+  // completes on a thread pool rather than on a timer, so the number of
+  // event-loop turns it needs is a property of the machine — a counted budget is
+  // a race a loaded CI runner loses (it did: the batch was still "connecting").
+  // Advancing by zero still runs only what is already due, so the credential
+  // timers this file is about stay exactly where they were armed.
+  const giveUpAt = vi.getRealSystemTime() + FIXTURE_STALL_MS;
+  while (mixed.file.send?.status !== "waitingAccept" && vi.getRealSystemTime() < giveUpAt) {
     await vi.advanceTimersByTimeAsync(0);
   }
   expect(mixed.file.send?.status).toBe("waitingAccept");
@@ -499,5 +512,43 @@ describe("the terminal explanation's own lifetime", () => {
     const { mixed } = world({ joined: () => false, selfId: () => "" });
     expect(mixed.recoveryAvailable).toBe(true);
     mixed.stop();
+  });
+});
+
+describe("the in-flight-batch fixture itself", () => {
+  // Every case above is only about the credential because `inFlightBatch` puts
+  // real lane work in flight first. When that fixture gives up early the batch is
+  // still "connecting", the idle lease is never taken, and the case silently
+  // stops testing what it names — so the fixture's own wait is worth a test.
+  it("lands the offer however many real event-loop turns the seal needs, without spending credential time", async () => {
+    // Sealing the manifest is thread-pool work, so a slow runner is exactly a
+    // runner where it needs more turns. Emulate that directly, across a spread
+    // wide enough to bracket the 64-turn budget this replaced, and bounded so the
+    // guard itself stays cheap.
+    const realSetTimeout = globalThis.setTimeout.bind(globalThis);
+    const encrypt = crypto.subtle.encrypt.bind(crypto.subtle);
+    let hops = 0;
+    const slowSeal = vi.spyOn(crypto.subtle, "encrypt").mockImplementation(async (...args) => {
+      for (let i = 0; i < hops; i++) await new Promise((r) => realSetTimeout(r, 0));
+      return encrypt(...args);
+    });
+    try {
+      for (const turns of [0, 1, 96]) {
+        hops = turns;
+        const { mixed } = world({ deadline: () => EIGHT_MIN });
+        const link = await mixed.ensure("b");
+        await inFlightBatch(mixed); // asserts waitingAccept itself
+
+        // …and none of that waiting was charged to the credential: the injected
+        // clock has not moved, so the eight minutes are all still ahead.
+        expect(Date.now()).toBe(0);
+        expect(mixed.link).toBe(link);
+        expect(mixed.relayExpiring).toBe(false);
+        expect(mixed.endReason).toBe("");
+        mixed.stop();
+      }
+    } finally {
+      slowSeal.mockRestore();
+    }
   });
 });
