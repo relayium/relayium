@@ -170,6 +170,25 @@ enum UITestMode {
         return store
     }
 
+    /// The installation identity an acceptance launch may use.
+    ///
+    /// Isolating the bearer is not isolating the app: this Mac has Relayium
+    /// installed, and a test build resolving the product's own item would READ
+    /// the installed app's installation identity and, on first launch, WRITE
+    /// one there. The first would make an acceptance run present the owner's
+    /// real identity to the server; the second would silently create the
+    /// identity the product then keeps forever.
+    ///
+    /// Cleared on every launch as well as isolated, so one acceptance path
+    /// cannot inherit an identity another established.
+    static func makeInstallationIdentityStore() -> InstallationIdentityStoring? {
+        guard isActive else { return nil }
+        let store = AppEnvironment.makeInstallationIdentityStore(
+            AppEnvironment.isolatedKeychainConfiguration())
+        try? store.clear()
+        return store
+    }
+
     /// Holds the FILE pairing surface on its generated code.
     ///
     /// The text half of this flow has had a runtime path since batch 8; the file
@@ -255,6 +274,10 @@ enum UITestMode {
     /// nil, so a shipped launch always resolves the product's own keychain
     /// identity and cannot be pointed at a test one.
     static func makeTokenStore() -> TokenStore? { nil }
+
+    /// nil, so a shipped launch always keeps its installation identity where
+    /// the product keeps it, and cannot be pointed at a test one.
+    static func makeInstallationIdentityStore() -> InstallationIdentityStoring? { nil }
 
     /// nil, so a shipped launch always keeps its stored-link keys where the
     /// product keeps them.
@@ -411,12 +434,17 @@ final class UITestAccountTransport: URLProtocol {
         // entry cannot show that Revoke is per-row, and "Revoke" alone is the
         // same word on every row — which is right to look at and useless to
         // hear. `AccountDevice` decodes the server's PascalCase keys.
+        // Both arms of the server-observed address, side by side: the server has
+        // one for this device and none for the other. A fixture that gave every
+        // row an address would leave the "no address, no sentence" half of the
+        // contract with no runtime evidence at all, which is the half that would
+        // otherwise ship as an empty "last address" on a row nobody has used.
         offer("/api/devices", """
             {"devices":[
             {"ID":"dev_this","Name":"\(thisDeviceName)","CreatedAt":1750000000,
-            "LastSeenAt":1754600000,"Kind":"app","Current":true},
+            "LastSeenAt":1754600000,"Kind":"app","Current":true,"LastIP":"203.0.113.9"},
             {"ID":"dev_other","Name":"\(otherDeviceName)","CreatedAt":1740000000,
-            "LastSeenAt":1754000000,"Kind":"cli","Current":false}]}
+            "LastSeenAt":1754000000,"Kind":"cli","Current":false,"LastIP":""}]}
             """, as: DeviceListResponse.self)
         // One row, in the state a fresh launch is genuinely in: the key for an
         // object uploaded from somewhere else was never on this device, so the

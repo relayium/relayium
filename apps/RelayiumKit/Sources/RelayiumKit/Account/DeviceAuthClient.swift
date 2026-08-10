@@ -87,15 +87,32 @@ public protocol DeviceAuthClient {
 public struct HTTPDeviceAuthClient: DeviceAuthClient {
     let baseURL: URL
     let session: URLSession
+    /// This installation's lookup hint, or nil when there is none to offer.
+    ///
+    /// Carried on `start` only. It tells the server which device row an approved
+    /// login should land on; it is not a credential, and deliberately never
+    /// appears on `poll`, which is the call that hands back a bearer.
+    let installationID: String?
 
-    public init(baseURL: URL, session: URLSession = .shared) {
+    public init(baseURL: URL, session: URLSession = .shared, installationID: String? = nil) {
         self.baseURL = baseURL
         self.session = session
+        self.installationID = installationID
     }
 
     public func start() async throws -> DeviceAuthStart {
         var req = URLRequest(url: baseURL.appendingPathComponent("api/cli/device/start"))
         req.httpMethod = "POST"
+        // A hint is sent only when there is a well-formed one. Otherwise the
+        // request stays byte-identical to the bodyless POST every shipped CLI
+        // makes: `handleDeviceStart` reads an EOF body as "no hint" but refuses
+        // anything it cannot parse, so an empty-object body would be a new
+        // failure mode bought for nothing.
+        if let installationID, InstallationIdentity.isValid(installationID),
+           let body = try? JSONSerialization.data(withJSONObject: ["install_id": installationID]) {
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.httpBody = body
+        }
         let (data, http) = try await send(req)
         guard http.statusCode == 200 else { throw statusError(http.statusCode) }
         return try parseDeviceStart(data)

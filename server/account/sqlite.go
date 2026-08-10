@@ -15,6 +15,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/relayium/relayium/authx"
+	"github.com/relayium/relayium/internal/devicelabel"
 	"github.com/relayium/relayium/internal/inbox"
 )
 
@@ -79,7 +80,12 @@ CREATE TABLE IF NOT EXISTS devices (
   name         TEXT NOT NULL,
   created_at   INTEGER NOT NULL,
   last_seen_at INTEGER NOT NULL DEFAULT 0,
-  last_ip      TEXT NOT NULL DEFAULT ''
+  last_ip      TEXT NOT NULL DEFAULT '',
+  -- Client-generated installation lookup hint (43-char RawURLEncoding of 32
+  -- random bytes). '' for every browser row, every CLI and every pre-1.1.3 app.
+  -- Never a credential and never returned by an API: see Device.InstallID and
+  -- the partial unique index created by migrateInstallID.
+  install_id   TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS usage_events (
   alloc_id      TEXT PRIMARY KEY,
@@ -197,7 +203,8 @@ CREATE TABLE IF NOT EXISTS cli_device_auth (
   consumed_at      INTEGER NOT NULL DEFAULT 0,
   client_ip        TEXT NOT NULL DEFAULT '', -- origin of the CLI that started the flow, shown on /device to help spot phishing
   user_agent       TEXT NOT NULL DEFAULT '',
-  device_name      TEXT NOT NULL DEFAULT ''  -- account-visible label the CLI asked to register; '' = a pre-label CLI
+  device_name      TEXT NOT NULL DEFAULT '', -- account-visible label the CLI asked to register; '' = a pre-label CLI
+  install_id       TEXT NOT NULL DEFAULT ''  -- validated installation lookup hint; '' = a client that sends none
 );
 CREATE INDEX IF NOT EXISTS idx_cli_device_auth_expires ON cli_device_auth(expires_at);
 CREATE TABLE IF NOT EXISTS cli_tokens (
@@ -985,6 +992,14 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		db.Close()
 		return nil, err
 	}
+	// The installation lookup hint plus the partial unique index that makes an
+	// approved re-login find exactly one row or none. See migrateInstallID: the
+	// index cannot live in the schema literal because the column it covers does
+	// not exist on a legacy database until that ALTER has run.
+	if err := migrateInstallID(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	// The transfers table backed the retired share-link mode (one-time
 	// rendezvous tokens). Dropping it is idempotent and safe: tokens lived
 	// at most one hour, so nothing in an existing deployment still needs it.
@@ -1181,6 +1196,43 @@ func migrateActiveTransfersUnknown(db *sql.DB) error {
 			`UPDATE nodes SET active_transfers = -1 WHERE active_transfers = 0`)
 		return err
 	})
+}
+
+// migrateInstallID upgrades a live database to carry the installation lookup
+// hint, and creates the constraint that makes the lookup answerable.
+//
+// Both ALTERs default to ”, so every pre-existing device row and every
+// in-flight device-code request reads as "no hint" and behaves exactly as it
+// did before — which is the whole migration story for legacy data. There is
+// deliberately NO backfill: an identifier is something an installation
+// generates and presents, and inventing one for a row would associate a machine
+// with a credential nobody approved for it.
+//
+// The unique index is PARTIAL. Every legacy row carries ”, so a total unique
+// index would collide with itself on the first upgrade and fail startup;
+// excluding ” means any number of un-hinted rows coexist while a real
+// identifier can name at most one row per account. It is created here rather
+// than in the schema literal because on a legacy database the column does not
+// exist until the ALTER above has run.
+//
+// Idempotent and safe to run on every boot: a duplicate column is ignored, and
+// the index uses IF NOT EXISTS. No ledger entry is needed because nothing here
+// rewrites data — there is no half-applied state a crash could leave behind
+// that the next boot would skip.
+func migrateInstallID(db *sql.DB) error {
+	for _, alter := range []string{
+		`ALTER TABLE devices ADD COLUMN install_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE cli_device_auth ADD COLUMN install_id TEXT NOT NULL DEFAULT ''`,
+	} {
+		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
+			!strings.Contains(err.Error(), "duplicate column name") {
+			return err
+		}
+	}
+	_, err := db.ExecContext(context.Background(),
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_install_id
+		   ON devices(user_id, install_id) WHERE install_id <> ''`)
+	return err
 }
 
 func (s *SQLiteStore) Close() error {
@@ -2042,25 +2094,116 @@ func (s *SQLiteStore) DeleteSpentEmailTokens(ctx context.Context, now int64) err
 	return err
 }
 
-const deviceCols = `id, user_id, name, created_at, last_seen_at, kind, last_ip`
+const deviceCols = `id, user_id, name, created_at, last_seen_at, kind, last_ip, install_id`
+
+// scanDevice keeps the column order of deviceCols and its readers in one place;
+// adding a column to that list without adding it here is a compile error rather
+// than a silently shifted field.
+func scanDevice(sc rowScanner, d *Device) error {
+	return sc.Scan(&d.ID, &d.UserID, &d.Name, &d.CreatedAt, &d.LastSeenAt, &d.Kind, &d.LastIP, &d.InstallID)
+}
 
 func (s *SQLiteStore) UpsertDevice(ctx context.Context, d Device) (Device, error) {
+	// install_id is deliberately NOT in the DO UPDATE list. This upsert is the
+	// browser self-registration path and the generic one; the installation
+	// identifier is bound only by ApproveAndRegisterDeviceAuth, behind a human
+	// approval. Letting an ordinary upsert move it would make the identifier
+	// assignable by any authenticated caller, which is exactly what it must
+	// never be.
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO devices (`+deviceCols+`)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(id) DO UPDATE SET name = excluded.name, kind = excluded.kind,
 		 last_ip = CASE WHEN excluded.last_ip <> '' THEN excluded.last_ip ELSE devices.last_ip END
 		 WHERE devices.user_id = excluded.user_id`,
-		d.ID, d.UserID, d.Name, d.CreatedAt, d.LastSeenAt, d.Kind, d.LastIP)
+		d.ID, d.UserID, d.Name, d.CreatedAt, d.LastSeenAt, d.Kind, d.LastIP, d.InstallID)
 	if err != nil {
 		return Device{}, err
 	}
 	var out Device
-	err = s.db.QueryRowContext(ctx,
+	err = scanDevice(s.db.QueryRowContext(ctx,
 		`SELECT `+deviceCols+` FROM devices WHERE id = ? AND user_id = ?`,
-		d.ID, d.UserID,
-	).Scan(&out.ID, &out.UserID, &out.Name, &out.CreatedAt, &out.LastSeenAt, &out.Kind, &out.LastIP)
+		d.ID, d.UserID), &out)
 	return out, err
+}
+
+// registerApprovedDeviceTx is the one place an installation identifier decides
+// which device row a bearer lands on. Its caller owns the approval transaction,
+// so row selection, bearer rotation and pending-token visibility share a commit.
+//
+// The lookup is `user_id = ? AND install_id = ?` with a non-empty identifier,
+// which is what makes cross-account reuse and legacy-row adoption impossible
+// rather than merely unlikely: a different account's rows are outside the
+// predicate, and a legacy row's ” can never equal a valid identifier.
+//
+// The read-then-write here is safe WITHOUT a retry loop, and the reason is
+// worth stating because it is a property of the connection, not of this code:
+// every read-write transaction on this pool begins with BEGIN IMMEDIATE
+// (`_txlock=immediate`, see OpenSQLite), so it holds the write lock from its
+// first statement. Two approvals of the same installation therefore run
+// strictly one after the other — the second one's SELECT sees the row the first
+// one committed — instead of interleaving into two rows. Racing approvals
+// converge on one row with exactly one live bearer, which
+// TestTwoConcurrentApprovalsConvergeOnOneRowAndOneLiveBearer asserts directly.
+//
+// If that locking mode were ever relaxed, the partial unique index turns the
+// interleaving into a refused INSERT — a failed approval the user can retry —
+// rather than a silently split identity. There is deliberately no code here
+// that "handles" that case: it cannot be reached from this process, so any
+// handler for it would be untestable insurance that reads as coverage.
+func registerApprovedDeviceTx(ctx context.Context, tx *sql.Tx, in ApprovedDeviceRegistration) (Device, error) {
+	deviceID := ""
+	if in.InstallID != "" {
+		err := tx.QueryRowContext(ctx,
+			`SELECT id FROM devices WHERE user_id = ? AND install_id = ?`,
+			in.UserID, in.InstallID).Scan(&deviceID)
+		if err != nil && err != sql.ErrNoRows {
+			return Device{}, err
+		}
+	}
+
+	if deviceID != "" {
+		// Reuse. Only the server-observed address moves; the name, the kind and
+		// the creation time belong to the owner and to the row's history.
+		if in.LastIP != "" {
+			if _, err := tx.ExecContext(ctx,
+				`UPDATE devices SET last_ip = ? WHERE id = ? AND user_id = ?`,
+				in.LastIP, deviceID, in.UserID); err != nil {
+				return Device{}, err
+			}
+		}
+	} else {
+		deviceID = in.NewDeviceID
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO devices (`+deviceCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			deviceID, in.UserID, in.Name, in.At, 0, in.Kind, in.LastIP, in.InstallID); err != nil {
+			return Device{}, err
+		}
+	}
+
+	// Atomic bearer replacement. Every token previously bound to this row dies
+	// in the same transaction that installs the new one, so there is never a
+	// moment with two live bearers (a logout that half-revokes) or none (a
+	// sign-in that authenticates nowhere). A freshly created row has none to
+	// delete, which makes this uniform rather than conditional.
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM cli_tokens WHERE device_id = ? AND user_id = ?`, deviceID, in.UserID); err != nil {
+		return Device{}, err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO cli_tokens (token_hash, user_id, device_id, created_at, last_seen_at)
+		 VALUES (?, ?, ?, ?, 0)`,
+		in.TokenHash, in.UserID, deviceID, in.At); err != nil {
+		return Device{}, err
+	}
+
+	var out Device
+	if err := scanDevice(tx.QueryRowContext(ctx,
+		`SELECT `+deviceCols+` FROM devices WHERE id = ? AND user_id = ?`,
+		deviceID, in.UserID), &out); err != nil {
+		return Device{}, err
+	}
+	return out, nil
 }
 
 func (s *SQLiteStore) ListDevices(ctx context.Context, userID string) ([]Device, error) {
@@ -2073,7 +2216,7 @@ func (s *SQLiteStore) ListDevices(ctx context.Context, userID string) ([]Device,
 	var out []Device
 	for rows.Next() {
 		var d Device
-		if err := rows.Scan(&d.ID, &d.UserID, &d.Name, &d.CreatedAt, &d.LastSeenAt, &d.Kind, &d.LastIP); err != nil {
+		if err := scanDevice(rows, &d); err != nil {
 			return nil, err
 		}
 		out = append(out, d)
@@ -4272,19 +4415,19 @@ func (s *SQLiteStore) ListActiveFleetTokens(ctx context.Context) ([]FleetToken, 
 // deviceAuthCols is shared by CreateDeviceAuth's INSERT and the two lookup
 // SELECTs; pending_token is deliberately excluded from the public struct (it
 // is a DB-internal handoff field) but still needs its own default on INSERT.
-const deviceAuthCols = `user_code, device_code_hash, status, user_id, token_hash, created_at, expires_at, consumed_at, client_ip, user_agent, device_name`
+const deviceAuthCols = `user_code, device_code_hash, status, user_id, token_hash, created_at, expires_at, consumed_at, client_ip, user_agent, device_name, install_id`
 
 func (s *SQLiteStore) CreateDeviceAuth(ctx context.Context, r DeviceAuthRequest) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO cli_device_auth (`+deviceAuthCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		r.UserCode, r.DeviceCodeHash, r.Status, r.UserID, r.TokenHash, r.CreatedAt, r.ExpiresAt, r.ConsumedAt, r.ClientIP, r.UserAgent, r.DeviceName)
+		`INSERT INTO cli_device_auth (`+deviceAuthCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		r.UserCode, r.DeviceCodeHash, r.Status, r.UserID, r.TokenHash, r.CreatedAt, r.ExpiresAt, r.ConsumedAt, r.ClientIP, r.UserAgent, r.DeviceName, r.InstallID)
 	return err
 }
 
 func scanDeviceAuth(sc rowScanner) (DeviceAuthRequest, error) {
 	var r DeviceAuthRequest
 	err := sc.Scan(&r.UserCode, &r.DeviceCodeHash, &r.Status, &r.UserID, &r.TokenHash,
-		&r.CreatedAt, &r.ExpiresAt, &r.ConsumedAt, &r.ClientIP, &r.UserAgent, &r.DeviceName)
+		&r.CreatedAt, &r.ExpiresAt, &r.ConsumedAt, &r.ClientIP, &r.UserAgent, &r.DeviceName, &r.InstallID)
 	return r, err
 }
 
@@ -4312,54 +4455,69 @@ func (s *SQLiteStore) GetDeviceAuthByCodeHash(ctx context.Context, hash string) 
 	return r, true, nil
 }
 
-// ApproveDeviceAuth atomically transitions a request from pending to approved,
-// conditioned on both the request still being pending AND unexpired — the
-// WHERE clause means only the request whose user_code exactly matches a
-// pending, live row is touched, so RowsAffected()==1 is the sole signal of
-// success (stale/expired/already-approved/denied/unknown codes all report
-// ok=false, nothing written). The raw one-time token is stashed in
-// pending_token for ConsumeDeviceAuth to hand back on the CLI's next poll.
-//
-// It also returns the label that row carried, in the SAME transaction as the
-// transition. Reading it separately would let a second request reuse the code
-// between the read and the update, and the caller would then name the device
-// after a request it did not approve — the one thing binding the label to the
-// pending request is supposed to prevent. An empty name means a pre-label CLI
-// started the flow; the caller substitutes the historical name.
-func (s *SQLiteStore) ApproveDeviceAuth(ctx context.Context, userCode, userID, tokenHash, rawToken string, at int64) (string, string, bool, error) {
+// ApproveAndRegisterDeviceAuth keeps the approval state, device identity and
+// bearer rotation behind one commit. In particular, status='approved' and its
+// pending_token cannot become visible to a poll before the matching cli_tokens
+// row exists: SQLite readers see either the state before this transaction or
+// all of it after commit.
+func (s *SQLiteStore) ApproveAndRegisterDeviceAuth(ctx context.Context, userCode, userID, rawToken, newDeviceID string, at int64) (ApprovedDeviceAuth, Device, bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return "", "", false, err
+		return ApprovedDeviceAuth{}, Device{}, false, err
 	}
 	defer tx.Rollback()
-	var name, clientIP string
+
+	var approved ApprovedDeviceAuth
 	err = tx.QueryRowContext(ctx,
-		`SELECT device_name, client_ip FROM cli_device_auth
-		  WHERE user_code=? AND status='pending' AND expires_at > ?`, userCode, at).Scan(&name, &clientIP)
+		`SELECT device_name, client_ip, install_id FROM cli_device_auth
+		  WHERE user_code=? AND status='pending' AND expires_at > ?`, userCode, at).
+		Scan(&approved.DeviceName, &approved.ClientIP, &approved.InstallID)
 	if err == sql.ErrNoRows {
-		return "", "", false, nil
+		return ApprovedDeviceAuth{}, Device{}, false, nil
 	}
 	if err != nil {
-		return "", "", false, err
+		return ApprovedDeviceAuth{}, Device{}, false, err
 	}
+
+	name := devicelabel.Sanitize(approved.DeviceName)
+	if name == "" {
+		name = devicelabel.Fallback
+	}
+	kind := "cli"
+	if approved.InstallID != "" {
+		// Only the native app owns an installation identity. Bodyless and legacy
+		// device-code clients remain CLI; a current Mac must not be presented to
+		// its owner as "Command line" merely because login is browser-delegated.
+		kind = "app"
+	}
+	tokenHash := authx.HashToken(rawToken)
+	device, err := registerApprovedDeviceTx(ctx, tx, ApprovedDeviceRegistration{
+		UserID: userID, NewDeviceID: newDeviceID, Name: name, Kind: kind,
+		InstallID: approved.InstallID, LastIP: canonicalDeviceIP(approved.ClientIP),
+		TokenHash: tokenHash, At: at,
+	})
+	if err != nil {
+		return ApprovedDeviceAuth{}, Device{}, false, err
+	}
+
 	res, err := tx.ExecContext(ctx,
 		`UPDATE cli_device_auth SET status='approved', user_id=?, token_hash=?, pending_token=?
 		  WHERE user_code=? AND status='pending' AND expires_at > ?`,
 		userID, tokenHash, rawToken, userCode, at)
 	if err != nil {
-		return "", "", false, err
+		return ApprovedDeviceAuth{}, Device{}, false, err
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
-		return "", "", false, err
+		return ApprovedDeviceAuth{}, Device{}, false, err
 	}
 	if n != 1 {
-		return "", "", false, nil
+		return ApprovedDeviceAuth{}, Device{}, false, nil
 	}
 	if err := tx.Commit(); err != nil {
-		return "", "", false, err
+		return ApprovedDeviceAuth{}, Device{}, false, err
 	}
-	return name, clientIP, true, nil
+	return approved, device, true, nil
 }
 
 // ConsumeDeviceAuth marks an approved request consumed exactly once and returns
@@ -4367,7 +4525,9 @@ func (s *SQLiteStore) ApproveDeviceAuth(ctx context.Context, userCode, userID, t
 // The SELECT and UPDATE run in one transaction so a second concurrent caller
 // racing the same codeHash either sees the row still approved/unconsumed (and
 // wins) or already consumed (sql.ErrNoRows, ok=false) — never a torn read of a
-// pending_token that's about to be blanked out from under it.
+// pending_token that's about to be blanked out from under it. The join to the
+// live cli_tokens row also prevents an older, concurrently superseded approval
+// from handing the client a bearer that a newer approval already revoked.
 func (s *SQLiteStore) ConsumeDeviceAuth(ctx context.Context, codeHash string, at int64) (string, bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -4376,8 +4536,9 @@ func (s *SQLiteStore) ConsumeDeviceAuth(ctx context.Context, codeHash string, at
 	defer tx.Rollback()
 	var raw string
 	err = tx.QueryRowContext(ctx,
-		`SELECT pending_token FROM cli_device_auth
-		  WHERE device_code_hash=? AND status='approved' AND consumed_at=0`, codeHash).Scan(&raw)
+		`SELECT a.pending_token FROM cli_device_auth a
+		  JOIN cli_tokens t ON t.token_hash = a.token_hash AND t.user_id = a.user_id
+		  WHERE a.device_code_hash=? AND a.status='approved' AND a.consumed_at=0`, codeHash).Scan(&raw)
 	if err == sql.ErrNoRows {
 		return "", false, nil
 	}

@@ -68,6 +68,10 @@ func (s *Service) handleDeviceStart(w http.ResponseWriter, r *http.Request) {
 	// on.
 	var in struct {
 		DeviceName string `json:"device_name"`
+		// InstallID is the native app's per-installation lookup hint. Optional
+		// for exactly the same reason device_name is: every shipped CLI and
+		// every pre-1.1.3 app posts without it.
+		InstallID string `json:"install_id"`
 	}
 	if err := httpx.DecodeJSONBody(w, r, &in); err != nil && !errors.Is(err, io.EOF) {
 		http.Error(w, "bad request", http.StatusBadRequest)
@@ -92,6 +96,14 @@ func (s *Service) handleDeviceStart(w http.ResponseWriter, r *http.Request) {
 		// the terminal and the account agree. For a hostile one it is the only
 		// thing standing between a bidi override and a revoke confirmation.
 		DeviceName: devicelabel.Sanitize(in.DeviceName),
+		// Validated, not trusted, and DROPPED rather than refused when it does
+		// not parse. This endpoint is the first call an unauthenticated client
+		// ever makes, and answering 400 to a malformed hint would break sign-in
+		// over a field that is only ever an optimisation. A dropped hint means a
+		// fresh device row — the pre-1.1.3 behaviour — which is the fail-closed
+		// direction: it never matches a row, it is never persisted, and no
+		// non-canonical spelling can become a second name for one installation.
+		InstallID: validatedInstallID(in.InstallID),
 	}
 	if err := s.store.CreateDeviceAuth(r.Context(), req); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -104,6 +116,15 @@ func (s *Service) handleDeviceStart(w http.ResponseWriter, r *http.Request) {
 		"interval":         devicePollInterval,
 		"expires_in":       int(deviceCodeTTL.Seconds()),
 	})
+}
+
+// validatedInstallID returns the hint only if it is the one canonical spelling
+// this product generates, and "" otherwise.
+func validatedInstallID(raw string) string {
+	if validInstallID(raw) {
+		return raw
+	}
+	return ""
 }
 
 // truncateUA bounds a stored User-Agent so a hostile client can't bloat the row
@@ -205,9 +226,8 @@ func (s *Service) handleDevicePoll(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDeviceApprove is called by the logged-in web session when the human
-// confirms the code shown by the CLI. It mints a new CLI device + long-lived
-// bearer token and hands the raw token to ApproveDeviceAuth, which stashes it
-// so the CLI's next poll (handleDevicePoll) can hand it back exactly once.
+// confirms the code shown by the CLI. Approval, installation-row reuse and
+// bearer rotation commit together before the raw token becomes pollable.
 func (s *Service) handleDeviceApprove(w http.ResponseWriter, r *http.Request, u User) {
 	var in struct {
 		UserCode string `json:"user_code"`
@@ -218,47 +238,19 @@ func (s *Service) handleDeviceApprove(w http.ResponseWriter, r *http.Request, u 
 	}
 	ctx := r.Context()
 	now := s.now().Unix()
-	// Validate-then-mint: settle the raw token + hash in memory only, then let
-	// ApproveDeviceAuth gate on user_code FIRST. An ordinary expired/mistyped/
+	// Validate-then-mint: settle the raw token in memory only, then let the store
+	// gate on user_code inside the transaction. An ordinary expired/mistyped/
 	// double-submitted code fails here having created no DB rows, so it can't
 	// leave a phantom "CLI" device in the user's list or an orphaned cli_token.
 	raw := "rlm_cli_" + authx.RandToken()
-	h := authx.HashToken(raw)
-	name, requestIP, ok, err := s.store.ApproveDeviceAuth(ctx, in.UserCode, u.ID, h, raw, now)
+	_, _, ok, err := s.store.ApproveAndRegisterDeviceAuth(
+		ctx, in.UserCode, u.ID, raw, authx.NewID(), now)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
 	if !ok {
 		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_or_expired_code"})
-		return
-	}
-	// The label comes from the row that was just approved, not from this
-	// request: the browser must not be able to name a device something the
-	// terminal never showed. '' is a pre-label CLI, which keeps the name every
-	// CLI device has always had. Re-sanitized because a row could predate a
-	// change to the rules — persisting a label no current CLI could produce
-	// would put an unfilterable string into a destructive confirmation.
-	name = devicelabel.Sanitize(name)
-	if name == "" {
-		name = devicelabel.Fallback
-	}
-	// Only now that the code is validated do we persist the device + token. A
-	// poll could observe pending_token in the microsecond window before these
-	// commit; that's benign — the token row is created regardless, so a CLI
-	// retry (5s poll interval) self-heals. No rollback machinery needed.
-	dev, err := s.store.UpsertDevice(ctx, Device{
-		ID: authx.NewID(), UserID: u.ID, Name: name, Kind: "cli", CreatedAt: now,
-		LastIP: canonicalDeviceIP(requestIP),
-	})
-	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return
-	}
-	if err := s.store.CreateCLIToken(ctx, CLIToken{
-		TokenHash: h, UserID: u.ID, DeviceID: dev.ID, CreatedAt: now,
-	}); err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok", "account_email": u.Email})

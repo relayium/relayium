@@ -373,7 +373,8 @@
 "account.staleFigures" = "Affichage des derniers chiffres connus — le serveur était injoignable.";
 "account.restoring" = "Chargement de votre compte…";
 "account.devicesHeading" = "Appareils connectés";
-"account.devicesBody" = "Apps et connexions en ligne de commande qui détiennent un jeton pour ce compte. Les navigateurs n’y figurent pas : ils se connectent avec une session, pas avec un jeton.";
+"account.devicesBody" = "Apps et connexions en ligne de commande enregistrées avec ce compte. La déconnexion retire l’accès, mais conserve l’appareil pour le reconnaître la prochaine fois. Les navigateurs n’y figurent pas.";
+"account.devicesAddressNote" = "Cette adresse est celle que notre serveur a vue en dernier pour cette connexion. Elle peut correspondre à une box, à un réseau mobile ou à un VPN : ce n’est pas une localisation.";
 "account.noDevices" = "Aucune app ni ligne de commande n’est connectée.";
 "account.unnamedDevice" = "Appareil sans nom";
 "account.thisMac" = "Cet appareil";
@@ -385,6 +386,7 @@
 "account.deviceNeverUsed" = "jamais utilisé";
 "account.deviceLastUsed" = "dernière utilisation %@";
 "account.deviceAdded" = "ajouté %@";
+"account.deviceLastAddress" = "dernière adresse %@";
 "account.revokeTitle" = "Révoquer « %@ » ?";
 "account.revokeThisMac" = "C’est l’appareil que vous utilisez. Le révoquer déconnecte cette app immédiatement.";
 "account.revokeOther" = "Cet appareil sera déconnecté et devra se reconnecter.";

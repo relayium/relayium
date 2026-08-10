@@ -369,7 +369,8 @@
 "account.staleFigures" = "마지막으로 확인된 수치를 표시하고 있습니다 — 서버에 연결하지 못했습니다.";
 "account.restoring" = "계정을 불러오는 중…";
 "account.devicesHeading" = "로그인된 기기";
-"account.devicesBody" = "이 계정의 토큰을 가진 앱과 명령줄 로그인입니다. 브라우저는 목록에 없습니다. 브라우저는 토큰이 아니라 세션으로 로그인하기 때문입니다.";
+"account.devicesBody" = "이 계정에 등록된 앱과 명령줄 로그인입니다. 로그아웃하면 접근 권한은 제거되지만 다음에 같은 기기로 인식할 수 있도록 기기 기록은 유지됩니다. 브라우저는 목록에 표시되지 않습니다.";
+"account.devicesAddressNote" = "이 주소는 저희 서버가 이 로그인에서 마지막으로 확인한 주소입니다. 가정용 공유기, 모바일 네트워크, VPN일 수 있으며 위치를 뜻하지 않습니다.";
 "account.noDevices" = "로그인된 앱이나 명령줄 기기가 없습니다.";
 "account.unnamedDevice" = "이름 없는 기기";
 "account.thisMac" = "이 기기";
@@ -381,6 +382,7 @@
 "account.deviceNeverUsed" = "사용한 적 없음";
 "account.deviceLastUsed" = "마지막 사용 %@";
 "account.deviceAdded" = "추가됨 %@";
+"account.deviceLastAddress" = "마지막 주소 %@";
 "account.revokeTitle" = "“%@”을(를) 해지할까요?";
 "account.revokeThisMac" = "지금 사용 중인 기기입니다. 해지하면 이 앱은 즉시 로그아웃됩니다.";
 "account.revokeOther" = "해당 기기는 로그아웃되며 다시 로그인해야 합니다.";

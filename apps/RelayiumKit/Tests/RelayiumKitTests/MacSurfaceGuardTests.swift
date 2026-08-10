@@ -45,9 +45,15 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "the delivery sentence is still gated on the pause flag")
         // Found by the fixture the moment the device list stopped being empty:
         // macOS rendered a bare "Revoke" on every row while iOS had named the
-        // credential since R3-D.
-        XCTAssertTrue(try source(named: "AccountView.swift").contains(
-            "AccountPresentation.revokeActionLabel(for: device)"),
+        // credential since R3-D. From 1.1.3 the label also mirrors the address
+        // this platform's row displays — the two must not drift apart, or the
+        // button describes a row that is not on screen.
+        // Whitespace-normalised, so wrapping the call over two lines is not a
+        // product change this guard reports as one.
+        let accountView = try source(named: "AccountView.swift")
+            .components(separatedBy: .whitespacesAndNewlines).joined()
+        XCTAssertTrue(accountView.contains(
+            "AccountPresentation.revokeActionLabel(for:device,showsAddress:true)"),
             "macOS revoke reads as the same word on every device row")
         XCTAssertTrue(try source(named: "AccountView.swift").contains(
             "AccountPresentation.revokeConsequence(") ,

@@ -64,8 +64,8 @@ final class BundleVersionTests: XCTestCase {
         // Six: the app, Share extension and UI test bundle, each in Debug and
         // Release. The extension must match the containing app; keeping the UI
         // host aligned avoids a different version during release automation.
-        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.1.2", occurrences: 6)
-        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "4", occurrences: 6)
+        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.1.3", occurrences: 6)
+        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "5", occurrences: 6)
     }
 
     /// iOS: the app and its Share extension, both Debug and Release.

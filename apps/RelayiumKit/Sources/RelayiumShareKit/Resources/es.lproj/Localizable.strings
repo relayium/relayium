@@ -373,7 +373,8 @@
 "account.staleFigures" = "Se muestran las últimas cifras conocidas: no se pudo contactar con el servidor.";
 "account.restoring" = "Cargando tu cuenta…";
 "account.devicesHeading" = "Dispositivos con sesión iniciada";
-"account.devicesBody" = "Apps e inicios de sesión por línea de comandos que tienen un token de esta cuenta. Los navegadores no aparecen: inician sesión con una sesión, no con un token.";
+"account.devicesBody" = "Apps e inicios de sesión por línea de comandos registrados con esta cuenta. Al cerrar sesión se elimina el acceso, pero se conserva el dispositivo para reconocerlo la próxima vez. Los navegadores no aparecen.";
+"account.devicesAddressNote" = "La dirección es la que nuestro servidor vio por última vez en este inicio de sesión. Puede ser un router doméstico, una red móvil o una VPN: no es una ubicación.";
 "account.noDevices" = "No hay ninguna app ni dispositivo de línea de comandos con sesión iniciada.";
 "account.unnamedDevice" = "Dispositivo sin nombre";
 "account.thisMac" = "Este dispositivo";
@@ -385,6 +386,7 @@
 "account.deviceNeverUsed" = "nunca usado";
 "account.deviceLastUsed" = "último uso %@";
 "account.deviceAdded" = "añadido %@";
+"account.deviceLastAddress" = "última dirección %@";
 "account.revokeTitle" = "¿Revocar «%@»?";
 "account.revokeThisMac" = "Este es el dispositivo que estás usando. Revocarlo cierra la sesión de esta app de inmediato.";
 "account.revokeOther" = "Ese dispositivo cerrará sesión y tendrá que volver a iniciarla.";

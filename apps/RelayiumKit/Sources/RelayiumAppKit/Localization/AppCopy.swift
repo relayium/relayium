@@ -81,9 +81,16 @@ public enum AccountPresentation {
     ///
     /// The device's own NAME is not in here — it is the user's or the peer's
     /// text and is rendered verbatim beside this line.
+    /// `lastIP` is the SERVER-observed address carried on the row, and the only
+    /// address this sentence will ever contain. It defaults to none so a caller
+    /// that does not display it — the iOS row — is unchanged, and so there is no
+    /// way for this function to acquire an address of its own: a local interface
+    /// address rendered here would be a claim this machine made about itself,
+    /// under a sentence that says what central saw.
     public static func deviceDetail(kind: String,
                                     lastSeenAt: Int64,
                                     createdAt: Int64,
+                                    lastIP: String = "",
                                     language: AppLanguage? = nil) -> String {
         let kindText = kind == "cli"
             ? L10n.t(.accountDeviceKindCli, language: language)
@@ -96,7 +103,16 @@ public enum AccountPresentation {
                      language: language)
         let added = L10n.t(.accountDeviceAdded, [shortDate(createdAt, language: language)],
                            language: language)
-        return L10n.detail([kindText, used, added], language: language)
+        var parts = [kindText, used, added]
+        if !lastIP.isEmpty {
+            // Server-issued opaque text, like a stored-file id: isolated under
+            // Arabic so its digits and dots cannot reorder around the sentence
+            // and show the reader a different address than the one recorded.
+            parts.append(L10n.t(.accountDeviceLastAddress,
+                                [L10n.token(lastIP, language: language)],
+                                language: language))
+        }
+        return L10n.detail(parts, language: language)
     }
 
     /// "1.2 MB encrypted · expires 4 Jan 2026 at 09:00 · downloaded twice".
@@ -162,11 +178,19 @@ public enum AccountPresentation {
     /// buttons. The detail line is what separates them — it carries the kind and
     /// both dates — and the current device says so outright, because that is the
     /// one whose consequence is different.
+    ///
+    /// `showsAddress` says whether THIS platform's row displays the
+    /// server-observed address. The label mirrors the row rather than always
+    /// including everything known: macOS shows it and so says it, while iOS does
+    /// not display it and its label must not announce a fact its list never
+    /// shows.
     public static func revokeActionLabel(for device: AccountDevice,
+                                         showsAddress: Bool = false,
                                          language: AppLanguage? = nil) -> String {
         var detail = deviceDetail(kind: device.kind,
                                   lastSeenAt: device.lastSeenAt,
                                   createdAt: device.createdAt,
+                                  lastIP: showsAddress ? device.lastIP : "",
                                   language: language)
         if device.current {
             detail = L10n.detail([L10n.t(.accountThisMac, language: language), detail],

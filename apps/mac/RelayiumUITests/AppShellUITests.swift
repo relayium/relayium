@@ -866,6 +866,25 @@ final class AppShellUITests: XCTestCase {
         XCTAssertGreaterThan(revokes.count, 0,
                              "a revoke action does not identify the row it destroys")
 
+        // The server-observed address, and the sentence that says what it is.
+        // The fixture gives this device an address and the other none, so both
+        // arms are on one screen: an IP appears exactly once, and the row the
+        // server has never seen used says nothing about an address rather than
+        // rendering the words with nothing after them.
+        XCTAssertGreaterThan(window.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@",
+                        "203.0.113.9", "203.0.113.9")).count, 0,
+                       "the device list does not show the server-observed address it was given")
+        // Exactly one, which is the both-arms half: the row the server has never
+        // seen used must not render the words with nothing after them.
+        XCTAssertEqual(window.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@",
+                        "last address", "last address")).count, 1,
+                       "an address sentence is rendered for a row that has no address")
+        XCTAssertTrue(visibleElement(id: "devices-address-note",
+                                     contains: "it is not a location", in: window).exists,
+                      "the device list shows an address without saying what it is")
+
         // Both arms of a stored row, side by side. A `#k=` link is the plaintext
         // to anybody holding it, so which arm a row is in is a security fact,
         // not a convenience one.

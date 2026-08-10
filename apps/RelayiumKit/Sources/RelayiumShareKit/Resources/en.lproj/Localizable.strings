@@ -374,7 +374,8 @@
 "account.staleFigures" = "Showing the last known figures — couldn't reach the server.";
 "account.restoring" = "Loading your account…";
 "account.devicesHeading" = "Signed-in devices";
-"account.devicesBody" = "Apps and command-line logins that hold a token for this account. Browsers aren't listed: they sign in with a session, not a token.";
+"account.devicesBody" = "Apps and command-line logins registered with this account. Signing out removes access but keeps the device here so it can be recognized next time. Browsers aren't listed.";
+"account.devicesAddressNote" = "The address is the one our server last saw this login use. It can be a home router, a mobile network or a VPN — it is not a location.";
 "account.noDevices" = "No app or command-line device is signed in.";
 "account.unnamedDevice" = "Unnamed device";
 "account.thisMac" = "This device";
@@ -386,6 +387,7 @@
 "account.deviceNeverUsed" = "never used";
 "account.deviceLastUsed" = "last used %@";
 "account.deviceAdded" = "added %@";
+"account.deviceLastAddress" = "last address %@";
 "account.revokeTitle" = "Revoke “%@”?";
 "account.revokeThisMac" = "This is the device you're using. Revoking it signs this app out immediately.";
 "account.revokeOther" = "That device will be signed out and will have to sign in again.";

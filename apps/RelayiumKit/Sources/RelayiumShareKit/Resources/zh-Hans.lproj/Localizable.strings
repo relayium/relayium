@@ -369,7 +369,8 @@
 "account.staleFigures" = "显示的是最后一次已知数据 — 无法连接服务器。";
 "account.restoring" = "正在载入账户…";
 "account.devicesHeading" = "已登录的设备";
-"account.devicesBody" = "持有本账户令牌的应用与命令行登录。浏览器不在此列：它们使用会话登录，而不是令牌。";
+"account.devicesBody" = "已注册到本账户的应用和命令行登录。退出登录会移除访问权限，但会保留设备记录，以便下次识别同一设备。浏览器不在此列。";
+"account.devicesAddressNote" = "该地址是我们的服务器最后一次看到此登录使用的地址。它可能是家庭路由器、移动网络或 VPN，并不代表位置。";
 "account.noDevices" = "当前没有应用或命令行设备处于登录状态。";
 "account.unnamedDevice" = "未命名设备";
 "account.thisMac" = "这台设备";
@@ -381,6 +382,7 @@
 "account.deviceNeverUsed" = "从未使用";
 "account.deviceLastUsed" = "上次使用 %@";
 "account.deviceAdded" = "添加于 %@";
+"account.deviceLastAddress" = "上次地址 %@";
 "account.revokeTitle" = "吊销“%@”？";
 "account.revokeThisMac" = "这就是你正在使用的设备。吊销它会立即让本应用退出登录。";
 "account.revokeOther" = "该设备将被退出登录，必须重新登录才能继续使用。";

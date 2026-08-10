@@ -53,12 +53,22 @@ public final class KeychainTokenStore: TokenStore {
         return q
     }
 
+    /// How every item this type writes is protected.
+    ///
+    /// Named rather than inlined because two separate guarantees rest on it and
+    /// neither is visible at the call site: the item is available to a headless
+    /// relaunch after the first unlock, and — the `ThisDeviceOnly` half — Apple
+    /// documents it as NOT migrating to a new device when restoring from a
+    /// backup. The installation identity depends on that second property, so it
+    /// is asserted by a test rather than left as a literal one edit could move.
+    static let accessibility = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+
     public func save(_ token: String) throws {
         let data = Data(token.utf8)
         SecItemDelete(baseQuery as CFDictionary)      // idempotent overwrite
         var add = baseQuery
         add[kSecValueData as String] = data
-        add[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        add[kSecAttrAccessible as String] = Self.accessibility
         let status = SecItemAdd(add as CFDictionary, nil)
         guard status == errSecSuccess else { throw KeychainError.status(status) }
     }

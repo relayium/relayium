@@ -123,16 +123,30 @@ public struct AccountDevice: Codable, Equatable, Identifiable {
     /// True for the device whose bearer token made the request that returned
     /// this row. Never true for a cookie-authenticated (browser) request.
     public var current: Bool
+    /// The last network address the SERVER observed this credential being used
+    /// from, exactly as `deviceView.LastIP` emits it — an address only, never a
+    /// port and never a forwarded-header string.
+    ///
+    /// "" means the server has none: the credential has not been used since it
+    /// was issued, or the response came from a build that predates the field.
+    /// It is an identification hint for the account owner and nothing more: it
+    /// may be a NAT, carrier or VPN address, so no surface may present it as a
+    /// location. It is deliberately NOT the local interface address this app
+    /// can enumerate for LAN transfer — that one describes this machine, and
+    /// this one describes what central saw.
+    public var lastIP: String
 
     public init(id: String, name: String, createdAt: Int64, lastSeenAt: Int64,
-                kind: String, current: Bool) {
+                kind: String, current: Bool, lastIP: String = "") {
         self.id = id; self.name = name; self.createdAt = createdAt
         self.lastSeenAt = lastSeenAt; self.kind = kind; self.current = current
+        self.lastIP = lastIP
     }
 
     enum CodingKeys: String, CodingKey {
         case id = "ID", name = "Name", createdAt = "CreatedAt"
         case lastSeenAt = "LastSeenAt", kind = "Kind", current = "Current"
+        case lastIP = "LastIP"
     }
 
     /// Hand-written so that only `ID` is actually required. A server that
@@ -147,6 +161,7 @@ public struct AccountDevice: Codable, Equatable, Identifiable {
         lastSeenAt = try c.decodeIfPresent(Int64.self, forKey: .lastSeenAt) ?? 0
         kind = try c.decodeIfPresent(String.self, forKey: .kind) ?? ""
         current = try c.decodeIfPresent(Bool.self, forKey: .current) ?? false
+        lastIP = try c.decodeIfPresent(String.self, forKey: .lastIP) ?? ""
     }
 }
 

@@ -268,6 +268,17 @@ struct AccountView: View {
             Text(L10n.t(.accountDevicesBody))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            // Said once, here, rather than as a caveat on every row: the rows
+            // carry the address, and this is what the address means. Without it
+            // an IP under a device name reads as "where that machine is", which
+            // a NAT or VPN address is not.
+            Text(L10n.t(.accountDevicesAddressNote))
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                // On the leaf, never on the card: an identifier on the enclosing
+                // stack propagates down and renames every control inside it.
+                // nonlocalized: an accessibility identifier
+                .accessibilityIdentifier("devices-address-note")
 
             if management.isLoading && management.devices.isEmpty {
                 ProgressView { Text(L10n.t(.accountLoadingDevices)) }
@@ -310,7 +321,11 @@ struct AccountView: View {
                     // to look at and useless to hear: two devices of the same
                     // model sign in under the same name routinely. iOS has said
                     // which credential this destroys since R3-D; macOS did not.
-                    .accessibilityLabel(AccountPresentation.revokeActionLabel(for: device))
+                    // showsAddress mirrors this row: the detail line below the
+                    // name carries the server-observed address, so the label
+                    // that stands in for it does too.
+                    .accessibilityLabel(AccountPresentation.revokeActionLabel(
+                        for: device, showsAddress: true))
             }
             if let error = management.error(forRow: device.id) {
                 InlineMessage(.failure, error)
@@ -318,10 +333,15 @@ struct AccountView: View {
         }
     }
 
+    /// The address comes from the row the server sent and from nowhere else.
+    /// This app can also enumerate its own local interface addresses for LAN
+    /// transfer; one of those here would describe this machine under a sentence
+    /// about what central observed of a possibly distant one.
     private func deviceDetail(_ device: AccountDevice) -> String {
         AccountPresentation.deviceDetail(kind: device.kind,
                                          lastSeenAt: device.lastSeenAt,
-                                         createdAt: device.createdAt)
+                                         createdAt: device.createdAt,
+                                         lastIP: device.lastIP)
     }
 
     // MARK: - stored files

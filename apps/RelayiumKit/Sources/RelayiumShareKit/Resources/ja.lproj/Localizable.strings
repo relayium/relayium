@@ -369,7 +369,8 @@
 "account.staleFigures" = "最後に取得できた数値を表示しています — サーバーに接続できませんでした。";
 "account.restoring" = "アカウントを読み込んでいます…";
 "account.devicesHeading" = "サインイン中のデバイス";
-"account.devicesBody" = "このアカウントのトークンを保持しているアプリとコマンドラインのログインです。ブラウザは一覧に含まれません。ブラウザはトークンではなくセッションでサインインするためです。";
+"account.devicesBody" = "このアカウントに登録されたアプリとコマンドラインのログインです。サインアウトするとアクセス権は削除されますが、次回同じデバイスとして認識できるよう記録は残ります。ブラウザは一覧に含まれません。";
+"account.devicesAddressNote" = "このアドレスは、当社のサーバーがこのログインで最後に確認したものです。自宅のルーター、モバイル回線、VPN の場合もあり、場所を示すものではありません。";
 "account.noDevices" = "サインイン中のアプリ・コマンドラインデバイスはありません。";
 "account.unnamedDevice" = "名称未設定のデバイス";
 "account.thisMac" = "このデバイス";
@@ -381,6 +382,7 @@
 "account.deviceNeverUsed" = "未使用";
 "account.deviceLastUsed" = "最終使用 %@";
 "account.deviceAdded" = "追加 %@";
+"account.deviceLastAddress" = "前回のアドレス %@";
 "account.revokeTitle" = "「%@」を失効させますか？";
 "account.revokeThisMac" = "これはいま使っているデバイスです。失効させると、このアプリは直ちにサインアウトします。";
 "account.revokeOther" = "そのデバイスはサインアウトされ、再度サインインが必要になります。";

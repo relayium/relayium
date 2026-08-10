@@ -28,7 +28,8 @@ struct LoginView: View {
     /// describe something that is no longer on screen.
     @State private var localProblem: RegistrationProblem?
     @FocusState private var confirmFocused: Bool
-    @StateObject private var browserLogin = AppEnvironment.makeBrowserLoginModel()
+    @StateObject private var browserLogin = AppEnvironment.makeBrowserLoginModel(
+        installationStore: UITestMode.makeInstallationIdentityStore())
     @State private var presenter = BrowserSignInPresenter()
 
     private var canSubmit: Bool {

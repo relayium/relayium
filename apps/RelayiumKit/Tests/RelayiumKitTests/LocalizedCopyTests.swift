@@ -1122,6 +1122,7 @@ final class LocalizedCopyTests: XCTestCase {
         .accountUnnamedDevice, .accountThisMac, .accountLoadingDevices,
         .accountDeviceKindCli, .accountDeviceKindApp, .accountDeviceNeverUsed,
         .accountDeviceLastUsed, .accountDeviceAdded,
+        .accountDeviceLastAddress, .accountDevicesAddressNote,
         .accountRevokeTitle, .accountRevokeThisMac, .accountRevokeOther,
         .accountRevokeDeviceLabel,
         .accountFilesHeading, .accountFilesBody, .accountNoFiles, .accountLoadingFiles,

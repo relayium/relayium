@@ -147,6 +147,16 @@ type Device struct {
 	// Kind distinguishes the device's platform: "" / "browser" (default) or
 	// "cli" for a device registered via the device-code CLI login flow.
 	Kind string
+	// InstallID is the client-generated installation lookup hint this row was
+	// registered under, or "" for every row that predates it and every client
+	// that does not send one (all CLI versions, all pre-1.1.3 apps).
+	//
+	// It is account-scoped and unique within an account (a partial unique index
+	// covers the non-empty values), which is what lets an approved re-login find
+	// exactly one row or none. It is NEVER an authenticator, never matched
+	// across accounts, and never emitted in an API response — deviceView has no
+	// field for it, and a test asserts the device list does not echo it.
+	InstallID string
 }
 
 // DeviceInbox is one device's Device Inbox enrolment: the negotiated protocol
@@ -344,6 +354,60 @@ type DeviceAuthRequest struct {
 	// Descriptive and spoofable — never an authentication signal. '' = a
 	// pre-label CLI; approval substitutes the historical "CLI" name.
 	DeviceName string
+	// InstallID is the installation lookup hint the client offered at start,
+	// already validated (validInstallID) — an unparseable one is dropped to ''
+	// rather than stored. Bound HERE, at start, for the same reason DeviceName
+	// is: approval must consume the identifier the request was created with, not
+	// one a concurrent request could substitute between the read and the write.
+	//
+	// '' means "no hint", and approval then registers a fresh device row — what
+	// every CLI version and every pre-1.1.3 app gets.
+	InstallID string
+}
+
+// ApprovedDeviceAuth is what a successful ApproveAndRegisterDeviceAuth read out
+// of the row it transitioned, inside that same transaction. A struct rather than a growing
+// tuple of same-typed returns: three strings in a row are exactly what a later
+// edit transposes silently.
+type ApprovedDeviceAuth struct {
+	// DeviceName is the label the request carried; '' means a pre-label client
+	// and the caller substitutes the historical name.
+	DeviceName string
+	// ClientIP is the origin the flow was started from, recorded as the row's
+	// server-observed address.
+	ClientIP string
+	// InstallID is the validated installation hint, or '' for none.
+	InstallID string
+}
+
+// ApprovedDeviceRegistration is one approved device-code login binding a device
+// row to a freshly minted bearer.
+//
+// It exists so that finding-or-creating the row, revoking whatever bearer that
+// row previously held, and installing the new one happen in ONE transaction.
+// As three separate calls each intermediate state is a real defect: a row with
+// two live bearers (a logout that only half revokes), a row with none (a device
+// that authenticates nowhere while the user has just watched themselves sign
+// in), or two rows for one machine — the bug this batch exists to fix.
+type ApprovedDeviceRegistration struct {
+	UserID string
+	// NewDeviceID is used ONLY when no existing row matches. A reused row keeps
+	// its own id, because that id is what the Device Inbox enrolment, the
+	// registered key history and every queued task hang off.
+	NewDeviceID string
+	// Name and Kind are applied only when a row is CREATED. A reused row keeps
+	// the name the owner gave it: re-registering must not rename a machine back
+	// to the login flow's fallback label on every sign-in.
+	Name string
+	Kind string
+	// InstallID is the validated hint, or "" to register a fresh row
+	// unconditionally.
+	InstallID string
+	// LastIP is the canonicalized server-observed address of the approval.
+	// Empty leaves an existing row's address alone.
+	LastIP    string
+	TokenHash string
+	At        int64
 }
 
 // CLIToken is a long-lived hashed bearer credential minted at the end of a
@@ -1364,17 +1428,15 @@ type Store interface {
 	CreateDeviceAuth(ctx context.Context, r DeviceAuthRequest) error
 	GetDeviceAuthByUserCode(ctx context.Context, userCode string) (DeviceAuthRequest, bool, error)
 	GetDeviceAuthByCodeHash(ctx context.Context, hash string) (DeviceAuthRequest, bool, error)
-	// ApproveDeviceAuth atomically transitions a request from pending to
-	// approved (WHERE status='pending' AND unexpired), stashing the raw
-	// one-time CLI token in pending_token for the next poll to collect.
-	// ok=false if the request wasn't pending/unexpired (already approved,
-	// denied, expired, or unknown code) — nothing is written. deviceName is
-	// the label that exact row carried, read in the same transaction as the
-	// transition; '' means a pre-label CLI started the flow.
-	ApproveDeviceAuth(ctx context.Context, userCode, userID, tokenHash, rawToken string, at int64) (deviceName, clientIP string, ok bool, err error)
+	// ApproveAndRegisterDeviceAuth performs the whole human-approved handoff in
+	// one transaction: validate and approve the pending code, find or create the
+	// account-scoped installation row, rotate its bearer, and make the raw token
+	// available to poll. A poll can therefore never observe an approved request
+	// whose bearer has not committed yet.
+	ApproveAndRegisterDeviceAuth(ctx context.Context, userCode, userID, rawToken, newDeviceID string, at int64) (approved ApprovedDeviceAuth, device Device, ok bool, err error)
 	// ConsumeDeviceAuth atomically transitions an approved request to
 	// consumed exactly once, returning the raw one-time token stashed by
-	// ApproveDeviceAuth and blanking pending_token so it never lingers at
+	// ApproveAndRegisterDeviceAuth and blanking pending_token so it never lingers at
 	// rest. ok=false on any second call or if the request isn't approved.
 	ConsumeDeviceAuth(ctx context.Context, codeHash string, at int64) (rawToken string, ok bool, err error)
 	// DeleteExpiredDeviceAuth reclaims device-auth rows past their expiry.

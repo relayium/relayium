@@ -60,6 +60,37 @@ public enum AppEnvironment {
                               accessGroup: nil)
     }
 
+    /// The keychain account holding this installation's lookup identity.
+    ///
+    /// Its OWN account under the app's service, beside the bearer rather than
+    /// inside it. That separation is the mechanism, not tidiness: sign-out
+    /// clears the bearer item, and an identity sharing that item would be
+    /// destroyed by every logout — which is exactly the behaviour this identity
+    /// exists to end.
+    // nonlocalized: a keychain account key
+    public static let installationIdentityAccount = "installation-id"
+
+    /// The store for this installation's identity.
+    ///
+    /// **No access group, on either platform.** A group is a SHARE: an item in
+    /// the team group is readable by the Share extension and by anything else
+    /// signed into it, and an identity that two processes can read is one that
+    /// two installations could end up presenting. The bearer is in the group
+    /// because the product genuinely shares it; this is not shared with anyone.
+    ///
+    /// The accessibility comes from `KeychainTokenStore.accessibility` —
+    /// `…AfterFirstUnlockThisDeviceOnly`, which Apple documents as not migrating
+    /// to a new device when restoring from a backup. That is what keeps a
+    /// restored clone of this Mac from arriving with this Mac's identity and
+    /// contending for its device row.
+    public static func makeInstallationIdentityStore(
+        _ configuration: KeychainConfiguration = keychainConfiguration
+    ) -> KeychainTokenStore {
+        KeychainTokenStore(service: configuration.service,
+                           account: installationIdentityAccount,
+                           accessGroup: nil)
+    }
+
     /// Built through the configuration so a test can assert the keychain query
     /// for a platform it is not running on.
     public static func makeTokenStore(
@@ -471,9 +502,24 @@ public enum AppEnvironment {
         return receive
     }
 
+    /// The browser-delegated login, carrying this installation's lookup hint.
+    ///
+    /// `installationStore` is a parameter for the reason every other store here
+    /// is: an acceptance launch has to be able to point it somewhere that is not
+    /// the installed product's item. Passing nil resolves the product's own.
     @MainActor
-    public static func makeBrowserLoginModel(baseURL: URL = productionBaseURL) -> BrowserLoginModel {
-        BrowserLoginModel(client: HTTPDeviceAuthClient(baseURL: baseURL))
+    public static func makeBrowserLoginModel(
+        baseURL: URL = productionBaseURL,
+        installationStore: InstallationIdentityStoring? = nil
+    ) -> BrowserLoginModel {
+        let identity = InstallationIdentityProvider(
+            store: installationStore ?? makeInstallationIdentityStore())
+        // Read once, here, rather than per request: the model is built when the
+        // sign-in surface appears, and the identity is the same for the life of
+        // the installation. A nil answer (an unreadable or unwritable keychain)
+        // sends no hint and the login proceeds exactly as an older client's.
+        return BrowserLoginModel(client: HTTPDeviceAuthClient(baseURL: baseURL,
+                                                              installationID: identity.current()))
     }
 
     /// The keys of stored uploads made from this installation.

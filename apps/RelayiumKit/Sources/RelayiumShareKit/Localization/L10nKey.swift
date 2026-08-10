@@ -910,6 +910,15 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case accountDeviceLastUsed = "account.deviceLastUsed"
     /// %@ — a formatted date.
     case accountDeviceAdded = "account.deviceAdded"
+    /// %@ — the last network address the SERVER observed this credential from,
+    /// isolated rather than translated. Rendered only when the server has one;
+    /// there is deliberately no "unknown" wording, because a row with no address
+    /// simply does not say anything about one.
+    case accountDeviceLastAddress = "account.deviceLastAddress"
+    /// What that address is, said once under the list instead of as a caveat on
+    /// every row. It must not promise a location: a NAT, mobile carrier or VPN
+    /// address is the common case, not the exception.
+    case accountDevicesAddressNote = "account.devicesAddressNote"
     /// %@ — the device's own name, never translated.
     case accountRevokeTitle = "account.revokeTitle"
     case accountRevokeThisMac = "account.revokeThisMac"

@@ -373,7 +373,8 @@
 "account.staleFigures" = "Es werden die zuletzt bekannten Werte angezeigt — der Server war nicht erreichbar.";
 "account.restoring" = "Konto wird geladen…";
 "account.devicesHeading" = "Angemeldete Geräte";
-"account.devicesBody" = "Apps und Befehlszeilen-Anmeldungen, die ein Token für dieses Konto halten. Browser stehen nicht in der Liste: Sie melden sich mit einer Sitzung an, nicht mit einem Token.";
+"account.devicesBody" = "Apps und Befehlszeilen-Anmeldungen, die für dieses Konto registriert sind. Beim Abmelden wird der Zugriff entfernt, der Geräteeintrag bleibt jedoch zur Wiedererkennung erhalten. Browser stehen nicht in der Liste.";
+"account.devicesAddressNote" = "Die Adresse ist die, die unser Server bei dieser Anmeldung zuletzt gesehen hat. Sie kann zu einem Heimrouter, einem Mobilfunknetz oder einem VPN gehören – ein Standort ist sie nicht.";
 "account.noDevices" = "Kein App- oder Befehlszeilengerät ist angemeldet.";
 "account.unnamedDevice" = "Unbenanntes Gerät";
 "account.thisMac" = "Dieses Gerät";
@@ -385,6 +386,7 @@
 "account.deviceNeverUsed" = "nie verwendet";
 "account.deviceLastUsed" = "zuletzt verwendet %@";
 "account.deviceAdded" = "hinzugefügt %@";
+"account.deviceLastAddress" = "letzte Adresse %@";
 "account.revokeTitle" = "„%@“ widerrufen?";
 "account.revokeThisMac" = "Das ist das Gerät, das du gerade benutzt. Ein Widerruf meldet diese App sofort ab.";
 "account.revokeOther" = "Dieses Gerät wird abgemeldet und muss sich erneut anmelden.";

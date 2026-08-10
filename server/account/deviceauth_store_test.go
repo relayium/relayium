@@ -10,16 +10,20 @@ import (
 func TestDeviceAuthApproveConsumeOnce(t *testing.T) {
 	st := newTestStore(t)
 	ctx := context.Background()
+	u, err := st.UpsertUserByEmail(ctx, "approve-once@example.com", "Approve Once")
+	if err != nil {
+		t.Fatal(err)
+	}
 	req := DeviceAuthRequest{UserCode: "WDJB-MJHT", DeviceCodeHash: authx.HashToken("dev"), Status: "pending", CreatedAt: 1, ExpiresAt: 1 << 40}
 	if err := st.CreateDeviceAuth(ctx, req); err != nil {
 		t.Fatal(err)
 	}
-	_, _, ok, err := st.ApproveDeviceAuth(ctx, "WDJB-MJHT", "u1", authx.HashToken("tok"), "rlm_cli_raw", 2)
+	_, _, ok, err := st.ApproveAndRegisterDeviceAuth(ctx, "WDJB-MJHT", u.ID, "rlm_cli_raw", "approve-once-device", 2)
 	if err != nil || !ok {
 		t.Fatalf("approve: %v %v", ok, err)
 	}
 	// second approve on same code must fail (already approved)
-	_, _, ok2, _ := st.ApproveDeviceAuth(ctx, "WDJB-MJHT", "u1", authx.HashToken("tok"), "rlm_cli_raw", 3)
+	_, _, ok2, _ := st.ApproveAndRegisterDeviceAuth(ctx, "WDJB-MJHT", u.ID, "rlm_cli_raw", "must-not-exist", 3)
 	if ok2 {
 		t.Fatal("double approve should fail")
 	}
@@ -27,6 +31,76 @@ func TestDeviceAuthApproveConsumeOnce(t *testing.T) {
 	_, c2, _ := st.ConsumeDeviceAuth(ctx, authx.HashToken("dev"), 5)
 	if !c1 || c2 || tok1 != "rlm_cli_raw" {
 		t.Fatalf("consume should succeed once with token: tok=%q c1=%v c2=%v", tok1, c1, c2)
+	}
+}
+
+func TestApproveAndRegisterMakesTheReturnedBearerImmediatelyValid(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	u, err := st.UpsertUserByEmail(ctx, "atomic-approve@example.com", "Atomic Approve")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := DeviceAuthRequest{
+		UserCode: "ATOM-CODE", DeviceCodeHash: authx.HashToken("atomic-device-code"),
+		Status: "pending", CreatedAt: 1, ExpiresAt: 1 << 40,
+		DeviceName: "This Mac", InstallID: sampleInstallID, ClientIP: "203.0.113.9",
+	}
+	if err := st.CreateDeviceAuth(ctx, req); err != nil {
+		t.Fatal(err)
+	}
+	raw := "rlm_cli_atomic"
+	_, device, ok, err := st.ApproveAndRegisterDeviceAuth(ctx, req.UserCode, u.ID, raw, "atomic-device", 2)
+	if err != nil || !ok {
+		t.Fatalf("approve and register: ok=%v err=%v", ok, err)
+	}
+	if device.Kind != "app" {
+		t.Fatalf("native installation was presented as %q, want app", device.Kind)
+	}
+	if gotUser, gotDevice, valid, err := st.GetCLITokenUser(ctx, authx.HashToken(raw)); err != nil || !valid || gotUser != u.ID || gotDevice != device.ID {
+		t.Fatalf("committed token is not immediately valid: user=%q device=%q valid=%v err=%v", gotUser, gotDevice, valid, err)
+	}
+	gotRaw, consumed, err := st.ConsumeDeviceAuth(ctx, req.DeviceCodeHash, 3)
+	if err != nil || !consumed || gotRaw != raw {
+		t.Fatalf("poll handoff: raw=%q consumed=%v err=%v", gotRaw, consumed, err)
+	}
+}
+
+func TestApproveAndRegisterRollsBackApprovalWhenBearerCannotCommit(t *testing.T) {
+	st := newTestStore(t)
+	ctx := context.Background()
+	u, err := st.UpsertUserByEmail(ctx, "atomic-rollback@example.com", "Atomic Rollback")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := st.UpsertDevice(ctx, Device{ID: "other-device", UserID: u.ID, Name: "Other", Kind: "cli", CreatedAt: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := "rlm_cli_collision"
+	if err := st.CreateCLIToken(ctx, CLIToken{TokenHash: authx.HashToken(raw), UserID: u.ID, DeviceID: other.ID, CreatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+	req := DeviceAuthRequest{
+		UserCode: "ROLL-BACK", DeviceCodeHash: authx.HashToken("rollback-device-code"),
+		Status: "pending", CreatedAt: 1, ExpiresAt: 1 << 40,
+		DeviceName: "This Mac", InstallID: sampleInstallID,
+	}
+	if err := st.CreateDeviceAuth(ctx, req); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, ok, err := st.ApproveAndRegisterDeviceAuth(ctx, req.UserCode, u.ID, raw, "must-not-exist", 2); err == nil || ok {
+		t.Fatalf("colliding bearer should refuse the whole transaction: ok=%v err=%v", ok, err)
+	}
+	after, found, err := st.GetDeviceAuthByUserCode(ctx, req.UserCode)
+	if err != nil || !found || after.Status != "pending" {
+		t.Fatalf("failed registration exposed an approved request: found=%v status=%q err=%v", found, after.Status, err)
+	}
+	if _, consumed, err := st.ConsumeDeviceAuth(ctx, req.DeviceCodeHash, 3); err != nil || consumed {
+		t.Fatalf("failed registration exposed a pollable token: consumed=%v err=%v", consumed, err)
+	}
+	if devices, err := st.ListDevices(ctx, u.ID); err != nil || len(devices) != 1 || devices[0].ID != other.ID {
+		t.Fatalf("failed registration left a device row: devices=%+v err=%v", devices, err)
 	}
 }
 
