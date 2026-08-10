@@ -27,12 +27,17 @@
  */
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { apiFixtureScript, ME_ROUTES } from "./a11y-fixtures.mjs";
 import { argFlag, fail, launchBrowser, newTab, ok, sleep, withWatchdog } from "./harness.mjs";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
+const macRelease = JSON.parse(
+  readFileSync(resolve(here, "..", "native-releases.json"), "utf8"),
+).macos;
+const macDownloadable = macRelease.available === true && !!macRelease.downloadUrl;
 // One debug port per script: lan-transfer 9444 / mixed-link 9445 / a11y 9446 /
 // device-discovery 9447.
 const DEBUG_PORT = 9448;
@@ -191,16 +196,31 @@ async function checkPage(tab, base, view) {
     if (badVis) throw new Error(`${view.id}: the ${id} section is ${badVis}`);
   }
 
-  // A native product that does not exist gets no command and no download.
+  // A native product that does not exist gets no command. The macOS branch is
+  // tied to the same canonical release manifest as the rendered page, so this
+  // journey remains meaningful before and after the release-state transition.
   for (const id of ["iphone", "android"]) {
     const cmds = await tab.evaluate(`document.querySelectorAll('[data-platform="${id}"] pre').length`);
     if (cmds !== 0) throw new Error(`${view.id}: the ${id} section shows ${cmds} runnable command block(s)`);
   }
-  if (await tab.evaluate(`!!document.querySelector('[data-di="mac-download"]')`)) {
-    throw new Error(`${view.id}: a macOS download CTA appeared while native-releases.json says there is none`);
-  }
-  if (!(await tab.evaluate(`!!document.querySelector('[data-di="mac-no-download"]')`))) {
-    throw new Error(`${view.id}: the macOS section does not explain why there is no download`);
+  const macDownload = await tab.evaluate(
+    `document.querySelector('[data-di="mac-download"]')?.getAttribute('href') ?? null`,
+  );
+  const macNoDownload = await tab.evaluate(
+    `!!document.querySelector('[data-di="mac-no-download"]')`,
+  );
+  if (macDownloadable) {
+    if (macDownload !== macRelease.downloadUrl) {
+      throw new Error(`${view.id}: the macOS download does not match native-releases.json`);
+    }
+    if (macNoDownload) throw new Error(`${view.id}: released macOS still shows the no-download copy`);
+  } else {
+    if (macDownload !== null) {
+      throw new Error(`${view.id}: a macOS download CTA appeared while native-releases.json says there is none`);
+    }
+    if (!macNoDownload) {
+      throw new Error(`${view.id}: the macOS section does not explain why there is no download`);
+    }
   }
 
   // The executable server path: the installer, inspected before it gets root.
