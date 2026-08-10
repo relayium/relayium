@@ -997,12 +997,15 @@ final class LocalizedCopyTests: XCTestCase {
     /// Tokens are per language and written down by hand: the point of the table
     /// is that somebody read each translation and confirmed the limitation is
     /// still in it, in a form that language actually uses.
+    ///
+    /// **The Workspace row changed which limitation is decisive, and this table
+    /// changed with it.** Nearby's caption had to say *only* this network,
+    /// because picking that row ruled cross-network out. One row now offers both
+    /// routes, so "same network only" would be false — what still rules the whole
+    /// destination out is that it is a LIVE transport: both sides have to be
+    /// online at the same time. That is the fact the merged caption carries, and
+    /// the large-file negative below applies to it for the same reason.
     func testSidebarSubtitlesKeepTheDecisiveLimitation() throws {
-        let sameNetworkOnly: [AppLanguage: String] = [
-            .en: "same network only", .zh: "仅限同一网络", .ja: "同じネットワーク内のみ",
-            .ko: "같은 네트워크에서만", .de: "nur im selben Netzwerk", .fr: "même réseau uniquement",
-            .ar: "على الشبكة نفسها فقط", .es: "solo la misma red", .pt: "só na mesma rede",
-        ]
         let bothOnline: [AppLanguage: String] = [
             .en: "both sides online", .zh: "双方须同时在线", .ja: "双方がオンライン",
             .ko: "양쪽 모두 온라인", .de: "beide Seiten online", .fr: "les deux en ligne",
@@ -1019,29 +1022,25 @@ final class LocalizedCopyTests: XCTestCase {
             .ar: "بدون حساب", .es: "sin cuenta", .pt: "sem conta",
         ]
         for language in AppLanguage.allCases {
-            let nearby = L10n.t(.navNearbySubtitle, language: language)
-            let pairing = L10n.t(.navPairingCodeSubtitle, language: language)
+            let workspace = L10n.t(.navWorkspaceSubtitle, language: language)
             let send = L10n.t(.navStoredSendSubtitle, language: language)
             let receive = L10n.t(.navStoredReceiveSubtitle, language: language)
 
-            XCTAssertTrue(nearby.contains(try XCTUnwrap(sameNetworkOnly[language])),
-                          "\(language.rawValue) nearby hides that it cannot leave the network: \(nearby)")
-            XCTAssertTrue(pairing.contains(try XCTUnwrap(bothOnline[language])),
-                          "\(language.rawValue) pairing hides that both sides must stay online: \(pairing)")
+            XCTAssertTrue(workspace.contains(try XCTUnwrap(bothOnline[language])),
+                          "\(language.rawValue) workspace hides that both sides must stay online: \(workspace)")
             XCTAssertTrue(send.contains(try XCTUnwrap(largeFiles[language])),
                           "\(language.rawValue) stored send no longer claims the large-file path: \(send)")
             XCTAssertTrue(receive.contains(try XCTUnwrap(noAccount[language])),
                           "\(language.rawValue) stored receive drops the anonymous half: \(receive)")
 
-            // The large-file path is the stored one. A pairing-code caption that
-            // also advertises large files puts the reader on a live transport
-            // that requires both app/page sessions to remain active. Temporary
+            // The large-file path is the stored one. A Workspace caption that
+            // also advertised large files would put the reader on a live
+            // transport that requires both sessions to remain active. Temporary
             // transport drops may resume; closing the session is the boundary.
-            XCTAssertFalse(pairing.localizedCaseInsensitiveContains(try XCTUnwrap(largeFiles[language])),
-                           "\(language.rawValue) pairing recommends itself for large files: \(pairing)")
+            XCTAssertFalse(workspace.localizedCaseInsensitiveContains(try XCTUnwrap(largeFiles[language])),
+                           "\(language.rawValue) workspace recommends itself for large files: \(workspace)")
 
-            for (key, rendered) in [(L10nKey.navNearbySubtitle, nearby),
-                                    (.navPairingCodeSubtitle, pairing),
+            for (key, rendered) in [(L10nKey.navWorkspaceSubtitle, workspace),
                                     (.navStoredSendSubtitle, send),
                                     (.navStoredReceiveSubtitle, receive)] {
                 XCTAssertNotEqual(rendered, key.rawValue,

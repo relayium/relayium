@@ -25,7 +25,7 @@ import XCTest
 ///     is what keeps that a rule rather than an intention.
 final class MacSurfaceGuardTests: XCTestCase {
     func testNearbyOffStateOffersOneTruthfulRecovery() throws {
-        let nearby = try source(named: "NearbyPane.swift")
+        let nearby = try source(named: workspaceConnect)
         XCTAssertTrue(nearby.contains("switch receive.state"))
         XCTAssertTrue(nearby.contains("case .off:"))
         XCTAssertTrue(nearby.contains("case .connecting, .ready, .reconnecting, .active:"))
@@ -70,6 +70,24 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(ui.contains("window.buttons[\"Resume receiving\"].exists"))
     }
 
+    /// The three macOS files this round created, named once so a rename is one
+    /// edit rather than forty. The Workspace replaced `NearbyPane`, `DirectPane`,
+    /// `RealtimeTextPane`, `NearbyDestination` and `PairingCodeDestination`; the
+    /// invariants those five carried did not go anywhere, so most of the guards
+    /// below are the same assertions pointed at these.
+    private let workspaceDestination = "Destinations/WorkspaceDestination.swift"
+    private let workspaceConnect = "Workspace/WorkspaceConnectPane.swift"
+    private let workspaceSession = "Workspace/WorkspaceSessionPane.swift"
+
+    /// The five surfaces that no longer exist. Asserted as absences, because a
+    /// half-finished revert — the new files plus one of the old ones still
+    /// compiled in — is exactly the state that reintroduces the second sidebar
+    /// row nobody would notice in a diff.
+    private let retiredSurfaces = ["NearbyPane.swift", "DirectPane.swift",
+                                   "RealtimeTextPane.swift",
+                                   "Destinations/NearbyDestination.swift",
+                                   "Destinations/PairingCodeDestination.swift"]
+
     /// …/apps/RelayiumKit/Tests/RelayiumKitTests/<this file> → …/apps
     private var appsRoot: URL {
         URL(fileURLWithPath: #filePath)
@@ -95,7 +113,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     }
 
     func testNearbyProgressNamesRealReconnectWorkAndNeverDecoratesLookAgain() throws {
-        let pane = try source(named: "NearbyPane.swift")
+        let pane = try source(named: workspaceConnect)
         XCTAssertFalse(pane.contains("ProgressView()"),
                        "an unlabelled spinner says neither what is running nor whether anything is")
         XCTAssertTrue(pane.contains("if case .reconnecting = discovery.state"),
@@ -120,11 +138,11 @@ final class MacSurfaceGuardTests: XCTestCase {
     func testMacUITestNavigationCannotMistakePageHeadingsForSidebarRows() throws {
         let shell = try source(named: "Shell/AppShellView.swift")
         XCTAssertTrue(shell.contains(
-            ".accessibilityIdentifier(\"destination-\\(navigation.selection.rawValue)\")"),
+            ".accessibilityIdentifier(\"destination-\\(navigation.selection.macSurface.rawValue)\")"),
             "the detail surface has no stable runtime identity")
         let sidebar = try source(named: "Shell/SidebarView.swift")
         XCTAssertTrue(sidebar.contains(
-            ".accessibilityIdentifier(\"sidebar-\\(destination.rawValue)\")"),
+            ".accessibilityIdentifier(\"sidebar-\\(surface.rawValue)\")"),
             "sidebar task identity depends on the OS-specific List container")
 
         let uiURL = macRoot.deletingLastPathComponent()
@@ -238,7 +256,7 @@ final class MacSurfaceGuardTests: XCTestCase {
                          "ScrollView", ".frame(maxHeight: 200)"] {
             XCTAssertTrue(component.contains(required), "pending-file list lost \(required)")
         }
-        for pane in ["NearbyPane.swift", "DirectPane.swift", "UploadPane.swift"] {
+        for pane in [workspaceConnect, "UploadPane.swift"] {
             XCTAssertTrue(try source(named: pane).contains("PendingFileList(files:"),
                           "\(pane) regressed to a count-only selection")
         }
@@ -274,29 +292,28 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// Creating a code removes the picker, but it must not remove the sender's
     /// answer to “what am I about to send?” during minting or while the peer joins.
     func testFilePairingKeepsTheStagedFileNamesAndSizesVisibleUntilDone() throws {
-        let pane = try source(named: "DirectPane.swift")
+        let pane = try source(named: workspaceSession)
         let minting = try XCTUnwrap(pane.components(
             separatedBy: "case .minting:").dropFirst().first?
             .components(separatedBy: "case let .showingCode").first)
         let showing = try XCTUnwrap(pane.components(
             separatedBy: "case let .showingCode(code, expiresAt):").dropFirst().first?
-            .components(separatedBy: "case .joining, .connecting").first)
+            .components(separatedBy: "case .failed(let message):").first)
         for phase in [minting, showing] {
-            XCTAssertTrue(phase.contains("PendingFileList(sessionFiles: model.sessionFiles)"),
+            XCTAssertTrue(phase.contains("PendingFileList(sessionFiles: fileModel.sessionFiles)"),
                           "code creation hides the files it is waiting to send")
         }
-        guard let stage = pane.range(of: "model.stageSend(sources: staged.sources, metas: staged.metas)"),
-              let mint = pane.range(of: "await model.mintCode(token: token)") else {
+        // The manifest must exist before the minting screen replaces the picker,
+        // and the staging step now lives on the connect pane — which is exactly
+        // where the picker it replaces lives.
+        let connect = try source(named: workspaceConnect)
+        guard let stage = connect.range(
+                of: "fileModel.stageSend(sources: staged.sources, metas: staged.metas)"),
+              let mint = connect.range(of: "await fileModel.mintCode(token: token)") else {
             return XCTFail("the file-code action lost staging or minting")
         }
         XCTAssertLessThan(stage.lowerBound, mint.lowerBound,
                           "the manifest must exist before the minting screen replaces the picker")
-
-        let failure = try XCTUnwrap(pane.components(
-            separatedBy: "if case let .failed(message)").dropFirst().first?
-            .components(separatedBy: "if let stagingError").first)
-        XCTAssertTrue(failure.contains("PendingFileList(sessionFiles: model.sessionFiles)"),
-                      "a failed pairing task hides which files failed")
 
         let session = try source(named: "RealtimeFileSessionView.swift")
         let connecting = try XCTUnwrap(session.components(
@@ -315,7 +332,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// navigation destination. Keep all three macOS entry points aligned with
     /// the ordinary Button semantics already used on iOS.
     func testEverySendPanePresentsClearAsAnActionButton() throws {
-        for pane in ["NearbyPane.swift", "DirectPane.swift", "UploadPane.swift"] {
+        for pane in [workspaceConnect, "UploadPane.swift"] {
             let source = try source(named: pane)
             let clear = try XCTUnwrap(source.components(
                 separatedBy: "Button(L10n.t(.commonClear)) { selection.clear() }").dropFirst().first,
@@ -331,39 +348,56 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// A terminal pairing task still owns cleanup and, for text, the only local
     /// transcript. It must not expose a second Create/Join path until Done has
     /// returned the model to idle. iOS already enforces this same boundary.
+    /// A terminal task still owns its dead connection, its partial receive and,
+    /// for text, the only local transcript. It must not expose a second
+    /// create/join path until the user has crossed the cleanup boundary.
+    ///
+    /// The Workspace makes that STRUCTURAL rather than per-state: the connect
+    /// controls live in a different view, and the destination renders exactly one
+    /// of the two panes. So the assertions are (1) the session pane names no
+    /// connect control at all, and (2) the destination's branch is the whole
+    /// reason it cannot.
     func testPairingTerminalStatesExposeOnlyTheirCleanupBoundary() throws {
-        let files = try source(named: "DirectPane.swift")
-        let fileTerminal = try XCTUnwrap(files.components(separatedBy: "case .failed:").dropFirst().first)
-            .components(separatedBy: "case .minting:").first ?? ""
-        XCTAssertFalse(fileTerminal.contains("createCard"))
-        XCTAssertFalse(fileTerminal.contains("joinCard"))
-        XCTAssertTrue(files.contains("Button(L10n.t(.commonDone)) { model.cancel() }"))
-        XCTAssertFalse(fileTerminal.contains("buttonStyle(.link)"))
+        let session = try source(named: workspaceSession)
+        for connectControl in ["createControls", "joinControls", "roster", "deviceRow",
+                               "normalizedJoinCode", "CapabilityGateView"] {
+            XCTAssertFalse(session.contains(connectControl),
+                           "the live/terminal session surface exposes \(connectControl)")
+        }
+        XCTAssertTrue(session.contains("Button(L10n.t(.workspaceLeaveSession)) { leaveOrConfirm() }"),
+                      "a retained terminal session has no explicit cleanup boundary")
+        XCTAssertFalse(session.contains("buttonStyle(.link)"),
+                       "a task mutation is presented as navigation")
 
-        let text = try source(named: "RealtimeTextPane.swift")
-        let textTerminal = try XCTUnwrap(text.components(
-            separatedBy: "case .failed, .ended, .refused, .unsupported:").dropFirst().first)
-            .components(separatedBy: "case .minting:").first ?? ""
-        XCTAssertFalse(textTerminal.contains("createCard"))
-        XCTAssertFalse(textTerminal.contains("joinCard"))
-        XCTAssertTrue(textTerminal.contains("Button(L10n.t(.commonDone)) { finishOrConfirm() }"))
-        XCTAssertFalse(textTerminal.contains("buttonStyle(.link)"))
+        let destination = try source(named: workspaceDestination)
+        XCTAssertTrue(destination.contains("if ownsSession || hasRetainedSession {"),
+                      "the destination no longer chooses exactly one pane")
+        XCTAssertTrue(destination.contains("WorkspaceSessionPane(")
+                      && destination.contains("WorkspaceConnectPane("),
+                      "the destination must render both phases of the one task")
 
-        let session = try source(named: "RealtimeFileSessionView.swift")
-        let completed = try XCTUnwrap(session.components(separatedBy: "case .completed:").dropFirst().first)
+        let fileSession = try source(named: "RealtimeFileSessionView.swift")
+        let completed = try XCTUnwrap(fileSession.components(
+            separatedBy: "case .completed:").dropFirst().first)
         XCTAssertTrue(completed.contains("Button(L10n.t(.commonDone), action: onDone)"))
         XCTAssertFalse(completed.components(separatedBy: "private func verifying").first?.contains(
             "buttonStyle(.link)") ?? true)
     }
 
+    /// One exit, one confirmation. The Workspace has a single leave control for
+    /// both lanes, so the local-transcript question is asked once rather than
+    /// once per pane — which is also why the confirmation's destructive button is
+    /// now the leave verb rather than Done.
     func testPairingDoneCannotDiscardAnyLocalTextWithoutConfirmation() throws {
-        let source = try source(named: "RealtimeTextPane.swift")
-        XCTAssertTrue(source.contains("@State private var confirmingLocalTextDone = false"))
-        XCTAssertTrue(source.contains("guard model.hasLocalContent else"))
+        let source = try source(named: workspaceSession)
+        XCTAssertTrue(source.contains("@State private var confirmingLocalTextLeave = false"))
+        XCTAssertTrue(source.contains("if mode == .text, textModel.hasLocalContent"))
         XCTAssertTrue(source.contains(
-            "Button(L10n.t(.commonDone), role: .destructive) { model.reset() }"))
+            "Button(L10n.t(.workspaceLeaveSession), role: .destructive) { leaveSession() }"))
         XCTAssertTrue(source.contains("L10n.t(.textDiscardLocalContentConfirmTitle)"))
         XCTAssertTrue(source.contains("L10n.t(.textDiscardLocalContentConfirmBody)"))
+        XCTAssertEqual(occurrences(of: "confirmationDialog(", in: source), 1,
+                       "two confirmations for one exit is two answers to one question")
     }
 
     func testNearbyFileFailureKeepsTheManifestIdentityUntilBack() throws {
@@ -372,14 +406,14 @@ final class MacSurfaceGuardTests: XCTestCase {
             separatedBy: "case .failed:").dropFirst().first?
             .components(separatedBy: "case .joining").first)
         XCTAssertTrue(failed.contains("fileList"),
-                      "Nearby failure hides which files failed")
+                      "a failed transfer hides which files failed")
 
-        let nearby = try source(named: "NearbyPane.swift")
-        let nearbySession = try XCTUnwrap(nearby.components(
-            separatedBy: "private var session:").dropFirst().first?
-            .components(separatedBy: "// MARK: - actions").first)
-        XCTAssertLessThan(try XCTUnwrap(nearbySession.range(of: "InlineMessage(.failure")).lowerBound,
-                          try XCTUnwrap(nearbySession.range(of: "RealtimeFileSessionView")).lowerBound,
+        let pane = try source(named: workspaceSession)
+        let lane = try XCTUnwrap(pane.components(
+            separatedBy: "case .failed(let message):").dropFirst().first?
+            .components(separatedBy: "case .joining, .connecting").first)
+        XCTAssertLessThan(try XCTUnwrap(lane.range(of: "InlineMessage(.failure")).lowerBound,
+                          try XCTUnwrap(lane.range(of: "RealtimeFileSessionView")).lowerBound,
                           "a long file list pushes the failure reason below the fold")
     }
 
@@ -388,76 +422,115 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(session.contains("let onDone: () -> Void"))
         XCTAssertTrue(session.contains("Button(L10n.t(.commonDone), action: onDone)"))
 
-        let pairing = try source(named: "DirectPane.swift")
-        XCTAssertTrue(pairing.contains(
-            "RealtimeFileSessionView(model: model, onDone: finishCompletedTransfer)"))
-        XCTAssertTrue(pairing.contains("if model.received == nil { selection.clear() }"))
-
-        let nearby = try source(named: "NearbyPane.swift")
-        XCTAssertTrue(nearby.contains(
+        // One pane, one rule, for both routes — which is the point of the merge:
+        // the pairing half and the same-network half used to answer this
+        // separately, and separately is how two answers drift.
+        let pane = try source(named: workspaceSession)
+        XCTAssertTrue(pane.contains(
             "RealtimeFileSessionView(model: fileModel, onDone: finishCompletedFileTransfer)"))
-        XCTAssertTrue(nearby.contains("if fileModel.received == nil { selection.clear() }"))
-        XCTAssertTrue(nearby.contains("if mode == .files, case .failed = fileModel.state"),
-                      "a failed outbound batch should return to the roster ready to retry")
-        XCTAssertTrue(nearby.contains("if !preservesFailedFiles { selection.clear() }"))
+        XCTAssertTrue(pane.contains("if fileModel.received == nil { selection.clear() }"))
+        XCTAssertTrue(pane.contains("if mode == .files, case .failed = fileModel.state"),
+                      "a failed outbound batch should return to connecting ready to retry")
+        XCTAssertTrue(pane.contains("if !preservesFailedFiles { selection.clear() }"))
+        XCTAssertEqual(occurrences(of: "selection.clear()", in: pane), 2,
+                       "a third clear site is a third answer to what a finished task keeps")
     }
 
     /// Minting is a locked network wait: the idle controls are gone until the
     /// request settles, so both pairing modes need an explicit way back.
     func testPairingMintingCanBeCancelledInBothModes() throws {
-        let files = try source(named: "DirectPane.swift")
-        let fileMinting = try XCTUnwrap(files.components(separatedBy: "case .minting:")
+        let pane = try source(named: workspaceSession)
+        let fileMinting = try XCTUnwrap(pane.components(separatedBy: "case .minting:")
             .dropFirst().first?.components(separatedBy: "case let .showingCode").first)
-        XCTAssertTrue(fileMinting.contains("Button(L10n.t(.commonCancel)) { model.cancel() }"))
+        XCTAssertTrue(fileMinting.contains("Button(L10n.t(.commonCancel)) { fileModel.cancel() }"))
         XCTAssertTrue(fileMinting.contains(".buttonStyle(.bordered)"))
 
-        let text = try source(named: "RealtimeTextPane.swift")
-        let textMinting = try XCTUnwrap(text.components(separatedBy: "case .minting:")
-            .dropFirst().first?.components(separatedBy: "case let .showingCode").first)
-        XCTAssertTrue(textMinting.contains("Button(L10n.t(.commonCancel)) { model.reset() }"))
+        let textMinting = try XCTUnwrap(pane.components(separatedBy: "case .minting:")
+            .dropFirst().dropFirst().first?.components(separatedBy: "case let .showingCode").first)
+        XCTAssertTrue(textMinting.contains("Button(L10n.t(.commonCancel)) { textModel.reset() }"))
         XCTAssertTrue(textMinting.contains(".buttonStyle(.bordered)"))
     }
 
-    func testPairingModePickerExplainsThatTheReceiverMustMatchTheSender() throws {
-        let destination = try source(named: "Destinations/PairingCodeDestination.swift")
-        let picker = try XCTUnwrap(destination.components(
-            separatedBy: "private var modePicker:").dropFirst().first?
-            .components(separatedBy: "private func busyElsewhere").first)
-        XCTAssertTrue(picker.contains("Text(L10n.t(.directModeMatchHint))"))
-        XCTAssertTrue(picker.contains(".accessibilityHint(L10n.t(.directModeMatchHint))"))
-        XCTAssertTrue(picker.contains(".accessibilityIdentifier(\"pairing-mode-match-hint\")"))
-        XCTAssertFalse(try source(named: "RealtimeTextPane.swift").contains(".textJoinHint"),
-                       "the shared picker explanation is duplicated only in Text mode")
+    // MARK: - the mode picker is gone
+
+    /// **No macOS surface may ask "files or text?" before there is a peer.**
+    ///
+    /// The segmented picker was the single most damaging thing left on this
+    /// screen: it made a user who only wanted to say something choose a
+    /// transport mode first, it sat above every other control on two
+    /// destinations, and it was disabled the instant a session was claimed — so
+    /// its only lasting effect was to be in the way. Each connect action now
+    /// states its own kind, and `TransferPresence.mode` is written by those
+    /// actions rather than by a control the user has to interpret.
+    ///
+    /// Asserted as an absence across every macOS source, because a picker
+    /// reintroduced on one card is exactly the regression a screenshot review
+    /// would call a nice touch.
+    func testNoSegmentedModePickerSurvivesAnywhereOnMacOS() throws {
+        for (name, text) in try sources(under: macRoot, atLeast: 20) {
+            XCTAssertFalse(text.contains("pickerStyle(.segmented)"),
+                           "\(name) reintroduced a segmented mode picker")
+            for retired in ["hubTransferType", "hubFiles", "hubText", "hubTransferTypeHint",
+                            "directModeMatchHint", "presenceBusyTitle", "presenceBusyBody",
+                            "presenceShowIt"] {
+                XCTAssertFalse(text.contains(retired),
+                               "\(name) still renders separate-mode copy: \(retired)")
+            }
+        }
+        // `selectMode` was the picker's setter. A mode is now decided by the verb
+        // that starts a session, through `beginSession(_:mode:)`, which takes
+        // ownership in the same synchronous step — so a second caller would be a
+        // second authority able to repoint an intent nobody restated.
+        //
+        // Exactly ONE site survives, and it is not a control: `RelayiumApp` hands
+        // `AppDeepLinkCoordinator` a `selectRealtimeMode` closure, because that
+        // coordinator is shared with iOS, where the mode still has a picker
+        // (`DirectModeSelection`). On macOS the write is inert by construction —
+        // the coordinator refuses to apply a link while anything is claimed, and
+        // the next `beginSession` sets the mode itself — so it is kept as the
+        // shared seam rather than special-cased per platform. Naming the file
+        // here is what stops that argument from being quietly extended to a view.
+        let modeWriters = try sources(under: macRoot, atLeast: 20)
+            .filter { $0.text.contains("selectMode(") }.map(\.name).sorted()
+        XCTAssertEqual(modeWriters, ["RelayiumApp.swift"],
+                       "a macOS surface writes the transfer mode outside a session claim")
+        let app = try source(named: "RelayiumApp.swift")
+        XCTAssertEqual(occurrences(of: "selectMode(", in: app), 1)
+        XCTAssertTrue(app.contains("selectRealtimeMode: { mode in presenting.selectMode(mode) }"),
+                      "the one surviving mode write is no longer the shared deep-link seam")
     }
 
+    /// The verification setting is the one control that still has to lock at
+    /// claim time rather than at busy time: the models read it when the SAS
+    /// arrives, and ownership is taken synchronously before either model can
+    /// publish a non-idle state.
     func testDirectChoicesLockAtClaimBeforeTheModelsBecomeBusy() throws {
-        for name in ["Destinations/PairingCodeDestination.swift",
-                     "Destinations/NearbyDestination.swift"] {
-            let destination = try source(named: name)
-            XCTAssertTrue(destination.contains("set: { presence.selectMode($0) }"),
-                          "\(name) bypasses the ownership-aware mode setter")
-            XCTAssertFalse(destination.contains("selection: $presence.mode"),
-                           "\(name) can move the mode after a session claim")
-        }
-
-        let nearby = try source(named: "Destinations/NearbyDestination.swift")
-        XCTAssertTrue(nearby.contains("presence.owner != nil || anySessionLive"))
-        XCTAssertTrue(nearby.contains(
+        let destination = try source(named: workspaceDestination)
+        XCTAssertTrue(destination.contains(
+            "presence.owner != nil || hasRetainedSession"),
+            "the lock reads busy flags that lag the synchronous claim")
+        XCTAssertTrue(destination.contains(
             "set: { if !sessionLocked { verification.requiresSASConfirmation = $0 } }"),
-                      "verification can change after claim but before handshake state appears")
-        XCTAssertGreaterThanOrEqual(nearby.components(separatedBy: ".disabled(sessionLocked)").count - 1, 2)
+            "verification can change after claim but before handshake state appears")
+        XCTAssertTrue(destination.contains(".disabled(sessionLocked)"))
     }
 
     func testSessionOwnershipCleanupIsAppScopedAndNeverRunsFromInitialViewIdle() throws {
         let app = try source(named: "RelayiumApp.swift")
         XCTAssertTrue(app.contains(
             "presenting.observeSessions(fileModel: files, textModel: text)"))
-        for name in ["Destinations/PairingCodeDestination.swift",
-                     "Destinations/NearbyDestination.swift"] {
+        for name in [workspaceDestination, workspaceConnect, workspaceSession] {
             let destination = try source(named: name)
             XCTAssertFalse(destination.contains("presence.releaseAll()"),
                            "\(name) can erase a fresh claim from its initial idle task")
         }
+        // Only the owner may let go, and with two routes drawing one surface the
+        // owner has to be ASKED rather than assumed.
+        let session = try source(named: workspaceSession)
+        XCTAssertTrue(session.contains("guard let owner = presence.owner,")
+                      && session.contains("AppDestination.macWorkspaceRoutes.contains(owner)")
+                      && session.contains("presence.release(owner)"),
+                      "the Workspace releases a route it may not own")
     }
 
     func testInboundNearbyOfferPassesOwnershipAdmissionBeforeBuildingResponder() throws {
@@ -478,11 +551,19 @@ final class MacSurfaceGuardTests: XCTestCase {
     }
 
     func testNearbySessionKeepsItsPeerVisibleAfterTheRosterDisappears() throws {
-        let nearby = try source(named: "NearbyPane.swift")
-        XCTAssertTrue(nearby.contains("presence.sessionPeerLabel"))
-        XCTAssertTrue(nearby.contains("L10n.t(.nearbySessionWith"))
-        XCTAssertTrue(nearby.contains("L10n.t(.nearbySessionPeerDisclaimer)"),
+        let pane = try source(named: workspaceSession)
+        XCTAssertTrue(pane.contains("presence.sessionPeerLabel"))
+        XCTAssertTrue(pane.contains("L10n.t(.nearbySessionWith"))
+        XCTAssertTrue(pane.contains("L10n.t(.nearbySessionPeerDisclaimer)"),
                       "a peer-supplied label must not be presented as verified identity")
+        // A pairing-code session has no roster label to snapshot. It says how the
+        // peer was reached rather than leaving the header blank or, worse,
+        // inventing a name for somebody nobody named.
+        XCTAssertTrue(pane.contains("L10n.t(.workspaceSessionWithCode)"),
+                      "a code-reached session renders no header at all")
+        XCTAssertEqual(occurrences(of: ".accessibilityIdentifier(\"workspace-session-peer\")",
+                                   in: pane), 2,
+                       "both header shapes need the same stable runtime identity")
     }
 
     /// Before a text peer connects there is no transcript or result to retain.
@@ -563,13 +644,23 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(session.contains("L10n.t(.textClearHistoryConfirmBody)"))
     }
 
+    /// Waiting on a code the peer never joined is not a session to END — there is
+    /// no transcript and no connection. Cancelling returns straight to the
+    /// connect phase, in both lanes, through each model's own reset/cancel.
     func testTextCodeWaitingCancelReturnsDirectlyToThePairingEntry() throws {
-        let source = try source(named: "RealtimeTextPane.swift")
-        let showing = try XCTUnwrap(source.components(
-            separatedBy: "private func showing(code:").dropFirst().first?
-            .components(separatedBy: "// MARK: - join").first)
-        XCTAssertTrue(showing.contains("PairingCodeHandoffView(url: joinURL) { model.reset() }"))
-        XCTAssertFalse(showing.contains("model.end()"))
+        let source = try source(named: workspaceSession)
+        let text = try XCTUnwrap(source.components(
+            separatedBy: "private var textLane:").dropFirst().first?
+            .components(separatedBy: "private func codeHandoff").first)
+        XCTAssertTrue(text.contains("cancel: { textModel.reset() }"),
+                      "the text handoff lost its direct way back")
+        XCTAssertFalse(text.contains("textModel.end()"),
+                       "Cancel creates an empty Session ended task that still needs Done")
+        let files = try XCTUnwrap(source.components(
+            separatedBy: "private var fileLane:").dropFirst().first?
+            .components(separatedBy: "private var textLane").first)
+        XCTAssertTrue(files.contains("cancel: { fileModel.cancel() }"),
+                      "the file handoff lost its direct way back")
     }
 
     func testGeneratedCodeCancelIsPresentedAsATaskButton() throws {
@@ -582,24 +673,29 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(cancel.contains(".buttonStyle(.bordered)"))
     }
 
+    /// One handoff builder for both lanes now, so the expiry scope cannot be
+    /// stated correctly in one and ambiguously in the other.
     func testPairingExpiryIsNamedAsCodeExpiryNotTransferExpiry() throws {
-        for file in ["DirectPane.swift", "RealtimeTextPane.swift"] {
-            let source = try source(named: file)
-            let handoff = try XCTUnwrap(source.components(
-                separatedBy: "private func showing(code:").dropFirst().first?
-                .components(separatedBy: "// MARK: - join").first)
-            XCTAssertTrue(handoff.contains("L10n.t(.pairingCodeExpiryNote)"),
-                          "\(file) leaves the expiry scope ambiguous")
-            XCTAssertTrue(handoff.contains(
-                ".accessibilityIdentifier(\"pairing-code-expiry-note\")"))
-        }
+        let source = try source(named: workspaceSession)
+        let handoff = try XCTUnwrap(source.components(
+            separatedBy: "private func codeHandoff(").dropFirst().first?
+            .components(separatedBy: "// MARK: - what this connection carries").first)
+        XCTAssertTrue(handoff.contains("L10n.t(.pairingCodeExpiryNote)"),
+                      "the expiry scope is ambiguous")
+        XCTAssertTrue(handoff.contains(
+            ".accessibilityIdentifier(\"pairing-code-expiry-note\")"))
+        XCTAssertTrue(handoff.contains("L10n.t(.commonExpires,"))
     }
 
+    /// The join link a code hands over still carries the kind the code was
+    /// minted for. That is the one thing that makes a link-driven join
+    /// unambiguous where a typed code cannot be.
     func testPairingHandoffPreservesTheModeThatCreatedTheCode() throws {
-        XCTAssertTrue(try source(named: "DirectPane.swift").contains(
-            "productionPairingJoinURL(code: code, mode: .files)"))
-        XCTAssertTrue(try source(named: "RealtimeTextPane.swift").contains(
-            "productionPairingJoinURL(code: code, mode: .text)"))
+        let pane = try source(named: workspaceSession)
+        XCTAssertTrue(pane.contains("productionPairingJoinURL(code: code, mode: mode)"),
+                      "the handoff link must carry the lane it was minted for")
+        XCTAssertTrue(pane.contains("mode: .files,") && pane.contains("mode: .text,"),
+                      "both lanes must reach the shared handoff with their own kind")
     }
 
     func testPairingHandoffShowsTheWholeCurrentLink() throws {
@@ -725,27 +821,31 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// visible control and its accessibility role must describe a Button, as
     /// the equivalent iOS surface already does, rather than harmless navigation.
     func testNearbyBackToDevicesKeepsTaskBoundaryButtonSemantics() throws {
-        let source = try source(named: "NearbyPane.swift")
-        let session = try XCTUnwrap(source.components(
-            separatedBy: "private var session").dropFirst().first)
+        let source = try source(named: workspaceSession)
+        let exit = try XCTUnwrap(source.components(
+            separatedBy: "private var exit: some View").dropFirst().first)
             .components(separatedBy: "// MARK: - actions").first ?? ""
-        let boundary = try XCTUnwrap(session.components(
-            separatedBy: "Button(L10n.t(.nearbyBackToDevices))").dropFirst().first)
-            .components(separatedBy: "if mode == .text").first ?? ""
 
-        XCTAssertTrue(boundary.contains(".buttonStyle(.bordered)"))
-        XCTAssertFalse(boundary.contains(".buttonStyle(.link)"),
-                       "Back to devices is exposed as a navigation Link")
-        XCTAssertTrue(session.contains("if hasRetainedSession && !modelBusy"),
+        XCTAssertTrue(exit.contains(".buttonStyle(.bordered)"))
+        XCTAssertFalse(exit.contains(".buttonStyle(.link)"),
+                       "Leave this session is exposed as a navigation Link")
+        XCTAssertTrue(exit.contains("if hasRetainedSession && !modelBusy"),
                       "a claimed owner made the terminal exit permanently unreachable")
+        XCTAssertTrue(exit.contains(".accessibilityIdentifier(\"workspace-leave-session\")"),
+                      "the one exit has no stable runtime identity")
+        // Exactly one exit for the whole surface. Two — one per lane, as the two
+        // panes this replaced had — is what let "Back to devices" and "Done"
+        // disagree about what a finished task keeps.
+        XCTAssertEqual(occurrences(of: "L10n.t(.workspaceLeaveSession)", in: source), 2,
+                       "the exit exists once, plus its confirmation")
     }
 
     func testNearbyLocalTextCannotBeDiscardedByAnUnconfirmedExit() throws {
-        let source = try source(named: "NearbyPane.swift")
+        let source = try source(named: workspaceSession)
         XCTAssertTrue(source.contains("@State private var confirmingLocalTextLeave = false"))
         XCTAssertTrue(source.contains("if mode == .text, textModel.hasLocalContent"))
         XCTAssertTrue(source.contains(
-            "Button(L10n.t(.nearbyBackToDevices), role: .destructive) { leaveSession() }"))
+            "Button(L10n.t(.workspaceLeaveSession), role: .destructive) { leaveSession() }"))
         XCTAssertTrue(source.contains("L10n.t(.textDiscardLocalContentConfirmTitle)"))
         XCTAssertTrue(source.contains("L10n.t(.textDiscardLocalContentConfirmBody)"))
     }
@@ -946,11 +1046,25 @@ final class MacSurfaceGuardTests: XCTestCase {
                        ["Components/SecurityCodeText.swift"])
     }
 
-    func testTheSixDestinationFilesExist() {
-        for f in ["NearbyDestination", "PairingCodeDestination", "StoredSendDestination",
-                  "StoredReceiveDestination", "DeviceInboxDestination", "AccountDestination"] {
+    /// Five destination files, one per `MacSurface`, and the five the Workspace
+    /// replaced are gone rather than merely unreferenced.
+    ///
+    /// The absence half is the load-bearing one. A revert that left
+    /// `NearbyDestination.swift` on disk would compile — the project group is
+    /// filesystem-synchronized — and would put the second row back in the
+    /// sidebar the moment anybody added a `row(.nearby,` line, with no diff
+    /// against this file to explain it.
+    func testTheFiveDestinationFilesExist() {
+        for surface in MacSurface.allCases {
+            let name = surface.rawValue.prefix(1).uppercased() + surface.rawValue.dropFirst()
             XCTAssertTrue(FileManager.default.fileExists(
-                atPath: macRoot.appendingPathComponent("Destinations/\(f).swift").path), f)
+                atPath: macRoot.appendingPathComponent("Destinations/\(name)Destination.swift").path),
+                          "no destination file for \(surface.rawValue)")
+        }
+        for retired in retiredSurfaces {
+            XCTAssertFalse(FileManager.default.fileExists(
+                atPath: macRoot.appendingPathComponent(retired).path),
+                           "\(retired) survived the Workspace merge")
         }
     }
 
@@ -963,17 +1077,42 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// with no arm is a compile error only because the `switch` has no `default`.
     /// Checked against `AppDestination.allCases` so neither list can be the one
     /// that is right.
+    /// Checked against `MacSurface.allCases` rather than `AppDestination`, and
+    /// that substitution IS this round: `.nearby` and `.pairingCode` are two
+    /// routes into one screen, so the sidebar owes the user one row for them and
+    /// the shell owes one arm.
+    ///
+    /// The count assertion is what makes the merge stick. Adding a second direct
+    /// row back — under any name — fails here rather than shipping.
     func testEveryDestinationIsBothASidebarRowAndAShellArm() throws {
         let sidebar = try source(named: "Shell/SidebarView.swift")
         let shell = try source(named: "Shell/AppShellView.swift")
-        for destination in AppDestination.allCases {
-            XCTAssertTrue(sidebar.contains("row(.\(destination.rawValue),"),
-                          "the sidebar has no row for \(destination.rawValue)")
-            XCTAssertTrue(shell.contains("case .\(destination.rawValue):"),
-                          "the shell renders nothing for \(destination.rawValue)")
+        for surface in MacSurface.allCases {
+            XCTAssertTrue(sidebar.contains("row(.\(surface.rawValue),"),
+                          "the sidebar has no row for \(surface.rawValue)")
+            XCTAssertTrue(shell.contains("case .\(surface.rawValue):"),
+                          "the shell renders nothing for \(surface.rawValue)")
         }
-        XCTAssertEqual(occurrences(of: "row(.", in: sidebar), AppDestination.allCases.count,
-                       "the sidebar renders a row for something that is not a destination")
+        XCTAssertEqual(occurrences(of: "row(.", in: sidebar), MacSurface.allCases.count,
+                       "the sidebar renders a row for something that is not a macOS surface")
+        XCTAssertEqual(MacSurface.allCases.count, 5)
+        // Every destination reaches a surface, and the two direct routes reach
+        // the same one. Derived from the enum rather than restated, so a seventh
+        // destination cannot be added without answering the question.
+        XCTAssertEqual(Set(AppDestination.macWorkspaceRoutes.map(\.macSurface)), [.workspace])
+        XCTAssertEqual(Set(AppDestination.allCases.map(\.macSurface)),
+                       Set(MacSurface.allCases),
+                       "a macOS surface exists that no destination can reach")
+        for surface in MacSurface.allCases {
+            XCTAssertEqual(surface.route.macSurface, surface,
+                           "\(surface.rawValue)'s row selects a route that draws something else")
+        }
+        // The shell must switch on the SURFACE. Switching on the destination
+        // again is how a pairing-code deep link gets its own screen back.
+        XCTAssertTrue(shell.contains("switch navigation.selection.macSurface {"))
+        XCTAssertTrue(shell.contains(
+            ".accessibilityIdentifier(\"destination-\\(navigation.selection.macSurface.rawValue)\")"),
+            "the detail surface's runtime identity must name the one screen it is")
     }
 
     /// Constraint 5. `WindowGroup` anywhere means a second window is reachable,
@@ -1003,64 +1142,88 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// gate has a reason to render one, and neither of these has a half that
     /// needs an account.
     func testAnonymousDestinationsHoldNoAccountReference() throws {
-        for f in ["Destinations/NearbyDestination.swift",
-                  "Destinations/StoredReceiveDestination.swift"] {
-            let text = try source(named: f)
-            for symbol in ["AccountSession", "bearerToken", "session.state", "AccountGate"] {
-                XCTAssertFalse(text.contains(symbol), "\(f) must not depend on an account: \(symbol)")
+        let text = try source(named: "Destinations/StoredReceiveDestination.swift")
+        for symbol in ["AccountSession", "bearerToken", "session.state", "AccountGate"] {
+            XCTAssertFalse(text.contains(symbol),
+                           "StoredReceiveDestination must not depend on an account: \(symbol)")
+        }
+    }
+
+    /// **The Workspace has an account-backed half now, and exactly one.**
+    ///
+    /// It holds `AccountSession` because minting a pairing code reserves relay
+    /// capacity billed to whoever created it. Everything else on the surface —
+    /// both directions of same-network transfer, and joining a code somebody
+    /// else created — reaches the transport with no credential at all, so the
+    /// gate must wrap the create controls and nothing else.
+    ///
+    /// That is checked positionally rather than by presence, because "the file
+    /// contains a gate" is true of the correct and the broken version alike. The
+    /// gate has to sit inside the pairing card, after the roster, and the join
+    /// controls have to sit outside it.
+    func testTheWorkspaceGatesOnlyTheHalfThatSpendsAnAccount() throws {
+        let connect = try source(named: workspaceConnect)
+        XCTAssertEqual(occurrences(of: "CapabilityGateView(", in: connect), 1,
+                       "a second gate on this surface is a second account wall")
+        guard let sameNetwork = connect.range(of: "private var sameNetwork: some View"),
+              let gate = connect.range(of: "CapabilityGateView(gate: gate,"),
+              let join = connect.range(of: "private var joinControls: some View") else {
+            return XCTFail("the connect pane no longer has the shape this guards")
+        }
+        XCTAssertLessThan(sameNetwork.lowerBound, gate.lowerBound,
+                          "same-network transfer must not sit behind the account gate")
+        XCTAssertLessThan(gate.upperBound, join.lowerBound,
+                          "joining somebody else's code must not sit behind the account gate")
+        // The gate wraps the create half only — `if case .allowed` selects
+        // between the create controls and the gate, and nothing else.
+        XCTAssertTrue(connect.contains("if case .allowed = gate {\n                    createControls\n                } else {"),
+                      "the account gate no longer selects exactly the create controls")
+        // Neither the roster nor the join field may consult the account at all.
+        for anonymous in ["private var receiving: some View",
+                          "private var roster: some View",
+                          "private var joinControls: some View"] {
+            guard let start = connect.range(of: anonymous) else {
+                return XCTFail("the connect pane lost \(anonymous)")
+            }
+            let body = connect[start.upperBound...].prefix(1200)
+            for symbol in ["gate", "accessNow", "session.state", "bearerToken"] {
+                XCTAssertFalse(body.contains(symbol),
+                               "\(anonymous) consults the account: \(symbol)")
             }
         }
     }
 
-    /// Every pairing-code terminal surface can be dismissed, and only those.
+    /// Every terminal surface can be dismissed, and the exit is unreachable
+    /// while work is running.
     ///
     /// A terminal state is deliberately NOT `.idle` — a completed transfer's
     /// result, a message transcript and a failure all keep their place on screen
-    /// instead of blinking past. Both direct destinations reconcile presence on
-    /// "both models are `.idle`", so a terminal surface with no way out holds the
-    /// claim for as long as the user leaves it there, and the other destination
-    /// stays on its "shown elsewhere" card with no way back. The wiring that
-    /// closes that is one visible Button per surface, which is exactly the kind
-    /// of thing a later refactor drops without any test noticing. Text also has
-    /// a second Done inside its destructive history confirmation.
+    /// instead of blinking past. Presence is reconciled on "both models are
+    /// `.idle`", so a terminal surface with no way out holds the claim for as
+    /// long as the user leaves it there. The wiring that closes that is one
+    /// visible Button, which is exactly the kind of thing a later refactor drops
+    /// without any test noticing.
     ///
-    /// Bounded to the terminal branch on both sides rather than merely present
-    /// in the file: a Done offered on `.connecting` or `.open` would abandon a
-    /// live session on a button whose label promises the opposite.
+    /// Bounded rather than merely present: an exit offered mid-transfer would
+    /// abandon a live session on a button whose label promises tidying up, which
+    /// is why it is gated on `!modelBusy` and why the mid-transfer Cancel stays
+    /// the destructive control inside `RealtimeFileSessionView`.
     func testEveryPairingCodeTerminalSurfaceCarriesExactlyOneDone() throws {
-        let surfaces = [
-            (file: "DirectPane.swift",
-             begins: "if case let .failed(message) = model.state {",
-             ends: Optional<String>.none,
-             dismisses: "Button(L10n.t(.commonDone)) { model.cancel() }",
-             doneCount: 1),
-            (file: "RealtimeTextPane.swift",
-             begins: "case .failed, .ended, .refused, .unsupported:",
-             ends: Optional("case .minting:"),
-             dismisses: "Button(L10n.t(.commonDone)) { finishOrConfirm() }",
-             doneCount: 2),
-        ]
-        for surface in surfaces {
-            let text = try source(named: surface.file)
-            XCTAssertEqual(text.components(separatedBy: ".commonDone").count - 1,
-                           surface.doneCount,
-                           "\(surface.file) lost its visible or confirmation Done")
-            XCTAssertTrue(text.contains(surface.dismisses),
-                          "\(surface.file) must dismiss with \(surface.dismisses)")
-            guard let done = text.range(of: ".commonDone"),
-                  let begins = text.range(of: surface.begins) else {
-                return XCTFail("\(surface.file) no longer has the branch this guards")
-            }
-            XCTAssertTrue(done.lowerBound > begins.upperBound,
-                          "\(surface.file)'s Done is before its terminal branch")
-            if let marker = surface.ends {
-                guard let ends = text.range(of: marker) else {
-                    return XCTFail("\(surface.file) no longer has \(marker)")
-                }
-                XCTAssertTrue(done.upperBound < ends.lowerBound,
-                              "\(surface.file)'s Done escaped into a live state")
-            }
+        let pane = try source(named: workspaceSession)
+        guard let exit = pane.range(of: "private var exit: some View"),
+              let gated = pane.range(of: "if hasRetainedSession && !modelBusy {",
+                                     range: exit.lowerBound..<pane.endIndex),
+              let button = pane.range(of: "Button(L10n.t(.workspaceLeaveSession)) { leaveOrConfirm() }",
+                                      range: gated.lowerBound..<pane.endIndex) else {
+            return XCTFail("the session pane no longer has one gated exit")
         }
+        XCTAssertLessThan(gated.upperBound, button.lowerBound)
+        // The session pane offers no Done of its own: the only Done left belongs
+        // to a COMPLETED file transfer, and it is the shared session view's.
+        XCTAssertFalse(pane.contains(".commonDone"),
+                       "a second dismissal verb competes with the one exit")
+        let fileSession = try source(named: "RealtimeFileSessionView.swift")
+        XCTAssertEqual(occurrences(of: ".commonDone", in: fileSession), 1)
     }
 
     /// The menu bar is the only way back once the window is closed.
@@ -1122,6 +1285,16 @@ final class MacSurfaceGuardTests: XCTestCase {
                      ".accessibilityAddTraits(.isHeader)"] {
             XCTAssertTrue(sidebar.contains(kept), "the section header lost \(kept)")
         }
+        // The merged row keeps a title and a subtitle like every other one, and
+        // the subtitle has to name BOTH ways of reaching a peer — it is the only
+        // place the sidebar can still say that a pairing code lives here.
+        XCTAssertTrue(sidebar.contains("title: L10n.t(.navWorkspace)"))
+        XCTAssertTrue(sidebar.contains("subtitle: L10n.t(.navWorkspaceSubtitle)"))
+        for retired in ["navNearby", "navNearbySubtitle", "navPairingCode",
+                        "navPairingCodeSubtitle"] {
+            XCTAssertFalse(sidebar.contains(retired),
+                           "the sidebar still names a row this round merged: \(retired)")
+        }
     }
 
     /// Lists and rosters use the available detail-column width; forms and prose
@@ -1129,7 +1302,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// destinations with wide structured data, so making every screen stretch
     /// cannot happen as an accidental scaffold edit.
     func testOnlyStructuredDataDestinationsOptOutOfTheReadingMeasure() throws {
-        for file in ["Destinations/NearbyDestination.swift",
+        for file in [workspaceDestination,
                      "Destinations/AccountDestination.swift",
                      // A grouped `Form` of controls, not prose.
                      "Destinations/DeviceInboxDestination.swift"] {
@@ -1139,21 +1312,26 @@ final class MacSurfaceGuardTests: XCTestCase {
         // Exactly one destination supplies its own scrolling, and it is the one
         // whose content is a `Form` — which is already a scroll view. A second
         // opt-out is a screen whose content silently stops scrolling at all.
-        let optedOut = try ["Nearby", "PairingCode", "StoredSend", "StoredReceive",
+        let optedOut = try ["Workspace", "StoredSend", "StoredReceive",
                             "DeviceInbox", "Account"]
             .filter { try source(named: "Destinations/\($0)Destination.swift")
                 .contains("scrolls: false") }
         XCTAssertEqual(optedOut, ["DeviceInbox"],
                        "a destination opted out of the scaffold's scroll view")
-        for file in ["Destinations/PairingCodeDestination.swift",
-                     "Destinations/StoredSendDestination.swift",
+        for file in ["Destinations/StoredSendDestination.swift",
                      "Destinations/StoredReceiveDestination.swift"] {
             XCTAssertFalse(try source(named: file).contains("contentMaxWidth: nil"),
                            "\(file) should keep the prose/form reading measure")
         }
-        let nearby = try source(named: "NearbyPane.swift")
-        XCTAssertTrue(nearby.contains(".frame(maxWidth: .infinity, alignment: .leading)"),
-                      "the nearby roster's container must accept the available width")
+        // The Workspace opts its ROSTER out and constrains its prose locally:
+        // the destination takes the width, and every paragraph on it is still
+        // capped at the reading measure.
+        let connect = try source(named: workspaceConnect)
+        XCTAssertTrue(connect.contains(".frame(maxWidth: .infinity, alignment: .leading)"),
+                      "the roster's container must accept the available width")
+        XCTAssertGreaterThanOrEqual(
+            occurrences(of: ".frame(maxWidth: 720, alignment: .leading)", in: connect), 4,
+            "prose on a full-width destination must keep the reading measure")
     }
 
     /// Signing out from Account must not hide an in-flight upload's Cancel or
@@ -1287,7 +1465,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(gate.contains("Button(L10n.t(.gateOpenAccount)) { onAccount(.signIn) }"),
                       "an unverified address is finished on the Account destination, "
                       + "which owns the resend action — not on a website")
-        for caller in ["UploadPane.swift", "DirectPane.swift", "RealtimeTextPane.swift"] {
+        for caller in ["UploadPane.swift", workspaceConnect] {
             XCTAssertTrue(try source(named: caller)
                 .contains("onAccount: { navigation.selectAccount(intent: $0) }"),
                           "\(caller) must pass the gate's requested half through to navigation")
@@ -1625,14 +1803,18 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// directly would be a second copy of the busy rule — and the copy that
     /// contradicts the disabled drop zone beside it.
     func testOnlyTheThreeSendPanesAdoptOpenedFilesAndNoneReDerivesTheRule() throws {
+        // Two panes now, and the Workspace's ask is the SET of its own routes.
+        // `AppRouting.destination(forOpenedFiles:)` still addresses a batch to
+        // `.nearby` or `.pairingCode` — untouched, and iOS-shared — so a Dock
+        // drop that lands while a pairing-code deep link owns the selection is
+        // still addressed to a route this one screen renders.
         let panes: [(file: String, destination: String)] = [
-            ("NearbyPane.swift", ".nearby"),
-            ("DirectPane.swift", ".pairingCode"),
-            ("UploadPane.swift", ".storedSend"),
+            (workspaceConnect, "forAnyOf: AppDestination.macWorkspaceRoutes"),
+            ("UploadPane.swift", "for: .storedSend"),
         ]
         for pane in panes {
             let text = try source(named: pane.file)
-            XCTAssertTrue(text.contains("fileOpenRouting.batch(for: \(pane.destination), busy:"),
+            XCTAssertTrue(text.contains("fileOpenRouting.batch(\(pane.destination),"),
                           "\(pane.file) must ask the coordinator for its own destination's batch")
             XCTAssertTrue(text.contains("selection.add(batch.urls)"),
                           "\(pane.file) must append rather than replace what the user already picked")
@@ -1662,21 +1844,18 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// realtime model to busy. Open With/Dock Drop must treat that ownership as
     /// busy too, and key the task on the combined answer so release retries it.
     func testRealtimeOpenedFilesWaitForClaimedSessionOwnershipToClear() throws {
-        let nearby = try source(named: "NearbyPane.swift")
-        XCTAssertTrue(nearby.contains(
+        let connect = try source(named: workspaceConnect)
+        XCTAssertTrue(connect.contains(
             "private var fileAdoptionBusy: Bool { presence.owner != nil || modelBusy }"))
-        XCTAssertTrue(nearby.contains(
+        XCTAssertTrue(connect.contains(
             "FileOpenAdoption(staged: fileOpenRouting.staged, busy: fileAdoptionBusy)"))
-        XCTAssertTrue(nearby.contains(
-            "fileOpenRouting.batch(for: .nearby, busy: fileAdoptionBusy)"))
-
-        let pairing = try source(named: "DirectPane.swift")
-        XCTAssertTrue(pairing.contains(
-            "private var fileAdoptionBusy: Bool { presence.owner != nil || model.isBusy }"))
-        XCTAssertTrue(pairing.contains(
-            "FileOpenAdoption(staged: fileOpenRouting.staged, busy: fileAdoptionBusy)"))
-        XCTAssertTrue(pairing.contains(
-            "fileOpenRouting.batch(for: .pairingCode, busy: fileAdoptionBusy)"))
+        XCTAssertTrue(connect.contains(
+            "fileOpenRouting.batch(forAnyOf: AppDestination.macWorkspaceRoutes,"))
+        XCTAssertTrue(connect.contains("busy: fileAdoptionBusy)"))
+        // `presence.owner` is ANY owner, not just this surface's: a stored-send
+        // claim is still a reason not to mutate a selection behind the user.
+        XCTAssertFalse(connect.contains("presence.rendersSession("),
+                       "adoption must stop for every claim, not only this one's")
     }
 
     /// Item-provider resolution suspends after AppKit accepts a drop. A live
@@ -1694,12 +1873,11 @@ final class MacSurfaceGuardTests: XCTestCase {
         }
         XCTAssertTrue(resolve.lowerBound < recheck.lowerBound && recheck.lowerBound < add.lowerBound)
 
-        let nearby = try source(named: "NearbyPane.swift")
-        let pairing = try source(named: "DirectPane.swift")
-        XCTAssertTrue(nearby.contains(
+        let connect = try source(named: workspaceConnect)
+        XCTAssertTrue(connect.contains(
             "FileDropZone(store: selection, isBusy: { fileAdoptionBusy })"))
-        XCTAssertTrue(pairing.contains(
-            "FileDropZone(store: selection, isBusy: { fileAdoptionBusy })"))
+        XCTAssertEqual(occurrences(of: "FileDropZone(", in: connect), 1,
+                       "one surface, one drop target — two would be two selections")
         XCTAssertTrue(try source(named: "UploadPane.swift").contains(
             "FileDropZone(store: selection, isBusy: { model.isBusy })"))
     }
@@ -1707,47 +1885,62 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// Claim refusal is a real concurrency result, not an impossible branch:
     /// an inbound offer can win between the last render and an outbound click.
     /// Every macOS start path must stop before touching its shared model.
+    /// Five outbound starts, five claims — one per verb, each naming its own
+    /// route AND its own kind. That the kind is now written by the claim rather
+    /// than read from a picker is the whole mode-picker removal: there is no
+    /// moment at which an intent exists without ownership behind it.
     func testEveryOutboundRealtimeStartRequiresItsSurfaceClaim() throws {
-        let expectations: [(String, String, Int)] = [
-            ("DirectPane.swift", "guard presence.beginSession(.pairingCode, mode: .files) else { return }", 2),
-            ("RealtimeTextPane.swift", "guard presence.beginSession(.pairingCode, mode: .text) else { return }", 2),
-            ("NearbyPane.swift",
-             "guard presence.beginSession(.nearby, mode: mode, peerLabel: device.label) else { return }", 2),
+        let connect = try source(named: workspaceConnect)
+        let claims = [
+            "guard presence.beginSession(.nearby, mode: .text, peerLabel: live.label) else { return }",
+            "guard presence.beginSession(.nearby, mode: .files, peerLabel: live.label) else { return }",
+            "guard presence.beginSession(.pairingCode, mode: mode) else { return }",
+            "guard presence.beginSession(.pairingCode, mode: .files) else { return }",
+            "guard presence.beginSession(.pairingCode, mode: .text) else { return }",
         ]
-        for (file, guardLine, count) in expectations {
-            let source = try source(named: file)
-            XCTAssertEqual(occurrences(of: guardLine, in: source), count,
-                           "\(file) can start a shared model after losing ownership")
+        for claim in claims {
+            XCTAssertEqual(occurrences(of: claim, in: connect), 1,
+                           "the Workspace can start a shared model after losing ownership: \(claim)")
         }
+        // Every start is behind one. A bare `Task { await` that no claim
+        // precedes is the regression this counts.
+        XCTAssertEqual(occurrences(of: "presence.beginSession(", in: connect), claims.count,
+                       "a start path exists with no ownership claim, or a claim with no start")
     }
 
     func testPairingJoinSnapshotsAValidatedCodeBeforeClaimAndTask() throws {
-        for (file, model) in [("DirectPane.swift", "model"),
-                              ("RealtimeTextPane.swift", "model")] {
-            let source = try source(named: file)
+        let source = try source(named: workspaceConnect)
+        for model in ["fileModel", "textModel"] {
             XCTAssertTrue(source.contains("let code = \(model).joinCode"))
             XCTAssertTrue(source.contains("guard \(model).canJoin else { return }"))
             XCTAssertTrue(source.contains("Task { await \(model).join(code: code) }"))
             XCTAssertFalse(source.contains("Task { await \(model).join(code: \(model).joinCode) }"),
-                           "\(file) reads mutable input after taking ownership")
+                           "the join reads mutable input after taking ownership")
         }
     }
 
+    /// **One field, both models.** The two join verbs share a code, so the
+    /// binding writes both models in the one state transition. Writing only one
+    /// would leave the two buttons disagreeing about which code this device is
+    /// about to join — the same class of drift the old two-pane split had, moved
+    /// one level down and made unrepresentable instead.
     func testPairingJoinNormalizesAtomicallyInBothModes() throws {
-        for file in ["DirectPane.swift", "RealtimeTextPane.swift"] {
-            let source = try source(named: file)
-            XCTAssertTrue(source.contains("private var normalizedJoinCode: Binding<String>"))
-            XCTAssertTrue(source.contains("set: { model.updateJoinCode($0) }"))
-            XCTAssertTrue(source.contains("text: normalizedJoinCode"))
-            XCTAssertTrue(source.contains(".accessibilityIdentifier(\"pairing.joinCode\")"))
-            XCTAssertFalse(source.contains(".onChange(of: model.joinCode)"),
-                           "\(file) can overwrite fast input with an older partial value")
+        let source = try source(named: workspaceConnect)
+        XCTAssertTrue(source.contains("private var normalizedJoinCode: Binding<String>"))
+        XCTAssertTrue(source.contains("fileModel.updateJoinCode($0)"))
+        XCTAssertTrue(source.contains("textModel.updateJoinCode($0)"))
+        XCTAssertTrue(source.contains("text: normalizedJoinCode"))
+        XCTAssertTrue(source.contains(".accessibilityIdentifier(\"pairing.joinCode\")"))
+        XCTAssertEqual(occurrences(of: "TextField(L10n.t(.commonCode)", in: source), 1,
+                       "one code, one field: two would be two answers to one question")
+        for stale in [".onChange(of: fileModel.joinCode)", ".onChange(of: textModel.joinCode)"] {
+            XCTAssertFalse(source.contains(stale),
+                           "the join field can overwrite fast input with an older partial value")
         }
         let uiURL = macRoot.deletingLastPathComponent()
             .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
         let ui = try String(contentsOf: uiURL, encoding: .utf8)
-        XCTAssertTrue(ui.contains("testPairingJoinKeepsACompleteCodeActionableInBothModes"))
-        XCTAssertTrue(ui.contains("[(\"Files\", \"123456\"), (\"Text\", \"654321\")]"))
+        XCTAssertTrue(ui.contains("testWorkspaceJoinKeepsACompleteCodeActionableForBothVerbs"))
         XCTAssertTrue(ui.contains("window.textFields[\"pairing.joinCode\"]"))
     }
 
@@ -1762,47 +1955,53 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertFalse(login.contains("session.register(email: draft.email"))
     }
 
+    /// Everything a Create must settle SYNCHRONOUSLY, in order: expand and open
+    /// the batch (a useless code for an unreadable selection is worse than a
+    /// refusal), re-read live access, claim ownership, and only then start async
+    /// work. One `createCode(mode:)` now, so the ordering is stated once instead
+    /// of twice with a chance to disagree.
     func testPairingCreateSettlesIntentBeforeStartingAsyncMint() throws {
-        let files = try source(named: "DirectPane.swift")
-        XCTAssertTrue(files.contains(
-            "Button(L10n.t(.directCreateCode)) { createCode() }"))
-        guard let selection = files.range(of: "guard let expanded = selection.selection"),
-              let access = files.range(of: "guard let access = accessNow() else {"),
-              let claim = files.range(of:
-                "guard presence.beginSession(.pairingCode, mode: .files) else { return }",
-                range: selection.lowerBound..<files.endIndex),
-              let task = files.range(of: "Task { await mintAndWait(token: access.token) }") else {
-            return XCTFail("file code creation lost its synchronous intent boundary")
+        let connect = try source(named: workspaceConnect)
+        XCTAssertTrue(connect.contains(
+            "Button(L10n.t(.workspaceCreateMessageCode)) { createCode(mode: .text) }"))
+        XCTAssertTrue(connect.contains(
+            "Button(L10n.t(.workspaceCreateFileCode)) { createCode(mode: .files) }"))
+        guard let create = connect.range(of: "private func createCode(mode: TransferMode) {"),
+              let staged = connect.range(of: "guard let ready = stage() else { return }",
+                                         range: create.lowerBound..<connect.endIndex),
+              let access = connect.range(of: "guard let access = accessNow() else {",
+                                         range: staged.lowerBound..<connect.endIndex),
+              let claim = connect.range(of:
+                "guard presence.beginSession(.pairingCode, mode: mode) else { return }",
+                range: access.lowerBound..<connect.endIndex),
+              let task = connect.range(of: "Task { await mintAndJoinFiles(token: access.token) }",
+                                       range: claim.lowerBound..<connect.endIndex),
+              let textTask = connect.range(of: "Task { await mintAndJoinText(token: access.token) }",
+                                           range: claim.lowerBound..<connect.endIndex) else {
+            return XCTFail("code creation lost its synchronous intent boundary")
         }
-        XCTAssertTrue(selection.lowerBound < access.lowerBound && access.lowerBound < claim.lowerBound
-                      && claim.lowerBound < task.lowerBound)
-
-        let text = try source(named: "RealtimeTextPane.swift")
-        XCTAssertTrue(text.contains(
-            "Button(L10n.t(.textCreateCode)) { createCode() }"))
-        guard let textAccess = text.range(of: "guard let access = accessNow() else {"),
-              let textClaim = text.range(of:
-                "guard presence.beginSession(.pairingCode, mode: .text) else { return }",
-                range: textAccess.lowerBound..<text.endIndex),
-              let textTask = text.range(of: "Task { await mintAndWait(token: access.token) }") else {
-            return XCTFail("text code creation lost its synchronous intent boundary")
-        }
-        XCTAssertTrue(textAccess.lowerBound < textClaim.lowerBound && textClaim.lowerBound < textTask.lowerBound)
+        XCTAssertLessThan(task.lowerBound, textTask.lowerBound)
+        // A message code needs nothing staged, and that asymmetry has to be
+        // visible in the source rather than only in the disabled state: only the
+        // files arm expands a selection.
+        XCTAssertTrue(connect.contains("if mode == .files {"),
+                      "creating a message code must not require a staged batch")
     }
 
     /// Account gating is presentation, not authorization. A button from the
     /// preceding render may still be delivered after sign-out or credential
     /// replacement, so every authenticated macOS start re-reads live access.
     func testAuthenticatedMacStartsDoNotSpendRenderTimeCredentials() throws {
-        let destination = try source(named: "Destinations/PairingCodeDestination.swift")
+        let destination = try source(named: workspaceDestination)
         XCTAssertTrue(destination.contains("AccountGate.from(session.state,"))
-        XCTAssertEqual(occurrences(of: "accessNow: { accessNow }", in: destination), 2)
+        XCTAssertEqual(occurrences(of: "accessNow: { accessNow }", in: destination), 1,
+                       "one surface, one live-access seam")
 
-        for pane in ["DirectPane.swift", "RealtimeTextPane.swift"] {
-            let text = try source(named: pane)
-            XCTAssertTrue(text.contains("let accessNow: () -> AccountAccess?"))
-            XCTAssertTrue(text.contains("guard let access = accessNow() else {"))
-        }
+        let connect = try source(named: workspaceConnect)
+        XCTAssertTrue(connect.contains("let accessNow: () -> AccountAccess?"))
+        XCTAssertTrue(connect.contains("guard let access = accessNow() else {"))
+        XCTAssertFalse(connect.contains("AccountGate.from("),
+                       "the pane must render the gate it was handed, not compute a second one")
 
         let upload = try source(named: "UploadPane.swift")
         XCTAssertTrue(upload.contains("@EnvironmentObject private var session: AccountSession"))
@@ -1814,14 +2013,12 @@ final class MacSurfaceGuardTests: XCTestCase {
     }
 
     func testStalePairingCreateRoutesToTheAccountRemedy() throws {
-        for name in ["DirectPane.swift", "RealtimeTextPane.swift"] {
-            let pane = try source(named: name)
-            let staleGate = try XCTUnwrap(pane.components(
-                separatedBy: "guard let access = accessNow() else {").dropFirst().first?
-                .components(separatedBy: "return").first)
-            XCTAssertTrue(staleGate.contains("navigation.selectAccount(intent: .signIn)"),
-                          "\(name) silently swallowed a stale Create activation")
-        }
+        let pane = try source(named: workspaceConnect)
+        let staleGate = try XCTUnwrap(pane.components(
+            separatedBy: "guard let access = accessNow() else {").dropFirst().first?
+            .components(separatedBy: "return").first)
+        XCTAssertTrue(staleGate.contains("navigation.selectAccount(intent: .signIn)"),
+                      "the Workspace silently swallowed a stale Create activation")
     }
 
     /// The document-type declaration that makes the app a Dock drop target and a
@@ -2103,12 +2300,18 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// guard exists to catch.
     func testTheSidebarMarksOnlyARunningSessionOnTheRowThatOwnsIt() throws {
         let sidebar = try source(named: "Shell/SidebarView.swift")
-        XCTAssertTrue(sidebar.contains("presence.announcesRunningTransfer(destination,"),
+        XCTAssertTrue(sidebar.contains("presence.announcesRunningTransfer("),
                       "the live marker must be derived through TransferPresence")
         XCTAssertTrue(sidebar.contains("fileModel.isBusy || textModel.isBusy"),
                       "activity must come from the session models, not from a cached flag")
-        XCTAssertFalse(sidebar.contains("destination == .nearby"),
-                       "the marker must not be hard-coded to one destination")
+        // The Workspace row asks about BOTH of its routes: `TransferPresence`
+        // still arbitrates per route, so a pairing-code session would go
+        // unmarked if the row only asked about the one its click selects.
+        XCTAssertTrue(sidebar.contains(
+            "AppDestination.macWorkspaceRoutes.contains {"),
+            "the Workspace row can miss a session owned by its other route")
+        XCTAssertFalse(sidebar.contains("surface == .storedSend"),
+                       "the marker must not be hard-coded to one surface")
         XCTAssertFalse(sidebar.contains("receive.activeKind"),
                        "NearbyReceiveModel keeps residency and loses the session marker")
         XCTAssertTrue(sidebar.contains("NearbyStatusPresentation.text(for: receive.state)"),
@@ -2152,40 +2355,112 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// `.keyboardShortcut(.defaultAction)`." Four primaries had no keyboard path
     /// at all, so Return did nothing on the two destinations a keyboard user
     /// reaches first.
-    func testNearbysTwoPrimaryActionsCarryTheKeyboardDefault() throws {
-        let nearby = try source(named: "NearbyPane.swift")
-        // Exactly two, and they are mutually exclusive branches of `switch mode`,
-        // so only one is ever on screen.
-        XCTAssertEqual(occurrences(of: ".keyboardShortcut(.defaultAction)", in: nearby), 2,
-                       "nearby has exactly two primaries: Send, and Start message")
-        assertDefaultAction(attachesTo: "Button(L10n.t(.commonSend))", in: nearby,
-                            named: "NearbyPane.swift")
-        assertDefaultAction(attachesTo: "Button(L10n.t(.nearbyStartMessageSession))", in: nearby,
-                            named: "NearbyPane.swift")
+    /// **Message-first, and it is visible in the source rather than only in a
+    /// screenshot.** On a chosen device the prominent verb is the one with no
+    /// precondition at all; the file verb sits beside it, bordered, disabled
+    /// until something is staged. The pairing card mirrors that: the message
+    /// code is prominent, the file code is not.
+    func testTheWorkspaceLeadsWithTheMessageIntentAndKeepsFileActionsBesideIt() throws {
+        let connect = try source(named: workspaceConnect)
+        let messageAction = try XCTUnwrap(connect.range(
+            of: "Button(L10n.t(.workspaceSendMessage)) { startMessage(with: device) }"))
+        let fileAction = try XCTUnwrap(connect.range(
+            of: "Button(L10n.t(.workspaceSendFiles)) { sendFiles(to: device) }"))
+        XCTAssertLessThan(messageAction.lowerBound, fileAction.lowerBound,
+                          "the file action is offered before the default message intent")
+        let messageStyling = String(connect[messageAction.upperBound..<fileAction.lowerBound])
+        XCTAssertTrue(messageStyling.contains(".buttonStyle(.borderedProminent)"),
+                      "the default intent is not the prominent one")
+        XCTAssertFalse(messageStyling.contains(".disabled(selection.isEmpty"),
+                       "the message intent must not require a staged selection")
+        XCTAssertTrue(connect.contains(".disabled(selection.isEmpty || modelBusy)"),
+                      "the file action must state its own precondition")
+
+        // Both verbs, and both connection methods, carry stable runtime
+        // identities — this is what the UI suite proves ONE screen offers.
+        for identifier in ["workspace-send-message", "workspace-send-files",
+                           "workspace-create-message-code", "workspace-create-file-code",
+                           "workspace-join-messages", "workspace-join-files",
+                           "workspace-choose-files", "workspace-staging-optional"] {
+            XCTAssertTrue(connect.contains(".accessibilityIdentifier(\"\(identifier)\")"),
+                          "the Workspace lost its \(identifier) control")
+        }
+
+        // The pairing card leads with messages too.
+        let createMessage = try XCTUnwrap(connect.range(
+            of: "Button(L10n.t(.workspaceCreateMessageCode)) { createCode(mode: .text) }"))
+        let createFile = try XCTUnwrap(connect.range(
+            of: "Button(L10n.t(.workspaceCreateFileCode)) { createCode(mode: .files) }"))
+        XCTAssertLessThan(createMessage.lowerBound, createFile.lowerBound)
+        let joinMessages = try XCTUnwrap(connect.range(
+            of: "Button(L10n.t(.workspaceJoinMessages)) { join(mode: .text) }"))
+        let joinFiles = try XCTUnwrap(connect.range(
+            of: "Button(L10n.t(.workspaceJoinFiles)) { join(mode: .files) }"))
+        XCTAssertLessThan(joinMessages.lowerBound, joinFiles.lowerBound)
     }
 
-    /// Create and join sit on one screen, so only one of them can be the keyboard
+    /// **Never claim that one legacy connection carries both lanes.**
+    ///
+    /// The surface is unified; the shipped wire is not. So the connect phase
+    /// says it once before anything is connected, and the session phase says it
+    /// again from inside, naming the lane this connection does NOT have. Both
+    /// sentences are asserted here because the temptation a unified screen
+    /// creates is to quietly drop them and render a dead composer instead.
+    ///
+    /// This guard is the one the `link/1` integration batch DELETES, and that is
+    /// deliberate: when a link really does carry both lanes, these three strings
+    /// become false and this test is what says so.
+    func testTheWorkspaceStatesTheOneLaneLimitInBothPhases() throws {
+        let connect = try source(named: workspaceConnect)
+        XCTAssertTrue(connect.contains("InlineMessage(.info, L10n.t(.workspaceOneConnectionNote))"),
+                      "the connect phase no longer states what one connection carries")
+        XCTAssertTrue(connect.contains(".accessibilityIdentifier(\"workspace-one-connection-note\")"))
+
+        let session = try source(named: workspaceSession)
+        XCTAssertTrue(session.contains(
+            "L10n.t(mode == .text ? .workspaceMessagesOnlyNote : .workspaceFilesOnlyNote)"),
+            "a live session no longer names the lane it does not have")
+        XCTAssertTrue(session.contains(".accessibilityIdentifier(\"workspace-lane-note\")"))
+        // The note is unconditional within a session: gating it on a state would
+        // be the same omission, one branch deep.
+        guard let laneNote = session.range(of: "private var laneNote: some View"),
+              let body = session.range(of: "var body: some View") else {
+            return XCTFail("the session pane no longer has the shape this guards")
+        }
+        XCTAssertLessThan(body.lowerBound, laneNote.lowerBound)
+        XCTAssertTrue(session.contains("laneNote\n            exit"),
+                      "the lane note must sit with the exit rather than inside one lane")
+    }
+
+    /// Create and join sit on one screen, so only one control can be the keyboard
     /// default — two would be undefined, and SwiftUI would pick one of them
     /// without saying which.
     ///
-    /// **Join wins, in both modes.** Its precondition is a single field whose
-    /// completion is unambiguous: six digits are in, or they are not, and
-    /// `canJoin` says so, so the default is inert until Return means exactly one
-    /// thing. Create's precondition is an account *and* a staged selection, and
-    /// it sits beside the field a user is typing a code into — making it the
-    /// default would fire the wrong half on the keystroke that ends the other
-    /// one. Prominence stays with each card's own primary; the keyboard default
-    /// is the narrower claim and belongs to the half that can honour it.
-    func testJoinIsTheOnlyKeyboardDefaultOnThePairingCodeDestination() throws {
-        for file in ["DirectPane.swift", "RealtimeTextPane.swift"] {
-            let text = try source(named: file)
-            XCTAssertEqual(occurrences(of: ".keyboardShortcut(.defaultAction)", in: text), 1,
-                           "\(file) must not offer two competing default buttons")
-            assertDefaultAction(attachesTo: "Button(L10n.t(.commonJoin))", in: text, named: file)
-            XCTAssertTrue(text.contains(".disabled(!model.canJoin)"),
-                          "\(file): the default action must stay inert until six digits are in")
-            XCTAssertTrue(text.contains("model.updateJoinCode($0)"),
-                          "\(file): six-digit normalization — including a leading 1 — must survive")
+    /// **Join takes it, and the message verb within join.** Its precondition is a
+    /// single field whose completion is unambiguous: six digits are in, or they
+    /// are not, and `canJoin` says so, so the default is inert until Return means
+    /// exactly one thing. Create's precondition is an account, and the
+    /// same-network verbs need a chosen device — both sit beside the field a user
+    /// is typing a code into, and either as the default would fire on the
+    /// keystroke that ends the other one. Prominence still belongs to each card's
+    /// own primary; the keyboard default is the narrower claim.
+    func testJoinIsTheOnlyKeyboardDefaultOnTheWorkspace() throws {
+        let text = try source(named: workspaceConnect)
+        XCTAssertEqual(occurrences(of: ".keyboardShortcut(.defaultAction)", in: text), 1,
+                       "the Workspace must not offer two competing default buttons")
+        assertDefaultAction(attachesTo: "Button(L10n.t(.workspaceJoinMessages))",
+                            in: text, named: workspaceConnect)
+        XCTAssertTrue(text.contains(".disabled(!textModel.canJoin)"),
+                      "the default action must stay inert until six digits are in")
+        XCTAssertTrue(text.contains("fileModel.updateJoinCode($0)")
+                      && text.contains("textModel.updateJoinCode($0)"),
+                      "six-digit normalization — including a leading 1 — must survive")
+        // And exactly one on this surface's other file: the session pane must
+        // not inherit a default from the phase that started it, because Return
+        // over a transfer in flight has nothing safe to mean.
+        for name in [workspaceDestination, workspaceSession] {
+            XCTAssertFalse(try source(named: name).contains(".keyboardShortcut(.defaultAction)"),
+                           "\(name) competes for the window's default action")
         }
     }
 

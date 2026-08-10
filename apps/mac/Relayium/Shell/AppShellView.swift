@@ -51,11 +51,19 @@ struct AppShellView: View {
                 .navigationSplitViewColumnWidth(min: 208, ideal: 224, max: 288)
         } detail: {
             Group {
-                // No `default`: a seventh destination is a compile error here
-                // rather than a sidebar row that opens nothing.
-                switch navigation.selection {
-                case .nearby:        NearbyDestination()
-                case .pairingCode:   PairingCodeDestination()
+                // Switched on the SURFACE rather than on the destination, and
+                // that indirection is the whole shape of this round: `.nearby`
+                // and `.pairingCode` are still two routes — iOS renders them as
+                // two tabs, deep links and incoming sessions still select them
+                // by name — and on macOS they are two ways into one screen.
+                //
+                // No `default`, exactly as before: a sixth macOS surface is a
+                // compile error here rather than a sidebar row that opens
+                // nothing, and a seventh destination is a compile error in
+                // `AppDestination.macSurface` rather than a screen that never
+                // opens.
+                switch navigation.selection.macSurface {
+                case .workspace:     WorkspaceDestination()
                 case .storedSend:    StoredSendDestination()
                 case .storedReceive: StoredReceiveDestination()
                 case .deviceInbox:   DeviceInboxDestination()
@@ -64,8 +72,10 @@ struct AppShellView: View {
             }
             // Stable and nonlocalized. The UI suite must observe the detail
             // surface itself, not mistake the identically titled sidebar row
-            // for proof that a destination rendered.
-            .accessibilityIdentifier("destination-\(navigation.selection.rawValue)")
+            // for proof that a destination rendered. Keyed on the surface, so
+            // a pairing-code deep link and a nearby session both prove the ONE
+            // screen they actually land on.
+            .accessibilityIdentifier("destination-\(navigation.selection.macSurface.rawValue)")
         }
         .frame(minWidth: 860, minHeight: 560)
         // A modifier ON the split view, never a branch around it: the structure

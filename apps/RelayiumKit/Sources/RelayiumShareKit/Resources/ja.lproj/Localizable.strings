@@ -102,7 +102,6 @@
 "nav.sectionLinks" = "リンク";
 "nav.sectionDevice" = "この Mac";
 "nav.nearby" = "近くのデバイス";
-"nav.nearbySubtitle" = "アカウント不要、端末から端末へ。同じネットワーク内のみ";
 "nav.pairingCode" = "ペアリングコード";
 "nav.pairingCodeSubtitle" = "ネットワークを越えてテキストと小さめのファイル。双方がオンラインで";
 "nav.storedSend" = "リンクを送る";
@@ -160,7 +159,6 @@
 
 /* MARK: ペアリングコードによるファイル転送 */
 "direct.sendHeading" = "送信";
-"direct.dropHint" = "ここにファイルやフォルダをドロップするか、クリックして選択してください。そのあと相手のデバイス用のコードを作成します。";
 "direct.createCode" = "コードを作成";
 "direct.receiveHeading" = "受信";
 "direct.creatingCode" = "コードを作成しています…";
@@ -264,7 +262,6 @@
 "text.startHeading" = "テキストセッションを開始";
 "text.startBody" = "両方のデバイスがオンラインのままである必要があります。メッセージはエンドツーエンドで暗号化され、このセッションのメモリ上にのみ保持されます。";
 "text.createCode" = "テキスト用コードを作成";
-"text.joinHeading" = "テキストセッションに参加";
 "text.giveCode" = "このテキスト用コードを相手のデバイスに伝えてください";
 "text.connecting" = "プライベートなテキストセッションを接続しています…";
 "text.checkMatches" = "相手のデバイスと一致するか確認してください";
@@ -306,11 +303,9 @@
 "text.safetyLimits" = "メッセージセッションが安全上の上限を超えました。";
 
 /* MARK: 近くのデバイス */
-"nearby.heading" = "近くのデバイス";
 "nearby.explain" = "Relayium（アプリまたは relayium.com）を実行していて、このデバイスと同じグローバルアドレスからインターネットに出ているデバイスです。通常はご自宅の Wi-Fi を意味しますが、通信事業者や VPN のゲートウェイ越しでは見知らぬ人のデバイスが一覧に入ることもあります。Relayium はネットワークをスキャンしません。ランデブーサービスに「同じアドレスから来ているのは他に誰か」を尋ねるだけです。";
 "nearby.safetySummary" = "このデバイスと同じグローバルアドレスで Relayium を実行しているデバイスです。通信事業者・VPN・共有ゲートウェイでは、そのアドレスに見知らぬ人が含まれることがあるため、送る相手は自分で選んでください。";
 "nearby.howItWorks" = "この一覧のしくみ";
-"nearby.dropHint" = "ここにファイルやフォルダをドロップするか、クリックして選択してください。下でデバイスを選んで「送信」を押すまで、何も送信されません。";
 "nearby.lookAgain" = "もう一度探す";
 "nearby.resumeReceiving" = "受信を再開";
 "nearby.pauseReceiving" = "受信を一時停止";
@@ -604,3 +599,27 @@
 "inbox.loginNote" = "「ログイン時に開く」は、この Mac にログインしたあと Relayium が受信を再開できるようにします。受信ボックスが今すぐ使える状態であることを意味するものではありません。";
 "inbox.savedFiles.other" = "%@ 個のファイルを保存しました";
 "inbox.waitingDeliveries.other" = "%@ 件の配信が回答を待っています";
+
+/* MARK: macOS Workspace */
+"nav.workspace" = "ワークスペース";
+"nav.workspaceSubtitle" = "1台のデバイスとメッセージやファイルを — 同じネットワーク、またはコードでネットワークをまたいで。双方がオンラインである必要があります";
+"workspace.sameNetworkHeading" = "同じネットワーク";
+"workspace.pairingHeading" = "ペアリングコード";
+"workspace.stagingHeading" = "ファイルとフォルダ";
+"workspace.stagingOptional" = "任意です。先に接続してから選んでもかまいません。メッセージなら何も選ぶ必要はありません。";
+"workspace.dropHint" = "ファイルやフォルダをここにドロップするか、クリックして選択します。";
+"workspace.sendMessage" = "メッセージを送る";
+"workspace.addFilesHint" = "下でファイルやフォルダを選び、そのデバイスへ直接送信します。";
+"workspace.sendMessageHint" = "このデバイスとのメッセージセッションを開きます。何も選択する必要はありません。";
+"workspace.sendFiles" = "ファイルを送る";
+"workspace.createMessageCode" = "メッセージ用のコードを作成";
+"workspace.createFileCode" = "ファイル用のコードを作成";
+"workspace.createFileCodeHint" = "先に下でファイルまたはフォルダを選んでください。コードはその内容を運びます。";
+"workspace.joinMessages" = "メッセージに参加";
+"workspace.joinFiles" = "ファイルに参加";
+"workspace.joinKindHint" = "コードだけではどちらか分かりません。作成した相手に確認するか、送られたリンクを使ってください。";
+"workspace.oneConnectionNote" = "1つの接続が運べるのはメッセージかファイルのどちらかで、両方ではありません。もう一方を送ると、新しい確認コードを持つ別の接続が開きます。";
+"workspace.messagesOnlyNote" = "このセッションが運ぶのはメッセージで、ファイルではありません。ファイルの送信には別のセッションが必要です。開始するにはこのセッションを終了してください。";
+"workspace.filesOnlyNote" = "このセッションが運ぶのはファイルで、メッセージではありません。メッセージの送信には別のセッションが必要です。開始するにはこのセッションを終了してください。";
+"workspace.leaveSession" = "このセッションを終了";
+"workspace.sessionWithCode" = "ペアリングコードで接続中";

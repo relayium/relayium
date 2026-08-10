@@ -99,21 +99,39 @@ accessibility hint:
 
 | section | destination | account |
 |---|---|---|
-| Direct | Nearby — devices on this network | not needed, either direction |
-| Direct | Pairing code | needed to *create* a code; joining one needs none |
+| Direct | Workspace — one peer, reached on this network or with a pairing code | not needed, except to *create* a code |
 | Links | Send a link — store an encrypted file | needed |
 | Links | Open a link — receive one somebody sent | not needed |
 | — | Account — plan, devices, stored files | is the sign-in *and* the sign-up |
 
+**Workspace is one row for two routes, not one route.** `AppDestination` still
+has `.nearby` and `.pairingCode` — iOS renders them as two tabs, and deep links,
+incoming sessions and Dock drops still address them by name — and
+`AppDestination.macSurface` maps both onto the one screen macOS draws. What that
+merge removes is the segmented Files/Text picker that used to sit above both of
+them: each connect action now states its own kind, and a message is the default
+intent because it needs nothing staged.
+
+It does **not** remove the wire's own limit. One realtime connection carries a
+file transfer *or* an ephemeral text session, never both, so a live Workspace
+session renders the lane it actually has and says in one sentence that the other
+kind needs a session of its own. The `link/1` stack that would lift that is in
+`RelayiumKit` and switched off (`LINK_BUILD_SUPPORT`); nothing here advertises or
+depends on it.
+
 A sidebar footer reports whether this Mac can be reached right now; pause and
-resume stay in Nearby and in the menu bar rather than gaining a third site.
+resume stay in the Workspace and in the menu bar rather than gaining a third site.
 
 The shell itself never reads the account session — `MacSurfaceGuardTests`
-asserts that by name, and asserts that the nearby and stored-receive destination
-files mention neither `AccountSession` nor `bearerToken`. That is what keeps the
-four anonymous capabilities reachable without a sign-in form in front of them.
-The two account-backed halves render an `AccountGate` in place, stating why an
-account is needed and offering sign-in, beside the half that needs none. A
+asserts that by name, and asserts that the stored-receive destination file
+mentions neither `AccountSession` nor `bearerToken`. That is what keeps the four
+anonymous capabilities reachable without a sign-in form in front of them. The
+Workspace does hold an `AccountSession`, for exactly one half of itself, and the
+guard checks that positionally rather than by presence: the gate must sit *after*
+the same-network roster and *before* the join controls, so neither of the two
+anonymous halves can drift behind it. The account-backed halves render an
+`AccountGate` in place, stating why an account is needed and offering sign-in,
+beside the half that needs none. A
 capability that is unavailable for want of an account says so and offers the
 action that resolves it, rather than appearing as a greyed control with no
 stated reason.

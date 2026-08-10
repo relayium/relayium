@@ -102,7 +102,6 @@
 "nav.sectionLinks" = "Links";
 "nav.sectionDevice" = "Dieser Mac";
 "nav.nearby" = "In der Nähe";
-"nav.nearbySubtitle" = "Ohne Konto, von Gerät zu Gerät — nur im selben Netzwerk";
 "nav.pairingCode" = "Kopplungscode";
 "nav.pairingCodeSubtitle" = "Text und kleine Dateien netzübergreifend — beide Seiten online";
 "nav.storedSend" = "Link senden";
@@ -160,7 +159,6 @@
 
 /* MARK: Dateiübertragung per Kopplungscode */
 "direct.sendHeading" = "Senden";
-"direct.dropHint" = "Dateien oder Ordner hierher ziehen oder klicken, um sie auszuwählen. Erstelle danach einen Code für das andere Gerät.";
 "direct.createCode" = "Code erstellen";
 "direct.receiveHeading" = "Empfangen";
 "direct.creatingCode" = "Code wird erstellt…";
@@ -267,7 +265,6 @@
 "text.startHeading" = "Textsitzung starten";
 "text.startBody" = "Beide Geräte bleiben online. Nachrichten sind Ende-zu-Ende-verschlüsselt und bleiben nur im Arbeitsspeicher dieser Sitzung.";
 "text.createCode" = "Textcode erstellen";
-"text.joinHeading" = "Textsitzung beitreten";
 "text.giveCode" = "Gib diesen Textcode an das andere Gerät weiter";
 "text.connecting" = "Private Textsitzung wird verbunden…";
 "text.checkMatches" = "Prüfe, ob dies mit dem anderen Gerät übereinstimmt";
@@ -309,11 +306,9 @@
 "text.safetyLimits" = "Die Nachrichtensitzung hat ihre Sicherheitsgrenzen überschritten.";
 
 /* MARK: Geräte in der Nähe */
-"nearby.heading" = "Geräte in der Nähe";
 "nearby.explain" = "Geräte, auf denen Relayium läuft — die App oder relayium.com — und die das Internet über dieselbe öffentliche Adresse erreichen wie dieses Gerät. Meist ist das dein WLAN, aber ein Mobilfunk- oder VPN-Gateway kann auch fremde Geräte in die Liste bringen. Relayium durchsucht dein Netzwerk nie; es fragt seinen Rendezvous-Dienst, wer sonst noch von dieser Adresse kommt.";
 "nearby.safetySummary" = "Geräte, auf denen Relayium läuft und die dieselbe öffentliche Adresse haben wie dieses Gerät. Hinter einem Mobilfunk-, VPN- oder gemeinsam genutzten Gateway können darunter auch Fremde sein — wähle selbst, an wen du sendest.";
 "nearby.howItWorks" = "Wie diese Liste entsteht";
-"nearby.dropHint" = "Dateien oder Ordner hierher ziehen oder klicken, um sie auszuwählen. Nichts wird gesendet, bevor du unten ein Gerät auswählst und auf Senden drückst.";
 "nearby.lookAgain" = "Erneut suchen";
 "nearby.resumeReceiving" = "Empfang fortsetzen";
 "nearby.pauseReceiving" = "Empfang pausieren";
@@ -615,3 +610,27 @@
 "inbox.savedFiles.other" = "%@ Dateien gespeichert";
 "inbox.waitingDeliveries.one" = "%@ Zustellung wartet auf deine Antwort";
 "inbox.waitingDeliveries.other" = "%@ Zustellungen warten auf deine Antwort";
+
+/* MARK: macOS Workspace */
+"nav.workspace" = "Arbeitsbereich";
+"nav.workspaceSubtitle" = "Nachrichten und Dateien mit einem Gerät — gleiches Netzwerk oder netzübergreifend mit Code; beide Seiten online";
+"workspace.sameNetworkHeading" = "Gleiches Netzwerk";
+"workspace.pairingHeading" = "Kopplungscode";
+"workspace.stagingHeading" = "Dateien und Ordner";
+"workspace.stagingOptional" = "Optional. Du kannst zuerst verbinden und Dateien danach wählen — für eine Nachricht braucht es gar nichts.";
+"workspace.dropHint" = "Dateien oder Ordner hierher ziehen oder zum Auswählen klicken.";
+"workspace.sendMessage" = "Nachricht senden";
+"workspace.addFilesHint" = "Wähle unten Dateien oder Ordner und sende sie direkt an dieses Gerät.";
+"workspace.sendMessageHint" = "Öffnet eine Nachrichtensitzung mit diesem Gerät. Es muss nichts ausgewählt sein.";
+"workspace.sendFiles" = "Dateien senden";
+"workspace.createMessageCode" = "Code für Nachrichten erstellen";
+"workspace.createFileCode" = "Code für Dateien erstellen";
+"workspace.createFileCodeHint" = "Wähle zuerst unten Dateien oder Ordner; der Code trägt genau diese Auswahl.";
+"workspace.joinMessages" = "Nachrichten beitreten";
+"workspace.joinFiles" = "Dateien beitreten";
+"workspace.joinKindHint" = "Ein Code sagt nicht, worum es geht. Frag die Person, die ihn erstellt hat, oder nutze den gesendeten Link.";
+"workspace.oneConnectionNote" = "Eine Verbindung überträgt Nachrichten oder Dateien, nicht beides. Die andere Art öffnet eine neue Verbindung mit einem neuen Bestätigungscode.";
+"workspace.messagesOnlyNote" = "Diese Sitzung überträgt Nachrichten, keine Dateien. Dateien brauchen eine eigene Sitzung — verlasse diese, um sie zu starten.";
+"workspace.filesOnlyNote" = "Diese Sitzung überträgt Dateien, keine Nachrichten. Eine Nachricht braucht eine eigene Sitzung — verlasse diese, um sie zu starten.";
+"workspace.leaveSession" = "Sitzung verlassen";
+"workspace.sessionWithCode" = "Über einen Kopplungscode verbunden";

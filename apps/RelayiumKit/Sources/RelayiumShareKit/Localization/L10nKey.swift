@@ -184,8 +184,6 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// this machine as a destination.
     case navSectionDevice = "nav.sectionDevice"
     case navNearby = "nav.nearby"
-    /// Says "no account needed" because that is the fact the old shell hid.
-    case navNearbySubtitle = "nav.nearbySubtitle"
     case navPairingCode = "nav.pairingCode"
     case navPairingCodeSubtitle = "nav.pairingCodeSubtitle"
     case navStoredSend = "nav.storedSend"
@@ -207,6 +205,55 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// The sidebar footer's heading. Background receive — what makes this Mac
     /// reachable — reports its own state beneath it.
     case navResidency = "nav.residency"
+    /// The macOS Workspace row. It replaced two rows — Nearby and Pairing code —
+    /// that were two ways to reach one peer rather than two products, so the
+    /// title names the place and the subtitle names both ways of getting there.
+    case navWorkspace = "nav.workspace"
+    case navWorkspaceSubtitle = "nav.workspaceSubtitle"
+
+    // MARK: - Workspace (macOS)
+    //
+    // One destination, two connection methods, one live session. The copy here
+    // carries one obligation the rest of the app does not: the surface is
+    // unified and the shipped wire is not, so three of these strings exist
+    // purely to say what a connection can and cannot carry. They are deliberately
+    // plain about it — a user who is told "messages need their own connection"
+    // can act; one who finds a composer that silently does nothing cannot.
+
+    case workspaceSameNetworkHeading = "workspace.sameNetworkHeading"
+    case workspacePairingHeading = "workspace.pairingHeading"
+    case workspaceStagingHeading = "workspace.stagingHeading"
+    /// Says the quiet part: nothing has to be chosen before connecting.
+    case workspaceStagingOptional = "workspace.stagingOptional"
+    case workspaceDropHint = "workspace.dropHint"
+    /// The default intent on a chosen device — no selection required, which is
+    /// why it is the prominent one.
+    case workspaceSendMessage = "workspace.sendMessage"
+    /// The Workspace's own version of `nearby.addFilesHint`, which says
+    /// "above" — true on the iOS layout that still renders it, and false here,
+    /// where staging sits under the two connection methods.
+    case workspaceAddFilesHint = "workspace.addFilesHint"
+    case workspaceSendMessageHint = "workspace.sendMessageHint"
+    case workspaceSendFiles = "workspace.sendFiles"
+    case workspaceCreateMessageCode = "workspace.createMessageCode"
+    case workspaceCreateFileCode = "workspace.createFileCode"
+    case workspaceCreateFileCodeHint = "workspace.createFileCodeHint"
+    case workspaceJoinMessages = "workspace.joinMessages"
+    case workspaceJoinFiles = "workspace.joinFiles"
+    /// Why joining asks which kind: a code does not say what the peer who minted
+    /// it chose, and a speculative offer is read by an older peer as the wrong
+    /// kind entirely.
+    case workspaceJoinKindHint = "workspace.joinKindHint"
+    /// The bounded limitation, stated once before anything is connected.
+    case workspaceOneConnectionNote = "workspace.oneConnectionNote"
+    /// The same fact from inside a live session, per lane.
+    case workspaceMessagesOnlyNote = "workspace.messagesOnlyNote"
+    case workspaceFilesOnlyNote = "workspace.filesOnlyNote"
+    /// The one exit from a live or terminal session, whichever route opened it.
+    case workspaceLeaveSession = "workspace.leaveSession"
+    /// A pairing-code session has no roster label to snapshot, so it says how
+    /// the peer was reached rather than inventing a name for them.
+    case workspaceSessionWithCode = "workspace.sessionWithCode"
 
     // MARK: - Capability gates
     //
@@ -319,7 +366,6 @@ public enum L10nKey: String, CaseIterable, Sendable {
     // MARK: - Pairing-code file transfer
 
     case directSendHeading = "direct.sendHeading"
-    case directDropHint = "direct.dropHint"
     case directCreateCode = "direct.createCode"
     case directReceiveHeading = "direct.receiveHeading"
     case directCreatingCode = "direct.creatingCode"
@@ -540,7 +586,6 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case textStartHeading = "text.startHeading"
     case textStartBody = "text.startBody"
     case textCreateCode = "text.createCode"
-    case textJoinHeading = "text.joinHeading"
     case textGiveCode = "text.giveCode"
     case textConnecting = "text.connecting"
     case textCheckMatches = "text.checkMatches"
@@ -585,7 +630,6 @@ public enum L10nKey: String, CaseIterable, Sendable {
 
     // MARK: - Nearby pane
 
-    case nearbyHeading = "nearby.heading"
     /// The full mechanism paragraph: what the room is, why it usually but not
     /// always means the user's own network, and that nothing is scanned. On the
     /// narrow platform it is the body of a collapsed disclosure rather than the
@@ -599,7 +643,6 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// The disclosure's own title, which has to say what is behind it — a
     /// chevron labelled nothing is a control nobody opens.
     case nearbyHowItWorks = "nearby.howItWorks"
-    case nearbyDropHint = "nearby.dropHint"
     case nearbyLookAgain = "nearby.lookAgain"
     case nearbyResumeReceiving = "nearby.resumeReceiving"
     case nearbyPauseReceiving = "nearby.pauseReceiving"

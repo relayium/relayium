@@ -103,7 +103,6 @@
 "nav.sectionLinks" = "Links";
 "nav.sectionDevice" = "This Mac";
 "nav.nearby" = "Nearby";
-"nav.nearbySubtitle" = "No account, device to device — same network only";
 "nav.pairingCode" = "Pairing code";
 "nav.pairingCodeSubtitle" = "Text and small files across networks — both sides online";
 "nav.storedSend" = "Send a link";
@@ -161,7 +160,6 @@
 
 /* MARK: pairing-code file transfer */
 "direct.sendHeading" = "Send";
-"direct.dropHint" = "Drop files or folders here, or click to choose. Then create a code for the other device.";
 "direct.createCode" = "Create a code";
 "direct.receiveHeading" = "Receive";
 "direct.creatingCode" = "Creating a code…";
@@ -268,7 +266,6 @@
 "text.startHeading" = "Start a text session";
 "text.startBody" = "Both devices stay online. Messages are end-to-end encrypted and kept only in this session's memory.";
 "text.createCode" = "Create a text code";
-"text.joinHeading" = "Join a text session";
 "text.giveCode" = "Give this text code to the other device";
 "text.connecting" = "Connecting a private text session…";
 "text.checkMatches" = "Check this matches the other device";
@@ -310,11 +307,9 @@
 "text.safetyLimits" = "The message session exceeded its safety limits.";
 
 /* MARK: nearby pane */
-"nearby.heading" = "Nearby devices";
 "nearby.explain" = "Devices running Relayium — the app or relayium.com — that reach the internet from the same public address as this device. Usually that means your Wi-Fi, but a carrier or VPN gateway can put strangers' devices on the list too. Relayium never scans your network; it asks its rendezvous service who else arrives from that address.";
 "nearby.safetySummary" = "Devices running Relayium at the same public address as this device. On a carrier, VPN or shared gateway that address can include strangers, so choose who you send to.";
 "nearby.howItWorks" = "How this list works";
-"nearby.dropHint" = "Drop files or folders here, or click to choose. Nothing is sent until you pick a device below and press Send.";
 "nearby.lookAgain" = "Look again";
 "nearby.resumeReceiving" = "Resume receiving";
 "nearby.pauseReceiving" = "Pause receiving";
@@ -616,3 +611,27 @@
 "inbox.savedFiles.other" = "%@ files saved";
 "inbox.waitingDeliveries.one" = "%@ delivery waiting for your answer";
 "inbox.waitingDeliveries.other" = "%@ deliveries waiting for your answer";
+
+/* MARK: macOS Workspace */
+"nav.workspace" = "Workspace";
+"nav.workspaceSubtitle" = "Messages and files with one device — same network or across networks with a code; both sides online";
+"workspace.sameNetworkHeading" = "Same network";
+"workspace.pairingHeading" = "Pairing code";
+"workspace.stagingHeading" = "Files and folders";
+"workspace.stagingOptional" = "Optional. You can connect first and choose files afterwards — a message needs nothing at all.";
+"workspace.dropHint" = "Drop files or folders here, or click to choose.";
+"workspace.sendMessage" = "Send a message";
+"workspace.addFilesHint" = "Choose files or folders below, then send them straight to that device.";
+"workspace.sendMessageHint" = "Opens a message session with this device. Nothing needs to be selected.";
+"workspace.sendFiles" = "Send files";
+"workspace.createMessageCode" = "Create a code for messages";
+"workspace.createFileCode" = "Create a code for files";
+"workspace.createFileCodeHint" = "Choose files or folders below first; the code carries that batch.";
+"workspace.joinMessages" = "Join messages";
+"workspace.joinFiles" = "Join files";
+"workspace.joinKindHint" = "A code doesn't say which it is. Ask whoever created it, or use the link they sent.";
+"workspace.oneConnectionNote" = "One connection carries messages or files, not both. Sending the other kind opens a new connection, with a new verification code.";
+"workspace.messagesOnlyNote" = "This session carries messages, not files. Sending files needs a session of its own — leave this one to start it.";
+"workspace.filesOnlyNote" = "This session carries files, not messages. Sending a message needs a session of its own — leave this one to start it.";
+"workspace.leaveSession" = "Leave this session";
+"workspace.sessionWithCode" = "Connected with a pairing code";

@@ -102,7 +102,6 @@
 "nav.sectionLinks" = "Ligações";
 "nav.sectionDevice" = "Este Mac";
 "nav.nearby" = "Por perto";
-"nav.nearbySubtitle" = "Sem conta, de aparelho para aparelho — só na mesma rede";
 "nav.pairingCode" = "Código de emparelhamento";
 "nav.pairingCodeSubtitle" = "Texto e ficheiros pequenos entre redes — ambos online";
 "nav.storedSend" = "Enviar uma ligação";
@@ -160,7 +159,6 @@
 
 /* MARK: transferência por código */
 "direct.sendHeading" = "Enviar";
-"direct.dropHint" = "Largue ficheiros ou pastas aqui, ou clique para escolher. Depois crie um código para o outro dispositivo.";
 "direct.createCode" = "Criar um código";
 "direct.receiveHeading" = "Receber";
 "direct.creatingCode" = "A criar um código…";
@@ -267,7 +265,6 @@
 "text.startHeading" = "Iniciar uma sessão de texto";
 "text.startBody" = "Ambos os dispositivos ficam online. As mensagens são cifradas ponta a ponta e ficam apenas na memória desta sessão.";
 "text.createCode" = "Criar um código de texto";
-"text.joinHeading" = "Entrar numa sessão de texto";
 "text.giveCode" = "Dê este código de texto ao outro dispositivo";
 "text.connecting" = "A ligar uma sessão de texto privada…";
 "text.checkMatches" = "Verifique se corresponde ao outro dispositivo";
@@ -309,11 +306,9 @@
 "text.safetyLimits" = "A sessão de mensagens excedeu os seus limites de segurança.";
 
 /* MARK: dispositivos por perto */
-"nearby.heading" = "Dispositivos por perto";
 "nearby.explain" = "Dispositivos com o Relayium a correr — a app ou relayium.com — que chegam à internet a partir do mesmo endereço público que este dispositivo. Normalmente isso significa a sua rede Wi-Fi, mas um gateway de operadora ou de VPN pode colocar na lista dispositivos de desconhecidos. O Relayium nunca examina a sua rede; pergunta ao seu serviço de encontro quem mais chega desse endereço.";
 "nearby.safetySummary" = "Dispositivos com o Relayium no mesmo endereço público que este dispositivo. Atrás de um gateway de operadora, de VPN ou partilhado podem estar desconhecidos, por isso escolha a quem envia.";
 "nearby.howItWorks" = "Como funciona esta lista";
-"nearby.dropHint" = "Largue ficheiros ou pastas aqui, ou clique para escolher. Nada é enviado até escolher um dispositivo abaixo e carregar em Enviar.";
 "nearby.lookAgain" = "Procurar de novo";
 "nearby.resumeReceiving" = "Retomar a receção";
 "nearby.pauseReceiving" = "Pausar a receção";
@@ -615,3 +610,27 @@
 "inbox.savedFiles.other" = "%@ ficheiros guardados";
 "inbox.waitingDeliveries.one" = "%@ entrega à espera da sua resposta";
 "inbox.waitingDeliveries.other" = "%@ entregas à espera da sua resposta";
+
+/* MARK: macOS Workspace */
+"nav.workspace" = "Espaço de trabalho";
+"nav.workspaceSubtitle" = "Mensagens e ficheiros com um dispositivo — mesma rede ou entre redes com um código; ambos online";
+"workspace.sameNetworkHeading" = "Mesma rede";
+"workspace.pairingHeading" = "Código de emparelhamento";
+"workspace.stagingHeading" = "Ficheiros e pastas";
+"workspace.stagingOptional" = "Opcional. Podes ligar primeiro e escolher ficheiros depois — uma mensagem não precisa de nada.";
+"workspace.dropHint" = "Arrasta ficheiros ou pastas para aqui, ou clica para escolher.";
+"workspace.sendMessage" = "Enviar uma mensagem";
+"workspace.addFilesHint" = "Escolhe ficheiros ou pastas abaixo e envia-os diretamente para esse dispositivo.";
+"workspace.sendMessageHint" = "Abre uma sessão de mensagens com este dispositivo. Não é preciso selecionar nada.";
+"workspace.sendFiles" = "Enviar ficheiros";
+"workspace.createMessageCode" = "Criar um código para mensagens";
+"workspace.createFileCode" = "Criar um código para ficheiros";
+"workspace.createFileCodeHint" = "Escolhe primeiro ficheiros ou pastas abaixo; o código transporta esse lote.";
+"workspace.joinMessages" = "Entrar em mensagens";
+"workspace.joinFiles" = "Entrar em ficheiros";
+"workspace.joinKindHint" = "Um código não diz qual é. Pergunta a quem o criou, ou usa a ligação que te enviou.";
+"workspace.oneConnectionNote" = "Uma ligação transporta mensagens ou ficheiros, não ambos. Enviar o outro tipo abre uma nova ligação, com um novo código de verificação.";
+"workspace.messagesOnlyNote" = "Esta sessão transporta mensagens, não ficheiros. Enviar ficheiros precisa de uma sessão própria — sai desta para a iniciar.";
+"workspace.filesOnlyNote" = "Esta sessão transporta ficheiros, não mensagens. Enviar uma mensagem precisa de uma sessão própria — sai desta para a iniciar.";
+"workspace.leaveSession" = "Sair desta sessão";
+"workspace.sessionWithCode" = "Ligado com um código de emparelhamento";

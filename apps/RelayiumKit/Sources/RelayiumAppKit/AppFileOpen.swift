@@ -143,7 +143,22 @@ public final class AppFileOpenCoordinator: ObservableObject {
     /// `busy` goes false — so the files land as soon as they legitimately can
     /// instead of being silently discarded.
     public func batch(for destination: AppDestination, busy: Bool) -> OpenedFiles? {
-        guard !busy, let staged, staged.destination == destination else { return nil }
+        batch(forAnyOf: [destination], busy: busy)
+    }
+
+    /// The same rule for a surface that renders more than one destination.
+    ///
+    /// macOS draws `.nearby` and `.pairingCode` as ONE Workspace screen, so the
+    /// batch addressed to either belongs to the pane that is on screen. Asking
+    /// twice with the single-destination overload would be two reads of one
+    /// answer with a `consume` between them; asking once keeps "which pane is
+    /// this for" a single decision, exactly as `OpenedFiles` carrying its own
+    /// destination was meant to.
+    ///
+    /// It does NOT widen who may take a batch: the addressed set is the caller's
+    /// own surface, and a batch addressed to `.storedSend` is still refused here.
+    public func batch(forAnyOf destinations: Set<AppDestination>, busy: Bool) -> OpenedFiles? {
+        guard !busy, let staged, destinations.contains(staged.destination) else { return nil }
         return staged
     }
 

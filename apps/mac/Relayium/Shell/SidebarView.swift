@@ -1,7 +1,15 @@
 import SwiftUI
 import RelayiumAppKit
 
-/// Six rows, all visible at once, in three sections plus a standalone Account row.
+/// Five rows, all visible at once, in three sections plus a standalone Account row.
+///
+/// **Nearby and Pairing code used to be two of them and are now one, named
+/// Workspace.** They were never two products — same models, same
+/// `TransferPresence`, and each row spending half its screen saying the session
+/// was on the other one. What the sidebar owes the user is the set of places the
+/// app can be, and "the same peer, reached a different way" is not one of them.
+/// The two routes still exist in `AppDestination` because iOS renders them as
+/// two tabs; `MacSurface` is what makes them one row here.
 ///
 /// This is the round's central correction. Everything the app can do used to be
 /// either behind a sign-in form the capability did not need or inside a
@@ -46,22 +54,24 @@ struct SidebarView: View {
     /// `List` single-selection is an optional binding; a deselection (which the
     /// sidebar has no gesture for) is simply ignored rather than blanking the
     /// detail column.
-    private var selection: Binding<AppDestination?> {
-        Binding(get: { navigation.selection },
-                set: { if let destination = $0 { navigation.select(destination) } })
+    /// **Normalised to the surface, not to the destination.** A pairing-code
+    /// deep link selects `.pairingCode`, an unsolicited session selects
+    /// `.nearby`, and both draw the Workspace — so the row that must look
+    /// selected is the Workspace's, whichever route got there. Writing back goes
+    /// through the surface's own `route`, so a click still produces exactly one
+    /// ordinary `select(_:)`.
+    private var selection: Binding<MacSurface?> {
+        Binding(get: { navigation.selection.macSurface },
+                set: { if let surface = $0 { navigation.select(surface.route) } })
     }
 
     var body: some View {
         List(selection: selection) {
             Section {
-                row(.nearby,
+                row(.workspace,
                     symbol: "dot.radiowaves.left.and.right",
-                    title: L10n.t(.navNearby),
-                    subtitle: L10n.t(.navNearbySubtitle))
-                row(.pairingCode,
-                    symbol: "number",
-                    title: L10n.t(.navPairingCode),
-                    subtitle: L10n.t(.navPairingCodeSubtitle))
+                    title: L10n.t(.navWorkspace),
+                    subtitle: L10n.t(.navWorkspaceSubtitle))
             } header: {
                 sectionHeader(.navSectionDirect)
             }
@@ -119,11 +129,11 @@ struct SidebarView: View {
             .accessibilityAddTraits(.isHeader)
     }
 
-    private func row(_ destination: AppDestination,
+    private func row(_ surface: MacSurface,
                      symbol: String,
                      title: String,
                      subtitle: String) -> some View {
-        let live = hasLiveSession(destination)
+        let live = hasLiveSession(surface)
         return VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 6) {
                 Label(title, systemImage: symbol)
@@ -151,12 +161,12 @@ struct SidebarView: View {
         // (table vs outline). The task identity must not depend on that private
         // hierarchy, and it also gives UI automation the same stable row on
         // every supported system.
-        .accessibilityIdentifier("sidebar-\(destination.rawValue)")
+        .accessibilityIdentifier("sidebar-\(surface.rawValue)")
         .accessibilityLabel(live
                             ? L10n.detail([title, L10n.t(.navA11yLiveSession)])
                             : title)
         .accessibilityHint(subtitle)
-        .tag(destination)
+        .tag(surface)
     }
 
     /// Whichever destination is presenting a session that is actually running —
@@ -173,9 +183,18 @@ struct SidebarView: View {
     /// `nav.a11yLiveSession` — "A transfer is running here" — while the user
     /// read "Transfer complete". Both facts are needed, and each is taken from
     /// the object that owns it rather than copied into a third.
-    private func hasLiveSession(_ destination: AppDestination) -> Bool {
-        presence.announcesRunningTransfer(destination,
-                                          sessionIsBusy: fileModel.isBusy || textModel.isBusy)
+    /// The Workspace row asks about BOTH of its routes, because either of them
+    /// may be the one `TransferPresence` handed the session to — that
+    /// arbitration is unchanged, and iOS still depends on it. Every other row
+    /// asks about the single destination it renders.
+    private func hasLiveSession(_ surface: MacSurface) -> Bool {
+        let busy = fileModel.isBusy || textModel.isBusy
+        if surface == .workspace {
+            return AppDestination.macWorkspaceRoutes.contains {
+                presence.announcesRunningTransfer($0, sessionIsBusy: busy)
+            }
+        }
+        return presence.announcesRunningTransfer(surface.route, sessionIsBusy: busy)
     }
 
     /// Read-only on purpose: pause and resume live in Nearby and in the menu

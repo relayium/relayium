@@ -105,7 +105,6 @@
 "nav.sectionLinks" = "الروابط";
 "nav.sectionDevice" = "هذا الـ Mac";
 "nav.nearby" = "الأجهزة القريبة";
-"nav.nearbySubtitle" = "بدون حساب، من جهاز إلى جهاز — على الشبكة نفسها فقط";
 "nav.pairingCode" = "رمز الاقتران";
 "nav.pairingCodeSubtitle" = "نصوص وملفات صغيرة عبر الشبكات — مع اتصال الطرفين";
 "nav.storedSend" = "إرسال رابط";
@@ -163,7 +162,6 @@
 
 /* MARK: نقل الملفات برمز اقتران */
 "direct.sendHeading" = "إرسال";
-"direct.dropHint" = "أفلِت الملفات أو المجلدات هنا، أو انقر للاختيار. ثم أنشئ رمزًا للجهاز الآخر.";
 "direct.createCode" = "إنشاء رمز";
 "direct.receiveHeading" = "استقبال";
 "direct.creatingCode" = "جارٍ إنشاء رمز…";
@@ -282,7 +280,6 @@
 "text.startHeading" = "بدء جلسة نصية";
 "text.startBody" = "يبقى الجهازان متصلين. الرسائل مُعمّاة من الطرف إلى الطرف ولا تُحفظ إلا في ذاكرة هذه الجلسة.";
 "text.createCode" = "إنشاء رمز نصي";
-"text.joinHeading" = "الانضمام إلى جلسة نصية";
 "text.giveCode" = "أعطِ هذا الرمز النصي للجهاز الآخر";
 "text.connecting" = "جارٍ وصل جلسة نصية خاصة…";
 "text.checkMatches" = "تحقق من تطابق هذا مع الجهاز الآخر";
@@ -324,11 +321,9 @@
 "text.safetyLimits" = "تجاوزت جلسة الرسائل حدود الأمان الخاصة بها.";
 
 /* MARK: الأجهزة القريبة */
-"nearby.heading" = "الأجهزة القريبة";
 "nearby.explain" = "أجهزة تُشغِّل Relayium — التطبيق أو relayium.com — وتصل إلى الإنترنت من العنوان العام نفسه الذي يستخدمه هذا الجهاز. غالبًا ما يعني ذلك شبكة Wi‑Fi الخاصة بك، لكن بوابة مشغّل أو VPN قد تُدخل أجهزة غرباء إلى القائمة أيضًا. لا يفحص Relayium شبكتك إطلاقًا؛ بل يسأل خدمة الالتقاء التابعة له مَن غيرك يأتي من ذلك العنوان.";
 "nearby.safetySummary" = "أجهزة تُشغِّل Relayium من العنوان العام نفسه الذي يستخدمه هذا الجهاز. وخلف بوابة مشغّل أو VPN أو بوابة مشتركة قد يكون بين هذه الأجهزة غرباء، فاختر بنفسك مَن ترسل إليه.";
 "nearby.howItWorks" = "كيف تعمل هذه القائمة";
-"nearby.dropHint" = "أفلِت الملفات أو المجلدات هنا، أو انقر للاختيار. لن يُرسل شيء حتى تختار جهازًا أدناه وتضغط إرسال.";
 "nearby.lookAgain" = "البحث مجددًا";
 "nearby.resumeReceiving" = "استئناف الاستقبال";
 "nearby.pauseReceiving" = "إيقاف الاستقبال مؤقتًا";
@@ -662,3 +657,27 @@
 "inbox.waitingDeliveries.few" = "%@ عمليات توصيل بانتظار ردّك";
 "inbox.waitingDeliveries.many" = "%@ عملية توصيل بانتظار ردّك";
 "inbox.waitingDeliveries.other" = "%@ عملية توصيل بانتظار ردّك";
+
+/* MARK: macOS Workspace */
+"nav.workspace" = "مساحة العمل";
+"nav.workspaceSubtitle" = "رسائل وملفات مع جهاز واحد — على الشبكة نفسها أو عبر الشبكات برمز؛ يلزم اتصال الطرفين";
+"workspace.sameNetworkHeading" = "الشبكة نفسها";
+"workspace.pairingHeading" = "رمز الاقتران";
+"workspace.stagingHeading" = "الملفات والمجلدات";
+"workspace.stagingOptional" = "اختياري. يمكنك الاتصال أولًا واختيار الملفات لاحقًا — والرسالة لا تحتاج إلى شيء.";
+"workspace.dropHint" = "أفلِت الملفات أو المجلدات هنا، أو انقر للاختيار.";
+"workspace.sendMessage" = "إرسال رسالة";
+"workspace.addFilesHint" = "اختر الملفات أو المجلدات بالأسفل، ثم أرسلها مباشرة إلى ذلك الجهاز.";
+"workspace.sendMessageHint" = "يفتح جلسة رسائل مع هذا الجهاز. لا حاجة إلى تحديد أي شيء.";
+"workspace.sendFiles" = "إرسال ملفات";
+"workspace.createMessageCode" = "إنشاء رمز للرسائل";
+"workspace.createFileCode" = "إنشاء رمز للملفات";
+"workspace.createFileCodeHint" = "اختر الملفات أو المجلدات بالأسفل أولًا؛ فالرمز يحمل تلك الدفعة.";
+"workspace.joinMessages" = "الانضمام إلى الرسائل";
+"workspace.joinFiles" = "الانضمام إلى الملفات";
+"workspace.joinKindHint" = "الرمز وحده لا يوضّح أيًّا منهما. اسأل من أنشأه، أو استخدم الرابط الذي أرسله.";
+"workspace.oneConnectionNote" = "الاتصال الواحد ينقل الرسائل أو الملفات، لا كليهما. إرسال النوع الآخر يفتح اتصالًا جديدًا برمز تحقق جديد.";
+"workspace.messagesOnlyNote" = "هذه الجلسة تنقل الرسائل لا الملفات. إرسال الملفات يحتاج جلسة خاصة به — غادر هذه الجلسة لبدئها.";
+"workspace.filesOnlyNote" = "هذه الجلسة تنقل الملفات لا الرسائل. إرسال رسالة يحتاج جلسة خاصة به — غادر هذه الجلسة لبدئها.";
+"workspace.leaveSession" = "مغادرة هذه الجلسة";
+"workspace.sessionWithCode" = "متصل عبر رمز اقتران";

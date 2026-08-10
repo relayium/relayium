@@ -102,7 +102,6 @@
 "nav.sectionLinks" = "Liens";
 "nav.sectionDevice" = "Ce Mac";
 "nav.nearby" = "À proximité";
-"nav.nearbySubtitle" = "Sans compte, d’appareil à appareil — même réseau uniquement";
 "nav.pairingCode" = "Code d’association";
 "nav.pairingCodeSubtitle" = "Texte et petits fichiers entre réseaux — les deux en ligne";
 "nav.storedSend" = "Envoyer un lien";
@@ -160,7 +159,6 @@
 
 /* MARK: transfert de fichiers par code */
 "direct.sendHeading" = "Envoyer";
-"direct.dropHint" = "Déposez des fichiers ou des dossiers ici, ou cliquez pour les choisir. Créez ensuite un code pour l’autre appareil.";
 "direct.createCode" = "Créer un code";
 "direct.receiveHeading" = "Recevoir";
 "direct.creatingCode" = "Création d’un code…";
@@ -267,7 +265,6 @@
 "text.startHeading" = "Démarrer une session texte";
 "text.startBody" = "Les deux appareils restent en ligne. Les messages sont chiffrés de bout en bout et ne restent qu’en mémoire pour la durée de la session.";
 "text.createCode" = "Créer un code texte";
-"text.joinHeading" = "Rejoindre une session texte";
 "text.giveCode" = "Communiquez ce code texte à l’autre appareil";
 "text.connecting" = "Connexion d’une session texte privée…";
 "text.checkMatches" = "Vérifiez que cela correspond à l’autre appareil";
@@ -309,11 +306,9 @@
 "text.safetyLimits" = "La session de messages a dépassé ses limites de sécurité.";
 
 /* MARK: appareils à proximité */
-"nearby.heading" = "Appareils à proximité";
 "nearby.explain" = "Appareils exécutant Relayium — l’app ou relayium.com — qui atteignent Internet depuis la même adresse publique que cet appareil. C’est généralement votre Wi-Fi, mais une passerelle d’opérateur ou de VPN peut aussi y faire apparaître les appareils d’inconnus. Relayium ne scanne jamais votre réseau ; il demande à son service de rendez-vous qui d’autre arrive depuis cette adresse.";
 "nearby.safetySummary" = "Appareils exécutant Relayium à la même adresse publique que cet appareil. Derrière une passerelle d’opérateur, de VPN ou partagée, des inconnus peuvent en faire partie : choisissez vous-même le destinataire.";
 "nearby.howItWorks" = "Comment cette liste fonctionne";
-"nearby.dropHint" = "Déposez des fichiers ou des dossiers ici, ou cliquez pour les choisir. Rien n’est envoyé tant que vous n’avez pas choisi un appareil ci-dessous et appuyé sur Envoyer.";
 "nearby.lookAgain" = "Chercher à nouveau";
 "nearby.resumeReceiving" = "Reprendre la réception";
 "nearby.pauseReceiving" = "Suspendre la réception";
@@ -615,3 +610,27 @@
 "inbox.savedFiles.other" = "%@ fichiers enregistrés";
 "inbox.waitingDeliveries.one" = "%@ livraison attend votre réponse";
 "inbox.waitingDeliveries.other" = "%@ livraisons attendent votre réponse";
+
+/* MARK: macOS Workspace */
+"nav.workspace" = "Espace de travail";
+"nav.workspaceSubtitle" = "Messages et fichiers avec un appareil — même réseau ou d’un réseau à l’autre avec un code ; les deux en ligne";
+"workspace.sameNetworkHeading" = "Même réseau";
+"workspace.pairingHeading" = "Code d’association";
+"workspace.stagingHeading" = "Fichiers et dossiers";
+"workspace.stagingOptional" = "Facultatif. Vous pouvez vous connecter d’abord et choisir les fichiers ensuite — un message ne demande rien.";
+"workspace.dropHint" = "Déposez des fichiers ou dossiers ici, ou cliquez pour choisir.";
+"workspace.sendMessage" = "Envoyer un message";
+"workspace.addFilesHint" = "Choisissez des fichiers ou dossiers ci-dessous, puis envoyez-les directement à cet appareil.";
+"workspace.sendMessageHint" = "Ouvre une session de messages avec cet appareil. Aucune sélection n’est nécessaire.";
+"workspace.sendFiles" = "Envoyer des fichiers";
+"workspace.createMessageCode" = "Créer un code pour les messages";
+"workspace.createFileCode" = "Créer un code pour les fichiers";
+"workspace.createFileCodeHint" = "Choisissez d’abord des fichiers ou dossiers ci-dessous ; le code porte ce lot.";
+"workspace.joinMessages" = "Rejoindre les messages";
+"workspace.joinFiles" = "Rejoindre les fichiers";
+"workspace.joinKindHint" = "Un code ne dit pas de quoi il s’agit. Demandez à la personne qui l’a créé, ou utilisez le lien envoyé.";
+"workspace.oneConnectionNote" = "Une connexion transporte des messages ou des fichiers, pas les deux. L’autre type ouvre une nouvelle connexion, avec un nouveau code de vérification.";
+"workspace.messagesOnlyNote" = "Cette session transporte des messages, pas des fichiers. Envoyer des fichiers demande une session à part — quittez celle-ci pour l’ouvrir.";
+"workspace.filesOnlyNote" = "Cette session transporte des fichiers, pas des messages. Envoyer un message demande une session à part — quittez celle-ci pour l’ouvrir.";
+"workspace.leaveSession" = "Quitter cette session";
+"workspace.sessionWithCode" = "Connecté avec un code d’association";

@@ -102,7 +102,6 @@
 "nav.sectionLinks" = "Enlaces";
 "nav.sectionDevice" = "Este Mac";
 "nav.nearby" = "Cerca";
-"nav.nearbySubtitle" = "Sin cuenta, de dispositivo a dispositivo: solo la misma red";
 "nav.pairingCode" = "Código de emparejamiento";
 "nav.pairingCodeSubtitle" = "Texto y archivos pequeños entre redes: ambos en línea";
 "nav.storedSend" = "Enviar un enlace";
@@ -160,7 +159,6 @@
 
 /* MARK: transferencia por código */
 "direct.sendHeading" = "Enviar";
-"direct.dropHint" = "Arrastra archivos o carpetas aquí, o haz clic para elegirlos. Después crea un código para el otro dispositivo.";
 "direct.createCode" = "Crear un código";
 "direct.receiveHeading" = "Recibir";
 "direct.creatingCode" = "Creando un código…";
@@ -267,7 +265,6 @@
 "text.startHeading" = "Iniciar una sesión de texto";
 "text.startBody" = "Ambos dispositivos permanecen conectados. Los mensajes van cifrados de extremo a extremo y solo se conservan en la memoria de esta sesión.";
 "text.createCode" = "Crear un código de texto";
-"text.joinHeading" = "Unirse a una sesión de texto";
 "text.giveCode" = "Dale este código de texto al otro dispositivo";
 "text.connecting" = "Conectando una sesión de texto privada…";
 "text.checkMatches" = "Comprueba que coincida con el otro dispositivo";
@@ -309,11 +306,9 @@
 "text.safetyLimits" = "La sesión de mensajes superó sus límites de seguridad.";
 
 /* MARK: dispositivos cercanos */
-"nearby.heading" = "Dispositivos cercanos";
 "nearby.explain" = "Dispositivos que ejecutan Relayium —la app o relayium.com— y que salen a internet desde la misma dirección pública que este dispositivo. Normalmente eso significa tu wifi, pero una pasarela de operador o de VPN puede meter en la lista dispositivos de desconocidos. Relayium nunca escanea tu red; le pregunta a su servicio de encuentro quién más llega desde esa dirección.";
 "nearby.safetySummary" = "Dispositivos con Relayium en la misma dirección pública que este dispositivo. Tras una pasarela de operador, de VPN o compartida puede haber desconocidos, así que elige tú a quién envías.";
 "nearby.howItWorks" = "Cómo funciona esta lista";
-"nearby.dropHint" = "Arrastra archivos o carpetas aquí, o haz clic para elegirlos. No se envía nada hasta que elijas un dispositivo abajo y pulses Enviar.";
 "nearby.lookAgain" = "Buscar de nuevo";
 "nearby.resumeReceiving" = "Reanudar la recepción";
 "nearby.pauseReceiving" = "Pausar la recepción";
@@ -615,3 +610,27 @@
 "inbox.savedFiles.other" = "%@ archivos guardados";
 "inbox.waitingDeliveries.one" = "%@ entrega esperando tu respuesta";
 "inbox.waitingDeliveries.other" = "%@ entregas esperando tu respuesta";
+
+/* MARK: macOS Workspace */
+"nav.workspace" = "Espacio de trabajo";
+"nav.workspaceSubtitle" = "Mensajes y archivos con un dispositivo: misma red o entre redes con un código; ambos en línea";
+"workspace.sameNetworkHeading" = "Misma red";
+"workspace.pairingHeading" = "Código de emparejamiento";
+"workspace.stagingHeading" = "Archivos y carpetas";
+"workspace.stagingOptional" = "Opcional. Puedes conectar primero y elegir archivos después; un mensaje no necesita nada.";
+"workspace.dropHint" = "Arrastra archivos o carpetas aquí, o haz clic para elegirlos.";
+"workspace.sendMessage" = "Enviar un mensaje";
+"workspace.addFilesHint" = "Elige archivos o carpetas abajo y envíalos directamente a ese dispositivo.";
+"workspace.sendMessageHint" = "Abre una sesión de mensajes con este dispositivo. No hace falta seleccionar nada.";
+"workspace.sendFiles" = "Enviar archivos";
+"workspace.createMessageCode" = "Crear un código para mensajes";
+"workspace.createFileCode" = "Crear un código para archivos";
+"workspace.createFileCodeHint" = "Elige primero archivos o carpetas abajo; el código lleva ese lote.";
+"workspace.joinMessages" = "Unirse a mensajes";
+"workspace.joinFiles" = "Unirse a archivos";
+"workspace.joinKindHint" = "Un código no dice de cuál se trata. Pregunta a quien lo creó, o usa el enlace que te envió.";
+"workspace.oneConnectionNote" = "Una conexión lleva mensajes o archivos, no ambos. Enviar el otro tipo abre una conexión nueva, con un código de verificación nuevo.";
+"workspace.messagesOnlyNote" = "Esta sesión lleva mensajes, no archivos. Enviar archivos necesita una sesión propia: sal de esta para abrirla.";
+"workspace.filesOnlyNote" = "Esta sesión lleva archivos, no mensajes. Enviar un mensaje necesita una sesión propia: sal de esta para abrirla.";
+"workspace.leaveSession" = "Salir de esta sesión";
+"workspace.sessionWithCode" = "Conectado con un código de emparejamiento";

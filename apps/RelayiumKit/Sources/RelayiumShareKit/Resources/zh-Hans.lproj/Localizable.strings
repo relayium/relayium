@@ -102,7 +102,6 @@
 "nav.sectionLinks" = "链接";
 "nav.sectionDevice" = "这台 Mac";
 "nav.nearby" = "附近设备";
-"nav.nearbySubtitle" = "免账户，设备之间直传——仅限同一网络";
 "nav.pairingCode" = "配对码";
 "nav.pairingCodeSubtitle" = "跨网络发送文本和小文件——双方须同时在线";
 "nav.storedSend" = "发送链接";
@@ -160,7 +159,6 @@
 
 /* MARK: 配对码文件传输 */
 "direct.sendHeading" = "发送";
-"direct.dropHint" = "把文件或文件夹拖到这里，或点击选择。然后为对方设备创建配对码。";
 "direct.createCode" = "创建配对码";
 "direct.receiveHeading" = "接收";
 "direct.creatingCode" = "正在创建配对码…";
@@ -264,7 +262,6 @@
 "text.startHeading" = "发起文本会话";
 "text.startBody" = "双方设备都需保持在线。消息端到端加密，且仅保存在本次会话的内存中。";
 "text.createCode" = "创建文本配对码";
-"text.joinHeading" = "加入文本会话";
 "text.giveCode" = "把这个文本配对码告诉对方设备";
 "text.connecting" = "正在建立私密文本会话…";
 "text.checkMatches" = "请核对与对方设备是否一致";
@@ -306,11 +303,9 @@
 "text.safetyLimits" = "消息会话超出了安全限额。";
 
 /* MARK: 附近设备 */
-"nearby.heading" = "附近设备";
 "nearby.explain" = "正在运行 Relayium（应用或 relayium.com）、并且与这台设备从同一个公网地址访问互联网的设备。通常这意味着你的 Wi-Fi，但运营商或 VPN 网关也可能把陌生人的设备放进这个列表。Relayium 从不扫描你的网络；它只是向自己的会合服务询问还有谁来自那个地址。";
 "nearby.safetySummary" = "与这台设备处于同一公网地址、并且正在运行 Relayium 的设备。在运营商、VPN 或共用网关下，这个地址里也可能有陌生人，所以请自己决定发给谁。";
 "nearby.howItWorks" = "这个列表是怎么来的";
-"nearby.dropHint" = "把文件或文件夹拖到这里，或点击选择。在你从下方挑选设备并按下「发送」之前，什么都不会发出。";
 "nearby.lookAgain" = "重新查找";
 "nearby.resumeReceiving" = "恢复接收";
 "nearby.pauseReceiving" = "暂停接收";
@@ -604,3 +599,27 @@
 "inbox.loginNote" = "“登录时打开”让 Relayium 在你登录这台 Mac 后重新开始接收。它并不表示收件箱现在已经就绪。";
 "inbox.savedFiles.other" = "已保存 %@ 个文件";
 "inbox.waitingDeliveries.other" = "%@ 项投递正在等待你的答复";
+
+/* MARK: macOS Workspace */
+"nav.workspace" = "工作区";
+"nav.workspaceSubtitle" = "与一台设备互传消息和文件 —— 同一网络，或用配对码跨网络；双方须同时在线";
+"workspace.sameNetworkHeading" = "同一网络";
+"workspace.pairingHeading" = "配对码";
+"workspace.stagingHeading" = "文件和文件夹";
+"workspace.stagingOptional" = "可选。你可以先连接、之后再选文件；发消息则什么都不用选。";
+"workspace.dropHint" = "把文件或文件夹拖到这里，或点击选择。";
+"workspace.sendMessage" = "发送消息";
+"workspace.addFilesHint" = "在下方选择文件或文件夹，然后直接发送到该设备。";
+"workspace.sendMessageHint" = "与这台设备开启消息会话，无需先选择任何内容。";
+"workspace.sendFiles" = "发送文件";
+"workspace.createMessageCode" = "创建消息配对码";
+"workspace.createFileCode" = "创建文件配对码";
+"workspace.createFileCodeHint" = "请先在下方选择文件或文件夹；配对码携带的就是这一批。";
+"workspace.joinMessages" = "加入消息";
+"workspace.joinFiles" = "加入文件";
+"workspace.joinKindHint" = "配对码本身不说明是哪一种。请问创建它的人，或使用对方发来的链接。";
+"workspace.oneConnectionNote" = "一条连接只承载消息或文件，不能同时承载两者。发送另一种会新建一条连接，并产生新的验证码。";
+"workspace.messagesOnlyNote" = "本会话承载消息，不承载文件。发送文件需要单独的会话——离开本会话后再开始。";
+"workspace.filesOnlyNote" = "本会话承载文件，不承载消息。发送消息需要单独的会话——离开本会话后再开始。";
+"workspace.leaveSession" = "离开本会话";
+"workspace.sessionWithCode" = "已通过配对码连接";

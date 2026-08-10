@@ -20,7 +20,13 @@ text_sources=(
   "$repo_root/apps/RelayiumKit/Sources/RelayiumKit/RealtimeWire/RealtimeTextFrame.swift"
   "$repo_root/apps/RelayiumKit/Tests/RelayiumKitTests/RealtimeTextSessionModelTests.swift"
   "$repo_root/apps/RelayiumKit/Tests/RelayiumKitTests/RealtimeTextFrameTests.swift"
-  "$repo_root/apps/mac/Relayium/RealtimeTextPane.swift"
+  # Was RealtimeTextPane.swift until the macOS Workspace merge. The pairing-code
+  # create/join half of an ephemeral text session now lives on the Workspace's
+  # connect pane and its live/terminal half on the session pane, so the surface
+  # this evidence rests on is these two files rather than that one. The
+  # capability itself is unchanged — same model, same wire, same consent steps.
+  "$repo_root/apps/mac/Relayium/Workspace/WorkspaceConnectPane.swift"
+  "$repo_root/apps/mac/Relayium/Workspace/WorkspaceSessionPane.swift"
 )
 for source_path in "${text_sources[@]}"; do
   if [ ! -f "$source_path" ]; then

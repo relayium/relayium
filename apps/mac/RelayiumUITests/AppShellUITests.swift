@@ -100,12 +100,16 @@ final class AppShellUITests: XCTestCase {
                       "the menu-bar recovery action did not restore the product window")
     }
 
-    /// Every destination's visible title and the `AppDestination` raw value the
+    /// Every destination's visible title and the `MacSurface` raw value the
     /// product identifies it by. One list, so the suite that walks the sidebar and
     /// the assertion that names a rendered surface cannot drift into two sets.
+    ///
+    /// **Five, not six.** Nearby and Pairing code are one Workspace row: they
+    /// were two ways to reach one peer, not two products, and both routes still
+    /// exist in `AppDestination` for iOS. Keyed on the surface, so this suite
+    /// asserts the screen the user actually sees.
     private static let destinationIDs = [
-        "Nearby": "nearby",
-        "Pairing code": "pairingCode",
+        "Workspace": "workspace",
         "Send a link": "storedSend",
         "Open a link": "storedReceive",
         "Device Inbox": "deviceInbox",
@@ -167,7 +171,7 @@ final class AppShellUITests: XCTestCase {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
         // English is the CI locale; the localized suites cover the other eight.
-        for destination in ["Nearby", "Pairing code", "Send a link",
+        for destination in ["Workspace", "Send a link",
                             "Open a link", "Device Inbox", "Account"] {
             let row = sidebarDestination(destination, in: window)
             XCTAssertTrue(row.waitForExistence(timeout: 10),
@@ -178,7 +182,7 @@ final class AppShellUITests: XCTestCase {
     func testStoppedNearbyDiscoveryAsksForActionWithoutPretendingToWork() {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let nearby = sidebarDestination("Nearby", in: window)
+        let nearby = sidebarDestination("Workspace", in: window)
         XCTAssertTrue(nearby.waitForExistence(timeout: 10))
         nearby.click()
 
@@ -203,7 +207,7 @@ final class AppShellUITests: XCTestCase {
     func testPendingSendNamesTheFileAndItsSizeBeforeTransfer() throws {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let nearby = sidebarDestination("Nearby", in: window)
+        let nearby = sidebarDestination("Workspace", in: window)
         XCTAssertTrue(nearby.waitForExistence(timeout: 10))
         nearby.click()
 
@@ -249,8 +253,8 @@ final class AppShellUITests: XCTestCase {
     func testEachDestinationRendersItsOwnSurface() {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let destinations = ["Pairing code", "Send a link", "Open a link",
-                            "Account", "Nearby"]
+        let destinations = ["Send a link", "Open a link",
+                            "Account", "Workspace"]
         for destination in destinations {
             let row = sidebarDestination(destination, in: window)
             guard row.waitForExistence(timeout: 10) else {
@@ -403,20 +407,16 @@ final class AppShellUITests: XCTestCase {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
 
-        let pairing = sidebarDestination("Pairing code", in: window)
+        let pairing = sidebarDestination("Workspace", in: window)
         XCTAssertTrue(pairing.waitForExistence(timeout: 10))
         pairing.click()
 
-        let textMode = window.radioButtons["Text"]
-        XCTAssertTrue(textMode.waitForExistence(timeout: 10))
-        XCTAssertTrue(visibleElement(
-            id: "pairing-mode-match-hint",
-            text: "Choose Files or Text to match what the sender started. The code itself does not identify the type.",
-            in: window).exists,
-                      "the mode picker hides the requirement to match the sender")
-        textMode.click()
+        // No mode picker to set first: the verb carries the kind. This is the
+        // runtime half of `testNoSegmentedModePickerSurvivesAnywhereOnMacOS`.
+        XCTAssertEqual(window.radioButtons.count, 0,
+                       "the Workspace still offers a segmented transfer-type choice")
 
-        let create = window.buttons["Create a text code"]
+        let create = window.buttons["Create a code for messages"]
         XCTAssertTrue(create.waitForExistence(timeout: 10))
         create.click()
 
@@ -442,15 +442,22 @@ final class AppShellUITests: XCTestCase {
                       "the handoff leaves it ambiguous whether the code or transfer expires")
         XCTAssertTrue(window.buttons["Cancel"].exists,
                       "the generated-code surface hides its escape action")
-        XCTAssertTrue(window.staticTexts["Pairing code"].exists || window.title == "Pairing code",
-                      "creating a pairing-code text session navigated elsewhere")
+        XCTAssertTrue(window.staticTexts["Workspace"].exists || window.title == "Workspace",
+                      "creating a pairing-code message session navigated elsewhere")
+        // The bounded honesty of this batch, on screen: a live connection says
+        // which lane it does NOT have rather than showing a dead composer.
+        XCTAssertTrue(visibleElement(
+            id: "workspace-lane-note",
+            text: "This session carries messages, not files. Sending files needs a session of its own — leave this one to start it.",
+            in: window).exists,
+                      "a live session does not say what it can carry")
 
         // No conversation or transcript exists yet. Cancel must be the whole
         // exit, not the first half of Cancel -> Session ended -> Done.
         window.buttons["Cancel"].click()
-        XCTAssertTrue(window.buttons["Create a text code"].waitForExistence(timeout: 10),
-                      "Cancel did not return directly to text-code creation")
-        XCTAssertTrue(window.buttons["Join"].exists,
+        XCTAssertTrue(window.buttons["Create a code for messages"].waitForExistence(timeout: 10),
+                      "Cancel did not return directly to code creation")
+        XCTAssertTrue(window.buttons["Join messages"].exists,
                       "Cancel did not restore the pairing-code join path")
         XCTAssertFalse(window.buttons["Done"].exists,
                        "Cancel manufactured an empty terminal task requiring Done")
@@ -458,35 +465,92 @@ final class AppShellUITests: XCTestCase {
                        "the cancelled pairing code remained on screen")
     }
 
-    /// Both pairing modes accept the same six-digit task. Fast entry must be
-    /// canonicalized once without an older partial value replacing later
-    /// digits, and the complete value must make Join actionable.
-    func testPairingJoinKeepsACompleteCodeActionableInBothModes() {
+    /// **One field, both join verbs.** A code does not say whether the peer who
+    /// minted it chose messages or files, and this side cannot probe for it — a
+    /// speculative offer is read by an older peer as the wrong kind entirely. So
+    /// the joiner states which, and both statements have to be reachable from
+    /// the one complete code. Fast entry must be canonicalized once without an
+    /// older partial value replacing later digits.
+    func testWorkspaceJoinKeepsACompleteCodeActionableForBothVerbs() {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let pairing = sidebarDestination("Pairing code", in: window)
-        XCTAssertTrue(pairing.waitForExistence(timeout: 10))
-        pairing.click()
+        let workspace = sidebarDestination("Workspace", in: window)
+        XCTAssertTrue(workspace.waitForExistence(timeout: 10))
+        workspace.click()
 
-        for (mode, code) in [("Files", "123456"), ("Text", "654321")] {
-            let choice = window.radioButtons[mode]
-            XCTAssertTrue(choice.waitForExistence(timeout: 10))
-            choice.click()
-            let field = window.textFields["pairing.joinCode"]
-            XCTAssertTrue(field.waitForExistence(timeout: 10),
-                          "\(mode) has no pairing-code field")
-            field.click()
-            field.typeText(code)
-            XCTAssertEqual(field.value as? String, code,
-                           "\(mode) lost digits during fast entry")
-            XCTAssertTrue(window.buttons["Join"].isEnabled,
-                          "\(mode) cannot join with a complete code")
-        }
+        let field = window.textFields["pairing.joinCode"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10),
+                      "the Workspace has no pairing-code field")
+        XCTAssertFalse(window.buttons["Join messages"].isEnabled,
+                       "an empty code left a join verb actionable")
+        XCTAssertFalse(window.buttons["Join files"].isEnabled,
+                       "an empty code left a join verb actionable")
+
+        field.click()
+        field.typeText("123456")
+        XCTAssertEqual(field.value as? String, "123456",
+                       "the join field lost digits during fast entry")
+        // BOTH verbs, from the one field: writing only one model is how the two
+        // buttons end up disagreeing about which code this device is joining.
+        XCTAssertTrue(window.buttons["Join messages"].isEnabled,
+                      "a complete code cannot join a message session")
+        XCTAssertTrue(window.buttons["Join files"].isEnabled,
+                      "a complete code cannot join a file transfer")
+    }
+
+    /// **One screen offers both ways to connect, and leads with the message.**
+    ///
+    /// The regression this catches is the one the merge exists to prevent: a
+    /// later edit that puts the pairing-code half back on a screen of its own, or
+    /// that makes connecting depend on staging files first.
+    func testTheWorkspaceOffersBothConnectionMethodsAndLeadsWithMessages() {
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let workspace = sidebarDestination("Workspace", in: window)
+        XCTAssertTrue(workspace.waitForExistence(timeout: 10))
+        workspace.click()
+
+        // Same-network discovery.
+        XCTAssertTrue(window.buttons["Look again"].waitForExistence(timeout: 10),
+                      "the Workspace lost same-network discovery")
+        // Pairing-code create AND join, on the same screen.
+        XCTAssertTrue(window.buttons["Create a code for messages"].exists,
+                      "the Workspace lost pairing-code creation")
+        XCTAssertTrue(window.buttons["Create a code for files"].exists,
+                      "the Workspace lost the file half of pairing-code creation")
+        XCTAssertTrue(window.textFields["pairing.joinCode"].exists,
+                      "the Workspace lost pairing-code joining")
+        // File and folder actions sit alongside, and are optional.
+        XCTAssertTrue(window.descendants(matching: .any)["Files to send"].firstMatch.exists,
+                      "the Workspace lost its file and folder staging")
+        XCTAssertTrue(visibleElement(
+            id: "workspace-staging-optional",
+            text: "Optional. You can connect first and choose files afterwards — a message needs nothing at all.",
+            in: window).exists,
+                      "the Workspace no longer says staging is optional")
+        // And it states, before anything is connected, what one connection can
+        // carry. Deleting this sentence is what the link/1 batch will do.
+        XCTAssertTrue(visibleElement(
+            id: "workspace-one-connection-note",
+            text: "One connection carries messages or files, not both. Sending the other kind opens a new connection, with a new verification code.",
+            in: window).exists,
+                      "the Workspace no longer states its one-lane limit")
+        // Creating a message code needs nothing staged; creating a file code
+        // does. That asymmetry IS message-first.
+        XCTAssertTrue(window.buttons["Create a code for messages"].isEnabled,
+                      "the default intent requires a staged selection")
+        XCTAssertFalse(window.buttons["Create a code for files"].isEnabled,
+                       "a file code can be created with nothing to send")
     }
 
     /// A terminal task is not an invitation to start another one on top of it.
-    /// Done is the explicit boundary that releases the old connection/history;
-    /// only after it is pressed may Create and Join return.
+    /// The one exit is the explicit boundary that releases the old
+    /// connection/history; only after it is pressed may the connect controls
+    /// return.
+    ///
+    /// With one surface, that boundary is now structural rather than per-state:
+    /// the connect controls live in a different view, so a terminal session
+    /// cannot leak one.
     func testTerminalTextSessionMustBeDismissedBeforeStartingAgain() {
         app.terminate()
         app.launchArguments = offlineLaunchArguments
@@ -496,27 +560,26 @@ final class AppShellUITests: XCTestCase {
 
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let pairing = sidebarDestination("Pairing code", in: window)
-        XCTAssertTrue(pairing.waitForExistence(timeout: 10))
-        pairing.click()
-        let textMode = window.radioButtons["Text"]
-        XCTAssertTrue(textMode.waitForExistence(timeout: 10))
-        textMode.click()
-        XCTAssertTrue(window.buttons["Create a text code"].waitForExistence(timeout: 10))
-        window.buttons["Create a text code"].click()
+        let workspace = sidebarDestination("Workspace", in: window)
+        XCTAssertTrue(workspace.waitForExistence(timeout: 10))
+        workspace.click()
+        XCTAssertTrue(window.buttons["Create a code for messages"].waitForExistence(timeout: 10))
+        window.buttons["Create a code for messages"].click()
 
-        let done = window.buttons["Done"]
-        XCTAssertTrue(done.waitForExistence(timeout: 10),
+        let leave = window.buttons["Leave this session"]
+        XCTAssertTrue(leave.waitForExistence(timeout: 10),
                       "the failed session has no cleanup boundary")
-        XCTAssertFalse(window.buttons["Create a text code"].exists,
-                       "a new create path replaced a terminal session before Done")
-        XCTAssertFalse(window.buttons["Join"].exists,
-                       "a new join path replaced a terminal session before Done")
+        XCTAssertFalse(window.buttons["Create a code for messages"].exists,
+                       "a new create path replaced a terminal session before the exit")
+        XCTAssertFalse(window.buttons["Join messages"].exists,
+                       "a new join path replaced a terminal session before the exit")
+        XCTAssertFalse(window.buttons["Look again"].exists,
+                       "the roster replaced a terminal session before the exit")
 
-        done.click()
-        XCTAssertTrue(window.buttons["Create a text code"].waitForExistence(timeout: 10),
+        leave.click()
+        XCTAssertTrue(window.buttons["Create a code for messages"].waitForExistence(timeout: 10),
                       "the start controls did not return after cleanup")
-        XCTAssertTrue(window.buttons["Join"].exists)
+        XCTAssertTrue(window.buttons["Join messages"].exists)
     }
 
     /// A terminal Nearby task retains both its peer context and a real cleanup
@@ -533,19 +596,19 @@ final class AppShellUITests: XCTestCase {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
         XCTAssertTrue(visibleElement(
-            id: "nearby-session-peer", text: "Session with Studio Mac · 19af02",
+            id: "workspace-session-peer", text: "Session with Studio Mac · 19af02",
             in: window).waitForExistence(timeout: 10),
                       "the terminal task lost who it was with")
         XCTAssertTrue(window.staticTexts[
             "This name is provided by the other device and is not verified identity."
         ].exists)
 
-        let back = window.buttons["Back to nearby devices"]
+        let back = window.buttons["Leave this session"]
         XCTAssertTrue(back.waitForExistence(timeout: 10),
-                      "the retained Nearby owner made its own exit unreachable")
+                      "the retained session owner made its own exit unreachable")
         back.click()
         XCTAssertTrue(window.buttons["Look again"].waitForExistence(timeout: 10),
-                      "Back to devices did not release the terminal task")
+                      "leaving did not release the terminal task")
         XCTAssertFalse(window.staticTexts["Session with Studio Mac · 19af02"].exists,
                        "the released task kept stale peer context on screen")
     }
@@ -1037,28 +1100,34 @@ final class AppShellUITests: XCTestCase {
             "a cancelled upload left a capability link on screen")
     }
 
-    /// Nearby's transfer type is two different tasks, not a label.
-    func testNearbyTransferTypeChangesWhatIsStaged() {
+    /// **Staging is available at all times, and never a precondition of
+    /// connecting.**
+    ///
+    /// This replaces the old "transfer type changes what is staged" test, which
+    /// asserted the behaviour of the segmented picker this round removed: the
+    /// file staging surface used to DISAPPEAR when the user chose Text, so
+    /// choosing to say something also threw away the batch they had picked. The
+    /// property that matters now is the opposite one — the drop zone, the picker
+    /// button and the message verb are on screen together, and none of them is
+    /// gated on the others.
+    func testWorkspaceStagingIsAlwaysAvailableAndNeverGatesConnecting() {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let nearby = sidebarDestination("Nearby", in: window)
-        XCTAssertTrue(nearby.waitForExistence(timeout: 10))
-        nearby.click()
+        let workspace = sidebarDestination("Workspace", in: window)
+        XCTAssertTrue(workspace.waitForExistence(timeout: 10))
+        workspace.click()
 
         let chooser = window.descendants(matching: .any)["Files to send"].firstMatch
         XCTAssertTrue(chooser.waitForExistence(timeout: 15),
-                      "Nearby's file mode stages nothing")
-
-        let text = window.radioButtons["Text"]
-        XCTAssertTrue(text.waitForExistence(timeout: 10),
-                      "Nearby offers no transfer type choice")
-        text.click()
-        XCTAssertFalse(chooser.waitForExistence(timeout: 3),
-                       "choosing Text left the file staging surface behind")
-
-        window.radioButtons["Files"].click()
-        XCTAssertTrue(chooser.waitForExistence(timeout: 10),
-                      "returning to Files did not restore its staging surface")
+                      "the Workspace stages nothing")
+        XCTAssertTrue(window.buttons["Choose files or folders"].exists,
+                      "the Workspace has no explicit file and folder picker")
+        XCTAssertEqual(window.radioButtons.count, 0,
+                       "a transfer-type picker can still hide the staging surface")
+        // Connecting is reachable with nothing staged: the message verbs are the
+        // ones with no precondition at all.
+        XCTAssertTrue(window.buttons["Create a code for messages"].isEnabled,
+                      "connecting was made to depend on choosing files first")
     }
 
     /// An upload that fails mid-transfer keeps the user's files in front of them.
@@ -1123,10 +1192,9 @@ final class AppShellUITests: XCTestCase {
 
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let pairing = sidebarDestination("Pairing code", in: window)
+        let pairing = sidebarDestination("Workspace", in: window)
         XCTAssertTrue(pairing.waitForExistence(timeout: 10))
         pairing.click()
-        window.radioButtons["Files"].click()
 
         let fixture = FileManager.default.temporaryDirectory
             .appendingPathComponent("Relayium product brief \(UUID().uuidString).txt")
@@ -1135,7 +1203,7 @@ final class AppShellUITests: XCTestCase {
 
         let chooser = window.descendants(matching: .any)["Files to send"].firstMatch
         XCTAssertTrue(chooser.waitForExistence(timeout: 10),
-                      "the file pairing mode stages nothing")
+                      "the Workspace stages nothing")
         chooser.click()
         app.typeKey("g", modifierFlags: [.command, .shift])
         let location = app.textFields.firstMatch
@@ -1146,9 +1214,11 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(choose.waitForExistence(timeout: 10))
         choose.click()
 
-        let create = window.buttons["Create a code"]
+        let create = window.buttons["Create a code for files"]
         XCTAssertTrue(create.waitForExistence(timeout: 10),
                       "a staged file offers no way to create a code")
+        XCTAssertTrue(create.isEnabled,
+                      "a staged batch left the file-code action inert")
         create.click()
 
         XCTAssertTrue(window.staticTexts["4 8 3 9 2 0"].waitForExistence(timeout: 20),
@@ -1222,11 +1292,12 @@ final class AppShellUITests: XCTestCase {
     /// catalog from inside the package.
     func testEveryShippedLanguageRendersItsOwnShell() {
         let shipped = [
-            ("en", "Nearby"), ("zh-Hans", "附近设备"), ("ja", "近くのデバイス"),
-            ("ko", "근처 기기"), ("de", "In der Nähe"), ("fr", "À proximité"),
-            ("ar", "الأجهزة القريبة"), ("es", "Cerca"), ("pt", "Por perto"),
+            ("en", "Workspace"), ("zh-Hans", "工作区"), ("ja", "ワークスペース"),
+            ("ko", "작업 공간"), ("de", "Arbeitsbereich"), ("fr", "Espace de travail"),
+            ("ar", "مساحة العمل"), ("es", "Espacio de trabajo"),
+            ("pt", "Espaço de trabalho"),
         ]
-        for (code, nearby) in shipped {
+        for (code, workspace) in shipped {
             app.terminate()
             app.launchArguments = ["--relayium-ui-testing", "-AppleLanguages", "(\(code))",
                                    "-AppleLocale", code, "-SUEnableAutomaticChecks", "NO"]
@@ -1235,11 +1306,11 @@ final class AppShellUITests: XCTestCase {
             let window = mainWindow
             XCTAssertTrue(window.waitForExistence(timeout: 20),
                           "\(code) did not produce a window at all")
-            let row = window.descendants(matching: .any)["sidebar-nearby"].firstMatch
+            let row = window.descendants(matching: .any)["sidebar-workspace"].firstMatch
             XCTAssertTrue(row.waitForExistence(timeout: 10),
-                          "\(code) produced a window with no Nearby destination")
+                          "\(code) produced a window with no Workspace destination")
             let shown = (row.value as? String) ?? row.label
-            XCTAssertEqual(shown, nearby,
+            XCTAssertEqual(shown, workspace,
                            "\(code) rendered a shell that is not in \(code)")
         }
     }
@@ -1261,9 +1332,9 @@ final class AppShellUITests: XCTestCase {
 
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let row = window.descendants(matching: .any)["sidebar-nearby"].firstMatch
+        let row = window.descendants(matching: .any)["sidebar-workspace"].firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: 15),
-                      "the Arabic window has no Nearby destination")
+                      "the Arabic window has no Workspace destination")
         XCTAssertGreaterThan(row.frame.midX, window.frame.midX,
                              "an Arabic launch kept the sidebar on the leading-left side")
     }
@@ -1294,7 +1365,7 @@ final class AppShellUITests: XCTestCase {
         // rather than a stack of cards, so it is the one whose height the
         // scaffold's non-scrolling mode has to carry, and the minimum window is
         // where that would clip first.
-        for destination in ["Nearby", "Pairing code", "Send a link",
+        for destination in ["Workspace", "Send a link",
                             "Open a link", "Device Inbox", "Account"] {
             let row = sidebarDestination(destination, in: window)
             XCTAssertTrue(row.waitForExistence(timeout: 10),
@@ -1406,11 +1477,10 @@ final class AppShellUITests: XCTestCase {
 
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let pairing = sidebarDestination("Pairing code", in: window)
+        let pairing = sidebarDestination("Workspace", in: window)
         XCTAssertTrue(pairing.waitForExistence(timeout: 10))
         pairing.click()
-        window.radioButtons["Text"].click()
-        let create = window.buttons["Create a text code"]
+        let create = window.buttons["Create a code for messages"]
         XCTAssertTrue(create.waitForExistence(timeout: 10))
         create.click()
         XCTAssertTrue(window.staticTexts["4 8 3 9 2 0"].waitForExistence(timeout: 20))
