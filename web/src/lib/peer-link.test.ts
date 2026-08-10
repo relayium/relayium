@@ -1809,18 +1809,20 @@ describe("mixed link explicit leave", () => {
 
     it("leaves no timer or retry behind after an honoured leave", async () => {
       vi.useFakeTimers();
-      const settleFake = async () => {
-        for (let i = 0; i < 10; i++) await vi.advanceTimersByTimeAsync(1);
-      };
       const resume = vi.fn(async (): Promise<Conn> => { throw new Error("no route"); });
       const { manager, link, sig, events, drop } = await linked({ resume });
       drop("failed");
-      await settleFake();
+      // Wait on the observable boundary instead of advancing an arbitrary ten
+      // fake milliseconds. The recovery call and the leave MAC both cross Web
+      // Crypto, whose completion is scheduled outside the fake-timer queue;
+      // a busy hosted worker can therefore need more real task turns even
+      // though no product timer is late. `waitFor` advances fake timers while
+      // yielding those turns and fails with the state that never arrived.
+      await vi.waitFor(() => expect(resume).toHaveBeenCalled());
       const attempts = resume.mock.calls.length;
 
       sig.inject("b", await leaveFrom(link));
-      await settleFake();
-      expect(manager.current).toBeNull();
+      await vi.waitFor(() => expect(manager.current).toBeNull());
 
       // Neither the 90 s window timer nor the 1.5 s retry driver survives, so
       // there is no second teardown and no rebuild toward a peer that has gone.
