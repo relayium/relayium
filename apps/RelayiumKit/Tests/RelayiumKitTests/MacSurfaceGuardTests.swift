@@ -1057,6 +1057,8 @@ final class MacSurfaceGuardTests: XCTestCase {
         let code = try source(named: "Components/SecurityCodeText.swift")
         XCTAssertTrue(code.contains("design: .monospaced"))
         XCTAssertTrue(code.contains(".textSelection(.enabled)"))
+        XCTAssertEqual(code.components(separatedBy: ".accessibilityElement(children: .ignore)").count - 1, 2,
+                       "selectable AppKit text must collapse into one labelled automation element")
         XCTAssertTrue(code.contains(".accessibilityLabel(spokenCode)"))
         XCTAssertTrue(code.contains("joined(separator: \" \")"),
                       "VoiceOver must read pairing-code digits one at a time")

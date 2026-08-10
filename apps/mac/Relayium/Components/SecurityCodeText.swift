@@ -40,14 +40,17 @@ struct SecurityCodeText: View {
         case .pairing:
             // Label the same outer element that owns the identifier. AppKit
             // otherwise exposes the identifier on a wrapper with an empty
-            // label and the spoken digits on its inner selectable Text.
+            // label and the spoken digits on its inner selectable Text. The
+            // explicit accessibility element collapses that AppKit split.
             codeText
+                .accessibilityElement(children: .ignore)
                 .accessibilityIdentifier("pairing-code-value")
                 .accessibilityLabel(spokenCode)
         case .verification:
             // Keep the identifier and spoken label on this same element for
             // the same AppKit reason as the pairing code above.
             codeText
+                .accessibilityElement(children: .ignore)
                 .accessibilityIdentifier("verification-code-value")
                 .accessibilityLabel(spokenCode)
         }
