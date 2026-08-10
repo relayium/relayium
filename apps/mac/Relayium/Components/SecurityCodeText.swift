@@ -38,11 +38,18 @@ struct SecurityCodeText: View {
     var body: some View {
         switch style {
         case .pairing:
-            codeText.accessibilityIdentifier("pairing-code-value")
-        case .verification:
-            // Verification call sites name the surrounding task (for example
-            // `link-sas`); do not overwrite that identifier on the inner Text.
+            // Label the same outer element that owns the identifier. AppKit
+            // otherwise exposes the identifier on a wrapper with an empty
+            // label and the spoken digits on its inner selectable Text.
             codeText
+                .accessibilityIdentifier("pairing-code-value")
+                .accessibilityLabel(spokenCode)
+        case .verification:
+            // Keep the identifier and spoken label on this same element for
+            // the same AppKit reason as the pairing code above.
+            codeText
+                .accessibilityIdentifier("verification-code-value")
+                .accessibilityLabel(spokenCode)
         }
     }
 
@@ -50,7 +57,6 @@ struct SecurityCodeText: View {
         Text(L10n.token(code))
             .font(.system(size: style.size, weight: .semibold, design: .monospaced))
             .textSelection(.enabled)
-            .accessibilityLabel(spokenCode)
     }
 
     /// Digits one at a time; a phrase left as the words it already is.

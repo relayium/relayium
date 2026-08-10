@@ -146,7 +146,6 @@ struct WorkspaceLinkPane: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(L10n.t(.linkVerifyTitle)).font(.subheadline.weight(.semibold))
             SecurityCodeText(code: sas, style: .verification)
-                .accessibilityIdentifier("link-sas")
             Text(L10n.t(.linkVerifyBody))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

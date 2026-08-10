@@ -1063,8 +1063,10 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(code.contains("L10n.token(code)"),
                       "the displayed code must stay isolated in RTL copy")
         XCTAssertEqual(code.components(separatedBy: "pairing-code-value").count - 1, 1)
-        XCTAssertFalse(code.contains("verification-code-value"),
-                       "the inner code view overwrites verification task identifiers")
+        XCTAssertEqual(code.components(separatedBy: "verification-code-value").count - 1, 1)
+        XCTAssertFalse(try source(named: "Workspace/WorkspaceLinkPane.swift")
+            .contains("link-sas"),
+                       "a caller wrapper split the verification identifier from its label")
     }
 
     func testUITestPairingRoomsUseTheOfflineLinkFixture() throws {
