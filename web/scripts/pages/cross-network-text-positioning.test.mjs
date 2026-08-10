@@ -27,6 +27,28 @@ const RETAIN = {
   ar: /نسخ.*الاحتفاظ/, es: /copiar o conservar/i, pt: /copiar ou guardar/i,
 };
 
+// The unified workspace reached pairing-code rooms on 2026-08-10 (DECISION-LOG;
+// linkRoomActive() in src/lib/peer-caps.svelte.ts is now LINK_BUILD_SUPPORT and
+// nothing else). This page IS the cross-network product surface, so the step that
+// describes what happens after both devices are in the room has to name it —
+// otherwise the landing page keeps selling the pre-promotion product, where a
+// code room meant separate file and text flows.
+//
+// Per-locale, like every other table here: what "shared workspace" is called is a
+// translation decision, and mirroring src/lib/i18n/<lang>.ts workspace.openWith
+// is the convention (content/GLOSSARY.md, "UI labels must match the shipped app").
+const WORKSPACE = {
+  en: /shared workspace/i,
+  zh: /共享工作区/,
+  ja: /共有ワークスペース/,
+  ko: /공유 작업 공간/,
+  de: /gemeinsame[nr]? Arbeitsbereich/i,
+  fr: /espace de travail partagé/i,
+  ar: /مساحة عمل مشتركة|مساحة العمل المشتركة/,
+  es: /espacio de trabajo compartido/i,
+  pt: /área de trabalho compartilhada/i,
+};
+
 const flat = (value) => JSON.stringify(value);
 
 describe("cross-network file and live text positioning", () => {
@@ -63,6 +85,20 @@ describe("cross-network file and live text positioning", () => {
       expect(all, lang).toMatch(/65[,. ]536/);
       expect(doc.how.steps[1], lang).toMatch(NO_ACCOUNT[lang]);
       expect(flat(doc.faq), lang).toMatch(NO_ACCOUNT[lang]);
+    }
+  });
+
+  // Pinned on step 4 specifically — the step about what the two devices do once
+  // they are both in the room — rather than anywhere in the document, so a
+  // passing mention somewhere else cannot stand in for describing the surface
+  // the reader will actually meet.
+  it("names the shared workspace as what a joined code room opens, in every locale", () => {
+    for (const lang of LANGS) {
+      const step = crossNetwork.langs[lang].how.steps[3];
+      expect(step, lang).toMatch(WORKSPACE[lang]);
+      // Unified does not mean unbounded or unrelayed: both halves stay on the
+      // page, because they are what keeps the new claim honest.
+      expect(step, lang).toContain("TURN");
     }
   });
 });

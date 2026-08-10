@@ -15,6 +15,25 @@ describe("llms.txt file and ephemeral text product facts", () => {
     expect(llms).toContain("Either endpoint can copy, log, screenshot, or otherwise retain text");
   });
 
+  // An answering model reads this file to decide what to tell someone about the
+  // cross-network product. Leaving the unified workspace out of the pairing-code
+  // bullet let it describe a surface that stopped existing on 2026-08-10 — one
+  // where files and messages are separate flows across networks.
+  it("states that a pairing-code room gets the same shared workspace", () => {
+    expect(llms).toContain("Two up-to-date browsers get the same shared workspace here as on the same network");
+    expect(llms).toContain("one end-to-end encrypted connection carrying files and ephemeral text together");
+    expect(llms).toContain("one optional verification code (SAS) rather than one per session");
+    // Relayed and therefore bounded — relay-deadline.ts derives it from the TURN
+    // REST credential, so this is a product fact and not an implementation note.
+    expect(llms).toContain("bounded lifetime derived from the TURN credential");
+    // The exact-match capability gate, which is what keeps this from overclaiming.
+    expect(llms).toContain("older browsers, the native apps, the CLI — keep the separate file and text flows");
+    // The same-network bullet has to describe the same one surface, or the two
+    // bullets teach a reader that the rooms differ in a way they no longer do.
+    expect(llms).toContain("the peer card offers one action, which opens a shared workspace");
+    expect(llms).not.toMatch(/pairing[- ]code[^.]{0,80}(?:older|legacy|separate) (?:controls|surface|flows?)/i);
+  });
+
   it("states the account boundary for pairing-code creation and joining", () => {
     expect(llms).toContain("Same-network transfers need no account");
     expect(llms).toContain("Creating a cross-network file or text pairing code requires sign-in");

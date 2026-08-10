@@ -30,12 +30,14 @@
   import { recordTransfer, loadHistory, clearHistory, historyEnabled, setHistoryEnabled, type HistEntry } from "./lib/history";
   import { chooseRtcConfig, fetchIceConfig, measureRelays, pickRelay, type RelayAvailability, type RelayEntry } from "./lib/ice";
   import { relayFailNote } from "./lib/relay-status";
+  import { relayDeadline, type RelayDeadline } from "./lib/relay-deadline";
   import type { Peer } from "./lib/protocol";
   import { lang, dir, messages, legalUrl, pageUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
   import { applyHeadMeta, pageMeta } from "./lib/page-meta";
   import { hasFiles, dropTarget, pickedFromInput, filesFromDataTransfer, type PickedFile } from "./lib/drag";
   import { outbox, setOutbox, takeOutbox, clearOutbox } from "./lib/outbox.svelte";
   import { needsSendConfirmation, shownSasCode, autoAcceptsIncomingText } from "./lib/verify-gates";
+  import { canReleaseConfirmedSend, queuedReleaseTarget } from "./lib/confirm-send";
   import { verifyPeers, setVerifyPeers } from "./lib/verify-pref.svelte";
   import { folderUploadSupported } from "./lib/platform";
   import { reveal } from "./lib/reveal";
@@ -123,6 +125,12 @@
   const workspace: PeerWorkspace = createPeerWorkspace({
     selfId: () => selfId,
     joined: () => joinedRoom,
+    // The room refused or expired this page's membership. In a code room that is
+    // exactly `linkDead` — a close before we ever joined — and it means no
+    // rebuild offer will ever be delivered, so a link that drops afterwards is
+    // terminal rather than recoverable.
+    rejoinRefused: () => linkDead,
+    relayDeadline: () => relayBound,
     peerIds: () => peers.map((peer) => peer.id),
     unsupported: () => unsupported,
     signaling: () => signaling,
@@ -291,6 +299,13 @@
   // over the same (mine, theirs) data and converge on the same relay id — see the
   // relay-measurement block below.
   let relayPool = $state<RelayEntry[]>([]);
+  // The credential boundary for a RELAYED unified link in this room, derived
+  // once from the ICE config the moment it was fetched, and null whenever
+  // nothing in that config relays (every LAN room, and a code room the server
+  // issued no TURN username for). Derived here rather than inside the session
+  // because `Date.now()` at FETCH time is what makes the skew correction a
+  // duration on this clock — see relay-deadline.ts.
+  let relayBound = $state<RelayDeadline | null>(null);
   let myRelayRtt = $state<Record<string, number>>({});
   let peerRelayRtt = $state<Record<string, number>>({});
   let selectedRelayId = $state<string | null>(null);
@@ -573,17 +588,70 @@
       // auto-sending, so a code-guesser who joined never receives the files
       // automatically.
       if (!pendingPeer && peer.id !== dismissedPeerId) pendingPeer = peer;
-    } else {
-      pendingPeer = null; // peer left / conditions changed
+    } else if (!pendingPeer || pendingPeer.id !== releaseTarget) {
+      // The peer left, or the conditions changed — EXCEPT in the one state where
+      // an empty roster does not mean the peer left: a bar armed for the peer of
+      // a LIVE link whose signalling went away underneath a DataChannel that is
+      // still carrying files. `releaseTarget` is what put that bar on screen, so
+      // clearing it here would take it away again one tick after the user asked
+      // for it, and leave the queue with no control that could reach it.
+      pendingPeer = null;
     }
   });
 
+  /**
+   * The peer the workspace's standing release control acts on, or "".
+   *
+   * Read by the control's `{#if}` and by `releaseQueued` alike — see
+   * queuedReleaseTarget, which exists so those two cannot disagree. Resolved
+   * from the LINK, never from the roster: a peer whose signalling socket
+   * dropped is gone from the roster while its DataChannel is still open, and
+   * that is precisely when a user has queued files and a working link to send
+   * them over.
+   */
+  const releaseTarget = $derived.by(() => {
+    const peerId = workspace.hasLink ? workspace.linkPeerId : "";
+    return queuedReleaseTarget({
+      linkPeerId: peerId,
+      queued: outbox().length,
+      // The same live policy every other outbound control reads, so the button
+      // is never offered for a link that would refuse the batch anyway.
+      blocked: peerId !== "" && workspace.blocksNewIntent(peerId),
+    });
+  });
+
+  /**
+   * Whether the confirmation bar's Send may release the batch right now.
+   *
+   * The bar can be armed before any link exists — a preselected batch (OS share
+   * sheet, or files picked before the code was minted) arms it the instant the
+   * one peer joins — and for a unified target the verification code it tells the
+   * user to compare only exists once the workspace is open. Read both by the
+   * handler and by the template, so the button cannot say one thing while the
+   * handler does another.
+   */
+  const canRelease = $derived.by(() => {
+    const target = pendingPeer;
+    if (!target) return false;
+    return canReleaseConfirmedSend({
+      confirmed: needsSendConfirmation(verifyOn, roomCode),
+      unified: workspace.routes(target.id),
+      targetPeerId: target.id,
+      // A LIVE link, never `linkPeerId` alone: that one still names the peer of a
+      // link that has ended, and an ended link's code is not on screen.
+      linkPeerId: workspace.hasLink ? workspace.linkPeerId : "",
+      shownSas,
+    });
+  });
+
   function confirmSend() {
-    if (pendingPeer) {
-      const id = pendingPeer.id;
-      pendingPeer = null;
-      workspace.sendFiles(id, takeOutbox());
-    }
+    // Fails closed, and not merely because the button is hidden: this is the one
+    // step between a queued batch and a peer who may have guessed the code, so
+    // it must not depend on a template branch to be correct.
+    if (!pendingPeer || !canRelease) return;
+    const id = pendingPeer.id;
+    pendingPeer = null;
+    workspace.sendFiles(id, takeOutbox());
   }
   function cancelSend() {
     if (pendingPeer) {
@@ -843,6 +911,7 @@
     iceServers = ice.iceServers;
     relayPool = ice.relays;
     relayStatus = ice.relayStatus;
+    relayBound = relayDeadline(ice, Date.now());
     lanDevice = await lanDeviceId();
     signaling = new SignalingClient(wsURL(location, roomCode), selfName, undefined, {
       // LAN room only. A pairing-code room is a two-participant capability room
@@ -951,6 +1020,9 @@
     iceServers = ice.iceServers;
     relayPool = ice.relays;
     relayStatus = ice.relayStatus;
+    // The new room has its own credentials with their own expiry. Recomputed
+    // beside them so the boundary can never outlive the config it came from.
+    relayBound = relayDeadline(ice, Date.now());
     signaling.reconnect(wsURL(location, roomCode));
     startRelayMeasurement(); // measure the new room's pool in the background
   }
@@ -1151,14 +1223,48 @@
    * handed to us by the system with their destination still missing, so picking
    * the peer completes THAT intent rather than throwing it away — and a typed
    * draft is never sent by this path, on either branch.
+   *
+   * Except where the sender-side verification stop applies. In a code room with
+   * advanced verification ON, the peer that joined might be someone who guessed
+   * a live code, and the whole remedy is "look at the verification code before
+   * you send". Opening the workspace is how the code gets on screen — so it must
+   * not also be what sends the files. The batch stays queued and the workspace
+   * carries an explicit, persistent release action for it (releaseQueued below).
    */
   function openWorkspace(peerId: string) {
     if (workspace.blocksNewIntent(peerId)) return;
-    if (outbox().length) {
+    if (outbox().length && !needsSendConfirmation(verifyOn, roomCode)) {
       workspace.sendFiles(peerId, takeOutbox());
       return;
     }
     void workspace.openText(peerId);
+  }
+  /**
+   * Put the queued batch back in front of the user, from inside the workspace.
+   *
+   * The confirmation bar is dismissible, and dismissing it must not be a way to
+   * lose files: inside a unified workspace the peer chooser is gone, so Cancel
+   * used to leave a queue with no control anywhere on screen that could still
+   * reach it. This is that control, and it re-arms the SAME confirmation rather
+   * than sending — the code comparison is the point of the stop, so the release
+   * cannot be the thing that skips it.
+   */
+  function releaseQueued() {
+    // The exact value the control's own branch renders on, so there is no state
+    // in which it is clickable and does nothing. A LIVE link is part of that
+    // answer: this control exists so the files can leave after their code is
+    // compared, and a link that has ended has no code to compare. With none,
+    // the way back is the terminal card's "start again", which returns the
+    // chooser and its own queued-files UI.
+    const peerId = releaseTarget;
+    if (!peerId) return;
+    dismissedPeerId = null; // asked for again explicitly; the earlier Cancel is spent
+    // Built from the link, not looked up in the roster. The peer of a live link
+    // is not always in the roster — losing a signalling socket removes it from
+    // every page's roster and leaves the DataChannel untouched — and a lookup
+    // that missed used to silently arm nothing at all. `nameOf` degrades to a
+    // short id there, exactly as the workspace header already does.
+    pendingPeer = { id: peerId, name: nameOf(peerId) };
   }
   /** MessagePanel's explicit restart, scoped to the peer this link belongs to.
    *  With no link there is nothing to restart — reopening would silently build a
@@ -1178,6 +1284,15 @@
     textOpener.reset();
     workspace.disconnect();
   }
+  /** The action on a link that ended of something the user has to act on. Same
+   *  local cleanup as Disconnect, but there is nothing left to tear down —
+   *  answering the explanation is the whole job, and it returns the chooser so a
+   *  new link (or, in a code room, a fresh pairing) can be started. */
+  function restartWorkspace() {
+    textCompose = "";
+    textOpener.reset();
+    workspace.dismissLinkEnd();
+  }
   function pickFile(e: Event, peerId: string) {
     const input = e.currentTarget as HTMLInputElement;
     if (input.files?.length) workspace.sendFiles(peerId, pickedFromInput(input.files));
@@ -1196,11 +1311,13 @@
 <main>
 {#snippet peerCard(p: Peer, solo: boolean)}
   {@const intentBlocked = workspace.blocksNewIntent(p.id)}
-  <!-- Whether this peer can carry a unified workspace: it speaks `link/1` AND the
-       room allows routing it (peer-caps' linkRoomActive — the code-less LAN room
-       only). Every pairing-code room and every peer that does not speak the
-       protocol — older browsers, the native clients, the CLI — is false here and
-       renders the untouched legacy card below. -->
+  <!-- Whether this peer can carry a unified workspace: it announced exactly
+       `link/1`. Every room qualifies now — LAN and pairing-code alike (see
+       peer-caps' linkRoomActive) — so what decides this is the peer, not the
+       room. A peer that does not speak the protocol (older browsers, the native
+       clients, the CLI) is false here and renders the untouched legacy card
+       below; it must never be sent a two-channel offer it would read as a file
+       transfer whose manifest never arrives. -->
   {@const unifiedPeer = workspace.routes(p.id)}
   <li
     class="peer"
@@ -1312,25 +1429,67 @@
        path label, the single SAS and the explicit Disconnect live here and only
        here; every lane card below deliberately renders none of them again. Legacy
        peers (workspace.usingMixed === false) keep their untouched per-surface
-       chrome — that is the path for a peer that does not speak link/1 and for
-       every pairing-code room, which is not allowed to route it. -->
+       chrome — that is now the path for exactly one thing: a peer that does not
+       speak link/1, in either kind of room. -->
   {#if mixed}
     <WorkspaceHeader
       peerName={nameOf(workspace.linkPeerId)}
       status={workspace.linkStatus}
       sasCode={shownSas}
       path={workspace.linkPath}
+      relayExpiring={workspace.relayExpiring}
+      recoveryAvailable={workspace.recoveryAvailable}
+      endReason={workspace.linkEndReason}
       onDisconnect={disconnectWorkspace}
+      onRestart={restartWorkspace}
       bind:element={headEl}
     />
   {/if}
 
   {#if pendingPeer}
+    <!-- Captured once: the handlers below are closures, and narrowing a $state
+         binding does not survive into one. -->
+    {@const pendingTarget = pendingPeer}
     <div class="activity-reveal-marker" bind:this={pendingReveal} aria-hidden="true"></div>
     <div class="ui-callout ui-callout-accent confirm-send">
-      <span>{t.confirmRecv(nameOf(pendingPeer.id))}</span>
-      <button class="btn btn-primary" onclick={confirmSend}>{t.confirmRecvSend}</button>
+      <!-- Two sentences, not one: who is asking, and what to do before saying
+           yes. Gated on `shownSas` rather than on the preference, because that
+           is exactly "a code is on screen right now" — in the workspace header
+           above, or in the legacy card below. Telling someone to compare a code
+           they cannot see would be worse than saying nothing. Naming the
+           comparison is the whole point of the stop; "a device wants to receive
+           — [Send]" is a prompt with no stated way to answer it correctly. -->
+      <span>{t.confirmRecv(nameOf(pendingPeer.id))}{#if shownSas} {t.confirmRecvCompare}{:else if !canRelease} {t.confirmRecvNeedsCode}{/if}</span>
+      <!-- Send only exists once there IS a code to compare. A preselected batch
+           arms this bar before any link does, so on a unified target the Send it
+           used to render was a release with nothing behind it — see
+           canReleaseConfirmedSend. It is REPLACED rather than disabled: the way
+           forward is a different action, and a greyed Send says only "no". The
+           workspace it opens builds the link and drains nothing. -->
+      {#if canRelease}
+        <button class="btn btn-primary confirm-send-btn" onclick={confirmSend}>{t.confirmRecvSend}</button>
+      {:else}
+        <button class="btn btn-primary confirm-send-open" onclick={() => openWorkspace(pendingTarget.id)}>{t.workspace.open}</button>
+      {/if}
       <button class="btn" onclick={cancelSend}>{t.confirmRecvCancel}</button>
+    </div>
+  {/if}
+
+  <!-- The queue's own way back, and the reason Cancel above is not a trap.
+       Inside a unified workspace the peer chooser is gone, so without this a
+       dismissed confirmation would leave files queued with no control anywhere
+       on screen that could still reach them. It re-arms the confirmation rather
+       than sending: the comparison is the stop, and the release must not be a
+       way around it. -->
+  {#if releaseTarget && !pendingPeer}
+    <div class="ui-callout release-queued">
+      <span>{t.workspace.queuedRelease(
+        outbox().length,
+        formatSize(outbox().reduce((total, item) => total + item.file.size, 0)),
+      )}</span>
+      <button class="btn btn-primary btn-sm release-queued-btn" onclick={releaseQueued}>
+        {t.workspace.queuedReleaseBtn}
+      </button>
     </div>
   {/if}
 
@@ -1886,6 +2045,14 @@
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
   }
   .confirm-send span { flex: 1 1 auto; }
+  /* Same shape as the confirmation it re-arms, one step quieter: it is a
+     standing reminder that files are still waiting, not a decision being asked
+     for right now. */
+  .release-queued {
+    margin-block: 0 12px;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .release-queued span { flex: 1 1 auto; }
   .peers ul {
     list-style: none; padding: 0; margin: 0;
     display: grid; gap: 12px;

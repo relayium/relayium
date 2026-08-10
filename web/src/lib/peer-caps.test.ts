@@ -6,9 +6,9 @@ import {
 import { clearRoom, enterRoom } from "./room.svelte";
 import { localCaps } from "./webrtc";
 
-/** The code-less LAN room is the only one `link/1` is scoped to. Every test
- *  starts there explicitly rather than inheriting whichever room a previous
- *  file left behind. */
+/** `link/1` is no longer scoped to a room, so these run in both. Each test still
+ *  starts from a known room rather than inheriting whichever one a previous file
+ *  left behind — the room store is module state. */
 beforeEach(() => { clearRoom(); resetPeerCaps(); });
 
 describe("peer caps", () => {
@@ -21,11 +21,11 @@ describe("peer caps", () => {
     expect(peerSupportsText("p1")).toBe(true);
   });
 
-  it("announces exactly text/1 and link/1 in the code-less LAN room", () => {
+  it("announces exactly text/1 and link/1", () => {
     expect(CAP_TEXT).toBe("text/1");
     expect(CAP_LINK).toBe("link/1");
     // The release switch for the unified workspace. A default build implements
-    // both lanes, so it says so — in the LAN room, and only there.
+    // both lanes, so it says so.
     expect(capsSignal()).toEqual({ caps: [CAP_TEXT, CAP_LINK] });
     expect(advertisedCaps()).toEqual([CAP_TEXT, CAP_LINK]);
     expect(LINK_BUILD_SUPPORT).toBe(true);
@@ -35,31 +35,41 @@ describe("peer caps", () => {
     expect([...localCaps()]).toEqual([...advertisedCaps()]);
   });
 
-  it("never announces link/1 from a pairing-code room", () => {
+  // Supersedes "never announces link/1 from a pairing-code room". The room scope
+  // is gone (DECISION-LOG 2026-08-10); what replaced it is a bounded relay
+  // lifetime, not a refusal to speak the protocol. The announcement must be the
+  // SAME in both rooms — an asymmetry here is what strands a peer that believed
+  // one half of it.
+  it("announces the same capabilities in a pairing-code room", () => {
     enterRoom({ code: "123456" });
-    expect(linkRoomActive()).toBe(false);
-    expect(capsSignal()).toEqual({ caps: [CAP_TEXT] });
-    expect(advertisedCaps()).toEqual([CAP_TEXT]);
-    // The per-connection confirmation is read at call time, not frozen at
-    // import time — a module constant would keep announcing the LAN answer
-    // after the page switched rooms without reloading.
-    expect([...localCaps()]).toEqual([CAP_TEXT]);
+    expect(linkRoomActive()).toBe(true);
+    expect(capsSignal()).toEqual({ caps: [CAP_TEXT, CAP_LINK] });
+    expect(advertisedCaps()).toEqual([CAP_TEXT, CAP_LINK]);
+    // Still read at call time, not frozen at import time: entering and leaving a
+    // room rewrites the URL fragment without a reload.
+    expect([...localCaps()]).toEqual([CAP_TEXT, CAP_LINK]);
     clearRoom();
     expect([...localCaps()]).toEqual([CAP_TEXT, CAP_LINK]);
   });
 
-  // The room policy is not only about what we say. A signalling relay sees every
-  // frame and can inject one, so a code room must also refuse to BELIEVE a
-  // link/1 claim: routing is what actually activates the mixed manager.
-  it("refuses a forged link/1 claim inside a pairing-code room", () => {
-    recordPeerCaps("forger", { caps: [CAP_TEXT, CAP_LINK] });
-    expect(peerSupportsLink("forger")).toBe(true);
-    enterRoom({ code: "654321" });
-    expect(peerSupportsLink("forger")).toBe(false);
-    // text/1 is unaffected: the pairing room keeps its existing message path.
-    expect(peerSupportsText("forger")).toBe(true);
-    clearRoom();
-    expect(peerSupportsLink("forger")).toBe(true);
+  // The downgrade boundary that did NOT move. It is what keeps a speculative
+  // two-channel offer away from an older Web peer, a native client or the CLI —
+  // all of which read any inbound offer as a file transfer and then wait out a
+  // stall watchdog for a manifest that never comes.
+  it.each([
+    ["a peer that never announced", null],
+    ["a peer announcing only text/1", [CAP_TEXT]],
+    ["a later link version", [CAP_TEXT, "link/2"]],
+    ["a differently-cased claim", [CAP_TEXT, "LINK/1"]],
+    ["a near-miss claim", [CAP_TEXT, "link/1 "]],
+    ["an empty announcement", []],
+  ])("refuses to route %s, in either room", (_label, caps) => {
+    for (const room of [undefined, "123456"] as const) {
+      resetPeerCaps();
+      room ? enterRoom({ code: room }) : clearRoom();
+      if (caps) recordPeerCaps("p", { caps });
+      expect(peerSupportsLink("p"), `${_label} in ${room ?? "LAN"}`).toBe(false);
+    }
   });
 
   it("tracks exact link support independently from text", () => {
@@ -70,6 +80,13 @@ describe("peer caps", () => {
     expect(peerSupportsText("link-only")).toBe(false);
     expect(peerSupportsLink("text-only")).toBe(false);
     expect(peerSupportsLink("future")).toBe(false);
+  });
+
+  it("believes an exact claim in a pairing-code room too", () => {
+    recordPeerCaps("peer", { caps: [CAP_TEXT, CAP_LINK] });
+    enterRoom({ code: "654321" });
+    expect(peerSupportsLink("peer")).toBe(true);
+    expect(peerSupportsText("peer")).toBe(true);
   });
 
   it("records text and link support together", () => {

@@ -211,7 +211,13 @@
       {/if}
       <button class="btn btn-ghost" onclick={() => (mode = "receive")}>{t.pair.enterCode}</button>
     </div>
-    <button class="btn-link" disabled={busy} onclick={send}>{busy ? t.generating : t.pair.bareConnect}</button>
+    <!-- A real button, not a text link. It is the entry point for the whole
+         receiver-initiated half of the product — open a room first, decide what
+         to send once the other device is actually there — and as an underlined
+         sentence under two primary buttons it read as a footnote about them.
+         It stays visually secondary (ghost): picking files is still the common
+         case, and this one is a choice, not a fallback. -->
+    <button class="btn btn-ghost bare-connect" disabled={busy} onclick={send}>{busy ? t.generating : t.pair.bareConnect}</button>
   {:else}
     <div class="signin">
       <button class="btn btn-primary" onclick={() => requireLogin?.()}>{t.account.signIn}</button>

@@ -25,7 +25,7 @@ type LegacyText = Pick<TextSession,
 >;
 
 export interface PeerWorkspaceDeps extends Omit<MixedSessionDeps,
-  "supportsLink" | "canAcceptLink" | "now" | "onLinkState"
+  "supportsLink" | "canAcceptLink" | "now" | "onLinkState" | "joined"
 > {
   joined(): boolean;
   peerIds(): readonly string[];
@@ -70,6 +70,17 @@ export interface PeerWorkspace {
   /** Local file batches waiting for the lane. Always empty on the legacy path,
    *  which has no queue at all. */
   readonly queuedBatches: readonly QueuedFileBatch[];
+  /** The relayed link is inside its credential warning window. Always false on
+   *  the legacy path and on any link with no credential boundary. */
+  readonly relayExpiring: boolean;
+  /** False while a live link could NOT be rebuilt if its transport died — the
+   *  signalling socket is gone, rejoined under a new identity, or was refused.
+   *  The link itself is untouched; this is a statement about its future. */
+  readonly recoveryAvailable: boolean;
+  /** Why the last link ended, when that is something the user must act on. */
+  readonly linkEndReason: MixedSession["endReason"];
+  /** Dismiss that explanation once it has been read. Tears nothing down. */
+  dismissLinkEnd(): void;
   cancelQueuedBatch(id: number): void;
   routes(peerId: string): boolean;
   blocksNewIntent(peerId: string): boolean;
@@ -99,9 +110,51 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
   const supports = deps.supportsLink ?? peerSupportsLink;
   const now = deps.now ?? Date.now;
   const suppressedUntil = new Map<string, number>();
+  /**
+   * Peer ids the SERVER said have physically left this room.
+   *
+   * Deliberately not derived from `peerIds()`: a roster that stops naming an id
+   * is a representative handoff, whose socket and data channel are both still
+   * alive — `syncPeers` says so at length. Only a `left` frame is the socket.
+   * Same lifetime as `suppressedUntil`: it belongs to one room.
+   *
+   * Reactive, and replaced rather than mutated, because `recoveryAvailable` is
+   * read by the workspace header during render. A plain Set would answer the
+   * question correctly to anyone who asked again and never cause anyone to ask:
+   * the warning would only appear if some other reactive value happened to
+   * change afterwards. `suppressedUntil` above needs none of this — it is only
+   * ever read from inside an event handler.
+   */
+  let departed = $state.raw<ReadonlySet<string>>(new Set());
   let textOwner: "legacy" | "mixed" = "legacy";
 
+  /**
+   * Whether an established link with a live transport already binds this peer.
+   *
+   * The correlated-loss invariant, stated at the router. Everything `routes`
+   * asks below is a fact about SIGNALLING — this room's membership, this page's
+   * own id, and a capability announcement that arrives over signalling and is
+   * pruned with the roster (peer-caps' `retainPeers`) — and none of those is a
+   * fact about the DataChannel between the two pages. A peer's socket dropping,
+   * or this page's own, therefore used to flip a healthy, authenticated,
+   * mutually verified link's peer back to "legacy": new file batches fell
+   * through to a second connection with a second SAS, or were refused outright
+   * by `blocksNewIntent`, while the unified link carried on working.
+   *
+   * Scoped to `open`, so this is never a way to bypass a gate. A held link has
+   * no transport under it and getting one back means a rebuild through the
+   * signalling layer that just went away — the ordinary answer is the honest one
+   * there. And it says nothing about links that do not exist yet: a new link, an
+   * inbound offer or request, and a recovery all keep the exact capability and
+   * membership tests they had.
+   */
+  function linkAuthoritative(peerId: string): boolean {
+    const link = mixed.link;
+    return !!link && link.peerId === peerId && mixed.status === "open";
+  }
+
   function routes(peerId: string): boolean {
+    if (linkAuthoritative(peerId)) return true;
     return deps.joined() && deps.selfId() !== "" && supports(peerId);
   }
 
@@ -139,6 +192,15 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
     resume: deps.resume,
     pickSaveTarget: deps.pickSaveTarget,
     requestNotify: deps.requestNotify,
+    // The recovery-availability inputs. `joined` is the SAME predicate the
+    // admission rules above read, so "we can still start a link" and "we could
+    // still rebuild this one" cannot answer differently.
+    joined: deps.joined,
+    rejoinRefused: deps.rejoinRefused,
+    // The far-side half of the same question. `peerLeft` records the departure;
+    // this is where it stops a link being described as rebuildable.
+    peerPresent: (peerId) => !departed.has(peerId),
+    relayDeadline: deps.relayDeadline,
     now,
     idleMs: deps.idleMs,
     setTimer: deps.setTimer,
@@ -147,7 +209,15 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
 
   function usingMixed(): boolean {
     return !!mixed.link || mixed.status === "requesting" || mixed.status === "connecting"
-      || mixed.file.active() || mixed.text.active();
+      || mixed.file.active() || mixed.text.active()
+      // A link that ended of something the user must act on keeps the workspace
+      // on screen to SAY so. Without this the surface silently reverts to the
+      // device chooser and the only evidence that a transfer stopped mid-flight
+      // is that it is no longer there. Deliberately not part of
+      // `blocksLegacyInbound`/`blocksNewIntent` below: it holds the screen, it
+      // does not hold the peer — starting a new link is exactly the way out, and
+      // doing so clears it.
+      || mixed.endReason !== "";
   }
 
   function blocksLegacyInbound(): boolean {
@@ -204,6 +274,10 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
     get linkGeneration() { return mixed.linkGeneration; },
     get linkPath() { return usingMixed() ? mixed.path ?? undefined : undefined; },
     get queuedBatches() { return usingMixed() ? mixed.file.queued : []; },
+    get relayExpiring() { return mixed.relayExpiring; },
+    get recoveryAvailable() { return mixed.recoveryAvailable; },
+    get linkEndReason() { return mixed.endReason; },
+    dismissLinkEnd() { mixed.dismissEnded(); },
     cancelQueuedBatch(id) {
       // Deliberately unconditional: the legacy path never populates this queue,
       // so there is nothing for a stray id to cancel there.
@@ -284,8 +358,8 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
       const awaiting = mixed.manager.requestedPeerId;
       if (awaiting && !deps.peerIds().includes(awaiting)) mixed.disconnect();
       // The same rule for the legacy text session, which is still the path for
-      // every peer outside a code-less LAN room and every peer that does not
-      // speak link/1 — native clients included. A live session whose
+      // every peer that does not speak link/1 — native clients included — in
+      // either kind of room. A live session whose
       // peer is no longer in the roster is not merely stale on screen: it still
       // counts as busy, so the user cannot start a new one with the page that
       // replaced it either.
@@ -306,10 +380,24 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
       }
     },
     peerLeft(peerId) {
-      // Unlike a roster representative handoff, this event means the physical
-      // signaling connection is gone. End every phase tied to exactly that id;
-      // a surviving sibling page will be offered separately by the next roster.
-      if (mixed.manager.boundPeerId === peerId) {
+      // Unlike a roster representative handoff, this event means the peer's
+      // physical SIGNALING connection is gone. That is a statement about the
+      // rendezvous socket and about nothing else: the DataChannel between the
+      // two pages is a separate transport, and the far side losing its
+      // WebSocket — the ordinary way this event is produced — leaves it
+      // untouched and still carrying whatever it was carrying.
+      //
+      // Recorded first, before any decision reads it: it is what makes an
+      // established link report `recoveryAvailable === false` from this instant,
+      // and what makes a later transport death terminal instead of a recovery
+      // window spent addressing a peer that is not in the room.
+      departed = new Set(departed).add(peerId);
+      // The current link decides for itself — preserve a healthy one, end a held
+      // one that has no transport left to preserve. Only when it holds nothing
+      // for this peer does a cancellation reach the phases that are still
+      // pending: an in-flight establishment and an outstanding request are not
+      // an authenticated link, and nothing of theirs survives the peer.
+      if (!mixed.peerDeparted(peerId) && mixed.manager.boundPeerId === peerId) {
         mixed.disconnect();
       }
       if (deps.legacyText.peerId === peerId && deps.legacyText.active()) {
@@ -327,11 +415,17 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
     },
     resetRoom() {
       suppressedUntil.clear();
+      departed = new Set();
       mixed.disconnect();
+      // The new room has its own peers, its own ICE config and its own credential
+      // boundary; an explanation about the old room's link is not about anything
+      // the user can still see.
+      mixed.dismissEnded();
       textOwner = "legacy";
     },
     stop() {
       suppressedUntil.clear();
+      departed = new Set();
       mixed.stop();
     },
   };

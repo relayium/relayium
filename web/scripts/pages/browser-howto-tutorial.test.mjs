@@ -366,13 +366,13 @@ const UI_ANCHORS = {
   // anchored too: an incoming batch is still gated on the receiving screen, and
   // that is the half a "just scan and it's sent" rewrite would drop.
   "howto-transfer-by-qr-code": ["pathRelay", "pair.scanHint", "pair.enterCode", "accept"],
-  // Two procedures, deliberately not merged. Same network: the nearby-device
-  // card's one action is `workspace.open`, and the composer lives inside that
-  // workspace. Cross-network: a pairing-code room is NOT a link room
-  // (peer-caps.svelte.ts gates CAP_LINK on `roomCode() === ""`), so it keeps the
-  // older peer-card controls and `text.open` is still the button there. Both
-  // labels are anchored so neither procedure can quietly absorb the other.
-  "howto-send-text-between-devices": ["peersTitle", "workspace.open", "text.open", "text.sendHint", "text.copy"],
+  // ONE procedure now, in both rooms. The card's single action is
+  // `workspace.open` and the composer lives inside the workspace it opens —
+  // in a pairing-code room too, since link/1 is no longer scoped to the LAN
+  // room (DECISION-LOG 2026-08-10, peer-caps.svelte.ts). `text.open` is
+  // deliberately NOT anchored any more: quoting it would send a cross-network
+  // reader looking for a button their peer card does not have.
+  "howto-send-text-between-devices": ["peersTitle", "workspace.open", "text.sendHint", "text.copy"],
   // Same split for folders: `workspace.open` on the card, `sendFolder` as the
   // attachment inside the workspace, `accept` as the gate the batch still passes.
   "howto-send-a-folder": ["peersTitle", "workspace.open", "sendFolder", "accept", "pathLan"],
@@ -534,15 +534,28 @@ const RETIRED_CLAIMS = {
     /scanning (?:it )?starts the transfer/i,
     /(?:the scan|scanning)[^.]{0,40}sends? the files? (?:automatically|on its own)/i,
     /no acceptance is needed/i,
+    // Retired 2026-08-10. A pairing code still puts two devices in their own
+    // room — that part was never the defect — but the SURFACE inside it is the
+    // same shared workspace a same-network pair opens, so calling the room an
+    // older one told a reader the product had two front ends when it has one.
+    /room is (?:also )?its own,? older surface/i,
+    /rather than the shared workspace same-network devices open/i,
   ],
   "howto-send-text-between-devices": [
-    // Before the unified workspace, a nearby-device card carried its own “Send a
-    // message” button. It does not any more: that card's one action opens the
-    // workspace and the composer lives inside it. The banned shape is the LAN
-    // instruction only — in a cross-network pairing-code room the peer card
-    // really does still offer that button, and the guide must keep saying so.
+    // Before the unified workspace, a peer card carried its own “Send a message”
+    // button. It does not any more, in EITHER room: that card's one action opens
+    // the workspace and the composer lives inside it. The cross-network variant
+    // is banned too now — it used to be the one place the old fork survived.
     /on the other device'?s card, (?:choose|press|tap|click) “Send a message”/i,
     /(?:choose|press|tap|click) “Send a message” on (?:the|that|a) nearby[- ]device'?s card/i,
+    /(?:choose|press|tap|click) “Send a message” on (?:the|that|a) peer card/i,
+    // Retired 2026-08-10: the pairing-code room was the last place the fork was
+    // still described, and this article described it three times — an intro that
+    // called the two rooms two procedures, a step, and a troubleshooting fix.
+    /that room keeps its own older controls/i,
+    /(?:the )?peer card still offers “Send a message”/i,
+    /across networks it is a separate procedure/i,
+    /(?:in|across)[^.]{0,40}(?:pairing[- ]code room|networks)[^.]{0,60}(?:press|choose|tap|click) “Send a message”/i,
   ],
   "howto-send-a-folder": [
     // The relative paths cross on a REALTIME send. A stored upload is handed a
@@ -557,6 +570,9 @@ const RETIRED_CLAIMS = {
     /(?:a )?dropped connection[^.]{0,30}cannot resume/i,
     // The old LAN fork: a nearby-device card no longer sends a folder itself.
     /(?:choose|pick) the recipient'?s card and press/i,
+    // …and the cross-network half of the same fork, retired 2026-08-10.
+    /pairing[- ]code room keeps the older controls/i,
+    /keeps the older controls instead/i,
   ],
   "howto-large-files-without-cloud": [
     // A limited download spends its slot once real ciphertext starts moving;
@@ -588,6 +604,45 @@ const RETIRED_CLAIMS = {
     /server[^.]{0,60}silently (?:truncates|shortens)/i,
   ],
 };
+
+// ── THE LEGACY MESSAGE BUTTON, IN ALL NINE LOCALES ──────────────────────────
+// RETIRED_CLAIMS above is English-only by design, and that was exactly the hole
+// the 2026-08-10 audit fell into: the English "press “Send a message” on the peer
+// card" shapes were already banned, so the stale claim survived by being phrased
+// as "the peer card STILL OFFERS “Send a message”" — and survived untouched in
+// the other eight locales, which no shape reached at all.
+//
+// This is the mechanical half, and it works the way the shipped-label rule does:
+// the label is read out of src/lib/i18n/<lang>.ts rather than typed here, so it
+// follows a UI rename. A link-capable peer card has ONE action in both rooms
+// (workspace.open; web/e2e/code-room.mjs asserts `.peer-actions` has exactly one
+// child and no legacy pickers), so quoting `text.open` as a label sends a reader
+// hunting for a button their card does not have.
+//
+// Keying on the QUOTE MARKS is what makes this safe in ja/ko/ar, where the label
+// is also an ordinary phrase: ja `text.open` is "メッセージを送る", a substring of
+// the perfectly innocent "…メッセージを送ると、洪水対策が…", and ko/ar headings
+// legitimately read "메시지 보내기" / "إرسال رسالة". Only a QUOTED occurrence is a
+// UI label, and only that is banned.
+const QUOTES = {
+  en: ["“", "”"], zh: ["「", "」"], ja: ["「", "」"], ko: ["“", "”"], de: ["„", "“"],
+  fr: ["«", "»"], ar: ["«", "»"], es: ["«", "»"], pt: ["“", "”"],
+};
+const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+function legacyOpenComplaints(name, lang, doc) {
+  const want = label(lang, "text.open");
+  if (want === undefined) {
+    return [`${name}[${lang}]: i18n key text.open is gone — the legacy-label rule would pass vacuously`];
+  }
+  const [open, close] = QUOTES[lang];
+  // \s* on both sides: fr/ar set their guillemets with a space, and whether it is
+  // a plain one or U+00A0 is typesetting rather than a different label.
+  const quoted = new RegExp(`${escRe(open)}\\s*${escRe(flatSpace(want))}\\s*${escRe(close)}`);
+  return quoted.test(flatSpace(docText(doc)))
+    ? [`${name}[${lang}]: quotes the legacy ${JSON.stringify(want)} button as a UI label — the card's one action is workspace.open in both rooms`]
+    : [];
+}
 
 function retiredClaimComplaints(name, doc) {
   const text = docText(doc);
@@ -779,6 +834,13 @@ describe("the eleven browser how-tos are runnable tutorials in all nine locales"
     const bad = [];
     for (const [name, article] of Object.entries(TUTORIALS))
       for (const lang of LANGS) bad.push(...factComplaints(name, lang, article.langs[lang]));
+    expect(bad).toEqual([]);
+  });
+
+  it("never quotes the legacy message button as a peer-card action, in any locale", () => {
+    const bad = [];
+    for (const [name, article] of Object.entries(TUTORIALS))
+      for (const lang of LANGS) bad.push(...legacyOpenComplaints(name, lang, article.langs[lang]));
     expect(bad).toEqual([]);
   });
 
@@ -1250,11 +1312,10 @@ describe("the browser guard fails when a tutorial regresses", () => {
     );
   });
 
-  it("catches the text guide reverting to the old LAN peer-card fork", () => {
-    // Same-network text now lives in the workspace the card opens. The banned
-    // instruction is the LAN one only: a cross-network pairing-code room really
-    // does still put “Send a message” on the peer card, which is why the two
-    // procedures are kept apart rather than merged.
+  it("catches the text guide reverting to the old peer-card fork", () => {
+    // Text now lives in the workspace the card opens, in both kinds of room, so
+    // quoting the old per-card button would send a reader looking for something
+    // that is not on their screen.
     const doc = enOf("howto-send-text-between-devices");
     doc.sections = JSON.parse(
       JSON.stringify(doc.sections).replaceAll(label("en", "workspace.open"), label("en", "text.open")),
@@ -1268,6 +1329,30 @@ describe("the browser guard fails when a tutorial regresses", () => {
     expect(retiredClaimComplaints("howto-send-text-between-devices", doc).join("\n")).toMatch(
       /on the other device'\?s card/i,
     );
+  });
+
+  // Nine independent matchers, so a green corpus proves nothing about any one of
+  // them. This puts the defect into each locale in turn — the peer card's action
+  // quoted as the legacy message button, which is what all nine articles said
+  // about pairing-code rooms before 2026-08-10 — and fails if a locale shrugs.
+  it("catches the legacy message button in every locale, and not in ordinary prose", () => {
+    const deaf = [];
+    const falsePositives = [];
+    for (const lang of LANGS) {
+      const [open, close] = QUOTES[lang];
+      const legacy = label(lang, "text.open");
+      const doc = clone(TUTORIALS["howto-send-text-between-devices"].langs[lang]);
+      doc.sections.find((x) => x.steps?.length).steps[0].text = `… ${open}${legacy}${close} …`;
+      if (!legacyOpenComplaints("howto-send-text-between-devices", lang, doc).length) deaf.push(lang);
+
+      // The mirror, and the reason this rule keys on quote marks: the same words
+      // unquoted are ordinary prose — a heading ("ブラウザ：オンライン端末へメッセージ
+      // を送る"), or a verb that merely contains the label ("メッセージを送ると…").
+      const innocent = clone(TUTORIALS["howto-send-text-between-devices"].langs[lang]);
+      innocent.sections.find((x) => x.steps?.length).steps[0].text = `… ${legacy} …`;
+      if (legacyOpenComplaints("howto-send-text-between-devices", lang, innocent).length) falsePositives.push(lang);
+    }
+    expect({ deaf, falsePositives }).toEqual({ deaf: [], falsePositives: [] });
   });
 
   it("catches the folder guide reverting to the old LAN peer-card fork", () => {

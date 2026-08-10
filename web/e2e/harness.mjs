@@ -13,6 +13,7 @@ import { accessSync, constants, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
 
 export { sleep };
 
@@ -498,4 +499,77 @@ export async function withWatchdog(label, timeoutMs, run) {
   ]);
   // 收尾：run 的 finally 已经收过浏览器，这里只是确保进程不被 CDP 的 socket 挂住。
   process.exit(process.exitCode ?? 0);
+}
+
+// ── 静态产物的 HTTP 生命周期 ────────────────────────────────────────────────
+//
+// `vite preview` 直接吐 `dist`，所以不需要手写一个 HTTP 服务器去复制 nginx 的
+// try_files 规则——那份复制品迟早会和 `server/spa.go` 漂移，然后用一条测不准的路由
+// 给出一条测不准的结论。vite 本来就是开发依赖。
+//
+// `a11y-scan.mjs` 有它自己的一份：它还要处理 `--url`（扫一个已经跑着的服务器）和
+// `--preview-port`，那些开关只有它需要。这一份是给"只想要 dist 起在一个端口上"的
+// 脚本用的最小实现。
+
+/**
+ * 起一个 `vite preview` 并等它真的开始应答，返回 `{ base, stop }`。
+ *
+ * `--host 127.0.0.1` 不是可选的：vite preview 默认监听 "localhost"，而 Node 按 DNS
+ * 顺序解析它——某些机器上它只绑到 ::1，于是发往 127.0.0.1 的请求一律连不上，表现成
+ * "preview 起不来"。钉死 IPv4，本地和 CI 才是同一件事。
+ */
+export async function startPreview({ port, distDir = "dist", cwd }) {
+  // fileURLToPath, not `.pathname`: the latter keeps percent-encoding, so any
+  // checkout path containing a space resolves to a directory that does not exist.
+  const root = cwd ?? fileURLToPath(new URL("..", import.meta.url));
+  const viteBin = join(root, "node_modules", "vite", "bin", "vite.js");
+  const child = spawn(
+    process.execPath,
+    [viteBin, "preview", "--port", String(port), "--strictPort", "--host", "127.0.0.1", "--outDir", distDir],
+    { cwd: root, stdio: "ignore" },
+  );
+  let stopping = false;
+  let diedEarly = false;
+  child.on("exit", (code) => {
+    // preview 自己死掉（端口被占、dist 不存在）时不要让场景去慢慢超时——那种失败会
+    // 被读成"页面加载不出来"，指向完全错误的方向。
+    if (!stopping) diedEarly = true;
+    if (!stopping) console.error(`vite preview exited early with code ${code}`);
+  });
+
+  const alive = () => child.exitCode === null && child.signalCode === null;
+  const stop = async () => {
+    stopping = true;
+    if (!alive()) return;
+    const exited = new Promise((res) => child.once("exit", res));
+    try { child.kill("SIGTERM"); } catch { /* 已经没了 */ }
+    // 只发信号就返回是不够的：子进程句柄还活着的时候 Node 不会退出事件循环，于是
+    // "脚本跑完了但命令不返回"——在 CI 里这和挂死没有区别。
+    let timer;
+    await Promise.race([exited, new Promise((res) => { timer = setTimeout(res, 3_000); })]);
+    clearTimeout(timer);
+    if (alive()) { try { child.kill("SIGKILL"); } catch { /* 已经没了 */ } await exited; }
+  };
+
+  const base = `http://127.0.0.1:${port}`;
+  try {
+    for (let i = 0; ; i++) {
+      if (diedEarly) {
+        throw new Error(`vite preview died before serving ${distDir} — is port ${port} taken, or is ${distDir} missing? (run \`npm run build\`)`);
+      }
+      try {
+        const res = await fetch(`${base}/`);
+        if (res.ok) { await res.arrayBuffer(); break; }
+      } catch { /* 还没起来 */ }
+      if (i > 80) throw new Error(`vite preview never answered on ${base} within 20s`);
+      await sleep(250);
+    }
+  } catch (err) {
+    // 起不来也要把可能还活着的子进程收掉再抛：留一个活着的 preview 会占住端口，让
+    // **下一次**运行以 "--strictPort 端口被占" 收场——一个由上一轮失败造成、却指向
+    // 完全无关原因的错误。
+    await stop();
+    throw err;
+  }
+  return { base, stop };
 }

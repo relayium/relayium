@@ -98,7 +98,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
         <li>Eine Person meldet sich an und erzeugt einen 6-Zeichen-Pairing-Code für Dateien oder Text (oder teilt Beitrittslink/QR).</li>
         <li>Die andere öffnet den Link oder gibt den Code ein — zum Beitreten mit Code ist kein Konto nötig.</li>
         <li>Optional (erweiterte Verifizierung einschalten): Beide Seiten vergleichen denselben 6-stelligen Verifizierungscode (SAS — nicht den Pairing-Code) über einen unabhängigen Kanal. Eine Übereinstimmung bestätigt, dass die öffentlichen X25519-Endpunktschlüssel nicht ersetzt wurden und weder Signalisierungsdienst noch TURN-Relay einen Endpunkt imitiert oder die E2E-Verschlüsselung der Anwendung terminiert haben. TURN kann weiter im Netzwerkpfad liegen und transportiert dort nur Chiffretext.</li>
-        <li>Solange beide Geräte online sind, laufen Dateien und Live-Text Ende-zu-Ende-verschlüsselt über TURN. Relayium speichert keine Nachrichtentexte; eine Nachricht umfasst höchstens 65.536 UTF-8-Bytes.</li>
+        <li>Solange beide Geräte online sind, öffnet die eine Aktion auf der Karte der Gegenstelle einen gemeinsamen Arbeitsbereich: eine Ende-zu-Ende-verschlüsselte Verbindung, mit dem Eingabefeld standardmäßig auf dem Schirm und den Datei- und Ordner-Bedienelementen darunter. Dateien und Live-Text laufen gemeinsam über TURN, das nur Chiffretext trägt, und zwar für eine begrenzte Lebensdauer, auf die der Arbeitsbereich vor dem Ende hinweist. Relayium speichert keine Nachrichtentexte; eine Nachricht umfasst höchstens 65.536 UTF-8-Bytes.</li>
       </ol>
       </section>
 

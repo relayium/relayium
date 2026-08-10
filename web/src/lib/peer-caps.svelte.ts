@@ -15,8 +15,6 @@
 // 它永远不可能让明文被发出去：消息密钥是**派生**出来的，不是协商出来的，所以不存在
 // "降级成不加密"这条路径。能改写信令的攻击者本来就能直接让连接建不起来。
 
-import { roomCode } from "./room.svelte";
-
 /** The one capability this version advertises. Versioned so a later, wire-
  *  incompatible message format can be introduced without ambiguity. */
 export const CAP_TEXT = "text/1";
@@ -35,26 +33,37 @@ export const CAP_LINK = "link/1";
  * property of the source, so it is written in the source.
  *
  * It is not a switch. There is no setter, no query parameter and no stored
- * setting: a page script, a relay or a user cannot reach it. Scope is decided
- * one level down, by the room.
+ * setting: a page script, a relay or a user cannot reach it. What a build
+ * implements and what it is allowed to use are still two named things — see
+ * linkRoomActive below — even though every room now allows it.
  */
 export const LINK_BUILD_SUPPORT = true;
 
 /**
- * Whether the room this page is currently in may use link/1.
+ * Whether link/1 may be advertised and routed at all right now.
  *
- * Only the code-less LAN room. A pairing-code/cross-network room keeps the
- * existing one-mode-at-a-time file and text paths, because a relayed link's TURN
- * allocation lifetime, quota accounting and mobile-background cost need their
- * own production acceptance before one long-lived link replaces two short ones
- * there. See DECISION-LOG "Promote the unified Web peer workspace on LAN".
+ * Every room, LAN and pairing-code alike. It used to be the code-less LAN room
+ * only, while a relayed link's TURN allocation lifetime, quota accounting and
+ * mobile-background cost got their own acceptance. They have it now: a relayed
+ * link derives a bounded, clock-skew-safe lifetime from the credential the
+ * server issued (relay-deadline.ts) and reaches a truthful terminal state at it,
+ * and the ten-minute inactive close (MIXED_LINK_IDLE_MS) still bounds a link
+ * nobody is using. See DECISION-LOG "Promote the unified Web workspace to
+ * pairing rooms with a bounded relay lifecycle" (2026-08-10), which supersedes
+ * the LAN-only scope of 2026-08-04.
  *
- * Read at call time, never cached: entering or leaving a room rewrites the URL
- * fragment WITHOUT a reload, so a value frozen at import would keep answering
- * for the room the page was loaded into.
+ * What did NOT move with it is the exactness of the capability: a peer that does
+ * not announce this precise version is still legacy, in every room, and is never
+ * probed with a two-channel offer it would misread. That rule is peerSupportsLink
+ * below, and it is the whole downgrade boundary now.
+ *
+ * Kept as a named predicate rather than inlined so there is still exactly ONE
+ * expression the announcement and the routing rule both read; a future scope
+ * (a room kind, a build) has one place to live and cannot be applied to the
+ * announcement while the router forgets it.
  */
 export function linkRoomActive(): boolean {
-  return LINK_BUILD_SUPPORT && roomCode() === "";
+  return LINK_BUILD_SUPPORT;
 }
 
 /** What this build announces, at the roster level and (via localCaps) in its
@@ -104,12 +113,19 @@ export function peerSupportsText(peerId: string): boolean {
 /**
  * Exact match; callers must never infer link support from text/1.
  *
- * Room scope is enforced HERE rather than only at the announcement, because a
- * signalling relay sees every frame and can inject one. Refusing to *say*
- * link/1 in a pairing-code room is worth nothing on its own: this is the
- * predicate every routing decision reads (peer-workspace's `routes`, the
- * manager's inbound request/offer guards, `ensure`), so a forged roster claim
- * cannot activate the mixed manager where the room does not allow it.
+ * "Exact" is the load-bearing word and the only downgrade boundary left. An
+ * older Web peer, a native client or the CLI announces `text/1` and nothing
+ * else, and `listenForIncoming` on such a peer starts receiving FILES from any
+ * inbound offer — so a speculative two-channel offer to it becomes a transfer
+ * whose manifest never arrives, and it waits out a stall watchdog. `link/2`, a
+ * capitalised variant or a peer that never announced are all equally not this
+ * protocol.
+ *
+ * Enforced HERE, not only at the announcement, because this is the predicate
+ * every routing decision reads (peer-workspace's `routes`, the manager's inbound
+ * request/offer guards, `ensure`). The scope check stays in front of the
+ * membership test for the same reason it always did: one place decides, so a
+ * later scope cannot be applied to what we say and forgotten in what we route.
  */
 export function peerSupportsLink(peerId: string): boolean {
   if (!linkRoomActive()) return false;

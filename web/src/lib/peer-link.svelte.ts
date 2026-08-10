@@ -152,6 +152,16 @@ export interface PeerLinkDeps {
    * whether there was work worth reconnecting for.
    */
   onTransportLost?: (link: MixedPeerLink) => boolean;
+  /**
+   * How long the rebuild driver may keep trying, asked once per gap.
+   *
+   * Defaults to LINK_RECOVERY_WINDOW_MS, which is what LAN and P2P keep. A
+   * relayed link hands back the time left on its TURN credential instead, so the
+   * driver can never still be re-offering under a credential that has expired.
+   * Zero (or less) means the gap is not holdable at all: the link fails
+   * immediately rather than showing a recovery that cannot succeed.
+   */
+  recoveryWindowMs?: () => number;
 }
 
 export function isLinkOffer(data: unknown): data is InboundSignal {
@@ -424,7 +434,7 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
     });
   }
 
-  function beginRecovery(link: MixedPeerLink) {
+  function beginRecovery(link: MixedPeerLink, windowMs: number) {
     failRecovery(new Error("relayium: superseded mixed link recovery"));
     let resolve!: (next: MixedPeerLink) => void;
     let reject!: (err: unknown) => void;
@@ -437,7 +447,7 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
       promise,
       resolve,
       reject,
-      timer: setTimeout(() => expireRecovery(r), LINK_RECOVERY_WINDOW_MS),
+      timer: setTimeout(() => expireRecovery(r), windowMs),
     };
     recovering = r;
     // The establishment role, not a freshly computed one: both sides keep the
@@ -459,6 +469,19 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
     let hold = false;
     try { hold = deps.onTransportLost?.(link) === true; }
     catch (err) { console.error("relayium link transport-loss policy error", err); }
+    // A window of zero is a refusal, asked separately from the policy above so a
+    // lane that wants recovery cannot obtain one there is no time for. Reading it
+    // here (not inside beginRecovery) keeps "held" and "recoverable" the same
+    // answer: an `interrupted` status that can only expire is a lie on screen.
+    let windowMs = LINK_RECOVERY_WINDOW_MS;
+    if (hold) {
+      try { windowMs = deps.recoveryWindowMs?.() ?? LINK_RECOVERY_WINDOW_MS; }
+      catch (err) {
+        console.error("relayium link recovery window error", err);
+        windowMs = 0;
+      }
+      if (!(windowMs > 0)) hold = false;
+    }
     if (!hold) {
       publish(null, next === "failed" ? "failed" : "idle");
       try { conn.close(); } catch { /* terminal already */ }
@@ -468,7 +491,7 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
     // the dead connection is released, and closing it re-enters here inertly.
     status = "interrupted";
     try { conn.close(); } catch { /* terminal already */ }
-    beginRecovery(link);
+    beginRecovery(link, windowMs);
   }
 
   /**
@@ -958,6 +981,24 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
     },
 
     ensure(peerId: string): Promise<MixedPeerLink> {
+      // An established link with a LIVE transport is its own answer, and it is
+      // handed back before the capability gate is consulted at all.
+      //
+      // The gate is about links that do not exist yet. This one exists: it was
+      // built with a two-channel offer this peer answered, authenticated by
+      // commit-reveal, and its SAS compared. The announcement the gate reads
+      // arrives over signalling and is pruned with the roster (peer-caps'
+      // `retainPeers`), so a peer whose WebSocket dropped while its DataChannel
+      // stayed up would make this reject the very link it is holding — and with
+      // it every lane intent raised on a connection that is working perfectly.
+      //
+      // Scoped to `open` and to a link with no gap under it, deliberately.
+      // Getting a HELD link back means a rebuild, addressed through the same
+      // signalling layer whose answer just changed, so that stays behind the
+      // gate below with every other new connection attempt.
+      if (current && current.peerId === peerId && status === "open" && !recovering) {
+        return Promise.resolve(current);
+      }
       if (!supports(peerId)) return Promise.reject(new UnsupportedLinkError());
       if (current) {
         if (current.peerId !== peerId) return Promise.reject(new LinkBusyError());

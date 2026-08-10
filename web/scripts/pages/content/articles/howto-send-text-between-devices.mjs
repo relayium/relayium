@@ -70,7 +70,7 @@ const en = article({
   ],
   browserHeading: "Browser: send a message to an online device",
   browserBody:
-    "Open relayium.com on both devices, then follow whichever of the two procedures fits. On one network the other device appears by itself under “Nearby devices”, and its card offers a single action, “Open workspace”: the composer lives inside that workspace, beside the file and folder attachments, on the one encrypted connection. Across networks it is a separate procedure — create a browser pairing code on the cross-network page and join it in the other browser, and that room keeps its own older controls, where the peer card still offers “Send a message”.",
+    "Open relayium.com on both devices. Only the way they meet differs: on one network the other device appears by itself under “Nearby devices”, while across networks you create a browser pairing code on the cross-network page and join it from the other browser. What the two get once they have met is the same — the peer card offers a single action, “Open workspace”, and the composer lives inside that workspace, beside the file and folder attachments, on the one encrypted connection. Across networks that connection is carried by an encrypted TURN relay which forwards only ciphertext, and it runs under a time limit the workspace warns about before it is reached. The one exception is a peer that is not an up-to-date browser — an older one, a native app, the CLI: it keeps the earlier flow, where files and messages are used one at a time.",
   prereqLabel: "Before you start",
   prereqs: [
     "Both devices online at the same time, with the page open in a browser. There is no inbox: a message exists only inside a session both sides are holding open.",
@@ -84,7 +84,7 @@ const en = article({
       code: ["https://relayium.com/"],
     },
     {
-      text: "Open the session by the route your two devices are on. Same network: press “Open workspace” on the other device's card under “Nearby devices”, and type into the composer that workspace puts on screen. Across networks: in the pairing-code room, press “Send a message” on the peer card instead. By default the session opens straight into the composer on both ends — the connection is encrypted either way.",
+      text: "Press “Open workspace” on the other device's card and type into the composer that workspace puts on screen. It is the same one action either way: under “Nearby devices” on the same network, and on the peer card inside a pairing-code room across networks. By default the session opens straight into the composer on both ends — the connection is encrypted either way.",
     },
     {
       text: "Type or paste the text. The counter under the box shows how much of the one-message budget you have used, in bytes rather than characters, because an emoji or a CJK character costs several.",
@@ -122,7 +122,7 @@ const en = article({
     {
       symptom: "The session closed itself and blamed too many messages.",
       code: ["https://relayium.com/   # the session line reports it ended rather than failed"],
-      fix: "A flood guard closes a session when one side sends far more messages than a person types, which a script or a stuck key can do. Reopen the session the way you opened it — “Open workspace” on a nearby device's card, or “Send a message” in a cross-network pairing-code room — and send the remaining text in fewer, larger messages.",
+      fix: "A flood guard closes a session when one side sends far more messages than a person types, which a script or a stuck key can do. Reopen the session the way you opened it — “Open workspace” on the other device's card, on the same network or in a pairing-code room — and send the remaining text in fewer, larger messages.",
     },
     {
       symptom: "Everything worked, and after a reload the conversation is empty.",
@@ -180,7 +180,7 @@ const zh = article({
   ],
   browserHeading: "浏览器：给在线设备发送消息",
   browserBody:
-    "在两台设备上打开 relayium.com，然后按你们所处的情形选其中一套流程。同一网络下，对方会自己出现在「附近的设备」里，它的卡片只提供一个动作——「打开工作区」：输入框就在那个工作区里，和文件、文件夹附件并排，共用同一条加密连接。跨网络则是另一套流程：在跨网络页面创建浏览器配对码，再让另一台浏览器加入；那个房间保留着更早的一套控件，对端卡片上仍然是「发送消息」。",
+    "在两台设备上打开 relayium.com。两条路径只有「怎么遇上」不同：同一网络下，对方会自己出现在「附近的设备」里；跨网络则在跨网络页面创建浏览器配对码，再让另一台浏览器加入。遇上之后两边得到的东西是一样的——对端卡片只提供一个动作「打开工作区」，输入框就在那个工作区里，和文件、文件夹附件并排，共用同一条加密连接。跨网络时这条连接由加密的 TURN 中继承载，中继只转发密文；它还有一个时限，工作区会在到点之前提醒你。唯一的例外是不够新的对端——旧版浏览器、原生应用、CLI：它们保留更早的那套流程，文件和消息只能一次用一样。",
   prereqLabel: "开始之前",
   prereqs: [
     "两台设备同时在线，并且都在浏览器里打开着页面。这里没有收件箱：消息只存在于双方都保持打开的那个会话里。",
@@ -194,7 +194,7 @@ const zh = article({
       code: ["https://relayium.com/"],
     },
     {
-      text: "按你们所在的路径打开会话。同一网络：在「附近的设备」里那台设备的卡片上按「打开工作区」，然后在工作区给出的输入框里打字。跨网络：在配对码房间里，改按对端卡片上的「发送消息」。默认情况下会话会直接在两端打开输入框——无论是否核对校验码，连接都是加密的。",
+      text: "在对方设备的卡片上按「打开工作区」，然后在工作区给出的输入框里打字。两条路径是同一个动作：同一网络在「附近的设备」里，跨网络在配对码房间的对端卡片上。默认情况下会话会直接在两端打开输入框——无论是否核对校验码，连接都是加密的。",
     },
     {
       text: "输入或粘贴文本。输入框下方的计数显示你已经用掉了单条消息预算的多少，单位是字节而不是字符，因为一个 emoji 或一个汉字要占好几个字节。",
@@ -232,7 +232,7 @@ const zh = article({
     {
       symptom: "会话自己关掉了，并归因于消息发得太多。",
       code: ["https://relayium.com/   # 会话那行会显示它是结束，而不是失败"],
-      fix: "当一侧发送的消息数量远超人手打字的量时，防洪机制会关闭会话——脚本或卡住的按键都会造成这种情况。用你当初打开它的方式重新打开会话——同一网络就在附近设备的卡片上按「打开工作区」，跨网络就在配对码房间里按「发送消息」——再把剩下的内容合并成更少、更长的几条发出去。",
+      fix: "当一侧发送的消息数量远超人手打字的量时，防洪机制会关闭会话——脚本或卡住的按键都会造成这种情况。用你当初打开它的方式重新打开会话——在对方卡片上按「打开工作区」，同一网络和配对码房间都是这一个动作——再把剩下的内容合并成更少、更长的几条发出去。",
     },
     {
       symptom: "本来一切正常，刷新之后对话是空的。",
@@ -290,7 +290,7 @@ const ja = article({
   ],
   browserHeading: "ブラウザ：オンライン端末へメッセージを送る",
   browserBody:
-    "両方の端末で relayium.com を開き、状況に合う方の手順に進みます。同じネットワークなら相手は「近くのデバイス」に自動表示され、そのカードの操作は「ワークスペースを開く」の一つだけです。入力欄はそのワークスペースの中、ファイルとフォルダの添付の隣にあり、同じ1本の暗号化接続を使います。ネットワークをまたぐ場合は別の手順です。クロスネットワーク画面でブラウザ用コードを作り、もう一方のブラウザで参加します。その部屋には以前からの操作が残っていて、相手のカードには今も「メッセージを送る」が並びます。",
+    "両方の端末で relayium.com を開きます。違うのは「どう出会うか」だけです。同じネットワークなら相手は「近くのデバイス」に自動表示され、ネットワークをまたぐ場合はクロスネットワーク画面でブラウザ用のペアリングコードを作り、もう一方のブラウザで参加します。出会ったあとに得られるものはどちらも同じです。相手のカードの操作は「ワークスペースを開く」の一つだけで、入力欄はそのワークスペースの中、ファイルとフォルダの添付の隣にあり、同じ1本の暗号化接続を使います。ネットワークをまたぐ場合、その接続を運ぶのは暗号化された TURN リレーで、リレーが転送するのは暗号文だけです。さらに時間の上限があり、ワークスペースは上限に達する前に知らせます。唯一の例外は最新のブラウザではない相手——古いブラウザ、ネイティブアプリ、CLI——で、その場合はファイルとメッセージを一度に片方ずつ使う以前の流れが残ります。",
   prereqLabel: "始める前に",
   prereqs: [
     "2台が同時にオンラインで、どちらもブラウザでページを開いていること。受信箱はありません。メッセージは双方が開いたままにしているセッションの中にだけ存在します。",
@@ -304,7 +304,7 @@ const ja = article({
       code: ["https://relayium.com/"],
     },
     {
-      text: "2台がどちらの経路にいるかでセッションの開き方が変わります。同じネットワークなら、「近くのデバイス」にある相手のカードで「ワークスペースを開く」を押し、ワークスペースが出す入力欄に打ち込みます。ネットワークをまたぐ場合は、ペアリングコードの部屋で相手のカードの「メッセージを送る」を押します。既定では両端でそのまま入力欄が開きます。いずれの場合も接続は暗号化されています。",
+      text: "相手のカードで「ワークスペースを開く」を押し、ワークスペースが出す入力欄に打ち込みます。どちらの経路でも操作は同じ一つです。同じネットワークなら「近くのデバイス」の中、ネットワークをまたぐならペアリングコードの部屋の相手のカードにあります。既定では両端でそのまま入力欄が開きます。いずれの場合も接続は暗号化されています。",
     },
     {
       text: "テキストを入力または貼り付けます。入力欄の下のカウンターは、1メッセージ分の枠をどれだけ使ったかを文字数ではなくバイト数で示します。絵文字や日本語の1文字は数バイトを消費するためです。",
@@ -342,7 +342,7 @@ const ja = article({
     {
       symptom: "セッションが自ら閉じ、メッセージが多すぎたと告げる。",
       code: ["https://relayium.com/   # セッションの行が失敗ではなく終了と表示する"],
-      fix: "片側が人の入力を大きく超える数のメッセージを送ると、洪水対策がセッションを閉じます。スクリプトや押されたままのキーがこれを起こします。開いたときと同じやり方でセッションを開き直し——同じネットワークなら近くのデバイスのカードで「ワークスペースを開く」、ネットワークをまたぐならペアリングコードの部屋で「メッセージを送る」——残りのテキストは少ない回数でまとめて送ってください。",
+      fix: "片側が人の入力を大きく超える数のメッセージを送ると、洪水対策がセッションを閉じます。スクリプトや押されたままのキーがこれを起こします。開いたときと同じやり方でセッションを開き直し——相手のカードで「ワークスペースを開く」、同じネットワークでもペアリングコードの部屋でも同じです——残りのテキストは少ない回数でまとめて送ってください。",
     },
     {
       symptom: "うまくいっていたのに、再読み込みしたら会話が空になっている。",
@@ -394,7 +394,7 @@ const ko = article({
   ],
   browserHeading: "브라우저: 온라인 기기에 메시지 보내기",
   browserBody:
-    "두 기기에서 relayium.com을 열고, 상황에 맞는 절차를 고르세요. 같은 네트워크에서는 상대가 “주변 기기”에 저절로 나타나고 그 카드가 주는 동작은 “작업 공간 열기” 하나뿐입니다. 작성기는 그 작업 공간 안, 파일과 폴더 첨부 옆에 있고 하나의 암호화된 연결을 함께 씁니다. 다른 네트워크에서는 별개의 절차입니다. 교차 네트워크 페이지에서 브라우저 코드를 만들고 다른 브라우저가 참여하며, 그 방은 예전 컨트롤을 그대로 두어 상대 카드에 여전히 “메시지 보내기”가 있습니다.",
+    "두 기기에서 relayium.com을 엽니다. 다른 것은 “어떻게 만나는가”뿐입니다. 같은 네트워크에서는 상대가 “주변 기기”에 저절로 나타나고, 다른 네트워크에서는 교차 네트워크 페이지에서 브라우저 페어링 코드를 만들어 다른 브라우저로 참여합니다. 만나고 난 뒤 얻는 것은 어느 쪽이든 같습니다. 상대 카드가 주는 동작은 “작업 공간 열기” 하나뿐이고, 작성기는 그 작업 공간 안, 파일과 폴더 첨부 옆에 있으며 하나의 암호화된 연결을 함께 씁니다. 다른 네트워크에서는 그 연결을 암호화된 TURN 릴레이가 나르며, 릴레이가 전달하는 것은 암호문뿐입니다. 또한 시간 제한이 있고 작업 공간이 그 전에 알려 줍니다. 유일한 예외는 최신 브라우저가 아닌 상대 — 오래된 브라우저, 네이티브 앱, CLI — 로, 이 경우 파일과 메시지를 한 번에 하나씩 쓰던 이전 흐름이 남습니다.",
   prereqLabel: "시작하기 전에",
   prereqs: [
     "두 기기가 같은 시간에 온라인이고, 둘 다 브라우저에서 페이지를 열어 두어야 합니다. 받은편지함은 없습니다. 메시지는 양쪽이 열어 둔 세션 안에만 존재합니다.",
@@ -408,7 +408,7 @@ const ko = article({
       code: ["https://relayium.com/"],
     },
     {
-      text: "두 기기가 놓인 경로에 맞게 세션을 엽니다. 같은 네트워크: “주변 기기”에 있는 상대 카드에서 “작업 공간 열기”를 누르고, 작업 공간이 띄우는 작성기에 입력합니다. 다른 네트워크: 페어링 코드 방에서 상대 카드의 “메시지 보내기”를 누릅니다. 기본값에서는 양쪽 모두 곧바로 작성기가 열립니다. 어느 쪽이든 연결은 암호화됩니다.",
+      text: "상대 기기 카드에서 “작업 공간 열기”를 누르고, 작업 공간이 띄우는 작성기에 입력합니다. 어느 경로든 같은 하나의 동작입니다. 같은 네트워크면 “주변 기기”에, 다른 네트워크면 페어링 코드 방의 상대 카드에 있습니다. 기본값에서는 양쪽 모두 곧바로 작성기가 열립니다. 어느 쪽이든 연결은 암호화됩니다.",
     },
     {
       text: "텍스트를 입력하거나 붙여 넣습니다. 입력창 아래 카운터는 한 메시지 예산을 얼마나 썼는지 글자 수가 아니라 바이트로 보여줍니다. 이모지나 한글 한 글자가 여러 바이트를 쓰기 때문입니다.",
@@ -446,7 +446,7 @@ const ko = article({
     {
       symptom: "세션이 스스로 닫히며 메시지가 너무 많았다고 알립니다.",
       code: ["https://relayium.com/   # 세션 줄이 실패가 아니라 종료라고 보고한다"],
-      fix: "한쪽이 사람이 타이핑하는 양을 크게 넘는 메시지를 보내면 홍수 방지가 세션을 닫습니다. 스크립트나 눌린 키가 그렇게 만듭니다. 열었던 방식 그대로 세션을 다시 여세요 — 같은 네트워크면 주변 기기 카드에서 “작업 공간 열기”, 다른 네트워크면 페어링 코드 방에서 “메시지 보내기” — 그리고 남은 텍스트를 더 적고 큰 메시지로 보내세요.",
+      fix: "한쪽이 사람이 타이핑하는 양을 크게 넘는 메시지를 보내면 홍수 방지가 세션을 닫습니다. 스크립트나 눌린 키가 그렇게 만듭니다. 열었던 방식 그대로 세션을 다시 여세요 — 상대 카드에서 “작업 공간 열기”, 같은 네트워크든 페어링 코드 방이든 동일합니다 — 그리고 남은 텍스트를 더 적고 큰 메시지로 보내세요.",
     },
     {
       symptom: "잘되고 있었는데 새로고침하니 대화가 비어 있습니다.",
@@ -498,7 +498,7 @@ const de = article({
   ],
   browserHeading: "Browser: Nachricht an ein Online-Gerät senden",
   browserBody:
-    "Öffne relayium.com auf beiden Geräten und folge dann dem passenden der beiden Abläufe. Im selben Netz erscheint das andere Gerät von selbst unter „Geräte in der Nähe“, und seine Karte bietet genau eine Aktion: „Arbeitsbereich öffnen“. Das Eingabefeld sitzt in diesem Arbeitsbereich, neben den Anhängen für Dateien und Ordner, auf derselben einen verschlüsselten Verbindung. Über verschiedene Netze ist es ein eigener Ablauf: Auf der Cross-Network-Seite erzeugst du einen Browser-Code und trittst im zweiten Browser bei, und dieser Raum behält seine älteren Bedienelemente, wo die Karte der Gegenstelle weiterhin „Nachricht senden“ anbietet.",
+    "Öffne relayium.com auf beiden Geräten. Unterschiedlich ist nur, wie sie sich finden: Im selben Netz erscheint das andere Gerät von selbst unter „Geräte in der Nähe“, netzübergreifend erzeugst du auf der Cross-Network-Seite einen Browser-Pairing-Code und trittst im zweiten Browser bei. Was beide danach bekommen, ist dasselbe: Die Karte der Gegenstelle bietet genau eine Aktion, „Arbeitsbereich öffnen“, und das Eingabefeld sitzt in diesem Arbeitsbereich, neben den Anhängen für Dateien und Ordner, auf derselben einen verschlüsselten Verbindung. Netzübergreifend trägt ein verschlüsseltes TURN-Relay diese Verbindung und leitet dabei nur Chiffretext weiter; außerdem läuft sie unter einer Zeitgrenze, auf die der Arbeitsbereich hinweist, bevor sie erreicht ist. Die einzige Ausnahme ist eine Gegenstelle, die kein aktueller Browser ist — ein älterer, eine native App, das CLI: Dort bleibt der frühere Ablauf, bei dem Dateien und Nachrichten nacheinander genutzt werden.",
   prereqLabel: "Bevor du anfängst",
   prereqs: [
     "Beide Geräte gleichzeitig online, mit der Seite im Browser geöffnet. Es gibt keine Inbox: Eine Nachricht existiert nur in einer Sitzung, die beide Seiten offen halten.",
@@ -512,7 +512,7 @@ const de = article({
       code: ["https://relayium.com/"],
     },
     {
-      text: "Öffne die Sitzung auf dem Weg, auf dem eure beiden Geräte sind. Gleiches Netz: Drücke auf der Karte des anderen Geräts unter „Geräte in der Nähe“ auf „Arbeitsbereich öffnen“ und tippe in das Eingabefeld, das der Arbeitsbereich zeigt. Über Netze hinweg: Drücke im Pairing-Code-Raum stattdessen „Nachricht senden“ auf der Karte der Gegenstelle. Standardmäßig öffnet sich die Sitzung auf beiden Seiten direkt im Eingabefeld — verschlüsselt ist die Verbindung so oder so.",
+      text: "Drücke auf der Karte des anderen Geräts „Arbeitsbereich öffnen“ und tippe in das Eingabefeld, das der Arbeitsbereich zeigt. Es ist so oder so dieselbe eine Aktion: im selben Netz unter „Geräte in der Nähe“, netzübergreifend auf der Karte der Gegenstelle im Pairing-Code-Raum. Standardmäßig öffnet sich die Sitzung auf beiden Seiten direkt im Eingabefeld — verschlüsselt ist die Verbindung so oder so.",
     },
     {
       text: "Text eingeben oder einfügen. Der Zähler unter dem Feld zeigt, wie viel des Budgets für eine Nachricht verbraucht ist, und zwar in Bytes statt in Zeichen, denn ein Emoji oder ein CJK-Zeichen kostet mehrere.",
@@ -550,7 +550,7 @@ const de = article({
     {
       symptom: "Die Sitzung hat sich selbst geschlossen und zu viele Nachrichten dafür verantwortlich gemacht.",
       code: ["https://relayium.com/   # die Sitzungszeile meldet beendet statt fehlgeschlagen"],
-      fix: "Ein Flutschutz schließt eine Sitzung, wenn eine Seite weit mehr Nachrichten sendet, als ein Mensch tippt — ein Skript oder eine hängende Taste schafft das. Öffne die Sitzung so neu, wie du sie geöffnet hast — „Arbeitsbereich öffnen“ auf der Karte eines Geräts in der Nähe, oder „Nachricht senden“ in einem netzübergreifenden Pairing-Code-Raum — und schicke den restlichen Text in weniger, größeren Nachrichten.",
+      fix: "Ein Flutschutz schließt eine Sitzung, wenn eine Seite weit mehr Nachrichten sendet, als ein Mensch tippt — ein Skript oder eine hängende Taste schafft das. Öffne die Sitzung so neu, wie du sie geöffnet hast — „Arbeitsbereich öffnen“ auf der Karte des anderen Geräts, im selben Netz wie im Pairing-Code-Raum — und schicke den restlichen Text in weniger, größeren Nachrichten.",
     },
     {
       symptom: "Alles lief, und nach einem Neuladen ist das Gespräch leer.",
@@ -602,7 +602,7 @@ const fr = article({
   ],
   browserHeading: "Navigateur : envoyer un message à un appareil en ligne",
   browserBody:
-    "Ouvrez relayium.com sur les deux appareils, puis suivez celle des deux procédures qui correspond. Sur le même réseau, l'autre appareil apparaît tout seul sous « Appareils à proximité » et sa carte ne propose qu'une action, « Ouvrir l’espace de travail » : la zone de saisie vit dans cet espace de travail, à côté des pièces jointes fichier et dossier, sur la même connexion chiffrée. Entre réseaux, c'est une procédure distincte : créez un code navigateur sur la page interréseau et rejoignez-le dans l'autre navigateur, et cette salle conserve ses commandes plus anciennes, où la carte du pair propose toujours « Envoyer un message ». En résumé : l'espace de travail partagé sur un même réseau ; la salle par code d'appairage entre deux réseaux différents.",
+    "Ouvrez relayium.com sur les deux appareils. Seule la façon dont ils se trouvent change : sur le même réseau, l'autre appareil apparaît tout seul sous « Appareils à proximité » ; entre réseaux, vous créez un code d'appairage navigateur sur la page interréseau et vous le rejoignez depuis l'autre navigateur. Ce que les deux obtiennent ensuite est identique : la carte du pair ne propose qu'une action, « Ouvrir l’espace de travail », et la zone de saisie vit dans cet espace de travail, à côté des pièces jointes fichier et dossier, sur la même connexion chiffrée. Entre réseaux, cette connexion est portée par un relais TURN chiffré qui ne transmet que du texte chiffré, et elle est soumise à une limite de temps que l'espace de travail signale avant qu'elle ne soit atteinte. La seule exception est un pair qui n'est pas un navigateur à jour — un ancien, une application native, le CLI : il conserve le flux antérieur, où fichiers et messages s'utilisent l'un après l'autre.",
   prereqLabel: "Avant de commencer",
   prereqs: [
     "Les deux appareils en ligne en même temps, avec la page ouverte dans un navigateur. Il n'y a pas de boîte de réception : un message n'existe que dans une session que les deux côtés maintiennent ouverte.",
@@ -616,7 +616,7 @@ const fr = article({
       code: ["https://relayium.com/"],
     },
     {
-      text: "Ouvrez la session par la voie sur laquelle sont vos deux appareils. Même réseau : appuyez sur « Ouvrir l’espace de travail » sur la carte de l'autre appareil, sous « Appareils à proximité », puis écrivez dans la zone de saisie que l'espace de travail affiche. Entre réseaux : dans la salle par code d'appairage, appuyez plutôt sur « Envoyer un message » sur la carte du pair. Par défaut, la session s'ouvre directement sur la zone de saisie des deux côtés — la connexion est chiffrée dans tous les cas.",
+      text: "Appuyez sur « Ouvrir l’espace de travail » sur la carte de l'autre appareil, puis écrivez dans la zone de saisie que l'espace de travail affiche. C'est la même action unique dans les deux cas : sous « Appareils à proximité » sur le même réseau, et sur la carte du pair dans la salle par code d'appairage entre réseaux. Par défaut, la session s'ouvre directement sur la zone de saisie des deux côtés — la connexion est chiffrée dans tous les cas.",
     },
     {
       text: "Saisissez ou collez le texte. Le compteur sous la zone indique la part du budget d'un message déjà consommée, en octets plutôt qu'en caractères, car un emoji ou un idéogramme en coûte plusieurs.",
@@ -654,7 +654,7 @@ const fr = article({
     {
       symptom: "La session s'est fermée d'elle-même en invoquant trop de messages.",
       code: ["https://relayium.com/   # la ligne de session indique terminée plutôt qu'échouée"],
-      fix: "Une protection contre les envois en rafale ferme une session quand un côté envoie bien plus de messages qu'une personne n'en tape, ce qu'un script ou une touche bloquée provoque. Rouvrez la session comme vous l'aviez ouverte — « Ouvrir l’espace de travail » sur la carte d'un appareil à proximité, ou « Envoyer un message » dans une salle par code d'appairage entre réseaux — et envoyez le reste en moins de messages, plus longs.",
+      fix: "Une protection contre les envois en rafale ferme une session quand un côté envoie bien plus de messages qu'une personne n'en tape, ce qu'un script ou une touche bloquée provoque. Rouvrez la session comme vous l'aviez ouverte — « Ouvrir l’espace de travail » sur la carte de l'autre appareil, sur le même réseau comme dans une salle par code d'appairage — et envoyez le reste en moins de messages, plus longs.",
     },
     {
       symptom: "Tout fonctionnait, et après un rechargement la conversation est vide.",
@@ -706,7 +706,7 @@ const ar = article({
   ],
   browserHeading: "المتصفح: إرسال رسالة إلى جهاز متصل",
   browserBody:
-    "افتح relayium.com على الجهازين، ثم اتبع أيًّا من المسارين يناسبك. على الشبكة نفسها يظهر الجهاز الآخر وحده تحت «الأجهزة القريبة»، ولا تعرض بطاقته سوى إجراء واحد: «فتح مساحة العمل»؛ ومربع الكتابة داخل مساحة العمل تلك، إلى جانب مرفقات الملفات والمجلدات، على الاتصال المشفَّر الواحد نفسه. أما عبر شبكتين فهو مسار منفصل: أنشئ رمز متصفح من صفحة النقل بين الشبكات وانضم إليه من المتصفح الآخر، وتلك الغرفة تحتفظ بأدواتها الأقدم، حيث ما تزال بطاقة الطرف الآخر تعرض «إرسال رسالة».",
+    "افتح relayium.com على الجهازين. ما يختلف هو طريقة التعارف فقط: على الشبكة نفسها يظهر الجهاز الآخر وحده تحت «الأجهزة القريبة»، أما عبر شبكتين فتُنشئ رمز اقتران للمتصفح من صفحة النقل بين الشبكات وتنضم إليه من المتصفح الآخر. أما ما يحصل عليه الطرفان بعد ذلك فهو نفسه: لا تعرض بطاقة الطرف الآخر سوى إجراء واحد، «فتح مساحة العمل»، ومربع الكتابة داخل مساحة العمل تلك، إلى جانب مرفقات الملفات والمجلدات، على الاتصال المشفَّر الواحد نفسه. وعبر الشبكات يحمل هذا الاتصالَ مُرحِّلُ TURN مشفَّرٌ لا يمرّر سوى النص المشفَّر، وله كذلك حدٌّ زمني تنبّه إليه مساحة العمل قبل بلوغه. والاستثناء الوحيد طرفٌ ليس متصفحًا حديثًا — متصفح أقدم أو تطبيق أصلي أو CLI: فيبقى لديه المسار السابق حيث تُستخدم الملفات والرسائل واحدة تلو الأخرى.",
   prereqLabel: "قبل أن تبدأ",
   prereqs: [
     "أن يكون الجهازان متصلين في الوقت نفسه، والصفحة مفتوحة في متصفح على كليهما. لا يوجد صندوق وارد: فالرسالة لا توجد إلا داخل جلسة يُبقيها الطرفان مفتوحة.",
@@ -720,7 +720,7 @@ const ar = article({
       code: ["https://relayium.com/"],
     },
     {
-      text: "افتح الجلسة بحسب المسار الذي عليه جهازاكما. على الشبكة نفسها: اضغط «فتح مساحة العمل» على بطاقة الجهاز الآخر تحت «الأجهزة القريبة»، ثم اكتب في مربع الكتابة الذي تعرضه مساحة العمل. وعبر شبكتين: اضغط «إرسال رسالة» على بطاقة الطرف الآخر داخل غرفة رمز الاقتران بدلًا من ذلك. افتراضيًا تُفتح الجلسة مباشرةً على مربع الكتابة في الطرفين، والاتصال مُشفَّر في الحالتين.",
+      text: "اضغط «فتح مساحة العمل» على بطاقة الجهاز الآخر، ثم اكتب في مربع الكتابة الذي تعرضه مساحة العمل. وهو الإجراء الواحد نفسه في الحالتين: تحت «الأجهزة القريبة» على الشبكة نفسها، وعلى بطاقة الطرف الآخر داخل غرفة رمز الاقتران عبر الشبكات. افتراضيًا تُفتح الجلسة مباشرةً على مربع الكتابة في الطرفين، والاتصال مُشفَّر في الحالتين.",
     },
     {
       text: "اكتب النص أو الصقه. يبيّن العدّاد أسفل المربع ما استُهلك من ميزانية الرسالة الواحدة، بالبايت لا بالحروف، لأن الرمز التعبيري أو الحرف الصيني يستهلك عدة بايتات.",
@@ -758,7 +758,7 @@ const ar = article({
     {
       symptom: "أغلقت الجلسة نفسها وعزت ذلك إلى كثرة الرسائل.",
       code: ["https://relayium.com/   # سطر الجلسة يذكر أنها انتهت لا أنها فشلت"],
-      fix: "تُغلق حمايةُ الطوفان الجلسةَ عندما يرسل أحد الطرفين رسائل تتجاوز بكثير ما يكتبه إنسان، وهو ما يفعله نص برمجي أو مفتاح ملتصق. أعِد فتح الجلسة بالطريقة نفسها التي فتحتها بها — «فتح مساحة العمل» على بطاقة جهاز قريب، أو «إرسال رسالة» في غرفة رمز اقتران عبر الشبكات — وأرسِل ما بقي في رسائل أقل وأطول.",
+      fix: "تُغلق حمايةُ الطوفان الجلسةَ عندما يرسل أحد الطرفين رسائل تتجاوز بكثير ما يكتبه إنسان، وهو ما يفعله نص برمجي أو مفتاح ملتصق. أعِد فتح الجلسة بالطريقة نفسها التي فتحتها بها — «فتح مساحة العمل» على بطاقة الجهاز الآخر، على الشبكة نفسها كما في غرفة رمز الاقتران — وأرسِل ما بقي في رسائل أقل وأطول.",
     },
     {
       symptom: "كان كل شيء يعمل، وبعد إعادة التحميل صار الحوار فارغًا.",
@@ -810,7 +810,7 @@ const es = article({
   ],
   browserHeading: "Navegador: enviar un mensaje a un dispositivo en línea",
   browserBody:
-    "Abre relayium.com en ambos dispositivos y sigue el procedimiento que te toque de los dos. En la misma red el otro dispositivo aparece solo bajo «Dispositivos cercanos», y su tarjeta ofrece una única acción, «Abrir espacio de trabajo»: el editor vive dentro de ese espacio de trabajo, junto a los adjuntos de archivo y carpeta, sobre la misma conexión cifrada. En redes distintas es un procedimiento aparte: crea un código de navegador en la página entre redes y únete desde el otro navegador, y esa sala conserva sus controles más antiguos, donde la tarjeta del par sigue ofreciendo «Enviar un mensaje».",
+    "Abre relayium.com en ambos dispositivos. Lo único que cambia es cómo se encuentran: en la misma red el otro dispositivo aparece solo bajo «Dispositivos cercanos»; entre redes creas un código de emparejamiento de navegador en la página entre redes y te unes desde el otro navegador. Lo que obtienen los dos después es lo mismo: la tarjeta del par ofrece una única acción, «Abrir espacio de trabajo», y el editor vive dentro de ese espacio de trabajo, junto a los adjuntos de archivo y carpeta, sobre la misma conexión cifrada. Entre redes esa conexión la transporta un retransmisor TURN cifrado que solo reenvía texto cifrado, y está sujeta a un límite de tiempo del que el espacio de trabajo avisa antes de alcanzarlo. La única excepción es un par que no es un navegador actualizado — uno antiguo, una app nativa, el CLI: conserva el flujo anterior, donde los archivos y los mensajes se usan de uno en uno.",
   prereqLabel: "Antes de empezar",
   prereqs: [
     "Los dos dispositivos en línea a la vez, con la página abierta en un navegador. No hay bandeja de entrada: un mensaje solo existe dentro de una sesión que ambos lados mantienen abierta.",
@@ -824,7 +824,7 @@ const es = article({
       code: ["https://relayium.com/"],
     },
     {
-      text: "Abre la sesión por la vía en la que estén tus dos dispositivos. Misma red: pulsa «Abrir espacio de trabajo» en la tarjeta del otro dispositivo bajo «Dispositivos cercanos» y escribe en el editor que ese espacio de trabajo pone en pantalla. Entre redes: en la sala de código de emparejamiento, pulsa «Enviar un mensaje» en la tarjeta del par. De forma predeterminada la sesión se abre directamente en el editor en ambos lados; la conexión está cifrada en cualquier caso.",
+      text: "Pulsa «Abrir espacio de trabajo» en la tarjeta del otro dispositivo y escribe en el editor que ese espacio de trabajo pone en pantalla. Es la misma acción única en ambos casos: bajo «Dispositivos cercanos» en la misma red, y en la tarjeta del par dentro de la sala de código de emparejamiento entre redes. De forma predeterminada la sesión se abre directamente en el editor en ambos lados; la conexión está cifrada en cualquier caso.",
     },
     {
       text: "Escribe o pega el texto. El contador bajo el cuadro muestra cuánto del presupuesto de un mensaje has gastado, en bytes y no en caracteres, porque un emoji o un carácter CJK cuesta varios.",
@@ -862,7 +862,7 @@ const es = article({
     {
       symptom: "La sesión se cerró sola y culpó al exceso de mensajes.",
       code: ["https://relayium.com/   # la línea de sesión informa de terminada en vez de fallida"],
-      fix: "Una protección contra avalanchas cierra la sesión cuando un lado envía muchos más mensajes de los que teclea una persona, algo que consigue un script o una tecla atascada. Vuelve a abrir la sesión como la abriste — «Abrir espacio de trabajo» en la tarjeta de un dispositivo cercano, o «Enviar un mensaje» en una sala de código de emparejamiento entre redes — y manda el resto en menos mensajes, más largos.",
+      fix: "Una protección contra avalanchas cierra la sesión cuando un lado envía muchos más mensajes de los que teclea una persona, algo que consigue un script o una tecla atascada. Vuelve a abrir la sesión como la abriste — «Abrir espacio de trabajo» en la tarjeta del otro dispositivo, tanto en la misma red como en una sala de código de emparejamiento — y manda el resto en menos mensajes, más largos.",
     },
     {
       symptom: "Todo iba bien y, tras una recarga, la conversación está vacía.",
@@ -914,7 +914,7 @@ const pt = article({
   ],
   browserHeading: "Navegador: enviar mensagem a um dispositivo online",
   browserBody:
-    "Abra relayium.com nos dois dispositivos e siga o procedimento que se aplica, entre os dois. Na mesma rede o outro dispositivo aparece sozinho em “Dispositivos próximos”, e o cartão dele oferece uma única ação, “Abrir área de trabalho”: o editor fica dentro dessa área de trabalho, ao lado dos anexos de arquivo e de pasta, na mesma conexão criptografada. Em redes diferentes é um procedimento à parte: crie um código de navegador na página entre redes e entre pelo outro navegador, e essa sala mantém os controles mais antigos, onde o cartão do par ainda oferece “Enviar uma mensagem”.",
+    "Abra relayium.com nos dois dispositivos. Só muda como eles se encontram: na mesma rede o outro dispositivo aparece sozinho em “Dispositivos próximos”; entre redes você cria um código de emparelhamento de navegador na página entre redes e entra por ele no outro navegador. O que os dois recebem depois é o mesmo: o cartão do par oferece uma única ação, “Abrir área de trabalho”, e o editor fica dentro dessa área de trabalho, ao lado dos anexos de arquivo e de pasta, na mesma conexão criptografada. Entre redes essa conexão é carregada por um retransmissor TURN criptografado que só encaminha texto cifrado, e ela corre sob um limite de tempo que a área de trabalho avisa antes de ser atingido. A única exceção é um par que não é um navegador atualizado — um antigo, um app nativo, a CLI: ele mantém o fluxo anterior, em que arquivos e mensagens são usados um de cada vez.",
   prereqLabel: "Antes de começar",
   prereqs: [
     "Os dois dispositivos online ao mesmo tempo, com a página aberta em um navegador. Não existe caixa de entrada: uma mensagem só existe dentro de uma sessão que os dois lados mantêm aberta.",
@@ -928,7 +928,7 @@ const pt = article({
       code: ["https://relayium.com/"],
     },
     {
-      text: "Abra a sessão pelo caminho em que seus dois dispositivos estão. Mesma rede: aperte “Abrir área de trabalho” no cartão do outro dispositivo em “Dispositivos próximos” e escreva no editor que essa área de trabalho coloca na tela. Entre redes: na sala de código de emparelhamento, aperte “Enviar uma mensagem” no cartão do par. Por padrão a sessão abre direto no editor dos dois lados; a conexão é criptografada de qualquer forma.",
+      text: "Aperte “Abrir área de trabalho” no cartão do outro dispositivo e escreva no editor que essa área de trabalho coloca na tela. É a mesma ação única nos dois casos: em “Dispositivos próximos” na mesma rede, e no cartão do par dentro da sala de código de emparelhamento entre redes. Por padrão a sessão abre direto no editor dos dois lados; a conexão é criptografada de qualquer forma.",
     },
     {
       text: "Digite ou cole o texto. O contador abaixo da caixa mostra quanto do orçamento de uma mensagem já foi usado, em bytes e não em caracteres, porque um emoji ou um caractere CJK custa vários.",
@@ -966,7 +966,7 @@ const pt = article({
     {
       symptom: "A sessão se fechou sozinha culpando o excesso de mensagens.",
       code: ["https://relayium.com/   # a linha da sessão informa encerrada em vez de falhou"],
-      fix: "Uma proteção contra enxurrada fecha a sessão quando um lado envia muito mais mensagens do que uma pessoa digita, o que um script ou uma tecla presa consegue. Reabra a sessão do mesmo jeito que a abriu — “Abrir área de trabalho” no cartão de um dispositivo próximo, ou “Enviar uma mensagem” em uma sala de código de emparelhamento entre redes — e mande o resto em menos mensagens, maiores.",
+      fix: "Uma proteção contra enxurrada fecha a sessão quando um lado envia muito mais mensagens do que uma pessoa digita, o que um script ou uma tecla presa consegue. Reabra a sessão do mesmo jeito que a abriu — “Abrir área de trabalho” no cartão do outro dispositivo, tanto na mesma rede quanto em uma sala de código de emparelhamento — e mande o resto em menos mensagens, maiores.",
     },
     {
       symptom: "Tudo funcionava e, depois de recarregar, a conversa está vazia.",

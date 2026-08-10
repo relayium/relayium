@@ -24,16 +24,19 @@ Relayium is a serious attempt at a **next-generation file and ephemeral text tra
 press one button to send, and the software picks the right path while keeping content
 **end-to-end encrypted by default** — the keys only ever exist on the sender and the receiver.
 
-On a LAN, two up-to-date browsers do not choose between the two at all. Picking the other
-device opens **one shared workspace**: a single end-to-end encrypted connection with one
-verification step, a composer and an attachment control, so files and messages travel together
-without reconnecting between them. Pairing-code (cross-network) rooms and the native clients keep
-the existing separate file and message flows, which is also what an older browser on the LAN falls
-back to.
+Two up-to-date browsers do not choose between the two at all — on a LAN and in a pairing-code
+(cross-network) room alike. Picking the other device opens **one shared workspace**: a single
+end-to-end encrypted connection with one verification step, a composer visible by default and the
+file and folder controls under it, so files and messages travel together without reconnecting
+between them. Across networks that same one connection is carried by the encrypted relay, which
+forwards only ciphertext, and it runs under a bounded lifetime derived from the relay credential —
+the workspace warns before that boundary and ends the link truthfully at it. Peers that do not
+announce this exact capability keep the existing separate file and message flows: the native
+clients, the CLI, and older browsers, on either network.
 
 The same protocol also carries **ephemeral text**. When both devices are online, a message session
 opens an independent end-to-end encrypted connection — with its own optional verification code to compare — and carries a link,
-a command, or a block of multiline code instead of a file. (Inside the shared LAN workspace above it is
+a command, or a block of multiline code instead of a file. (Inside the shared workspace above it is
 not a separate connection: that message lane rides the one link you already verified.)
 On a LAN, browser messages move directly;
 cross-network browser sessions use TURN that carries only ciphertext; CLI text is direct-only.

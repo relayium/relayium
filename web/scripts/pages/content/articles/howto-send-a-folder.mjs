@@ -37,7 +37,7 @@ const en = {
           text: "Drag the folder onto the page, or use the folder picker button. Relayium walks the tree in the browser and keeps each file's relative path, so nothing has to be zipped first.",
         },
         {
-          text: "On the same network, find the recipient under “Nearby devices” and press “Open workspace” on their card, then use the “Send a folder” attachment inside the workspace. A cross-network pairing-code room keeps the older controls instead, with its own folder button on the room's card. Either way, the request that arrives on the other side states the file count and the total size of the whole tree, not of one file.",
+          text: "On the same network, find the recipient under “Nearby devices” and press “Open workspace” on their card, then use the “Send a folder” attachment inside the workspace. Across networks it is the same one action: join the pairing-code room and press “Open workspace” on the peer card there. Either way, the request that arrives on the other side states the file count and the total size of the whole tree, not of one file.",
         },
         {
           text: "On the receiving side, read the line under the request before accepting: in Chrome or Edge it says the browser will ask where to save, which is the path that reproduces the folder on disk. Then press “Accept”.",
@@ -167,7 +167,7 @@ const zh = {
           text: "把文件夹拖到页面上，或者用文件夹选择按钮。Relayium 会在浏览器里遍历目录树并保留每个文件的相对路径，所以不需要先打包。",
         },
         {
-          text: "同一网络下，在「附近的设备」里找到接收方，在它的卡片上按「打开工作区」，然后用工作区里的「发送文件夹」附件。跨网络的配对码房间保留的是更早的一套控件，文件夹按钮在房间自己的卡片上。无论哪种情形，对方收到的请求上写的都是文件数量和整棵树的总大小，而不是单个文件的大小。",
+          text: "同一网络下，在「附近的设备」里找到接收方，在它的卡片上按「打开工作区」，然后用工作区里的「发送文件夹」附件。跨网络是同一个动作：加入配对码房间，在那里的对端卡片上同样按「打开工作区」。无论哪种情形，对方收到的请求上写的都是文件数量和整棵树的总大小，而不是单个文件的大小。",
         },
         {
           text: "在接收方，接受之前先读一下请求下面那行：用 Chrome 或 Edge 时它会说浏览器要问你存到哪，而这条路径才能在磁盘上还原出文件夹。然后按「接收」。",
@@ -297,7 +297,7 @@ const ja = {
           text: "フォルダをページにドラッグするか、フォルダ選択ボタンを使います。Relayium がブラウザ内でツリーをたどり、各ファイルの相対パスを保つので、事前に圧縮する必要はありません。",
         },
         {
-          text: "同じネットワークなら、「近くのデバイス」で相手を見つけ、そのカードで「ワークスペースを開く」を押し、ワークスペース内の「フォルダを送信」の添付を使います。ネットワークをまたぐペアリングコードの部屋には以前からの操作が残っていて、フォルダのボタンはその部屋自身のカードにあります。どちらの場合も、相手に届くリクエストには、1ファイルではなくツリー全体のファイル数と合計サイズが示されます。",
+          text: "同じネットワークなら、「近くのデバイス」で相手を見つけ、そのカードで「ワークスペースを開く」を押し、ワークスペース内の「フォルダを送信」の添付を使います。ネットワークをまたぐ場合も同じ一つの操作です。ペアリングコードの部屋に参加し、そこでも相手のカードで「ワークスペースを開く」を押します。どちらの場合も、相手に届くリクエストには、1ファイルではなくツリー全体のファイル数と合計サイズが示されます。",
         },
         {
           text: "受信側では、受け入れる前にリクエストの下の行を読んでください。Chrome か Edge ならブラウザが保存先を尋ねると書かれており、その経路こそがディスク上にフォルダを再現します。読んだうえで「受信」を押します。",
@@ -427,7 +427,7 @@ const ko = {
           text: "폴더를 페이지에 끌어다 놓거나 폴더 선택 버튼을 씁니다. Relayium이 브라우저에서 트리를 훑으며 각 파일의 상대 경로를 유지하므로 미리 압축할 필요가 없습니다.",
         },
         {
-          text: "같은 네트워크라면 “주변 기기”에서 받는 사람을 찾아 그 카드에서 “작업 공간 열기”를 누르고, 작업 공간 안의 “폴더 보내기” 첨부를 쓰세요. 네트워크를 넘는 페어링 코드 방은 예전 컨트롤을 그대로 두어, 폴더 버튼이 그 방 자체의 카드에 있습니다. 어느 쪽이든 상대에게 도착하는 요청에는 한 파일이 아니라 트리 전체의 파일 개수와 총 크기가 적힙니다.",
+          text: "같은 네트워크라면 “주변 기기”에서 받는 사람을 찾아 그 카드에서 “작업 공간 열기”를 누르고, 작업 공간 안의 “폴더 보내기” 첨부를 쓰세요. 네트워크를 넘을 때도 같은 하나의 동작입니다. 페어링 코드 방에 참여해 거기서도 상대 카드에서 “작업 공간 열기”를 누르세요. 어느 쪽이든 상대에게 도착하는 요청에는 한 파일이 아니라 트리 전체의 파일 개수와 총 크기가 적힙니다.",
         },
         {
           text: "받는 쪽에서는 수락하기 전에 요청 아래 줄을 읽으세요. Chrome이나 Edge라면 브라우저가 저장 위치를 묻는다고 적혀 있고, 그 경로가 바로 디스크에 폴더를 되살리는 길입니다. 그다음 “받기”를 누릅니다.",
@@ -557,7 +557,7 @@ const de = {
           text: "Zieh den Ordner auf die Seite, oder nutze die Ordnerauswahl-Schaltfläche. Relayium durchläuft den Baum im Browser und behält den relativen Pfad jeder Datei, es muss also nichts vorher gezippt werden.",
         },
         {
-          text: "Im selben Netz findest du die empfangende Person unter „Geräte in der Nähe“, drückst auf ihrer Karte „Arbeitsbereich öffnen“ und nutzt dann im Arbeitsbereich den Anhang „Ordner senden“. Ein netzübergreifender Pairing-Code-Raum behält stattdessen die älteren Bedienelemente, mit seinem eigenen Ordner-Knopf auf der Karte des Raums. So oder so nennt die Anfrage, die dort ankommt, die Dateizahl und die Gesamtgröße des ganzen Baums, nicht die einer Datei.",
+          text: "Im selben Netz findest du die empfangende Person unter „Geräte in der Nähe“, drückst auf ihrer Karte „Arbeitsbereich öffnen“ und nutzt dann im Arbeitsbereich den Anhang „Ordner senden“. Netzübergreifend ist es dieselbe eine Aktion: Tritt dem Pairing-Code-Raum bei und drücke auch dort auf der Karte der Gegenstelle „Arbeitsbereich öffnen“. So oder so nennt die Anfrage, die dort ankommt, die Dateizahl und die Gesamtgröße des ganzen Baums, nicht die einer Datei.",
         },
         {
           text: "Lies auf der Empfangsseite die Zeile unter der Anfrage, bevor du annimmst: In Chrome oder Edge steht dort, dass der Browser nach dem Speicherort fragt, und genau dieser Weg stellt den Ordner auf der Platte wieder her. Dann drücke „Annehmen“.",
@@ -687,7 +687,7 @@ const fr = {
           text: "Glissez le dossier sur la page, ou utilisez le bouton de sélection de dossier. Relayium parcourt l'arborescence dans le navigateur et conserve le chemin relatif de chaque fichier, il n'y a donc rien à zipper au préalable.",
         },
         {
-          text: "Sur le même réseau, trouvez le destinataire sous « Appareils à proximité », appuyez sur « Ouvrir l’espace de travail » sur sa carte, puis utilisez la pièce jointe « Envoyer un dossier » dans cet espace de travail. Une salle par code d'appairage entre réseaux conserve au contraire les anciennes commandes, avec son propre bouton de dossier sur la carte de la salle. Dans les deux cas, la demande qui arrive de l'autre côté indique le nombre de fichiers et la taille totale de toute l'arborescence, pas celle d'un seul fichier.",
+          text: "Sur le même réseau, trouvez le destinataire sous « Appareils à proximité », appuyez sur « Ouvrir l’espace de travail » sur sa carte, puis utilisez la pièce jointe « Envoyer un dossier » dans cet espace de travail. Entre réseaux, c'est la même action unique : rejoignez la salle par code d'appairage et appuyez là aussi sur « Ouvrir l’espace de travail » sur la carte du pair. Dans les deux cas, la demande qui arrive de l'autre côté indique le nombre de fichiers et la taille totale de toute l'arborescence, pas celle d'un seul fichier.",
         },
         {
           text: "Du côté qui reçoit, lisez la ligne sous la demande avant d'accepter : dans Chrome ou Edge, elle annonce que le navigateur demandera où enregistrer, et c'est cette voie qui reconstitue le dossier sur le disque. Appuyez ensuite sur « Accepter ».",
@@ -817,7 +817,7 @@ const ar = {
           text: "اسحب المجلد إلى الصفحة، أو استخدم زر منتقي المجلدات. يتجول Relayium في الشجرة داخل المتصفح ويحافظ على المسار النسبي لكل ملف، فلا حاجة إلى ضغط أي شيء أولًا.",
         },
         {
-          text: "على الشبكة نفسها، جِد المُستقبِل تحت «الأجهزة القريبة»، واضغط «فتح مساحة العمل» على بطاقته، ثم استخدم مرفق «إرسال مجلد» داخل مساحة العمل. أما غرفة رمز الاقتران عبر الشبكات فتحتفظ بالأدوات الأقدم، وزر المجلد فيها على بطاقة الغرفة نفسها. وفي الحالتين، الطلب الذي يصل إلى الطرف الآخر يذكر عدد الملفات والحجم الإجمالي للشجرة كلها، لا حجم ملف واحد.",
+          text: "على الشبكة نفسها، جِد المُستقبِل تحت «الأجهزة القريبة»، واضغط «فتح مساحة العمل» على بطاقته، ثم استخدم مرفق «إرسال مجلد» داخل مساحة العمل. وعبر الشبكات هو الإجراء نفسه: انضمّ إلى غرفة رمز الاقتران واضغط «فتح مساحة العمل» على بطاقة الطرف الآخر هناك أيضًا. وفي الحالتين، الطلب الذي يصل إلى الطرف الآخر يذكر عدد الملفات والحجم الإجمالي للشجرة كلها، لا حجم ملف واحد.",
         },
         {
           text: "على الطرف المستقبِل، اقرأ السطر أسفل الطلب قبل القبول: في Chrome أو Edge يقول إن المتصفح سيسأل عن مكان الحفظ، وهذا هو المسار الذي يعيد تكوين المجلد على القرص. ثم اضغط «قبول».",
@@ -947,7 +947,7 @@ const es = {
           text: "Arrastra la carpeta a la página, o usa el botón de selección de carpeta. Relayium recorre el árbol en el navegador y conserva la ruta relativa de cada archivo, así que no hay que comprimir nada antes.",
         },
         {
-          text: "En la misma red, busca al destinatario bajo «Dispositivos cercanos», pulsa «Abrir espacio de trabajo» en su tarjeta y usa después el adjunto «Enviar una carpeta» dentro de ese espacio de trabajo. Una sala de código de emparejamiento entre redes conserva en cambio los controles antiguos, con su propio botón de carpeta en la tarjeta de la sala. En ambos casos, la solicitud que llega al otro lado indica el número de archivos y el tamaño total de todo el árbol, no el de un archivo.",
+          text: "En la misma red, busca al destinatario bajo «Dispositivos cercanos», pulsa «Abrir espacio de trabajo» en su tarjeta y usa después el adjunto «Enviar una carpeta» dentro de ese espacio de trabajo. Entre redes es la misma acción única: únete a la sala de código de emparejamiento y pulsa «Abrir espacio de trabajo» en la tarjeta del par también allí. En ambos casos, la solicitud que llega al otro lado indica el número de archivos y el tamaño total de todo el árbol, no el de un archivo.",
         },
         {
           text: "En el lado que recibe, lee la línea bajo la solicitud antes de aceptar: en Chrome o Edge dice que el navegador preguntará dónde guardar, y esa es la vía que reproduce la carpeta en el disco. Después pulsa «Aceptar».",
@@ -1077,7 +1077,7 @@ const pt = {
           text: "Arraste a pasta para a página, ou use o botão de seleção de pasta. O Relayium percorre a árvore no navegador e mantém o caminho relativo de cada arquivo, então nada precisa ser compactado antes.",
         },
         {
-          text: "Na mesma rede, ache quem recebe em “Dispositivos próximos”, aperte “Abrir área de trabalho” no cartão dele e depois use o anexo “Enviar uma pasta” dentro dessa área de trabalho. Já uma sala de código de emparelhamento entre redes mantém os controles mais antigos, com o botão de pasta no cartão da própria sala. De um jeito ou de outro, o pedido que chega do outro lado informa a quantidade de arquivos e o tamanho total da árvore inteira, não de um arquivo.",
+          text: "Na mesma rede, ache quem recebe em “Dispositivos próximos”, aperte “Abrir área de trabalho” no cartão dele e depois use o anexo “Enviar uma pasta” dentro dessa área de trabalho. Entre redes é a mesma ação única: entre na sala de código de emparelhamento e aperte “Abrir área de trabalho” no cartão do par ali também. De um jeito ou de outro, o pedido que chega do outro lado informa a quantidade de arquivos e o tamanho total da árvore inteira, não de um arquivo.",
         },
         {
           text: "No lado que recebe, leia a linha abaixo do pedido antes de aceitar: no Chrome ou no Edge ela diz que o navegador vai perguntar onde salvar, e é esse caminho que reproduz a pasta no disco. Depois clique em “Aceitar”.",

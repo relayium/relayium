@@ -404,6 +404,75 @@ function recommendsRealtimeForLargeFiles(s, lang) {
 // that both devices connect to when a direct path fails" says the same thing
 // without the word — not to weaken the table.
 
+// ── (e) "a pairing-code room keeps the older, separate controls" ──────────
+// Retired on 2026-08-10. `link/1` used to be scoped to the code-less LAN room,
+// so a pairing-code room really did fall back to the legacy file/folder/message
+// fork — and eleven strings across three articles said so. That scope is gone:
+// `linkRoomActive()` is now `LINK_BUILD_SUPPORT` and nothing else, so a default
+// build advertises and routes the unified link in EVERY room (peer-caps.svelte.ts,
+// and web/e2e/code-room.mjs proves it in two real browsers: the pairing-room peer
+// card offers exactly one action, which opens one link with one SAS and a composer
+// visible by default with the file and folder controls under it).
+//
+// What did NOT move is `peerSupportsLink()`, still an exact match — so an older
+// browser, a native client or the CLI keeps the legacy surfaces, in either room.
+// That is why this rule is about the ROOM and never about the peer: "an older
+// browser keeps the earlier flow" is correct copy and must keep passing, while
+// "the pairing-code room keeps the older controls" is the retired claim.
+//
+// Every phrase below is harvested verbatim from the diff that removed it, per the
+// header: a table written from the corrected copy would recognise none of them.
+const PAIRING_ROOM = {
+  en: ["pairing code", "pairing-code", "cross-network", "across networks"],
+  zh: ["配对码", "跨网络"],
+  ja: ["ペアリングコード", "クロスネットワーク", "ネットワークをまたぐ"],
+  ko: ["페어링 코드", "교차 네트워크", "다른 네트워크", "네트워크를 넘"],
+  de: ["pairing-code", "cross-network", "netzübergreifend", "über verschiedene netze", "über netze hinweg"],
+  fr: ["code d'appairage", "code d’appairage", "interréseau", "entre réseaux", "cross-network", "code navigateur"],
+  ar: ["رمز الاقتران", "رمز اقتران", "عبر الشبكات", "بين الشبكات", "عبر شبكتين"],
+  es: ["código de emparejamiento", "código de navegador", "entre redes", "redes distintas"],
+  pt: ["código de emparelhamento", "código de navegador", "entre redes", "redes diferentes"],
+};
+// Deliberately specific multi-word phrases. A bare "older" / "más antigua" /
+// "plus ancienne" would swallow the comparison articles, which legitimately call
+// somebody else's product older, and a rule that fires on those gets suppressed.
+const OLDER_SURFACE = {
+  // "the older controls" and not a bare "older controls": the corrected copy says
+  // "the file and folder controls under it", and f-"older controls" is a substring
+  // of it. A rule that fires on the sentence describing the NEW surface is worse
+  // than no rule, and this one nearly did.
+  en: ["the older controls", "own older controls", "older surface", "its own, older", "older interface", "older separate surface"],
+  zh: ["更早的一套控件", "更早的、独立的界面", "更早的控件", "旧的一套控件"],
+  ja: ["以前からの操作が残", "より古い独立した画面", "古いコントロール"],
+  ko: ["예전 컨트롤", "더 오래된 별도의 화면", "오래된 컨트롤"],
+  de: ["älteren bedienelemente", "ältere oberfläche", "eigene, ältere", "alten bedienelemente"],
+  fr: ["anciennes commandes", "commandes plus anciennes", "surface distincte et plus ancienne"],
+  ar: ["الأدوات الأقدم", "أدواتها الأقدم", "واجهة مستقلة وأقدم"],
+  es: ["controles antiguos", "controles más antiguos", "superficie propia y más antigua"],
+  pt: ["controles mais antigos", "superfície própria e mais antiga"],
+};
+
+/**
+ * The retired claim, in any locale.
+ *
+ * The defect phrase must sit in the FOCAL sentence; the room evidence may come
+ * from the sentence on either side of it. That window is not generosity — it is
+ * required to see the shipped ja and ko defects at all, where 。 split "その部屋
+ * には以前からの操作が残っていて…" away from the クロスネットワーク that identifies
+ * which room "その部屋" is. As in rule (b), the window only ever ADDS evidence
+ * that a sentence is on topic; it can never excuse one.
+ */
+function claimsPairingRoomIsOlder(s, lang) {
+  const sents = sentences(s);
+  for (let i = 0; i < sents.length; i++) {
+    const focal = stripArabicMarks(sents[i]).toLowerCase();
+    if (!OLDER_SURFACE[lang].some((p) => focal.includes(stripArabicMarks(p).toLowerCase()))) continue;
+    const window = stripArabicMarks(sents.slice(Math.max(0, i - 1), i + 2).join(" ")).toLowerCase();
+    if (!PAIRING_ROOM[lang].some((p) => window.includes(stripArabicMarks(p).toLowerCase()))) continue;
+    return `says a pairing-code room keeps the older, separate controls: "${sents[i].trim()}"`;
+  }
+}
+
 describe("content claims about pairing codes, accounts and the relay", () => {
   it("demonstrates only codes the server could actually issue", () => {
     const bad = scan(badCodeExample);
@@ -518,6 +587,64 @@ describe("comparison articles describe realtime transport precisely", () => {
     es: /no puede leer ni descifrar/i,
     pt: /não consegue ler nem descriptografar/i,
   };
+
+  it("never tells a reader that a pairing-code room keeps the older controls", () => {
+    const bad = scan(claimsPairingRoomIsOlder);
+    if (bad.length) throw new Error(`retired pairing-room surface claims:\n  ${bad.join("\n  ")}`);
+  });
+
+  // Verbatim from the diff that removed them — one per locale, from the three
+  // articles that carried the claim (howto-send-a-folder, howto-send-text-between-devices,
+  // howto-transfer-by-qr-code). A green run over the corpus proves nothing about a
+  // matcher that cannot fire, and the ja/ko entries are the ones that need the
+  // look-back window, so they are the reason this case exists.
+  it("recognises the retired pairing-room claim in every language", () => {
+    const BAIT = {
+      en: "Across networks it is a separate procedure — create a browser pairing code on the cross-network page, and that room keeps its own older controls.",
+      zh: "跨网络的配对码房间保留的是更早的一套控件，文件夹按钮在房间自己的卡片上。",
+      ja: "クロスネットワーク画面でブラウザ用コードを作り、もう一方のブラウザで参加します。その部屋には以前からの操作が残っていて、相手のカードには今も「メッセージを送る」が並びます。",
+      ko: "교차 네트워크 페이지에서 브라우저 코드를 만들고 다른 브라우저가 참여합니다. 그 방은 예전 컨트롤을 그대로 두어 상대 카드에 여전히 “메시지 보내기”가 있습니다.",
+      de: "Ein netzübergreifender Pairing-Code-Raum behält stattdessen die älteren Bedienelemente, mit seinem eigenen Ordner-Knopf auf der Karte des Raums.",
+      fr: "Une salle par code d'appairage entre réseaux conserve au contraire les anciennes commandes, avec son propre bouton de dossier sur la carte de la salle.",
+      ar: "أما غرفة رمز الاقتران عبر الشبكات فتحتفظ بالأدوات الأقدم، وزر المجلد فيها على بطاقة الغرفة نفسها.",
+      es: "Una sala de código de emparejamiento entre redes conserva en cambio los controles antiguos, con su propio botón de carpeta en la tarjeta de la sala.",
+      pt: "Já uma sala de código de emparelhamento entre redes mantém os controles mais antigos, com o botão de pasta no cartão da própria sala.",
+    };
+    const deaf = LANGS.filter((l) => !claimsPairingRoomIsOlder(norm(BAIT[l]), l));
+    if (deaf.length) throw new Error(`retired pairing-room rule never fires for: ${deaf.join(", ")}`);
+  });
+
+  // The mirror, and the one that keeps this rule honest: the capability gate is
+  // REAL. `peerSupportsLink()` is an exact match, so an older browser, a native
+  // client or the CLI does keep the earlier one-at-a-time flow — in a pairing-code
+  // room as much as on a LAN. That sentence is correct copy, it sits right next to
+  // a pairing-code word in the shipped articles, and a rule that swallowed it
+  // would force the corpus to stop stating a true limit.
+  it("does not fire on the true statement about capability-gated older peers", () => {
+    const FACTS = {
+      en: "Across networks the peer card offers the same one action. The one exception is a peer that is not an up-to-date browser — an older one, a native app, the CLI: it keeps the earlier flow, where files and messages are used one at a time.",
+      zh: "跨网络也是同一个动作。唯一的例外是不够新的对端——旧版浏览器、原生应用、CLI：它们保留更早的那套流程，文件和消息只能一次用一样。",
+      ja: "ネットワークをまたぐ場合も同じ一つの操作です。唯一の例外は最新のブラウザではない相手——古いブラウザ、ネイティブアプリ、CLI——で、その場合はファイルとメッセージを一度に片方ずつ使う以前の流れが残ります。",
+      ko: "다른 네트워크에서도 같은 하나의 동작입니다. 유일한 예외는 최신 브라우저가 아닌 상대 — 오래된 브라우저, 네이티브 앱, CLI — 로, 이 경우 파일과 메시지를 한 번에 하나씩 쓰던 이전 흐름이 남습니다.",
+      de: "Netzübergreifend ist es dieselbe eine Aktion. Die einzige Ausnahme ist eine Gegenstelle, die kein aktueller Browser ist — ein älterer, eine native App, das CLI: Dort bleibt der frühere Ablauf, bei dem Dateien und Nachrichten nacheinander genutzt werden.",
+      fr: "Entre réseaux, c'est la même action unique. La seule exception est un pair qui n'est pas un navigateur à jour — un ancien, une application native, le CLI : il conserve le flux antérieur, où fichiers et messages s'utilisent l'un après l'autre.",
+      ar: "وعبر الشبكات هو الإجراء نفسه. والاستثناء الوحيد طرف ليس متصفحًا حديثًا — متصفح أقدم أو تطبيق أصلي أو CLI: فيبقى لديه المسار السابق حيث تُستخدم الملفات والرسائل واحدة تلو الأخرى.",
+      es: "Entre redes es la misma acción única. La única excepción es un par que no es un navegador actualizado — uno antiguo, una app nativa, el CLI: conserva el flujo anterior, donde los archivos y los mensajes se usan de uno en uno.",
+      pt: "Entre redes é a mesma ação única. A única exceção é um par que não é um navegador atualizado — um antigo, um app nativo, a CLI: ele mantém o fluxo anterior, em que arquivos e mensagens são usados um de cada vez.",
+    };
+    const trigger = LANGS.filter((l) => claimsPairingRoomIsOlder(norm(FACTS[l]), l));
+    if (trigger.length) throw new Error(`retired pairing-room rule false-positives on the capability gate in: ${trigger.join(", ")}`);
+
+    // And the substring trap this rule walked into once: the sentence that
+    // describes the NEW surface says "the file and folder controls", in which
+    // f-"older controls" is a substring. Caught before it shipped; pinned here so
+    // a future widening of the table cannot reintroduce it.
+    const NEW_SURFACE =
+      "With both devices online in a pairing-code room, the peer card's one action opens a shared workspace: the composer on screen by default and the file and folder controls under it.";
+    if (claimsPairingRoomIsOlder(NEW_SURFACE, "en")) {
+      throw new Error("retired pairing-room rule fires on the sentence describing the new surface");
+    }
+  });
 
   it("distinguishes LAN direct from cross-network TURN in every Firefox Send locale", () => {
     const bad = [];

@@ -7,18 +7,45 @@ Scope owner: Web LAN and realtime/direct transfer between two `link/1` capable
 browser clients. CLI, native-client adoption, stored transfer and server-side
 persistence are excluded.
 
-> **Superseded (2026-08-04).** Every statement below that `link/1` is absent from
-> `capsSignal()`/`LOCAL_CAPS` in a default build, and every reference to the
-> `VITE_RELAYIUM_LINK_E2E` flag and its `dist-link-e2e` bundle, described the
-> pre-release gate. That gate is gone. A default build now implements `link/1`
-> unconditionally (`LINK_BUILD_SUPPORT`) and advertises/routes it **only in the
-> code-less LAN room** (`linkRoomActive()`); pairing-code rooms neither announce
-> it nor accept a forged roster claim for it. `LOCAL_CAPS` is now the function
-> `localCaps()`, sampled per connection so a room switch cannot leave the SDP
-> confirmation disagreeing with the roster hello. See DECISION-LOG
-> "Promote the unified Web peer workspace on LAN before pairing-code rooms".
-> Everything else in this document — the protocol, lanes, consent, recovery and
-> presentation rules — still holds.
+> **Superseded (2026-08-04, extended 2026-08-10).** Every statement below that
+> `link/1` is absent from `capsSignal()`/`LOCAL_CAPS` in a default build, and
+> every reference to the `VITE_RELAYIUM_LINK_E2E` flag and its `dist-link-e2e`
+> bundle, described the pre-release gate. That gate is gone. A default build
+> implements `link/1` unconditionally (`LINK_BUILD_SUPPORT`) and now advertises
+> and routes it in **every** room — LAN and pairing-code alike
+> (`linkRoomActive()`). The LAN-only scope of 2026-08-04 is superseded; what
+> replaced it for a relayed link is a bounded lifetime rather than a refusal:
+> `relay-deadline.ts` derives a clock-skew-safe boundary from the earliest TURN
+> REST username expiry in the room's ICE config, and `mixed-session` warns before
+> it, reaches a truthful terminal state at it even with no transport event, and
+> never attempts a stale-credential recovery. The ten-minute inactive close
+> (`MIXED_LINK_IDLE_MS`) is unchanged and still the only bound a LAN link has.
+> Losing signalling alone does not close a healthy DataChannel; it marks recovery
+> unavailable, and only a LATER transport loss becomes terminal (`link-recovery.ts`).
+> That holds symmetrically, which is the ordinary case rather than the exotic one:
+> the far side losing only its WebSocket is precisely what makes the server send
+> **us** a `left` frame, so `peerLeft` preserves an established healthy link and
+> merely records the peer as absent (`peerPresent` → `recoveryBlock`). Only a
+> phase with no authenticated link — an in-flight establishment, an outstanding
+> request — is cancelled by that frame, and a link already HELD with no transport
+> under it ends at once with `signalingLost` rather than re-offering to an id that
+> has left the room (`MixedSession.peerDeparted`).
+> One more release rule sits on top of the workspace, in `confirm-send.ts`: a
+> queued batch that reaches a `link/1` peer BEFORE any link exists (an OS share,
+> or files picked before the code was minted) cannot be released by the send
+> confirmation, because that confirmation's only stated instruction is to compare
+> a verification code the workspace has not produced yet. Opening the workspace
+> builds the link without draining the queue; the release becomes available only
+> once that link's SAS is actually on screen.
+> The downgrade boundary did NOT move: `peerSupportsLink()` is still an exact
+> match, so a peer that does not announce this precise version is never sent a
+> speculative two-channel offer. `LOCAL_CAPS` is now the function `localCaps()`,
+> sampled per connection so a room switch cannot leave the SDP confirmation
+> disagreeing with the roster hello. See DECISION-LOG "Promote the unified Web
+> workspace to pairing rooms with a bounded relay lifecycle" (2026-08-10), which
+> supersedes "Promote the unified Web peer workspace on LAN before pairing-code
+> rooms". Everything else in this document — the protocol, lanes, consent,
+> recovery and presentation rules — still holds.
 
 ## Problem
 

@@ -96,11 +96,154 @@ describe("openWorkspace", () => {
     expect(body).toContain("if (workspace.blocksNewIntent(peerId)) return;");
     // A queued share was handed to us by the OS with its destination still
     // missing. Choosing the peer completes THAT intent; it is never dropped.
-    expect(body).toMatch(/if \(outbox\(\)\.length\) \{[^]*?workspace\.sendFiles\(peerId, takeOutbox\(\)\);[^]*?return;/);
+    expect(body).toMatch(/if \(outbox\(\)\.length[^]*?\) \{[^]*?workspace\.sendFiles\(peerId, takeOutbox\(\)\);[^]*?return;/);
     expect(body).toContain("void workspace.openText(peerId)");
     expect(body.indexOf("takeOutbox()")).toBeLessThan(body.indexOf("workspace.openText"));
     // Never a silent send of whatever is in the draft box.
     expect(body).not.toMatch(/sendText|clearOutbox/);
+  });
+
+  // The guessed-code boundary. Opening the workspace is how the verification
+  // code gets ON SCREEN, so it must not also be the thing that sends: a
+  // code-guesser who joined first would otherwise receive the batch as a direct
+  // consequence of the user looking at the code they were told to compare.
+  it("never drains the outbox before the send confirmation in a code room", () => {
+    const body = fn("openWorkspace");
+    expect(body).toContain("needsSendConfirmation(verifyOn, roomCode)");
+    // The drain is the NEGATIVE branch of that gate, not a separate statement
+    // after it — and the gate is the same tested predicate the auto-send effect
+    // reads, so the two cannot disagree about when the stop applies.
+    expect(body).toMatch(
+      /if \(outbox\(\)\.length && !needsSendConfirmation\(verifyOn, roomCode\)\)/,
+    );
+    // With the stop in force it falls through to opening the lanes, leaving the
+    // queue exactly where it was.
+    expect(body.indexOf("needsSendConfirmation")).toBeLessThan(body.indexOf("takeOutbox()"));
+  });
+
+  it("keeps a persistent release path for those files, reachable after Cancel", () => {
+    // Cancel sets `dismissedPeerId`, which permanently suppresses the automatic
+    // bar for that peer. Inside a workspace there is no peer card left either,
+    // so without this control the batch is stranded on screen with no way to
+    // send it and no way to know it is still queued.
+    const body = fn("releaseQueued");
+    expect(body).toContain("dismissedPeerId = null");
+    expect(body).toContain("pendingPeer =");
+    // It re-arms the confirmation; it never sends. The comparison is the whole
+    // point of the stop, so the release must not be a way around it.
+    expect(body).not.toMatch(/sendFiles|takeOutbox/);
+    expect(surface).toContain("onclick={releaseQueued}");
+    expect(surface).toContain("t.workspace.queuedRelease(");
+    expect(surface).toContain("{t.workspace.queuedReleaseBtn}");
+  });
+
+  // The control was clickable in a state where it could do nothing at all: it
+  // rendered on `workspace.hasLink`, and its handler resolved the peer out of
+  // `visiblePeers`. Those are two different sources of truth, and losing a
+  // signalling socket separates them — the roster empties while the DataChannel
+  // keeps carrying files. One derived value now feeds both.
+  it("renders and acts on exactly one target, so it is never a clickable no-op", () => {
+    const at = app.indexOf("const releaseTarget = $derived.by(");
+    expect(at, "releaseTarget is missing from App.svelte").toBeGreaterThan(-1);
+    const derived = app.slice(at, app.indexOf("\n  });", at) + 6);
+    // The tested predicate, not an inline expression that could drift from it.
+    expect(derived).toContain("queuedReleaseTarget({");
+    // A LIVE link: an ended link has no code to compare, and releasing against
+    // it would build a second link and send over a SAS nobody ever saw.
+    expect(derived).toContain('const peerId = workspace.hasLink ? workspace.linkPeerId : ""');
+    expect(derived).toContain("linkPeerId: peerId");
+    expect(derived).toContain("queued: outbox().length");
+    expect(derived).toContain('blocked: peerId !== "" && workspace.blocksNewIntent(peerId)');
+    // Both the branch and the handler read it, and the handler reads NOTHING
+    // else — in particular not the roster, which is what used to leave the
+    // button on screen with nothing behind it.
+    expect(surface).toContain("{#if releaseTarget && !pendingPeer}");
+    const body = fn("releaseQueued");
+    expect(body).toContain("const peerId = releaseTarget;");
+    expect(body).toContain("if (!peerId) return;");
+    expect(body).not.toContain("visiblePeers");
+    // The armed bar is built from the link, so a peer that is no longer in the
+    // roster still gets one.
+    expect(body).toContain("pendingPeer = { id: peerId, name: nameOf(peerId) };");
+  });
+
+  // Re-arming has to survive the automatic bar's own effect, which clears
+  // `pendingPeer` whenever its "exactly one visible peer" precondition stops
+  // holding — and an empty roster is exactly the state a signalling drop leaves
+  // behind while the link is still live.
+  it("does not let the auto-arm effect clear a confirmation the release control just armed", () => {
+    const at = app.indexOf("let dismissedPeerId = $state<string | null>(null);");
+    const effect = app.slice(at, app.indexOf("});", app.indexOf("$effect(", at)) + 3);
+    expect(effect).toContain("} else if (!pendingPeer || pendingPeer.id !== releaseTarget) {");
+    expect(effect).toContain("pendingPeer = null;");
+  });
+
+  it("tells the user to compare the code in the confirmation itself", () => {
+    // The bar states a risk ("a device calling itself X"); without the
+    // instruction it offers no way to answer it, which is a click-through.
+    // Gated on `shownSas` — "a code is on screen right now" — and not on the
+    // preference: with verification on but no link yet there is nothing to
+    // compare, and instructing a comparison that cannot be made is worse than
+    // saying nothing. The no-code branch is not silence either: it says what to
+    // do to GET one, next to the action that does it.
+    expect(surface).toContain(
+      "{#if shownSas} {t.confirmRecvCompare}{:else if !canRelease} {t.confirmRecvNeedsCode}{/if}",
+    );
+    expect(surface).toContain("t.confirmRecv(nameOf(pendingPeer.id))");
+  });
+});
+
+// The preselected-batch hole: with advanced verification on, a code room and an
+// OS share (or files picked before the code was minted), `pendingPeer` is armed
+// the instant the one peer joins — which is before any link, and therefore
+// before any SAS. Send used to work there.
+describe("the send confirmation cannot release before its code exists", () => {
+  it("fails closed in the handler, not only in the template", () => {
+    const body = fn("confirmSend");
+    // The guard is on the SAME derived the button branch reads, so the two
+    // cannot disagree, and it comes before anything is drained.
+    expect(body).toContain("if (!pendingPeer || !canRelease) return;");
+    expect(body.indexOf("canRelease")).toBeLessThan(body.indexOf("takeOutbox()"));
+    expect(body).toContain("workspace.sendFiles(id, takeOutbox())");
+  });
+
+  it("derives that answer from the tested predicate, against a LIVE link", () => {
+    const at = app.indexOf("const canRelease = $derived.by(");
+    expect(at, "canRelease is missing from App.svelte").toBeGreaterThan(-1);
+    const derived = app.slice(at, app.indexOf("});", at) + 3);
+    expect(derived).toContain("canReleaseConfirmedSend({");
+    // The same confirmation gate the auto-send effect reads, so "is there a bar"
+    // and "may the bar release" cannot answer differently.
+    expect(derived).toContain("confirmed: needsSendConfirmation(verifyOn, roomCode)");
+    expect(derived).toContain("unified: workspace.routes(target.id)");
+    expect(derived).toContain("targetPeerId: target.id");
+    // `linkPeerId` alone still names the peer of an ENDED link, whose code is no
+    // longer on screen. A live link, or "".
+    expect(derived).toContain('linkPeerId: workspace.hasLink ? workspace.linkPeerId : ""');
+    // The code as RENDERED, not workspace.sasCode: the preference decides
+    // whether it is on screen at all, and an invisible code is not comparable.
+    expect(derived).toContain("shownSas,");
+  });
+
+  it("replaces Send with the action that puts a code on screen", () => {
+    const bar = surface.slice(
+      surface.indexOf('class="ui-callout ui-callout-accent confirm-send"'),
+      surface.indexOf("{/if}", surface.indexOf("{t.confirmRecvCancel}")),
+    );
+    expect(bar).toContain("{#if canRelease}");
+    // Send exists ONLY in the branch that may send.
+    const send = bar.indexOf("onclick={confirmSend}");
+    const otherwise = bar.indexOf("{:else}");
+    expect(send).toBeGreaterThan(bar.indexOf("{#if canRelease}"));
+    expect(send).toBeLessThan(otherwise);
+    // …and the way forward is `openWorkspace`, which is separately pinned above
+    // as never draining the outbox while the confirmation is in force.
+    expect(bar.indexOf("openWorkspace(pendingTarget.id)")).toBeGreaterThan(otherwise);
+    expect(surface).toContain("{@const pendingTarget = pendingPeer}");
+    expect(bar.slice(otherwise)).not.toContain("confirmSend");
+    // Cancel is outside the fork: dismissing is available in both states, and it
+    // is what `releaseQueued` re-arms.
+    expect(bar.indexOf("onclick={cancelSend}")).toBeGreaterThan(bar.indexOf("openWorkspace"));
   });
 });
 

@@ -86,7 +86,12 @@ describe("i18n completeness", () => {
       "stateIdle", "stateRequesting", "stateConnecting", "stateOpen", "stateFailed",
     ] as const;
     const plainKeys = [
-      "heading", "disconnect", "lanesNote", "queuedHint", "queuedRemove", ...stateKeys,
+      "heading", "disconnect", "lanesNote", "queuedHint", "queuedRemove",
+      // The bounded relay lifetime and the correlated-loss boundary. A missing
+      // one of these is a link that ends with no explanation at all.
+      "relayExpiring", "endedRelay", "endedSignaling", "restart",
+      "recoveryUnavailable", "queuedReleaseBtn",
+      ...stateKeys,
     ] as const;
     for (const { code } of LANGS) {
       const m = messages[code].workspace;
@@ -104,6 +109,57 @@ describe("i18n completeness", () => {
       expect(m.queuedTitle(3), `${code}.workspace.queuedTitle`).toMatch(/\b3\b/);
       expect(m.queuedFiles(3), `${code}.workspace.queuedFiles`).toMatch(/\b3\b/);
       expect(m.queuedFiles(1), `${code}.workspace.queuedFiles`).toMatch(/\b1\b/);
+      // The release control names WHAT is waiting, in both numbers: a bare
+      // "files are waiting" is not enough to decide whether to send them.
+      expect(m.queuedRelease(3, "12.5 MB"), `${code}.workspace.queuedRelease count`).toMatch(/\b3\b/);
+      expect(m.queuedRelease(3, "12.5 MB"), `${code}.workspace.queuedRelease size`).toContain("12.5 MB");
+      expect(m.queuedRelease(1, "1 kB"), `${code}.workspace.queuedRelease singular`).toContain("1 kB");
+      // The two terminal reasons are different instructions ("start again" vs
+      // "the pairing service is gone"), so they may never be the same sentence.
+      expect(m.endedRelay, `${code}.workspace terminal reasons are distinct`).not.toBe(m.endedSignaling);
+      // …and neither may be confused with the live warning that precedes one.
+      expect(m.relayExpiring, `${code}.workspace.relayExpiring is not the terminal copy`)
+        .not.toBe(m.endedRelay);
+      // Losing signalling has a warning AND a terminal sentence, and they say
+      // opposite things: one is "everything here still works, but it could not
+      // come back", the other is "it is gone". Reusing one for the other tells
+      // a user with a perfectly healthy connection to stop using it.
+      expect(m.recoveryUnavailable, `${code}.workspace.recoveryUnavailable is not the terminal copy`)
+        .not.toBe(m.endedSignaling);
+    }
+  });
+
+  // Two short labels with a length budget, because both sit under something
+  // else: `restart` is an inline action inside the trust header's wrapping row,
+  // and `bareConnect` is a secondary button under two primary ones. The old
+  // bareConnect copy was a 42-character sentence and wrapped on a phone.
+  it("keeps the short action labels short in every language", () => {
+    for (const { code } of LANGS) {
+      for (const [where, label] of [
+        [`${code}.pair.bareConnect`, messages[code].pair.bareConnect],
+        [`${code}.workspace.restart`, messages[code].workspace.restart],
+      ] as const) {
+        expect(label, `${where} has copy`).toBeTruthy();
+        expect(label.trim(), `${where} is trimmed`).toBe(label);
+        expect(label.length, `${where} is short: ${label}`).toBeLessThanOrEqual(24);
+        expect(label.endsWith("."), `${where} is not a sentence: ${label}`).toBe(false);
+      }
+    }
+  });
+
+  // The sender-side stop in a code room exists because the peer might be someone
+  // who guessed a live code, and its entire remedy is "compare the code first".
+  // A translation that drops that instruction leaves a prompt with no stated way
+  // to answer it correctly — worse than no prompt, because it looks answered.
+  it("every language tells the sender to compare the code before sending", () => {
+    for (const { code } of LANGS) {
+      const m = messages[code];
+      expect(typeof m.confirmRecvCompare, `${code}.confirmRecvCompare`).toBe("string");
+      expect(m.confirmRecvCompare.trim().length, `${code}.confirmRecvCompare is empty`)
+        .toBeGreaterThan(0);
+      // It has to be a second sentence, not a restatement of who is asking.
+      expect(m.confirmRecvCompare, `${code}.confirmRecvCompare is not confirmRecv`)
+        .not.toBe(m.confirmRecv("X"));
     }
   });
 

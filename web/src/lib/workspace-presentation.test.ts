@@ -4,9 +4,9 @@ import { describe, expect, it } from "vitest";
 
 // Source contract, like activity-visibility.test.ts: the rules below are about
 // which nodes exist in which branch, which is exactly what a rendered snapshot of
-// one state cannot prove. `link/1` now ships, but only the code-less LAN room
-// activates it — pairing-code rooms and every older peer stay on the legacy
-// branch, so that branch has to stay byte-for-behaviour identical.
+// one state cannot prove. `link/1` ships and every room now activates it — so the
+// legacy branch is what a peer that does not speak the protocol still gets, in
+// either kind of room, and it has to stay byte-for-behaviour identical.
 const app = readFileSync(resolve(process.cwd(), "src/App.svelte"), "utf8");
 const surface = app.slice(
   app.indexOf("{#snippet transferSurface()}"),
@@ -81,6 +81,21 @@ describe("unified mixed peer workspace presentation", () => {
       expect(before.slice(before.lastIndexOf("{#if "))).toContain("showSas");
     }
     expect(indicesOf(panel, 'class="sas"')).toHaveLength(2);
+  });
+
+  // The lifecycle states are rendered by WorkspaceHeader (covered in its own
+  // test) — what has to hold HERE is that App actually hands them over. Each of
+  // these props defaults to the benign value, so a dropped binding does not
+  // fail: it silently shows a healthy link that is expiring, unrecoverable, or
+  // already dead.
+  it("hands the header the relay boundary, the recovery answer and the end reason", () => {
+    for (const prop of [
+      "relayExpiring={workspace.relayExpiring}",
+      "recoveryAvailable={workspace.recoveryAvailable}",
+      "endReason={workspace.linkEndReason}",
+      // Terminal cards state a problem; without this they would offer no way out.
+      "onRestart={restartWorkspace}",
+    ]) expect(surface, prop).toContain(prop);
   });
 
   it("shows one path label, owned by the header", () => {
@@ -216,21 +231,20 @@ describe("unified mixed peer workspace presentation", () => {
     expect(panel).toContain("showSas = true");
   });
 
-  it("scopes link/1 to the room, with no build flag and no runtime switch", () => {
-    // Behavioural coverage of both branches lives in peer-caps.test.ts and
-    // peer-workspace.test.ts. What this pins is the *shape* of the scope.
+  it("activates link/1 with no build flag and no runtime switch", () => {
+    // Behavioural coverage lives in peer-caps.test.ts and peer-workspace.test.ts.
+    // What this pins is the *shape* of the activation.
     //
-    // What a build can implement and what a room may activate are now two
-    // separate, named things. The build half is a plain constant, so a release
-    // no longer depends on an environment variable somebody has to remember to
-    // set — and cannot accidentally ship half-advertised because they forgot.
+    // The build half is a plain constant, so a release does not depend on an
+    // environment variable somebody has to remember to set — and cannot ship
+    // half-advertised because they forgot.
     expect(caps).toContain("export const LINK_BUILD_SUPPORT = true");
     expect(caps).not.toContain("VITE_RELAYIUM_LINK_E2E");
     expect(caps).not.toContain("import.meta.env");
-    // The room half reads the URL-driven room store and nothing else. A query
+    // The room no longer scopes it (DECISION-LOG 2026-08-10) — but nothing
+    // reachable by a page script or a user may scope it either. A query
     // parameter, a stored setting or an exported setter here would be a runtime
-    // switch over a protocol scope, reachable by a page script or a user.
-    expect(caps).toContain('from "./room.svelte"');
+    // switch over a protocol scope.
     expect(caps).not.toMatch(/localStorage|location\.|searchParams|setAdvertised/);
     // One expression decides it, and both the roster hello and the SDP
     // confirmation are derived from that one expression. Asymmetry here is the
@@ -238,7 +252,13 @@ describe("unified mixed peer workspace presentation", () => {
     // reverse) strands a peer that believed us.
     expect(caps.match(/CAP_LINK\]/g)).toHaveLength(1);
     expect(caps).toContain("linkRoomActive() ? [CAP_TEXT, CAP_LINK] : [CAP_TEXT]");
-    expect(caps).toMatch(/export function peerSupportsLink[\s\S]{0,400}?linkRoomActive\(\)/);
+    // The routing predicate still reads that same expression before it reads the
+    // peer's claim, so a future scope cannot be applied to what we announce and
+    // forgotten in what we route.
+    expect(caps).toMatch(/export function peerSupportsLink[\s\S]{0,600}?linkRoomActive\(\)/);
+    // Exact membership, never a prefix/`some`/`startsWith` match: "link/2" and
+    // "link/1x" are different wires and must not read as this one.
+    expect(caps).toMatch(/announced\[peerId\] \?\? \[\]\)\.includes\(CAP_LINK\)/);
     expect(app).not.toContain("CAP_LINK");
   });
 

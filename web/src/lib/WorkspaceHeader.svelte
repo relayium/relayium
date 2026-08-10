@@ -22,15 +22,32 @@
   import type { ConnPath } from "./webrtc";
 
   type LinkStatus = PeerWorkspace["linkStatus"];
+  type EndReason = PeerWorkspace["linkEndReason"];
 
   let {
-    peerName, status, sasCode, path, onDisconnect, element = $bindable(),
+    peerName, status, sasCode, path,
+    relayExpiring = false, recoveryAvailable = true, endReason = "",
+    onDisconnect, onRestart, element = $bindable(),
   }: {
     peerName: string;
     status: LinkStatus;
     sasCode: string;
     path?: ConnPath;
+    /** The relayed link is inside its credential warning window. A warning, not
+     *  a state: the link is fully live and both lanes still work. */
+    relayExpiring?: boolean;
+    /** Whether this link could be rebuilt if its transport died. Losing the
+     *  signalling socket makes it false while changing nothing else, and saying
+     *  so before anything breaks is the only warning that is any use. */
+    recoveryAvailable?: boolean;
+    /** Why the last link ended, when the user has to act on it. Overrides the
+     *  raw status line: "Not connected" is true and useless next to a transfer
+     *  that stopped mid-flight. */
+    endReason?: EndReason;
     onDisconnect: () => void;
+    /** Answers the terminal explanation. Required whenever `endReason` can be
+     *  non-empty; without it the card would state a problem and offer no way out. */
+    onRestart?: () => void;
     /** The pinned box itself, handed back so a caller that must clear it can
      *  measure it at the moment it scrolls. Deliberately the element and not a
      *  measured number: this header wraps differently in nine locales and at
@@ -56,6 +73,9 @@
   function pathLabel(m: Messages, p: ConnPath): string {
     return p === "lan" ? m.pathLan : p === "relay" ? m.pathRelay : m.pathP2p;
   }
+  function endText(m: Messages, r: Exclude<EndReason, "">): string {
+    return r === "relayExpired" ? m.workspace.endedRelay : m.workspace.endedSignaling;
+  }
 </script>
 
 <!-- Sticky so a long activity column can never scroll the SAS — when advanced
@@ -74,16 +94,34 @@
     {#if peerName}
       <span class="wh-peer">{t.workspace.peer(peerName)}</span>
     {/if}
-    <span class="wh-state">{stateText(t, status)}</span>
-    {#if path}
+    <!-- An ended link's REASON is its state. The raw status underneath is
+         "idle" or "failed" depending on which teardown path got there first,
+         and neither of those tells anyone what to do next. -->
+    <span class="wh-state">{endReason ? endText(t, endReason) : stateText(t, status)}</span>
+    {#if path && !endReason}
       <span class="path path-{path}"><i class="dot" aria-hidden="true"></i>{pathLabel(t, path)}</span>
     {/if}
-    <button type="button" class="btn btn-secondary btn-sm wh-disconnect" onclick={onDisconnect}>
-      {t.workspace.disconnect}
-    </button>
+    {#if endReason}
+      <button type="button" class="btn btn-primary btn-sm wh-restart" onclick={() => onRestart?.()}>
+        {t.workspace.restart}
+      </button>
+    {:else}
+      <button type="button" class="btn btn-secondary btn-sm wh-disconnect" onclick={onDisconnect}>
+        {t.workspace.disconnect}
+      </button>
+    {/if}
   </div>
-  {#if sasCode}
+  {#if sasCode && !endReason}
     <div class="sas">{t.codeLabel} <code>{sasCode}</code> — {t.codeCompare}</div>
+  {/if}
+  <!-- Live warnings. Both describe a link that is working right now, so they sit
+       under the trust row rather than replacing it, and neither is shown once
+       the link has actually ended — by then the state line above says more. -->
+  {#if !endReason && relayExpiring}
+    <p class="wh-warn wh-warn-relay">{t.workspace.relayExpiring}</p>
+  {/if}
+  {#if !endReason && !recoveryAvailable}
+    <p class="wh-warn">{t.workspace.recoveryUnavailable}</p>
   {/if}
 </section>
 <p class="wh-note">{t.workspace.lanesNote}</p>
@@ -116,7 +154,17 @@
   .wh-state { color: var(--text); }
   /* Push the destructive-ish action to the row end in both directions; logical
      property so RTL mirrors without a second rule. */
-  .wh-disconnect { margin-inline-start: auto; }
+  .wh-disconnect, .wh-restart { margin-inline-start: auto; }
+  /* A warning about a link that still works. Deliberately not danger-coloured
+     and not a filled banner: both read as "this has failed", which is exactly
+     what it is not. The heading colour is the emphasis, and it is a token that
+     already meets contrast in both themes. */
+  .wh-warn {
+    margin: 0;
+    font-size: var(--fs-xs);
+    line-height: 1.5;
+    color: var(--text-h);
+  }
   .wh-note {
     margin: 0 0 var(--space-4);
     font-size: var(--fs-xs);

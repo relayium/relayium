@@ -1,9 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mount, unmount, flushSync } from "svelte";
 import CodePairing from "./CodePairing.svelte";
 import { loadLang, messages } from "./i18n.svelte";
 import type { RelayAvailability } from "./ice";
 import { clearOutbox, setOutbox } from "./outbox.svelte";
+import { refreshSession } from "./auth.svelte";
 
 // The one thing that decides which role the component renders as: the minting
 // device stashes the code's expiry here, a joiner never has it.
@@ -177,4 +178,47 @@ describe("the join-code input", () => {
     flushSync();
     expect(el.value).toBe("483920");
   });
+});
+
+// The pre-pair choice, for a signed-in sender. "Open a room without picking
+// files first" is the entry point for the entire receiver-initiated half of the
+// product — someone who wants to RECEIVE, or who will decide what to send once
+// the other device is actually there. As an underlined sentence under two
+// primary buttons it read as a footnote about them.
+describe("the bare-connect action", () => {
+  async function signedIn() {
+    const user = { id: "u1", email: "a@b.c", displayName: "A", hasPassword: true };
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      if (url === "/api/me") return { ok: true, status: 200, json: async () => ({ user }) };
+      throw new Error(`unexpected fetch ${url}`);
+    }) as unknown as typeof fetch);
+    await refreshSession();
+    render({});
+  }
+
+  afterEach(() => { vi.unstubAllGlobals(); });
+
+  it("is a real button, not a text link", async () => {
+    await signedIn();
+    const bare = target.querySelector(".bare-connect") as HTMLButtonElement;
+    expect(bare).not.toBe(null);
+    expect(bare.tagName).toBe("BUTTON");
+    // Shares the .btn primitive, which is what supplies the coarse-pointer touch
+    // floor and the dark-mode control tokens. `.btn-link` supplies neither.
+    expect(bare.className).toContain("btn");
+    expect(bare.className).not.toContain("btn-link");
+    expect(bare.textContent?.trim()).toBe(messages.en.pair.bareConnect);
+  });
+
+  it("stays visually secondary to picking files", async () => {
+    await signedIn();
+    const bare = target.querySelector(".bare-connect") as HTMLButtonElement;
+    // Picking files is still the common case; this is a choice, not a fallback,
+    // and must not compete with the two primary actions above it.
+    expect(bare.className).toContain("btn-ghost");
+    expect(bare.className).not.toContain("btn-primary");
+  });
+
+  // The nine-locale shape of that label (short, trimmed, not a sentence) is
+  // asserted in i18n.test.ts, which is the file that imports every table.
 });

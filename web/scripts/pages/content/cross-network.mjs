@@ -31,7 +31,7 @@ const en = {
       "One person signs in and mints a 6-digit pairing code for a file or text session (or shares its join link / QR).",
       "The other person opens the link or enters the code — joining with a code needs no account.",
       "Optional (turn on advanced verification): both sides compare the same 6-digit verification code (SAS) out of band — a different value from the pairing code. A match confirms the X25519 endpoint public keys were not substituted, so the signaling service or TURN relay did not impersonate either endpoint or terminate the app-layer E2EE. TURN can still remain in the network path, carrying only ciphertext.",
-      "With both devices online, files stream and live text messages move end-to-end encrypted through TURN. Relayium never stores message bodies; one message can contain up to 65,536 UTF-8 bytes.",
+      "With both devices online, the peer card's one action opens a shared workspace: one end-to-end encrypted connection, with the composer on screen by default and the file and folder controls under it. Files and live text messages travel together through TURN, which carries only ciphertext, for a bounded lifetime the workspace warns about before it ends. Relayium never stores message bodies; one message can contain up to 65,536 UTF-8 bytes.",
     ],
   },
   why: {
@@ -121,7 +121,7 @@ const zh = {
       "一方登录后为文件或文本会话生成一个 6 位数字配对码（也可分享其加入链接/二维码）。",
       "另一方打开链接或输入配对码即可——持码加入无需账号。",
       "可选（打开「高级验证」）：双方通过带外渠道核对同一段 6 位数字校验码（SAS，与配对码是两个不同的值）。一致表示 X25519 端点公钥未被替换，信令服务或 TURN 中继没有冒充任一端点或终止应用层端到端加密；TURN 仍可处于网络路径中，但只承载密文。",
-      "双方同时在线时，文件流和实时文本均通过 TURN 端到端加密传输。Relayium 不存储消息正文；每条消息最多 65,536 个 UTF-8 字节。",
+      "双方同时在线时，对端卡片上的那一个动作会打开共享工作区：一条端到端加密连接，输入框默认就在屏幕上，文件和文件夹控件在它下面。文件和实时文本一起通过 TURN 传输，中继只承载密文，并且有一个有限的存活期，工作区会在结束前提醒你。Relayium 不存储消息正文；每条消息最多 65,536 个 UTF-8 字节。",
     ],
   },
   why: {
@@ -211,7 +211,7 @@ const ja = {
       "一方がサインインし、ファイルまたはテキスト用の 6 桁の数字ペアリングコードを発行します（参加リンク/QRの共有も可能）。",
       "もう一方はリンクを開くかコードを入力するだけ——コードでの参加にアカウントは不要です。",
       "任意（「高度な検証」をオンにした場合）：両端で6桁の検証コード（SAS。ペアリングコードとは別の値）を別経路で照合します。一致すればX25519エンドポイント公開鍵が置き換えられておらず、シグナリングサービスやTURNリレーが端末になりすましてアプリ層E2EEを終端していないことを確認できます。TURNはネットワーク経路上に残り、暗号文だけを運ぶ場合があります。",
-      "両端末がオンラインの間、ファイルとライブテキストはTURN経由でエンドツーエンド暗号化されます。Relayiumは本文を保存せず、1件は最大65,536 UTF-8バイトです。",
+      "両端末がオンラインの間、相手のカードの一つの操作が共有ワークスペースを開きます。エンドツーエンド暗号化された1本の接続で、入力欄は既定で画面にあり、その下にファイルとフォルダの操作が並びます。ファイルとライブテキストは同じTURN経由で一緒に運ばれ、リレーが載せるのは暗号文だけです。接続には有限の寿命があり、ワークスペースは終わる前に知らせます。Relayiumは本文を保存せず、1件は最大65,536 UTF-8バイトです。",
     ],
   },
   why: {
@@ -301,7 +301,7 @@ const ko = {
       "한쪽이 로그인해 파일 또는 텍스트 세션용 6자리 숫자 페어링 코드를 생성합니다(참여 링크/QR 공유도 가능).",
       "다른 쪽은 링크를 열거나 코드를 입력합니다 — 코드로 참여할 때는 계정이 필요 없습니다.",
       "선택 사항(«고급 검증»을 켠 경우): 양쪽이 별도 채널로 동일한 6자리 검증 코드(SAS, 페어링 코드와는 다른 값)를 대조합니다. 일치하면 X25519 끝점 공개 키가 바뀌지 않았고 시그널링 서비스나 TURN 릴레이가 어느 끝점도 사칭하거나 애플리케이션 계층 E2EE를 종료하지 않았음을 확인합니다. TURN은 네트워크 경로에 남아 암호문만 운반할 수 있습니다.",
-      "두 기기가 온라인인 동안 파일과 실시간 텍스트는 TURN을 통해 종단간 암호화됩니다. Relayium은 메시지 본문을 저장하지 않으며 메시지 하나는 최대 65,536 UTF-8바이트입니다.",
+      "두 기기가 온라인인 동안 상대 카드의 한 가지 동작이 공유 작업 공간을 엽니다. 종단간 암호화된 연결 하나에 작성기가 기본으로 화면에 있고 그 아래에 파일과 폴더 컨트롤이 있습니다. 파일과 실시간 텍스트는 같은 TURN을 통해 함께 이동하며 릴레이는 암호문만 나릅니다. 연결에는 유한한 수명이 있고 작업 공간이 끝나기 전에 알려 줍니다. Relayium은 메시지 본문을 저장하지 않으며 메시지 하나는 최대 65,536 UTF-8바이트입니다.",
     ],
   },
   why: {
@@ -391,7 +391,7 @@ const de = {
       "Eine Person meldet sich an und erzeugt einen 6-Zeichen-Pairing-Code für Dateien oder Text (oder teilt Beitrittslink/QR).",
       "Die andere öffnet den Link oder gibt den Code ein — zum Beitreten mit Code ist kein Konto nötig.",
       "Optional (erweiterte Verifizierung einschalten): Beide Seiten vergleichen denselben 6-stelligen Verifizierungscode (SAS — nicht den Pairing-Code) über einen unabhängigen Kanal. Eine Übereinstimmung bestätigt, dass die öffentlichen X25519-Endpunktschlüssel nicht ersetzt wurden und weder Signalisierungsdienst noch TURN-Relay einen Endpunkt imitiert oder die E2E-Verschlüsselung der Anwendung terminiert haben. TURN kann weiter im Netzwerkpfad liegen und transportiert dort nur Chiffretext.",
-      "Solange beide Geräte online sind, laufen Dateien und Live-Text Ende-zu-Ende-verschlüsselt über TURN. Relayium speichert keine Nachrichtentexte; eine Nachricht umfasst höchstens 65.536 UTF-8-Bytes.",
+      "Solange beide Geräte online sind, öffnet die eine Aktion auf der Karte der Gegenstelle einen gemeinsamen Arbeitsbereich: eine Ende-zu-Ende-verschlüsselte Verbindung, mit dem Eingabefeld standardmäßig auf dem Schirm und den Datei- und Ordner-Bedienelementen darunter. Dateien und Live-Text laufen gemeinsam über TURN, das nur Chiffretext trägt, und zwar für eine begrenzte Lebensdauer, auf die der Arbeitsbereich vor dem Ende hinweist. Relayium speichert keine Nachrichtentexte; eine Nachricht umfasst höchstens 65.536 UTF-8-Bytes.",
     ],
   },
   why: {
@@ -481,7 +481,7 @@ const fr = {
       "Une personne se connecte et génère un code à 6 chiffres pour une session de fichiers ou de texte (ou partage son lien/QR).",
       "L'autre ouvre le lien ou saisit le code — rejoindre avec un code ne nécessite aucun compte.",
       "Facultatif (activez la vérification avancée) : les deux parties comparent le même code de vérification (SAS) à 6 chiffres — différent du code d'appairage — par un canal indépendant. S'il correspond, les clés publiques X25519 des terminaux n'ont pas été remplacées : ni le service de signalisation ni le relais TURN n'a usurpé un terminal ou terminé le chiffrement E2E applicatif. TURN peut rester sur le chemin réseau, où il ne transporte que du texte chiffré.",
-      "Avec les deux appareils en ligne, fichiers et texte en direct passent par TURN, chiffrés de bout en bout. Relayium ne stocke aucun corps de message ; chacun peut contenir jusqu'à 65 536 octets UTF-8.",
+      "Avec les deux appareils en ligne, l'unique action de la carte du pair ouvre un espace de travail partagé : une connexion chiffrée de bout en bout, avec la zone de saisie affichée par défaut et les commandes fichier et dossier en dessous. Fichiers et texte en direct passent ensemble par TURN, qui ne porte que du texte chiffré, pour une durée de vie bornée que l'espace de travail signale avant la fin. Relayium ne stocke aucun corps de message ; chacun peut contenir jusqu'à 65 536 octets UTF-8.",
     ],
   },
   why: {
@@ -571,7 +571,7 @@ const ar = {
       "يسجّل أحد الطرفين الدخول ويولّد رمزًا من 6 خانات لجلسة ملفات أو نص (أو يشارك رابط الانضمام/QR).",
       "يفتح الطرف الآخر الرابط أو يُدخل الرمز — لا يحتاج الانضمام بالرمز إلى حساب.",
       "اختياري (بتفعيل «التحقّق المتقدّم»): يقارن الطرفان رمز التحقق نفسه المكوّن من 6 أرقام (SAS، وهو غير رمز الاقتران) عبر قناة مستقلة. يؤكد التطابق أن مفاتيح X25519 العامة للطرفين لم تُستبدل، وأن خدمة الإشارة أو مُرحِّل TURN لم تنتحل شخصية أي طرف أو تُنهِ تشفير طبقة التطبيق من الطرف إلى الطرف. وقد يظل TURN ضمن مسار الشبكة، لكنه لا يحمل سوى النص المشفر.",
-      "مع اتصال الجهازين، تنتقل الملفات والنصوص المباشرة مشفّرة من الطرف إلى الطرف عبر TURN. لا يخزن Relayium نص الرسالة؛ وحدّ الرسالة 65,536 بايت UTF-8.",
+      "مع اتصال الجهازين، يفتح الإجراء الوحيد على بطاقة الطرف الآخر مساحة عمل مشتركة: اتصال واحد مشفَّر من الطرف إلى الطرف، ومربع الكتابة ظاهر افتراضيًا وتحته أدوات الملفات والمجلدات. تنتقل الملفات والنصوص المباشرة معًا عبر TURN الذي لا يحمل سوى نص مشفَّر، ولمدة حياة محدودة تنبّه إليها مساحة العمل قبل انتهائها. لا يخزن Relayium نص الرسالة؛ وحدّ الرسالة 65,536 بايت UTF-8.",
     ],
   },
   why: {
@@ -661,7 +661,7 @@ const es = {
       "Una persona inicia sesión y genera un código de 6 dígitos para archivos o texto (o comparte su enlace/QR).",
       "La otra abre el enlace o introduce el código — unirse con el código no requiere cuenta.",
       "Opcional (activa la verificación avanzada): ambas partes comparan el mismo código de verificación (SAS) de 6 dígitos —distinto del código de emparejamiento— por un canal independiente. Si coincide, confirma que las claves públicas X25519 de los extremos no fueron sustituidas y que ni el servicio de señalización ni el retransmisor TURN suplantaron un extremo o terminaron el E2EE de la aplicación. TURN puede seguir en la ruta de red, llevando solo datos cifrados.",
-      "Con ambos dispositivos en línea, archivos y texto en vivo viajan cifrados de extremo a extremo por TURN. Relayium no almacena el cuerpo; cada mensaje admite hasta 65.536 bytes UTF-8.",
+      "Con ambos dispositivos en línea, la única acción de la tarjeta del par abre un espacio de trabajo compartido: una conexión cifrada de extremo a extremo, con el editor en pantalla de forma predeterminada y los controles de archivo y carpeta debajo. Archivos y texto en vivo viajan juntos por TURN, que solo lleva texto cifrado, durante una vida acotada de la que el espacio de trabajo avisa antes de terminar. Relayium no almacena el cuerpo; cada mensaje admite hasta 65.536 bytes UTF-8.",
     ],
   },
   why: {
@@ -751,7 +751,7 @@ const pt = {
       "Uma pessoa faz login e gera um código de 6 dígitos para arquivos ou texto (ou compartilha seu link/QR).",
       "A outra abre o link ou digita o código — entrar com o código não exige conta.",
       "Opcional (ligue a verificação avançada): as duas partes comparam o mesmo código de verificação (SAS) de 6 dígitos — diferente do código de emparelhamento — por um canal independente. Se coincidir, confirma que as chaves públicas X25519 das pontas não foram substituídas e que nem o serviço de sinalização nem o retransmissor TURN se passaram por uma ponta ou terminaram a E2EE da aplicação. O TURN pode continuar no caminho de rede, levando apenas dados cifrados.",
-      "Com os dois dispositivos online, arquivos e texto ao vivo passam criptografados de ponta a ponta pelo TURN. O Relayium não armazena o corpo; cada mensagem aceita até 65.536 bytes UTF-8.",
+      "Com os dois dispositivos online, a única ação do cartão do par abre uma área de trabalho compartilhada: uma conexão criptografada de ponta a ponta, com o editor na tela por padrão e os controles de arquivo e pasta abaixo dele. Arquivos e texto ao vivo passam juntos pelo TURN, que só carrega texto cifrado, por uma vida limitada que a área de trabalho avisa antes de terminar. O Relayium não armazena o corpo; cada mensagem aceita até 65.536 bytes UTF-8.",
     ],
   },
   why: {

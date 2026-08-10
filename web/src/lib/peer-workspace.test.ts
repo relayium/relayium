@@ -1,7 +1,8 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { CHROME_MAX_MESSAGE_BYTES } from "./wire-limit";
+import { canReleaseConfirmedSend } from "./confirm-send";
 import { generateKeyPair, ready } from "./crypto";
-import { CAP_LINK, CAP_TEXT, peerSupportsLink, recordPeerCaps, resetPeerCaps } from "./peer-caps.svelte";
+import { CAP_LINK, CAP_TEXT, peerSupportsLink, recordPeerCaps, resetPeerCaps, retainPeers } from "./peer-caps.svelte";
 import { clearRoom, enterRoom } from "./room.svelte";
 import { createPeerWorkspace } from "./peer-workspace.svelte";
 import type { TextSession } from "./text-session.svelte";
@@ -255,16 +256,89 @@ describe("peer workspace capability routing", () => {
     expect(h.legacyText.end).not.toHaveBeenCalled();
   });
 
-  it("ends an established mixed link only when that physical peer leaves", async () => {
+  it("keeps an established healthy mixed link when the remote SIGNALLING peer leaves", async () => {
+    // The correlated-loss invariant, arrived at from the other side. Side A
+    // losing only its WebSocket is exactly what makes the server tell us "A
+    // left" — and A's DataChannel to us is a different transport that is still
+    // carrying whatever it was carrying. Tearing it down here would abort a live
+    // transfer because the rendezvous socket blinked, which is the one thing
+    // link-recovery.ts says must never happen.
     const h = setup();
-    await h.workspace.mixed.ensure("z");
-    const conn = h.workspace.mixed.link!.conn;
+    const link = await h.workspace.mixed.ensure("z");
+    const conn = link.conn;
     h.workspace.peerLeft("unrelated");
     expect(h.workspace.mixed.link?.peerId).toBe("z");
 
     h.workspace.peerLeft("z");
+    expect(h.workspace.mixed.link).toBe(link);
+    expect(h.workspace.linkStatus).toBe("open");
+    expect(conn.close).not.toHaveBeenCalled();
+    // Both lanes are still attached to it, so work in flight keeps running.
+    expect(link.fileChannel.onmessage).not.toBeNull();
+    expect(link.textChannel.onmessage).not.toBeNull();
+    // …and the header says up front that this one can no longer be rebuilt: the
+    // peer id it would have to address is not in the room any more.
+    expect(h.workspace.recoveryAvailable).toBe(false);
+    expect(h.workspace.linkEndReason).toBe("");
+    h.workspace.stop();
+  });
+
+  it("terminates that preserved link with signalingLost, and no resume attempt, if its transport dies later", async () => {
+    const h = setup();
+    await h.workspace.mixed.ensure("z");
+    h.workspace.mixed.file.enqueue("z", [{ file: new File(["payload"], "held.txt") }]);
+    await vi.waitFor(() => expect(h.workspace.mixed.file.send?.status).toBe("waitingAccept"));
+
+    h.workspace.peerLeft("z");
+    h.connect.mock.calls[0][0].onStateChange?.("failed");
+
+    expect(h.workspace.linkStatus).toBe("failed");
     expect(h.workspace.mixed.link).toBeNull();
-    expect(conn.close).toHaveBeenCalledOnce();
+    expect(h.workspace.linkEndReason).toBe("signalingLost");
+    // Not one rebuild offer into a room the peer is no longer in.
+    expect(h.resume).not.toHaveBeenCalled();
+    h.workspace.stop();
+  });
+
+  it("ends an already-interrupted link at once instead of waiting out a window that cannot succeed", async () => {
+    const h = setup();
+    await h.workspace.mixed.ensure("z");
+    h.workspace.mixed.file.enqueue("z", [{ file: new File(["payload"], "held.txt") }]);
+    await vi.waitFor(() => expect(h.workspace.mixed.file.send?.status).toBe("waitingAccept"));
+    h.connect.mock.calls[0][0].onStateChange?.("failed");
+    expect(h.workspace.linkStatus).toBe("interrupted");
+
+    // This one HAS no transport left to preserve, and the rebuild it is waiting
+    // for is addressed to a peer that has gone. Say so now rather than 90
+    // seconds from now under a generic "connection failed".
+    h.workspace.peerLeft("z");
+    expect(h.workspace.mixed.link).toBeNull();
+    // The same shape as the credential's terminal teardown: the REASON is the
+    // state (WorkspaceHeader renders it over the status line), and it holds the
+    // workspace on screen with the queued batch still next to it.
+    expect(h.workspace.linkEndReason).toBe("signalingLost");
+    expect(h.workspace.usingMixed).toBe(true);
+    h.workspace.stop();
+  });
+
+  it("forgets a departure when the room is reset, so the next room's link is recoverable", async () => {
+    const h = setup();
+    await h.workspace.mixed.ensure("z");
+    h.workspace.peerLeft("z");
+    expect(h.workspace.recoveryAvailable).toBe(false);
+
+    h.workspace.resetRoom();
+    await h.workspace.mixed.ensure("z");
+    expect(h.workspace.recoveryAvailable).toBe(true);
+    h.workspace.stop();
+  });
+
+  it("scopes the departure to the peer that left, not to the next link", async () => {
+    const h = setup();
+    h.setPeers(["a", "z", "y"]);
+    await h.workspace.mixed.ensure("z");
+    h.workspace.peerLeft("y");
+    expect(h.workspace.recoveryAvailable).toBe(true);
     h.workspace.stop();
   });
 
@@ -545,51 +619,119 @@ describe("peer workspace during a mixed transport gap", () => {
   });
 });
 
+// A link that ended of something the user must act on. The state machine is
+// covered in mixed-link-lifecycle.test.ts; what this pins is the SURFACE rule —
+// the workspace holds the screen to say so, and holds nothing else.
+describe("peer workspace after a link ends terminally", () => {
+  async function ended() {
+    const h = setup();
+    // The signalling identity disappears under a live link with lane work: the
+    // socket dropped. Nothing happens to the transport until it, too, dies.
+    await h.workspace.mixed.ensure("z");
+    h.workspace.mixed.file.enqueue("z", [{ file: new File(["held"], "held.txt") }]);
+    await vi.waitFor(() => expect(h.workspace.mixed.file.send?.status).toBe("waitingAccept"));
+    h.setJoined(false);
+    h.setSelfId("");
+    h.connect.mock.calls[0][0].onStateChange?.("failed");
+    expect(h.workspace.linkEndReason).toBe("signalingLost");
+    return h;
+  }
+
+  it("keeps the workspace on screen so the reason can be read", async () => {
+    const h = await ended();
+    // Without this the surface silently reverts to the device chooser, and the
+    // only evidence that a transfer stopped mid-flight is that it is gone.
+    expect(h.workspace.usingMixed).toBe(true);
+    expect(h.workspace.hasLink).toBe(false);
+    h.workspace.stop();
+  });
+
+  it("holds the screen without holding the peer", async () => {
+    const h = await ended();
+    // A terminal explanation is not an exclusion: starting again is the way out,
+    // so it may not be what blocks starting again.
+    expect(h.workspace.blocksLegacyInbound).toBe(false);
+    expect(h.workspace.blocksNewIntent("z")).toBe(false);
+    expect(h.workspace.blocksNewIntent("old")).toBe(false);
+    h.workspace.stop();
+  });
+
+  it("clears the reason when it is dismissed, and only then", async () => {
+    const h = await ended();
+    h.workspace.syncPeers(); // roster churn is not an answer to it
+    expect(h.workspace.linkEndReason).toBe("signalingLost");
+    h.workspace.dismissLinkEnd();
+    expect(h.workspace.linkEndReason).toBe("");
+    expect(h.workspace.usingMixed).toBe(false);
+    h.workspace.stop();
+  });
+
+  it("clears it on a room switch, whose peers and credentials are all different", async () => {
+    const h = await ended();
+    h.workspace.resetRoom();
+    expect(h.workspace.linkEndReason).toBe("");
+    expect(h.workspace.usingMixed).toBe(false);
+    h.workspace.stop();
+  });
+});
+
 // ── the release scope of link/1 ────────────────────────────────────────────────
 //
-// A default build implements the unified link, so it advertises and routes it —
-// but only in the code-less LAN room. Everything below runs the SHIPPED
-// `peerSupportsLink` (no injected stub), because the point is what a real build
-// does with a real roster claim.
+// A default build implements the unified link and now advertises and routes it
+// in EVERY room — the LAN room and a pairing-code room alike (DECISION-LOG
+// 2026-08-10). Everything below runs the SHIPPED `peerSupportsLink` (no injected
+// stub), because the point is what a real build does with a real roster claim.
 //
-// The pairing-code half is a policy test, not a preference: a signalling relay
-// sees every frame and can inject one, so refusing to *say* `link/1` there is
-// worth nothing unless we also refuse to *believe* it.
-//
-// It is deterministic here rather than in a real browser on purpose, and that is
-// a limitation worth naming: `/api/pair` mints a cross-network code only for a
-// logged-in account and the ws route rejects any code that was never minted, so
-// the CDP harness cannot join a real pairing room at all. These cases are the
-// whole proof of that policy — see web/e2e/README.md.
-describe("peer workspace link/1 room scope", () => {
+// What the room no longer decides, the capability still does, and that is the
+// whole downgrade boundary now: an exact `link/1` announcement or nothing. These
+// cases are deterministic here rather than in a real browser because `/api/pair`
+// mints a cross-network code only for a logged-in account and the ws route
+// rejects a code that was never minted; the browser-side proof runs against a
+// controlled pairing fixture instead (e2e/code-room.mjs) — see web/e2e/README.md.
+describe("peer workspace link/1 routing scope", () => {
   beforeEach(() => { clearRoom(); resetPeerCaps(); });
 
-  it("routes a link-capable peer in the code-less LAN room", async () => {
+  it.each([
+    ["the code-less LAN room", undefined],
+    ["a pairing-code room", "123456"],
+  ])("routes a link-capable peer in %s", async (_label, code) => {
     const h = setup({ realLinkCaps: true });
     recordPeerCaps("z", { caps: [CAP_TEXT, CAP_LINK] });
+    if (code) enterRoom({ code });
 
     expect(h.workspace.routes("z")).toBe(true);
 
     const mixedFiles = vi.spyOn(h.workspace.mixed.file, "enqueue").mockImplementation(() => {});
+    const mixedText = vi.spyOn(h.workspace.mixed.text, "openWith").mockResolvedValue();
     const picked = [{ file: new File(["x"], "x.txt") }];
     h.workspace.sendFiles("z", picked);
+    await h.workspace.openText("z");
     expect(mixedFiles).toHaveBeenCalledWith("z", picked);
+    expect(mixedText).toHaveBeenCalledWith("z");
     expect(h.legacyFiles.sendFiles).not.toHaveBeenCalled();
+    expect(h.legacyText.openWith).not.toHaveBeenCalled();
     h.workspace.stop();
   });
 
-  // Requirement 3 of the rollout, against the SHIPPED predicate rather than a
-  // stub: a peer that never announced, or announced a different version, is a
-  // legacy peer even on LAN — and must never be probed with a link request or a
-  // two-channel offer it cannot answer. An old build reads such an offer as a
-  // file transfer whose manifest never arrives, and waits out its stall watchdog.
+  // The negative half of the rollout, against the SHIPPED predicate rather than
+  // a stub, and now in BOTH rooms: a peer that never announced, or announced a
+  // different version, is a legacy peer — and must never be probed with a link
+  // request or a two-channel offer it cannot answer. An old build reads such an
+  // offer as a file transfer whose manifest never arrives, and waits out its
+  // stall watchdog. A pairing room is where this matters most: the peer on the
+  // other end of a code is routinely a phone on an older bundle.
   it.each([
-    ["a peer that never announced", null],
-    ["a peer that announced only text/1", [CAP_TEXT]],
-    ["a peer announcing a different link version", [CAP_TEXT, "link/2"]],
-  ])("leaves %s on the legacy path in the LAN room", async (_label, caps) => {
+    ["a peer that never announced", null, undefined],
+    ["a peer that announced only text/1", [CAP_TEXT], undefined],
+    ["a peer announcing a different link version", [CAP_TEXT, "link/2"], undefined],
+    ["a peer that never announced", null, "123456"],
+    ["a peer that announced only text/1", [CAP_TEXT], "123456"],
+    ["a peer announcing a different link version", [CAP_TEXT, "link/2"], "123456"],
+    ["a peer announcing a near-miss claim", [CAP_TEXT, "link/1x"], "123456"],
+  ])("leaves %s on the legacy path (room %s)", async (_label, caps, code) => {
     const h = setup({ realLinkCaps: true });
     if (caps) recordPeerCaps("z", { caps });
+    if (code) enterRoom({ code });
     h.workspace.start();
 
     expect(h.workspace.routes("z")).toBe(false);
@@ -608,30 +750,30 @@ describe("peer workspace link/1 room scope", () => {
     h.workspace.stop();
   });
 
-  it("refuses to route a forged link/1 claim inside a pairing-code room", async () => {
+  // A signalling relay sees every frame and can inject one. It cannot forge its
+  // way past an EXACT capability check, so the surviving attack is a
+  // well-formed-looking announcement that is not this protocol — in either room.
+  it.each([
+    ["a caps frame that is not an array", { caps: "link/1" }],
+    ["a caps list of non-strings", { caps: [1, { link: "1" }] }],
+    ["a frame with no caps at all", { rename: "link/1" }],
+    ["a bare array instead of an envelope", ["link/1"]],
+  ])("cannot be made to route by %s", async (_label, frame) => {
     const h = setup({ realLinkCaps: true });
-    recordPeerCaps("z", { caps: [CAP_TEXT, CAP_LINK] });
     enterRoom({ code: "123456" });
+    recordPeerCaps("z", frame);
+    h.workspace.start();
 
     expect(h.workspace.routes("z")).toBe(false);
-
-    const mixedFiles = vi.spyOn(h.workspace.mixed.file, "enqueue").mockImplementation(() => {});
-    const mixedText = vi.spyOn(h.workspace.mixed.text, "openWith").mockResolvedValue();
-    const picked = [{ file: new File(["x"], "x.txt") }];
-    h.workspace.sendFiles("z", picked);
-    await h.workspace.openText("z");
-
-    // The pairing room keeps exactly its existing one-mode-at-a-time behaviour.
-    expect(mixedFiles).not.toHaveBeenCalled();
-    expect(mixedText).not.toHaveBeenCalled();
-    expect(h.legacyFiles.sendFiles).toHaveBeenCalledWith("z", picked);
-    expect(h.legacyText.openWith).toHaveBeenCalledWith("z");
+    h.inject("z", { link: true, linkRequest: true } as unknown as InboundSignal);
+    expect(h.sent).toEqual([]);
+    expect(h.connect).not.toHaveBeenCalled();
+    expect(h.workspace.linkStatus).toBe("idle");
     h.workspace.stop();
   });
 
-  it("never answers an inbound link request or offer from a pairing-code room", async () => {
+  it("never answers an inbound link request or offer from a peer that did not announce", async () => {
     const h = setup({ realLinkCaps: true });
-    recordPeerCaps("z", { caps: [CAP_TEXT, CAP_LINK] });
     enterRoom({ code: "123456" });
     h.workspace.start();
 
@@ -662,10 +804,192 @@ describe("peer workspace link/1 room scope", () => {
 
     expect(h.workspace.usingMixed).toBe(false);
     expect(h.workspace.linkStatus).toBe("idle");
+    // The new room's peers announce for themselves. The capability table is what
+    // carries a peer id, and the server hands the same ids out again in the next
+    // room — so a claim that survived the switch would route a link to a stranger.
     expect(peerSupportsLink("z")).toBe(false);
     // And leaving the room again does not resurrect the old claim.
     clearRoom();
     expect(peerSupportsLink("z")).toBe(false);
+    h.workspace.stop();
+  });
+});
+
+// ── an established link is authoritative for the peer it is bound to ──────────
+//
+// The correlated-loss invariant, read from the ROUTER rather than from the link
+// lifecycle. A `left` frame — or this page's own socket dropping — is a
+// statement about the rendezvous service and about nothing else: the DataChannel
+// between the two pages is a separate transport, still carrying whatever it was
+// carrying. But every input `routes()` used to read is a signalling fact: room
+// membership, this page's own id, and a capability announcement that ARRIVES
+// over signalling and is pruned with the roster (`retainPeers`). So a healthy,
+// authenticated, mutually verified link would silently stop being routable, and
+// the whole workspace with it — new files fell through to the legacy transfer
+// path or were refused outright, on a connection that was working perfectly.
+//
+// Deliberately run against the SHIPPED `peerSupportsLink` and the shipped
+// `retainPeers`: a stubbed capability cannot show that the announcement is
+// really gone, which is the entire point.
+describe("peer workspace routing across signalling-only loss", () => {
+  beforeEach(() => { clearRoom(); resetPeerCaps(); });
+
+  /** A live link to "z", then the signalling layer disappears underneath it —
+   *  either the peer's socket (a `left` frame plus the roster that follows it,
+   *  exactly as App sequences them) or this page's own. */
+  async function linked(cut: "peer" | "self") {
+    const h = setup({ realLinkCaps: true });
+    recordPeerCaps("z", { caps: [CAP_TEXT, CAP_LINK] });
+    h.workspace.start();
+    await h.workspace.mixed.ensure("z");
+    expect(h.workspace.hasLink).toBe(true);
+    expect(h.workspace.linkStatus).toBe("open");
+    if (cut === "peer") {
+      h.setPeers(["a", "old"]);
+      retainPeers(["a", "old"]);
+      h.workspace.syncPeers();
+      h.workspace.peerLeft("z");
+      // The pruning really happened: this is the state the router now has to
+      // route through, not a hypothetical one.
+      expect(peerSupportsLink("z")).toBe(false);
+    } else {
+      h.setJoined(false);
+      h.setSelfId("");
+    }
+    return h;
+  }
+
+  it.each([["the peer's", "peer"], ["this page's own", "self"]] as const)(
+    "keeps the link, and keeps routing to it, when %s signalling goes away",
+    async (_label, cut) => {
+      const h = await linked(cut);
+      expect(h.workspace.hasLink).toBe(true);
+      expect(h.workspace.linkStatus).toBe("open");
+      // The router's answer for the bound peer comes from the link, not from the
+      // signalling facts that just went away.
+      expect(h.workspace.routes("z")).toBe(true);
+      expect(h.workspace.blocksNewIntent("z")).toBe(false);
+      // …and it is honest about the future: this link could not be rebuilt.
+      expect(h.workspace.recoveryAvailable).toBe(false);
+      h.workspace.stop();
+    },
+  );
+
+  it.each([["the peer's", "peer"], ["this page's own", "self"]] as const)(
+    "sends a NEW file batch over that link instead of downgrading to legacy, after %s signalling loss",
+    async (_label, cut) => {
+      const h = await linked(cut);
+      const enqueue = vi.spyOn(h.workspace.mixed.file, "enqueue").mockImplementation(() => {});
+      const picked = [{ file: new File(["after the cut"], "after.txt") }];
+
+      h.workspace.sendFiles("z", picked);
+
+      expect(enqueue).toHaveBeenCalledWith("z", picked);
+      // The two failure modes this closes, named: a silent drop, and a legacy
+      // downgrade that would negotiate a SECOND connection and a second SAS.
+      expect(h.legacyFiles.sendFiles).not.toHaveBeenCalled();
+      h.workspace.stop();
+    },
+  );
+
+  it.each([["the peer's", "peer"], ["this page's own", "self"]] as const)(
+    "opens a NEW text conversation on that same link after %s signalling loss",
+    async (_label, cut) => {
+      const h = await linked(cut);
+      const openWith = vi.spyOn(h.workspace.mixed.text, "openWith").mockResolvedValue();
+
+      await h.workspace.openText("z");
+
+      expect(openWith).toHaveBeenCalledWith("z");
+      expect(h.legacyText.openWith).not.toHaveBeenCalled();
+      h.workspace.stop();
+    },
+  );
+
+  // The authority is scoped to ONE peer and one live link. Everything else keeps
+  // the exact gates it had: this is not "signalling loss turns the gates off".
+  // The routing answer is also an input to the sender-side verification stop:
+  // `canReleaseConfirmedSend` reads it as `unified`, and `unified === false`
+  // means "a legacy peer, whose code appears on its own transfer card" and
+  // releases immediately. So a healthy unified link reporting itself as
+  // un-routable did not merely downgrade the transport — it turned the code
+  // comparison in a code room into a click-through, for the exact peer the stop
+  // exists to guard against.
+  it.each([["the peer's", "peer"], ["this page's own", "self"]] as const)(
+    "keeps the unified send confirmation engaged after %s signalling loss",
+    async (_label, cut) => {
+      const h = await linked(cut);
+      const unified = h.workspace.routes("z");
+      expect(unified).toBe(true);
+      // Still fails closed with no code on screen…
+      expect(canReleaseConfirmedSend({
+        confirmed: true, unified, targetPeerId: "z",
+        linkPeerId: h.workspace.hasLink ? h.workspace.linkPeerId : "",
+        shownSas: "",
+      })).toBe(false);
+      // …and releases only against this link's own displayed code.
+      expect(canReleaseConfirmedSend({
+        confirmed: true, unified, targetPeerId: "z",
+        linkPeerId: h.workspace.hasLink ? h.workspace.linkPeerId : "",
+        shownSas: h.workspace.sasCode,
+      })).toBe(true);
+      // A code belonging to some other link is not a code for this batch.
+      expect(canReleaseConfirmedSend({
+        confirmed: true, unified, targetPeerId: "someone-else",
+        linkPeerId: h.workspace.linkPeerId,
+        shownSas: h.workspace.sasCode,
+      })).toBe(false);
+      h.workspace.stop();
+    },
+  );
+
+  it("grants that authority to the bound peer only", async () => {
+    // This page's own membership is gone, so a link that does not exist yet
+    // cannot be built — no matter how completely the other peer announced.
+    const h = await linked("self");
+    recordPeerCaps("old", { caps: [CAP_TEXT, CAP_LINK] });
+
+    expect(h.workspace.routes("old")).toBe(false);
+    expect(h.workspace.blocksNewIntent("old")).toBe(true);
+    // And the same page still routes the peer it is actually linked to.
+    expect(h.workspace.routes("z")).toBe(true);
+    h.workspace.stop();
+  });
+
+  it("withdraws it the moment the link is actually gone", async () => {
+    const h = await linked("peer");
+    // The transport dies for real. With the peer out of the room there is
+    // nothing to rebuild toward — and a link that has ended is authoritative
+    // for nothing.
+    h.connect.mock.calls[0][0].onStateChange?.("failed");
+
+    expect(h.workspace.hasLink).toBe(false);
+    expect(h.workspace.routes("z")).toBe(false);
+    const picked = [{ file: new File(["late"], "late.txt") }];
+    h.workspace.sendFiles("z", picked);
+    // Legacy is where a peer with no link belongs — including this one, now.
+    expect(h.legacyFiles.sendFiles).toHaveBeenCalledWith("z", picked);
+    h.workspace.stop();
+  });
+
+  // A gap is not an established link. Holding one open is a bet on a rebuild,
+  // and the rebuild is addressed through signalling — so while the transport is
+  // down the ordinary gates are the honest answer.
+  it("does not extend that authority to a link with no transport under it", async () => {
+    const h = setup({ realLinkCaps: true });
+    recordPeerCaps("z", { caps: [CAP_TEXT, CAP_LINK] });
+    h.workspace.start();
+    await h.workspace.mixed.ensure("z");
+    h.workspace.mixed.file.enqueue("z", [{ file: new File(["held"], "held.txt") }]);
+    await vi.waitFor(() => expect(h.workspace.mixed.file.send?.status).toBe("waitingAccept"));
+    h.connect.mock.calls[0][0].onStateChange?.("failed");
+    expect(h.workspace.linkStatus).toBe("interrupted");
+
+    // Signalling is fine here, so the ordinary answer is still "yes" — the point
+    // is that it comes from the capability, which can therefore still say no.
+    expect(h.workspace.routes("z")).toBe(true);
+    retainPeers(["a", "old"]);
+    expect(h.workspace.routes("z")).toBe(false);
     h.workspace.stop();
   });
 });

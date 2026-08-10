@@ -299,6 +299,61 @@ describe("mixed peer link ownership", () => {
     expect(transport.connect).not.toHaveBeenCalled();
   });
 
+  // The capability gate is about links that do not exist yet. An ESTABLISHED
+  // one already carries the peer's answer — it was built, authenticated and
+  // compared — so re-asking a roster-level announcement about it is asking the
+  // wrong layer. The announcement arrives over signalling and is dropped when
+  // the peer leaves the roster (peer-caps' retainPeers), so a peer whose socket
+  // went away while its DataChannel stayed up would make `ensure` reject the
+  // very link it is holding, and every lane intent with it.
+  it("hands back an established, healthy link even after its capability is forgotten", async () => {
+    const sig = signalingHarness();
+    const transport = transportHarness();
+    let announced = true;
+    const manager = createPeerLinkManager({
+      selfId: () => "a", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => announced,
+      connect: transport.connect,
+    });
+    const link = await manager.ensure("b");
+    announced = false;
+
+    await expect(manager.ensure("b")).resolves.toBe(link);
+    // Nothing new was built: this is the same link, not a re-establishment that
+    // slipped past the gate.
+    expect(transport.connect).toHaveBeenCalledOnce();
+    // …and the gate is untouched for everything that is not that link.
+    await expect(manager.ensure("c")).rejects.toBeInstanceOf(UnsupportedLinkError);
+    expect(transport.connect).toHaveBeenCalledOnce();
+    manager.stop();
+  });
+
+  // The other half of the same rule, and the reason it is scoped to `open`: a
+  // held link has no transport under it, and getting one back means a rebuild
+  // addressed through the signalling layer whose answer just changed. Joining
+  // that rebuild is a NEW connection attempt in every sense that matters, so it
+  // stays behind the gate.
+  it("still refuses a link whose transport is being rebuilt when capability is gone", async () => {
+    vi.useFakeTimers();
+    const sig = signalingHarness();
+    const transport = transportHarness();
+    let announced = true;
+    const manager = createPeerLinkManager({
+      selfId: () => "a", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => announced,
+      connect: transport.connect,
+      resume: vi.fn(() => new Promise<Conn>(() => {})) as unknown as PeerLinkDeps["resume"],
+      onTransportLost: () => true,
+    });
+    await manager.ensure("b");
+    transport.connect.mock.calls[0][0].onStateChange?.("failed");
+    expect(manager.status).toBe("interrupted");
+
+    announced = false;
+    await expect(manager.ensure("b")).rejects.toBeInstanceOf(UnsupportedLinkError);
+    manager.stop();
+  });
+
   it("keeps the global one-link bound across different peers", async () => {
     const sig = signalingHarness();
     const transport = transportHarness();

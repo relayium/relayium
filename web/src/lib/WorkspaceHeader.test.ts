@@ -152,3 +152,66 @@ describe("WorkspaceHeader", () => {
     expect(onDisconnect).toHaveBeenCalledOnce();
   });
 });
+
+// The bounded relay lifetime and the correlated-loss boundary, as the user sees
+// them. The state machine behind them is covered by mixed-link-lifecycle.test.ts;
+// what has to hold here is that a warning reads as a warning, a terminal state
+// reads as terminal AND offers a way out, and neither one is silent.
+describe("WorkspaceHeader lifecycle states", () => {
+  const t = () => messages.en.workspace;
+
+  it("warns about the relay boundary without pretending the link is broken", () => {
+    const section = open({ relayExpiring: true });
+    expect(section.textContent).toContain(t().relayExpiring);
+    // Still a live, fully-identified link: state, path and the code stay put,
+    // and the action is still Disconnect rather than a restart.
+    expect(section.textContent).toContain(t().stateOpen);
+    expect(target.querySelectorAll(".path")).toHaveLength(1);
+    expect(target.querySelectorAll(".sas")).toHaveLength(1);
+    expect(target.querySelector(".wh-restart")).toBe(null);
+  });
+
+  it("says a live link is unrecoverable before anything has gone wrong", () => {
+    const section = open({ recoveryAvailable: false });
+    expect(section.textContent).toContain(t().recoveryUnavailable);
+    expect(section.textContent).toContain(t().stateOpen);
+    expect(target.querySelector(".wh-restart")).toBe(null);
+  });
+
+  it("shows no warnings at all on an ordinary link", () => {
+    open();
+    expect(target.querySelectorAll(".wh-warn")).toHaveLength(0);
+  });
+
+  it.each([
+    ["relayExpired", () => messages.en.workspace.endedRelay],
+    ["signalingLost", () => messages.en.workspace.endedSignaling],
+  ])("states %s as the link's own state, with the action that answers it", (endReason, copy) => {
+    const onRestart = vi.fn();
+    const section = open({ endReason, onRestart, status: "idle" as LinkStatus });
+    expect(copy()).toBeTruthy();
+    expect(section.textContent).toContain(copy());
+    // The raw status is "idle" or "failed" depending on which teardown path got
+    // there first, and neither tells anyone what to do. The reason replaces it.
+    expect(section.textContent).not.toContain(t().stateIdle);
+    // Nothing left that describes a live link: no path badge, no code to
+    // compare — the connection they belonged to is gone.
+    expect(target.querySelectorAll(".path")).toHaveLength(0);
+    expect(target.querySelectorAll(".sas")).toHaveLength(0);
+
+    const restart = target.querySelector(".wh-restart") as HTMLButtonElement;
+    expect(restart).not.toBe(null);
+    expect(restart.textContent?.trim()).toBe(t().restart);
+    expect(target.querySelector(".wh-disconnect")).toBe(null);
+    restart.click();
+    flushSync();
+    expect(onRestart).toHaveBeenCalledOnce();
+  });
+
+  it("drops the live warnings once the link has actually ended", () => {
+    // By then the state line says more than either of them, and a "close to its
+    // time limit" note under "the time limit was reached" is simply wrong.
+    open({ endReason: "relayExpired", relayExpiring: true, recoveryAvailable: false, onRestart: vi.fn() });
+    expect(target.querySelectorAll(".wh-warn")).toHaveLength(0);
+  });
+});

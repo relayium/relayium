@@ -21,11 +21,12 @@ export type { Conn, ConnPath, Generation, InboundSignal, Reveal, RtcConfig, Sign
  *  authoritative announcement is at the roster level and this one is only the
  *  per-connection confirmation — and for what decides the contents.
  *
- *  A function, not a constant: link/1 is scoped to the code-less LAN room, and a
- *  room switch happens without a page reload. A value frozen at import time would
- *  confirm the load-time room's capabilities on a connection made after the
- *  switch — advertising one thing at the roster level and another in the SDP.
- *  Derived from that one source so the two announcements cannot drift. */
+ *  A function, not a constant. Every room advertises link/1 today, so the two
+ *  answers happen to agree — but a room switch still happens without a page
+ *  reload, and a value frozen at import time would confirm the load-time room's
+ *  capabilities on a connection made after the switch. That is the asymmetry
+ *  that strands a peer: advertising one thing at the roster level and another in
+ *  the SDP. Derived from the one source so the two announcements cannot drift. */
 export function localCaps(): readonly string[] {
   return advertisedCaps();
 }

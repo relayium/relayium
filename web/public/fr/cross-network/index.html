@@ -98,7 +98,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
         <li>Une personne se connecte et génère un code à 6 chiffres pour une session de fichiers ou de texte (ou partage son lien/QR).</li>
         <li>L&#39;autre ouvre le lien ou saisit le code — rejoindre avec un code ne nécessite aucun compte.</li>
         <li>Facultatif (activez la vérification avancée) : les deux parties comparent le même code de vérification (SAS) à 6 chiffres — différent du code d&#39;appairage — par un canal indépendant. S&#39;il correspond, les clés publiques X25519 des terminaux n&#39;ont pas été remplacées : ni le service de signalisation ni le relais TURN n&#39;a usurpé un terminal ou terminé le chiffrement E2E applicatif. TURN peut rester sur le chemin réseau, où il ne transporte que du texte chiffré.</li>
-        <li>Avec les deux appareils en ligne, fichiers et texte en direct passent par TURN, chiffrés de bout en bout. Relayium ne stocke aucun corps de message ; chacun peut contenir jusqu&#39;à 65 536 octets UTF-8.</li>
+        <li>Avec les deux appareils en ligne, l&#39;unique action de la carte du pair ouvre un espace de travail partagé : une connexion chiffrée de bout en bout, avec la zone de saisie affichée par défaut et les commandes fichier et dossier en dessous. Fichiers et texte en direct passent ensemble par TURN, qui ne porte que du texte chiffré, pour une durée de vie bornée que l&#39;espace de travail signale avant la fin. Relayium ne stocke aucun corps de message ; chacun peut contenir jusqu&#39;à 65 536 octets UTF-8.</li>
       </ol>
       </section>
 

@@ -279,14 +279,52 @@ only ciphertext — it never sees plaintext or file contents.
    is shown. Turn it on in the workspace's "Advanced verification" panel to see
    the 6-digit verification code on both sides and confirm they match — note it
    is a different value from the 6-digit pairing code.
-4. **Transfer:** sender picks files and sends; receiver accepts and downloads.
-   Confirm the per-file SHA-256 integrity check passes.
-5. **Legacy-link check:** open `https://<host>/cross-network#t=deadbeef` (a retired
+4. **Unified workspace:** the peer card offers ONE action ("Open workspace").
+   Press it and confirm both sides get the composer with "Send file" / "Send
+   folder" under it, one verification code in the header (with advanced
+   verification on) and none repeated on the lane cards. A pairing room is no
+   longer the legacy file-or-text fork — see DECISION-LOG 2026-08-10.
+5. **Transfer:** send files from the workspace's attachment control; receiver
+   accepts and downloads. Confirm the per-file SHA-256 integrity check passes,
+   and that a message can be sent on the SAME connection without disturbing it.
+6. **Preselected batch, verification on:** on the sender, pick files FIRST (the
+   "Send file" button on the cross-network page, before a code exists) or share
+   into Relayium from the OS share sheet, then have the receiver join. A
+   confirmation bar appears naming the joiner. With no workspace open yet it must
+   offer **no way to send** — only "Open workspace" — because the code it tells
+   you to compare does not exist yet. Open the workspace: the files must still be
+   waiting (nothing sent), a code appears in the header, and only then does Send
+   appear. Press Cancel instead and confirm the files are still reachable through
+   the workspace's "Send waiting files" control, which re-arms the same bar.
+7. **Peer's signalling loss mid-transfer (needs two real machines):** start a
+   large transfer, then kill ONLY the receiver's connection to the signalling
+   server — block `wss://<host>/ws` in its network, or stop/firewall the server
+   while leaving the peers' direct path alone. The transfer must **continue to
+   completion** on both sides: the data channel is a different transport, and the
+   sender must not tear a healthy link down because the room said the peer left.
+   The sender's header should say the link can no longer be restored if it drops.
+   If the transport then does die, the sender must end immediately with the
+   "connection to the pairing service was lost" explanation rather than sitting
+   in a recovery it cannot win.
+8. **Relay credential boundary (needs real TURN, and only checkable here):** the
+   client derives a deadline from the TURN username's stated expiry minus a 60s
+   clock-skew margin, and warns five minutes before it. The credential TTL is
+   currently a constant — `TURNCredTTL: time.Hour` in `server/main.go`, no flag
+   — so this check needs a local build with that value shortened to comfortably
+   more than the five-minute warning lead, so the whole sequence (live → warned
+   → terminal) is observable in one sitting. Then open a relayed workspace and
+   confirm (a) a warning appears about five minutes before the boundary while
+   the link still works, (b) at the boundary the workspace reaches a terminal
+   "start again" state **even if you touch nothing**, and (c) it never sits in
+   "Connecting…" retrying with the expired credential. Automated coverage of
+   this is deterministic only (`web/src/lib/mixed-link-lifecycle.test.ts`): a
+   browser cannot be made to expire a real credential on demand.
+9. **Legacy-link check:** open `https://<host>/cross-network#t=deadbeef` (a retired
    share-link token). Expect it to land on the normal cross-network method-selection
    page — no error, no hang.
-6. **Capacity check:** with a sender + receiver already in a pairing room, open the
+10. **Capacity check:** with a sender + receiver already in a pairing room, open the
    same join link in a third tab. Expect it to be refused (room full).
-7. **LAN regression:** open the app on two devices on the SAME network with NO
+11. **LAN regression:** open the app on two devices on the SAME network with NO
    `#c=` in the URL. Confirm they still discover each other and transfer
    (login-free), proving the LAN path is unaffected.
 

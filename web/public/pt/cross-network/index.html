@@ -98,7 +98,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
         <li>Uma pessoa faz login e gera um código de 6 dígitos para arquivos ou texto (ou compartilha seu link/QR).</li>
         <li>A outra abre o link ou digita o código — entrar com o código não exige conta.</li>
         <li>Opcional (ligue a verificação avançada): as duas partes comparam o mesmo código de verificação (SAS) de 6 dígitos — diferente do código de emparelhamento — por um canal independente. Se coincidir, confirma que as chaves públicas X25519 das pontas não foram substituídas e que nem o serviço de sinalização nem o retransmissor TURN se passaram por uma ponta ou terminaram a E2EE da aplicação. O TURN pode continuar no caminho de rede, levando apenas dados cifrados.</li>
-        <li>Com os dois dispositivos online, arquivos e texto ao vivo passam criptografados de ponta a ponta pelo TURN. O Relayium não armazena o corpo; cada mensagem aceita até 65.536 bytes UTF-8.</li>
+        <li>Com os dois dispositivos online, a única ação do cartão do par abre uma área de trabalho compartilhada: uma conexão criptografada de ponta a ponta, com o editor na tela por padrão e os controles de arquivo e pasta abaixo dele. Arquivos e texto ao vivo passam juntos pelo TURN, que só carrega texto cifrado, por uma vida limitada que a área de trabalho avisa antes de terminar. O Relayium não armazena o corpo; cada mensagem aceita até 65.536 bytes UTF-8.</li>
       </ol>
       </section>
 

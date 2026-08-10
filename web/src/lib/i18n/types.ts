@@ -104,6 +104,17 @@ export interface Messages {
   // 握手完成才算得出来）。而 name 是对端自己设的，一个拿到配对码进了房间的人可以把
   // 自己叫成任何名字。所以文案必须把它写成**自称**——界面不该暗示一件它并不知道的事。
   confirmRecv: (name: string) => string; // 'A device calling itself "<name>" wants to receive'
+  // The instruction that makes the bar above worth stopping for. It is only ever
+  // rendered with advanced verification on — i.e. with a verification code
+  // actually on screen — and it MUST name comparing that code. Without it the
+  // prompt states a risk and no way to answer it, which is a click-through.
+  confirmRecvCompare: string;
+  // The other half of the same stop, for the case where the code does not exist
+  // YET: a preselected batch (share sheet, or files picked before the code was
+  // minted) arms this bar before any link is built, and a link-capable peer's
+  // verification code only appears once the workspace is open. Rendered in place
+  // of the comparison instruction, next to the action that opens it.
+  confirmRecvNeedsCode: string;
   confirmRecvSend: string;
   confirmRecvCancel: string;
   status: {
@@ -884,7 +895,10 @@ export interface Messages {
     scanHint: string; // caption under the pairing-code QR
     waiting: string;
     queued: (n: number, size: string) => string; // files picked before pairing, auto-send on join
-    bareConnect: string; // secondary: open a room without picking files (receiver-initiated flows)
+    // Secondary BUTTON: open a room without picking files (receiver-initiated
+    // flows). Short — it sits under two primary buttons and must not read as a
+    // sentence about them.
+    bareConnect: string;
     expiresIn: (s: string) => string; // countdown on the minter's card — names the CODE, not the transfer
     // Says out loud what the countdown does and does not govern. The owner read
     // a shrinking timer next to a live session as "the transfer expires in N",
@@ -1082,6 +1096,40 @@ export interface Messages {
     // compared anything and the peer is not established as the intended person.
     // What always holds on top of that is the file-receive prompt.
     lanesNote: string;
+    // ── the bounded lifetime of a RELAYED link ──
+    // A relayed link lives on a server-issued TURN credential with a stated
+    // expiry (relay-deadline.ts). These three describe that boundary: the
+    // warning while the link is still fully working, the terminal state at it,
+    // and the action that answers the terminal state. LAN and P2P links have no
+    // such boundary and never render any of them.
+    //
+    // `endedRelay` must read as "time ran out on this connection, start
+    // another" — never as an error or a failure of either device, and never as
+    // something waiting will fix.
+    relayExpiring: string;
+    endedRelay: string;
+    // The other terminal reason: the transport died while this page had no
+    // signalling membership to rebuild through (dropped, rejoined under a new
+    // identity, or refused). Must not promise a retry either.
+    endedSignaling: string;
+    restart: string; // the one action on a terminal card
+    // A link that WORKS but could not be brought back if it dropped. Present
+    // tense, and explicitly not a failure — it is a warning, not a state.
+    //
+    // It must say BOTH halves, because the two are easy to conflate and only
+    // one of them is bad news: the whole workspace keeps working — new file
+    // batches and new messages included, not merely whatever was already in
+    // flight — and it cannot be restored once the transport itself drops. Copy
+    // that promises only "what is already open" reads as "this is dying, stop
+    // using it", which is the opposite of what the connection can still do.
+    recoveryUnavailable: string;
+    // ── files queued before the link existed (OS share, or picked pre-pairing) ──
+    // The workspace's standing release control. It exists so dismissing the send
+    // confirmation cannot strand a batch: inside a workspace there is no peer
+    // card left to send from. The button must read as "send these", not as
+    // "confirm" — pressing it re-asks the confirmation.
+    queuedRelease: (count: number, size: string) => string;
+    queuedReleaseBtn: string;
     // ── queued outbound file batches ──
     queuedTitle: (count: number) => string;
     queuedHint: string;

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterEach, vi } from "vitest";
 import { connect, connectLink, connectResume, connectResumeLink, connectText, classifyPath, summarizeStats, PeerBusyError, localCaps, LINK_CAPTURE_MAX_BYTES, LINK_CHANNEL_LABELS, TEXT_CAPTURE_MAX_BYTES, authPayload as reExportedAuthPayload, type InboundSignal } from "./webrtc";
 import { TEXT_MAX_BYTES, TEXT_FRAME_OVERHEAD } from "./text-wire";
 import { clearRoom, enterRoom } from "./room.svelte";
+import { advertisedCaps } from "./peer-caps.svelte";
 import type { SignalingClient } from "./signaling";
 import { ready, generateKeyPair, deriveSession, signResume, verifyResume, type SessionKeys } from "./crypto";
 import { sas } from "./crypto";
@@ -994,17 +995,20 @@ describe("capability piggyback", () => {
     expect(localCaps()).toContain("text/1");
   });
 
-  // The per-connection confirmation must say what the ROOM allows, not what the
-  // module knew at import time. A frozen constant would keep confirming link/1
-  // on the first connection made after a live room switch (no reload), which is
-  // the one asymmetry that turns a policy into a bug: advertised there, refused
-  // here — or worse, the reverse.
-  it("follows the room, sampled per connection rather than frozen at import", () => {
+  // The per-connection confirmation is derived from `advertisedCaps()` and is
+  // sampled per connection, not frozen at import. A pairing-code room now
+  // announces the same pair the LAN room does (DECISION-LOG 2026-08-10), so what
+  // this pins is the SYMMETRY: whatever the roster hello says, a connection made
+  // after a live room switch (no reload) confirms exactly that. Advertised
+  // there, refused here — or the reverse — is the asymmetry that strands a peer.
+  it("confirms exactly what the roster hello announces, in either room", () => {
     expect(localCaps()).toEqual(["text/1", "link/1"]);
+    expect([...localCaps()]).toEqual([...advertisedCaps()]);
     enterRoom({ code: "123456" });
-    expect(localCaps()).toEqual(["text/1"]);
-    clearRoom();
     expect(localCaps()).toEqual(["text/1", "link/1"]);
+    expect([...localCaps()]).toEqual([...advertisedCaps()]);
+    clearRoom();
+    expect([...localCaps()]).toEqual([...advertisedCaps()]);
   });
 
   // Adding `leave` to InboundSignal must be exactly as inert as adding `caps`
