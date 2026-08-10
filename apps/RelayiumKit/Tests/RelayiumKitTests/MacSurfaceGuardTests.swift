@@ -2341,10 +2341,20 @@ final class MacSurfaceGuardTests: XCTestCase {
     // MARK: - what the repository's own documents may claim
 
     /// Constraint 14, and `PROJECT-GOVERNANCE.md` § "Native product launch
-    /// definition": this slice produces an engineering build. Signed, notarized
-    /// and green is still "in development" until the product is ready, so a
-    /// document that reads as an announcement is a truthfulness regression even
-    /// when every technical gate passed.
+    /// definition". The owner has installed the notarized build and approved
+    /// 1.0, so the gate this guard holds is no longer "is it ready" — it is
+    /// "does the artifact a reader could go and download actually EXIST yet".
+    /// Until the GitHub Release is published there is nothing to download, so a
+    /// document that reads as an announcement is a truthfulness regression
+    /// exactly as it was before approval: signed, notarized, approved and green
+    /// still is not distributed.
+    ///
+    /// The list below is therefore deliberately UNCHANGED by approval, and must
+    /// stay that way while these documents are pre-publication. What approval
+    /// moved is recorded in the manifest and asserted by
+    /// `testTheReadinessManifestRecordsTheOwnersApproval`; the two are separate
+    /// facts and are kept in separate tests so that flipping one can never be
+    /// mistaken for licence to write the other.
     ///
     /// Phrases, not the word "launch". A bare-word ban would fail on
     /// `apps/README.md`'s "Launch the built app after a build", on this plan's
@@ -2352,7 +2362,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// missing — a guard that has to be disabled to write the truth protects
     /// nothing. Each entry below is a claim that cannot be made truthfully about
     /// this tree in any context.
-    func testNoLaunchClaimInDocs() throws {
+    func testNoPublicDistributionClaimInDocsBeforeTheReleaseExists() throws {
         let claims = ["now launched", "publicly available", "generally available",
                       "production release", "the macos app is complete",
                       "ready for launch", "available for download",
@@ -2364,9 +2374,30 @@ final class MacSurfaceGuardTests: XCTestCase {
                 XCTAssertFalse(text.contains(claim), "\(path) claims launch: \(claim)")
             }
         }
+    }
+
+    /// The other half of what used to be one test, and the half that inverted.
+    ///
+    /// `apps/mac/release-readiness.json` records the OWNER's decision, not CI's
+    /// opinion of the tree, and the release job gates on it through
+    /// `check-release-readiness.mjs --require-approved`. Pinning it to
+    /// `"approved": false` made the manifest unable to express the one state the
+    /// release path exists to consume: the formal 1.0 run was cancelled before
+    /// publishing anything because this assertion failed on an approval the
+    /// owner had actually given.
+    ///
+    /// Asserted positively rather than by deleting the old check, so that an
+    /// accidental revert of the approval commit fails here loudly instead of
+    /// reaching the release job as a silent "not approved".
+    ///
+    /// This says nothing about distribution. Approval is permission to publish;
+    /// `testNoPublicDistributionClaimInDocsBeforeTheReleaseExists` above still
+    /// forbids every claim surface from describing the Release as something a
+    /// reader can already download, until it is published.
+    func testTheReadinessManifestRecordsTheOwnersApproval() throws {
         XCTAssertTrue(try claimSurfaceText("apps/mac/release-readiness.json")
-            .contains("\"approved\": false"),
-                      "the readiness manifest must stay unapproved")
+            .contains("\"approved\": true"),
+                      "the readiness manifest must record the owner's 1.0 approval")
     }
 
     /// The other direction, and the one a ban list cannot give: the status has to
