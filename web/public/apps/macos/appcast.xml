@@ -6,12 +6,12 @@
     <language>en</language>
 <title>Relayium for macOS updates</title>
         <item>
-            <title>1.0</title>
-            <pubDate>Mon, 10 Aug 2026 02:44:25 +0000</pubDate>
-            <sparkle:version>1</sparkle:version>
-            <sparkle:shortVersionString>1.0</sparkle:shortVersionString>
+            <title>1.1</title>
+            <pubDate>Mon, 10 Aug 2026 15:19:23 +0000</pubDate>
+            <sparkle:version>2</sparkle:version>
+            <sparkle:shortVersionString>1.1</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/relayium/relayium/releases/download/macos-v1.0/Relayium.dmg" length="23160310" type="application/octet-stream" sparkle:edSignature="oMvWJyrYA2AVtlird7lSGVZuUujwJ9N2fqE92sCNV2X50l0biX8ez5paeXUYEc890l5CRfTMX93Bk3ZGmwjqAA=="/>
+            <enclosure url="https://github.com/relayium/relayium/releases/download/macos-v1.1/Relayium.dmg" length="23501204" type="application/octet-stream" sparkle:edSignature="RzybhFikNRr9QtKK2ziBkbt/3tSRXXtnbaaCRXH6onQ98BfHtBPGxVMVNLDLFabeCKoQGzIoUij0XcbbbVLNAQ=="/>
         </item>
     </channel>
 </rss>
