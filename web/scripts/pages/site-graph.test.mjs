@@ -9,6 +9,7 @@
 // the checks run against the built HTML for the same reason.
 import { describe, it, expect } from "vitest";
 import { buildAllPages, buildSiteSitemap } from "../gen-pages.mjs";
+import { SPA_ONLY_EN_SLUGS } from "./shared.mjs";
 import { buildShells } from "./shells.mjs";
 import crossNetwork from "./content/cross-network.mjs";
 import offlineTransfer from "./content/offline-transfer.mjs";
@@ -111,5 +112,21 @@ describe("the English-only SPA routes reach the static graph", () => {
       expect(sitemapPaths, u).toContain(u);
       expect(linkTargets.has(u), `${u} is linked from a static page`).toBe(true);
     }
+  });
+});
+
+// buildSitemap's guard only proves modes ⊆ MODE_SLUGS and spaPages ⊆
+// NO_LOCALIZED_TWIN_SLUGS. The converse matters just as much: if a registered
+// slug ever gains a generated English directory, urlPath() would report /cli
+// while the page lands at cli/index.html, and the origin would 301 the sitemap's
+// own URL — the same bug arriving from the other direction. This lives here
+// rather than in build-pages.test.mjs because the page graph is already built
+// at the top of this file.
+describe("no slash-less slug has a generated English directory", () => {
+  it("keeps the generated pages and SPA_ONLY_EN_SLUGS disjoint", () => {
+    const collisions = pages
+      .map((p) => p.path.replace(/^\/+/, ""))
+      .filter((p) => [...SPA_ONLY_EN_SLUGS].some((s) => p === `${s}/index.html`));
+    expect(collisions).toEqual([]);
   });
 });

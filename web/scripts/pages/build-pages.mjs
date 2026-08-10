@@ -1,5 +1,5 @@
 // web/scripts/pages/build-pages.mjs — pure builders (no disk IO).
-import { LANGS, LANDING_LANGS, DEFAULT_LANG, SITE, SPA_ONLY_EN_SLUGS, pagePath, urlPath, absUrl, landingUrl, landingPath, validateLangs } from "./shared.mjs";
+import { LANGS, LANDING_LANGS, DEFAULT_LANG, SITE, MODE_SLUGS, NO_LOCALIZED_TWIN_SLUGS, pagePath, urlPath, absUrl, landingUrl, landingPath, validateLangs } from "./shared.mjs";
 import { renderLegalPage } from "./legal-template.mjs";
 import { renderLandingPage } from "./landing-template.mjs";
 import { renderArticlePage } from "./article-template.mjs";
@@ -173,12 +173,31 @@ export function buildModePages(modeDef, { slug, learn = null }) {
 }
 
 export function buildSitemap(docs, { home = true, landing = null, articles = [], guidesIndex = null, categoryHubs = [], modes = [], spaPages = [], releases = null } = {}) {
-  // urlPath() only keeps a mode's English URL slash-less if the slug is listed in
-  // SPA_ONLY_EN_SLUGS. A mode added here but not there would emit /new-mode/ —
-  // a URL with no directory behind it. Fail the build instead.
-  const unlisted = modes.map((m) => m.slug).filter((s) => !SPA_ONLY_EN_SLUGS.has(s));
+  // urlPath() only keeps an English URL slash-less if the slug is registered. A
+  // mode or SPA page added to gen-pages.mjs but not registered would emit
+  // /new-thing/ — a URL with no directory behind it, so a redirect in the
+  // sitemap. Fail the build instead. Both lists are checked: the SPA pages used
+  // to escape this guard by carrying a literal path rather than a slug.
+  //
+  // Each list is checked against ITS OWN half, never the union: a new English-only
+  // page registered in MODE_SLUGS by mistake would pass a union check, emit a
+  // correct slash-less URL, and silently lose the throw that makes /zh/pricing/
+  // unrepresentable — restoring the defect the split exists to prevent.
+  const unlisted = [
+    ...modes.map((m) => m.slug).filter((s) => !MODE_SLUGS.has(s)).map((s) => [s, "MODE_SLUGS"]),
+    ...spaPages.map((p) => p.slug).filter((s) => !NO_LOCALIZED_TWIN_SLUGS.has(s)).map((s) => [s, "NO_LOCALIZED_TWIN_SLUGS"]),
+  ];
   if (unlisted.length) {
-    throw new Error(`buildSitemap: mode slugs missing from SPA_ONLY_EN_SLUGS in shared.mjs: ${unlisted.join(", ")}`);
+    // Name the slug AND the set it belongs in: "register it somewhere in
+    // shared.mjs" is the instruction that produced this bug's other half, where
+    // an English-only page in MODE_SLUGS silently loses its 404 guard.
+    // JSON.stringify(undefined) is undefined, not a string, so a caller still on
+    // the old { path } shape would otherwise print an empty list — exactly the
+    // migration case this guard exists to catch.
+    throw new Error(
+      `buildSitemap: slugs missing from shared.mjs: ` +
+        unlisted.map(([s, set]) => `${JSON.stringify(s) ?? String(s)} (add to ${set})`).join(", ")
+    );
   }
   const urls = [];
   const newest = [
@@ -239,8 +258,13 @@ export function buildSitemap(docs, { home = true, landing = null, articles = [],
   // generated directory, so they carry no trailing slash and no hreflang cluster
   // — but they are public pages, and leaving them out of the sitemap is why
   // /pricing had zero coverage while the router called it "public marketing".
+  // The URL comes from urlPath() like every other entry, so the sitemap has no
+  // slash rule of its own; the guard above is what keeps that honest. (Other
+  // hardcoded copies of these paths still exist outside the sitemap — PRICING_URL
+  // in shared.mjs, the footer hrefs and route: canonicals in shells.mjs, and the
+  // SPA router — so this is one source of truth for the sitemap, not the site.)
   for (const p of spaPages) {
-    urls.push({ loc: absUrl(p.path), lastmod: p.updated ?? newest, priority: "0.7", changefreq: "monthly" });
+    urls.push({ loc: absUrl(urlPath(p.slug, DEFAULT_LANG)), lastmod: p.updated ?? newest, priority: "0.7", changefreq: "monthly" });
   }
   const body = urls
     .map(

@@ -105,10 +105,36 @@ export const OG_IMAGE_META = `<meta property="og:image:type" content="image/jpeg
 export function pagePath(slug, lang) {
   return lang === DEFAULT_LANG ? `${slug}/index.html` : `${lang}/${slug}/index.html`;
 }
-// Slugs that have no generated <slug>/index.html in English — they are SPA routes
-// (see LANDING_LANGS: mode pages are built for every language *except* en). Keep
-// this in sync with the `modes` list in gen-pages.mjs; buildSitemap asserts it.
-export const SPA_ONLY_EN_SLUGS = new Set(["cross-network", "offline-transfer", "apps"]);
+// Two kinds of slug have no generated <slug>/index.html in English, so the origin
+// serves both slash-less from a per-route SPA shell. They are declared separately
+// and unioned below rather than listed twice, so a new one is registered in
+// exactly one place.
+//
+// Kind 1: mode routes. English is the SPA; buildModePages generates a localized
+// static twin for every LANDING_LANGS language (/zh/apps/, …).
+export const MODE_SLUGS = new Set(["cross-network", "offline-transfer", "apps"]);
+
+// Kind 2: English-only SPA pages. This is about generated PAGES, not
+// about translation: the SPA itself renders /pricing and /cli in all nine
+// languages from src/lib/i18n/*.ts (see the pricingLabel note above). What these
+// three lack is a localized static twin — buildModePages generates /<lang>/apps/
+// et al. for LANDING_LANGS, but nothing generates /<lang>/pricing/. So
+// /zh/pricing/ is a 404, and asking urlPath() for one is a bug, not a URL:
+// hreflang or an internal link built from it would point at nothing. Throwing
+// keeps that unrepresentable instead of silently emitting a dead URL — which is
+// the same class of mistake as the trailing-slash one above.
+export const NO_LOCALIZED_TWIN_SLUGS = new Set(["pricing", "cli", "device-inbox"]);
+
+// The union: every slug whose ENGLISH URL must not carry a trailing slash. Keep
+// MODE_SLUGS in sync with the `modes` list in gen-pages.mjs and NO_LOCALIZED_TWIN_SLUGS
+// with its `SPA_PAGES` list; buildSitemap asserts both.
+//
+// NO_LOCALIZED_TWIN_SLUGS was missing here until 2026-08-10. urlPath() therefore reported
+// /pricing/ — a URL the origin 301s away — and the sitemap escaped emitting it
+// only because gen-pages.mjs passed a hardcoded literal path that never went
+// through urlPath() at all. That is the same duplicate-source-of-truth shape
+// that put ~390 URLs in Search Console's "Page with redirect" bucket.
+export const SPA_ONLY_EN_SLUGS = new Set([...MODE_SLUGS, ...NO_LOCALIZED_TWIN_SLUGS]);
 
 // Every generated page is written to <slug>/index.html, and the origin 301s the
 // slash-less form to the slashed one. So generated URLs MUST carry the trailing
@@ -118,6 +144,13 @@ export const SPA_ONLY_EN_SLUGS = new Set(["cross-network", "offline-transfer", "
 // and would 404-to-SPA-shell if we invented a slashed form for them.
 export function urlPath(slug, lang) {
   if (lang === DEFAULT_LANG) return SPA_ONLY_EN_SLUGS.has(slug) ? `/${slug}` : `/${slug}/`;
+  if (NO_LOCALIZED_TWIN_SLUGS.has(slug)) {
+    throw new Error(
+      `urlPath: "${slug}" has no localized static page, so /${lang}/${slug}/ is a 404. ` +
+        `(The SPA itself does render it in all nine languages — this is about generated pages, not translation.) ` +
+        `Link to /${slug} instead, or generate a localized page first and drop the slug from NO_LOCALIZED_TWIN_SLUGS.`
+    );
+  }
   return `/${lang}/${slug}/`;
 }
 export function absUrl(path) {

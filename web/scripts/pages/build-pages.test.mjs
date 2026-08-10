@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import privacy from "./content/legal/privacy.mjs";
 import terms from "./content/legal/terms.mjs";
 import { buildLegalPages, buildSitemap, articleGroupsByLang, buildGuidesIndexPages } from "./build-pages.mjs";
-import { landingUrl, landingPath, ctaHref, validateLangs, LANDING_LANGS, SPA_ONLY_EN_SLUGS, urlPath } from "./shared.mjs";
+import { landingUrl, landingPath, ctaHref, validateLangs, LANDING_LANGS, SPA_ONLY_EN_SLUGS, NO_LOCALIZED_TWIN_SLUGS, urlPath } from "./shared.mjs";
 import guidesIndex from "./content/guides-index.mjs";
 
 const docs = [privacy, terms];
@@ -142,6 +142,15 @@ describe("SEO URL forms", () => {
   it("keeps English SPA-only routes slash-less (they have no directory to 301 to)", () => {
     for (const slug of SPA_ONLY_EN_SLUGS) {
       expect(urlPath(slug, "en")).toBe(`/${slug}`);
+    }
+  });
+
+  // Only the mode slugs have a localized static twin. Asserting the zh form for
+  // every SPA_ONLY_EN_SLUGS member would bless /zh/pricing/ — a 404 — as the
+  // right answer; see the NO_LOCALIZED_TWIN_SLUGS case below.
+  it("gives the mode routes a slashed localized twin", () => {
+    for (const slug of SPA_ONLY_EN_SLUGS) {
+      if (NO_LOCALIZED_TWIN_SLUGS.has(slug)) continue;
       expect(urlPath(slug, "zh")).toBe(`/zh/${slug}/`);
     }
   });
@@ -156,6 +165,53 @@ describe("SEO URL forms", () => {
   it("fails the build when a new mode slug is not registered as SPA-only", () => {
     expect(() =>
       buildSitemap(docs, { modes: [{ def: crossNetwork, slug: "brand-new-mode" }] })
-    ).toThrow(/SPA_ONLY_EN_SLUGS/);
+    ).toThrow(/add to MODE_SLUGS/);
+  });
+});
+
+// ── The slash-less English SPA pages (/pricing, /cli, /device-inbox) ──────────
+// These are served slash-less by the origin, exactly like the mode routes, but
+// they were never registered in SPA_ONLY_EN_SLUGS. urlPath() therefore claimed
+// they lived at /pricing/ — a URL that 301s away — and the sitemap only avoided
+// emitting it because gen-pages.mjs passed a hardcoded literal path that
+// bypassed urlPath() entirely. Two sources of truth, one of them wrong: the
+// exact shape of the regression that moved ~390 URLs into "Page with redirect".
+// These tests collapse them to one and keep the guard honest.
+describe("English SPA pages are registered, not special-cased", () => {
+  const SPA_PAGE_SLUGS = ["pricing", "cli", "device-inbox"];
+
+  it("registers every slash-less SPA page so urlPath() reports its real URL", () => {
+    for (const slug of SPA_PAGE_SLUGS) {
+      expect(SPA_ONLY_EN_SLUGS.has(slug)).toBe(true);
+      expect(urlPath(slug, "en")).toBe(`/${slug}`);
+    }
+  });
+
+  it("derives the sitemap entry from urlPath() instead of a literal path", () => {
+    const xml = buildSitemap([], { home: false, spaPages: SPA_PAGE_SLUGS.map((slug) => ({ slug })) });
+    const locs = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+    expect(locs).toEqual(SPA_PAGE_SLUGS.map((s) => `https://relayium.com/${s}`));
+  });
+
+  it("fails the build when a new SPA page slug is not registered as SPA-only", () => {
+    expect(() =>
+      buildSitemap(docs, { spaPages: [{ slug: "brand-new-spa-page" }] })
+    ).toThrow(/add to NO_LOCALIZED_TWIN_SLUGS/);
+  });
+
+  // A caller left on the pre-2026-08-10 { path } shape yields undefined slugs.
+  // It must fail loudly AND name what it choked on, or the migration error is
+  // an empty list.
+  it("names the offending entry when a caller still passes the old { path } shape", () => {
+    expect(() => buildSitemap(docs, { spaPages: [{ path: "/pricing" }] })).toThrow(
+      /undefined \(add to NO_LOCALIZED_TWIN_SLUGS\)/
+    );
+  });
+
+  it("refuses to invent a localized URL for a page with no localized twin", () => {
+    for (const slug of NO_LOCALIZED_TWIN_SLUGS) {
+      expect(() => urlPath(slug, "zh")).toThrow(/no localized static page/);
+      expect(urlPath(slug, "en")).toBe(`/${slug}`);
+    }
   });
 });

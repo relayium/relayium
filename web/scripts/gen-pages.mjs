@@ -119,8 +119,10 @@ const MODES = [
 ];
 // English-only SPA routes: served by the per-route shells
 // (vite-plugin-route-shells.ts), not by a generated directory — hence no
-// trailing slash.
-const SPA_PAGES = [{ path: "/pricing" }, { path: "/cli" }, { path: "/device-inbox" }];
+// trailing slash. Identified by slug, not by a literal path: buildSitemap
+// resolves the URL through urlPath() and fails the build when a slug here is
+// not registered in SPA_ONLY_EN_SLUGS.
+const SPA_PAGES = [{ slug: "pricing" }, { slug: "cli" }, { slug: "device-inbox" }];
 
 /** Every generated page, as [{ path, html }]. Exported so the site-graph test
  *  can check the real output (duplicate titles, orphans, dead internal links)
