@@ -1199,7 +1199,15 @@ final class AppShellUITests: XCTestCase {
         password.typeText("correct horse battery")
 
         let signIn = window.buttons["Sign in"]
-        XCTAssertTrue(signIn.exists, "the completed form cannot be submitted")
+        // SwiftUI may replace the button's accessibility node on the hosted
+        // macOS 15 runner when the last SecureField edit publishes. An
+        // instantaneous `exists` read can land in that replacement window even
+        // though the same form is ready a moment later, so wait for the actual
+        // contract: the submit action exists and is enabled.
+        let submitReady = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "exists == true AND enabled == true"), object: signIn)
+        XCTAssertEqual(XCTWaiter.wait(for: [submitReady], timeout: 10), .completed,
+                       "the completed form cannot be submitted")
         signIn.click()
 
         XCTAssertTrue(window.staticTexts["person@example.com"].waitForExistence(timeout: 20),
