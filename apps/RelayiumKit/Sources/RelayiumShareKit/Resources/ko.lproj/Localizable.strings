@@ -36,7 +36,7 @@
 "settings.openAtLogin" = "로그인 시 Relayium 열기";
 "settings.openAtLoginBody" = "Relayium은 실행 중일 때만 받을 수 있습니다. 로그인 시 열어 두면 재시동 후에도 누가 앱을 먼저 열지 않아도 이 Mac에 도달할 수 있습니다.";
 "settings.loginNeedsApproval" = "'로그인 항목'에서 Relayium을 허용할 때까지 macOS가 보류하고 있습니다.";
-"settings.loginUnavailable" = "macOS가 이 위치의 Relayium을 관리하지 않습니다. '응용 프로그램' 폴더로 옮긴 뒤 열어 주십시오.";
+"settings.loginUnmanagedLocation" = "macOS가 이 위치의 Relayium을 관리하지 않습니다. '응용 프로그램' 폴더로 옮긴 뒤 열어 주십시오.";
 "settings.loginRefused" = "macOS가 변경을 거부했습니다. '로그인 항목'에서 Relayium이 차단되어 있는지 확인해 주십시오.";
 "settings.openLoginItems" = "'로그인 항목' 설정 열기";
 "settings.automaticUpdates" = "자동으로 업데이트 확인";
@@ -667,3 +667,62 @@
 "link.acceptFiles" = "파일 수락";
 "link.declineFiles" = "거절";
 "link.historyIsLocal" = "이 대화는 두 기기에만 존재하며 연결이 끝나면 삭제됩니다.";
+
+/* MARK: 1.1.2 — numbered help steps */
+"format.helpStep" = "%1$@. %2$@";
+
+/* MARK: 1.1.2 — login item: notFound is two situations */
+"settings.loginUnconfirmed" = "이 Relayium은 응용 프로그램 폴더에 있지만, macOS는 로그인 항목 기록이 없다고 보고합니다. 지금 macOS에 등록을 요청할 수 있습니다.";
+"settings.loginNotRegistered" = "Relayium이 로그인 시 열리도록 등록되어 있지 않습니다.";
+"settings.loginTryRegistration" = "등록 시도";
+"settings.loginStillUnconfirmed" = "Relayium이 macOS에 등록을 요청했지만 macOS는 여전히 기록이 없다고 보고합니다. 아무것도 삭제되지 않았으며 기존 등록도 그대로입니다. 로그인 항목을 열어 확인하고, 거기에도 Relayium이 없다면 이 Mac을 다시 시동하십시오.";
+
+/* MARK: 1.1.2 — what this Mac is on the network */
+"nearby.announcedAs" = "이 방의 다른 기기에는 이 Mac이 %@(으)로 표시됩니다.";
+"nearby.localAddressesHeading" = "현재 이 Mac 자체의 주소:";
+"nearby.localAddressRow" = "%1$@(%2$@)";
+"nearby.noLocalAddresses" = "사용 가능한 주소를 찾지 못했습니다. 이 Mac이 VPN을 통해서만, 또는 직접 전송을 할 수 없는 연결로만 네트워크에 연결되어 있을 수 있습니다.";
+"nearby.addressesPrivacyNote" = "이 목록은 수신 대기 중에 이 Mac에서 생성되어 여기에만 표시됩니다. Relayium은 이 목록을 저장하거나 기록하지 않습니다.";
+"nearby.addressesNotGroupingNote" = "기기는 여기 표시된 주소가 아니라 Relayium 서비스가 관측한 네트워크 경로로 묶입니다. 따라서 같은 케이블에 연결된 두 기기도 서로 다른 그룹이 될 수 있습니다.";
+"nearby.a11yThisMac" = "네트워크상의 이 Mac";
+
+/* MARK: 1.1.2 — the CLI equivalent of a finished stored send */
+"storedSend.cliHeading" = "터미널에서 같은 방식으로 내려받기";
+"storedSend.cliCopy" = "명령 복사";
+"storedSend.cliWarning" = "따옴표는 반드시 필요합니다. 따옴표가 없으면 # 이후는 셸 주석으로 처리되어 키가 사라지고 다운로드가 실패합니다. 이 명령에는 파일을 여는 키가 들어 있으며, 대부분의 셸은 실행한 명령을 기록 파일에 남깁니다.";
+"storedSend.cliDocs" = "Relayium CLI 문서";
+
+/* MARK: 1.1.2 — help, below the controls on every browseable destination */
+"help.heading" = "도움말";
+"help.stepsHeading" = "작동 방식";
+"help.guideLink" = "relayium.com에서 안내서 읽기";
+
+"help.lan.step1" = "두 기기 모두에서 Relayium을 열고 같은 네트워크에 연결된 상태를 유지하십시오.";
+"help.lan.step2" = "목록에서 상대 기기를 선택한 다음, 메시지를 보내거나 추가해 둔 파일을 보내십시오.";
+"help.lan.step3" = "확인 기능이 켜져 있다면 두 화면에 같은 코드가 표시되는지 확인한 뒤 수락하십시오.";
+"help.lan.question" = "파일이 Relayium 서버를 거치나요?";
+"help.lan.answer" = "아니요. Relayium 서비스는 두 기기를 서로 찾게 해 줄 뿐이며, 연결된 뒤에는 파일이 두 기기 사이를 직접 오갑니다.";
+
+"help.cross.step1" = "이 기기에서 메시지용 또는 파일용 코드를 만드십시오.";
+"help.cross.step2" = "다른 기기의 Relayium에 그 코드를 입력하고 참여하십시오.";
+"help.cross.step3" = "두 화면에 같은 코드가 표시되는지 확인한 다음 전송을 수락하십시오.";
+"help.cross.question" = "두 기기가 같은 네트워크에 있어야 하나요?";
+"help.cross.answer" = "아니요. 바로 그래서 이 화면이 있습니다. 코드를 만들려면 계정이 필요합니다. 연결이 중계될 수 있고 그 비용은 코드를 만든 사람에게 청구되기 때문입니다. 다른 사람이 만든 코드에 참여하는 데에는 아무것도 필요하지 않습니다.";
+
+"help.storedSend.step1" = "파일이나 폴더를 선택하고 링크를 얼마나 오래 유지할지 정한 뒤 보내십시오.";
+"help.storedSend.step2" = "Relayium은 무엇이든 업로드하기 전에 이 Mac에서 먼저 암호화합니다.";
+"help.storedSend.step3" = "링크를 공유하십시오. 링크를 여는 키는 링크 안에 들어 있으며 Relayium에는 전달되지 않습니다.";
+"help.storedSend.question" = "누가 이 링크를 열 수 있나요?";
+"help.storedSend.answer" = "# 뒤의 부분까지 포함한 전체 링크를 가진 사람이라면 누구나 열 수 있습니다. Relayium은 암호화된 파일만 보관하며 그 내용을 읽을 수 없으므로, 링크 자체를 비밀로 다루십시오.";
+
+"help.inbox.step1" = "이 Mac과 보내려는 기기에서 같은 계정으로 로그인하십시오.";
+"help.inbox.step2" = "이 Mac에서 폴더를 선택한 다음, 도착한 항목을 자동으로 저장할지 확인을 기다릴지 정하십시오.";
+"help.inbox.step3" = "relayium.com이나 로그인된 다른 기기에서 이 Mac으로 보내면 파일이 그 폴더에 저장됩니다.";
+"help.inbox.question" = "이 Mac이 잠자기 상태이거나 Relayium이 종료되어 있으면 어떻게 되나요?";
+"help.inbox.answer" = "전달 항목은 Relayium이 여기서 다시 실행될 때까지 서버에서 기다립니다. 실행 중일 때만 받을 수 있으며, 위의 로그인 설정이 바로 그것을 위한 것입니다.";
+
+"help.account.step1" = "계정을 만들거나 로그인하십시오. 링크 보내기와 기기 수신함에는 모두 계정이 필요합니다.";
+"help.account.step2" = "어떤 요금제를 쓰고 있는지, 이번 기간에 얼마나 사용했는지 확인하십시오.";
+"help.account.step3" = "계정에 로그인된 기기와 저장한 파일을 살펴보고 둘 중 무엇이든 삭제하십시오.";
+"help.account.question" = "무엇에 계정이 필요하고 무엇에는 필요 없나요?";
+"help.account.answer" = "같은 네트워크에서의 전송과 다른 사람이 만든 코드에 참여하는 것은 계정이 필요 없습니다. 코드 만들기, 저장 링크 보내기, 기기 수신함에는 계정이 필요합니다.";

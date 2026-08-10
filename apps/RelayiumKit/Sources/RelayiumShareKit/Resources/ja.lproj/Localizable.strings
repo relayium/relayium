@@ -36,7 +36,7 @@
 "settings.openAtLogin" = "ログイン時に Relayium を開く";
 "settings.openAtLoginBody" = "Relayium は起動中しか受信できません。ログイン時に開いておくと、再起動後も誰かがアプリを開かなくてもこの Mac に届きます。";
 "settings.loginNeedsApproval" = "「ログイン項目」で Relayium を許可するまで macOS が保留しています。";
-"settings.loginUnavailable" = "macOS はこの場所の Relayium を管理しません。「アプリケーション」フォルダに移してから開いてください。";
+"settings.loginUnmanagedLocation" = "macOS はこの場所の Relayium を管理しません。「アプリケーション」フォルダに移してから開いてください。";
 "settings.loginRefused" = "macOS が変更を拒否しました。「ログイン項目」で Relayium がブロックされていないか確認してください。";
 "settings.openLoginItems" = "「ログイン項目」設定を開く";
 "settings.automaticUpdates" = "アップデートを自動的に確認";
@@ -667,3 +667,62 @@
 "link.acceptFiles" = "ファイルを受け入れる";
 "link.declineFiles" = "拒否";
 "link.historyIsLocal" = "この会話はこの 2 台の端末にのみ存在し、接続が終わると破棄されます。";
+
+/* MARK: 1.1.2 — numbered help steps */
+"format.helpStep" = "%1$@. %2$@";
+
+/* MARK: 1.1.2 — login item: notFound is two situations */
+"settings.loginUnconfirmed" = "この Relayium はアプリケーションフォルダにありますが、macOS はログイン項目の記録がないと報告しています。今すぐ macOS に登録を依頼できます。";
+"settings.loginNotRegistered" = "Relayium はログイン時に開くよう登録されていません。";
+"settings.loginTryRegistration" = "登録を試す";
+"settings.loginStillUnconfirmed" = "Relayium は macOS に登録を依頼しましたが、macOS は依然として記録がないと報告しています。何も削除されておらず、既存の登録にも変更はありません。「ログイン項目」を開いて確認し、そこに Relayium がない場合はこの Mac を再起動してください。";
+
+/* MARK: 1.1.2 — what this Mac is on the network */
+"nearby.announcedAs" = "このルーム内の他のデバイスからは、この Mac は %@ として見えています。";
+"nearby.localAddressesHeading" = "現在のこの Mac 自身のアドレス:";
+"nearby.localAddressRow" = "%1$@（%2$@）";
+"nearby.noLocalAddresses" = "使用できるアドレスが見つかりませんでした。この Mac は VPN 経由か、直接転送を行えない接続だけでネットワークにつながっている可能性があります。";
+"nearby.addressesPrivacyNote" = "この一覧は待ち受け中にこの Mac 上で作成され、ここにのみ表示されます。Relayium が一覧を保存・記録することはありません。";
+"nearby.addressesNotGroupingNote" = "デバイスはここに表示されたアドレスではなく、Relayium のサービスが観測したネットワーク経路によってグループ分けされます。そのため同じケーブル上の 2 台でも別のグループになることがあります。";
+"nearby.a11yThisMac" = "ネットワーク上のこの Mac";
+
+/* MARK: 1.1.2 — the CLI equivalent of a finished stored send */
+"storedSend.cliHeading" = "同じダウンロードをターミナルから";
+"storedSend.cliCopy" = "コマンドをコピー";
+"storedSend.cliWarning" = "引用符は必須です。引用符がないと # 以降はシェルのコメントとして扱われ、鍵が失われてダウンロードは失敗します。このコマンドはファイルを開く鍵を含んでおり、多くのシェルは実行内容を履歴ファイルに記録します。";
+"storedSend.cliDocs" = "Relayium CLI のドキュメント";
+
+/* MARK: 1.1.2 — help, below the controls on every browseable destination */
+"help.heading" = "ヘルプ";
+"help.stepsHeading" = "しくみ";
+"help.guideLink" = "relayium.com でガイドを読む";
+
+"help.lan.step1" = "両方のデバイスで Relayium を開き、同じネットワークに接続したままにします。";
+"help.lan.step2" = "一覧から相手のデバイスを選び、メッセージを送るか、追加したファイルを送ります。";
+"help.lan.step3" = "確認が有効な場合は、両方の画面に同じコードが表示されていることを確かめてから承認します。";
+"help.lan.question" = "ファイルは Relayium のサーバーを経由しますか？";
+"help.lan.answer" = "いいえ。Relayium のサービスは 2 台を引き合わせるだけで、接続が確立した後は、ファイルは 2 台の間を直接やり取りされます。";
+
+"help.cross.step1" = "このデバイスで、メッセージ用またはファイル用のコードを作成します。";
+"help.cross.step2" = "もう一方のデバイスの Relayium にそのコードを入力して参加します。";
+"help.cross.step3" = "両方の画面に同じコードが表示されていることを確認し、転送を承認します。";
+"help.cross.question" = "2 台は同じネットワークにいる必要がありますか？";
+"help.cross.answer" = "いいえ。そのための画面です。コードの作成にはアカウントが必要です。接続が中継される場合があり、その費用は作成者に請求されるためです。他の人が作ったコードへの参加には何も必要ありません。";
+
+"help.storedSend.step1" = "ファイルまたはフォルダを選び、リンクを有効にしておく期間を決めて送信します。";
+"help.storedSend.step2" = "Relayium はアップロードの前に、この Mac 上ですべてを暗号化します。";
+"help.storedSend.step3" = "リンクを共有します。リンクを開く鍵はリンクの中にあり、Relayium には届きません。";
+"help.storedSend.question" = "誰がこのリンクを開けますか？";
+"help.storedSend.answer" = "# より後ろの部分を含む完全なリンクを持っている人は誰でも開けます。Relayium は暗号化されたファイルだけを保存し、その中身を読むことはできません。リンクそのものを秘密として扱ってください。";
+
+"help.inbox.step1" = "この Mac と送信元のデバイスで、同じアカウントにサインインします。";
+"help.inbox.step2" = "この Mac 上のフォルダを選び、届いたものを自動的に保存するか、確認を待つかを決めます。";
+"help.inbox.step3" = "relayium.com またはサインイン済みの別のデバイスからこの Mac に送ると、ファイルはそのフォルダに保存されます。";
+"help.inbox.question" = "この Mac がスリープ中、または Relayium が終了しているときはどうなりますか？";
+"help.inbox.answer" = "配信は Relayium がここで再び動き出すまでサーバー上で待機します。受信できるのは動作中だけで、上のログイン設定はそのためにあります。";
+
+"help.account.step1" = "アカウントを作成するかサインインします。リンクの送信とデバイス受信箱にはアカウントが必要です。";
+"help.account.step2" = "利用中のプランと、今期の使用量を確認します。";
+"help.account.step3" = "アカウントにサインインしているデバイスと、保存したファイルを確認し、どちらも削除できます。";
+"help.account.question" = "アカウントが必要なのはどの機能ですか？";
+"help.account.answer" = "同じネットワーク内での転送と、他の人が作ったコードへの参加にはアカウントは不要です。コードの作成、保存リンクの送信、デバイス受信箱には必要です。";

@@ -86,6 +86,12 @@ struct DeviceInboxSurface: View {
             case let .account(gate):
                 accountSection(gate)
             }
+            // OUTSIDE the switch and after it, so help is the last section in
+            // every one of the three branches rather than a section the
+            // signed-out reader — the one most likely to need it — never sees.
+            // It is a `Section`, not a card: this surface is a grouped `Form`,
+            // and nothing here adds a second scroll view around it.
+            HelpFormSection(surface: .deviceInbox)
         }
         .formStyle(.grouped)
         // Re-measured when the surface appears rather than on every redraw: the
@@ -497,14 +503,16 @@ struct DeviceInboxSurface: View {
 
     // MARK: - residency
 
+    /// The same complete residency control the settings pane offers, and the
+    /// same component rather than a second rendering of it.
+    ///
+    /// This used to be a bare `Toggle` greyed out on one state with nothing
+    /// beside it — the dead switch the settings pane had already learned to
+    /// explain, kept alive by being written twice. Whatever `LoginItemSetting`
+    /// shows for a state, both surfaces now show.
     private var residencySection: some View {
         Section {
-            Toggle(L10n.t(.settingsOpenAtLogin), isOn: Binding(
-                get: { loginItem.state == .on },
-                set: { loginItem.set($0) }
-            ))
-            .disabled(loginItem.state == .unavailable)
-            .accessibilityIdentifier("inbox-open-at-login")
+            LoginItemSetting()
             // Said outright, because the checkbox invites exactly the wrong
             // inference: it decides whether Relayium is RUNNING after a login,
             // which is a different claim from whether the inbox is ready now.

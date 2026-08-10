@@ -36,7 +36,7 @@
 "settings.openAtLogin" = "Relayium bei der Anmeldung öffnen";
 "settings.openAtLoginBody" = "Relayium kann nur empfangen, solange es läuft. Beim Anmelden geöffnet, bleibt dieser Mac auch nach einem Neustart erreichbar, ohne dass jemand die App zuerst öffnen muss.";
 "settings.loginNeedsApproval" = "macOS wartet, bis Sie Relayium unter „Anmeldeobjekte“ erlauben.";
-"settings.loginUnavailable" = "macOS verwaltet diese Kopie von Relayium nicht. Bewegen Sie sie in den Ordner „Programme“ und öffnen Sie sie von dort.";
+"settings.loginUnmanagedLocation" = "macOS verwaltet diese Kopie von Relayium nicht. Bewegen Sie sie in den Ordner „Programme“ und öffnen Sie sie von dort.";
 "settings.loginRefused" = "macOS hat die Änderung abgelehnt. Prüfen Sie, ob Relayium unter „Anmeldeobjekte“ blockiert ist.";
 "settings.openLoginItems" = "Einstellungen für Anmeldeobjekte öffnen";
 "settings.automaticUpdates" = "Automatisch nach Updates suchen";
@@ -678,3 +678,62 @@
 "link.acceptFiles" = "Dateien annehmen";
 "link.declineFiles" = "Ablehnen";
 "link.historyIsLocal" = "Dieses Gespräch liegt nur auf diesen beiden Geräten und wird beim Ende der Verbindung verworfen.";
+
+/* MARK: 1.1.2 — numbered help steps */
+"format.helpStep" = "%1$@. %2$@";
+
+/* MARK: 1.1.2 — login item: notFound is two situations */
+"settings.loginUnconfirmed" = "macOS meldet keinen Anmeldeobjekt-Eintrag für diese Kopie von Relayium, obwohl sie in einem Programme-Ordner liegt. Du kannst macOS jetzt bitten, sie zu registrieren.";
+"settings.loginNotRegistered" = "Relayium ist nicht dafür registriert, sich bei der Anmeldung zu öffnen.";
+"settings.loginTryRegistration" = "Registrierung versuchen";
+"settings.loginStillUnconfirmed" = "Relayium hat macOS um Registrierung gebeten, und macOS meldet weiterhin keinen Eintrag. Es wurde nichts entfernt, und eine bereits vorhandene Registrierung bleibt unangetastet. Öffne die Anmeldeobjekte, um nachzusehen, und starte diesen Mac neu, falls Relayium dort nicht aufgeführt ist.";
+
+/* MARK: 1.1.2 — what this Mac is on the network */
+"nearby.announcedAs" = "Andere Geräte in diesem Raum sehen diesen Mac als %@.";
+"nearby.localAddressesHeading" = "Die eigenen Adressen dieses Mac im Moment:";
+"nearby.localAddressRow" = "%1$@ (%2$@)";
+"nearby.noLocalAddresses" = "Es wurde keine nutzbare Adresse gefunden. Möglicherweise erreicht dieser Mac das Netzwerk nur über ein VPN oder über eine Verbindung, die keine Direktübertragung tragen kann.";
+"nearby.addressesPrivacyNote" = "Diese Liste wird auf diesem Mac erstellt, solange er empfangsbereit ist, und nur hier angezeigt. Relayium speichert oder protokolliert die Liste nicht.";
+"nearby.addressesNotGroupingNote" = "Geräte werden nach dem Netzwerkpfad gruppiert, den der Relayium-Dienst beobachtet, nicht nach diesen Adressen. Zwei Geräte am selben Kabel können daher trotzdem in verschiedenen Gruppen landen.";
+"nearby.a11yThisMac" = "Dieser Mac im Netzwerk";
+
+/* MARK: 1.1.2 — the CLI equivalent of a finished stored send */
+"storedSend.cliHeading" = "Derselbe Download im Terminal";
+"storedSend.cliCopy" = "Befehl kopieren";
+"storedSend.cliWarning" = "Die Anführungszeichen sind notwendig: ohne sie ist alles ab dem # ein Shell-Kommentar, der Schlüssel geht verloren und der Download schlägt fehl. Dieser Befehl trägt den Schlüssel, der die Datei öffnet, und die meisten Shells schreiben ausgeführte Befehle in eine Verlaufsdatei.";
+"storedSend.cliDocs" = "Dokumentation zur Relayium-CLI";
+
+/* MARK: 1.1.2 — help, below the controls on every browseable destination */
+"help.heading" = "Hilfe";
+"help.stepsHeading" = "So funktioniert es";
+"help.guideLink" = "Anleitung auf relayium.com lesen";
+
+"help.lan.step1" = "Öffne Relayium auf beiden Geräten und lass sie im selben Netzwerk.";
+"help.lan.step2" = "Wähle das andere Gerät aus der Liste und sende dann eine Nachricht oder die hinzugefügten Dateien.";
+"help.lan.step3" = "Wenn die Bestätigung aktiv ist, prüfe vor dem Annehmen, dass beide Bildschirme denselben Code zeigen.";
+"help.lan.question" = "Laufen die Dateien über die Server von Relayium?";
+"help.lan.answer" = "Nein. Der Relayium-Dienst bringt die beiden Geräte nur zusammen; sobald sie verbunden sind, gehen die Dateien direkt von einem zum anderen.";
+
+"help.cross.step1" = "Erstelle auf diesem Gerät einen Code für eine Nachricht oder für Dateien.";
+"help.cross.step2" = "Gib diesen Code in Relayium auf dem anderen Gerät ein und tritt bei.";
+"help.cross.step3" = "Prüfe, dass beide Bildschirme denselben Code zeigen, und nimm die Übertragung dann an.";
+"help.cross.question" = "Müssen beide Geräte im selben Netzwerk sein?";
+"help.cross.answer" = "Nein – genau dafür ist dieser Bildschirm da. Einen Code zu erstellen erfordert ein Konto, weil die Verbindung unter Umständen weitergeleitet werden muss und das dem Ersteller berechnet wird. Einem fremden Code beizutreten erfordert gar nichts.";
+
+"help.storedSend.step1" = "Wähle Dateien oder Ordner, lege fest, wie lange der Link funktionieren soll, und sende.";
+"help.storedSend.step2" = "Relayium verschlüsselt alles auf diesem Mac, bevor irgendetwas hochgeladen wird.";
+"help.storedSend.step3" = "Teile den Link. Der Schlüssel zum Öffnen steckt im Link selbst und erreicht Relayium nie.";
+"help.storedSend.question" = "Wer kann den Link öffnen?";
+"help.storedSend.answer" = "Jede Person mit dem vollständigen Link, einschließlich des Teils nach dem #. Relayium speichert nur die verschlüsselte Datei und kann sie nicht lesen – behandle den Link also selbst als Geheimnis.";
+
+"help.inbox.step1" = "Melde dich hier und auf dem Gerät, von dem du senden willst, im selben Konto an.";
+"help.inbox.step2" = "Wähle einen Ordner auf diesem Mac und entscheide, ob Lieferungen automatisch gesichert oder erst nachgefragt werden.";
+"help.inbox.step3" = "Sende von relayium.com oder einem anderen angemeldeten Gerät an diesen Mac – die Dateien landen in diesem Ordner.";
+"help.inbox.question" = "Was passiert, während dieser Mac schläft oder Relayium geschlossen ist?";
+"help.inbox.answer" = "Lieferungen warten auf dem Server, bis Relayium hier wieder läuft. Empfangen kann es nur im laufenden Betrieb – dafür ist die Anmeldeeinstellung oben da.";
+
+"help.account.step1" = "Erstelle ein Konto oder melde dich an – einen Link zu senden und das Gerätepostfach brauchen beides.";
+"help.account.step2" = "Sieh, welchen Tarif du hast und wie viel davon du in diesem Zeitraum verbraucht hast.";
+"help.account.step3" = "Prüfe die in deinem Konto angemeldeten Geräte und die gespeicherten Dateien und entferne beides bei Bedarf.";
+"help.account.question" = "Wofür braucht man ein Konto und wofür nicht?";
+"help.account.answer" = "Übertragungen im selben Netzwerk und das Beitreten zu einem fremden Code brauchen kein Konto. Einen Code erstellen, einen gespeicherten Link senden und das Gerätepostfach brauchen eines.";

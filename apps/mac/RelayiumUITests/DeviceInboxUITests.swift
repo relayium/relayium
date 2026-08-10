@@ -405,7 +405,7 @@ final class DeviceInboxUITests: XCTestCase {
         }
         XCTAssertTrue(revealed("inbox-results-empty", in: window).exists,
                       "the destination has no result list")
-        XCTAssertTrue(revealed("inbox-open-at-login", in: window).exists,
+        XCTAssertTrue(residencyControlExists(in: window),
                       "residency has no control on the destination that depends on it")
         XCTAssertTrue(visibleText(in: window).contains("does not mean the inbox is ready"),
                       "Open at Login is presented as proof of readiness")
@@ -428,6 +428,24 @@ final class DeviceInboxUITests: XCTestCase {
     private func text(of element: XCUIElement) -> String {
         let value = element.value.map { String(describing: $0) } ?? ""
         return element.label + " " + value
+    }
+
+    /// Residency, in whichever of its two shapes this Mac has earned.
+    ///
+    /// **Not one identifier, and that is the point of the control it checks.**
+    /// `LoginItemSetting` renders a `Toggle` only where macOS will actually
+    /// honour it. Where the system reports no login-item record — which is the
+    /// ordinary answer for an app running out of a build directory, i.e. every
+    /// run of THIS suite — it renders a non-interactive state line and the
+    /// remedy for that state instead, because a greyed switch reading "off" is
+    /// worse than a dead control: it reads as a setting somebody turned off.
+    ///
+    /// So the assertion is that residency is REPRESENTED, not that a particular
+    /// widget is. Requiring the toggle would pin the suite to the one shape a
+    /// signed, installed copy produces and fail on the shape CI can produce.
+    private func residencyControlExists(in window: XCUIElement) -> Bool {
+        revealed("login-item-toggle", in: window).exists
+            || revealed("login-item-status", in: window).exists
     }
 
     private func element(_ identifier: String, in window: XCUIElement) -> XCUIElement {
@@ -478,7 +496,7 @@ final class DeviceInboxUITests: XCTestCase {
         XCTAssertTrue(element("inbox-remove-folder", in: window).exists,
                       "a chosen folder cannot be given back")
         XCTAssertTrue(element("inbox-policy", in: window).exists)
-        XCTAssertTrue(revealed("inbox-open-at-login", in: window).exists,
+        XCTAssertTrue(residencyControlExists(in: window),
                       "residency has no control on the surface that depends on it")
         // Open at Login is not evidence the inbox is ready now, and the surface
         // says so rather than leaving the inference to the reader.

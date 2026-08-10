@@ -32,6 +32,10 @@ struct StoredSendDestination: View {
     var body: some View {
         DestinationScaffold(title: L10n.t(.navStoredSend)) {
             UploadPane(model: model, gate: gate)
+            // Below the pane in every state it can be in — including the account
+            // gate, where a reader who cannot yet use the feature is the one most
+            // likely to want to know what it does.
+            HelpCard(surface: .storedSend)
         }
         // `task(id:)` rather than `onChange(of:initial:)`, which is macOS 14 —
         // and rather than a bare `onAppear`, which would miss the usage payload

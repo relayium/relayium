@@ -119,7 +119,16 @@ public final class SignalingClient {
     private let selfLock = NSLock()
 
     private let channel: WebSocketChannel
-    private let name: String
+    /// The name this socket puts in its `join` frame — i.e. the label every
+    /// other member of the room sees for this device.
+    ///
+    /// Public and immutable so a surface can state what this Mac is CALLED in
+    /// the room without recomputing it. Recomputing is the defect: the device
+    /// name is read once, when the socket is built, and a user who renames their
+    /// Mac afterwards is still announced under the old name until the socket is
+    /// replaced. A UI that asked the system again would print a name nobody in
+    /// the room can see.
+    public let announcedName: String
     private let enc = JSONEncoder()
     private let dec = JSONDecoder()
 
@@ -136,7 +145,7 @@ public final class SignalingClient {
 
     public init(channel: WebSocketChannel, name: String) {
         self.channel = channel
-        self.name = name
+        self.announcedName = name
         channel.onOpen = { [weak self] in self?.sendJoin() }
         channel.onText = { [weak self] in self?.handle($0) }
         channel.onClose = { [weak self] in self?.onClose?() }
@@ -253,7 +262,7 @@ public final class SignalingClient {
     /// would silently ignore.
     private struct LeftFrame: Decodable { let peer: String? }
 
-    private func sendJoin() { send(Envelope(type: SignalType.join, name: name)) }
+    private func sendJoin() { send(Envelope(type: SignalType.join, name: announcedName)) }
 
     private func send(_ e: Envelope) {
         guard let d = try? enc.encode(e), let s = String(data: d, encoding: .utf8) else { return }

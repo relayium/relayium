@@ -51,6 +51,10 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case formatBytes = "format.bytes"
     /// %1$@ and %2$@ joined by the middot the whole product uses for details.
     case formatDetailPair = "format.detailPair"
+    /// %1$@ the step's number, %2$@ the step. In the catalog so the numeral,
+    /// its separator and their order are the language's business — `"\(n). "`
+    /// is English punctuation, and one of the nine reads right to left.
+    case formatHelpStep = "format.helpStep"
 
     // MARK: - App lifecycle, menus
 
@@ -58,15 +62,34 @@ public enum L10nKey: String, CaseIterable, Sendable {
 
     // MARK: - Settings (macOS ⌘,)
     //
-    // The login-item rows are four states rather than a switch and a message,
-    // because "registered but held for approval" is neither on nor an error.
+    // The login-item rows are FIVE states rather than a switch and a message,
+    // because "registered but held for approval" is neither on nor an error —
+    // and because `notFound` is two different situations with opposite remedies.
+    // A bundle in Applications that the system holds no record for can ask to be
+    // registered; a translocated one, or one on a disk image, cannot, and
+    // telling its owner to move it to Applications when it is already there was
+    // the dead end this set of keys now avoids.
 
     case settingsGeneral = "settings.general"
     case settingsUpdates = "settings.updates"
     case settingsOpenAtLogin = "settings.openAtLogin"
     case settingsOpenAtLoginBody = "settings.openAtLoginBody"
     case settingsLoginNeedsApproval = "settings.loginNeedsApproval"
-    case settingsLoginUnavailable = "settings.loginUnavailable"
+    /// The bundle is somewhere macOS will not manage. Renamed from
+    /// `settings.loginUnavailable`, which named a state ("unavailable") rather
+    /// than the situation, and so was rendered for the case it does not describe.
+    case settingsLoginUnmanagedLocation = "settings.loginUnmanagedLocation"
+    /// The system reports no record for a bundle that IS in an Applications
+    /// folder — an ordinary situation with a working remedy, not a failure.
+    case settingsLoginUnconfirmed = "settings.loginUnconfirmed"
+    /// The non-interactive state line that replaces the switch in the two states
+    /// that have no working switch. Never a greyed `Toggle`.
+    case settingsLoginNotRegistered = "settings.loginNotRegistered"
+    case settingsLoginTryRegistration = "settings.loginTryRegistration"
+    /// The third outcome of an explicit registration: the call succeeded and the
+    /// system still reports nothing. Neither a success nor a failure, so it
+    /// borrows neither sentence — and it says outright that nothing was removed.
+    case settingsLoginStillUnconfirmed = "settings.loginStillUnconfirmed"
     case settingsLoginRefused = "settings.loginRefused"
     case settingsOpenLoginItems = "settings.openLoginItems"
     case settingsAutomaticUpdates = "settings.automaticUpdates"
@@ -532,6 +555,18 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case uploadReady = "upload.ready"
     case uploadLinkReady = "upload.linkReady"
     case uploadSendAnother = "upload.sendAnother"
+
+    // The CLI equivalent of a finished stored send, which the web has shown
+    // since this feature existed and the Mac app had not.
+    //
+    // The warning is not decoration. Unquoted, everything from `#` onwards is a
+    // shell comment, so pasting the bare link runs a command with the key
+    // removed and fails complaining about something else — and the command, once
+    // run, is written to a history file with the key in it.
+    case storedSendCliHeading = "storedSend.cliHeading"
+    case storedSendCliCopy = "storedSend.cliCopy"
+    case storedSendCliWarning = "storedSend.cliWarning"
+    case storedSendCliDocs = "storedSend.cliDocs"
     case uploadExpiresAfter = "upload.expiresAfter"
     case uploadBurnAfterRead = "upload.burnAfterRead"
     /// The foreground-only truth, rendered while an upload is in flight.
@@ -765,6 +800,27 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case nearbySavedToDownloads = "nearby.savedToDownloads"
     case nearbySavedToAppFolder = "nearby.savedToAppFolder"
     case nearbyA11yReceiving = "nearby.a11yReceiving"
+
+    // What this Mac IS on the network, which the receive surface could not say.
+    //
+    // Two questions somebody asks the moment the device they expect is missing
+    // from the roster — "which of these is me?" and "am I even on the right
+    // network?" — plus the two disclaimers without which the answers mislead.
+    // The address list is read locally while listening and is never stored,
+    // logged or transmitted, and rooms are grouped by the network path the
+    // service observes rather than by anything shown here.
+
+    /// %@ — the name the CURRENT room socket announced. Not the live system
+    /// name: renaming the Mac changes that and not what the room was told.
+    case nearbyAnnouncedAs = "nearby.announcedAs"
+    case nearbyLocalAddressesHeading = "nearby.localAddressesHeading"
+    /// %1$@ the address, %2$@ the interface it is on. Both technical values.
+    case nearbyLocalAddressRow = "nearby.localAddressRow"
+    case nearbyNoLocalAddresses = "nearby.noLocalAddresses"
+    case nearbyAddressesPrivacyNote = "nearby.addressesPrivacyNote"
+    case nearbyAddressesNotGroupingNote = "nearby.addressesNotGroupingNote"
+    case nearbyA11yThisMac = "nearby.a11yThisMac"
+
     case nearbyEmptyRoster = "nearby.emptyRoster"
     case nearbyNamesDisclaimer = "nearby.namesDisclaimer"
     case nearbyA11yDevices = "nearby.a11yDevices"
@@ -1270,6 +1326,52 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// deliberately not presented as evidence that the inbox is ready now, which
     /// is a different claim and one this checkbox cannot make.
     case inboxLoginNote = "inbox.loginNote"
+
+    // MARK: - Help, below the controls on every browseable destination
+    //
+    // Three steps and one common question per screen, chosen to be short: every
+    // string here is nine translations, and help nobody reads because it is long
+    // is worse than help that stops at the useful part. Not collapsible — this
+    // app's rules ban `DisclosureGroup`, and for the reason the root view once
+    // demonstrated: a capability hidden behind a triangle is a capability nobody
+    // finds.
+    //
+    // `help.guideLink` is rendered only where a maintained document actually
+    // exists (`HelpPresentation.topic`), so it is one label rather than five.
+
+    case helpHeading = "help.heading"
+    case helpStepsHeading = "help.stepsHeading"
+    case helpGuideLink = "help.guideLink"
+
+    case helpLanStep1 = "help.lan.step1"
+    case helpLanStep2 = "help.lan.step2"
+    case helpLanStep3 = "help.lan.step3"
+    case helpLanQuestion = "help.lan.question"
+    case helpLanAnswer = "help.lan.answer"
+
+    case helpCrossStep1 = "help.cross.step1"
+    case helpCrossStep2 = "help.cross.step2"
+    case helpCrossStep3 = "help.cross.step3"
+    case helpCrossQuestion = "help.cross.question"
+    case helpCrossAnswer = "help.cross.answer"
+
+    case helpStoredSendStep1 = "help.storedSend.step1"
+    case helpStoredSendStep2 = "help.storedSend.step2"
+    case helpStoredSendStep3 = "help.storedSend.step3"
+    case helpStoredSendQuestion = "help.storedSend.question"
+    case helpStoredSendAnswer = "help.storedSend.answer"
+
+    case helpInboxStep1 = "help.inbox.step1"
+    case helpInboxStep2 = "help.inbox.step2"
+    case helpInboxStep3 = "help.inbox.step3"
+    case helpInboxQuestion = "help.inbox.question"
+    case helpInboxAnswer = "help.inbox.answer"
+
+    case helpAccountStep1 = "help.account.step1"
+    case helpAccountStep2 = "help.account.step2"
+    case helpAccountStep3 = "help.account.step3"
+    case helpAccountQuestion = "help.account.question"
+    case helpAccountAnswer = "help.account.answer"
 }
 
 /// Keys whose value depends on a count.

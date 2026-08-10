@@ -95,6 +95,11 @@ struct LanTransferDestination: View {
                                sessionLocked: sessionLocked)
                 VerificationSetting(locked: sessionLocked, preference: verification)
             }
+            // Below the controls, on every pane, and never in place of them.
+            // Rendered outside the `switch` deliberately: help that appeared only
+            // on the idle screen would be absent exactly when a user is watching
+            // something they do not understand happen.
+            HelpCard(surface: .lanTransfer)
         }
         // A session nobody asked for decides its own kind, so the mode follows
         // it. `task(id:)` rather than `onChange`, because this window may have

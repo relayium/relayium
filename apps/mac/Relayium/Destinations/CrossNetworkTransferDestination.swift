@@ -74,6 +74,10 @@ struct CrossNetworkTransferDestination: View {
                                         sessionLocked: sessionLocked)
                 VerificationSetting(locked: sessionLocked, preference: verification)
             }
+            // Outside the `switch`, for the reason `LanTransferDestination`
+            // records: help present only on the idle pane is absent exactly when
+            // somebody is watching something they do not understand.
+            HelpCard(surface: .crossNetworkTransfer)
         }
     }
 

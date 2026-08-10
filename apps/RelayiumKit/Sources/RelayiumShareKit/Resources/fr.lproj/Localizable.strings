@@ -36,7 +36,7 @@
 "settings.openAtLogin" = "Ouvrir Relayium à l’ouverture de session";
 "settings.openAtLoginBody" = "Relayium ne peut recevoir que lorsqu’il est en cours d’exécution. En l’ouvrant à l’ouverture de session, ce Mac reste joignable après un redémarrage sans que personne ait à lancer l’app.";
 "settings.loginNeedsApproval" = "macOS attend que vous autorisiez Relayium dans « Ouverture ».";
-"settings.loginUnavailable" = "macOS ne gère pas cette copie de Relayium. Placez-la dans le dossier Applications et ouvrez-la depuis là.";
+"settings.loginUnmanagedLocation" = "macOS ne gère pas cette copie de Relayium. Placez-la dans le dossier Applications et ouvrez-la depuis là.";
 "settings.loginRefused" = "macOS a refusé la modification. Vérifiez si Relayium est bloqué dans « Ouverture ».";
 "settings.openLoginItems" = "Ouvrir les réglages « Ouverture »";
 "settings.automaticUpdates" = "Rechercher les mises à jour automatiquement";
@@ -678,3 +678,62 @@
 "link.acceptFiles" = "Accepter les fichiers";
 "link.declineFiles" = "Refuser";
 "link.historyIsLocal" = "Cette conversation n’existe que sur ces deux appareils et est effacée à la fin de la connexion.";
+
+/* MARK: 1.1.2 — numbered help steps */
+"format.helpStep" = "%1$@. %2$@";
+
+/* MARK: 1.1.2 — login item: notFound is two situations */
+"settings.loginUnconfirmed" = "macOS ne signale aucun enregistrement d’élément d’ouverture pour cette copie de Relayium, alors qu’elle se trouve bien dans un dossier Applications. Vous pouvez demander à macOS de l’enregistrer maintenant.";
+"settings.loginNotRegistered" = "Relayium n’est pas enregistré pour s’ouvrir à l’ouverture de session.";
+"settings.loginTryRegistration" = "Tenter l’enregistrement";
+"settings.loginStillUnconfirmed" = "Relayium a demandé son enregistrement à macOS, qui ne signale toujours aucun enregistrement. Rien n’a été supprimé et un enregistrement déjà existant reste intact. Ouvrez les Éléments d’ouverture pour vérifier, et redémarrez ce Mac si Relayium n’y figure pas.";
+
+/* MARK: 1.1.2 — what this Mac is on the network */
+"nearby.announcedAs" = "Les autres appareils de ce salon voient ce Mac sous le nom %@.";
+"nearby.localAddressesHeading" = "Les adresses propres à ce Mac en ce moment :";
+"nearby.localAddressRow" = "%1$@ (%2$@)";
+"nearby.noLocalAddresses" = "Aucune adresse utilisable n’a été trouvée. Ce Mac n’atteint peut-être le réseau que via un VPN ou une liaison incapable de porter un transfert direct.";
+"nearby.addressesPrivacyNote" = "Cette liste est créée sur ce Mac pendant qu’il est à l’écoute et n’est affichée qu’ici. Relayium ne conserve ni ne journalise cette liste.";
+"nearby.addressesNotGroupingNote" = "Les appareils sont regroupés selon le chemin réseau observé par le service Relayium, et non selon ces adresses : deux appareils sur le même câble peuvent donc se retrouver dans des groupes différents.";
+"nearby.a11yThisMac" = "Ce Mac sur le réseau";
+
+/* MARK: 1.1.2 — the CLI equivalent of a finished stored send */
+"storedSend.cliHeading" = "Le même téléchargement, depuis un terminal";
+"storedSend.cliCopy" = "Copier la commande";
+"storedSend.cliWarning" = "Les guillemets sont indispensables : sans eux, tout ce qui suit le # devient un commentaire pour l’interpréteur, la clé est perdue et le téléchargement échoue. Cette commande contient la clé qui ouvre le fichier, et la plupart des interpréteurs consignent les commandes exécutées dans un fichier d’historique.";
+"storedSend.cliDocs" = "Documentation de la CLI Relayium";
+
+/* MARK: 1.1.2 — help, below the controls on every browseable destination */
+"help.heading" = "Aide";
+"help.stepsHeading" = "Comment ça marche";
+"help.guideLink" = "Lire le guide sur relayium.com";
+
+"help.lan.step1" = "Ouvrez Relayium sur les deux appareils et laissez-les sur le même réseau.";
+"help.lan.step2" = "Choisissez l’autre appareil dans la liste, puis envoyez un message ou les fichiers que vous avez ajoutés.";
+"help.lan.step3" = "Si la vérification est active, contrôlez que les deux écrans affichent le même code avant d’accepter.";
+"help.lan.question" = "Les fichiers passent-ils par les serveurs de Relayium ?";
+"help.lan.answer" = "Non. Le service Relayium ne fait que mettre les deux appareils en relation ; une fois connectés, les fichiers circulent directement de l’un à l’autre.";
+
+"help.cross.step1" = "Sur cet appareil, créez un code pour un message ou pour des fichiers.";
+"help.cross.step2" = "Saisissez ce code dans Relayium sur l’autre appareil, puis rejoignez.";
+"help.cross.step3" = "Vérifiez que les deux écrans affichent le même code, puis acceptez le transfert.";
+"help.cross.question" = "Les deux appareils doivent-ils être sur le même réseau ?";
+"help.cross.answer" = "Non, c’est précisément l’objet de cet écran. Créer un code exige un compte, car la connexion peut devoir être relayée et cela est facturé à celui qui l’a créée. Rejoindre le code de quelqu’un d’autre n’exige rien.";
+
+"help.storedSend.step1" = "Choisissez des fichiers ou des dossiers, décidez combien de temps le lien doit rester actif, puis envoyez.";
+"help.storedSend.step2" = "Relayium chiffre tout sur ce Mac avant le moindre envoi.";
+"help.storedSend.step3" = "Partagez le lien. La clé qui l’ouvre voyage à l’intérieur du lien et n’atteint jamais Relayium.";
+"help.storedSend.question" = "Qui peut ouvrir le lien ?";
+"help.storedSend.answer" = "Toute personne disposant du lien complet, y compris la partie après le #. Relayium ne conserve que le fichier chiffré et ne peut pas le lire : traitez donc le lien lui-même comme un secret.";
+
+"help.inbox.step1" = "Connectez-vous au même compte ici et sur l’appareil depuis lequel vous voulez envoyer.";
+"help.inbox.step2" = "Choisissez un dossier sur ce Mac, puis décidez si les livraisons sont enregistrées automatiquement ou soumises à votre accord.";
+"help.inbox.step3" = "Envoyez vers ce Mac depuis relayium.com ou un autre appareil connecté : les fichiers arrivent dans ce dossier.";
+"help.inbox.question" = "Que se passe-t-il pendant que ce Mac dort ou que Relayium est fermé ?";
+"help.inbox.answer" = "Les livraisons attendent sur le serveur jusqu’à ce que Relayium tourne de nouveau ici. Il ne peut recevoir que lorsqu’il est en cours d’exécution : c’est à cela que sert le réglage d’ouverture de session ci-dessus.";
+
+"help.account.step1" = "Créez un compte ou connectez-vous : envoyer un lien et la boîte de réception d’appareil en demandent un.";
+"help.account.step2" = "Consultez votre formule et ce que vous en avez consommé sur la période.";
+"help.account.step3" = "Passez en revue les appareils connectés à votre compte et les fichiers que vous avez stockés, et supprimez les uns comme les autres.";
+"help.account.question" = "Qu’est-ce qui demande un compte et qu’est-ce qui n’en demande pas ?";
+"help.account.answer" = "Le transfert sur le même réseau et le fait de rejoindre un code créé par quelqu’un d’autre n’en demandent aucun. Créer un code, envoyer un lien stocké et la boîte de réception d’appareil en demandent un.";

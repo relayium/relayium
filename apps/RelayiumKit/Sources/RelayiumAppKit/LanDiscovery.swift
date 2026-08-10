@@ -171,6 +171,21 @@ public final class LanDiscoveryModel: ObservableObject {
     /// The peer id the user picked, or nil. Only ever set by `select`.
     @Published public private(set) var selectedId: String?
 
+    /// The name the CURRENT room socket announced this Mac under, or nil while
+    /// there is no socket.
+    ///
+    /// Captured at socket open rather than derived on demand, because those two
+    /// answers diverge in an ordinary way: the label is read once when the
+    /// socket is built, so renaming the Mac in Sharing settings changes what
+    /// `AppEnvironment.deviceName()` returns while every other device in the
+    /// room still sees the old one. A surface that showed the live system name
+    /// would be telling the user to look for something nobody else can see.
+    ///
+    /// Nil is a real answer and is rendered as "no socket", never as a blank
+    /// name: `teardown()` clears it, so a paused, stopped or reconnecting room
+    /// makes no claim about what this Mac is called anywhere.
+    @Published public private(set) var announcedName: String?
+
     /// The live room socket. Handed to `RealtimeConnectionFactory.connectNearby`
     /// so a transfer reuses the very socket the roster came from — reconnecting
     /// would earn a new peer id and a roster the user never saw.
@@ -429,6 +444,12 @@ public final class LanDiscoveryModel: ObservableObject {
             }
         }
         client = socket
+        // Snapshotted HERE, from the socket itself, and never recomputed. The
+        // device name is read once — when `connect()` builds the socket — so
+        // asking the system again later would print a name the room has never
+        // been told about, which is exactly what a user who renames their Mac
+        // and does not reconnect would be shown.
+        announcedName = socket.announcedName
         // `teardown()` above has already ended the previous room for the
         // announcer, so this only has to arm the new one's retries.
         scheduleCapsRetries()
@@ -475,6 +496,9 @@ public final class LanDiscoveryModel: ObservableObject {
         selfId = ""
         devices = []
         selectedId = nil
+        // Cleared with the socket that announced it. A name left behind after
+        // the room ends is a claim about a room this Mac is no longer in.
+        announcedName = nil
     }
 
     /// The user picked a row. Rejects anything that is not currently in the
@@ -548,6 +572,12 @@ public final class LanDiscoveryModel: ObservableObject {
         selfId = ""
         devices = []
         selectedId = nil
+        // Cleared here as well as in `teardown()`, because a DROP is the other
+        // way a socket ends and this path does not go through it. Between the
+        // drop and the next successful join this Mac is announced to nobody, so
+        // keeping the last socket's name would leave the receive surface naming
+        // a room it is no longer in — and the next socket earns a new one anyway.
+        announcedName = nil
         guard isResident, !isPausedByUser else {
             state = isPausedByUser ? .paused : .off
             return

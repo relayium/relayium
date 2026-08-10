@@ -77,6 +77,10 @@ struct AccountDestination: View {
             case let .ready(user, usage):
                 AccountView(user: user, usage: usage)
             }
+            // Outside the `switch` over `session.state`, so the sign-in form,
+            // the check-email screen and the ready account all end the same way.
+            // A reader who cannot sign in is the one with the most questions.
+            HelpCard(surface: .account)
         }
     }
 

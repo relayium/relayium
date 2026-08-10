@@ -36,7 +36,7 @@
 "settings.openAtLogin" = "Abrir o Relayium ao iniciar sessão";
 "settings.openAtLoginBody" = "O Relayium só consegue receber enquanto está em execução. Abri-lo ao iniciar sessão mantém este Mac acessível depois de reiniciar, sem que alguém tenha de abrir a app primeiro.";
 "settings.loginNeedsApproval" = "O macOS está a aguardar que autorize o Relayium nos «Itens de início de sessão».";
-"settings.loginUnavailable" = "O macOS não gere esta cópia do Relayium. Mova-a para a pasta Aplicações e abra-a a partir daí.";
+"settings.loginUnmanagedLocation" = "O macOS não gere esta cópia do Relayium. Mova-a para a pasta Aplicações e abra-a a partir daí.";
 "settings.loginRefused" = "O macOS recusou a alteração. Verifique se o Relayium está bloqueado nos «Itens de início de sessão».";
 "settings.openLoginItems" = "Abrir definições de itens de início de sessão";
 "settings.automaticUpdates" = "Procurar atualizações automaticamente";
@@ -678,3 +678,62 @@
 "link.acceptFiles" = "Aceitar ficheiros";
 "link.declineFiles" = "Recusar";
 "link.historyIsLocal" = "Esta conversa só existe nestes dois dispositivos e é descartada quando a ligação termina.";
+
+/* MARK: 1.1.2 — numbered help steps */
+"format.helpStep" = "%1$@. %2$@";
+
+/* MARK: 1.1.2 — login item: notFound is two situations */
+"settings.loginUnconfirmed" = "O macOS não relata nenhum registro de item de início para esta cópia do Relayium, embora ela esteja numa pasta Aplicativos. Você pode pedir ao macOS que a registre agora.";
+"settings.loginNotRegistered" = "O Relayium não está registrado para abrir ao iniciar a sessão.";
+"settings.loginTryRegistration" = "Tentar o registro";
+"settings.loginStillUnconfirmed" = "O Relayium pediu ao macOS que o registrasse e o macOS continua não relatando nenhum registro. Nada foi removido, e qualquer registro que já existisse permanece intacto. Abra os Itens de Início para conferir e reinicie este Mac se o Relayium não estiver listado lá.";
+
+/* MARK: 1.1.2 — what this Mac is on the network */
+"nearby.announcedAs" = "Os outros dispositivos desta sala veem este Mac como %@.";
+"nearby.localAddressesHeading" = "Os endereços do próprio Mac neste momento:";
+"nearby.localAddressRow" = "%1$@ (%2$@)";
+"nearby.noLocalAddresses" = "Nenhum endereço utilizável foi encontrado. Talvez este Mac só alcance a rede por uma VPN ou por um enlace incapaz de sustentar uma transferência direta.";
+"nearby.addressesPrivacyNote" = "Esta lista é criada neste Mac enquanto ele está à escuta e aparece apenas aqui. O Relayium não guarda nem registra a lista.";
+"nearby.addressesNotGroupingNote" = "Os dispositivos são agrupados pelo caminho de rede que o serviço do Relayium observa, e não por estes endereços — dois dispositivos no mesmo cabo ainda podem acabar em grupos diferentes.";
+"nearby.a11yThisMac" = "Este Mac na rede";
+
+/* MARK: 1.1.2 — the CLI equivalent of a finished stored send */
+"storedSend.cliHeading" = "O mesmo download, a partir de um terminal";
+"storedSend.cliCopy" = "Copiar comando";
+"storedSend.cliWarning" = "As aspas são obrigatórias: sem elas, tudo a partir do # vira comentário para o shell, a chave se perde e o download falha. Este comando carrega a chave que abre o arquivo, e a maioria dos shells anota o que você executa num arquivo de histórico.";
+"storedSend.cliDocs" = "Documentação da CLI do Relayium";
+
+/* MARK: 1.1.2 — help, below the controls on every browseable destination */
+"help.heading" = "Ajuda";
+"help.stepsHeading" = "Como funciona";
+"help.guideLink" = "Ler o guia em relayium.com";
+
+"help.lan.step1" = "Abra o Relayium nos dois dispositivos e mantenha-os na mesma rede.";
+"help.lan.step2" = "Escolha o outro dispositivo na lista e envie uma mensagem ou os arquivos que você adicionou.";
+"help.lan.step3" = "Se a verificação estiver ativada, confira se as duas telas mostram o mesmo código antes de aceitar.";
+"help.lan.question" = "Os arquivos passam pelos servidores do Relayium?";
+"help.lan.answer" = "Não. O serviço do Relayium apenas apresenta os dois dispositivos um ao outro; depois de conectados, os arquivos vão direto de um para o outro.";
+
+"help.cross.step1" = "Neste dispositivo, crie um código para uma mensagem ou para arquivos.";
+"help.cross.step2" = "Digite esse código no Relayium do outro dispositivo e entre.";
+"help.cross.step3" = "Confira se as duas telas mostram o mesmo código e aceite a transferência.";
+"help.cross.question" = "Os dois dispositivos precisam estar na mesma rede?";
+"help.cross.answer" = "Não — é exatamente para isso que esta tela existe. Criar um código exige uma conta, porque a conexão pode precisar ser retransmitida e isso é cobrado de quem a criou. Entrar num código feito por outra pessoa não exige nada.";
+
+"help.storedSend.step1" = "Escolha arquivos ou pastas, defina por quanto tempo o link deve continuar funcionando e envie.";
+"help.storedSend.step2" = "O Relayium criptografa tudo neste Mac antes de qualquer envio.";
+"help.storedSend.step3" = "Compartilhe o link. A chave que o abre viaja dentro do próprio link e nunca chega ao Relayium.";
+"help.storedSend.question" = "Quem pode abrir o link?";
+"help.storedSend.answer" = "Qualquer pessoa com o link inteiro, incluindo a parte depois do #. O Relayium guarda apenas o arquivo criptografado e não consegue lê-lo, então trate o próprio link como segredo.";
+
+"help.inbox.step1" = "Entre na mesma conta aqui e no dispositivo de onde você quer enviar.";
+"help.inbox.step2" = "Escolha uma pasta neste Mac e decida se as entregas são salvas automaticamente ou ficam esperando sua resposta.";
+"help.inbox.step3" = "Envie para este Mac pelo relayium.com ou por outro dispositivo com sessão iniciada, e os arquivos chegam nessa pasta.";
+"help.inbox.question" = "O que acontece enquanto este Mac dorme ou o Relayium está fechado?";
+"help.inbox.answer" = "As entregas esperam no servidor até o Relayium voltar a rodar aqui. Ele só recebe enquanto está em execução, e é para isso que serve o ajuste de início de sessão acima.";
+
+"help.account.step1" = "Crie uma conta ou entre — enviar um link e a Caixa de Entrada do Dispositivo precisam de uma.";
+"help.account.step2" = "Veja em que plano você está e quanto dele já usou neste período.";
+"help.account.step3" = "Revise os dispositivos com sessão iniciada na sua conta e os arquivos que você armazenou, e remova qualquer um dos dois.";
+"help.account.question" = "O que precisa de conta e o que não precisa?";
+"help.account.answer" = "Transferência na mesma rede e entrar num código criado por outra pessoa não precisam de conta. Criar um código, enviar um link armazenado e a Caixa de Entrada do Dispositivo precisam.";

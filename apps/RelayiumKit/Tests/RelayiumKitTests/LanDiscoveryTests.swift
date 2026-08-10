@@ -336,6 +336,85 @@ final class LanDiscoveryTests: XCTestCase {
         model.stop()
         XCTAssertFalse(model.capabilities.supports("other-3", TEXT_CAPABILITY))
     }
+
+    // MARK: - the name this Mac is announced under
+
+    /// The roster shows names and this Mac's own name was nowhere on the
+    /// receive screen, so "which of these is me" had no answer.
+    ///
+    /// The value has to come from the SOCKET, not from the system: the device
+    /// name is read once, when the socket is built, so renaming the Mac changes
+    /// what the system reports and not what the room was told. A surface showing
+    /// the live name would be telling the user to look for something no other
+    /// device can see.
+    func testTheAnnouncedNameIsTheOneTheCurrentSocketActuallyJoinedWith() async {
+        let model = makeModel()
+        XCTAssertNil(model.announcedName, "no socket, no claim about any room")
+        model.start()
+        await settle()
+        XCTAssertEqual(model.announcedName, "Mac")
+    }
+
+    /// Renaming the Mac between sockets is exactly the situation this guards.
+    /// Until the socket is replaced, the room still sees the old name — and so
+    /// does the surface.
+    func testARenameIsInvisibleUntilTheSocketIsReplaced() async {
+        var announced = "Old name"
+        let log = SocketLog()
+        let model = LanDiscoveryModel(connect: {
+            let ch = log.open()
+            let client = SignalingClient(channel: ch, name: announced)
+            ch.fireOpen()
+            return client
+        }, sleep: { _ in })
+        model.start()
+        await settle()
+        XCTAssertEqual(model.announcedName, "Old name")
+
+        announced = "New name"
+        await settle()
+        XCTAssertEqual(model.announcedName, "Old name",
+                       "the room has not been told, so the surface must not claim it")
+
+        model.start()
+        await settle()
+        XCTAssertEqual(model.announcedName, "New name",
+                       "a replaced socket announces the current name")
+    }
+
+    /// Cleared with the socket that announced it. A name left behind after a
+    /// pause or a stop is a claim about a room this Mac is no longer in.
+    func testTheAnnouncedNameIsClearedWheneverTheSocketEnds() async {
+        let model = makeModel()
+        model.start()
+        await settle()
+        XCTAssertNotNil(model.announcedName)
+        model.pause()
+        XCTAssertNil(model.announcedName, "a paused Mac announces nothing")
+
+        model.resume()
+        await settle()
+        XCTAssertNotNil(model.announcedName)
+        model.stop()
+        XCTAssertNil(model.announcedName, "a stopped Mac announces nothing")
+    }
+
+    /// A DROP is the other way a socket ends, and it does not go through
+    /// `teardown()`. Between the drop and the next join this Mac is announced to
+    /// nobody, so the last socket's name must not survive the gap — the next
+    /// socket earns its own, and may earn a different one.
+    func testADroppedSocketAnnouncesNothingUntilItHasRejoined() async {
+        let model = makeModel()
+        model.start()
+        await settle()
+        XCTAssertEqual(model.announcedName, "Mac")
+
+        channel.fireRemoteClose()
+        await settle()
+        XCTAssertNil(model.announcedName,
+                     "a reconnecting Mac is in no room and must claim no name in one")
+    }
+
 }
 
 // ── residency: the socket that makes this Mac reachable ─────────────────────

@@ -51,6 +51,16 @@ struct LanConnectPane: View {
 
     @State private var actionError: String?
 
+    /// This Mac's own usable addresses, held for exactly as long as they are on
+    /// screen.
+    ///
+    /// View state and nothing else: never written to `UserDefaults`, never
+    /// logged, never sent anywhere, and emptied by the refresh task the moment
+    /// the socket stops listening. An address inventory is a fingerprint
+    /// of somebody's home network, and the app's only legitimate use for one is
+    /// to show it to the person whose network it is.
+    @State private var localAddresses: [LocalNetworkAddress] = []
+
     /// This destination's own route. Named once, so the ownership claim, the
     /// release and the opened-file batch all address the same one.
     private let route = AppDestination.nearby
@@ -81,6 +91,43 @@ struct LanConnectPane: View {
         // republished, so keying on the batch alone would strand it.
         .task(id: FileOpenAdoption(staged: fileOpenRouting.staged, busy: sessionLocked)) {
             adoptOpenedFiles()
+        }
+        // Re-measured periodically while listening, and immediately on every
+        // socket edge. A DHCP renewal or interface change does not have to tear
+        // down an existing WebSocket, so relying on reconnect alone can leave a
+        // stale address visible indefinitely.
+        .task(id: LanIdentitySnapshot(listening: isListening,
+                                      socket: discovery.announcedName)) {
+            await refreshLocalAddressesWhileListening()
+        }
+    }
+
+    /// Two facts, so a reconnect under a new name or a move to another network
+    /// re-reads rather than leaving the previous socket's answer on screen.
+    private struct LanIdentitySnapshot: Equatable {
+        let listening: Bool
+        let socket: String?
+    }
+
+    /// Read while listening, cleared otherwise. The short periodic refresh
+    /// covers address changes that do not force the room socket to reconnect;
+    /// cancellation is owned by SwiftUI when the socket identity changes or the
+    /// view disappears.
+    private func refreshLocalAddressesWhileListening() async {
+        guard isListening, discovery.announcedName != nil else {
+            localAddresses = []
+            return
+        }
+        while !Task.isCancelled {
+            let next = LocalAddressInventory.current()
+            if next != localAddresses {
+                localAddresses = next
+            }
+            do {
+                try await Task.sleep(nanoseconds: 5_000_000_000)
+            } catch {
+                return
+            }
         }
     }
 
@@ -174,10 +221,99 @@ struct LanConnectPane: View {
             if let failure = receive.lastFailure {
                 InlineMessage(.warning, failure)
             }
+            listeningIdentity
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(L10n.t(.nearbyA11yReceiving))
         .frame(maxWidth: 720, alignment: .leading)
+    }
+
+    /// **What this Mac is called in the room, and which network it is actually
+    /// on.**
+    ///
+    /// Two questions the receive surface could not answer, and both of them are
+    /// what somebody asks when the device they expect is not in the roster.
+    ///
+    ///  - *Which of these is me?* The roster shows names, and this Mac's own name
+    ///    was nowhere on the screen. The value shown is the one the CURRENT
+    ///    socket announced — `LanDiscoveryModel` snapshots it at socket open —
+    ///    not the live system name, because renaming the Mac changes the second
+    ///    and not the first, and every other device in the room sees the first.
+    ///  - *Am I on the network I think I am?* A Mac silently moved onto a guest
+    ///    VLAN, a hotspot or a VPN looks identical to one that is fine. Its own
+    ///    addresses are the only local evidence there is.
+    ///
+    /// Both are stated with what they do NOT mean, because the inference is
+    /// otherwise irresistible and wrong: peers are grouped by the network path
+    /// the service observes, not by anything measured here, so two Macs sharing
+    /// a printer subnet can still be in different rooms.
+    ///
+    /// Shown only while a socket is actually listening, and dropped the moment it
+    /// is not — an address list is a fingerprint of somebody's home network, and
+    /// this app writes it nowhere, sends it nowhere and keeps it no longer than
+    /// the screen that shows it.
+    @ViewBuilder
+    private var listeningIdentity: some View {
+        if let announced = discovery.announcedName, isListening {
+            VStack(alignment: .leading, spacing: 4) {
+                // The peer-supplied-name rules do not apply: this is our own
+                // announcement. It is isolated rather than translated so a name
+                // with Latin characters keeps its reading order inside Arabic.
+                Text(L10n.t(.nearbyAnnouncedAs, [L10n.token(announced)]))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+                    .accessibilityIdentifier("lan-announced-name")
+                if localAddresses.isEmpty {
+                    Text(L10n.t(.nearbyNoLocalAddresses))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("lan-local-addresses-empty")
+                } else {
+                    Text(L10n.t(.nearbyLocalAddressesHeading))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    ForEach(localAddresses) { address in
+                        // Address and interface both isolated: they are technical
+                        // values, and a bidi run would reorder the octets of one
+                        // inside an Arabic sentence.
+                        Text(L10n.t(.nearbyLocalAddressRow,
+                                    [L10n.token(address.text), L10n.token(address.interfaceName)]))
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                            // On the LEAF, never on the `ForEach`: a container
+                            // identifier propagates down and renames what is
+                            // inside it, which is the defect the Device Inbox
+                            // pane has already lost two controls to.
+                            .accessibilityIdentifier("lan-local-address")
+                    }
+                }
+                // The two disclaimers this section cannot be honest without.
+                Text(L10n.t(.nearbyAddressesPrivacyNote))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(L10n.t(.nearbyAddressesNotGroupingNote))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(L10n.t(.nearbyA11yThisMac))
+        }
+    }
+
+    /// The room has assigned this Mac a peer id and it can answer. `connecting`
+    /// is deliberately excluded along with `reconnecting`: before `welcome`
+    /// there is no peer id, so the receive model itself says this Mac is not yet
+    /// reachable and the identity block must not imply otherwise.
+    private var isListening: Bool {
+        switch receive.state {
+        case .ready, .active: return true
+        case .off, .paused, .connecting, .reconnecting: return false
+        }
     }
 
     @ViewBuilder

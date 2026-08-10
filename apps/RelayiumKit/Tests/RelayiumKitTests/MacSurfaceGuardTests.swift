@@ -233,17 +233,27 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(names.count, minimum,
                                     "found \(names.count) sources at \(root.path)")
         return try names.map { name in
-            let raw = try String(contentsOf: root.appendingPathComponent(name), encoding: .utf8)
-            let code = raw
-                .components(separatedBy: "\n")
-                .filter { line in
-                    let trimmed = line.trimmingCharacters(in: .whitespaces)
-                    return !trimmed.hasPrefix("//") && !trimmed.hasPrefix("*")
-                        && !trimmed.hasPrefix("/*")
-                }
-                .joined(separator: "\n")
-            return (name, code)
+            (name, codeOnly(try String(contentsOf: root.appendingPathComponent(name),
+                                       encoding: .utf8)))
         }
+    }
+
+    /// One source with its whole-line comments dropped.
+    ///
+    /// Extracted so a guard can point at a file OUTSIDE `apps/mac/Relayium` —
+    /// the shared package's address enumeration, for one — and still get the
+    /// property every guard here depends on: these files explain what they
+    /// deliberately do NOT do, so raw text fails on the very sentence promising
+    /// the absence being checked for.
+    private func codeOnly(_ raw: String) -> String {
+        raw
+            .components(separatedBy: "\n")
+            .filter { line in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                return !trimmed.hasPrefix("//") && !trimmed.hasPrefix("*")
+                    && !trimmed.hasPrefix("/*")
+            }
+            .joined(separator: "\n")
     }
 
     /// One named source, by its path relative to `apps/mac/Relayium`.
@@ -933,6 +943,226 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "the view retains a second copy of a recovery credential")
     }
 
+    // MARK: - help, below the controls, on every browseable destination
+
+    /// **Every browseable screen ends with help; the hidden one does not.**
+    ///
+    /// The owner's report was that a destination states what it is, hands over
+    /// the controls and stops. Three assertions carry the repair, and each has a
+    /// way of looking done and not being: help rendered inside a `switch` arm is
+    /// absent from the states a confused reader is most likely to be in, help
+    /// that is not last is help above the thing it explains, and help on the
+    /// deep-link-only screen is a tutorial for getting somewhere nobody browses.
+    func testEveryBrowseableDestinationEndsWithHelpAndTheHiddenOneDoesNot() throws {
+        // The four scaffold destinations render the card.
+        for (surface, file) in [
+            (MacSurface.lanTransfer, lanDestination),
+            (.crossNetworkTransfer, crossDestination),
+            (.storedSend, "Destinations/StoredSendDestination.swift"),
+            (.account, "Destinations/AccountDestination.swift"),
+        ] {
+            let text = try source(named: file)
+            XCTAssertTrue(text.contains("HelpCard(surface: .\(surface.rawValue))"),
+                          "\(file) offers no help below its controls")
+            // Below, not above: the controls are what the screen is for.
+            guard let scaffold = text.range(of: "DestinationScaffold(title:"),
+                  let help = text.range(of: "HelpCard(surface:") else {
+                return XCTFail("\(file) no longer has the shape this guards")
+            }
+            XCTAssertLessThan(scaffold.upperBound, help.lowerBound)
+        }
+        // Both transfer destinations render it OUTSIDE the pane `switch`, so it
+        // survives a live session rather than existing only on the idle screen.
+        for file in [lanDestination, crossDestination] {
+            let text = try source(named: file)
+            guard let connect = text.range(of: "case .connect:"),
+                  let help = text.range(of: "HelpCard(surface:") else {
+                return XCTFail("\(file) no longer has the shape this guards")
+            }
+            XCTAssertLessThan(connect.lowerBound, help.lowerBound,
+                              "\(file) renders help inside one pane arm only")
+        }
+        // The Account screen's is outside its `session.state` switch, so the
+        // sign-in form gets it too — the reader with the most questions.
+        let account = try source(named: "Destinations/AccountDestination.swift")
+        guard let ready = account.range(of: "case let .ready(user, usage):"),
+              let accountHelp = account.range(of: "HelpCard(surface:") else {
+            return XCTFail("AccountDestination no longer has the shape this guards")
+        }
+        XCTAssertLessThan(ready.lowerBound, accountHelp.lowerBound)
+
+        // The hidden one, asserted as an absence.
+        XCTAssertFalse(try source(named: "Destinations/StoredReceiveDestination.swift")
+            .contains("Help"),
+            "the deep-link-only screen grew a tutorial for reaching it")
+
+        // No destination reprints its own name in the help block, which would
+        // put back the page heading this app removed.
+        let help = try source(named: "Components/HelpSection.swift")
+        for heading in ["navLanTransfer", "navCrossNetwork", "navStoredSend",
+                        "navAccount", "inboxTitle"] {
+            XCTAssertFalse(help.contains(heading),
+                           "the help block reprints a destination heading: \(heading)")
+        }
+    }
+
+    /// The Device Inbox's help is a `Form` section, it is the LAST one, and it
+    /// is outside the account/status branch — so all three branches end with it.
+    ///
+    /// It must also not arrive with a scroll view: this surface is the one
+    /// destination that supplies its own (`scrolls: false`), because a grouped
+    /// `Form` already is one, and nesting a second swallows the gesture.
+    func testTheDeviceInboxHelpIsItsLastFormSectionInEveryBranch() throws {
+        let surface = try source(named: "DeviceInbox/DeviceInboxSurface.swift")
+        XCTAssertTrue(surface.contains("HelpFormSection(surface: .deviceInbox)"),
+                      "the Device Inbox offers no help")
+        XCTAssertFalse(surface.contains("HelpCard("),
+                       "a card inside a grouped Form draws a box inside a box")
+        guard let lastBranch = surface.range(of: "accountSection(gate)"),
+              let help = surface.range(of: "HelpFormSection(surface:"),
+              let style = surface.range(of: ".formStyle(.grouped)") else {
+            return XCTFail("the Device Inbox surface no longer has the shape this guards")
+        }
+        XCTAssertLessThan(lastBranch.upperBound, help.lowerBound,
+                          "help is inside the account branch, so two branches lack it")
+        XCTAssertLessThan(help.upperBound, style.lowerBound,
+                          "help is not the last section of the Form")
+        // No second scroll view, on the surface or on its host.
+        for file in ["DeviceInbox/DeviceInboxSurface.swift",
+                     "Destinations/DeviceInboxDestination.swift"] {
+            XCTAssertFalse(try source(named: file).contains("ScrollView"),
+                           "\(file) nests a scroll view around a Form")
+        }
+        XCTAssertTrue(try source(named: "Destinations/DeviceInboxDestination.swift")
+            .contains("scrolls: false"),
+            "the Device Inbox stopped supplying its own scrolling")
+    }
+
+    // MARK: - what this Mac is on the network
+
+    /// **The LAN receive surface says what this Mac is called and where it is,
+    /// and says what neither fact means.**
+    ///
+    /// Four things have to hold together or the section is worse than nothing.
+    /// The name must come from the SOCKET — the live system name is what a user
+    /// who renamed their Mac sees, and no other device sees it. The addresses
+    /// must be gated on actually listening and cleared otherwise, or they
+    /// describe a network this Mac may have left. Neither may be persisted or
+    /// logged: an address inventory is a fingerprint of somebody's home network.
+    /// And both need the disclaimer that rooms are grouped by the path the
+    /// service observes, because the inference that they are not is irresistible.
+    func testTheLanReceiveSurfaceNamesThisMacAndItsAddressesTruthfully() throws {
+        let pane = try source(named: lanConnect)
+
+        // The socket's answer, not the system's.
+        XCTAssertTrue(pane.contains("if let announced = discovery.announcedName, isListening {"),
+                      "the announced name is rendered without a socket or without listening")
+        XCTAssertTrue(pane.contains("L10n.t(.nearbyAnnouncedAs, [L10n.token(announced)])"))
+        for live in ["AppEnvironment.deviceName", "Host.current", "ProcessInfo"] {
+            XCTAssertFalse(pane.contains(live),
+                           "the surface recomputes a name the room was never told: \(live)")
+        }
+
+        // Read while listening, emptied otherwise. The clearing half is the one
+        // that keeps a stale list off a paused or stopped screen.
+        XCTAssertTrue(pane.contains(
+            "guard isListening, discovery.announcedName != nil else {\n            localAddresses = []"),
+            "the address list is not cleared when the socket stops listening")
+        XCTAssertTrue(pane.contains("while !Task.isCancelled"),
+                      "addresses are read only once and can go stale without a reconnect")
+        XCTAssertTrue(pane.contains("let next = LocalAddressInventory.current()"),
+                      "the listening surface never refreshes its local addresses")
+        XCTAssertTrue(pane.contains("if next != localAddresses {"),
+                      "an unchanged address list invalidates the whole pane on every refresh")
+        XCTAssertTrue(pane.contains("@State private var localAddresses: [LocalNetworkAddress] = []"),
+                      "the address inventory must be view state and nothing longer-lived")
+        XCTAssertTrue(pane.contains("case .off, .paused, .connecting, .reconnecting: return false"),
+                      "a Mac with no socket must make no claim about being reachable")
+
+        // Nowhere else in the app touches the inventory at all.
+        let readers = try sources(under: macRoot, atLeast: 30)
+            .filter { $0.text.contains("LocalAddressInventory") }.map(\.name)
+        XCTAssertEqual(readers, [lanConnect],
+                       "a second surface reads this Mac's addresses")
+
+        // Never stored, never logged, never sent.
+        for sink in ["UserDefaults", "NSLog", "os_log", "Logger(", "print(",
+                     "FileManager.default.createFile", "URLRequest"] {
+            XCTAssertFalse(pane.contains(sink),
+                           "the address inventory could reach \(sink)")
+        }
+        // Comments stripped, for the reason the loader above exists: this file
+        // documents the sinks it deliberately never reaches, and scanning its
+        // raw text would fail this guard on the sentence promising the absence.
+        let inventory = codeOnly(try String(
+            contentsOf: appsRoot.appendingPathComponent(
+                "RelayiumKit/Sources/RelayiumAppKit/LocalNetworkAddresses.swift"),
+            encoding: .utf8))
+        for sink in ["UserDefaults", "NSLog", "os_log", "Logger(", "print(", "URLSession"] {
+            XCTAssertFalse(inventory.contains(sink),
+                           "the address enumeration could reach \(sink)")
+        }
+
+        // Both disclaimers, and the empty case that is a real answer.
+        for note in ["nearbyAddressesPrivacyNote", "nearbyAddressesNotGroupingNote",
+                     "nearbyNoLocalAddresses"] {
+            XCTAssertTrue(pane.contains(note), "the section is missing \(note)")
+        }
+        XCTAssertTrue(pane.contains(".accessibilityLabel(L10n.t(.nearbyA11yThisMac))"),
+                      "the section is an unnamed group to VoiceOver")
+        XCTAssertTrue(pane.contains(".accessibilityIdentifier(\"lan-announced-name\")"))
+    }
+
+    // MARK: - the stored link, as a command
+
+    /// The completed stored send shows the equivalent `relayium down`, quoted,
+    /// with its own copy acknowledgement and the two warnings a reader cannot
+    /// see for themselves.
+    ///
+    /// The quoting is asserted to be DELEGATED rather than correct here —
+    /// `StoredLinkCommandPresentationTests` holds it against the web's own
+    /// cases. What this guards is that the view did not compose the command
+    /// itself, which is exactly how the two clients would drift.
+    func testTheStoredSendResultShowsTheEquivalentQuotedCommand() throws {
+        let upload = try source(named: "UploadPane.swift")
+        let terminal = try XCTUnwrap(upload.components(
+            separatedBy: "private func cliCommand(link: String)").dropFirst().first)
+            .components(separatedBy: "private func failureCard").first ?? ""
+
+        XCTAssertTrue(terminal.contains("StoredLinkCommandPresentation.downCommand(link: link)"),
+                      "the command is composed in the view instead of the tested seam")
+        for (name, text) in try sources(under: macRoot, atLeast: 30) {
+            XCTAssertFalse(text.contains("relayium down"),
+                           "\(name) writes the command as a literal")
+        }
+
+        // Monospaced, selectable, and left-to-right through the app's own
+        // isolate rather than by overriding a scene's layout direction.
+        XCTAssertTrue(terminal.contains("Text(L10n.token(command))"),
+                      "the command is not isolated, so Arabic would reorder it")
+        XCTAssertTrue(terminal.contains(".font(.system(.body, design: .monospaced))"))
+        XCTAssertTrue(terminal.contains(".textSelection(.enabled)"))
+        XCTAssertFalse(terminal.contains(".lineLimit(1)"),
+                       "the command is visually truncated")
+
+        // Its OWN copy confirmation. One shared flag would acknowledge whichever
+        // of the two was copied last beside both buttons.
+        XCTAssertTrue(terminal.contains("copiedCommand = command"))
+        XCTAssertTrue(terminal.contains("copiedCommand == command"))
+        XCTAssertFalse(terminal.contains("copiedLink"),
+                       "the command's copy state is the link's")
+        XCTAssertTrue(upload.contains("@State private var copiedCommand: String?"))
+        // Both acknowledgements are dropped when the next upload starts.
+        XCTAssertTrue(upload.contains("copiedLink = nil\n                copiedCommand = nil"),
+                      "a later result inherits this one's copy acknowledgement")
+
+        // The two things the reader cannot see, and the documentation link.
+        XCTAssertTrue(terminal.contains("InlineMessage(.warning, L10n.t(.storedSendCliWarning))"),
+                      "nothing states why the quotes matter or that shells keep a history")
+        XCTAssertTrue(terminal.contains("Link(L10n.t(.storedSendCliDocs), "
+                                        + "destination: AppEnvironment.cliWebURL)"))
+    }
+
     private func occurrences(of needle: String, in text: String) -> Int {
         text.components(separatedBy: needle).count - 1
     }
@@ -1460,10 +1690,14 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "the Device Inbox settings tab is back")
         XCTAssertFalse(settings.contains("inboxTitle"),
                        "a settings tab still names the Device Inbox")
-        // General keeps the one residency control, exactly once. (Its
-        // `notFound` behaviour is deliberately untouched by this batch.)
-        XCTAssertEqual(occurrences(of: "L10n.t(.settingsOpenAtLogin)", in: settings), 1,
+        // General keeps the one residency control, exactly once — as the shared
+        // component rather than as its own copy of it. The Device Inbox
+        // destination offers the same control, and the two used to be written
+        // separately; see `testTheResidencyControlIsOneComponentOnBothSurfaces`.
+        XCTAssertEqual(occurrences(of: "LoginItemSetting()", in: settings), 1,
                        "the Open at Login control was removed or duplicated")
+        XCTAssertFalse(settings.contains("L10n.t(.settingsOpenAtLogin)"),
+                       "the settings pane renders the residency control itself again")
 
         // The destination and the menu-bar route are both still there.
         XCTAssertTrue(FileManager.default.fileExists(
@@ -2498,33 +2732,102 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "the adapter holds no state; the preference does")
     }
 
-    /// The settings surface reports the system, and states every case it cannot
-    /// show as a switch.
+    /// The residency control reports the system, and states every case it
+    /// cannot show as a switch.
+    ///
+    /// It moved out of `SettingsView` this batch: the Device Inbox destination
+    /// offers the same control, its copy was a bare `Toggle` greyed out on one
+    /// state with no explanation at all, and two renderings of one control is
+    /// how the two surfaces started telling the user different things.
     func testTheLoginSettingReportsTheSystemAndExplainsEveryStateItCannotShow() throws {
-        let settings = try source(named: "Settings/SettingsView.swift")
+        let control = try source(named: "Components/LoginItemSetting.swift")
 
         // Bound to what macOS says, never to what was requested. A switch built
         // from the requested value snaps to on for a registration macOS is still
         // holding for approval — the app asserting a residency it lacks.
-        XCTAssertTrue(settings.contains("get: { loginItem.state == .on }"),
+        XCTAssertTrue(control.contains("get: { loginItem.state == .on }"),
                       "the switch must read the system's answer")
-        XCTAssertFalse(settings.contains("@State private var opensAtLogin"),
+        XCTAssertFalse(control.contains("@State private var opensAtLogin"),
                        "a mirrored boolean would drift from the system")
 
         // Every state that is not a plain on/off says what it is and what
-        // resolves it. A greyed switch with no sentence beside it is the dead
-        // control this app's design rules forbid.
-        for state in ["case .needsApproval", "case .unavailable"] {
-            XCTAssertTrue(settings.contains(state), "the settings pane ignores \(state)")
+        // resolves it, and each names its own remedy. `unavailable` is gone and
+        // is TWO states now: the system reporting no record for a bundle in
+        // Applications, which an explicit registration can fix, and a bundle
+        // macOS will not manage at all, which only relocation fixes. Reporting
+        // them as one told a user whose app was already in Applications to move
+        // it there, with no other action on the screen.
+        for state in ["case .needsApproval", "case .unconfirmed",
+                      "case .unmanagedLocation"] {
+            XCTAssertTrue(control.contains(state), "the residency control ignores \(state)")
         }
-        for copy in ["settingsLoginNeedsApproval", "settingsLoginUnavailable",
+        for copy in ["settingsLoginNeedsApproval", "settingsLoginUnconfirmed",
+                     "settingsLoginUnmanagedLocation", "settingsLoginNotRegistered",
+                     "settingsLoginTryRegistration", "settingsLoginStillUnconfirmed",
                      "settingsLoginRefused", "settingsOpenLoginItems"] {
-            XCTAssertTrue(settings.contains(copy), "\(copy) is never rendered")
+            XCTAssertTrue(control.contains(copy), "\(copy) is never rendered")
         }
+
+        // **No dead disabled toggle.** The two states with no working switch do
+        // not render one at all — a greyed switch showing "off" reads as a
+        // setting somebody turned off, which is worse than merely dead. They
+        // render a non-interactive status line and their own action instead.
+        XCTAssertTrue(control.contains("if loginItem.offersToggle {"),
+                      "the switch is rendered without asking whether it can work")
+        XCTAssertFalse(control.contains(".disabled("),
+                       "a disabled residency control is the dead end this replaced")
+        XCTAssertTrue(control.contains("StatusBadge(symbol:"),
+                      "the states with no switch have no state indicator either")
+
+        // The registration attempt is EXPLICIT, offered only where it can work,
+        // and its unconfirmed outcome is reported rather than smoothed over.
+        XCTAssertTrue(control.contains("Button(L10n.t(.settingsLoginTryRegistration)) "
+                                       + "{ loginItem.attemptRegistration() }"),
+                      "the unconfirmed state has no way forward")
+        XCTAssertTrue(control.contains("if loginItem.lastRegistrationUnconfirmed {"),
+                      "a registration that stayed unconfirmed says nothing")
+        let unmanaged = try XCTUnwrap(control.components(separatedBy: "case .unmanagedLocation:")
+            .dropFirst().first?.components(separatedBy: "case .on, .off:").first)
+        XCTAssertFalse(unmanaged.contains("attemptRegistration"),
+                       "a bundle macOS will not manage is offered a button that always fails")
+
         // The user can change this in System Settings while the app runs and
-        // nothing notifies it, so the pane re-asks on appear.
-        XCTAssertTrue(settings.contains("loginItem.refresh()"),
-                      "the pane must re-read the system when it appears")
+        // nothing notifies it, so both hosts re-ask when they appear.
+        for host in ["Settings/SettingsView.swift",
+                     "DeviceInbox/DeviceInboxSurface.swift"] {
+            XCTAssertTrue(try source(named: host).contains("loginItem.refresh()"),
+                          "\(host) must re-read the system when it appears")
+        }
+    }
+
+    /// **One residency control, rendered by both surfaces that offer it.**
+    ///
+    /// The Device Inbox destination's copy was a `Toggle` with
+    /// `.disabled(state == .unavailable)` and a caption — the same dead switch
+    /// the settings pane had already learned to explain, kept alive by being
+    /// written twice. Whatever the component shows for a state, both now show.
+    func testTheResidencyControlIsOneComponentOnBothSurfaces() throws {
+        let hosts = try sources(under: macRoot, atLeast: 30)
+            .filter { $0.text.contains("LoginItemSetting()") }.map(\.name).sorted()
+        XCTAssertEqual(hosts, ["DeviceInbox/DeviceInboxSurface.swift",
+                               "Settings/SettingsView.swift"],
+                       "the residency control has gained or lost a host")
+        // Neither host may render any part of it itself. `settingsOpenAtLogin`
+        // is the label, and a host naming it is a host with its own switch.
+        for host in hosts {
+            let text = try source(named: host)
+            for reimplemented in ["settingsOpenAtLogin", "loginItem.set(",
+                                 "loginItem.state ==", "loginItem.attemptRegistration",
+                                 "settingsOpenLoginItems"] {
+                XCTAssertFalse(text.contains(reimplemented),
+                               "\(host) renders \(reimplemented) instead of sharing the control")
+            }
+        }
+        // And the component is the only place that decides any of it.
+        let owners = try sources(under: macRoot, atLeast: 30)
+            .filter { $0.text.contains("loginItem.set(") }.map(\.name)
+        XCTAssertEqual(owners, ["Components/LoginItemSetting.swift"],
+                       "a second surface writes the login-item registration")
     }
 
     /// The updates pane says what the old lone menu item could not, and reads

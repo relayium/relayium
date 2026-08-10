@@ -86,6 +86,12 @@ public enum AppEnvironment {
     /// `PRICING_PATH` on the web.
     public static var plansWebURL: URL { productionBaseURL.appendingPathComponent("pricing") }
 
+    /// The CLI's own page. `CLI_PATH` on the web, and English-only there — the
+    /// site's decision, recorded in `router.svelte.ts` beside `/pricing`, so
+    /// nothing here generates a language prefix that would 404.
+    // nonlocalized: a URL path, not user copy
+    public static var cliWebURL: URL { productionBaseURL.appendingPathComponent("cli") }
+
     /// One-click reactivation for a pending-deletion account.
     ///
     /// The token rides in the URL *fragment*, never the query: that keeps it out of

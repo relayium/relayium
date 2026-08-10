@@ -36,7 +36,7 @@
 "settings.openAtLogin" = "登录时打开 Relayium";
 "settings.openAtLoginBody" = "Relayium 只有在运行时才能接收。登录时打开它，这台 Mac 重启后无需有人先打开应用就能被找到。";
 "settings.loginNeedsApproval" = "macOS 正在等待你在「登录项」中允许 Relayium。";
-"settings.loginUnavailable" = "macOS 不会管理当前这份 Relayium。请把它移到「应用程序」文件夹，再从那里打开。";
+"settings.loginUnmanagedLocation" = "macOS 不会管理当前这份 Relayium。请把它移到「应用程序」文件夹，再从那里打开。";
 "settings.loginRefused" = "macOS 拒绝了这次更改。请检查 Relayium 是否在「登录项」中被阻止。";
 "settings.openLoginItems" = "打开「登录项」设置";
 "settings.automaticUpdates" = "自动检查更新";
@@ -667,3 +667,62 @@
 "link.acceptFiles" = "接受文件";
 "link.declineFiles" = "拒绝";
 "link.historyIsLocal" = "这段对话只存在于这两台设备上，连接结束后即丢弃。";
+
+/* MARK: 1.1.2 — numbered help steps */
+"format.helpStep" = "%1$@. %2$@";
+
+/* MARK: 1.1.2 — login item: notFound is two situations */
+"settings.loginUnconfirmed" = "尽管这份 Relayium 就在“应用程序”文件夹中，macOS 仍报告没有它的登录项记录。你可以让 macOS 现在注册它。";
+"settings.loginNotRegistered" = "Relayium 尚未注册为登录时打开。";
+"settings.loginTryRegistration" = "尝试注册";
+"settings.loginStillUnconfirmed" = "Relayium 已请求 macOS 注册，但 macOS 仍报告没有记录。没有删除任何内容，已有的注册也未被改动。请打开“登录项”查看；若其中仍没有 Relayium，请重新启动这台 Mac。";
+
+/* MARK: 1.1.2 — what this Mac is on the network */
+"nearby.announcedAs" = "此房间中的其他设备看到这台 Mac 的名称为 %@。";
+"nearby.localAddressesHeading" = "这台 Mac 当前自己的地址：";
+"nearby.localAddressRow" = "%1$@（%2$@）";
+"nearby.noLocalAddresses" = "未找到可用地址。这台 Mac 可能只通过 VPN 或无法承载直接传输的链路连接网络。";
+"nearby.addressesPrivacyNote" = "此列表仅在监听期间于本机生成，并只显示在这里。Relayium 不会存储或记录该列表。";
+"nearby.addressesNotGroupingNote" = "设备是按 Relayium 服务观察到的网络路径分组的，而不是按这些地址，因此同一条网线上的两台设备仍可能被分到不同的组。";
+"nearby.a11yThisMac" = "这台 Mac 在网络中的信息";
+
+/* MARK: 1.1.2 — the CLI equivalent of a finished stored send */
+"storedSend.cliHeading" = "在终端中完成同样的下载";
+"storedSend.cliCopy" = "复制命令";
+"storedSend.cliWarning" = "引号是必需的：不加引号时，# 之后的内容会被 shell 当作注释，密钥会被丢弃，下载随之失败。该命令携带着打开文件的密钥，而大多数 shell 会把你执行过的命令写入历史记录文件。";
+"storedSend.cliDocs" = "Relayium 命令行文档";
+
+/* MARK: 1.1.2 — help, below the controls on every browseable destination */
+"help.heading" = "帮助";
+"help.stepsHeading" = "工作方式";
+"help.guideLink" = "在 relayium.com 上阅读指南";
+
+"help.lan.step1" = "在两台设备上打开 Relayium，并让它们保持在同一网络中。";
+"help.lan.step2" = "从列表中选择另一台设备，然后发送消息，或发送你已添加的文件。";
+"help.lan.step3" = "若已开启验证，请先确认两边屏幕显示相同的代码，再点击接受。";
+"help.lan.question" = "文件会经过 Relayium 的服务器吗？";
+"help.lan.answer" = "不会。Relayium 的服务只负责让两台设备互相发现；连接建立后，文件直接在两者之间传输。";
+
+"help.cross.step1" = "在这台设备上，为消息或文件创建一个代码。";
+"help.cross.step2" = "在另一台设备的 Relayium 中输入该代码并加入。";
+"help.cross.step3" = "确认两边屏幕显示相同的代码，然后接受传输。";
+"help.cross.question" = "两台设备必须在同一网络中吗？";
+"help.cross.answer" = "不必——这正是本页面的用途。创建代码需要账户，因为连接可能需要中继，而费用记在创建者名下。加入别人创建的代码则完全不需要账户。";
+
+"help.storedSend.step1" = "选择文件或文件夹，决定链接的有效时长，然后发送。";
+"help.storedSend.step2" = "在任何内容上传之前，Relayium 会先在这台 Mac 上完成加密。";
+"help.storedSend.step3" = "分享该链接。打开它所需的密钥就在链接之中，绝不会传到 Relayium。";
+"help.storedSend.question" = "谁能打开这个链接？";
+"help.storedSend.answer" = "任何持有完整链接（包括 # 之后那部分）的人。Relayium 只保存加密后的文件且无法读取，因此请把链接本身当作机密。";
+
+"help.inbox.step1" = "在这台 Mac 和你要发送的设备上登录同一个账户。";
+"help.inbox.step2" = "在这台 Mac 上选择一个文件夹，然后决定投递是自动保存，还是先等你确认。";
+"help.inbox.step3" = "从 relayium.com 或另一台已登录的设备发送到这台 Mac，文件就会落到该文件夹中。";
+"help.inbox.question" = "这台 Mac 睡眠或 Relayium 关闭时会怎样？";
+"help.inbox.answer" = "投递会在服务器上等待，直到 Relayium 在这里重新运行。它只能在运行时接收，这正是上面那个登录设置的用途。";
+
+"help.account.step1" = "创建账户或登录——发送链接和设备收件箱都需要账户。";
+"help.account.step2" = "查看你所用的套餐，以及本周期已用掉多少。";
+"help.account.step3" = "查看已登录你账户的设备和你存储的文件，并可移除其中任意一项。";
+"help.account.question" = "哪些功能需要账户，哪些不需要？";
+"help.account.answer" = "同一网络内的传输，以及加入别人创建的代码，都不需要账户。创建代码、发送存储链接和设备收件箱则都需要。";

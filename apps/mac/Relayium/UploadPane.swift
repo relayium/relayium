@@ -36,6 +36,14 @@ struct UploadPane: View {
     /// string, rather than a bare flag, prevents a later upload from inheriting
     /// the previous result's confirmation.
     @State private var copiedLink: String?
+    /// Copy confirmation for the CLI command, kept SEPARATE from the link's.
+    ///
+    /// They are two different things to put on the clipboard — a link to send
+    /// somebody, and a command to run here — and one shared flag would
+    /// acknowledge whichever was copied last beside both buttons. Keyed by the
+    /// command string for the same reason `copiedLink` is keyed by the link: a
+    /// later upload must not inherit the previous result's tick.
+    @State private var copiedCommand: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -260,12 +268,68 @@ struct UploadPane: View {
                           dateStyle: .medium, timeStyle: .short),
             ]))
                 .font(.caption).foregroundStyle(.secondary)
+            cliCommand(link: link)
             Button(L10n.t(.uploadSendAnother)) {
                 copiedLink = nil
+                copiedCommand = nil
                 model.reset()
             }
             .buttonStyle(.bordered)
         }
+    }
+
+    /// **The same thing this window just did, as a command.**
+    ///
+    /// The web has shown this since stored send existed; the Mac app showed only
+    /// the link, so a reader who works in a terminal had to compose the command
+    /// themselves — and the natural way to compose it is to paste the link
+    /// unquoted, which is the one way to get it wrong. `#` opens a comment in
+    /// every POSIX shell, so the key is silently discarded and the download fails
+    /// complaining about something else.
+    ///
+    /// The quoting itself is `StoredLinkCommandPresentation`, held byte-for-byte
+    /// against the web's `shQuote` by its own tests. This file only renders it.
+    ///
+    /// Monospaced, selectable, and forced into left-to-right reading order —
+    /// through `L10n.token`, the isolate the whole app uses for technical values,
+    /// rather than by overriding the layout direction, which is a per-scene
+    /// decision this file is not allowed to make.
+    private func cliCommand(link: String) -> some View {
+        let command = StoredLinkCommandPresentation.downCommand(link: link)
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(L10n.t(.storedSendCliHeading))
+                .font(.subheadline.weight(.semibold))
+            Text(L10n.token(command))
+                .font(.system(.body, design: .monospaced))
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("storedSend.cliCommand")
+            HStack {
+                // Its own button and its own acknowledgement. The clipboard now
+                // holds a command, not the link, and saying "Copied" beside the
+                // link would be describing the wrong thing.
+                Button(L10n.t(.storedSendCliCopy)) {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(command, forType: .string)
+                    copiedCommand = command
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("storedSend.cliCopy")
+                if copiedCommand == command {
+                    Label(L10n.t(.commonCopied), systemImage: "checkmark")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            // Both halves are things the reader cannot see for themselves: why
+            // the quotes are not decoration, and that a command carrying a
+            // capability key is written to a history file by default.
+            InlineMessage(.warning, L10n.t(.storedSendCliWarning))
+            Link(L10n.t(.storedSendCliDocs), destination: AppEnvironment.cliWebURL)
+                .font(.caption)
+                .accessibilityIdentifier("storedSend.cliDocs")
+        }
+        .frame(maxWidth: 720, alignment: .leading)
     }
 
     private func failureCard(_ message: String) -> some View {

@@ -51,17 +51,12 @@ struct GeneralSettingsView: View {
     var body: some View {
         Form {
             Section {
-                // Bound to the SYSTEM's answer, not to what was last requested.
-                // Enabling can legitimately land on `needsApproval`, and a
-                // switch that snapped to on would assert something macOS has not
-                // agreed to.
-                Toggle(L10n.t(.settingsOpenAtLogin), isOn: Binding(
-                    get: { loginItem.state == .on },
-                    set: { loginItem.set($0) }
-                ))
-                .disabled(loginItem.state == .unavailable)
-                caption(L10n.t(.settingsOpenAtLoginBody))
-                loginItemStatus
+                // The whole residency control — switch, status, and the remedy
+                // for every state that has no switch — lives in one component,
+                // because the Device Inbox destination offers the same control
+                // and the two used to be written separately. See
+                // `LoginItemSetting`.
+                LoginItemSetting()
             }
             // **Not a toggle, because this app cannot set it.** Installing
             // Relayium registers the Share extension, and macOS then keeps every
@@ -97,37 +92,6 @@ struct GeneralSettingsView: View {
         // nothing notifies it, so the window re-asks every time it appears
         // rather than trusting what it last wrote.
         .task { loginItem.refresh() }
-    }
-
-    /// The three states a switch cannot show, each with the action that resolves
-    /// it. None of them greys the control out and leaves the user guessing.
-    @ViewBuilder
-    private var loginItemStatus: some View {
-        switch loginItem.state {
-        case .needsApproval:
-            InlineMessage(.warning, L10n.t(.settingsLoginNeedsApproval))
-            openLoginItemsButton
-        case .unavailable:
-            InlineMessage(.warning, L10n.t(.settingsLoginUnavailable))
-        case .on, .off:
-            if loginItem.lastChangeRefused {
-                InlineMessage(.failure, L10n.t(.settingsLoginRefused))
-                openLoginItemsButton
-            }
-        }
-    }
-
-    private var openLoginItemsButton: some View {
-        Button(L10n.t(.settingsOpenLoginItems)) {
-            // The documented deep link for the Login Items pane. If a future
-            // macOS renames it, System Settings opens at its root rather than
-            // failing — still the right app, one click further away.
-            // nonlocalized: a System Settings pane identifier, not user copy
-            guard let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension")
-            else { return }
-            NSWorkspace.shared.open(url)
-        }
-        .buttonStyle(.link)
     }
 
     private func caption(_ text: String) -> some View {

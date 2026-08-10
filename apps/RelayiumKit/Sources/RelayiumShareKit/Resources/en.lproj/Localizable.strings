@@ -37,7 +37,7 @@
 "settings.openAtLogin" = "Open Relayium at login";
 "settings.openAtLoginBody" = "Relayium can receive only while it is running. Opening it at login keeps this Mac reachable after a restart without anyone opening the app first.";
 "settings.loginNeedsApproval" = "macOS is holding this until you approve Relayium in Login Items.";
-"settings.loginUnavailable" = "macOS will not manage this copy of Relayium. Move it to your Applications folder and open it from there.";
+"settings.loginUnmanagedLocation" = "macOS will not manage this copy of Relayium. Move it to your Applications folder and open it from there.";
 "settings.loginRefused" = "macOS refused the change. Check whether Relayium is blocked in Login Items.";
 "settings.openLoginItems" = "Open Login Items settings";
 "settings.automaticUpdates" = "Check for updates automatically";
@@ -681,3 +681,62 @@
 "link.acceptFiles" = "Accept files";
 "link.declineFiles" = "Decline";
 "link.historyIsLocal" = "This conversation is only on these two devices and is discarded when the connection ends.";
+
+/* MARK: 1.1.2 — numbered help steps */
+"format.helpStep" = "%1$@. %2$@";
+
+/* MARK: 1.1.2 — login item: notFound is two situations */
+"settings.loginUnconfirmed" = "macOS reports no login-item record for this copy of Relayium, even though it is in an Applications folder. You can ask macOS to register it now.";
+"settings.loginNotRegistered" = "Relayium is not registered to open at login.";
+"settings.loginTryRegistration" = "Try registration";
+"settings.loginStillUnconfirmed" = "Relayium asked macOS to register it and macOS still reports no record. Nothing was removed, and any registration that already existed is untouched. Open Login Items to check, and restart this Mac if Relayium is not listed there.";
+
+/* MARK: 1.1.2 — what this Mac is on the network */
+"nearby.announcedAs" = "Other devices in this room see this Mac as %@.";
+"nearby.localAddressesHeading" = "This Mac's own addresses right now:";
+"nearby.localAddressRow" = "%1$@ (%2$@)";
+"nearby.noLocalAddresses" = "No usable address was found. This Mac may be reaching the network only through a VPN or a link that cannot carry a direct transfer.";
+"nearby.addressesPrivacyNote" = "This list is created on this Mac while it is listening and is shown only here. Relayium never stores or logs the list.";
+"nearby.addressesNotGroupingNote" = "Devices are grouped by the network path Relayium's service observes, not by these addresses, so two devices on one cable can still end up in different groups.";
+"nearby.a11yThisMac" = "This Mac on the network";
+
+/* MARK: 1.1.2 — the CLI equivalent of a finished stored send */
+"storedSend.cliHeading" = "The same download, from a terminal";
+"storedSend.cliCopy" = "Copy command";
+"storedSend.cliWarning" = "The quotes are required: unquoted, everything from the # onwards is a shell comment, so the key would be dropped and the download would fail. This command carries the key that opens the file, and most shells record what you run in a history file.";
+"storedSend.cliDocs" = "Relayium CLI documentation";
+
+/* MARK: 1.1.2 — help, below the controls on every browseable destination */
+"help.heading" = "Help";
+"help.stepsHeading" = "How it works";
+"help.guideLink" = "Read the guide on relayium.com";
+
+"help.lan.step1" = "Open Relayium on both devices and keep them on the same network.";
+"help.lan.step2" = "Choose the other device from the list, then send a message or send the files you have added.";
+"help.lan.step3" = "If verification is on, check that both screens show the same code before you accept.";
+"help.lan.question" = "Do the files pass through Relayium's servers?";
+"help.lan.answer" = "No. Relayium's service only introduces the two devices to each other; once they are connected the files travel straight between them.";
+
+"help.cross.step1" = "On this device, create a code for a message or for files.";
+"help.cross.step2" = "Type that code into Relayium on the other device and join.";
+"help.cross.step3" = "Check that both screens show the same code, then accept the transfer.";
+"help.cross.question" = "Do both devices have to be on the same network?";
+"help.cross.answer" = "No — that is what this screen is for. Creating a code needs an account, because the connection may have to be relayed and that is billed to whoever created it. Joining a code someone else made needs nothing at all.";
+
+"help.storedSend.step1" = "Choose files or folders, decide how long the link should keep working, and send.";
+"help.storedSend.step2" = "Relayium encrypts everything on this Mac before any of it is uploaded.";
+"help.storedSend.step3" = "Share the link. The key that opens it travels inside the link and never reaches Relayium.";
+"help.storedSend.question" = "Who can open the link?";
+"help.storedSend.answer" = "Anyone holding the whole link, including the part after the #. Relayium stores only the encrypted file and cannot read it, so treat the link itself as the secret.";
+
+"help.inbox.step1" = "Sign in to the same account here and on the device you want to send from.";
+"help.inbox.step2" = "Choose a folder on this Mac, then decide whether deliveries are saved automatically or held for your answer.";
+"help.inbox.step3" = "Send to this Mac from relayium.com or another signed-in device, and the files land in that folder.";
+"help.inbox.question" = "What happens while this Mac is asleep or Relayium is closed?";
+"help.inbox.answer" = "Deliveries wait on the server until Relayium is running here again. It can receive only while it is running, which is what the login setting above is for.";
+
+"help.account.step1" = "Create an account or sign in — sending a link and the Device Inbox both need one.";
+"help.account.step2" = "See which plan you are on and how much of it you have used this period.";
+"help.account.step3" = "Review the devices signed in to your account and the files you have stored, and remove either.";
+"help.account.question" = "What needs an account and what does not?";
+"help.account.answer" = "Same-network transfer, and joining a code somebody else created, need no account. Creating a code, sending a stored link and the Device Inbox all do.";
