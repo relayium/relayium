@@ -2910,8 +2910,12 @@ func (s *SQLiteStore) CommitUploadProgress(ctx context.Context, p UploadProgress
 		return out, err
 	}
 	defer tx.Rollback()
-	// answerRoomOnly settles RoomOpen for a commit that did not move the offset:
-	// the session is gone, it is already terminal, or the append committed no new
+	// answerRoom settles everything the CALLER may say about the room, from the
+	// row as it stands at this point in this transaction — whether the offset
+	// moved or not, and after any move this call made.
+	//
+	// RoomOpen is the half a commit that did not move the offset still needs: the
+	// session is gone, it is already terminal, or the append committed no new
 	// bytes. Nothing was bought, but the REQUEST still has to be answered
 	// truthfully, and the two questions have different answers — a session claimed
 	// by a finalize or the reaper inside a live room means this append is merely
@@ -2920,15 +2924,37 @@ func (s *SQLiteStore) CommitUploadProgress(ctx context.Context, p UploadProgress
 	// would tell a sender its bytes landed in a transfer whose ciphertext is
 	// already deleted.
 	//
-	// pairRoomOpenOn, never touchPairRoomOn: a read. Bytes that were not committed
-	// do not buy a deadline.
-	answerRoomOnly := func() error {
+	// RoomJoinDeadline is the other half, and it is READ here rather than derived
+	// by the caller for the reason spelled out on the field: the row may hold a
+	// deadline a sibling append bought after this request read the room, and a
+	// handler-side reconstruction would report a number the room never had.
+	//
+	// A READ, never a touch: bytes that were not committed do not buy a deadline,
+	// and reporting one the row already holds is not buying it.
+	answerRoom := func() error {
 		if p.RoomID == "" {
 			return nil
 		}
-		open, err := pairRoomOpenOn(ctx, tx, p.RoomID, p.Now)
-		out.RoomOpen = open
-		return err
+		room, found, err := pairRoomRowOn(ctx, tx, p.RoomID)
+		if err != nil {
+			return err
+		}
+		if !found {
+			out.RoomOpen = false
+			return nil
+		}
+		out.RoomOpen = pairRoomOpenAt(room, p.Now)
+		if out.RoomOpen {
+			// Only for a room that is still open, so the caller cannot answer 200 with
+			// a window for one that is over. A voided room keeps a join deadline in
+			// the future — closing it does not rewind last_upload_at — and reporting
+			// that is an invitation to a rendezvous whose ciphertext has already been
+			// deleted. The refusal path never reads this; the paths that can fall
+			// through to a 200 anyway now find nothing to say, which is the same
+			// silence the status probe keeps.
+			out.RoomJoinDeadline = pairRoomJoinDeadline(room)
+		}
+		return nil
 	}
 	var received, maxSize, done int64
 	err = tx.QueryRowContext(ctx,
@@ -2936,7 +2962,7 @@ func (s *SQLiteStore) CommitUploadProgress(ctx context.Context, p UploadProgress
 		Scan(&received, &maxSize, &done)
 	if err == sql.ErrNoRows {
 		// Reaped, or never existed: nothing to advance.
-		if rerr := answerRoomOnly(); rerr != nil {
+		if rerr := answerRoom(); rerr != nil {
 			return out, rerr
 		}
 		return out, tx.Commit()
@@ -2949,7 +2975,7 @@ func (s *SQLiteStore) CommitUploadProgress(ctx context.Context, p UploadProgress
 		// Finalized or reaped while this append was in flight. Its bytes are the
 		// documented maxAppendBytes residual: physically present, past a terminal
 		// offset nothing may move. Not billed, and bounded by one chunk.
-		if rerr := answerRoomOnly(); rerr != nil {
+		if rerr := answerRoom(); rerr != nil {
 			return out, rerr
 		}
 		return out, tx.Commit()
@@ -2996,18 +3022,22 @@ func (s *SQLiteStore) CommitUploadProgress(ctx context.Context, p UploadProgress
 	// renewed the window, six digits and the room behind them could be held to the
 	// six-hour ceiling at no cost, and the rule the window rests on would be
 	// untrue.
+	//
+	// The touch and the answer are separate steps, and in that order, because the
+	// answer must include a move this call did NOT make: touchPairRoomOn's UPDATE
+	// is monotonic, so a sibling append that already pushed the room further out
+	// makes it a silent no-op, and the deadline this request must report back is
+	// the sibling's rather than its own. Reading the row afterwards is what makes
+	// that automatic — and makes the reported number the row's, not a projection.
 	if p.RoomID != "" {
-		if out.Received <= received {
-			if rerr := answerRoomOnly(); rerr != nil {
-				return out, rerr
+		if out.Received > received {
+			if _, err := touchPairRoomOn(ctx, tx, p.RoomID, p.Now, p.RoomExpiry); err != nil {
+				return out, err
 			}
-			return out, tx.Commit()
 		}
-		open, err := touchPairRoomOn(ctx, tx, p.RoomID, p.Now, p.RoomExpiry)
-		if err != nil {
-			return out, err
+		if rerr := answerRoom(); rerr != nil {
+			return out, rerr
 		}
-		out.RoomOpen = open
 	}
 	return out, tx.Commit()
 }
@@ -3541,22 +3571,22 @@ func scanStoredFile(sc rowScanner) (StoredFile, error) {
 const storedFileCols = `id, user_id, blob_key, enc_manifest, size, burn_after_read, created_at, expires_at, downloaded_at, node_id, max_downloads, purpose, inbox_task_id, pair_room_id`
 const storedFileSelectCols = storedFileCols + `, download_count`
 
-// CreateStoredFile inserts a stored file. An object bound to a pairing room is
-// inserted under that room's precondition (see insertStoredFileOn) and gets
-// ErrPairRoomClosed if the room ended first.
+// CreateStoredFile inserts a stored file with no cap enforcement. An object bound
+// to a pairing room is inserted under that room's precondition and takes that
+// room's deadline (see insertPairRoomObjectOn); ErrPairRoomClosed if the room
+// ended first.
+//
+// The pair-room case DELEGATES rather than repeating the transaction, with both
+// caps disabled — which is exactly what a non-positive cap means. Two entry
+// points into one insert is how the object's deadline came to depend on which
+// call site an upload arrived through; there is one now, and this is the plain
+// door into it.
 func (s *SQLiteStore) CreateStoredFile(ctx context.Context, f StoredFile) error {
 	if f.PairRoomID == "" {
 		return insertStoredFileOn(ctx, s.db, f)
 	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if err := insertPairRoomObjectOn(ctx, tx, f); err != nil {
-		return err
-	}
-	return tx.Commit()
+	_, err := s.CreateStoredFileWithinStorageCaps(ctx, f, f.CreatedAt, 0, 0)
+	return err
 }
 
 // insertStoredFileOn is the INSERT itself, written once so the three callers
@@ -3572,26 +3602,44 @@ func insertStoredFileOn(ctx context.Context, ex sqlExecer, f StoredFile) error {
 	return err
 }
 
-// insertPairRoomObjectOn inserts an object under its room's open precondition,
-// in the caller's transaction.
+// insertPairRoomObjectOn inserts an object under its room's open precondition AND
+// on its room's deadline, in the caller's transaction, and reports back what the
+// row landed with.
 //
-// This is the last gap in "void means gone, now". A finalize re-derives its
-// room's liveness, then does several more writes, and the room can end in
-// between: the object lands in a closed room, no later void will ever collect
-// it (the void that closed the room took its object list before this row
+// The precondition is the last gap in "void means gone, now". A finalize
+// re-derives its room's liveness, then does several more writes, and the room can
+// end in between: the object lands in a closed room, no later void will ever
+// collect it (the void that closed the room took its object list before this row
 // existed), and the sender is told 200 for ciphertext no receiver can reach.
 // Checking inside the insert's own transaction makes that impossible — SQLite's
 // single writer means a room open at this instant cannot close until this
 // commits, and a room that closed first refuses the insert outright.
-func insertPairRoomObjectOn(ctx context.Context, tx *sql.Tx, f StoredFile) error {
-	open, err := pairRoomOpenOn(ctx, tx, f.PairRoomID, f.CreatedAt)
+//
+// The DEADLINE is here for the same reason and against the same interval, one
+// step short of closure rather than one step short of gone. The caller's
+// f.ExpiresAt is discarded: an object's expiry belongs to its room, the room
+// moves, and a sibling request can move it after the caller computed its number
+// and before this row exists. Since the row the precondition already reads is the
+// authority, taking the deadline from it costs nothing and leaves no interval —
+// where re-reading after the commit would simply move the gap along by one
+// statement.
+//
+// Both returned instants come from that one read: ExpiresAt is what the row now
+// carries (pairRoomNoDeadline once somebody has joined), RoomJoinDeadline is what
+// the CODE may be extended to, and they are different numbers on purpose.
+func insertPairRoomObjectOn(ctx context.Context, tx *sql.Tx, f StoredFile) (StoredFileWrite, error) {
+	room, found, err := pairRoomRowOn(ctx, tx, f.PairRoomID)
 	if err != nil {
-		return err
+		return StoredFileWrite{}, err
 	}
-	if !open {
-		return ErrPairRoomClosed
+	if !found || !pairRoomOpenAt(room, f.CreatedAt) {
+		return StoredFileWrite{}, ErrPairRoomClosed
 	}
-	return insertStoredFileOn(ctx, tx, f)
+	f.ExpiresAt = pairRoomExpiry(room)
+	if err := insertStoredFileOn(ctx, tx, f); err != nil {
+		return StoredFileWrite{}, err
+	}
+	return StoredFileWrite{ExpiresAt: f.ExpiresAt, RoomJoinDeadline: pairRoomJoinDeadline(room)}, nil
 }
 
 // CreateStoredFileWithinStorageCaps inserts a stored file only if it keeps the
@@ -3602,15 +3650,19 @@ func insertPairRoomObjectOn(ctx context.Context, tx *sql.Tx, f StoredFile) error
 // CreateStoredFile pair leaves open (N concurrent uploads each reading the same
 // pre-commit total and all committing). A non-positive cap disables that check.
 //
-// Returns ok=false with reason "storage" (owner cap) or "global" (disk cap) when
-// a cap would be exceeded; a real store error is returned as err so the caller
-// fails CLOSED. "Live" bytes are expires_at > now, matching CurrentStorage /
-// GlobalStorageUsed; the row being inserted is added explicitly since it is not
-// yet visible to the pre-insert sums.
-func (s *SQLiteStore) CreateStoredFileWithinStorageCaps(ctx context.Context, f StoredFile, now, userCap, globalCap int64) (ok bool, reason string, err error) {
+// Returns a StoredFileWrite whose Reason is "storage" (owner cap) or "global"
+// (disk cap) when a cap would be exceeded and nothing was written; a real store
+// error is returned as err so the caller fails CLOSED. "Live" bytes are
+// expires_at > now, matching CurrentStorage / GlobalStorageUsed; the row being
+// inserted is added explicitly since it is not yet visible to the pre-insert sums.
+//
+// For a pair-room object the returned deadlines are the ROOM's, read from its row
+// in this same transaction — which is where they have to be decided, not where
+// they are merely confirmed (see StoredFileWrite).
+func (s *SQLiteStore) CreateStoredFileWithinStorageCaps(ctx context.Context, f StoredFile, now, userCap, globalCap int64) (StoredFileWrite, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return false, "", err
+		return StoredFileWrite{}, err
 	}
 	defer tx.Rollback() // no-op after a successful Commit
 	if userCap > 0 {
@@ -3618,36 +3670,38 @@ func (s *SQLiteStore) CreateStoredFileWithinStorageCaps(ctx context.Context, f S
 		if err := tx.QueryRowContext(ctx,
 			`SELECT COALESCE(SUM(size),0) FROM stored_files WHERE user_id = ? AND expires_at > ?`,
 			f.UserID, now).Scan(&used); err != nil {
-			return false, "", err
+			return StoredFileWrite{}, err
 		}
 		if used.Int64+f.Size > userCap {
-			return false, "storage", nil
+			return StoredFileWrite{Reason: "storage"}, nil
 		}
 	}
 	if globalCap > 0 {
 		var used sql.NullInt64
 		if err := tx.QueryRowContext(ctx,
 			`SELECT COALESCE(SUM(size),0) FROM stored_files WHERE expires_at > ?`, now).Scan(&used); err != nil {
-			return false, "", err
+			return StoredFileWrite{}, err
 		}
 		if used.Int64+f.Size > globalCap {
-			return false, "global", nil
+			return StoredFileWrite{Reason: "global"}, nil
 		}
 	}
-	// Pair-room objects carry their room's open precondition into this same
-	// transaction (insertPairRoomObjectOn), so a room that ends between the
-	// caller's liveness check and this insert refuses the object instead of
-	// stranding it.
+	// Pair-room objects carry their room's open precondition AND their room's
+	// deadline into this same transaction (insertPairRoomObjectOn), so a room that
+	// ends between the caller's liveness check and this insert refuses the object
+	// instead of stranding it, and one that merely MOVES in that window is
+	// followed rather than lost.
 	if f.PairRoomID != "" {
-		if err := insertPairRoomObjectOn(ctx, tx, f); err != nil {
-			return false, "", err
+		out, err := insertPairRoomObjectOn(ctx, tx, f)
+		if err != nil {
+			return StoredFileWrite{}, err
 		}
-		return true, "", tx.Commit()
+		return out, tx.Commit()
 	}
 	if err := insertStoredFileOn(ctx, tx, f); err != nil {
-		return false, "", err
+		return StoredFileWrite{}, err
 	}
-	return true, "", tx.Commit()
+	return StoredFileWrite{ExpiresAt: f.ExpiresAt}, tx.Commit()
 }
 
 func (s *SQLiteStore) GetStoredFile(ctx context.Context, id string) (StoredFile, error) {

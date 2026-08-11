@@ -217,26 +217,32 @@ func (s *Service) overGlobalStorage(ctx context.Context, add int64) (bool, error
 // fail open) allow. Own-node uploads (enforceCaps=false) skip caps entirely —
 // they land on the user's own disk and are never metered against a plan.
 //
-// Returns reason "" on success, "storage" (owner cap) or "global" (disk cap)
-// when a cap is hit, or a non-nil err on a real store failure (caller 500s and
-// drops the blob — never admits an upload against an unknown cap).
-func (s *Service) persistStoredFile(ctx context.Context, f StoredFile, enforceCaps bool) (reason string, err error) {
-	if !enforceCaps {
-		return "", s.Store().CreateStoredFile(ctx, f)
+// Returns a StoredFileWrite whose Reason is "" on success and "storage" (owner
+// cap) or "global" (disk cap) when a cap is hit, or a non-nil err on a real store
+// failure (caller 500s and drops the blob — never admits an upload against an
+// unknown cap). Its ExpiresAt is what the row actually landed with, which for a
+// pair-room object is decided by the store rather than by f (StoredFileWrite).
+//
+// A PAIR-ROOM object takes the capped call whether or not caps apply to it, with
+// the caps simply switched off when they do not (a non-positive cap is already
+// "no check", so neither cap query runs and an own-node upload stays exactly as
+// exempt as it was). That is deliberate: the deadline such an object lands with
+// is decided inside that transaction, and letting the uncapped path reach the
+// insert by a different route is how "which door did this upload come in
+// through" became something an object's expiry could depend on.
+func (s *Service) persistStoredFile(ctx context.Context, f StoredFile, enforceCaps bool) (StoredFileWrite, error) {
+	if !enforceCaps && f.PairRoomID == "" {
+		return StoredFileWrite{ExpiresAt: f.ExpiresAt}, s.Store().CreateStoredFile(ctx, f)
 	}
-	plan, err := s.planForUser(ctx, f.UserID)
-	if err != nil {
-		return "", err
+	var userCap, globalCap int64
+	if enforceCaps {
+		plan, err := s.planForUser(ctx, f.UserID)
+		if err != nil {
+			return StoredFileWrite{}, err
+		}
+		userCap, globalCap = plan.StorageBytes, s.ResolveSettings(ctx).StorageDiskCap
 	}
-	globalCap := s.ResolveSettings(ctx).StorageDiskCap
-	ok, reason, err := s.Store().CreateStoredFileWithinStorageCaps(ctx, f, s.Now().Unix(), plan.StorageBytes, globalCap)
-	if err != nil {
-		return "", err
-	}
-	if !ok {
-		return reason, nil
-	}
-	return "", nil
+	return s.Store().CreateStoredFileWithinStorageCaps(ctx, f, s.Now().Unix(), userCap, globalCap)
 }
 
 // uploadWriteCap bounds how many bytes a single-shot BILLABLE upload may stream

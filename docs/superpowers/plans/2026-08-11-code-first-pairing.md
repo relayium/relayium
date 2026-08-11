@@ -621,10 +621,127 @@ lane. Three things are deliberately open:
    folder quietly missing a file. **Still open:** the row's ORIGIN is not shown —
    the receiver renders a separate card rather than one list with two origins,
    and there is no cancel for a download in flight.
-6. **Countdown copy.** `CodePairing.svelte` reads `expiresAt` once at mint and
-   counts down; with pre-upload the deadline MOVES. Finalize's `expiresAt` is a
-   floor, not a promise — treat it as such or the UI will show an expired code
-   that is actually alive.
+6. **Countdown copy.** ✅ **Done in checkpoint 2c.** The card no longer reads the
+   mint's `expiresAt` once and counts it to "expired, generate a new one" — that
+   claim is not the client's to make while the room is still taking bytes.
+   Four reactive facts now decide the line, and no new request was added
+   (nothing polls; the two answers below ride on responses a pre-upload was
+   already going to receive):
+   - `preuploadDeadline()` (new, in `preupload.svelte.ts`) is the last
+     `expiresAt` the SERVER named for this room — from an append's ack, from the
+     resume probe that recovers a lost one, or from finalize — stamped with the
+     room it was earned in, so a landing from a room the user has left can no
+     longer speak for the room on screen (that stale window is usually the LATER
+     of the two). Forward only, cleared with the room by `leaveRoom`, and an
+     answer that is not a Unix second at all is discarded: that is a JOINED
+     room's `math.MaxInt64` "no expiry", and the code's clock is not the
+     ciphertext's (§2 extends the code to the join deadline, never to never).
+     The bound is ABSOLUTE (`MAX_PLAUSIBLE_DEADLINE`, the year 5138) and not
+     `Date.now() + MAX_JOINABLE`, which the first cut used. Found in review of
+     this checkpoint: that reads the server's answer through the browser's own
+     clock, so a device hours behind — hand-set, dead battery, a timezone written
+     into the clock — throws away every honest deadline it is sent and falls
+     straight back to the false mint countdown this item exists to remove. Skew
+     cannot fake 9.2e18, and it cannot fake a millisecond timestamp either.
+   - `preuploadUnconfirmed()` (new) is the room whose window this page could not
+     confirm at all — see below.
+   - `PreuploadProgress` gained the room `code`, so "an upload is in flight" can
+     be asked as "…for THIS room".
+   - The card counts `max(mint, room)` — forward only, exactly as the server
+     moves the code's own registry entry — and while an upload for this room is
+     in flight it shows `pair.ttlUploading` (nine locales) INSTEAD of a number
+     and never times out. There is no number to show: every chunk still in flight
+     will push the deadline out again the moment it commits, so a countdown there
+     would be describing a window the next second replaces. With nothing
+     pre-uploaded the mint is still the whole story, ticking and expiring exactly
+     as before.
+   410 remains the authoritative "the room is over" — the driver still stops, the
+   files still return to the live link, `preuploadExpired` still renders outside
+   every branch — and it now also DROPS the recorded deadline. Found in review of
+   this checkpoint: a room can be voided early (an operator, a deleted account)
+   while the window an earlier file bought is still in the future, and without
+   this the card would keep counting that window down, offering a rendezvous the
+   server has already emptied. It drops the unconfirmed mark for the same reason
+   — that mark is a statement about missing evidence, and it has nothing left to
+   be true about once the evidence arrives.
+   **The deadline arrives on the append, not only at finalize.** The first cut of
+   this shipped with "only finalize reports where the room moved to" as an
+   accepted limit, and it was not one: after a single committed PATCH the room
+   (and the code) is alive for up to `JOIN_WINDOW` past the mint, so an upload
+   that failed before finalize left the card counting the mint down and then
+   announcing "expired, generate a new one" — with a button that burns a
+   rendezvous the server was still admitting joins on. "Understating" is the
+   wrong word for a false statement with a destructive action under it.
+   So the append's 200 and the resume probe's 200 now carry the room's JOIN
+   deadline as an optional `expiresAt` — the number the room's ROW holds where
+   the answer is produced, and the same number the code's registry entry is
+   extended to. Read, never projected: the append takes it from inside the
+   transaction that records its progress (`UploadProgressResult.RoomJoinDeadline`)
+   and the two read-only answers take it from a store read at response time
+   (`persistedRoomJoinDeadline`). Deriving it instead from the room snapshot the
+   handler read on the way in — which the first cut did, via
+   `pairRoomProgressJoinDeadline` — reports a window that a sibling append (a
+   retry after a lost answer, another file of the same batch) has already
+   replaced, and a page counting that down announces a dead code while the
+   registry is still admitting joins. That projection now belongs only to the
+   callers whose own write is the thing that lands: the room's creation, and
+   finalize's touch. Additive: no new
+   endpoint, no new request, nothing polls, an old client ignores the field and a
+   new client against an old server simply never hears it. A request that commits
+   nothing — a replay, or the probe, which is a read — reports the deadline the
+   room already has and buys none, matching the store's own rule; and the probe
+   says nothing at all about a room that is over. `stored-file.ts` forwards every
+   such answer through `onProgress`, so the window is recorded as soon as the
+   server acknowledges progress rather than at the end.
+   **Three states, because there are three.** Uploading (the deadline is moving
+   and unknowable), a deadline the server named (countable), and — the residual —
+   a room whose window this page could NOT confirm: bytes went on the wire and
+   neither the append's answer nor the probe behind it came back.
+   `preuploadUnconfirmed()` carries that as its own fact, set only when an
+   attempt reached the wire (`UploadProgress.onWire`, which is why a refusal at
+   init still leaves the mint entirely authoritative), scoped to its room, and
+   cleared by a later authoritative answer, by 410/404, and by the room boundary.
+   The card still counts to the later of the mint and the last named deadline —
+   an acknowledged instant is a real floor — but when that lapses on an
+   unconfirmed room it shows `pair.ttlUnknown` / `ttlUnknownNote` (nine locales,
+   no digits in either) and a button to mint a new code, instead of the expired
+   branch. It does not say the code is dead; it does not say it is fine.
+   That also removes the between-files flicker the first cut listed as a limit:
+   with the room's deadline recorded from the first file's appends there is a
+   real, later number to show in the gap where nothing is in flight, so there is
+   no lapsed mint to fall back to — pinned by "does not flash a dead mint between
+   two files of one batch".
+   **And the deadline finalize BINDS, not only the one it reports.** Same race,
+   one layer down, found in review of this checkpoint. Finalize recorded the
+   room's final progress, then built the object's `expires_at` from the room
+   snapshot it had read plus its own clock — and a sibling request (the batch's
+   next file, a retry of an append whose answer was lost) can move the room
+   inside that interval, after the touch has already projected onto the objects
+   that exist and before this one's row is inserted. The new object lands BEHIND
+   its own room, alone in its batch, and nothing repairs it: the room's
+   projection only moves rows that are behind the value it writes. Its response
+   under-reports the window the code registry is admitting joins for, on the one
+   answer a client treats as certainty. So the deadline is now READ where the row
+   is WRITTEN: `insertPairRoomObjectOn` takes it from the `pair_rooms` row in the
+   same writer transaction that already carries the room-open precondition and
+   the storage caps, and hands both instants back (`StoredFileWrite` — the
+   object's expiry, and separately the room's join deadline the CODE is synced
+   to). A post-write re-read was rejected as a fix: it moves the same gap along
+   by one statement. Both insert paths reach that transaction — the capped one
+   directly, the own-node one with the caps switched off — so which door an
+   upload came in through can no longer decide its expiry. Finalize still buys
+   its documented final progress window; what it no longer does is report or
+   persist a window derived from anything but the row.
+   **Evidence:** 3,686 Vitest passing / 3 skipped (baseline 3,667 — 19 new cases);
+   full Go suite green, `go build ./...` and `go vet ./...` clean; `npm run check`
+   523 files, 0 errors, 0 warnings; `npm run build` OK. Every new case was watched
+   fail first, and three of them failed for a reason that changed the design
+   rather than the code: the finalize-500 case proved doubt has to be able to
+   coexist with a known deadline (finalize moves the room too), the 410 case
+   proved an ambiguous failure closes the driver so only an ABORT can leave a room
+   in doubt with the batch still running, and the DOM case proved the unknown
+   state is only observable while nothing is in flight — which is exactly when it
+   has to be right.
 7. **B3's over-quota gate before entering the room** is NOT built. The decision
    stands (block before minting, fail OPEN on a read error, say LAN still works);
    it needs a quota read the choose screen does not have today.

@@ -260,6 +260,35 @@ func pairRoomProgressExpiry(r PairRoom, at int64) int64 {
 	return pairRoomExpiry(r)
 }
 
+// pairRoomProgressJoinDeadline is the JOIN deadline a room carries once the
+// server has committed bytes for it at `at` — the instant after which nobody may
+// still join, which is exactly the instant the CODE is extended to.
+//
+// Its own function rather than an expression inlined at each site because the
+// answer must be identical wherever it is produced: a client counting down a
+// number derived even slightly differently from the one the registry holds is a
+// client that announces a dead code while the receiver can still join, or the
+// reverse.
+//
+// It is a PROJECTION — "where a room with this snapshot would land if progress
+// were recorded at `at`" — so it belongs only to a caller whose own write is the
+// thing that lands. That is syncPairCode's two callers (the room they just
+// created, the touch finalize just performed) and nothing else. The append
+// path's responses deliberately do NOT come through here: their room snapshot
+// predates a transaction that overlapping siblings can move underneath them, so
+// they report what the row holds instead (UploadProgressResult.RoomJoinDeadline,
+// persistedRoomJoinDeadline) rather than what this projects.
+//
+// It is deliberately the join deadline and never pairRoomExpiry: a joined room's
+// expiry is "never" (pairRoomNoDeadline), and a code that never expired would
+// hold six of a million digits out of circulation for good.
+func pairRoomProgressJoinDeadline(r PairRoom, at int64) int64 {
+	if at > r.LastUploadAt {
+		r.LastUploadAt = at
+	}
+	return pairRoomJoinDeadline(r)
+}
+
 // pairRoomJoinable reports whether a receiver may still join and be given the
 // pre-uploaded batch.
 func pairRoomJoinable(r PairRoom, now int64) bool {
@@ -305,13 +334,27 @@ func pairRoomLive(r PairRoom, now int64) bool {
 // and the registry's refusal is precisely what stops this from resurrecting
 // digits that now belong to a stranger.
 func (s *Service) syncPairCode(room PairRoom, at int64) {
-	if s.pairCodes == nil || room.Code == "" {
+	s.syncPairCodeTo(room, pairRoomProgressJoinDeadline(room, at))
+}
+
+// syncPairCodeTo is the same thing for a caller that has been HANDED the room's
+// join deadline instead of deriving it — the append path, where the store's
+// transaction read the row and reported what it actually holds
+// (UploadProgressResult.RoomJoinDeadline).
+//
+// The two are the same call with different sources for one number, and the
+// difference matters only where requests overlap: syncPairCode's callers are
+// each acting on a write they just made themselves (the room they created, the
+// touch finalize just performed), while an append's room snapshot can be stale
+// by the time its transaction lands.
+//
+// A non-positive deadline is nothing to sync — the room is gone, or there is no
+// room — and moving the code on the strength of it would be inventing a window.
+func (s *Service) syncPairCodeTo(room PairRoom, until int64) {
+	if s.pairCodes == nil || room.Code == "" || until <= 0 {
 		return
 	}
-	if at > room.LastUploadAt {
-		room.LastUploadAt = at // a value copy: nothing here writes the room back
-	}
-	s.pairCodes.ExtendFor(room.Code, room.UserID, pairRoomJoinDeadline(room))
+	s.pairCodes.ExtendFor(room.Code, room.UserID, until)
 }
 
 // revokePairCode ends the code a voided room was opened for, at the moment the

@@ -56,6 +56,83 @@ describe("pairing-code expiry copy", () => {
     }
   });
 
+  // Pre-upload makes the deadline MOVE: every byte the server commits pushes
+  // the room's join window — and with it the code's own expiry — out again, and
+  // this client is told where it landed only when an upload finishes. So while
+  // one is running there is no number to show, and the line that stands in for
+  // the countdown must not invent one.
+  it("holds the code open while an upload runs, without inventing a time", () => {
+    const staysOpen: Record<string, RegExp> = {
+      en: /stays valid while these files upload/i,
+      zh: /上传期间保持有效/,
+      ja: /アップロード中.*有効なまま/,
+      ko: /업로드하는 동안.*계속 유효/,
+      de: /bleibt gültig, solange diese Dateien hochgeladen werden/i,
+      fr: /reste valide pendant l'envoi de ces fichiers/i,
+      ar: /يظل رمز الاقتران صالحًا أثناء رفع هذه الملفات/u,
+      es: /sigue válido mientras se suben estos archivos/i,
+      pt: /continua válido enquanto estes arquivos são enviados/i,
+    };
+    for (const [lang, messages] of Object.entries(locales)) {
+      const line = messages.pair.ttlUploading;
+      expect(line, `${lang}: ttlUploading present`).toBeTruthy();
+      expect(line, `${lang}: says the code is held open by the upload`).toMatch(staysOpen[lang]);
+      // The whole point: a digit here is a duration this client cannot know.
+      expect(line, `${lang}: states no time it cannot know`).not.toMatch(/\d/);
+      // And it may not be the countdown's own sentence — that one promises an
+      // instant the code stops admitting, which is exactly what is not true
+      // while the upload keeps pushing it out.
+      expect(line, `${lang}: is not the countdown`).not.toBe(messages.pair.expiresIn(""));
+    }
+  });
+
+  // And the state neither the countdown nor the "expired" line may stand in for:
+  // bytes went up, and no answer about the room came back. The window may have
+  // moved and may not have; this client was not told. Saying "expired" there
+  // offers to burn a rendezvous the server is still admitting joins on, and
+  // saying "valid" invents an assurance nobody gave.
+  it("says it cannot confirm the window, without deciding it either way", () => {
+    const cannotConfirm: Record<string, RegExp> = {
+      en: /could not be confirmed/i,
+      zh: /无法确认/,
+      ja: /確認できません/,
+      ko: /확인할 수 없습니다/,
+      de: /konnte nicht bestätigt werden/i,
+      fr: /impossible de confirmer/i,
+      ar: /تعذّر تأكيد/u,
+      es: /no se pudo confirmar/i,
+      pt: /não foi possível confirmar/i,
+    };
+    // What to DO about it, and it has to be a real choice: try the code on the
+    // other device, or make a new one. A line that only reports the doubt leaves
+    // the user staring at six digits with nothing to try.
+    const tryIt: Record<string, RegExp> = {
+      en: /try/i, zh: /试/, ja: /試/, ko: /시도/,
+      de: /ausprobieren|versuchen/i, fr: /essaye/i, ar: /جرّب/u, es: /prueb/i, pt: /tentar/i,
+    };
+    const makeNew: Record<string, RegExp> = {
+      en: /new (pairing )?code/i, zh: /新的?配对码|重新生成/, ja: /新しいペアリングコード|新しいコード/, ko: /새 (페어링 )?코드/,
+      de: /neuen (Pairing-)?Code/i, fr: /nouveau code/i, ar: /رمزًا جديدًا/u, es: /(código )?nuevo|uno nuevo/i, pt: /novo código/i,
+    };
+    for (const [lang, messages] of Object.entries(locales)) {
+      const line = messages.pair.ttlUnknown;
+      expect(line, `${lang}: ttlUnknown present`).toBeTruthy();
+      expect(line, `${lang}: says the window could not be confirmed`).toMatch(cannotConfirm[lang]);
+      // The whole point: there is no number, because there is none to know.
+      expect(line, `${lang}: states no time it cannot know`).not.toMatch(/\d/);
+      // And it is neither of the two claims it stands between.
+      expect(line, `${lang}: is not the countdown`).not.toBe(messages.pair.expiresIn(""));
+      expect(line, `${lang}: does not declare the code dead`).not.toBe(messages.pair.expired);
+      expect(line, `${lang}: does not promise it stays valid`).not.toBe(messages.pair.ttlUploading);
+
+      const note = messages.pair.ttlUnknownNote;
+      expect(note, `${lang}: ttlUnknownNote present`).toBeTruthy();
+      expect(note, `${lang}: offers trying the code that is on screen`).toMatch(tryIt[lang]);
+      expect(note, `${lang}: offers making a new one`).toMatch(makeNew[lang]);
+      expect(note, `${lang}: states no time it cannot know`).not.toMatch(/\d/);
+    }
+  });
+
   it("teaches the real post-join file-or-text flow in every locale", () => {
     const textTokens: Record<string, RegExp> = {
       en: /text/i,

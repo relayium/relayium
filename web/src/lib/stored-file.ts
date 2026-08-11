@@ -255,6 +255,35 @@ export interface UploadProgress {
   phase: "encrypting" | "uploading";
   sent: number;
   total: number;
+  /**
+   * Bytes for this upload have been handed to the network, and what the server
+   * did with them is not yet known.
+   *
+   * Reported once, on the tick immediately before the first PATCH leaves. It is
+   * the only thing that lets a caller tell the two failures apart: an upload
+   * refused at init sent nothing and changed nothing on the server, while one
+   * that failed after this point may have committed a prefix — and for a
+   * pre-upload, committed bytes MOVE the pairing room's deadline. A caller that
+   * cannot tell them apart has to either understate every failure (announcing a
+   * dead code the server is still admitting joins on) or overstate every one.
+   *
+   * Deliberately not the "uploading" phase itself: that tick is emitted before
+   * the first chunk is even encrypted, precisely so a progress bar appears at
+   * once, and an encryption that fails before the first PATCH really did send
+   * nothing.
+   */
+  onWire?: boolean;
+  /**
+   * Where the server says this upload's PAIRING ROOM is joinable until, in unix
+   * seconds — absent for every other purpose, and absent from any server too old
+   * to answer it.
+   *
+   * A pair-room upload extends its own room (and the code that names it) with
+   * every committed chunk, so this is the only honest source for how long the
+   * code on screen has left. Reported from every response that carries it: the
+   * append's ack, and the resume probe that recovers a lost one.
+   */
+  expiresAt?: number;
 }
 
 /** Encrypt files in-browser and POST the ciphertext; returns the link parts. */
@@ -413,6 +442,16 @@ async function chunkedUpload(
   let offset = 0; // 服务端已确认的偏移
   bufferPeak = 0;
 
+  // Every server answer that carries a pair-room deadline, forwarded as it
+  // arrives rather than kept until finalize: an upload that never gets there is
+  // exactly the one whose caller needs it. `offset` is read at call time, so the
+  // tick still reports the confirmed position it was published at.
+  const noteDeadline = (expiresAt?: number) => {
+    if (expiresAt !== undefined) onProgress?.({ phase: "uploading", sent: offset, total: cipherSize, expiresAt });
+  };
+  // Set once, on the tick before the first PATCH — see UploadProgress.onWire.
+  let onWire = false;
+
   const gen = encryptFiles(files, sk.key);
   try {
     onProgress?.({ phase: "uploading", sent: 0, total: cipherSize });
@@ -431,7 +470,14 @@ async function chunkedUpload(
       if (filled === 0) throw new UploadError(0);
       if (filled > bufferPeak) bufferPeak = filled;
 
-      const received = await uploadChunk(uploadId, pending.subarray(0, filled), chunkStart, cipherSize, signal);
+      if (!onWire) {
+        // The last moment at which "nothing was sent" is still true. Announced
+        // here rather than after the request, because the whole point is to
+        // cover the request whose answer never comes back.
+        onWire = true;
+        onProgress?.({ phase: "uploading", sent: offset, total: cipherSize, onWire: true });
+      }
+      const received = await uploadChunk(uploadId, pending.subarray(0, filled), chunkStart, cipherSize, signal, noteDeadline);
       const consumed = received - chunkStart;
       // 服务端偏移倒退，或者跑到我们根本还没产出的字节之后：两种情况我们都无法再
       // 对齐流位置，继续发只会写出一份错位的密文。
@@ -471,13 +517,18 @@ async function chunkedUpload(
  *  the server's real offset — the server commits whatever bytes landed before the
  *  reset, so that offset can fall *inside* the chunk — and replays from there; a
  *  409 means the server was already ahead — take its offset. Non-2xx (413/429/401)
- *  is fatal. */
+ *  is fatal.
+ *
+ *  `note` is handed the pair-room deadline of every answer that carries one —
+ *  the ack, the 409, and the resume probe — so a caller hears it even on the
+ *  attempts that end in a retry rather than a return. */
 async function uploadChunk(
   uploadId: string,
   chunk: Uint8Array,
   start: number,
   total: number,
   signal?: AbortSignal,
+  note?: (expiresAt?: number) => void,
 ): Promise<number> {
   const end = start + chunk.length;
   const maxAttempts = 5;
@@ -495,24 +546,37 @@ async function uploadChunk(
     } catch (e) {
       if (signal?.aborted) throw new DOMException("aborted", "AbortError");
       if (attempt >= maxAttempts) throw new UploadError(0);
-      from = await uploadOffset(uploadId, signal).catch(() => from);
+      from = await uploadOffset(uploadId, signal, note).catch(() => from);
       if (from >= end) return from;
       // 服务端偏移退到我们保留的字节之前 —— 那些字节已经丢了，重放不出来。
       if (from < start) throw new UploadError(0);
       await uploadSleep(uploadBackoff(attempt), signal);
       continue;
     }
-    if (res.status === 409) return (await res.json()).received; // server ahead
+    if (res.status === 409) {
+      const ahead = await res.json(); // server ahead
+      note?.(ahead.expiresAt);
+      return ahead.received;
+    }
     if (!res.ok) throw new UploadError(res.status);
-    return (await res.json()).received;
+    const acked = await res.json();
+    note?.(acked.expiresAt);
+    return acked.received;
   }
 }
 
-/** GET the server's committed offset for a resuming upload. */
-async function uploadOffset(uploadId: string, signal?: AbortSignal): Promise<number> {
+/** GET the server's committed offset for a resuming upload — and, for a
+ *  pre-upload, the room deadline the append whose answer was lost had bought. */
+async function uploadOffset(
+  uploadId: string,
+  signal?: AbortSignal,
+  note?: (expiresAt?: number) => void,
+): Promise<number> {
   const res = await fetch(`/api/uploads/${uploadId}`, { credentials: "include", signal });
   if (!res.ok) throw new UploadError(res.status);
-  return (await res.json()).received;
+  const out = await res.json();
+  note?.(out.expiresAt);
+  return out.received;
 }
 
 /** Credentialed JSON request; maps a non-2xx to UploadError(status). When

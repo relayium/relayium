@@ -173,16 +173,37 @@ func touchPairRoomOn(ctx context.Context, tx *sql.Tx, id string, at, expiresAt i
 // output of pairRoomExpiry (pairroom.go); the rule has one home, and SQL is not
 // it.
 func pairRoomOpenOn(ctx context.Context, tx *sql.Tx, id string, at int64) (bool, error) {
-	var closedAt, expiresAt int64
-	err := tx.QueryRowContext(ctx,
-		`SELECT closed_at, expires_at FROM pair_rooms WHERE id = ?`, id).Scan(&closedAt, &expiresAt)
-	if err == sql.ErrNoRows {
-		return false, nil
-	}
-	if err != nil {
+	r, found, err := pairRoomRowOn(ctx, tx, id)
+	if err != nil || !found {
 		return false, err
 	}
-	return closedAt == 0 && at < expiresAt, nil
+	return pairRoomOpenAt(r, at), nil
+}
+
+// pairRoomOpenAt is that same test applied to a row the caller has ALREADY read,
+// so a transaction that needs the room's other columns as well (the join
+// deadline it now carries — see CommitUploadProgress) does not have to read it
+// twice or restate the rule to reuse it.
+func pairRoomOpenAt(r PairRoom, at int64) bool {
+	return r.ClosedAt == 0 && at < r.ExpiresAt
+}
+
+// pairRoomRowOn reads the room's whole row inside the caller's transaction —
+// the same read pairRoomOpenOn is built on, kept separate because a caller that
+// must also REPORT the room (rather than only decide whether to write to it)
+// needs the columns the deadline is derived from, and reading them anywhere but
+// inside the write-locked transaction is exactly the stale snapshot this is
+// here to avoid.
+func pairRoomRowOn(ctx context.Context, tx *sql.Tx, id string) (PairRoom, bool, error) {
+	r, err := scanPairRoom(tx.QueryRowContext(ctx,
+		`SELECT `+pairRoomCols+` FROM pair_rooms WHERE id = ?`, id))
+	if err == sql.ErrNoRows {
+		return PairRoom{}, false, nil
+	}
+	if err != nil {
+		return PairRoom{}, false, err
+	}
+	return r, true, nil
 }
 
 // JoinPairRoom stamps the join and projects the post-join deadline.

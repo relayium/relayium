@@ -7,7 +7,7 @@
   import { enterRoom } from "./room.svelte";
   import { messages, lang, type Messages } from "./i18n.svelte";
   import { outbox, addToOutbox, removeFromOutbox, clearOutbox, outboxIndexOf } from "./outbox.svelte";
-  import { startPreupload, holdPreupload, resetPreupload, preuploadNotice, preuploadProgress } from "./preupload.svelte";
+  import { startPreupload, holdPreupload, resetPreupload, preuploadNotice, preuploadProgress, preuploadDeadline, preuploadUnconfirmed } from "./preupload.svelte";
   import { onMount } from "svelte";
   import { pickedFromInput, filesFromDataTransfer, hasFiles } from "./drag";
   import { formatSize } from "./format";
@@ -39,26 +39,86 @@
   // sessionStorage); false on the recipient who typed in a code.
   const isMinter = sessionStorage.getItem(EXP_KEY) !== null;
 
+  // The mint's own window: 300 s from the moment the code was issued, stashed by
+  // send(). Re-read whenever the room changes, which is the only thing that can
+  // change it — a fresh mint writes it before enterRoom flips roomCode. 0 for a
+  // joiner (no marker) and for the choose screen (no room), and that zero is
+  // what keeps both of them out of every countdown branch below.
+  const mintExpiry = $derived(roomCode ? Number(sessionStorage.getItem(EXP_KEY)) || 0 : 0);
+
+  // What the SERVER last said this room's window ends at, and only if it said it
+  // about the room on screen. A deadline is one room's fact: it is earned by
+  // bytes bound to that room, it is usually the LATER of the two, and a re-mint
+  // or a direct code change must not inherit it — see preupload.svelte.ts.
+  const roomExpiry = $derived.by(() => {
+    const d = preuploadDeadline();
+    return d && d.code === roomCode ? d.expiresAt : 0;
+  });
+
+  // The code's real deadline, as far as this page can honestly know it. The
+  // later of the two on purpose: the server moves the code's registry entry
+  // FORWARD to the room's join deadline and never back, so a room extension
+  // supersedes the mint, and a room that has not extended anything leaves the
+  // mint exactly as authoritative as it was before pre-upload existed.
+  const codeExpiry = $derived(Math.max(mintExpiry, roomExpiry));
+
+  // Bytes are going up against THIS room right now. While that is true the
+  // deadline is moving with every chunk the server commits and this page is not
+  // told where to until the upload finishes, so there is no number it may show —
+  // and, more importantly, no moment at which it may call the code dead.
+  const holdingOpen = $derived(!!roomCode && preuploadProgress()?.code === roomCode);
+
+  // Bytes went up against THIS room and no answer about it ever came back, so
+  // the deadline may have moved past anything on this page and may not have.
+  // Three states, not two: uploading (moving, unknowable), a deadline the server
+  // named, and this — which is neither, and must not be collapsed into either.
+  const unconfirmed = $derived(!!roomCode && preuploadUnconfirmed() === roomCode);
+
   // Countdown (only the minting device has the expiry stashed).
   let remaining = $state(""); // "m:ss" or ""
   let timedOut = $state(false); // the minter's own countdown hit zero — the code is now dead
   $effect(() => {
-    if (!roomCode) return;
-    const raw = sessionStorage.getItem(EXP_KEY);
-    if (!raw) return;
-    const exp = Number(raw);
-    timedOut = false; // re-armed for each fresh code (roomCode change re-runs this effect)
+    const exp = codeExpiry;
+    // Read HERE, in the effect's own body, so that doubt arriving after the
+    // countdown has already lapsed re-arms it in the same turn. Read only inside
+    // `tick` it would be a dependency of nothing, and the card would sit in the
+    // expired state until the next interval fired — a full second of announcing
+    // an expiry it had just learned it was not entitled to.
+    const vague = unconfirmed;
+    // No number, and nothing to give up on: a joiner, the choose screen, or a
+    // room whose upload is still pushing the deadline out.
+    if (!exp || holdingOpen) { remaining = ""; timedOut = false; return; }
+    timedOut = false; // re-armed for each fresh code / each later deadline
+    // Still counted, and counted to the LATER of the mint and whatever the
+    // server last named — an acknowledged deadline is a real floor and is worth
+    // showing. What lapsing may no longer do is set `timedOut`: see the tick.
     const tick = () => {
       const left = exp - Math.floor(Date.now() / 1000);
       // Once it lapses, flip into the expired branch so the minter isn't left
       // showing a live-looking code that the other side can no longer join.
-      if (left <= 0) { remaining = "0:00"; timedOut = true; return; }
+      //
+      // Unless the room's window is one this page could not confirm. "Expired"
+      // is a claim about the SERVER, and the only thing that entitles this page
+      // to make it is a deadline it knows the server honours — the mint's, or
+      // one the server named. After an upload put bytes up and said nothing
+      // back, neither is the whole story: the committed bytes may have pushed
+      // the room (and the code) past this instant. So the number simply stops
+      // and the unknown line takes over, rather than the card flipping to
+      // "expired, generate a new one" with a button that burns the rendezvous.
+      if (left <= 0) { remaining = vague ? "" : "0:00"; timedOut = !vague; return; }
       remaining = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
     };
     tick();
     const h = setInterval(tick, 1000);
     return () => clearInterval(h);
   });
+
+  // The unknown line goes up only when there is nothing better to say. A number
+  // to count is better — it is a floor the server named — and so is an upload in
+  // flight: bytes committing right now are pushing the deadline out whatever an
+  // earlier attempt failed to report, and "could not be confirmed" beside "stays
+  // valid while these files upload" is two answers to one question.
+  const showUnknown = $derived(unconfirmed && !holdingOpen && !remaining);
 
   // QR of the join link so the other person can scan instead of typing the code.
   let qrDataUrl = $state("");
@@ -209,12 +269,34 @@
         <button class="btn btn-ghost" class:copied={copied.value === "code"} onclick={() => copyText("code")}>{copied.value === "code" ? t.pair.copied : t.pair.copy}</button>
         <button class="btn btn-ghost" class:copied={copied.value === "link"} onclick={() => copyText("link")}>{copied.value === "link" ? t.pair.copied : t.pair.copyLink}</button>
         {#if canShare()}<button class="btn btn-ghost" onclick={() => share({ title: "Relayium", text: `Relayium: ${roomCode}`, url: joinLink })}>{t.share}</button>{/if}
-        {#if remaining}<span class="ttl">{t.pair.expiresIn(remaining)}</span>{/if}
+        <!-- Three answers to one question, in the order of how much this page
+             actually knows. While bytes are moving there is no number at all —
+             every committed chunk pushes the deadline out again. Where an
+             upload put bytes up and got no answer about the room, there is no
+             number either, and no right to call the code dead. Only a deadline
+             the server named (or the mint, which it also named) is countable. -->
+        {#if holdingOpen}
+          <span class="ttl">{t.pair.ttlUploading}</span>
+        {:else if showUnknown}
+          <span class="ttl">{t.pair.ttlUnknown}</span>
+        {:else if remaining}
+          <span class="ttl">{t.pair.expiresIn(remaining)}</span>
+        {/if}
       </div>
       <!-- The countdown is about the CODE, not about the transfer. Without this
            line a shrinking timer next to a live session reads as "your transfer
            has N minutes left", which is what the owner reported believing. -->
-      {#if remaining}<p class="ttl-note">{t.pair.ttlNote}</p>{/if}
+      {#if remaining}
+        <p class="ttl-note">{t.pair.ttlNote}</p>
+      {:else if showUnknown}
+        <!-- The doubt, and something real to do about it. Without the button
+             the user is left holding six digits with no way forward but "start
+             over", which discards the batch too; with it, minting a fresh code
+             stays the user's decision rather than a state the card walked them
+             into by claiming an expiry it was never told about. -->
+        <p class="ttl-note">{t.pair.ttlUnknownNote}</p>
+        <button class="btn btn-ghost" disabled={busy} onclick={() => void send()}>{busy ? t.generating : t.pair.sendCode}</button>
+      {/if}
       {#if qrDataUrl}
         <img class="qr" src={qrDataUrl} alt="QR" width="160" height="160" />
         <p class="scan">{t.pair.scanHint}</p>

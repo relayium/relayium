@@ -517,6 +517,29 @@ type UploadProgressResult struct {
 	// void. False means "billed, but refuse the request and take the ciphertext
 	// away" — never "silently succeeded".
 	RoomOpen bool
+	// RoomJoinDeadline is the instant the room named by UploadProgress.RoomID is
+	// joinable until, as its ROW held it inside this transaction — after the
+	// deadline this call may have bought, or as it already stood when it bought
+	// none.
+	//
+	// 0 for every case that has nothing to say rather than something reassuring:
+	// no room, a room that is gone, and any room this same transaction found not
+	// open (RoomOpen false). A closed room's join deadline can still be in the
+	// future — closing does not rewind the last byte — and it names a rendezvous
+	// whose ciphertext is already deleted.
+	//
+	// It exists because the caller CANNOT compute it. A handler holds a room
+	// snapshot it read before the append, and between that read and this write a
+	// sibling request — a duplicate, a retry, another file of the same batch — can
+	// move the room further out and lose its own answer. Reconstructing the
+	// deadline from that stale snapshot plus the handler's own clock produces a
+	// number the room never carried: earlier than the truth, so a client counts
+	// down to an expiry the registry is still admitting joins past, or later than
+	// it, so it counts down a window no byte bought.
+	//
+	// This is the row's own answer — whatever the deadline is when this
+	// transaction commits, a sibling's included — and never a projection of one.
+	RoomJoinDeadline int64
 }
 
 // ErrPairRoomClosed is returned by a store write whose pairing-room
@@ -560,6 +583,44 @@ type StoredFile struct {
 	// codes are recycled, and binding to one would let a reissued code reach the
 	// previous holder's ciphertext. See pairroom.go.
 	PairRoomID string
+}
+
+// StoredFileWrite is what a stored-file insert ACTUALLY landed — the row's own
+// answer, produced inside the transaction that wrote it.
+//
+// It exists for one field. A pair-room object's expires_at is not the caller's to
+// choose: it is the room's, every other object in the room carries it, and the
+// room moves. Finalize used to compute it from a room snapshot plus its own
+// clock, in the interval between recording its progress and inserting the row —
+// and a sibling request (the batch's next file, or a retry of an append whose
+// answer was lost) can move the room inside exactly that interval. The object
+// then lands BEHIND its own room and expires early, alone in its batch, while the
+// response under-reports the window the code registry is still admitting joins
+// for. Nothing repairs it afterwards: the room's projection onto its objects only
+// moves rows that are behind the value being written, and a later touch writes a
+// value this row is already at.
+//
+// So the deadline is read where the row is written, and handed back rather than
+// reconstructed. A post-write re-read would reopen the same gap one statement
+// further along.
+type StoredFileWrite struct {
+	// Reason is "" when the row was inserted, and names the cap that refused it
+	// otherwise: "storage" (the owner's plan) or "global" (the disk cap). A
+	// non-empty Reason means NOTHING was written.
+	Reason string
+	// ExpiresAt is the deadline the row carries. For a pair-room object it is the
+	// ROOM's, as its row stood inside this transaction — a sibling's move
+	// included; for every other object it is simply what the caller asked for.
+	// 0 when Reason is non-empty: there is no row to have a deadline.
+	ExpiresAt int64
+	// RoomJoinDeadline is the instant that room is joinable until, from the same
+	// read — the number the pairing CODE is extended to, which is NOT ExpiresAt: a
+	// joined room's objects have no expiry at all (pairRoomNoDeadline), and a code
+	// extended to that would hold six of a million digits out of circulation for
+	// good.
+	//
+	// 0 for an object with no room, and for a refused insert.
+	RoomJoinDeadline int64
 }
 
 // UsageKind selects which per-month meter a RecordMeter call increments.
@@ -1439,13 +1500,22 @@ type Store interface {
 	// no matching row (deleted user) is simply absent from the returned map.
 	AdminUserEmailsByIDs(ctx context.Context, ids []string) (map[string]string, error)
 	// stored files (zero-knowledge stored transfer)
+	// CreateStoredFile inserts a stored file with no cap enforcement. An object
+	// bound to a pairing room goes through the same transaction the capped path
+	// uses, so its deadline and its room's open precondition cannot differ by
+	// which entry point it came in at.
 	CreateStoredFile(ctx context.Context, f StoredFile) error
 	// CreateStoredFileWithinStorageCaps atomically enforces the owner (userCap)
 	// and global (globalCap) live-storage caps and inserts the row in one writer
 	// transaction, so concurrent uploads cannot collectively bust a cap. A
-	// non-positive cap disables that check. ok=false + reason ("storage"|"global")
-	// names the cap hit; a real error is returned as err (caller fails closed).
-	CreateStoredFileWithinStorageCaps(ctx context.Context, f StoredFile, now, userCap, globalCap int64) (ok bool, reason string, err error)
+	// non-positive cap disables that check. A StoredFileWrite with a non-empty
+	// Reason ("storage"|"global") names the cap hit and nothing was inserted; a
+	// real error is returned as err (caller fails closed).
+	//
+	// For a pair-room object the same transaction also carries the room's open
+	// precondition (ErrPairRoomClosed if it ended first) and is where the object's
+	// expires_at is DECIDED — see StoredFileWrite.
+	CreateStoredFileWithinStorageCaps(ctx context.Context, f StoredFile, now, userCap, globalCap int64) (StoredFileWrite, error)
 	GetStoredFile(ctx context.Context, id string) (StoredFile, error)
 	// GetStoredFileByBlobKey resolves a blob key back to its stored-file row (a
 	// direct-download receipt only carries the blob key). ErrNotFound if absent.

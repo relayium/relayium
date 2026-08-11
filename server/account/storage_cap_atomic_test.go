@@ -32,17 +32,17 @@ func TestCreateStoredFileWithinStorageCapsIsAtomic(t *testing.T) {
 				ID: fmt.Sprintf("f%d", i), UserID: u.ID, BlobKey: fmt.Sprintf("b%d", i),
 				EncManifest: []byte("m"), Size: each, CreatedAt: now, ExpiresAt: now + 10000,
 			}
-			ok, reason, err := st.CreateStoredFileWithinStorageCaps(ctx, f, now, cap, 0)
+			w, err := st.CreateStoredFileWithinStorageCaps(ctx, f, now, cap, 0)
 			if err != nil {
 				t.Errorf("unexpected err: %v", err)
 				return
 			}
-			if ok {
+			if w.Reason == "" {
 				mu.Lock()
 				accepted++
 				mu.Unlock()
-			} else if reason != "storage" {
-				t.Errorf("reject reason: want storage, got %q", reason)
+			} else if w.Reason != "storage" {
+				t.Errorf("reject reason: want storage, got %q", w.Reason)
 			}
 		}(i)
 	}
@@ -71,22 +71,22 @@ func TestCreateStoredFileWithinStorageCapsGlobal(t *testing.T) {
 	now := int64(1_800_000_000)
 
 	// userCap unlimited (0), globalCap 500. First 200 fits, second 400 busts global.
-	ok, _, err := st.CreateStoredFileWithinStorageCaps(ctx,
+	first, err := st.CreateStoredFileWithinStorageCaps(ctx,
 		StoredFile{ID: "a", UserID: u.ID, BlobKey: "ba", EncManifest: []byte("m"), Size: 200, CreatedAt: now, ExpiresAt: now + 10000},
 		now, 0, 500)
-	if err != nil || !ok {
-		t.Fatalf("first insert: ok=%v err=%v", ok, err)
+	if err != nil || first.Reason != "" {
+		t.Fatalf("first insert: reason=%q err=%v", first.Reason, err)
 	}
-	ok, reason, err := st.CreateStoredFileWithinStorageCaps(ctx,
+	second, err := st.CreateStoredFileWithinStorageCaps(ctx,
 		StoredFile{ID: "b", UserID: u.ID, BlobKey: "bb", EncManifest: []byte("m"), Size: 400, CreatedAt: now, ExpiresAt: now + 10000},
 		now, 0, 500)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ok {
+	if second.Reason == "" {
 		t.Fatal("second insert should have been rejected by the global cap")
 	}
-	if reason != "global" {
+	if reason := second.Reason; reason != "global" {
 		t.Fatalf("reason: want global, got %q", reason)
 	}
 }

@@ -695,7 +695,22 @@ func (s *Service) handleUploadChunk(w http.ResponseWriter, r *http.Request, u Us
 	if start < sess.Received {
 		// Client re-sent bytes we already have (a resume overshoot) — ack the
 		// current offset so it advances without corrupting the blob.
-		httpx.WriteJSON(w, http.StatusOK, map[string]any{"received": sess.Received})
+		//
+		// The deadline it hears back is the one the room ALREADY has: this request
+		// committed nothing, and nothing is exactly what it may buy. That is the
+		// store's own rule for moving the room (CommitUploadProgress), stated here
+		// so the answer cannot drift from it — an empty replay is a request anyone
+		// can send in a loop, and one that renewed the window would make the
+		// window free.
+		//
+		// Re-read rather than taken from `pairRoom` above, even though that read is
+		// a few lines old. This path never reaches the store transaction, so nothing
+		// else here can notice a sibling append that moved the room in between —
+		// and answering from the older snapshot would report a deadline the room has
+		// already replaced. The read renews nothing.
+		httpx.WriteJSON(w, http.StatusOK,
+			withRoomDeadline(map[string]any{"received": sess.Received},
+				s.persistedRoomJoinDeadline(ctx, sess.PairRoomID)))
 		return
 	}
 	if start > sess.Received {
@@ -839,7 +854,72 @@ func (s *Service) handleUploadChunk(w http.ResponseWriter, r *http.Request, u Us
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"received": progress.Received})
+	// The one answer a pre-upload cannot get anywhere else. Every committed chunk
+	// pushes this room's join deadline — and with it the pairing code's — out
+	// again, and until this line the only response that ever said where it landed
+	// was finalize's. An upload that FAILED after committing bytes therefore left
+	// the sender's page counting the mint's window down and announcing a dead code
+	// while the room was still taking joins, with a button offering to burn it.
+	//
+	// The number comes from the STORE's transaction, never from `pairRoom` and
+	// this handler's clock. That reconstruction is what was wrong here: `pairRoom`
+	// was read before the append, duplicate and sibling appends overlap by design
+	// (a retry after a lost answer is the ordinary case this whole field exists
+	// for), and whichever of them settles last would otherwise report a window
+	// computed from its own stale snapshot — earlier than the deadline the room
+	// and the code registry now hold, which is precisely how a client comes to
+	// announce a dead code while receivers can still join. progress.RoomJoinDeadline
+	// is the row's own answer at commit, a sibling's move included.
+	httpx.WriteJSON(w, http.StatusOK,
+		withRoomDeadline(map[string]any{"received": progress.Received}, progress.RoomJoinDeadline))
+}
+
+// withRoomDeadline adds a pairing room's join deadline to a resumable-upload
+// response body, and only for a pre-upload.
+//
+// ADDITIVE, on purpose. There is no new endpoint and no new request: the append
+// and the resume probe are already the two things a stalled pre-upload sends,
+// and an optional field on their existing 200 is what makes an old client keep
+// working unchanged against a new server and a new client keep working (without
+// this answer) against an old one.
+//
+// It DERIVES NOTHING. `deadline` is a number some authoritative read of the
+// room's row already produced — the store transaction's own answer
+// (UploadProgressResult.RoomJoinDeadline) or persistedRoomJoinDeadline — and 0
+// means "say nothing", which is the honest answer for an upload with no room
+// and for one whose room could not be read. This used to take the room snapshot
+// and a timestamp and re-derive the deadline here, which put a second copy of
+// the timing rule on the response path, running on a snapshot that a concurrent
+// append could already have replaced.
+func withRoomDeadline(body map[string]any, deadline int64) map[string]any {
+	if deadline > 0 {
+		body["expiresAt"] = deadline
+	}
+	return body
+}
+
+// persistedRoomJoinDeadline reports the instant `roomID` is joinable until, as
+// its row currently stands in the store — the answer for the two response paths
+// that never reach a CommitUploadProgress transaction and so have nothing else
+// authoritative to report (the resume overshoot's ack and the status probe).
+//
+// A plain read. It renews nothing, it does not void an expired room and it does
+// not refuse — those belong to the append.
+//
+// 0 for every case that must say NOTHING rather than something reassuring: no
+// room, a room that cannot be read, and above all a room that is no longer live.
+// A join deadline in the future computed from a room whose bytes are already
+// gone is an invitation to a rendezvous the server has emptied, and a read is
+// not the thing that gets to declare that either way — the append's own 410 is.
+func (s *Service) persistedRoomJoinDeadline(ctx context.Context, roomID string) int64 {
+	if roomID == "" {
+		return 0
+	}
+	room, found, err := s.store.GetPairRoom(ctx, roomID)
+	if err != nil || !found || !pairRoomLive(room, s.now().Unix()) {
+		return 0
+	}
+	return pairRoomJoinDeadline(room)
 }
 
 // commitUploadProgress records one committed append: the offset the blob now
@@ -872,22 +952,26 @@ func (s *Service) commitUploadProgress(ctx context.Context, sess UploadSessionRo
 	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), uploadCommitBudget)
 	defer cancel()
 	res, err := s.store.CommitUploadProgress(cctx, p)
-	if err == nil && res.RoomOpen && room.ID != "" && res.Received > sess.Received {
-		// The room's deadline just moved in the database; the CODE that reaches it
-		// has to move with it, or the batch's next file is refused and the receiver
-		// this upload is for cannot join at all (syncPairCode).
+	if err == nil && res.RoomOpen && room.ID != "" {
+		// The room's deadline may just have moved in the database; the CODE that
+		// reaches it has to move with it, or the batch's next file is refused and the
+		// receiver this upload is for cannot join at all (syncPairCode).
 		//
 		// After the transaction and only on its success, so the credential can never
 		// outlive the deadline it is supposed to mirror.
 		//
-		// And only when the offset actually advanced, matching the store's own rule
-		// for moving the room: an append that commits nothing is free, and free must
-		// not buy a code more time (see CommitUploadProgress). The offsets are
-		// compared against the row the store found rather than the one this request
-		// read, so a sibling append that advanced it first cannot be mistaken for
-		// progress this request made — at worst the code is extended to a deadline
-		// the room demonstrably already has, which ExtendFor treats as a no-op.
-		s.syncPairCode(room, now)
+		// TO THE STORE'S OWN NUMBER, which is what makes the byte-gate this used to
+		// carry unnecessary rather than merely tidier. The target is the deadline the
+		// row HOLDS, so an extension can only bring the code up to the room and never
+		// past it: a request that committed nothing buys nothing here either, it just
+		// stops the registry lagging behind bytes some other request already paid for.
+		// The old gate compared the store's offset against the one THIS request read
+		// before the append, which a sibling could already have advanced — so it fired
+		// on requests that had bought nothing while extending the code to a window
+		// derived from this handler's clock, and that window could sit past the room's
+		// own. Nothing is derived here now, so the code and the response cannot say
+		// different things (see UploadProgressResult.RoomJoinDeadline).
+		s.syncPairCodeTo(room, res.RoomJoinDeadline)
 	}
 	return res, err
 }
@@ -1132,7 +1216,11 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 			fail("server error", http.StatusInternalServerError)
 			return
 		}
-		room.LastUploadAt = now
+		// The snapshot is kept only for what cannot go stale — which room, whose
+		// code — and deliberately NOT advanced to `now` here. It used to be, and
+		// the object's deadline was then read back off it; that projection is the
+		// bug this path had, and leaving the assignment behind would leave the
+		// next reader a plausible-looking source for it.
 		pairRoom = room
 	}
 	if sess.Billable {
@@ -1184,31 +1272,50 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 		NodeID: sess.NodeID, MaxDownloads: sess.MaxDL, Purpose: sess.Purpose,
 		PairRoomID: sess.PairRoomID,
 	}
-	if pairRoom.ID != "" {
-		// The object inherits its ROOM's deadline, not the session's TTL: the two
-		// are the same 300 seconds at this instant, but only the room's keeps
-		// moving as the rest of the batch uploads and stops moving when someone
-		// joins. Reading it from the room is what makes the rule have one home.
-		sf.ExpiresAt = pairRoomExpiry(pairRoom)
-	}
+	// sf.ExpiresAt above is the SESSION's TTL, and for a pre-upload it is not the
+	// answer: the object inherits its ROOM's deadline, which is the same 300
+	// seconds at this instant but is the only one that keeps moving as the rest of
+	// the batch uploads and stops moving when someone joins.
+	//
+	// It is deliberately NOT computed here. The room this handler read is a
+	// snapshot, `now` is this handler's clock, and between the two of them and the
+	// insert below sits an interval a sibling request can land in — the batch's
+	// next file, or a retry of an append whose answer was lost, either of which
+	// pushes the room further out. An object built from the snapshot then lands
+	// behind its own room and dies early, alone in its batch, and nothing repairs
+	// it (touchPairRoomOn only moves objects that are BEHIND the value it writes,
+	// and this one would already hold that value). The store decides it, from the
+	// room's row, inside the insert's own transaction — see StoredFileWrite.
+	//
 	// Atomic, fail-closed storage-cap enforcement + insert (see persistStoredFile).
 	// For a pre-upload the insert also carries the room's open precondition, so
 	// this is the last and tightest place a room that ended mid-finalize is caught:
 	// a 200 from here can never describe ciphertext bound to a closed room.
-	switch reason, err := s.persistStoredFile(r.Context(), sf, sess.Billable); {
-	case errors.Is(err, ErrPairRoomClosed):
+	persisted, perr := s.persistStoredFile(r.Context(), sf, sess.Billable)
+	switch {
+	case errors.Is(perr, ErrPairRoomClosed):
 		s.endPairRoomByID(r.Context(), sess.PairRoomID)
 		fail(errPairRoomOver.msg, errPairRoomOver.status)
 		return
-	case err != nil:
+	case perr != nil:
 		fail("server error", http.StatusInternalServerError)
 		return
-	case reason == "global":
+	case persisted.Reason == "global":
 		fail("server storage is full", http.StatusInsufficientStorage)
 		return
-	case reason == "storage":
+	case persisted.Reason == "storage":
 		fail("storage limit reached — free up space or upgrade", http.StatusRequestEntityTooLarge)
 		return
+	}
+	if pairRoom.ID != "" {
+		// The room may have moved while this finalize was running, and the row —
+		// not this handler — is what says where to. Bringing the CODE up to the
+		// deadline the transaction actually saw is not a renewal: it is at most the
+		// deadline the room demonstrably already holds, which is why it is safe to
+		// do unconditionally, and it is what stops the registry from lagging behind
+		// bytes some other request already paid for. syncPairCodeTo, never
+		// syncPairCode: nothing is projected from a snapshot here.
+		s.syncPairCodeTo(pairRoom, persisted.RoomJoinDeadline)
 	}
 	// Lifetime stats are whole-object on purpose, and are NOT the meter: they
 	// count completed uploads, while the meter counts bytes that crossed the wire.
@@ -1217,7 +1324,10 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 	// it.)
 	_ = s.store.AddUploadStat(r.Context(), u.ID, size)
 	_ = s.store.DeleteUploadSession(r.Context(), sess.ID)
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"id": fid, "expiresAt": sf.ExpiresAt})
+	// The row's own deadline, which for a pre-upload is the room's and never the
+	// session TTL sf still carries. This number is what the sender counts down and
+	// treats as certainty about its code, so it has to be the one that landed.
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"id": fid, "expiresAt": persisted.ExpiresAt})
 }
 
 // handleUploadStatus (GET /api/files/uploads/{uploadId}) reports the committed
@@ -1232,7 +1342,19 @@ func (s *Service) handleUploadStatus(w http.ResponseWriter, r *http.Request, u U
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]any{"received": sess.Received})
+	body := map[string]any{"received": sess.Received}
+	// For a pre-upload, also where its room is joinable until — this is the
+	// request a client falls back to when an append's answer is lost, and the
+	// deadline that append bought is precisely what it came back for.
+	//
+	// A plain READ, unlike the append's pairRoomStillOpen: it does not void an
+	// expired room, it does not refuse, and a room that is over is simply not
+	// spoken for (persistedRoomJoinDeadline, where the whole rule lives). Read at
+	// RESPONSE time from the row itself, so a probe that overlaps a sibling
+	// append's commit reports the deadline the room ends up with rather than one
+	// this request derived on the way past.
+	body = withRoomDeadline(body, s.persistedRoomJoinDeadline(r.Context(), sess.PairRoomID))
+	httpx.WriteJSON(w, http.StatusOK, body)
 }
 
 // parseContentRangeStart pulls N from "bytes N-M/total" (the standard request

@@ -161,15 +161,34 @@ async function toBytes(body: unknown): Promise<Uint8Array> {
 //   partialPatches: the first N PATCH fetches commit *half* the body and then reject
 //                   — the real server does exactly this (`sess.received = newSize`
 //                   even on error), leaving the committed offset inside the chunk.
-function installFakeUploadFetch(opts?: { chunkSize?: number; failPatches?: number; partialPatches?: number }) {
+//   roomExpiry:     the pre-upload deadline the append/probe responses carry
+//                   (`expiresAt`), as a pair-room server does. Absent by
+//                   default, which is both an ordinary upload and any server too
+//                   old to answer it.
+//   failOffsets:    the first N resume probes (GET) reject, so a lost append
+//                   answer stays lost.
+//   initStatus:     answer init with this status instead of opening a session.
+function installFakeUploadFetch(opts?: {
+  chunkSize?: number;
+  failPatches?: number;
+  partialPatches?: number;
+  roomExpiry?: number;
+  failOffsets?: number;
+  initStatus?: number;
+}) {
   // patchBytes = 实际发出的 PATCH body 字节总数；staleBytes = 其中落在服务端**已经
   // 确认过**的偏移上、被幂等 ack 掉一个字节都没写进去的部分。两者一起是「重放缓冲
   // 有没有退化成整块重发」的直接度量：正确实现续传时先 GET 到真实偏移、只补那一截，
   // staleBytes 恒为 0；退化成从块起点整块重发就会把已确认的半个块再发一遍。
-  const state = { received: 0, patches: 0, patchBytes: 0, staleBytes: 0, emptyPatches: 0, finalized: false, committed: [] as Uint8Array[] };
+  const state = { received: 0, patches: 0, patchBytes: 0, staleBytes: 0, emptyPatches: 0, offsetProbes: 0, finalized: false, committed: [] as Uint8Array[] };
   const chunkSize = opts?.chunkSize ?? 8;
   let failsLeft = opts?.failPatches ?? 0;
   let partialsLeft = opts?.partialPatches ?? 0;
+  let offsetFailsLeft = opts?.failOffsets ?? 0;
+  // Spread over every body that reports one, so a test cannot pass by reading it
+  // from a single lucky response shape.
+  const withExpiry = (body: Record<string, unknown>) =>
+    opts?.roomExpiry === undefined ? body : { ...body, expiresAt: opts.roomExpiry };
   const json = (body: unknown, status = 200) => ({
     ok: status >= 200 && status < 300,
     status,
@@ -177,12 +196,22 @@ function installFakeUploadFetch(opts?: { chunkSize?: number; failPatches?: numbe
   });
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
-    if (method === "POST" && url.startsWith("/api/uploads?")) return json({ uploadId: "u1", chunkSize });
+    if (method === "POST" && url.startsWith("/api/uploads?")) {
+      if (opts?.initStatus) return json({}, opts.initStatus);
+      return json({ uploadId: "u1", chunkSize });
+    }
     if (method === "POST" && url.endsWith("/finalize")) {
       state.finalized = true;
       return json({ id: "id1", expiresAt: 123 });
     }
-    if (method === "GET" && url === "/api/uploads/u1") return json({ received: state.received });
+    if (method === "GET" && url === "/api/uploads/u1") {
+      state.offsetProbes++;
+      if (offsetFailsLeft > 0) {
+        offsetFailsLeft--;
+        throw new TypeError("network");
+      }
+      return json(withExpiry({ received: state.received }));
+    }
     if (method === "PATCH" && url === "/api/uploads/u1") {
       if (failsLeft > 0) {
         failsLeft--;
@@ -199,11 +228,11 @@ function installFakeUploadFetch(opts?: { chunkSize?: number; failPatches?: numbe
         state.emptyPatches++;
         return json({}, 500);
       }
-      if (start > state.received) return json({ received: state.received }, 409);
+      if (start > state.received) return json(withExpiry({ received: state.received }), 409);
       if (start < state.received) {
         // stale start: ack, write nothing. 已确认的字节又被发了一遍 = 纯浪费带宽。
         state.staleBytes += Math.min(buf.length, state.received - start);
-        return json({ received: state.received });
+        return json(withExpiry({ received: state.received }));
       }
       if (partialsLeft > 0 && buf.length > 1) {
         partialsLeft--;
@@ -214,7 +243,7 @@ function installFakeUploadFetch(opts?: { chunkSize?: number; failPatches?: numbe
       }
       state.committed.push(buf.slice());
       state.received += buf.length;
-      return json({ received: state.received });
+      return json(withExpiry({ received: state.received }));
     }
     throw new Error(`unexpected ${method} ${url}`);
   });
@@ -328,6 +357,63 @@ describe("uploadFileResumable", () => {
     // Progress counts server-confirmed bytes: monotonic, ending at the full size.
     expect(sent).toEqual([...sent].sort((a, b) => a - b));
     expect(sent[sent.length - 1]).toBe(state.received);
+  });
+
+  // ── what a pre-upload's caller has to be able to learn from the wire ──────
+  //
+  // A pair-room upload MOVES the pairing code's deadline with every byte the
+  // server commits, and until the append and the resume probe reported where it
+  // landed, the only client that ever heard was one whose upload ran all the way
+  // to finalize. These three cases carry that answer — and the one fact that
+  // makes an unanswered failure interpretable — out to `onProgress`.
+  it("carries the deadline an append answered with out to onProgress", async () => {
+    installFakeUploadFetch({ chunkSize: 100 * 1024, roomExpiry: 4242 });
+    const { file } = multiChunkFixture(3);
+    const seen: number[] = [];
+    await uploadFileResumable([file], { purpose: "pair_room", code: "483920" }, (p) => {
+      if (p.expiresAt !== undefined) seen.push(p.expiresAt);
+    });
+    expect(seen.length, "every committed append's deadline is reported, not just the last").toBeGreaterThan(1);
+    expect(new Set(seen)).toEqual(new Set([4242]));
+  });
+
+  it("recovers the deadline from the resume probe when an append's answer is lost", async () => {
+    // The exact shape of the ambiguity: bytes went up, the response did not come
+    // back. The probe the client sends to re-sync its offset is also where the
+    // deadline those bytes bought is waiting.
+    const state = installFakeUploadFetch({ chunkSize: 100 * 1024, failPatches: 1, roomExpiry: 777 });
+    const { file } = multiChunkFixture(3);
+    const seen: number[] = [];
+    await uploadFileResumable([file], { purpose: "pair_room", code: "483920" }, (p) => {
+      if (p.expiresAt !== undefined) seen.push(p.expiresAt);
+    });
+    expect(state.offsetProbes, "the recovery path really ran").toBeGreaterThan(0);
+    expect(seen).toContain(777);
+  });
+
+  it("says when bytes have gone on the wire, and does not say it before they have", async () => {
+    // The one bit that makes a FAILED pre-upload interpretable: a failure after
+    // this point may have committed bytes and moved the room's deadline, so the
+    // caller may no longer speak with certainty about the old one. Before it,
+    // nothing was sent and the old deadline is still the whole truth.
+    //
+    // Both halves in one case on purpose — the flag is only worth anything if it
+    // is false somewhere, and an implementation that simply always sets it would
+    // pass either half alone.
+    installFakeUploadFetch({ chunkSize: 100 * 1024, failPatches: 9, failOffsets: 9, roomExpiry: 4242 });
+    const { file } = multiChunkFixture(3);
+    const afterBytes: boolean[] = [];
+    await expect(
+      uploadFileResumable([file], { purpose: "pair_room", code: "483920" }, (p) => afterBytes.push(!!p.onWire)),
+    ).rejects.toThrow(UploadError);
+    expect(afterBytes.some(Boolean), "an upload whose appends all failed still put bytes on the wire").toBe(true);
+
+    installFakeUploadFetch({ chunkSize: 100 * 1024, initStatus: 503 });
+    const beforeBytes: boolean[] = [];
+    await expect(
+      uploadFileResumable([file], { purpose: "pair_room", code: "483920" }, (p) => beforeBytes.push(!!p.onWire)),
+    ).rejects.toThrow(UploadError);
+    expect(beforeBytes.some(Boolean), "an upload refused at init never reached the wire").toBe(false);
   });
 
   it("keeps the packing buffer bounded regardless of file size", async () => {

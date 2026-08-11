@@ -141,8 +141,11 @@ refused — so a recycled code can never inherit another transfer's join.
 ```
 POST   /api/uploads?purpose=pair_room&code=<6 digits>&size=<ciphertext bytes>
 PATCH  /api/uploads/{uploadId}          Content-Range: bytes <start>-<end>/<total>
+                                                   → {"received": <int>,
+                                                      "expiresAt": <unix seconds>}
 POST   /api/uploads/{uploadId}/finalize
-GET    /api/uploads/{uploadId}                     → {"received": <int>}
+GET    /api/uploads/{uploadId}                     → {"received": <int>,
+                                                      "expiresAt": <unix seconds>}
 ```
 
 - The init body is `uint32BE(len(encManifest)) || encManifest`, exactly as for a
@@ -183,7 +186,51 @@ GET    /api/uploads/{uploadId}                     → {"received": <int>}
     closing the window entirely would need a seal operation the node protocol
     does not have.
 - Finalize returns `{"id": <string>, "expiresAt": <unix seconds>}`. `expiresAt`
-  is the room's deadline, and it moves — treat it as a floor, not a promise.
+  is the room's deadline, and it moves — treat it as a floor, not a promise. It
+  is the object's EXPIRY (so it is "no expiry" once somebody has joined), unlike
+  the append's and the probe's, which are the room's JOIN deadline.
+  - Same read-never-project rule, and it decides more here than a response: the
+    deadline the object is STORED with comes from the room's row inside the same
+    transaction that inserts it. Finalize records the room's final progress
+    first, and a sibling request can move the room between that and the insert;
+    an object built from the room as this request last saw it would be the one
+    file in the batch that expires early, with nothing left to repair it, and the
+    response would under-report the window the code registry is still admitting
+    joins for.
+- **`expiresAt` on the append and on the status probe.** Both 200s carry the
+  room's JOIN deadline — the instant after which nobody may still join, which is
+  exactly what the pairing code's own registry entry is extended to. It is an
+  ADDITIVE field on the two responses a pre-upload already makes, not a new
+  endpoint and not a new request: there is nothing to poll and nothing to ask.
+  - Present only for `purpose=pair_room`. An ordinary upload has no room, no
+    code and no such instant, and its responses are byte-for-byte what they were.
+  - It is the JOIN deadline, never the room's expiry. A joined room's expiry is
+    "no expiry" (§2); the code is extended to the join deadline and never to
+    never, so this is the number a client may count down.
+  - A request that commits NO bytes — a resume overshoot, or the probe, which is
+    a plain read — reports the deadline the room already has. It does not buy
+    one. Nothing free may move the window (§2).
+  - **It is READ, never projected.** The number is whatever the room's row holds
+    where the response is produced: for an append, inside the same transaction
+    that records the progress; for the overshoot ack and the probe, a store read
+    taken as the answer is written. Requests for one room overlap by design — a
+    lost answer is retried, and a batch uploads its files at once — so a server
+    that instead recomputed the deadline from the room it read on the way in
+    would report a window a sibling had already replaced, and a client counting
+    that down announces a dead code while the registry is still admitting joins.
+    A consequence worth stating: what a client is told may be a deadline it did
+    not buy, bought by another of its own requests.
+  - **Forward only, per room.** Deadlines only ever move outwards (§2), so an
+    answer older than one already held is not news — two overlapping requests can
+    land out of order. Clients keep the LATER of the two and must not let a
+    response pull a window in.
+  - The probe reports nothing at all for a room that is over: a deadline in the
+    future computed from a room whose ciphertext has been reclaimed is an
+    invitation to a rendezvous the server has emptied. The append's own `410`
+    remains the authority on that.
+  - **Clients must treat it as optional.** A server that predates it answers
+    exactly as before, and a client that sees no field has learned nothing —
+    which is not the same as learning that the room is over.
 
 ### 3.2 Download (unauthenticated, zero-knowledge)
 

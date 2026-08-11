@@ -941,6 +941,25 @@ export interface Messages {
     // so the two facts (code stops admitting / transfer runs to completion) are
     // stated together rather than left to be inferred.
     ttlNote: string;
+    // What stands in place of the countdown while a room-bound upload is
+    // running. Every committed byte pushes the room's deadline — and with it the
+    // code's — out again (docs/protocol/relayium-pair-room-v1.md §2), and this
+    // client is told where it landed only when the upload finishes, so any
+    // number shown meanwhile would be one the client made up. It must therefore
+    // contain no duration at all, and it must not promise the code lasts beyond
+    // the upload: it says exactly that the code is held open while these bytes
+    // are moving.
+    ttlUploading: string;
+    // What stands in place of the countdown when a room-bound upload put bytes
+    // on the wire and no answer about the room ever came back. Committed bytes
+    // move the room's deadline, and this client was not told whether they did or
+    // where to — so the two claims it must NOT make are "expired" (which offers
+    // to burn a rendezvous the server may still be admitting joins on) and "still
+    // valid" (an assurance nobody gave). It states the doubt, with no duration in
+    // it, and ttlUnknownNote gives the user something real to do about it: try
+    // the code on the other device, or create a new one.
+    ttlUnknown: string;
+    ttlUnknownNote: string;
     expired: string;
     copy: string;
     copied: string;

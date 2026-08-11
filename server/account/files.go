@@ -331,18 +331,18 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 	// Atomic, fail-closed storage-cap enforcement + insert. This is what actually
 	// stops N concurrent uploads from collectively busting the plan/global cap
 	// (the over* pre-checks race and fail open).
-	switch reason, err := s.persistStoredFile(r.Context(), sf, billable); {
+	switch persisted, err := s.persistStoredFile(r.Context(), sf, billable); {
 	case err != nil:
 		s.dropBlob(bs, blobKey, nodeID)
 		refundReserved()
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
-	case reason == "global":
+	case persisted.Reason == "global":
 		s.dropBlob(bs, blobKey, nodeID)
 		refundReserved()
 		http.Error(w, "server storage is full", http.StatusInsufficientStorage)
 		return
-	case reason == "storage":
+	case persisted.Reason == "storage":
 		s.dropBlob(bs, blobKey, nodeID)
 		refundReserved()
 		http.Error(w, "storage limit reached — free up space or upgrade", http.StatusRequestEntityTooLarge)

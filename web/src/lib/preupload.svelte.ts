@@ -56,15 +56,83 @@ import { CAP_PREUPLOAD } from "./preupload-handoff";
 export type PreuploadNotice = "" | "expired";
 
 /** Which entry is uploading right now and how far it has got. `token` is the
- *  outbox handle (outboxToken), not an index: the queue moves while this runs. */
+ *  outbox handle (outboxToken), not an index: the queue moves while this runs.
+ *  `code` is the room those bytes are bound to — a reader that acts on "an
+ *  upload is in flight" has to know whether it is in flight for ITS room, and a
+ *  surface can outlive the room whose upload is still winding down. */
 export interface PreuploadProgress {
+  code: string;
   token: string;
   sent: number;
   total: number;
 }
 
+/**
+ * Where the room's deadline stood the last time the server said so.
+ *
+ * The pairing code's on-screen countdown runs from the MINT; the room's real
+ * deadline runs from the last committed byte (docs/protocol/relayium-pair-room-v1.md §2)
+ * and the code is dragged along with it. Nothing polls, so a client only ever
+ * hears about it on the responses to requests it was making anyway: every
+ * append's ack, the resume probe that recovers a lost one, and finalize.
+ *
+ * Scoped to a code because it is one room's fact: room A's window says nothing
+ * about the digits the user is looking at now, and it can easily be the LATER of
+ * the two.
+ */
+export interface PreuploadDeadline {
+  code: string;
+  /** Unix seconds, the server's clock — the same units the mint's expiry uses. */
+  expiresAt: number;
+}
+
+/**
+ * The largest number that can be a room deadline AT ALL, and the reason this
+ * module filters: a room somebody has JOINED has no expiry, and the server says
+ * so with math.MaxInt64 (≈9.22e18). The code is a different clock — extended to
+ * the join deadline, never to never — so that number is not one to count down to.
+ *
+ * An ABSOLUTE instant, deliberately, and not `Date.now() + MAX_JOINABLE`. That
+ * earlier ceiling read the server's answer through this browser's clock, and the
+ * two are not related: a device hours behind (a hand-set clock, a dead battery, a
+ * timezone written into the clock itself) is otherwise working perfectly, and
+ * every honest deadline it is handed sits past a ceiling anchored to its own now.
+ * Discarding one costs exactly what this feature buys — the card falls back to
+ * the mint's five minutes and announces a dead code while the server is still
+ * admitting the receiver, with a button offering to burn the rendezvous.
+ *
+ * So the test is only "is this a Unix second at all". 1e11 is the year 5138: past
+ * anything a deadline can honestly be, and far below both the sentinel and a
+ * millisecond timestamp sent where seconds were meant (≈1.8e12) — the two ways a
+ * number that is not Unix seconds actually reaches here. Skew cannot fake either.
+ *
+ * It deliberately does NOT reject a deadline in this browser's past. That is a
+ * legitimate answer (the room really is over, or the clock is FAST), and the
+ * forward-only rule plus the server's own 410 already handle it; rejecting it
+ * here would put the local clock back in the decision by the other door.
+ */
+const MAX_PLAUSIBLE_DEADLINE = 1e11;
+
 let notice = $state<PreuploadNotice>("");
 let progress = $state<PreuploadProgress | null>(null);
+let deadline = $state<PreuploadDeadline | null>(null);
+/**
+ * The room whose window this client CANNOT speak for, "" when there is none.
+ *
+ * The residual ambiguity, and the one state that has to exist rather than be
+ * approximated by one of the other two. An append can commit bytes — extending
+ * the room, and with it the code — and then have its answer, and the resume
+ * probe behind it, both lost. From here that is indistinguishable from an append
+ * that landed nowhere, so this client knows two things and not a third: bytes
+ * went up, and where the window ended is not something it was told.
+ *
+ * What it must NOT do is resolve that either way. Falling back to the mint
+ * announces a dead code and offers to burn a rendezvous the server may still be
+ * admitting joins on — the failure this whole change exists to close. Assuming
+ * the extension instead leaves a code that quietly stopped working looking fine
+ * forever. So it is carried as its own answer, and the surface says so.
+ */
+let unconfirmed = $state("");
 
 /** Reactive read of the one thing the waiting room may have to explain. */
 export function preuploadNotice(): PreuploadNotice {
@@ -74,6 +142,41 @@ export function preuploadNotice(): PreuploadNotice {
 /** Reactive read of the upload in flight, or null. */
 export function preuploadProgress(): PreuploadProgress | null {
   return progress;
+}
+
+/** Reactive read of the last deadline the server reported for the room being
+ *  pre-uploaded into, or null while nothing has finished in it. */
+export function preuploadDeadline(): PreuploadDeadline | null {
+  return deadline;
+}
+
+/** Reactive read of the room whose window could not be confirmed, "" when none
+ *  — see `unconfirmed`. */
+export function preuploadUnconfirmed(): string {
+  return unconfirmed;
+}
+
+/**
+ * Record what the server just said about `code`'s room.
+ *
+ * Forward only, and per room. Forward because that is the server's own rule for
+ * both the room and the code (§2): an extension may push a deadline out, never
+ * pull it in, so an answer older than one already held is not news. Per room
+ * because the caller can be a landing from a room that is already over, and its
+ * window — usually the later of the two — must not become the current room's.
+ *
+ * A usable answer also ENDS any doubt about that room, and does so even when the
+ * forward-only rule then discards it. Every deadline is measured from a byte the
+ * server committed, and this one was committed after whatever ambiguous append
+ * came before it, so the window it names is at or past anything the lost answer
+ * could have bought. Certainty replaces doubt rather than sitting beside it.
+ */
+function noteDeadline(code: string, expiresAt: number): void {
+  if (!Number.isFinite(expiresAt) || expiresAt <= 0) return;
+  if (expiresAt > MAX_PLAUSIBLE_DEADLINE) return; // a joined room's "never"
+  if (unconfirmed === code) unconfirmed = "";
+  if (deadline?.code === code && deadline.expiresAt >= expiresAt) return;
+  deadline = { code, expiresAt };
 }
 
 /**
@@ -205,6 +308,13 @@ function leaveRoom(): void {
   closed = false;
   notice = "";
   progress = null;
+  // The old room's deadline goes with the old room's objects. Left behind it
+  // would hold the NEXT code's countdown open on a window that belongs to digits
+  // nobody can join with any more. Doubt is one room's fact for exactly the same
+  // reason: what could not be confirmed about a room the user has left is not a
+  // reason to be vague about the one now on screen.
+  deadline = null;
+  unconfirmed = "";
   inFlight?.abort();
   inFlight = null;
   releaseUploaded();
@@ -260,12 +370,26 @@ async function drive(): Promise<void> {
       markUploading(index);
       const ctl = new AbortController();
       inFlight = ctl;
+      // Whether THIS attempt got as far as handing bytes to the network. It is
+      // what decides how its failure may be read: before it, nothing moved on
+      // the server and the code's own window is untouched; after it, an append
+      // may have committed and extended the room without ever saying so.
+      let onWire = false;
       try {
         const res = await uploadFileResumable(
           [picked.file],
           { purpose: "pair_room", code },
           (p) => {
-            progress = { token, sent: p.sent, total: p.total };
+            progress = { code, token, sent: p.sent, total: p.total };
+            if (p.onWire) onWire = true;
+            // Every response that names the room's deadline, taken as it
+            // arrives: the append's ack and the probe that recovers a lost one.
+            // Waiting for finalize is what left a failed batch with nothing.
+            //
+            // Guarded on the room still being the active one for the same reason
+            // the landing below is: a tick from an upload whose room the user has
+            // already left must not file that room's window over the new one's.
+            if (p.expiresAt !== undefined && code === activeCode) noteDeadline(code, p.expiresAt);
             // The user removed this file (or cleared the batch) while its bytes
             // were going up. Nothing will ever be handed the key, so stop paying
             // for the rest of them.
@@ -291,12 +415,18 @@ async function drive(): Promise<void> {
           continue;
         }
         markUploaded(at, { id: res.id, key: res.key });
+        // Recorded only on the path that keeps the object, and only under the
+        // room that is still current — the two refusals above have already
+        // returned. This response is the one moment the server tells a client
+        // where the room's window now ends, and therefore how long the code it
+        // is showing has left.
+        noteDeadline(code, res.expiresAt);
       } catch (e) {
         const at = outboxIndexOf(token);
         // Back to `staged`, so the live link picks it up on join. An entry
         // parked in `uploading` is a file that would go over neither transport.
         if (at >= 0) failUpload(at);
-        if (!continueAfter(e)) return;
+        if (!continueAfter(e, code, onWire)) return;
       } finally {
         inFlight = null;
         progress = null;
@@ -315,14 +445,27 @@ async function drive(): Promise<void> {
  * already exhausted its own per-chunk retries, and a driver that re-queued the
  * same file would spend the room's remaining seconds — and the account's
  * traffic — on a batch it is no longer able to finish.
+ *
+ * `code` and `onWire` are what the failure has to be read AGAINST: which room it
+ * was for, and whether it happened after bytes had been handed to the network.
  */
-function continueAfter(e: unknown): boolean {
+function continueAfter(e: unknown, code: string, onWire: boolean): boolean {
+  // Doubt about a room the user has already left is not doubt about the one on
+  // screen — and `leaveRoom` has already cleared this room's state, which a late
+  // landing must not undo.
+  const mayBeExtended = onWire && code === activeCode;
   // An abort is this module's own doing — the file left the queue, or the room
   // was abandoned — and it says nothing about whether more work is possible. So
   // it never ends the pass: the loop's own top decides that, from the room that
   // is active by then. Ending here instead would strand a freshly minted room
   // whose predecessor's upload was aborted to make way for it.
-  if (e instanceof DOMException && e.name === "AbortError") return true;
+  if (e instanceof DOMException && e.name === "AbortError") {
+    // Its bytes were still bytes. An abort stops the request, not whatever the
+    // server had already committed of it, so a room it may have extended is
+    // exactly as unconfirmable as any other lost answer.
+    if (mayBeExtended) unconfirmed = code;
+    return true;
+  }
   const status = e instanceof UploadError ? e.status : 0;
   switch (status) {
     case 409:
@@ -338,6 +481,16 @@ function continueAfter(e: unknown): boolean {
       // consequence the user can see.
       closed = true;
       notice = "expired";
+      // And it outranks every deadline this module was ever handed. A window an
+      // earlier file bought can still be in the future when the room is voided
+      // early — an operator, a deleted account — and a card counting that window
+      // down would go on offering a rendezvous the server has already emptied.
+      // The server is the authority on the room being over; nothing this client
+      // was told before that may argue with it — including this module's own
+      // "I could not tell", which is a statement about missing evidence and has
+      // nothing left to be true about once the evidence arrives.
+      deadline = null;
+      unconfirmed = "";
       return false;
     default:
       // 403 (no live code this instance minted, or not this account's), 503 (not
@@ -345,6 +498,13 @@ function continueAfter(e: unknown): boolean {
       // all leave the batch exactly as it was and the live link exactly as it
       // was. Stop asking — every one of them will answer the same way for the
       // next file — and say nothing.
+      //
+      // Say nothing about the FILES, that is. If bytes had already gone out, the
+      // room may have been extended by them and this client was not told where
+      // to, and none of these statuses is an answer to that question: a 500 in
+      // particular is returned by an append that has already committed its bytes
+      // and moved the room in the same transaction.
+      if (mayBeExtended) unconfirmed = code;
       closed = true;
       return false;
   }
