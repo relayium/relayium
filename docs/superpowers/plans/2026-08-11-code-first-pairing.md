@@ -26,7 +26,10 @@ the decisions are not derivable from the code:
   during the wait — "upload and walk away" is NOT supported.
 - **Join deadline 5 minutes; transfer deadline none.** If nobody joins within
   5 minutes of the upload, the transfer fails and the ciphertext is void. Once
-  a peer has joined, a long transfer is never cut off by that clock.
+  a peer has joined, a long transfer is never cut off by that clock. **Refined
+  by B1 below:** the 5 minutes run from upload *completion*, and the code stays
+  joinable for the whole upload — otherwise a ten-minute upload kills its own
+  code at T+5.
 - **Metering bills from the first uploaded byte,** including when pairing later
   fails or times out, so upload bandwidth cannot be consumed for free.
 - **Brute-force hardening: declined for now** by the owner, who judged the
@@ -60,6 +63,32 @@ the decisions are not derivable from the code:
 - **Preserve the OS share-target path.** `share-target.ts` fills the same outbox.
   Files that arrive that way must remain visible, not silently replaced.
 - **Baseline to protect:** 3448 passing / 3 skipped Vitest tests at `0240d41e`.
+
+---
+
+## Phase 1 — DELIVERED AND PUBLIC (`ebd2f10c`, 2026-08-11)
+
+Tasks 1–5 below all shipped in one commit, fast-forwarded onto `origin/main` and
+verified in production (assets SHA-256-identical to the local build of that SHA,
+`healthz=ok`, new copy live in the shipped locale chunks, real headless Chrome on
+`/cross-network` clean). Their unchecked boxes are the plan as written, kept as
+the record of what was intended; they are **not** open work.
+
+Deviations from the plan as written, and why:
+- `pair.stageLocalNote` became `pair.stageNote` and dropped its "stays on this
+  device / not uploaded" sentence. Pre-upload was reinstated by the owner while
+  Phase 1 was being built, so a no-upload promise in a code room would have been
+  false within one phase. The LAN note keeps the promise; the code-room note says
+  only that the transfer starts on join.
+- `pair.sendCode` was removed from `i18n.test.ts`'s 24-character short-label
+  budget rather than shortening three locales. It is now a full-width primary
+  button, and "Crear un código de emparejamiento" is 33 characters and correct.
+- Per-file removal was added to `PendingFiles.svelte` (optional `onRemove` /
+  `removeLabel`) instead of a parallel list of buttons, so one list carries both
+  the files and the control that removes them.
+- `web/e2e/code-room.mjs`'s `preselectedSendScenario` was rewritten to load its
+  queue from the waiting room's staging box; it drove the deleted files-first
+  pickers and was a real (not flaky) failure until updated.
 
 ---
 
@@ -237,13 +266,32 @@ The transport already exists — `POST /api/files` plus the stored-wire codec
 is a zero-knowledge encrypt-then-upload pipeline serving `/offline-transfer`
 today. Phase 2 binds it to a pairing-code room instead of a `/d/<id>#k=` link.
 
-### Blockers — resolve BEFORE writing Phase 2 code
+### Blockers
 
-These are not implementation steps. Each changes what gets built, and three need
-the owner. Coding before they are answered means building something that has to
-be torn out.
+B1–B3 needed the owner and were **answered on 2026-08-11** (below, with the work
+each answer creates). B4–B6 are engineering items that still have to be settled
+while building.
 
-**B1 (owner) — the 5-minute code TTL and a long upload contradict each other.**
+Two corrections the owner made to this document's own framing, worth keeping so
+they are not re-introduced:
+
+- **There is no "direct" cross-network path.** `web/src/lib/ice.ts:212,219` set
+  `iceTransportPolicy: "relay"` whenever a TURN relay is available, which drops
+  host and srflx candidates entirely — cross-network browsers do not attempt a
+  direct connection and cannot fall back to one. The choice is never
+  "server vs direct"; it is **store-and-forward vs live TURN relay**, and both go
+  through Relayium. Only LAN is genuinely direct. (The `"p2p"` path label exists
+  in the code but is unreachable for a cross-network browser.)
+- **Store-and-forward is not inherently faster.** With both peers online, the
+  live relay is a single pipelined pass — `size / min(up, down)` — while
+  store-and-forward is `size/up + size/down`, strictly worse. The entire benefit
+  of pre-upload is spending wait time that was going to be idle anyway: if the
+  upload finishes before the peer arrives, the peer pays only `size/down` and
+  skips the sender's slow uplink. If the peer joins immediately, pre-upload is
+  a net loss. This is why the default is Plan B and A is opt-in by staging early,
+  and it is the reasoning behind B2's answer.
+
+**B1 — the 5-minute code TTL vs. a long upload.**
 A real conflict the current rules do not resolve, and the first thing to settle.
 
 `CodeTTLSeconds = 300` (`server/internal/signal/pair.go:233`) runs from the
@@ -255,33 +303,65 @@ owner's own example is the case that breaks it: 「上传一个大文件，上�
 the upload was still running. Nobody can join at all, and the transfer that was
 meant to be *faster* cannot happen.
 
-Three ways out, with what each costs:
-- **(a) Keep 300s from mint.** No security change, but pre-upload is then only
-  usable for batches that upload well inside 5 minutes — which excludes the
-  large-folder case that motivates the feature. Mostly defeats the point.
-- **(b) Restart or extend the window when the upload completes** (join deadline
-  becomes upload-ready + 5 min). This is what the owner described. It widens the
-  window in which a code is guessable to upload-time + 5 min, unbounded from the
-  server's point of view unless capped.
-- **(c) Decouple:** keep a short admit window but let the sender re-mint a code
-  against the same staged batch — the upload survives, the code rotates.
+**DECIDED — the code stays joinable while the upload is genuinely progressing,
+then the 5-minute clock starts at upload completion.** 「上传期间码不死，传完再计
+5 分钟」. `pair.go`'s own comment calls widening this window 「永久放宽一个安全
+参数」, and the owner accepted it knowingly, having already declined brute-force
+hardening.
 
-`pair.go`'s own comment calls widening this window 「永久放宽一个安全参数」, so it
-is an owner call, not a routine choice. The owner has already declined
-brute-force hardening, which makes (b) cheaper to accept than it would otherwise
-be — but it should be a stated decision, not a side effect of shipping.
+What this decision creates:
+- The pair registry needs an **extend/keepalive** driven by observed upload
+  progress for that room, then a final 300s window when the upload completes.
+- **Define "genuinely progressing" or the window is unbounded.** A stalled or
+  deliberately trickled upload must not hold a code open forever — needs an idle
+  timeout (no bytes for N seconds → fall back to normal expiry). Without this,
+  "upload duration + 5 min" is an attacker-chosen number.
+- The abuse case is self-limiting but only because of the owner's own billing
+  rule: holding a code open requires continuously uploading, and traffic bills
+  from the first byte against the holder's own quota. Note this explicitly — the
+  billing rule is load-bearing for the security argument, so weakening one
+  weakens the other.
+- **Client countdown must follow.** `CodePairing.svelte` reads `expiresAt` from
+  `sessionStorage` once at mint and counts down from it. Left alone it will show
+  an expired code while the code is actually alive.
 
-**B2 (owner) — what happens if the peer joins mid-upload.** Three states exist
-at join: nothing uploaded, partly uploaded, fully uploaded. Does the receiver
-wait for the upload to finish then download; does the sender abandon the upload
-and fall back to the live link; or does it split (uploaded part from storage,
-remainder over the link)? Left unanswered this is exactly the A/B 「打架」 the
-owner set out to remove, reappearing inside a single transfer.
+**DECIDED — split the batch at file boundaries.** Already-uploaded files: the
+receiver downloads them from storage. The file currently uploading: let it
+finish (it is already paid for), then download. Files not yet started: send over
+the live TURN relay, which skips a whole leg. **Never split a single file across
+two transports** — byte-range reassembly across two ciphertext framings with an
+integrity check over the seam is a large amount of risk for no real gain.
 
-**B3 (owner) — over-quota and upload failure.** `POST /api/files` returns 413
-over quota. Does staging fall back silently to Plan B (hold locally, send on
-join), or fail loudly? Silent fallback is friendlier but quietly fails to
-deliver the speed the UI just promised.
+What this decision creates:
+- Confirms B4's per-item state is needed at **file** granularity, not batch.
+- Receiver UI shows one list whose rows have two different origins. That is the
+  main cost of this choice, and it is presentation work, not protocol work.
+
+**DECIDED — block before entering the room when the account is over quota.**
+「进房前就拦」. The create-code action is replaced by a quota explanation, an
+upgrade path, and a "use LAN instead" route; no code is minted.
+
+Why the earlier framing of this question was void, and must not come back: there
+is **one combined monthly traffic pool**, not separate upload/download/relay
+budgets. `account/turn.go:124` says so outright — "monthly traffic (relay +
+staged upload/download combined)" — and the same `overTraffic()` gate guards
+TURN credentials (`turn.go:126`), upload (`files.go:204,242`), download billed to
+the file's owner (`files.go:486`) and Device Inbox (`deviceinbox_task.go:103`).
+So an over-quota account cannot fall back to the live relay either: **the whole
+cross-network path is dead, not just the accelerated one.** LAN is unaffected —
+it generates no server traffic and passes no gate.
+
+What this decision creates:
+- **A quota read the choose screen does not have today.** The client currently
+  learns about quota only from `/api/ice` (`relayStatus`), which is fetched after
+  entering a room. Gating the create-code action needs that state earlier —
+  either carried on `/api/me` or a small dedicated endpoint. This is real work,
+  not a copy change.
+- **The gate must fail OPEN on a quota read error**, matching `turn.go`'s
+  existing behaviour ("fail-open so a DB blip never blocks a real user"). A
+  fail-closed gate here would deny transfers to paying users on a database blip.
+- Copy must say three things: that the month's allowance is used up, how to
+  raise it, and that LAN still works.
 
 **B4 (engineering) — the auto-send effect must learn what is already uploaded.**
 Phase 1 ships an App effect that drains the whole outbox over the live link the
