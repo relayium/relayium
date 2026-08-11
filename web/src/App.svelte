@@ -35,8 +35,11 @@
   import { lang, dir, messages, legalUrl, pageUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
   import { applyHeadMeta, pageMeta } from "./lib/page-meta";
   import { hasFiles, dropTarget, pickedFromInput, filesFromDataTransfer, type PickedFile } from "./lib/drag";
-  import { outbox, setOutbox, takeOutbox, clearOutbox } from "./lib/outbox.svelte";
+  import { outbox, setOutbox, takeOutbox, clearOutbox, liveLinkCount, liveLinkFiles, uploadedRefs, uploadedFingerprint, releaseUploaded } from "./lib/outbox.svelte";
   import { resetPreupload } from "./lib/preupload.svelte";
+  import { createStoredReceiver } from "./lib/preupload-receive.svelte";
+  import { peerSupportsPreupload } from "./lib/peer-caps.svelte";
+  import StoredIncoming from "./lib/StoredIncoming.svelte";
   import { needsSendConfirmation, shownSasCode, autoAcceptsIncomingText } from "./lib/verify-gates";
   import { canReleaseConfirmedSend, queuedReleaseTarget } from "./lib/confirm-send";
   import { verifyPeers, setVerifyPeers } from "./lib/verify-pref.svelte";
@@ -139,7 +142,26 @@
     legacyFiles: session,
     legacyText: textSession,
     requestNotify: requestNotifyPermission,
+    // Pre-upload key handoff (frame kind 12). A PULL of the CURRENT set, asked
+    // again on every (re)established transport — which is exactly the protocol's
+    // retry rule, expressed as "there is no remembered partial state to be
+    // wrong about".
+    //
+    // Room-guarded, because the pull happens LATE: it runs inside the send
+    // chain, at seal time, which can be well after the frame was scheduled. A
+    // stored object belongs to the room it was uploaded into, so a set pulled
+    // while this page is between rooms could name objects the link's peer can
+    // only 404 on. The room boundary already empties the set — the sender's own
+    // `resetPreupload`/`startPreupload` on a re-mint, this effect's on the way
+    // out; this covers the window around it, when `roomCode` has changed and the
+    // socket is still bound to the room being left.
+    storedKeysToSend: () => (roomCode && roomCode === socketRoomKey ? uploadedRefs() : []),
+    onStoredKeys: (items) => storedReceiver.offer(items),
+    supportsPreupload: peerSupportsPreupload,
   });
+  /** Files a peer pre-uploaded and then handed us the keys to. Its own surface
+   *  and its own accept step; see preupload-receive.svelte.ts. */
+  const storedReceiver = createStoredReceiver();
   // 模板里读得最多的三个，取个短名字（getter 转发，响应式不丢）。
   const send = $derived(workspace.send);
   const recv = $derived(workspace.recv);
@@ -422,7 +444,18 @@
     peerCardList?.scrollIntoView?.({ block: "nearest" });
   }
 
-  const busy = $derived(workspace.warnsOnLeave);
+  /**
+   * "A reload, a navigation or a version swap right now destroys work in flight."
+   *
+   * The stored-receive lane is part of this and is easy to leave out, because it
+   * is the one transfer that does not look like one from the workspace's side:
+   * no peer, no link, no `send`/`recv`. What it does have is a manifest fetch, a
+   * consent prompt the user has not answered yet, and a download writing to a
+   * save target — all of which a refresh, a Back, or the update banner reloading
+   * the page would end mid-file, with the ciphertext's only keys held in this
+   * tab's memory and nothing on the server that could hand them over again.
+   */
+  const busy = $derived(workspace.warnsOnLeave || storedReceiver.active());
   const dropBusy = $derived(
     visiblePeers.length === 0 || visiblePeers.every((peer) => workspace.blocksNewIntent(peer.id)),
   );
@@ -431,7 +464,15 @@
   // method choices instead. An in-flight transfer (busy) always wins over it, and
   // the reset effect below clears it once the peer drops, so a reconnect re-shows.
   let lanDismissed = $state(false);
-  const showTransfer = $derived(busy || (visiblePeers.length > 0 && !lanDismissed));
+  // `storedReceiver` is part of this test because a pre-uploaded batch does not
+  // need the peer any more: the ciphertext is on the server and the keys are
+  // already here. Without it, a sender whose signalling socket dropped after the
+  // handoff would empty the roster and take the unanswered prompt — and the
+  // downloads behind it — off the screen, for a transfer that could still have
+  // completed on its own.
+  const showTransfer = $derived(
+    busy || storedReceiver.status !== "idle" || (visiblePeers.length > 0 && !lanDismissed),
+  );
 
   // Un-dismiss once the LAN peer disconnects, so the next device that appears
   // re-shows the transfer surface rather than staying hidden behind a stale flag.
@@ -555,10 +596,64 @@
   // every exit path (done/fail/cancel) releases without per-branch bookkeeping.
   const wake = createWakeLock();
   $effect(() => {
-    const active = (send && !send.done) || (recv && !recv.done);
+    // The stored lane counts for the same reason it counts as `busy`: a phone
+    // that locks its screen while a pre-uploaded batch is downloading is a
+    // suspended tab, and this transfer cannot be resumed from the other side —
+    // the keys only exist here.
+    const active = (send && !send.done) || (recv && !recv.done) || storedReceiver.active();
     if (active) wake.acquire();
     else wake.release();
   });
+
+  /**
+   * Take the batch the LIVE LINK is responsible for, for this exact peer.
+   *
+   * The extra step over `takeOutbox()` is the old/unknown-peer rule. Pre-upload
+   * happens while the room is still waiting, so the sender cannot know who will
+   * join; when the joiner turns out not to announce `preupload/1` — an older Web
+   * build, a native client, the CLI — its keys can never be delivered, because
+   * frame kind 12 is a hard error for a peer that does not know it. Left
+   * `uploaded`, those entries are drained by NEITHER lane and the user simply
+   * never sees the file arrive. Returning them to the live link costs the bytes
+   * that were already spent and delivers the transfer.
+   *
+   * Deliberately decided HERE, at the drain, rather than from a capability
+   * watcher: this is the instant the answer is actually needed, and it is the
+   * same instant `routes()` decides link-versus-legacy from the same
+   * announcement. If a caps hello were late, both decisions degrade together to
+   * "send it the ordinary way", which is wasteful and correct — the alternative
+   * failure (wait for an announcement that never comes) loses the files.
+   *
+   * The stored object is not deleted: its life is the room's, and the room's own
+   * deadline reclaims it.
+   */
+  function drainFor(peerId: string): PickedFile[] {
+    if (!peerSupportsPreupload(peerId)) releaseUploaded();
+    return takeOutbox();
+  }
+
+  /**
+   * How many entries the live link owes THIS peer — the gate in front of every
+   * `drainFor`, and it must be the peer-specific question.
+   *
+   * The whole fallback above is unreachable otherwise. Every send decision used
+   * to ask `stagedCount()`, which is 0 for a batch that finished uploading
+   * before anyone joined — so a peer that cannot be handed keys never reached
+   * the drain that would have released those entries to it, and the batch
+   * arrived as silence. The second edge is the same bug later in time: the peer
+   * is already here and already known not to speak `preupload/1` when an upload
+   * that was in flight completes, and `markUploaded` moves an entry out of
+   * `staged` rather than into it, so a `stagedCount()` gate sees the number go
+   * DOWN and stays shut.
+   *
+   * Reactive on both halves: `liveLinkCount` reads the per-entry state array
+   * (so `markUploaded`/`failUpload` wake it even though the file list is
+   * untouched) and `peerSupportsPreupload` reads the roster announcement (so a
+   * caps hello arriving after the peer does re-decides).
+   */
+  function liveLinkFor(peerId: string): number {
+    return liveLinkCount(peerSupportsPreupload(peerId));
+  }
 
   // Queued files (OS share sheet, or picked before pairing) auto-send the
   // moment there's exactly one reachable device and nothing else in flight;
@@ -567,9 +662,26 @@
   let dismissedPeerId = $state<string | null>(null);
 
   $effect(() => {
-    if (outbox().length && surfaceShown && visiblePeers.length === 1
-      && !workspace.blocksNewIntent(visiblePeers[0].id)) {
-      const peer = visiblePeers[0];
+    // `liveLinkFor(peer)`, never `outbox().length` and never the peer-independent
+    // `stagedCount()`. Three different bugs live in those differences, and all
+    // three only exist once pre-upload can leave entries behind:
+    //
+    //  1. A queue whose only entry is still UPLOADING is not empty, but it has
+    //     nothing for the live link. `outbox().length` passed, `takeOutbox()`
+    //     returned [], and the peer was offered a batch with no files in it.
+    //  2. `failUpload` (the room expired, the upload broke) moves an entry back
+    //     to `staged` by rewriting the STATE array only — `files` is untouched.
+    //     A reader that tracks `outbox()` alone therefore never re-runs, and the
+    //     released file goes over neither transport. Reading the per-entry state
+    //     is what makes this effect fire on exactly that transition.
+    //  3. A batch that finished uploading before anyone joined has a
+    //     `stagedCount()` of 0, so a gate on that number never opened and
+    //     `drainFor`'s old-peer fallback — the only thing that can deliver those
+    //     entries to a peer with no `preupload/1` — was never reached at all.
+    const solo = visiblePeers.length === 1 ? visiblePeers[0] : null;
+    if (solo && liveLinkFor(solo.id) && surfaceShown
+      && !workspace.blocksNewIntent(solo.id)) {
+      const peer = solo;
       // The extra sender confirmation belongs to advanced verification: its only
       // stated reason was "the joiner might be a code-guesser, so look at the SAS
       // before you send". With the preference off there is no SAS on screen to
@@ -582,7 +694,7 @@
       // mode skips (autoAcceptsIncomingFile). Turning verification on restores
       // the sender-side confirmation as well.
       if (!needsSendConfirmation(verifyOn, roomCode)) {
-        workspace.sendFiles(peer.id, takeOutbox());
+        workspace.sendFiles(peer.id, drainFor(peer.id));
         return;
       }
       // Code room, verification on: surface a confirmation bar instead of
@@ -601,6 +713,33 @@
   });
 
   /**
+   * Re-hand the peer the pre-uploaded set whenever that set changes.
+   *
+   * `attach()` already sends it on every (re)established transport, which covers
+   * the ordinary case where everything was uploaded before anyone joined. This
+   * covers the one that is not ordinary and is easy to lose: an upload that was
+   * still IN FLIGHT when the peer joined is allowed to finish (the protocol
+   * refuses only a new init), so a new object appears on an already-open link
+   * minutes after the first handoff. Without this the receiver is never told
+   * about it and the file sits in storage until the room deletes it.
+   *
+   * Re-sending the whole set rather than the delta is the protocol's own rule,
+   * and it is why over-sending here is CHEAP — the receiver dedupes by id, so a
+   * spurious re-send costs one frame and changes nothing. It is not free, and
+   * that is what `uploadedFingerprint` is for: a `$derived` over `uploadedRefs()`
+   * would allocate a new array on every unrelated state transition (a file
+   * picked, an upload started, an entry removed), never compare equal, and
+   * re-emit the whole set each time — O(N) frames per upload, O(N²) over an
+   * N-file batch, every one of them a seal and a send. A string of the ids
+   * settles, so the re-send happens once per genuinely new object.
+   */
+  const uploadedIds = $derived(uploadedFingerprint());
+  $effect(() => {
+    if (!uploadedIds || !workspace.hasLink) return;
+    workspace.sendStoredKeys();
+  });
+
+  /**
    * The peer the workspace's standing release control acts on, or "".
    *
    * Read by the control's `{#if}` and by `releaseQueued` alike — see
@@ -614,7 +753,13 @@
     const peerId = workspace.hasLink ? workspace.linkPeerId : "";
     return queuedReleaseTarget({
       linkPeerId: peerId,
-      queued: outbox().length,
+      // What the live link owes THIS peer. Not `outbox().length`: an entry
+      // still uploading is nobody's to release. Not the peer-independent
+      // staged count either: for a peer that cannot be handed keys the
+      // already-uploaded entries ARE this control's batch, and a gate that
+      // could not see them left a fully pre-uploaded queue with no control
+      // that could reach it.
+      queued: peerId === "" ? 0 : liveLinkFor(peerId),
       // The same live policy every other outbound control reads, so the button
       // is never offered for a link that would refuse the batch anyway.
       blocked: peerId !== "" && workspace.blocksNewIntent(peerId),
@@ -652,7 +797,7 @@
     if (!pendingPeer || !canRelease) return;
     const id = pendingPeer.id;
     pendingPeer = null;
-    workspace.sendFiles(id, takeOutbox());
+    workspace.sendFiles(id, drainFor(id));
   }
   function cancelSend() {
     if (pendingPeer) {
@@ -1032,11 +1177,49 @@
     const key = roomCode;
     if (!signaling) return; // socket not built yet (initial mount)
     if (key === socketRoomKey) return; // already bound to this room
-    // Queued files belong to the pairing attempt that queued them: leaving the code
-    // room by ANY path (start over, tab switch, back button) must drop them so they
-    // can't surprise-send to an unrelated peer later. Only the code→"" exit clears —
-    // ""→code (files were just queued) and code→code (timedOut re-mint) keep the queue.
-    if (socketRoomKey && !key) { clearOutbox(); resetPreupload(); }
+    // A room is ending. Nothing it decided may be inherited by the next one, and
+    // that is true of a re-mint (code→code) exactly as it is of the way out —
+    // the new room has a new deadline, new ciphertext and, as far as either side
+    // knows, a different peer. What differs between the two halves is only WHO
+    // crosses that boundary.
+    //
+    // THE RECEIVER IS THIS EFFECT'S, on every change including code→code. It
+    // holds the last room's keys, its prompt, and its record of which ids it has
+    // already answered for; carried across, an id the new peer sends is silently
+    // a no-op because the OLD room settled it, and the user is never offered a
+    // file that was really sent. App is its only holder, so there is no second
+    // owner to race with.
+    //
+    // THE SENDER'S HALF IS NOT, except on the way out. `CodePairing.send()`
+    // already calls `resetPreupload()` synchronously, between the mint and
+    // `enterRoom`, and `startPreupload` runs the same boundary itself when it is
+    // handed a different code. Both happen at or before the moment `roomCode`
+    // changes — so by the time this effect runs on a code→code re-mint there is
+    // nothing left to release, and a reset here would be a SECOND one.
+    //
+    // That second reset is not merely redundant. This effect and CodePairing's
+    // room effect are both woken by the one roomCode change, and if the child
+    // runs first it has already started the NEW room's driver: the reset would
+    // then abort that upload, release its refs and blank the active code, which
+    // stops the driver at the top of its loop. Nothing re-arms it — the child
+    // effect has run for this roomCode, and its incidental dependency on the
+    // outbox's state array disappears as soon as a pass is already running. The
+    // new room would sit there uploading nothing.
+    //
+    // On the way OUT (code→"") there is no new room and no new driver, so this
+    // is the last owner standing and does both. The QUEUE goes only here for its
+    // own reason: queued files belong to the pairing attempt that queued them,
+    // so leaving the code room by ANY path (start over, tab switch, back button)
+    // drops them rather than letting them surprise-send to an unrelated peer
+    // later — but ""→code (files were just queued) and code→code (a timedOut
+    // re-mint) are the same user still sending the same batch, and must keep it.
+    if (socketRoomKey) {
+      storedReceiver.reset();
+      if (!key) {
+        clearOutbox();
+        resetPreupload();
+      }
+    }
     socketRoomKey = key;
     void switchRoom();
   });
@@ -1234,8 +1417,8 @@
    */
   function openWorkspace(peerId: string) {
     if (workspace.blocksNewIntent(peerId)) return;
-    if (outbox().length && !needsSendConfirmation(verifyOn, roomCode)) {
-      workspace.sendFiles(peerId, takeOutbox());
+    if (liveLinkFor(peerId) && !needsSendConfirmation(verifyOn, roomCode)) {
+      workspace.sendFiles(peerId, drainFor(peerId));
       return;
     }
     void workspace.openText(peerId);
@@ -1396,7 +1579,7 @@
         <input class="file-pick-input" id={`pick-${p.id}`} type="file" multiple disabled={intentBlocked}
           aria-labelledby={`send-file-label-${p.id}`}
           aria-describedby={`peer-target-${p.id}`}
-          onclick={(e) => { if (outbox().length) { e.preventDefault(); workspace.sendFiles(p.id, takeOutbox()); } }}
+          onclick={(e) => { if (liveLinkFor(p.id)) { e.preventDefault(); workspace.sendFiles(p.id, drainFor(p.id)); } }}
           onchange={(e) => pickFile(e, p.id)} />
       </label>
       {#if folderUploadSupported}
@@ -1420,7 +1603,8 @@
   {@const solo = visiblePeers.length === 1}
   {@const revealFile = [send, recv].find((x) => x && !x.done && workspace.sasCode)}
   {@const mixed = workspace.usingMixed}
-  {@const hasActivity = !!pendingPeer || !!incoming || !!send || !!recv || activeText.status !== "idle" || mixed}
+  {@const hasActivity = !!pendingPeer || !!incoming || !!send || !!recv || activeText.status !== "idle" || mixed
+    || storedReceiver.status !== "idle"}
   <!-- This live node exists before an event occurs; mounting a live region and
        its message in the same update is not announced reliably. Protected text
        bodies never enter it. -->
@@ -1446,6 +1630,12 @@
       bind:element={headEl}
     />
   {/if}
+
+  <!-- Files the peer uploaded against the pairing code before this device
+       joined, handed over as keys the moment it did. Above the live-link cards
+       because it is the thing that is already finished waiting: the ciphertext
+       exists and the room's deadline is counting against it. -->
+  <StoredIncoming receiver={storedReceiver} />
 
   {#if pendingPeer}
     <!-- Captured once: the handlers below are closures, and narrowing a $state
@@ -1483,10 +1673,17 @@
        than sending: the comparison is the stop, and the release must not be a
        way around it. -->
   {#if releaseTarget && !pendingPeer}
+    <!-- Counted over exactly what releaseQueued will hand THIS peer, which is
+         peer-specific: an entry still uploading is in nobody's batch, and an
+         already-uploaded one is in this batch precisely when the peer cannot be
+         handed its key. Asking a different question here than the drain asks is
+         how the sentence and the send come to disagree about which files they
+         mean. -->
+    {@const releasing = liveLinkFiles(peerSupportsPreupload(releaseTarget))}
     <div class="ui-callout release-queued">
       <span>{t.workspace.queuedRelease(
-        outbox().length,
-        formatSize(outbox().reduce((total, item) => total + item.file.size, 0)),
+        releasing.length,
+        formatSize(releasing.reduce((total, item) => total + item.file.size, 0)),
       )}</span>
       <button class="btn btn-primary btn-sm release-queued-btn" onclick={releaseQueued}>
         {t.workspace.queuedReleaseBtn}

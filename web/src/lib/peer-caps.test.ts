@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
-  CAP_LINK, CAP_TEXT, LINK_BUILD_SUPPORT, advertisedCaps, capsSignal, linkRoomActive,
-  recordPeerCaps, peerSupportsLink, peerSupportsText, retainPeers, resetPeerCaps,
+  CAP_LINK, CAP_PREUPLOAD, CAP_TEXT, LINK_BUILD_SUPPORT, advertisedCaps, capsSignal, linkRoomActive,
+  recordPeerCaps, peerSupportsLink, peerSupportsPreupload, peerSupportsText, retainPeers, resetPeerCaps,
 } from "./peer-caps.svelte";
 import { clearRoom, enterRoom } from "./room.svelte";
 import { localCaps } from "./webrtc";
@@ -21,13 +21,17 @@ describe("peer caps", () => {
     expect(peerSupportsText("p1")).toBe(true);
   });
 
-  it("announces exactly text/1 and link/1", () => {
+  it("announces exactly text/1, link/1 and preupload/1", () => {
     expect(CAP_TEXT).toBe("text/1");
     expect(CAP_LINK).toBe("link/1");
     // The release switch for the unified workspace. A default build implements
     // both lanes, so it says so.
-    expect(capsSignal()).toEqual({ caps: [CAP_TEXT, CAP_LINK] });
-    expect(advertisedCaps()).toEqual([CAP_TEXT, CAP_LINK]);
+    // preupload/1 joined the list in the checkpoint that implemented BOTH
+    // halves of the key handoff. It rides with link/1 and can never be
+    // announced without it: frame kind 12 travels on the link's file channel.
+    expect(CAP_PREUPLOAD).toBe("preupload/1");
+    expect(capsSignal()).toEqual({ caps: [CAP_TEXT, CAP_LINK, CAP_PREUPLOAD] });
+    expect(advertisedCaps()).toEqual([CAP_TEXT, CAP_LINK, CAP_PREUPLOAD]);
     expect(LINK_BUILD_SUPPORT).toBe(true);
     expect(linkRoomActive()).toBe(true);
     // Both announcements come from this one source, so the roster hello and the
@@ -43,13 +47,13 @@ describe("peer caps", () => {
   it("announces the same capabilities in a pairing-code room", () => {
     enterRoom({ code: "123456" });
     expect(linkRoomActive()).toBe(true);
-    expect(capsSignal()).toEqual({ caps: [CAP_TEXT, CAP_LINK] });
-    expect(advertisedCaps()).toEqual([CAP_TEXT, CAP_LINK]);
+    expect(capsSignal()).toEqual({ caps: [CAP_TEXT, CAP_LINK, CAP_PREUPLOAD] });
+    expect(advertisedCaps()).toEqual([CAP_TEXT, CAP_LINK, CAP_PREUPLOAD]);
     // Still read at call time, not frozen at import time: entering and leaving a
     // room rewrites the URL fragment without a reload.
-    expect([...localCaps()]).toEqual([CAP_TEXT, CAP_LINK]);
+    expect([...localCaps()]).toEqual([CAP_TEXT, CAP_LINK, CAP_PREUPLOAD]);
     clearRoom();
-    expect([...localCaps()]).toEqual([CAP_TEXT, CAP_LINK]);
+    expect([...localCaps()]).toEqual([CAP_TEXT, CAP_LINK, CAP_PREUPLOAD]);
   });
 
   // The downgrade boundary that did NOT move. It is what keeps a speculative
@@ -89,6 +93,36 @@ describe("peer caps", () => {
     expect(peerSupportsText("peer")).toBe(true);
   });
 
+  // The gate on frame kind 12, with the same exactness rule and the same reason:
+  // an unknown kind is a hard error, so a speculative handoff does not degrade
+  // to the live link — it fails the whole transfer.
+  it.each([
+    ["a peer that never announced", null],
+    ["a peer announcing only text/1", [CAP_TEXT]],
+    ["a current link peer that does not speak it", [CAP_TEXT, CAP_LINK]],
+    ["a later handoff version", [CAP_TEXT, CAP_LINK, "preupload/2"]],
+    ["a differently-cased claim", [CAP_TEXT, CAP_LINK, "PREUPLOAD/1"]],
+    ["a near-miss claim", [CAP_TEXT, CAP_LINK, "preupload/1 "]],
+  ])("never hands a key handoff to %s", (_label, caps) => {
+    if (caps) recordPeerCaps("peer", { caps });
+    expect(peerSupportsPreupload("peer")).toBe(false);
+    enterRoom({ code: "123456" });
+    expect(peerSupportsPreupload("peer")).toBe(false);
+  });
+
+  it("believes an exact preupload/1 claim", () => {
+    recordPeerCaps("peer", { caps: [CAP_TEXT, CAP_LINK, CAP_PREUPLOAD] });
+    expect(peerSupportsPreupload("peer")).toBe(true);
+    enterRoom({ code: "654321" });
+    expect(peerSupportsPreupload("peer")).toBe(true);
+  });
+
+  it("forgets a departed peer's handoff claim with the rest of its announcement", () => {
+    recordPeerCaps("gone", { caps: [CAP_TEXT, CAP_LINK, CAP_PREUPLOAD] });
+    retainPeers([]);
+    expect(peerSupportsPreupload("gone")).toBe(false);
+  });
+
   it("records text and link support together", () => {
     recordPeerCaps("both", { caps: [CAP_TEXT, CAP_LINK] });
     expect(peerSupportsText("both")).toBe(true);
@@ -98,7 +132,7 @@ describe("peer caps", () => {
   it("hands out a fresh array, so a caller cannot mutate what we announce", () => {
     const first = capsSignal();
     first.caps.push("forged/1");
-    expect(capsSignal()).toEqual({ caps: [CAP_TEXT, CAP_LINK] });
+    expect(capsSignal()).toEqual({ caps: [CAP_TEXT, CAP_LINK, CAP_PREUPLOAD] });
   });
 
   // The other piggybacks (relayRtt, rename) share this envelope and are handled

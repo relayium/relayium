@@ -25,10 +25,21 @@
    * `retry` 是上一次被用户在选择器里取消之后的**再问一次**（桌面独有）。那次取消
    * 在线路上什么都没留下，所以这里不是失败卡片，而是同一张同意卡片换一句话。
    */
-  let { files, total, retry = false, onAccept, onReject }: {
+  /**
+   * `acceptLabel` / `rejectLabel` 只是换个说法，不是换条路。
+   *
+   * 预上传那条接收路（StoredIncoming）用的是"保存这些文件"而不是通用的"接收"，
+   * 但它需要的**判断**和实时接收路一模一样：同一个 warnsAboutMemory、同一个
+   * asksWhereToSave、同一套 2× ZIP 峰值估算。为了两句不同的按钮文案而在那边另写
+   * 一遍这些条件，正是这个组件的注释一直在防的那种漂移 —— 于是那边会慢慢和
+   * pickSaveTarget 真正会走的分支对不上，而这里的提示一个字都不会跟着改。
+   */
+  let { files, total, retry = false, acceptLabel, rejectLabel, onAccept, onReject }: {
     files: FileMetaLite[];
     total: number;
     retry?: boolean;
+    acceptLabel?: string;
+    rejectLabel?: string;
     onAccept: () => void;
     onReject: () => void;
   } = $props();
@@ -57,7 +68,7 @@
   <div class="memwarn" role="alert">
     <p>{t.recvMemWarn(formatSize(total))}</p>
     <div class="actions">
-      <button class="btn btn-primary" onclick={onReject}>{t.decline}</button>
+      <button class="btn btn-primary" onclick={onReject}>{rejectLabel ?? t.decline}</button>
       <button class="btn btn-ghost" onclick={acceptAnyway}>{t.recvMemWarnAccept}</button>
     </div>
   </div>
@@ -69,8 +80,8 @@
     {retry ? t.recvSaveRetry : willAsk ? t.recvSaveHintPicker : t.recvSaveHintDownload}
   </p>
   <div class="actions">
-    <button class="btn btn-primary" onclick={onAccept}>{t.accept}</button>
-    <button class="btn btn-ghost" onclick={onReject}>{t.decline}</button>
+    <button class="btn btn-primary" onclick={onAccept}>{acceptLabel ?? t.accept}</button>
+    <button class="btn btn-ghost" onclick={onReject}>{rejectLabel ?? t.decline}</button>
   </div>
 {/if}
 

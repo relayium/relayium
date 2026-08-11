@@ -3,7 +3,7 @@ import { mount, unmount, flushSync } from "svelte";
 import CodePairing from "./CodePairing.svelte";
 import { loadLang, messages } from "./i18n.svelte";
 import type { RelayAvailability } from "./ice";
-import { clearOutbox, setOutbox, outboxState } from "./outbox.svelte";
+import { clearOutbox, setOutbox, outboxState, uploadedRefs } from "./outbox.svelte";
 import { resetPreupload, startPreupload } from "./preupload.svelte";
 import { refreshSession } from "./auth.svelte";
 
@@ -330,32 +330,132 @@ describe("staging inside a waiting code room", () => {
   });
 });
 
-// Pre-upload's sender half is wired into this surface, and is switched off in
-// this build because the key handoff it depends on does not exist yet. Both
-// halves of that are load-bearing, so both are pinned here.
+// Pre-upload's sender half is wired into this surface, and this build both
+// sends the key handoff and receives it — so the surface really does upload.
+// That is the load-bearing fact, and it is pinned here.
 describe("the waiting room and pre-upload", () => {
   const EXPIRY = () => String(Math.floor(Date.now() / 1000) + 300);
 
+  async function until(check: () => boolean, timeout = 4_000) {
+    const deadline = Date.now() + timeout;
+    while (!check()) {
+      if (Date.now() > deadline) throw new Error("condition timed out");
+      await new Promise((r) => setTimeout(r, 5));
+    }
+  }
+
+  // Both ends, not just the way out: an earlier case in this file renders a
+  // minted room with files staged, which starts a real driver against the same
+  // code and leaves it `closed` when the unstubbed fetch fails. A room this
+  // module already believes is over accepts no upload, so without this the case
+  // below waits for a request that will never be made.
+  beforeEach(() => resetPreupload());
+
   afterEach(() => {
     resetPreupload();
+    clearOutbox();
     vi.unstubAllGlobals();
   });
 
-  it("uploads nothing at all while this build cannot hand the keys over", async () => {
-    // The compatibility guard for the whole checkpoint: a code room in this
-    // build behaves exactly as it did before pre-upload existed — files stay
-    // staged for the live link and no upload request is made.
-    const f = vi.fn(async (_url: string) => ({ ok: true, status: 200, json: async () => ({}) }));
+  it("pre-uploads the staged batch against this room's code", async () => {
+    // This assertion used to be the exact opposite — "uploads nothing at all
+    // while this build cannot hand the keys over" — and it went on passing after
+    // the handoff landed and switched the uploader on, because it drained a
+    // single microtask and the upload had not reached `fetch` yet. A guard that
+    // proves the absence of something has to WAIT for it; this one waits for the
+    // upload to finish instead, so there is nothing left for it to miss.
+    const json = (body: unknown, status = 200) => ({ ok: status < 300, status, json: async () => body });
+    let received = 0;
+    const f = vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (method === "POST" && url.startsWith("/api/uploads?")) return json({ uploadId: "u1", chunkSize: 1024 });
+      if (url.endsWith("/finalize")) return json({ id: "obj1", expiresAt: 123 });
+      if (method === "PATCH") {
+        received += new Uint8Array(await (init!.body as Blob).arrayBuffer?.() ?? (init!.body as Uint8Array)).length;
+        return json({ received });
+      }
+      return json({ received });
+    });
     vi.stubGlobal("fetch", f);
     setOutbox([{ file: new File(["x"], "a.bin", { lastModified: 0 }) }]);
     sessionStorage.setItem(EXP_KEY, EXPIRY());
     render({ roomCode: "483920" });
-    await Promise.resolve();
-    flushSync();
 
-    for (const call of f.mock.calls) expect(String(call[0])).not.toContain("/api/uploads");
-    expect(outboxState(0)).toBe("staged");
-    expect(target.textContent).not.toContain("%");
+    await until(() => outboxState(0) === "uploaded");
+    const init = f.mock.calls.map((c) => String(c[0])).find((u) => u.startsWith("/api/uploads?"));
+    // Bound to THIS room, and naming no retention of its own: retention here
+    // belongs to the room, and the server refuses a pre-upload that mentions it.
+    expect(init).toContain("purpose=pair_room");
+    expect(init).toContain("code=483920");
+    expect(init).not.toContain("ttl=");
+    // The key is the outbox's, to be handed over on the link — never in the URL.
+    expect(uploadedRefs().map((r) => r.id)).toEqual(["obj1"]);
+  });
+
+  it("crosses the pre-upload boundary itself on a re-mint, before the new room exists", async () => {
+    // Who owns the sender half of a code→code boundary, proved through the real
+    // button. `send()` releases the old room's finished objects SYNCHRONOUSLY,
+    // between the mint and enterRoom — so by the time roomCode changes there is
+    // nothing left for a second owner to release, and any reset that arrives
+    // afterwards can only take the NEW room's work away (preupload.test.ts
+    // executes that). App's room-binding effect therefore does not reset
+    // pre-upload on code→code; workspace-orchestration.test.ts pins its absence.
+    //
+    // Asserted AT the room change rather than after it, because "before" is the
+    // whole claim: history.replaceState is enterRoom's first statement, so this
+    // observes the outbox at the instant the room flips.
+    const json = (body: unknown, status = 200) => ({ ok: status < 300, status, json: async () => body });
+    let sessions = 0, received = 0, pairs = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (url === "/api/pair") { pairs++; return json({ code: "100200", expiresAt: 9e9 }); }
+      if (method === "POST" && url.startsWith("/api/uploads?")) {
+        received = 0;
+        return json({ uploadId: `u${++sessions}`, chunkSize: 1024 });
+      }
+      if (url.endsWith("/finalize")) return json({ id: `obj-u${sessions}`, expiresAt: 123 });
+      if (method === "PATCH") {
+        received += new Uint8Array(await (init!.body as Blob).arrayBuffer?.() ?? (init!.body as Uint8Array)).length;
+        return json({ received });
+      }
+      return json({ received });
+    }));
+
+    setOutbox([{ file: new File(["x"], "a.bin", { lastModified: 0 }) }]);
+    await startPreupload("483920", true); // room A finishes the batch
+    expect(outboxState(0)).toBe("uploaded");
+    expect(uploadedRefs().map((r) => r.id)).toEqual(["obj-u1"]);
+
+    const atRoomChange: { url: string; state: string; refs: string[] }[] = [];
+    const replaceState = history.replaceState.bind(history);
+    vi.spyOn(history, "replaceState").mockImplementation((...args: Parameters<typeof replaceState>) => {
+      atRoomChange.push({
+        url: String(args[2] ?? ""),
+        state: outboxState(0),
+        refs: uploadedRefs().map((r) => r.id),
+      });
+      replaceState(...args);
+    });
+
+    // The minter's own countdown has lapsed, so the card offers the re-mint.
+    sessionStorage.setItem(EXP_KEY, String(Math.floor(Date.now() / 1000) - 1));
+    render({ roomCode: "483920" });
+    const remint = [...target.querySelectorAll("button")]
+      .find((b) => b.textContent?.trim() === messages.en.pair.sendCode);
+    expect(remint, "the lapsed card offers no re-mint").toBeTruthy();
+    remint!.click();
+    await vi.waitFor(() => expect(pairs).toBe(1));
+    await vi.waitFor(() => expect(atRoomChange).toHaveLength(1));
+
+    // Already back on the live link, and already off the set the handoff would
+    // seal into a frame — at the moment the new code takes over, not later.
+    expect(atRoomChange[0].url).toContain("100200");
+    expect(atRoomChange[0].state).toBe("staged");
+    expect(atRoomChange[0].refs).toEqual([]);
+    // The other half — the new room's driver uploading it again under the new
+    // code — is preupload.test.ts's "re-uploads into the new room a file the old
+    // room had already finished"; it cannot be shown here, where App is absent
+    // and this instance's roomCode prop therefore never changes.
   });
 
   it("explains an expired pre-upload even after the card has flipped to expired", async () => {

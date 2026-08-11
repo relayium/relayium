@@ -24,6 +24,15 @@ vi.mock("./stored-file", () => ({
   downloadBlob: (...a: unknown[]) => downloadBlob(...a),
   parseDownloadKey: (...a: unknown[]) => parseDownloadKey(...a),
   keyFromFragment: async () => ({ fake: "key" }),
+  // Not used by the page, and required all the same: this factory REPLACES the
+  // module for everyone in the graph, and stored-download.ts — which the page
+  // does its writing through, and which is not mocked — calls this on every
+  // run. A missing export here is not a missing export, it is `undefined()`
+  // thrown before a single byte is fetched. Kept faithful to the real one so
+  // the page's no-signal path behaves exactly as it does in production.
+  throwIfAborted: (signal?: AbortSignal) => {
+    if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+  },
   DownloadNetworkError: class DownloadNetworkError extends Error {},
   InvalidStoredObjectIdError: class InvalidStoredObjectIdError extends Error {},
   // 和真模块同形（status + phase），但必须是页面真正 import 到的那一个类 ——

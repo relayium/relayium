@@ -316,7 +316,9 @@ before writing the client; the summary below is a map, not the spec.
   auto-send effect therefore cannot re-send a pre-uploaded file over the link.
   With nothing uploaded this is byte-for-byte the old drain-everything.
 - **B5 defined and implemented as a codec.** `preupload-handoff.ts` +
-  `relayium-pair-room-v1.md` §4: sealed DataChannel frame kind 10, payload
+  `relayium-pair-room-v1.md` §4: sealed DataChannel frame **kind 12** (10 and 11
+  have been CHUNK_PART/BATCH_PART on the wire since fragmentation shipped — see
+  the correction under step 4), payload
   `{"v":1,"items":[{"id","key"}]}`, gated on the exact capability `preupload/1`,
   sent first on every (re)established link, deduped by id on receipt, no ack.
 - **B6 held.** Anonymous receiver access is asserted by test, not by intent.
@@ -433,6 +435,129 @@ gate, and the no-free-renewal guard). `go build ./...`, `go vet ./...`,
    the live-link path, and say so in copy. `409` means the peer joined — stop
    starting new uploads, let the in-flight one finish.
 
+**What checkpoint 2b delivered.** The E2E key handoff and the receiver download,
+which together turn the dormant 2a sender on. Beyond seams 3–5 above:
+
+Final local evidence: 3,651 Web tests pass with three designed skips;
+Svelte/TypeScript reports zero errors and warnings; the production Web build,
+Go build/vet, all 24 code-room real-browser checks, and `git diff --check` pass.
+Production enablement remains separate: the source default is still off and the
+production environment has no `RELAYIUM_ENABLE_PREUPLOAD` override.
+
+- **Two acceptance edges Codex's review of 2a predicted, both real.** (1) A peer
+  arriving while the only file is still uploading no longer triggers a live-link
+  send with an empty batch: every send decision reads `stagedCount()`, and
+  `peer-workspace.sendFiles` refuses an empty list as the single choke point both
+  transports pass through. (2) An upload that fails back to `staged` AFTER the
+  peer is already there is now actually released, because `stagedCount()` reads
+  the per-entry state array — `failUpload` rewrites only that array, so a reader
+  of `outbox().length` never re-ran and the file went over neither transport.
+  Both are executed tests, the second with a real Svelte effect
+  (`effect-probe.svelte.ts`) plus a control proving the old reader does NOT wake.
+- **Old and unknown peers.** Pre-upload happens before anyone joins, so the
+  sender cannot know who will. A joiner that does not announce `preupload/1`
+  cannot be handed keys, and entries left `uploaded` would be drained by neither
+  lane — so `drainFor` returns them to the live link at the moment it drains for
+  that peer. The bytes are spent; the transfer is not. The objects are not
+  deleted: their life is the room's.
+- **Still OFF in production.** `RELAYIUM_ENABLE_PREUPLOAD` defaults to false and
+  is untouched, so a deploy of this build answers every pre-upload init with 503
+  — which the sender already treats as "change nothing, say nothing".
+
+**Post-review round on 2b (four release blockers).** Codex and Claude Fable 5
+reviewed 2b independently; four findings were confirmed and fixed, each with
+executed tests and a mutation that kills them.
+
+1. *The old-peer fallback was unreachable in the ordinary case.* Every send gate
+   asked `stagedCount()` — the peer-INDEPENDENT "what would a drain return" — and
+   only the drain behind it performed the fallback. For a batch that finished
+   uploading before anyone joined that count is 0, so the gate never opened and
+   the release inside `drainFor` was dead code for exactly the situation it was
+   written for. The second edge is the same bug later in time: `markUploaded`
+   moves an entry OUT of `staged`, so an upload completing while an unsupported
+   peer is already present made the number go DOWN and the gate stayed shut.
+   Fixed by making the question peer-specific everywhere — `liveLinkCount(peerTakesKeys)`
+   in `outbox.svelte.ts`, `liveLinkFor(peerId)` at all four gates (auto-send,
+   `openWorkspace`, the per-peer picker, the standing release control) and in the
+   sentence the release control renders. `uploading` is in neither answer, so the
+   empty-batch guard still holds. Protocol §4.3 now states the gate rule.
+2. *A burned seq wedged the key handoff permanently.* `StoredKeysSender` takes
+   its seq synchronously and seals asynchronously, so a transport replacement, a
+   superseded generation or a throwing `send()` destroys a frame whose number is
+   already spent — and the counter can never be rolled back, because the seq is
+   the AEAD nonce. The receiver's strict "exactly the next seq" then refused
+   every later whole-set resend for the life of the link: §4.4's rescue rule
+   became the thing that could never succeed again. Now forward-only rather than
+   gap-free — at-or-below the last consumed is a replay and is refused, ahead is
+   accepted if it opens, and the expectation moves ON THE OPEN: an authenticated
+   frame has already spent its number at the sender whatever this side makes of
+   its payload, so waiting for a successful decode would only leave that frame
+   replayable. §4.1 and the wire registry rewritten.
+3. *A transient failure was permanent.* The receiver claimed each id at OFFER
+   time, so one 5xx plus a Dismiss turned every later resend into a no-op while
+   the card said "try again". Replaced with a disposition table (`held`/`done`/
+   `rejected`/`spent`/absent): delivered and declined ids stay no-ops, an id whose
+   failure a retry could survive becomes offerable again — so the sender's own
+   resend IS the retry — and a `retry()` control on the card covers the peer that
+   has already gone. Mixed batches settle honestly: objects already written are
+   `done` and are never re-fetched.
+4. *reset/reject could resurrect a room and write to disk.* Added an `epoch`
+   bumped by `reset()` and `reject()` and compared after every await. It closes
+   three real races: a resolve outliving its room (including publishing over the
+   batch a NEW room is showing), and a save picker or a download completing after
+   the user left or declined — declining being available for the whole time the
+   modal is up, since `status` stays `prompt` throughout.
+
+P2s taken in the same pass: the four error strings no longer claim "Nothing was
+saved" unconditionally (`savedCount`, `SaveTarget.bundled` and
+`writeStoredObject`'s `onFileClosed` make the outcome sentence true in both
+directions, in nine locales); `StoredIncoming` now renders the live lane's own
+`ReceiveActions`, so the large-batch memory warning and the "where will this go"
+hint come from the same condition `pickSaveTarget` will actually take; an active
+stored receive counts as `busy` (navigation guard, unload prompt, update banner)
+and holds the wake lock; the whole-set re-emit is keyed on
+`uploadedFingerprint()` through a `$derived` over a primitive, instead of
+re-emitting O(N) frames per upload; and the handoff set is pulled INSIDE the send
+chain, so a queued emission cannot name an object that was released to the live
+link while it waited.
+
+Not fixed, deliberately: `FileSink` has no `abort`, and `close()` is the commit
+on every target (a native writable publishes the partial file, `blobSink`
+downloads what it holds, the ZIP branch adds the truncated entry). Closing an
+open sink on a write failure would hand the user a silently truncated file, so
+abandonment stays the abort and `stored-download.ts` now says why. Separately,
+and pre-existing rather than from this checkpoint: a `DownloadPage` failure
+between `openSwStream` and `close()` leaves `liveStreams` counted, which holds
+the service-worker update gate; it is untouched here.
+
+**Evidence:** 3,629 Vitest passing / 3 skipped (baseline 3,490), `svelte-check`
+523 files 0 errors, `npm run build` OK, `go build ./...` and `go vet ./...` green,
+`npm run test:e2e:code-room` green (24 checks, axe clean). 14 failure-path
+mutations introduced across the four fixes and the P2s, 13 killed. Four of them
+only became lethal after the tests were strengthened, and each strengthening was
+a real hole:
+
+- the transport-rebuild case was returning at the pre-seal guard and so never
+  burned a seq at all — it now waits until the emission is genuinely INSIDE the
+  seal before killing the transport;
+- every "nothing happened afterwards" assertion was draining microtasks only,
+  which returns while a WebCrypto continuation is still on its way. That is what
+  hid a missing cancellation check in the resolve loop; the drain is macrotask
+  turns now;
+- `retry()`'s guard against re-queueing an id a resend had already taken had no
+  case at all, and the resend-versus-button race is not exotic — both are retries
+  of the same failure arriving from different directions;
+- the fingerprint's whole purpose is that a `$derived` over it SETTLES, which no
+  source-text assertion can show. `trackDerived` in the effect probe puts a real
+  derived between the store and the effect, with the allocating version kept
+  alongside as a running control.
+
+The one survivor is a redundancy rather than a gap: `reject()` writes `rejected`
+over ids that are already `held`, and `held` happens to block a re-offer too. The
+write is kept because every other terminal path leaves `done`, `spent` or absent
+behind, and an id parked in "queued, or on screen right now" for a batch that is
+neither is what a later reader cleans up — taking the refusal with it.
+
 **What checkpoint 2a actually delivered, and what it deliberately did not.**
 `preupload.svelte.ts` is the sender driver: one object per file, one at a time,
 `403/503/413/429`/network stop the pass silently (the batch and the live link are
@@ -459,16 +584,43 @@ lane. Three things are deliberately open:
 - **The staged list does not show per-row origin.** An `uploaded` row looks like
   a `staged` one; only the in-flight file has a line of its own
   (`pair.preuploading`). That is seam 5's presentation work.
-3. **Flip the capability on.** `advertisedCaps()` must include `CAP_PREUPLOAD`
-   only in the same change that implements BOTH sending and receiving kind 10;
-   `preupload-handoff.test.ts` asserts it is absent today, and that assertion is
-   the reminder.
-4. **Wire kind 10 into `transfer.ts`.** Seal/parse with the session key in the
-   existing seq space, send before any live-lane content, resend on every
-   (re)established link, fold with `mergeHandoff`.
-5. **Receiver download.** Fetch `/api/files/<id>/meta` + `/blob` per handoff item
-   and decrypt with `StoreDecryptor`; the row's origin (storage vs live) is
-   presentation, and one list with two origins is the expected shape.
+3. **Flip the capability on.** ✅ **Done in checkpoint 2b.** `advertisedCaps()`
+   now returns `[text/1, link/1, preupload/1]`, in the same change that
+   implemented both halves. `peerSupportsPreupload` is the exact-match routing
+   gate, and it reads `linkRoomActive()` first for the same reason
+   `peerSupportsLink` does.
+4. **Wire the handoff frame.** ✅ **Done in checkpoint 2b — with two corrections
+   to the frozen contract, each of which was a release blocker.**
+   - **Kind 10 was not free.** `relayium-realtime-wire-v1.md`'s kind list omitted
+     `CHUNK_PART`/`BATCH_PART`, which have been 10/11 on the wire since
+     fragmentation shipped, in `transfer.ts` and in Swift's `RealtimeKind` alike.
+     A handoff sent as kind 10 would have been authenticated in sequence as a
+     chunk fragment and spliced into the middle of a file. **STORED_KEYS is kind
+     12**, and the registry now lists 10/11 so the next kind cannot be chosen the
+     same way.
+   - **It does not share the file stream's key or seq space.** That counter's
+     safety rests on having exactly one producer; the handoff is a second one
+     (link open, every rebuild, every later upload landing). It seals under
+     derived `preuploadSend`/`preuploadRecv` with its own counter — the same
+     answer `text/1` already gave to the same hazard. That independence is what
+     makes "re-send on every re-established link" implementable at all: the frame
+     never has to be ordered against a batch, a pre-consent guard or a resume
+     realignment. `StoredKeysSender`/`StoredKeysReceiver` are link-scoped codecs
+     carried across `replaceTransport`; the receiver is forward-only rather than
+     gap-free — a replay (at or below the last consumed seq) fails closed, while
+     a SKIP is accepted if the frame opens, because the sender genuinely destroys
+     frames whose numbers are already spent and can never roll the counter back.
+5. **Receiver download.** ✅ **Done in checkpoint 2b.**
+   `preupload-receive.svelte.ts` resolves each object's manifest, raises its OWN
+   accept step (bytes from storage are still bytes a code-guesser could be
+   sending), then writes the whole batch into ONE save target. The plaintext
+   splitting is `stored-download.ts`, extracted from `DownloadPage` and now
+   shared, so the zero-byte-tail and sink-open rules cannot drift between the two
+   readers of the same ciphertext. All-or-nothing per batch: a manifest that
+   cannot be read or a download that stops is reported as failed, never as a
+   folder quietly missing a file. **Still open:** the row's ORIGIN is not shown —
+   the receiver renders a separate card rather than one list with two origins,
+   and there is no cancel for a download in flight.
 6. **Countdown copy.** `CodePairing.svelte` reads `expiresAt` once at mint and
    counts down; with pre-upload the deadline MOVES. Finalize's `expiresAt` is a
    floor, not a promise — treat it as such or the UI will show an expired code

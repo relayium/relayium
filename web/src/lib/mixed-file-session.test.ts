@@ -21,6 +21,13 @@ import {
   resumeReqFrame,
 } from "./transfer";
 import { TextReceiver, TextSender } from "./text-wire";
+import {
+  KIND_STORED_KEYS,
+  StoredKeysReceiver,
+  StoredKeysSender,
+  type HandoffItem,
+} from "./preupload-handoff";
+import { encodeKey } from "./store-crypto";
 
 interface FakeChannel {
   sent: ArrayBuffer[];
@@ -101,6 +108,13 @@ async function harness(opts: {
   /** B 侧单独的同意窗口。默认与 A 侧同值（真实部署就是同一个常量）；只有那条
    *  「接收端的窗口先走完」的用例需要把两侧岔开，好在发送端放弃之前观察接收端。 */
   consentTimeoutMsB?: number;
+  /** Pre-upload key handoff wiring, per side. Omitted by every existing case, so
+   *  the lane behaves exactly as it did before frame kind 12 existed. */
+  storedKeysA?: () => readonly HandoffItem[];
+  onStoredKeysB?: (items: HandoffItem[]) => void;
+  onStoredKeysA?: (items: HandoffItem[]) => void;
+  /** Which peer ids announced `preupload/1`. Default: neither. */
+  preuploadPeers?: string[];
   receiveStallMs?: number;
   drainTimeoutMs?: number;
   gapTimeoutMs?: number;
@@ -125,6 +139,8 @@ async function harness(opts: {
     fileReceiver: new Receiver(),
     textSender: new TextSender(),
     textReceiver: new TextReceiver(),
+    storedKeysSender: new StoredKeysSender(),
+    storedKeysReceiver: new StoredKeysReceiver(),
   };
   const bLink: MixedPeerLink = {
     peerId: "a",
@@ -138,13 +154,20 @@ async function harness(opts: {
     fileReceiver: new Receiver(),
     textSender: new TextSender(),
     textReceiver: new TextReceiver(),
+    storedKeysSender: new StoredKeysSender(),
+    storedKeysReceiver: new StoredKeysReceiver(),
   };
   // ensureLink mirrors the coordinator: it hands back whichever link is current,
   // so a rebuild replaces what a queued batch will launch onto.
   const links = { a: aLink, b: bLink };
+  const speaks = new Set(opts.preuploadPeers ?? []);
+  const supportsPreupload = (peerId: string) => speaks.has(peerId);
   const a = createMixedFileSession({
     ensureLink: vi.fn(async () => links.a),
     pickSaveTarget: opts.pickA ?? (async () => aTarget),
+    storedKeysToSend: opts.storedKeysA,
+    onStoredKeys: opts.onStoredKeysA,
+    supportsPreupload,
     consentTimeoutMs: opts.consentTimeoutMs,
     receiveStallMs: opts.receiveStallMs,
     drainTimeoutMs: opts.drainTimeoutMs,
@@ -153,6 +176,8 @@ async function harness(opts: {
   const b = createMixedFileSession({
     ensureLink: vi.fn(async () => links.b),
     pickSaveTarget: opts.pickB ?? (async () => bTarget),
+    onStoredKeys: opts.onStoredKeysB,
+    supportsPreupload,
     consentTimeoutMs: opts.consentTimeoutMsB ?? opts.consentTimeoutMs,
     receiveStallMs: opts.receiveStallMs,
     drainTimeoutMs: opts.drainTimeoutMs,
@@ -160,7 +185,7 @@ async function harness(opts: {
   });
   a.attach(aLink);
   b.attach(bLink);
-  return { a, b, aLink, bLink, links, file, text, aTarget, bTarget };
+  return { a, b, aLink, bLink, links, file, text, aTarget, bTarget, speaks };
 }
 
 async function until(check: () => boolean, timeout = 4_000) {
@@ -1658,5 +1683,310 @@ describe("mixed file session transport recovery", () => {
     await until(() => b.recv?.status === "recvDone");
     expect([...bTarget.output.get("mid-gap.txt")!]).toEqual(bytes("enqueued mid gap"));
     expect(a.queued).toHaveLength(0);
+  });
+});
+
+// ── The pre-upload key handoff (frame kind 12) ──────────────────────────────
+//
+// It shares the file channel and nothing else: its own derived key, its own
+// counter, dispatched ahead of the receive chain. Every case here is about that
+// separation holding — a handoff must never be able to disturb a transfer, and a
+// transfer must never be able to delay a handoff.
+describe("stored-key handoff on the file lane", () => {
+  const item = (id: string, fill = 3): HandoffItem => ({ id, key: encodeKey(new Uint8Array(32).fill(fill)) });
+
+  it("hands the whole set over the moment the link attaches", async () => {
+    const got: HandoffItem[][] = [];
+    const items = [item("obj1", 1), item("obj2", 2)];
+    await harness({
+      preuploadPeers: ["a", "b"],
+      storedKeysA: () => items,
+      onStoredKeysB: (i) => got.push(i),
+    });
+    await until(() => got.length > 0);
+    expect(got[0]).toEqual(items);
+  });
+
+  it("says nothing at all to a peer that never announced preupload/1", async () => {
+    // The old/unknown-peer rule. An unknown frame kind is a HARD ERROR in every
+    // implementation, so a speculative handoff to a native client, the CLI or an
+    // older Web build does not degrade to the live link — it fails the transfer
+    // on a frame the peer cannot parse.
+    const got: HandoffItem[][] = [];
+    const { file, a, b, bTarget } = await harness({
+      preuploadPeers: [], // neither side announced
+      storedKeysA: () => [item("obj1", 1)],
+      onStoredKeysB: (i) => got.push(i),
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(got).toEqual([]);
+    expect(file.a.sent.filter((f) => new Uint8Array(f)[0] === KIND_STORED_KEYS)).toEqual([]);
+
+    // And the ordinary transfer to that peer is completely unaffected.
+    a.enqueue("b", picked("hello.txt", "hello"));
+    await until(() => !!b.incoming);
+    b.accept();
+    await until(() => a.send?.status === "sendDone" && b.recv?.status === "recvDone");
+    expect([...bTarget.output.get("hello.txt")!]).toEqual(bytes("hello"));
+  });
+
+  it("sends nothing when there is nothing uploaded", async () => {
+    const got: HandoffItem[][] = [];
+    const { file } = await harness({
+      preuploadPeers: ["a", "b"],
+      storedKeysA: () => [],
+      onStoredKeysB: (i) => got.push(i),
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(got).toEqual([]);
+    expect(file.a.sent).toEqual([]);
+  });
+
+  it("re-sends the WHOLE current set on a rebuilt transport", async () => {
+    // §4.4's retry rule. The set is pulled again rather than remembered, so a
+    // reconnect costs one frame and there is no partial form to get wrong.
+    const got: HandoffItem[][] = [];
+    let items = [item("obj1", 1)];
+    const h = await harness({
+      preuploadPeers: ["a", "b"],
+      storedKeysA: () => items,
+      onStoredKeysB: (i) => got.push(i),
+    });
+    await until(() => got.length === 1);
+
+    // A transport replacement: same link identity, same codecs, new channels.
+    const nextFile = channelPair();
+    const nextText = channelPair();
+    items = [item("obj1", 1), item("obj2", 2)];
+    const rebuiltA = { ...h.aLink, fileChannel: nextFile.a as unknown as RTCDataChannel, textChannel: nextText.a as unknown as RTCDataChannel };
+    const rebuiltB = { ...h.bLink, fileChannel: nextFile.b as unknown as RTCDataChannel, textChannel: nextText.b as unknown as RTCDataChannel };
+    h.links.a = rebuiltA;
+    h.links.b = rebuiltB;
+    h.b.attach(rebuiltB);
+    h.a.attach(rebuiltA);
+
+    await until(() => got.length === 2);
+    // The whole set, not the delta — including the id the peer already holds.
+    expect(got[1]).toEqual(items);
+  });
+
+  it("hands over an object that finished uploading after the link was already open", async () => {
+    // The case the attach-time send cannot cover: an upload still in flight when
+    // the peer joined is allowed to finish, so a NEW object appears minutes
+    // later on a link nobody is going to re-establish.
+    const got: HandoffItem[][] = [];
+    let items = [item("early", 1)];
+    const h = await harness({
+      preuploadPeers: ["a", "b"],
+      storedKeysA: () => items,
+      onStoredKeysB: (i) => got.push(i),
+    });
+    await until(() => got.length === 1);
+
+    items = [item("early", 1), item("late", 2)];
+    h.a.sendStoredKeys();
+    await until(() => got.length === 2);
+    expect(got[1].map((i) => i.id)).toEqual(["early", "late"]);
+  });
+
+  it("does not disturb a file batch, and is not delayed by one", async () => {
+    // The whole reason it has its own key and counter. A handoff emitted while a
+    // transfer is running must neither consume a seq the file receiver is
+    // expecting nor queue behind the receive chain's disk writes.
+    const got: HandoffItem[][] = [];
+    let items = [item("obj1", 1)];
+    const h = await harness({
+      preuploadPeers: ["a", "b"],
+      storedKeysA: () => items,
+      onStoredKeysB: (i) => got.push(i),
+    });
+    await until(() => got.length === 1);
+
+    h.a.enqueue("b", picked("hello.txt", "hello"));
+    await until(() => !!h.b.incoming);
+    items = [item("obj1", 1), item("obj2", 2)];
+    h.a.sendStoredKeys(); // mid-batch, before consent
+    h.b.accept();
+    await until(() => h.a.send?.status === "sendDone" && h.b.recv?.status === "recvDone");
+    expect([...h.bTarget.output.get("hello.txt")!]).toEqual(bytes("hello"));
+    await until(() => got.length === 2);
+    expect(h.a.errorKey).toBe("");
+    expect(h.b.errorKey).toBe("");
+  });
+
+  it("never names an object that left the uploaded set while it was queued", async () => {
+    // A queued emission can sit behind another handoff's seal for as long as
+    // that seal takes, and the set is not stable across that wait: an entry can
+    // be RELEASED to the live link in between and drained into a batch. A frame
+    // built from a snapshot taken before that would tell the receiver to fetch
+    // and write a file the live lane is delivering at the same moment — one
+    // transfer, two writes, from two sources.
+    const got: HandoffItem[][] = [];
+    let items = [item("obj1", 1), item("released", 2)];
+    const h = await harness({
+      preuploadPeers: ["a", "b"],
+      storedKeysA: () => items,
+      onStoredKeysB: (i) => got.push(i),
+    });
+    await until(() => got.length === 1);
+
+    // Hold a seal open so the NEXT emission is queued behind it, then change the
+    // set while it waits — exactly what releaseUploaded() does to the outbox.
+    let release!: () => void;
+    let sealing = false;
+    const gate = new Promise<void>((r) => { release = r; });
+    const realFrame = h.aLink.storedKeysSender.frame.bind(h.aLink.storedKeysSender);
+    h.aLink.storedKeysSender.frame = async (i, k) => {
+      sealing = true;
+      await gate;
+      return realFrame(i, k);
+    };
+    h.a.sendStoredKeys(); // occupies the chain
+    await until(() => sealing);
+    h.a.sendStoredKeys(); // queued behind it
+
+    items = [item("obj1", 1)]; // "released" went back to the live link
+    release();
+    await until(() => got.length === 3);
+    // The frame that was already sealing may name it — it was true when that
+    // one was built. The frame that was still QUEUED must not: it is sent after
+    // the release, so a set captured at call time is a set that no longer
+    // exists.
+    expect(got[2].map((i) => i.id)).toEqual(["obj1"]);
+  });
+
+  it("recovers from a send that throws, and the peer takes the next set", async () => {
+    // The seq is taken synchronously and the seal is async, so a `send()` that
+    // throws destroys a frame that already spent its number. If that wedged the
+    // peer's receiver, every later whole-set resend would be refused for the
+    // life of the link — the sender believing it handed the keys over while the
+    // receiver waits for a prompt that can never come.
+    const got: HandoffItem[][] = [];
+    let items = [item("obj1", 1)];
+    const h = await harness({
+      preuploadPeers: ["a", "b"],
+      storedKeysA: () => items,
+      onStoredKeysB: (i) => got.push(i),
+    });
+    await until(() => got.length === 1);
+
+    const realSend = h.file.a.send.bind(h.file.a);
+    let broken = true;
+    h.file.a.send = function (data: ArrayBuffer) {
+      if (broken && new Uint8Array(data)[0] === KIND_STORED_KEYS) {
+        broken = false;
+        throw new Error("datachannel send failed");
+      }
+      realSend(data);
+    } as FakeChannel["send"];
+
+    items = [item("obj1", 1), item("obj2", 2)];
+    h.a.sendStoredKeys(); // seq burned by the throw; nothing reaches the peer
+    await new Promise((r) => setTimeout(r, 20));
+    expect(got).toHaveLength(1);
+
+    items = [item("obj1", 1), item("obj2", 2), item("obj3", 3)];
+    h.a.sendStoredKeys();
+    await until(() => got.length === 2);
+    expect(got[1].map((i) => i.id)).toEqual(["obj1", "obj2", "obj3"]);
+    expect(h.b.errorKey).toBe("");
+  });
+
+  it("recovers when the transport dies mid-seal and the link is rebuilt", async () => {
+    // The generation guard inside the emission fires after the seal, so the
+    // frame is silently dropped with its seq spent. The rebuilt transport
+    // deliberately carries the SAME codec objects (one link, one counter), so
+    // the resend that attach() makes lands on a receiver whose expectation is
+    // now behind — exactly the hole the forward-gap rule absorbs.
+    const got: HandoffItem[][] = [];
+    let items = [item("obj1", 1)];
+    const h = await harness({
+      preuploadPeers: ["a", "b"],
+      storedKeysA: () => items,
+      onStoredKeysB: (i) => got.push(i),
+    });
+    await until(() => got.length === 1);
+
+    // Hold the next seal open, then kill the transport under it. `sealing` is
+    // what makes this the case it claims to be: the emission must be INSIDE the
+    // seal (its seq already spent) when the rebuild lands, not still queued
+    // behind the guard that would have refused it for free.
+    let release!: () => void;
+    let sealing = false;
+    const sealGate = new Promise<void>((r) => { release = r; });
+    const realFrame = h.aLink.storedKeysSender.frame.bind(h.aLink.storedKeysSender);
+    h.aLink.storedKeysSender.frame = async (i, k) => {
+      const out = await realFrame(i, k); // the seq is spent right here
+      sealing = true;
+      await sealGate;
+      return out;
+    };
+    items = [item("obj1", 1), item("obj2", 2)];
+    h.a.sendStoredKeys();
+    await until(() => sealing);
+
+    const nextFile = channelPair();
+    const nextText = channelPair();
+    const rebuiltA = { ...h.aLink, fileChannel: nextFile.a as unknown as RTCDataChannel, textChannel: nextText.a as unknown as RTCDataChannel };
+    const rebuiltB = { ...h.bLink, fileChannel: nextFile.b as unknown as RTCDataChannel, textChannel: nextText.b as unknown as RTCDataChannel };
+    h.links.a = rebuiltA;
+    h.links.b = rebuiltB;
+    h.b.attach(rebuiltB);
+    h.a.attach(rebuiltA);
+    release(); // the superseded frame finishes sealing and is dropped
+
+    await until(() => got.length === 2);
+    expect(got[1].map((i) => i.id)).toEqual(["obj1", "obj2"]);
+    expect(h.b.errorKey).toBe("");
+  });
+
+  it("drops a junk handoff frame without failing the lane", async () => {
+    // Peer-authored input: the far end is authenticated but has never been
+    // trusted to be well-behaved, and a peer that is buggy or hostile can put
+    // whatever it likes on this channel. A malformed kind-12 frame must not
+    // become a way to kill a working transfer: it cannot corrupt the file stream
+    // (different key, different counter), so it is logged and ignored.
+    const got: HandoffItem[][] = [];
+    const h = await harness({
+      preuploadPeers: ["a", "b"],
+      onStoredKeysB: (i) => got.push(i),
+    });
+    const junk = new Uint8Array(5 + 32);
+    junk[0] = KIND_STORED_KEYS;
+    h.file.b.onmessage?.(new MessageEvent("message", { data: junk.buffer }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(got).toEqual([]);
+    expect(h.b.errorKey).toBe("");
+
+    h.a.enqueue("b", picked("hello.txt", "hello"));
+    await until(() => !!h.b.incoming);
+    h.b.accept();
+    await until(() => h.a.send?.status === "sendDone" && h.b.recv?.status === "recvDone");
+    expect([...h.bTarget.output.get("hello.txt")!]).toEqual(bytes("hello"));
+  });
+
+  it("drops a kind-12 frame too short to be one, instead of feeding it to the file lane", async () => {
+    // The demux answers "whose frame is this?", and the answer is the KIND — a
+    // truncated kind-12 frame is still not the file stream's. Deciding it by
+    // length instead sent a one-byte kind 12 to the file receiver, which then
+    // failed the lane on a frame that was never part of its sequence: one byte
+    // from a buggy or hostile peer, and the transfer nobody had a problem with
+    // is dead. Routed to the handoff decoder it is refused there, logged, and
+    // costs the lane nothing — exactly like the junk frame above.
+    const got: HandoffItem[][] = [];
+    const h = await harness({
+      preuploadPeers: ["a", "b"],
+      onStoredKeysB: (i) => got.push(i),
+    });
+    h.file.b.onmessage?.(new MessageEvent("message", { data: new Uint8Array([KIND_STORED_KEYS]).buffer }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(got).toEqual([]);
+    expect(h.b.errorKey, "one truncated frame killed the file lane").toBe("");
+
+    h.a.enqueue("b", picked("hello.txt", "hello"));
+    await until(() => !!h.b.incoming);
+    h.b.accept();
+    await until(() => h.a.send?.status === "sendDone" && h.b.recv?.status === "recvDone");
+    expect([...h.bTarget.output.get("hello.txt")!]).toEqual(bytes("hello"));
   });
 });

@@ -1,11 +1,12 @@
 // One authenticated Web link to one peer. This layer owns transport trust and
-// the four nonce-bearing codecs; file/text product state machines consume it but
+// the six nonce-bearing codecs; file/text product state machines consume it but
 // must never construct replacement codecs while the link is alive.
 
 import { deriveSession, generateKeyPair, sas, signResume, verifyResume, type SessionKeys } from "./crypto";
 import { peerSupportsLink } from "./peer-caps.svelte";
 import { Receiver, Sender } from "./transfer";
 import { TextReceiver, TextSender } from "./text-wire";
+import { StoredKeysReceiver, StoredKeysSender } from "./preupload-handoff";
 import {
   LINK_CAPTURE_MAX_BYTES,
   authPayload,
@@ -60,6 +61,12 @@ export interface MixedPeerLink {
   readonly fileReceiver: Receiver;
   readonly textSender: TextSender;
   readonly textReceiver: TextReceiver;
+  /** The pre-upload key-handoff codecs. Link-scoped like the other four, and for
+   *  the same reason: each owns one `(derived key, direction)` nonce counter, so
+   *  a rebuilt transport must reuse these objects rather than restart a counter
+   *  under a key that has already sealed frames at those seqs. */
+  readonly storedKeysSender: StoredKeysSender;
+  readonly storedKeysReceiver: StoredKeysReceiver;
 }
 
 export class UnsupportedLinkError extends Error {
@@ -145,7 +152,7 @@ export interface PeerLinkDeps {
    * `Conn`, while the link is still current and before anything is published.
    *
    * Returning true holds the link: it stays `current` with its keys, SAS and
-   * four codecs untouched while a replacement transport is built under it.
+   * every codec untouched while a replacement transport is built under it.
    * Returning false (or omitting the hook) reproduces the unconditional
    * teardown. The manager owns the mechanism — window, retries, `ensure()`
    * joining — and deliberately none of the policy: only the lane owner knows
@@ -691,6 +698,8 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
         fileReceiver: new Receiver(),
         textSender: new TextSender(),
         textReceiver: new TextReceiver(),
+        storedKeysSender: new StoredKeysSender(),
+        storedKeysReceiver: new StoredKeysReceiver(),
       };
       if (mine !== linkToken) {
         throw new Error("relayium: superseded mixed link");
@@ -732,7 +741,7 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
   /**
    * Rebuild the transport under the CURRENT link, keeping the link itself.
    *
-   * The published replacement reuses the exact SessionKeys, SAS and all four
+   * The published replacement reuses the exact SessionKeys, SAS and all six
    * nonce-bearing codec objects; only the Conn and the two channel objects
    * change. That identity is the whole contract: a link owns one
    * `(content key, direction)` sequence for its lifetime, so a rebuilt transport
@@ -822,6 +831,8 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
         fileReceiver: link.fileReceiver,
         textSender: link.textSender,
         textReceiver: link.textReceiver,
+        storedKeysSender: link.storedKeysSender,
+        storedKeysReceiver: link.storedKeysReceiver,
       };
       const captured = capture.take();
       const old = link.conn;

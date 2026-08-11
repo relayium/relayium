@@ -54,6 +54,11 @@ export interface MixedSessionDeps {
   resume?: PeerLinkDeps["resume"];
   pickSaveTarget?: MixedFileSessionDeps["pickSaveTarget"];
   requestNotify?: MixedFileSessionDeps["requestNotify"];
+  /** Pre-upload key handoff, forwarded verbatim to the file lane that owns the
+   *  channel the frame travels on. See MixedFileSessionDeps. */
+  storedKeysToSend?: MixedFileSessionDeps["storedKeysToSend"];
+  onStoredKeys?: MixedFileSessionDeps["onStoredKeys"];
+  supportsPreupload?: MixedFileSessionDeps["supportsPreupload"];
   /** Whether the signalling socket currently holds a room membership. Defaults
    *  to "yes" so every existing caller and test is unaffected. */
   joined?(): boolean;
@@ -327,7 +332,9 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
       && link.fileSender === publishedLink.fileSender
       && link.fileReceiver === publishedLink.fileReceiver
       && link.textSender === publishedLink.textSender
-      && link.textReceiver === publishedLink.textReceiver;
+      && link.textReceiver === publishedLink.textReceiver
+      && link.storedKeysSender === publishedLink.storedKeysSender
+      && link.storedKeysReceiver === publishedLink.storedKeysReceiver;
     // A rebuilt transport is still the same authentication step. Incrementing
     // here would make the live-region announcer read an unchanged SAS again on
     // the next lane edge. Teardown and a later establishment both advance, so
@@ -428,6 +435,9 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
     ensureLink,
     pickSaveTarget: deps.pickSaveTarget,
     requestNotify: deps.requestNotify,
+    storedKeysToSend: deps.storedKeysToSend,
+    onStoredKeys: deps.onStoredKeys,
+    supportsPreupload: deps.supportsPreupload,
     now,
     onActivity: touch,
   });

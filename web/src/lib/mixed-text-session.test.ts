@@ -7,6 +7,7 @@ import {
 } from "./mixed-text-session.svelte";
 import { LinkBusyError, UnsupportedLinkError, type MixedPeerLink } from "./peer-link.svelte";
 import { TextReceiver, TextSender, TEXT_END, TEXT_MAX_BYTES, TEXT_REQUEST } from "./text-wire";
+import { StoredKeysReceiver, StoredKeysSender } from "./preupload-handoff";
 import { CHROME_MAX_MESSAGE_BYTES, CONSERVATIVE_MAX_MESSAGE_BYTES } from "./wire-limit";
 import { ACCEPT, REJECT } from "./transfer";
 
@@ -62,6 +63,8 @@ async function harness(
     fileReceiver: {} as MixedPeerLink["fileReceiver"],
     textSender: new TextSender(),
     textReceiver: new TextReceiver(),
+    storedKeysSender: new StoredKeysSender(),
+    storedKeysReceiver: new StoredKeysReceiver(),
   };
   let clock = 0;
   const ensureLink = vi.fn(async () => link);

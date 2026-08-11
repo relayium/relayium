@@ -35,6 +35,8 @@ import {
   type ResumePoint,
 } from "./transfer";
 import { wouldExceedDeclared } from "./transfer-session.svelte";
+import { isStoredKeysFrame, type HandoffItem } from "./preupload-handoff";
+import { peerSupportsPreupload as defaultSupportsPreupload } from "./peer-caps.svelte";
 
 export const MIXED_FILE_CONSENT_TIMEOUT_MS = 10 * 60_000;
 export const MIXED_FILE_DRAIN_TIMEOUT_MS = 30_000;
@@ -150,6 +152,22 @@ export interface MixedFileSessionDeps {
   gapTimeoutMs?: number;
   /** Link owner uses lane traffic to refresh its idle lease. */
   onActivity?(): void;
+  /**
+   * The complete set of pre-uploaded objects to hand this peer, asked once per
+   * (re)established transport and again whenever `sendStoredKeys()` is called.
+   *
+   * A PULL, not a push, and that is what implements the protocol's retry rule:
+   * "re-send the WHOLE current set on every (re)established link". A push would
+   * have to remember what it sent and would then have a partial form to get
+   * wrong; asking again always produces the current truth.
+   */
+  storedKeysToSend?(): readonly HandoffItem[];
+  /** A validated handoff arrived from the peer. Called with the frame's items in
+   *  wire order; merging and deduping by id belong to the receiver driver. */
+  onStoredKeys?(items: HandoffItem[]): void;
+  /** Whether this peer announced `preupload/1`. Test seam; production reads the
+   *  roster announcement. */
+  supportsPreupload?(peerId: string): boolean;
 }
 
 export interface MixedFileSession {
@@ -175,6 +193,9 @@ export interface MixedFileSession {
    *  or final teardown. */
   needsRecovery(): boolean;
   enqueue(peerId: string, picked: PickedFile[]): void;
+  /** Hand the peer the current pre-uploaded set now. A no-op with no open
+   *  channel, an empty set, or a peer that never announced `preupload/1`. */
+  sendStoredKeys(): void;
   accept(): void;
   reject(): void;
   cancel(dir: "send" | "recv"): void;
@@ -192,6 +213,7 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
   const receiveStallMs = deps.receiveStallMs ?? MIXED_FILE_RECEIVE_STALL_MS;
   const drainTimeoutMs = deps.drainTimeoutMs ?? MIXED_FILE_DRAIN_TIMEOUT_MS;
   const gapTimeoutMs = deps.gapTimeoutMs ?? MIXED_FILE_GAP_TIMEOUT_MS;
+  const supportsPreupload = deps.supportsPreupload ?? defaultSupportsPreupload;
 
   let link = $state.raw<MixedPeerLink | null>(null);
   let incoming = $state.raw<Incoming | null>(null);
@@ -561,6 +583,91 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       markLaneFailed(candidate, "recvFail", expectedGeneration);
       return false;
     }
+  }
+
+  /**
+   * Serialises this side's handoff emissions.
+   *
+   * `StoredKeysSender.frame()` takes its seq synchronously and then awaits the
+   * seal, so two overlapping calls would seal out of order and the peer's strict
+   * receiver would hard-fail on the second frame. Every emission goes through
+   * this chain, so there is exactly one in flight at a time.
+   */
+  let handoffChain: Promise<void> = Promise.resolve();
+
+  /**
+   * Hand `candidate`'s peer the current pre-uploaded set.
+   *
+   * Every refusal here is silent and changes nothing: no announcement means the
+   * ordinary live-link path (an unknown kind is a hard error, so a speculative
+   * send would fail the whole transfer), an empty set means there is nothing to
+   * say, and a gap means the next attach will ask again. Deliberately NOT routed
+   * through the batch pump or the receive chain: this frame has its own key and
+   * its own counter precisely so it can never be ordered behind a transfer.
+   */
+  function emitStoredKeys(candidate: MixedPeerLink, expectedGeneration: number) {
+    const pull = deps.storedKeysToSend;
+    if (!pull || !supportsPreupload(candidate.peerId)) return;
+    handoffChain = handoffChain.then(async () => {
+      // Re-checked after the await for the same reason every other emission is:
+      // the transport can die, be replaced, or be superseded while a frame seals.
+      if (candidate !== link || expectedGeneration !== generation) return;
+      // Pulled HERE, not at call time. This callback can sit behind another
+      // handoff's seal for as long as that seal takes, and the set is not
+      // stable across that wait: an entry can be RELEASED to the live link in
+      // between (the peer turned out not to speak preupload/1, or the room
+      // expired mid-upload), drained into a batch, and then still be named by a
+      // snapshot taken before any of that — so the receiver would fetch and
+      // write a file the live lane is delivering at the same moment. Pulling
+      // late means the frame always describes the set as it is when it is sent,
+      // which is what "re-send the WHOLE current set" actually asks for.
+      const items = pull();
+      if (!items.length) return;
+      const frame = await candidate.storedKeysSender.frame(items, candidate.keys.preuploadSend);
+      if (candidate !== link || expectedGeneration !== generation) return;
+      if (suspended || candidate.fileChannel.readyState !== "open") return;
+      candidate.fileChannel.send(frame);
+      deps.onActivity?.();
+    }).catch((err) => {
+      // A failed handoff is never a lane failure. The live link is still exactly
+      // what it was, the receiver is told nothing it must act on, and the next
+      // (re)established transport re-sends the whole set — which is the whole
+      // reason the message has no incremental form.
+      console.error("relayium stored-keys send error", err);
+    });
+  }
+
+  /**
+   * Consume a sealed handoff from the peer.
+   *
+   * Dispatched like a control frame — ahead of `recvChain` — because it is not
+   * part of the file stream: its own key and counter mean it can neither desync
+   * a batch nor be desynced by one, and it must not queue behind a slow disk
+   * write when it is the thing the receiver is waiting for. A malformed or
+   * unopenable frame is logged and dropped: it cannot corrupt the file lane, and
+   * failing the transfer over it would make one junk frame a way to kill a
+   * working link.
+   *
+   * Where such a frame comes from is worth being exact about, because the
+   * looser version of this note ("a signalling relay could inject one") is
+   * false and points the defence at the wrong place: DataChannel frames arrive
+   * over DTLS/SCTP between the two peers, and the signalling server — which
+   * only ever carried the SDP and the ICE candidates — cannot put a byte on
+   * this channel. What CAN put one here is the PEER: authenticated, and never
+   * trusted to be well-behaved. So this fails closed on peer-authored garbage,
+   * which is the same reason `isStoredKeysFrame` routes a truncated kind 12
+   * here rather than letting it fall into the file lane.
+   */
+  function handleStoredKeys(buf: ArrayBuffer, candidate: MixedPeerLink, expectedGeneration: number) {
+    if (!deps.onStoredKeys) return;
+    handoffChain = handoffChain.then(async () => {
+      if (candidate !== link || expectedGeneration !== generation) return;
+      const items = await candidate.storedKeysReceiver.open(buf, candidate.keys.preuploadRecv);
+      if (candidate !== link || expectedGeneration !== generation) return;
+      deps.onStoredKeys?.(items);
+    }).catch((err) => {
+      console.error("relayium stored-keys receive error", err);
+    });
   }
 
   function sendBarrier(
@@ -1731,6 +1838,13 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
         // Receiver->sender controls must not wait behind slow inbound disk writes,
         // or our independent outbound flow-control window can deadlock.
         handleControl(buf);
+      } else if (isStoredKeysFrame(buf)) {
+        // Checked BEFORE the file stream is offered the frame. Kind 12 is
+        // disjoint from every file kind, but the discriminator has to run in
+        // front of queueInbound anyway: the handoff belongs to a different key
+        // and a different counter, and feeding it to the file receiver would
+        // fail that codec's sequence for a frame that was never part of it.
+        handleStoredKeys(buf, candidate, expectedGeneration);
       } else if (isBatchAbort(buf)) queueAbort(candidate, expectedGeneration);
       else queueInbound(buf, candidate, expectedGeneration);
     };
@@ -1751,6 +1865,18 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       if (replacement) suspend();
       return;
     }
+    // §4.4's two rules, on every (re)established transport: hand over the whole
+    // current set, and do it before this side starts anything else on the lane.
+    //
+    // Stated precisely, because the emission is not synchronous: the send is
+    // INITIATED here, ahead of the resume timer and the pump, but the frame
+    // itself is sealed asynchronously, so a batch already queued may still put
+    // its manifest on the wire first. That is harmless and is not what the rule
+    // is about — the hazard it names is a handoff stuck behind a long transfer's
+    // BYTES, and this frame can never be: the receiver dispatches it ahead of
+    // the receive chain, and it carries its own key and counter, so neither side
+    // has to order it against the file stream at all.
+    emitStoredKeys(candidate, expectedGeneration);
     if (resumingOutbound) armOutboundResumeTimer(resumingOutbound);
     if (resumingInbound) {
       // An old task may already have authenticated a chunk and be inside the
@@ -1828,6 +1954,11 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     detach,
     suspend,
     needsRecovery() { return recoveryIntent; },
+    sendStoredKeys() {
+      const candidate = link;
+      if (!candidate || suspended || candidate.fileChannel.readyState !== "open") return;
+      emitStoredKeys(candidate, generation);
+    },
 
     enqueue(peerId, picked) {
       const chosen = picked.slice(0, MAX_FILES);

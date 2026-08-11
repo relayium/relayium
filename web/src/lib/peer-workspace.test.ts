@@ -118,6 +118,28 @@ describe("peer workspace capability routing", () => {
     expect(h.legacyText.openWith).toHaveBeenCalledWith("old");
   });
 
+  // The empty-batch choke point. With pre-upload live, App's auto-send effect
+  // can be looking at a queue whose only entries are `uploading` or `uploaded`;
+  // draining it returns nothing, and the old code still called through. On the
+  // legacy path that seals and sends a manifest with no files in it and raises a
+  // consent prompt on the peer for a transfer that does not exist. Refused here
+  // because this is the single point BOTH transports pass through — the caller
+  // that produced it is not the only caller that could.
+  it("never starts a transfer for an empty batch, on either transport", async () => {
+    const h = setup();
+    const mixedFiles = vi.spyOn(h.workspace.mixed.file, "enqueue").mockImplementation(() => {});
+
+    h.workspace.sendFiles("z", []); // link-capable peer
+    h.workspace.sendFiles("old", []); // legacy peer
+    expect(mixedFiles).not.toHaveBeenCalled();
+    expect(h.legacyFiles.sendFiles).not.toHaveBeenCalled();
+
+    // And it is a refusal of the BATCH, not of the peer: a real one still goes.
+    const picked = [{ file: new File(["x"], "x.txt") }];
+    h.workspace.sendFiles("z", picked);
+    expect(mixedFiles).toHaveBeenCalledWith("z", picked);
+  });
+
   it("blocks both legacy inbound generations while one mixed link exists", async () => {
     const h = setup();
     await h.workspace.mixed.ensure("z");

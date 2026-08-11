@@ -196,7 +196,7 @@ saw) is the whole capability, which is exactly the share model — the id is a
 server-minted random token that only ever travels inside the peers' encrypted
 channel. A deadline that has passed is `404`, and asking is what deletes it.
 
-## 4. Key handoff (`STORED_KEYS`, DataChannel kind 10)
+## 4. Key handoff (`STORED_KEYS`, DataChannel kind 12)
 
 The receiver learns which objects to fetch, and with which keys, from the sender
 directly. This message is the only thing that carries a key, and it never leaves
@@ -204,11 +204,77 @@ the end-to-end channel.
 
 ### 4.1 Frame
 
-`[kind = 10][seq: uint32 BE][sealed]`, sealed with the session key at that seq —
-the same frame shape, seal and seq space as `BATCH_ENC`/`CHUNK`
-(`relayium-realtime-wire-v1.md`). It is a sealed frame and MUST NOT be sent as a
-plaintext control frame: the relay would then see the object ids, and an id plus
-the ciphertext it already stores is most of a transfer.
+`[kind = 12][seq: uint32 BE][sealed]` — the same frame SHAPE as
+`BATCH_ENC`/`CHUNK`, on the same DataChannel, but with its own key and its own
+sequence.
+
+**Corrected from kind 10 (and from the session key) while checkpoint 2b wired
+it.** Both halves of the original text were wrong, and each would have been a
+release blocker:
+
+- **Kind 10 was not free.** `relayium-realtime-wire-v1.md`'s kind list omitted
+  the two transport-fragmentation kinds, and 10/11 have been
+  `CHUNK_PART`/`BATCH_PART` on the wire since fragmentation shipped, in the Web
+  client and in the Swift port alike. A handoff sent as kind 10 would not have
+  been a new frame: the file receiver would have authenticated it in sequence as
+  a chunk fragment and spliced a JSON list of object ids and keys into the
+  middle of somebody's file. The registry now lists 10/11 explicitly.
+- **The session key's seq space has exactly one producer, and this is a second
+  one.** It is emitted on link establishment, again on every transport rebuild,
+  and again whenever another upload lands — none of which is the batch pump.
+  Sharing that counter is the shape AES-GCM nonce reuse takes, and it is the
+  hazard `text/1` already answered by deriving a separate key. So STORED_KEYS
+  seals under `preuploadSend`/`preuploadRecv` (domain `relayium-preupload-v1\0`,
+  derived per direction exactly like the text keys) with its own counter from 0.
+  That independence is also what makes §4.4's "re-send on every (re)established
+  link" implementable: the frame never has to be ordered against a batch in
+  flight, a pre-consent guard, or a resume realignment.
+
+**Sequence rule: forward-only, not gap-free.** There is no resume for this
+stream, and none is needed — the sender always re-sends the whole set — but the
+receiver MUST NOT demand the exact next seq.
+
+- A seq at or below the last one CONSUMED is refused. That is a replay of a key
+  list, whether it is an attacker re-injecting a frame or a burned one arriving
+  late.
+- A seq AHEAD of the expectation is accepted if, and only if, it opens under the
+  receiving key. The receiver then sets its expectation to that seq + 1.
+- The expectation moves as soon as the frame OPENS, and MUST NOT wait for the
+  payload to decode. A frame that authenticated was authored by the peer, and
+  its seq is already spent on the sending side whatever this side thinks of the
+  bytes inside: the sender takes the number synchronously, before it seals, and
+  can never reuse it — the seq is the AEAD nonce. There is therefore no "retry
+  at the same seq" to leave room for; a re-send is always a NEW frame at a NEW
+  number. Holding the expectation back for a payload that was refused protects
+  nothing and leaves that exact authenticated frame replayable for the life of
+  the link.
+- A frame that FAILS to open moves nothing. It was not authored by the peer, so
+  it says nothing about what the peer has sent, and advancing on one would let
+  anyone who can put bytes on the channel push the receiver past the number the
+  real frame is carrying.
+
+The gap is not hypothetical and it is not attacker-induced: the sender takes its
+seq SYNCHRONOUSLY and seals asynchronously, so a transport replacement, a
+superseded link generation or a `send()` that throws destroys a frame whose
+number is already spent. The counter can never be rolled back to reclaim it —
+the seq is the AEAD nonce, and reusing one under the same derived key for a
+different payload is the exact failure this stream's separate key exists to
+prevent. So the hole is permanent, and the receiver is what absorbs it.
+
+A receiver that insisted on the exact next seq would turn one such event into a
+permanently wedged stream: every later whole-set resend refused, the sender
+believing it handed the keys over, and the receiver waiting for a prompt that can
+never arrive — with §4.4's resend rule, the very thing meant to RESCUE a dropped
+handoff, becoming the thing that can never succeed again.
+
+Tolerating a forward gap concedes nothing. The frame still has to open under a
+key derived from the peers' own session secret, so a gap admits nothing an
+attacker can author; all it costs is that a key list this side never saw is never
+seen, which the unconditional resend already covers.
+
+It is a sealed frame and MUST NOT be sent as a plaintext control frame: the relay
+would then see the object ids, and an id plus the ciphertext it already stores is
+most of a transfer.
 
 **It MUST NOT travel over the signaling channel.** Signaling is relayed by the
 server, and this message carries keys.
@@ -237,11 +303,40 @@ Compact JSON, UTF-8, key order as written:
 Announced as `preupload/1` alongside `text/1` and `link/1`, at the roster level
 (`relayium-text-v1.md`) and in the SDP `caps` (`relayium-handshake-v1.md`).
 
-**Never send kind 10 to a peer that has not announced `preupload/1`.** An unknown
+**Never send kind 12 to a peer that has not announced `preupload/1`.** An unknown
 kind is a hard error in every implementation — web, Swift and the Go CLI — so a
 speculative send does not degrade, it fails the whole transfer. Exact match:
 `preupload/2` is a different wire. A peer that never announced gets the ordinary
 live-link path and nothing else.
+
+**And the sender must have somewhere to put the files it already uploaded.**
+Pre-upload happens while the room is still waiting, so the sender cannot know who
+will join. When the joiner turns out not to announce `preupload/1`, its objects
+are unreachable ciphertext: the keys can never be delivered, and an entry left in
+the "already uploaded" state is sent over neither transport — the user simply
+never sees the file arrive. The sender therefore returns those entries to the
+live-link lane at the moment it drains the batch for that peer. The bytes are
+spent either way; the transfer is not. The stored objects are not deleted — their
+life is the room's, and §2's deadline reclaims them.
+
+**That fallback is only real if the gate in front of it is peer-specific.** The
+condition every send decision tests MUST be "how many entries does the live link
+owe THIS peer" — the entries that were never uploaded, PLUS the uploaded ones
+when the peer cannot be handed keys. Testing the peer-independent question
+("what would a drain return right now") reintroduces the whole failure in two
+places, and both are the ordinary case rather than an edge:
+
+- a batch that finished uploading before anyone joined has NO entries in the
+  never-uploaded state, so the gate never opens, the drain is never reached, and
+  the fallback inside it is dead code for exactly the situation it exists for;
+- an upload that was still in flight when the peer joined is allowed to finish
+  (§3), and completing it moves an entry OUT of the never-uploaded state — so a
+  gate on that count sees the number go down and stays shut while the peer is
+  already present and already known not to speak `preupload/1`.
+
+An entry whose bytes are still moving is in neither answer: it belongs to the
+upload that is still allowed to finish, and counting it would open the gate onto
+a batch with no files in it.
 
 ### 4.4 Failure, retry, idempotency
 
@@ -253,17 +348,45 @@ without a rule reads as "the receiver joined and then nothing happened".
 - **Resend on every (re)established link.** Reconnect, ICE restart or a fresh
   session each re-send the full current set. There is no partial or incremental
   form.
-- **The receiver dedupes by `id`.** Re-delivery of an id it already holds is a
-  no-op — not an error, not a second download. Repeated delivery is therefore
-  always safe, which is what makes blind resending correct.
+- **The receiver dedupes by `id`, on the OUTCOME and not on the offer.** An id it
+  has DELIVERED, and an id the user has DECLINED, are permanent no-ops — not an
+  error, not a second prompt, not a second download. An id that merely FAILED in
+  a way a second attempt could survive is NOT in that category, and must be
+  accepted again from the next resend. Claiming an id the moment it is offered
+  looks like the same rule and is not: it makes one transient failure — a single
+  5xx, one dropped socket — permanently disable the retry the sender is
+  faithfully performing on every reconnect, so the receiver shows a "try again"
+  that can never try and the objects sit in storage until the room deletes them.
+  A failure the receiver cannot survive by retrying (the ciphertext is gone; the
+  key does not open its object) IS permanent, and must not be re-offered either —
+  a retry there is a request with a guaranteed failure behind it.
 - **No acknowledgement frame.** An ack would have to carry ids and would either
   leak them to the relay in plaintext or need a second sealed reverse seq space.
   Resending is cheaper and cannot get out of sync.
 - **A receiver that never got a handoff MUST NOT claim success.** It reports that
   the sender left before handing over the keys. The objects then expire on the
   room's own deadline and are deleted; nothing is silently half-transferred.
+- **A partial failure is reported as partial.** "All or nothing" is the rule for
+  what the receiver CLAIMS, not a description of what a disk contains: on a save
+  target that flushes each file as it closes (a chosen folder, per-file browser
+  downloads), a batch that stopped on its third object really did leave the first
+  two behind. Reporting "nothing was saved" there tells the user they have none
+  of it while they have half a folder — so they neither clean it up nor expect
+  the retry to land beside it. A target that only delivers on finalisation (the
+  ZIP branch assembles the archive at the end) is the opposite case and saved
+  nothing at all, however many entries it accepted. The receiver states which of
+  the two happened, and it never re-downloads an object it has already written.
 - **A key that fails to decrypt its object is a hard error** for that item —
   never a fallback to an unencrypted path, which does not exist.
+- **Leaving the room cancels everything already in flight.** A manifest fetch, an
+  open save picker and a running download are each a window in which the user can
+  leave, decline, or be handed a different room, and every one of those
+  continuations still holds live keys and a save target. A receiver MUST make
+  them inert rather than let them resume: otherwise a previous pairing's files
+  are written after the user left it, a declined batch is written because the
+  picker was already open when the answer came, or a stale resolve publishes its
+  file list over the batch a NEW room is showing — so the user accepts one set of
+  names and receives another.
 
 ## 5. Metering
 
@@ -315,5 +438,6 @@ without a rule reads as "the receiver joined and then nothing happened".
 - A Device Inbox (`device_task`) object remains invisible on the public
   endpoints and is never handed to a node as a direct-download URL.
 - A client that knows nothing about pre-upload keeps working: it never announces
-  `preupload/1`, is never sent kind 10, never sends `purpose=pair_room`, and gets
-  the live-link behaviour it always had.
+  `preupload/1`, is never sent kind 12, never sends `purpose=pair_room`, and gets
+  the live-link behaviour it always had — including the files a pre-uploading
+  peer had already put in storage before it joined (§4.3).

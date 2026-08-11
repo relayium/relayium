@@ -133,6 +133,19 @@ export interface SaveTarget {
   /** Finalise the batch (e.g. flush a bundled ZIP). Called once, after the last
    *  file's sink closes. Optional: streaming targets need no finalisation. */
   done?(): Promise<void>;
+  /**
+   * 这一批要**整批**在 done() 里才交付（ZIP 分支），还是每个文件 close() 就落地。
+   *
+   * 只有报「失败了，但已经存下几个」时才需要问它，而那句话在两个方向上都可能是谎：
+   * 目录句柄/Blob/SW 流那几条路每关一个 sink 就交付一个文件，说「一个都没保存」
+   * 是假的（用户手上有半个文件夹却被告知没有）；ZIP 分支在 finish() 之前一个字节
+   * 都没交给用户，说「已保存 N 个」同样是假的。
+   *
+   * 显式字段而不是 `done === undefined` 反推：那只是今天刚好成立的巧合，
+   * 下一个需要收尾却逐个落地的目标会让它静静地答错。缺省视为逐文件落地——
+   * 既有目标里只有 ZIP 一条是打包的。
+   */
+  bundled?: boolean;
 }
 
 interface SavePickerWindow {
@@ -779,6 +792,8 @@ export async function pickSaveTarget(files: FileMetaLite[], opts: SaveOptions = 
     const topDir = files.find((f) => f.path?.includes("/"))!.path!.split("/")[0];
     return {
       label: "将打包为 ZIP 下载",
+      // 整批攒在 zip 里，finish() 之前用户手上什么都没有。
+      bundled: true,
       file: async (name, _size, path) => {
         const parts: Uint8Array[] = [];
         return {

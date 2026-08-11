@@ -15,12 +15,19 @@
 // 它永远不可能让明文被发出去：消息密钥是**派生**出来的，不是协商出来的，所以不存在
 // "降级成不加密"这条路径。能改写信令的攻击者本来就能直接让连接建不起来。
 
+import { CAP_PREUPLOAD } from "./preupload-handoff";
+
 /** The one capability this version advertises. Versioned so a later, wire-
  *  incompatible message format can be introduced without ambiguity. */
 export const CAP_TEXT = "text/1";
 /** Unified two-lane Web link: one authenticated connection carrying an ordered
  *  file lane and an ordered text lane. Versioned for the same reason text/1 is. */
 export const CAP_LINK = "link/1";
+
+/** Pre-upload key handoff (DataChannel frame kind 12). Re-exported from the
+ *  codec that owns it so the announcement and the frame it promises cannot
+ *  drift apart in two files. */
+export { CAP_PREUPLOAD };
 
 /**
  * Whether this BUILD implements link/1 at all.
@@ -71,7 +78,10 @@ export function linkRoomActive(): boolean {
  *  disagree — and so neither can disagree with the routing rule below, which
  *  reads the same predicate. */
 export function advertisedCaps(): readonly string[] {
-  return linkRoomActive() ? [CAP_TEXT, CAP_LINK] : [CAP_TEXT];
+  // preupload/1 rides with link/1 and can never be announced without it: the
+  // handoff frame travels on the LINK's file channel, so a build (or a scope)
+  // that cannot open a link has no way to deliver the keys it would be promising.
+  return linkRoomActive() ? [CAP_TEXT, CAP_LINK, CAP_PREUPLOAD] : [CAP_TEXT];
 }
 
 /** What each peer in the room has told us it supports. Reactive: the peer cards
@@ -130,6 +140,25 @@ export function peerSupportsText(peerId: string): boolean {
 export function peerSupportsLink(peerId: string): boolean {
   if (!linkRoomActive()) return false;
   return (announced[peerId] ?? []).includes(CAP_LINK);
+}
+
+/**
+ * Exact match, and never inferred from link/1.
+ *
+ * This is the one gate on frame kind 12. An unknown kind is a HARD ERROR in
+ * every implementation, so a speculative handoff does not degrade to the live
+ * link — it kills the whole transfer on a frame the peer cannot parse. Native
+ * clients and the CLI announce `text/1` (and, for a current Web peer, `link/1`)
+ * and nothing else, so they take the ordinary live-link path and are never sent
+ * one. `preupload/2` is a different wire and must not be read as this one.
+ *
+ * Gated on `linkRoomActive()` in front of the membership test for the same
+ * reason peerSupportsLink is: the frame has no transport without a link, so one
+ * predicate decides both what we announce and what we route.
+ */
+export function peerSupportsPreupload(peerId: string): boolean {
+  if (!linkRoomActive()) return false;
+  return (announced[peerId] ?? []).includes(CAP_PREUPLOAD);
 }
 
 /** Drop announcements for peers no longer in the roster. A reconnecting peer is

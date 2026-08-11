@@ -94,9 +94,9 @@ function installFakeServer(opts: FakeOpts = {}) {
   return state;
 }
 
-/** Run the driver to a standstill with the capability gate forced on — this
- *  build cannot hand the keys over yet (see the last test in this file), which
- *  is the ONLY reason the gate exists. */
+/** Run the driver to a standstill with the capability gate passed explicitly.
+ *  The build's own gate is now ON (see the last test in this file); passing it
+ *  here keeps every case in this file independent of that announcement. */
 const run = (code = CODE) => startPreupload(code, true);
 
 beforeEach(() => {
@@ -190,6 +190,76 @@ describe("driving staged files up against the pairing code", () => {
     expect(server.inits[1]).toContain("code=100200");
     expect(uploadedRefs().map((r) => r.id)).toEqual(["obj-u2"]); // never obj-u1
     expect(outboxState(0)).toBe("uploaded");
+  });
+
+  it("re-uploads into the new room a file the old room had already finished", async () => {
+    // The case the guard above cannot reach, because there the upload was still
+    // in flight when the room changed. An upload that COMPLETED is worse: the
+    // entry is `uploaded`, so no lane is looking at it any more — the live link
+    // skips it and the driver has nothing staged to pick up — while its ref
+    // still names ciphertext bound to a room the new code cannot reach. Handed
+    // over as it stands, the new peer fetches a 404; not handed over, the file
+    // simply never arrives. So the room boundary returns it to the live-link
+    // lane, exactly as a failed upload is returned, and the new room uploads it
+    // again under its own code.
+    const server = installFakeServer();
+    addToOutbox([pf("a.bin")]);
+    await run(); // room A
+    expect(outboxState(0)).toBe("uploaded");
+    expect(uploadedRefs().map((r) => r.id)).toEqual(["obj-u1"]);
+
+    resetPreupload(); // the re-mint boundary
+    expect(outboxState(0), "an old room's object is still the outbox's answer").toBe("staged");
+    expect(uploadedRefs(), "the old room's refs are still on offer to the new peer").toEqual([]);
+
+    await run("100200"); // room B
+    expect(server.inits[1]).toContain("code=100200");
+    expect(outboxState(0)).toBe("uploaded");
+    // Only the new room's object, and it is a genuinely new one.
+    expect(uploadedRefs().map((r) => r.id)).toEqual(["obj-u2"]);
+  });
+
+  it("is stranded by a SECOND boundary that lands after its own driver started", async () => {
+    // Executed proof of why exactly ONE owner may cross this boundary on a
+    // re-mint, and why that owner is the sender.
+    //
+    // A re-mint is code→code, and on that one roomCode change TWO effects wake:
+    // CodePairing's, which calls startPreupload(newCode), and App's room-binding
+    // effect. CodePairing.send() has already crossed the boundary synchronously
+    // (resetPreupload() before enterRoom), and startPreupload owns the other
+    // half — being handed a different code runs leaveRoom itself. So a reset
+    // from the second effect has nothing left to release, and if the child ran
+    // first it lands INSIDE the new room's first upload: this is what happens.
+    const server = installFakeServer({ onPatch: (n) => { if (n === 1) resetPreupload(); } });
+    addToOutbox([bigPf("a.bin")]);
+    await run("100200");
+
+    // The new room's own upload, aborted by the new room's own reset.
+    expect(server.finalized).toBe(0);
+    expect(outboxState(0)).toBe("staged");
+    expect(uploadedRefs()).toEqual([]);
+    // And the driver is gone with the room it was blanked out of: a live code
+    // with a staged file uploaded nothing, and only an explicit new call can
+    // revive it — which no caller makes, because CodePairing's effect has
+    // already run for this roomCode and only wakes if the queue changes.
+    expect(server.inits).toHaveLength(1);
+    await run("100200");
+    expect(server.inits).toHaveLength(2); // had to be started over from nothing
+    expect(outboxState(0)).toBe("uploaded");
+  });
+
+  it("returns a finished upload to the live link when the code changes under a running pass", async () => {
+    // Same boundary reached the other way: nobody calls reset(), the driver is
+    // simply told about a different room. Whichever entry point notices first,
+    // what the old room uploaded stops being an answer.
+    const server = installFakeServer();
+    addToOutbox([pf("a.bin")]);
+    await run();
+    expect(uploadedRefs().map((r) => r.id)).toEqual(["obj-u1"]);
+
+    await run("100200");
+    expect(server.inits[1]).toContain("code=100200");
+    expect(uploadedRefs().map((r) => r.id)).toEqual(["obj-u2"]);
   });
 
   it("refuses to start without a code, rather than uploading into nothing", async () => {
@@ -457,16 +527,29 @@ describe("files a stored object cannot carry faithfully", () => {
 });
 
 describe("the capability gate", () => {
-  it("is OFF in this build, because the sender cannot hand the keys over yet", async () => {
-    // Pre-uploading what this client cannot then hand off is worse than not
-    // pre-uploading: the receiver joins, gets no key for those objects, and the
-    // files sit in storage until the room's deadline deletes them. The gate is
-    // this build's own `preupload/1` announcement, so the checkpoint that wires
-    // frame kind 10 turns the sender on by announcing it — and nothing else can.
-    expect(preuploadSenderReady()).toBe(false);
+  it("is ON now that this build can both hand the keys over and receive them", async () => {
+    // The gate is this build's own `preupload/1` announcement, and that is not a
+    // coincidence dressed up as a rule: the announcement means "I can send frame
+    // kind 12", and frame kind 12 is the only way an uploaded object's key ever
+    // reaches the receiver. It stayed false for a whole checkpoint because
+    // uploading what this client could not hand off is strictly worse than not
+    // uploading — the receiver joins, gets no key, and the objects sit in
+    // storage until the room's deadline deletes them.
+    expect(preuploadSenderReady()).toBe(true);
     const server = installFakeServer();
     addToOutbox([pf("a.bin")]);
     await startPreupload(CODE); // the real gate, not the test's override
+    expect(server.inits).toHaveLength(1);
+    expect(outboxState(0)).toBe("uploaded");
+  });
+
+  it("refuses to run at all when the announcement is withdrawn", async () => {
+    // The gate is one expression, so withdrawing the capability must stop the
+    // uploader too — not leave it producing ciphertext with no way to hand over
+    // the keys that open it.
+    const server = installFakeServer();
+    addToOutbox([pf("a.bin")]);
+    await startPreupload(CODE, false);
     expect(server.inits).toHaveLength(0);
     expect(outboxState(0)).toBe("staged");
   });

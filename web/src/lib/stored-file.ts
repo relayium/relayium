@@ -219,6 +219,33 @@ export class DownloadNetworkError extends Error {
   }
 }
 
+/**
+ * Stop here if the caller has cancelled.
+ *
+ * A `DOMException("aborted", "AbortError")` — the same shape `fetch` rejects
+ * with when its own signal fires, and the same one the upload path below throws.
+ * One shape, because the alternative is a caller having to recognise
+ * "this was cancelled" differently depending on WHICH await noticed first: the
+ * request, the stream read, or a check between two writes. A cancellation that
+ * arrives looking like a network fault gets offered a retry; one that falls
+ * through to a default gets read as a decrypt failure, which in the pre-upload
+ * receiver marks every id permanently unretryable. Neither is survivable by a
+ * caller that cannot tell what it is holding.
+ */
+export function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new DOMException("aborted", "AbortError");
+}
+
+/** Whether `e` is a cancellation rather than a fault — ours or `fetch`'s.
+ *
+ *  Matches on `name`, not on `instanceof DOMException`: an AbortError can come
+ *  from this module, from `fetch`, or from a `ReadableStream` reader, and the
+ *  last of those is not guaranteed to be the same DOMException constructor in
+ *  every runtime this ships to. */
+export function isAbortError(e: unknown): boolean {
+  return typeof e === "object" && e !== null && (e as { name?: unknown }).name === "AbortError";
+}
+
 /** Upload progress. The single-shot fallback (`uploadFile`) reports two sequential
  *  phases — in-browser encryption, then the network POST of the assembled blob —
  *  and `total` differs per phase (plaintext size vs. ciphertext blob size). The
@@ -584,8 +611,8 @@ function postWithProgress(
  *  here, on the way in, with nothing awaited before it: a value Relayium could
  *  never have issued costs the network nothing and tells the server nothing about
  *  what was tried. */
-export async function fetchMeta(id: string): Promise<StoredFileMeta> {
-  return fetchMetaChecked(checkedStoredObjectId(id));
+export async function fetchMeta(id: string, signal?: AbortSignal): Promise<StoredFileMeta> {
+  return fetchMetaChecked(checkedStoredObjectId(id), signal);
 }
 
 /** `fetchMeta` for an id that has ALREADY passed `checkedStoredObjectId`. Private
@@ -593,11 +620,19 @@ export async function fetchMeta(id: string): Promise<StoredFileMeta> {
  *  one value it checked at its own boundary, instead of re-running a check whose
  *  result is already known (which would read as the real defence while the real
  *  defence sat elsewhere). */
-async function fetchMetaChecked(id: string): Promise<StoredFileMeta> {
+async function fetchMetaChecked(id: string, signal?: AbortSignal): Promise<StoredFileMeta> {
+  // A caller that has already cancelled gets no request at all: the metadata
+  // read is the FIRST thing a stored download does, so this is the cheapest
+  // point at which "the room is over" can cost the server nothing.
+  throwIfAborted(signal);
   let res: Response;
   try {
-    res = await fetch(`/api/files/${encodeURIComponent(id)}/meta`);
+    res = await fetch(`/api/files/${encodeURIComponent(id)}/meta`, { signal });
   } catch (e) {
+    // A cancelled request rejects here too, and it is not a network fault: the
+    // caller pulled the plug, and telling it the server was unreachable would
+    // put a retry in front of a user who has left the room.
+    throwIfAborted(signal);
     // Offline, DNS failure, connection refused — the request never reached a
     // server, so there is no status to classify. The blob read has wrapped this
     // as DownloadNetworkError from the start; the metadata read let a bare
@@ -618,11 +653,30 @@ function base64ToBytes(b64: string): Uint8Array {
   return out;
 }
 
+/**
+ * Fetch and decrypt one stored object's manifest — the names and sizes it holds.
+ *
+ * The two halves of "what is in this object?" in one call, so a caller that has
+ * an id and a key does not have to know that the manifest arrives base64 inside
+ * the metadata document. Fails exactly as its parts do: a refused id costs no
+ * request, an unreachable server raises DownloadNetworkError, a non-2xx raises
+ * StoredDownloadHttpError, and a key that does not open the manifest throws from
+ * decryptManifest — never a partial or guessed file list.
+ */
+export async function fetchStoredManifest(
+  id: string,
+  key: CryptoKey,
+  signal?: AbortSignal,
+): Promise<StoredManifest> {
+  const meta = await fetchMetaChecked(checkedStoredObjectId(id), signal);
+  return decryptManifest(key, base64ToBytes(meta.encManifest));
+}
+
 /** Expected total plaintext length, from the (encrypted) manifest's file sizes.
  *  Used to detect a stream truncated on a frame boundary, which a bare frame
  *  reassembler cannot distinguish from a clean end. */
-async function expectedPlaintextBytes(id: string, key: CryptoKey): Promise<number> {
-  const meta = await fetchMetaChecked(id); // only ever called with downloadBlob's checked id
+async function expectedPlaintextBytes(id: string, key: CryptoKey, signal?: AbortSignal): Promise<number> {
+  const meta = await fetchMetaChecked(id, signal); // only ever called with downloadBlob's checked id
   const manifest = await decryptManifest(key, base64ToBytes(meta.encManifest));
   return manifest.files.reduce((n, f) => n + f.size, 0);
 }
@@ -634,20 +688,33 @@ async function expectedPlaintextBytes(id: string, key: CryptoKey): Promise<numbe
  *
  *  Public, and its own trust boundary rather than a caller's: `expectedBytes`
  *  lets a caller skip the metadata lookup entirely, so nothing upstream can be
- *  relied on to have looked at `id` first. */
+ *  relied on to have looked at `id` first.
+ *
+ *  `signal` cancels the whole thing, and it is the ONLY way to stop a download
+ *  that has started streaming. A caller that owns the lifetime of a transfer —
+ *  the pre-upload receiver, whose room can end at any moment — cannot do this
+ *  from outside: once the response body is live, every remaining chunk is read,
+ *  decrypted and handed to `onChunk` by the loop below, with no await the caller
+ *  gets to interpose a check on. Checking a token after this function returns
+ *  stops the NEXT object, never the bytes still landing from this one. So the
+ *  check has to live at each of the three points where cancellation can be
+ *  observed: before a request is made, around the read that may resolve after
+ *  the signal fired, and between two plaintext deliveries. */
 export async function downloadBlob(
   id: string,
   key: CryptoKey,
   onChunk: (pt: Uint8Array) => Promise<void>,
   onProgress?: (received: number) => void,
   expectedBytes?: number,
+  signal?: AbortSignal,
 ): Promise<void> {
   // First statement, before the metadata lookup, the blob request and any
   // onChunk/onProgress callback: a refused id must cost zero requests and must
   // never hand a caller a byte or a progress tick it would have to un-report.
   // `checked` is then the only value composed into either URL below.
   const checked = checkedStoredObjectId(id);
-  const expected = expectedBytes ?? (await expectedPlaintextBytes(checked, key));
+  throwIfAborted(signal);
+  const expected = expectedBytes ?? (await expectedPlaintextBytes(checked, key, signal));
   let res: Response;
   // A direct-download 302 hands us a one-shot token, so a request the browser
   // itself replayed (a retried idle connection, say) comes back 403 from the
@@ -655,13 +722,23 @@ export async function downloadBlob(
   // again — it mints a fresh token. Bounded to one extra attempt: a persistent
   // 403 is a real failure, not something to spin on.
   for (let attempt = 0; ; attempt++) {
+    // The replay is a SECOND request, so the cancellation has to be honoured
+    // here as well: a room that ended during the first attempt must not be the
+    // reason central mints another one-shot token.
+    throwIfAborted(signal);
     try {
-      res = await fetch(`/api/files/${encodeURIComponent(checked)}/blob`);
+      res = await fetch(`/api/files/${encodeURIComponent(checked)}/blob`, { signal });
     } catch (e) {
+      throwIfAborted(signal); // cancelled, not a transport fault — see fetchMetaChecked
       throw new DownloadNetworkError(e); // fetch rejected — offline / DNS / connection refused
     }
     if (res.status !== 403 || attempt > 0) break;
   }
+  // A response that arrives after the cancellation is not news about the
+  // transfer any more, whatever its status. Checked before it is read so a
+  // caller is handed the cancellation it caused rather than, say, a 503 it
+  // would then have to decide whether to retry.
+  throwIfAborted(signal);
   // After the bounded 403 replay above, so a spent-token retry still happens
   // before any status is reported as final.
   if (!res.ok) throw new StoredDownloadHttpError(res.status, "blob");
@@ -669,27 +746,69 @@ export async function downloadBlob(
   const decryptor = new StoreDecryptor(key);
   const reader = res.body.getReader();
   let received = 0;
-  for (;;) {
-    let chunk: ReadableStreamReadResult<Uint8Array>;
-    try {
-      chunk = await reader.read(); // a mid-stream drop rejects here — a network fault, not a decrypt fault
-    } catch (e) {
-      throw new DownloadNetworkError(e);
+  try {
+    for (;;) {
+      throwIfAborted(signal);
+      let chunk: ReadableStreamReadResult<Uint8Array>;
+      try {
+        chunk = await reader.read(); // a mid-stream drop rejects here — a network fault, not a decrypt fault
+      } catch (e) {
+        throwIfAborted(signal); // our own abort tearing the stream down
+        throw new DownloadNetworkError(e);
+      }
+      // Re-checked AFTER the read. The check before it only covers a signal that
+      // had already fired; the case that matters is the read that was in flight
+      // WHEN it fired and resolves afterwards, holding a chunk whose plaintext
+      // is about to be written to the user's disk. On a real stream the abort
+      // rejects the read and the catch above handles it; on a reader that
+      // resolves the pending read instead, this stops the chunk before it is
+      // even decrypted. (The per-delivery check below is the backstop for
+      // anything that reaches `onChunk`.)
+      throwIfAborted(signal);
+      const { done, value } = chunk;
+      if (done) break;
+      for await (const pt of decryptor.push(value)) {
+        // One network chunk can carry several frames, so several deliveries —
+        // each an `await` into the caller's sink, and each a place the signal
+        // can fire between.
+        throwIfAborted(signal);
+        await onChunk(pt);
+        received += pt.length;
+        // Re-checked AFTER the delivery, which is the longest await here: it is
+        // the caller writing to a disk. A cancellation that lands inside it
+        // resumes to a caller that has already torn its surface down, and a
+        // progress tick published there is a bigger number pushed at a transfer
+        // that is over.
+        throwIfAborted(signal);
+        onProgress?.(received);
+      }
     }
-    const { done, value } = chunk;
-    if (done) break;
-    for await (const pt of decryptor.push(value)) {
+    // end() throws on trailing bytes or a length shortfall — an incomplete file
+    // must surface as an error, never as a successful download.
+    for await (const pt of decryptor.end(expected)) {
+      throwIfAborted(signal);
       await onChunk(pt);
       received += pt.length;
+      throwIfAborted(signal);
       onProgress?.(received);
     }
-  }
-  // end() throws on trailing bytes or a length shortfall — an incomplete file
-  // must surface as an error, never as a successful download.
-  for await (const pt of decryptor.end(expected)) {
-    await onChunk(pt);
-    received += pt.length;
-    onProgress?.(received);
+  } finally {
+    // Only on the cancellation path. A stream left un-cancelled keeps its
+    // connection and its buffers alive for a transfer nobody is waiting for,
+    // and on a real body the browser goes on downloading into it. The error
+    // paths deliberately do NOT cancel: a reader that already rejected is
+    // errored, and cancelling it there would replace an honest network/decrypt
+    // failure with whatever cancel() decides to reject with.
+    //
+    // AWAITED, and its own failure swallowed. `cancel()` is asynchronous, so
+    // dispatching it and walking away means the caller is handed its
+    // AbortError while the stream may still be open — "the room is over" and
+    // "the connection is actually gone" become two moments with an unbounded
+    // gap between them, and a caller that leaves and rejoins can be streaming
+    // twice. Waiting closes the gap; the `.catch` is what keeps waiting from
+    // ever REPLACING the cancellation (or the fault) this run is really about,
+    // which is the reason it was fire-and-forget in the first place.
+    if (signal?.aborted) await Promise.resolve(reader.cancel?.()).catch(() => {});
   }
 }
 

@@ -1002,10 +1002,10 @@ describe("capability piggyback", () => {
   // after a live room switch (no reload) confirms exactly that. Advertised
   // there, refused here — or the reverse — is the asymmetry that strands a peer.
   it("confirms exactly what the roster hello announces, in either room", () => {
-    expect(localCaps()).toEqual(["text/1", "link/1"]);
+    expect(localCaps()).toEqual(["text/1", "link/1", "preupload/1"]);
     expect([...localCaps()]).toEqual([...advertisedCaps()]);
     enterRoom({ code: "123456" });
-    expect(localCaps()).toEqual(["text/1", "link/1"]);
+    expect(localCaps()).toEqual(["text/1", "link/1", "preupload/1"]);
     expect([...localCaps()]).toEqual([...advertisedCaps()]);
     clearRoom();
     expect([...localCaps()]).toEqual([...advertisedCaps()]);

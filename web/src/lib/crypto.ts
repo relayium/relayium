@@ -58,6 +58,16 @@ export interface SessionKeys {
    *  问题就消失了，而不是被回答了。 */
   textSend: CryptoKey;
   textRecv: CryptoKey;
+  /** AEAD keys for the pre-upload key handoff (STORED_KEYS), domain-separated
+   *  from send/recv for exactly the reason textSend/textRecv are.
+   *
+   *  该帧和文件流共用一条 DataChannel，但它**不是**文件流的一部分：它由链路建立、
+   *  链路重建和"又一个文件传完了"三件事触发，而文件流的 seq 由批次泵推进。把它接到
+   *  同一个计数器上就是给一个"安全性建立在只有一个生产者"的 nonce 空间加第二个生产者
+   *  ——恰好是消息流当年派生独立子密钥要躲开的那个形状。独立子密钥之后，握手帧有自己
+   *  从 0 开始的计数器，它和续传对齐、批次泵、consent 门都彻底无关。 */
+  preuploadSend: CryptoKey;
+  preuploadRecv: CryptoKey;
 }
 
 export function generateKeyPair(): KeyPair {
@@ -99,6 +109,8 @@ export async function deriveSession(
     resumeAuth: await deriveResumeAuth(keys.sharedTx as Bytes, keys.sharedRx as Bytes),
     textSend: await importAesKey(textKeyBytes(keys.sharedTx as Bytes) as Bytes),
     textRecv: await importAesKey(textKeyBytes(keys.sharedRx as Bytes) as Bytes),
+    preuploadSend: await importAesKey(preuploadKeyBytes(keys.sharedTx as Bytes) as Bytes),
+    preuploadRecv: await importAesKey(preuploadKeyBytes(keys.sharedRx as Bytes) as Bytes),
   };
 }
 
@@ -158,6 +170,28 @@ export function textKeyBytes(sessionKey: Uint8Array): Uint8Array {
   // `null` key = unkeyed BLAKE2b, byte-identical to omitting the argument; the
   // resolved libsodium-wrappers types mark it required, so pass it (same as
   // commitKey/sas/deriveResumeAuth).
+  return sodiumSync().crypto_generichash(32, input, null) as Bytes;
+}
+
+/** Domain separation for the pre-upload key-handoff stream. Changing this string
+ *  is a wire break and moves web + Swift together, exactly like TEXT_KEY_DOMAIN. */
+export const PREUPLOAD_KEY_DOMAIN = "relayium-preupload-v1\0";
+
+/**
+ * The 32-byte AEAD key for ONE direction of the pre-upload key handoff.
+ *
+ * Same shape and same reasoning as textKeyBytes: per direction, unsorted, and
+ * prefixed with its own domain so the derived value cannot be replayed into any
+ * other context that hashes the same session secret. A *different* domain from
+ * the text stream is the load-bearing part — sharing one would put two producers
+ * back on one nonce counter, which is the hazard this whole pattern removes.
+ */
+export function preuploadKeyBytes(sessionKey: Uint8Array): Uint8Array {
+  const domain = new TextEncoder().encode(PREUPLOAD_KEY_DOMAIN);
+  const input = new Uint8Array(domain.length + sessionKey.length);
+  input.set(domain, 0);
+  input.set(sessionKey, domain.length);
+  // `null` key = unkeyed BLAKE2b, as in commitKey/sas/textKeyBytes/deriveResumeAuth.
   return sodiumSync().crypto_generichash(32, input, null) as Bytes;
 }
 

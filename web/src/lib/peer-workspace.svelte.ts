@@ -85,6 +85,9 @@ export interface PeerWorkspace {
   routes(peerId: string): boolean;
   blocksNewIntent(peerId: string): boolean;
   sendFiles(peerId: string, files: PickedFile[]): void;
+  /** Re-hand the peer the current pre-uploaded set. Used when an upload that was
+   *  still in flight when the peer joined finishes on an already-open link. */
+  sendStoredKeys(): void;
   openText(peerId: string): Promise<void>;
   acceptFile(): void;
   rejectFile(): void;
@@ -192,6 +195,9 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
     resume: deps.resume,
     pickSaveTarget: deps.pickSaveTarget,
     requestNotify: deps.requestNotify,
+    storedKeysToSend: deps.storedKeysToSend,
+    onStoredKeys: deps.onStoredKeys,
+    supportsPreupload: deps.supportsPreupload,
     // The recovery-availability inputs. `joined` is the SAME predicate the
     // admission rules above read, so "we can still start a link" and "we could
     // still rebuild this one" cannot answer differently.
@@ -285,7 +291,15 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
     },
     routes,
     blocksNewIntent,
+    sendStoredKeys() { mixed.file.sendStoredKeys(); },
     sendFiles(peerId, files) {
+      // An empty batch is never a transfer, and the one caller that can produce
+      // one is the auto-send effect draining a queue whose only entries are
+      // uploading or already uploaded. Refused HERE as well as at that call site
+      // because this is the single choke point both transports pass through: the
+      // legacy path would otherwise seal and send a manifest with no files in it,
+      // and the peer would raise a consent prompt for nothing.
+      if (!files.length) return;
       if (blocksNewIntent(peerId)) return;
       clearSuppressionForIntent(peerId);
       if (routes(peerId)) mixed.file.enqueue(peerId, files);

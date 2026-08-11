@@ -949,6 +949,53 @@ export interface Messages {
     mintFailed: string; // minting a fresh code failed (network/server), not expiry
     back: string; // return from code entry to the send/receive choice
   };
+  /**
+   * The RECEIVER's side of pre-upload: the other device uploaded before this one
+   * joined, and handed over the keys the moment it did.
+   *
+   * `lead` is deliberately the only sentence that describes where the bytes are.
+   * It must stay true of storage and say nothing that contradicts the live-link
+   * rows sitting next to it, because one transfer can have both — the files that
+   * were already up come from storage, the ones added after the join come over
+   * the link. `note` is the zero-knowledge statement and is the reason this
+   * surface is allowed to mention an upload at all: encrypted before it left the
+   * sender, unreadable by Relayium, and it must never be softened into
+   * "securely stored".
+   *
+   * The four error strings are separate keys, not one generic failure, because
+   * exactly one of them ("gone") has a different remedy: the room's deadline
+   * passed and the ciphertext was deleted, so retrying cannot work and the user
+   * needs a new code. Collapsing them would send people to retry something that
+   * is not there any more.
+   *
+   * Each error names only the CAUSE. What was saved is a second sentence,
+   * `nothingSaved` or `savedSome`, and it is separate because the answer is not
+   * a property of the cause: on every target that flushes per file — a chosen
+   * folder, a per-file browser download — a batch that stopped on its third
+   * object really did leave the first two on disk. The four errors used to end
+   * in "Nothing was saved." unconditionally, which told those users they had
+   * none of it while they had half a folder, so they neither knew to clean it
+   * up nor that a retry would land beside it. (The ZIP branch is the other
+   * direction and is why `nothingSaved` still exists: it assembles the archive
+   * at the end, so a batch that never finished produced no file at all.)
+   */
+  storedRecv: {
+    lead: (count: number, size: string) => string;
+    note: string;
+    accept: string;
+    reject: string;
+    receiving: string;
+    done: string;
+    dismiss: string;
+    retry: string; // try a retryably-failed batch again, without a reconnect
+    more: (count: number) => string; // another handoff is queued behind this one
+    errGone: string; // the pairing room expired; the ciphertext is deleted
+    errNet: string;
+    errDecrypt: string; // the key the peer sent does not open its object
+    errSave: string; // nothing was wrong with the bytes; they could not be written
+    nothingSaved: string; // outcome: not one file reached the disk
+    savedSome: (count: number) => string; // outcome: this many did, the rest did not
+  };
   stored: {
     pick: string;
     dropHint: string; // secondary line in the picker: drag files/folders here too

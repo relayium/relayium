@@ -33,6 +33,17 @@ const fn = (name: string): string => {
   }
   throw new Error(`unbalanced braces in ${name}`);
 };
+/** Statements only: these rules are about what App DOES, and the prose beside a
+ *  rule names the very calls it is a rule about. */
+const code = (text: string) =>
+  text.split("\n").filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join("\n");
+
+/** The room-binding effect's statements, up to the switch it ends with. */
+const roomEffect = (): string => {
+  const at = app.indexOf("if (key === socketRoomKey) return;");
+  expect(at, "the room-binding effect is missing from App.svelte").toBeGreaterThan(-1);
+  return code(app.slice(at, app.indexOf("void switchRoom();", at)));
+};
 const panel = surface.slice(
   surface.indexOf("<MessagePanel"),
   surface.indexOf("/>", surface.indexOf("<MessagePanel")) + 2,
@@ -96,9 +107,15 @@ describe("openWorkspace", () => {
     expect(body).toContain("if (workspace.blocksNewIntent(peerId)) return;");
     // A queued share was handed to us by the OS with its destination still
     // missing. Choosing the peer completes THAT intent; it is never dropped.
-    expect(body).toMatch(/if \(outbox\(\)\.length[^]*?\) \{[^]*?workspace\.sendFiles\(peerId, takeOutbox\(\)\);[^]*?return;/);
+    // `liveLinkFor(peerId)`, not `outbox().length`: a queue holding only
+    // entries that are uploading has nothing for the live link and draining it
+    // here would hand the peer an empty batch, while a queue that is entirely
+    // uploaded is this lane's job precisely when the peer cannot be handed its
+    // keys. `drainFor` is `takeOutbox` plus that old-peer fallback — see its
+    // own doc comment.
+    expect(body).toMatch(/if \(liveLinkFor\(peerId\)[^]*?\) \{[^]*?workspace\.sendFiles\(peerId, drainFor\(peerId\)\);[^]*?return;/);
     expect(body).toContain("void workspace.openText(peerId)");
-    expect(body.indexOf("takeOutbox()")).toBeLessThan(body.indexOf("workspace.openText"));
+    expect(body.indexOf("drainFor(peerId)")).toBeLessThan(body.indexOf("workspace.openText"));
     // Never a silent send of whatever is in the draft box.
     expect(body).not.toMatch(/sendText|clearOutbox/);
   });
@@ -114,11 +131,11 @@ describe("openWorkspace", () => {
     // after it — and the gate is the same tested predicate the auto-send effect
     // reads, so the two cannot disagree about when the stop applies.
     expect(body).toMatch(
-      /if \(outbox\(\)\.length && !needsSendConfirmation\(verifyOn, roomCode\)\)/,
+      /if \(liveLinkFor\(peerId\) && !needsSendConfirmation\(verifyOn, roomCode\)\)/,
     );
     // With the stop in force it falls through to opening the lanes, leaving the
     // queue exactly where it was.
-    expect(body.indexOf("needsSendConfirmation")).toBeLessThan(body.indexOf("takeOutbox()"));
+    expect(body.indexOf("needsSendConfirmation")).toBeLessThan(body.indexOf("drainFor("));
   });
 
   it("keeps a persistent release path for those files, reachable after Cancel", () => {
@@ -131,7 +148,7 @@ describe("openWorkspace", () => {
     expect(body).toContain("pendingPeer =");
     // It re-arms the confirmation; it never sends. The comparison is the whole
     // point of the stop, so the release must not be a way around it.
-    expect(body).not.toMatch(/sendFiles|takeOutbox/);
+    expect(body).not.toMatch(/sendFiles|takeOutbox|drainFor/);
     expect(surface).toContain("onclick={releaseQueued}");
     expect(surface).toContain("t.workspace.queuedRelease(");
     expect(surface).toContain("{t.workspace.queuedReleaseBtn}");
@@ -152,7 +169,12 @@ describe("openWorkspace", () => {
     // it would build a second link and send over a SAS nobody ever saw.
     expect(derived).toContain('const peerId = workspace.hasLink ? workspace.linkPeerId : ""');
     expect(derived).toContain("linkPeerId: peerId");
-    expect(derived).toContain("queued: outbox().length");
+    // What the live link owes THIS peer. Not the queue length (an entry still
+    // uploading is nobody's to release) and not the peer-independent staged
+    // count (for a peer that cannot be handed keys, the already-uploaded
+    // entries ARE this control's batch, and a gate blind to them left a fully
+    // pre-uploaded queue with no control anywhere that could reach it).
+    expect(derived).toContain('queued: peerId === "" ? 0 : liveLinkFor(peerId)');
     expect(derived).toContain('blocked: peerId !== "" && workspace.blocksNewIntent(peerId)');
     // Both the branch and the handler read it, and the handler reads NOTHING
     // else — in particular not the roster, which is what used to leave the
@@ -203,8 +225,8 @@ describe("the send confirmation cannot release before its code exists", () => {
     // The guard is on the SAME derived the button branch reads, so the two
     // cannot disagree, and it comes before anything is drained.
     expect(body).toContain("if (!pendingPeer || !canRelease) return;");
-    expect(body.indexOf("canRelease")).toBeLessThan(body.indexOf("takeOutbox()"));
-    expect(body).toContain("workspace.sendFiles(id, takeOutbox())");
+    expect(body.indexOf("canRelease")).toBeLessThan(body.indexOf("drainFor(id)"));
+    expect(body).toContain("workspace.sendFiles(id, drainFor(id))");
   });
 
   it("derives that answer from the tested predicate, against a LIVE link", () => {
@@ -497,5 +519,178 @@ describe("one auto-open per authenticated link", () => {
     expect(epoch).toContain("if (hadLink && !has) linkEpoch++;");
     expect(epoch).toContain("const has = workspace.hasLink;");
     expect(epoch).not.toContain("linkGeneration");
+  });
+});
+
+// ── Pre-upload wiring in App ────────────────────────────────────────────────
+//
+// Source contract, for the same reason the rest of this file is one: these are
+// statements about which expression a reactive block reads and in what order,
+// and App is not mountable here. What the expressions THEMSELVES do is proved
+// executably elsewhere — outbox.test.ts drives the staged/released transitions
+// through a real effect, peer-workspace.test.ts refuses the empty batch, and
+// mixed-file-session.test.ts carries the handoff over a real channel pair.
+describe("pre-upload: the batch is split between two transports", () => {
+  /** Source with comment lines removed. These assertions are about what the CODE
+   *  reads; the comments next to it deliberately name the expression that was
+   *  replaced, and a bare substring search cannot tell the two apart. */
+  const autoSend = code((() => {
+    const at = app.indexOf("let dismissedPeerId = $state<string | null>(null);");
+    return app.slice(at, app.indexOf("});", app.indexOf("$effect(", at)) + 3);
+  })());
+
+  it("decides from what the live link owes THIS peer", () => {
+    // Three wrong questions, one right one. `outbox().length` answers "is the
+    // queue non-empty" and opens onto batches that are only in flight. The
+    // peer-INDEPENDENT staged count answers "what would takeOutbox() return",
+    // which is 0 for a batch that finished uploading before anyone joined — so
+    // the gate never opened, drainFor was never reached, and the old-peer
+    // fallback inside it was dead code for exactly the case it exists for.
+    expect(autoSend).toContain("liveLinkFor(solo.id)");
+    expect(autoSend).not.toContain("outbox().length");
+    expect(autoSend).not.toContain("stagedCount()");
+    // Peer first, then the count for that peer: the question cannot be asked
+    // without knowing whose it is.
+    expect(autoSend.indexOf("const solo =")).toBeLessThan(autoSend.indexOf("liveLinkFor(solo.id)"));
+  });
+
+  it("asks that peer-specific question at every gate in front of a drain", () => {
+    // Each of these guards a drainFor. A gate that asks the peer-independent
+    // question reopens the same hole on that one path.
+    const all = code(app);
+    expect(all).toContain("function liveLinkFor(peerId: string): number");
+    expect(all).toContain("return liveLinkCount(peerSupportsPreupload(peerId));");
+    expect(all).toContain("if (liveLinkFor(peerId) && !needsSendConfirmation(verifyOn, roomCode))");
+    expect(all).toContain("if (liveLinkFor(p.id)) { e.preventDefault();");
+    expect(all).toContain('queued: peerId === "" ? 0 : liveLinkFor(peerId),');
+    // And nothing anywhere still asks the peer-independent one.
+    expect(all).not.toContain("stagedCount()");
+    expect(all).not.toContain("stagedFiles()");
+  });
+
+  it("describes the release batch with the same question the drain will ask", () => {
+    // The sentence and the send must mean the same files. A staged-only count
+    // next to a drain that also releases the uploaded entries understates the
+    // batch it is about to hand over.
+    expect(surface).toContain("{@const releasing = liveLinkFiles(peerSupportsPreupload(releaseTarget))}");
+    expect(surface).toContain("releasing.length,");
+    expect(surface).toContain("releasing.reduce((total, item) => total + item.file.size, 0)");
+  });
+
+  it("hands an old peer the files it cannot be given keys for", () => {
+    // Pre-upload happens before anyone joins, so the joiner may turn out not to
+    // announce preupload/1. Its objects are then unreachable ciphertext, and
+    // left `uploaded` they are drained by neither lane.
+    const body = fn("drainFor");
+    expect(body).toContain("if (!peerSupportsPreupload(peerId)) releaseUploaded();");
+    expect(body).toContain("return takeOutbox();");
+    // The release must come BEFORE the drain, or the entries it moved are not in
+    // the batch it just returned.
+    expect(body.indexOf("releaseUploaded")).toBeLessThan(body.indexOf("takeOutbox"));
+  });
+
+  it("routes every live-link drain through that decision", () => {
+    // A single takeOutbox() left anywhere with a peer in hand is a path on which
+    // an old peer silently loses the pre-uploaded files.
+    const withoutHelper = code(app.replace(fn("drainFor"), ""));
+    expect(withoutHelper).not.toContain("takeOutbox()");
+  });
+
+  it("re-hands the key set whenever it changes on an open link", () => {
+    // attach() covers "everything was uploaded before anyone joined". This
+    // covers the one it cannot: an upload still in flight at the join is allowed
+    // to finish, so a new object appears on a link nobody will re-establish.
+    const at = app.indexOf("if (!uploadedIds || !workspace.hasLink) return;");
+    expect(at, "the stored-key resend effect is missing from App.svelte").toBeGreaterThan(-1);
+    const effect = app.slice(app.lastIndexOf("$effect(", at), app.indexOf("});", at) + 3);
+    expect(effect).toContain("workspace.sendStoredKeys();");
+    // Through a $derived over a PRIMITIVE, not over uploadedRefs(). A derived
+    // that allocates never compares equal, so the effect would re-emit the whole
+    // set on every unrelated state transition — O(N) frames per upload and
+    // O(N²) over the batch, each one a seal and a send.
+    expect(app).toContain("const uploadedIds = $derived(uploadedFingerprint());");
+    expect(app).not.toContain("$derived(uploadedRefs())");
+  });
+
+  it("counts an active stored receive as work a reload would destroy", () => {
+    // The one transfer that does not look like one from the workspace's side —
+    // no peer, no link, no send/recv — so every guard derived from those misses
+    // it. What it does have is an unanswered consent prompt and a download
+    // writing to disk, and the keys for that ciphertext exist only in this tab:
+    // a refresh, a Back or the update banner reloading the page ends it with
+    // nothing on the server that could hand them over again.
+    expect(app).toContain("const busy = $derived(workspace.warnsOnLeave || storedReceiver.active());");
+    // busy is what the navigation guard, the unload prompt and the update
+    // banner all read, so including it here reaches all three.
+    expect(app).toContain("setNavGuard(() => (busy ?");
+    expect(app).toContain("<UpdateNotice {busy} />");
+    // And the screen wake lock, which is a separate reader: a phone that locks
+    // its screen mid-download suspends a transfer that cannot be resumed from
+    // the other side.
+    const wake = app.slice(app.indexOf("const wake = createWakeLock();"));
+    expect(wake.slice(0, wake.indexOf("});"))).toContain("|| storedReceiver.active()");
+  });
+
+  it("hands the receiver's own surface the peer's handoff, and resets it with the room", () => {
+    expect(app).toContain("onStoredKeys: (items) => storedReceiver.offer(items),");
+    expect(app).toContain("supportsPreupload: peerSupportsPreupload,");
+    expect(surface).toContain("<StoredIncoming receiver={storedReceiver} />");
+  });
+
+  it("resets the receiver on EVERY room change, not only on the way out", () => {
+    // A re-mint is code→code, and it used to change nothing here. The receiver
+    // then leaked across a boundary that has no memory on the other side: it
+    // kept the previous room's keys, prompts and dispositions, so an id the old
+    // room had answered for was silently a no-op in the new one — a file the new
+    // peer sent and the user never saw offered.
+    //
+    // This half stays App's, on every prior-nonempty change, because App is the
+    // only holder of `storedReceiver`: nothing else can reset it, so there is no
+    // second owner to race with.
+    const effect = roomEffect();
+    expect(effect).toContain("if (socketRoomKey) {");
+    const guarded = effect.slice(effect.indexOf("if (socketRoomKey) {"));
+    // Outside the `!key` block: it must fire for code→code too.
+    expect(guarded.slice(0, guarded.indexOf("if (!key)"))).toContain("storedReceiver.reset();");
+  });
+
+  it("hands the code→code pre-upload boundary to the sender, and touches it here only on the way out", () => {
+    // The race this shape exists to make impossible. A re-mint is TWO effects on
+    // one roomCode change — App's, here, and CodePairing's, which calls
+    // startPreupload(newCode). CodePairing.send() already crossed the sender's
+    // boundary SYNCHRONOUSLY (resetPreupload() before enterRoom), and
+    // startPreupload owns the other half (a different code runs leaveRoom).
+    //
+    // So a resetPreupload() here on code→code is a SECOND reset with no work
+    // left to do — and, running in a later flush, it can land after the child
+    // has already started the new room's driver. It would then abort the NEW
+    // room's upload, release the NEW room's refs and blank `activeCode`, which
+    // stops the driver at the top of its loop. Nothing re-arms it: CodePairing's
+    // effect has already run for this roomCode and only wakes again if the user
+    // stages another file. See preupload.test.ts for that sequence executed.
+    //
+    // The QUEUE goes on the way out for its own reason: ""→code and code→code
+    // are the user still staging for the same send, but leaving the code room by
+    // ANY path drops the batch rather than letting it surprise-send later.
+    const effect = roomEffect();
+    const exit = effect.slice(effect.indexOf("if (!key) {"));
+    expect(exit, "the way-out branch is missing from the room-binding effect").toContain("clearOutbox();");
+    expect(exit).toContain("resetPreupload();");
+    // Exactly one, and it is that one: any other occurrence in this effect is a
+    // code→code reset, which is the bug.
+    expect(effect.match(/resetPreupload\(\)/g)).toHaveLength(1);
+    expect(effect.indexOf("resetPreupload()")).toBeGreaterThan(effect.indexOf("if (!key) {"));
+    // And App has no other pre-upload reset anywhere — the boundary is the
+    // sender's everywhere else.
+    expect(code(app).match(/resetPreupload\(\)/g)).toHaveLength(1);
+  });
+
+  it("never pulls the handoff set for a room the socket is not bound to", () => {
+    // The set is pulled LATE — inside the send chain, at seal time — so the pull
+    // itself has to answer for the room. `resetPreupload()` at the boundary
+    // above is what keeps the set from ever holding another room's refs; this is
+    // what covers the window before that boundary has run, when `roomCode` has
+    // already changed and the link still belongs to the room being left.
+    expect(app).toContain("storedKeysToSend: () => (roomCode && roomCode === socketRoomKey ? uploadedRefs() : []),");
   });
 });

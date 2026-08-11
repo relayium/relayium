@@ -32,6 +32,7 @@ import {
   markUploading,
   markUploaded,
   failUpload,
+  releaseUploaded,
 } from "./outbox.svelte";
 import { advertisedCaps } from "./peer-caps.svelte";
 import { CAP_PREUPLOAD } from "./preupload-handoff";
@@ -79,16 +80,17 @@ export function preuploadProgress(): PreuploadProgress | null {
  * Whether this BUILD may pre-upload at all.
  *
  * The gate is its own `preupload/1` announcement, and that is not a coincidence
- * dressed up as a rule: the announcement means "I can send frame kind 10", and
- * frame kind 10 is the only way an uploaded object's key ever reaches the
+ * dressed up as a rule: the announcement means "I can send frame kind 12", and
+ * frame kind 12 is the only way an uploaded object's key ever reaches the
  * receiver. A build that uploads without it produces ciphertext nobody can open
  * — the receiver joins, is handed nothing, and the objects sit in storage until
  * the room's deadline deletes them. That is strictly worse than not
  * pre-uploading at all.
  *
- * So the checkpoint that wires the handoff turns the sender on by announcing the
- * capability, and nothing else can. Today it is false
- * (preupload-handoff.test.ts pins the announcement's absence).
+ * So the checkpoint that wires the handoff turned the sender on by announcing
+ * the capability, and nothing else can. It is true from that checkpoint on
+ * (preupload-handoff.test.ts pins the announcement, and preupload.test.ts pins
+ * that withdrawing it stops the uploader too).
  */
 export function preuploadSenderReady(): boolean {
   return advertisedCaps().includes(CAP_PREUPLOAD);
@@ -134,11 +136,10 @@ let inFlight: AbortController | null = null;
 export function startPreupload(code: string, ready = preuploadSenderReady()): Promise<void> {
   if (!ready || !code) return Promise.resolve();
   if (code !== activeCode) {
-    // A different room: its own deadline, its own refusals, its own explanation.
+    // A different room: its own deadline, its own refusals, its own explanation
+    // — and none of the previous room's objects.
+    leaveRoom();
     activeCode = code;
-    held = false;
-    closed = false;
-    notice = "";
   }
   if (!running) driver = drive();
   return driver;
@@ -165,7 +166,40 @@ export function holdPreupload(code: string): void {
 /** Leaving the room: stop, abandon anything in flight, and forget the
  *  explanation with the room it belonged to. */
 export function resetPreupload(): void {
+  leaveRoom();
   activeCode = "";
+}
+
+/**
+ * The room boundary — everything that must not survive one room into the next.
+ *
+ * ONE function, called from both entry points that can notice the change
+ * (`resetPreupload`, and `startPreupload` being handed a different code),
+ * because the two halves of "this room is over" have to be inseparable. An
+ * upload in flight is aborted; that half was always here. The half that was
+ * missing is what a FINISHED upload leaves behind:
+ *
+ * A completed pre-upload puts its entry in `uploaded`, which means "no lane owes
+ * this file anything — the handoff will name it". That is only true for the room
+ * it went into. Its object is bound to THAT room, dies on that room's deadline,
+ * and its id is meaningless to the peer that joins the next one. Left alone
+ * across a re-mint, the entry belongs to nobody: the live link skips it (it is
+ * not `staged`), the driver never picks it up again (same reason), and the
+ * handoff would hand the new peer keys to a fetch that 404s. The file the user
+ * staged simply never arrives, and nothing on screen says so.
+ *
+ * So the boundary returns those entries to `staged`, exactly as a failed upload
+ * is returned — the live link is always the answer to "this object is no longer
+ * reachable" — and the new room's driver uploads them again under its own code.
+ * The old objects are deliberately not deleted from the server: their life is
+ * the old room's, whose deadline reclaims them (see releaseUploaded).
+ *
+ * It also leaves `uploadedRefs()` empty at the moment the room changes, which is
+ * what makes the handoff's late pull safe: the set can only ever describe the
+ * room that is current, so there is no window in which a stale ref could be
+ * sealed into a frame at all.
+ */
+function leaveRoom(): void {
   skipped.clear();
   held = false;
   closed = false;
@@ -173,6 +207,7 @@ export function resetPreupload(): void {
   progress = null;
   inFlight?.abort();
   inFlight = null;
+  releaseUploaded();
 }
 
 /**

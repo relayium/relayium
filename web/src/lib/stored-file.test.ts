@@ -880,7 +880,10 @@ describe("recipient-supplied identifier trust", () => {
         vi.stubGlobal("fetch", fetchMock);
         expect((await fetchMeta(id)).size).toBe(10);
         expect(fetchMock).toHaveBeenCalledTimes(1);
-        expect(fetchMock).toHaveBeenCalledWith(`/api/files/${id}/meta`);
+        // The URL argument specifically: this case is about the path being
+        // composed verbatim, not about the request init that carries the
+        // (here absent) AbortSignal.
+        expect(fetchMock.mock.calls[0][0]).toBe(`/api/files/${id}/meta`);
       });
     }
   });
@@ -984,7 +987,7 @@ describe("fetchMeta", () => {
     vi.stubGlobal("fetch", fetchMock);
     const meta = await fetchMeta("abc");
     expect(meta.size).toBe(10);
-    expect(fetchMock).toHaveBeenCalledWith("/api/files/abc/meta");
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/files/abc/meta");
   });
   it("retries once when a storage node rejects an already-spent download token", async () => {
     // Direct-download tokens are one-shot, so a request the browser replayed on
@@ -1156,6 +1159,192 @@ describe("downloadBlob", () => {
   });
 });
 
+// 取消是 downloadBlob 自己的边界。上层（配对房间的接收端）在用户离开房间时必须能
+// 真正掐断一条**正在流**的下载 —— 光有上层的世代校验拦不住它：世代只在 await 落地
+// 之后才被检查，而响应体一旦开始流，后面每一块的解密与落盘都发生在这个函数内部的
+// 循环里，外面根本没有插话的机会。
+describe("downloadBlob 的取消", () => {
+  async function until(check: () => boolean, timeout = 4_000) {
+    const deadline = Date.now() + timeout;
+    while (!check()) {
+      if (Date.now() > deadline) throw new Error("condition timed out");
+      await new Promise((r) => setTimeout(r, 5));
+    }
+  }
+
+  /** 一帧一读的密文体，每次 read 之前先过 `gate`，这样取消可以精确落在两块之间。 */
+  function framedBody(frames: Uint8Array[], gate?: (i: number) => Promise<void> | undefined) {
+    const cancels: string[] = [];
+    let next = 0;
+    const body = {
+      getReader() {
+        return {
+          async read() {
+            const i = next++;
+            await gate?.(i);
+            if (i >= frames.length) return { done: true, value: undefined };
+            return { done: false, value: frames[i] };
+          },
+          async cancel() { cancels.push("cancelled"); },
+        };
+      },
+    };
+    return { body, cancels };
+  }
+
+  it("已经取消的 signal 一个请求都不发", async () => {
+    const sk = await generateStoreKey();
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const ac = new AbortController();
+    ac.abort();
+    const err = await downloadBlob("test-id", sk.key, async () => {}, undefined, 0, ac.signal).catch((e) => e);
+    expect(err).toBeInstanceOf(DOMException);
+    expect((err as DOMException).name).toBe("AbortError");
+    expect(fetchMock, "取消了还去问服务端").not.toHaveBeenCalled();
+  });
+
+  it("把 signal 传给 blob 请求本身", async () => {
+    const sk = await generateStoreKey();
+    const ac = new AbortController();
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      ac.abort();
+      expect(init?.signal).toBe(ac.signal);
+      throw new DOMException("aborted", "AbortError");
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const err = await downloadBlob("test-id", sk.key, async () => {}, undefined, 0, ac.signal).catch((e) => e);
+    // fetch 因取消而 reject 时不能被当成「网络故障」—— 那会让上层看到一个可重试的
+    // 失败，而实际上是我们自己掐的。
+    expect(err).not.toBeInstanceOf(DownloadNetworkError);
+    expect((err as DOMException).name).toBe("AbortError");
+  });
+
+  it("流到一半取消：不再交付任何一块明文，并把流关掉", async () => {
+    const sk = await generateStoreKey();
+    // 三个文件 = 三帧，一帧一读。
+    const files = [new File(["one"], "a.txt"), new File(["two"], "b.txt"), new File(["three"], "c.txt")];
+    const frames: Uint8Array[] = [];
+    for await (const fr of encryptFiles(files, sk.key)) frames.push(fr);
+
+    const ac = new AbortController();
+    let release!: () => void;
+    const held = new Promise<void>((r) => { release = r; });
+    let atSecond = false;
+    const { body, cancels } = framedBody(frames, (i) => {
+      if (i !== 1) return undefined;
+      atSecond = true;
+      return held;
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, body })));
+
+    const got: string[] = [];
+    const run = downloadBlob(
+      "test-id",
+      sk.key,
+      async (pt) => { got.push(new TextDecoder().decode(pt)); },
+      undefined,
+      9,
+      ac.signal,
+    );
+    await until(() => atSecond && got.length === 1);
+
+    ac.abort();
+    release();
+    const err = await run.catch((e) => e);
+    expect((err as DOMException).name).toBe("AbortError");
+    // 第二帧在取消之后才送达，一个字节都不该再交出去。
+    expect(got, "取消之后仍然交付了明文").toEqual(["one"]);
+    expect(cancels, "取消之后流还开着").toEqual(["cancelled"]);
+  });
+
+  it("取消落在 onChunk 里：这一块的进度不再上报", async () => {
+    // 取消可以正好落在**调用方的落盘 await** 里，而不是两次读之间。等这一块写完
+    // 回来的时候房间已经没了，这时候再报一次进度，就是给一个已经归零的界面推一个
+    // 更大的数字 —— 上层看到的是"传输还在走"。
+    const sk = await generateStoreKey();
+    const files = [new File(["one"], "a.txt"), new File(["two"], "b.txt")];
+    const frames: Uint8Array[] = [];
+    for await (const fr of encryptFiles(files, sk.key)) frames.push(fr);
+    const { body } = framedBody(frames);
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, body })));
+
+    const ac = new AbortController();
+    let release!: () => void;
+    const held = new Promise<void>((r) => { release = r; });
+    let inChunk = false;
+    const progress: number[] = [];
+    const run = downloadBlob(
+      "test-id",
+      sk.key,
+      async () => { if (inChunk) return; inChunk = true; await held; },
+      (n) => progress.push(n),
+      6,
+      ac.signal,
+    );
+    await until(() => inChunk);
+
+    ac.abort();
+    release();
+    const err = await run.catch((e) => e);
+    expect((err as DOMException).name).toBe("AbortError");
+    expect(progress, "取消之后还报了进度").toEqual([]);
+  });
+
+  it("reject 落地之前，流是真的已经关掉了", async () => {
+    // cancel() 本身是异步的。发出去就不管（fire-and-forget），调用方拿到 AbortError
+    // 的那一刻流可能还没关，"离开房间"和"连接真的断了"之间就留了一段谁也说不清多长
+    // 的窗口。等它 —— 但只吞掉它自己的错误，绝不能拿 cancel 的失败去替换 AbortError。
+    const sk = await generateStoreKey();
+    const files = [new File(["one"], "a.txt"), new File(["two"], "b.txt")];
+    const frames: Uint8Array[] = [];
+    for await (const fr of encryptFiles(files, sk.key)) frames.push(fr);
+    const cancels: string[] = [];
+    let next = 0;
+    let release!: () => void;
+    const held = new Promise<void>((r) => { release = r; });
+    let atSecond = false;
+    const body = {
+      getReader() {
+        return {
+          async read() {
+            const i = next++;
+            if (i === 1) { atSecond = true; await held; }
+            if (i >= frames.length) return { done: true, value: undefined };
+            return { done: false, value: frames[i] };
+          },
+          // 一个"真的要花点时间才关得掉"的流，这正是 fire-and-forget 看不出区别的地方。
+          async cancel() { await new Promise((r) => setTimeout(r, 0)); cancels.push("cancelled"); },
+        };
+      },
+    };
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, body })));
+
+    const ac = new AbortController();
+    const run = downloadBlob("test-id", sk.key, async () => {}, undefined, 6, ac.signal);
+    await until(() => atSecond);
+    ac.abort();
+    release();
+
+    const err = await run.catch((e) => e);
+    expect((err as DOMException).name, "cancel 的结果替换了 AbortError").toBe("AbortError");
+    expect(cancels, "reject 落地时流还开着").toEqual(["cancelled"]);
+  });
+
+  it("不给 signal 时行为一字不变", async () => {
+    const sk = await generateStoreKey();
+    const files = [new File(["one"], "a.txt"), new File(["two"], "b.txt")];
+    const frames: Uint8Array[] = [];
+    for await (const fr of encryptFiles(files, sk.key)) frames.push(fr);
+    const { body, cancels } = framedBody(frames);
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, body })));
+    const got: string[] = [];
+    await downloadBlob("test-id", sk.key, async (pt) => { got.push(new TextDecoder().decode(pt)); }, undefined, 6);
+    expect(got).toEqual(["one", "two"]);
+    expect(cancels, "读完的流不该被取消").toEqual([]);
+  });
+});
+
 // 服务端说「没有了」必须和「密钥不对 / 文件坏了」分得开。存储对象会过期、会被别的
 // 接收方 burn 掉、也会在读完 meta 到取字节之间被 GC —— 三种都以 404 出现，三种都与
 // 用户的密钥和这份文件的完整性无关。状态码以前只以文本形式活在 Error.message 里，
@@ -1217,7 +1406,7 @@ describe("stored-download response failures", () => {
     expect(err.status).toBe(404);
     expect(err.phase).toBe("metadata");
     expect(f).toHaveBeenCalledTimes(1);
-    expect(f).toHaveBeenCalledWith("/api/files/gone/meta");
+    expect(f.mock.calls[0][0]).toBe("/api/files/gone/meta");
   });
 
   it("第二次 403 仍在正好两次请求后停下，并暴露 blob 阶段的 403", async () => {
@@ -1254,7 +1443,7 @@ describe("stored-download response failures", () => {
     expect(err).toBeInstanceOf(DownloadNetworkError);
     // 清单都没读到，blob 那一次请求根本不该发出去。
     expect(f).toHaveBeenCalledTimes(1);
-    expect(f).toHaveBeenCalledWith("/api/files/abc/meta");
+    expect(f.mock.calls[0][0]).toBe("/api/files/abc/meta");
   });
 
   it("被拒的 id 仍然先于任何网络归因 —— 不能被包成「可重试的网络故障」", async () => {

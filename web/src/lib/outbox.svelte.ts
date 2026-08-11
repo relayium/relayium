@@ -80,6 +80,132 @@ export function uploadedRefs(): StoredRef[] {
   return out;
 }
 
+/**
+ * A primitive that changes exactly when the handoff SET changes.
+ *
+ * `uploadedRefs()` allocates a fresh array every call, so a `$derived` over it
+ * is never equal to its previous value and every reader re-runs on every
+ * unrelated state transition — a file being picked, an upload starting, an entry
+ * being removed. The reader here re-sends the WHOLE set, so that is O(N) frames
+ * for an N-file batch and O(N²) over the batch, each one a seal and a
+ * DataChannel send, to tell the peer things it already knows.
+ *
+ * A string of the ids compares by value, so a `$derived` over it settles and the
+ * re-send happens once per genuinely new object. Ids only: the key never has to
+ * be in a comparison value, and an id is already what the receiver dedupes on.
+ * The separator cannot appear in an id (the wire rule is `[A-Za-z0-9_-]`), so
+ * two different sets cannot collide on one fingerprint.
+ */
+export function uploadedFingerprint(): string {
+  let fp = "";
+  for (const e of states) if (e?.state === "uploaded" && e.ref) fp += `${e.ref.id},`;
+  return fp;
+}
+
+/**
+ * How many entries the LIVE LINK is still responsible for.
+ *
+ * The number every "is there anything to send?" decision must read, and the
+ * reason it exists rather than `outbox().length`:
+ *
+ *   - a queue whose only entry is uploading is NOT an empty queue, but it has
+ *     nothing for the live link, and draining it would hand the peer a batch
+ *     with no files in it;
+ *   - `failUpload` and `markUploaded` change only `states`, never `files`, so a
+ *     reader that touches `outbox()` alone never re-runs when an in-flight
+ *     upload gives up. That is the difference between a released file and one
+ *     stranded in neither lane — see releaseUploaded below for the other half.
+ *
+ * Reading both arrays is therefore deliberate: it is what makes this reactive to
+ * a state change that leaves the file list untouched.
+ */
+export function stagedCount(): number {
+  return liveLinkCount(true);
+}
+
+/** The entries `takeOutbox()` would return, without taking them. What a control
+ *  that describes the batch it is about to release has to count and total, so
+ *  the sentence and the send cannot disagree about which files they mean. */
+export function stagedFiles(): PickedFile[] {
+  return liveLinkFiles(true);
+}
+
+/**
+ * What the live link owes ONE peer — the question every send gate must ask.
+ *
+ * `peerTakesKeys` is whether that peer announced `preupload/1`. It is the whole
+ * difference, and getting it wrong in either direction loses files:
+ *
+ *  - **true** (a current Web peer): only `staged` counts. An `uploaded` entry is
+ *    the handoff's job, and draining it here would send one transfer twice.
+ *  - **false** (an older Web build, a native client, the CLI): `uploaded` counts
+ *    too. Those objects can never be handed over — kind 12 is a hard error for a
+ *    peer that does not know it — so if this lane does not take them, nothing
+ *    ever will. `releaseUploaded()` is what actually moves them; this is what
+ *    makes the gate in front of it OPEN.
+ *
+ * That last point is the bug this shape exists to prevent. Every send decision
+ * used to read `stagedCount()`, which is 0 for a batch that finished uploading
+ * before anyone joined — so the drain that performs the fallback was never
+ * reached, and the whole batch reached an old peer as silence. The gate has to
+ * be the peer-specific question, not the peer-independent one.
+ *
+ * `uploading` is in NEITHER answer, deliberately: its bytes are moving, the
+ * protocol lets an upload that was in flight when the peer joined finish, and
+ * counting it would open a gate onto a batch with no files in it.
+ *
+ * Reads both arrays, so it re-runs on a state transition that leaves the file
+ * list untouched — see the note on takeOutbox and releaseUploaded.
+ */
+export function liveLinkCount(peerTakesKeys: boolean): number {
+  let n = 0;
+  for (let i = 0; i < files.length; i++) if (livesOnLink(i, peerTakesKeys)) n++;
+  return n;
+}
+
+/** The files behind `liveLinkCount`, in queue order. What a control that
+ *  describes the batch it is about to release has to count and total. */
+export function liveLinkFiles(peerTakesKeys: boolean): PickedFile[] {
+  return files.filter((_, i) => livesOnLink(i, peerTakesKeys));
+}
+
+function livesOnLink(index: number, peerTakesKeys: boolean): boolean {
+  const state = outboxState(index);
+  return state === "staged" || (!peerTakesKeys && state === "uploaded");
+}
+
+/**
+ * Return every already-uploaded entry to the live-link lane.
+ *
+ * The answer to a peer that cannot be handed keys: an old Web build, a native
+ * client or the CLI, none of which announce `preupload/1`. Pre-upload happens
+ * BEFORE anyone joins, so the sender cannot know who will — and when the joiner
+ * turns out not to speak the handoff, the objects it uploaded are unreachable
+ * ciphertext. Left `uploaded` they would be drained by neither lane: the file
+ * the user staged simply never arrives.
+ *
+ * The stored object is deliberately NOT deleted here. Its life is the room's,
+ * and the room's deadline reclaims it; asking the server to drop it would be a
+ * second failure path on the way out of the first. The bytes are spent either
+ * way — the transfer is not.
+ *
+ * Returns how many entries moved, so a caller can tell "nothing to do" from
+ * "the batch just changed lanes" without re-deriving it.
+ */
+export function releaseUploaded(): number {
+  let moved = 0;
+  const next = states.map((e) => {
+    if (e?.state !== "uploaded") return e;
+    moved++;
+    return { state: "staged" as const, token: e.token };
+  });
+  // Only when something actually moved. An unconditional reassignment would
+  // publish a new array on every call, and the caller is an effect that reads
+  // this store — which is how an idempotent "nothing to do" becomes a loop.
+  if (moved) states = next;
+  return moved;
+}
+
 /** Mark the entry at `index` as being uploaded right now. Out of range, or an
  *  entry already past staging, changes nothing. */
 export function markUploading(index: number): void {

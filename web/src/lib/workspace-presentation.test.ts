@@ -250,8 +250,12 @@ describe("unified mixed peer workspace presentation", () => {
     // confirmation are derived from that one expression. Asymmetry here is the
     // failure mode: advertising a capability we then refuse to route (or the
     // reverse) strands a peer that believed us.
-    expect(caps.match(/CAP_LINK\]/g)).toHaveLength(1);
-    expect(caps).toContain("linkRoomActive() ? [CAP_TEXT, CAP_LINK] : [CAP_TEXT]");
+    expect(caps.match(/CAP_PREUPLOAD\]/g)).toHaveLength(1);
+    expect(caps).toContain("linkRoomActive() ? [CAP_TEXT, CAP_LINK, CAP_PREUPLOAD] : [CAP_TEXT]");
+    // preupload/1 is inside the SAME expression, not a second announcement:
+    // its frame travels on the link's file channel, so a scope that withdraws
+    // link/1 must withdraw it too rather than leave a promise we cannot keep.
+    expect(caps).toMatch(/export function peerSupportsPreupload[\s\S]{0,600}?linkRoomActive\(\)/);
     // The routing predicate still reads that same expression before it reads the
     // peer's claim, so a future scope cannot be applied to what we announce and
     // forgotten in what we route.

@@ -10,7 +10,7 @@
 // rests on:
 //
 //   The payload carries FILE KEYS. It travels sealed, inside the peers'
-//   end-to-end DataChannel (frame kind 10), and it MUST NOT be put on the
+//   end-to-end DataChannel (frame kind 12), and it MUST NOT be put on the
 //   signaling channel, in a URL, in a log line, or in anything the server sees.
 //   The server stores the ciphertext these keys open; handing it one is not a
 //   degraded mode, it is the end of zero knowledge.
@@ -21,7 +21,12 @@
 // by id. A dropped link therefore costs a re-send, never a stranded transfer,
 // and a duplicate delivery is a no-op rather than a second download.
 
+import { open, seal } from "./crypto";
 import { decodeKey } from "./store-crypto";
+
+// Frames flow into DataChannel.send() and Web Crypto, which require an
+// explicitly ArrayBuffer-backed `Uint8Array`.
+type Bytes = Uint8Array<ArrayBuffer>;
 
 /** The capability a peer must announce before it may be sent this message.
  *
@@ -32,9 +37,23 @@ import { decodeKey } from "./store-crypto";
  *  read as this one. */
 export const CAP_PREUPLOAD = "preupload/1";
 
-/** The DataChannel frame kind that carries a sealed handoff payload
- *  (relayium-realtime-wire-v1.md). */
-export const KIND_STORED_KEYS = 10;
+/**
+ * The DataChannel frame kind that carries a sealed handoff payload
+ * (relayium-realtime-wire-v1.md).
+ *
+ * **12, not 10.** The pair-room spec originally wrote this down as 10 because
+ * the realtime-wire kind registry never listed the two transport-fragmentation
+ * kinds, and 10/11 have been CHUNK_PART/BATCH_PART on the wire since
+ * fragmentation shipped — in `transfer.ts` here and in `RealtimeKind` in the
+ * Swift port. Sending a handoff as kind 10 would not have been a new frame at
+ * all: `Receiver.feed` would have authenticated it as a chunk fragment and
+ * spliced a JSON key list into the middle of a file. The registry now lists
+ * 10/11 explicitly so the next kind cannot be chosen the same way.
+ */
+export const KIND_STORED_KEYS = 12;
+
+/** Per-frame wire overhead: 5-byte header + 16-byte AES-GCM tag. */
+export const HANDOFF_FRAME_OVERHEAD = 5 + 16;
 
 /** Wire version of the payload itself, independent of the frame kind. */
 export const HANDOFF_VERSION = 1;
@@ -68,7 +87,7 @@ export class InvalidHandoffError extends Error {
  *  `.` or a `/` aims a request somewhere this client never meant to call. */
 const STORED_OBJECT_ID_RE = /^[A-Za-z0-9_-]{1,128}$/;
 
-/** Build the payload the sender seals into a kind-10 frame.
+/** Build the payload the sender seals into a kind-12 frame.
  *
  *  Compact JSON with the key order the protocol fixes, so two implementations
  *  produce identical bytes for identical input — the property the Swift port's
@@ -169,4 +188,146 @@ export function mergeHandoff(held: readonly HandoffItem[], incoming: readonly Ha
     out.push(it);
   }
   return out;
+}
+
+/**
+ * Cheap discriminator for the file channel's onmessage demux.
+ *
+ * The KIND decides, and nothing else — including for a frame too short to be a
+ * valid one. Length used to be part of the answer, and it made a one-byte kind
+ * 12 the file stream's problem: the demux said "not a handoff", `queueInbound`
+ * handed it to the file receiver, and that codec failed the lane on a frame that
+ * was never part of its sequence. One byte from a buggy or hostile peer, and a
+ * transfer with nothing wrong with it is dead. Routed here instead, the same
+ * byte is refused by `StoredKeysReceiver.open` (which checks the length itself),
+ * logged, and costs the lane nothing. `isResumeReq` is first-byte-only for the
+ * identical reason, and says so in the same words.
+ *
+ * Still disjoint from everything else on the channel: no file-stream kind is 12,
+ * and no 1-byte control frame is either (they are 0xf8–0xff).
+ */
+export function isStoredKeysFrame(buf: ArrayBuffer): boolean {
+  return new Uint8Array(buf)[0] === KIND_STORED_KEYS;
+}
+
+function frame(seq: number, payload: Uint8Array): Bytes {
+  const out = new Uint8Array(5 + payload.length) as Bytes;
+  out[0] = KIND_STORED_KEYS;
+  new DataView(out.buffer).setUint32(1, seq);
+  out.set(payload, 5);
+  return out;
+}
+
+const enc = new TextEncoder();
+// fatal: a payload that is not valid UTF-8 must fail loudly rather than decode
+// to U+FFFD and then fail the JSON parse with a misleading reason.
+const dec = new TextDecoder("utf-8", { fatal: true });
+
+/**
+ * Seals one handoff for one direction of one link.
+ *
+ * Its own counter under its own derived key (`keys.preuploadSend`), NOT the file
+ * stream's — see SessionKeys.preuploadSend. That is what makes §4.4's "re-send
+ * the whole set on every (re)established link" unconditionally safe: this frame
+ * never has to be ordered against a batch in flight, never consumes a seq the
+ * resume announcement has to account for, and can be dispatched ahead of the
+ * receive chain like a control frame.
+ *
+ * Serial-call contract, same as TextSender: `seq` is taken synchronously before
+ * the await, so two overlapping calls get different seqs but may seal out of
+ * order. The one caller (the link's handoff driver) sends one at a time.
+ *
+ * **A taken seq is never given back**, and that asymmetry is deliberate. The seq
+ * IS the nonce, so reusing one under the same derived key for a different
+ * payload is the AES-GCM catastrophe this stream's whole design avoids. A frame
+ * that is sealed and then not sent — the transport died, a generation guard
+ * fired, `send()` threw — therefore leaves a permanent hole in the sequence, and
+ * the receiver is what absorbs it (see StoredKeysReceiver). Rolling the counter
+ * back to "recover" would trade a recoverable gap for an unrecoverable key leak.
+ *
+ * So there is no such thing as "the retry that reuses this seq": a re-send is
+ * always a NEW frame at a NEW number, whatever became of the last one. That is
+ * why the receiver can spend a seq the moment the frame opens.
+ */
+export class StoredKeysSender {
+  private seq = 0;
+
+  async frame(items: readonly HandoffItem[], key: CryptoKey): Promise<Bytes> {
+    // encodeHandoff validates first, so a refused set burns no seq and the link
+    // keeps working — the counter only ever advances for a frame that is emitted.
+    const payload = enc.encode(encodeHandoff(items)) as Bytes;
+    const s = this.seq++;
+    return frame(s, await seal(key, s, payload));
+  }
+}
+
+/**
+ * Opens sealed handoffs for one direction of one link.
+ *
+ * **Forward-only, not gap-free**, and the difference is the whole point:
+ *
+ *  - A seq at or below the last one consumed is refused. That is a REPLAY of a
+ *    key list, and it is refused whether it is an attacker re-injecting a frame
+ *    or the burned frame from §StoredKeysSender finally arriving late.
+ *  - A seq AHEAD of what was expected is accepted if — and only if — it opens.
+ *    The sender takes its seq synchronously and seals asynchronously, so a
+ *    transport replacement, a superseded generation or a throwing `send()`
+ *    destroys a frame that has already spent its number. Insisting on the exact
+ *    next seq would mean one such event wedges the stream permanently: every
+ *    later whole-set resend is refused, and §4.4's "resend on every
+ *    (re)established link" — the rule that is supposed to RESCUE a dropped
+ *    handoff — becomes the thing that can never succeed again. The receiver
+ *    would sit forever on a prompt that never comes while the sender believes it
+ *    handed the keys over.
+ *
+ * A gap is not a downgrade. The frame still has to open under a key derived from
+ * the peers' own session secret, so nothing an attacker can author is admitted
+ * by tolerating one; all a gap costs is that a key list this side never saw is
+ * never seen — which the sender's unconditional resend already covers.
+ *
+ * The counter moves as soon as the frame OPENS, and not one line later. What
+ * comes after that is a judgement about the payload, and no such judgement can
+ * hand a nonce back: the sender took this seq synchronously before it sealed and
+ * can never reuse it, because the seq IS the AES-GCM nonce under a key derived
+ * once per link. Holding the number back for a payload this side refused would
+ * therefore protect nothing that exists, while leaving that authenticated frame
+ * replayable for as long as the link lives — junk payload and all. A frame that
+ * does not open moves nothing, which is the same rule read the other way: it was
+ * never the peer's, so it says nothing about what the peer has sent.
+ */
+export class StoredKeysReceiver {
+  /** The lowest seq this side will still accept. Starts at 0 and only rises. */
+  private expectedSeq = 0;
+
+  async open(buf: ArrayBuffer, key: CryptoKey): Promise<HandoffItem[]> {
+    const b = new Uint8Array(buf);
+    if (b.length < HANDOFF_FRAME_OVERHEAD || b[0] !== KIND_STORED_KEYS) {
+      throw new InvalidHandoffError("not a handoff frame");
+    }
+    const seq = new DataView(b.buffer, b.byteOffset).getUint32(1);
+    if (seq < this.expectedSeq) throw new InvalidHandoffError("replayed handoff");
+    // Only after the sequence check: a replayed frame must not be able to spend
+    // a decryption.
+    const plain = await open(key, seq, b.slice(5) as Bytes); // throws on tamper
+    // The frame is the peer's, so its number is spent — HERE, before the payload
+    // is looked at. Everything below this line is a judgement about content, and
+    // no judgement about content can give a nonce back: the sender took this seq
+    // synchronously before it sealed, and it can never reuse it for anything
+    // (the seq IS the AES-GCM nonce under a key both sides derive once). Waiting
+    // for a successful decode would leave the number live on this side alone,
+    // and this exact authenticated frame — junk payload included — could then be
+    // replayed as often as anyone likes.
+    //
+    // A frame that FAILS to open never reaches this line, which is the other
+    // half of the rule: it was not authored by the peer, so it may not move an
+    // expectation that describes what the peer has sent.
+    this.expectedSeq = seq + 1;
+    let json: string;
+    try {
+      json = dec.decode(plain);
+    } catch {
+      throw new InvalidHandoffError("not UTF-8");
+    }
+    return decodeHandoff(json);
+  }
 }

@@ -1,13 +1,13 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import { fetchMeta, downloadBlob, parseDownloadKey, keyFromFragment, DownloadNetworkError, InvalidStoredObjectIdError, StoredDownloadHttpError } from "./stored-file";
+  import { fetchMeta, parseDownloadKey, keyFromFragment, DownloadNetworkError, InvalidStoredObjectIdError, StoredDownloadHttpError } from "./stored-file";
   import { decryptManifest, type StoredManifest } from "./store-crypto";
-  import { pickSaveTarget, warnsAboutMemory, LARGE_DOWNLOAD_WARN_BYTES, SaveCancelledError, SinkCancelledError, SinkTransportError, type SaveOptions, type SaveTarget, type FileSink } from "./filesink";
+  import { pickSaveTarget, warnsAboutMemory, LARGE_DOWNLOAD_WARN_BYTES, SaveCancelledError, SinkCancelledError, SinkTransportError, type SaveOptions, type SaveTarget } from "./filesink";
   import { lang, setLang, LANGS, messages, legalUrl, type Lang, type Messages } from "./i18n.svelte";
   import { holdRefresh } from "./app-update.svelte";
   import ThemeSelect from "./ThemeSelect.svelte";
   import { formatRemaining, formatSize } from "./format";
-  import { safeSegments } from "./zip";
+  import { storedSaveSpecs, writeStoredObject } from "./stored-download";
   import CommandBlock from "./CommandBlock.svelte";
   import { RELEASE_PAGE_URL, downCommand, storedLink, tempDownloaderScript, windowsTempDownloaderScript } from "./temp-downloader";
 
@@ -231,40 +231,9 @@
     }
   }
 
-  /**
-   * 拿一个文件的写入端。失败（blobSink 构造、ZIP writer、目录句柄）归成
-   * SinkTransportError：字节一个都没错，只是没地方落，和 SW 落盘故障是同一类，
-   * 下面的归因会把它说成可重试的保存问题，而不是「密钥错误或文件损坏」。
-   */
-  async function openSink(t: SaveTarget, i: number): Promise<FileSink> {
-    try {
-      const spec = saveSpecs[i];
-      return await t.file(spec.name, spec.size, spec.path);
-    } catch (e) {
-      throw new SinkTransportError(`could not open a save sink: ${(e as Error)?.message ?? "unknown"}`);
-    }
-  }
-
-  /**
-   * 存储清单没有 path 字段（它是冻结的，密文有金标向量钉着），文件夹层级就写在
-   * `name` 里，形如 "trip/day1/a.txt" —— Go CLI 的 walkUploadPaths 一直是这么发的，
-   * macOS 原生端现在也是。
-   *
-   * 这里把它拆成 filesink 认识的 {name(叶子), path(相对路径)}。之前整串 name 直接
-   * 当文件名传下去：桌面目录句柄那条路碰巧还对（它自己 safeSegments(path || name)），
-   * 但 Firefox/Safari/手机那条路 `f.path` 恒为 undefined，于是判不出这是文件夹，
-   * 逐个 blob 下载 —— 层级在最后一步丢光。拆开之后这批会走 ZIP，树完整保留。
-   */
-  const saveSpecs = $derived(
-    (manifest?.files ?? []).map((f) => {
-      const segs = safeSegments(f.name);
-      return {
-        name: segs[segs.length - 1] ?? f.name,
-        size: f.size,
-        path: segs.length > 1 ? segs.join("/") : undefined,
-      };
-    }),
-  );
+  /** The manifest's entries as the save layer wants them — see storedSaveSpecs,
+   *  which owns the "the folder tree lives inside `name`" rule for every caller. */
+  const saveSpecs = $derived(storedSaveSpecs(manifest ?? { files: [] }));
 
   // ── 终端那条路 ───────────────────────────────────────────────────────────
   //
@@ -307,73 +276,21 @@
     }
     pageState = "downloading";
     progress = 0;
-    // Plaintext is the concatenation of all files; split by manifest sizes.
-    let fileIdx = 0;
-    let intoFile = 0;
-    let sink: FileSink | null = null;
     try {
-      // 第一个 sink 以前在 try **之外**：blobSink / ZIP / 目录句柄任何一个构造失败，
-      // 异常都直接从这个函数逃出去，页面永远停在进度条上，一句话都不说（而且更新
-      // 提示条的刷新闸门也跟着一直被占着）。openSink 把它归成保存故障，交给下面
-      // 已有的归因：可重试，不是「密钥错误或文件损坏」。
-      sink = manifest.files.length ? await openSink(target, 0) : null;
-      await downloadBlob(
+      // The whole "plaintext is the concatenation, split it by the manifest"
+      // job — including the zero-byte tail and the sink-open failure mode —
+      // lives in stored-download.ts, shared with the pre-upload receiver so the
+      // two cannot drift. Classification of whatever it throws stays here.
+      await writeStoredObject({
         id,
         key,
-        async (pt: Uint8Array) => {
-          let off = 0;
-          while (off < pt.length && fileIdx < manifest!.files.length) {
-            const remaining = manifest!.files[fileIdx].size - intoFile;
-            const take = Math.min(remaining, pt.length - off);
-            if (take > 0 && sink) { await sink.write(pt.subarray(off, off + take)); intoFile += take; off += take; }
-            if (intoFile >= manifest!.files[fileIdx].size) {
-              if (sink) await sink.close();
-              fileIdx++;
-              intoFile = 0;
-              sink = fileIdx < manifest!.files.length ? await openSink(target, fileIdx) : null;
-            }
-          }
+        manifest,
+        target,
+        specs: saveSpecs,
+        onProgress: (received) => {
+          progress = totalBytes > 0 ? Math.round((received / totalBytes) * 100) : 0;
         },
-        (received) => { progress = totalBytes > 0 ? Math.round((received / totalBytes) * 100) : 0; },
-      );
-      // 把明文流没走到的清单条目补完。
-      //
-      // 上面那个回调**只在手里有字节时**推进 fileIdx：整个循环的条件是
-      // `off < pt.length`。于是零字节文件只要后面没有别的字节来驱动循环，就永远
-      // 不会被打开——密文流里根本没有它们的帧。两种真实形状：
-      //
-      //  * 整份清单都是零字节文件：downloadBlob 一次回调都不发，只有下载前预开的
-      //    第 0 个 sink 存在，其余一个都没建；
-      //  * 一个非空文件后面跟着两个以上零字节文件：最后一批字节把第 0 个文件收尾、
-      //    开出第 1 个 sink，然后 off 到头、循环退出，第 2 个之后再没人建。
-      //
-      // 而 target.done() 照样跑、页面照样显示"完成"——用户拿到一个少了文件的
-      // 文件夹，却被告知一切正常。
-      //
-      // 这一段只补**剩下的**条目：回调仍然负责关掉它自己写满的那些 sink，这里
-      // 关的是回调留下的当前 sink 以及其后从未被打开过的尾部条目。每轮 close
-      // 之后立刻置 null，下一轮用 ??= 新开一个，所以已经收尾的 sink 不会被
-      // 二次 close；每轮必定 fileIdx++，循环必然终止。
-      while (fileIdx < manifest.files.length) {
-        sink ??= await openSink(target, fileIdx);
-        // 走到这里还没写满的条目只可能是零字节的：downloadBlob 没拿到
-        // expectedBytes 时会自己从加密清单算出明文总量，并在 resolve 之前用
-        // StoreDecryptor.end(expected) 核对，对不上就抛。真出现就是字节数对不
-        // 上，按"和链接描述的不一致"归因，绝不能默默产出一个空文件冒充它。
-        if (manifest.files[fileIdx].size !== intoFile) {
-          throw new Error(
-            `manifest entry ${fileIdx} expected ${manifest.files[fileIdx].size} bytes, got ${intoFile}`,
-          );
-        }
-        await sink.close();
-        sink = null;
-        fileIdx++;
-        intoFile = 0;
-      }
-      // 收尾这一批。ZIP 分支要靠它把整个 zip 拼出来并触发下载；流式分支没有 done。
-      // 少了这一步，打包下载会静默地什么都不产出，而页面照样显示"完成"。
-      // 必须排在上面的 while 之后：done 的含义是"每个文件都已经 close 了"。
-      await target.done?.();
+      });
       pageState = "done";
     } catch (e) {
       pageState = "error";
