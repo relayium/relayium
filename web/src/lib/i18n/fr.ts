@@ -846,6 +846,8 @@ const fr: Messages = {
     stageAddFolder: "Ajouter un dossier",
     stageDrop: "ou déposez fichiers et dossiers ici",
     stageRemove: "Retirer",
+    preuploading: (name, pct) => `Envoi de ${name} pendant l'attente — ${pct} %`,
+    preuploadExpired: "Le code d'appairage a expiré avant la fin de l'envoi : rien n'a été conservé. Vos fichiers sont toujours là — générez un nouveau code pour les envoyer.",
     expiresIn: (s) => `le code d'appairage expire dans ${s}`,
     ttlNote: "Ce compte à rebours ne concerne que le code d'appairage : passé ce délai, aucun nouvel appareil ne peut le rejoindre. Une fois l'autre appareil connecté, le transfert va jusqu'au bout et n'est jamais interrompu par ce délai.",
     expired: "Code d'appairage expiré — générez-en un nouveau",

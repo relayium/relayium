@@ -423,15 +423,42 @@ gate, and the no-free-renewal guard). `go build ./...`, `go vet ./...`,
 
 ### Remaining seams for checkpoint 2 (exact)
 
-1. **Sender upload.** `stored-file.ts` `UploadPurpose` needs `"pair_room"` and
+1. **Sender upload.** ✅ **Done in checkpoint 2a.** `stored-file.ts` `UploadPurpose` needs `"pair_room"` and
    `uploadQuery` needs to pass `&code=`. Use `uploadFileResumable` only — the
    single-shot route refuses `pair_room` with 400 on purpose. Honour the init
    response's `chunkSize` (1 MiB here, not 8). Drive
    `markUploading`/`markUploaded`/`failUpload` around it.
-2. **Sender failure handling.** `410` from a PATCH or finalize means the room is
+2. **Sender failure handling.** ✅ **Done in checkpoint 2a.** `410` from a PATCH or finalize means the room is
    over and the ciphertext is gone: call `failUpload(i)` so the file returns to
    the live-link path, and say so in copy. `409` means the peer joined — stop
    starting new uploads, let the in-flight one finish.
+
+**What checkpoint 2a actually delivered, and what it deliberately did not.**
+`preupload.svelte.ts` is the sender driver: one object per file, one at a time,
+`403/503/413/429`/network stop the pass silently (the batch and the live link are
+exactly as they were), `409` holds — no new init, the running upload finishes —
+and `410`/`404` return the file to `staged` and raise the one user-visible
+explanation, `pair.preuploadExpired`, rendered outside every branch of
+`CodePairing` because the on-screen countdown (mint-based) usually gives up
+before the room's real deadline (last-byte-based) does. The outbox gained a
+stable per-entry handle (`outboxToken`/`outboxIndexOf`) because an index is not
+an identity across a minutes-long upload: without it, removing a file ahead of
+the uploading one strands that upload in `uploading` for good, drained by neither
+lane. Three things are deliberately open:
+
+- **It is off.** `preuploadSenderReady()` is `advertisedCaps().includes(CAP_PREUPLOAD)`,
+  so seam 3 below turns the sender on by announcing the capability and nothing
+  else can. Uploading what this build cannot hand off is worse than not
+  uploading: the peer joins, gets no key, and the objects wait for the room's
+  deadline to delete them.
+- **A folder's files are never pre-uploaded.** The stored manifest has no field
+  for a relative path (`StoredManifest` is names and sizes), so a pre-uploaded
+  folder would arrive flattened while the live link reproduces it. They stay
+  staged; flat files in the same batch still go up. Closing this means a manifest
+  change, which §6 of the protocol puts out of scope for now.
+- **The staged list does not show per-row origin.** An `uploaded` row looks like
+  a `staged` one; only the in-flight file has a line of its own
+  (`pair.preuploading`). That is seam 5's presentation work.
 3. **Flip the capability on.** `advertisedCaps()` must include `CAP_PREUPLOAD`
    only in the same change that implements BOTH sending and receiving kind 10;
    `preupload-handoff.test.ts` asserts it is absent today, and that assertion is

@@ -37,7 +37,13 @@ interface Entry {
   state: OutboxUploadState;
   /** Set exactly when state === "uploaded". */
   ref?: StoredRef;
+  /** This entry's stable handle — see outboxToken. */
+  token: string;
 }
+
+/** Source of entry handles. Monotonic for the life of the page and never reset,
+ *  so a handle taken before a clear can never name an entry queued after it. */
+let nextToken = 1;
 
 let files = $state<PickedFile[]>([]);
 /**
@@ -78,7 +84,9 @@ export function uploadedRefs(): StoredRef[] {
  *  entry already past staging, changes nothing. */
 export function markUploading(index: number): void {
   if (outboxState(index) !== "staged" || index >= files.length) return;
-  states = states.map((e, i) => (i === index ? { state: "uploading" } : e));
+  // The handle rides through every transition: it is what the uploader resolves
+  // against, so a state change that minted a new one would strand the upload.
+  states = states.map((e, i) => (i === index ? { state: "uploading", token: e.token } : e));
 }
 
 /** Record that the entry at `index` is on the server under `ref`. Only an entry
@@ -86,17 +94,42 @@ export function markUploading(index: number): void {
  *  removed upload must not resurrect one. */
 export function markUploaded(index: number, ref: StoredRef): void {
   if (outboxState(index) !== "uploading") return;
-  states = states.map((e, i) => (i === index ? { state: "uploaded", ref } : e));
+  states = states.map((e, i) => (i === index ? { state: "uploaded", ref, token: e.token } : e));
 }
 
 /** Return a failed upload to the live-link path. Idempotent. */
 export function failUpload(index: number): void {
   if (outboxState(index) !== "uploading") return;
-  states = states.map((e, i) => (i === index ? { state: "staged" } : e));
+  states = states.map((e, i) => (i === index ? { state: "staged", token: e.token } : e));
+}
+
+/**
+ * A stable handle to the entry at `index`, or "" for an index that has none.
+ *
+ * An index answers "where is this file now", and that is not the question a
+ * pre-upload asks. An upload runs for minutes while the user goes on adding and
+ * removing files, so the index it started from can name a different file — or no
+ * file — by the time it finishes. Marking a completion by that index files one
+ * file's stored key under another file's row, or silently strands the entry that
+ * moved. Take a handle before starting, resolve it again at every state change.
+ */
+export function outboxToken(index: number): string {
+  if (index < 0 || index >= states.length) return "";
+  return states[index].token;
+}
+
+/** Where the entry with this handle is now, or -1 if it is gone (removed,
+ *  replaced or cleared). "Gone" is a real answer and the caller must act on it:
+ *  the alternative — falling back to the original index — is exactly the
+ *  wrong-row write this exists to prevent. */
+export function outboxIndexOf(token: string): number {
+  if (!token) return -1;
+  return states.findIndex((e) => e.token === token);
 }
 
 /** A fresh `staged` entry per file. */
-const stagedFor = (list: readonly unknown[]): Entry[] => list.map(() => ({ state: "staged" as const }));
+const stagedFor = (list: readonly unknown[]): Entry[] =>
+  list.map(() => ({ state: "staged" as const, token: `e${nextToken++}` }));
 
 /** Replace the queue (a fresh pick supersedes any stale leftovers).
  *

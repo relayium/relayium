@@ -836,6 +836,8 @@ const ko: Messages = {
     stageAddFolder: "폴더 추가",
     stageDrop: "또는 파일과 폴더를 여기에 놓으세요",
     stageRemove: "제거",
+    preuploading: (name, pct) => `기다리는 동안 ${name} 업로드 중 — ${pct}%`,
+    preuploadExpired: "업로드가 끝나기 전에 페어링 코드가 만료되어 아무것도 저장되지 않았습니다. 파일은 그대로 있으니 새 코드를 만들어 보내세요.",
     expiresIn: (s) => `페어링 코드는 ${s} 후 만료`,
     ttlNote: "이 카운트다운은 페어링 코드에만 적용됩니다. 시간이 지나면 새 기기가 이 코드로 참여할 수 없습니다. 상대가 참여한 뒤의 전송은 끝까지 진행되며 이 때문에 중단되지 않습니다.",
     expired: "페어링 코드가 만료되었습니다. 다시 생성하세요",

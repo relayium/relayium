@@ -3,7 +3,8 @@ import { mount, unmount, flushSync } from "svelte";
 import CodePairing from "./CodePairing.svelte";
 import { loadLang, messages } from "./i18n.svelte";
 import type { RelayAvailability } from "./ice";
-import { clearOutbox, setOutbox } from "./outbox.svelte";
+import { clearOutbox, setOutbox, outboxState } from "./outbox.svelte";
+import { resetPreupload, startPreupload } from "./preupload.svelte";
 import { refreshSession } from "./auth.svelte";
 
 // The one thing that decides which role the component renders as: the minting
@@ -29,7 +30,7 @@ afterEach(() => {
   sessionStorage.clear();
 });
 
-function render(props: { roomCode?: string; relayStatus?: RelayAvailability }) {
+function render(props: { roomCode?: string; relayStatus?: RelayAvailability; expired?: boolean }) {
   app = mount(CodePairing, { target, props });
   flushSync();
 }
@@ -326,5 +327,58 @@ describe("staging inside a waiting code room", () => {
     render({ roomCode: "483920" }); // no EXP_KEY: this is the joiner
     expect(target.textContent).not.toContain(messages.en.pair.stageLead);
     expect(target.querySelectorAll('input[type="file"]')).toHaveLength(0);
+  });
+});
+
+// Pre-upload's sender half is wired into this surface, and is switched off in
+// this build because the key handoff it depends on does not exist yet. Both
+// halves of that are load-bearing, so both are pinned here.
+describe("the waiting room and pre-upload", () => {
+  const EXPIRY = () => String(Math.floor(Date.now() / 1000) + 300);
+
+  afterEach(() => {
+    resetPreupload();
+    vi.unstubAllGlobals();
+  });
+
+  it("uploads nothing at all while this build cannot hand the keys over", async () => {
+    // The compatibility guard for the whole checkpoint: a code room in this
+    // build behaves exactly as it did before pre-upload existed — files stay
+    // staged for the live link and no upload request is made.
+    const f = vi.fn(async (_url: string) => ({ ok: true, status: 200, json: async () => ({}) }));
+    vi.stubGlobal("fetch", f);
+    setOutbox([{ file: new File(["x"], "a.bin", { lastModified: 0 }) }]);
+    sessionStorage.setItem(EXP_KEY, EXPIRY());
+    render({ roomCode: "483920" });
+    await Promise.resolve();
+    flushSync();
+
+    for (const call of f.mock.calls) expect(String(call[0])).not.toContain("/api/uploads");
+    expect(outboxState(0)).toBe("staged");
+    expect(target.textContent).not.toContain("%");
+  });
+
+  it("explains an expired pre-upload even after the card has flipped to expired", async () => {
+    // The 410 lands after the on-screen countdown (which runs from the mint) has
+    // already given up, so this line has to live outside the waiting branch or
+    // the user never sees why their upload bought nothing.
+    const json = (body: unknown, status = 200) => ({ ok: status < 300, status, json: async () => body });
+    let received = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      if (method === "POST" && url.startsWith("/api/uploads?")) return json({ uploadId: "u1", chunkSize: 1024 });
+      if (url.endsWith("/finalize")) return json({}, 410);
+      if (method === "PATCH") {
+        received += new Uint8Array(await (init!.body as Blob).arrayBuffer?.() ?? (init!.body as Uint8Array)).length;
+        return json({ received });
+      }
+      return json({ received });
+    }));
+    setOutbox([{ file: new File(["x"], "a.bin", { lastModified: 0 }) }]);
+    await startPreupload("483920", true);
+    expect(outboxState(0)).toBe("staged"); // back on the live link
+
+    render({ roomCode: "483920", expired: true });
+    expect(target.textContent).toContain(messages.en.pair.preuploadExpired);
   });
 });

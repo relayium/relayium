@@ -918,6 +918,23 @@ export interface Messages {
     stageAddFolder: string;
     stageDrop: string;
     stageRemove: string; // verb on the per-file remove control; named with the file
+    // Pre-upload, sender side (docs/protocol/relayium-pair-room-v1.md).
+    //
+    // `preuploading` is the only line in a code room that says bytes are leaving
+    // this device, so it may only be on screen while ciphertext is actually
+    // going up against the code. It names the file and how far it has got,
+    // because the staged list otherwise looks identical whether an upload is
+    // running or not.
+    //
+    // `preuploadExpired` covers the one refusal with a consequence the user can
+    // see: the room's deadline passed mid-upload, the server deleted that
+    // ciphertext, and the files are back in the live-link lane needing a fresh
+    // code. It must not read as "sent" — nothing arrived — and it must say what
+    // to do next. Every other refusal (the peer joined, the deployment does not
+    // offer pre-upload, quota, a dropped network) changes nothing the user can
+    // see and gets no copy at all.
+    preuploading: (name: string, pct: number) => string;
+    preuploadExpired: string;
     expiresIn: (s: string) => string; // countdown on the minter's card — names the CODE, not the transfer
     // Says out loud what the countdown does and does not govern. The owner read
     // a shrinking timer next to a live session as "the transfer expires in N",

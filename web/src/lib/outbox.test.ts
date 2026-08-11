@@ -11,6 +11,8 @@ import {
   markUploaded,
   failUpload,
   uploadedRefs,
+  outboxToken,
+  outboxIndexOf,
 } from "./outbox.svelte";
 
 // lastModified is pinned rather than left to default to Date.now(): it is part of
@@ -176,6 +178,55 @@ describe("per-entry transport state", () => {
     expect(outbox().map((p) => p.file.name)).toEqual(["b.bin", "c.bin"]);
     expect([outboxState(0), outboxState(1)]).toEqual(["uploaded", "staged"]);
     expect(uploadedRefs()).toEqual([ref("obj-b")]);
+  });
+
+  // An index is only an answer to "where is this file NOW". A pre-upload takes
+  // minutes and the user can add or remove files while it runs, so the index the
+  // uploader started with is not the index it must mark on completion.
+  it("hands out a handle that survives the queue moving underneath it", () => {
+    clearOutbox();
+    addToOutbox([pf("a.bin"), pf("b.bin")]);
+    const b = outboxToken(1);
+    expect(b).toBeTruthy();
+    removeFromOutbox(0); // b.bin is now index 0
+    expect(outboxIndexOf(b)).toBe(0);
+    addToOutbox([pf("c.bin")]);
+    expect(outboxIndexOf(b)).toBe(0);
+  });
+
+  it("reports a handle whose entry is gone rather than pointing at its successor", () => {
+    // The failure this prevents: an upload finishes, its entry was removed
+    // mid-flight, and markUploaded lands on whatever file slid into that index —
+    // filing one file's key under another file's row.
+    clearOutbox();
+    addToOutbox([pf("a.bin"), pf("b.bin")]);
+    const a = outboxToken(0);
+    removeFromOutbox(0);
+    expect(outboxIndexOf(a)).toBe(-1);
+    expect(outbox().map((p) => p.file.name)).toEqual(["b.bin"]);
+  });
+
+  it("never reuses a handle across a replace or a clear", () => {
+    clearOutbox();
+    addToOutbox([pf("a.bin")]);
+    const first = outboxToken(0);
+    setOutbox([pf("a.bin")]);
+    expect(outboxToken(0)).not.toBe(first);
+    expect(outboxIndexOf(first)).toBe(-1);
+    const second = outboxToken(0);
+    clearOutbox();
+    expect(outboxIndexOf(second)).toBe(-1);
+    addToOutbox([pf("a.bin")]);
+    expect(outboxToken(0)).not.toBe(second);
+  });
+
+  it("answers an out-of-range index and an unknown handle without inventing one", () => {
+    clearOutbox();
+    addToOutbox([pf("a.bin")]);
+    expect(outboxToken(5)).toBe("");
+    expect(outboxToken(-1)).toBe("");
+    expect(outboxIndexOf("")).toBe(-1);
+    expect(outboxIndexOf("nope")).toBe(-1);
   });
 
   it("resets state when the queue is replaced or cleared", () => {

@@ -68,3 +68,38 @@ describe("what the two staged-file notes are allowed to promise", () => {
     expect(note).toContain("this device");
   });
 });
+
+// The sender half of pre-upload adds the first two lines in the waiting room
+// that talk about bytes leaving the device. Both are held to what actually
+// happened, because both appear at moments the user cannot verify for
+// themselves: one while ciphertext is going up, one after the server deleted it.
+describe("what the pre-upload lines are allowed to say", () => {
+  it("defines both in every language", () => {
+    for (const { code } of LANGS) {
+      const progress = messages[code].pair.preuploading("photo.jpg", 42);
+      const expired = messages[code].pair.preuploadExpired;
+      for (const [where, s] of [
+        [`${code}.pair.preuploading`, progress],
+        [`${code}.pair.preuploadExpired`, expired],
+      ] as const) {
+        expect(s, `${where} has copy`).toBeTruthy();
+        expect(s.trim(), `${where} is trimmed`).toBe(s);
+      }
+      expect(progress, `${code} progress names the file`).toContain("photo.jpg");
+      expect(progress, `${code} progress shows how far`).toContain("42");
+    }
+  });
+
+  it("never says a pre-upload that expired was delivered", () => {
+    // The state it describes: bytes went up, the room's deadline passed, the
+    // server deleted that ciphertext, and the files are back in the live-link
+    // lane needing a fresh code. Anything that reads as "sent" is a lie about
+    // the one case where nothing arrived.
+    const note = messages.en.pair.preuploadExpired.toLowerCase();
+    for (const banned of ["delivered", "sent successfully", "received"]) {
+      expect(note, `en.pair.preuploadExpired must not claim "${banned}"`).not.toContain(banned);
+    }
+    // ...and it has to say what to do next, or it is just a dead end.
+    expect(note).toContain("new code");
+  });
+});

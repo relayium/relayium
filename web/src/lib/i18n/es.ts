@@ -845,6 +845,8 @@ const es: Messages = {
     stageAddFolder: "Añadir una carpeta",
     stageDrop: "o arrastra archivos y carpetas aquí",
     stageRemove: "Quitar",
+    preuploading: (name, pct) => `Subiendo ${name} mientras esperas — ${pct} %`,
+    preuploadExpired: "El código de emparejamiento caducó antes de terminar la subida, así que no se guardó nada. Tus archivos siguen aquí: genera un código nuevo para enviarlos.",
     expiresIn: (s) => `el código de emparejamiento caduca en ${s}`,
     ttlNote: "Esa cuenta atrás es solo del código de emparejamiento: cuando llega a cero, ningún dispositivo nuevo puede unirse con él. Una vez que el otro dispositivo se ha unido, la transferencia sigue hasta terminar y nunca se corta por esto.",
     expired: "El código de emparejamiento caducó — genera uno nuevo",

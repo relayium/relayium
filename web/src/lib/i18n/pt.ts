@@ -845,6 +845,8 @@ const pt: Messages = {
     stageAddFolder: "Adicionar uma pasta",
     stageDrop: "ou arraste arquivos e pastas para cá",
     stageRemove: "Remover",
+    preuploading: (name, pct) => `Enviando ${name} enquanto você espera — ${pct}%`,
+    preuploadExpired: "O código de emparelhamento expirou antes de o envio terminar, então nada ficou guardado. Seus arquivos continuam aqui — gere um código novo para enviá-los.",
     expiresIn: (s) => `o código de emparelhamento expira em ${s}`,
     ttlNote: "Essa contagem regressiva vale só para o código de emparelhamento: depois dela, nenhum dispositivo novo entra com ele. Depois que o outro dispositivo entrou, a transferência segue até o fim e nunca é cortada por isso.",
     expired: "Código de emparelhamento expirado — gere um novo",

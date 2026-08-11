@@ -36,6 +36,7 @@
   import { applyHeadMeta, pageMeta } from "./lib/page-meta";
   import { hasFiles, dropTarget, pickedFromInput, filesFromDataTransfer, type PickedFile } from "./lib/drag";
   import { outbox, setOutbox, takeOutbox, clearOutbox } from "./lib/outbox.svelte";
+  import { resetPreupload } from "./lib/preupload.svelte";
   import { needsSendConfirmation, shownSasCode, autoAcceptsIncomingText } from "./lib/verify-gates";
   import { canReleaseConfirmedSend, queuedReleaseTarget } from "./lib/confirm-send";
   import { verifyPeers, setVerifyPeers } from "./lib/verify-pref.svelte";
@@ -1035,7 +1036,7 @@
     // room by ANY path (start over, tab switch, back button) must drop them so they
     // can't surprise-send to an unrelated peer later. Only the code→"" exit clears —
     // ""→code (files were just queued) and code→code (timedOut re-mint) keep the queue.
-    if (socketRoomKey && !key) clearOutbox();
+    if (socketRoomKey && !key) { clearOutbox(); resetPreupload(); }
     socketRoomKey = key;
     void switchRoom();
   });

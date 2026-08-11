@@ -6,7 +6,9 @@
   import { canShare, share } from "./share";
   import { enterRoom } from "./room.svelte";
   import { messages, lang, type Messages } from "./i18n.svelte";
-  import { outbox, addToOutbox, removeFromOutbox, clearOutbox } from "./outbox.svelte";
+  import { outbox, addToOutbox, removeFromOutbox, clearOutbox, outboxIndexOf } from "./outbox.svelte";
+  import { startPreupload, holdPreupload, resetPreupload, preuploadNotice, preuploadProgress } from "./preupload.svelte";
+  import { onMount } from "svelte";
   import { pickedFromInput, filesFromDataTransfer, hasFiles } from "./drag";
   import { formatSize } from "./format";
   import { folderUploadSupported } from "./platform";
@@ -88,9 +90,54 @@
     input.value = ""; // allow re-picking the same files
   }
 
+  // Spend the wait instead of sitting in it: the staged batch goes up as
+  // ciphertext bound to this code, one object per file, so a file that is
+  // already stored when the other device arrives skips the sender's uplink
+  // entirely. Whether anything actually happens is decided inside
+  // (preuploadSenderReady) and by the server; until both say yes this is the
+  // same live-link-only staging box it was, which is why nothing here branches
+  // on it.
+  //
+  // Deliberately not gated on `timedOut`: that countdown runs from the MINT,
+  // while the room's real deadline runs from the last uploaded byte, so a long
+  // upload outlives it. The server is the authority — it answers 410 when the
+  // room is genuinely over — and the driver stops on that.
+  $effect(() => {
+    if (!isMinter || !roomCode || !outbox().length) return;
+    void startPreupload(roomCode);
+  });
+
+  // Leaving this surface — the peer joined, or the user walked away — must stop
+  // NEW uploads without touching the one in flight: the protocol refuses only a
+  // new init once someone has joined, and the running upload's bytes are already
+  // sent and already billed. onMount's teardown rather than the effect's, which
+  // re-runs on every staging change.
+  //
+  // It names the room this instance was mounted for, captured at mount. The
+  // choose screen and the waiting room are two instances of this component in
+  // two `{#if}` branches, so a mint tears one down while building the other, and
+  // an unqualified hold from the outgoing instance would stop the incoming
+  // room's driver before it ever started.
+  onMount(() => {
+    const mounted = roomCode;
+    return () => holdPreupload(mounted);
+  });
+
   // Drag state is local to the staging box, so the highlight cannot outlive the
   // branch that renders it.
   let dragOver = $state(false);
+
+  // The upload in flight, resolved back to the file it belongs to. By handle,
+  // never by index: the queue moves while an upload runs, and a stale index
+  // would name a different file in the very line that claims to be uploading it.
+  const uploading = $derived.by(() => {
+    const p = preuploadProgress();
+    if (!p) return null;
+    const at = outboxIndexOf(p.token);
+    if (at < 0) return null;
+    const pct = p.total > 0 ? Math.min(100, Math.floor((p.sent / p.total) * 100)) : 0;
+    return { name: outbox()[at].file.name, pct };
+  });
 
   async function stageDropped(e: DragEvent) {
     e.preventDefault();
@@ -112,6 +159,12 @@
     try {
       const { code, expiresAt } = await createPair();
       sessionStorage.setItem(EXP_KEY, String(expiresAt));
+      // A fresh code is a fresh room. Anything still uploading belongs to the
+      // old one — its ciphertext is bound to a room the new code cannot reach,
+      // so paying for the rest of those bytes buys nothing; the abort returns
+      // that file to the live-link lane. It also drops the previous room's
+      // explanation, which is about a code that no longer exists.
+      resetPreupload();
       enterRoom({ code }); // rebinds the socket to the code room without reloading
     } catch (e) {
       busy = false;
@@ -120,7 +173,7 @@
       // room was entered). In the timedOut state the user is still in the room
       // retrying the re-mint — keep the batch; leaving the room (start over / tab
       // switch) clears it via the room-exit path.
-      if (!roomCode) clearOutbox();
+      if (!roomCode) { clearOutbox(); resetPreupload(); }
       // A 401 means the session lapsed between render and mint — re-open the login
       // panel instead of a dead-end "couldn't create a code" error.
       if (e instanceof HttpError && e.status === 401) { requireLogin?.(); return; }
@@ -218,6 +271,11 @@
             removeLabel={t.pair.stageRemove}
           />
           <p class="stage-note">{t.pair.stageNote}</p>
+          <!-- The one line in this room that says bytes are leaving the device,
+               and it is on screen only while that is happening. -->
+          {#if uploading}
+            <p class="stage-progress">{t.pair.preuploading(uploading.name, uploading.pct)}</p>
+          {/if}
         {/if}
       </div>
     {/if}
@@ -288,6 +346,12 @@
     </div>
     <button class="btn btn-ghost" onclick={() => (mode = "receive")}>{t.pair.enterCode}</button>
   {/if}
+  <!-- Outside every branch on purpose. The room's deadline runs from the last
+       uploaded byte and the on-screen countdown runs from the mint, so a 410
+       almost always lands after this card has already flipped to its expired
+       state — and that is exactly the moment the user needs to be told that the
+       upload bought nothing and their files are still here. -->
+  {#if preuploadNotice() === "expired"}<p class="preupload-expired">{t.pair.preuploadExpired}</p>{/if}
   {#if err}<p class="error">{err}</p>{/if}
 </section>
 
@@ -321,6 +385,19 @@
   .stage-lead { margin: 0; font-size: var(--fs-sm); color: var(--text-h); text-align: center; }
   .stage-drop { margin: 0; font-size: var(--fs-xs); color: var(--text); text-align: center; }
   .stage-note { margin: 0; font-size: var(--fs-xs); line-height: 1.5; color: var(--text); text-align: center; max-width: 36ch; }
+  .stage-progress {
+    margin: 0; font-size: var(--fs-xs); line-height: 1.5; color: var(--text-h);
+    text-align: center; max-width: 36ch; font-variant-numeric: tabular-nums;
+  }
+  /* Not `.error`: nothing failed that the user did, and the files are still
+     here. It reads as the explanation it is, next to the code they now have to
+     re-mint. */
+  .preupload-expired {
+    margin: 0; font-size: var(--fs-xs); line-height: 1.5; text-align: center; max-width: 40ch;
+    color: var(--text-h);
+    border: 1px solid var(--accent-border); border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3); background: var(--code-bg);
+  }
   /* The list brings its own surface; inside this box that would be a panel in a
      panel. */
   .staging :global(.pending-files) {

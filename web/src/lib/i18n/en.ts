@@ -856,6 +856,8 @@ const en: Messages = {
     stageAddFolder: "Add a folder",
     stageDrop: "or drop files and folders here",
     stageRemove: "Remove",
+    preuploading: (name, pct) => `Uploading ${name} while you wait — ${pct}%`,
+    preuploadExpired: "The pairing code ran out before the upload finished, so nothing was stored. Your files are still here — create a new code to send them.",
     expiresIn: (s) => `pairing code expires in ${s}`,
     ttlNote: "That countdown is the pairing code only — it stops new devices from joining with it. Once the other device has joined, the transfer keeps running to completion and is never cut off by it.",
     expired: "Pairing code expired — generate a new one",

@@ -846,6 +846,8 @@ const de: Messages = {
     stageAddFolder: "Ordner hinzufügen",
     stageDrop: "oder Dateien und Ordner hierher ziehen",
     stageRemove: "Entfernen",
+    preuploading: (name, pct) => `${name} wird während des Wartens hochgeladen — ${pct}%`,
+    preuploadExpired: "Der Pairing-Code ist abgelaufen, bevor der Upload fertig war — gespeichert wurde nichts. Deine Dateien sind noch da: erzeuge einen neuen Code, um sie zu senden.",
     expiresIn: (s) => `Pairing-Code läuft in ${s} ab`,
     ttlNote: "Dieser Countdown gilt nur dem Pairing-Code: Danach kann kein neues Gerät mehr damit beitreten. Ist die Gegenstelle einmal beigetreten, läuft die Übertragung bis zum Ende weiter und wird davon nie abgebrochen.",
     expired: "Pairing-Code abgelaufen — bitte neu erzeugen",

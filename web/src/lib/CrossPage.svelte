@@ -12,6 +12,7 @@
   import { session } from "./auth.svelte";
   import { enterRoom } from "./room.svelte";
   import { clearOutbox } from "./outbox.svelte";
+  import { resetPreupload } from "./preupload.svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { setLoginOpen } from "./login.svelte";
   import PageFooter from "./PageFooter.svelte";
@@ -30,8 +31,11 @@
   function startOver() {
     sessionStorage.removeItem("relayium_pair_exp");
     // Queued-but-unsent files belong to the abandoned pairing attempt — drop
-    // them so they can't surprise-send to the next peer that appears.
+    // them so they can't surprise-send to the next peer that appears. Any
+    // pre-upload for that attempt goes with them: it is bound to the room being
+    // abandoned, so the rest of its bytes would buy nothing.
     clearOutbox();
+    resetPreupload();
     // A LAN auto-pair (and the share-link+same-LAN overlap) has no room to leave —
     // enterRoom({}) alone leaves the surface up, since it's driven by the visible
     // peer, not the URL. Suppress it so we fall back to the method choices; App

@@ -836,6 +836,8 @@ const zh: Messages = {
     stageAddFolder: "添加文件夹",
     stageDrop: "或把文件、文件夹拖到这里",
     stageRemove: "移除",
+    preuploading: (name, pct) => `正在趁等待上传 ${name} —— ${pct}%`,
+    preuploadExpired: "配对码在上传完成前就失效了，已上传的内容不会保留。文件都还在这里，重新生成一个配对码即可发送。",
     expiresIn: (s) => `配对码 ${s} 后失效`,
     ttlNote: "这个倒计时只针对配对码：到点之后，新设备就不能再用这个码加入。对方已经加入之后，传输会一直进行到完成，不会被它中断。",
     expired: "配对码已失效，请重新生成",

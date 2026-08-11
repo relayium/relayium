@@ -1267,6 +1267,147 @@ describe("stored-download response failures", () => {
   });
 });
 
+// A fetch double for the pair-room upload endpoints, with per-phase status
+// injection so a test can reproduce the four refusals the room lifecycle has:
+// 403 (no live owned code), 409 (the peer already joined), 410 (the room's
+// deadline passed) and 503 (pre-upload not offered by this deployment).
+function installPairRoomFetch(opts?: {
+  chunkSize?: number;
+  initStatus?: number;
+  patchStatus?: number;
+  patchAfter?: number;
+  finalizeStatus?: number;
+}) {
+  const state = { init: 0, patches: 0, finalized: false, bodies: [] as number[], initUrls: [] as string[] };
+  const chunkSize = opts?.chunkSize ?? 1 << 20;
+  const json = (body: unknown, status = 200) => ({
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  });
+  let received = 0;
+  const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+    const method = init?.method ?? "GET";
+    if (method === "POST" && url.startsWith("/api/uploads?")) {
+      state.init++;
+      state.initUrls.push(url);
+      if (opts?.initStatus) return json({}, opts.initStatus);
+      return json({ uploadId: "u1", chunkSize });
+    }
+    if (method === "POST" && url.endsWith("/finalize")) {
+      if (opts?.finalizeStatus) return json({}, opts.finalizeStatus);
+      state.finalized = true;
+      return json({ id: "id1", expiresAt: 123 });
+    }
+    if (method === "GET" && url === "/api/uploads/u1") return json({ received });
+    if (method === "PATCH" && url === "/api/uploads/u1") {
+      state.patches++;
+      if (opts?.patchStatus && state.patches > (opts.patchAfter ?? 0)) return json({}, opts.patchStatus);
+      const buf = await toBytes(init!.body);
+      state.bodies.push(buf.length);
+      received += buf.length;
+      return json({ received });
+    }
+    throw new Error(`unexpected ${method} ${url}`);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return state;
+}
+
+describe("a pair-room pre-upload", () => {
+  it("binds the upload to the pairing code and asks for no retention at all", async () => {
+    // Retention here is the ROOM's, and the server refuses a burn flag, a
+    // download limit or a TTL rather than overriding it (taskobject.go's
+    // resolveUploadRetention) — so a query that carries `ttl=` is a 400, not a
+    // harmless extra parameter.
+    const state = installPairRoomFetch();
+    await uploadFileResumable([new File(["hello"], "a.txt")], { purpose: "pair_room", code: "483920" });
+    expect(state.initUrls).toHaveLength(1);
+    const url = state.initUrls[0];
+    expect(url).toContain("purpose=pair_room");
+    expect(url).toContain("code=483920");
+    expect(url).toMatch(/[?&]size=\d+/);
+    expect(url).not.toContain("ttl=");
+    expect(url).not.toContain("burnAfterRead");
+    expect(url).not.toContain("maxDownloads");
+  });
+
+  it("uploads at the chunk size the server asked for, not the share default", async () => {
+    // 1 MiB, not 8: a pair room's deadline only moves when a chunk COMMITS, so a
+    // single chunk that takes longer than the join window to arrive would let the
+    // room expire underneath its own upload. A client that hardcoded 8 MiB would
+    // send this fixture in ONE PATCH.
+    const oneMiB = 1 << 20;
+    const state = installPairRoomFetch({ chunkSize: oneMiB });
+    const bytes = new Uint8Array(3 * oneMiB);
+    for (let i = 0; i < bytes.length; i++) bytes[i] = i & 0xff;
+    await uploadFileResumable([new File([bytes], "big.bin")], { purpose: "pair_room", code: "483920" });
+    expect(state.patches).toBeGreaterThanOrEqual(3);
+    // Greedy packing may overshoot by at most one store frame; nothing near 8 MiB.
+    for (const n of state.bodies) expect(n).toBeLessThanOrEqual(oneMiB + STORE_CHUNK_SIZE + 64);
+  });
+
+  it("never falls back to the single-shot route, whatever the refusal", async () => {
+    // POST /api/files refuses purpose=pair_room with 400 on purpose, so a
+    // fallback would re-encrypt and re-send every byte to earn a worse error —
+    // and would hide the room status (409/410) the caller has to act on.
+    for (const status of [403, 409, 410, 503]) {
+      const state = installPairRoomFetch({ initStatus: status });
+      await expect(
+        uploadFileResumable([new File(["hello"], "a.txt")], { purpose: "pair_room", code: "483920" }),
+      ).rejects.toMatchObject({ status });
+      expect(state.init).toBe(1);
+      expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining("/api/files"), expect.anything());
+    }
+  });
+
+  it("surfaces a 410 that arrives on a PATCH instead of retrying it away", async () => {
+    // The room can end while a chunk is in flight. That is terminal for this
+    // file — the ciphertext is gone — so the status must reach the caller, which
+    // returns the file to the live-link lane.
+    const state = installPairRoomFetch({ chunkSize: 1 << 20, patchStatus: 410, patchAfter: 1 });
+    const bytes = new Uint8Array(3 << 20);
+    await expect(
+      uploadFileResumable([new File([bytes], "big.bin")], { purpose: "pair_room", code: "483920" }),
+    ).rejects.toMatchObject({ status: 410 });
+    expect(state.finalized).toBe(false);
+  });
+
+  it("surfaces a 410 that arrives on finalize", async () => {
+    installPairRoomFetch({ finalizeStatus: 410 });
+    await expect(
+      uploadFileResumable([new File(["hello"], "a.txt")], { purpose: "pair_room", code: "483920" }),
+    ).rejects.toMatchObject({ status: 410 });
+  });
+
+  it("surfaces the terminal 404 of an upload the room's void already reclaimed", async () => {
+    installPairRoomFetch({ chunkSize: 1 << 20, patchStatus: 404, patchAfter: 1 });
+    await expect(
+      uploadFileResumable([new File([new Uint8Array(3 << 20)], "big.bin")], { purpose: "pair_room", code: "483920" }),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
+  it("refuses to send a pair-room upload with no code, before any request", async () => {
+    // The type union makes this unreachable from TypeScript; the guard is for the
+    // JavaScript caller and for a code that went empty between render and send.
+    // A request with no code is a guaranteed 403 that tells the server a pairing
+    // code was tried.
+    const state = installPairRoomFetch();
+    await expect(
+      uploadFileResumable([new File(["hello"], "a.txt")], { purpose: "pair_room", code: "" } as never),
+    ).rejects.toBeInstanceOf(Error);
+    expect(state.init).toBe(0);
+  });
+
+  it("refuses the single-shot route outright, without sending the ciphertext", async () => {
+    const cap = installFakeXHR({ status: 200, response: JSON.stringify({ id: "x", expiresAt: 0 }), network: false });
+    await expect(
+      uploadFile([new File(["hello"], "a.txt")], { purpose: "pair_room", code: "483920" } as never),
+    ).rejects.toBeInstanceOf(Error);
+    expect(cap.body).toBeNull();
+  });
+});
+
 describe("uploadFile — body wire format", () => {
   it("prefixes the blob with uint32BE(encManifest length) then the manifest ciphertext then the frame stream", async () => {
     const cap = installFakeXHR({ status: 200, response: JSON.stringify({ id: "x", expiresAt: 0 }), network: false });

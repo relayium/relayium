@@ -30,15 +30,44 @@ export interface UploadResult {
  *  no file-list row, 404 on the public endpoints even for its owner. It carries
  *  an authorization decision, so it is sent explicitly on BOTH upload paths and
  *  a resumable session persists it — `finalize` may run on a different instance
- *  and must not re-derive it from a query string it can no longer see. */
-export type UploadPurpose = "share" | "device_task";
+ *  and must not re-derive it from a query string it can no longer see.
+ *
+ *  `pair_room` is ciphertext staged against a pairing code while its room waits
+ *  for the other device (docs/protocol/relayium-pair-room-v1.md). One object per
+ *  FILE, bound to the room the `?code=` names, with a lifetime that is the
+ *  room's rather than a TTL of its own. */
+export type UploadPurpose = "share" | "device_task" | "pair_room";
 
-export interface UploadOptions {
+/** A share or Device Inbox upload: the caller chooses the retention the server
+ *  then resolves against its settings. */
+export interface RetainedUploadOptions {
   burnAfterRead: boolean;
   ttl: number;
   /** Omitted means `share`, exactly as the server resolves an absent
    *  `?purpose=`. Never inferred from anything else. */
-  purpose?: UploadPurpose;
+  purpose?: "share" | "device_task";
+}
+
+/** A pre-upload into a pairing room.
+ *
+ *  A separate arm of the union rather than three optional fields, because the two
+ *  shapes are mutually exclusive on the wire and the server enforces it: a pair-
+ *  room upload with `burnAfterRead`, `maxDownloads` or a positive `ttl` is a 400,
+ *  refused rather than overridden, since retention here belongs to the room. And
+ *  `code` is required for the same reason in reverse — an upload with no code is
+ *  a guaranteed 403. Both mistakes are compile errors instead of round trips. */
+export interface PairRoomUploadOptions {
+  purpose: "pair_room";
+  /** The six digits of a live pairing code minted by THIS account. */
+  code: string;
+}
+
+export type UploadOptions = RetainedUploadOptions | PairRoomUploadOptions;
+
+/** Whether these options describe a pre-upload into a pairing room. Narrows the
+ *  union for every branch that has to treat one differently. */
+function isPairRoom(opts: UploadOptions): opts is PairRoomUploadOptions {
+  return opts.purpose === "pair_room";
 }
 
 /** The retention/purpose query both upload paths share.
@@ -50,6 +79,15 @@ export interface UploadOptions {
  *  contradiction rather than rewriting it, so this never silently drops the
  *  caller's burn flag. */
 function uploadQuery(opts: UploadOptions): string {
+  // A pre-upload names its room and NOTHING else. Not "burnAfterRead=0&ttl=0",
+  // which would happen to pass today: the server refuses any retention parameter
+  // it can see rather than overriding it, and a query that carries the two
+  // harmless-looking zeros is one server-side tightening away from a 400 on every
+  // pre-upload. Retention here is the room's; the request should not mention it.
+  if (isPairRoom(opts)) {
+    if (!opts.code) throw new Error("pair-room upload without a pairing code");
+    return `?purpose=pair_room&code=${encodeURIComponent(opts.code)}`;
+  }
   const q = `?burnAfterRead=${opts.burnAfterRead ? 1 : 0}&ttl=${opts.ttl}`;
   return opts.purpose && opts.purpose !== "share" ? `${q}&purpose=${encodeURIComponent(opts.purpose)}` : q;
 }
@@ -199,6 +237,13 @@ export async function uploadFile(
   onProgress?: (p: UploadProgress) => void,
   signal?: AbortSignal,
 ): Promise<UploadResult> {
+  // Refused here, before a byte is encrypted: POST /api/files rejects
+  // purpose=pair_room with 400 by design (a single-shot pre-upload commits once,
+  // at the end, so one big enough to be worth doing is big enough to outlive its
+  // own room). Sending the whole ciphertext to earn that 400 costs the user real
+  // bytes and real time, and this path is also uploadFileResumable's fallback —
+  // see the pair-room clause there.
+  if (isPairRoom(opts)) throw new Error("pair-room uploads must use the resumable path");
   const sk = await generateStoreKey();
   const manifest: StoredManifest = { files: files.map((f) => ({ name: f.name, size: f.size })) };
   const encManifest = await encryptManifest(sk.key, manifest);
@@ -263,6 +308,13 @@ export async function uploadFileResumable(
     return await chunkedUpload(files, opts, onProgress, signal);
   } catch (e) {
     if (signal?.aborted) throw e;
+    // A pre-upload has no fallback at all. The single-shot route refuses
+    // purpose=pair_room, so falling through would re-encrypt and re-send every
+    // byte to earn a 400 — and, worse, would replace the status the caller has to
+    // act on (409 the peer joined, 410 the room is over, 503 not offered here)
+    // with a generic upload failure. Every refusal is reported exactly as the
+    // server gave it.
+    if (isPairRoom(opts)) throw e;
     // An identifier this client refused is a trust-boundary failure, not a
     // server too old to offer /api/uploads. Stated as its own clause rather
     // than left to the fact that it is not an UploadError, because what must
