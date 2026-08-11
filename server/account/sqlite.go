@@ -2952,7 +2952,13 @@ func (s *SQLiteStore) CommitUploadProgress(ctx context.Context, p UploadProgress
 			// deleted. The refusal path never reads this; the paths that can fall
 			// through to a 200 anyway now find nothing to say, which is the same
 			// silence the status probe keeps.
-			out.RoomJoinDeadline = pairRoomJoinDeadline(room)
+			//
+			// pairRoomCodeDeadline, not pairRoomJoinDeadline: a room somebody has
+			// already joined admits nobody else, so there is no instant to report
+			// and none to extend its code to (invariant 5). A batch's later file
+			// keeps uploading after the peer arrives — only a new init is refused —
+			// so this is an ordinary interleaving, not an exotic one.
+			out.RoomJoinDeadline = pairRoomCodeDeadline(room)
 		}
 		return nil
 	}
@@ -3639,7 +3645,7 @@ func insertPairRoomObjectOn(ctx context.Context, tx *sql.Tx, f StoredFile) (Stor
 	if err := insertStoredFileOn(ctx, tx, f); err != nil {
 		return StoredFileWrite{}, err
 	}
-	return StoredFileWrite{ExpiresAt: f.ExpiresAt, RoomJoinDeadline: pairRoomJoinDeadline(room)}, nil
+	return StoredFileWrite{ExpiresAt: f.ExpiresAt, RoomJoinDeadline: pairRoomCodeDeadline(room)}, nil
 }
 
 // CreateStoredFileWithinStorageCaps inserts a stored file only if it keeps the

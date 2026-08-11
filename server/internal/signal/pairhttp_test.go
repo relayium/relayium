@@ -18,7 +18,7 @@ func TestPairHandlerMints(t *testing.T) {
 	now := func() int64 { return clock }
 	reg := NewPairRegistry(300, now)
 	rl := NewRateLimiter(5, time.Minute, now)
-	h := PairHandler(reg, rl, NewIPExtractor(nil), alwaysAuthed)
+	h := PairHandler(reg, rl, NewIPExtractor(nil), alwaysAuthed, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/pair", nil)
 	req.RemoteAddr = "203.0.113.5:5555"
@@ -65,7 +65,7 @@ func TestPairHandlerRequiresLogin(t *testing.T) {
 	ipx := NewIPExtractor(nil)
 
 	// Anonymous (currentUser returns false) → 401.
-	anon := PairHandler(reg, rl, ipx, func(*http.Request) (string, bool) { return "", false })
+	anon := PairHandler(reg, rl, ipx, func(*http.Request) (string, bool) { return "", false }, nil)
 	rec := httptest.NewRecorder()
 	anon.ServeHTTP(rec, httptest.NewRequest("POST", "/api/pair", nil))
 	if rec.Code != http.StatusUnauthorized {
@@ -73,7 +73,7 @@ func TestPairHandlerRequiresLogin(t *testing.T) {
 	}
 
 	// Logged in → 200 with a code owned by that user.
-	authed := PairHandler(reg, rl, ipx, func(*http.Request) (string, bool) { return "user-xyz", true })
+	authed := PairHandler(reg, rl, ipx, func(*http.Request) (string, bool) { return "user-xyz", true }, nil)
 	rec2 := httptest.NewRecorder()
 	authed.ServeHTTP(rec2, httptest.NewRequest("POST", "/api/pair", nil))
 	if rec2.Code != http.StatusOK {
@@ -88,12 +88,157 @@ func TestPairHandlerRequiresLogin(t *testing.T) {
 	}
 }
 
+// ── admission (B3) ──────────────────────────────────────────────────────────
+//
+// The mint is the last place the server can refuse a rendezvous an account
+// cannot use, and it has to be the AUTHORITATIVE place: the choose screen's
+// preflight is advisory (it can be stale by the time the button is clicked, and
+// a CLI/bearer client never asks it at all), so the answer that decides is the
+// one taken here, immediately before MintFor.
+
+// blocked is an admission that always refuses, with a stable machine-readable
+// code the client can branch on.
+func blocked(reason string) PairAdmission {
+	return func(*http.Request, string) string { return reason }
+}
+
+func TestPairHandlerRefusesAMintTheOwnerMayNotHave(t *testing.T) {
+	clock := int64(1000)
+	now := func() int64 { return clock }
+	reg := NewPairRegistry(300, now)
+	rl := NewRateLimiter(5, time.Minute, now)
+	h := PairHandler(reg, rl, NewIPExtractor(nil), alwaysAuthed, blocked("traffic_exhausted"))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/pair", nil)
+	req.RemoteAddr = "203.0.113.9:5555"
+	rec := httptest.NewRecorder()
+	h(rec, req)
+
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("status = %d, want 429", rec.Code)
+	}
+	// Machine-readable, because the client has to tell this apart from the IP
+	// rate limiter's 429 above it — one is "you personally are out of
+	// allowance" and the other is "slow down", and they lead to different
+	// screens.
+	var body struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("the refusal is not JSON (%q): %v", rec.Body.String(), err)
+	}
+	if body.Error != "traffic_exhausted" {
+		t.Fatalf("refusal error = %q, want traffic_exhausted", body.Error)
+	}
+}
+
+// Nothing is allocated by a refusal. A code taken out of the space and handed to
+// nobody is worse than useless: it collides with the next mint for its whole TTL.
+func TestARefusedMintAllocatesNoCode(t *testing.T) {
+	clock := int64(1000)
+	now := func() int64 { return clock }
+	reg := NewPairRegistry(300, now)
+	rl := NewRateLimiter(5, time.Minute, now)
+	h := PairHandler(reg, rl, NewIPExtractor(nil), alwaysAuthed, blocked("traffic_exhausted"))
+
+	rec := httptest.NewRecorder()
+	h(rec, httptest.NewRequest(http.MethodPost, "/api/pair", nil))
+
+	reg.mu.Lock()
+	n := len(reg.codes)
+	reg.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("the registry holds %d code(s) after a refused mint", n)
+	}
+}
+
+// The gate runs on the owner the request actually resolved to, and only after
+// the login check — so an anonymous request is still a 401 rather than an
+// account-shaped refusal, and the gate is never asked about "".
+func TestAdmissionRunsAfterAuthAndOnTheResolvedOwner(t *testing.T) {
+	clock := int64(1000)
+	now := func() int64 { return clock }
+	rl := NewRateLimiter(100, time.Minute, now)
+	ipx := NewIPExtractor(nil)
+
+	var asked []string
+	record := PairAdmission(func(_ *http.Request, userID string) string {
+		asked = append(asked, userID)
+		return ""
+	})
+
+	anon := PairHandler(NewPairRegistry(300, now), rl, ipx,
+		func(*http.Request) (string, bool) { return "", false }, record)
+	rec := httptest.NewRecorder()
+	anon(rec, httptest.NewRequest("POST", "/api/pair", nil))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous = %d, want 401", rec.Code)
+	}
+	if len(asked) != 0 {
+		t.Fatalf("the admission gate was asked about %v for an anonymous request", asked)
+	}
+
+	authed := PairHandler(NewPairRegistry(300, now), rl, ipx,
+		func(*http.Request) (string, bool) { return "user-xyz", true }, record)
+	rec2 := httptest.NewRecorder()
+	authed(rec2, httptest.NewRequest("POST", "/api/pair", nil))
+	if rec2.Code != 200 {
+		t.Fatalf("admitted mint = %d, want 200", rec2.Code)
+	}
+	if len(asked) != 1 || asked[0] != "user-xyz" {
+		t.Fatalf("the gate was asked about %v, want exactly [user-xyz]", asked)
+	}
+}
+
+// The IP limiter still comes first, and the gate is not consulted for a request
+// that never gets that far — otherwise a flood would turn into a quota-read
+// flood against the database.
+func TestTheIPLimiterStillShedsBeforeTheAdmissionGate(t *testing.T) {
+	clock := int64(1000)
+	now := func() int64 { return clock }
+	rl := NewRateLimiter(1, time.Minute, now)
+	asks := 0
+	h := PairHandler(NewPairRegistry(300, now), rl, NewIPExtractor(nil), alwaysAuthed,
+		func(*http.Request, string) string { asks++; return "" })
+
+	call := func() int {
+		req := httptest.NewRequest(http.MethodPost, "/api/pair", nil)
+		req.RemoteAddr = "198.51.100.9:1"
+		rec := httptest.NewRecorder()
+		h(rec, req)
+		return rec.Code
+	}
+	if got := call(); got != 200 {
+		t.Fatalf("first = %d, want 200", got)
+	}
+	if got := call(); got != http.StatusTooManyRequests {
+		t.Fatalf("second = %d, want 429 from the IP limiter", got)
+	}
+	if asks != 1 {
+		t.Fatalf("the admission gate was asked %d times, want 1 — a rate-limited request must not reach it", asks)
+	}
+}
+
+// A deployment with no gate wired keeps the old behaviour exactly, which is what
+// makes the parameter safe to add to a handler several call sites construct.
+func TestNoAdmissionGateMeansNoAdmissionCheck(t *testing.T) {
+	clock := int64(1000)
+	now := func() int64 { return clock }
+	reg := NewPairRegistry(300, now)
+	h := PairHandler(reg, NewRateLimiter(5, time.Minute, now), NewIPExtractor(nil), alwaysAuthed, nil)
+	rec := httptest.NewRecorder()
+	h(rec, httptest.NewRequest(http.MethodPost, "/api/pair", nil))
+	if rec.Code != 200 {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+}
+
 func TestPairHandlerRateLimitsPerIP(t *testing.T) {
 	clock := int64(1000)
 	now := func() int64 { return clock }
 	reg := NewPairRegistry(300, now)
 	rl := NewRateLimiter(2, time.Minute, now)
-	h := PairHandler(reg, rl, NewIPExtractor(nil), alwaysAuthed)
+	h := PairHandler(reg, rl, NewIPExtractor(nil), alwaysAuthed, nil)
 
 	call := func(ip string) int {
 		req := httptest.NewRequest(http.MethodPost, "/api/pair", nil)

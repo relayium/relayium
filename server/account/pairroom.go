@@ -250,6 +250,29 @@ func pairRoomExpiry(r PairRoom) int64 {
 	return pairRoomJoinDeadline(r)
 }
 
+// pairRoomCodeDeadline is the instant this room's pairing CODE may be kept alive
+// until — the single answer every authoritative write hands back for
+// syncPairCodeTo, and the only thing entitled to move a registry entry.
+//
+// It is pairRoomJoinDeadline while nobody has joined, and NOTHING once somebody
+// has. The second half is invariant 5 read for what it costs rather than for what
+// it grants: joining ends every clock, so there is no later instant a receiver
+// may still arrive at, and a code extended past the join would hold six of a
+// million digits out of circulation while buying nothing at all — the room it
+// names is full and its two peers are already connected. 0 is "extend nothing",
+// which syncPairCodeTo already treats as a no-op.
+//
+// Distinct from pairRoomExpiry, which answers the other question about the same
+// joined room: its ciphertext has no deadline (pairRoomNoDeadline), while its
+// code has no future. One is unbounded and the other is over, and collapsing
+// them either strands the receiver or immortalizes the digits.
+func pairRoomCodeDeadline(r PairRoom) int64 {
+	if r.JoinedAt > 0 {
+		return 0
+	}
+	return pairRoomJoinDeadline(r)
+}
+
 // pairRoomProgressExpiry is the deadline a room carries once the server has
 // committed bytes for it at `at`. Pure, so the two callers that record progress
 // (the append transaction and finalize) cannot derive it differently.
@@ -271,13 +294,16 @@ func pairRoomProgressExpiry(r PairRoom, at int64) int64 {
 // reverse.
 //
 // It is a PROJECTION — "where a room with this snapshot would land if progress
-// were recorded at `at`" — so it belongs only to a caller whose own write is the
-// thing that lands. That is syncPairCode's two callers (the room they just
-// created, the touch finalize just performed) and nothing else. The append
-// path's responses deliberately do NOT come through here: their room snapshot
-// predates a transaction that overlapping siblings can move underneath them, so
-// they report what the row holds instead (UploadProgressResult.RoomJoinDeadline,
-// persistedRoomJoinDeadline) rather than what this projects.
+// were recorded at `at`" — so it belongs only to a caller whose snapshot cannot
+// be wrong. Exactly ONE qualifies: syncPairCode, at the moment a room is created,
+// where the room was built by this request an instant earlier and nothing else
+// has seen it yet. Every other site reports what a row HOLDS
+// (UploadProgressResult.RoomJoinDeadline, PairRoomTouch.CodeDeadline,
+// StoredFileWrite.RoomJoinDeadline, persistedRoomJoinDeadline) rather than what
+// this projects, for two reasons that are both ordinary rather than exotic:
+// overlapping siblings move the row underneath a snapshot, and this function
+// cannot see a JOIN at all — it happily projects a join deadline for a room
+// somebody is already in, which is not a window that exists (pairRoomCodeDeadline).
 //
 // It is deliberately the join deadline and never pairRoomExpiry: a joined room's
 // expiry is "never" (pairRoomNoDeadline), and a code that never expired would
@@ -313,9 +339,12 @@ func pairRoomLive(r PairRoom, now int64) bool {
 // ten-minute pre-upload used to push its row's deadline out chunk by chunk while
 // the only credential that could reach it had already died at T+5.
 //
-// Called at exactly the two moments a join deadline moves: when the room opens,
-// and after every committed append the store accepted for it. Never from a bare
-// read, because a read moves nothing.
+// Called at exactly ONE moment now: when the room opens, by the request that
+// just created it. Never from a bare read, because a read moves nothing — and no
+// longer from finalize either, which used to project a deadline off its own
+// snapshot here and now syncs to the touch transaction's own answer instead
+// (notePairRoomUpload, PairRoomTouch). A room this caller did not itself create
+// one statement ago has no business being projected from.
 //
 // It targets the JOIN deadline, never pairRoomExpiry. For an unjoined room they
 // are the same number. For a joined one the room's expiry is "never"
@@ -338,18 +367,20 @@ func (s *Service) syncPairCode(room PairRoom, at int64) {
 }
 
 // syncPairCodeTo is the same thing for a caller that has been HANDED the room's
-// join deadline instead of deriving it — the append path, where the store's
-// transaction read the row and reported what it actually holds
-// (UploadProgressResult.RoomJoinDeadline).
+// code deadline instead of deriving it — every path that writes through a store
+// transaction, each reporting what its own row actually held
+// (UploadProgressResult.RoomJoinDeadline for an append,
+// PairRoomTouch.CodeDeadline for finalize's touch,
+// StoredFileWrite.RoomJoinDeadline for the object it then inserts).
 //
-// The two are the same call with different sources for one number, and the
-// difference matters only where requests overlap: syncPairCode's callers are
-// each acting on a write they just made themselves (the room they created, the
-// touch finalize just performed), while an append's room snapshot can be stale
-// by the time its transaction lands.
+// The two are the same call with different sources for one number, and this is
+// the one to reach for unless the caller CREATED the room a statement ago. A
+// snapshot goes stale where requests overlap, and it is blind to a join
+// (pairRoomCodeDeadline) whether or not anything overlaps.
 //
-// A non-positive deadline is nothing to sync — the room is gone, or there is no
-// room — and moving the code on the strength of it would be inventing a window.
+// A non-positive deadline is nothing to sync — the room is gone, there is no
+// room, or somebody has joined it and there is no window left to name — and
+// moving the code on the strength of it would be inventing one.
 func (s *Service) syncPairCodeTo(room PairRoom, until int64) {
 	if s.pairCodes == nil || room.Code == "" || until <= 0 {
 		return
@@ -439,7 +470,7 @@ func (s *Service) pairRoomAdmission(ctx context.Context, userID string) error {
 	if over, err := s.overStorage(ctx, userID, 0); err == nil && over {
 		return errPairRoomStorageFull
 	}
-	if over, err := s.overTraffic(ctx, userID, 0); err == nil && over {
+	if spent, err := s.trafficAllowanceSpent(ctx, userID); err == nil && spent {
 		return errPairRoomTrafficSpent
 	}
 	if remaining, err := s.remainingDailyQuota(ctx, userID); err == nil && remaining <= 0 {
@@ -579,9 +610,37 @@ func (s *Service) pairRoomStillOpen(ctx context.Context, roomID string) (PairRoo
 // window where a room ends between the two with nothing at all to notice. A
 // deadline move that is merely redundant succeeds silently; a room that is over
 // comes back as ErrPairRoomClosed.
+//
+// THE CODE IS SYNCED TO THE TRANSACTION'S OWN ANSWER, never to a projection off
+// `room`. That distinction is the whole reason TouchPairRoomUpload returns
+// anything (PairRoomTouch). `room` is a snapshot this caller read in an earlier
+// statement, and pairRoomProgressJoinDeadline — the projection that used to
+// stand here — answers "where would a room with this snapshot land", which is a
+// different question from "where is this room" in two reachable ways. A sibling
+// append can move the row after the snapshot was taken; and a room somebody has
+// JOINED has no join deadline at all, while the projection computes one anyway
+// from created/last_upload and buys the registry another window of six digits
+// for a rendezvous that is already full. The touch's write is a no-op in that
+// second case (a joined room's expires_at is pairRoomNoDeadline, so the
+// monotonic UPDATE matches nothing) — so the code moved on the strength of a
+// database write that never happened.
+//
+// THE HANDOFF IS STILL TWO STEPS, and no distributed transaction closes it. The
+// room lives in the database and the code lives in the signaling layer's memory;
+// the extension therefore happens AFTER the commit, deliberately, so a credential
+// can never claim a window the room does not hold. What can still be lost is the
+// other order: the transaction commits and the process dies before the registry
+// is moved, leaving a code SHORTER than its room. That failure is the safe one
+// (the ciphertext outlives the credential rather than the reverse, and the code
+// is in that same process's memory, so it dies with it), and it is bounded by the
+// same fact invariant 4 already rests on — the registry is per-process, so
+// "the code" and "the process that could have extended it" are the same thing.
 func (s *Service) notePairRoomUpload(ctx context.Context, room PairRoom, at int64) error {
+	var touch PairRoomTouch
 	if err := retryStore(func() error {
-		return s.store.TouchPairRoomUpload(ctx, room.ID, at, pairRoomProgressExpiry(room, at))
+		var terr error
+		touch, terr = s.store.TouchPairRoomUpload(ctx, room.ID, at, pairRoomProgressExpiry(room, at))
+		return terr
 	}); err != nil {
 		return err
 	}
@@ -589,7 +648,7 @@ func (s *Service) notePairRoomUpload(ctx context.Context, room PairRoom, at int6
 	// five minutes begin — for the ciphertext AND for the code that reaches it.
 	// After the database, never before: the code may not claim a deadline the
 	// room does not have.
-	s.syncPairCode(room, at)
+	s.syncPairCodeTo(room, touch.CodeDeadline)
 	return nil
 }
 

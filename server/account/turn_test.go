@@ -265,6 +265,103 @@ func TestICEUnderPlanCapIncludesTurn(t *testing.T) {
 	}
 }
 
+// The exhaustion boundary, to the byte, on the relay half of the same allowance
+// the pre-mint gate reads. These two cases are one byte apart and this gate has
+// to disagree about them: the product says a spent monthly allowance closes BOTH
+// cross-network paths, and "spent" has to include exactly zero left, or a code
+// minted at the boundary (which pairMintRefusal refuses) would still be handed a
+// relay credential for an account with nothing left to spend on it.
+//
+// This is the case `overTraffic(…, 0)` used to get wrong here: that helper asks
+// `add > remaining`, which with add == 0 and remaining == 0 answers "it fits".
+func TestICEWithholdsTURNAtExactlyThePlanTrafficCap(t *testing.T) {
+	ts, svc, store := newICEServer(t, "secret")
+	ctx := context.Background()
+	owner := verifiedOwner(t, store, "owner1@example.com")
+	svc.SetPairCodeOwner(ownerResolver(owner, "424242"))
+
+	now := svc.now().Unix()
+	// Cap and usage are the same number: remaining is exactly 0, not negative.
+	if err := store.UpsertPlan(ctx, Plan{
+		ID: "free", Name: "Free", StorageBytes: 1 << 30, TrafficBytes: 500,
+		RetentionSecs: 86400, Active: true, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("UpsertPlan: %v", err)
+	}
+	if err := store.RecordUsage(ctx, UsageEvent{
+		AllocID: "z", Token: "424242", UserID: owner, RelayedBytes: 500, RecordedAt: now, Billable: true,
+	}); err != nil {
+		t.Fatalf("RecordUsage: %v", err)
+	}
+	if rem, unlimited, err := svc.remainingTraffic(ctx, owner); err != nil || unlimited || rem != 0 {
+		t.Fatalf("the owner is not actually sitting on exactly the cap (remaining=%d unlimited=%v err=%v)", rem, unlimited, err)
+	}
+
+	resp, err := ts.Client().Get(ts.URL + "/api/ice?code=424242")
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("get: err=%v status=%v", err, resp.StatusCode)
+	}
+	var out struct {
+		ICEServers  []ICEServer `json:"iceServers"`
+		RelayDenied string      `json:"relayDenied"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if hasTURN(out.ICEServers) {
+		t.Fatalf("expected STUN-only with exactly zero allowance left, got %+v", out.ICEServers)
+	}
+	if len(out.ICEServers) == 0 {
+		t.Fatalf("STUN must still be offered when relay is withheld")
+	}
+	if out.RelayDenied != "quota" {
+		t.Fatalf("relayDenied = %q at exactly the cap, want %q", out.RelayDenied, "quota")
+	}
+}
+
+// One byte below the cap is not spent, and the account keeps its relay. A gate
+// that rounded this off would strand hard-NAT transfers that can still complete.
+func TestICEOneByteBelowThePlanTrafficCapIncludesTurn(t *testing.T) {
+	ts, svc, store := newICEServer(t, "secret")
+	ctx := context.Background()
+	owner := verifiedOwner(t, store, "owner1@example.com")
+	svc.SetPairCodeOwner(ownerResolver(owner, "424242"))
+
+	now := svc.now().Unix()
+	if err := store.UpsertPlan(ctx, Plan{
+		ID: "free", Name: "Free", StorageBytes: 1 << 30, TrafficBytes: 501,
+		RetentionSecs: 86400, Active: true, UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("UpsertPlan: %v", err)
+	}
+	if err := store.RecordUsage(ctx, UsageEvent{
+		AllocID: "z", Token: "424242", UserID: owner, RelayedBytes: 500, RecordedAt: now, Billable: true,
+	}); err != nil {
+		t.Fatalf("RecordUsage: %v", err)
+	}
+	if rem, _, err := svc.remainingTraffic(ctx, owner); err != nil || rem != 1 {
+		t.Fatalf("the owner is not actually one byte below the cap (remaining=%d err=%v)", rem, err)
+	}
+
+	resp, err := ts.Client().Get(ts.URL + "/api/ice?code=424242")
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("get: err=%v status=%v", err, resp.StatusCode)
+	}
+	var out struct {
+		ICEServers  []ICEServer `json:"iceServers"`
+		RelayDenied string      `json:"relayDenied"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !hasTURN(out.ICEServers) {
+		t.Fatalf("expected TURN with one byte of allowance left, got %+v", out.ICEServers)
+	}
+	if out.RelayDenied != "" {
+		t.Fatalf("relayDenied = %q one byte below the cap, want it absent", out.RelayDenied)
+	}
+}
+
 func TestICEUnverifiedOwnerDeniedRelay(t *testing.T) {
 	ts, svc, store := newICEServer(t, "secret")
 	u, err := store.UpsertUserByEmail(context.Background(), "unv@example.com", "U")

@@ -907,10 +907,13 @@ func withRoomDeadline(body map[string]any, deadline int64) map[string]any {
 // not refuse — those belong to the append.
 //
 // 0 for every case that must say NOTHING rather than something reassuring: no
-// room, a room that cannot be read, and above all a room that is no longer live.
-// A join deadline in the future computed from a room whose bytes are already
-// gone is an invitation to a rendezvous the server has emptied, and a read is
-// not the thing that gets to declare that either way — the append's own 410 is.
+// room, a room that cannot be read, a room that is no longer live, and a room
+// somebody has already JOINED. A join deadline in the future computed from a
+// room whose bytes are already gone is an invitation to a rendezvous the server
+// has emptied, and a read is not the thing that gets to declare that either way
+// — the append's own 410 is. A join deadline for a joined room is an instant at
+// which nobody may still join: not a window, and not a number the code registry
+// holds (pairRoomCodeDeadline).
 func (s *Service) persistedRoomJoinDeadline(ctx context.Context, roomID string) int64 {
 	if roomID == "" {
 		return 0
@@ -919,7 +922,7 @@ func (s *Service) persistedRoomJoinDeadline(ctx context.Context, roomID string) 
 	if err != nil || !found || !pairRoomLive(room, s.now().Unix()) {
 		return 0
 	}
-	return pairRoomJoinDeadline(room)
+	return pairRoomCodeDeadline(room)
 }
 
 // commitUploadProgress records one committed append: the offset the blob now
@@ -1315,6 +1318,10 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 		// do unconditionally, and it is what stops the registry from lagging behind
 		// bytes some other request already paid for. syncPairCodeTo, never
 		// syncPairCode: nothing is projected from a snapshot here.
+		//
+		// "At most the deadline the room holds" includes NONE of it: if the peer
+		// joined while this finalize ran, the insert's transaction answers 0 and
+		// this moves nothing (pairRoomCodeDeadline).
 		s.syncPairCodeTo(pairRoom, persisted.RoomJoinDeadline)
 	}
 	// Lifetime stats are whole-object on purpose, and are NOT the meter: they

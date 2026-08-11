@@ -119,13 +119,16 @@ func (s *Service) handleICE(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Per-plan traffic gate: withhold TURN when the code's owner is already over
-	// their plan's monthly traffic (relay + staged upload/download combined).
-	// P2P direct still works; only relay is withheld. Fail-open on a read error.
+	// Per-plan traffic gate: withhold TURN once the code's owner's monthly
+	// traffic allowance (relay + staged upload/download combined) is spent —
+	// including at exactly zero left, which is the same boundary the pre-mint
+	// gate refuses at, so a code that could not be minted cannot be relayed
+	// either. P2P direct still works; only relay is withheld. Fail-open on a
+	// read error.
 	if validCode {
-		if over, err := s.overTraffic(r.Context(), owner, 0); err != nil {
+		if spent, err := s.trafficAllowanceSpent(r.Context(), owner); err != nil {
 			log.Printf("relay quota read failed for owner %s: %v (fail-open, issuing relay)", owner, err)
-		} else if over {
+		} else if spent {
 			validCode = false
 			relayDenied = "quota"
 		}

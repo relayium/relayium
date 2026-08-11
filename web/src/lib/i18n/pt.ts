@@ -853,6 +853,8 @@ const pt: Messages = {
     ttlUnknown: "não foi possível confirmar a validade do código de emparelhamento",
     ttlUnknownNote: "O envio parou antes que o servidor confirmasse por quanto tempo este código continua válido. Peça para o outro dispositivo tentar o código — se não funcionar, crie um novo código de emparelhamento.",
     expired: "Código de emparelhamento expirado — gere um novo",
+    trafficBlocked: "Você usou todo o volume deste mês para transferências entre redes, então agora não dá para enviar pela Internet. Faça upgrade para continuar enviando entre redes, ou envie pela sua rede local, que não consome nada desse volume.",
+    trafficBlockedLan: "Enviar pela rede local",
     copy: "Copiar",
     copied: "Copiado",
     copyLink: "Copiar link",

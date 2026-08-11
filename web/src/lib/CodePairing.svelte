@@ -2,7 +2,8 @@
 <script lang="ts">
   import { CODE_LEN, isValidCode, normalizeCode } from "./pair-code";
   import { copyFeedback } from "./clipboard.svelte";
-  import { createPair, CROSS_PATH, HttpError } from "./transfer-link";
+  import { createPair, CROSS_PATH, HttpError, pairPreflight, PAIR_TRAFFIC_SPENT, type PairPreflight } from "./transfer-link";
+  import { navigate } from "./router.svelte";
   import { canShare, share } from "./share";
   import { enterRoom } from "./room.svelte";
   import { messages, lang, type Messages } from "./i18n.svelte";
@@ -183,6 +184,83 @@
     return () => holdPreupload(mounted);
   });
 
+  // ── B3: may this account be handed a code at all? ─────────────────────────
+  //
+  // With this month's COMBINED traffic allowance spent, both cross-network paths
+  // are closed — the live relay and the stored one are metered by the same meter
+  // (server/account/pairmint.go) — so six digits would name a rendezvous this
+  // account cannot complete. The server refuses to mint; this asks it in advance
+  // so the screen can stop offering the action instead of failing after a click.
+  //
+  // ADVISORY, in three ways that all matter:
+  //   - it fails open (pairPreflight resolves allowed on every error), so one
+  //     network blip is never why somebody cannot start a transfer;
+  //   - it can be stale by the time the button is clicked, which is why the POST
+  //     re-asks and is the gate that decides (see send's catch);
+  //   - it is not asked at all for an anonymous visitor, who has no account for
+  //     it to be about.
+  //
+  // `blockedReason` is only ever set to a refusal this component has copy for.
+  // A reason from a newer server it cannot explain is left to the POST, which
+  // will refuse again — better a wasted click than a screen inventing a reason.
+  let blockedReason = $state("");
+  const trafficBlocked = $derived(blockedReason === PAIR_TRAFFIC_SPENT);
+
+  // The answer already in flight, so a click that beats it waits for THAT
+  // request rather than firing a second one.
+  let preflightInFlight: Promise<PairPreflight> | null = null;
+  // Every request is stamped with the generation it was made in, and a stamp
+  // that no longer matches is dropped. One counter covers all four ways the
+  // screen an answer is about can stop being the screen in front of the user —
+  // the account changed or signed out, this instance entered a room, it moved to
+  // code entry, or it was torn down — because each of them either re-runs the
+  // effect below (bumping the counter) or runs its teardown (bumping it too).
+  //
+  // It stamps BOTH requests this component makes. The preflight is advisory and a
+  // stale one merely paints a wrong screen; the mint POST is authoritative and a
+  // stale one would enter a room, so if anything the counter matters more there.
+  let preflightGen = 0;
+
+  // The account, as a VALUE rather than as a signal. $derived republishes only
+  // when its result changes, so a session refresh that hands back the same
+  // account (a fresh object, same id) is not a change — read straight out of
+  // `session()` inside the effect, every such refresh would bump the generation
+  // and throw away a mint that was still perfectly about this account.
+  const mintAccount = $derived(session().user?.id ?? "");
+
+  $effect(() => {
+    const uid = mintAccount;
+    const room = roomCode;
+    const at = mode;
+    const mine = ++preflightGen;
+    // A fresh question means no verdict yet — including for an account that has
+    // just replaced a blocked one.
+    blockedReason = "";
+    preflightInFlight = null;
+    // Returned on EVERY path, including the ones that ask nothing. A mint POST
+    // can be in flight from inside a room (the re-mint buttons) or from a screen
+    // that asks no preflight at all, and for those the teardown is the only
+    // thing that can tell the continuation this component is gone.
+    const done = () => { preflightGen++; };
+    if (!uid || room || at !== "choose") return done;
+    const answer = pairPreflight();
+    preflightInFlight = answer;
+    void answer.then((verdict) => {
+      if (mine !== preflightGen) return; // about a screen that no longer exists
+      preflightInFlight = null;
+      if (!verdict.allowed && verdict.reason === PAIR_TRAFFIC_SPENT) blockedReason = verdict.reason;
+    });
+    return done;
+  });
+
+  // How long a click waits for an answer that has not arrived. Bounded because
+  // "the preflight never came back" must not be a button that does nothing; on
+  // the cap this falls through to the POST, which is the authority anyway.
+  const PREFLIGHT_CLICK_WAIT_MS = 1500;
+  const preflightWaitCap = (): Promise<PairPreflight> =>
+    new Promise((resolve) =>
+      setTimeout(() => resolve({ allowed: true, reason: "" }), PREFLIGHT_CLICK_WAIT_MS));
+
   // Drag state is local to the staging box, so the highlight cannot outlive the
   // branch that renders it.
   let dragOver = $state(false);
@@ -215,9 +293,48 @@
   }
 
   async function send() {
-    busy = true; err = "";
+    // Cleared with `err`, and for the same reason: this attempt has not been
+    // refused yet. It matters for the re-mint buttons inside a room, which are
+    // the one place this action is reachable while a previous refusal is still
+    // on screen.
+    busy = true; err = ""; blockedReason = "";
+    // The screen this click belongs to, captured before the first await. Both
+    // awaits below can outlive it: the nav's sign-out does not unmount this
+    // component, a join link or a second mint can put a room on screen, the user
+    // can switch to code entry, and the whole card can be torn down. Whatever
+    // comes back after any of that is an answer about a screen that is gone.
+    const mine = preflightGen;
+    // Clicked before the advisory answer arrived. Wait for the request already
+    // running rather than minting something the screen is about to say is
+    // impossible — bounded, and falling through on the cap.
+    if (preflightInFlight) {
+      const verdict = await Promise.race([preflightInFlight, preflightWaitCap()]);
+      // The account or the screen moved while this was awaited; whatever this
+      // answer says, it is not about the thing in front of the user now.
+      if (mine !== preflightGen) { busy = false; return; }
+      if (!verdict.allowed && verdict.reason === PAIR_TRAFFIC_SPENT) {
+        busy = false;
+        blockedReason = verdict.reason;
+        return;
+      }
+    }
     try {
       const { code, expiresAt } = await createPair();
+      // If the screen moved, the mint still SUCCEEDED and cannot be unminted:
+      // the code exists on the server and is left to expire on its own, which
+      // costs nothing — a code buys no bytes, and nobody was ever shown it. What
+      // must not happen is that answer landing on the screen that replaced the
+      // one it was asked from, and all three lines below would do exactly that:
+      //   - EXP_KEY is the mint marker the whole card reads. Writing it hands
+      //     the room now on screen a countdown from a different code, and marks
+      //     a device that only ever JOINED as the minter for the rest of the tab.
+      //   - resetPreupload aborts the upload the current room has in flight and
+      //     drops its notice — work this click never staged and is not about.
+      //   - enterRoom yanks the user out of wherever they now are (a room, code
+      //     entry, a signed-out screen) into a room they did not ask for.
+      // `busy` is released, though: on an account change this instance stays
+      // mounted, and a stuck `busy` is a permanently disabled mint button.
+      if (mine !== preflightGen) { busy = false; return; }
       sessionStorage.setItem(EXP_KEY, String(expiresAt));
       // A fresh code is a fresh room. Anything still uploading belongs to the
       // old one — its ciphertext is bound to a room the new code cannot reach,
@@ -228,6 +345,26 @@
       enterRoom({ code }); // rebinds the socket to the code room without reloading
     } catch (e) {
       busy = false;
+      // The same boundary, the other outcome. A refusal is earned by ONE account
+      // in ONE state, and every branch below acts on the screen as it is now: a
+      // quota block would stop an account that has allowance left, clearOutbox
+      // would throw away a batch staged after this click, requireLogin would pop
+      // the panel over a session that is fine, and `err` would put a red line on
+      // a room that minted nothing. Dropped whole, exactly like the success.
+      if (mine !== preflightGen) return;
+      // The authoritative answer to the same question the preflight asked, and
+      // the one that decides: the allowance can be spent between the advisory
+      // answer and this click. It lands on the SAME surface — a screen that said
+      // "couldn't create a code, check your connection" here would be blaming
+      // the network for a billing limit.
+      //
+      // And it does NOT drop the staged batch. Nothing about it failed: those
+      // files are the user's work, they are still sendable over the local
+      // network, and the block below offers exactly that route.
+      if (e instanceof HttpError && e.reason === PAIR_TRAFFIC_SPENT) {
+        blockedReason = e.reason;
+        return;
+      }
       // Only the choose state (roomCode "") drops the queue: a roomless stale queue
       // could surprise-send later (Fix-1's room-exit clearing never fires because no
       // room was entered). In the timedOut state the user is still in the room
@@ -414,11 +551,18 @@
          in the waiting branch above, beside the code there is to pass on.
          No file input belongs here: one would rebuild the old ordering right
          next to the button that replaced it. Entering someone else's code stays,
-         and is the only way in for a receiver who was read six digits. -->
+         and is the only way in for a receiver who was read six digits.
+         When the allowance is spent, the MINT action is the only thing that
+         goes: entering someone else's code is billed to whoever minted it, so a
+         spent account can still receive. The explanation and its two ways out
+         are rendered once, below, so a refusal that arrives while a room is on
+         screen reads the same as one that arrives here. -->
     <div class="choices">
-      <button class="btn btn-primary create-code" disabled={busy} onclick={send}>
-        <Icon name="bolt" size={18} /> {busy ? t.generating : t.pair.sendCode}
-      </button>
+      {#if !trafficBlocked}
+        <button class="btn btn-primary create-code" disabled={busy} onclick={send}>
+          <Icon name="bolt" size={18} /> {busy ? t.generating : t.pair.sendCode}
+        </button>
+      {/if}
       <button class="btn btn-ghost" onclick={() => (mode = "receive")}>{t.pair.enterCode}</button>
     </div>
   {:else}
@@ -433,6 +577,23 @@
        almost always lands after this card has already flipped to its expired
        state — and that is exactly the moment the user needs to be told that the
        upload bought nothing and their files are still here. -->
+  <!-- The blocked surface, outside every branch for the same reason the
+       preupload notice is: the authoritative refusal can arrive from a re-mint
+       inside a lapsed room, not only from the choose screen, and it must read
+       the same either way.
+       Two ways out and no third: upgrading buys allowance back, and the local
+       network moves no bytes through Relayium so it is unaffected. The
+       stored/async path is deliberately NOT offered — it draws on this very
+       allowance, so pointing at it would be a second refusal. -->
+  {#if trafficBlocked}
+    <div class="blocked" role="status">
+      <p class="traffic-blocked">{t.pair.trafficBlocked}</p>
+      <div class="row wrap">
+        <button class="btn btn-primary upgrade-plan" onclick={() => navigate("pricing")}>{t.quota.upgrade}</button>
+        <button class="btn btn-ghost lan-fallback" onclick={() => navigate("lan")}>{t.pair.trafficBlockedLan}</button>
+      </div>
+    </div>
+  {/if}
   {#if preuploadNotice() === "expired"}<p class="preupload-expired">{t.pair.preuploadExpired}</p>{/if}
   {#if err}<p class="error">{err}</p>{/if}
 </section>
@@ -517,6 +678,20 @@
     background: var(--bg); color: var(--text-h); font-variant-numeric: tabular-nums;
   }
   .error { color: var(--danger); font-size: var(--fs-xs); margin: 0; }
+  /* Not `.error`, and deliberately the same surface treatment as the other
+     "nothing you did went wrong, here is what to do" panels on this card: a
+     spent allowance is a state of the account, not a failure of the request. */
+  .blocked {
+    display: flex; flex-direction: column; align-items: center; gap: var(--space-2);
+    inline-size: 100%; max-inline-size: 30rem;
+    padding: var(--space-3);
+    border: 1px solid var(--accent-border); border-radius: var(--radius-sm);
+    background: var(--code-bg);
+  }
+  .traffic-blocked {
+    margin: 0; font-size: var(--fs-sm); line-height: 1.5; color: var(--text-h);
+    text-align: center; max-width: 40ch;
+  }
   .quota-warn {
     margin: 0; font-size: var(--fs-xs); line-height: 1.5; text-align: center; max-width: 34ch;
     color: var(--text-h);

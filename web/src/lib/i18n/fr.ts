@@ -854,6 +854,8 @@ const fr: Messages = {
     ttlUnknown: "impossible de confirmer la validité du code d'appairage",
     ttlUnknownNote: "L'envoi s'est interrompu avant que le serveur ait pu confirmer combien de temps ce code reste utilisable. Faites essayer le code sur l'autre appareil — s'il ne fonctionne pas, créez un nouveau code d'appairage.",
     expired: "Code d'appairage expiré — générez-en un nouveau",
+    trafficBlocked: "Vous avez épuisé le volume de ce mois-ci pour les transferts entre réseaux : impossible de passer par Internet pour l'instant. Passez à une offre supérieure pour continuer entre réseaux, ou envoyez via votre réseau local, qui ne consomme pas ce volume.",
+    trafficBlockedLan: "Envoyer via le réseau local",
     copy: "Copier",
     copied: "Copié",
     copyLink: "Copier le lien",

@@ -251,10 +251,10 @@ func (r *racingStore) GetPairRoom(ctx context.Context, id string) (PairRoom, boo
 	return room, found, err
 }
 
-func (r *racingStore) TouchPairRoomUpload(ctx context.Context, id string, at, expiresAt int64) error {
-	err := r.Store.TouchPairRoomUpload(ctx, id, at, expiresAt)
+func (r *racingStore) TouchPairRoomUpload(ctx context.Context, id string, at, expiresAt int64) (PairRoomTouch, error) {
+	touch, err := r.Store.TouchPairRoomUpload(ctx, id, at, expiresAt)
 	if err != nil {
-		return err
+		return touch, err
 	}
 	r.mu.Lock()
 	r.touches++
@@ -263,7 +263,7 @@ func (r *racingStore) TouchPairRoomUpload(ctx context.Context, id string, at, ex
 	if fire {
 		r.onTouch() // after this request's own move, before whatever it writes next
 	}
-	return nil
+	return touch, nil
 }
 
 // withRacingStore puts a racingStore in front of the harness's service.
@@ -286,7 +286,7 @@ func (h *pairHarness) advanceRoomFromAnotherRequest(t *testing.T, code string, s
 	if err != nil || !found {
 		t.Fatalf("resolve room for %s: found=%v err=%v", code, found, err)
 	}
-	if err := h.store.TouchPairRoomUpload(ctx, room.ID, h.now, pairRoomProgressExpiry(room, h.now)); err != nil {
+	if _, err := h.store.TouchPairRoomUpload(ctx, room.ID, h.now, pairRoomProgressExpiry(room, h.now)); err != nil {
 		t.Fatalf("sibling touch: %v", err)
 	}
 	h.svc.syncPairCode(room, h.now)

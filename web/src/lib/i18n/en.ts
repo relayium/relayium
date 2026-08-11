@@ -864,6 +864,8 @@ const en: Messages = {
     ttlUnknown: "pairing code availability could not be confirmed",
     ttlUnknownNote: "The upload stopped before the server could confirm how long this code stays joinable. Have the other device try it — if it does not work, create a new pairing code.",
     expired: "Pairing code expired — generate a new one",
+    trafficBlocked: "You've used all of this month's cross-network allowance, so Relayium can't carry this transfer over the internet right now. Upgrade to keep sending between networks — or send over your local network, which doesn't use the allowance at all.",
+    trafficBlockedLan: "Send over the local network",
     copy: "Copy",
     copied: "Copied",
     copyLink: "Copy link",

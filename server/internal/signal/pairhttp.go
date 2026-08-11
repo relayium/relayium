@@ -79,13 +79,36 @@ func (rl *RateLimiter) Run(ctx context.Context, interval time.Duration) {
 	}
 }
 
+// PairAdmission decides whether the account this request resolved to may be
+// handed a pairing code AT ALL, as opposed to how fast it may ask for one.
+//
+// It answers "" to admit, or a STABLE MACHINE-READABLE refusal code the client
+// branches on — never prose. The client has to tell this refusal apart from the
+// IP rate limiter's, which shares its status: one means "this account cannot use
+// the rendezvous it is asking for" and leads to an upgrade/LAN screen, the other
+// means "slow down" and leads to a retry.
+//
+// Injected, like currentUser above and for the same reason: the question is an
+// account-layer one (is this owner's monthly cross-network allowance spent?) and
+// this package must not learn how to ask it. The dependency runs account →
+// signal, never back.
+type PairAdmission func(r *http.Request, userID string) string
+
 // PairHandler mints a pairing code for a logged-in user. currentUser resolves the
 // request's owner (injected so this package need not depend on the account layer);
 // an anonymous request is rejected with 401 — cross-network rendezvous requires an
 // owning account, while the receiver still joins the code room anonymously. The
 // IPExtractor determines the rate-limit key (see IPExtractor for the
 // X-Forwarded-For policy).
-func PairHandler(reg *PairRegistry, rl *RateLimiter, ipx *IPExtractor, currentUser func(*http.Request) (string, bool)) http.HandlerFunc {
+//
+// `admit` is the pre-mint admission gate (B3). Nil means no gate at all, which is
+// the old behaviour exactly. It runs AFTER the login check — so it is never asked
+// about an anonymous "" — and IMMEDIATELY BEFORE MintFor, with nothing in
+// between, because this is the authoritative answer: a client-side preflight can
+// be stale by the time the button is clicked, and a CLI or bearer client never
+// asks one. A refusal allocates nothing; a code taken out of a 10^6 space and
+// handed to nobody collides with real mints for its whole TTL.
+func PairHandler(reg *PairRegistry, rl *RateLimiter, ipx *IPExtractor, currentUser func(*http.Request) (string, bool), admit PairAdmission) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ip := ipx.IP(r)
 		if !rl.Allow(ip) {
@@ -96,6 +119,16 @@ func PairHandler(reg *PairRegistry, rl *RateLimiter, ipx *IPExtractor, currentUs
 		if !ok {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
+		}
+		// Ordered after the limiter on purpose: a guessing or retry flood must not
+		// turn into a flood of quota reads against the database.
+		if admit != nil {
+			if reason := admit(r, userID); reason != "" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusTooManyRequests)
+				_ = json.NewEncoder(w).Encode(map[string]any{"error": reason})
+				return
+			}
 		}
 		code, exp := reg.MintFor(userID)
 		if code == "" {

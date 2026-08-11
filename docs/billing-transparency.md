@@ -78,13 +78,14 @@ ICE/TURN credentials for a pairing-code transfer. It:
    An invalid or expired code gets STUN-only servers — no TURN credential, so
    no relay is even possible.
 2. Refuses to mint a TURN credential if the owner's email isn't verified
-   (`account/turn.go:101-106`, the "Sybil dampener" comment) or if the owner
-   is already over their plan's monthly traffic (`account/turn.go:111-118`,
-   calling `s.overTraffic` from `account/plan_enforce.go:139`). P2P direct
-   still works in both cases; only relay is withheld.
+   (`account/turn.go:112-120`, the "Sybil dampener" comment) or if the owner's
+   monthly traffic allowance is already spent (`account/turn.go:122-135`,
+   calling `s.trafficAllowanceSpent` from `account/plan_enforce.go:157`, which
+   treats exactly zero remaining as spent). P2P direct still works in both
+   cases; only relay is withheld.
 3. Embeds the owner's user ID and the pairing code into the TURN username as
-   `<expiry>:<userID>.<code>` (`account/turn.go:122`, `turnCredentials` at
-   `account/turn.go:273`) — this is the only mechanism that ties relay bytes
+   `<expiry>:<userID>.<code>` (`account/turn.go:139`, `turnCredentials` at
+   `account/turn.go:276`) — this is the only mechanism that ties relay bytes
    back to an account.
 
 **Ingesting what was actually relayed** is a separate, one-way pipeline:
@@ -120,7 +121,7 @@ caps a relay transfer would (`account/plan_enforce.go:53-68`,
 `currentMonthTraffic` sums `usage_monthly` — stored upload/download — plus
 billable `usage_events` — relay). An own-node (BYO) upload skips this
 entirely: `persistStoredFile(ctx, f, enforceCaps=false)`
-(`account/plan_enforce.go:223`) writes straight to the store with no cap
+(`account/plan_enforce.go:264`) writes straight to the store with no cap
 check, because it lands on the user's own disk, never central's.
 
 ## What is recorded, table by table
@@ -242,7 +243,7 @@ list, and it can change.)
 
 The dimensions actually checked, each fail-closed at write time:
 
-- **Daily upload quota** — a rolling 24-hour window (`account/plan_enforce.go:186`,
+- **Daily upload quota** — a rolling 24-hour window (`account/plan_enforce.go:217`,
   `remainingDailyQuota`), reserved atomically per upload
   (`account/sqlite.go:3814`, `ReserveUpload`) so concurrent uploads can't
   race past it. A near-empty file still debits a 64 KiB floor
@@ -255,21 +256,21 @@ The dimensions actually checked, each fail-closed at write time:
   mid-month plan change into segments rather than granting a full month's
   cap on every upgrade. Exceeding it: `429` "monthly traffic limit reached"
   on upload (`account/files.go:195`), and TURN credential issuance is
-  withheld for relay (`account/turn.go:111-118`).
+  withheld for relay (`account/turn.go:122-135`).
 - **Storage cap** (how much can be live at once, not how much has moved) —
-  `overStorage` (`account/plan_enforce.go:170`) against the plan's
+  `overStorage` (`account/plan_enforce.go:201`) against the plan's
   `StorageBytes`, enforced atomically at persist time in
   `CreateStoredFileWithinStorageCaps` so concurrent uploads can't collectively
-  bust it (`account/plan_enforce.go:223-240`, `persistStoredFile`).
+  bust it (`account/plan_enforce.go:264-277`, `persistStoredFile`).
   Exceeding it: `413` "storage limit reached."
 - **Global disk cap** — a deployment-wide ceiling across all users
-  (`SettingStorageDiskCap`, `account/plan_enforce.go:198-210`), independent
+  (`SettingStorageDiskCap`, `account/plan_enforce.go:229-241`), independent
   of any one plan. Exceeding it: `507` "server storage is full."
 - **Retention (TTL) and download-count limits** — every stored file gets an
   expiry and/or a max-download count resolved from the request plus admin
   defaults (`account/settings.go:132-167`, `resolveRetention`/`clampTTL`),
   further capped by the owner's plan retention ceiling if lower
-  (`account/plan_enforce.go:273`, `planRetentionCap`). A file is deleted —
+  (`account/plan_enforce.go:310`, `planRetentionCap`). A file is deleted —
   ciphertext and row both — once either limit is hit; see
   [Retention](#retention-how-long-anything-is-kept).
 

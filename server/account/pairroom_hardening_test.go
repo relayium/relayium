@@ -141,9 +141,9 @@ func (f *flakyStore) JoinPairRoom(ctx context.Context, id string, at, expiresAt 
 	return f.Store.JoinPairRoom(ctx, id, at, expiresAt)
 }
 
-func (f *flakyStore) TouchPairRoomUpload(ctx context.Context, id string, at, expiresAt int64) error {
+func (f *flakyStore) TouchPairRoomUpload(ctx context.Context, id string, at, expiresAt int64) (PairRoomTouch, error) {
 	if f.shouldFail("TouchPairRoomUpload") {
-		return errInjected
+		return PairRoomTouch{}, errInjected
 	}
 	return f.Store.TouchPairRoomUpload(ctx, id, at, expiresAt)
 }
@@ -247,6 +247,45 @@ func TestNoRoomIsCreatedForAnAccountAlreadyOverQuota(t *testing.T) {
 			}
 			if n := h.openRooms(t, "242424"); n != 0 {
 				t.Fatalf("%d room(s) created for an account known to be over quota", n)
+			}
+		})
+	}
+}
+
+// The exhaustion boundary, at the room gate. Exactly zero left is spent here for
+// the same reason it is spent at the mint: the room's whole purpose is to hold
+// ciphertext that will be uploaded and downloaded, and both of those bytes draw
+// on this allowance, so an account with nothing left cannot use the room it would
+// be given. One byte below is a different answer, and the ordinary
+// over-the-limit case above stays exactly as it was.
+func TestNoRoomIsCreatedWhenTheTrafficAllowanceIsExactlySpent(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		spend int64
+		want  int
+		rooms int
+	}{
+		{name: "exactly at the cap", spend: 1000, want: 429, rooms: 0},
+		{name: "one byte below the cap", spend: 999, want: 200, rooms: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newPairHarness(t)
+			h.setPlan(t, Plan{ID: "tight-traffic", Name: "Tight", StorageBytes: 1 << 30,
+				TrafficBytes: 1000, RetentionSecs: 3600, DailyQuotaBytes: 1 << 30})
+			if err := h.store.RecordMeter(context.Background(), h.userID, MeterUpload, tc.spend, h.now); err != nil {
+				t.Fatalf("record traffic: %v", err)
+			}
+			if rem, unlimited, err := h.svc.remainingTraffic(context.Background(), h.userID); err != nil || unlimited || rem != 1000-tc.spend {
+				t.Fatalf("the account is not where this case needs it (remaining=%d unlimited=%v err=%v)", rem, unlimited, err)
+			}
+			h.mintCode("272727", "")
+
+			// size=0, so the declared-size pre-check cannot be what decides this.
+			if status, _, _ := h.initPairUpload(t, "272727", 0, ""); status != tc.want {
+				t.Fatalf("init with %d bytes spent of 1000: %d, want %d", tc.spend, status, tc.want)
+			}
+			if n := h.openRooms(t, "272727"); n != tc.rooms {
+				t.Fatalf("open rooms = %d, want %d", n, tc.rooms)
 			}
 		})
 	}

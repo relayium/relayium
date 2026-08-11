@@ -134,8 +134,39 @@ func (s *Service) remainingTraffic(ctx context.Context, userID string) (remainin
 	return cap - used, false, nil
 }
 
+// trafficAllowanceSpent answers the STATE question: is userID's effective
+// monthly combined traffic allowance gone right now? Unlimited plans are never
+// spent; anything else is spent once nothing is left, INCLUDING exactly zero.
+//
+// It is a different question from overTraffic, which is a FIT check — "will
+// `add` more bytes go through" — and answers `add > remaining`. With add == 0
+// those two disagree at exactly one point, remaining == 0, where the fit check
+// says yes (a zero-byte write does fit in zero bytes) and this says spent. That
+// point is not academic: it is where the meter lands when a transfer ends
+// exactly on the cap, and it is what the product tells the user is "gone".
+//
+// Use this one for every gate whose question is "does this account still have a
+// cross-network path at all" — the pre-mint refusal, the TURN credential gate,
+// the room-admission traffic leg — so the answer the user is shown and the
+// answer each gate enforces cannot differ by a byte. Use overTraffic where a
+// real byte count is being weighed (upload init, finalize, download).
+//
+// Errors come back to the caller untouched. Every caller of this fails OPEN, and
+// each does so in its own words (a log line here, a 200 there), so this must not
+// decide that for them by folding a read error into `false`.
+func (s *Service) trafficAllowanceSpent(ctx context.Context, userID string) (bool, error) {
+	remaining, unlimited, err := s.remainingTraffic(ctx, userID)
+	if err != nil || unlimited {
+		return false, err
+	}
+	return remaining <= 0, nil
+}
+
 // overTraffic reports whether userID's month-to-date traffic plus add exceeds
 // their monthly traffic allowance. A non-positive cap means "unlimited".
+//
+// This is the fit check, and its `add > remaining` contract is unchanged: a gate
+// asking whether an allowance is SPENT wants trafficAllowanceSpent instead.
 func (s *Service) overTraffic(ctx context.Context, userID string, add int64) (bool, error) {
 	remaining, unlimited, err := s.remainingTraffic(ctx, userID)
 	if err != nil {

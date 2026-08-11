@@ -525,7 +525,15 @@ func main() {
 		// cross-network rendezvous code needs an account for attribution. The
 		// owner may authenticate with a session cookie (web) or a CLI bearer
 		// token — pairUser accepts either.
-		mux.Handle("POST /api/pair", acct.CSRFGuard(signal.PairHandler(pairReg, pairLimiter, ipx, pairUser(acct))))
+		//
+		// acct.PairMintRefusal is B3's gate (server/account/pairmint.go): an owner
+		// whose monthly combined traffic allowance is spent gets no code, because
+		// with that meter empty BOTH cross-network paths are closed to them and the
+		// digits would name a rendezvous they cannot complete. It runs here rather
+		// than only on the choose screen because this is the authoritative place —
+		// the Web preflight can be stale by the time the button is clicked, and a
+		// CLI/bearer client never asks it. It fails OPEN on a read error.
+		mux.Handle("POST /api/pair", acct.CSRFGuard(signal.PairHandler(pairReg, pairLimiter, ipx, pairUser(acct), acct.PairMintRefusal)))
 		// Relay-node register/heartbeat: bearer-authenticated (not cookie/CSRF),
 		// so mounted directly on the root mux like /api/pair above. No-op when
 		// NodeToken is unset.

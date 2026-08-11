@@ -85,10 +85,33 @@ nothing else:
   late progress report may not bring back digits that are free to be reissued.
 - **`MAX_JOINABLE` is the ceiling.** The code is extended to `joinDeadline`,
   which already carries the six-hour bound, so trickling cannot buy the code
-  more time than it buys the room. It is extended to the JOIN deadline even
-  after a join, never to `NEVER`: a code that never expired would hold six of a
-  million digits out of circulation for good, and buy nothing, because the room
-  it names is full.
+  more time than it buys the room.
+- **A JOINED room extends nothing.** Once somebody is in the room there is no
+  join deadline left to extend a code to, and the code is simply left to lapse
+  on whatever it already holds. It is never extended to `NEVER` — a code that
+  never expired would hold six of a million digits out of circulation for good —
+  and it is no longer extended to the join deadline either, which would keep the
+  digits for another `JOIN_WINDOW` while buying nothing, because the room they
+  name is full and its two peers are already connected. This is reachable by
+  ordinary use, not only by a race: the protocol refuses a new upload INIT once
+  someone has joined, but a file already in flight keeps appending and finalizes
+  afterwards, and each of those used to extend the code.
+  - The rule has one home in the implementation and every authoritative write
+    answers with it — the touch (`PairRoomTouch.CodeDeadline`), the append
+    (`UploadProgressResult.RoomJoinDeadline`) and the object insert
+    (`StoredFileWrite.RoomJoinDeadline`) each report the row's own answer and
+    `0` for a joined room, so no caller derives a deadline for itself. The one
+    thing a caller may still project from is a room it CREATED an instant
+    earlier, where the snapshot cannot be wrong.
+  - **The database→registry handoff is two steps and stays that way.** The room
+    is a row and the code is in the signaling layer's memory; the extension
+    happens after the transaction commits, deliberately, so a credential can
+    never claim a window the room does not hold. What that leaves open is the
+    other order — a commit followed by a process death before the registry
+    moves, i.e. a code SHORTER than its room. That failure is the safe one, it
+    needs no distributed transaction to be acceptable, and it is bounded by the
+    same fact this whole section already rests on: the registry is per-process,
+    so the code dies with the process that would have extended it.
 
 **Void revokes the code.** When a room is voided its code is REMOVED from the
 registry, not left to expire on its own. The two happen to coincide today —
@@ -135,6 +158,56 @@ retry targets the room INSTANCE, and a room opened after the observation is
 refused — so a recycled code can never inherit another transfer's join.
 
 ## 3. HTTP
+
+### 3.0 Before the code exists: the pre-mint gate (B3)
+
+Upstream of everything else in this document. A pairing code is only worth
+minting if its owner can actually use one, and there is exactly one limit whose
+exhaustion means they cannot:
+
+```
+POST   /api/pair                                   → 429 {"error": "traffic_exhausted"}
+GET    /api/pair/preflight    (authenticated)      → {"allowed": <bool>,
+                                                      "reason": <string, omitted when allowed>}
+```
+
+- **The question is the MONTHLY COMBINED TRAFFIC allowance, and nothing else.**
+  Relayium's meter covers relay AND stored upload/download, so an account with
+  none left has both cross-network paths closed to it: the live TURN session is
+  refused by the relay's own gate and pre-upload by the stored gates. Six digits
+  in that state name a rendezvous that cannot be completed by any route.
+  **"None left" means `remaining <= 0`, exactly zero included**, and it means the
+  same thing at all three gates — the pre-mint refusal, the TURN credential gate
+  and room admission all ask one server-side helper, so the account that cannot
+  mint a code also cannot be handed a relay credential or a room for one it
+  minted a moment earlier. A gate asking instead whether N more bytes would
+  *fit* answers "yes" at exactly zero for N = 0, which is the right answer to a
+  different question and would leave this claim false by one byte.
+- **Storage capacity and the rolling daily upload quota are deliberately NOT
+  asked.** Both refuse an UPLOAD; neither touches the live relay. An account
+  whose disk is full can still pair and still transfer in real time, so refusing
+  to mint would invent a limit the product does not have. They keep their own
+  refusals at the room-admission gates in §3.1 (`413`, `429`), where they are
+  true. LAN is unaffected by all three, always.
+- **`POST /api/pair` is the authority**, checked immediately before the registry
+  mint, so a Web race and a CLI/bearer client are both covered. A refusal
+  allocates NOTHING: no code, no registry entry, no room. Its body carries a
+  stable machine-readable `error` because the same `429` is also the per-IP rate
+  limiter's, and the two mean different things ("upgrade or use LAN" versus
+  "slow down").
+- **`GET /api/pair/preflight` is advisory**, so a client can stop offering the
+  action instead of failing after a click. It mints nothing, reads no registry
+  state and writes nothing; an anonymous caller gets `401` and learns nothing
+  about anybody's usage. Both routes evaluate the SAME server-side function —
+  clients must not re-derive the answer from `/api/me/usage`, which would put a
+  second copy of the mid-month proration rule in the client.
+- **Both FAIL OPEN.** Any read error admits the mint and answers `allowed`. An
+  admitted mint buys no bytes and every byte that follows still passes an
+  authoritative fail-closed gate, whereas failing closed would let one database
+  blip stop everybody from starting a transfer.
+- Backward compatible in both directions: a client that never calls the
+  preflight is unaffected, and a client that calls it against a server without
+  it gets `404`, which it must read as "no opinion".
 
 ### 3.1 Upload (authenticated, resumable only)
 
@@ -205,8 +278,13 @@ GET    /api/uploads/{uploadId}                     → {"received": <int>,
   - Present only for `purpose=pair_room`. An ordinary upload has no room, no
     code and no such instant, and its responses are byte-for-byte what they were.
   - It is the JOIN deadline, never the room's expiry. A joined room's expiry is
-    "no expiry" (§2); the code is extended to the join deadline and never to
-    never, so this is the number a client may count down.
+    "no expiry" (§2), and a number a client counts down must be one the registry
+    actually holds, so this is that one.
+  - **Absent once the room is joined**, on both — the committed append, the
+    overshoot ack and the probe alike. There is no instant left at which anybody
+    may still join, which is the same `0` the code synchronization treats as
+    "extend nothing" (§2). A client that had been counting one down simply stops
+    hearing about it, which is correct: the peer it was waiting for has arrived.
   - A request that commits NO bytes — a resume overshoot, or the probe, which is
     a plain read — reports the deadline the room already has. It does not buy
     one. Nothing free may move the window (§2).

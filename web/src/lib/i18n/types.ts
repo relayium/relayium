@@ -961,6 +961,29 @@ export interface Messages {
     ttlUnknown: string;
     ttlUnknownNote: string;
     expired: string;
+    // The pre-mint block (B3): this account's monthly COMBINED traffic
+    // allowance is spent, so both cross-network paths are closed to it — the
+    // live relay and the stored one are metered by the same meter — and the
+    // server refuses to mint a code that would name a rendezvous it cannot
+    // complete (server/account/pairmint.go).
+    //
+    // `trafficBlocked` replaces the create-code action and must do three things
+    // at once, each of which a plausible translation gets wrong (pinned by
+    // i18n-pair-traffic-block.test.ts):
+    //
+    //   - name the LOCAL NETWORK as the way through. It is the only path that
+    //     moves no bytes through Relayium, so it genuinely still works, and
+    //     without it the screen is a dead end with an upsell on it.
+    //   - NOT offer the stored / async / "send a download link" path as the
+    //     fallback. It draws on the very same allowance, so it is exactly as
+    //     unavailable, and pointing at it sends the user to a second refusal.
+    //   - not blame storage capacity or the daily upload quota. Neither stops a
+    //     live relay session, and neither is consulted before a mint.
+    //
+    // `trafficBlockedLan` is the LAN action's own label — a short control name,
+    // not a sentence. The upgrade action beside it reuses `quota.upgrade`.
+    trafficBlocked: string;
+    trafficBlockedLan: string;
     copy: string;
     copied: string;
     copyLink: string; // copies the full join link for forwarding

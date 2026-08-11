@@ -148,6 +148,12 @@ func (s *Service) routeMux() *http.ServeMux {
 	// the session cookie first.
 	mux.HandleFunc("GET /api/me", s.RequireAuth(s.handleMe))
 	mux.HandleFunc("GET /api/me/usage", s.RequireAuth(s.handleMeUsage))
+	// B3's pre-mint answer, read-only, for the choose screen (see pairmint.go).
+	// It mints nothing; POST /api/pair — which lives on the ROOT mux, because it
+	// is bearer-authed — re-asks the same evaluator and is what actually decides.
+	// RequireAuth rather than RequireSession for the same reason /api/me carries
+	// it: a bearer client may reasonably ask before it tries.
+	mux.HandleFunc("GET /api/pair/preflight", s.RequireAuth(s.handlePairPreflight))
 	// RequireAuth (session cookie OR bearer), for the same reason /api/me above
 	// carries it: the native app's own credential IS one of the rows in this
 	// list, so a session-only device list puts the one screen that can revoke it

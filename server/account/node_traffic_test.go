@@ -76,7 +76,7 @@ func TestICEWithholdsFleetNodeAt90PercentOfInheritedDefault(t *testing.T) {
 	st.SetEmailVerified(ctx, owner.ID)
 	// Same isolation as turn_node_traffic_cap_test.go: this test records
 	// 950+900 GiB of usage against the same owner, which would trip the
-	// separate owner-level plan traffic gate (turn.go's overTraffic, default
+	// separate owner-level plan traffic gate (turn.go's trafficAllowanceSpent, default
 	// Free plan cap is far smaller) and withhold the whole relay list before
 	// the per-node 90% check even runs. Give the owner an effectively
 	// unlimited plan so only the per-node cap is exercised.

@@ -853,6 +853,8 @@ const es: Messages = {
     ttlUnknown: "no se pudo confirmar la validez del código de emparejamiento",
     ttlUnknownNote: "La subida se interrumpió antes de que el servidor confirmara cuánto tiempo sigue siendo válido este código. Prueba el código en el otro dispositivo; si no funciona, crea un código nuevo.",
     expired: "El código de emparejamiento caducó — genera uno nuevo",
+    trafficBlocked: "Has agotado el volumen de este mes para transferencias entre redes, así que ahora mismo no se puede enviar por Internet. Mejora tu plan para seguir enviando entre redes, o envía por tu red local, que no consume nada de ese volumen.",
+    trafficBlockedLan: "Enviar por la red local",
     copy: "Copiar",
     copied: "Copiado",
     copyLink: "Copiar enlace",

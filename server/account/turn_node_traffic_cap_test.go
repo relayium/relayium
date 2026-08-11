@@ -16,7 +16,7 @@ func TestICEWithholdsFleetNodeOverTrafficLimit(t *testing.T) {
 	owner, _ := st.UpsertUserByEmail(ctx, "u@example.com", "u")
 	st.SetEmailVerified(ctx, owner.ID)
 	// This test isolates the per-node traffic cap (below) from the separate
-	// owner-level plan traffic gate (turn.go's overTraffic check). The owner
+	// owner-level plan traffic gate (turn.go's trafficAllowanceSpent check). The owner
 	// defaults to the "free" plan_id with no plans row seeded here, so
 	// planForUser falls back to defaultPlans()'s Free tier (1 GiB as of the
 	// 2026-07 pricing change) — well under the 2 GiB this test records, which

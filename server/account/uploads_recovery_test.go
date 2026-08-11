@@ -577,12 +577,12 @@ func (c *closingStore) GetPairRoom(ctx context.Context, id string) (PairRoom, bo
 	return r, ok, err
 }
 
-func (c *closingStore) TouchPairRoomUpload(ctx context.Context, id string, at, expiresAt int64) error {
-	err := c.Store.TouchPairRoomUpload(ctx, id, at, expiresAt)
+func (c *closingStore) TouchPairRoomUpload(ctx context.Context, id string, at, expiresAt int64) (PairRoomTouch, error) {
+	touch, err := c.Store.TouchPairRoomUpload(ctx, id, at, expiresAt)
 	if err == nil {
 		c.closeOnce(ctx, id, &c.closeAfterTouch)
 	}
-	return err
+	return touch, err
 }
 
 // withClosingStore puts a closingStore in front of the harness's service.
@@ -657,7 +657,7 @@ func TestStaleProgressForAnOpenRoomIsNotTreatedAsClosed(t *testing.T) {
 	// already past anything this chunk can buy.
 	ahead := room
 	ahead.LastUploadAt = h.now + 120
-	if err := h.store.TouchPairRoomUpload(ctx, room.ID, h.now+120, pairRoomExpiry(ahead)); err != nil {
+	if _, err := h.store.TouchPairRoomUpload(ctx, room.ID, h.now+120, pairRoomExpiry(ahead)); err != nil {
 		t.Fatalf("sibling progress: %v", err)
 	}
 
@@ -903,7 +903,7 @@ func TestTouchPairRoomUploadDistinguishesClosedFromStale(t *testing.T) {
 
 	t.Run("progress older than the room already has is a silent no-op", func(t *testing.T) {
 		st, room := mk(t)
-		if err := st.TouchPairRoomUpload(ctx, room.ID, 1100, 1100+pairRoomJoinWindow); err != nil {
+		if _, err := st.TouchPairRoomUpload(ctx, room.ID, 1100, 1100+pairRoomJoinWindow); err != nil {
 			t.Fatalf("stale but open: %v", err)
 		}
 		got, _, _ := st.GetPairRoom(ctx, room.ID)
@@ -917,7 +917,7 @@ func TestTouchPairRoomUploadDistinguishesClosedFromStale(t *testing.T) {
 		if _, err := st.ClosePairRoom(ctx, room.ID, 1300, 1300+pairRoomBlobHold); err != nil {
 			t.Fatalf("close: %v", err)
 		}
-		if err := st.TouchPairRoomUpload(ctx, room.ID, 1400, 1400+pairRoomJoinWindow); !errors.Is(err, ErrPairRoomClosed) {
+		if _, err := st.TouchPairRoomUpload(ctx, room.ID, 1400, 1400+pairRoomJoinWindow); !errors.Is(err, ErrPairRoomClosed) {
 			t.Fatalf("touch of a closed room: %v, want ErrPairRoomClosed", err)
 		}
 	})
@@ -925,14 +925,14 @@ func TestTouchPairRoomUploadDistinguishesClosedFromStale(t *testing.T) {
 	t.Run("a room past its deadline refuses the write", func(t *testing.T) {
 		st, room := mk(t)
 		at := room.ExpiresAt + 1
-		if err := st.TouchPairRoomUpload(ctx, room.ID, at, at+pairRoomJoinWindow); !errors.Is(err, ErrPairRoomClosed) {
+		if _, err := st.TouchPairRoomUpload(ctx, room.ID, at, at+pairRoomJoinWindow); !errors.Is(err, ErrPairRoomClosed) {
 			t.Fatalf("touch of an expired room: %v, want ErrPairRoomClosed", err)
 		}
 	})
 
 	t.Run("a room that vanished refuses the write", func(t *testing.T) {
 		st, _ := mk(t)
-		if err := st.TouchPairRoomUpload(ctx, "no-such-room", 1400, 1700); !errors.Is(err, ErrPairRoomClosed) {
+		if _, err := st.TouchPairRoomUpload(ctx, "no-such-room", 1400, 1700); !errors.Is(err, ErrPairRoomClosed) {
 			t.Fatalf("touch of a missing room: %v, want ErrPairRoomClosed", err)
 		}
 	})

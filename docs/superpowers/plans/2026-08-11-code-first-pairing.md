@@ -742,15 +742,132 @@ lane. Three things are deliberately open:
    in doubt with the batch still running, and the DOM case proved the unknown
    state is only observable while nothing is in flight — which is exactly when it
    has to be right.
-7. **B3's over-quota gate before entering the room** is NOT built. The decision
-   stands (block before minting, fail OPEN on a read error, say LAN still works);
-   it needs a quota read the choose screen does not have today.
+7. **B3's over-quota gate before entering the room is BUILT** (checkpoint 2d),
+   exactly as decided: block before minting, fail OPEN on a read error, say LAN
+   still works.
+   **It asks about one limit, and the boundary is the point.** Only the MONTHLY
+   COMBINED TRAFFIC allowance blocks a mint, because Relayium's meter covers
+   relay AND stored upload/download, so with it spent BOTH cross-network paths
+   are closed and six digits name a rendezvous nobody can complete. Storage
+   capacity and the rolling daily upload quota deliberately do NOT block a mint:
+   each refuses an UPLOAD and neither touches the live relay, so refusing to pair
+   over them would be the server inventing a limit the product does not have.
+   They keep their own refusals at the room-admission gates, where they are true.
+   LAN is unaffected by all three.
+   **"Spent" is one boundary, and now literally one function.** `remaining <= 0`,
+   exactly zero included, answered by `Service.trafficAllowanceSpent`
+   (`account/plan_enforce.go`) for all three gates that ask "does this account
+   have a cross-network path at all": the pre-mint refusal, the owner-level TURN
+   credential gate (`turn.go`), and the traffic leg of `pairRoomAdmission`. The
+   last two used to ask `overTraffic(…, 0)`, whose question is a FIT check
+   (`add > remaining`) and therefore answers "fits" at exactly zero remaining —
+   so until this pass the claim above was false by one byte for an
+   already-minted code: the mint was refused at the boundary while the relay
+   credential and the room were still handed out. `overTraffic` keeps that
+   contract unchanged and keeps every gate that weighs real bytes (upload init,
+   finalize, download, Device Inbox); the storage and daily-quota legs are
+   untouched. All three shared gates still FAIL OPEN in their own words — a log
+   line and a relay credential in `turn.go`, an admitted room, an allowed
+   preflight — which is why the helper returns the read error rather than
+   folding it into `false`.
+   **One evaluator, two callers** (`server/account/pairmint.go`,
+   `Service.pairMintRefusal`). `POST /api/pair` is the authority — the gate runs
+   immediately before `MintFor`, after the login check and after the per-IP
+   limiter, so a Web race and a CLI/bearer client are both covered and a flood
+   never becomes a flood of quota reads. A refusal allocates nothing at all and
+   answers `429 {"error":"traffic_exhausted"}`; the machine-readable code is what
+   tells it apart from the limiter's own 429. `GET /api/pair/preflight` is the
+   advisory half so the choose screen can stop OFFERING the action, and it is
+   deliberately not client-side arithmetic over `/api/me/usage` — that would put
+   a second copy of the mid-month proration rule in the client, next to the one
+   screen whose job is to be right about it. The seam runs account → signal
+   (`signal.PairAdmission` is an injected func; the signaling layer never learns
+   what a plan is).
+   **The Web surface replaces the mint action only.** Entering somebody else's
+   code stays — the receiver is anonymous and the transfer is billed to the
+   minter, so a spent account can still receive — and the block offers exactly
+   two ways out, upgrade and LAN. It must never offer the stored/async path:
+   that draws on the SAME allowance, so pointing at it is a second refusal
+   (pinned in nine locales by `i18n-pair-traffic-block.test.ts`). A preflight
+   that fails leaves the button alone; a click that beats the answer waits for
+   the request already in flight, bounded, then falls through to the POST; and a
+   POST refusal lands on the same surface and does NOT drop the staged batch,
+   which is still sendable over LAN. Every late answer is stamped with a
+   generation counter, so a verdict cannot arrive into another account, another
+   room, another mode, or an unmounted card.
+   **Residual:** the preflight is one extra authenticated read per choose-screen
+   render; it is not cached across mounts (unlike `/api/me/usage`), which is a
+   deliberate trade for freshness on the screen that acts on it.
+   **Evidence (checkpoint 2d, items 7 and 9 together):** 3,718 Vitest passing /
+   3 skipped (baseline 3,686 — 32 new cases across
+   `CodePairing.quota-block.test.ts`, `i18n-pair-traffic-block.test.ts` and
+   `transfer-link.test.ts`); 29 new Go cases (`account/pairmint_test.go`,
+   `account/pairroom_joined_code_test.go`, `account/pairroom_hardening_test.go`,
+   `account/turn_test.go`, `pairmint_wiring_test.go`,
+   `internal/signal/pairhttp_test.go`); full Go suite green with `go build ./...`
+   and `go vet ./...` clean and `gofmt -l` adding nothing; `npm run check` 526
+   files, 0 errors, 0 warnings; `npm run build` OK; `npm run test:e2e:code-room`
+   green (24 checks, axe clean). Every behaviour case was watched fail first, and
+   three were additionally mutation-checked — deleting the pre-gate code sync,
+   deleting only its projection, and adding storage/daily to the pre-mint
+   evaluator each turn the relevant test red, which is what stops those three
+   from being tests that merely happen to pass.
+   **The boundary is pinned at all three gates, one byte apart each time.** The
+   three cases added last (`TestICEWithholdsTURNAtExactlyThePlanTrafficCap`,
+   `TestICEOneByteBelowThePlanTrafficCapIncludesTurn`,
+   `TestNoRoomIsCreatedWhenTheTrafficAllowanceIsExactlySpent`, the last a table of
+   both sides) were watched fail on the pre-existing `overTraffic(…, 0)` code:
+   at exactly zero remaining the ICE response still carried a TURN credential
+   with `relayDenied` empty, and the room-admission gate still answered `200`
+   and created a room. The above-the-cap and under-the-cap cases they sit beside
+   are unchanged and still green, as are the fail-open ones
+   (`TestICEMeteringReadErrorFailsOpenWithAlert` still logs and issues relay;
+   `TestPairRoomAdmissionFailsOpenWhenTheQuotaReadFails` still admits), which is
+   what pins the error path through the shared helper. On the client side, a
+   response that arrives late is pinned dead at both ends. The advisory
+   preflight cases cover account, room and mode changes; the authoritative POST
+   cases separately cover sign-out/account replacement, entering another room,
+   moving to code entry, unmount, and a lapsed-room re-mint. Both successful
+   mints and quota/generic failures are discarded once their generation is
+   superseded, so they cannot overwrite a room marker, clear a newer queue, or
+   repaint a screen that has moved on.
 8. **Burn-after-download** ("delete the ciphertext once the receiver has it") is
    NOT built; the room's window bounds storage instead. It needs a completion
    signal that resume cannot fake.
-9. **Native clients** (`apps/`) are untouched and announce no `preupload/1`, so
-   they keep the live-link behaviour. Adding it means porting §4 exactly.
-10. **Multi-instance:** pair rooms inherit the pairing registry's existing
+9. **A JOINED room no longer extends its code** (checkpoint 2d). Found while
+   building B3, and reachable by ordinary use rather than by a race: the
+   protocol refuses a new upload INIT once somebody has joined, but a file
+   already in flight keeps appending and finalizes afterwards. Finalize's touch
+   is a no-op for a joined room (its `expires_at` is `pairRoomNoDeadline`, so the
+   monotonic UPDATE matches nothing) — and then `syncPairCode` projected a join
+   deadline out of the handler's snapshot with `pairRoomProgressJoinDeadline`,
+   which has never asked whether anybody joined. The code moved on the strength
+   of a write that did not happen, holding six of a million digits for another
+   `JOIN_WINDOW` for a rendezvous that is already full.
+   **The rule now has one home** (`pairRoomCodeDeadline`: the join deadline while
+   nobody has joined, `0` once somebody has) and every authoritative write
+   answers with it rather than letting a caller derive one —
+   `PairRoomTouch.CodeDeadline` (new: `TouchPairRoomUpload` returns an explicit
+   transactional result), `UploadProgressResult.RoomJoinDeadline`,
+   `StoredFileWrite.RoomJoinDeadline`, and `persistedRoomJoinDeadline` for the
+   two answers that never reach a transaction (the overshoot ack, the probe).
+   `syncPairCode`'s projection now has exactly ONE caller left: the request that
+   just created the room, whose snapshot cannot be wrong.
+   **The pre-gate sync was re-sourced, not deleted.** A finalize that fails at a
+   later gate after a real UNJOINED touch must still leave the code at the
+   deadline the room actually holds, or the credential dies while its ciphertext
+   is live and joinable — the drift invariant 4 exists to forbid. Pinned by a
+   test that fails if the sync is removed.
+   **The DB→registry handoff stays two steps**, honestly: the room is a row and
+   the code is process memory, and the extension runs AFTER the commit so a
+   credential can never claim a window the room does not hold. The reverse
+   failure — commit, then die before extending — leaves a code SHORTER than its
+   room, which is the safe direction and is bounded by item 10: the registry is
+   per-process, so the code dies with the process that would have extended it.
+   No distributed transaction is expected or implied.
+10. **Native clients** (`apps/`) are untouched and announce no `preupload/1`, so
+    they keep the live-link behaviour. Adding it means porting §4 exactly.
+11. **Multi-instance:** pair rooms inherit the pairing registry's existing
     single-process constraint (the registry is in memory). The DB half is
     instance-safe; the code→owner lookup is not, exactly as before this change —
     and the code's *lifetime* is now in the same boat, since an append served by
@@ -849,10 +966,14 @@ upgrade path, and a "use LAN instead" route; no code is minted.
 
 Why the earlier framing of this question was void, and must not come back: there
 is **one combined monthly traffic pool**, not separate upload/download/relay
-budgets. `account/turn.go:124` says so outright — "monthly traffic (relay +
-staged upload/download combined)" — and the same `overTraffic()` gate guards
-TURN credentials (`turn.go:126`), upload (`files.go:204,242`), download billed to
-the file's owner (`files.go:486`) and Device Inbox (`deviceinbox_task.go:103`).
+budgets. `account/turn.go` says so outright — "monthly traffic (relay + staged
+upload/download combined)" — and every gate reads that one pool through the same
+arithmetic (`remainingTraffic` over `monthlyTrafficCap` + `currentMonthTraffic`):
+TURN credentials (`turn.go`, via `trafficAllowanceSpent`), upload
+(`files.go:204,242`), download billed to the file's owner (`files.go:486`) and
+Device Inbox (`deviceinbox_task.go:103`) — the byte-weighing gates through
+`overTraffic(…, size)`, the "is there any path left" gates through
+`trafficAllowanceSpent`, which differ only at exactly zero remaining.
 So an over-quota account cannot fall back to the live relay either: **the whole
 cross-network path is dead, not just the accelerated one.** LAN is unaffected —
 it generates no server traffic and passes no gate.

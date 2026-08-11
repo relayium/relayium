@@ -19,7 +19,7 @@ import (
 //
 // 干扰条件排查（照 node_traffic_test.go 踩过的坑逐条核对，本测试数据下的取值）：
 //   - owner 级 plan 流量配额：本测试不调用 RecordUsage，owner 当月用量为 0，
-//     远低于任何默认 Free 档位，不会触发 turn.go 的 overTraffic/quota 拒绝。
+//     远低于任何默认 Free 档位，不会触发 turn.go 的 trafficAllowanceSpent/quota 拒绝。
 //     故无需像 node_traffic_test.go 那样另外塞一个"近乎不限"的 plan。
 //   - strict（只用自己节点）：User.OnlyOwnNodes 未设置，零值 false，不触发。
 //   - 邮箱验证：显式 SetEmailVerified，validCode 不会因未验证被撤销。

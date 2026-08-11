@@ -854,6 +854,8 @@ const de: Messages = {
     ttlUnknown: "Gültigkeit des Pairing-Codes konnte nicht bestätigt werden",
     ttlUnknownNote: "Der Upload brach ab, bevor der Server bestätigen konnte, wie lange dieser Code noch beitrittsfähig ist. Lass das andere Gerät den Code ausprobieren — falls er nicht funktioniert, erstelle einen neuen Pairing-Code.",
     expired: "Pairing-Code abgelaufen — bitte neu erzeugen",
+    trafficBlocked: "Das Übertragungsvolumen dieses Monats für Übertragungen zwischen Netzwerken ist aufgebraucht — über das Internet geht gerade nichts. Mit einem Upgrade kannst du weiter zwischen Netzwerken senden, oder du sendest über dein lokales Netzwerk, das dieses Volumen gar nicht verbraucht.",
+    trafficBlockedLan: "Über lokales Netzwerk senden",
     copy: "Kopieren",
     copied: "Kopiert",
     copyLink: "Link kopieren",

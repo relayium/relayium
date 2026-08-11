@@ -8,11 +8,64 @@ import { isValidCode } from "./pair-code";
 // (capability model — only minting requires a session, joining does not).
 
 /** Error carrying the HTTP status of a failed mint. A thrown TypeError (fetch
- *  never reached the server) is left as-is and surfaces as a network error. */
+ *  never reached the server) is left as-is and surfaces as a network error.
+ *
+ *  `reason` is the server's stable machine-readable refusal code from the JSON
+ *  body ("" when there was none). It exists because /api/pair answers 429 for
+ *  two unrelated things — the per-IP rate limiter and this account's spent
+ *  monthly allowance — and they lead to different screens: "try again in a
+ *  moment" versus upgrade-or-LAN. Never render it; it is an identifier. */
 export class HttpError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(public status: number, message: string, public reason = "") {
     super(message);
     this.name = "HttpError";
+  }
+}
+
+/** The server's refusal code for "this account's monthly combined traffic
+ *  allowance is spent". Must match account.PairMintTrafficSpent on the server;
+ *  it is compared with ===, never shown. */
+export const PAIR_TRAFFIC_SPENT = "traffic_exhausted";
+
+/** The read-only pre-mint verdict (B3): may this account be handed a pairing
+ *  code right now? `reason` is empty exactly when `allowed`. */
+export interface PairPreflight {
+  allowed: boolean;
+  reason: string;
+}
+
+/** ADVISORY: ask the server whether minting would be refused, so the choose
+ *  screen can say so before the button is clicked instead of after.
+ *
+ *  It is NOT the gate — POST /api/pair re-asks the same server-side evaluator
+ *  and is what decides — so every failure mode here resolves to allowed. A
+ *  network blip, a 500, a proxy's HTML error page, and an older server with no
+ *  such endpoint (404) all mean "no opinion", and treating any of them as a
+ *  block would be this screen refusing a transfer the server would have allowed.
+ *  It never throws, and never mints anything. */
+export async function pairPreflight(): Promise<PairPreflight> {
+  try {
+    const res = await fetch("/api/pair/preflight", { credentials: "include" });
+    if (!res.ok) return { allowed: true, reason: "" };
+    const body = (await res.json()) as { allowed?: boolean; reason?: string };
+    // `allowed !== false` rather than `!!allowed`: a body that says nothing at
+    // all is not a block.
+    return body.allowed === false
+      ? { allowed: false, reason: body.reason ?? "" }
+      : { allowed: true, reason: "" };
+  } catch {
+    return { allowed: true, reason: "" };
+  }
+}
+
+/** The refusal code in a non-2xx body, or "" when the body is not JSON (a
+ *  gateway's HTML page, the rate limiter's plain text). */
+async function refusalReason(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { error?: string };
+    return typeof body?.error === "string" ? body.error : "";
+  } catch {
+    return "";
   }
 }
 
@@ -43,6 +96,8 @@ export function wsURL(loc: { protocol: string; host: string }, code = ""): strin
  *  to re-prompt login). The receiver who joins by code needs no session. */
 export async function createPair(): Promise<{ code: string; expiresAt: number }> {
   const res = await fetch("/api/pair", { method: "POST" });
-  if (!res.ok) throw new HttpError(res.status, `createPair failed: ${res.status}`);
+  if (!res.ok) {
+    throw new HttpError(res.status, `createPair failed: ${res.status}`, await refusalReason(res));
+  }
   return res.json();
 }

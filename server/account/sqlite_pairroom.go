@@ -109,20 +109,40 @@ func (s *SQLiteStore) LivePairRoomByCode(ctx context.Context, code string) (Pair
 // deadline — the precondition, not a write failure. Progress that is merely
 // STALE (a concurrent sibling append already moved the deadline further out)
 // succeeds silently, because it changes nothing and nothing is wrong.
-func (s *SQLiteStore) TouchPairRoomUpload(ctx context.Context, id string, at, expiresAt int64) error {
+//
+// The PairRoomTouch it hands back is the row's own answer to "what may the
+// pairing code be extended to now", read after the write inside this same
+// transaction. It is deliberately not derivable by the caller: a stale touch's
+// row already stands further out than anything this request could project, and
+// a JOINED room has no such instant at all (pairRoomCodeDeadline).
+func (s *SQLiteStore) TouchPairRoomUpload(ctx context.Context, id string, at, expiresAt int64) (PairRoomTouch, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return err
+		return PairRoomTouch{}, err
 	}
 	defer tx.Rollback()
 	open, err := touchPairRoomOn(ctx, tx, id, at, expiresAt)
 	if err != nil {
-		return err
+		return PairRoomTouch{}, err
 	}
 	if !open {
-		return ErrPairRoomClosed
+		return PairRoomTouch{}, ErrPairRoomClosed
 	}
-	return tx.Commit()
+	// Re-read rather than reuse the value the precondition saw: the UPDATE above
+	// is this transaction's own move, and the answer has to include it. Inside the
+	// write-locked transaction, so nothing can land between the write and the read
+	// it is reported from.
+	room, found, err := pairRoomRowOn(ctx, tx, id)
+	if err != nil {
+		return PairRoomTouch{}, err
+	}
+	if !found {
+		return PairRoomTouch{}, ErrPairRoomClosed
+	}
+	if err := tx.Commit(); err != nil {
+		return PairRoomTouch{}, err
+	}
+	return PairRoomTouch{CodeDeadline: pairRoomCodeDeadline(room)}, nil
 }
 
 // touchPairRoomOn is TouchPairRoomUpload's body, so the append path can do it in

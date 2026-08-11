@@ -523,10 +523,12 @@ type UploadProgressResult struct {
 	// none.
 	//
 	// 0 for every case that has nothing to say rather than something reassuring:
-	// no room, a room that is gone, and any room this same transaction found not
-	// open (RoomOpen false). A closed room's join deadline can still be in the
-	// future — closing does not rewind the last byte — and it names a rendezvous
-	// whose ciphertext is already deleted.
+	// no room, a room that is gone, any room this same transaction found not
+	// open (RoomOpen false), and a room somebody has already JOINED. A closed
+	// room's join deadline can still be in the future — closing does not rewind
+	// the last byte — and it names a rendezvous whose ciphertext is already
+	// deleted; a joined room's would name a rendezvous nobody else may enter
+	// (pairRoomCodeDeadline, invariant 5).
 	//
 	// It exists because the caller CANNOT compute it. A handler holds a room
 	// snapshot it read before the append, and between that read and this write a
@@ -540,6 +542,40 @@ type UploadProgressResult struct {
 	// This is the row's own answer — whatever the deadline is when this
 	// transaction commits, a sibling's included — and never a projection of one.
 	RoomJoinDeadline int64
+}
+
+// PairRoomTouch is what one TouchPairRoomUpload actually left behind: the room's
+// own answer, read inside the transaction that wrote it.
+//
+// It exists for the same reason UploadProgressResult.RoomJoinDeadline does, one
+// call site along. Finalize's touch is followed by a sync of the pairing CODE,
+// and the only number the caller had for it was one it PROJECTED from the room
+// snapshot it read before the write (pairRoomProgressJoinDeadline). That
+// projection has two ways of being wrong, and both were reachable by ordinary
+// use: a sibling append can move the room after this snapshot was taken, and —
+// the one this type was added for — a room somebody has JOINED has no join
+// deadline at all, while the projection cheerfully computes one from
+// created/last_upload and hands the registry another five minutes of six digits
+// for a rendezvous that is already full.
+//
+// The handoff between the database and the registry (in-memory, in the signaling
+// layer) is still two steps and cannot be made one: the code is extended AFTER
+// the transaction commits, deliberately, so the credential can never claim a
+// window the room does not hold. What this removes is the caller's freedom to
+// invent the number in between — not the gap itself. See pairroom.go's
+// notePairRoomUpload for what a crash inside that gap costs.
+type PairRoomTouch struct {
+	// CodeDeadline is the instant the room's pairing CODE may be extended to, as
+	// the row stood at the end of this transaction — this call's own move
+	// included, and a sibling's too if the sibling got there first.
+	//
+	// 0 means "extend nothing", and it is the answer for every case that has
+	// nothing to say rather than something reassuring: a room somebody has
+	// already joined (invariant 5 — joining ends every clock, and a code kept
+	// alive past it holds six of a million digits out of circulation while
+	// buying nothing), and a room that is gone. A closed or expired room does not
+	// reach this at all: it comes back as ErrPairRoomClosed.
+	CodeDeadline int64
 }
 
 // ErrPairRoomClosed is returned by a store write whose pairing-room
@@ -619,7 +655,9 @@ type StoredFileWrite struct {
 	// extended to that would hold six of a million digits out of circulation for
 	// good.
 	//
-	// 0 for an object with no room, and for a refused insert.
+	// 0 for an object with no room, for a refused insert, and for a room somebody
+	// has already joined — which is the same "nothing to extend to" the two other
+	// authoritative answers give (pairRoomCodeDeadline).
 	RoomJoinDeadline int64
 }
 
@@ -1567,7 +1605,12 @@ type Store interface {
 	// TouchPairRoomUpload records upload progress: last_upload_at and the room's
 	// deadline move forward (never back), and the same deadline is projected onto
 	// every object already in the room, in one transaction.
-	TouchPairRoomUpload(ctx context.Context, id string, at, expiresAt int64) error
+	//
+	// It answers with what the ROW then holds (PairRoomTouch), because the only
+	// other source for that number is a projection off the caller's snapshot —
+	// which is how a code came to be extended for a room somebody had already
+	// joined.
+	TouchPairRoomUpload(ctx context.Context, id string, at, expiresAt int64) (PairRoomTouch, error)
 	// JoinPairRoom stamps the join and projects the post-join deadline, only
 	// while the room is open and unjoined (so a second join changes nothing).
 	JoinPairRoom(ctx context.Context, id string, at, expiresAt int64) error
