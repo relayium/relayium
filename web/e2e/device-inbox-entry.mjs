@@ -203,9 +203,77 @@ async function reachFromHome(browser, base, view) {
   return tab;
 }
 
+/**
+ * The shape of the page: the tool above the explanation, and a document that
+ * does not scroll sideways.
+ *
+ * Both of these were real, measured defects on 2026-08-11, and NEITHER was
+ * visible to the per-element checks below. `VISIBLE` asks whether a section's
+ * own border box spills past the viewport; a block-level section's box never
+ * does, because it is sized by its container. What actually overflowed was its
+ * CONTENT — a grid item whose automatic minimum size is min-content, holding a
+ * `white-space: pre` command block — so every platform section measured 390px
+ * wide while the document measured 795px and every screen of this page scrolled
+ * sideways. The document's own scrollWidth is the only measurement that sees it.
+ */
+async function checkShape(tab, view, label) {
+  const shape = await tab.evaluate(`(() => {
+    const doc = document.documentElement;
+    const box = (sel) => {
+      const el = document.querySelector(sel);
+      return el ? Math.round(el.getBoundingClientRect().top + window.scrollY) : null;
+    };
+    return {
+      clientWidth: doc.clientWidth,
+      scrollWidth: doc.scrollWidth,
+      pageHeight: doc.scrollHeight,
+      start: box('[data-di="start"]'),
+      notSaved: box('[data-di="not-saved"]'),
+      linkBoundary: box('[data-di="link-boundary"]'),
+      platforms: box("#platforms"),
+    };
+  })()`);
+
+  // One pixel of tolerance for sub-pixel rounding. 795 in a 390px viewport is
+  // not rounding.
+  if (shape.scrollWidth > shape.clientWidth + 1) {
+    throw new Error(
+      `${view.id} (${label}): the page scrolls sideways — the document is ${shape.scrollWidth}px wide inside a ${shape.clientWidth}px viewport`,
+    );
+  }
+
+  if (shape.start === null) throw new Error(`${view.id}: there is no operational block on the page`);
+  for (const [name, top] of [
+    ["the uploaded-is-not-saved callout", shape.notSaved],
+    ["the share-link boundary", shape.linkBoundary],
+    ["the platform matrix", shape.platforms],
+  ]) {
+    if (top === null) throw new Error(`${view.id}: ${name} is missing from the page`);
+    if (shape.start >= top) {
+      throw new Error(
+        `${view.id}: the operational block starts at ${shape.start}px, below ${name} at ${top}px — the explanation is back in front of the tool`,
+      );
+    }
+  }
+
+  // Why the order matters at all: a returning owner reaches the control without
+  // a scrolling expedition. Two screens is the budget; the measured value
+  // before this batch was 2,774px, or 3.3 screens at 390px.
+  const budget = 2 * view.height;
+  if (shape.start > budget) {
+    throw new Error(
+      `${view.id}: the operational block starts ${shape.start}px down, past the ${budget}px two-screen budget`,
+    );
+  }
+  ok(`${view.id} (${label}): the tool is ${shape.start}px down a ${shape.pageHeight}px page, and nothing scrolls sideways`);
+}
+
 /** The page itself: six honest platform sections and an executable server path. */
 async function checkPage(tab, base, view) {
   await tab.waitFor(`document.querySelectorAll("[data-platform]").length === 6`, `${view.id}: six platform sections`);
+
+  // As the reader first meets it: collapsed.
+  await checkShape(tab, view, "as it opens");
 
   const sections = await tab.evaluate(
     `[...document.querySelectorAll("[data-platform]")].map((e) => [e.getAttribute("data-platform"), e.getAttribute("data-status")])`,
@@ -223,12 +291,26 @@ async function checkPage(tab, base, view) {
     if (status[planned] !== "planned") throw new Error(`${view.id}: ${planned} is marked ${status[planned]}`);
   }
 
+  // The disclosure is a summary of what is inside, so from here on everything
+  // must be OPEN. Checking the collapsed page would be the easiest possible
+  // false green: the defect this suite now guards against — a command block
+  // inflating the document past the viewport — cannot appear while the block
+  // that carries it is not laid out.
+  await tab.evaluate(`(() => {
+    for (const d of document.querySelectorAll("details[data-platform]")) d.open = true;
+    return true;
+  })()`);
+  await sleep(200);
+
   // Every section is on screen at this width — including at 390px, where the
   // two-column definition list has to collapse rather than overflow.
   for (const id of PLATFORMS) {
     const badVis = await tab.evaluate(VISIBLE(`[data-platform="${id}"]`));
     if (badVis) throw new Error(`${view.id}: the ${id} section is ${badVis}`);
   }
+
+  // …and the same measurement again, now that all six carry their commands.
+  await checkShape(tab, view, "every platform expanded");
 
   // A native product that does not exist gets no command. The macOS branch is
   // tied to the same canonical release manifest as the rendered page, so this
@@ -305,6 +387,69 @@ async function checkPage(tab, base, view) {
     }
   }
   ok(`${view.id}: six honest platform sections, an inspectable installer and a live server guide`);
+}
+
+/**
+ * A fragment now has to do two things, and only a browser can show both.
+ *
+ * Arriving at `/device-inbox#platform-server` must OPEN that section, not stop
+ * at a closed summary; the SPA shell is empty when the document loads, so the
+ * page owns this, not the browser (WORKFLOW-LEARNINGS, 2026-08-09: "A real
+ * browser is where link and layout defects live").
+ *
+ * And an in-page link must still WRITE its fragment. The handler that opens the
+ * disclosure could have cancelled the default action to take over the scroll —
+ * that also cancels the fragment, and these links would quietly stop producing
+ * a URL worth copying or a Back step they produced before.
+ */
+const inView = (top, view) => top >= -60 && top <= view.height * 0.5;
+
+async function checkAnchors(browser, base, view) {
+  const tab = await openTab(browser, base, view, "/device-inbox#platform-server", null);
+  await tab.waitFor(
+    `document.querySelectorAll("[data-platform]").length === 6`,
+    `${view.id}: the page rendered for the fragment check`,
+  );
+  await sleep(300);
+
+  const landed = await tab.evaluate(`(() => {
+    const d = document.querySelector('[data-platform="server"]');
+    const r = d.getBoundingClientRect();
+    return JSON.stringify({ open: d.open, top: Math.round(r.top), others: [...document.querySelectorAll("details[data-platform]")].filter((x) => x.open).length });
+  })()`);
+  const arrived = JSON.parse(landed);
+  if (!arrived.open) {
+    throw new Error(`${view.id}: /device-inbox#platform-server left the server section closed`);
+  }
+  if (arrived.others !== 1) {
+    throw new Error(`${view.id}: the fragment opened ${arrived.others} sections, not just the one it named`);
+  }
+  // Scrolled TO it, not merely opened somewhere below the fold. The band is
+  // not [0, ∞): opening the disclosure changes the page's height under the
+  // scroll that just happened, so the row settles a few pixels either side of
+  // the top edge. It has to be AT the top, not merely on screen — a summary row
+  // is 44px tall, so anything past -60 has scrolled the named section away.
+  if (!inView(arrived.top, view)) {
+    throw new Error(`${view.id}: the named section is ${arrived.top}px from the top of a ${view.height}px viewport`);
+  }
+
+  // The other direction: a platform's "send from this page" link back to the
+  // tool, which must move the reader AND leave the fragment behind it.
+  await tab.evaluate(`document.querySelector('[data-di="send-server"]').click()`);
+  await sleep(300);
+  const back = JSON.parse(await tab.evaluate(`(() => {
+    const r = document.querySelector('[data-di="start"]').getBoundingClientRect();
+    return JSON.stringify({ hash: location.hash, top: Math.round(r.top) });
+  })()`));
+  if (back.hash !== "#start") {
+    throw new Error(`${view.id}: the send link left the URL at ${JSON.stringify(back.hash)} — the fragment was cancelled`);
+  }
+  if (!inView(back.top, view)) {
+    throw new Error(`${view.id}: the send link left the operational block ${back.top}px from the top`);
+  }
+
+  if (tab.errors.length) throw new Error(`${view.id}: page errors — ${tab.errors.join(" / ")}`);
+  ok(`${view.id}: a fragment opens the section it names, and an in-page link still writes one`);
 }
 
 /** Signed out: two buttons that open the real account dialog, on two panels. */
@@ -498,6 +643,7 @@ await withWatchdog("device-inbox-entry", GLOBAL_TIMEOUT_MS, async () => {
     for (const view of VIEWS) {
       const tab = await reachFromHome(browser, base, view);
       await checkPage(tab, base, view);
+      await checkAnchors(browser, base, view);
       await checkSignedOut(tab, view);
       if (tab.errors.length) throw new Error(`${view.id}: page errors — ${tab.errors.join(" / ")}`);
       await checkSignedIn(browser, base, view);

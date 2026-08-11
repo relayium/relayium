@@ -281,6 +281,73 @@ describe("the boundaries this page must not blur", () => {
   });
 });
 
+// The order and the disclosures are a product decision, not styling, so they
+// are asserted on the document rather than left to a screenshot. Both defects
+// they close were measured in a real browser at 390px on 2026-08-11: the start
+// block began 2,774px down a 12,436px page — three and a third phone screens of
+// explanation before the control — and the six expanded platform sections were
+// most of what was in between.
+describe("the tool comes before the explanation", () => {
+  /** True when `a` starts before `b` in document order. */
+  const precedes = (a: Element, b: Element) =>
+    (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+
+  it("puts the operational block above every explanatory one", () => {
+    const root = render();
+    const start = root.querySelector('[data-di="start"]')!;
+    // The three blocks a returning owner used to scroll past every visit.
+    for (const sel of ['[data-di="not-saved"]', '[data-di="link-boundary"]', "#platforms"]) {
+      const later = root.querySelector(sel)!;
+      expect(later, sel).not.toBeNull();
+      expect(precedes(start, later), `${sel} still comes before the start block`).toBe(true);
+    }
+    // And it is still the FIRST thing under the hero, not merely above them.
+    const blocks = [...root.querySelectorAll(".block")];
+    expect(blocks[0]).toBe(start);
+  });
+
+  it("keeps every explanatory block on the page rather than deleting it", () => {
+    const root = render();
+    // Reordering is not a licence to drop content: the two boundary callouts and
+    // the four prerequisites are PRD requirements wherever they sit.
+    expect(root.querySelector('[data-di="not-saved"]')).not.toBeNull();
+    expect(root.querySelector('[data-di="link-boundary"]')).not.toBeNull();
+    expect(root.querySelectorAll(".prereq li").length).toBe(4);
+    expect(root.querySelectorAll(".steps li").length).toBe(en().howSteps.length);
+  });
+
+  it("collapses each platform behind a disclosure that still states its status", () => {
+    const root = render();
+    for (const id of REQUIRED_PLATFORM_IDS) {
+      const sec = root.querySelector<HTMLDetailsElement>(`[data-platform="${id}"]`)!;
+      expect(sec.tagName, id).toBe("DETAILS");
+      expect(sec.open, `${id} is expanded, which is the wall of text this replaces`).toBe(false);
+      // What must never be behind the click: the name and the honest status.
+      const summary = sec.querySelector("summary")!;
+      expect(summary.textContent, id).toContain(en().platforms[id].name);
+      expect(summary.querySelector(".badge")!.textContent, id).toContain("Status:");
+      // The heading survives the move into <summary>: the outline is unchanged.
+      expect(summary.querySelector("h3"), id).not.toBeNull();
+    }
+  });
+
+  it("opens the section a same-page link names, instead of scrolling to a closed row", async () => {
+    // An account with nothing to send to: the state whose remedy IS the server
+    // section, and the one that renders the link to it.
+    const root = await signedIn({ fetchDevices: async () => [] });
+    const server = root.querySelector<HTMLDetailsElement>('[data-platform="server"]')!;
+    expect(server.open).toBe(false);
+
+    const cta = root.querySelector<HTMLAnchorElement>('[data-di="setup-server"]')!;
+    expect(cta.getAttribute("href")).toBe("#platform-server");
+    cta.click();
+    flushSync();
+    // Without this the anchor resolves, the page jumps, and the reader is left
+    // looking at a summary line — the same dead end as a broken link.
+    expect(server.open, "the setup CTA scrolled to a section it did not open").toBe(true);
+  });
+});
+
 describe("the start block, signed out", () => {
   it("offers two controls that actually open the account modal", () => {
     const root = render();

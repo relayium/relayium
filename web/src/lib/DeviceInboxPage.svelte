@@ -199,22 +199,58 @@
     // the document loads, so the browser's own fragment handling has already
     // given up by the time #platform-server exists (WORKFLOW-LEARNINGS,
     // 2026-08-09: "A real browser is where link and layout defects live").
-    // Focus moves with the scroll, or a keyboard user is left at the document
-    // start while the sighted view has jumped.
-    const id = location.hash.slice(1);
-    const target = id ? document.getElementById(id) : null;
-    if (target) {
-      target.setAttribute("tabindex", "-1");
-      target.scrollIntoView({ block: "start" });
-      target.focus({ preventScroll: true });
-    }
+    revealAnchor(location.hash.slice(1));
+    // A hash arriving after mount — the browser Back button, or a link in
+    // another component — has to open the same section the click path opens.
+    if (typeof window !== "undefined") window.addEventListener("hashchange", onHashChange);
 
     return () => {
       if (presenceTick !== undefined) clearInterval(presenceTick);
       if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVisibility);
+      if (typeof window !== "undefined") window.removeEventListener("hashchange", onHashChange);
       deviceGen++;
     };
   });
+
+  /**
+   * Scroll to `#id`, and OPEN it first if it is one of the collapsed platform
+   * sections. Without the open, "Set up a receiver" scrolls a reader to a
+   * closed row and leaves them looking at a summary line — the anchor resolves
+   * and the content it named is still not on screen, which is the same dead end
+   * as a broken link with none of the evidence that it broke.
+   *
+   * Focus moves with the scroll, or a keyboard user is left at the document
+   * start while the sighted view has jumped.
+   */
+  function revealAnchor(id: string) {
+    if (!id || typeof document === "undefined") return false;
+    const target = document.getElementById(id);
+    if (!target) return false;
+    const box = target.closest("details");
+    if (box) box.open = true;
+    target.setAttribute("tabindex", "-1");
+    // Optional call, as in Nav.svelte: this now runs from a click handler as
+    // well as from mount, and an environment without scrollIntoView (jsdom)
+    // must not take the OPEN with it — the disclosure is the load-bearing half.
+    target.scrollIntoView?.({ block: "start" });
+    target.focus({ preventScroll: true });
+    return true;
+  }
+
+  function onHashChange() {
+    revealAnchor(location.hash.slice(1));
+  }
+
+  /**
+   * In-page anchors get a hand, not a replacement: the native jump cannot open
+   * a closed <details>, so this opens it first and then lets the browser do
+   * everything it already did. Deliberately NOT `preventDefault()` — that would
+   * also cancel the fragment write, and these links would stop producing a URL
+   * worth copying or a Back step, which they did before this batch.
+   */
+  function goAnchor(_e: MouseEvent, id: string) {
+    revealAnchor(id);
+  }
 
   // ── Platform presentation ────────────────────────────────────────────────
 
@@ -258,38 +294,17 @@
     </ul>
   </header>
 
-  <!-- What it is -->
-  <div class="block">
-    <h2>{t.deviceInboxPage.howH2}</h2>
-    <p>{t.deviceInboxPage.howLead}</p>
-    <ol class="steps">
-      {#each t.deviceInboxPage.howSteps as s (s)}<li>{s}</li>{/each}
-    </ol>
-    <div class="callout" data-di="not-saved">
-      <h3>{t.deviceInboxPage.notSavedH3}</h3>
-      <p>{t.deviceInboxPage.notSavedBody}</p>
-    </div>
-  </div>
-
-  <!-- Prerequisites + the permission boundary -->
-  <div class="block">
-    <h2>{t.deviceInboxPage.prereqH2}</h2>
-    <ul class="prereq">
-      <li>{t.deviceInboxPage.prereqAccount}</li>
-      <li>{t.deviceInboxPage.prereqSameAccount}</li>
-      <li>{t.deviceInboxPage.prereqEnable}</li>
-      <li>{t.deviceInboxPage.prereqOffline}</li>
-    </ul>
-    <div class="callout" data-di="link-boundary">
-      <h3>{t.deviceInboxPage.linkBoundaryH3}</h3>
-      <p>{t.deviceInboxPage.linkBoundary}</p>
-    </div>
-  </div>
-
   <!-- Start: the operational half of the page, and the whole journey for a
        signed-in owner. Signed out it opens the real Account modal; signed in it
        renders this account's own devices, each with the send control that
-       actually works, and says which of the five states it is in. -->
+       actually works, and says which of the five states it is in.
+
+       It is FIRST, directly under the hero, and that placement is the product
+       decision this page had wrong: the explanatory blocks used to push it
+       2,774px down at 390px — three and a third phone screens of reading before
+       a returning owner could reach the control they came for. Explanation that
+       has to be scrolled past on every visit is a cost paid per visit; the
+       people who need it read it once. It now follows the tool. -->
   <div class="block start" id="start" data-di="start" data-state={session().user ? step : "signed-out"}>
     <h2>{t.deviceInboxPage.startH2}</h2>
 
@@ -330,7 +345,11 @@
           </button>
         {/if}
         {#if step !== "ready"}
-          <a class="cta ghost" href="#platform-server" data-di="setup-server">{t.deviceInboxPage.setUpServerCta}</a>
+          <a
+            class="cta ghost"
+            href="#platform-server"
+            data-di="setup-server"
+            onclick={(e) => goAnchor(e, "platform-server")}>{t.deviceInboxPage.setUpServerCta}</a>
         {/if}
         <!-- Secondary, and deliberately not a send path: renaming and revoking
              are credential management, and this page's rows do not offer them. -->
@@ -351,21 +370,61 @@
     {/if}
   </div>
 
-  <!-- Six platforms -->
+  <!-- What it is -->
+  <div class="block">
+    <h2>{t.deviceInboxPage.howH2}</h2>
+    <p>{t.deviceInboxPage.howLead}</p>
+    <ol class="steps">
+      {#each t.deviceInboxPage.howSteps as s (s)}<li>{s}</li>{/each}
+    </ol>
+    <div class="callout" data-di="not-saved">
+      <h3>{t.deviceInboxPage.notSavedH3}</h3>
+      <p>{t.deviceInboxPage.notSavedBody}</p>
+    </div>
+  </div>
+
+  <!-- Prerequisites + the permission boundary -->
+  <div class="block">
+    <h2>{t.deviceInboxPage.prereqH2}</h2>
+    <ul class="prereq">
+      <li>{t.deviceInboxPage.prereqAccount}</li>
+      <li>{t.deviceInboxPage.prereqSameAccount}</li>
+      <li>{t.deviceInboxPage.prereqEnable}</li>
+      <li>{t.deviceInboxPage.prereqOffline}</li>
+    </ul>
+    <div class="callout" data-di="link-boundary">
+      <h3>{t.deviceInboxPage.linkBoundaryH3}</h3>
+      <p>{t.deviceInboxPage.linkBoundary}</p>
+    </div>
+  </div>
+
+  <!-- Six platforms.
+       Each one is a disclosure rather than a wall. Expanded, the six sections
+       were 8,000px of the 12,400px this page occupied at 390px: a reference
+       matrix nobody reads six of, in the position where a reader is looking for
+       exactly one. Collapsed, the six statuses are one screen and still all
+       true — the name and the honest status stay on the summary, so nothing
+       that this page promises to state is behind a click. Only the detail of a
+       platform the reader has not asked about is. -->
   <div class="block">
     <h2 id="platforms">{t.deviceInboxPage.platformsH2}</h2>
     <p>{t.deviceInboxPage.platformsLead}</p>
 
     {#each INBOX_PLATFORMS as p (p.id)}
-      <section class="plat" id={`platform-${p.id}`} data-platform={p.id} data-status={p.status}>
-        <h3>
-          <span class="g" aria-hidden="true">{p.glyph}</span>
-          <span class="pname">{copy(p).name}</span>
-          <span class="badge" data-badge={p.status}>
-            <span class="vh">{t.deviceInboxPage.statusLabel(statusText(p.status))}</span>
-            <span aria-hidden="true">{statusText(p.status)}</span>
-          </span>
-        </h3>
+      <!-- <summary> takes phrasing content OR heading content, so the h3 stays:
+           the page's outline is unchanged and the row is still the disclosure
+           button a screen reader announces as expanded/collapsed. -->
+      <details class="plat" id={`platform-${p.id}`} data-platform={p.id} data-status={p.status}>
+        <summary>
+          <h3>
+            <span class="g" aria-hidden="true">{p.glyph}</span>
+            <span class="pname">{copy(p).name}</span>
+            <span class="badge" data-badge={p.status}>
+              <span class="vh">{t.deviceInboxPage.statusLabel(statusText(p.status))}</span>
+              <span aria-hidden="true">{statusText(p.status)}</span>
+            </span>
+          </h3>
+        </summary>
 
         <dl>
           <dt>{t.deviceInboxPage.labelUse}</dt>
@@ -415,7 +474,9 @@
                  route. The send target for this platform is the card in the
                  start block, once this account has such a device. -->
             <p class="alt">
-              <a href="#start" data-di={`send-${p.id}`}>{t.deviceInboxPage.sendHereCta}</a>
+              <a href="#start" data-di={`send-${p.id}`} onclick={(e) => goAnchor(e, "start")}>
+                {t.deviceInboxPage.sendHereCta}
+              </a>
             </p>
           </dd>
 
@@ -436,7 +497,7 @@
             {/if}
           </dd>
         </dl>
-      </section>
+      </details>
     {/each}
   </div>
 
@@ -635,11 +696,62 @@
 
   /* Platform sections */
   .plat {
-    margin-top: var(--space-6);
-    padding: var(--space-5);
+    margin-top: var(--space-4);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     background: var(--surface);
+  }
+  /* The row is a flex container, which drops the UA marker on its own — so the
+     chevron below is not decoration, it is the ONLY remaining "this opens"
+     affordance and has to be drawn, not merely allowed. Safari keeps its marker
+     through `display: flex` and needs the -webkit rule as well; without it that
+     browser gets two triangles. */
+  .plat > summary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-5);
+    cursor: pointer;
+    border-radius: var(--radius);
+    /* A tap target the thumb can actually hit, at every width. */
+    min-height: 44px;
+  }
+  .plat > summary::-webkit-details-marker {
+    display: none;
+  }
+  .plat > summary::after {
+    content: "";
+    flex: none;
+    margin-inline-start: auto;
+    width: 8px;
+    height: 8px;
+    /* Physical borders on purpose: a chevron pointing DOWN points down in
+       Arabic too. The logical pair flips it sideways under `dir="rtl"`. */
+    border-right: 2px solid var(--text);
+    border-bottom: 2px solid var(--text);
+    transform: rotate(45deg);
+    transform-origin: center;
+    transition: transform 0.15s ease;
+  }
+  .plat[open] > summary::after {
+    transform: rotate(-135deg);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .plat > summary::after {
+      transition: none;
+    }
+  }
+  .plat > summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+  .plat[open] > summary {
+    border-bottom: 1px solid var(--border);
+    border-end-start-radius: 0;
+    border-end-end-radius: 0;
+  }
+  .plat > dl {
+    padding: var(--space-5);
   }
   .plat h3 {
     display: flex;
@@ -648,7 +760,11 @@
     gap: var(--space-3);
     font-size: var(--fs-h3);
     color: var(--text-h);
-    margin: 0 0 var(--space-4);
+    margin: 0;
+    /* A flex item's floor is its content, not zero: without this a long
+       localized platform name refuses to wrap and pushes the chevron out. */
+    flex: 1 1 auto;
+    min-width: 0;
   }
   .plat h3 .g {
     font-size: 22px;
@@ -686,6 +802,20 @@
     font-size: var(--fs-sm);
     font-weight: 600;
   }
+  /* min-width: 0 is the whole horizontal-overflow fix, and it is not cosmetic.
+     A grid item's automatic minimum size is its MIN-CONTENT size, and a
+     CommandBlock's <pre> is `white-space: pre` — its min-content width is the
+     longest command in the file. So the dd refused to be narrower than
+     `sudo sh inbox-server-install.sh --dir /srv/relayium-inbox`, the dl grew
+     with it, and the whole document went to 795px inside a 390px viewport:
+     every screen of this page scrolled sideways, and the <pre>'s own
+     `overflow-x: auto` never engaged because it was never the thing being
+     squeezed. Floor the item at zero and the scroll happens where it was
+     designed to, inside the terminal block. */
+  dt,
+  dd {
+    min-width: 0;
+  }
   dd {
     margin: 0 0 var(--space-3);
     color: var(--text);
@@ -710,10 +840,90 @@
     dt {
       margin-top: var(--space-3);
     }
+
+    /* A phone is not a small desktop. The hero used to occupy most of the
+       first screen on its own — a 60px badge, a display-size heading and a
+       three-line subhead, all centred — before a returning owner reached
+       anything they could operate. It keeps the heading and the promise and
+       gives up the ceremony. */
+    .dinbox {
+      padding-top: 0;
+    }
+    .hero {
+      padding: var(--space-3) 0 var(--space-2);
+      text-align: start;
+    }
+    .logo {
+      width: 40px;
+      height: 40px;
+      line-height: 40px;
+      font-size: 21px;
+      margin: 0 0 var(--space-2);
+      border-radius: 10px;
+    }
+    .hero h1 {
+      /* The token that already means "page header, not marketing hero". */
+      font-size: var(--fs-page-title);
+      letter-spacing: -0.6px;
+    }
+    .hero .sub {
+      font-size: var(--fs-sm);
+      margin: 0;
+    }
+    .badges {
+      justify-content: flex-start;
+      margin-top: var(--space-3);
+    }
+
+    .block {
+      margin-top: var(--space-6);
+    }
+    /* The operational block is the exception: it follows the hero directly and
+       should read as part of the same first screen, not as the next chapter. */
+    .block.start {
+      margin-top: var(--space-4);
+    }
+    .start,
+    .plat > summary,
+    .plat > dl {
+      padding-inline: var(--space-4);
+    }
+
+    /* Full-width actions. Side-by-side CTAs at 390px are two ~150px buttons
+       with a wrap that puts the second one somewhere unpredictable; stacked,
+       each is a thumb-sized target in a fixed place. */
+    .actions {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--space-2);
+    }
+    .cta {
+      text-align: center;
+      padding: var(--space-3) var(--space-4);
+    }
+    .manage {
+      align-self: start;
+    }
   }
 
   a {
     color: var(--accent-fg);
+  }
+
+  /* A standalone action link is not prose: at 17px tall it fails WCAG 2.5.8's
+     24px minimum target, and on a phone it is a coin-toss for a thumb. Inside a
+     sentence a link keeps the line's rhythm, so only these are enlarged. */
+  .alt a,
+  .manage {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+  }
+  @media (max-width: 720px) {
+    .alt a,
+    .manage {
+      min-height: 44px;
+    }
   }
 
   /* Hidden from sight, not from the accessibility tree: the badge's visible
