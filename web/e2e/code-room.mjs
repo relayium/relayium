@@ -381,9 +381,13 @@ async function codeRoomScenario(browser, base) {
  * 是可以直接按下去的。按下去，文件就交给了"第一个进房间的人"，也就是这条确认栏
  * 当初被加进来防的那种猜码者。
  *
- * 这里跑的是完整的一遍：先选文件 → 铸码进房 → 对端加入 → 确认栏出现但**没有**发送
- * 按钮 → 打开工作区（不排空队列）→ 头部出现 SAS → 现在才可以发送。中途还按一次
- * 取消，验证工作区里那条常驻的重新武装路径没有被这次改动破坏。
+ * 这里跑的是完整的一遍：铸码进房 → 在等待中暂存文件 → 对端加入 → 确认栏出现但
+ * **没有**发送按钮 → 打开工作区（不排空队列）→ 头部出现 SAS → 现在才可以发送。
+ * 中途还按一次取消，验证工作区里那条常驻的重新武装路径没有被这次改动破坏。
+ *
+ * 2026-08-11 起，队列的来源换了顺序：站主把流程从"先选文件再铸码"翻成"先铸码再选
+ * 文件"，所以这一幕现在从**等待房间里的暂存区**装载队列，而不是从 choose 屏上那两个
+ * 已经不存在的文件按钮。队列本身、确认栏、以及它守的那个洞都没有变。
  */
 async function preselectedSendScenario(browser, base) {
   const room = `${base}/cross-network`;
@@ -392,12 +396,28 @@ async function preselectedSendScenario(browser, base) {
   const a = await newTab(browser, room, sender + codeRoomSignalingScript({ selfId: "aaaa1111", name: "Tab A" }));
   await setWideViewport(a, 390, 844);
 
-  // ── 一、先选文件、再铸码：产品里预置队列的两个来源之一，逐字走一遍 ──────────
-  await a.waitFor("!!document.querySelector('.choices .file-pick-input')",
-    "the signed-in sender's file picker", 30_000);
+  // ── 一、先铸码，再在等待中暂存：翻转后的真实顺序，逐字走一遍 ────────────────
+  // choose 屏上现在只有一个发送动作，而且**没有**文件选择器；有的话就是旧顺序回来了。
+  await a.waitFor("!!document.querySelector('.choices .create-code')",
+    "the signed-in sender's create-code action", 30_000);
+  const noPickerBeforeCode = await a.evaluate(
+    "document.querySelectorAll('.pairing input[type=\"file\"]').length",
+  );
+  if (noPickerBeforeCode !== 0) {
+    throw new Error(`choose screen still offers ${noPickerBeforeCode} file picker(s) before a code exists`);
+  }
+  await a.evaluate("document.querySelector('.choices .create-code').click(), true");
+  await a.waitFor(
+    `document.querySelector('.pairing .code')?.textContent?.trim() === '${PRESELECT_ROOM_CODE}'`,
+    "the create-code action to mint and enter its room",
+    30_000,
+  );
+
   const FILE_BYTES = 64 * 1024 + 9;
+  await a.waitFor("!!document.querySelector('.staging .file-pick-input')",
+    "the waiting room's staging picker", 15_000);
   await a.evaluate(`(() => {
-    const input = document.querySelector('.choices .file-pick-input');
+    const input = document.querySelector('.staging .file-pick-input');
     const body = new Uint8Array(${FILE_BYTES});
     for (let i = 0; i < body.length; i++) body[i] = (i * 53 + 7) % 251;
     const dt = new DataTransfer();
@@ -406,14 +426,9 @@ async function preselectedSendScenario(browser, base) {
     input.dispatchEvent(new Event('change', { bubbles: true }));
     return true;
   })()`);
-  await a.waitFor(
-    `document.querySelector('.pairing .code')?.textContent?.trim() === '${PRESELECT_ROOM_CODE}'`,
-    "the picked batch to mint a code and enter its room",
-    30_000,
-  );
   await a.waitFor("document.querySelectorAll('.pending-files .file-name').length === 1",
-    "the queued batch to be listed while the room waits", 15_000);
-  ok("a preselected batch minted a code and waited in the room, undrained");
+    "the staged batch to be listed while the room waits", 15_000);
+  ok("a code was minted first, then a batch staged into the waiting room, undrained");
 
   // ── 二、对端进房 → 确认栏出现，但此刻还没有任何码 ─────────────────────────
   const b = await newTab(

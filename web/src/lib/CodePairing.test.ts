@@ -180,45 +180,151 @@ describe("the join-code input", () => {
   });
 });
 
-// The pre-pair choice, for a signed-in sender. "Open a room without picking
-// files first" is the entry point for the entire receiver-initiated half of the
-// product — someone who wants to RECEIVE, or who will decide what to send once
-// the other device is actually there. As an underlined sentence under two
-// primary buttons it read as a footnote about them.
-describe("the bare-connect action", () => {
+// The pre-pair choice, for a signed-in sender.
+//
+// The owner inverted this flow on 2026-08-11: it used to lead with "Send files"
+// / "Send a folder", which mint a code only AFTER a batch is picked, and offered
+// minting-without-files as a secondary ghost button. Picking first is what made
+// the sender wait with nothing to do, so the order is now reversed — mint first,
+// decide what to send while the code is out. That leaves exactly one sender
+// action on this screen and no file input at all: staging moved into the waiting
+// room, where the code is already on screen to pass on.
+describe("the signed-in choose screen", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
   async function signedIn() {
     const user = { id: "u1", email: "a@b.c", displayName: "A", hasPassword: true };
-    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    fetchMock = vi.fn(async (url: string) => {
       if (url === "/api/me") return { ok: true, status: 200, json: async () => ({ user }) };
+      if (url === "/api/pair") {
+        return { ok: true, status: 200, json: async () => ({ code: "483920", expiresAt: 9e9 }) };
+      }
       throw new Error(`unexpected fetch ${url}`);
-    }) as unknown as typeof fetch);
+    });
+    vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
     await refreshSession();
     render({});
   }
 
   afterEach(() => { vi.unstubAllGlobals(); });
 
-  it("is a real button, not a text link", async () => {
+  it("offers creating a code as the one primary action", async () => {
     await signedIn();
-    const bare = target.querySelector(".bare-connect") as HTMLButtonElement;
-    expect(bare).not.toBe(null);
-    expect(bare.tagName).toBe("BUTTON");
-    // Shares the .btn primitive, which is what supplies the coarse-pointer touch
-    // floor and the dark-mode control tokens. `.btn-link` supplies neither.
-    expect(bare.className).toContain("btn");
-    expect(bare.className).not.toContain("btn-link");
-    expect(bare.textContent?.trim()).toBe(messages.en.pair.bareConnect);
+    const create = target.querySelector(".create-code") as HTMLButtonElement;
+    expect(create).not.toBe(null);
+    expect(create.tagName).toBe("BUTTON");
+    expect(create.className).toContain("btn-primary");
+    expect(create.textContent?.trim()).toBe(messages.en.pair.sendCode);
   });
 
-  it("stays visually secondary to picking files", async () => {
+  it("offers no file picker before a code exists", async () => {
     await signedIn();
-    const bare = target.querySelector(".bare-connect") as HTMLButtonElement;
-    // Picking files is still the common case; this is a choice, not a fallback,
-    // and must not compete with the two primary actions above it.
-    expect(bare.className).toContain("btn-ghost");
-    expect(bare.className).not.toContain("btn-primary");
+    // The whole point of the inversion. A picker here would rebuild the
+    // "choose files, then wait" ordering next to the button that replaced it.
+    expect(target.querySelectorAll('input[type="file"]')).toHaveLength(0);
+  });
+
+  it("still lets a receiver enter someone else's code", async () => {
+    await signedIn();
+    // Without this the six-digit half of the product is unreachable: a receiver
+    // who was read a code over the phone has no other way in.
+    const buttons = [...target.querySelectorAll("button")].map((b) => b.textContent?.trim());
+    expect(buttons).toContain(messages.en.pair.enterCode);
+  });
+
+  it("mints exactly one code when that action is used", async () => {
+    await signedIn();
+    (target.querySelector(".create-code") as HTMLButtonElement).click();
+    await vi.waitFor(() => {
+      expect(fetchMock.mock.calls.filter(([u]) => u === "/api/pair")).toHaveLength(1);
+    });
   });
 
   // The nine-locale shape of that label (short, trimmed, not a sentence) is
   // asserted in i18n.test.ts, which is the file that imports every table.
+});
+
+// The other half of the inversion: the wait is now where the batch is built.
+describe("staging inside a waiting code room", () => {
+  // The minter's branch is the one with the staging box — a joiner has nothing
+  // to stage, it is the sender who is waiting.
+  function asMinter() {
+    sessionStorage.setItem(EXP_KEY, String(Math.floor(Date.now() / 1000) + 300));
+    render({ roomCode: "483920" });
+  }
+  const pick = (n: number) =>
+    [...target.querySelectorAll<HTMLInputElement>('input[type="file"]')][n];
+  const file = (name: string) => new File(["x"], name, { lastModified: 0 });
+
+  /** Drive a file input the way a user's pick does. jsdom will not let `.files`
+   *  be assigned, so it is redefined for this one element. */
+  function choose(input: HTMLInputElement, ...names: string[]) {
+    Object.defineProperty(input, "files", {
+      configurable: true,
+      value: Object.assign(names.map(file), { item: (i: number) => file(names[i]) }),
+    });
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    flushSync();
+  }
+
+  it("tells the sender to pass the code on", () => {
+    asMinter();
+    expect(target.textContent).toContain(messages.en.pair.handoff);
+  });
+
+  it("offers to stage files without waiting for the other device", () => {
+    asMinter();
+    expect(target.textContent).toContain(messages.en.pair.stageLead);
+    expect(pick(0)).toBeTruthy();
+  });
+
+  it("adds each pick to the batch instead of replacing the last one", () => {
+    asMinter();
+    choose(pick(0), "a.txt");
+    choose(pick(0), "b.txt");
+    // The regression this guards: setOutbox semantics here would silently throw
+    // away "a.txt" — including when it arrived from the OS share sheet.
+    expect(target.textContent).toContain("a.txt");
+    expect(target.textContent).toContain("b.txt");
+  });
+
+  it("keeps a batch that was already queued before the code was minted", () => {
+    setOutbox([{ file: file("shared.bin") }]);
+    asMinter();
+    choose(pick(0), "picked.bin");
+    expect(target.textContent).toContain("shared.bin");
+    expect(target.textContent).toContain("picked.bin");
+  });
+
+  it("lets one staged file be removed again", () => {
+    asMinter();
+    choose(pick(0), "a.txt");
+    choose(pick(0), "b.txt");
+    const remove = [...target.querySelectorAll<HTMLButtonElement>(".file-remove")];
+    expect(remove).toHaveLength(2);
+    // Named with the file, not just "Remove": a column of identical labels
+    // names nothing to a screen reader.
+    expect(remove[0].getAttribute("aria-label")).toContain("a.txt");
+    remove[0].click();
+    flushSync();
+    expect(target.textContent).not.toContain("a.txt");
+    expect(target.textContent).toContain("b.txt");
+  });
+
+  it("says the transfer starts by itself, and claims nothing about uploading", () => {
+    asMinter();
+    choose(pick(0), "a.txt");
+    expect(target.textContent).toContain(messages.en.pair.stageNote);
+    // stageNote must survive pre-upload landing, so it may not promise either
+    // that the bytes stay local or that they go straight to the peer (a
+    // cross-network room relays them through TURN).
+    expect(messages.en.pair.stageNote.toLowerCase()).not.toContain("upload");
+    expect(messages.en.pair.stageNote.toLowerCase()).not.toContain("directly");
+  });
+
+  it("shows no staging box to the side that joined with a code", () => {
+    render({ roomCode: "483920" }); // no EXP_KEY: this is the joiner
+    expect(target.textContent).not.toContain(messages.en.pair.stageLead);
+    expect(target.querySelectorAll('input[type="file"]')).toHaveLength(0);
+  });
 });

@@ -9,10 +9,18 @@
 
   type FileItem = FileIdentity | { readonly file: FileIdentity };
 
-  let { files, summary, compact = false }: {
+  let { files, summary, compact = false, onRemove, removeLabel = "" }: {
     files: readonly FileItem[];
     summary: string;
     compact?: boolean;
+    /** Optional per-row removal. Only the staging surfaces pass it: everywhere
+     *  else this list reports a batch that is already committed or in flight,
+     *  where a remove control would offer to cancel something it cannot. */
+    onRemove?: (index: number) => void;
+    /** Verb for the remove control. Required in practice whenever onRemove is
+     *  passed — the accessible name is this plus the file it acts on, because
+     *  a column of identical "Remove" buttons names nothing. */
+    removeLabel?: string;
   } = $props();
 
   const identity = (item: FileItem): FileIdentity =>
@@ -34,7 +42,17 @@
           <!-- bdi contains a legitimate RTL name without letting it reorder the
                adjacent size. Trojan-source controls are removed separately. -->
           <bdi class="file-name" dir="auto">{displayName(item)}</bdi>
-          <span class="file-size" dir="ltr">{formatSize(identity(item).size)}</span>
+          <!-- No whitespace between the size and the {#if}: a newline there is a
+               text node, and it lands in this row's textContent for EVERY caller
+               including the ones that pass no onRemove. Named with the sanitized
+               display name, not the raw one — this string reaches a screen
+               reader, and safeDisplayName is what strips the bidi/control
+               characters that would otherwise reorder the label around it. -->
+          <span class="file-size" dir="ltr">{formatSize(identity(item).size)}</span>{#if onRemove}<button
+              class="btn btn-sm file-remove"
+              aria-label={`${removeLabel} ${displayName(item)}`}
+              onclick={() => onRemove?.(index)}
+            >{removeLabel}</button>{/if}
         </li>
       {/each}
     </ul>
@@ -99,4 +117,8 @@
     white-space: nowrap;
     unicode-bidi: isolate;
   }
+  /* Never margin-inline-start:auto — the size already claims that, and two
+     auto-margins in one flex row split the free space instead of pinning both
+     to the end. */
+  .file-remove { flex: 0 0 auto; }
 </style>

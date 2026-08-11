@@ -1657,6 +1657,16 @@
           formatSize(outbox().reduce((total, item) => total + item.file.size, 0)),
         )}
       />
+      <!-- Only on LAN, and deliberately so. It is a standing owner promise that
+           LAN staging is local and stays local — free LAN transfer is the whole
+           point of not putting it on the server — and it is the one surface
+           where the stronger claim is also true: these bytes go peer to peer,
+           with no relay in the path. A code room must NOT reuse this string;
+           its own note (pair.stageNote) stays silent about where the bytes are,
+           because that is exactly what pre-upload changes. -->
+      {#if currentRoute() === "lan"}
+        <p class="ui-callout staged-local">{t.lanStagedNote}</p>
+      {/if}
     {/if}
     {#if currentRoute() === "lan"}
       {#if chooser === "empty"}
@@ -2122,6 +2132,10 @@
     margin-block: var(--space-3) 0;
   }
   .text-availability-icon { flex: none; color: var(--accent); margin-block-start: 1px; }
+
+  /* Sits directly under the staged-file list it describes, so the promise and
+     the files it is about are read together. */
+  .staged-local { margin-block: 0 var(--space-3); font-size: var(--fs-xs); line-height: 1.5; }
 
   footer {
     margin-top: var(--space-6); padding-top: var(--space-5); border-top: 1px solid var(--border);

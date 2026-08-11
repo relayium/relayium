@@ -6,8 +6,8 @@
   import { canShare, share } from "./share";
   import { enterRoom } from "./room.svelte";
   import { messages, lang, type Messages } from "./i18n.svelte";
-  import { outbox, setOutbox, clearOutbox } from "./outbox.svelte";
-  import { pickedFromInput } from "./drag";
+  import { outbox, addToOutbox, removeFromOutbox, clearOutbox } from "./outbox.svelte";
+  import { pickedFromInput, filesFromDataTransfer, hasFiles } from "./drag";
   import { formatSize } from "./format";
   import { folderUploadSupported } from "./platform";
   import { session } from "./auth.svelte";
@@ -76,15 +76,35 @@
   const queuedBytes = $derived(outbox().reduce((n, p) => n + p.file.size, 0));
   const relayWarn = $derived(relayWarnNote(t, relayStatus));
 
-  // Files-first entry: pick files, then mint — the batch waits in the outbox
-  // and App auto-offers it the moment the recipient joins the code room.
-  async function pickAndSend(e: Event) {
+  // Staging inside a waiting room. Every pick ADDS to the batch (addToOutbox,
+  // not setOutbox): the user is assembling what to send over several gestures
+  // while the code is out, and a replace would silently drop the previous drop —
+  // including a batch that arrived from the OS share sheet before the code was
+  // minted. App's auto-send effect drains whatever is queued the moment the
+  // other device joins, so nothing here needs to know about the transport.
+  function stagePicked(e: Event) {
     const input = e.currentTarget as HTMLInputElement;
-    const picked = input.files?.length ? pickedFromInput(input.files) : [];
+    if (input.files?.length) addToOutbox(pickedFromInput(input.files));
     input.value = ""; // allow re-picking the same files
-    if (!picked.length) return;
-    setOutbox(picked);
-    await send();
+  }
+
+  // Drag state is local to the staging box, so the highlight cannot outlive the
+  // branch that renders it.
+  let dragOver = $state(false);
+
+  async function stageDropped(e: DragEvent) {
+    e.preventDefault();
+    // The window-level handler in App also claims file drops. It is inert here
+    // today (it only sends when exactly one peer is visible, and a waiting room
+    // has none), but this box owns the drop either way — matching the peer
+    // cards, which stop propagation for exactly this reason.
+    e.stopPropagation();
+    dragOver = false;
+    if (!e.dataTransfer) return;
+    // Same walker the LAN drop zones use, so a dropped FOLDER expands to its
+    // files with their relative paths instead of being silently ignored.
+    const picked = await filesFromDataTransfer(e.dataTransfer);
+    if (picked.length) addToOutbox(picked);
   }
 
   async function send() {
@@ -146,12 +166,60 @@
         <img class="qr" src={qrDataUrl} alt="QR" width="160" height="160" />
         <p class="scan">{t.pair.scanHint}</p>
       {/if}
-      {#if outbox().length}
-        <PendingFiles
-          files={outbox()}
-          summary={t.pair.queued(outbox().length, formatSize(queuedBytes))}
-        />
-      {/if}
+      <!-- Say what to do with the code that is now on screen. Everything above
+           this line is the code itself; without an instruction the screen shows
+           six digits and a spinner and leaves the handoff to be guessed. -->
+      <p class="handoff">{t.pair.handoff}</p>
+
+      <!-- The staging surface, and the reason the mint moved first. The batch is
+           assembled HERE, during the wait, instead of before the code exists.
+           `stageNote` says only that the transfer starts by itself on join: it is
+           deliberately silent about where the bytes are, because that is exactly
+           what changes when pre-upload lands, and a note that has to be corrected
+           later is worse than one that was never that specific. It must not say
+           "never uploaded" — that is a LAN promise (see lanStagedNote), not a
+           code-room one. -->
+      <!-- role/label rather than a bare div: this is a drop target, and a drop
+           target with no role is invisible to anything that is not a mouse. -->
+      <div
+        class="staging"
+        role="group"
+        aria-labelledby="stage-lead"
+        class:dragover={dragOver}
+        ondragover={(e) => { if (hasFiles(e.dataTransfer?.types)) { e.preventDefault(); dragOver = true; } }}
+        ondragleave={() => (dragOver = false)}
+        ondrop={stageDropped}
+      >
+        <!-- labelledby, not a duplicate aria-label: the group's name is this
+             visible line, so an aria-label would make a screen reader read the
+             same sentence twice — once as the name, once as the content. -->
+        <p class="stage-lead" id="stage-lead">{t.pair.stageLead}</p>
+        <div class="row wrap">
+          <label class="btn btn-ghost">
+            <Icon name="file" size={18} /> {t.pair.stageAdd}
+            <input class="file-pick-input" type="file" multiple onchange={stagePicked} />
+          </label>
+          {#if folderUploadSupported}
+            <label class="btn btn-ghost">
+              <Icon name="folder" size={18} /> {t.pair.stageAddFolder}
+              <input class="file-pick-input" type="file" webkitdirectory multiple onchange={stagePicked} />
+            </label>
+          {/if}
+        </div>
+        <p class="stage-drop">{t.pair.stageDrop}</p>
+        {#if outbox().length}
+          <!-- Staging is only honest if it is reversible: without a per-file
+               remove, one misdrag can only be undone by "start over", which
+               discards the code along with the batch. -->
+          <PendingFiles
+            files={outbox()}
+            summary={t.pair.queued(outbox().length, formatSize(queuedBytes))}
+            onRemove={removeFromOutbox}
+            removeLabel={t.pair.stageRemove}
+          />
+          <p class="stage-note">{t.pair.stageNote}</p>
+        {/if}
+      </div>
     {/if}
     <!-- Deliberately OUTSIDE the isMinter branch: both ends of a code room fetch
          their own /api/ice, and the side that typed or scanned the code is the
@@ -198,26 +266,21 @@
     </div>
     <button class="btn-link" onclick={() => { mode = "choose"; entry = ""; err = ""; }}>{t.pair.back}</button>
   {:else if session().user}
+    <!-- One sender action, deliberately. This screen used to lead with "Send
+         files" / "Send a folder", which mint a code only once a batch is picked;
+         the owner inverted that on 2026-08-11 because picking first is exactly
+         what left the sender with nothing to do while the code sat unclaimed.
+         Minting first turns the wait into working time — the staging surface is
+         in the waiting branch above, beside the code there is to pass on.
+         No file input belongs here: one would rebuild the old ordering right
+         next to the button that replaced it. Entering someone else's code stays,
+         and is the only way in for a receiver who was read six digits. -->
     <div class="choices">
-      <label class="btn btn-primary" class:disabled={busy}>
-        <Icon name="file" size={18} /> {t.sendFile}
-        <input class="file-pick-input" type="file" multiple disabled={busy} onchange={pickAndSend} />
-      </label>
-      {#if folderUploadSupported}
-        <label class="btn btn-primary" class:disabled={busy}>
-          <Icon name="folder" size={18} /> {t.sendFolder}
-          <input class="file-pick-input" type="file" webkitdirectory multiple disabled={busy} onchange={pickAndSend} />
-        </label>
-      {/if}
+      <button class="btn btn-primary create-code" disabled={busy} onclick={send}>
+        <Icon name="bolt" size={18} /> {busy ? t.generating : t.pair.sendCode}
+      </button>
       <button class="btn btn-ghost" onclick={() => (mode = "receive")}>{t.pair.enterCode}</button>
     </div>
-    <!-- A real button, not a text link. It is the entry point for the whole
-         receiver-initiated half of the product — open a room first, decide what
-         to send once the other device is actually there — and as an underlined
-         sentence under two primary buttons it read as a footnote about them.
-         It stays visually secondary (ghost): picking files is still the common
-         case, and this one is a choice, not a fallback. -->
-    <button class="btn btn-ghost bare-connect" disabled={busy} onclick={send}>{busy ? t.generating : t.pair.bareConnect}</button>
   {:else}
     <div class="signin">
       <button class="btn btn-primary" onclick={() => requireLogin?.()}>{t.account.signIn}</button>
@@ -231,12 +294,38 @@
 <style>
   .pairing { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; }
   .choices { display: flex; gap: var(--space-3); flex-wrap: wrap; justify-content: center; }
-  .choices label.btn.disabled { opacity: .55; cursor: not-allowed; }
   .signin { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); padding: var(--space-2) 0; }
   .signin .hint { margin: 0; font-size: var(--fs-xs); color: var(--text); text-align: center; max-width: 34ch; }
   .qr { margin-top: var(--space-1); border-radius: var(--radius-sm); background: #fff; padding: 6px; }
   .scan { margin: 0; font-size: 12px; color: var(--text); text-align: center; max-width: 30ch; }
   .lead { margin: 0; font-size: var(--fs-sm); color: var(--text); text-align: center; }
+  /* The instruction that turns six digits into an action. Sits between the code
+     block and the staging box, so it reads as "pass this on" rather than as a
+     caption for either. */
+  .handoff {
+    margin: 0; font-size: var(--fs-sm); line-height: 1.5; color: var(--text-h);
+    text-align: center; max-width: 40ch;
+  }
+  /* The staging box is a drop target for the whole wait, so it keeps a visible
+     boundary even when empty — an invisible one is not a target anyone aims at. */
+  .staging {
+    inline-size: 100%; max-inline-size: 30rem;
+    display: flex; flex-direction: column; align-items: center; gap: var(--space-2);
+    padding: var(--space-3);
+    border: 1px dashed var(--border); border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    transition: border-color .15s ease, background-color .15s ease;
+  }
+  .staging.dragover { border-color: var(--accent); background: var(--code-bg); }
+  @media (prefers-reduced-motion: reduce) { .staging { transition: none; } }
+  .stage-lead { margin: 0; font-size: var(--fs-sm); color: var(--text-h); text-align: center; }
+  .stage-drop { margin: 0; font-size: var(--fs-xs); color: var(--text); text-align: center; }
+  .stage-note { margin: 0; font-size: var(--fs-xs); line-height: 1.5; color: var(--text); text-align: center; max-width: 36ch; }
+  /* The list brings its own surface; inside this box that would be a panel in a
+     panel. */
+  .staging :global(.pending-files) {
+    inline-size: 100%; margin-block-end: 0; background: transparent; border: 0; padding: 0;
+  }
   /* Intentional oversized code display — the whole point is at-a-glance readback. */
   .code {
     font-size: 40px; letter-spacing: 10px; font-weight: 700; color: var(--text-h);

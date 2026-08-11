@@ -51,6 +51,13 @@ export interface Messages {
   pathP2p: string; // direct P2P over the public internet (NAT-traversed)
   pathRelay: string; // traffic going through a TURN relay
   sharePending: (n: number, size: string) => string; // local queued-file summary before device choice
+  // Sits with that queued-file summary on the LAN surface. A standing owner
+  // promise, not a description of the current build: LAN staging is local and
+  // must never become an upload, because free LAN transfer is the whole point
+  // (「不需要也不能上传到服务器，否则就失去了局域网传输不收费的意义」). Unlike the
+  // code room's stageNote this one MAY say the bytes go directly to the other
+  // device, because on a LAN they do — there is no relay in that path.
+  lanStagedNote: string;
   sendFile: string; // button: choose files to send
   sendFolder: string; // button: choose a folder to send
   accept: string;
@@ -895,10 +902,22 @@ export interface Messages {
     scanHint: string; // caption under the pairing-code QR
     waiting: string;
     queued: (n: number, size: string) => string; // files picked before pairing, auto-send on join
-    // Secondary BUTTON: open a room without picking files (receiver-initiated
-    // flows). Short — it sits under two primary buttons and must not read as a
-    // sentence about them.
-    bareConnect: string;
+    // What to do with the code that is now on screen. The waiting room shows six
+    // digits, a QR and a spinner; without this it never says to pass them on.
+    handoff: string;
+    // The staging surface in a waiting room — the reason the mint moved ahead of
+    // the file pick. `stageNote` is deliberately silent about WHERE the staged
+    // bytes are: that is what changes when pre-upload lands, and a note that has
+    // to be corrected later is worse than one that was never that specific. It
+    // must not say "never uploaded" (that is the LAN promise, `lanStagedNote`),
+    // and it must not claim the bytes go straight to the other device — a
+    // cross-network room relays them through TURN.
+    stageLead: string;
+    stageNote: string;
+    stageAdd: string;
+    stageAddFolder: string;
+    stageDrop: string;
+    stageRemove: string; // verb on the per-file remove control; named with the file
     expiresIn: (s: string) => string; // countdown on the minter's card — names the CODE, not the transfer
     // Says out loud what the countdown does and does not govern. The owner read
     // a shrinking timer next to a live session as "the transfer expires in N",

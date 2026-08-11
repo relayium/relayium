@@ -129,14 +129,23 @@ describe("i18n completeness", () => {
     }
   });
 
-  // Two short labels with a length budget, because both sit under something
-  // else: `restart` is an inline action inside the trust header's wrapping row,
-  // and `bareConnect` is a secondary button under two primary ones. The old
-  // bareConnect copy was a 42-character sentence and wrapped on a phone.
+  // Short labels with a length budget, because each sits in a row that wraps
+  // beside other controls: `restart` is an inline action in the trust header,
+  // and the three staging labels share one wrapping row inside the waiting
+  // room's staging box, next to a per-file remove.
+  //
+  // `pair.sendCode` is deliberately NOT here, even though it took over the slot
+  // `bareConnect` used to hold. bareConnect was a ghost button competing for
+  // width in a row; sendCode is the choose screen's single full-width primary,
+  // so it has the room. It could not meet this budget anyway without rewriting
+  // established copy — "Crear un código de emparejamiento" is 33 characters and
+  // is the correct Spanish for it.
   it("keeps the short action labels short in every language", () => {
     for (const { code } of LANGS) {
       for (const [where, label] of [
-        [`${code}.pair.bareConnect`, messages[code].pair.bareConnect],
+        [`${code}.pair.stageAdd`, messages[code].pair.stageAdd],
+        [`${code}.pair.stageAddFolder`, messages[code].pair.stageAddFolder],
+        [`${code}.pair.stageRemove`, messages[code].pair.stageRemove],
         [`${code}.workspace.restart`, messages[code].workspace.restart],
       ] as const) {
         expect(label, `${where} has copy`).toBeTruthy();
