@@ -237,7 +237,74 @@ The transport already exists — `POST /api/files` plus the stored-wire codec
 is a zero-knowledge encrypt-then-upload pipeline serving `/offline-transfer`
 today. Phase 2 binds it to a pairing-code room instead of a `/d/<id>#k=` link.
 
-Open work, roughly in dependency order:
+### Blockers — resolve BEFORE writing Phase 2 code
+
+These are not implementation steps. Each changes what gets built, and three need
+the owner. Coding before they are answered means building something that has to
+be torn out.
+
+**B1 (owner) — the 5-minute code TTL and a long upload contradict each other.**
+A real conflict the current rules do not resolve, and the first thing to settle.
+
+`CodeTTLSeconds = 300` (`server/internal/signal/pair.go:233`) runs from the
+moment the code is **minted**, and is checked exactly once, when a device joins
+(`RoomFor`, at WebSocket setup). The owner's rule is 「我上传文件后，对方必须在 5
+分钟之内加入」 — measured from **upload**. Those are different clocks, and the
+owner's own example is the case that breaks it: 「上传一个大文件，上传本身可能就要
+超过 5 分钟」. Mint at T, upload for ten minutes, and the code died at T+5 while
+the upload was still running. Nobody can join at all, and the transfer that was
+meant to be *faster* cannot happen.
+
+Three ways out, with what each costs:
+- **(a) Keep 300s from mint.** No security change, but pre-upload is then only
+  usable for batches that upload well inside 5 minutes — which excludes the
+  large-folder case that motivates the feature. Mostly defeats the point.
+- **(b) Restart or extend the window when the upload completes** (join deadline
+  becomes upload-ready + 5 min). This is what the owner described. It widens the
+  window in which a code is guessable to upload-time + 5 min, unbounded from the
+  server's point of view unless capped.
+- **(c) Decouple:** keep a short admit window but let the sender re-mint a code
+  against the same staged batch — the upload survives, the code rotates.
+
+`pair.go`'s own comment calls widening this window 「永久放宽一个安全参数」, so it
+is an owner call, not a routine choice. The owner has already declined
+brute-force hardening, which makes (b) cheaper to accept than it would otherwise
+be — but it should be a stated decision, not a side effect of shipping.
+
+**B2 (owner) — what happens if the peer joins mid-upload.** Three states exist
+at join: nothing uploaded, partly uploaded, fully uploaded. Does the receiver
+wait for the upload to finish then download; does the sender abandon the upload
+and fall back to the live link; or does it split (uploaded part from storage,
+remainder over the link)? Left unanswered this is exactly the A/B 「打架」 the
+owner set out to remove, reappearing inside a single transfer.
+
+**B3 (owner) — over-quota and upload failure.** `POST /api/files` returns 413
+over quota. Does staging fall back silently to Plan B (hold locally, send on
+join), or fail loudly? Silent fallback is friendlier but quietly fails to
+deliver the speed the UI just promised.
+
+**B4 (engineering) — the auto-send effect must learn what is already uploaded.**
+Phase 1 ships an App effect that drains the whole outbox over the live link the
+moment a peer joins (`web/src/App.svelte`, the `outbox().length && surfaceShown
+&& visiblePeers.length === 1` effect). If Phase 2 uploads that same batch, the
+join must not *also* send it over the link — that is a double send and double
+billing. The outbox needs per-item state (`staged` / `uploading` / `uploaded`)
+and the effect must drain only the `staged` ones. This is the concrete seam
+between the two phases, and where a careless Phase 2 introduces a
+duplicate-transfer bug.
+
+**B5 (engineering) — define the key handoff on the wire.** E2E-only delivery
+means the file key travels over the DataChannel after the handshake. Which
+message carries it, and what happens if the link drops after the peer joined but
+before the key arrived? Undefined, this fails as "the receiver joined and then
+nothing happened".
+
+**B6 (invariant to preserve, not a question).** A code-room receiver needs no
+account today, and stored downloads are unauthenticated and zero-knowledge
+(`docs/protocol/relayium-cloud-transport-v1.md`). Phase 2 must not quietly gate
+the receiver behind an account just because the bytes now come from storage.
+
+### Open work, roughly in dependency order
 
 1. **Server:** bind an uploaded set to a code room; enforce the 5-minute join
    deadline; delete and void the ciphertext on timeout; burn after the peer's
