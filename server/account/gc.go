@@ -1,7 +1,9 @@
 package account
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"log"
 	"time"
 
@@ -17,8 +19,16 @@ const pruneMargin = int64(90000) // 25h
 // than any download runs, so pruning can never let a late duplicate re-refund.
 const receiptRetention = int64(86400) // 24h
 
-// pendingDeleteMaxAge bounds the orphan-retry queue: a permanently-dead node's
-// pending_node_deletes rows would otherwise retry forever and never self-clean.
+// pendingDeleteMaxAge is how old a DISCHARGED orphan-retry row has to be before
+// it is swept up — a backstop for a retirement that failed at the moment its
+// hold passed, not a horizon after which responsibility lapses.
+//
+// It used to be the latter, and that was the bug: the prune ran on enqueued_at
+// alone, so a blob on a node that had been unreachable for seven days lost the
+// only row in the system that knew it existed. Nothing else could: the
+// stored_files or upload_sessions row it was created from was deleted in the
+// same transaction that created it, which is the entire reason it exists. The
+// rule that replaced it is in Store.RetirePendingNodeDeletes.
 const pendingDeleteMaxAge = int64(7 * 24 * 3600) // 7 days
 
 // auditRetentionDefault is how long admin_audit rows are kept: TWO YEARS.
@@ -94,6 +104,11 @@ type GC struct {
 	// (and their partial blobs) each sweep. Wired to Service.ReapPendingUploads.
 	ReapSessions func(now int64)
 
+	// SweepPairRooms, when set, voids pairing rooms whose join deadline passed
+	// and purges long-closed rows. Wired to Service.SweepPairRooms; nil in the
+	// bare GCs that tests build for the file/session/token passes.
+	SweepPairRooms func(ctx context.Context, now int64)
+
 	// AuditRetention is how long admin_audit rows are kept, in seconds.
 	// <= 0 falls back to auditRetentionDefault — a zero/garbage configuration
 	// must not be read as "prune everything".
@@ -125,7 +140,18 @@ func (g *GC) sweep(ctx context.Context) {
 		}
 	}
 	g.reclaimTaskObjects(ctx, now)
+	// Pair rooms: void the ones whose deadline passed with nobody joining, and
+	// drop long-closed rows. A BACKSTOP only — every read and write path voids on
+	// the spot (pairroom.go), so this catches the room nobody touches again and
+	// must never be what makes the five-minute rule true.
+	if g.SweepPairRooms != nil {
+		g.SweepPairRooms(ctx, now)
+	}
 	g.drainPending(ctx)
+	// Bills that could not be written when they became known. Normally a no-op;
+	// when it is not, it is the retry that keeps "every accepted byte is billed"
+	// true across a database that was briefly refusing writes (see UnbilledMeter).
+	g.settleOwedBills(ctx)
 	if g.ReapSessions != nil {
 		g.ReapSessions(now)
 	}
@@ -268,6 +294,36 @@ func (g *GC) reclaimTaskObjects(ctx context.Context, now int64) {
 	}
 }
 
+// probePendingBlob asks a queued blob how many bytes it really holds, the same
+// zero-byte-append probe the reclaim paths use (see Service.probeBlobSize): a
+// blob still at the row's billing floor accepts it and answers that number, one
+// holding more refuses with the real size, and a blob that no longer exists
+// answers 0 — which is definitive, not unknown, and lets the row settle to "owes
+// nothing". ok=false means nothing could ask (node unreachable / no store),
+// which must keep both the blob and the row.
+func (g *GC) probePendingBlob(ctx context.Context, p PendingNodeDelete) (int64, bool) {
+	var bs storage.BlobStore
+	if g.BlobFor != nil {
+		resolved, err := g.BlobFor(ctx, p.NodeID)
+		if err != nil {
+			return 0, false
+		}
+		bs = resolved
+	} else {
+		bs = g.Blobs
+	}
+	if bs == nil {
+		return 0, false
+	}
+	pctx, cancel := probeContext(ctx)
+	defer cancel()
+	size, err := bs.Append(pctx, p.BlobKey, p.BilledThrough, bytes.NewReader(nil))
+	if err == nil || errors.Is(err, storage.ErrOffsetMismatch) {
+		return size, true
+	}
+	return 0, false
+}
+
 func (g *GC) deleteBlob(ctx context.Context, nodeID, blobKey string) error {
 	if g.BlobFor != nil {
 		bs, err := g.BlobFor(ctx, nodeID)
@@ -282,8 +338,26 @@ func (g *GC) deleteBlob(ctx context.Context, nodeID, blobKey string) error {
 	return nil
 }
 
-// drainPending retries orphaned node deletes recorded when a node was
-// unreachable at expiry; each success clears its row, each failure stays queued.
+// drainPending retries the node deletes GC has taken durable responsibility for
+// — a node that was unreachable at expiry, or a blob whose last referencing row
+// has been removed. Each success clears its row, each failure stays queued.
+//
+// A row may carry a HOLD (PendingNodeDelete.NotBefore), and the delete is
+// attempted either way: the hold governs when the responsibility is discharged,
+// never when the bytes go. That is what makes it work — a blob re-created by an
+// append that was in flight when its row was deleted is removed by the next
+// sweep, because the sweep keeps asking for the whole window rather than
+// trusting one success and forgetting the key.
+//
+// A row may also carry a BILLING OBLIGATION (PendingNodeDelete.BillUserID): the
+// blob is the last evidence of bytes that may never have been billed — a void
+// whose meter AND journal writes both failed, or a late append that landed
+// after everything else was gone. For those rows the bytes are asked about and
+// the answer made durable BEFORE the delete, because the delete destroys the
+// only copy of the number; a settle that cannot complete keeps the blob AND the
+// row for the next sweep. The settle is idempotent (a monotonic floor advanced
+// atomically with each billing write), so re-asking every sweep costs a probe
+// and can never double-charge.
 func (g *GC) drainPending(ctx context.Context) {
 	pend, err := g.Store.ListPendingNodeDeletes(ctx)
 	if err != nil {
@@ -291,15 +365,60 @@ func (g *GC) drainPending(ctx context.Context) {
 		return
 	}
 	for _, p := range pend {
+		if p.BillUserID != "" {
+			size, ok := g.probePendingBlob(ctx, p)
+			if !ok {
+				continue // cannot learn the number; keep blob and row, retry next sweep
+			}
+			if to := min(size, p.BillMax); to > p.BilledThrough {
+				billed, serr := g.Store.SettleBlobBilling(ctx, p.BlobKey, p.NodeID, to, g.Now())
+				if serr != nil {
+					// The obligation is still not durable, so the evidence must not be
+					// destroyed: skip the delete entirely and come back.
+					g.Log.Printf("gc: settle billing for pending blob %s@%s: %v; keeping the blob until the bill lands",
+						p.BlobKey, nodeLabelForLog(p.NodeID), serr)
+					continue
+				}
+				if billed > 0 {
+					g.Log.Printf("gc: billed %d bytes blob %s@%s held that nothing had settled",
+						billed, p.BlobKey, nodeLabelForLog(p.NodeID))
+				}
+			}
+		}
 		if err := g.deleteBlob(ctx, p.NodeID, p.BlobKey); err != nil {
 			continue // node still unreachable; retry next sweep
+		}
+		if p.NotBefore > g.Now() {
+			// Deleted, but something may still be able to put it back, so the row
+			// stays. What is recorded is that the delete SUCCEEDED — the difference
+			// between a row holding a discharged responsibility open and a row that
+			// is a blob's only owner, which is what age eviction is allowed to act on
+			// (see RetirePendingNodeDeletes). Stamped once; the WHERE keeps the first.
+			if p.DeletedAt == 0 {
+				if err := g.Store.MarkPendingNodeDeleteDone(ctx, p.BlobKey, p.NodeID, g.Now()); err != nil {
+					g.Log.Printf("gc: record that pending delete %s@%s has landed: %v", p.BlobKey, p.NodeID, err)
+				}
+			}
+			continue
 		}
 		if err := g.Store.DeletePendingNodeDelete(ctx, p.BlobKey, p.NodeID); err != nil {
 			g.Log.Printf("gc: clear pending delete %s@%s: %v", p.BlobKey, p.NodeID, err)
 		}
 	}
-	if err := g.Store.DeletePendingNodeDeletesOlderThan(ctx, g.Now()-pendingDeleteMaxAge); err != nil {
-		g.Log.Printf("gc: evict aged pending deletes: %v", err)
+	retired, retained, err := g.Store.RetirePendingNodeDeletes(ctx, g.Now()-pendingDeleteMaxAge)
+	if err != nil {
+		g.Log.Printf("gc: retire pending deletes: %v", err)
+	}
+	if retired != 0 {
+		g.Log.Printf("gc: retired %d pending delete(s)", retired)
+	}
+	if retained != 0 {
+		// The rows age alone is NOT allowed to throw away. Said out loud on every
+		// sweep, because a growing number here means real ciphertext is sitting on a
+		// node that has not accepted a delete in over a week, and the fix is an
+		// operator bringing that node back or explicitly deleting it — not a timer.
+		g.Log.Printf("gc: %d pending delete(s) older than %d s have never once succeeded; their blobs still exist and this queue is their only owner",
+			retained, pendingDeleteMaxAge)
 	}
 }
 

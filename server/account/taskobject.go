@@ -75,7 +75,23 @@ const taskObjectBindGrace = time.Hour
 
 // isValidStoredPurpose reports whether p is a purpose this server understands.
 func isValidStoredPurpose(p string) bool {
-	return p == StoredPurposeShare || p == StoredPurposeDeviceTask
+	return p == StoredPurposeShare || p == StoredPurposeDeviceTask || p == StoredPurposePairRoom
+}
+
+// directDownloadEligible reports whether central may hand this object to a
+// storage node as a signed direct-download URL instead of proxying it.
+//
+// ONE predicate, read by both the place that issues such a URL (handleFileBlob)
+// and the place that honours the node's receipt for one (handleDownloadReceipt).
+// They were a pair of separately-written `purpose == share` tests, which is a
+// shape that silently rots: adding a kind to the issuing side and not the
+// receipt side pre-meters a download whose refund is then refused, so the owner
+// is billed for the whole object on every partial fetch.
+//
+// A device-task object is never eligible: it is streamed only through its task,
+// by the one claiming device, and never through a public capability URL.
+func directDownloadEligible(purpose string) bool {
+	return purpose == StoredPurposeShare || purpose == StoredPurposePairRoom
 }
 
 // purposeOrShare resolves an unset purpose to `share`. Every call site that
@@ -147,6 +163,23 @@ func resolveUploadRetention(q url.Values, st Settings) (purpose string, ttl, max
 			return "", 0, 0, false
 		}
 		return purpose, clampTTL(reqTTL, st), 0, true
+	}
+	if purpose == StoredPurposePairRoom {
+		// Retention is NOT the caller's to choose here. A pair-room object's
+		// lifetime is its room's — five minutes past the last uploaded byte,
+		// then the transfer backstop once someone joins (pairroom.go) — and a
+		// requested TTL, burn flag or download limit would each describe a
+		// different object than the one this actually is.
+		//
+		// Refused rather than ignored, exactly as the device-task branch above
+		// refuses: silently dropping a caller's burn flag hands them an object
+		// with retention they did not ask for. The TTL returned here is only the
+		// value the row is INSERTed with; finalize immediately projects the
+		// room's real deadline onto it.
+		if burn || reqMaxDL > 0 || reqTTL > 0 {
+			return "", 0, 0, false
+		}
+		return purpose, pairRoomJoinWindow, 0, true
 	}
 	ttl, maxDL = resolveRetention(burn, reqTTL, reqMaxDL, st)
 	return purpose, ttl, maxDL, true

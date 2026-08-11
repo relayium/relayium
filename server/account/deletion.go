@@ -44,8 +44,9 @@ func (s *Service) RequestAccountDeletion(ctx context.Context, userID, email stri
 //     deletion — a stale duplicate confirm (e.g. the link opened twice, or an
 //     email client prefetching it) must not re-run the purge or re-send mail;
 //  2. otherwise purges the user's transient/live data (sessions, devices,
-//     stored files + their blobs, ...) immediately, schedules the hard purge
-//     AccountGraceDays (settings, in days) from now, and emails a
+//     stored files and unfinished uploads + their blobs, ...) immediately,
+//     schedules the hard purge AccountGraceDays (settings, in days) from now,
+//     and emails a
 //     confirmation carrying a "reactivate" token that can undo the schedule
 //     within the grace window.
 func (s *Service) ConfirmAccountDeletion(ctx context.Context, rawToken string) error {
@@ -79,7 +80,12 @@ func (s *Service) ConfirmAccountDeletion(ctx context.Context, rawToken string) e
 		return err
 	}
 
-	files, err := s.store.PurgeTransientUserData(ctx, tok.UserID)
+	// Every blob the purge orphaned: finalized stored files AND the partial blob
+	// of every chunked upload the account had open or half-finished. They are one
+	// list because they are one job — ciphertext with no row left to reach it —
+	// and the store has already deduplicated the case where a stored file and a
+	// stale session name the same blob.
+	blobs, err := s.store.PurgeTransientUserData(ctx, tok.UserID)
 	if err != nil {
 		return err
 	}
@@ -90,13 +96,13 @@ func (s *Service) ConfirmAccountDeletion(ctx context.Context, rawToken string) e
 	// deadline sized for the request, not this cleanup fan-out) can't cut the
 	// deletes short — mirrors handleDeleteFile's per-file delete-or-enqueue.
 	cleanupCtx := context.WithoutCancel(ctx)
-	for _, f := range files {
-		if bs, berr := s.blobFor(cleanupCtx, f.NodeID); berr == nil {
-			if derr := bs.Delete(cleanupCtx, f.BlobKey); derr != nil {
-				_ = s.store.EnqueueNodeDelete(cleanupCtx, f.BlobKey, f.NodeID, now.Unix())
+	for _, b := range blobs {
+		if bs, berr := s.blobFor(cleanupCtx, b.NodeID); berr == nil {
+			if derr := bs.Delete(cleanupCtx, b.BlobKey); derr != nil {
+				_ = s.store.EnqueueNodeDelete(cleanupCtx, b.BlobKey, b.NodeID, now.Unix())
 			}
 		} else {
-			_ = s.store.EnqueueNodeDelete(cleanupCtx, f.BlobKey, f.NodeID, now.Unix())
+			_ = s.store.EnqueueNodeDelete(cleanupCtx, b.BlobKey, b.NodeID, now.Unix())
 		}
 	}
 

@@ -17,7 +17,9 @@ func TestReaperKeysOnIdleNotAge(t *testing.T) {
 	old.CreatedAt = 100 // created way before the reap horizon
 	_, _ = st.CreateUploadSession(ctx, old, maxSessionsPerUser)
 	// A chunk lands "now" (6000), well after the horizon.
-	if err := st.AdvanceUploadReceived(ctx, "active", 10, 6000); err != nil {
+	if _, err := st.CommitUploadProgress(ctx, UploadProgress{
+		SessionID: "active", UserID: u.ID, Committed: 10, Billable: true, Now: 6000,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -34,9 +36,11 @@ func TestReaperKeysOnIdleNotAge(t *testing.T) {
 	}
 }
 
-// AdvanceUploadReceived must never push received past max_size, so a lying blob
-// node can't inflate the owner's storage/quota accounting.
-func TestAdvanceUploadReceivedClampedToMaxSize(t *testing.T) {
+// The committed offset must never exceed max_size, so a lying blob node can't
+// inflate the owner's storage/quota accounting. (What happens to the overshoot
+// itself — clamped and billed rather than dropped — is
+// TestCommitUploadProgressClampsToMaxSizeAndBillsTheClampedBytes.)
+func TestUploadReceivedClampedToMaxSize(t *testing.T) {
 	st := newTestStore(t)
 	ctx := context.Background()
 	u, _ := st.UpsertUserByEmail(ctx, "clamp@example.com", "C")
@@ -44,18 +48,30 @@ func TestAdvanceUploadReceivedClampedToMaxSize(t *testing.T) {
 	row.MaxSize = 1000
 	_, _ = st.CreateUploadSession(ctx, row, maxSessionsPerUser)
 
-	// A node reporting a size beyond the cap is refused (no-op).
-	if err := st.AdvanceUploadReceived(ctx, "clamp", 50_000, 2000); err != nil {
-		t.Fatal(err)
+	commit := func(to int64) {
+		t.Helper()
+		if _, err := st.CommitUploadProgress(ctx, UploadProgress{
+			SessionID: "clamp", UserID: u.ID, Committed: to, Billable: true, Now: 2000,
+		}); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if got, _, _ := st.GetUploadSession(ctx, "clamp", u.ID); got.Received != 0 {
+	commit(50_000)
+	if got, _, _ := st.GetUploadSession(ctx, "clamp", u.ID); got.Received != 1000 {
 		t.Fatalf("received must not exceed max_size, got %d", got.Received)
 	}
 	// A legit within-cap advance still works.
-	if err := st.AdvanceUploadReceived(ctx, "clamp", 500, 2000); err != nil {
+	st2 := newTestStore(t)
+	u2, _ := st2.UpsertUserByEmail(ctx, "clamp@example.com", "C")
+	row2 := mkUploadRow("clamp", u2.ID)
+	row2.MaxSize = 1000
+	_, _ = st2.CreateUploadSession(ctx, row2, maxSessionsPerUser)
+	if _, err := st2.CommitUploadProgress(ctx, UploadProgress{
+		SessionID: "clamp", UserID: u2.ID, Committed: 500, Billable: true, Now: 2000,
+	}); err != nil {
 		t.Fatal(err)
 	}
-	if got, _, _ := st.GetUploadSession(ctx, "clamp", u.ID); got.Received != 500 {
+	if got, _, _ := st2.GetUploadSession(ctx, "clamp", u2.ID); got.Received != 500 {
 		t.Fatalf("within-cap advance should apply, got %d", got.Received)
 	}
 }
@@ -72,7 +88,7 @@ func TestOrphanDoneUploadReaping(t *testing.T) {
 	orphan := mkUploadRow("orphan", u.ID)
 	orphan.CreatedAt = 100
 	_, _ = st.CreateUploadSession(ctx, orphan, maxSessionsPerUser)
-	if _, ok, _ := st.ClaimUploadDone(ctx, "orphan", 100); !ok {
+	if _, _, ok, _ := st.ClaimUploadDone(ctx, "orphan", 100); !ok {
 		t.Fatal("claim orphan")
 	}
 
@@ -80,7 +96,7 @@ func TestOrphanDoneUploadReaping(t *testing.T) {
 	live := mkUploadRow("live", u.ID)
 	live.CreatedAt = 100
 	_, _ = st.CreateUploadSession(ctx, live, maxSessionsPerUser)
-	if _, ok, _ := st.ClaimUploadDone(ctx, "live", 100); !ok {
+	if _, _, ok, _ := st.ClaimUploadDone(ctx, "live", 100); !ok {
 		t.Fatal("claim live")
 	}
 	if err := st.CreateStoredFile(ctx, StoredFile{

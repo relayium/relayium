@@ -96,6 +96,25 @@ func (w *wsConn) Send(e Envelope) {
 // two tabs of one browser. Gating it here rather than trusting the client to
 // omit the field makes that a property of the server.
 func ServeWS(h *Hub, idgen func() string) func(ctx context.Context, c *websocket.Conn, room string, maxPeers int, clientIP string, lan bool) {
+	return ServeWSObserved(h, idgen, nil)
+}
+
+// RoomJoinObserver is told, after a connection is admitted, which room it joined
+// and how many connections that room now holds.
+//
+// It exists for exactly one thing: the pre-upload lifecycle has to learn that a
+// pairing code was claimed, and it must learn it from the SERVER's own view of
+// the room rather than from a client saying so — a client-asserted join would be
+// a free extension of the ciphertext's deadline, granted to the one party the
+// deadline constrains.
+//
+// Called on the connection's read goroutine. An implementation MUST NOT block:
+// anything that touches a database or the network belongs on a goroutine of its
+// own, or every join in the room waits for it.
+type RoomJoinObserver func(room string, peers int)
+
+// ServeWSObserved is ServeWS plus a join observer. nil observer == ServeWS.
+func ServeWSObserved(h *Hub, idgen func() string, observe RoomJoinObserver) func(ctx context.Context, c *websocket.Conn, room string, maxPeers int, clientIP string, lan bool) {
 	return func(ctx context.Context, c *websocket.Conn, room string, maxPeers int, clientIP string, lan bool) {
 		// Explicit single-frame cap: a real signaling frame is a few KB. Anything
 		// larger is rejected by coder/websocket at read time (ends the loop).
@@ -180,6 +199,9 @@ func ServeWS(h *Hub, idgen func() string) func(ctx context.Context, c *websocket
 					if h.JoinDeviceLimited(room, id, e.Name, conn, maxPeers, clientIP, device, active) {
 						joined = true
 						cancelJoin() // joined in time — stop the join deadline
+						if observe != nil {
+							observe(room, h.PeerCount(room))
+						}
 					} else {
 						return // room full — close the connection
 					}

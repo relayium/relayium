@@ -6,12 +6,97 @@
 
 import type { PickedFile } from "./drag";
 
+/**
+ * Where one queued file's bytes are.
+ *
+ * `staged` — on this device only, to be sent over the live link when a peer
+ * arrives. Every entry starts here, and this is the only state that existed
+ * before pre-upload.
+ * `uploading` — ciphertext is going up against the pairing code right now.
+ * `uploaded` — the server holds the ciphertext; the receiver will fetch it and
+ * be given the key over the end-to-end channel.
+ *
+ * There is deliberately no `failed`: a pre-upload that fails goes back to
+ * `staged`, because the live link is the answer to "the upload did not work",
+ * and an entry parked in a terminal failure state is a file the user watched
+ * disappear from both transports.
+ */
+export type OutboxUploadState = "staged" | "uploading" | "uploaded";
+
+/** What the receiver needs to fetch one pre-uploaded file: the stored object's
+ *  id, and the key the server has never seen. Delivered over the peers' own
+ *  encrypted channel (docs/protocol/relayium-pair-room-v1.md §4), never over
+ *  signaling and never to the server. */
+export interface StoredRef {
+  id: string;
+  /** base64url, no padding — the stored-wire key encoding. */
+  key: string;
+}
+
+interface Entry {
+  state: OutboxUploadState;
+  /** Set exactly when state === "uploaded". */
+  ref?: StoredRef;
+}
+
 let files = $state<PickedFile[]>([]);
+/**
+ * Per-entry upload state, index-aligned with `files`.
+ *
+ * A parallel array rather than a field on PickedFile: PickedFile is what the
+ * drag/share/picker layers produce and what PendingFiles renders, and threading
+ * a transport concern through all of them would put upload state in three more
+ * places that can disagree. Every mutator below moves both arrays together, so
+ * the alignment is a local invariant of this file.
+ */
+let states = $state<Entry[]>([]);
 
 /** Reactive read of the queued files ([] when none). */
 export function outbox(): PickedFile[] {
   return files;
 }
+
+/** This entry's transport state; `staged` for any index that has none. */
+export function outboxState(index: number): OutboxUploadState {
+  return states[index]?.state ?? "staged";
+}
+
+/**
+ * Every already-uploaded entry's stored reference, in queue order.
+ *
+ * This is the input to the key-handoff message: the sender sends exactly these
+ * on every (re)established link, and the receiver dedupes by id
+ * (preupload-handoff.ts).
+ */
+export function uploadedRefs(): StoredRef[] {
+  const out: StoredRef[] = [];
+  for (const e of states) if (e?.state === "uploaded" && e.ref) out.push(e.ref);
+  return out;
+}
+
+/** Mark the entry at `index` as being uploaded right now. Out of range, or an
+ *  entry already past staging, changes nothing. */
+export function markUploading(index: number): void {
+  if (outboxState(index) !== "staged" || index >= files.length) return;
+  states = states.map((e, i) => (i === index ? { state: "uploading" } : e));
+}
+
+/** Record that the entry at `index` is on the server under `ref`. Only an entry
+ *  that is actually uploading can complete: a stale callback from a cancelled or
+ *  removed upload must not resurrect one. */
+export function markUploaded(index: number, ref: StoredRef): void {
+  if (outboxState(index) !== "uploading") return;
+  states = states.map((e, i) => (i === index ? { state: "uploaded", ref } : e));
+}
+
+/** Return a failed upload to the live-link path. Idempotent. */
+export function failUpload(index: number): void {
+  if (outboxState(index) !== "uploading") return;
+  states = states.map((e, i) => (i === index ? { state: "staged" } : e));
+}
+
+/** A fresh `staged` entry per file. */
+const stagedFor = (list: readonly unknown[]): Entry[] => list.map(() => ({ state: "staged" as const }));
 
 /** Replace the queue (a fresh pick supersedes any stale leftovers).
  *
@@ -21,6 +106,7 @@ export function outbox(): PickedFile[] {
  *  ride along. Staging inside a room means the opposite and appends. */
 export function setOutbox(next: PickedFile[]): void {
   files = next;
+  states = stagedFor(next);
 }
 
 /** Identity of a picked file for dedupe purposes.
@@ -47,7 +133,10 @@ export function addToOutbox(next: PickedFile[]): void {
     seen.add(key);
     fresh.push(p);
   }
-  if (fresh.length) files = [...files, ...fresh];
+  if (fresh.length) {
+    files = [...files, ...fresh];
+    states = [...states, ...stagedFor(fresh)];
+  }
 }
 
 /** Drop one staged file by position; an out-of-range index changes nothing.
@@ -57,16 +146,42 @@ export function addToOutbox(next: PickedFile[]): void {
 export function removeFromOutbox(index: number): void {
   if (index < 0 || index >= files.length) return;
   files = [...files.slice(0, index), ...files.slice(index + 1)];
+  states = [...states.slice(0, index), ...states.slice(index + 1)];
 }
 
-/** Drain the queue atomically: returns the files and empties it, so two racing
- *  consumers can't double-send the same batch. */
+/**
+ * Drain the entries the LIVE LINK is responsible for: returns the staged files
+ * and removes exactly those, leaving anything uploading or uploaded in place.
+ *
+ * This is the seam between the two transports, and the whole reason per-entry
+ * state exists. App's auto-send effect drains this the moment a peer is
+ * reachable; if it drained everything, a file that was already pre-uploaded
+ * would ALSO go over the link — one transfer sent twice and billed twice, with
+ * the receiver writing the same file from two sources.
+ *
+ * Still atomic for its own population, so two racing consumers cannot both take
+ * the same staged file. With nothing uploaded (every entry staged, which is
+ * every queue until a pre-upload starts) this is exactly the drain-everything it
+ * has always been.
+ */
 export function takeOutbox(): PickedFile[] {
-  const drained = files;
-  files = [];
+  const drained: PickedFile[] = [];
+  const keptFiles: PickedFile[] = [];
+  const keptStates: Entry[] = [];
+  files.forEach((p, i) => {
+    if (outboxState(i) === "staged") {
+      drained.push(p);
+      return;
+    }
+    keptFiles.push(p);
+    keptStates.push(states[i]);
+  });
+  files = keptFiles;
+  states = keptStates;
   return drained;
 }
 
 export function clearOutbox(): void {
   files = [];
+  states = [];
 }

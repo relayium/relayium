@@ -134,6 +134,18 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	// Pre-upload is resumable-only, and refused here rather than half-supported.
+	//
+	// A pairing room's deadline moves when a chunk COMMITS, and this route commits
+	// exactly once, at the end: a single-shot pre-upload long enough to be worth
+	// doing is long enough to let its own room expire while it is in flight, and
+	// the user would pay for every byte of an upload that could never bind. One
+	// explicit refusal is honest; a path that works for small objects and silently
+	// fails for large ones is not.
+	if purpose == StoredPurposePairRoom {
+		http.Error(w, "pre-upload requires the resumable upload API (POST /api/uploads)", http.StatusBadRequest)
+		return
+	}
 	if capSecs := s.planRetentionCap(r.Context(), u.ID); capSecs > 0 && ttl > capSecs {
 		ttl = capSecs
 	}
@@ -224,6 +236,18 @@ func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u Use
 		// Reclaim a committed-but-response-lost blob; if the node is unreachable
 		// the pending-delete queue ensures GC retries instead of orphaning it.
 		s.dropBlob(bs, blobKey, nodeID)
+		// Bill what the client actually sent before it failed. A cancelled or
+		// oversize single-shot upload used to be entirely free: the body crossed
+		// the network, the disk absorbed it, and because no stored file was
+		// created nothing was ever metered — an unbounded free-bandwidth channel
+		// for anyone willing to hang up before the last byte. cappedReader has
+		// counted exactly what was read; a detached context so the client's own
+		// hangup cannot cancel the accounting for it.
+		if billable && capped.n > 0 {
+			mctx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 5*time.Second)
+			_ = s.store.RecordMeter(mctx, u.ID, MeterUpload, capped.n, now)
+			cancel()
+		}
 		if errors.Is(err, errTooLarge) {
 			http.Error(w, "file too large", http.StatusRequestEntityTooLarge)
 			return
@@ -398,7 +422,7 @@ func (s *Service) redirectToNode(w http.ResponseWriter, r *http.Request, node No
 //     came back (stuck/broken, not updating) resumes being metered rather
 //     than earning permanent free egress.
 func (s *Service) byoUpdateExempt(ctx context.Context, sf StoredFile) bool {
-	if !(s.directDownload && sf.MaxDownloads == 0) {
+	if !(s.directDownload && sf.MaxDownloads == 0 && directDownloadEligible(sf.Purpose)) {
 		return false
 	}
 	if sf.NodeID == "" {
@@ -446,7 +470,7 @@ func (s *Service) handleFileBlob(w http.ResponseWriter, r *http.Request) {
 	// advertise a public https DownloadURL and hold the shared secret.
 	var directNode Node
 	directCapable := false
-	if s.directDownload && sf.MaxDownloads == 0 {
+	if s.directDownload && sf.MaxDownloads == 0 && directDownloadEligible(sf.Purpose) {
 		// A node that has stopped heartbeating may be restarting (an update) or
 		// gone; redirecting there just hands the downloader a dead origin. Fall
 		// back to central proxying, which is always correct if slower.
@@ -722,9 +746,10 @@ func (s *Service) handleDeleteFile(w http.ResponseWriter, r *http.Request, u Use
 	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// liveFile fetches a stored file that exists, has not expired, and is a PUBLIC
-// share; ok=false maps to a 404 for missing, expired, wrong-purpose, or store
-// errors (fail closed).
+// liveFile fetches a stored file that exists, has not expired, and is publicly
+// readable — a share, or a pair-room object whose room is still live; ok=false
+// maps to a 404 for missing, expired, wrong-purpose, or store errors (fail
+// closed).
 //
 // This is the single resolver behind both unauthenticated endpoints
 // (`/api/files/{id}/meta` and `/blob`), which is why the purpose gate lives
@@ -740,10 +765,27 @@ func (s *Service) handleDeleteFile(w http.ResponseWriter, r *http.Request, u Use
 // its ciphertext reaches the target device through the task blob endpoint.
 func (s *Service) liveFile(r *http.Request, id string) (StoredFile, bool) {
 	sf, err := s.store.GetStoredFile(r.Context(), id)
-	if err != nil || s.now().Unix() >= sf.ExpiresAt {
+	if err != nil {
 		return StoredFile{}, false
 	}
-	if sf.Purpose != StoredPurposeShare {
+	// A pair-room object is the second kind of public capability object: the
+	// receiver of a code-first transfer holds its id (and the key the server never
+	// saw) and fetches it exactly the way a share is fetched, with no account —
+	// which is the whole reason it reuses these endpoints rather than getting an
+	// authenticated one of its own.
+	//
+	// It is checked BEFORE the generic expiry test on purpose. The room gate is
+	// what makes a passed deadline true on disk rather than merely 404: it deletes
+	// the ciphertext inline. Falling out of the expiry test first would answer
+	// correctly and leave the bytes sitting there until a sweep.
+	if sf.Purpose == StoredPurposePairRoom {
+		if !s.pairRoomObjectReadable(r.Context(), sf) {
+			return StoredFile{}, false
+		}
+	} else if sf.Purpose != StoredPurposeShare {
+		return StoredFile{}, false
+	}
+	if s.now().Unix() >= sf.ExpiresAt {
 		return StoredFile{}, false
 	}
 	// A limited-download file whose slots are already spent is gone: treat it as

@@ -186,6 +186,13 @@ type Service struct {
 	deleteRequests *loginThrottle              // per user+IP account-deletion-request limiter
 	blobs          storage.BlobStore           // nil until SetBlobStore; stored-transfer disabled when nil
 	pairCodeOwner  func(string) (string, bool) // resolves a live code to its owner userID; nil until wired
+	// pairCodes is the live pairing-code registry itself, wired by SetPairCodes.
+	// pairCodeOwner answers "whose code is this" for /api/ice; this is the half
+	// pre-upload needs, because a pair room's deadline MOVES and the code has to
+	// move with it. nil disables pre-upload outright (pairRoomForUpload), which
+	// is the honest behaviour: a room lifecycle whose codes still die at five
+	// minutes binds ciphertext to a rendezvous nobody can reach.
+	pairCodes PairCodes
 	// clientIP resolves the request's rate-limit key IP. Defaults to the
 	// package clientIP (trusts XFF's left entry — legacy behavior kept so
 	// existing tests are unchanged); main.go injects signal.IPExtractor.IP,
@@ -229,6 +236,21 @@ type Service struct {
 	// bypass central (see docs/design-decentralized-stored-downloads.md). Opt-in
 	// (default off) — a new data path; a kill-switch to fall back to full proxy.
 	directDownload bool
+	// preUpload enables pair-room pre-upload: staging ciphertext against a
+	// pairing code while its room waits for someone to join (pairroom.go).
+	//
+	// Off by default, and that default is load-bearing rather than cautious. The
+	// owner's rule is that a joined transfer has NO deadline of any kind, so a
+	// joined room's ciphertext has nothing that removes it until a completion
+	// lifecycle exists to end one — which is not built. Enabling this before then
+	// means every joined room is stored indefinitely at the operator's expense.
+	// See pairroom.go's invariants 5 and 8.
+	preUpload bool
+	// pairJoins holds pairing-code joins the server observed on its own websocket
+	// but could not persist. It is both a retry queue and, while an entry is in
+	// it, the thing that stops a room being voided on a deadline that should
+	// already have stopped. See pairJoinQueue.
+	pairJoins pairJoinQueue
 	// uploadSem caps concurrent in-flight POST /api/files per account (M1).
 	uploadSem *uploadSem
 	// diskUsage reads the blob volume's current usage; nil disables the global
@@ -331,7 +353,23 @@ func (s *Service) SetDiskGuard(usage func() (used, total uint64, err error), max
 // SetPairCodeOwner wires the pairing-code registry so /api/ice can resolve a
 // live code to its owning account — TURN is issued (and relay billed) for that
 // owner. Called once at startup.
+//
+// This is the OWNER LOOKUP alone. A deployment that also runs pre-upload wires
+// the registry itself with SetPairCodes, which covers this as well; the two are
+// separate only because /api/ice has needed the lookup since long before there
+// was a lifecycle to keep in step with it.
 func (s *Service) SetPairCodeOwner(fn func(string) (string, bool)) { s.pairCodeOwner = fn }
+
+// SetPairCodes wires the whole live pairing-code registry: the owner lookup
+// /api/ice needs, and the lifetime control the pre-upload lifecycle needs.
+//
+// One call for both, because they must describe the SAME registry. A code's
+// owner and a code's expiry answered by two different objects is how ciphertext
+// ends up bound to a rendezvous whose credential has already been reissued.
+func (s *Service) SetPairCodes(reg PairCodes) {
+	s.pairCodes = reg
+	s.pairCodeOwner = reg.OwnerOf
+}
 
 // SetClientIP overrides how per-IP rate-limit keys are derived. main.go
 // injects the trusted-proxy-aware signal.IPExtractor.IP so a forged
@@ -370,6 +408,14 @@ func (s *Service) SetDownloadLimiter(rl rateLimiter) { s.downloadLimiter = rl }
 // SetDirectDownload toggles direct-from-node downloads for fleet nodes that
 // advertise a DownloadURL (default off → central proxies every download).
 func (s *Service) SetDirectDownload(on bool) { s.directDownload = on }
+
+// SetPreUpload toggles pair-room pre-upload (default off). Read pairroom.go's
+// invariants 5 and 8 before turning it on: a joined room currently has no
+// deadline and no completion lifecycle, so its ciphertext is stored until the
+// account is deleted. Off, `purpose=pair_room` is refused with 503 and no room
+// is ever created, which is exactly the behaviour of a server that never heard
+// of the feature.
+func (s *Service) SetPreUpload(on bool) { s.preUpload = on }
 
 // Store returns the account data store. Exported so the commercial
 // admin/billing layer (billing.go, admin.go, admin_rollout.go,

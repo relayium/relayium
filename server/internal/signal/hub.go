@@ -138,6 +138,19 @@ func (h *Hub) JoinDeviceLimited(room, id, name string, c Conn, max int, clientIP
 	return true
 }
 
+// PeerCount is how many connections the room currently holds.
+//
+// Connections, not devices: a pairing-code room admits exactly two and does not
+// group tabs (JoinDeviceLimited honours device grouping on the LAN room only),
+// so "the room holds two" is precisely "this code is paired" there. Used by the
+// join observer (ServeWSObserved) to tell the pre-upload lifecycle that the code
+// has been claimed.
+func (h *Hub) PeerCount(room string) int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.rooms[room])
+}
+
 // logicalDeviceCount returns how many selectable devices the room currently
 // contains. Connections with a valid installation id share one slot; legacy or
 // identity-less connections each consume their own slot. Caller holds h.mu.

@@ -59,6 +59,77 @@ func (p *PairRegistry) MintFor(owner string) (string, int64) {
 // 而不是运气问题，继续重试没有意义。
 const maxMintAttempts = 10
 
+// ExtendFor pushes a live code's expiry out to `until`, for the account that
+// minted it and nobody else. It reports whether the code is now good for at
+// least that long.
+//
+// It exists because a pairing code is no longer only a rendezvous credential:
+// with pre-upload, ciphertext is bound to the code's ROOM, and that room stays
+// joinable while the upload is genuinely progressing (see the pair-room
+// lifecycle in server/account/pairroom.go). Without this the two clocks
+// disagree — the room's deadline follows the last accepted byte while the code
+// dies CodeTTLSeconds after the mint — so a ten-minute upload would leave live
+// ciphertext behind a code nobody can present any more.
+//
+// Three rules, each of which a test pins:
+//
+//   - OWNER-BOUND. A caller may only move the code IT minted. The digits are
+//     recycled minutes after they expire, so "the account that owns this room"
+//     and "the account that owns these six digits right now" are different
+//     questions, and only the second one may extend a code.
+//   - FORWARD ONLY. `until` below the current expiry is not a failure and not a
+//     shortening: two chunks of one batch commit concurrently and the older may
+//     land second. Nothing may ever pull a deadline in.
+//   - NEVER A RESURRECTION. An expired entry — reaped or merely not swept yet —
+//     is refused outright. A late progress report must not bring back digits
+//     that are already free to be handed to somebody else.
+//
+// The CEILING is the caller's. This registry knows nothing about rooms, so the
+// bound on how long progress may keep a code alive lives with the rule that
+// defines it (pairRoomMaxJoinable) rather than being re-stated here where it
+// would drift.
+func (p *PairRegistry) ExtendFor(code, owner string, until int64) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	e, ok := p.codes[code]
+	if !ok || e.exp <= p.now() || e.owner != owner {
+		return false
+	}
+	if until > e.exp {
+		e.exp = until
+		p.codes[code] = e
+	}
+	return true
+}
+
+// RevokeFor drops a code its owner's transfer is finished with, so it stops
+// validating at once instead of lingering to its expiry. Reports whether it
+// took one.
+//
+// The caller is the pair-room void: a room whose deadline passed has had its
+// ciphertext deleted, and a code that still admitted a receiver after that would
+// name a rendezvous whose transfer no longer exists. Ending both in one place
+// is what keeps "the room is void" and "the code is dead" a single fact rather
+// than two clocks that happen to agree.
+//
+// `notAfter` is the caller's own deadline for those digits — for a pair room,
+// the join deadline it was extended to. An entry living past it cannot be the
+// one the caller is ending: a code is only mintable again once it has expired,
+// so a fresh minting always sits beyond the deadline that freed it. That is the
+// check owner-matching alone cannot make, because the same account can be
+// issued the same six digits twice, and a void can run long after the deadline
+// that caused it (the GC sweep is ten minutes behind).
+func (p *PairRegistry) RevokeFor(code, owner string, notAfter int64) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	e, ok := p.codes[code]
+	if !ok || e.owner != owner || e.exp > notAfter {
+		return false
+	}
+	delete(p.codes, code)
+	return true
+}
+
 // OwnerOf returns the owning userID of a live code, or ("", false) if the code
 // is unknown or expired.
 func (p *PairRegistry) OwnerOf(code string) (string, bool) {
@@ -165,9 +236,12 @@ const CodeAlphabet = "0123456789"
 // on the order of 25 guesses from one address against one live code —
 // 25/1e6 = 0.0025%. Treat that as a design figure, not a proof: the window is
 // trailing with one-second granularity, the budget is per-process and divided
-// across instances (PerInstanceThreshold) rather than enforced globally, and an
+// across instances (PerInstanceThreshold) rather than enforced globally, an
 // attacker with many addresses simply multiplies it — nothing here caps
-// distributed guessing. The old format's comparable per-IP figure was 30/min
+// distributed guessing — and, where pre-upload is enabled, the "5-minute TTL"
+// in the first line is a floor rather than a constant: a code whose upload keeps
+// committing stays live for up to six hours (see CodeTTLSeconds), which scales
+// this figure for that one code by the same factor. The old format's comparable per-IP figure was 30/min
 // over a 30-minute window: 900/24^6 ≈ 0.00047%. So the honest statement is that
 // the new format is roughly 5.3x looser per IP, and that is the usability trade
 // the owner approved — not a wash.
@@ -230,6 +304,17 @@ const CodeLen = 6
 //
 // 过期之后重新铸一枚码是一次点击；把窗口拉宽是永久放宽一个安全参数。要再压命中率，
 // 加长 CodeLen 比继续缩短 TTL 便宜得多——多一位数字就是除以 10。
+//
+// **开启 pre-upload 之后，这 5 分钟是下限而不是定值。** 一枚码只要绑着 pair room，
+// 每次被服务端接受并提交的上传进度都会把它的到期时间推到房间当前的 join deadline
+// （ExtendFor / account.syncPairCode），上限是房间开启后的 6 小时
+// （account.pairRoomMaxJoinable）。也就是说，对**那一枚**码，在线爆破窗口最坏情况
+// 是这里写的 72 倍——CodeLen 上的算式请按实际窗口重算，别直接拿 300 秒代入。
+//
+// 这是 owner 明确接受的取舍（「上传期间码不死，传完再计 5 分钟」），并且是有代价才
+// 换得到的：把窗口撑开的唯一办法是持续上传，而每一个字节都记在上传者自己的额度上
+// （pair-room 协议 §5）。计费规则是这个安全论证的承重墙——削弱其中一个就是削弱另一
+// 个。另外 pre-upload 默认关闭（-enable-preupload），关着的时候窗口就是这里的 300 秒。
 const CodeTTLSeconds int64 = 300
 
 // randCode returns a uniformly random CodeLen-digit code over CodeAlphabet.

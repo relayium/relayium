@@ -455,7 +455,76 @@ type UploadSessionRow struct {
 	// and must not have to re-derive an authorization-relevant decision from a
 	// query string it can no longer see.
 	Purpose string
+	// PairRoomID is the pairing-code room this upload is pre-uploading into, ""
+	// for every other purpose. Persisted for the same reason Purpose is: the
+	// finalize that binds the object may not be the instance that resolved the
+	// code, and it must not have to re-check an ownership decision from a query
+	// string it can no longer see.
+	PairRoomID string
+	// Metered is how many of Received's bytes have already been charged to the
+	// account's monthly traffic. Uploads are billed per committed append (so a
+	// cancelled upload is billed for exactly what moved), and finalize charges
+	// only the remainder — this column is what keeps the two from double-billing
+	// the same bytes across instances.
+	Metered int64
+	// UnresolvedAt is when this session was moved into the RECOVERY state: it
+	// was abandoned, and its blob's node could not be reached even once to ask
+	// how many bytes it really holds. 0 for every ordinary session.
+	//
+	// It marks the row as accounting evidence that is explicitly NOT settled.
+	// Received is only a lower bound in this state — the node may have committed
+	// bytes it never got to acknowledge — so nothing may purge the row, nothing
+	// may drop the blob, and nothing may read the meter as final until a probe
+	// succeeds (SettleUnresolvedUpload) and clears this back to 0. See
+	// Service.recoverUnresolvedUploads.
+	UnresolvedAt int64
 }
+
+// UploadProgress is one committed append as the store must record it: the bytes
+// that landed, and the pairing-room deadline they bought.
+type UploadProgress struct {
+	// SessionID is the upload session; UserID is who pays for it.
+	SessionID string
+	UserID    string
+	// Committed is the blob's own authoritative size after the append — never a
+	// client-supplied number and never an increment. The delta to bill is derived
+	// from it inside the transaction, against the offset the database holds, so a
+	// duplicated or concurrent request cannot bill the same bytes twice.
+	Committed int64
+	// Billable is false for own-node uploads, which are never metered.
+	Billable bool
+	Now      int64
+	// RoomID is the pairing room this upload is pre-uploading into, "" for every
+	// other purpose. RoomExpiry is the deadline the room and its objects take on
+	// as a result of this progress (pairRoomProgressExpiry — the rule lives in
+	// pairroom.go, never in SQL).
+	RoomID     string
+	RoomExpiry int64
+}
+
+// UploadProgressResult is what one CommitUploadProgress actually did.
+type UploadProgressResult struct {
+	// Received is the session's committed offset after the call.
+	Received int64
+	// RoomOpen reports whether the pairing room named by UploadProgress.RoomID
+	// was still open and inside its deadline at the instant this transaction
+	// wrote. Always true when there is no room.
+	//
+	// It is the transactional answer to a question the caller can only ask
+	// racily: the room's liveness is re-derived before every append, but a room
+	// that ends in the microseconds after that check would otherwise have bytes
+	// accepted, billed and a deadline projected for ciphertext that is already
+	// void. False means "billed, but refuse the request and take the ciphertext
+	// away" — never "silently succeeded".
+	RoomOpen bool
+}
+
+// ErrPairRoomClosed is returned by a store write whose pairing-room
+// precondition failed: the room closed, expired, or vanished before the write
+// could land. It is a terminal condition, never a transient one — retrying it
+// cannot make a closed room open — so the retry helper stops on it and the
+// upload routes turn it into the same 410 a pre-check refusal produces.
+var ErrPairRoomClosed = errors.New("account: pair room is closed")
 
 // StoredFile is one zero-knowledge stored-transfer object's lifecycle row. The
 // server holds only ciphertext: EncManifest (encrypted filenames/sizes) and the
@@ -486,6 +555,11 @@ type StoredFile struct {
 	// to, "" while unbound. A share is never bound: it may back several tasks
 	// and it belongs to its link, not to a delivery.
 	InboxTaskID string
+	// PairRoomID is the pairing-code room a pair-purpose object was pre-uploaded
+	// into, "" for every other kind. It is the room INSTANCE id, never the code:
+	// codes are recycled, and binding to one would let a reissued code reach the
+	// previous holder's ciphertext. See pairroom.go.
+	PairRoomID string
 }
 
 // UsageKind selects which per-month meter a RecordMeter call increments.
@@ -495,6 +569,27 @@ const (
 	MeterUpload UsageKind = iota
 	MeterDownload
 )
+
+// UnbilledMeter is one bill that is OWED: bytes that are known to have moved,
+// whose meter write failed, and whose evidence has been (or is about to be)
+// destroyed.
+//
+// It exists because two settlement paths bill something the database has never
+// held — the size of a partial blob, read from the node an instant before the
+// blob is deleted. Everywhere else the bill and the state change it belongs to
+// are one transaction; there they cannot be, so the number is made durable on
+// its own and GC settles it (see Store.SettleUnbilledMeter).
+//
+// Reason is free text naming the path that owed it. It is read by a human after
+// something has already gone wrong, so it should say what and for which blob.
+type UnbilledMeter struct {
+	ID     string
+	UserID string
+	Kind   UsageKind
+	Bytes  int64
+	At     int64
+	Reason string
+}
 
 // UserStats are a user's lifetime aggregate counters for the personal center /
 // future metering. Monotonic (never decremented), survive file expiry/GC, and
@@ -675,13 +770,116 @@ type FleetToken struct {
 	RevokedAt  int64
 }
 
-// PendingNodeDelete is a blob whose owning node was unreachable when its file
-// expired/was deleted; GC retries the node DELETE each sweep until it succeeds,
-// reclaiming the orphan under the no-replication model.
+// PendingNodeDelete is a blob GC has taken durable responsibility for: either
+// its owning node was unreachable when its file expired/was deleted, or the row
+// that used to point at it has been removed and this is now the ONLY record
+// that those bytes must go. GC retries the node DELETE each sweep until it
+// succeeds, reclaiming the orphan under the no-replication model.
 type PendingNodeDelete struct {
 	BlobKey    string
 	NodeID     string
 	EnqueuedAt int64
+	// NotBefore is the instant this responsibility may be RETIRED — the row
+	// dropped because a delete succeeded. 0 (the ordinary case) means "as soon as
+	// one does": nothing can put the blob back, so the first success is the end
+	// of it.
+	//
+	// A pairing room's void sets it, and it is the whole answer to the one race
+	// a delete cannot win on its own. Central deletes the blob of an upload whose
+	// session row it has just removed, and an append that read that row a moment
+	// earlier is still streaming to the node: it lands AFTER the delete and
+	// re-creates the key. Retiring the row on the first success would leave those
+	// bytes with no owner at all — no session, no stored_files row, nothing for
+	// any generic sweep to find. Holding it until every append that could still
+	// be in flight has finished is what makes the responsibility outlive the
+	// race, and outlive a crash in the middle of it.
+	//
+	// It is a hold on the ROW, never on the delete: the bytes go on the first
+	// sweep that can reach the node, and every sweep in the hold window asks
+	// again, so a re-created blob is removed by the next pass rather than
+	// surviving to the end of the window.
+	NotBefore int64
+	// DeletedAt is when a delete for this key first SUCCEEDED, 0 if none ever
+	// has. Only rows inside a hold can carry it: everywhere else the success is
+	// the end of the row.
+	//
+	// It is what makes age eviction safe. A row is retired by age only once it
+	// has one, because until then the row is not a hold on a discharged
+	// responsibility — it is the only record that the blob exists at all, its
+	// stored_files or upload_sessions row having been deleted in the same
+	// transaction that created it. See Store.RetirePendingNodeDeletes.
+	DeletedAt int64
+	// BillUserID, when non-empty, is a BILLING obligation riding on the row: any
+	// bytes the blob turns out to hold past BilledThrough (clamped to BillMax)
+	// must be durably billed to this user, as BillKind, BEFORE the bytes are
+	// destroyed — the blob is the last evidence of the number, so destroying it
+	// first would make the bill unrecoverable.
+	//
+	// Written by a pairing room's close for its upload-session blobs, in the
+	// SAME transaction that deletes the session rows: that ordering is what lets
+	// the obligation survive a database that refuses every write afterwards.
+	// The settle paths (Service.settleBlobBillingDurably, GC.drainPending)
+	// advance BilledThrough atomically with the meter or journal write, so a
+	// crash between "billed" and "recorded as billed" cannot double-charge.
+	// "" — the ordinary case — is a deletion-only row, exactly as before.
+	BillUserID string
+	BillKind   UsageKind
+	// BillMax caps what the blob's self-reported size can be billed as: a node
+	// is free to answer a probe with anything, and max_size is the most this
+	// upload was ever authorized to write.
+	BillMax int64
+	// BilledThrough is the durable billing floor: bytes [0, BilledThrough) are
+	// already metered or journaled. Monotonic — settling never lowers it.
+	BilledThrough int64
+}
+
+// PairRoomClosure is everything one room close took responsibility for: the
+// single, transactional enumeration of the ciphertext a voided room owns.
+//
+// Both halves are ciphertext the room's deadline governs, and before this had
+// two of them only the first was reclaimed — an upload still in flight when the
+// deadline passed kept its partial blob and its session until the generic
+// one-hour reaper, twelve times the window the room promised.
+//
+// The close is exactly-once, so exactly one of two racing voids receives a
+// non-empty closure and no artifact can be reclaimed (or double-deleted) twice.
+type PairRoomClosure struct {
+	// Objects are the finalized stored_files rows bound to the room: blob and
+	// row both go.
+	Objects []StoredFile
+	// Sessions are the upload sessions the room held, in whatever state they were
+	// in — open, finalized-but-not-persisted, or in the unresolved recovery
+	// state. Their ROWS ARE ALREADY GONE: the close settled each one's meter and
+	// deleted it inside the same transaction, so the account's open-session slots
+	// and the room's bindings are free the instant the close commits, whatever
+	// any node is doing.
+	//
+	// What comes back is therefore a work list, not live state. Each row is the
+	// last thing the database knew about that upload, and the caller's remaining
+	// job is physical and best-effort: ask the blob how big it really is (bill
+	// the delta), then delete it (Service.settleReclaimedUpload). Every one of
+	// them already has a durable delete intent queued by this transaction, so a
+	// caller that runs out of budget — or dies — loses accuracy on the residual,
+	// never the bytes.
+	//
+	// An earlier version handed these back untouched and claimed them one at a
+	// time afterwards, so that an append still in flight kept committing against
+	// an open session. That bought the bytes of one in-flight chunk and cost the
+	// property the room exists to enforce: a claim that never came (a finalize
+	// that crashed holding it, a budget that expired) left the session, its slot
+	// and its ciphertext alive until the generic one-hour reaper.
+	Sessions []UploadSessionRow
+}
+
+// BlobRef names ONE piece of ciphertext to reclaim: the key, and the node
+// holding it ("" = central-local storage). It is everything the caller needs to
+// delete-or-enqueue a blob and deliberately nothing else — a finalized
+// stored_file's ciphertext and an abandoned upload's partial blob are the same
+// job once their rows are gone, and the reclaim path should not have to care
+// which kind of row a key came from.
+type BlobRef struct {
+	BlobKey string
+	NodeID  string
 }
 
 // RolloutTrack is the persisted state of one automatic node-update rollout
@@ -927,23 +1125,93 @@ type Store interface {
 	// See the multi-instance-state-migration doc in relayium-ops, item #9.
 	CreateUploadSession(ctx context.Context, row UploadSessionRow, maxPerUser int) (ok bool, err error)
 	GetUploadSession(ctx context.Context, id, userID string) (UploadSessionRow, bool, error)
-	// AdvanceUploadReceived monotonically advances the committed offset (only ever
-	// forward, only while the session is open, never past max_size), mirroring the
-	// authoritative blob size, and stamps last_activity=now (idle-reaper input).
-	AdvanceUploadReceived(ctx context.Context, id string, to, now int64) error
-	// ClaimUploadDone atomically marks the session terminal and returns the offset
-	// at that instant, stamping last_activity=now. ok=false ⇒ already claimed (a
-	// racing finalize/reaper won).
-	ClaimUploadDone(ctx context.Context, id string, now int64) (received int64, ok bool, err error)
+	// CommitUploadProgress records ONE committed append: it advances the session's
+	// offset to the blob's authoritative size (only ever forward, only while the
+	// session is open, never past max_size), adds exactly the bytes that advance
+	// bought to the session's metered ledger AND to the account's monthly traffic,
+	// and — for a pre-upload — moves its pairing room's deadline and projects that
+	// deadline onto the room's objects. All in ONE transaction.
+	//
+	// One transaction is the point. These used to be three best-effort writes, so
+	// a failure between them could bill bytes twice, bill none at all, or leave a
+	// progressing upload's room expiring underneath it. Together they are either
+	// all true or all false, and "all false" is a failed request the client
+	// retries — the blob's own size is authoritative, so the retry re-derives the
+	// same delta and bills it exactly once.
+	//
+	// The pairing-room half carries a PRECONDITION, evaluated inside the same
+	// transaction: bytes may only buy a deadline for a room that is still open
+	// and inside its own. A room that closed after the caller's check and before
+	// this write comes back as RoomOpen=false — the bytes are still committed and
+	// still billed, because they moved, but no deadline is projected and the
+	// caller must refuse the request rather than hand back success for ciphertext
+	// nobody can reach.
+	CommitUploadProgress(ctx context.Context, p UploadProgress) (UploadProgressResult, error)
+	// ReconcileUploadMeter charges the account for every committed byte of this
+	// session that is not on its meter yet (received - metered), atomically with
+	// moving the session's ledger to match, and returns what it billed.
+	//
+	// Idempotent by construction: a second call bills nothing. Non-billable
+	// (own-node) sessions bill nothing at all.
+	//
+	// It is the reconcile for a session that is ALREADY terminal (the orphan-row
+	// pass). The way an upload normally ends reconciles inside ClaimUploadDone,
+	// because a bill that can fail separately from the claim it belongs to is a
+	// bill that gets skipped.
+	ReconcileUploadMeter(ctx context.Context, id string, now int64) (billed int64, err error)
+	// ClaimUploadDone atomically marks the session terminal, settles its meter and
+	// returns the offset at that instant, stamping last_activity=now. ok=false ⇒
+	// already claimed (a racing finalize/reaper won).
+	//
+	// The claim and the reconcile are ONE transaction on purpose. They used to be
+	// two calls, and the second one's error was logged: a transient failure there
+	// left a session claimed, its committed bytes unbilled, and the row deleted
+	// moments later by the very caller that logged it — a permanent underbill with
+	// no record left of what was lost. Together they are all-or-nothing, so a
+	// failure claims nothing and the caller's retry settles it exactly once.
+	ClaimUploadDone(ctx context.Context, id string, now int64) (received, billed int64, ok bool, err error)
 	DeleteUploadSession(ctx context.Context, id string) error
 	// ListExpiredOpenUploadSessions returns open sessions idle since ≤ before.
+	// Never a session already in the recovery state (see MarkUploadUnresolved).
 	ListExpiredOpenUploadSessions(ctx context.Context, before int64) ([]UploadSessionRow, error)
 	// ListOrphanDoneUploadSessions returns finalized rows idle since ≤ before whose
 	// blob no stored_files row references (a finalize that crashed before persist).
+	//
+	// EXCLUDES rows in the recovery state. Their blob is the only thing that can
+	// still say how many bytes the node accepted, and this pass drops blobs.
 	ListOrphanDoneUploadSessions(ctx context.Context, before int64) ([]UploadSessionRow, error)
 	// PurgeDoneUploadSessions deletes finalized rows idle since ≤ before (their
-	// blob is either a live file or already dropped by the orphan pass).
+	// blob is either a live file or already dropped by the orphan pass). Rows
+	// whose meter is short, and rows in the recovery state, are never purged:
+	// the row is the only record of what an upload accepted.
 	PurgeDoneUploadSessions(ctx context.Context, before int64) error
+	// MarkUploadUnresolved moves an abandoned open session into the RECOVERY
+	// state: terminal for the client, but explicitly NOT settled. ok=false ⇒ the
+	// session was claimed by a racing finalize or reaper first.
+	//
+	// It is what the reaper does instead of settling a session whose blob it
+	// cannot reach. `received` is a lower bound there — the node may hold bytes
+	// no append survived to record — so writing the session off against it
+	// permanently underbills committed traffic and destroys the only evidence
+	// that could ever correct it. This keeps the evidence instead, and hands the
+	// session to the paced recovery pass below.
+	MarkUploadUnresolved(ctx context.Context, id string, now int64) (ok bool, err error)
+	// ListUnresolvedUploadSessions returns recovery-state rows whose last probe
+	// attempt was at/before `before`, oldest attempt first, at most limit — so
+	// one sweep's work is bounded however many nodes are away.
+	ListUnresolvedUploadSessions(ctx context.Context, before int64, limit int) ([]UploadSessionRow, error)
+	// NoteUnresolvedProbe records that a re-probe was attempted and failed,
+	// which is what paces the next one. It settles nothing.
+	NoteUnresolvedProbe(ctx context.Context, id string, now int64) error
+	// SettleUnresolvedUpload closes the recovery state with the blob's own
+	// authoritative size: the offset moves to it (clamped to max_size, so a
+	// lying node cannot inflate the bill), every byte of it that is not on the
+	// account's meter is charged, and unresolved_at is cleared — all in one
+	// transaction. Returns what it billed.
+	//
+	// Only ever called with a size a probe actually returned. There is no
+	// variant that settles without one: "the node did not answer" is not a size.
+	SettleUnresolvedUpload(ctx context.Context, id string, size, now int64) (billed int64, err error)
 	EmailVerified(ctx context.Context, userID string) (bool, error)
 	SetEmailVerified(ctx context.Context, userID string) error
 	// SetOnlyOwnNodes toggles the BYO-nodes-only restriction (SP3) for a user.
@@ -998,12 +1266,27 @@ type Store interface {
 	MarkPurgeReminderSent(ctx context.Context, userID string, at int64) error
 	// PurgeTransientUserData wipes a user's transient/live data immediately at
 	// deletion-confirmation time (sessions, cli_tokens, cli_device_auth,
-	// devices, magic_tokens, stored_files, node_tokens, and their own
-	// owner_type='user' nodes), keeping the account shell (users row +
-	// identities + usage_events/usage_monthly/user_stats) intact until the
-	// 30-day hard-purge. Returns the deleted stored_files so the caller can
-	// enqueue blob deletes. Runs in one transaction.
-	PurgeTransientUserData(ctx context.Context, userID string) (blobs []StoredFile, err error)
+	// devices, magic_tokens, stored_files, upload_sessions, pair_rooms,
+	// node_tokens, and their own owner_type='user' nodes), keeping the account
+	// shell (users row + identities + usage_events/usage_monthly/user_stats)
+	// intact until the 30-day hard-purge. Runs in one transaction.
+	//
+	// It returns every blob those rows pointed at — finalized ciphertext AND the
+	// partial blob of every upload session, in whatever state — so the caller can
+	// delete or enqueue each one. Deduplicated by (node, key): a finalize that
+	// crashed between persisting the stored_file and dropping its session leaves
+	// two rows naming ONE blob, and the reclaim path must not be handed it twice.
+	//
+	// Upload sessions go with everything else, INCLUDING the recovery state
+	// (unresolved_at>0) whose row is otherwise protected as the only surviving
+	// evidence of bytes an unreachable node may have accepted. That protection
+	// exists to stop an automatic sweep from writing off a bill; it is not a
+	// claim on the data of an account that has asked to be deleted. Deleting the
+	// account is the user's explicit instruction, the residual bytes could never
+	// be charged to it afterwards anyway, and keeping a user_id and a partial
+	// ciphertext behind for a node that may never return would make the
+	// immediate-deletion promise (and the later hard purge) false indefinitely.
+	PurgeTransientUserData(ctx context.Context, userID string) (blobs []BlobRef, err error)
 	// ListUsersToPurge returns every user whose grace period has fully
 	// elapsed (purge_after>0 AND purge_after<=now): GC's hard-purge worklist.
 	ListUsersToPurge(ctx context.Context, now int64) ([]User, error)
@@ -1015,8 +1298,9 @@ type Store interface {
 	// userID's usage_monthly rows into the anonymized usage_archive (summed by
 	// period, no user identity retained), then deletes every user-linked row
 	// (identities, sessions, magic_tokens, devices, cli_tokens,
-	// cli_device_auth, usage_events, stored_files, upload_events, user_stats,
-	// usage_monthly, email_tokens, node_tokens, the user's own nodes) before
+	// cli_device_auth, usage_events, stored_files, upload_sessions, pair_rooms,
+	// upload_events, user_stats, usage_monthly, email_tokens, node_tokens,
+	// the user's own nodes) before
 	// finally deleting the users row itself. FK-safe delete order (children
 	// before the users parent, PRAGMA foreign_keys=ON). The final users delete
 	// is guarded on purge_after>0 AND purge_after<=now; if a concurrent
@@ -1194,6 +1478,56 @@ type Store interface {
 	// and the delete keeps its ciphertext. ok=false means the object became live
 	// again and the caller must NOT delete its blob.
 	DeleteTaskObjectIfReclaimable(ctx context.Context, id string, now, bindGrace int64) (bool, error)
+	// pair rooms (code-first pre-upload; see pairroom.go for the lifecycle these
+	// methods implement — every deadline RULE lives there, never in SQL)
+	//
+	// CreatePairRoomIfAbsent opens r's room unless these digits already have an
+	// open, unjoined one, in which case that room comes back with created=false.
+	// Get-or-create in one transaction: two files starting their pre-upload at the
+	// same instant must not open two rooms, because a join only ever resolves one
+	// of them and a file in the other is stranded.
+	CreatePairRoomIfAbsent(ctx context.Context, r PairRoom) (room PairRoom, created bool, err error)
+	GetPairRoom(ctx context.Context, id string) (PairRoom, bool, error)
+	// LivePairRoomByCode resolves the NEWEST room opened for `code` that has not
+	// been closed. Newest, because codes are recycled: an older row with the same
+	// digits belongs to a different transfer and must never be reachable.
+	// Liveness against the clock is the caller's (pairRoomLive), so a caller that
+	// finds an over-deadline room can void it rather than silently miss it.
+	LivePairRoomByCode(ctx context.Context, code string) (PairRoom, bool, error)
+	// TouchPairRoomUpload records upload progress: last_upload_at and the room's
+	// deadline move forward (never back), and the same deadline is projected onto
+	// every object already in the room, in one transaction.
+	TouchPairRoomUpload(ctx context.Context, id string, at, expiresAt int64) error
+	// JoinPairRoom stamps the join and projects the post-join deadline, only
+	// while the room is open and unjoined (so a second join changes nothing).
+	JoinPairRoom(ctx context.Context, id string, at, expiresAt int64) error
+	// ClosePairRoom ends the room and, in the SAME transaction, performs every
+	// part of the void that a database alone can perform:
+	//
+	//   - marks the room closed, exactly once (a second call returns an empty
+	//     closure, so two racing voids cannot double-reclaim);
+	//   - settles the meter of every upload session bound to it — the bytes the
+	//     account is KNOWN to have sent stay billed, whatever happens next;
+	//   - DELETES those session rows, so the account's open-session slots and the
+	//     room's bindings are free immediately;
+	//   - queues a durable delete intent (pending_node_deletes) for every blob
+	//     the room held, finalized and half-uploaded alike, held until holdUntil
+	//     (see PendingNodeDelete.NotBefore).
+	//
+	// Nothing here touches a node. That is the point: the authoritative state
+	// transition completes on the database's own clock, and the caller's slow,
+	// failable, budgeted physical work — probing a blob for its real size,
+	// deleting it — can only ever make the outcome MORE accurate, never more
+	// correct. A caller that runs out of budget, or dies, leaves no room-bound row
+	// behind and no blob without an owner.
+	//
+	// The closure is that remaining work list (see PairRoomClosure); the rows it
+	// describes are already gone.
+	ClosePairRoom(ctx context.Context, id string, at, holdUntil int64) (PairRoomClosure, error)
+	// ListDeadPairRooms returns open rooms whose deadline has passed (GC's
+	// backstop pass), newest-deadline-last, at most limit rows.
+	ListDeadPairRooms(ctx context.Context, now int64, limit int) ([]PairRoom, error)
+	PurgeClosedPairRooms(ctx context.Context, before int64) error
 	IncDownloadCount(ctx context.Context, id string) error
 	// ClaimDownloadSlot atomically takes one of a file's remaining download
 	// slots: increments download_count only while download_count < max_downloads
@@ -1215,6 +1549,16 @@ type Store interface {
 	// usage_monthly (per-month billing ledger: upload/download bytes; relay is
 	// derived from usage_events, not stored here)
 	RecordMeter(ctx context.Context, userID string, kind UsageKind, bytes, at int64) error
+	// EnqueueUnbilledMeter durably records bytes that are owed after a
+	// RecordMeter failed, on the paths whose evidence does not survive the
+	// failure. See UnbilledMeter.
+	EnqueueUnbilledMeter(ctx context.Context, m UnbilledMeter) error
+	// SettleUnbilledMeter charges up to `limit` owed rows, each in one
+	// transaction with the removal of the row that owed it, and reports how
+	// many it settled. GC's retry.
+	SettleUnbilledMeter(ctx context.Context, limit int) (int, error)
+	// CountUnbilledMeter reports how many bills are still owed.
+	CountUnbilledMeter(ctx context.Context) (int, error)
 	MonthlyUsage(ctx context.Context, userID, period string) (upload, download int64, err error)
 	// upload events (rolling-24h quota ledger)
 	RecordUpload(ctx context.Context, e UploadEvent) error
@@ -1407,9 +1751,30 @@ type Store interface {
 	EnqueueNodeDelete(ctx context.Context, blobKey, nodeID string, at int64) error
 	ListPendingNodeDeletes(ctx context.Context) ([]PendingNodeDelete, error)
 	DeletePendingNodeDelete(ctx context.Context, blobKey, nodeID string) error
-	// DeletePendingNodeDeletesOlderThan evicts orphan-retry rows enqueued
-	// before `before`: a permanently-dead node would otherwise retry forever.
-	DeletePendingNodeDeletesOlderThan(ctx context.Context, before int64) error
+	// MarkPendingNodeDeleteDone stamps the first delete that succeeded for a
+	// row still inside its hold, so age eviction can tell a discharged
+	// responsibility from an undischarged one.
+	MarkPendingNodeDeleteDone(ctx context.Context, blobKey, nodeID string, at int64) error
+	// RetirePendingNodeDeletes drops the rows that own nothing any more — a
+	// discharged (deleted_at > 0) row past its age window, and nothing else —
+	// and reports how many old undischarged rows it deliberately KEPT. Age,
+	// an absent node row and removed_at are all non-reasons: only the explicit
+	// irreversible node deletion ends an undischarged row, by removing its own
+	// rows itself. See the implementation for why.
+	RetirePendingNodeDeletes(ctx context.Context, before int64) (retired, retained int, err error)
+	// SettleBlobBilling atomically charges the unbilled residual a pending blob
+	// carries (its size `through`, clamped to the row's bill_max, minus the
+	// row's billed_through floor) to the row's bill_user_id, advancing the
+	// floor in the same transaction. Idempotent: a repeat with the same
+	// `through` bills nothing. Returns the bytes billed; (0, nil) when the row
+	// is missing, carries no obligation, or owes nothing.
+	SettleBlobBilling(ctx context.Context, blobKey, nodeID string, through, at int64) (int64, error)
+	// JournalBlobBilling is SettleBlobBilling's fallback for a database whose
+	// meter tables are refusing writes: the residual goes to the owed-bills
+	// outbox (unbilled_meter) instead of the meter, with the floor advanced in
+	// the same transaction so the two records cannot both exist for one byte.
+	// GC settles the outbox row later (SettleUnbilledMeter).
+	JournalBlobBilling(ctx context.Context, blobKey, nodeID string, through, at int64, reason string) (int64, error)
 	// node_tokens (per-user BYO-node bearer credentials; SP3)
 	CreateNodeToken(ctx context.Context, t NodeToken) error
 	NodeTokenByHash(ctx context.Context, hash string) (NodeToken, bool, error)

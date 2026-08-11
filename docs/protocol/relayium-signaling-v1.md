@@ -19,6 +19,14 @@ handshake ride inside `data` and are defined by the realtime layer, not here.
   derived from the two endpoint public keys. Two different values, same width.
 - **TTL 300 s**, checked once, at this join. Nothing re-checks it afterwards, so
   a code expiring mid-session never interrupts an established transfer.
+  - 300 s from the MINT is the floor, not always the value. Where pre-upload is
+    enabled (`relayium-pair-room-v1.md`), a code with staged ciphertext is
+    extended to its room's join deadline on every accepted committed append —
+    up to six hours from when the room opened — and is REVOKED outright when
+    that room is voided. Both are owner-bound and forward-only; an expired code
+    is never revived. A client still treats the code as opaque and short-lived:
+    the only observable difference is that a code can outlive the `expiresAt`
+    it was minted with, so that value is a floor to display, never a promise.
 - The server refuses a wrong-shaped code with 403 before any registry lookup.
 - Admission limits, per `main.go`, in two distinct kinds:
   - **Distinct codes tried: 5 per minute per IP, shared with `/api/ice`**

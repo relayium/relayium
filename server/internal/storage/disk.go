@@ -195,6 +195,39 @@ func (d *DiskStore) GetRange(ctx context.Context, key string, start int64) (io.R
 	return rc, nil
 }
 
+// ctxReader makes a copy from an otherwise context-blind reader observe ctx.
+//
+// It checks BETWEEN reads rather than interrupting one, which is the honest
+// bound it can offer: io.Copy asks for the next block only after the previous
+// one returned, so the deadline is observed within one Read of expiring. A
+// source that blocks forever inside a single Read is not stopped by this and
+// cannot be — that has to be bounded where the source is (an HTTP body has a
+// read deadline; see Service.handleUploadChunk).
+//
+// The point is the drip: a client sending a byte at a time never stalls a Read
+// long enough for any socket deadline to notice, and without this the copy runs
+// as long as the client keeps dripping.
+type ctxReader struct {
+	ctx context.Context
+	r   io.Reader
+}
+
+func (c ctxReader) Read(p []byte) (int, error) {
+	if err := c.ctx.Err(); err != nil {
+		return 0, err
+	}
+	return c.r.Read(p)
+}
+
+// Append copies r onto the end of the blob, and it STOPS when ctx does.
+//
+// The context is not decoration here. Central streams a client's request body
+// straight into this call, so before it was honoured the only bound on one
+// append was the client's willingness to keep sending — which is no bound at
+// all, and which is what let an append outlive the delete intent covering the
+// blob it was writing to (see account.maxAppendLifetime). Whatever landed
+// before the deadline stays on disk and is reported, because those bytes
+// crossed the network and are owed.
 func (d *DiskStore) Append(ctx context.Context, key string, offset int64, r io.Reader) (int64, error) {
 	if !validKey.MatchString(key) {
 		return 0, ErrInvalidKey
@@ -202,11 +235,21 @@ func (d *DiskStore) Append(ctx context.Context, key string, offset int64, r io.R
 	if offset < 0 {
 		return 0, ErrOffsetMismatch
 	}
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	// Serialize same-key appends: the Stat-then-copy below is not atomic on its
 	// own, so two concurrent PATCHes at the same offset must not interleave.
 	l := d.keyLock(key)
 	l.Lock()
 	defer l.Unlock()
+	// Re-checked AFTER the lock: the wait for a contended stripe can outlast the
+	// caller's deadline, and the O_CREATE below must not manufacture a blob for
+	// a request that is already dead — the check above only covered the moment
+	// before the wait began.
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
 	shardDir, full := d.paths(key)
 	if err := os.MkdirAll(shardDir, 0o700); err != nil {
 		return 0, err
@@ -229,7 +272,7 @@ func (d *DiskStore) Append(ctx context.Context, key string, offset int64, r io.R
 	if _, err := f.Seek(offset, io.SeekStart); err != nil {
 		return 0, err
 	}
-	n, err := io.Copy(f, r)
+	n, err := io.Copy(f, ctxReader{ctx: ctx, r: r})
 	if err != nil {
 		return offset + n, err
 	}

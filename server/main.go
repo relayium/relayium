@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/mdp/qrterminal/v3"
@@ -100,6 +101,7 @@ func main() {
 	nodeToken := flag.String("node-token", envStr("RELAYIUM_NODE_TOKEN", ""), "fleet bootstrap bearer token for relay-node /api/nodes/* (empty disables the node API)")
 	enableUserNodes := flag.Bool("enable-user-nodes", envBool("RELAYIUM_ENABLE_USER_NODES", true), "serve per-user BYO node tokens (account-bound relay/storage nodes)")
 	directDownload := flag.Bool("direct-download", envBool("RELAYIUM_DIRECT_DOWNLOAD", false), "redirect stored downloads straight to fleet nodes that advertise a public DownloadURL (default off = central proxies)")
+	enablePreUpload := flag.Bool("enable-preupload", envBool("RELAYIUM_ENABLE_PREUPLOAD", false), "let a sender stage encrypted files against a pairing code while its room waits for a peer (default OFF: a joined room's ciphertext currently has no deadline and no completion lifecycle, so it is stored until the account is deleted — see server/account/pairroom.go)")
 	releaseCheck := flag.Bool("release-check", envBool("RELAYIUM_RELEASE_CHECK", true), "ask GitHub hourly for the newest release and offer it in /admin (default on; sends no instance data)")
 	enableGoogle := flag.Bool("enable-google", envBool("RELAYIUM_ENABLE_GOOGLE", false), "enable Google OAuth login (disabled by default)")
 	enableApple := flag.Bool("enable-apple", envBool("RELAYIUM_ENABLE_APPLE", false), "enable Sign in with Apple (disabled by default)")
@@ -242,7 +244,34 @@ func main() {
 	log.Printf("client-IP: X-Forwarded-For trusted from loopback + %d configured proxy CIDR(s)", len(trustedNets))
 
 	hub := signal.NewHub()
-	handle := signal.ServeWS(hub, newID)
+	// Pre-upload lifecycle hook. A pairing code whose sender staged files while
+	// waiting has ciphertext bound to it with a five-minute join deadline, and the
+	// only trustworthy witness that somebody actually joined is this server's own
+	// view of the room — see account.Service.MarkPairRoomJoined for why a client
+	// claim is not acceptable here.
+	//
+	// Held behind an atomic because /ws is registered before the account service
+	// exists (and the service does not exist at all when the database is down, in
+	// which case a code room simply has no pre-uploaded ciphertext to bind). The
+	// observer runs on the connection's read goroutine, so the actual work is
+	// handed to a goroutine: a database write must never delay a peer's join.
+	var pairJoined atomic.Pointer[func(code string)]
+	handle := signal.ServeWSObserved(hub, newID, func(room string, peers int) {
+		if peers < 2 {
+			return // the minter's own connection; nobody has joined yet
+		}
+		// The prefix alone is not proof. A LAN room's name is the client's IP
+		// address, and an IPv6 address can legitimately begin "c:" (e.g. "c::1"),
+		// so the remainder has to actually be a pairing code before this is
+		// treated as one. Cheap, and it keeps every LAN join off the database.
+		code, isPair := strings.CutPrefix(room, signal.PairRoomPrefix)
+		if !isPair || !signal.ValidCodeFormat(code) {
+			return
+		}
+		if fn := pairJoined.Load(); fn != nil {
+			go (*fn)(code)
+		}
+	})
 	// Per-IP concurrent /ws connection cap (H4). Acquired after the room is
 	// resolved and before the websocket upgrade; released when the handler returns.
 	ipConns := signal.NewIPConnLimiter()
@@ -429,10 +458,58 @@ func main() {
 			StripePortalConfig:   *stripePortalConfig,
 			ReleaseCheck:         *releaseCheck,
 		})
-		// Wire /api/ice to validate anonymous pairing codes so it can hand out
-		// TURN credentials for them — otherwise code transfers are STUN-only
-		// and fail across strict NATs.
-		acct.SetPairCodeOwner(pairReg.OwnerOf)
+		// The live pairing-code registry, whole. Two things need it, and they need
+		// to be looking at the SAME object:
+		//
+		//   - /api/ice resolves an anonymous code to its owner so it can hand out
+		//     TURN credentials for it — otherwise code transfers are STUN-only and
+		//     fail across strict NATs.
+		//   - the pre-upload lifecycle keeps a code alive for as long as the room
+		//     it names is joinable, and takes it away when that room is void. A
+		//     code that expired on its own five-minute mint TTL while its upload
+		//     was still running would leave ciphertext behind a credential nobody
+		//     can present (server/account/pairroom.go, syncPairCode).
+		acct.SetPairCodes(pairReg)
+		// Pre-upload (staging ciphertext against a waiting code) is opt-in and off
+		// by default. Not because the server half is unfinished — it is finished and
+		// tested — but because the owner's rule that a joined transfer is never cut
+		// off by a clock is implemented literally, and nothing yet exists to end a
+		// joined room, so every one of them is stored indefinitely. Turning this on
+		// is a storage commitment; see server/account/pairroom.go invariants 5 and 8.
+		acct.SetPreUpload(*enablePreUpload)
+		if *enablePreUpload {
+			log.Printf("pairing-code pre-upload: ENABLED — a joined room's ciphertext has no expiry until a completion lifecycle exists")
+		}
+		// Now that the lifecycle owner exists, let the /ws join observer above
+		// reach it. Bounded context: this is a background write, and a stuck
+		// database must not leave a goroutine per join alive forever.
+		//
+		// The failure is REPORTED here rather than swallowed inside the account
+		// layer, and it is not the end of the matter: MarkPairRoomJoined queues an
+		// observation it could not persist, the retry loop below finishes it, and
+		// until it does the room is not voided on the deadline it should already
+		// have shed. The websocket join itself is never affected — the peers are
+		// connected either way; what is at stake is only the ciphertext staged for
+		// them.
+		markJoined := func(code string) {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if err := acct.MarkPairRoomJoined(ctx, code); err != nil {
+				log.Printf("pairing code %s was joined but the lifecycle write failed (queued for retry): %v", code, err)
+			}
+		}
+		pairJoined.Store(&markJoined)
+		// Short ticker, not the ten-minute GC: a queued join holds its code's only
+		// room slot until it lands, and the room it belongs to is held out of every
+		// void path meanwhile. Nothing expires the observation itself (see
+		// pairJoinQueue), so this is about landing it promptly, not beating a clock.
+		//
+		// Started whatever -enable-preupload says, on purpose. The queue only ever
+		// receives an entry when a room exists to be joined, so with the feature off
+		// this is a map read every fifteen seconds — and a queue that can fill with
+		// no drainer running is worth a great deal more than that. It also keeps
+		// rooms opened before the flag was turned OFF from losing their joins.
+		go acct.RunPairJoinRetries(context.Background(), 15*time.Second)
 		acct.SetClientIP(ipx.IP) // H3: trusted-proxy-aware rate-limit keys
 		acct.SetICELimiter(iceLimiter)
 		// The same object the /ws route holds: one distinct-code budget per IP
@@ -491,6 +568,7 @@ func main() {
 				ReminderWindow: acct.ReminderWindowSeconds,
 				ReactivateLink: acct.IssueReactivateLink,
 				ReapSessions:   acct.ReapPendingUploads,
+				SweepPairRooms: acct.SweepPairRooms,
 				AuditRetention: *auditRetentionDays * 86400,
 			}
 			go gc.Run(context.Background(), 10*time.Minute)

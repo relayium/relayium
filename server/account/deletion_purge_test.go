@@ -70,6 +70,8 @@ var userLinkedTables = []struct {
 	{"devices", "user_id=?"},
 	{"usage_events", "user_id=?"},
 	{"stored_files", "user_id=?"},
+	{"upload_sessions", "user_id=?"},
+	{"pair_rooms", "user_id=?"},
 	{"upload_events", "user_id=?"},
 	{"user_stats", "user_id=?"},
 	{"usage_monthly", "user_id=?"},
@@ -119,6 +121,12 @@ func TestArchiveAndPurgeUserClearsEveryLinkedTable(t *testing.T) {
 	}
 	if err := st.CreateStoredFile(ctx, StoredFile{ID: authx.NewID(), UserID: u.ID, BlobKey: "bk", EncManifest: []byte("x"), Size: 1, ExpiresAt: 1 << 40, CreatedAt: 1}); err != nil {
 		t.Fatalf("create stored file: %v", err)
+	}
+	newUploadSession(t, st, "purge-upload", u.ID, "purge-upload-blob", "", "unresolved")
+	if _, created, err := st.CreatePairRoomIfAbsent(ctx, PairRoom{
+		ID: authx.NewID(), Code: "919191", UserID: u.ID, CreatedAt: 1, ExpiresAt: 301,
+	}); err != nil || !created {
+		t.Fatalf("create pair room: created=%v err=%v", created, err)
 	}
 	if err := st.RecordUpload(ctx, UploadEvent{ID: authx.NewID(), UserID: u.ID, Bytes: 1, UploadedAt: 1}); err != nil {
 		t.Fatalf("record upload: %v", err)

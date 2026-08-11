@@ -18,6 +18,11 @@ transport and handshake are defined elsewhere.
   per-direction counter, NOT the session key or this seq space. Byte layout is the
   same `[kind][seq][sealed]`; everything else about it is
   relayium-text-v1.md's business.
+- 10 STORED_KEYS — the pre-upload key handoff, sealed(sessionKey, seq) like any
+  other sealed frame. Gated on the `preupload/1` capability for exactly the reason
+  kind 9 is gated: an unknown kind is a hard error, so a speculative send fails the
+  whole transfer instead of degrading. Payload, ordering, retry and idempotency are
+  relayium-pair-room-v1.md's business.
 - 2 DONE_LEGACY / 3 BATCH_LEGACY — REJECTED (peer on an older version); never parsed.
 - Single-byte control (recv→sender): 0xfe ACCEPT, 0xff REJECT, 0xfd COMPLETE.
   ACCEPT/REJECT are reused unchanged as the message session's activation handshake
