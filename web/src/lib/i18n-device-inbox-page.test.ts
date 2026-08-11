@@ -310,12 +310,35 @@ describe("no locale calls the released macOS app a pre-release artifact", () => 
     }
   });
 
-  it("still names the launchd receiver in all nine", () => {
-    // The other half: the sentence has to keep saying what it DOES set up, so
+  it("still names the launchd alternative in all nine", () => {
+    // The other half: the sentence has to keep saying what ELSE is on offer, so
     // the rule above cannot be satisfied by deleting the explanation.
+    //
+    // Pinned on "launchd" rather than on the full command: since 2026-08-11 the
+    // sentence leads with the shipped Mac app and names the command-line
+    // receiver as the unattended alternative, and the literal command lives in
+    // the terminal block (device-inbox-platforms.ts) where it is byte-identical
+    // in all nine languages. "launchd" is a proper noun and is untranslated in
+    // every one of them, which is exactly why it is the checkable token here.
     for (const code of CODES) {
-      expect(locales[code].deviceInboxPage.platforms.macos.setup, code)
-        .toContain("relayium inbox service launchd");
+      expect(locales[code].deviceInboxPage.platforms.macos.setup, code).toContain("launchd");
+    }
+  });
+
+  it("tells every locale to install the app, now that there is one to install", () => {
+    // The defect this closes, found on production 2026-08-11: macOS 1.1.3 was
+    // public, notarized and downloadable FROM THIS PAGE, and all nine locales
+    // still described the launchd CLI as the only way to receive on a Mac.
+    // "Mac" is the shared token — every locale keeps the product's own spelling
+    // of the platform — and it has to appear before "launchd", because which
+    // one a reader is told to reach for first IS the claim being made.
+    for (const code of CODES) {
+      const setup = locales[code].deviceInboxPage.platforms.macos.setup;
+      const app = setup.search(/Mac/);
+      const cli = setup.search(/launchd/);
+      expect(app, `${code} never mentions the Mac app`).toBeGreaterThanOrEqual(0);
+      expect(cli, `${code} never mentions launchd`).toBeGreaterThanOrEqual(0);
+      expect(app, `${code} still leads with the command line, not the shipped app`).toBeLessThan(cli);
     }
   });
 });
@@ -358,12 +381,20 @@ describe("English keeps the availability boundaries it is the master of", () => 
     // up until the release existed and then became the one false sentence on a
     // page whose whole argument is that it does not overstate anything.
     //
-    // What this page sets up did not change: the command-line receiver under
-    // launchd, which is the one that runs unattended whether or not the app is
-    // installed. What it may no longer do is explain that choice by calling the
-    // shipped app unreleased. The "no longer" half is checked across all nine
-    // locales below, not here — see the note on that test.
-    expect(d.platforms.macos.setup).toContain("relayium inbox service launchd");
+    // Inverted AGAIN on 2026-08-11, and for the opposite reason: the app is not
+    // merely released, it is the thing this page hands you a download for, so
+    // leading with the CLI was the false emphasis. The CLI is still named, as
+    // what it now actually is — the unattended path.
+    expect(d.platforms.macos.setup).toMatch(/download the mac app/i);
+    expect(d.platforms.macos.setup).toMatch(/launchd/);
+
+    // The residency sentence is where a Mac app is easiest to overstate. Both
+    // halves are required: it stops when you quit it, and Open at Login is what
+    // brings it back. The shipped app says the same two things in its own
+    // `inbox.loginNote`, and this page must not promise more than that.
+    expect(d.platforms.macos.residency).toMatch(/quit it and it stops receiving/i);
+    expect(d.platforms.macos.residency).toMatch(/open at login/i);
+    expect(d.platforms.macos.residency).toMatch(/not a system daemon/i);
 
     // Still true, and still worth pinning: this page proves neither of these,
     // and the release surfaces that DO prove them are the ones allowed to say

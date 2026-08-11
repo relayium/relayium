@@ -599,15 +599,16 @@ const pt: Messages = {
         name: "macOS",
         use: "Um Mac que fica na sua mesa e recolhe o que você manda do celular ou de um navegador em outro lugar.",
         setup:
-          "O que esta página configura no macOS é o receptor de linha de comando supervisionado pelo launchd: relayium inbox service launchd imprime um agente para este Mac e os comandos que o carregam.",
+          "Baixe o app para Mac, entre na mesma conta e depois escolha uma pasta de recebimento e deixe o recebimento em «Perguntar sempre» ou «Automático». O receptor de linha de comando sob launchd, mais abaixo, é a alternativa para um Mac que roda sem supervisão ou que você administra por SSH.",
         files:
-          "A pasta que você passou em --dir. Nada é sobrescrito, nada é descompactado, e um arquivo recebido nunca é aberto por você.",
+          "A pasta que você escolheu no app, ou a que passou em --dir na linha de comando. Nada é sobrescrito, nada é descompactado, e um arquivo recebido nunca é aberto por você.",
         residency:
-          "Um agente de usuário do launchd roda enquanto você está com a sessão aberta e volta depois de um reinício assim que você entra de novo. Não é um daemon de sistema e não recebe enquanto ninguém está logado.",
+          "O app recebe enquanto está em execução, inclusive com a janela fechada, e «Abrir ao fazer login» o inicia de novo quando você entra outra vez neste Mac. Ele não é um daemon de sistema: se você sair dele, para de receber — e é para isso que serve o agente do launchd mais abaixo.",
         send: "Esta página em um navegador, ou de um iPhone conectado à mesma conta.",
         recovery:
-          "relayium inbox status separa um problema de pasta de um problema de credencial. Se a pasta foi movida ou as permissões mudaram, rode inbox enable de novo com a pasta desejada.",
-        stop: "launchctl bootout descarrega o agente; inbox disable revoga a caixa e suas chaves.",
+          "O app diz se o problema é a pasta de recebimento ou as credenciais, e oferece escolher a pasta de novo. Na linha de comando, relayium inbox status faz a mesma distinção e inbox enable reaponta a pasta.",
+        stop:
+          "Deixe o recebimento em «Desligado» no app. Para o receptor de linha de comando, launchctl bootout descarrega o agente e inbox disable revoga a caixa e suas chaves.",
       },
       windows: {
         name: "Windows",

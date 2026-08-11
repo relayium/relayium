@@ -41,6 +41,7 @@
   import {
     INBOX_PLATFORMS,
     SERVER_GUIDE_SLUG,
+    platformStatus,
     startState,
     type DeviceCensus,
     type InboxPlatform,
@@ -269,6 +270,11 @@
 
   const copy = (p: InboxPlatform) => t.deviceInboxPage.platforms[p.id];
 
+  /** The badge and the download button now answer to ONE input. Reading
+   *  `p.status` directly here is what let a released Mac app sit under an
+   *  "In testing" badge on this very page. */
+  const statusOf = (p: InboxPlatform) => platformStatus(p, macDownloadable);
+
   /** /guides/device-inbox-server/ exists in all nine languages as a static
    *  page, so this one IS language-prefixed — unlike the SPA routes, whose
    *  localized paths do not exist and would 404 in eight of nine locales. */
@@ -414,14 +420,14 @@
       <!-- <summary> takes phrasing content OR heading content, so the h3 stays:
            the page's outline is unchanged and the row is still the disclosure
            button a screen reader announces as expanded/collapsed. -->
-      <details class="plat" id={`platform-${p.id}`} data-platform={p.id} data-status={p.status}>
+      <details class="plat" id={`platform-${p.id}`} data-platform={p.id} data-status={statusOf(p)}>
         <summary>
           <h3>
             <span class="g" aria-hidden="true">{p.glyph}</span>
             <span class="pname">{copy(p).name}</span>
-            <span class="badge" data-badge={p.status}>
-              <span class="vh">{t.deviceInboxPage.statusLabel(statusText(p.status))}</span>
-              <span aria-hidden="true">{statusText(p.status)}</span>
+            <span class="badge" data-badge={statusOf(p)}>
+              <span class="vh">{t.deviceInboxPage.statusLabel(statusText(statusOf(p)))}</span>
+              <span aria-hidden="true">{statusText(statusOf(p))}</span>
             </span>
           </h3>
         </summary>

@@ -610,15 +610,16 @@ const en: Messages = {
         name: "macOS",
         use: "A Mac that stays on your desk and collects what you send it from your phone or from a browser somewhere else.",
         setup:
-          "What this page sets up on macOS is the command-line receiver supervised by launchd: relayium inbox service launchd prints an agent for this Mac and the commands that load it.",
+          "Download the Mac app, sign in to the same account, then choose a receive folder and set Receiving to Ask every time or Automatic. The launchd command-line receiver below is the alternative for a Mac you run unattended or administer over SSH.",
         files:
-          "The folder you passed to --dir. Nothing is overwritten, nothing is unpacked, and a received file is never opened for you.",
+          "The folder you chose in the app, or the one you passed to --dir on the command line. Nothing is overwritten, nothing is unpacked, and a received file is never opened for you.",
         residency:
-          "A launchd user agent runs while you are logged in and comes back after a restart once you log in again. It is not a system daemon and does not receive while nobody is logged in.",
+          "The app receives while it is running, including with its window closed, and Open at Login starts it again after you log back in to this Mac. It is not a system daemon: quit it and it stops receiving, which is what the launchd agent below is for.",
         send: "From this page in a browser, or from an iPhone signed in to the same account.",
         recovery:
-          "relayium inbox status tells a folder problem from a credential problem; if the folder was moved or its permissions changed, re-run inbox enable with the folder you want.",
-        stop: "launchctl bootout unloads the agent; inbox disable revokes the inbox and its keys.",
+          "The app says whether the problem is your receive folder or your credentials, and offers to choose the folder again. On the command line, relayium inbox status draws the same distinction and inbox enable re-points the folder.",
+        stop:
+          "Set Receiving to Off in the app. For the command-line receiver, launchctl bootout unloads the agent and inbox disable revokes the inbox and its keys.",
       },
       windows: {
         name: "Windows",

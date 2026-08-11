@@ -599,15 +599,16 @@ const es: Messages = {
         name: "macOS",
         use: "Un Mac que se queda en tu escritorio y recoge lo que le envías desde el teléfono o desde un navegador en otro sitio.",
         setup:
-          "Lo que esta página configura en macOS es el receptor de línea de comandos supervisado por launchd: relayium inbox service launchd imprime un agente para este Mac y los comandos que lo cargan.",
+          "Descarga la app para Mac, inicia sesión en la misma cuenta y luego elige una carpeta de recepción y pon la recepción en «Preguntar cada vez» o «Automática». El receptor de línea de comandos bajo launchd que aparece más abajo es la alternativa para un Mac que corre sin supervisión o que administras por SSH.",
         files:
-          "La carpeta que pasaste a --dir. Nada se sobrescribe, nada se descomprime y un archivo recibido nunca se abre por ti.",
+          "La carpeta que elegiste en la app, o la que pasaste a --dir en la línea de comandos. Nada se sobrescribe, nada se descomprime y un archivo recibido nunca se abre por ti.",
         residency:
-          "Un agente de usuario de launchd corre mientras tienes la sesión iniciada y vuelve tras un reinicio en cuanto vuelves a entrar. No es un demonio del sistema y no recibe mientras nadie tiene sesión abierta.",
+          "La app recibe mientras está en marcha, también con la ventana cerrada, y «Abrir al iniciar sesión» vuelve a arrancarla cuando entras de nuevo en este Mac. No es un demonio del sistema: si la cierras, deja de recibir, y para eso está el agente de launchd de más abajo.",
         send: "Esta página en un navegador, o desde un iPhone con sesión iniciada en la misma cuenta.",
         recovery:
-          "relayium inbox status distingue un problema de carpeta de uno de credenciales. Si moviste la carpeta o cambiaron sus permisos, vuelve a ejecutar inbox enable con la carpeta que quieras.",
-        stop: "launchctl bootout descarga el agente; inbox disable revoca el buzón y sus claves.",
+          "La app dice si el problema es la carpeta de recepción o las credenciales, y ofrece volver a elegir la carpeta. En la línea de comandos, relayium inbox status hace la misma distinción e inbox enable reapunta la carpeta.",
+        stop:
+          "Pon la recepción en «Desactivada» en la app. Para el receptor de línea de comandos, launchctl bootout descarga el agente e inbox disable revoca el buzón y sus claves.",
       },
       windows: {
         name: "Windows",

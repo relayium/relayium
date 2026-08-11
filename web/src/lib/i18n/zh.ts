@@ -590,14 +590,16 @@ const zh: Messages = {
         name: "macOS",
         use: "一台常年在桌上的 Mac，接住你从手机或别处浏览器发过来的东西。",
         setup:
-          "这个页面在 macOS 上帮你配置的，是由 launchd 托管的命令行接收端：relayium inbox service launchd 会打印出针对这台 Mac 的 agent 和加载它的命令。",
-        files: "你用 --dir 指定的目录。不覆盖、不解压，收到的文件也不会被自动打开。",
+          "下载 Mac 应用，登录同一个账户，然后选一个接收文件夹，把「接收」设为「每次询问」或「自动」。下面那套由 launchd 托管的命令行接收端，是留给无人值守或只能通过 SSH 管理的 Mac 的另一条路。",
+        files:
+          "你在应用里选的那个文件夹，或者命令行上用 --dir 指定的那个。不覆盖、不解压，收到的文件也不会被自动打开。",
         residency:
-          "launchd 用户 agent 在你登录期间运行，重启后再次登录时会回来。它不是系统守护进程，无人登录时不会接收。",
+          "应用运行期间就在接收，窗口关着也算；「登录时打开」会在你重新登录这台 Mac 之后再把它启动起来。它不是系统守护进程：退出应用就不再接收——那正是下面那个 launchd agent 的用处。",
         send: "浏览器里的本页，或者从登录了同一账户的 iPhone 发送。",
         recovery:
-          "relayium inbox status 能区分目录问题和凭据问题；目录被移动或权限变了，就带上你想用的目录重新执行 inbox enable。",
-        stop: "launchctl bootout 卸载 agent；inbox disable 吊销收件箱及其密钥。",
+          "应用会告诉你出问题的是接收文件夹还是凭据，并直接让你重新选择文件夹。命令行这边，relayium inbox status 做同样的区分，inbox enable 用来重新指定文件夹。",
+        stop:
+          "在应用里把「接收」设为「关闭」。命令行接收端则是：launchctl bootout 卸载 agent，inbox disable 吊销收件箱及其密钥。",
       },
       windows: {
         name: "Windows",

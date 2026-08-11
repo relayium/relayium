@@ -599,15 +599,16 @@ const de: Messages = {
         name: "macOS",
         use: "Ein Mac, der auf dem Schreibtisch stehen bleibt und einsammelt, was vom Telefon oder aus einem Browser anderswo geschickt wird.",
         setup:
-          "Was diese Seite auf macOS einrichtet, ist der Kommandozeilen-Empfänger unter launchd: relayium inbox service launchd gibt einen Agent für diesen Mac und die Befehle zum Laden aus.",
+          "Lade die Mac-App, melde dich an demselben Konto an, wähle dann einen Empfangsordner und stelle den Empfang auf „Jedes Mal fragen“ oder „Automatisch“. Der launchd-Empfänger auf der Kommandozeile weiter unten ist die Alternative für einen Mac, der unbeaufsichtigt läuft oder über SSH verwaltet wird.",
         files:
-          "Der Ordner, den du an --dir übergeben hast. Nichts wird überschrieben, nichts entpackt, und eine empfangene Datei wird nie für dich geöffnet.",
+          "Der Ordner, den du in der App gewählt hast, oder der, den du auf der Kommandozeile an --dir übergeben hast. Nichts wird überschrieben, nichts entpackt, und eine empfangene Datei wird nie für dich geöffnet.",
         residency:
-          "Ein launchd-Benutzeragent läuft, solange du angemeldet bist, und kehrt nach einem Neustart zurück, sobald du dich wieder anmeldest. Er ist kein Systemdienst und empfängt nicht, während niemand angemeldet ist.",
+          "Die App empfängt, solange sie läuft — auch mit geschlossenem Fenster —, und „Bei der Anmeldung öffnen“ startet sie wieder, sobald du dich an diesem Mac neu anmeldest. Sie ist kein Systemdienst: Beendest du sie, empfängt sie nicht mehr. Genau dafür ist der launchd-Agent weiter unten da.",
         send: "Diese Seite im Browser oder von einem iPhone, das an demselben Konto angemeldet ist.",
         recovery:
-          "relayium inbox status unterscheidet ein Ordnerproblem von einem Anmeldeproblem. Wurde der Ordner verschoben oder haben sich seine Rechte geändert, führe inbox enable mit dem gewünschten Ordner erneut aus.",
-        stop: "launchctl bootout entlädt den Agent; inbox disable widerruft den Posteingang und seine Schlüssel.",
+          "Die App sagt, ob das Problem am Empfangsordner oder an den Anmeldedaten liegt, und bietet an, den Ordner erneut zu wählen. Auf der Kommandozeile trifft relayium inbox status dieselbe Unterscheidung, und inbox enable setzt den Ordner neu.",
+        stop:
+          "Stelle den Empfang in der App auf „Aus“. Beim Kommandozeilen-Empfänger entlädt launchctl bootout den Agent, und inbox disable widerruft den Posteingang und seine Schlüssel.",
       },
       windows: {
         name: "Windows",

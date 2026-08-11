@@ -599,15 +599,16 @@ const fr: Messages = {
         name: "macOS",
         use: "Un Mac qui reste sur votre bureau et récupère ce que vous lui envoyez depuis votre téléphone ou depuis un navigateur ailleurs.",
         setup:
-          "Ce que cette page met en place sur macOS, c'est le récepteur en ligne de commande supervisé par launchd — relayium inbox service launchd affiche un agent pour ce Mac et les commandes qui le chargent.",
+          "Téléchargez l'app Mac, connectez-vous au même compte, puis choisissez un dossier de réception et réglez la réception sur « Demander à chaque fois » ou « Automatique ». Le récepteur en ligne de commande sous launchd, plus bas, est l'autre voie : celle d'un Mac qui tourne sans surveillance ou que vous administrez en SSH.",
         files:
-          "Le dossier passé à --dir. Rien n'est écrasé, rien n'est décompressé, et un fichier reçu n'est jamais ouvert à votre place.",
+          "Le dossier choisi dans l'app, ou celui passé à --dir en ligne de commande. Rien n'est écrasé, rien n'est décompressé, et un fichier reçu n'est jamais ouvert à votre place.",
         residency:
-          "Un agent utilisateur launchd tourne pendant que vous êtes connecté et revient après un redémarrage dès que vous vous reconnectez. Ce n'est pas un démon système : il ne reçoit pas tant que personne n'est connecté.",
+          "L'app reçoit tant qu'elle tourne, fenêtre fermée comprise, et « Ouvrir à la session » la relance dès que vous rouvrez une session sur ce Mac. Ce n'est pas un démon système : si vous la quittez, elle ne reçoit plus — c'est précisément à quoi sert l'agent launchd plus bas.",
         send: "Cette page dans un navigateur, ou depuis un iPhone connecté au même compte.",
         recovery:
-          "relayium inbox status distingue un problème de dossier d'un problème d'identifiants. Si le dossier a été déplacé ou ses droits modifiés, relancez inbox enable avec le dossier voulu.",
-        stop: "launchctl bootout décharge l'agent ; inbox disable révoque la boîte et ses clés.",
+          "L'app indique si le problème vient du dossier de réception ou des identifiants, et propose de rechoisir le dossier. En ligne de commande, relayium inbox status fait la même distinction et inbox enable redirige le dossier.",
+        stop:
+          "Réglez la réception sur « Désactivée » dans l'app. Pour le récepteur en ligne de commande, launchctl bootout décharge l'agent et inbox disable révoque la boîte et ses clés.",
       },
       windows: {
         name: "Windows",

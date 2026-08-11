@@ -13,8 +13,9 @@
 // native receiver does not exist gets no native command or button.** A separately
 // shipped CLI/Web alternative may appear only with its limitation in the same
 // section, whether the native status is testing or planned. iPhone and Android
-// therefore have no command at all; macOS shows the launchd CLI while the native
-// build is in testing, and Windows shows only the verified foreground CLI.
+// therefore have no command at all; macOS shows the launchd CLI as the
+// unattended alternative BESIDE its published app, and Windows shows only the
+// verified foreground CLI.
 
 /** Honest release status of a platform's Device Inbox *receiver*.
  *
@@ -26,6 +27,27 @@
  *    plan and may point at a distinct, explicitly limited CLI/Web path that
  *    works today. */
 export type PlatformStatus = "available" | "testing" | "planned";
+
+/**
+ * macOS is the one platform whose status is NOT a constant here, and that is the
+ * point of this function.
+ *
+ * Whether the Mac app is published already has one authoritative answer —
+ * `native-releases.json`, which is what the page's download CTA reads. Writing
+ * the status down a second time in the table below made two truths out of one
+ * fact, and on 2026-08-11 they had drifted: macOS 1.1.3 was public, notarized
+ * and downloadable, this page offered that exact download, and the badge beside
+ * it still said "In testing" while every sentence in the section described the
+ * command-line receiver as the only way to receive on a Mac.
+ *
+ * So the badge is derived from the same input as the button. The table's own
+ * `status` stays as the pre-release answer, used when the manifest says there is
+ * nothing to download.
+ */
+export function platformStatus(p: InboxPlatform, macDownloadable: boolean): PlatformStatus {
+  if (p.id !== "macos") return p.status;
+  return macDownloadable ? "available" : p.status;
+}
 
 export type InboxPlatformId = "server" | "macos" | "iphone" | "windows" | "android" | "linux";
 

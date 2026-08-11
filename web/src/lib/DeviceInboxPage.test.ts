@@ -185,10 +185,31 @@ describe("the six platform sections", () => {
     // The two receivers a reader can install today.
     expect(status("server")).toBe("available");
     expect(status("linux")).toBe("available");
-    // native-releases.json is available:false, and a signed engineering DMG is
-    // not a release. Anything but "testing" here would be a distribution claim.
-    expect(status("macos")).toBe("testing");
+    // macOS is derived, not declared — see the manifest pair below.
     for (const id of ["windows", "iphone", "android"]) expect(status(id), id).toBe("planned");
+  });
+
+  // The badge and the download button answer to ONE input, and this is the pair
+  // that pins it. The defect it closes was live on production 2026-08-11: macOS
+  // 1.1.3 was published and downloadable FROM THIS PAGE, and the badge next to
+  // that download still read "In testing", because the status was written down
+  // a second time in device-inbox-platforms.ts and nobody updated it on release.
+  it("calls macOS available exactly when the manifest offers a download", () => {
+    const root = render({ macRelease: { available: true, downloadUrl: "https://example.test/Relayium.dmg" } });
+    const mac = root.querySelector('[data-platform="macos"]')!;
+    expect(mac.getAttribute("data-status")).toBe("available");
+    expect(mac.querySelector(".badge")!.textContent).toContain(en().statusAvailable);
+    // The badge cannot say "available" while the button that would prove it is
+    // missing: same input, so this is the same assertion from the other side.
+    expect(mac.querySelector('[data-di="mac-download"]')).not.toBeNull();
+  });
+
+  it("falls back to the pre-release status when the manifest offers nothing", () => {
+    const root = render({ macRelease: { available: false, downloadUrl: null } });
+    const mac = root.querySelector('[data-platform="macos"]')!;
+    expect(mac.getAttribute("data-status")).toBe("testing");
+    expect(mac.querySelector(".badge")!.textContent).toContain(en().statusTesting);
+    expect(mac.querySelector('[data-di="mac-download"]')).toBeNull();
   });
 
   it("shows no command block for a platform with no receiver at all", () => {

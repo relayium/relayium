@@ -286,7 +286,13 @@ async function checkPage(tab, base, view) {
   if (status.server !== "available" || status.linux !== "available") {
     throw new Error(`${view.id}: server/linux are not marked available: ${JSON.stringify(status)}`);
   }
-  if (status.macos !== "testing") throw new Error(`${view.id}: macOS is marked ${status.macos}, not testing`);
+  // Derived from the same manifest the download CTA reads, in the same
+  // direction: a page that offers a notarized 1.1.3 DMG and badges it "In
+  // testing" is exactly the contradiction this line now forbids.
+  const wantMac = macDownloadable ? "available" : "testing";
+  if (status.macos !== wantMac) {
+    throw new Error(`${view.id}: macOS is marked ${status.macos}, but native-releases.json says ${wantMac}`);
+  }
   for (const planned of ["windows", "iphone", "android"]) {
     if (status[planned] !== "planned") throw new Error(`${view.id}: ${planned} is marked ${status[planned]}`);
   }
