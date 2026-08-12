@@ -1390,8 +1390,11 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 // byo row happens to say. A removed node is excluded for the same reason
 // update-check refuses it: the machine is on its way out.
 //
-// The full-table read happens only while a manual fast rollout is actually
-// rolling, so an ordinary heartbeat pays one primary-key lookup. Any error
+// The full-table read happens only while one of the two fast rollout modes is
+// actually rolling, so an ordinary heartbeat pays one primary-key lookup. (The
+// safe mode holds that state for its canary's six hours rather than for minutes,
+// which is a longer stretch of one extra read per heartbeat on a table with one
+// row per fleet machine — bounded by the fleet's size, not by traffic.) Any error
 // degrades to false — the node's timer is the fallback, and bookkeeping must
 // never fail a heartbeat.
 func (s *Service) fleetFastUpdateHint(ctx context.Context, node Node, now int64) bool {
@@ -1399,7 +1402,7 @@ func (s *Service) fleetFastUpdateHint(ctx context.Context, node Node, now int64)
 		return false
 	}
 	tr, found, err := s.store.GetRolloutTrack(ctx, "fleet")
-	if err != nil || !found || tr.Status != "rolling" || !tr.ManualFast || tr.Emergency {
+	if err != nil || !found || tr.Status != "rolling" || !fastQueueMode(tr) || tr.Emergency {
 		return false
 	}
 	// EVERY fleet node including offline ones, the same input contract

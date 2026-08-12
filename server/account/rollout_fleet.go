@@ -139,7 +139,7 @@ type RolloutDecision struct {
 //     If that node was the recorded canary, IsFirst is re-asserted on
 //     whoever is picked next, because a node that never installed the
 //     build cannot have observed it (see reassertFirst).
-//     In MANUAL FAST mode this HALTS instead: that mode advances only on a
+//     In EITHER FAST mode this HALTS instead: both advance only on a
 //     reported success, so a node that never installed the build cannot be
 //     allowed to hand the slot to the next machine.
 //     d. it has gone silent (no heartbeat) for longer than updateSilenceLimit
@@ -156,6 +156,10 @@ type RolloutDecision struct {
 //     target but has not REPORTED 'ok' yet" -> wait, bounded by
 //     fleetInstallLimit -> halt. That swap is the entire difference the mode
 //     makes here, plus one extra halt in 2e for "ok" while not on target.
+//     In SAFE FAST mode (tr.FastAfterCanary) the node must clear BOTH: it
+//     must have REPORTED 'ok' (same bound, same halt) AND, if it is the
+//     canary, have spent the full fleetFirstWindow on the target. Only
+//     fleetStepWindow is dropped, and only for the nodes after the canary.
 //  3. Every fleet node currently online is already on the target version ->
 //     complete.
 //  4. Otherwise pick the next node to update: the very first node of the
@@ -246,12 +250,13 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 		// machine's network, so both share the same "this node's turn is over"
 		// handling -- fall through so the queue advances without it.
 		//
-		// IN MANUAL FAST MODE both HALT instead, and the difference is not
-		// inconsistency: that mode has no observation window to advance on, so
-		// the only thing that can carry the queue forward is a reported success.
-		// A node that never installed the build has not provided one, and letting
-		// it hand the slot to the next machine would mean the fleet moving on
-		// with nothing having verified the release. See the branch below.
+		// IN EITHER FAST MODE both HALT instead, and the difference is not
+		// inconsistency: neither mode has a window it can advance the QUEUE on
+		// (the safe mode's canary window gates the canary, not the machines after
+		// it), so the only thing that can carry the queue forward is a reported
+		// success. A node that never installed the build has not provided one, and
+		// letting it hand the slot to the next machine would mean the fleet moving
+		// on with nothing having verified the release. See the branch below.
 		//
 		// canary is whether the node in flight holds this rollout's 6h slot.
 		// FirstNodeID == "" while a node IS in flight is a track written before
@@ -261,23 +266,25 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 		// observation to 30 minutes. Every defence here must fail LONG.
 		canary := cur.ID == tr.FirstNodeID || tr.FirstNodeID == ""
 		if passedOverResult(cur.UpdateResult) {
-			// MANUAL FAST: a pass-over is NOT a success, and in this mode the
-			// queue advances on nothing else. "skipped" and "unreachable" both
+			// EITHER FAST MODE: a pass-over is NOT a success, and in these modes
+			// the queue advances on nothing else. "skipped" and "unreachable" both
 			// mean the node in flight never installed, restarted or proved the
 			// build — so falling through to pick the next machine would command a
 			// second node off the back of one that ran no part of the release,
-			// which is the exact invariant this mode is allowed to keep.
+			// which is the exact invariant these modes are allowed to keep.
 			//
 			// The staged ladder keeps its opposite behaviour deliberately: it
 			// advances on an observation window, so leaving one unreachable
 			// machine behind is better than stopping the fleet for it. Here there
-			// is no window to advance on, so "left behind" would silently become
-			// "the rest of the fleet moved without any node having verified the
-			// build".
-			if tr.ManualFast {
+			// is no window the QUEUE advances on, so "left behind" would silently
+			// become "the rest of the fleet moved without any node having verified
+			// the build". That is as true of the safe mode's canary — whose six
+			// hours cannot be spent observing a build it never installed — as it
+			// is of a node after it.
+			if fastQueueMode(tr) {
 				return RolloutDecision{Action: "halt", Reason: fmt.Sprintf(
-					"node %s reported %q, so it never installed %s: a manual fast rollout stops rather than moving on",
-					cur.ID, cur.UpdateResult, tr.TargetVersion)}
+					"node %s reported %q, so it never installed %s: a %s rollout stops rather than moving on",
+					cur.ID, cur.UpdateResult, tr.TargetVersion, fastModeName(tr))}
 			}
 			reassertFirst = canary
 		} else {
@@ -285,8 +292,8 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 				return RolloutDecision{Action: "halt", Reason: fmt.Sprintf("node %s silent since update started", cur.ID)}
 			}
 			if !onTarget(cur) {
-				// MANUAL FAST ONLY: "ok" while not on the target is a
-				// contradiction, and in this mode "ok" is the very signal the
+				// FAST MODES ONLY: "ok" while not on the target is a
+				// contradiction, and in these modes "ok" is the very signal the
 				// queue advances on — so it must halt rather than be waited out.
 				// (The staged path advances on its window instead, so it can
 				// safely leave this to the wedge timeout below; leaving that
@@ -297,7 +304,7 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 				// watch passed, and that watch requires a heartbeat from the
 				// restarted process, which re-registers its new version first.
 				// The version therefore lands strictly before the result.
-				if tr.ManualFast && cur.UpdateResult == "ok" {
+				if fastQueueMode(tr) && cur.UpdateResult == "ok" {
 					return RolloutDecision{Action: "halt", Reason: fmt.Sprintf(
 						"node %s reported a successful update but is running %q, not the target %s",
 						cur.ID, cur.Version, tr.TargetVersion)}
@@ -338,7 +345,42 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 			if cur.UpdateStartedAt > stageStart {
 				stageStart = cur.UpdateStartedAt
 			}
-			if tr.ManualFast {
+			// The SAFE fast mode is checked FIRST, and the order is a defence
+			// rather than a preference. The three modes are mutually exclusive at
+			// every write, so a row carrying both fast flags is already a bug; if
+			// one ever exists, the branch taken must be the one that keeps the
+			// canary's six hours, because this package's rule on the fleet ladder
+			// is that every defence fails LONG. Testing tr.ManualFast first would
+			// resolve that same bug by silently running a never-observed build
+			// straight through the fleet.
+			if tr.FastAfterCanary {
+				// Both of the fast mode's gates, in the order that makes the
+				// canary's window unskippable: the node's own reported verdict
+				// first (it is what proves the build actually runs, and its
+				// absence is bounded by fleetInstallLimit exactly as in manual
+				// fast mode), then — for the canary only — the FULL six-hour
+				// observation window, unchanged from the staged ladder.
+				//
+				// The canary therefore cannot pass on time alone (six quiet hours
+				// with no result is a halt, not a promotion) and cannot pass on a
+				// result alone (an "ok" ten minutes in still owes the window). The
+				// nodes after it owe only the result: fleetStepWindow is the one
+				// thing this mode drops, and it drops it only once a machine has
+				// carried the build through a full observation period.
+				if cur.UpdateResult != "ok" {
+					if now-stageStart > fleetInstallLimit {
+						return RolloutDecision{Action: "halt", Reason: fmt.Sprintf(
+							"node %s installed %s over %d seconds ago but never reported the outcome",
+							cur.ID, tr.TargetVersion, fleetInstallLimit)}
+					}
+					return RolloutDecision{Action: "wait"}
+				}
+				if canary && now-stageStart < fleetFirstWindow {
+					return RolloutDecision{Action: "wait"}
+				}
+				// Canary observed and reported, or a later node reported. Fall
+				// through and pick the next node now.
+			} else if tr.ManualFast {
 				// THE MODE: both observation windows are skipped, and the node's
 				// own verdict is NOT. The queue advances only once this node has
 				// REPORTED "ok" — never merely because it is seen on the target
@@ -456,10 +498,18 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 // would pick next. Any other result means the track is about to halt on or move
 // past that node, so there is nothing to hurry.
 //
-// Manual fast mode only: on the staged ladder the wait is the POINT, and an
+// Fast modes only: on the staged ladder the wait is the POINT, and an
 // emergency release has no queue to be next in.
+//
+// The SAFE fast mode hints too, and hinting DURING its canary's six hours costs
+// that window nothing. The hint only ever reaches the node decideFleet would act
+// on next, and for the whole of the canary's window decideFleet answers "wait"
+// for every node — so no later machine can be hurried into the queue by it. What
+// it does buy is the two places this mode is genuinely waiting on a poll: the
+// canary starting its window promptly rather than up to ten minutes late, and
+// the next node being commanded promptly once the window has closed.
 func fleetFastHintFor(tr RolloutTrack, snaps []NodeSnapshot, nodeID string, now int64) bool {
-	if tr.Status != "rolling" || !tr.ManualFast || tr.Emergency || tr.TargetVersion == "" {
+	if tr.Status != "rolling" || !fastQueueMode(tr) || tr.Emergency || tr.TargetVersion == "" {
 		return false
 	}
 	if tr.CurrentNodeID == nodeID {
@@ -472,6 +522,38 @@ func fleetFastHintFor(tr RolloutTrack, snaps []NodeSnapshot, nodeID string, now 
 	}
 	d := decideFleet(tr, snaps, now)
 	return d.Action == "update" && d.NodeID == nodeID
+}
+
+// fastQueueMode reports whether this track's QUEUE advances only on the node in
+// flight having REPORTED "ok" — true for both fast modes, false for the staged
+// ladder, which advances on an observation window instead.
+//
+// It is one predicate rather than `tr.ManualFast || tr.FastAfterCanary` spelled
+// out at each site because the three places that read it are the three halts
+// that make either mode safe (pass-over, contradictory result, missing result),
+// and a mode added to two of the three would be a rollout that moves the fleet
+// on a machine that never verified the build. This package has shipped that
+// class of defect before, from exactly this shape of hand-copied condition.
+//
+// It deliberately says nothing about WINDOWS: the safe mode keeps the canary's
+// six hours and manual fast does not, which is the one thing the two disagree
+// about and therefore the one thing that must stay spelled out at the branch
+// that implements it (see decideFleet's on-target step).
+func fastQueueMode(tr RolloutTrack) bool { return tr.ManualFast || tr.FastAfterCanary }
+
+// fastModeName names the mode in a halt reason, which is operator-facing text on
+// the panel and in the audit trail. The two modes stop for the same reasons but
+// are different decisions to have made, and an incident review reading "a manual
+// fast rollout stopped" about a rollout that kept its canary window would be
+// told the wrong thing about what was skipped.
+//
+// The manual-fast wording is unchanged from before this mode existed, so a halt
+// on that path still reads byte-for-byte as it always did.
+func fastModeName(tr RolloutTrack) string {
+	if tr.FastAfterCanary {
+		return "canary-then-fast"
+	}
+	return "manual fast"
 }
 
 // passedOverResult reports whether an update result marks the node that
@@ -495,11 +577,13 @@ func fleetFastHintFor(tr RolloutTrack, snaps []NodeSnapshot, nodeID string, now 
 //   - ResumeRolloutTrack, inside its transaction, because 继续 restarts the
 //     ladder from the beginning;
 //   - RetryRolloutNode, for ONE node on a finished track;
-//   - StartManualFastRollout, inside its transaction, because it starts a fresh
-//     rollout on a finished track (added when manual fast mode shipped —
-//     exactly the case the warning below anticipated).
+//   - StartManualFastRollout and StartCanaryFastRollout, inside the transaction
+//     they share (startFastRollout), because each starts a fresh rollout on a
+//     finished track — exactly the case the warning below anticipated, which is
+//     why the second of them inherited the clear by construction rather than by
+//     someone remembering it.
 //
-// Adding a fifth way to start or restart a rollout means adding the clear to
+// Adding a further way to start or restart a rollout means adding the clear to
 // it as well; without it, that path strands every node this rollout passed
 // over.
 //

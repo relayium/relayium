@@ -1237,6 +1237,56 @@ type RolloutTrack struct {
 	// accident. HaltRolloutTrack is the deliberate exception: a halted track
 	// keeps the flag so the panel can say which kind of rollout stopped.
 	ManualFast bool
+	// FastAfterCanary is the SAFE first-use form of the fast fleet ladder: the
+	// canary keeps its ENTIRE six-hour observation window and must additionally
+	// report "ok" while actually running the target; only AFTER that first node
+	// has passed both does the rest of the fleet run without the 30-minute soak
+	// between nodes.
+	//
+	// It exists because ManualFast alone cannot be the first thing a version ever
+	// gets: that mode advances the moment the node in flight reports success, so
+	// the very first machine to run a never-before-fleet-tested build hands the
+	// slot on ~10 minutes later, and a release that only breaks after hours of
+	// real traffic reaches every node before anything notices. That is precisely
+	// what fleetFirstWindow exists to catch, and the manual-fast runbook already
+	// says the mode must not be used to validate a version no fleet canary has
+	// passed. This field is the entry point that obeys that rule instead of
+	// asking an operator to.
+	//
+	// What it keeps, beyond the canary window: everything ManualFast keeps (one
+	// node at a time via the same compare-and-swap, each node's own download,
+	// signature verification, install, restart, health watch and local rollback),
+	// and it is STRICTLY SAFER than ManualFast on the canary — the two differ in
+	// exactly one thing, whether the first node's six hours are skipped, and this
+	// is the mode that KEEPS them. It is looser than ManualFast nowhere.
+	// Everywhere else the two share the same failure gates: every bad outcome
+	// halts on BOTH — failed, rolled_back, skipped, unreachable, silence, wedge, a
+	// missing result inside fleetInstallLimit, and "ok" reported while not on the
+	// target version.
+	//
+	// What it drops: only the 30-minute inter-node soak, and only for the nodes
+	// AFTER the canary. There is no adjustable canary duration on purpose — a
+	// tunable observation window is a dial that gets turned down under pressure,
+	// which is the one circumstance in which it is load-bearing.
+	//
+	// MUTUALLY EXCLUSIVE with Emergency and ManualFast, enforced at every write
+	// rather than trusted: each of the three start paths writes all three columns
+	// explicitly (StartCanaryFastRollout, StartManualFastRollout,
+	// setTargetVersion's whole-row replace), and the retained
+	// SQLiteStore.SetRolloutEmergency clears both fast columns in the same
+	// statement that arms emergency, so no row can carry two modes. See
+	// decideFleet for the defensive precedence if one ever did.
+	//
+	// FLEET ONLY, by the same construction as ManualFast: the only writer is
+	// Service.StartCanaryFastFleetRollout, which takes no track parameter, behind
+	// a route with "fleet" spelled out.
+	//
+	// Cleared by every path back into 'rolling' that is not this mode
+	// (SetTargetVersion, ResumeRolloutTrack, StartManualFastRollout) and by
+	// CompleteRolloutTrack. HaltRolloutTrack is the same deliberate exception it
+	// is for ManualFast: a halted track keeps the flag so the panel and an
+	// incident review can say which kind of rollout stopped.
+	FastAfterCanary bool
 }
 
 // Setting is one admin-editable integer config value (bytes or seconds).
@@ -2051,6 +2101,14 @@ type Store interface {
 	// a ladder starts. ok=false means the row moved (or appeared) since the
 	// confirmation page was rendered and NOTHING was written, node rows included.
 	StartManualFastRollout(ctx context.Context, track, expectStatus, expectTargetVersion, version string, at int64) (bool, error)
+	// StartCanaryFastRollout is the same operation for the SAFE fast mode
+	// (RolloutTrack.FastAfterCanary): the canary keeps its full six-hour
+	// observation window and only the nodes after it skip the inter-node soak.
+	// Same two startable states, same compare-and-swap, same passed-over clear in
+	// the same transaction, same "ok=false means nothing was written" contract —
+	// it differs from StartManualFastRollout only in which mode column it arms,
+	// and both write all three mode columns so a row can never carry two modes.
+	StartCanaryFastRollout(ctx context.Context, track, expectStatus, expectTargetVersion, version string, at int64) (bool, error)
 	// RetryRolloutNode gives one passed-over node its candidacy back on a
 	// COMPLETE track and sets that track rolling again, so the queue re-offers
 	// the same target version to it. It touches neither target_version nor
@@ -2070,6 +2128,10 @@ type Store interface {
 	// expectVersion — a compare-and-swap against exactly what the admin
 	// confirmed. ok=false means the track moved in between and nothing was
 	// released.
+	//
+	// Arming it DISARMS both fast modes in the same write, because the three are
+	// mutually exclusive and emergency is the opposite trade: it gives up the
+	// gated one-at-a-time queue that either fast mode is defined by keeping.
 	SetRolloutEmergency(ctx context.Context, track, expectVersion string, at int64) (bool, error)
 	// NodesByOwnerType returns every node of one ownership class ("fleet" |
 	// "user") INCLUDING offline ones. The rollout state machines require the

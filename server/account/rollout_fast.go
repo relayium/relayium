@@ -64,3 +64,41 @@ func (s *Service) StartManualFastFleetRollout(ctx context.Context, expectStatus,
 	}
 	return nil
 }
+
+// StartCanaryFastFleetRollout starts the SAFE fast rollout of version on the
+// FLEET track: the canary keeps its ENTIRE six-hour observation window and must
+// report success while actually running the target, and only the nodes after it
+// run without the 30-minute soak (see RolloutTrack.FastAfterCanary).
+//
+// It is a SEPARATE entry point from StartManualFastFleetRollout rather than a
+// boolean on it, and that is the point of the whole change: the two are
+// different promises about the same fleet, so they get different actions,
+// different confirmation copy, different audit records — and, here, different
+// functions, so no caller can turn the safe one into the immediate one by
+// passing a flag through.
+//
+// Which of the two is correct is not a preference: manual fast may only ship a
+// version some fleet canary has ALREADY carried through an observation window
+// (its own runbook says so), so a version the fleet has never run must come
+// through this entry point. Nothing here enforces that — it cannot, since
+// central does not know what a human has observed elsewhere — which is exactly
+// why the safe path has to be the one that is easy to take.
+//
+// Everything else is StartManualFastFleetRollout's, for the same reasons its doc
+// comment gives: the same IsPlainVersion chokepoint, the same fleet-only-by-
+// construction shape (no track parameter, "fleet" spelled out in the route), the
+// same compare-and-swap against what the operator was shown, and the same
+// ErrFastRolloutStateChanged refusal that must be rendered as a 400.
+func (s *Service) StartCanaryFastFleetRollout(ctx context.Context, expectStatus, expectTargetVersion, version string) error {
+	if !selfupdate.IsPlainVersion(version) {
+		return fmt.Errorf("invalid target version %q: must be a plain vMAJOR.MINOR.PATCH release tag", version)
+	}
+	ok, err := s.store.StartCanaryFastRollout(ctx, "fleet", expectStatus, expectTargetVersion, version, s.now().Unix())
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrFastRolloutStateChanged
+	}
+	return nil
+}

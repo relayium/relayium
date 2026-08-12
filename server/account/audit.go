@@ -56,6 +56,20 @@ const (
 	// the question a post-incident review asks, and it must be answerable from
 	// the action name alone rather than by inferring it from a changes field.
 	AuditRolloutFast = "rollout.fast"
+	// AuditRolloutFastCanary is the SAFE fast fleet push: start a rollout now,
+	// keep the canary's ENTIRE six-hour observation window and its
+	// reported-success requirement, and drop only the soak between the machines
+	// that come after it.
+	//
+	// Its own action, distinct from rollout.fast, and the reason is the same one
+	// that separates rollout.fast from rollout.emergency: the two are different
+	// answers to "what did this operator decide to skip". rollout.fast means the
+	// canary window was skipped, which is only defensible for a version some
+	// fleet canary has already carried; this one means it was kept. An incident
+	// review that could not tell them apart would have to reconstruct which from
+	// timestamps, and would read every safe push as if it had skipped the
+	// observation the release actually got.
+	AuditRolloutFastCanary = "rollout.fast_canary"
 	// AuditReleaseRollout is the release-notice "发布到机队" button. It funnels
 	// into the exact same SetTargetVersion write as AuditRolloutTarget (the
 	// hand-typed fleet-target form), and gets a SEPARATE action anyway — same
@@ -84,7 +98,8 @@ var auditActions = []string{
 	AuditNodeLabel, AuditNodeDraining, AuditNodeRestore, AuditNodeRemove, AuditNodeDeregister,
 	AuditTokenMint, AuditTokenRevoke, AuditPasskeyDelete,
 	AuditRolloutTarget, AuditRolloutPause, AuditRolloutResume,
-	AuditRolloutRollback, AuditRolloutEmergency, AuditRolloutRetry, AuditRolloutFast,
+	AuditRolloutRollback, AuditRolloutEmergency, AuditRolloutRetry,
+	AuditRolloutFast, AuditRolloutFastCanary,
 	AuditReleaseRollout, AuditReleaseDismiss,
 }
 

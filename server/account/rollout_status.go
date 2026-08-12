@@ -50,11 +50,19 @@ type fleetNodeInput struct {
 	// node's own reported outcome, bounded by fleetInstallLimit, whose expiry is
 	// a HALT. Printing the first while the state machine runs the second is the
 	// precise shape of lie this file exists to prevent.
-	TrackStatus string
-	Emergency   bool
-	ManualFast  bool
-	OnTarget    bool
-	IsCanary    bool
+	//
+	// FastAfterCanary runs BOTH clocks on the canary, in decideFleet's own order:
+	// the reported-outcome wait first (its expiry is a halt), then the six-hour
+	// window (its expiry is success). On every node after the canary it is the
+	// fast clock alone. A panel that showed only one of the two on the canary
+	// would be the same lie in a subtler place — "已回报成功" beside a node the
+	// queue will not move past for another five hours reads as a stuck rollout.
+	TrackStatus     string
+	Emergency       bool
+	ManualFast      bool
+	FastAfterCanary bool
+	OnTarget        bool
+	IsCanary        bool
 	// UpdateResult is nodes.update_result for this node, i.e. what it last
 	// reported back. Two of its values are decisions in decideFleet, not
 	// clocks, and they sit ABOVE every clock it runs (rollout_fleet.go:224,
@@ -76,10 +84,11 @@ type fleetNodeInput struct {
 // it (and computes it with the same selfupdate.SameVersion decideFleet uses).
 func newFleetNodeInput(tr RolloutTrack, n NodeSnapshot, onTarget bool) fleetNodeInput {
 	return fleetNodeInput{
-		TrackStatus: tr.Status,
-		Emergency:   tr.Emergency,
-		ManualFast:  tr.ManualFast,
-		OnTarget:    onTarget,
+		TrackStatus:     tr.Status,
+		Emergency:       tr.Emergency,
+		ManualFast:      tr.ManualFast,
+		FastAfterCanary: tr.FastAfterCanary,
+		OnTarget:        onTarget,
 		// Same rule as rollout_fleet.go:247, including the empty case:
 		// FirstNodeID == "" while a node IS in flight is a track written before
 		// that field existed, and the state machine assumes the node in flight
@@ -94,6 +103,14 @@ func newFleetNodeInput(tr RolloutTrack, n NodeSnapshot, onTarget bool) fleetNode
 		StageStartedAt:  tr.StageStartedAt,
 	}
 }
+
+// fastQueue mirrors decideFleet's fastQueueMode for the classifier's input: the
+// track's QUEUE advances only on a reported "ok". It is a method on the input
+// rather than a second reading of the two flags at each branch, for the same
+// reason fastQueueMode is one predicate in the state machine — the three
+// branches that read it are the three halts, and a mode wired into two of them
+// would make the panel calm about a node the track is stopping on.
+func (in fleetNodeInput) fastQueue() bool { return in.ManualFast || in.FastAfterCanary }
 
 // fleetNodeStatus says what decideFleet is doing with the node holding the
 // rollout slot. Its branches are in decideFleet's own order, because mirroring
@@ -157,10 +174,10 @@ func fleetNodeStatus(in fleetNodeInput, now int64) rolloutNodeStatus {
 	// track is halting on this node on its next poll, so no clock printed below
 	// would be describing anything that is still going to happen.
 	//
-	// Fast-mode-only, matching the state machine: on the staged path this state
+	// Fast-modes-only, matching the state machine: on the staged path this state
 	// is left to the wedge timeout, so the panel keeps printing the install
 	// clock there, which is still true.
-	if in.ManualFast && in.UpdateResult == "ok" && !in.OnTarget {
+	if in.fastQueue() && in.UpdateResult == "ok" && !in.OnTarget {
 		return rolloutNodeStatus{
 			Band: "failed", Label: "结果自相矛盾",
 			Detail: "该节点回报了更新成功，但它当前运行的并不是目标版本。" +
@@ -177,12 +194,12 @@ func fleetNodeStatus(in fleetNodeInput, now int64) rolloutNodeStatus {
 	// and only a human closes it out.
 	if in.UpdateResult == "skipped" {
 		detail := "该节点跳过了本次更新，不会装到目标版本；队列将在下一次轮询时越过它继续，这台机器留给人处理。"
-		if in.ManualFast {
-			// In fast mode a pass-over HALTS (decideFleet), because the queue
-			// advances on a reported success and this node reported none. Saying
-			// "the queue will step over it and carry on" here would be the panel
-			// describing the staged ladder while the state machine stops.
-			detail = "该节点跳过了本次更新，没有装到目标版本；手动快速发布只在当前节点回报成功后才继续，因此本轨道将在下一次轮询时中止，不会下发给下一台。"
+		if in.fastQueue() {
+			// In EITHER fast mode a pass-over HALTS (decideFleet), because the
+			// queue advances on a reported success and this node reported none.
+			// Saying "the queue will step over it and carry on" here would be the
+			// panel describing the staged ladder while the state machine stops.
+			detail = "该节点跳过了本次更新，没有装到目标版本；快速发布只在当前节点回报成功后才继续，因此本轨道将在下一次轮询时中止，不会下发给下一台。"
 		}
 		return rolloutNodeStatus{Band: "skipped", Label: "已跳过（不是失败）", Detail: detail, Alarm: true}
 	}
@@ -203,8 +220,8 @@ func fleetNodeStatus(in fleetNodeInput, now int64) rolloutNodeStatus {
 	// about to act on.
 	if in.UpdateResult == "unreachable" {
 		detail := "该节点没能取到这个版本的文件，因此没有安装；队列将在下一次轮询时越过它继续。这说明的是这台机器到发布来源的路径，而不是这个版本本身。"
-		if in.ManualFast {
-			detail = "该节点没能取到这个版本的文件，因此没有安装；手动快速发布只在当前节点回报成功后才继续，因此本轨道将在下一次轮询时中止，不会下发给下一台。这说明的是取产物的路径（可能是发布来源本身），而不是这个版本的代码。"
+		if in.fastQueue() {
+			detail = "该节点没能取到这个版本的文件，因此没有安装；快速发布只在当前节点回报成功后才继续，因此本轨道将在下一次轮询时中止，不会下发给下一台。这说明的是取产物的路径（可能是发布来源本身），而不是这个版本的代码。"
 		}
 		return rolloutNodeStatus{Band: "unreachable", Label: "拿不到产物（不是失败）", Detail: detail, Alarm: true}
 	}
@@ -276,17 +293,44 @@ func fleetBand(in fleetNodeInput, now int64) rolloutNodeStatus {
 		if in.UpdateStartedAt > start {
 			start = in.UpdateStartedAt
 		}
-		if in.ManualFast {
-			// No window at all in this mode. What the queue is waiting for is
-			// the node's own reported outcome, which arrives only after its
-			// updater's health watch has decided not to roll the build back --
-			// so a node that is merely SEEN on the target version is not done.
+		if in.fastQueue() {
+			// No window the QUEUE advances on in either fast mode. What it is
+			// waiting for is the node's own reported outcome, which arrives only
+			// after its updater's health watch has decided not to roll the build
+			// back -- so a node that is merely SEEN on the target version is not
+			// done. Both modes run this clock, and its expiry is a halt in both.
 			if in.UpdateResult != "ok" {
 				deadline := start + fleetInstallLimit
 				over := now > deadline
 				return rolloutNodeStatus{
 					Band: "confirming", Label: "等待节点回报结果",
 					Detail: elapsedText(start, deadline, now), Overdue: over, Alarm: over,
+				}
+			}
+			// SAFE FAST MODE, canary only: the outcome is in, and the six-hour
+			// observation window is still running. decideFleet waits here, so the
+			// panel must print the window rather than "已回报成功 · 等待下一次轮询
+			// 继续下一台" -- which is true in the other mode and, here, would have
+			// an operator reading a rollout that is deliberately holding for five
+			// more hours as one that is stuck.
+			//
+			// This is the observing band and it does not alarm, for the same
+			// reason the staged one does not: the window's expiry is the window
+			// SUCCEEDING. Every node after the canary skips it entirely and falls
+			// through to the fast answer below.
+			if in.FastAfterCanary && in.IsCanary {
+				deadline := start + fleetFirstWindow
+				if now < deadline {
+					return rolloutNodeStatus{
+						Band: "observing", Label: "已回报成功 · 观察中",
+						Detail: "首台保留完整观察窗：" + notBeforeText(deadline, now) +
+							"。窗口结束后，后面的节点之间不再等待。",
+					}
+				}
+				return rolloutNodeStatus{
+					Band: "observing", Label: "已回报成功 · 观察窗已结束",
+					Detail:  "首台已通过完整观察窗，等待下一次轮询继续下一台（之后不再有节点间等待）。",
+					Overdue: true,
 				}
 			}
 			// Reported ok. Nothing is being timed: decideFleet moves on to the
@@ -393,13 +437,33 @@ func elapsedText(since, deadline, now int64) string {
 // in an operator's memory. Both are generated from the constants so that
 // tuning one moves the state machine and the sentence together.
 //
-// The fleet sentence has two forms because the track has two modes. The fast
-// form still states a limit, and it is the state machine's own
+// The fleet sentence has three forms because the track has three modes. Both
+// fast forms still state a limit, and it is the state machine's own
 // (fleetInstallLimit): there the queue waits for the node's REPORTED outcome and
 // running out of patience is a HALT, not a success, so "no window" alone would
 // describe an unbounded wait that does not exist.
-func fleetRulesText(manualFast bool) string {
-	if manualFast {
+//
+// It takes the track rather than a boolean per mode. Two booleans at a call site
+// is the shape that produces a caller passing the wrong one — and the sentence
+// this function returns is the operator's statement of what is protecting the
+// release in front of them, so getting it wrong is not a cosmetic slip.
+func fleetRulesText(tr RolloutTrack) string {
+	if tr.FastAfterCanary {
+		// The safe form leads with what is KEPT, because that is the whole
+		// difference from the mode below it and the reason this one may be used
+		// on a version the fleet has never run. The window and the limit are both
+		// the state machine's own constants.
+		return fmt.Sprintf("安全快速发布：第一台（canary）完整保留 %s 观察窗，而且必须明确回报成功、"+
+			"运行的确实是目标版本，才算过关；只有首台过窗之后，后面的节点之间才不再等待 %s。"+
+			"全程仍然一次只更新一台——每台都要自己装好、重启、通过健康检查并回报成功，队列才会继续下一台。"+
+			"失败、回滚、跳过、拿不到产物、掉心跳，或超过 %s 没有回报结果，都会立刻中止，"+
+			"后面的节点不会被下发（这一点和常规分批不同——常规分批会越过拿不到产物的机器继续）。"+
+			"下发速度取决于节点版本：支持立即检查的节点会在下一次心跳（每 %d 秒）就被要求去问中心，"+
+			"较旧的节点没有这个能力，仍然要等自己的 ~10 分钟定时检查——那是回退路径，不是故障。",
+			humanDuration(fleetFirstWindow), humanDuration(fleetStepWindow),
+			humanDuration(fleetInstallLimit), nodeHeartbeatInterval)
+	}
+	if tr.ManualFast {
 		return fmt.Sprintf("手动快速发布：不设 canary 观察窗、节点之间也不等待，但仍然一次只更新一台——"+
 			"每台都要自己装好、重启、通过健康检查并回报成功，队列才会继续下一台。"+
 			"只有「成功」才算过关：失败、回滚、跳过、拿不到产物，或超过 %s 没有回报结果，"+

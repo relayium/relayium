@@ -594,6 +594,18 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	// track 参数）。
 	mux.Handle("POST /admin/rollout/fleet/fast",
 		s.CSRFGuard(s.RequireStepUp(AuditRolloutFast, s.handleAdminRolloutFast)))
+	// 安全快速发布：同样立刻开始一轮机队发布，但**第一台完整保留 6 小时观察窗**，
+	// 而且必须明确回报成功、且真的在跑目标版本；只有首台过关之后，后面的节点才
+	// 不再等 30 分钟间隔（仍然一次一台，任何坏结果照样中止）。
+	//
+	// 它和上面那条是两个动作而不是一个带开关的动作：上面那条只有在"某台机队节点
+	// 已经完整观察过这个版本"时才成立（它自己的 runbook 就是这么写的），而一个
+	// 机队从没跑过的版本必须走这条。两个路由、两个审计动作、两套确认页文案，
+	// 就是为了让"跳没跳观察窗"这件事事后一眼可查，也让安全的那条更好按。
+	//
+	// 同样把 fleet 写死在路径里，理由和上面一样：用户自己的机器没有这条路。
+	mux.Handle("POST /admin/rollout/fleet/fast-canary",
+		s.CSRFGuard(s.RequireStepUp(AuditRolloutFastCanary, s.handleAdminRolloutFastCanary)))
 	// 新版本通知：一键把机队轨指向 GitHub 上最新的 release，或忽略这个版本。
 	// 底层调用的是与手动填版本号相同的 SetTargetVersion（见
 	// handleAdminReleaseRollout），但审计动作是独立的 release.rollout ——

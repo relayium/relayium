@@ -50,8 +50,16 @@ type rolloutPanelView struct {
 	// gating left, a manual fast push has both. One badge with two meanings
 	// would tell an operator the wrong thing at the exact moment they are
 	// deciding whether to intervene.
-	ManualFast     bool
-	StageStartedAt int64
+	ManualFast bool
+	// FastAfterCanary is the fleet track running the SAFE fast mode: the canary
+	// keeps its whole six-hour observation window, only the nodes after it skip
+	// the soak (see RolloutTrack.FastAfterCanary). A third separate field and a
+	// third separate badge, for the same reason ManualFast is not folded into
+	// Emergency: the badge answers "what is protecting this release right now",
+	// and these three answer it differently. An operator deciding whether to
+	// intervene must not have to remember which of two modes a shared badge meant.
+	FastAfterCanary bool
+	StageStartedAt  int64
 	// CurrentNodeID (fleet) is the node in flight; ByoBatch (byo) is the batch
 	// percentage currently open. Each is meaningless on the other track, and
 	// the template only renders the one that belongs to this panel.
@@ -287,15 +295,23 @@ func rolloutTrackLabel(track string) string {
 // entire job is not lying.
 //
 // Emergency reads its track from the path wildcard (registered on {id}, aimable
-// at either track); the manual fast push is fleet-only by route, so its track is
+// at either track); both fast pushes are fleet-only by route, so their track is
 // a constant rather than anything read from the request. ("", "") means no
 // banner: correct for every action whose blast radius is a form field.
+//
+// The two fast modes get two notices, not one parameterised notice, for the same
+// reason emergency and fast do: they differ in whether the canary's six hours
+// are kept, which is the ONLY thing an operator on this page has to decide
+// between them, so a shared sentence would be one edit away from describing the
+// window while performing the mode that skips it.
 func confirmBlastFor(action, pathID string) (track, notice string) {
 	switch action {
 	case AuditRolloutEmergency:
 		return pathID, "emergency"
 	case AuditRolloutFast:
 		return "fleet", "fast"
+	case AuditRolloutFastCanary:
+		return "fleet", "fast-canary"
 	}
 	return "", ""
 }
@@ -346,7 +362,7 @@ func (s *Service) rolloutPanel(ctx context.Context, track, title string, now tim
 	p.TargetVersion, p.Status = tr.TargetVersion, tr.Status
 	p.StatusText = rolloutStatusText(tr.Status, found)
 	if track == "fleet" {
-		p.RulesText = fleetRulesText(tr.ManualFast)
+		p.RulesText = fleetRulesText(tr)
 	} else {
 		p.RulesText = byoRulesText()
 		// !tr.Emergency is part of the precondition, not a nicety: nodes.go:470
@@ -362,6 +378,7 @@ func (s *Service) rolloutPanel(ctx context.Context, track, title string, now tim
 		}
 	}
 	p.HaltedReason, p.Emergency, p.ManualFast = tr.HaltedReason, tr.Emergency, tr.ManualFast
+	p.FastAfterCanary = tr.FastAfterCanary
 	p.StageStartedAt, p.CurrentNodeID, p.ByoBatch = tr.StageStartedAt, tr.CurrentNodeID, tr.ByoBatch
 	p.FirstNodeID = tr.FirstNodeID
 	if track == "byo" {
@@ -948,7 +965,65 @@ func (s *Service) handleAdminRolloutRetry(w http.ResponseWriter, r *http.Request
 // statements against a multi-instance deployment, so only the SQL can stop a
 // rollout that starts in between; these branches exist to turn the refusal into
 // a message that says which condition failed.
+//
+// The body is rolloutStartFast below, shared with the safe fast push
+// (handleAdminRolloutFastCanary) so the two cannot come to accept different
+// states. Everything documented above is implemented there.
 func (s *Service) handleAdminRolloutFast(w http.ResponseWriter, r *http.Request) {
+	s.rolloutStartFast(w, r, fastPushManual, s.StartManualFastFleetRollout)
+}
+
+// handleAdminRolloutFastCanary starts the SAFE fast fleet rollout: the same
+// action as above in every respect except the one that matters most — the canary
+// keeps its ENTIRE six-hour observation window and must report success while
+// actually running the target, and only the machines after it skip the 30-minute
+// soak (see RolloutTrack.FastAfterCanary).
+//
+// It exists because the manual fast push cannot legitimately be a version's
+// FIRST fleet exposure: that mode hands the slot on as soon as the node in
+// flight reports success, so a build that only fails after hours of real traffic
+// reaches the whole fleet before anything notices. Its own runbook says so, and
+// before this control the only way to obey that rule with no separate staging
+// fleet was to not use the fast path at all — or to take a production node
+// offline to manufacture a "previously validated" target, which is a workaround,
+// not a safety property.
+//
+// Everything else is handleAdminRolloutFast's, literally: the three guards, the
+// startable-state set, the stale-confirmation comparison and the store's
+// compare-and-swap all come from the shared rolloutStartFast below, so the two
+// controls cannot drift into accepting different states. Only the operator-facing
+// wording and which service call is made differ.
+func (s *Service) handleAdminRolloutFastCanary(w http.ResponseWriter, r *http.Request) {
+	s.rolloutStartFast(w, r, fastPushCanary, s.StartCanaryFastFleetRollout)
+}
+
+// fastPushLabels is the per-mode operator-facing wording for the shared handler:
+// what to call this action in a refusal, and the staleness message that belongs
+// to it. Two message constants rather than one built by concatenation, because
+// each is a complete sentence an operator reads under time pressure and both are
+// pinned by tests as whole strings.
+type fastPushLabels struct {
+	name  string // 手动快速发布 / 安全快速发布
+	stale string
+}
+
+var (
+	fastPushManual = fastPushLabels{name: "手动快速发布", stale: staleFastRolloutMessage}
+	fastPushCanary = fastPushLabels{name: "安全快速发布", stale: staleCanaryFastRolloutMessage}
+)
+
+// rolloutStartFast is the shared implementation of both fast pushes. See
+// handleAdminRolloutFast above for what each guard is protecting; start is the
+// service call that arms the mode, and it is the ONLY thing that differs between
+// the two beyond wording.
+//
+// Sharing it is not a tidy-up. The three guards here are the difference between
+// "start a fresh rollout" and "silently abandon one in flight", and a second
+// hand-written copy of them for the safe mode would be a second place for that
+// distinction to rot — this package's own history is a series of predicates that
+// were copied and then drifted.
+func (s *Service) rolloutStartFast(w http.ResponseWriter, r *http.Request, lbl fastPushLabels,
+	start func(ctx context.Context, expectStatus, expectTargetVersion, version string) error) {
 	if !s.isAdminReq(r) {
 		http.Error(w, "unauthorized", http.StatusUnauthorized)
 		return
@@ -959,7 +1034,7 @@ func (s *Service) handleAdminRolloutFast(w http.ResponseWriter, r *http.Request)
 
 	before, found, err := s.Store().GetRolloutTrack(r.Context(), "fleet")
 	if err != nil {
-		s.renderAdminRolloutError(w, r, http.StatusInternalServerError, "手动快速发布失败："+err.Error())
+		s.renderAdminRolloutError(w, r, http.StatusInternalServerError, lbl.name+"失败："+err.Error())
 		return
 	}
 	// Guard 2, as a message. The store refuses anything but these two states too
@@ -974,8 +1049,8 @@ func (s *Service) handleAdminRolloutFast(w http.ResponseWriter, r *http.Request)
 	// operator to refresh.
 	if found && before.Status != "complete" {
 		s.renderAdminRolloutError(w, r, http.StatusBadRequest,
-			"手动快速发布失败：机队轨当前是「"+rolloutStatusText(before.Status, found)+"」。"+
-				"手动快速发布只能在机队轨已经结束（「已完成」）或从未启动过时开始——"+
+			lbl.name+"失败：机队轨当前是「"+rolloutStatusText(before.Status, found)+"」。"+
+				lbl.name+"只能在机队轨已经结束（「已完成」）或从未启动过时开始——"+
 				"请先在下方机队面板里处理这一轮：正在发布中就等它跑完或先「暂停」，"+
 				"已暂停就用「继续」（会回到常规分批节奏）。")
 		return
@@ -988,20 +1063,20 @@ func (s *Service) handleAdminRolloutFast(w http.ResponseWriter, r *http.Request)
 		curStatus, curVersion = before.Status, before.TargetVersion
 	}
 	if fromStatus != curStatus || fromVersion != curVersion {
-		s.renderAdminRolloutError(w, r, http.StatusBadRequest, staleFastRolloutMessage)
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest, lbl.stale)
 		return
 	}
 
-	if err := s.StartManualFastFleetRollout(r.Context(), curStatus, curVersion, version); err != nil {
+	if err := start(r.Context(), curStatus, curVersion, version); err != nil {
 		if errors.Is(err, ErrFastRolloutStateChanged) {
 			// The compare-and-swap refused: the track moved between the read
 			// above and the write. Nothing was written.
-			s.renderAdminRolloutError(w, r, http.StatusBadRequest, staleFastRolloutMessage)
+			s.renderAdminRolloutError(w, r, http.StatusBadRequest, lbl.stale)
 			return
 		}
 		// Everything else reaching here is the version check, which is the
 		// operator's input and legible as-is.
-		s.renderAdminRolloutError(w, r, http.StatusBadRequest, "手动快速发布失败："+err.Error())
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest, lbl.name+"失败："+err.Error())
 		return
 	}
 	http.Redirect(w, r, "/admin", http.StatusFound)
@@ -1013,6 +1088,14 @@ func (s *Service) handleAdminRolloutFast(w http.ResponseWriter, r *http.Request)
 // written — and only differ in how narrowly they raced. One string so they
 // cannot drift into contradicting each other.
 const staleFastRolloutMessage = "手动快速发布失败：机队轨的状态在你确认之后发生了变化，" +
+	"本次操作没有改动任何东西。请刷新 /admin 重新确认当前目标版本与状态后再试。"
+
+// staleCanaryFastRolloutMessage is the same sentence for the safe fast push. It
+// is a second constant rather than the first one with the action name
+// substituted in, so that each message is greppable as the whole string an
+// operator will see and can be pinned by its own test — and so that a future
+// edit to one mode's wording cannot silently reword the other's refusal.
+const staleCanaryFastRolloutMessage = "安全快速发布失败：机队轨的状态在你确认之后发生了变化，" +
 	"本次操作没有改动任何东西。请刷新 /admin 重新确认当前目标版本与状态后再试。"
 
 // handleAdminRolloutEmergency releases the whole track at once: a single write

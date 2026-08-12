@@ -7,18 +7,18 @@ import (
 
 // rolloutCols is the column list shared by GetRolloutTrack's SELECT and
 // PutRolloutTrack's upsert, so the two can never drift out of order.
-const rolloutCols = `track, target_version, previous_version, current_node_id, first_node_id, byo_batch, stage_started_at, status, halted_reason, emergency, manual_fast`
+const rolloutCols = `track, target_version, previous_version, current_node_id, first_node_id, byo_batch, stage_started_at, status, halted_reason, emergency, manual_fast, fast_after_canary`
 
 // GetRolloutTrack returns the persisted state of the given track ("fleet" |
 // "byo"). ok=false means no row has been written for that track yet (a fresh
 // DB, or a track whose rollout has never been started) — not an error.
 func (s *SQLiteStore) GetRolloutTrack(ctx context.Context, track string) (RolloutTrack, bool, error) {
 	var t RolloutTrack
-	var emergency, manualFast int
+	var emergency, manualFast, fastAfterCanary int
 	err := s.reader().QueryRowContext(ctx,
 		`SELECT `+rolloutCols+` FROM node_rollout WHERE track = ?`, track).
-		Scan(&t.Track, &t.TargetVersion, &t.PreviousVersion, &t.CurrentNodeID, &t.FirstNodeID, &t.ByoBatch, &t.StageStartedAt, &t.Status, &t.HaltedReason, &emergency, &manualFast)
-	t.Emergency, t.ManualFast = emergency != 0, manualFast != 0
+		Scan(&t.Track, &t.TargetVersion, &t.PreviousVersion, &t.CurrentNodeID, &t.FirstNodeID, &t.ByoBatch, &t.StageStartedAt, &t.Status, &t.HaltedReason, &emergency, &manualFast, &fastAfterCanary)
+	t.Emergency, t.ManualFast, t.FastAfterCanary = emergency != 0, manualFast != 0, fastAfterCanary != 0
 	if err == sql.ErrNoRows {
 		return RolloutTrack{}, false, nil
 	}
@@ -48,7 +48,7 @@ func (s *SQLiteStore) GetRolloutTrack(ctx context.Context, track string) (Rollou
 // version.
 func (s *SQLiteStore) PutRolloutTrack(ctx context.Context, t RolloutTrack) error {
 	_, err := s.db.ExecContext(ctx,
-		`INSERT INTO node_rollout (`+rolloutCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+		`INSERT INTO node_rollout (`+rolloutCols+`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
 		 ON CONFLICT(track) DO UPDATE SET
 		   target_version=excluded.target_version,
 		   previous_version=CASE WHEN excluded.previous_version = '' THEN previous_version ELSE excluded.previous_version END,
@@ -56,8 +56,9 @@ func (s *SQLiteStore) PutRolloutTrack(ctx context.Context, t RolloutTrack) error
 		   first_node_id=excluded.first_node_id,
 		   byo_batch=excluded.byo_batch, stage_started_at=excluded.stage_started_at,
 		   status=excluded.status, halted_reason=excluded.halted_reason,
-		   emergency=excluded.emergency, manual_fast=excluded.manual_fast`,
-		t.Track, t.TargetVersion, t.PreviousVersion, t.CurrentNodeID, t.FirstNodeID, t.ByoBatch, t.StageStartedAt, t.Status, t.HaltedReason, b2i(t.Emergency), b2i(t.ManualFast))
+		   emergency=excluded.emergency, manual_fast=excluded.manual_fast,
+		   fast_after_canary=excluded.fast_after_canary`,
+		t.Track, t.TargetVersion, t.PreviousVersion, t.CurrentNodeID, t.FirstNodeID, t.ByoBatch, t.StageStartedAt, t.Status, t.HaltedReason, b2i(t.Emergency), b2i(t.ManualFast), b2i(t.FastAfterCanary))
 	return err
 }
 
@@ -156,12 +157,17 @@ func (s *SQLiteStore) HaltRolloutTrack(ctx context.Context, track, reason string
 //     side: the node that failed is still recorded as in flight with its
 //     failure still on its row, so decideFleet would halt again on its very
 //     next evaluation. Clearing them starts a fresh canary pick.
-//   - emergency AND manual_fast back to 0: resuming is the staged, careful
-//     path. A release halted while skipping the ladder — released to everyone
-//     at once, or run fast one node at a time — must be re-armed explicitly and
-//     re-confirmed, never silently by pressing 继续. Restarting the ladder in a
-//     mode that skips the very windows a halt just proved necessary would be the
-//     opposite of what the button says.
+//   - emergency, manual_fast AND fast_after_canary back to 0: resuming is the
+//     staged, careful path. A release halted while skipping the ladder —
+//     released to everyone at once, run fast one node at a time, or run fast
+//     after its canary — must be re-armed explicitly and re-confirmed, never
+//     silently by pressing 继续. Restarting the ladder in a mode that skips the
+//     very windows a halt just proved necessary would be the opposite of what
+//     the button says. fast_after_canary is cleared for that reason and not a
+//     weaker one: it keeps the canary's own window, but a resumed track picks a
+//     FRESH canary (current_node_id/first_node_id are cleared just above), and
+//     "the machines after the new canary need no soak" is exactly the judgement
+//     the halt called into question.
 //
 // It also clears this track's passed-over results, and that clear is INSIDE the
 // transaction with the compare-and-swap above, conditional on it having matched.
@@ -189,7 +195,8 @@ func (s *SQLiteStore) ResumeRolloutTrack(ctx context.Context, track string, at i
 
 	res, err := tx.ExecContext(ctx,
 		`UPDATE node_rollout SET status = 'rolling', halted_reason = '', current_node_id = '',
-		   first_node_id = '', byo_batch = 0, emergency = 0, manual_fast = 0, stage_started_at = ?
+		   first_node_id = '', byo_batch = 0, emergency = 0, manual_fast = 0, fast_after_canary = 0,
+		   stage_started_at = ?
 		   WHERE track = ? AND status = 'halted'`,
 		at, track)
 	if err != nil {
@@ -343,9 +350,59 @@ func (s *SQLiteStore) RetryRolloutNode(ctx context.Context, track, nodeID string
 // ok=false means the row was not in the expected state — the caller must report
 // that nothing was written and ask the operator to refresh.
 func (s *SQLiteStore) StartManualFastRollout(ctx context.Context, track, expectStatus, expectTargetVersion, version string, at int64) (bool, error) {
+	return s.startFastRollout(ctx, track, expectStatus, expectTargetVersion, version, at, fleetModeManualFast)
+}
+
+// StartCanaryFastRollout arms the SAFE fast mode instead: the canary keeps its
+// entire six-hour observation window and must report success on the target
+// version, and only the nodes after it skip the inter-node soak (see
+// RolloutTrack.FastAfterCanary).
+//
+// Everything else — the two startable states, the compare-and-swap that makes
+// them race-safe, the passed-over clear inside the same transaction, and
+// "ok=false means NOTHING was written" — is StartManualFastRollout's, literally:
+// both delegate to startFastRollout and differ only in which mode column they
+// arm. That sharing is deliberate rather than incidental. The reasoning in
+// StartManualFastRollout's doc comment above is the reasoning for this method
+// too, and a near-copy of a fifty-line transaction is exactly how two paths that
+// must refuse identically drift into refusing differently — this package has
+// already shipped that defect twice with hand-copied predicates.
+func (s *SQLiteStore) StartCanaryFastRollout(ctx context.Context, track, expectStatus, expectTargetVersion, version string, at int64) (bool, error) {
+	return s.startFastRollout(ctx, track, expectStatus, expectTargetVersion, version, at, fleetModeFastAfterCanary)
+}
+
+// fleetFastMode selects which mode column a start arms. It is an enum rather
+// than two booleans so that "exactly one mode" is expressed by the TYPE and not
+// by a caller remembering to pass false for the other one: every write below
+// sets all three mode columns from this single value, so no row can come out
+// carrying two modes.
+type fleetFastMode int
+
+const (
+	fleetModeManualFast fleetFastMode = iota
+	fleetModeFastAfterCanary
+)
+
+// manualFast/fastAfterCanary are the column values this mode writes. emergency
+// is 0 for both: neither of these actions is an emergency release, and a start
+// that inherited emergency from the row it replaced would release the whole
+// track at once under a confirmation page that promised a queue.
+func (m fleetFastMode) columns() (manualFast, fastAfterCanary int) {
+	if m == fleetModeFastAfterCanary {
+		return 0, 1
+	}
+	return 1, 0
+}
+
+// startFastRollout is the shared implementation. See StartManualFastRollout for
+// the full reasoning behind each condition; the only thing mode changes is which
+// of the two fast columns is set to 1, and all three mode columns are written
+// explicitly on both paths.
+func (s *SQLiteStore) startFastRollout(ctx context.Context, track, expectStatus, expectTargetVersion, version string, at int64, mode fleetFastMode) (bool, error) {
 	if expectStatus != "" && expectStatus != "complete" {
 		return false, nil
 	}
+	manualFast, fastAfterCanary := mode.columns()
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
@@ -361,19 +418,26 @@ func (s *SQLiteStore) StartManualFastRollout(ctx context.Context, track, expectS
 		// Columns are named explicitly instead of reusing rolloutCols: every
 		// omitted column has a schema default that is exactly the value wanted
 		// here (empty ids, byo_batch 0, no halt reason, emergency off), and
-		// spelling out five names cannot be silently broken by a reorder of
+		// spelling out six names cannot be silently broken by a reorder of
 		// that positional list.
 		res, err = tx.ExecContext(ctx,
-			`INSERT INTO node_rollout (track, target_version, stage_started_at, status, manual_fast)
-			 VALUES (?,?,?,'rolling',1) ON CONFLICT(track) DO NOTHING`,
-			track, version, at)
+			`INSERT INTO node_rollout (track, target_version, stage_started_at, status, manual_fast, fast_after_canary)
+			 VALUES (?,?,?,'rolling',?,?) ON CONFLICT(track) DO NOTHING`,
+			track, version, at, manualFast, fastAfterCanary)
 	} else {
+		// The OTHER mode's column is written to 0 here rather than left alone,
+		// and that is load-bearing rather than tidy: the row being replaced is a
+		// finished one, and a finished row is normally cleared by
+		// CompleteRolloutTrack — but PutRolloutTrack can write a complete row
+		// with either flag still set, and inheriting it would produce a track
+		// carrying two modes at once, i.e. a decideFleet precedence question
+		// instead of a mode.
 		res, err = tx.ExecContext(ctx,
 			`UPDATE node_rollout SET target_version = ?, current_node_id = '', first_node_id = '',
 			   byo_batch = 0, stage_started_at = ?, status = 'rolling', halted_reason = '',
-			   emergency = 0, manual_fast = 1
+			   emergency = 0, manual_fast = ?, fast_after_canary = ?
 			   WHERE track = ? AND status = 'complete' AND target_version = ?`,
-			version, at, track, expectTargetVersion)
+			version, at, manualFast, fastAfterCanary, track, expectTargetVersion)
 	}
 	if err != nil {
 		return false, err
@@ -407,9 +471,22 @@ func (s *SQLiteStore) StartManualFastRollout(ctx context.Context, track, expectS
 // and arming are now one row write — see Service.SetEmergencyTargetVersion.
 // Kept (unused) per this package's policy of not dropping store methods a live
 // deployment might still be calling mid-rollout.
+//
+// It clears BOTH fast columns in the same statement that arms emergency, and
+// that is the whole reason the retained method is safe to keep reachable. The
+// modes are mutually exclusive (see RolloutTrack.FastAfterCanary), and this is
+// the one arming path that does not rewrite the row wholesale: left alone, an
+// old caller landing on a track someone had started in either fast mode would
+// produce a row carrying two modes at once — an emergency release wearing a
+// badge that promises a gated one-at-a-time queue, and a decideFleet precedence
+// question instead of a mode. One UPDATE, so the arm and the clear cannot be
+// observed apart; the compare-and-swap in the WHERE clause is unchanged, so a
+// track that moved since the operator looked at it is still refused outright and
+// nothing — emergency included — is written.
 func (s *SQLiteStore) SetRolloutEmergency(ctx context.Context, track, expectVersion string, at int64) (bool, error) {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE node_rollout SET emergency = 1, stage_started_at = ?
+		`UPDATE node_rollout SET emergency = 1, manual_fast = 0, fast_after_canary = 0,
+		   stage_started_at = ?
 		   WHERE track = ? AND status = 'rolling' AND target_version = ?`,
 		at, track, expectVersion)
 	if err != nil {
@@ -434,13 +511,14 @@ func (s *SQLiteStore) SetRolloutEmergency(ctx context.Context, track, expectVers
 // complete); on byo the column is already always empty, so clearing it there
 // is a no-op, not a behaviour change.
 //
-// It also clears `emergency` and `manual_fast`: a finished track is neither
-// "紧急发布中" nor "手动快速发布中", and leaving either at 1 left the badge sitting
-// next to 已完成 forever. Nothing reads either flag once status is no longer
-// 'rolling' (handleUpdateCheck returns before the emergency branch, and
-// decideFleet's first check makes a non-rolling track inert), so this is a
-// display fix — and every path back into 'rolling' (SetTargetVersion,
-// ResumeRolloutTrack, StartManualFastRollout) sets both explicitly.
+// It also clears `emergency`, `manual_fast` and `fast_after_canary`: a finished
+// track is none of "紧急发布中", "手动快速发布中" or "安全快速发布中", and leaving any
+// of them at 1 left the badge sitting next to 已完成 forever. Nothing reads any of
+// the three once status is no longer 'rolling' (handleUpdateCheck returns before
+// the emergency branch, and decideFleet's first check makes a non-rolling track
+// inert), so this is a display fix — and every path back into 'rolling'
+// (SetTargetVersion, ResumeRolloutTrack, StartManualFastRollout,
+// StartCanaryFastRollout) sets all three explicitly.
 // RetryRolloutNode is the one that does not, and need not: it acts on a track
 // this method already cleared, so a single-node retry runs staged.
 // ok=false means the track was no longer rolling when this landed (already
@@ -450,7 +528,7 @@ func (s *SQLiteStore) SetRolloutEmergency(ctx context.Context, track, expectVers
 func (s *SQLiteStore) CompleteRolloutTrack(ctx context.Context, track string, at int64) (bool, error) {
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE node_rollout SET status = 'complete', current_node_id = '', emergency = 0,
-		   manual_fast = 0, stage_started_at = ?
+		   manual_fast = 0, fast_after_canary = 0, stage_started_at = ?
 		   WHERE track = ? AND status = 'rolling'`,
 		at, track)
 	if err != nil {

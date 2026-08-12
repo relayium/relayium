@@ -40,8 +40,19 @@ var adminEN = map[string]string{
 	"手动快速发布":                        "Manual fast push",
 	"手动快速发布中（仍逐台，不设观察窗）": "Manual fast push in progress (still one node at a time, no observation window)",
 	"手动快速发布的版本":          "Version for the manual fast push",
-	"立刻开始一轮机队发布：不设观察窗、节点之间不等待，但仍一次一台，任一台没有回报成功即中止": "Start a fleet rollout now: no observation window and no wait between nodes, but still one node at a time, and it halts as soon as a node does not report success",
-	"⚠ 手动快速发布：跳过 canary 观察窗与节点之间的等待，立刻开始发布":        "⚠ Manual fast push: skips the canary observation window and the wait between nodes, and starts rolling immediately",
+	"立刻开始一轮机队发布：不设观察窗、节点之间不等待，但仍一次一台，任一台没有回报成功即中止。仅适用于机队已经完整观察过的版本": "Start a fleet rollout now: no observation window and no wait between nodes, but still one node at a time, and it halts as soon as a node does not report success. Only for a version some fleet node has already carried through a full observation window",
+	"⚠ 手动快速发布：跳过 canary 观察窗与节点之间的等待，立刻开始发布":                         "⚠ Manual fast push: skips the canary observation window and the wait between nodes, and starts rolling immediately",
+	// 安全快速发布 (canary-then-fast): the entry point for a version the fleet has
+	// never run. Every string here has to be readable next to the manual-fast one
+	// above without the two blurring together — the whole point of the pair is
+	// that one keeps the canary's six hours and the other does not.
+	"安全快速发布（保留首台观察窗）":            "Safe fast push (keeps the canary's window)",
+	"安全快速发布中（首台保留完整观察窗，之后逐台不等待）": "Safe fast push in progress (the canary keeps its full observation window; after it, one node at a time with no wait)",
+	"安全快速发布的版本":                  "Version for the safe fast push",
+	"立刻开始一轮机队发布：第一台完整保留 6 小时观察窗并且必须回报成功，之后的节点之间不再等待；仍一次一台，任一台没有回报成功即中止":                                           "Start a fleet rollout now: the first node keeps its full 6-hour observation window and must report success; after it there is no wait between nodes. Still one node at a time, and it halts as soon as a node does not report success",
+	"安全快速发布：保留第一台的完整 canary 观察窗，只去掉其后节点之间的等待":                                                                     "Safe fast push: keeps the first node's full canary observation window, and drops only the wait between the nodes after it",
+	"第一台不加速：它保留完整的 6 小时观察窗，并且必须明确回报成功、运行的确实是目标版本，才算过关。只有首台过窗之后，后面的节点之间才不再等待。":                                     "The first node is NOT accelerated: it keeps the full 6-hour observation window and must explicitly report success while actually running the target version. Only once it has cleared that window do the nodes after it stop waiting between updates.",
+	"全程仍然逐台进行：一次只更新一台节点，每台都要自己校验签名、安装、重启并通过健康检查，并回报成功，队列才会继续下一台。失败、回滚、跳过、拿不到产物、掉心跳或超时都会立刻中止本次发布，后面的节点不会被下发。":      "It stays one node at a time throughout: each node verifies the release signature, installs, restarts, passes its own health check and REPORTS SUCCESS before the queue moves on. A failure, rollback, skip, unobtainable artifact, lost heartbeat or timeout halts this rollout immediately and no later node is commanded.",
 	"仍然逐台进行：一次只更新一台节点，每台都要自己校验签名、安装、重启并通过健康检查，并回报成功，队列才会继续下一台。只有「成功」才算过关：失败、回滚、跳过、拿不到产物或超时都会立刻中止本次发布，后面的节点不会被下发。": "Still one node at a time: each node verifies the release signature, installs, restarts, passes its own health check and REPORTS SUCCESS before the queue moves on. Only success counts: a failure, rollback, skip, unobtainable artifact or timeout halts this rollout immediately and no later node is commanded.",
 	"节点":                    "Node",
 	"状态":                    "Status",

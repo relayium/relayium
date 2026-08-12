@@ -258,7 +258,7 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 {{if .Err}}
 <p class="err">{{t $.Lang "读取该轨道状态失败，控制按钮已隐藏（另一条轨道不受影响）。"}}</p>
 {{else}}
-<p class="ro-state">{{t $.Lang "目标版本："}}<b>{{if .TargetVersion}}{{.TargetVersion}}{{else}}—{{end}}</b>{{t $.Lang "· 状态："}}<b>{{.StatusText}}</b>{{if .Emergency}} <span class="ro-emg">{{t $.Lang "紧急发布中（已跳过分批）"}}</span>{{end}}{{if .ManualFast}} <span class="ro-emg">{{t $.Lang "手动快速发布中（仍逐台，不设观察窗）"}}</span>{{end}} ·
+<p class="ro-state">{{t $.Lang "目标版本："}}<b>{{if .TargetVersion}}{{.TargetVersion}}{{else}}—{{end}}</b>{{t $.Lang "· 状态："}}<b>{{.StatusText}}</b>{{if .Emergency}} <span class="ro-emg">{{t $.Lang "紧急发布中（已跳过分批）"}}</span>{{end}}{{if .ManualFast}} <span class="ro-emg">{{t $.Lang "手动快速发布中（仍逐台，不设观察窗）"}}</span>{{end}}{{if .FastAfterCanary}} <span class="ro-emg">{{t $.Lang "安全快速发布中（首台保留完整观察窗，之后逐台不等待）"}}</span>{{end}} ·
 {{t $.Lang "进度："}}{{.OnTarget}}/{{.Total}} {{t $.Lang "台已在目标版本"}} ·
 {{if eq .Track "fleet"}}{{t $.Lang "正在更新："}}{{if .CurrentNodeID}}{{.CurrentNodeID}}{{else}}—{{end}}
 {{else}}{{t $.Lang "当前批次："}}{{if .ByoBatch}}{{.ByoBatch}}%{{else}}{{t $.Lang "未开批"}}{{end}}{{end}}
@@ -306,11 +306,21 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
        store 都拿它比对：没有它，一个还停在「已完成 v1.0.0」的旧页面就能覆盖掉
        这期间新开的一轮发布。 */}}
 {{if and (eq .Track "fleet") (or (not .Configured) (eq .Status "complete"))}}
+{{/* 安全快速发布：先给这一个。两个按钮的可用条件完全一样（handler 与 store 也
+     共用同一套守卫），差别只有一处——首台要不要保留 6 小时观察窗。把保留的那个
+     放在前面，是因为"这个版本机队还没跑过"才是常态，而上面那个只有在某台机队
+     节点已经完整观察过这个版本之后才成立。 */}}
+<form method="post" action="/admin/rollout/fleet/fast-canary" class="lim">
+<input type="hidden" name="from_status" value="{{.Status}}">
+<input type="hidden" name="from_version" value="{{.TargetVersion}}">
+<input type="text" name="version" placeholder="v1.2.4" title="{{t $.Lang "安全快速发布的版本"}}" style="width:110px">
+<button type="submit" title="{{t $.Lang "立刻开始一轮机队发布：第一台完整保留 6 小时观察窗并且必须回报成功，之后的节点之间不再等待；仍一次一台，任一台没有回报成功即中止"}}">{{t $.Lang "安全快速发布（保留首台观察窗）"}}</button>
+</form>
 <form method="post" action="/admin/rollout/fleet/fast" class="lim">
 <input type="hidden" name="from_status" value="{{.Status}}">
 <input type="hidden" name="from_version" value="{{.TargetVersion}}">
 <input type="text" name="version" placeholder="v1.2.4" title="{{t $.Lang "手动快速发布的版本"}}" style="width:110px">
-<button type="submit" title="{{t $.Lang "立刻开始一轮机队发布：不设观察窗、节点之间不等待，但仍一次一台，任一台没有回报成功即中止"}}">{{t $.Lang "手动快速发布"}}</button>
+<button type="submit" title="{{t $.Lang "立刻开始一轮机队发布：不设观察窗、节点之间不等待，但仍一次一台，任一台没有回报成功即中止。仅适用于机队已经完整观察过的版本"}}">{{t $.Lang "手动快速发布"}}</button>
 </form>
 {{end}}
 </div>
@@ -492,11 +502,20 @@ button:hover{filter:brightness(1.07)}
 <p class="t">{{t $.Lang "⚠ 紧急发布：跳过金丝雀与分批，整条轨道一次性放行"}}</p>
 {{else if eq .TrackNotice "fast"}}
 <p class="t">{{t $.Lang "⚠ 手动快速发布：跳过 canary 观察窗与节点之间的等待，立刻开始发布"}}</p>
+{{else if eq .TrackNotice "fast-canary"}}
+<p class="t">{{t $.Lang "安全快速发布：保留第一台的完整 canary 观察窗，只去掉其后节点之间的等待"}}</p>
 {{end}}
 <p class="track">{{t $.Lang "轨道："}}{{.Track}}</p>
 <p class="who">{{.TrackLabel}}</p>
 {{if eq .TrackNotice "fast"}}
 <p class="who">{{t $.Lang "仍然逐台进行：一次只更新一台节点，每台都要自己校验签名、安装、重启并通过健康检查，并回报成功，队列才会继续下一台。只有「成功」才算过关：失败、回滚、跳过、拿不到产物或超时都会立刻中止本次发布，后面的节点不会被下发。"}}</p>
+{{end}}
+{{/* 安全快速发布自己的一段，同样写死、不与上面那段共用：两者唯一的区别就是首台
+     那 6 小时，而这一段正是描述它的。共用一句参数化的话，等于把这一页仅有的
+     判别点交给一个将来可能被改错的模板变量。 */}}
+{{if eq .TrackNotice "fast-canary"}}
+<p class="who">{{t $.Lang "第一台不加速：它保留完整的 6 小时观察窗，并且必须明确回报成功、运行的确实是目标版本，才算过关。只有首台过窗之后，后面的节点之间才不再等待。"}}</p>
+<p class="who">{{t $.Lang "全程仍然逐台进行：一次只更新一台节点，每台都要自己校验签名、安装、重启并通过健康检查，并回报成功，队列才会继续下一台。失败、回滚、跳过、拿不到产物、掉心跳或超时都会立刻中止本次发布，后面的节点不会被下发。"}}</p>
 {{end}}
 </div>
 {{end}}

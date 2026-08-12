@@ -91,6 +91,19 @@ func (s *Service) beforeImageFor(ctx context.Context, action, pathID string, for
 			},
 			rolloutAuditTarget("fleet"), nil
 
+	// The safe fast push's page and audit row must differ from the one above in
+	// the only place the two actions differ: what happens to the canary. "mode"
+	// spells out that the six-hour window is KEPT, because an operator who has
+	// used the other control reads this diff table with that one in mind, and a
+	// row that merely said "fast" would be read as the mode they already know.
+	case AuditRolloutFastCanary:
+		return map[string]any{}, map[string]any{
+				"track":          "fleet",
+				"target_version": form.Get("version"),
+				"mode":           "canary-then-fast (canary keeps its full 6h observation window; only later nodes skip the soak)",
+			},
+			rolloutAuditTarget("fleet"), nil
+
 	case AuditPasskeyDelete:
 		return map[string]any{}, map[string]any{}, "passkey:" + form.Get("id"), nil
 

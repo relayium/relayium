@@ -634,6 +634,22 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// only safe default: a rollout already in flight when this deploys must
 		// not silently stop observing its canary.
 		`ALTER TABLE node_rollout ADD COLUMN manual_fast INTEGER NOT NULL DEFAULT 0`,
+		// fast_after_canary = the SAFE form of the same request: the canary keeps
+		// its ENTIRE six-hour observation window and must also report success while
+		// running the target, and only the nodes AFTER it skip the 30-minute soak
+		// (see RolloutTrack.FastAfterCanary). Added by ALTER, like the four columns
+		// above, so live databases migrate. 0 on every existing row = the behaviour
+		// that shipped before this column, which is the only safe default: a
+		// rollout already in flight when this deploys keeps whatever mode it was
+		// started in, and no track silently acquires a new one.
+		//
+		// Deliberately a SECOND column rather than a widening of manual_fast into
+		// an integer mode: the two modes' rows must be distinguishable by a live
+		// deployment mid-rollout (an old binary reading a widened manual_fast=2 as
+		// truthy would run the canary with no window at all, which is the exact
+		// failure this mode exists to prevent), and a boolean per mode makes the
+		// mutual exclusion something every writer states explicitly.
+		`ALTER TABLE node_rollout ADD COLUMN fast_after_canary INTEGER NOT NULL DEFAULT 0`,
 		// One row, enforced by the CHECK, holding what the last successful
 		// release check saw and which tag the operator dismissed. The two
 		// halves are written by separate statements so neither can clobber the

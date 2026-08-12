@@ -142,6 +142,14 @@ func (s *Service) confirmHandlerFor(action string) (http.HandlerFunc, bool) {
 		// afterwards, but because deciding to skip ~14 hours of observation is a
 		// judgement one click should not be able to make by accident.
 		AuditRolloutFast: s.handleAdminRolloutFast,
+		// The safe fast push keeps the canary's whole observation window and
+		// drops only the soak after it. It is behind step-up for the narrower of
+		// the reasons above: not "skip ~14 hours of observation", but "start a
+		// fleet-wide rollout right now", which is still not a decision one
+		// mis-click should be able to make — and keeping both fast actions on the
+		// same confirmation path is what stops the safe one becoming the
+		// unconfirmed shortcut that gets reached for under pressure.
+		AuditRolloutFastCanary: s.handleAdminRolloutFastCanary,
 	}
 	h, ok := m[action]
 	return h, ok

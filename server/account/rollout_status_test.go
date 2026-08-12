@@ -443,7 +443,7 @@ func TestByoNextStepLabel(t *testing.T) {
 // The rules line is generated from the constants, so tuning one moves the
 // state machine and the sentence together.
 func TestRulesTextIsGeneratedFromConstants(t *testing.T) {
-	fleet := fleetRulesText(false)
+	fleet := fleetRulesText(RolloutTrack{})
 	for _, want := range []string{humanDuration(fleetFirstWindow), humanDuration(fleetStepWindow)} {
 		if !strings.Contains(fleet, want) {
 			t.Fatalf("fleetRulesText = %q, want it to contain %q", fleet, want)
@@ -452,7 +452,7 @@ func TestRulesTextIsGeneratedFromConstants(t *testing.T) {
 	// The fast form states its own limit, and it must be the state machine's
 	// too: in that mode running out of patience is a HALT, so a hand-typed
 	// duration here would be the panel promising a deadline nothing enforces.
-	fast := fleetRulesText(true)
+	fast := fleetRulesText(RolloutTrack{ManualFast: true})
 	if !strings.Contains(fast, humanDuration(fleetInstallLimit)) {
 		t.Fatalf("fleetRulesText(fast) = %q, want it to contain %q", fast, humanDuration(fleetInstallLimit))
 	}
@@ -468,6 +468,29 @@ func TestRulesTextIsGeneratedFromConstants(t *testing.T) {
 	}
 	if !strings.Contains(fast, "10 分钟") {
 		t.Errorf("fleetRulesText(fast) = %q, want the old-client timer fallback stated", fast)
+	}
+	// The safe fast form has to state BOTH numbers, and from the same constants:
+	// the canary window it KEEPS (the one thing that makes this mode usable on a
+	// version the fleet has never run) and the reported-outcome limit whose
+	// expiry is a halt. A sentence that stated only the second would read exactly
+	// like the mode above it — which is the one mistake this pair of controls
+	// exists to make impossible.
+	safe := fleetRulesText(RolloutTrack{FastAfterCanary: true})
+	for _, want := range []string{
+		humanDuration(fleetFirstWindow),
+		humanDuration(fleetStepWindow),
+		humanDuration(fleetInstallLimit),
+		fmt.Sprintf("%d 秒", nodeHeartbeatInterval),
+		"10 分钟",
+	} {
+		if !strings.Contains(safe, want) {
+			t.Errorf("fleetRulesText(canary-then-fast) = %q, want it to contain %q", safe, want)
+		}
+	}
+	// And the three forms must be distinguishable from each other: an operator
+	// reads this line to know what is protecting the release in front of them.
+	if safe == fast || safe == fleet {
+		t.Errorf("the canary-then-fast rules line is not distinct: %q", safe)
 	}
 	if byo := byoRulesText(); !strings.Contains(byo, humanDuration(byoBatchWindow)) {
 		t.Fatalf("byoRulesText = %q, want it to contain %q", byo, humanDuration(byoBatchWindow))
@@ -580,14 +603,30 @@ func TestPanelStatusAgreesWithDecideFleet(t *testing.T) {
 	seenAges := ages[:5]
 
 	checked := 0
-	// manualFast is swept alongside emergency because it is the second flag
-	// that changes what decideFleet does with the node holding the slot -- it
-	// replaces both observation windows with "has this node REPORTED ok yet",
-	// bounded by fleetInstallLimit. A panel that kept printing window clocks in
-	// that mode would be calm about a node the state machine is about to halt
-	// the track on, which is exactly property 1 below.
+	// The MODE is swept alongside emergency because it is what changes what
+	// decideFleet does with the node holding the slot. Manual fast replaces both
+	// observation windows with "has this node REPORTED ok yet", bounded by
+	// fleetInstallLimit; canary-then-fast runs that same reported-outcome clock
+	// AND, on the canary only, the six-hour window after it. A panel that kept
+	// printing window clocks in the first, or dropped the window in the second,
+	// would be calm about a node the state machine is about to act on -- which is
+	// exactly property 1 below.
+	//
+	// All three modes are swept, and the sweep deliberately includes the
+	// impossible fourth combination only by NOT generating it: the modes are
+	// mutually exclusive at every write, so a row with both flags is a bug in a
+	// writer, not a state the panel is asked to describe.
+	modes := []struct {
+		name            string
+		manualFast      bool
+		fastAfterCanary bool
+	}{
+		{name: "staged"},
+		{name: "manual-fast", manualFast: true},
+		{name: "canary-then-fast", fastAfterCanary: true},
+	}
 	for _, status := range []string{"rolling", "halted", "complete"} {
-		for _, manualFast := range []bool{false, true} {
+		for _, mode := range modes {
 			for _, emergency := range []bool{false, true} {
 				for _, result := range []string{"", "ok", "failed", "rolled_back", "skipped", "unreachable"} {
 					for _, onTarget := range []bool{false, true} {
@@ -601,8 +640,9 @@ func TestPanelStatusAgreesWithDecideFleet(t *testing.T) {
 									for _, seen := range seenAges {
 										tr := RolloutTrack{
 											Track: "fleet", TargetVersion: target, Status: status,
-											Emergency: emergency, ManualFast: manualFast,
-											CurrentNodeID: nodeID, FirstNodeID: firstNodeID,
+											Emergency: emergency, ManualFast: mode.manualFast,
+											FastAfterCanary: mode.fastAfterCanary,
+											CurrentNodeID:   nodeID, FirstNodeID: firstNodeID,
 											StageStartedAt: now - stage.ago,
 										}
 										n := NodeSnapshot{
@@ -616,8 +656,8 @@ func TestPanelStatusAgreesWithDecideFleet(t *testing.T) {
 											n.Version = target
 										}
 										desc := fmt.Sprintf(
-											"status=%s manualFast=%v emergency=%v result=%q onTarget=%v firstNodeID=%q stage=%s update=%s lastSeen=%s",
-											status, manualFast, emergency, result, onTarget, firstNodeID, stage.name, started.name, seen.name)
+											"status=%s mode=%s emergency=%v result=%q onTarget=%v firstNodeID=%q stage=%s update=%s lastSeen=%s",
+											status, mode.name, emergency, result, onTarget, firstNodeID, stage.name, started.name, seen.name)
 										assertPanelAgreesWithDecideFleet(t, desc, tr, n, now, far)
 										checked++
 
