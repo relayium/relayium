@@ -47,6 +47,16 @@ type heartbeatResp struct {
 	OK                bool `json:"ok"`
 	HeartbeatInterval int  `json:"heartbeatInterval"`
 	nodeLimits
+	// UpdateCheckNow is central asking this machine's ROOT UPDATER to poll now
+	// rather than waiting out its ~10-minute timer. It is set only during a
+	// manual fast fleet rollout and only while it is this node's turn.
+	//
+	// This process does NOT act on it beyond touching a marker file the root
+	// updater's path unit watches (see updaterequest.go): it has no authority to
+	// replace the binary, and central deliberately sends no version, path or URL
+	// here that could be relayed upward as an instruction. An older central omits
+	// the key entirely, which decodes as false — the ordinary state.
+	UpdateCheckNow bool `json:"updateCheckNow"`
 }
 
 type usageItem struct {

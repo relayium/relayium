@@ -29,11 +29,43 @@
 #                               downloaded and signature-verified locally, same as
 #                               this installer does. Set to off (and re-run this
 #                               installer) to disable and remove the timer.
+#                               With it ON, this also installs a tiny path unit so
+#                               central can ask a node to check NOW instead of
+#                               waiting out the timer (used by the admin console's
+#                               manual fast fleet push). The node service itself
+#                               still cannot install anything — all it may do is
+#                               touch one file in /run/relayium-node, which the
+#                               root-owned path unit watches; the dedicated root
+#                               updater then re-asks central and verifies the
+#                               release signature itself.
+#   RELAYIUM_NODE_PREFIX        path prefix for every system path, for testing only
+#                               (see scripts/test/install-node-test.sh). A prefixed
+#                               run touches nothing under / and needs no root.
 set -eu
 
 REPO="relayium/relayium"
 BASE_URL="${RELAYIUM_BASE_URL:-https://github.com/${REPO}/releases/latest/download}"
 INSTALL_DIR="${RELAYIUM_INSTALL_DIR:-/usr/local/bin}"
+
+# PREFIX exists so the unit generation below can be exercised against a scratch
+# directory, exactly as uninstall-node.sh already allows. It prefixes the
+# on-disk paths this script WRITES; it deliberately does NOT prefix paths that
+# appear INSIDE generated units and are resolved by systemd at runtime
+# (RuntimeDirectory=, /run/relayium-node), which are always absolute on a real
+# host and are never touched by a prefixed run.
+PREFIX="${RELAYIUM_NODE_PREFIX:-}"
+CONF_DIR="${PREFIX}/etc/relayium-node"
+UNIT_DIR="${PREFIX}/etc/systemd/system"
+STATE_DIR="${PREFIX}/var/lib/relayium-node"
+
+# The node service's systemd RuntimeDirectory, and the marker file inside it
+# that the node process touches to ask the root updater to poll central now.
+# Kept as one definition because three places have to agree: the node unit that
+# creates the directory, the path unit that watches the file, and the env file
+# that tells the (separately-run) updater where to look.
+RUNTIME_DIR_NAME="relayium-node"
+RUNTIME_DIR="/run/${RUNTIME_DIR_NAME}"
+UPDATE_REQUEST_FILE="${RUNTIME_DIR}/update-requested"
 
 err() { echo "relayium-node-install: $*" >&2; exit 1; }
 
@@ -117,8 +149,8 @@ if [ "$(id -u)" = "0" ] && command -v systemctl >/dev/null 2>&1; then
       || useradd --system --no-create-home relayium-node 2>/dev/null || true
   fi
 
-  mkdir -p /etc/relayium-node
-  cat > /etc/relayium-node/env <<EOF
+  mkdir -p "${CONF_DIR}"
+  cat > "${CONF_DIR}/env" <<EOF
 RELAYIUM_CENTRAL_URL=${RELAYIUM_CENTRAL_URL}
 RELAYIUM_NODE_TOKEN=${RELAYIUM_NODE_TOKEN}
 RELAYIUM_NODE_REGION=${RELAYIUM_NODE_REGION:-}
@@ -134,8 +166,9 @@ RELAYIUM_NODE_MAX_PORT=${RELAYIUM_NODE_MAX_PORT:-}
 RELAYIUM_NODE_BIN=${INSTALL_DIR}/relayium-node
 RELAYIUM_NODE_UPDATE_BASE=${RELAYIUM_NODE_UPDATE_BASE:-}
 RELAYIUM_NODE_AUTO_UPDATE=${RELAYIUM_NODE_AUTO_UPDATE:-on}
+RELAYIUM_NODE_RUNTIME_DIR=${RUNTIME_DIR}
 EOF
-  chmod 0600 /etc/relayium-node/env
+  chmod 0600 "${CONF_DIR}/env"
 
   # A public download listener on a privileged port (<1024, e.g. :443) needs
   # CAP_NET_BIND_SERVICE — the only capability we ever grant this otherwise
@@ -178,7 +211,7 @@ AmbientCapabilities=CAP_NET_BIND_SERVICE"
   warn_busy u "${RELAYIUM_NODE_TURN_PORT:-3478}" "TURN" "RELAYIUM_NODE_TURN_PORT"
 
   # Hand the state dir to the node user (also migrates a prior root install).
-  [ -d /var/lib/relayium-node ] && chown -R relayium-node:relayium-node /var/lib/relayium-node 2>/dev/null || true
+  [ -d "${STATE_DIR}" ] && chown -R relayium-node:relayium-node "${STATE_DIR}" 2>/dev/null || true
 
   # If this node stores blobs, create + lock down the storage dir and grant the
   # sandbox write+noexec on exactly that path (nothing else on disk is writable).
@@ -191,7 +224,7 @@ AmbientCapabilities=CAP_NET_BIND_SERVICE"
 NoExecPaths=${RELAYIUM_NODE_STORAGE_DIR}"
   fi
 
-  cat > /etc/systemd/system/relayium-node.service <<EOF
+  cat > "${UNIT_DIR}/relayium-node.service" <<EOF
 [Unit]
 Description=Relayium relay node
 After=network-online.target
@@ -202,13 +235,26 @@ Wants=network-online.target
 # for what each hardening line defends against.
 User=relayium-node
 Group=relayium-node
-EnvironmentFile=/etc/relayium-node/env
+EnvironmentFile=${CONF_DIR}/env
 ExecStart=${INSTALL_DIR}/relayium-node
 Restart=always
 RestartSec=5
 TimeoutStopSec=90
 StateDirectory=relayium-node
 StateDirectoryMode=0700
+# ${RUNTIME_DIR}, owned by this service user, mode 0700, and destroyed when the
+# service stops. It holds exactly one thing: the marker this process touches to
+# ask the ROOT updater to poll central now (used by the admin console's manual
+# fast fleet push, which otherwise waits out the updater's ~10min timer).
+#
+# This is the ONLY new authority the node service has, and it is not an
+# authority to install anything: the marker is empty, its contents are never
+# read, and the root updater re-asks central for the version and verifies the
+# release signature itself. The node still cannot write ${INSTALL_DIR} — that is
+# what ProtectSystem=strict below denies it, and there is deliberately no
+# ReadWritePaths for it.
+RuntimeDirectory=${RUNTIME_DIR_NAME}
+RuntimeDirectoryMode=0700
 
 # Hardening — cap the blast radius if the node is ever compromised.
 NoNewPrivileges=yes
@@ -249,8 +295,9 @@ EOF
   # ...) exists to deny it. Keeping that power in one small, single-purpose
   # unit — rather than loosening the node's own hardening — is the point.
   auto_update="${RELAYIUM_NODE_AUTO_UPDATE:-on}"
-  update_service=/etc/systemd/system/relayium-node-update.service
-  update_timer=/etc/systemd/system/relayium-node-update.timer
+  update_service="${UNIT_DIR}/relayium-node-update.service"
+  update_timer="${UNIT_DIR}/relayium-node-update.timer"
+  update_request_path="${UNIT_DIR}/relayium-node-update-request.path"
   if [ "$auto_update" = "on" ]; then
     cat > "$update_service" <<EOF
 [Unit]
@@ -259,7 +306,7 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-EnvironmentFile=/etc/relayium-node/env
+EnvironmentFile=${CONF_DIR}/env
 ExecStart=${INSTALL_DIR}/relayium-node update
 # The watchdog waits up to 10 minutes for the new version to prove itself.
 # systemd's default TimeoutStartSec (90s) would SIGTERM the updater mid-watch,
@@ -283,15 +330,61 @@ Persistent=true
 [Install]
 WantedBy=timers.target
 EOF
+
+    # The immediate-check channel. The timer above answers "eventually"; this
+    # answers "now", and it is what makes the admin console's manual fast fleet
+    # push actually fast — without it each node still waits out its own ~10min
+    # timer before discovering its turn, which on a 16-machine fleet is over two
+    # hours of pure polling latency.
+    #
+    # It is deliberately the narrowest thing that can work, and every line is a
+    # boundary:
+    #   · PathExists names ONE file, inside the node service's own runtime
+    #     directory. That file is the only thing the unprivileged node process
+    #     can create, and it is created EMPTY — the node cannot hand root a
+    #     version, a path or a URL, because there is nothing in the channel to
+    #     carry one.
+    #   · Unit= names ONE unit: the dedicated root updater above, which already
+    #     existed and which re-queries central and verifies the release
+    #     signature against a key compiled into the binary. So the node's
+    #     request cannot decide WHAT gets installed, only that the question is
+    #     asked sooner.
+    #   · PathExists (not PathChanged/PathModified) means a write to an
+    #     already-present marker does nothing; systemd re-arms after the updater
+    #     deactivates, and the updater deletes the marker as it starts, so a
+    #     request is consumed exactly once and cannot loop.
+    #   · This unit is root-owned under ${UNIT_DIR}, like every other unit here.
+    #     The node service has no write access to it — ProtectSystem=strict.
+    #
+    # Nothing depends on it: a host that has not re-run this installer has no
+    # path unit, its node writes a marker into a directory that does not exist,
+    # the request is silently skipped, and the timer keeps driving updates.
+    cat > "$update_request_path" <<EOF
+[Unit]
+Description=Relayium node update-check request (asks the root updater to poll central now)
+
+[Path]
+PathExists=${UPDATE_REQUEST_FILE}
+Unit=relayium-node-update.service
+
+[Install]
+WantedBy=paths.target
+EOF
     systemctl daemon-reload
     systemctl enable --now relayium-node-update.timer
+    systemctl enable --now relayium-node-update-request.path
     echo "relayium-node-update.timer enabled — polls central for a new version every ~10min (auto-update: on)"
+    echo "relayium-node-update-request.path enabled — lets central ask this node to check immediately;"
+    echo "  it can only trigger that same updater, which still asks central itself and verifies the signature."
   else
-    if [ -f "$update_timer" ] || [ -f "$update_service" ]; then
+    if [ -f "$update_timer" ] || [ -f "$update_service" ] || [ -f "$update_request_path" ]; then
+      # Disable before deleting, so a host whose systemd is still running does
+      # not keep an enabled unit pointing at a file that is about to vanish.
       systemctl disable --now relayium-node-update.timer 2>/dev/null || true
-      rm -f "$update_timer" "$update_service"
+      systemctl disable --now relayium-node-update-request.path 2>/dev/null || true
+      rm -f "$update_timer" "$update_service" "$update_request_path"
       systemctl daemon-reload
-      echo "relayium-node-update.timer disabled and removed (RELAYIUM_NODE_AUTO_UPDATE=off)"
+      echo "relayium-node-update.timer and relayium-node-update-request.path disabled and removed (RELAYIUM_NODE_AUTO_UPDATE=off)"
     else
       echo "auto-update: off (RELAYIUM_NODE_AUTO_UPDATE=off) — not installing the update timer"
     fi
@@ -304,8 +397,8 @@ EOF
   # relay-only node and a storage node were just set up differently, so the
   # summary must say different things about them.
   if [ "$auto_update" = "on" ]; then
-    update_units=", relayium-node-update.service, relayium-node-update.timer"
-    update_state="enabled — central hands out only a version NUMBER; the binary itself is downloaded and signature-verified on this machine by a key compiled into the updater, the same check this installer just did (RELAYIUM_NODE_AUTO_UPDATE=off to disable)"
+    update_units=", relayium-node-update.service, relayium-node-update.timer, relayium-node-update-request.path"
+    update_state="enabled — central hands out only a version NUMBER; the binary itself is downloaded and signature-verified on this machine by a key compiled into the updater, the same check this installer just did. Central may also ask this node to check immediately instead of waiting ~10min: the node then touches one empty file in ${RUNTIME_DIR}, and the root-owned path unit starts that same updater — the node service itself can neither install anything nor say what to install (RELAYIUM_NODE_AUTO_UPDATE=off to disable)"
   else
     update_units=""
     update_state="disabled (RELAYIUM_NODE_AUTO_UPDATE=off) — re-run this installer with RELAYIUM_NODE_AUTO_UPDATE=on to enable"

@@ -77,6 +77,20 @@ func (s *Service) beforeImageFor(ctx context.Context, action, pathID string, for
 			},
 			rolloutAuditTarget(pathID), nil
 
+	// The manual fast push's page must state the same three things, with the
+	// third one different: the version, WHICH TRACK (always fleet — the route
+	// has no other), and that what is being skipped is the WAITING rather than
+	// the staging. "mode" is spelled out as a diff row rather than left to the
+	// banner alone, because the banner is prose an operator can skim and the
+	// diff table is the part they have to read past.
+	case AuditRolloutFast:
+		return map[string]any{}, map[string]any{
+				"track":          "fleet",
+				"target_version": form.Get("version"),
+				"mode":           "manual-fast (one node at a time, no canary/soak wait)",
+			},
+			rolloutAuditTarget("fleet"), nil
+
 	case AuditPasskeyDelete:
 		return map[string]any{}, map[string]any{}, "passkey:" + form.Get("id"), nil
 

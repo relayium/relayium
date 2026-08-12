@@ -1204,6 +1204,39 @@ type RolloutTrack struct {
 	// whose failure could stop it. The admin's 暂停 (pause) control is the kill
 	// switch, since a track that is not 'rolling' is inert on every path.
 	Emergency bool
+	// ManualFast makes the fleet ladder run at speed instead of over ~14 hours.
+	// It removes exactly one thing — the WAITING: the canary's 6h observation
+	// window and the 30min soak between nodes (see decideFleet). Everything the
+	// staged ladder does to stop a bad release is kept, and that list is why the
+	// mode exists separately from Emergency:
+	//
+	//   - at most ONE fleet node holds the slot at a time, via the same
+	//     ClaimRolloutNode compare-and-swap;
+	//   - every node still downloads, signature-verifies, installs, restarts and
+	//     passes its own updater health watch, local rollback intact;
+	//   - the queue advances only once the node in flight has REPORTED "ok" — not
+	//     merely once it is SEEN on the target version, which happens the moment
+	//     the new binary starts, up to healthWindow before its updater has
+	//     decided whether to roll it back;
+	//   - a failure, rollback, silence, wedge, missing or contradictory result
+	//     halts the track before any later node is commanded.
+	//
+	// So it is the opposite of Emergency, which releases the whole track at once
+	// with no queue and no failure gating: Emergency trades safety for reach,
+	// this trades nothing but time. One action must never set both.
+	//
+	// FLEET ONLY, by construction rather than by a check: the only writer is
+	// Service.StartManualFastFleetRollout, which takes no track parameter, behind
+	// a route with "fleet" spelled out. The byo ladder exists to keep our own
+	// fleet ahead of every user's machine, and "faster" is not a reason to
+	// mass-push hardware we do not own.
+	//
+	// Cleared by every other way a track's state is written (SetTargetVersion's
+	// whole-row replace writes it false, ResumeRolloutTrack and
+	// CompleteRolloutTrack zero it), so a track cannot be left in fast mode by
+	// accident. HaltRolloutTrack is the deliberate exception: a halted track
+	// keeps the flag so the panel can say which kind of rollout stopped.
+	ManualFast bool
 }
 
 // Setting is one admin-editable integer config value (bytes or seconds).
@@ -2007,6 +2040,17 @@ type Store interface {
 	// other. ok=false means the track was not halted (already rolling, or
 	// complete) and NOTHING was written, node rows included.
 	ResumeRolloutTrack(ctx context.Context, track string, at int64) (bool, error)
+	// StartManualFastRollout points a track at version, arms manual-fast mode
+	// (RolloutTrack.ManualFast) and starts it rolling — but ONLY if the row is
+	// still exactly what the operator was shown: either no row at all
+	// (expectStatus "") or a FINISHED one on expectTargetVersion (expectStatus
+	// "complete"). Any other expectStatus is refused without touching the
+	// database, so this can never replace a rollout in flight or resurrect a
+	// paused one. It clears this track's passed-over node results in the same
+	// transaction, exactly as ResumeRolloutTrack does, because it is another way
+	// a ladder starts. ok=false means the row moved (or appeared) since the
+	// confirmation page was rendered and NOTHING was written, node rows included.
+	StartManualFastRollout(ctx context.Context, track, expectStatus, expectTargetVersion, version string, at int64) (bool, error)
 	// RetryRolloutNode gives one passed-over node its candidacy back on a
 	// COMPLETE track and sets that track rolling again, so the queue re-offers
 	// the same target version to it. It touches neither target_version nor

@@ -37,12 +37,20 @@ type rolloutPanelView struct {
 	// worse), which must never affect the other panel.
 	Err bool
 	// Configured is false when no rollout has ever been started on this track.
-	Configured     bool
-	TargetVersion  string
-	Status         string // raw "rolling" | "halted" | "complete"
-	StatusText     string // Chinese label for the above
-	HaltedReason   string
-	Emergency      bool
+	Configured    bool
+	TargetVersion string
+	Status        string // raw "rolling" | "halted" | "complete"
+	StatusText    string // Chinese label for the above
+	HaltedReason  string
+	Emergency     bool
+	// ManualFast is the fleet track running its ladder without the waiting (see
+	// RolloutTrack.ManualFast). It is a SEPARATE field from Emergency and
+	// renders a separate badge, because the two are opposite claims about what
+	// is protecting this release: an emergency has no queue and no failure
+	// gating left, a manual fast push has both. One badge with two meanings
+	// would tell an operator the wrong thing at the exact moment they are
+	// deciding whether to intervene.
+	ManualFast     bool
 	StageStartedAt int64
 	// CurrentNodeID (fleet) is the node in flight; ByoBatch (byo) is the batch
 	// percentage currently open. Each is meaningless on the other track, and
@@ -266,6 +274,32 @@ func rolloutTrackLabel(track string) string {
 	return track
 }
 
+// confirmBlastFor resolves the confirmation page's blast banner for an action:
+// which track it hits, and which of the two banners to render ("emergency" or
+// "fast"). The prose itself lives in adminConfirmTmpl — see
+// confirmPageData.TrackNotice for why.
+//
+// Both values come from ONE function so they cannot diverge. Resolved
+// separately, an action added to one switch and forgotten in the other would
+// render a page with a track and the WRONG banner — telling an operator they
+// were about to release the whole track at once, or the opposite. A missing
+// banner is a visible gap; a wrong one is a lie, and this is the page whose
+// entire job is not lying.
+//
+// Emergency reads its track from the path wildcard (registered on {id}, aimable
+// at either track); the manual fast push is fleet-only by route, so its track is
+// a constant rather than anything read from the request. ("", "") means no
+// banner: correct for every action whose blast radius is a form field.
+func confirmBlastFor(action, pathID string) (track, notice string) {
+	switch action {
+	case AuditRolloutEmergency:
+		return pathID, "emergency"
+	case AuditRolloutFast:
+		return "fleet", "fast"
+	}
+	return "", ""
+}
+
 // rolloutOwnerClass maps a track to the nodes.owner_type it governs. The owner
 // type IS the track (see handleUpdateCheck): our machines roll on "fleet",
 // users' machines on "byo", and neither is ever read across.
@@ -312,7 +346,7 @@ func (s *Service) rolloutPanel(ctx context.Context, track, title string, now tim
 	p.TargetVersion, p.Status = tr.TargetVersion, tr.Status
 	p.StatusText = rolloutStatusText(tr.Status, found)
 	if track == "fleet" {
-		p.RulesText = fleetRulesText()
+		p.RulesText = fleetRulesText(tr.ManualFast)
 	} else {
 		p.RulesText = byoRulesText()
 		// !tr.Emergency is part of the precondition, not a nicety: nodes.go:470
@@ -327,7 +361,7 @@ func (s *Service) rolloutPanel(ctx context.Context, track, title string, now tim
 			p.NextStepLabel = byoNextStepLabel(tr.ByoBatch)
 		}
 	}
-	p.HaltedReason, p.Emergency = tr.HaltedReason, tr.Emergency
+	p.HaltedReason, p.Emergency, p.ManualFast = tr.HaltedReason, tr.Emergency, tr.ManualFast
 	p.StageStartedAt, p.CurrentNodeID, p.ByoBatch = tr.StageStartedAt, tr.CurrentNodeID, tr.ByoBatch
 	p.FirstNodeID = tr.FirstNodeID
 	if track == "byo" {
@@ -874,6 +908,111 @@ func (s *Service) handleAdminRolloutRetry(w http.ResponseWriter, r *http.Request
 		}, StepUpNone)
 	http.Redirect(w, r, "/admin", http.StatusFound)
 }
+
+// handleAdminRolloutFast starts a MANUAL FAST fleet rollout: the ordinary
+// staged ladder, minus its waiting. One node at a time, every node's own
+// install/restart/health check/rollback intact, a halt on the first bad result
+// — and no 6h canary observation, no 30min soak between machines. It is the
+// answer to "this fix has to be on the fleet today", without being the answer
+// to "release it to everyone at once", which is what 紧急发布 already is and
+// what this must never quietly become.
+//
+// Registered on a path with "fleet" spelled out rather than on the {id}
+// wildcard. That is invariant 1 expressed structurally: the BYO track is every
+// user's machine, and the safest way to say "never mass-push hardware we do not
+// own" is for there to be no route that could. A byo POST 404s, and
+// Service.StartManualFastFleetRollout takes no track parameter either.
+//
+// It sits behind RequireStepUp, so by the time this runs the operator has seen a
+// confirmation page naming the fleet track, the version, and — the part that
+// distinguishes this page from the emergency one — what is still guaranteed.
+// HandleAdminConfirm writes the audit entry (rollout.fast) once this returns a
+// non-error status, so this handler must NOT write its own: that would double-log
+// it, and log it without the step-up factor.
+//
+// THREE GUARDS, and none of them is "the button was not rendered":
+//
+//  1. WHICH version — validated as a plain release tag by the service call, the
+//     same chokepoint the staged target box uses.
+//  2. WHAT STATE — the fleet track must be neither rolling (starting here would
+//     abandon a rollout in flight, discarding up to six hours of canary
+//     observation on one click) nor halted (restarting a paused rollout is
+//     继续's job, which returns it to the STAGED ladder on purpose).
+//  3. WHAT THE OPERATOR SAW — from_status/from_version carry the panel's state
+//     at render time. Without them a page showing "已完成 v1.0.0" could, minutes
+//     later, ship over a rollout that had since started and passed its canary.
+//
+// Guards 2 and 3 are re-read here AND expressed in the store's compare-and-swap.
+// That is not belt-and-braces: the read below and the write are separate
+// statements against a multi-instance deployment, so only the SQL can stop a
+// rollout that starts in between; these branches exist to turn the refusal into
+// a message that says which condition failed.
+func (s *Service) handleAdminRolloutFast(w http.ResponseWriter, r *http.Request) {
+	if !s.isAdminReq(r) {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	version := strings.TrimSpace(r.FormValue("version"))
+	fromStatus := strings.TrimSpace(r.FormValue("from_status"))
+	fromVersion := strings.TrimSpace(r.FormValue("from_version"))
+
+	before, found, err := s.Store().GetRolloutTrack(r.Context(), "fleet")
+	if err != nil {
+		s.renderAdminRolloutError(w, r, http.StatusInternalServerError, "手动快速发布失败："+err.Error())
+		return
+	}
+	// Guard 2, as a message. The store refuses anything but these two states too
+	// (that is the race-safe half); this branch exists so the operator is told
+	// WHICH state stopped them rather than getting the staleness message.
+	//
+	// The condition is "not complete" rather than "rolling or halted", so it
+	// matches StartManualFastRollout's accepted set exactly. Enumerating the two
+	// bad statuses instead would let any third value (a row whose status column
+	// is still at its schema default) pass this guard, fail the store's, and be
+	// reported as a stale page — a control that refuses forever while telling the
+	// operator to refresh.
+	if found && before.Status != "complete" {
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest,
+			"手动快速发布失败：机队轨当前是「"+rolloutStatusText(before.Status, found)+"」。"+
+				"手动快速发布只能在机队轨已经结束（「已完成」）或从未启动过时开始——"+
+				"请先在下方机队面板里处理这一轮：正在发布中就等它跑完或先「暂停」，"+
+				"已暂停就用「继续」（会回到常规分批节奏）。")
+		return
+	}
+	// Guard 3, as a message. The same comparison is the store's compare-and-swap
+	// a moment later; this one only turns "the page you clicked from is stale"
+	// into words while the values are still to hand.
+	curStatus, curVersion := "", ""
+	if found {
+		curStatus, curVersion = before.Status, before.TargetVersion
+	}
+	if fromStatus != curStatus || fromVersion != curVersion {
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest, staleFastRolloutMessage)
+		return
+	}
+
+	if err := s.StartManualFastFleetRollout(r.Context(), curStatus, curVersion, version); err != nil {
+		if errors.Is(err, ErrFastRolloutStateChanged) {
+			// The compare-and-swap refused: the track moved between the read
+			// above and the write. Nothing was written.
+			s.renderAdminRolloutError(w, r, http.StatusBadRequest, staleFastRolloutMessage)
+			return
+		}
+		// Everything else reaching here is the version check, which is the
+		// operator's input and legible as-is.
+		s.renderAdminRolloutError(w, r, http.StatusBadRequest, "手动快速发布失败："+err.Error())
+		return
+	}
+	http.Redirect(w, r, "/admin", http.StatusFound)
+}
+
+// staleFastRolloutMessage is shared by the handler's own staleness check and by
+// the store compare-and-swap's refusal, because the two describe the SAME thing
+// to the operator — what you were looking at is no longer true, and nothing was
+// written — and only differ in how narrowly they raced. One string so they
+// cannot drift into contradicting each other.
+const staleFastRolloutMessage = "手动快速发布失败：机队轨的状态在你确认之后发生了变化，" +
+	"本次操作没有改动任何东西。请刷新 /admin 重新确认当前目标版本与状态后再试。"
 
 // handleAdminRolloutEmergency releases the whole track at once: a single write
 // points the track at the target AND arms emergency mode, which makes the

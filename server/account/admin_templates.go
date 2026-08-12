@@ -163,14 +163,23 @@ type confirmPageData struct {
 	Token  string // pending-action token; echoed back as the confirm_token field
 	Action string // audit action name (AuditSettings etc.), shown for context
 	Target string // "-" for global actions, "plan:x" / "node:x" for scoped ones
-	// Track / TrackLabel are set for the emergency release only, and the page
-	// renders them as a banner above the diff. They exist because that action's
-	// blast radius is decided by the path wildcard ("fleet" = our own machines,
-	// "byo" = every user's machine) rather than by any form field, and a
-	// confirmation page that does not say which one is not a confirmation.
-	// Empty for every other action.
+	// Track / TrackLabel are set for the two ladder-changing rollout actions
+	// only, and the page renders them as a banner above the diff. They exist
+	// because those actions' blast radius is decided by the route ("fleet" = our
+	// own machines, "byo" = every user's machine) rather than by any form field,
+	// and a confirmation page that does not say which one is not a
+	// confirmation. Empty for every other action.
 	Track      string
 	TrackLabel string
+	// TrackNotice selects WHICH banner to render: "emergency" or "fast". A
+	// discriminator, never the prose — the two actions give up materially
+	// different things, so a shared parameterised sentence would be one edit
+	// away from describing one while performing the other. Keeping both texts as
+	// literals in the template also keeps them inside the console's translation
+	// guard, which scans this file: copy that leaves admin_templates.go silently
+	// leaves the English map behind with it. Set together with Track by
+	// confirmBlastFor.
+	TrackNotice string
 	// Changes is the field-level diff (diffFields' output) — the actual
 	// anti-misclick mechanism: naming exactly what would change, not just
 	// that "something" would.
@@ -249,7 +258,7 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 {{if .Err}}
 <p class="err">{{t $.Lang "读取该轨道状态失败，控制按钮已隐藏（另一条轨道不受影响）。"}}</p>
 {{else}}
-<p class="ro-state">{{t $.Lang "目标版本："}}<b>{{if .TargetVersion}}{{.TargetVersion}}{{else}}—{{end}}</b>{{t $.Lang "· 状态："}}<b>{{.StatusText}}</b>{{if .Emergency}} <span class="ro-emg">{{t $.Lang "紧急发布中（已跳过分批）"}}</span>{{end}} ·
+<p class="ro-state">{{t $.Lang "目标版本："}}<b>{{if .TargetVersion}}{{.TargetVersion}}{{else}}—{{end}}</b>{{t $.Lang "· 状态："}}<b>{{.StatusText}}</b>{{if .Emergency}} <span class="ro-emg">{{t $.Lang "紧急发布中（已跳过分批）"}}</span>{{end}}{{if .ManualFast}} <span class="ro-emg">{{t $.Lang "手动快速发布中（仍逐台，不设观察窗）"}}</span>{{end}} ·
 {{t $.Lang "进度："}}{{.OnTarget}}/{{.Total}} {{t $.Lang "台已在目标版本"}} ·
 {{if eq .Track "fleet"}}{{t $.Lang "正在更新："}}{{if .CurrentNodeID}}{{.CurrentNodeID}}{{else}}—{{end}}
 {{else}}{{t $.Lang "当前批次："}}{{if .ByoBatch}}{{.ByoBatch}}%{{else}}{{t $.Lang "未开批"}}{{end}}{{end}}
@@ -287,6 +296,23 @@ const rolloutPanelTmpl = `{{define "rolloutPanel"}}
 <input type="text" name="version" placeholder="v1.2.4" title="{{t $.Lang "紧急发布的版本"}}" style="width:110px">
 <button type="submit" class="danger">{{t $.Lang "紧急发布"}}</button>
 </form>
+{{/* 手动快速发布：机队轨专有，且只在这条轨道已经结束时才给出。
+     · action 里写死 fleet：路由只有 fleet 一条，渲染在 byo 面板上只会是个必然
+       404 的按钮，更糟的是让人以为我们愿意批量推用户自己的机器。
+     · 正在发布中 / 已暂停时不渲染：这个动作不能接管一轮在飞的发布，handler 和
+       store 都会拒绝。按钮不在场从来不是守卫（handler 会重读全部条件），但一个
+       唯一可能结果是被拒绝的按钮比没有按钮更糟。
+     · from_status / from_version 把这次渲染看到的状态一起提交回去，handler 与
+       store 都拿它比对：没有它，一个还停在「已完成 v1.0.0」的旧页面就能覆盖掉
+       这期间新开的一轮发布。 */}}
+{{if and (eq .Track "fleet") (or (not .Configured) (eq .Status "complete"))}}
+<form method="post" action="/admin/rollout/fleet/fast" class="lim">
+<input type="hidden" name="from_status" value="{{.Status}}">
+<input type="hidden" name="from_version" value="{{.TargetVersion}}">
+<input type="text" name="version" placeholder="v1.2.4" title="{{t $.Lang "手动快速发布的版本"}}" style="width:110px">
+<button type="submit" title="{{t $.Lang "立刻开始一轮机队发布：不设观察窗、节点之间不等待，但仍一次一台，任一台没有回报成功即中止"}}">{{t $.Lang "手动快速发布"}}</button>
+</form>
+{{end}}
 </div>
 
 <table>
@@ -454,11 +480,24 @@ button:hover{filter:brightness(1.07)}
 <h1>{{t $.Lang "请确认这项操作"}}</h1>
 <p class="sub">{{t $.Lang "动作："}}<code>{{.Action}}</code>{{if ne .Target "-"}} · {{t $.Lang "目标："}}<code>{{.Target}}</code>{{end}}</p>
 
+{{/* 两种「跳过阶梯」的确认横幅。两段文案分开写死、不做参数化：紧急发布放弃的是
+     队列**和**失败闸门，手动快速发布放弃的只有等待。用一句可替换的话描述两者，
+     迟早会有人照着其中一个的说明确认了另一个——而这一页的全部意义就是别让这
+     种事发生。"仍然保证什么"那段只有快速发布有：紧急发布在这里没有可承诺的。
+     两个分支都显式判断，没有兜底文案：将来多一个动作而漏了它的横幅，页面会
+     少一段（看得见的缺口），而不是挂上另一个动作的说明（谎话）。 */}}
 {{if .Track}}
 <div class="blast">
+{{if eq .TrackNotice "emergency"}}
 <p class="t">{{t $.Lang "⚠ 紧急发布：跳过金丝雀与分批，整条轨道一次性放行"}}</p>
+{{else if eq .TrackNotice "fast"}}
+<p class="t">{{t $.Lang "⚠ 手动快速发布：跳过 canary 观察窗与节点之间的等待，立刻开始发布"}}</p>
+{{end}}
 <p class="track">{{t $.Lang "轨道："}}{{.Track}}</p>
 <p class="who">{{.TrackLabel}}</p>
+{{if eq .TrackNotice "fast"}}
+<p class="who">{{t $.Lang "仍然逐台进行：一次只更新一台节点，每台都要自己校验签名、安装、重启并通过健康检查，并回报成功，队列才会继续下一台。只有「成功」才算过关：失败、回滚、跳过、拿不到产物或超时都会立刻中止本次发布，后面的节点不会被下发。"}}</p>
+{{end}}
 </div>
 {{end}}
 

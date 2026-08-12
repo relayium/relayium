@@ -80,7 +80,7 @@ func TestSendHeartbeatReportsActiveTransfers(t *testing.T) {
 	}))
 	defer central.Close()
 
-	sendHeartbeat(newReporter(central.URL, "tok"), "node-1", reg, "", t.TempDir(), nil, nil)
+	sendHeartbeat(newReporter(central.URL, "tok"), "node-1", reg, "", t.TempDir(), nil, nil, nil)
 
 	if got.ActiveTransfers != 2 {
 		t.Fatalf("heartbeat activeTransfers = %d, want 2 (two live allocations)", got.ActiveTransfers)

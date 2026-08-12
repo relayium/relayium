@@ -29,3 +29,17 @@ jobs:
       # status. Pure POSIX sh with stubbed systemctl/curl — no node required.
       - name: uninstall-node.sh decision matrix
         run: sh scripts/test/uninstall-node-test.sh
+
+  install-node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      # web/public/install-node.sh decides what privileges a relay node has on
+      # its host, and the properties that keep the unprivileged node service
+      # unable to install anything live entirely in generated systemd units —
+      # which unit a node-writable file may trigger, who owns the runtime
+      # directory, and the absence of any write path to the binary. None of that
+      # is reachable from Go tests. Pure POSIX sh with stubbed
+      # id/systemctl/useradd and a file:// release — no root, no network.
+      - name: install-node.sh unit generation
+        run: sh scripts/test/install-node-test.sh

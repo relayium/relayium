@@ -42,6 +42,20 @@ const (
 	// rollout, and for which node" is exactly the question an incident review
 	// asks. Collapsing it into rollout.resume would lose the node.
 	AuditRolloutRetry = "rollout.retry"
+	// AuditRolloutFast is the manual fast fleet push: start a rollout NOW and
+	// run the fleet ladder without its canary observation window or its
+	// between-node soak, while keeping one-node-at-a-time, each node's own
+	// install/health/rollback, and the halt on any bad result.
+	//
+	// Its own action, and this is the case where sharing one would do the most
+	// damage. It is NOT rollout.emergency: that action deliberately releases the
+	// whole track at once with no queue and no failure gating, and an incident
+	// review reading "rollout.emergency" would conclude the operator had
+	// abandoned staging entirely when they had not. It is not rollout.target
+	// either — "who chose to skip ~14 hours of observation, and when" is exactly
+	// the question a post-incident review asks, and it must be answerable from
+	// the action name alone rather than by inferring it from a changes field.
+	AuditRolloutFast = "rollout.fast"
 	// AuditReleaseRollout is the release-notice "发布到机队" button. It funnels
 	// into the exact same SetTargetVersion write as AuditRolloutTarget (the
 	// hand-typed fleet-target form), and gets a SEPARATE action anyway — same
@@ -70,7 +84,7 @@ var auditActions = []string{
 	AuditNodeLabel, AuditNodeDraining, AuditNodeRestore, AuditNodeRemove, AuditNodeDeregister,
 	AuditTokenMint, AuditTokenRevoke, AuditPasskeyDelete,
 	AuditRolloutTarget, AuditRolloutPause, AuditRolloutResume,
-	AuditRolloutRollback, AuditRolloutEmergency, AuditRolloutRetry,
+	AuditRolloutRollback, AuditRolloutEmergency, AuditRolloutRetry, AuditRolloutFast,
 	AuditReleaseRollout, AuditReleaseDismiss,
 }
 

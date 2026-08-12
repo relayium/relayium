@@ -549,19 +549,28 @@ fi
 # an error.
 # ---------------------------------------------------------------------------
 if command -v systemctl >/dev/null 2>&1; then
-  for unit in relayium-node.service relayium-node-update.timer relayium-node-update.service; do
+  for unit in relayium-node.service relayium-node-update.timer \
+              relayium-node-update-request.path relayium-node-update.service; do
     systemctl disable --now "$unit" >/dev/null 2>&1 || true
   done
   systemctl daemon-reload >/dev/null 2>&1 || true
 fi
+# relayium-node-update-request.path is the watcher that starts the root updater
+# when a file appears in the node's runtime directory. It matters more than the
+# rest of this list: a leftover path unit is a root-triggering watcher outliving
+# the thing it was installed for. Its runtime directory is systemd's own
+# (RuntimeDirectory=), so it disappears with the service and needs no cleanup
+# here — but the unit and its enable symlink do.
 rm -f "${UNIT_DIR}/relayium-node.service" \
       "${UNIT_DIR}/relayium-node-update.service" \
-      "${UNIT_DIR}/relayium-node-update.timer"
+      "${UNIT_DIR}/relayium-node-update.timer" \
+      "${UNIT_DIR}/relayium-node-update-request.path"
 # `systemctl disable` normally removes these; do it explicitly so a machine
 # whose systemd is already broken (or absent) is not left with dangling enable
 # symlinks that resurrect the unit on the next boot.
 rm -f "${UNIT_DIR}/multi-user.target.wants/relayium-node.service" \
-      "${UNIT_DIR}/timers.target.wants/relayium-node-update.timer"
+      "${UNIT_DIR}/timers.target.wants/relayium-node-update.timer" \
+      "${UNIT_DIR}/paths.target.wants/relayium-node-update-request.path"
 if command -v systemctl >/dev/null 2>&1; then
   systemctl daemon-reload >/dev/null 2>&1 || true
 fi

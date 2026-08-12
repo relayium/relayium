@@ -124,9 +124,11 @@ func TestDecideFleet(t *testing.T) {
 		},
 		{
 			// "skipped" is terminal for that node: it will never report the target
-			// version, so waiting for it would wedge the track forever. The canary
-			// slot moves with it: n1 never ran the build, so n2 is the first node
-			// that actually does and must be reported IsFirst.
+			// version, so on this STAGED ladder waiting for it would wedge the
+			// track forever. The canary slot moves with it: n1 never ran the
+			// build, so n2 is the first node that actually does and must be
+			// reported IsFirst. (A manual fast rollout answers the same state by
+			// halting instead — see rollout_fleet_fast_test.go.)
 			name: "advances past a node that reported skipped",
 			track: RolloutTrack{
 				Track: "fleet", TargetVersion: "v0.9.0", Status: "rolling",
@@ -402,6 +404,9 @@ func TestDecideFleetNeverPrefersAnUnreportedNodeOverAKnownIdleOne(t *testing.T) 
 // released after 30 minutes with nobody having observed it for 6 hours — a bad
 // release reaching a second live node with zero real observation. The slot must
 // follow the build.
+//
+// STAGED LADDER ONLY, like every step below: manual fast mode never reaches the
+// re-assertment because a pass-over halts it outright.
 func TestSkippedCanaryHandsTheSixHourWindowToTheNextNode(t *testing.T) {
 	const target = "v0.9.0"
 	nodes := []NodeSnapshot{

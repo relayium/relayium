@@ -14,12 +14,18 @@ import (
 )
 
 type config struct {
-	CentralURL  string
-	NodeToken   string
-	Region      string
-	PublicIP    string
-	Realm       string
-	StateDir    string
+	CentralURL string
+	NodeToken  string
+	Region     string
+	PublicIP   string
+	Realm      string
+	StateDir   string
+	// RuntimeDir is systemd's RuntimeDirectory for this service
+	// (/run/relayium-node): the ONE place this unprivileged process may leave a
+	// marker asking the root updater to poll central now. See updaterequest.go
+	// for why that is the whole of the channel, and why an absent directory is a
+	// silent no-op rather than an error.
+	RuntimeDir  string
 	TURNPort    int
 	MinPort     int
 	MaxPort     int
@@ -71,6 +77,10 @@ func parseConfig() (config, error) {
 	flag.StringVar(&c.PublicIP, "public-ip", env("RELAYIUM_NODE_PUBLIC_IP", ""), "public IP for the TURN URL; auto-detected if empty")
 	flag.StringVar(&c.Realm, "realm", env("RELAYIUM_NODE_REALM", "relayium.app"), "TURN realm advertised to clients")
 	flag.StringVar(&c.StateDir, "state-dir", env("RELAYIUM_NODE_STATE_DIR", "/var/lib/relayium-node"), "directory for state.json")
+	// RUNTIME_DIRECTORY is what systemd itself exports for RuntimeDirectory=,
+	// so a unit that sets it needs no configuration here at all; the explicit
+	// env var and flag exist for a hand-run node and for tests.
+	flag.StringVar(&c.RuntimeDir, "runtime-dir", env("RELAYIUM_NODE_RUNTIME_DIR", env("RUNTIME_DIRECTORY", "")), "systemd runtime directory used to ask the root updater for an update check; empty disables that request")
 	flag.IntVar(&c.TURNPort, "turn-port", envInt("RELAYIUM_NODE_TURN_PORT", 3478), "TURN listening UDP port")
 	flag.IntVar(&c.MinPort, "min-port", envInt("RELAYIUM_NODE_MIN_PORT", 49152), "relay UDP range low")
 	flag.IntVar(&c.MaxPort, "max-port", envInt("RELAYIUM_NODE_MAX_PORT", 65535), "relay UDP range high")

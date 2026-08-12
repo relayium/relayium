@@ -83,6 +83,25 @@ type nodeHeartbeatResp struct {
 	OK                bool `json:"ok"`
 	HeartbeatInterval int  `json:"heartbeatInterval"`
 	nodeLimits
+	// UpdateCheckNow asks a capable node process to signal that the machine's
+	// ROOT UPDATER should run an update check now, instead of waiting out its
+	// ~10-minute systemd timer. It is set only during a manual fast fleet
+	// rollout, and only for the node whose turn it is (fleetFastHintFor).
+	//
+	// It is a REQUEST TO ASK, not an instruction to install, and that is the
+	// whole trust model: this response reaches the UNPRIVILEGED relayium-node
+	// service, which cannot replace its own binary and is handed nothing here it
+	// could act on if it could — no version, no path, no URL. All it does is
+	// touch a file the root updater's path unit watches; that updater re-queries
+	// central itself and signature-verifies what it downloads against a key
+	// compiled into it. See updaterequest.go in the node binary.
+	//
+	// `omitempty` is load-bearing for OLD-CLIENT COMPATIBILITY: false is the
+	// overwhelmingly common answer, so omitting the key means a node predating
+	// this field decodes byte for byte what it decoded before. Such a node keeps
+	// using its timer — the documented fallback, not an error, and never a reason
+	// to hand another node the rollout slot.
+	UpdateCheckNow bool `json:"updateCheckNow,omitempty"`
 }
 
 // 中继流量的调度余量：中心端只把生效上限的 90% 发出去，留 10% 给已经建连的
@@ -1352,8 +1371,46 @@ func (s *Service) handleNodeHeartbeat(w http.ResponseWriter, r *http.Request) {
 	warnImplausibleAttribution(req.NodeID, len(req.Usage), attributed)
 	httpx.WriteJSON(w, http.StatusOK, nodeHeartbeatResp{
 		OK: true, HeartbeatInterval: nodeHeartbeatInterval,
-		nodeLimits: s.nodeLimitsFor(r.Context(), node),
+		nodeLimits:     s.nodeLimitsFor(r.Context(), node),
+		UpdateCheckNow: s.fleetFastUpdateHint(r.Context(), node, now),
 	})
+}
+
+// fleetFastUpdateHint answers nodeHeartbeatResp.UpdateCheckNow: should this node
+// ask its root updater to poll central now, rather than waiting for its timer?
+//
+// READ-ONLY, and that is a requirement, not an implementation detail: claiming
+// the slot, commanding an update and halting or completing a track belong to
+// handleUpdateCheck, whose compare-and-swap is what makes "one fleet node at a
+// time" hold across instances. Driving any of it from here would put those
+// transitions on an endpoint every fleet node calls every 30 seconds, under a
+// shared token that does not bind to a node id.
+//
+// FLEET ONLY, checked here rather than left to fleetFastHintFor, whatever the
+// byo row happens to say. A removed node is excluded for the same reason
+// update-check refuses it: the machine is on its way out.
+//
+// The full-table read happens only while a manual fast rollout is actually
+// rolling, so an ordinary heartbeat pays one primary-key lookup. Any error
+// degrades to false — the node's timer is the fallback, and bookkeeping must
+// never fail a heartbeat.
+func (s *Service) fleetFastUpdateHint(ctx context.Context, node Node, now int64) bool {
+	if node.OwnerType != "fleet" || node.RemovedAt != 0 {
+		return false
+	}
+	tr, found, err := s.store.GetRolloutTrack(ctx, "fleet")
+	if err != nil || !found || tr.Status != "rolling" || !tr.ManualFast || tr.Emergency {
+		return false
+	}
+	// EVERY fleet node including offline ones, the same input contract
+	// decideFleet requires (see NodesByOwnerType): a pre-filtered listing would
+	// make the node in flight vanish and could hand the "next" answer to a
+	// second machine while the first is merely quiet.
+	all, err := s.store.NodesByOwnerType(ctx, "fleet")
+	if err != nil {
+		return false
+	}
+	return fleetFastHintFor(tr, nodeSnapshots(all), node.ID, now)
 }
 
 // SetNodeDraining is the operator-facing entry point for the first half of a

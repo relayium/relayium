@@ -54,11 +54,17 @@ const defaultBinPath = "/usr/local/bin/relayium-node"
 //	8 exitFetchFailed     -> unreachable  the artifact could not be OBTAINED
 //	                                      (DNS, TLS, a reset, a 404); says
 //	                                      nothing about the release itself, so
-//	                                      central advances the rollout queue
+//	                                      a STAGED rollout advances the queue
 //	                                      past this node instead of halting the
-//	                                      fleet for one machine's network
+//	                                      fleet for one machine's network. A
+//	                                      MANUAL FAST rollout halts on it: that
+//	                                      mode advances only on a reported
+//	                                      success, so a node that fetched
+//	                                      nothing cannot carry the queue.
 //
 // Codes are API: renumbering one silently rewrites history in central's queue.
+// What central DOES with a result is the rollout mode's decision, not this
+// table's: the same value can advance a staged ladder and stop a fast one.
 const (
 	exitOK            = 0
 	exitUsage         = 2
@@ -69,8 +75,9 @@ const (
 	exitNotHealthy    = 7
 	// exitFetchFailed: the artifact could not be OBTAINED (DNS, TLS, a reset,
 	// a 404). Distinct from exitUpdateFailed because it says nothing about the
-	// release -- central advances the rollout queue past this node instead of
-	// halting the fleet for one machine's network. See selfupdate.ErrFetch.
+	// release -- a staged rollout advances the queue past this node instead of
+	// halting the fleet for one machine's network (a manual fast one halts on
+	// it; see the table above). See selfupdate.ErrFetch.
 	exitFetchFailed = 8
 )
 
@@ -99,6 +106,19 @@ type updateConfig struct {
 	AllowDowngrade bool
 	ClearFailed    bool
 	Repo           string
+
+	// RuntimeDir is the node service's systemd RuntimeDirectory
+	// (/run/relayium-node), where the unprivileged node process leaves the
+	// "please ask central now" marker that relayium-node-update-request.path
+	// watches. This command CONSUMES that marker as it starts (see
+	// consumeUpdateRequest) and never reads its contents — the marker is a
+	// wake-up, never an instruction.
+	//
+	// It is resolved here rather than taken from systemd's RUNTIME_DIRECTORY
+	// because the updater is a SEPARATE unit from the node service and so does
+	// not inherit it. Same precedence chain as StateDir/BinPath: explicit flag >
+	// process env > env file > built-in default.
+	RuntimeDir string
 
 	// CentralURL and NodeToken are used ONLY when TargetTag is empty, to ask
 	// central which version this node should run (task 6). Same precedence
@@ -147,6 +167,7 @@ func parseUpdateFlags(args []string, stderr io.Writer) (updateConfig, error) {
 	fs.StringVar(&uc.StateDir, "state-dir", env("RELAYIUM_NODE_STATE_DIR", ""), "directory holding state.json (default from "+defaultEnvFile+", else /var/lib/relayium-node)")
 	fs.StringVar(&uc.BinPath, "bin", env("RELAYIUM_NODE_BIN", ""), "path of the binary to replace (default from "+defaultEnvFile+", else "+defaultBinPath+")")
 	fs.StringVar(&uc.TargetTag, "to", "", "exact release tag to install, e.g. v0.9.0 (omit to ask central which version this node should run)")
+	fs.StringVar(&uc.RuntimeDir, "runtime-dir", env("RELAYIUM_NODE_RUNTIME_DIR", ""), "node service runtime directory holding the update-check request marker (default from "+defaultEnvFile+", else "+defaultRuntimeDir+")")
 	fs.StringVar(&uc.CentralURL, "central-url", env("RELAYIUM_CENTRAL_URL", ""), "central relayium server base URL; used only when -to is omitted (default from "+defaultEnvFile+")")
 	fs.StringVar(&uc.NodeToken, "node-token", env("RELAYIUM_NODE_TOKEN", ""), "node bearer token; used only when -to is omitted (default from "+defaultEnvFile+")")
 	fs.BoolVar(&uc.AllowDowngrade, "allow-downgrade", false, "permit installing a version older than the running one")
@@ -165,6 +186,9 @@ func parseUpdateFlags(args []string, stderr io.Writer) (updateConfig, error) {
 	}
 	if uc.BinPath == "" {
 		uc.BinPath = valueOr(fileEnv["RELAYIUM_NODE_BIN"], defaultBinPath)
+	}
+	if uc.RuntimeDir == "" {
+		uc.RuntimeDir = valueOr(fileEnv["RELAYIUM_NODE_RUNTIME_DIR"], defaultRuntimeDir)
 	}
 	if uc.CentralURL == "" {
 		uc.CentralURL = fileEnv["RELAYIUM_CENTRAL_URL"] // no built-in default; empty fails clearly when actually needed
@@ -296,6 +320,19 @@ const healthWindow = 10 * time.Minute
 const nodeUnit = "relayium-node"
 
 func runUpdate(uc updateConfig, stdout, stderr io.Writer) int {
+	// Retire the "ask central now" marker FIRST, before anything can return.
+	// relayium-node-update-request.path re-arms the moment the unit it started
+	// deactivates, so a marker still present when this exits restarts the
+	// updater — and the overwhelmingly common outcome below is "not this node's
+	// turn", which is precisely the path that would loop. Consuming at the start
+	// rather than on success is what makes every exit path, refusals included,
+	// retire the request that woke it.
+	//
+	// Its CONTENTS are never read. A marker written by the unprivileged node
+	// process is a wake-up and nothing else; what to install is decided by the
+	// authoritative central check below and verified against the signing key
+	// compiled into this binary.
+	consumeUpdateRequest(uc.RuntimeDir, stderr)
 	// -to omitted (and this isn't the standalone -clear-failed action): ask
 	// central which version to run instead of failing outright (task 6).
 	// -clear-failed never touches the network — it is a purely local
@@ -450,18 +487,24 @@ const pendingResultFile = "pending-update-result"
 // resultForExitCode maps a run's exit code onto the closed set of result
 // strings central accepts (updateResults in nodes.go: ok/failed/rolled_back/
 // skipped/unreachable), matching the exit-code table above exactly.
-// exitAlreadyFailed and exitPrecondition map to "skipped": decideFleet has a
-// dedicated branch whose whole purpose is advancing the rollout queue past a
-// node that will never reach the target, WITHOUT halting — central needs that
-// signal, or a node refusing locally (a version already in failed-versions, a
-// stray .prev) just keeps heartbeating happily until the 15-minute silence
-// check halts the entire fleet rollout for a human, instead of skipping one
-// node. exitFetchFailed maps to "unreachable" for the same shape of reason:
-// the artifact was never obtained, which says nothing about the release, so
-// the queue advances past this node instead of halting the fleet for one
-// machine's network (see exitCodeForUpdateError). Only exitUsage (bad flags;
-// nothing was even parsed enough to attempt anything) has genuinely nothing
-// to tell central and maps to "".
+// exitAlreadyFailed and exitPrecondition map to "skipped": on the STAGED
+// ladder decideFleet has a dedicated branch whose whole purpose is advancing
+// the rollout queue past a node that will never reach the target, WITHOUT
+// halting — central needs that signal, or a node refusing locally (a version
+// already in failed-versions, a stray .prev) just keeps heartbeating happily
+// until the 15-minute silence check halts the entire fleet rollout for a human,
+// instead of skipping one node. exitFetchFailed maps to "unreachable" for the
+// same shape of reason: the artifact was never obtained, which says nothing
+// about the release (see exitCodeForUpdateError).
+//
+// Reporting these honestly matters just as much in MANUAL FAST mode, where
+// decideFleet halts on them instead of advancing — that is the mode's own
+// judgement about a node that never installed anything, and it still depends on
+// this side telling the truth about what happened. Nothing here changes with the
+// mode: the node reports what it did, central decides what that means.
+//
+// Only exitUsage (bad flags; nothing was even parsed enough to attempt
+// anything) has genuinely nothing to tell central and maps to "".
 func resultForExitCode(code int) string {
 	switch code {
 	case exitOK:
@@ -496,13 +539,16 @@ func resultForExitCode(code int) string {
 // and that is deliberate, not an oversight: a 404 there may equally mean
 // "this mirror doesn't carry the file" as "the release truly wasn't signed",
 // and either way the node correctly refuses to install rather than fall back
-// to running something unsigned. The consequence is that a release
-// accidentally published without its signature 404s on every node the same
-// way, classifies as fetch, and the rollout queue advances past the entire
-// fleet having installed nothing. That is caught elsewhere in this plan: a
-// later task renders a rollout that updated nobody as "完成，但 N 台未更新"
-// rather than as a clean success, so this fall-through does not silently
-// read as victory.
+// to running something unsigned. The consequence differs by rollout mode, and
+// neither reads as victory:
+//
+//   - a STAGED rollout advances past each node in turn, so a release published
+//     without its signature 404s on every one of them and the queue can reach
+//     the end having installed nothing. The panel renders that as
+//     "完成，但 N 台未更新" rather than as a clean success.
+//   - a MANUAL FAST rollout HALTS on the first such node, because it advances
+//     only on a reported success. The operator sees the stop immediately and no
+//     later node is commanded.
 func exitCodeForUpdateError(err error) int {
 	if errors.Is(err, selfupdate.ErrFetch) {
 		return exitFetchFailed

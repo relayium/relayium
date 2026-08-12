@@ -197,11 +197,14 @@ func TestPendingResultSurvivesFailedPoll(t *testing.T) {
 }
 
 // resultForExitCode must match the exit-code table exactly. exitAlreadyFailed
-// and exitPrecondition map to "skipped" (important 3, not ""): decideFleet's
-// graceful-skip branch exists specifically to advance the rollout queue past
-// a node that will never reach the target, without halting it — a node that
-// refuses locally and reports nothing just keeps heartbeating happily until
-// the 15-minute silence check halts the ENTIRE fleet rollout for a human.
+// and exitPrecondition map to "skipped" (important 3, not ""): on the STAGED
+// ladder decideFleet's graceful-skip branch exists specifically to advance the
+// rollout queue past a node that will never reach the target, without halting
+// it — a node that refuses locally and reports nothing just keeps heartbeating
+// happily until the 15-minute silence check halts the ENTIRE fleet rollout for
+// a human. In MANUAL FAST mode that same "skipped" halts the track instead,
+// which is the mode's own judgement; either way the value has to be reported,
+// and this mapping is what the two modes both read.
 // Only exitUsage (bad flags; nothing was even attempted) has nothing to tell
 // central and maps to "".
 func TestResultForExitCode(t *testing.T) {

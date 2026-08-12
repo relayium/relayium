@@ -63,21 +63,25 @@ func (s *Service) RequireStepUp(action string, next http.HandlerFunc) http.Handl
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
-		// Emergency release is the one action whose blast radius is decided by
-		// the path wildcard rather than the form, so the page states the track
-		// in its own banner on top of the diff row. See rolloutTrackLabel.
-		track, trackLabel := "", ""
-		if action == AuditRolloutEmergency {
-			track, trackLabel = pathID, rolloutTrackLabel(pathID)
+		// The two ladder-changing rollout actions state their blast radius in a
+		// banner above the diff row: for both of them the fact that matters most
+		// is not a field value but WHOSE machines, and WHICH guarantees are being
+		// given up. Track and banner come from one call so they cannot disagree
+		// — see confirmBlastFor and rolloutTrackLabel.
+		track, notice := confirmBlastFor(action, pathID)
+		trackLabel := ""
+		if track != "" {
+			trackLabel = rolloutTrackLabel(track)
 		}
 		s.renderConfirmPage(w, confirmPageData{
-			Lang:       adminLangFrom(r),
-			Token:      tok,
-			Action:     action,
-			Target:     target,
-			Track:      track,
-			TrackLabel: trackLabel,
-			Changes:    diffFields(before, after),
+			Lang:        adminLangFrom(r),
+			Token:       tok,
+			Action:      action,
+			Target:      target,
+			Track:       track,
+			TrackLabel:  trackLabel,
+			TrackNotice: notice,
+			Changes:     diffFields(before, after),
 			// The grace window only ever affects NeedFactor, never whether
 			// this page renders at all — see the doc comment above.
 			NeedFactor: !s.stepUpFresh(r.Context(), c.Value),
@@ -129,10 +133,15 @@ func (s *Service) confirmHandlerFor(action string) (http.HandlerFunc, bool) {
 		AuditTokenMint:     s.handleAdminMintToken,
 		AuditNodeDelete:    s.handleAdminDeleteNode,
 		AuditPasskeyDelete: s.HandleAdminPasskeyDelete,
-		// Emergency release is the only rollout control behind step-up: it is
-		// the one that ships a build to every node of a track at once, with no
-		// canary left to catch it.
+		// Emergency release is the one that ships a build to every node of a
+		// track at once, with no canary left to catch it.
 		AuditRolloutEmergency: s.handleAdminRolloutEmergency,
+		// The manual fast fleet push keeps the canary and the queue but drops
+		// their waiting periods. It is behind step-up for a different reason
+		// from the emergency release: not because nothing can catch a bad build
+		// afterwards, but because deciding to skip ~14 hours of observation is a
+		// judgement one click should not be able to make by accident.
+		AuditRolloutFast: s.handleAdminRolloutFast,
 	}
 	h, ok := m[action]
 	return h, ok

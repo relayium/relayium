@@ -582,6 +582,18 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	// 由 HandleAdminConfirm 落审计。
 	mux.Handle("POST /admin/rollout/{id}/emergency",
 		s.CSRFGuard(s.RequireStepUp(AuditRolloutEmergency, s.handleAdminRolloutEmergency)))
+	// 手动快速发布：立刻开始一轮机队发布，去掉 canary 观察窗与节点间的等待，
+	// 但**保留其余全部**——仍是一次一台、每台仍要自己下载校验安装重启并通过
+	// 健康检查、任何失败/回滚/超时立刻中止。它跟紧急发布是两件事（后者是整条
+	// 轨道一次性放行、没有失败闸门），所以是独立的路由、独立的审计动作、独立
+	// 的确认页文案。同样走 RequireStepUp。
+	//
+	// 路径里把 fleet 写死，不用 {id} 通配：自带节点轨是所有用户自己的机器，
+	// "快一点"从来不是把它们批量推更新的理由。让这条路由根本不存在，比在
+	// handler 里判一次更难绕过（Service.StartManualFastFleetRollout 也不收
+	// track 参数）。
+	mux.Handle("POST /admin/rollout/fleet/fast",
+		s.CSRFGuard(s.RequireStepUp(AuditRolloutFast, s.handleAdminRolloutFast)))
 	// 新版本通知：一键把机队轨指向 GitHub 上最新的 release，或忽略这个版本。
 	// 底层调用的是与手动填版本号相同的 SetTargetVersion（见
 	// handleAdminReleaseRollout），但审计动作是独立的 release.rollout ——

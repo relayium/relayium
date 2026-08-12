@@ -86,7 +86,7 @@ func TestHeartbeatReportsBlobFootprintNotVolumeUsage(t *testing.T) {
 	}))
 	defer central.Close()
 
-	sendHeartbeat(newReporter(central.URL, "tok"), "node-1", newAllocRegistry(nil), dir, t.TempDir(), gauge, nil)
+	sendHeartbeat(newReporter(central.URL, "tok"), "node-1", newAllocRegistry(nil), dir, t.TempDir(), gauge, nil, nil)
 
 	if got.StoredBytes != 777 {
 		t.Fatalf("storedBytes = %d, want the gauge's 777", got.StoredBytes)

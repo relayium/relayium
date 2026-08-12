@@ -624,6 +624,16 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// row = "no history recorded", which the rollback action refuses
 		// rather than guessing.
 		`ALTER TABLE node_rollout ADD COLUMN previous_version TEXT NOT NULL DEFAULT ''`,
+		// manual_fast = the operator asked for the fleet ladder to run at speed:
+		// the canary's observation window and the soak between nodes are skipped,
+		// and NOTHING else is (one node at a time, each node's own install,
+		// restart, health watch and rollback, and the halt on any bad or missing
+		// result all stay — see RolloutTrack.ManualFast). Added by ALTER, like the
+		// three columns above, so live databases migrate. 0 on every existing row
+		// = the staged behaviour that shipped before this column, which is the
+		// only safe default: a rollout already in flight when this deploys must
+		// not silently stop observing its canary.
+		`ALTER TABLE node_rollout ADD COLUMN manual_fast INTEGER NOT NULL DEFAULT 0`,
 		// One row, enforced by the CHECK, holding what the last successful
 		// release check saw and which tag the operator dismissed. The two
 		// halves are written by separate statements so neither can clobber the

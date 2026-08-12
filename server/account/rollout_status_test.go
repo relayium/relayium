@@ -443,11 +443,31 @@ func TestByoNextStepLabel(t *testing.T) {
 // The rules line is generated from the constants, so tuning one moves the
 // state machine and the sentence together.
 func TestRulesTextIsGeneratedFromConstants(t *testing.T) {
-	fleet := fleetRulesText()
+	fleet := fleetRulesText(false)
 	for _, want := range []string{humanDuration(fleetFirstWindow), humanDuration(fleetStepWindow)} {
 		if !strings.Contains(fleet, want) {
 			t.Fatalf("fleetRulesText = %q, want it to contain %q", fleet, want)
 		}
+	}
+	// The fast form states its own limit, and it must be the state machine's
+	// too: in that mode running out of patience is a HALT, so a hand-typed
+	// duration here would be the panel promising a deadline nothing enforces.
+	fast := fleetRulesText(true)
+	if !strings.Contains(fast, humanDuration(fleetInstallLimit)) {
+		t.Fatalf("fleetRulesText(fast) = %q, want it to contain %q", fast, humanDuration(fleetInstallLimit))
+	}
+	// It must also state the trigger latency HONESTLY, and that is two different
+	// numbers on two kinds of node: a node that supports the immediate-check
+	// hint is asked on its next heartbeat, and one that does not still waits out
+	// its ~10-minute timer. Reporting only the fast number would promise a pace
+	// most of the fleet cannot deliver until it has been re-provisioned; the
+	// heartbeat figure comes from nodeHeartbeatInterval so it moves with the
+	// wire, not from a literal.
+	if !strings.Contains(fast, fmt.Sprintf("%d 秒", nodeHeartbeatInterval)) {
+		t.Errorf("fleetRulesText(fast) = %q, want the heartbeat interval (%d 秒)", fast, nodeHeartbeatInterval)
+	}
+	if !strings.Contains(fast, "10 分钟") {
+		t.Errorf("fleetRulesText(fast) = %q, want the old-client timer fallback stated", fast)
 	}
 	if byo := byoRulesText(); !strings.Contains(byo, humanDuration(byoBatchWindow)) {
 		t.Fatalf("byoRulesText = %q, want it to contain %q", byo, humanDuration(byoBatchWindow))
@@ -560,48 +580,56 @@ func TestPanelStatusAgreesWithDecideFleet(t *testing.T) {
 	seenAges := ages[:5]
 
 	checked := 0
+	// manualFast is swept alongside emergency because it is the second flag
+	// that changes what decideFleet does with the node holding the slot -- it
+	// replaces both observation windows with "has this node REPORTED ok yet",
+	// bounded by fleetInstallLimit. A panel that kept printing window clocks in
+	// that mode would be calm about a node the state machine is about to halt
+	// the track on, which is exactly property 1 below.
 	for _, status := range []string{"rolling", "halted", "complete"} {
-		for _, emergency := range []bool{false, true} {
-			for _, result := range []string{"", "ok", "failed", "rolled_back", "skipped", "unreachable"} {
-				for _, onTarget := range []bool{false, true} {
-					// The canary is positional: the node itself, somebody else,
-					// or a track written before the field existed (both
-					// decideFleet and the panel must read "" as "the node in
-					// flight IS the canary").
-					for _, firstNodeID := range []string{nodeID, "n-someone-else", ""} {
-						for _, stage := range ages {
-							for _, started := range ages {
-								for _, seen := range seenAges {
-									tr := RolloutTrack{
-										Track: "fleet", TargetVersion: target, Status: status,
-										Emergency:     emergency,
-										CurrentNodeID: nodeID, FirstNodeID: firstNodeID,
-										StageStartedAt: now - stage.ago,
-									}
-									n := NodeSnapshot{
-										ID: nodeID, Version: behind,
-										LastSeenAt:        now - seen.ago,
-										UpdateStartedAt:   now - started.ago,
-										UpdateFromVersion: behind,
-										UpdateResult:      result,
-									}
-									if onTarget {
-										n.Version = target
-									}
-									desc := fmt.Sprintf(
-										"status=%s emergency=%v result=%q onTarget=%v firstNodeID=%q stage=%s update=%s lastSeen=%s",
-										status, emergency, result, onTarget, firstNodeID, stage.name, started.name, seen.name)
-									assertPanelAgreesWithDecideFleet(t, desc, tr, n, now, far)
-									checked++
+		for _, manualFast := range []bool{false, true} {
+			for _, emergency := range []bool{false, true} {
+				for _, result := range []string{"", "ok", "failed", "rolled_back", "skipped", "unreachable"} {
+					for _, onTarget := range []bool{false, true} {
+						// The canary is positional: the node itself, somebody else,
+						// or a track written before the field existed (both
+						// decideFleet and the panel must read "" as "the node in
+						// flight IS the canary").
+						for _, firstNodeID := range []string{nodeID, "n-someone-else", ""} { //nolint:revive // depth is the point: this is an exhaustive sweep
+							for _, stage := range ages {
+								for _, started := range ages {
+									for _, seen := range seenAges {
+										tr := RolloutTrack{
+											Track: "fleet", TargetVersion: target, Status: status,
+											Emergency: emergency, ManualFast: manualFast,
+											CurrentNodeID: nodeID, FirstNodeID: firstNodeID,
+											StageStartedAt: now - stage.ago,
+										}
+										n := NodeSnapshot{
+											ID: nodeID, Version: behind,
+											LastSeenAt:        now - seen.ago,
+											UpdateStartedAt:   now - started.ago,
+											UpdateFromVersion: behind,
+											UpdateResult:      result,
+										}
+										if onTarget {
+											n.Version = target
+										}
+										desc := fmt.Sprintf(
+											"status=%s manualFast=%v emergency=%v result=%q onTarget=%v firstNodeID=%q stage=%s update=%s lastSeen=%s",
+											status, manualFast, emergency, result, onTarget, firstNodeID, stage.name, started.name, seen.name)
+										assertPanelAgreesWithDecideFleet(t, desc, tr, n, now, far)
+										checked++
 
-									// The same tuple with the node's own update
-									// stamp missing entirely: central's two
-									// writes split, which is a state both
-									// functions have a dedicated backstop for.
-									n.UpdateStartedAt = 0
-									assertPanelAgreesWithDecideFleet(t,
-										desc+" update=never recorded", tr, n, now, far)
-									checked++
+										// The same tuple with the node's own update
+										// stamp missing entirely: central's two
+										// writes split, which is a state both
+										// functions have a dedicated backstop for.
+										n.UpdateStartedAt = 0
+										assertPanelAgreesWithDecideFleet(t,
+											desc+" update=never recorded", tr, n, now, far)
+										checked++
+									}
 								}
 							}
 						}

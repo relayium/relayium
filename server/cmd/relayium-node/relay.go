@@ -379,6 +379,11 @@ func run(c config, st nodeState) error {
 	defer stop()
 	ticker := time.NewTicker(time.Duration(interval) * time.Second)
 	defer ticker.Stop()
+	// nil on a host with no runtime directory (every node installed before the
+	// manual-fast acceleration shipped): central's hint is then simply ignored
+	// and the root updater's ~10-minute timer stays the only trigger, which is
+	// the documented fallback rather than a fault.
+	updateReq := newUpdateRequester(c.RuntimeDir)
 	for {
 		select {
 		case <-ctx.Done():
@@ -389,12 +394,12 @@ func run(c config, st nodeState) error {
 			log.Printf("relayium-node: shutting down")
 			return nil
 		case <-ticker.C:
-			sendHeartbeat(rp, nodeID, reg, c.StorageDir, c.StateDir, blobGauge, lim)
+			sendHeartbeat(rp, nodeID, reg, c.StorageDir, c.StateDir, blobGauge, lim, updateReq)
 		}
 	}
 }
 
-func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir, stateDir string, blobGauge *blobUsage, lim *limits) {
+func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir, stateDir string, blobGauge *blobUsage, lim *limits, updateReq *updateRequester) {
 	// Read the live count BEFORE snapshot(), which evicts closed allocations:
 	// either order gives the same answer (activeAllocs ignores closed entries),
 	// but taking it first keeps the two reads from being confused for one.
@@ -433,6 +438,11 @@ func sendHeartbeat(rp *reporter, nodeID string, reg *allocRegistry, storageDir, 
 	if lim != nil {
 		lim.sync(hr.RelayedThisMonth, hr.TrafficLimitBytes, hr.DiskLimitBytes)
 	}
+	// Central may be asking this machine's ROOT UPDATER to poll now (a manual
+	// fast fleet rollout). All this does is touch a marker file — it never
+	// downloads or installs anything, and central sends nothing here that could
+	// be relayed upward as an instruction. See updaterequest.go.
+	handleUpdateHint(hr, updateReq, time.Now())
 	// Record the success so the updater can tell a working new version from one
 	// that starts but can't reach central.
 	if err := markHealthy(stateDir, version); err != nil {

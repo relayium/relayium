@@ -126,6 +126,7 @@ newtree() {
   mkdir -p "$d/etc/relayium-node" \
     "$d/etc/systemd/system/multi-user.target.wants" \
     "$d/etc/systemd/system/timers.target.wants" \
+    "$d/etc/systemd/system/paths.target.wants" \
     "$d/usr/local/bin" "$d/var/lib/relayium-node"
   printf '{"nodeID":"n-1"}' >"$d/var/lib/relayium-node/state.json"
   : >"$d/var/lib/relayium-node/id.key"
@@ -138,10 +139,13 @@ newtree() {
   : >"$d/etc/systemd/system/relayium-node.service"
   : >"$d/etc/systemd/system/relayium-node-update.service"
   : >"$d/etc/systemd/system/relayium-node-update.timer"
+  : >"$d/etc/systemd/system/relayium-node-update-request.path"
   ln -s ../relayium-node.service \
     "$d/etc/systemd/system/multi-user.target.wants/relayium-node.service"
   ln -s ../relayium-node-update.timer \
     "$d/etc/systemd/system/timers.target.wants/relayium-node-update.timer"
+  ln -s ../relayium-node-update-request.path \
+    "$d/etc/systemd/system/paths.target.wants/relayium-node-update-request.path"
   printf '%s' "$d"
 }
 
@@ -417,6 +421,14 @@ assert_gone "$p/etc/systemd/system/multi-user.target.wants/relayium-node.service
   "artifacts: multi-user.target.wants symlink removed"
 assert_gone "$p/etc/systemd/system/timers.target.wants/relayium-node-update.timer" \
   "artifacts: timers.target.wants symlink removed"
+# The update-request path unit is the one that can START a root unit when a file
+# appears. Leaving it (or its enable symlink) behind on an uninstalled host
+# means a root-triggering watcher outliving the thing it was installed for —
+# the exact category of leftover this section exists to catch.
+assert_gone "$p/etc/systemd/system/relayium-node-update-request.path" \
+  "artifacts: update-request path unit removed"
+assert_gone "$p/etc/systemd/system/paths.target.wants/relayium-node-update-request.path" \
+  "artifacts: paths.target.wants symlink removed"
 assert_gone "$p/etc/relayium-node" "artifacts: /etc/relayium-node removed"
 
 # --- 16. pathological purge targets are rejected before anything is deleted ---

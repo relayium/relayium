@@ -139,6 +139,9 @@ type RolloutDecision struct {
 //     If that node was the recorded canary, IsFirst is re-asserted on
 //     whoever is picked next, because a node that never installed the
 //     build cannot have observed it (see reassertFirst).
+//     In MANUAL FAST mode this HALTS instead: that mode advances only on a
+//     reported success, so a node that never installed the build cannot be
+//     allowed to hand the slot to the next machine.
 //     d. it has gone silent (no heartbeat) for longer than updateSilenceLimit
 //     since it was commanded to update -> halt (possible brick). If it
 //     never even recorded an update start, tr.StageStartedAt is the
@@ -148,7 +151,11 @@ type RolloutDecision struct {
 //     (heartbeating but never converging) -> halt
 //     f. it has reached the target version but hasn't cleared its
 //     observation window yet (fleetFirstWindow for the canary,
-//     fleetStepWindow for every node after) -> wait
+//     fleetStepWindow for every node after) -> wait. In MANUAL FAST mode
+//     (tr.ManualFast) both windows are zero and this becomes "reached the
+//     target but has not REPORTED 'ok' yet" -> wait, bounded by
+//     fleetInstallLimit -> halt. That swap is the entire difference the mode
+//     makes here, plus one extra halt in 2e for "ok" while not on target.
 //  3. Every fleet node currently online is already on the target version ->
 //     complete.
 //  4. Otherwise pick the next node to update: the very first node of the
@@ -232,11 +239,19 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 		// build, pinned, whatever) and will NEVER reach the target version.
 		// "unreachable" means the node could not even fetch the build -- bytes
 		// never arrived, so there is nothing to verify and nothing that could
-		// have installed wrong. Neither is a failure of the RELEASE, so neither
-		// halts -- but waiting for a version that will never be reported would
-		// wedge the whole track forever on one machine's network. Both share
-		// the same "this node's turn is over" handling: fall through so the
-		// queue advances without it.
+		// have installed wrong. Neither is a failure of the RELEASE.
+		//
+		// ON THE STAGED LADDER that is why neither halts: waiting for a version
+		// that will never be reported would wedge the whole track forever on one
+		// machine's network, so both share the same "this node's turn is over"
+		// handling -- fall through so the queue advances without it.
+		//
+		// IN MANUAL FAST MODE both HALT instead, and the difference is not
+		// inconsistency: that mode has no observation window to advance on, so
+		// the only thing that can carry the queue forward is a reported success.
+		// A node that never installed the build has not provided one, and letting
+		// it hand the slot to the next machine would mean the fleet moving on
+		// with nothing having verified the release. See the branch below.
 		//
 		// canary is whether the node in flight holds this rollout's 6h slot.
 		// FirstNodeID == "" while a node IS in flight is a track written before
@@ -246,12 +261,47 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 		// observation to 30 minutes. Every defence here must fail LONG.
 		canary := cur.ID == tr.FirstNodeID || tr.FirstNodeID == ""
 		if passedOverResult(cur.UpdateResult) {
+			// MANUAL FAST: a pass-over is NOT a success, and in this mode the
+			// queue advances on nothing else. "skipped" and "unreachable" both
+			// mean the node in flight never installed, restarted or proved the
+			// build — so falling through to pick the next machine would command a
+			// second node off the back of one that ran no part of the release,
+			// which is the exact invariant this mode is allowed to keep.
+			//
+			// The staged ladder keeps its opposite behaviour deliberately: it
+			// advances on an observation window, so leaving one unreachable
+			// machine behind is better than stopping the fleet for it. Here there
+			// is no window to advance on, so "left behind" would silently become
+			// "the rest of the fleet moved without any node having verified the
+			// build".
+			if tr.ManualFast {
+				return RolloutDecision{Action: "halt", Reason: fmt.Sprintf(
+					"node %s reported %q, so it never installed %s: a manual fast rollout stops rather than moving on",
+					cur.ID, cur.UpdateResult, tr.TargetVersion)}
+			}
 			reassertFirst = canary
 		} else {
 			if cur.UpdateStartedAt != 0 && now-cur.LastSeenAt > updateSilenceLimit {
 				return RolloutDecision{Action: "halt", Reason: fmt.Sprintf("node %s silent since update started", cur.ID)}
 			}
 			if !onTarget(cur) {
+				// MANUAL FAST ONLY: "ok" while not on the target is a
+				// contradiction, and in this mode "ok" is the very signal the
+				// queue advances on — so it must halt rather than be waited out.
+				// (The staged path advances on its window instead, so it can
+				// safely leave this to the wedge timeout below; leaving that
+				// path byte-identical is deliberate.)
+				//
+				// It cannot fire on a healthy node racing its own heartbeat: a
+				// node reports "ok" only on the poll AFTER its updater's health
+				// watch passed, and that watch requires a heartbeat from the
+				// restarted process, which re-registers its new version first.
+				// The version therefore lands strictly before the result.
+				if tr.ManualFast && cur.UpdateResult == "ok" {
+					return RolloutDecision{Action: "halt", Reason: fmt.Sprintf(
+						"node %s reported a successful update but is running %q, not the target %s",
+						cur.ID, cur.Version, tr.TargetVersion)}
+				}
 				// Commanded, alive, but update_started_at is still 0: the
 				// caller's two writes (the track's CurrentNodeID/StageStartedAt
 				// and the node's update_started_at) split — a crash between
@@ -278,21 +328,54 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 				}
 				return RolloutDecision{Action: "wait"}
 			}
-			window := int64(fleetStepWindow)
-			if canary {
-				window = fleetFirstWindow
-			}
-			// Measure the window from the LATER of the track's stage start and
-			// the node's own update start. The two are written by different
-			// code paths; a stale StageStartedAt (still the previous stage's)
-			// or an unset one (0, which is older than everything) would
-			// otherwise collapse a 6h observation into seconds.
+			// Measure from the LATER of the track's stage start and the node's
+			// own update start. The two are written by different code paths; a
+			// stale StageStartedAt (still the previous stage's) or an unset one
+			// (0, which is older than everything) would otherwise collapse a 6h
+			// observation into seconds — and, in fast mode, would put the
+			// missing-result deadline in the past on the very first evaluation.
 			stageStart := tr.StageStartedAt
 			if cur.UpdateStartedAt > stageStart {
 				stageStart = cur.UpdateStartedAt
 			}
-			if now-stageStart < window {
-				return RolloutDecision{Action: "wait"}
+			if tr.ManualFast {
+				// THE MODE: both observation windows are skipped, and the node's
+				// own verdict is NOT. The queue advances only once this node has
+				// REPORTED "ok" — never merely because it is seen on the target
+				// version, which happens the instant the new binary starts and
+				// re-registers, up to healthWindow (10min) before its updater has
+				// decided whether to roll it back. Advancing on version alone
+				// would command a second machine while the first one's rollback
+				// is still in flight, which is exactly the property this mode is
+				// allowed to keep. Only "ok" (exitOK: installed, restarted and
+				// confirmed healthy — resultForExitCode in the node updater)
+				// means done.
+				//
+				// Every other value was handled above (failed/rolled_back halted,
+				// skipped/unreachable took the passed-over branch), so the only
+				// value reachable here is "" — not yet reported.
+				if cur.UpdateResult != "ok" {
+					// Bounded, or an updater that died between installing and
+					// reporting pins the rollout in 发布中 forever: on target, so
+					// the wedge check cannot fire; heartbeating, so neither can
+					// the silence one. fleetInstallLimit comfortably exceeds
+					// install + the 10min health watch + one ~10min poll.
+					if now-stageStart > fleetInstallLimit {
+						return RolloutDecision{Action: "halt", Reason: fmt.Sprintf(
+							"node %s installed %s over %d seconds ago but never reported the outcome",
+							cur.ID, tr.TargetVersion, fleetInstallLimit)}
+					}
+					return RolloutDecision{Action: "wait"}
+				}
+				// Reported ok. Fall through and pick the next node now.
+			} else {
+				window := int64(fleetStepWindow)
+				if canary {
+					window = fleetFirstWindow
+				}
+				if now-stageStart < window {
+					return RolloutDecision{Action: "wait"}
+				}
 			}
 		}
 	}
@@ -348,6 +431,49 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 	return RolloutDecision{Action: "update", NodeID: candidates[0].ID, IsFirst: firstPick || reassertFirst}
 }
 
+// fleetFastHintFor reports whether this node should be ASKED to run an update
+// check right now, rather than waiting up to a poll interval for its timer.
+//
+// Without it, removing the observation windows still leaves every node waiting
+// out its own ~10-minute timer to discover its turn — on a 16-machine fleet,
+// over two hours of pure polling latency.
+//
+// A HINT, NEVER A COMMAND, and three properties keep it that way:
+//
+//   - it authorises nothing. All the node does with a true answer is ask its
+//     root updater to run; that updater re-queries central and verifies the
+//     release signature itself. Every guarantee is downstream of the poll.
+//   - it is PURE, and the caller must keep it so: the heartbeat path must not
+//     claim, command, halt or complete. That belongs to update-check, where the
+//     compare-and-swap lives.
+//   - both wrong answers are safe. A false negative means the node waits for its
+//     timer (the pre-existing behaviour); a false positive means one extra poll
+//     answering "not your turn", because ClaimRolloutNode — not this — is what
+//     makes the rollout serial.
+//
+// It hints exactly the node whose turn it is: the one holding the slot with no
+// result yet (its report IS the rollout's pace here), and the one decideFleet
+// would pick next. Any other result means the track is about to halt on or move
+// past that node, so there is nothing to hurry.
+//
+// Manual fast mode only: on the staged ladder the wait is the POINT, and an
+// emergency release has no queue to be next in.
+func fleetFastHintFor(tr RolloutTrack, snaps []NodeSnapshot, nodeID string, now int64) bool {
+	if tr.Status != "rolling" || !tr.ManualFast || tr.Emergency || tr.TargetVersion == "" {
+		return false
+	}
+	if tr.CurrentNodeID == nodeID {
+		for _, n := range snaps {
+			if n.ID == nodeID {
+				return n.UpdateResult == ""
+			}
+		}
+		return false
+	}
+	d := decideFleet(tr, snaps, now)
+	return d.Action == "update" && d.NodeID == nodeID
+}
+
 // passedOverResult reports whether an update result marks the node that
 // reported it as having had its turn without ever reaching the target
 // version: "skipped" (declined the update) or "unreachable" (could not fetch
@@ -368,9 +494,12 @@ func decideFleet(tr RolloutTrack, nodes []NodeSnapshot, now int64) RolloutDecisi
 //     the track's owner class (see ClearPassedOverResults);
 //   - ResumeRolloutTrack, inside its transaction, because 继续 restarts the
 //     ladder from the beginning;
-//   - RetryRolloutNode, for ONE node on a finished track.
+//   - RetryRolloutNode, for ONE node on a finished track;
+//   - StartManualFastRollout, inside its transaction, because it starts a fresh
+//     rollout on a finished track (added when manual fast mode shipped —
+//     exactly the case the warning below anticipated).
 //
-// Adding a fourth way to start or restart a rollout means adding the clear to
+// Adding a fifth way to start or restart a rollout means adding the clear to
 // it as well; without it, that path strands every node this rollout passed
 // over.
 //
