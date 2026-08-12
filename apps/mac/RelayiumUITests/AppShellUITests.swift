@@ -674,6 +674,49 @@ final class AppShellUITests: XCTestCase {
                        "a file code can be created with nothing to send")
     }
 
+    /// **Same-network residency is a LAN Transfer fact, and it appears there.**
+    ///
+    /// `testCrossNetworkTransferOffersOnlyPairingCodeConnecting…` above already
+    /// forbids the residency *control* on the pairing screen. It passed while
+    /// the sidebar's own footer reported "Receiving · ready" under every row,
+    /// including Cross-network Transfer — a destination whose whole premise is
+    /// that the two devices share no network — because that footer is one
+    /// column to the left of everything that test looks at.
+    ///
+    /// The absence is asserted per destination, and each check first waits for
+    /// the window to actually be on that destination: an absence observed on a
+    /// window that had not navigated yet would be about nothing. The final
+    /// return to LAN Transfer is what makes it a routing rule rather than a
+    /// footer that disappeared and stayed gone.
+    func testLanResidencyAppearsOnLanTransferAndOnNoOtherDestination() {
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+        let residency = window.descendants(matching: .any)["sidebar-lan-residency"].firstMatch
+
+        let lan = sidebarDestination("LAN Transfer", in: window)
+        XCTAssertTrue(lan.waitForExistence(timeout: 10))
+        lan.click()
+        XCTAssertTrue(residency.waitForExistence(timeout: 10),
+                      "LAN Transfer lost the residency footer this test is about")
+
+        for destination in ["Cross-network Transfer", "Send a link",
+                            "Device Inbox", "Account"] {
+            let row = sidebarDestination(destination, in: window)
+            XCTAssertTrue(row.waitForExistence(timeout: 10),
+                          "the sidebar has no row for \(destination)")
+            row.click()
+            expectation(for: NSPredicate(format: "title == %@", destination),
+                        evaluatedWith: window)
+            waitForExpectations(timeout: 10)
+            XCTAssertFalse(residency.exists,
+                           "\(destination) still reports same-network residency")
+        }
+
+        lan.click()
+        XCTAssertTrue(residency.waitForExistence(timeout: 10),
+                      "returning to LAN Transfer no longer restores its residency")
+    }
+
     /// A live session is on the destination that owns it, and on no other.
     ///
     /// Two screens over one set of models is exactly the shape that renders one

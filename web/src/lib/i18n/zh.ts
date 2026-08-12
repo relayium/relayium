@@ -482,8 +482,8 @@ const zh: Messages = {
     noToken: "本页面只能从登录链接进入。",
     home: "返回首页",
   },
-  nav: { footerLegalLabel: "法律", footerGuidesLabel: "资源", primaryLabel: "主导航", footerLabel: "页脚导航", lanTab: "局域网传输", crossTab: "实时传输", offlineTab: "异步传输", cliTab: "CLI", appsTab: "应用", deviceInboxTab: "设备收件箱" },
-  crossTitle: "实时传输",
+  nav: { footerLegalLabel: "法律", footerGuidesLabel: "资源", primaryLabel: "主导航", footerLabel: "页脚导航", lanTab: "局域网传输", crossTab: "跨网络传输", offlineTab: "异步传输", cliTab: "CLI", appsTab: "应用", deviceInboxTab: "设备收件箱" },
+  crossTitle: "跨网络传输",
   offlineTitle: "异步传输",
   cli: { subtitle: "在终端里传文件和临时文本 —— 端到端加密，可自托管。" },
   cliCallout: {
@@ -810,7 +810,7 @@ const zh: Messages = {
     textLimitNote: "单条消息最多 65,536 字节 UTF-8。更大的东西是文件，用 relayium send。",
   },
   crossnet: {
-    realtimeTitle: "实时传输",
+    realtimeTitle: "跨网络传输",
     realtimeSub: "对方此刻在线 · 端到端加密实时传输 · 服务器和中继无法解密文件或消息",
     realtimeFoot: "接收方无需账号 · 端到端加密",
     signInToSend: "登录后即可跨网络发送。接收方无需账号。",
@@ -833,11 +833,11 @@ const zh: Messages = {
     planNote: "你能存储多少、每月的传输量，以及下载链接的存活时长，都取决于你的套餐——免费起步，随时升级：",
   },
   crossSell: {
-    realtime: { lead: "对方就在线？使用端到端加密实时传输；跨网 TURN 只承载其无法解密的密文。", cta: "前往实时传输 →" },
+    realtime: { lead: "对方就在线？使用端到端加密实时传输；跨网 TURN 只承载其无法解密的密文。", cta: "前往跨网络传输 →" },
     offline: { lead: "对方现在不在线？用异步传输——加密上传后生成下载链接，对方几天内随时来取。", cta: "前往异步传输 →" },
   },
   methods: {
-    realtime: { name: "实时传输", sub: "先创建 6 位数字码，念码、发链接或扫码任选其一；对方设备加入后，再选择要发送的文件，或点「发送消息」发文本。", badge: "接收方免注册" },
+    realtime: { name: "跨网络传输", sub: "先创建 6 位数字码，念码、发链接或扫码任选其一；对方设备加入后，再选择要发送的文件，或点「发送消息」发文本。", badge: "接收方免注册" },
     stored: { name: "下载链接", sub: "浏览器先加密再暂存，对方无需在线、无需登录，凭链接随时下载。", badge: "对方可离线" },
   },
   pair: {
@@ -982,7 +982,7 @@ const zh: Messages = {
   },
   howItWorks: {
     realtime: {
-      title: "实时传输，三步完成",
+      title: "跨网络传输，三步完成",
       sub: "双方都在线时，跨网络实时互传——接收方无需账号。",
       ways: [
         { name: "创建配对码", how: "登录并创建一个 6 位数字配对码，同时得到加入链接和二维码；等另一台设备加入后再选择要发送的内容。", tag: "创建者需登录" },
@@ -1002,10 +1002,10 @@ const zh: Messages = {
   },
   compare: {
     title: "三种模式，怎么选",
-    sub: "「局域网传输」免账号，但只能在同一网络内使用；「实时传输」适合双方都在线时快速递送小文件和文本；大文件或对方稍后再取，用「下载链接」。",
+    sub: "「局域网传输」免账号，但只能在同一网络内使用；「跨网络传输」适合双方都在线时实时快速递送小文件和文本；大文件或对方稍后再取，用「下载链接」。",
     colFeature: "对比项",
     colLan: "局域网传输",
-    colRealtime: "实时传输",
+    colRealtime: "跨网络传输",
     colStored: "下载链接",
     rows: [
       { label: "是否需登录", lan: "两端都无需登录", realtime: "跨网文件/文本配对码创建者登录；加入者免账号", stored: "下载链接创建者登录；接收方免账号" },
@@ -1064,11 +1064,11 @@ const zh: Messages = {
       { q: "可以把文件存到我自己的服务器上吗？", a: "可以。在「个人中心」部署你自己的节点后，你的上传会优先存到自己的节点，免费且不计入额度；连不通时才回落到公共节点。" },
     ],
   },
-  crossPitch: "同一网络下用「局域网传输」更省事；不在同一网络，双方在线就在这里实时传输；对方不在线，用下方入口转到异步传输。",
+  crossPitch: "双方都在线，但不在同一个网络？在这里创建 6 位数字码，实时、端到端加密传输；对方不在线，用下方入口转到异步传输。",
   homeCross: {
     title: "不在同一个网络？",
-    desc: "对方在线，用实时传输（端到端加密；浏览器跨网络流量以密文经 TURN 承载）；对方不在线，用异步传输（加密暂存，凭链接随时取）。",
-    realtimeCta: "实时传输 →",
+    desc: "对方在线，用跨网络传输（实时、端到端加密；浏览器跨网络流量以密文经 TURN 承载）；对方不在线，用异步传输（加密暂存，凭链接随时取）。",
+    realtimeCta: "跨网络传输 →",
     offlineCta: "异步传输 →",
   },
   homeText: {

@@ -214,6 +214,16 @@ describe("localized ephemeral-text retention boundaries", () => {
         messages.crossSell.realtime.cta,
         messages.methods.realtime.name,
         messages.howItWorks.realtime.title,
+        // The three DESCRIPTIONS of that destination, added after fr/ar/es/pt
+        // were found still offering "direct on the local network, or TURN
+        // between networks" — a same-network path presented as one of this
+        // destination's own options. Cross-network Transfer is LAN Transfer's
+        // sibling, not a mode that contains it: the only path it has is TURN.
+        // The list above covered the NAMES, which is why the rename left the
+        // bodies untouched and the claim survived in four languages.
+        messages.crossnet.realtimeSub,
+        messages.crossSell.realtime.lead,
+        messages.homeCross.desc,
       ]) {
         expect(field, `${code}: cross-network mode name`).not.toMatch(expected.directNameBad);
       }

@@ -482,8 +482,8 @@ const en: Messages = {
     noToken: "This page is only reachable from a sign-in link.",
     home: "Back to home",
   },
-  nav: { footerLegalLabel: "Legal", footerGuidesLabel: "Resources", primaryLabel: "Main", footerLabel: "Footer", lanTab: "LAN", crossTab: "Realtime", offlineTab: "Async", cliTab: "CLI", appsTab: "Apps", deviceInboxTab: "Device Inbox" },
-  crossTitle: "Realtime transfer",
+  nav: { footerLegalLabel: "Legal", footerGuidesLabel: "Resources", primaryLabel: "Main", footerLabel: "Footer", lanTab: "LAN", crossTab: "Cross-network", offlineTab: "Async", cliTab: "CLI", appsTab: "Apps", deviceInboxTab: "Device Inbox" },
+  crossTitle: "Cross-network transfer",
   offlineTitle: "Async transfer",
   cli: { subtitle: "Transfer files and ephemeral text from your terminal — end-to-end encrypted, self-hostable." },
   cliCallout: {
@@ -830,7 +830,7 @@ const en: Messages = {
     textLimitNote: "One message is at most 65,536 bytes of UTF-8. Anything larger is a file — use relayium send.",
   },
   crossnet: {
-    realtimeTitle: "Realtime transfer",
+    realtimeTitle: "Cross-network transfer",
     realtimeSub: "Both online now · live, end-to-end encrypted · servers and relays cannot decrypt files or messages",
     realtimeFoot: "Recipient needs no account · end-to-end encrypted",
     signInToSend: "Sign in to send across networks. The person receiving never needs an account.",
@@ -853,11 +853,11 @@ const en: Messages = {
     planNote: "How much you can store, your monthly transfer, and how long download links stay live depend on your plan — start free, upgrade anytime:",
   },
   crossSell: {
-    realtime: { lead: "Is the other person online right now? Use realtime end-to-end encrypted transfer; cross-network TURN carries only ciphertext it cannot decrypt.", cta: "Go to realtime transfer →" },
+    realtime: { lead: "Is the other person online right now? Use realtime end-to-end encrypted transfer; cross-network TURN carries only ciphertext it cannot decrypt.", cta: "Go to cross-network transfer →" },
     offline: { lead: "Recipient not online? Use async transfer — encrypt, upload, and leave a download link they can fetch for days.", cta: "Go to async transfer →" },
   },
   methods: {
-    realtime: { name: "Realtime transfer", sub: "Create a 6-digit code — read it out, send the link, or show the QR. Once the other device joins, choose the files to send, or “Send a message” for text.", badge: "Recipient: no account" },
+    realtime: { name: "Cross-network transfer", sub: "Create a 6-digit code — read it out, send the link, or show the QR. Once the other device joins, choose the files to send, or “Send a message” for text.", badge: "Recipient: no account" },
     stored: { name: "Download link", sub: "Your browser encrypts then stores; the recipient downloads anytime, no live session and no account needed.", badge: "Offline OK" },
   },
   pair: {
@@ -1002,7 +1002,7 @@ const en: Messages = {
   },
   howItWorks: {
     realtime: {
-      title: "Realtime transfer, in three steps",
+      title: "Cross-network transfer, in three steps",
       sub: "When both sides are online, transfer across networks in real time — the recipient needs no account.",
       ways: [
         { name: "Create a pairing code", how: "Sign in and create a 6-digit pairing code, together with a join link and QR. You choose what to send after the other device joins.", tag: "The creator signs in" },
@@ -1022,10 +1022,10 @@ const en: Messages = {
   },
   compare: {
     title: "Which mode to choose",
-    sub: "LAN needs no account but only works on one shared network; realtime hands small files and text over while both sides are online; a download link is the one to use for large files, or when they'll fetch it later.",
+    sub: "LAN needs no account but only works on one shared network; cross-network transfer hands small files and text over in real time while both sides are online; a download link is the one to use for large files, or when they'll fetch it later.",
     colFeature: "Aspect",
     colLan: "LAN",
-    colRealtime: "Realtime",
+    colRealtime: "Cross-network",
     colStored: "Download link",
     rows: [
       { label: "Sign-in needed", lan: "Neither side signs in", realtime: "Cross-network file/text code creator signs in; joiner needs no account", stored: "Download-link creator signs in; the recipient needs no account" },
@@ -1084,11 +1084,11 @@ const en: Messages = {
       { q: "Can I store files on my own server?", a: "Yes. Deploy your own node from the account page and your uploads go to your own node first — free and quota-exempt — falling back to public nodes only if yours is unreachable." },
     ],
   },
-  crossPitch: "On the same network, “LAN transfer” is simplest; apart but both online, transfer right here in realtime — recipient offline? Switch to async transfer below.",
+  crossPitch: "Both online but not on the same network? Create a 6-digit code and transfer right here — live and end-to-end encrypted. Recipient offline? Switch to async transfer below.",
   homeCross: {
     title: "Not on the same network?",
-    desc: "If they're online, use realtime transfer (end-to-end encrypted; cross-network browser traffic goes through TURN as ciphertext); if not, use async transfer (encrypted storage, fetch by link anytime).",
-    realtimeCta: "Realtime transfer →",
+    desc: "If they're online, use cross-network transfer (real time, end-to-end encrypted; browser traffic goes through TURN as ciphertext); if not, use async transfer (encrypted storage, fetch by link anytime).",
+    realtimeCta: "Cross-network transfer →",
     offlineCta: "Async transfer →",
   },
   homeText: {

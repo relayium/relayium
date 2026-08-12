@@ -194,6 +194,68 @@ final class MacSurfaceGuardTests: XCTestCase {
             "the destination smoke test does not observe the rendered detail surface")
     }
 
+    /// **LAN Transfer and Cross-network Transfer are sibling products, and the
+    /// sidebar chrome has to know that too.**
+    ///
+    /// The two destinations were split precisely because their preconditions
+    /// are opposite, and the split was then contradicted by one view that is
+    /// not a destination: the sidebar rendered `NearbyReceiveModel`'s
+    /// same-network residency under every row through `safeAreaInset`, so
+    /// Cross-network Transfer — which exists for devices that share no network
+    /// — permanently displayed whether this Mac could be reached on the local
+    /// one. Stored Send, Device Inbox and Account carried it too, and it
+    /// describes none of them either.
+    ///
+    /// Asserted structurally rather than as a screenshot: the reachability read
+    /// (`receive.state`) may appear in this file only under the LAN condition,
+    /// so restoring the global footer cannot pass by moving the badge.
+    func testSidebarResidencyIsScopedToLanTransfer() throws {
+        let sidebar = try source(named: "Shell/SidebarView.swift")
+        XCTAssertTrue(sidebar.contains("if navigation.selection.macSurface == .lanTransfer {"),
+                      "the sidebar residency footer is not scoped to a destination")
+        XCTAssertTrue(sidebar.contains("@ViewBuilder private var residency: some View"),
+                      "a non-optional residency view cannot express the absence")
+        XCTAssertTrue(sidebar.contains(".accessibilityIdentifier(\"sidebar-lan-residency\")"),
+                      "the residency footer has no stable identity to assert an absence against")
+
+        // Everything that reads reachability must sit inside the gate. The
+        // condition opens the property and the property is the file's last
+        // member, so "after the gate" is the whole remainder.
+        let gate = try XCTUnwrap(sidebar.range(of:
+            "if navigation.selection.macSurface == .lanTransfer {"))
+        let beforeGate = String(sidebar[..<gate.lowerBound])
+        XCTAssertFalse(beforeGate.contains("NearbyStatusPresentation.text(for: receive.state)"),
+                       "same-network residency is rendered outside the LAN destination")
+        XCTAssertEqual(occurrences(of: "NearbyStatusPresentation.text(for: receive.state)",
+                                   in: sidebar), 1,
+                       "a second residency render site is a second answer to which rows show it")
+        // `hasLiveSession` is the OTHER thing the sidebar says about a
+        // transfer, and it is per row by design. Residency must not be folded
+        // into it: ownership and reachability are different facts, which is
+        // the mistake `hasLiveSession`'s own comment records.
+        XCTAssertFalse(sidebar.contains("receive.activeKind != nil"),
+                       "residency is being read as session ownership again")
+
+        let uiURL = macRoot.deletingLastPathComponent()
+            .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
+        let ui = try String(contentsOf: uiURL, encoding: .utf8)
+        XCTAssertTrue(ui.contains("testLanResidencyAppearsOnLanTransferAndOnNoOtherDestination"),
+                      "no runtime check observes where residency is drawn")
+        XCTAssertTrue(ui.contains("\"sidebar-lan-residency\""),
+                      "the runtime check does not use the footer's stable identity")
+        // An absence is only evidence once the window has actually arrived on
+        // the destination it is claimed about.
+        let runtime = try XCTUnwrap(ui.components(
+            separatedBy: "func testLanResidencyAppearsOnLanTransferAndOnNoOtherDestination()")
+            .dropFirst().first?.components(separatedBy: "\n    /// ").first)
+        XCTAssertTrue(runtime.contains("NSPredicate(format: \"title == %@\", destination)"),
+                      "the absence is asserted before the destination is on screen")
+        XCTAssertTrue(runtime.contains("\"Cross-network Transfer\""),
+                      "the sibling destination is not among the checked absences")
+        XCTAssertTrue(runtime.contains("returning to LAN Transfer no longer restores its residency"),
+                      "a footer that vanished for good would pass every absence")
+    }
+
     func testMacRuntimeSuiteIsAHostedProductGate() throws {
         let workflowURL = repoRoot.appendingPathComponent(".github/workflows/macos.yml")
         let workflow = try String(contentsOf: workflowURL, encoding: .utf8)

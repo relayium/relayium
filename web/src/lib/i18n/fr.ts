@@ -482,8 +482,8 @@ const fr: Messages = {
     noToken: "Cette page n'est accessible que depuis un lien de connexion.",
     home: "Retour à l'accueil",
   },
-  nav: { footerLegalLabel: "Mentions légales", footerGuidesLabel: "Ressources", primaryLabel: "Navigation principale", footerLabel: "Navigation de pied de page", lanTab: "LAN", crossTab: "Temps réel", offlineTab: "Asynchrone", cliTab: "CLI", appsTab: "Applis", deviceInboxTab: "Boîte appareil" },
-  crossTitle: "Transfert en temps réel",
+  nav: { footerLegalLabel: "Mentions légales", footerGuidesLabel: "Ressources", primaryLabel: "Navigation principale", footerLabel: "Navigation de pied de page", lanTab: "LAN", crossTab: "Entre réseaux", offlineTab: "Asynchrone", cliTab: "CLI", appsTab: "Applis", deviceInboxTab: "Boîte appareil" },
+  crossTitle: "Transfert entre réseaux",
   offlineTitle: "Transfert asynchrone",
   cli: { subtitle: "Transférez des fichiers et du texte éphémère depuis votre terminal — chiffré de bout en bout, auto-hébergeable." },
   cliCallout: {
@@ -820,8 +820,8 @@ const fr: Messages = {
     textLimitNote: "Un message fait au plus 65 536 octets UTF-8. Au-delà, c’est un fichier — utilisez relayium send.",
   },
   crossnet: {
-    realtimeTitle: "Transfert en temps réel",
-    realtimeSub: "Les deux en ligne · réseau local direct · entre réseaux, TURN transporte du chiffré que le relais ne peut ni lire ni déchiffrer",
+    realtimeTitle: "Transfert entre réseaux",
+    realtimeSub: "Les deux en ligne · session en temps réel, chiffrée de bout en bout · TURN transporte du chiffré que le relais ne peut ni lire ni déchiffrer",
     realtimeFoot: "Le destinataire n'a pas besoin de compte · chiffré de bout en bout",
     signInToSend: "Connectez-vous pour envoyer d'un réseau à l'autre. La personne qui reçoit n'a jamais besoin de compte.",
     relayQuotaWarn: "Votre quota de relais mensuel est épuisé : une session navigateur inter-réseaux ne peut pas démarrer ou continuer. Les sessions sur le même réseau et les transferts directs CLI restent disponibles. Utilisez un lien de téléchargement, augmentez votre offre ou exécutez votre propre nœud.",
@@ -843,11 +843,11 @@ const fr: Messages = {
     planNote: "La capacité de stockage, votre volume de transfert mensuel et la durée pendant laquelle les liens de téléchargement restent actifs dépendent de votre offre — commencez gratuitement, améliorez à tout moment :",
   },
   crossSell: {
-    realtime: { lead: "L'autre personne est en ligne ? En temps réel : direct sur le réseau local ; entre réseaux, TURN transporte du chiffré que le relais ne peut ni lire ni déchiffrer.", cta: "Vers le transfert en temps réel →" },
+    realtime: { lead: "L'autre personne est en ligne ? Utilisez le transfert entre réseaux, en temps réel et chiffré de bout en bout ; TURN transporte du chiffré que le relais ne peut ni lire ni déchiffrer.", cta: "Vers le transfert entre réseaux →" },
     offline: { lead: "Destinataire hors ligne ? Utilisez le transfert asynchrone — chiffrez, téléversez et laissez un lien de téléchargement, récupérable pendant plusieurs jours.", cta: "Vers le transfert asynchrone →" },
   },
   methods: {
-    realtime: { name: "Transfert en temps réel", sub: "Créez d'abord un code à 6 chiffres — dictez-le, envoyez le lien ou montrez le QR. Dès que l'autre appareil rejoint, choisissez les fichiers à envoyer, ou « Envoyer un message » pour du texte.", badge: "Destinataire sans compte" },
+    realtime: { name: "Transfert entre réseaux", sub: "Créez d'abord un code à 6 chiffres — dictez-le, envoyez le lien ou montrez le QR. Dès que l'autre appareil rejoint, choisissez les fichiers à envoyer, ou « Envoyer un message » pour du texte.", badge: "Destinataire sans compte" },
     stored: { name: "Lien de téléchargement", sub: "Votre navigateur chiffre puis stocke temporairement ; le destinataire télécharge quand il veut, sans session ni compte.", badge: "Même hors ligne" },
   },
   pair: {
@@ -992,7 +992,7 @@ const fr: Messages = {
   },
   howItWorks: {
     realtime: {
-      title: "Transfert en temps réel, en trois étapes",
+      title: "Transfert entre réseaux, en trois étapes",
       sub: "Quand les deux côtés sont en ligne, transfert en temps réel d'un réseau à l'autre — le destinataire n'a pas besoin de compte.",
       ways: [
         { name: "Créer un code d'appairage", how: "Connectez-vous et créez un code à 6 chiffres, avec lien de participation et QR. Vous choisirez le contenu après l'arrivée de l'autre appareil.", tag: "Le créateur se connecte" },
@@ -1012,10 +1012,10 @@ const fr: Messages = {
   },
   compare: {
     title: "Quel mode choisir",
-    sub: "Le LAN ne demande aucun compte mais ne fonctionne que sur un même réseau ; le temps réel fait passer petits fichiers et textes tant que les deux sont en ligne ; pour les gros fichiers, ou pour une récupération plus tard, prenez le lien de téléchargement.",
+    sub: "Le LAN ne demande aucun compte mais ne fonctionne que sur un même réseau ; le transfert entre réseaux fait passer petits fichiers et textes en temps réel tant que les deux sont en ligne ; pour les gros fichiers, ou pour une récupération plus tard, prenez le lien de téléchargement.",
     colFeature: "Critère",
     colLan: "LAN",
-    colRealtime: "Transfert en temps réel",
+    colRealtime: "Transfert entre réseaux",
     colStored: "Lien de téléchargement",
     rows: [
       { label: "Connexion requise", lan: "Aucune des deux parties ne se connecte", realtime: "Le créateur d'un code fichier ou texte se connecte ; la personne qui le rejoint n'en a pas besoin", stored: "Le créateur du lien se connecte ; le destinataire n'a pas besoin de compte" },
@@ -1074,11 +1074,11 @@ const fr: Messages = {
       { q: "Puis-je stocker les fichiers sur mon propre serveur ?", a: "Oui. Déployez votre propre nœud depuis la page de votre compte et vos téléversements iront d'abord sur votre nœud — gratuit et hors quota — avec un repli vers les nœuds publics uniquement si le vôtre est injoignable." },
     ],
   },
-  crossPitch: "Sur le même réseau, le « transfert en réseau local » est le plus simple ; à distance et tous deux en ligne, transférez ici en temps réel — destinataire hors ligne ? Passez au transfert asynchrone ci-dessous.",
+  crossPitch: "Tous deux en ligne mais pas sur le même réseau ? Créez ici un code à 6 chiffres et transférez en temps réel, chiffré de bout en bout — destinataire hors ligne ? Passez au transfert asynchrone ci-dessous.",
   homeCross: {
     title: "Pas sur le même réseau ?",
-    desc: "S'il est en ligne, utilisez le temps réel : direct sur le réseau local, ou TURN chiffré entre réseaux. Sinon, utilisez le transfert asynchrone.",
-    realtimeCta: "Direct en temps réel →",
+    desc: "S'il est en ligne, utilisez le transfert entre réseaux (en temps réel, chiffré de bout en bout ; le trafic du navigateur passe par TURN sous forme de chiffré) ; sinon, utilisez le transfert asynchrone (stockage chiffré, récupération par lien à tout moment).",
+    realtimeCta: "Transfert entre réseaux →",
     offlineCta: "Transfert asynchrone →",
   },
   homeText: {

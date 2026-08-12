@@ -18,6 +18,12 @@ import RelayiumAppKit
 /// code without requiring a shared network — and that difference is the first thing a
 /// person choosing between them needs.
 ///
+/// **The residency footer belongs to LAN Transfer, not to the sidebar.** It
+/// answers "can this Mac be reached on this network right now", which is a fact
+/// about one of those two destinations and about none of the others. It sits in
+/// the sidebar's safe area because that is where it fits, not because it
+/// describes the sidebar — so it renders only while LAN Transfer is selected.
+///
 /// **Open a link is deliberately not a row.** It is where a link the OS handed
 /// this app is opened, not somewhere to set out for; the destination is still
 /// rendered whenever a supported deep link selects it, and `MacSurface.browseable`
@@ -205,20 +211,42 @@ struct SidebarView: View {
     /// bar, and a third control site for one toggle is worse than a slightly
     /// longer path to it. What the footer owes the user is the answer to "can
     /// this Mac be reached right now", which is exactly what it reports.
-    private var residency: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Divider()
-            Text(L10n.t(.navResidency))
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.secondary)
-            StatusBadge(symbol: residencySymbol,
-                        tint: residencyTint,
-                        label: NearbyStatusPresentation.text(for: receive.state))
+    ///
+    /// **On LAN Transfer, and nowhere else.** `NearbyReceiveModel` is
+    /// same-network residency: whether this Mac is announcing itself on the
+    /// local network and can be reached by a device that shares it. Rendered
+    /// under every row, it put that answer on Cross-network Transfer — the one
+    /// destination whose entire premise is that no shared network exists — and
+    /// on Stored Send, Device Inbox and Account, none of which it describes
+    /// either. `testCrossNetworkTransferOffersOnlyPairingCodeConnecting…`
+    /// already forbade the residency *control* on the pairing screen; this
+    /// footer was the same claim, one column to the left, in a container the
+    /// destination does not own.
+    ///
+    /// This is presentation only. Residency itself is unchanged and app-scoped:
+    /// this Mac keeps receiving from anywhere in the app, and the LAN row's own
+    /// live-session marker still says when a transfer is running there.
+    @ViewBuilder private var residency: some View {
+        if navigation.selection.macSurface == .lanTransfer {
+            VStack(alignment: .leading, spacing: 4) {
+                Divider()
+                Text(L10n.t(.navResidency))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                StatusBadge(symbol: residencySymbol,
+                            tint: residencyTint,
+                            label: NearbyStatusPresentation.text(for: receive.state))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .padding(.bottom, 10)
+            .accessibilityElement(children: .combine)
+            // The footer is an absence on four of five rows, and an absence
+            // needs a name a runtime check can ask for. The AX container for a
+            // safe-area inset is not stable across macOS versions, so the
+            // identity is on the content rather than on the inset.
+            .accessibilityIdentifier("sidebar-lan-residency")
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
-        .padding(.bottom, 10)
-        .accessibilityElement(children: .combine)
     }
 
     private var residencySymbol: String {

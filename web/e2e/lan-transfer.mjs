@@ -20,7 +20,8 @@
  * 都是真的：真服务器、真 WebSocket 信令、真 RTCPeerConnection、真 AES-GCM。
  *
  * 用法：node e2e/lan-transfer.mjs [--url http://localhost:8099] [--keep]
- *       node e2e/lan-transfer.mjs --multi-page-only  # targeted identity regression
+ *       node e2e/lan-transfer.mjs --multi-page-only         # targeted identity regression
+ *       node e2e/lan-transfer.mjs --transfer-boundary-only  # targeted sibling-destination regression
  *   前置：web 已 build（普通 `npm run build` 即可），且 Go 服务器在 --url 上跑着
  *   （它同时兜 SPA 和 /ws）。
  */
@@ -1021,6 +1022,123 @@ async function messageDefaultRaceScenario(browser) {
 }
 
 /**
+ * **A LAN peer cannot surface on the cross-network destination.**
+ *
+ * LAN Transfer and Cross-network Transfer are sibling products: `/` answers
+ * "who is on this network?" and `/cross-network` answers "what is the code?".
+ * What shipped answered both on both, because the transfer surface's condition
+ * had no route term — so a second window on the same Wi-Fi put that window's
+ * device card, its name and the same-network empty prompt onto the destination
+ * whose entire premise is that no shared network exists.
+ *
+ * Why this needs a real browser and a real server rather than the unit guards:
+ * the leak is a *live roster* reaching a *rendered route*. Both halves have to
+ * be real for the absence to mean anything, which is why this scenario asserts
+ * three things together and not just the absence:
+ *
+ *   1. tab A is genuinely on `/cross-network` and its socket is genuinely
+ *      still being offered the LAN peer (`window.__roster`), so the absence is
+ *      a routing decision and not a roster that quietly emptied;
+ *   2. tab B, still on `/`, keeps rendering that same peer, so LAN itself is
+ *      untouched;
+ *   3. going back to `/` brings the card straight back, so this is a boundary
+ *      rather than a surface that was destroyed.
+ *
+ * The leak counter is latched from BEFORE the click and only counts while the
+ * location is already `/cross-network`, so a card that appears for one frame
+ * during the route change still fails.
+ */
+async function transferBoundaryScenario(browser) {
+  const boot = VERIFY_DEFAULT + OBSERVE_ROSTER;
+  const a = await newTab(browser, BASE + "/", boot);
+  const b = await newTab(browser, BASE + "/", boot);
+  for (const tab of [a, b]) await setWideViewport(tab);
+
+  const peersSeen = "document.querySelectorAll('.pname').length > 0";
+  await a.waitFor(peersSeen, "peers (transfer-boundary scenario)", 30_000);
+  await b.waitFor(peersSeen, "peers (transfer-boundary scenario)", 30_000);
+  const peerName = await a.evaluate("document.querySelector('.pname').textContent.trim()");
+  if (!peerName) throw new Error("the LAN peer has no visible name; the scenario proves nothing");
+
+  // Latched before the navigation. `.peers` is the roster section, `.pname` a
+  // device name, `.radar` the multi-device chooser and `.empty-lead` the
+  // "open this page on another device on the same network" prompt — every one
+  // of them is LAN discovery, and none may exist on the other destination.
+  await a.evaluate(`(() => {
+    window.__lanLeak = [];
+    const look = () => {
+      if (location.pathname !== "/cross-network") return;
+      for (const sel of [".peers", ".pname", ".radar", ".empty-lead"]) {
+        if (document.querySelector(sel)) window.__lanLeak.push(sel);
+      }
+    };
+    new MutationObserver(look).observe(document.body, { childList: true, subtree: true });
+    look();
+    return true;
+  })()`);
+
+  await a.evaluate(`(() => { document.querySelector('[data-nav="cross"]').click(); return true; })()`);
+  await a.waitFor(
+    "location.pathname === '/cross-network' && !!document.querySelector('.crosspage')",
+    "tab A to arrive on the cross-network destination",
+    20_000,
+  );
+
+  // The peer is still being offered to this page. Without this the absence
+  // below could just as well mean the LAN room fell apart.
+  await a.waitFor(
+    "Array.isArray(window.__roster) && window.__roster.length > 0",
+    "tab A's signalling roster to still carry the LAN peer while on /cross-network",
+    20_000,
+  );
+  // Give a late render a chance to be caught rather than raced past.
+  await sleep(1_500);
+
+  const seen = await a.evaluate(`({
+    leaked: window.__lanLeak,
+    roster: window.__roster.length,
+    namePresent: document.body.innerText.includes(${JSON.stringify(peerName)}),
+    crossPage: !!document.querySelector(".crosspage"),
+  })`);
+  if (!seen.crossPage) throw new Error("tab A is not rendering the cross-network destination");
+  if (seen.roster < 1) throw new Error("tab A stopped being offered the LAN peer; the absence proves nothing");
+  if (seen.leaked.length) {
+    throw new Error(
+      `LAN discovery surfaced on /cross-network: ${[...new Set(seen.leaked)].join(", ")}`,
+    );
+  }
+  if (seen.namePresent) {
+    throw new Error(`the LAN peer's name "${peerName}" is rendered on /cross-network`);
+  }
+  ok("a visible LAN peer stayed off the cross-network destination while still being discovered");
+
+  // The control: LAN itself is untouched by the boundary.
+  const stillOnLan = await b.evaluate(`({
+    cards: document.querySelectorAll(".pname").length,
+    named: document.body.innerText.includes(${JSON.stringify(peerName)}),
+  })`);
+  if (stillOnLan.cards < 1) {
+    throw new Error("the LAN tab lost its own roster; the boundary took the product with it");
+  }
+  ok("the LAN destination kept rendering the same peer throughout");
+
+  // …and the surface comes back, so this is a route boundary and not a
+  // one-way teardown.
+  await a.evaluate(`(() => { document.querySelector('[data-nav="lan"]').click(); return true; })()`);
+  await a.waitFor("location.pathname === '/'", "tab A to return to LAN Transfer", 20_000);
+  await a.waitFor(peersSeen, "the LAN peer card to come back on /", 30_000);
+  ok("returning to LAN Transfer restored the peer card the boundary had withheld");
+
+  const errs = [...a.errors, ...b.errors].filter((e) => !/401|Failed to load resource/.test(e));
+  if (errs.length) {
+    throw new Error(`console errors during the transfer-boundary scenario:\n    ${errs.join("\n    ")}`);
+  }
+
+  await browser.send("Target.closeTarget", { targetId: a.targetId });
+  await browser.send("Target.closeTarget", { targetId: b.targetId });
+}
+
+/**
  * Read-only probe of what the SERVER told this page: its own peer id from the
  * welcome, and the ids in the latest roster.
  *
@@ -1941,11 +2059,24 @@ async function main() {
       return;
     }
 
+    // The sibling-destination boundary on its own. It needs the same real
+    // server, real signalling and real roster as the full run, but none of the
+    // other scenarios: they cost minutes, and a LAN peer leaking onto
+    // /cross-network is decided in the first two tabs. Permanent rather than
+    // scratch, because the boundary is the kind of thing a later routing or
+    // layout change reopens silently, and this is the cheapest way to ask.
+    if (argPresent("--transfer-boundary-only")) {
+      await transferBoundaryScenario(browser);
+      console.log("\n\x1b[32mLAN/cross-network transfer-boundary E2E passed\x1b[0m\n");
+      return;
+    }
+
     await authLandingScenario(browser);
     await appsHierarchyScenario(browser);
     await pricingHierarchyScenario(browser);
     await mobileRelayFallbackScenario(browser);
     await smallMessageCapScenario(browser);
+    await transferBoundaryScenario(browser);
 
     // ── 两个标签页进同一个房间（都是 127.0.0.1，服务器按来源 IP 归组）────────
     // Advanced verification ON for the main pair. This run asserts the ON-path

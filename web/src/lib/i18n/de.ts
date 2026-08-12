@@ -482,8 +482,8 @@ const de: Messages = {
     noToken: "Diese Seite ist nur über einen Anmeldelink erreichbar.",
     home: "Zurück zur Startseite",
   },
-  nav: { footerLegalLabel: "Rechtliches", footerGuidesLabel: "Ressourcen", primaryLabel: "Hauptnavigation", footerLabel: "Fußzeilennavigation", lanTab: "LAN", crossTab: "Echtzeit", offlineTab: "Asynchron", cliTab: "CLI", appsTab: "Apps", deviceInboxTab: "Geräte-Posteingang" },
-  crossTitle: "Echtzeitübertragung",
+  nav: { footerLegalLabel: "Rechtliches", footerGuidesLabel: "Ressourcen", primaryLabel: "Hauptnavigation", footerLabel: "Fußzeilennavigation", lanTab: "LAN", crossTab: "Netzwerkübergreifend", offlineTab: "Asynchron", cliTab: "CLI", appsTab: "Apps", deviceInboxTab: "Geräte-Posteingang" },
+  crossTitle: "Netzwerkübergreifende Übertragung",
   offlineTitle: "Asynchron senden",
   cli: { subtitle: "Dateien und flüchtigen Text vom Terminal übertragen — Ende-zu-Ende-verschlüsselt, selbst hostbar." },
   cliCallout: {
@@ -820,7 +820,7 @@ const de: Messages = {
     textLimitNote: "Eine Nachricht umfasst höchstens 65.536 Bytes UTF-8. Alles Größere ist eine Datei — nimm relayium send.",
   },
   crossnet: {
-    realtimeTitle: "Echtzeitübertragung",
+    realtimeTitle: "Netzwerkübergreifende Übertragung",
     realtimeSub: "Beide jetzt online · Ende-zu-Ende-verschlüsselt · Server und Relay können Dateien und Nachrichten nicht entschlüsseln",
     realtimeFoot: "Empfänger braucht kein Konto · Ende-zu-Ende-verschlüsselt",
     signInToSend: "Zum netzwerkübergreifenden Senden anmelden. Die empfangende Person braucht nie ein Konto.",
@@ -843,11 +843,11 @@ const de: Messages = {
     planNote: "Wie viel du speichern kannst, dein monatliches Transfervolumen und wie lange Download-Links aktiv bleiben, hängt von deinem Tarif ab — kostenlos starten, jederzeit upgraden:",
   },
   crossSell: {
-    realtime: { lead: "Ist die andere Person online? Nutze die Ende-zu-Ende-verschlüsselte Echtzeitübertragung; netzwerkübergreifend trägt TURN nur Chiffretext, den es nicht entschlüsseln kann.", cta: "Zur Echtzeitübertragung →" },
+    realtime: { lead: "Ist die andere Person online? Nutze die Ende-zu-Ende-verschlüsselte Echtzeitübertragung; netzwerkübergreifend trägt TURN nur Chiffretext, den es nicht entschlüsseln kann.", cta: "Zur netzwerkübergreifenden Übertragung →" },
     offline: { lead: "Gegenseite offline? Nutze die asynchrone Übertragung — verschlüsselt hochladen und einen Download-Link hinterlassen, tagelang abholbar.", cta: "Zur asynchronen Übertragung →" },
   },
   methods: {
-    realtime: { name: "Echtzeitübertragung", sub: "Zuerst einen 6-stelligen Zifferncode erstellen — vorlesen, als Link verschicken oder QR zeigen. Sobald das andere Gerät beitritt, wählst du die Dateien aus oder „Nachricht senden“ für Text.", badge: "Empfänger ohne Konto" },
+    realtime: { name: "Netzwerkübergreifende Übertragung", sub: "Zuerst einen 6-stelligen Zifferncode erstellen — vorlesen, als Link verschicken oder QR zeigen. Sobald das andere Gerät beitritt, wählst du die Dateien aus oder „Nachricht senden“ für Text.", badge: "Empfänger ohne Konto" },
     stored: { name: "Download-Link", sub: "Dein Browser verschlüsselt und speichert zwischen; die empfangende Person lädt jederzeit herunter — ohne Sitzung, ohne Konto.", badge: "Auch offline" },
   },
   pair: {
@@ -992,7 +992,7 @@ const de: Messages = {
   },
   howItWorks: {
     realtime: {
-      title: "Echtzeitübertragung in drei Schritten",
+      title: "Netzwerkübergreifende Übertragung in drei Schritten",
       sub: "Wenn beide Seiten online sind, netzwerkübergreifend in Echtzeit übertragen — der Empfänger braucht kein Konto.",
       ways: [
         { name: "Pairing-Code erstellen", how: "Melde dich an und erstelle einen 6-stelligen Pairing-Zifferncode samt Beitrittslink und QR. Was du sendest, wählst du erst, wenn das andere Gerät beigetreten ist.", tag: "Der Ersteller meldet sich an" },
@@ -1012,10 +1012,10 @@ const de: Messages = {
   },
   compare: {
     title: "Welcher Modus passt",
-    sub: "LAN braucht kein Konto, funktioniert aber nur im selben Netzwerk; Echtzeit reicht kleine Dateien und Text hinüber, solange beide online sind; für große Dateien oder späteres Abholen ist der Download-Link der richtige Weg.",
+    sub: "LAN braucht kein Konto, funktioniert aber nur im selben Netzwerk; die netzwerkübergreifende Übertragung reicht kleine Dateien und Text in Echtzeit hinüber, solange beide online sind; für große Dateien oder späteres Abholen ist der Download-Link der richtige Weg.",
     colFeature: "Aspekt",
     colLan: "LAN",
-    colRealtime: "Echtzeit",
+    colRealtime: "Netzwerkübergreifend",
     colStored: "Download-Link",
     rows: [
       { label: "Anmeldung nötig", lan: "Keine Seite meldet sich an", realtime: "Ersteller eines Netzwerk-Datei-/Textcodes meldet sich an; Beitritt ohne Konto", stored: "Ersteller des Download-Links meldet sich an; die empfangende Seite braucht kein Konto" },
@@ -1074,11 +1074,11 @@ const de: Messages = {
       { q: "Kann ich Dateien auf meinem eigenen Server speichern?", a: "Ja. Betreibe einen eigenen Node über die Kontoseite, dann gehen deine Uploads zuerst auf deinen eigenen Node — kostenlos und kontingentfrei — und weichen nur auf öffentliche Nodes aus, wenn deiner nicht erreichbar ist." },
     ],
   },
-  crossPitch: "Im selben Netzwerk ist „LAN-Übertragung“ am einfachsten; getrennt und beide online? Dann hier in Echtzeit übertragen — Gegenseite offline? Unten geht's zur asynchronen Übertragung.",
+  crossPitch: "Beide online, aber nicht im selben Netzwerk? Hier einen 6-stelligen Code erstellen und in Echtzeit Ende-zu-Ende-verschlüsselt übertragen — Gegenseite offline? Unten geht's zur asynchronen Übertragung.",
   homeCross: {
     title: "Nicht im selben Netzwerk?",
-    desc: "Ist die Gegenseite online, nutze Echtzeitübertragung (netzübergreifend trägt TURN Browser-Daten als Chiffretext); sonst asynchron mit verschlüsseltem Speicher.",
-    realtimeCta: "Echtzeitübertragung →",
+    desc: "Ist die Gegenseite online, nutze die netzwerkübergreifende Übertragung in Echtzeit (TURN trägt Browser-Daten als Chiffretext); sonst asynchron mit verschlüsseltem Speicher.",
+    realtimeCta: "Netzwerkübergreifende Übertragung →",
     offlineCta: "Asynchron senden →",
   },
   homeText: {

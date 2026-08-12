@@ -18,8 +18,8 @@
   import PageFooter from "./PageFooter.svelte";
   import Icon from "./Icon.svelte";
 
-  let { roomCode = "", linkDead = false, showTransfer = false, relayStatus = "ok", transferSurface, dismissLan }:
-    { roomCode?: string; linkDead?: boolean; showTransfer?: boolean; relayStatus?: RelayAvailability; transferSurface?: Snippet; dismissLan?: () => void } = $props();
+  let { roomCode = "", linkDead = false, showTransfer = false, relayStatus = "ok", transferSurface }:
+    { roomCode?: string; linkDead?: boolean; showTransfer?: boolean; relayStatus?: RelayAvailability; transferSurface?: Snippet } = $props();
 
   const t = $derived<Messages>(messages[lang()]);
   const inRoom = $derived(!!roomCode);
@@ -36,11 +36,11 @@
     // abandoned, so the rest of its bytes would buy nothing.
     clearOutbox();
     resetPreupload();
-    // A LAN auto-pair (and the share-link+same-LAN overlap) has no room to leave —
-    // enterRoom({}) alone leaves the surface up, since it's driven by the visible
-    // peer, not the URL. Suppress it so we fall back to the method choices; App
-    // self-clears the flag once the peer drops.
-    dismissLan?.();
+    // Leaving the room is the whole exit now. This destination draws the
+    // transfer surface for its pairing room and for nothing else
+    // (`showsTransferSurface`), so dropping the code returns to the method
+    // choices — there is no second, LAN-driven reason for the surface to stay
+    // up that would need suppressing as well.
     enterRoom({});
   }
 </script>

@@ -295,7 +295,11 @@ describe("the send confirmation cannot release before its code exists", () => {
 
 describe("the mixed workspace owns the screen", () => {
   it("hides the chooser, the old peer actions and the availability hint", () => {
-    expect(surface).toMatch(/\{#if !mixed\}\s*<section class="peers"/);
+    // `!mixed` is this test's subject and must stay the first term. The route
+    // gate beside it belongs to the sibling-destination boundary and is owned
+    // by transfer-surface.test.ts — a live workspace still hides this section
+    // on both destinations either way.
+    expect(surface).toMatch(/\{#if !mixed && showsPeerRoster\(.*\)\}\s*<section class="peers"/);
     // The hint lives inside that section, so it goes with it.
     const peers = surface.slice(surface.indexOf('<section class="peers"'), surface.indexOf("</section>", surface.indexOf('<section class="peers"')));
     expect(peers).toContain('class="ui-callout text-availability"');

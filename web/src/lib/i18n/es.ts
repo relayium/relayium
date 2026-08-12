@@ -482,8 +482,8 @@ const es: Messages = {
     noToken: "A esta página solo se llega desde un enlace de acceso.",
     home: "Volver al inicio",
   },
-  nav: { footerLegalLabel: "Aviso legal", footerGuidesLabel: "Recursos", primaryLabel: "Navegación principal", footerLabel: "Navegación de pie de página", lanTab: "LAN", crossTab: "Tiempo real", offlineTab: "Asíncrono", cliTab: "CLI", appsTab: "Apps", deviceInboxTab: "Buzón de dispositivo" },
-  crossTitle: "Transferencia en tiempo real",
+  nav: { footerLegalLabel: "Aviso legal", footerGuidesLabel: "Recursos", primaryLabel: "Navegación principal", footerLabel: "Navegación de pie de página", lanTab: "LAN", crossTab: "Entre redes", offlineTab: "Asíncrono", cliTab: "CLI", appsTab: "Apps", deviceInboxTab: "Buzón de dispositivo" },
+  crossTitle: "Transferencia entre redes",
   offlineTitle: "Transferencia asíncrona",
   cli: { subtitle: "Transfiere archivos y texto efímero desde tu terminal — cifrado de extremo a extremo, autoalojable." },
   cliCallout: {
@@ -819,8 +819,8 @@ const es: Messages = {
     textLimitNote: "Un mensaje ocupa como máximo 65.536 bytes UTF-8. Cualquier cosa mayor es un archivo: usa relayium send.",
   },
   crossnet: {
-    realtimeTitle: "Transferencia en tiempo real",
-    realtimeSub: "Ambos en línea · red local directa · entre redes, TURN lleva datos cifrados que el retransmisor no puede leer ni descifrar",
+    realtimeTitle: "Transferencia entre redes",
+    realtimeSub: "Ambos en línea · sesión en tiempo real, cifrada de extremo a extremo · TURN lleva datos cifrados que el retransmisor no puede leer ni descifrar",
     realtimeFoot: "El destinatario no necesita cuenta · cifrado de extremo a extremo",
     signInToSend: "Inicia sesión para enviar entre redes. La persona que recibe nunca necesita una cuenta.",
     relayQuotaWarn: "Agotaste la cuota mensual de retransmisión: una sesión del navegador entre redes no puede empezar ni continuar. Las sesiones en la misma red y las transferencias directas por CLI siguen disponibles. Usa un enlace de descarga, mejora tu plan o ejecuta tu propio nodo.",
@@ -842,11 +842,11 @@ const es: Messages = {
     planNote: "Cuánto puedes almacenar, tu transferencia mensual y cuánto tiempo siguen activos los enlaces de descarga dependen de tu plan — empieza gratis y mejora cuando quieras:",
   },
   crossSell: {
-    realtime: { lead: "¿La otra persona está en línea? En tiempo real: directo en la red local; entre redes, TURN lleva datos cifrados que el retransmisor no puede leer ni descifrar.", cta: "Ir a la transferencia en tiempo real →" },
+    realtime: { lead: "¿La otra persona está en línea? Usa la transferencia entre redes, en tiempo real y cifrada de extremo a extremo; TURN lleva datos cifrados que el retransmisor no puede leer ni descifrar.", cta: "Ir a la transferencia entre redes →" },
     offline: { lead: "¿El destinatario no está en línea? Usa la transferencia asíncrona — cifra, sube y deja un enlace de descarga que podrá recoger durante días.", cta: "Ir a la transferencia asíncrona →" },
   },
   methods: {
-    realtime: { name: "Transferencia en tiempo real", sub: "Crea primero un código de 6 dígitos: léelo en voz alta, envía el enlace o muestra el QR. En cuanto el otro dispositivo se une, elige los archivos que enviar, o «Enviar un mensaje» para texto.", badge: "Destinatario: sin cuenta" },
+    realtime: { name: "Transferencia entre redes", sub: "Crea primero un código de 6 dígitos: léelo en voz alta, envía el enlace o muestra el QR. En cuanto el otro dispositivo se une, elige los archivos que enviar, o «Enviar un mensaje» para texto.", badge: "Destinatario: sin cuenta" },
     stored: { name: "Enlace de descarga", sub: "Tu navegador cifra y luego almacena; el destinatario descarga en cualquier momento, sin sesión en vivo ni cuenta.", badge: "Sin conexión, sin problema" },
   },
   pair: {
@@ -991,7 +991,7 @@ const es: Messages = {
   },
   howItWorks: {
     realtime: {
-      title: "Transferencia en tiempo real, en tres pasos",
+      title: "Transferencia entre redes, en tres pasos",
       sub: "Cuando ambos lados están en línea, transfiere en tiempo real entre redes — el destinatario no necesita cuenta.",
       ways: [
         { name: "Crea un código de emparejamiento", how: "Inicia sesión y crea un código de 6 dígitos, con enlace para unirse y QR. Elige qué enviar después de que se una el otro dispositivo.", tag: "El creador inicia sesión" },
@@ -1011,10 +1011,10 @@ const es: Messages = {
   },
   compare: {
     title: "Qué modo elegir",
-    sub: "La red local no pide cuenta, pero solo funciona dentro de una misma red; el tiempo real pasa archivos pequeños y texto mientras ambos están en línea; para archivos grandes, o para recoger más tarde, usa el enlace de descarga.",
+    sub: "La red local no pide cuenta, pero solo funciona dentro de una misma red; la transferencia entre redes pasa archivos pequeños y texto en tiempo real mientras ambos están en línea; para archivos grandes, o para recoger más tarde, usa el enlace de descarga.",
     colFeature: "Aspecto",
     colLan: "Red local (LAN)",
-    colRealtime: "Transferencia en tiempo real",
+    colRealtime: "Transferencia entre redes",
     colStored: "Enlace de descarga",
     rows: [
       { label: "¿Necesita inicio de sesión?", lan: "Ninguna de las dos partes inicia sesión", realtime: "Quien crea un código para archivos o texto inicia sesión; quien se une no la necesita", stored: "Quien crea el enlace inicia sesión; quien lo recibe no necesita cuenta" },
@@ -1073,11 +1073,11 @@ const es: Messages = {
       { q: "¿Puedo almacenar archivos en mi propio servidor?", a: "Sí. Despliega tu propio nodo desde la página de cuenta y tus subidas irán primero a tu propio nodo — gratis y exento de cuota — recurriendo a los nodos públicos solo si el tuyo es inaccesible." },
     ],
   },
-  crossPitch: "En la misma red, la «transferencia por LAN» es lo más sencillo; separados pero ambos en línea, transfiere aquí mismo en tiempo real — ¿destinatario sin conexión? Cambia a la transferencia asíncrona más abajo.",
+  crossPitch: "¿Ambos en línea pero en redes distintas? Crea aquí un código de 6 dígitos y transfiere en tiempo real, cifrado de extremo a extremo — ¿destinatario sin conexión? Cambia a la transferencia asíncrona más abajo.",
   homeCross: {
     title: "¿No estás en la misma red?",
-    desc: "Si están en línea, usa tiempo real: directo en la red local o TURN cifrado entre redes. Si no, usa la transferencia asíncrona.",
-    realtimeCta: "Directo en tiempo real →",
+    desc: "Si están en línea, usa la transferencia entre redes (en tiempo real, cifrada de extremo a extremo; el tráfico del navegador pasa por TURN como datos cifrados); si no, usa la transferencia asíncrona (almacenamiento cifrado, se recoge por enlace cuando quieran).",
+    realtimeCta: "Transferencia entre redes →",
     offlineCta: "Transferencia asíncrona →",
   },
   homeText: {

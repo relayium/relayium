@@ -62,6 +62,7 @@
   import { reveal } from "./lib/reveal";
   import Nav from "./lib/Nav.svelte";
   import { currentRoute, syncRouteFromLocation, downloadId, navigate, setNavGuard, PRICING_PATH } from "./lib/router.svelte";
+  import { showsTransferSurface, showsPeerRoster } from "./lib/transfer-surface";
   import Hero from "./lib/Hero.svelte";
   import DeviceRadar from "./lib/DeviceRadar.svelte";
   import PeerLink from "./lib/PeerLink.svelte";
@@ -492,26 +493,25 @@
   const dropBusy = $derived(
     visiblePeers.length === 0 || visiblePeers.every((peer) => workspace.blocksNewIntent(peer.id)),
   );
-  // The realtime surface auto-appears whenever a LAN peer is visible, but there's
-  // no room to leave — so "Start over" there sets this flag to fall back to the
-  // method choices instead. An in-flight transfer (busy) always wins over it, and
-  // the reset effect below clears it once the peer drops, so a reconnect re-shows.
-  let lanDismissed = $state(false);
   // `storedReceiver` is part of this test because a pre-uploaded batch does not
   // need the peer any more: the ciphertext is on the server and the keys are
   // already here. Without it, a sender whose signalling socket dropped after the
   // handoff would empty the roster and take the unanswered prompt — and the
   // downloads behind it — off the screen, for a transfer that could still have
   // completed on its own.
-  const showTransfer = $derived(
-    busy || storedReceiver.status !== "idle" || (visiblePeers.length > 0 && !lanDismissed),
-  );
-
-  // Un-dismiss once the LAN peer disconnects, so the next device that appears
-  // re-shows the transfer surface rather than staying hidden behind a stale flag.
-  $effect(() => {
-    if (visiblePeers.length === 0) lanDismissed = false;
-  });
+  //
+  // The route term is the sibling-product boundary and lives in
+  // `transfer-surface.ts` with the reasoning: /cross-network draws this surface
+  // for its pairing room and for nothing else, so a LAN neighbour appearing on
+  // this Wi-Fi can never put a device card, a name or a same-network prompt on
+  // the destination whose premise is that no shared network exists.
+  const showTransfer = $derived(showsTransferSurface({
+    route: currentRoute(),
+    roomCode,
+    busy,
+    storedReceiveActive: storedReceiver.status !== "idle",
+    visiblePeers: visiblePeers.length,
+  }));
 
   // The window-wide drop only makes sense where the device cards are actually
   // rendered: the LAN page (unless unsupported), or the cross page once a
@@ -1944,12 +1944,18 @@
        live workspace offers a second, contradictory way to start one. Disconnect
        brings this whole section straight back. Legacy peers and every pairing
        room never take this branch. -->
-  {#if !mixed}
+  <!-- `showsPeerRoster` is the second half of the sibling boundary. LAN keeps
+       its section unconditionally — the empty state IS its answer, and the
+       scanning signal lives inside it. Cross-network keeps it only while the
+       one participant the code let in is present, because "no other devices
+       yet, open this page on another device on the same network" describes a
+       network that destination does not use. -->
+  {#if !mixed && showsPeerRoster(currentRoute(), visiblePeers.length)}
   <section class="peers" class:cross={currentRoute() === "cross"} class:after-activity={hasActivity}>
     <!-- A pairing room currently has one remote target (the signalling room cap
-         is two participants). Cross without roomCode is the LAN auto-surface,
-         where “Nearby devices” remains truthful for one or many peers. -->
-    <h2>{currentRoute() === "cross" && roomCode ? t.crossPeersTitle : t.peersTitle}</h2>
+         is two participants), and the roster on this route is that room — the
+         socket is bound to the code, so “Nearby devices” is LAN's title alone. -->
+    <h2>{currentRoute() === "cross" ? t.crossPeersTitle : t.peersTitle}</h2>
     <QuotaNotice />
     {#if outbox().length && visiblePeers.length !== 1}
       <PendingFiles
@@ -1995,17 +2001,13 @@
         </ul>
       {/if}
     {:else}
-      {#if visiblePeers.length === 0}
-        <div class="empty">
-          <p class="empty-lead">{t.emptyPeers}</p>
-        </div>
-      {:else}
-        <ul class:solo class:dragging={dragActive && dropTarget(visiblePeers.length, dropBusy) === "pick"}>
-          {#each visiblePeers as p (p.id)}
-            {@render peerCard(p, solo)}
-          {/each}
-        </ul>
-      {/if}
+      <!-- No empty state here on purpose: `showsPeerRoster` has already decided
+           this section only exists while the code's participant is present. -->
+      <ul class:solo class:dragging={dragActive && dropTarget(visiblePeers.length, dropBusy) === "pick"}>
+        {#each visiblePeers as p (p.id)}
+          {@render peerCard(p, solo)}
+        {/each}
+      </ul>
     {/if}
     <!-- Sits with the message action it describes. Above the chooser it merely
          delayed the primary task; with no peer visible there is no such action,
@@ -2053,7 +2055,7 @@
 
   {#if currentRoute() === "cross"}
     {#await routePage("cross") then { default: CrossPage }}
-      <CrossPage {roomCode} {linkDead} {showTransfer} {relayStatus} {transferSurface} dismissLan={() => (lanDismissed = true)} />
+      <CrossPage {roomCode} {linkDead} {showTransfer} {relayStatus} {transferSurface} />
     {/await}
   {:else if currentRoute() === "offline"}
     {#await routePage("offline") then { default: OfflinePage }}
