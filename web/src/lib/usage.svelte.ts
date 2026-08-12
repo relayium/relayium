@@ -32,6 +32,9 @@ export interface PlanInfo {
   isTop: boolean; // 已在最高档：隐藏升级引导
   subscriptionStatus: string; // '' = 从未结账
   subscriptionEnd: number; // unix 秒；0 = 无订阅
+  // 权益来自哪个渠道：'stripe' | 'apple' | 'admin' | 'multiple' | ''（无）。
+  // 可选：老版本服务端不返回它，此时按 '' 处理（不做任何渠道假设）。
+  entitlementProvider?: string;
 }
 
 export interface Usage {

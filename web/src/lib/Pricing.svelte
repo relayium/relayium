@@ -42,6 +42,18 @@
   const hasBilling = $derived(session().user?.hasBilling ?? false);
   // A live Stripe subscription we can switch in place (vs. a fresh checkout).
   const isSubscribed = $derived(!!session().user && hasBilling && currentPlanId !== "free");
+  // Where the entitlement actually lives. "" for a free account and for any
+  // server that predates the field, so every branch below must treat absence as
+  // "no provider" rather than assuming Stripe.
+  const entitlementProvider = $derived(session().user?.entitlementProvider ?? "");
+  // A live entitlement Stripe does not (solely) own. Every Stripe action on this
+  // page is refused server-side for such an account — change-plan/preview return
+  // 409 managed_by_provider, and checkout returns 409 already_subscribed — so
+  // offering one would be a button that cannot work, and offering "Subscribe"
+  // would be an invitation to pay twice.
+  const managedElsewhere = $derived(
+    entitlementProvider === "apple" || entitlementProvider === "multiple",
+  );
   const currentTier = $derived(tiers.find((x) => x.id === currentPlanId));
   // Tier a pending period-end downgrade will switch to ("" = none).
   const scheduledPlanId = $derived(session().user?.scheduledPlanId ?? "");
@@ -239,7 +251,23 @@
   {#if checkoutError}<p class="err ui-callout ui-callout-danger" role="alert">{checkoutError}</p>{/if}
   {#if changeMsg}<p class="ok-note ui-callout ui-callout-accent" role="status">{changeMsg}</p>{/if}
 
-  {#if scheduledPlanId && scheduledTier}
+  {#if managedElsewhere}
+    <p class="ui-callout" role="status" data-testid="managed-elsewhere">
+      {entitlementProvider === "multiple" ? t.billing.multipleProvidersNote : t.billing.appleManagedNote}
+    </p>
+  {/if}
+
+  <!-- A scheduled downgrade is STRIPE's state, and it outlives the Stripe
+       subscription that created it: an account that later buys through the App
+       Store still carries the stale scheduled_plan_id. Rendering it here would
+       claim a switch that is not going to happen, and its only action —
+       cancel-scheduled-change — is refused server-side with 409
+       managed_by_provider for exactly these accounts. So the whole banner is
+       suppressed rather than softened into read-only copy: there is nothing
+       truthful left to say about a schedule that no longer applies, and the
+       managed-elsewhere note above already says where the subscription lives.
+       Ordinary Stripe scheduling is untouched. -->
+  {#if scheduledPlanId && scheduledTier && !managedElsewhere}
     <div class="sched-banner">
       <span>{t.billing.scheduledNote(scheduledTier.name)}</span>
       <button type="button" class="btn btn-ghost" disabled={busyPlanId === "__cancel__"} onclick={cancelScheduled}>
@@ -299,8 +327,16 @@
 
           {#if relation(tier) === "current"}
             <div class="current-badge">{isFree(tier) ? t.billing.currentFree : t.billing.current}</div>
-          {:else if tier.id === scheduledPlanId}
+          {:else if tier.id === scheduledPlanId && !managedElsewhere}
             <div class="current-badge">{t.billing.scheduledBadge}</div>
+          {:else if managedElsewhere}
+            <!-- Ahead of the free/paid split and behind the scheduled badge,
+                 both deliberately: neither a checkout nor the portal (which
+                 only ever cancels the Stripe side) is a truthful action for
+                 this account, and a "Scheduled" badge on a tier it is not
+                 moving to is a stale Stripe claim (see the banner gate above).
+                 The note above says where the subscription actually lives. -->
+            <div class="tier-note">{t.billing.appleManagedBadge}</div>
           {:else if isFree(tier)}
             {#if isSubscribed}
               <!-- A paid subscriber viewing Free: this is their downgrade/cancel

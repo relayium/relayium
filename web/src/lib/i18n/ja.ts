@@ -187,6 +187,9 @@ const ja: Messages = {
     pastDueNotice: "お支払いに失敗しました · お支払い方法を更新してください",
     canceledUntil: (date) => `解約済み · ${date}まで利用可`,
     scheduledDowngradeRow: (name, date) => `変更予定: ${date}に${name}へダウングレード`,
+    appleManagedBadge: "App Store で管理",
+    appleManagedNote: "このサブスクリプションは App Store で購入されました。変更や解約は Apple アカウントの設定から行ってください。",
+    multipleProvidersNote: "複数の提供元で有効なサブスクリプションがあります。不要なほうは購入した場所で解約してください。",
   },
   pricingPage: {
     navLink: "料金",

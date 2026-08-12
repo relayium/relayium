@@ -187,6 +187,9 @@ const fr: Messages = {
     pastDueNotice: "Échec du paiement · mettez à jour votre moyen de paiement",
     canceledUntil: (date) => `Annulé · actif jusqu'au ${date}`,
     scheduledDowngradeRow: (name, date) => `Prévu : passage à ${name} le ${date}`,
+    appleManagedBadge: "Géré dans l’App Store",
+    appleManagedNote: "Cet abonnement a été acheté dans l’App Store. Modifiez-le ou résiliez-le dans les réglages de votre compte Apple.",
+    multipleProvidersNote: "Vous avez des abonnements actifs chez plusieurs fournisseurs. Résiliez celui dont vous n’avez pas besoin là où vous l’avez acheté.",
   },
   pricingPage: {
     navLink: "Tarifs",

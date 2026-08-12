@@ -27,6 +27,13 @@ export interface SessionUser {
   // when unknown (a subscription predating the column). Unknown must NOT be read
   // as monthly — that would offer "switch to yearly" to someone already yearly.
   billingCycle?: string;
+  // Which provider the entitlement comes from: "stripe", "apple", "admin",
+  // "multiple" (more than one live at once), or ""/absent (none, and what an
+  // older server sends). Distinct from hasBilling, which stays "this account
+  // has a Stripe customer, so the Billing Portal is reachable": an App Store
+  // subscriber is subscribed WITHOUT a portal, and every Stripe management call
+  // on their behalf is refused server-side.
+  entitlementProvider?: string;
 }
 
 let user = $state<SessionUser | null>(null);

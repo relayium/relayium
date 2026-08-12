@@ -187,6 +187,9 @@ const en: Messages = {
     pastDueNotice: "Payment failed · update your payment method",
     canceledUntil: (date) => `Canceled · active until ${date}`,
     scheduledDowngradeRow: (name, date) => `Scheduled: downgrades to ${name} on ${date}`,
+    appleManagedBadge: "Managed in the App Store",
+    appleManagedNote: "This subscription was bought in the App Store. Change or cancel it in your Apple account settings.",
+    multipleProvidersNote: "You have active subscriptions from more than one provider. Cancel the one you don’t need where you bought it.",
   },
   pricingPage: {
     navLink: "Pricing",

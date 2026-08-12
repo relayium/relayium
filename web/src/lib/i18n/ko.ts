@@ -187,6 +187,9 @@ const ko: Messages = {
     pastDueNotice: "결제 실패 · 결제 수단을 업데이트해 주세요",
     canceledUntil: (date) => `취소됨 · ${date}까지 이용 가능`,
     scheduledDowngradeRow: (name, date) => `변경 예정: ${date}에 ${name}(으)로 다운그레이드`,
+    appleManagedBadge: "App Store에서 관리",
+    appleManagedNote: "이 구독은 App Store에서 구매했습니다. 변경이나 취소는 Apple 계정 설정에서 하세요.",
+    multipleProvidersNote: "두 곳 이상에서 구독이 활성화되어 있습니다. 필요 없는 구독은 구매한 곳에서 취소하세요.",
   },
   pricingPage: {
     navLink: "요금제",

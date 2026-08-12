@@ -224,6 +224,11 @@ func (s *Service) routeMux() *http.ServeMux {
 	mux.HandleFunc("POST /api/billing/preview", s.RequireSession(s.handleBillingPreview))
 	mux.HandleFunc("POST /api/billing/cancel-scheduled-change", s.RequireSession(s.handleBillingCancelScheduledChange))
 	mux.HandleFunc("POST /api/billing/portal", s.RequireSession(s.handleBillingPortal))
+	// The App Store purchase-attribution token. RequireAuth (not RequireSession)
+	// because the native apps authenticate with a bearer token and this is the
+	// one billing call they make; POST because it may mint the token. See
+	// handleAppleAccountToken for why it is not a credential.
+	mux.HandleFunc("POST /api/billing/apple/account-token", s.RequireAuth(s.handleAppleAccountToken))
 	mux.HandleFunc("GET /api/plans", s.handlePublicPlans)
 	// Stripe webhook: unauthenticated (no session, no CSRF token — Stripe
 	// can't provide either), authenticated instead by its own HMAC signature
@@ -573,6 +578,18 @@ func (s *Service) handleMe(w http.ResponseWriter, r *http.Request, u User) {
 		return
 	}
 	linked, _ := s.store.ListIdentityProviders(r.Context(), u.ID)
+	// Which provider the entitlement actually comes from. NOT best-effort: this
+	// field decides which billing controls the client offers, and its "unknown"
+	// value is "" — indistinguishable from the free account that has no
+	// subscription at all. Degrading a failed lookup to "" would put a Subscribe
+	// call-to-action in front of an App Store subscriber, which is an invitation
+	// to pay twice through a provider that cannot see the first subscription.
+	// A 500 tells the client it has no state to render, and it retries.
+	live, err := s.store.LiveEntitlementProviders(r.Context(), u.ID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"user": map[string]any{
 			"id": u.ID, "email": u.Email, "displayName": u.DisplayName,
@@ -584,13 +601,25 @@ func (s *Service) handleMe(w http.ResponseWriter, r *http.Request, u User) {
 			"planId":             u.PlanID,
 			"subscriptionStatus": u.SubscriptionStatus,
 			"subscriptionEnd":    u.SubscriptionEnd,
-			"hasBilling":         u.StripeCustomerID != "",
-			"scheduledPlanId":    u.ScheduledPlanID,
-			"scheduledCycle":     u.ScheduledCycle,
+			// hasBilling keeps its ORIGINAL meaning — "this account has a Stripe
+			// customer", i.e. the Billing Portal is reachable — because that is
+			// what every shipped client uses it for. It is deliberately NOT
+			// widened into "is subscribed": an Apple subscriber has no Stripe
+			// customer and no portal, and flipping this true for them would put a
+			// dead "Manage billing" button in front of them.
+			"hasBilling":      u.StripeCustomerID != "",
+			"scheduledPlanId": u.ScheduledPlanID,
+			"scheduledCycle":  u.ScheduledCycle,
 			// '' when unknown (a subscription that predates the column). The UI
 			// must not assume monthly in that case — it would render "switch to
 			// yearly" as if it were a no-op for someone already billed yearly.
 			"billingCycle": u.BillingCycle,
+			// Where the entitlement comes from: "" (none), "stripe", "apple",
+			// "admin", or "multiple" when more than one provider is live at once.
+			// Optional by construction — absent in older server payloads, and ""
+			// for every free account — so clients must default it rather than
+			// require it.
+			"entitlementProvider": entitlementProviderWire(u, live),
 		},
 	})
 }
@@ -678,6 +707,15 @@ func (s *Service) handleMeUsage(w http.ResponseWriter, r *http.Request, u User) 
 			scheduledName = sp.Name
 		}
 	}
+	// Same rule as /api/me, for the same reason: the plan card renders its
+	// billing controls from this response, so "which provider owns this" is
+	// either known or the response is refused. Unlike scheduledName above, ""
+	// here is not a cosmetic gap — it is the value that means "not subscribed".
+	liveProviders, err := s.store.LiveEntitlementProviders(ctx, u.ID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"period":   period,
 		"resetsAt": monthEnd,
@@ -701,6 +739,12 @@ func (s *Service) handleMeUsage(w http.ResponseWriter, r *http.Request, u User) 
 			"scheduledPlanId":    u.ScheduledPlanID,
 			"scheduledPlanName":  scheduledName,
 			"scheduledCycle":     u.ScheduledCycle,
+			// Same field, same rules, as on /api/me: the plan card renders its
+			// management controls from this response and must not offer a Stripe
+			// action for an entitlement Stripe does not own. "" here means "no
+			// paid provider" and nothing else — the lookup above refuses rather
+			// than guessing it.
+			"entitlementProvider": entitlementProviderWire(u, liveProviders),
 		},
 	})
 }

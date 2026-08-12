@@ -255,6 +255,12 @@ export interface Messages {
     pastDueNotice: string; // past_due：扣款失败 · 请更新支付方式
     canceledUntil: (date: string) => string; // canceled：已取消 · {date} 前有效
     scheduledDowngradeRow: (name: string, date: string) => string; // 已排期：{date} 期末降到 {name}
+    // An entitlement this site cannot manage, because it was not bought here.
+    // The server refuses every Stripe management call for such an account and
+    // 409s a fresh checkout, so the UI must say so instead of offering either.
+    appleManagedBadge: string; // short label in place of a tier/plan-card CTA
+    appleManagedNote: string; // banner: where to actually change or cancel it
+    multipleProvidersNote: string; // banner: subscribed through more than one provider
   };
   // Standalone /pricing marketing page (PricingPage.svelte).
   pricingPage: {

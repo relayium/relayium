@@ -187,6 +187,9 @@ const es: Messages = {
     pastDueNotice: "Pago fallido · actualiza tu método de pago",
     canceledUntil: (date) => `Cancelado · activo hasta el ${date}`,
     scheduledDowngradeRow: (name, date) => `Programado: pasa a ${name} el ${date}`,
+    appleManagedBadge: "Gestionado en la App Store",
+    appleManagedNote: "Esta suscripción se compró en la App Store. Cámbiala o cancélala en los ajustes de tu cuenta de Apple.",
+    multipleProvidersNote: "Tienes suscripciones activas en más de un proveedor. Cancela la que no necesites donde la compraste.",
   },
   pricingPage: {
     navLink: "Precios",

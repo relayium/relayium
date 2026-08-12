@@ -222,6 +222,14 @@
     return p.charAt(0).toUpperCase() + p.slice(1);
   }
 
+  // Which provider owns the entitlement; "" for a free account and for any
+  // server that predates the field. See Pricing.svelte for why an entitlement
+  // Stripe does not solely own gets a note here rather than any billing action.
+  const entitlementProvider = $derived(session().user?.entitlementProvider ?? "");
+  const managedElsewhere = $derived(
+    entitlementProvider === "apple" || entitlementProvider === "multiple",
+  );
+
   async function onManageBilling() {
     if (portalBusy) return;
     portalError = "";
@@ -380,7 +388,17 @@
               {t.billing.currentPlan}: {planLabel(session().user!.planId)}
               {#if session().user!.subscriptionStatus}<span class="sub-status"> · {session().user!.subscriptionStatus}</span>{/if}
             </p>
-            {#if session().user!.hasBilling}
+            <!-- An entitlement bought elsewhere is shown as what it is. It
+                 comes BEFORE hasBilling because the two are independent: an App
+                 Store subscriber has no Stripe customer (so no portal), and a
+                 subscriber with BOTH has a portal that would only ever cancel
+                 half of what they are paying for. Either way, "Upgrade" here
+                 would be an invitation to pay a second time. -->
+            {#if managedElsewhere}
+              <p class="hint" data-testid="account-managed-elsewhere">
+                {entitlementProvider === "multiple" ? t.billing.multipleProvidersNote : t.billing.appleManagedNote}
+              </p>
+            {:else if session().user!.hasBilling}
               <button class="btn btn-ghost" onclick={() => { open = false; navigate("pricing"); }}>{t.billing.upgrade}</button>
               <button class="btn btn-ghost" disabled={portalBusy} onclick={onManageBilling}>{t.billing.manageBilling}</button>
               <!-- Standalone cancel link (same portal), shown when a live sub exists. -->

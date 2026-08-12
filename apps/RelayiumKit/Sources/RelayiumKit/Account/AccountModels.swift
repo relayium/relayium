@@ -15,6 +15,19 @@ public struct NativeUser: Codable, Equatable {
     public var scheduledPlanId: String
     public var scheduledCycle: String
     public var billingCycle: String
+    /// Which provider the entitlement comes from: `"stripe"`, `"apple"`,
+    /// `"admin"`, `"multiple"` (more than one live at once), or `""`/absent.
+    ///
+    /// Deliberately OPTIONAL, unlike every field above it. Those are always
+    /// emitted by `/api/me` and so are decoded strictly; this one is not
+    /// present at all in a response from a server that predates it, and a
+    /// client that refused those payloads would lock users out of an app that
+    /// merely shipped ahead of the deployment. Absent and `""` mean the same
+    /// thing — no paid provider — so no caller needs to tell them apart.
+    ///
+    /// Distinct from ``hasBilling``, which stays "this account has a Stripe
+    /// customer, so the web Billing Portal is reachable".
+    public var entitlementProvider: String? = nil
 }
 
 public struct MeResponse: Codable, Equatable { public let user: NativeUser }
@@ -52,6 +65,10 @@ public struct PlanInfo: Codable, Equatable {
     public var scheduledPlanId: String
     public var scheduledPlanName: String
     public var scheduledCycle: String
+    /// See ``NativeUser/entitlementProvider``: same values, same optionality,
+    /// same reason. `/api/me/usage` carries it so the plan card can decide
+    /// whether a billing control is honest without a second request.
+    public var entitlementProvider: String? = nil
 }
 
 public struct UsageResponse: Codable, Equatable {

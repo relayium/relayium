@@ -1562,6 +1562,9 @@ type Store interface {
 	// yet, returning the id now in force (the existing one if already bound).
 	SetUserStripeCustomerIfEmpty(ctx context.Context, userID, customerID string) (string, error)
 	// SetUserStripeSubscription records the canonical subscription id ('' clears).
+	// It also claims that id on the Stripe source row, in the same transaction,
+	// and so returns ErrExternalSubscriptionOwned when another account already
+	// owns it — a refusal to adopt, not a transient failure to retry past.
 	SetUserStripeSubscription(ctx context.Context, userID, subID string) error
 	// GetUserByStripeCustomer looks up a user by Stripe customer id (webhook
 	// dispatch). An empty customerID returns not-found.
@@ -1576,9 +1579,51 @@ type Store interface {
 	// Stripe event.created (0 for non-webhook callers), stored monotonically for
 	// the ordering guard.
 	SetUserSubscription(ctx context.Context, userID, planID, status string, end int64, source, cycle string, now, subEventAt int64) error
-	// LastSubEventAt returns the event.created of the last subscription event
-	// applied to a user (0 if none), so the webhook can drop stale re-deliveries.
+	// LastSubEventAt returns users.sub_event_at (0 if none). Legacy: the
+	// ordering authority is LastSourceEventAt, per provider. See its comment in
+	// sqlite.go for why the column is still maintained.
 	LastSubEventAt(ctx context.Context, userID string) (int64, error)
+
+	// ---- Provider-neutral subscription state (see entitlement.go) ----
+
+	// ApplySubscriptionSource records one provider's event on that provider's
+	// own row — with that provider's own replay clock — and recomputes the
+	// user's effective entitlement projection, in one transaction. A stale
+	// event for its provider changes nothing and reports Applied=false.
+	ApplySubscriptionSource(ctx context.Context, ev SourceEvent) (SubscriptionApply, error)
+	// GetSubscriptionSource returns one provider's recorded state for a user.
+	GetSubscriptionSource(ctx context.Context, userID, provider string) (SubscriptionSource, bool, error)
+	// ListSubscriptionSources returns every provider row a user holds.
+	ListSubscriptionSources(ctx context.Context, userID string) ([]SubscriptionSource, error)
+	// LiveEntitlementProviders names the providers currently granting this user
+	// paid access, sorted. More than one is the double-billing state clients
+	// must surface rather than hide.
+	LiveEntitlementProviders(ctx context.Context, userID string) ([]string, error)
+	// LastSourceEventAt returns one provider's last applied event clock (0 when
+	// that provider has never been seen).
+	LastSourceEventAt(ctx context.Context, userID, provider string) (int64, error)
+	// BindExternalSubscription binds an external subscription id to a user's
+	// provider row, first-write-wins across users ('' clears it). Returns
+	// ErrExternalSubscriptionOwned when another account already owns that id.
+	BindExternalSubscription(ctx context.Context, userID, provider, externalID string) error
+	// UserByExternalSubscription resolves the owner of an external subscription
+	// id. An empty id returns not-found.
+	UserByExternalSubscription(ctx context.Context, provider, externalID string) (string, bool, error)
+	// EnsureAppleAccountToken binds candidate as the user's stable App Store
+	// appAccountToken if they have none, returning whichever value is in force.
+	// It is an attribution key, never an authorization one.
+	EnsureAppleAccountToken(ctx context.Context, userID, candidate string) (string, error)
+	// UserByAppleAccountToken resolves the account a token belongs to. An empty
+	// or malformed token returns not-found rather than scanning.
+	UserByAppleAccountToken(ctx context.Context, token string) (User, bool, error)
+	// AppleProductPlan resolves one app's product id to a Relayium tier, keyed
+	// by bundle identity as well as product id (the macOS and iOS apps ship
+	// different bundle ids). An empty key returns not-found, and so does a
+	// mapping whose tier has since been retired: the tier is re-checked at read
+	// time, because retiring a plan never revisits the mappings pointing at it.
+	AppleProductPlan(ctx context.Context, bundleID, productID string) (AppleProduct, bool, error)
+	// UpsertAppleProduct records (or retires, with Active=false) one mapping.
+	UpsertAppleProduct(ctx context.Context, p AppleProduct) error
 	// SetScheduledPlan records (or clears, with planID="" and cycle="") the tier
 	// AND cycle a pending period-end downgrade will switch to — a display hint for
 	// the pricing UI and the key the webhook uses to detect when the change lands.

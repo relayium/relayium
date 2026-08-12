@@ -938,6 +938,82 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// an absent verifier indistinguishable from a zero-length one and put a
 		// length check on the critical path of that distinction.
 		`ALTER TABLE stored_files ADD COLUMN completion_verifier BLOB`,
+		// Provider-neutral subscription state (2026-08): ONE ROW PER (user,
+		// provider), each carrying that provider's own plan/status/cycle/period
+		// end, its canonical external subscription id, and — critically — its OWN
+		// replay clock. Stripe's webhook and Apple's notifications are independent
+		// ordered streams; a single shared users.sub_event_at cannot tell them
+		// apart, so one provider's redelivery would rewind the other's state.
+		//
+		// The users row keeps plan_id/subscription_status/subscription_end/
+		// plan_source/billing_cycle as the EFFECTIVE PROJECTION over these rows,
+		// so enforcement, the admin console and every existing client are
+		// unchanged. See entitlement.go for the resolution rules and
+		// backfillSubscriptionSources for how a Stripe-only database is migrated.
+		//
+		// The users(id) reference is real (foreign_keys is ON), which is what ties
+		// these rows into the account deletion lifecycle rather than leaving them
+		// as orphans after a hard purge.
+		`CREATE TABLE IF NOT EXISTS subscription_sources (
+  user_id     TEXT NOT NULL REFERENCES users(id),
+  provider    TEXT NOT NULL,
+  plan_id     TEXT NOT NULL DEFAULT 'free',
+  status      TEXT NOT NULL DEFAULT '',
+  cycle       TEXT NOT NULL DEFAULT '',
+  period_end  INTEGER NOT NULL DEFAULT 0,
+  external_id TEXT NOT NULL DEFAULT '',
+  event_at    INTEGER NOT NULL DEFAULT 0,
+  updated_at  INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, provider))`,
+		// One external subscription has exactly ONE owner, enforced by the
+		// database rather than by the care of every future adapter. Partial
+		// because the overwhelming majority of rows carry no id yet ('' would
+		// otherwise collide with every other unbound row).
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_subscription_sources_external
+		   ON subscription_sources(provider, external_id) WHERE external_id <> ''`,
+		// The reconcile sweep's candidate query walks the Stripe rows.
+		`CREATE INDEX IF NOT EXISTS idx_subscription_sources_provider
+		   ON subscription_sources(provider, plan_id)`,
+		// The stable, opaque UUID an App Store purchase carries as
+		// `appAccountToken` so the resulting transaction can be attributed to
+		// this account. Server-issued, one per user, never a credential, and on
+		// the users row precisely so the hard purge that removes the account
+		// removes it too — no second cleanup path to keep in step. '' on every
+		// existing row = never minted, which is what every account is until it
+		// asks. Deliberately absent from the User struct so nothing that renders
+		// or logs a user can pick it up by accident.
+		`ALTER TABLE users ADD COLUMN apple_account_token TEXT NOT NULL DEFAULT ''`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_apple_account_token
+		   ON users(apple_account_token) WHERE apple_account_token <> ''`,
+		// Which App Store product grants which tier. Keyed by BUNDLE identity as
+		// well as product id: Relayium's macOS and iOS apps ship under different
+		// bundle ids and Apple namespaces product ids per app, so the same tier is
+		// two distinct products and a pair of columns on `plans` could only ever
+		// hold one of them. Nothing seeds this table — it is inert until real
+		// product records exist, so no purchase can be granted by accident.
+		//
+		// The plans(id) reference is real (foreign_keys is ON). It guarantees the
+		// tier EXISTS; whether it is still on sale is a lifecycle question no
+		// constraint can answer, which is why UpsertAppleProduct checks it on the
+		// way in and AppleProductPlan re-checks it on the way out. It is the
+		// database-level backstop under UpsertAppleProduct's validation, for the
+		// same reason the unique index sits under BindExternalSubscription's
+		// ownership check: an App Store product wired to a tier that does not
+		// exist is a paid purchase with no resolvable entitlement, and that must
+		// not depend on every future write path remembering to ask. It is
+		// compatible with the admin plan lifecycle because tiers are RETIRED
+		// (active=0), never deleted — there is no DeletePlan. A future
+		// plan-deletion path would hit this constraint, which is the correct
+		// place to be forced to decide what happens to the products pointing at
+		// the tier being deleted.
+		`CREATE TABLE IF NOT EXISTS apple_products (
+  bundle_id  TEXT NOT NULL,
+  product_id TEXT NOT NULL,
+  plan_id    TEXT NOT NULL REFERENCES plans(id),
+  cycle      TEXT NOT NULL DEFAULT '',
+  active     INTEGER NOT NULL DEFAULT 1,
+  updated_at INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (bundle_id, product_id))`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -1035,6 +1111,16 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 	// read as the share it has always been rather than as an unknown kind of
 	// object the public endpoints would refuse.
 	if err := backfillStoredFilePurpose(context.Background(), db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	// Same shape and same reason again, for the per-provider subscription rows:
+	// a Stripe-only database written before this model existed must come out of
+	// the migration with identical effective plans, identical canonical
+	// subscription ownership and identical reconcile-sweep membership. Runs on
+	// every boot (insert-only where missing) so a crash between the CREATE and
+	// the fill self-heals rather than silently stranding those users.
+	if err := backfillSubscriptionSources(context.Background(), db); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -1535,17 +1621,30 @@ func (s *SQLiteStore) GetUserByID(ctx context.Context, id string) (User, error) 
 	return u, err
 }
 
-// ListStripePaidUsers returns active users on a Stripe-sourced paid plan that
-// have a customer id — the reconcile sweep's candidate set. plan_source='admin'
-// (comped) and free/unbound accounts are excluded: they never take a webhook and
-// have no Stripe subscription to reconcile against.
+// ListStripePaidUsers returns active users whose STRIPE source row is on a paid
+// plan and who have a customer id — the reconcile sweep's candidate set.
+//
+// It is driven by the Stripe source row rather than by the users-row projection
+// so that the sweep stays exactly as wide as Stripe itself: a user whose
+// EFFECTIVE plan now comes from another provider still has a real Stripe
+// subscription that can vanish and must still be reconciled, while a user with
+// no Stripe row at all (an Apple-only account) can never be handed to
+// ListActiveSubscriptions / CancelSubscription / the refund path. On a
+// Stripe-only database the two formulations select exactly the same users:
+// plan_source='stripe' holds precisely when the backfilled Stripe row mirrors
+// the users row.
+//
+// plan_source='admin' (comped) stays excluded, as before: those accounts never
+// took a webhook and the sweep has never been responsible for them.
 func (s *SQLiteStore) ListStripePaidUsers(ctx context.Context) ([]User, error) {
 	rows, err := s.reader().QueryContext(ctx,
-		`SELECT id, email, display_name, created_at, email_verified, only_own_nodes, deleted_at, purge_after, plan_id,
-		        stripe_customer_id, stripe_subscription_id, subscription_status, subscription_end, plan_source, scheduled_plan_id, scheduled_cycle, billing_cycle,
-		        plan_started_at, quota_accrued_bytes, quota_accrued_period
-		   FROM users
-		  WHERE plan_source = 'stripe' AND plan_id != 'free' AND stripe_customer_id != '' AND deleted_at = 0`)
+		`SELECT u.id, u.email, u.display_name, u.created_at, u.email_verified, u.only_own_nodes, u.deleted_at, u.purge_after, u.plan_id,
+		        u.stripe_customer_id, u.stripe_subscription_id, u.subscription_status, u.subscription_end, u.plan_source, u.scheduled_plan_id, u.scheduled_cycle, u.billing_cycle,
+		        u.plan_started_at, u.quota_accrued_bytes, u.quota_accrued_period
+		   FROM users u
+		   JOIN subscription_sources s ON s.user_id = u.id AND s.provider = 'stripe'
+		  WHERE s.plan_id != 'free' AND s.plan_id != '' AND u.plan_source != 'admin'
+		    AND u.stripe_customer_id != '' AND u.deleted_at = 0`)
 	if err != nil {
 		return nil, err
 	}
@@ -1685,10 +1784,35 @@ func (s *SQLiteStore) SetUserStripeCustomer(ctx context.Context, userID, custome
 // SetUserStripeSubscription records the user's canonical subscription id; an
 // empty value clears it. Used by the webhook dedup to know which subscription is the one
 // that drives the plan.
+//
+// The id is written to the users column (the compatibility projection the
+// webhook dedup reads) and to the Stripe source row's external_id IN ONE
+// TRANSACTION, so the two can never disagree. The source row is where
+// ownership is ENFORCED: a subscription already bound to a different account is
+// refused with ErrExternalSubscriptionOwned and neither write lands, so the
+// existing binding stays with its owner rather than being taken over.
+//
+// A refusal is NOT something callers may shrug off. Both adoption call sites —
+// the webhook's first-subscription branch and reconcileSubscriptions' canonical
+// pick — stop and 500 on it, because the grant that would follow is justified
+// by a subscription this account does not own. The one caller that does merely
+// log is clearCanonicalSubscription, which passes ” and therefore cannot hit
+// the ownership check at all; see its comment for why that single case is
+// proportionate.
 func (s *SQLiteStore) SetUserStripeSubscription(ctx context.Context, userID, subID string) error {
-	_, err := s.db.ExecContext(ctx,
-		`UPDATE users SET stripe_subscription_id = ? WHERE id = ?`, subID, userID)
-	return err
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE users SET stripe_subscription_id = ? WHERE id = ?`, subID, userID); err != nil {
+		return err
+	}
+	if err := bindExternalSubscriptionTx(ctx, tx, userID, ProviderStripe, subID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // SetUserStripeCustomerIfEmpty binds a customer id only when the user has none
@@ -1763,6 +1887,22 @@ func (s *SQLiteStore) GetUserByStripeCustomer(ctx context.Context, customerID st
 // ordering guard can drop a later-delivered older event. Pass 0 for non-webhook
 // callers (they never race Stripe ordering).
 func (s *SQLiteStore) SetUserSubscription(ctx context.Context, userID, planID, status string, end int64, source, cycle string, now, subEventAt int64) error {
+	// A real billing provider goes through the provider-neutral path: it owns a
+	// source row of its own, with its own replay clock, and the users row below
+	// becomes the projection over every such row. For a single provider the two
+	// are identical, which is why this remains one call with one signature.
+	//
+	// SourceAdmin does NOT: a manual comp has no external subscription to
+	// replay, cancel or refund, so it stays a direct write to the users row —
+	// and it is the projection's top rule, which is what keeps it winning while
+	// providers keep updating underneath.
+	if knownProvider(source) {
+		_, err := s.ApplySubscriptionSource(ctx, SourceEvent{
+			UserID: userID, Provider: source, PlanID: planID, Status: status,
+			Cycle: cycle, PeriodEnd: end, EventAt: subEventAt, Now: now,
+		})
+		return err
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -1799,8 +1939,13 @@ func (s *SQLiteStore) SetUserSubscription(ctx context.Context, userID, planID, s
 	return tx.Commit()
 }
 
-// LastSubEventAt returns the Stripe event.created of the last subscription event
-// applied to this user (0 if none / user absent), for the webhook ordering guard.
+// LastSubEventAt returns users.sub_event_at (0 if none / user absent).
+//
+// It is no longer the webhook's ordering authority — that is
+// LastSourceEventAt, per provider, because one shared clock cannot order two
+// independent event streams. The column and this reader remain so a previous
+// binary rolled back onto this database still finds the Stripe clock it
+// expects; only Stripe events advance it (see applySourceTx).
 func (s *SQLiteStore) LastSubEventAt(ctx context.Context, userID string) (int64, error) {
 	var at int64
 	err := s.db.QueryRowContext(ctx,
@@ -2102,6 +2247,15 @@ func (s *SQLiteStore) ArchiveAndPurgeUser(ctx context.Context, userID string, no
 		// Non-FK but user-owned.
 		{`DELETE FROM magic_tokens WHERE email=(SELECT email FROM users WHERE id=?)`, []any{userID}},
 		{`DELETE FROM cli_device_auth WHERE user_id=?`, []any{userID}},
+		// Per-provider subscription state. It carries user_id and a real
+		// REFERENCES users(id), so it must go before the users row — and it must
+		// go at all: leaving it would retain a purged account's billing history
+		// and orphan a row per deleted account forever. Deliberately NOT part of
+		// the confirm-time transient purge: an account inside the grace window
+		// can still be reactivated, and it must come back with its subscription.
+		// The Apple app account token needs no entry here — it is a column on the
+		// users row this transaction deletes.
+		{`DELETE FROM subscription_sources WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM nodes WHERE owner_type='user' AND owner_user_id=?`, []any{userID}},
 	}
 	for _, st := range stmts {

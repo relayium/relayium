@@ -28,8 +28,22 @@ func (s *Service) handleBillingCheckout(w http.ResponseWriter, r *http.Request, 
 	// correctly falls through so the user can re-subscribe. liveSubStatus is the
 	// authoritative signal — PlanSource stays "stripe" after cancellation, so it
 	// alone cannot distinguish a live sub from a lapsed one.
+	live, err := s.Store().LiveEntitlementProviders(r.Context(), u.ID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
 	if u.StripeCustomerID != "" && liveSubStatus(u.SubscriptionStatus) {
-		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "already_subscribed"})
+		writeAlreadySubscribed(w, blockingProvider(u, live, ProviderStripe))
+		return
+	}
+	// ...and the same guard for a live entitlement from ANY OTHER provider. The
+	// Stripe condition above cannot see one: an Apple subscriber has no Stripe
+	// customer at all, so without this they would be sold a second, parallel
+	// subscription through a provider that knows nothing about the first. This
+	// has to exist BEFORE Apple purchases can be made, not alongside them.
+	if len(live) > 0 {
+		writeAlreadySubscribed(w, blockingProvider(u, live, ProviderStripe))
 		return
 	}
 	var in struct {
@@ -94,11 +108,109 @@ func (s *Service) handleBillingCheckout(w http.ResponseWriter, r *http.Request, 
 	httpx.WriteJSON(w, http.StatusOK, map[string]string{"url": url})
 }
 
+// writeAlreadySubscribed is the one double-purchase refusal. The `provider`
+// field is additive — the pre-existing `error` code is unchanged — so an older
+// client keeps reading exactly what it always did, while a current one can say
+// WHERE the existing subscription lives instead of offering a second one.
+func writeAlreadySubscribed(w http.ResponseWriter, provider string) {
+	httpx.WriteJSON(w, http.StatusConflict, map[string]string{
+		"error":    "already_subscribed",
+		"provider": provider,
+	})
+}
+
+// blockingProvider attributes a refusal: which provider's live subscription is
+// standing in the way.
+//
+// It names the LIVE PROVIDERS, deliberately not entitlementProviderWire, which
+// answers a different question. For an admin-comped account that wire value is
+// "admin" — correct for "where does this plan come from", and useless as the
+// answer to "why can I not buy this", where the honest answer is the provider
+// that is actually billing them. fallback covers the case where the users-row
+// projection says a subscription is live but no source row does (a legacy or
+// hand-edited row): naming the provider the guard fired on beats reporting
+// nothing, and an admin comp is named as such because that IS the blocker then.
+func blockingProvider(u User, live []string, fallback string) string {
+	switch len(live) {
+	case 0:
+		if u.PlanSource == SourceAdmin {
+			return SourceAdmin
+		}
+		return fallback
+	case 1:
+		return live[0]
+	default:
+		return ProviderMultiple
+	}
+}
+
+// providerManagedElsewhere reports whether this account's entitlement is owned
+// by something other than a plain Stripe subscription, so the Stripe management
+// endpoints must decline it.
+//
+// The distinction matters for what the client does NEXT. `no_active_subscription`
+// means "you have nothing here — go and subscribe", which for an Apple
+// subscriber would walk them straight into a second, parallel subscription.
+// `managed_by_provider` means "this exists, but not here", which is the truth
+// and the only routing that cannot double-bill. A user who holds BOTH a Stripe
+// and an Apple subscription is reported as `multiple` for the same reason: the
+// Stripe change they are asking for would not move their effective plan, and
+// silently performing it would be a charge with no effect.
+func (s *Service) providerManagedElsewhere(ctx context.Context, u User) (string, bool, error) {
+	live, err := s.Store().LiveEntitlementProviders(ctx, u.ID)
+	if err != nil {
+		return "", false, err
+	}
+	if len(live) == 0 || (len(live) == 1 && live[0] == ProviderStripe) {
+		return "", false, nil
+	}
+	return blockingProvider(u, live, live[0]), true, nil
+}
+
+// refuseIfManagedElsewhere writes the 409 and reports true when the caller must
+// stop. A store failure fails CLOSED (500): guessing "Stripe owns it" during a
+// DB blip is how an Apple subscriber would end up in a Stripe checkout.
+func (s *Service) refuseIfManagedElsewhere(w http.ResponseWriter, r *http.Request, u User) bool {
+	provider, managed, err := s.providerManagedElsewhere(r.Context(), u)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return true
+	}
+	if !managed {
+		return false
+	}
+	httpx.WriteJSON(w, http.StatusConflict, map[string]string{
+		"error":    "managed_by_provider",
+		"provider": provider,
+	})
+	return true
+}
+
 // handleBillingPortal opens a Stripe Billing Portal session for the signed-in
 // user to manage an existing subscription. 404 when billing is unconfigured
-// or the user has no Stripe customer yet (never checked out).
+// or the user has no Stripe customer yet (never checked out); 409
+// managed_by_provider when the entitlement belongs to another provider.
 func (s *Service) handleBillingPortal(w http.ResponseWriter, r *http.Request, u User) {
-	if s.biller == nil || u.StripeCustomerID == "" {
+	if s.biller == nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	// BEFORE the customer check, not after it. `has a Stripe customer` is not a
+	// proxy for `Stripe owns this entitlement`: stripe_customer_id is written
+	// once and never cleared, so a user who paid by card years ago and now
+	// subscribes on the App Store still satisfies it. Ordering the two the other
+	// way would make the answer depend on that residue — 409 for an Apple
+	// subscriber who never touched Stripe, a live Stripe cancel/update surface
+	// for one who did. The portal governs Stripe subscriptions only; for a dual
+	// subscriber it would offer to cancel half of what they pay for while
+	// reporting it as "cancel subscription".
+	//
+	// This runs before ANY Stripe call, so a refused account never reaches
+	// CreatePortalSession.
+	if s.refuseIfManagedElsewhere(w, r, u) {
+		return
+	}
+	if u.StripeCustomerID == "" {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
@@ -171,6 +283,12 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 	}
 	if err := httpx.DecodeJSONBody(w, r, &in); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	// An entitlement owned by another provider is refused here BEFORE the
+	// Stripe-shaped check below, so the client is never told to go and buy a
+	// second subscription. No Stripe call is made on this path.
+	if s.refuseIfManagedElsewhere(w, r, u) {
 		return
 	}
 	// Only a live Stripe-sourced subscription can be changed in place. Free users
@@ -297,8 +415,14 @@ func (s *Service) handleBillingPreview(w http.ResponseWriter, r *http.Request, u
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	// Same guard as change-plan: a canceled subscriber (plan_source still "stripe")
-	// gets a clean 409, not a 500, when previewing a change with no live sub.
+	// Same guards as change-plan, in the same order: another provider's
+	// entitlement is named as such, and only then does the Stripe-shaped check
+	// run. Preview performs no state change either way.
+	if s.refuseIfManagedElsewhere(w, r, u) {
+		return
+	}
+	// A canceled subscriber (plan_source still "stripe") gets a clean 409, not a
+	// 500, when previewing a change with no live sub.
 	if u.StripeCustomerID == "" || u.PlanSource != "stripe" || !liveSubStatus(u.SubscriptionStatus) {
 		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "no_active_subscription"})
 		return
@@ -367,6 +491,9 @@ func (s *Service) handleBillingCancelScheduledChange(w http.ResponseWriter, r *h
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
+	if s.refuseIfManagedElsewhere(w, r, u) {
+		return
+	}
 	if u.StripeCustomerID == "" || u.PlanSource != "stripe" {
 		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "no_active_subscription"})
 		return
@@ -426,6 +553,25 @@ func (s *Service) handlePublicPlans(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
+// clearCanonicalSubscription drops the recorded canonical subscription id on a
+// path that is about to write the user to free anyway.
+//
+// This is the one SetUserStripeSubscription call whose failure is genuinely
+// proportionate to log rather than propagate. Clearing can never hit the
+// ownership check (an empty id claims nothing), so the only failure left is the
+// store itself — and the very next statement on every one of these paths writes
+// to that same store, which is what turns a real outage into the 500 that makes
+// Stripe redeliver. What is left behind meanwhile is a stale canonical id on a
+// free account: it grants nothing, and the next event for any subscription
+// either takes the normal path or re-runs reconciliation, both of which
+// converge. Refusing to downgrade over it would be the worse trade — a canceled
+// subscriber left on a paid tier.
+func (s *Service) clearCanonicalSubscription(ctx context.Context, userID string) {
+	if err := s.Store().SetUserStripeSubscription(ctx, userID, ""); err != nil {
+		log.Printf("billing: clearing the canonical subscription id for user %s failed: %v (the downgrade still applies)", userID, err)
+	}
+}
+
 // maxWebhookBodyBytes caps the raw Stripe webhook payload we'll read before
 // giving up; real Stripe event payloads are a few KB, so 1 MiB is generous
 // headroom while still bounding memory against a malicious/broken sender.
@@ -453,7 +599,7 @@ func (s *Service) reconcileSubscriptions(ctx context.Context, u User, evCreated 
 	}
 	if len(subs) == 0 {
 		// No live subscription remains → free (a cancellation, or all lapsed).
-		_ = s.Store().SetUserStripeSubscription(ctx, u.ID, "")
+		s.clearCanonicalSubscription(ctx, u.ID)
 		if err := s.Store().SetUserSubscription(ctx, u.ID, "free", "canceled", 0, "stripe", "", s.Now().Unix(), evCreated); err != nil {
 			return false, err
 		}
@@ -469,7 +615,18 @@ func (s *Service) reconcileSubscriptions(ctx context.Context, u User, evCreated 
 			canonical = sub
 		}
 	}
-	_ = s.Store().SetUserStripeSubscription(ctx, u.ID, canonical.ID)
+	// Adopting the canonical is also where ownership is enforced, so it must
+	// happen BEFORE the destructive half below. A subscription that cannot be
+	// bound — it belongs to another account, or the store is failing — makes the
+	// whole reconciliation wrong: the plan written from it would be justified by
+	// somebody else's subscription, and the cancel+refund loop would have
+	// already reaped this customer's real ones on the strength of that choice.
+	// 500 → Stripe redelivers, and the conflict stays visible in its dashboard
+	// rather than being ACKed into silence.
+	if err := s.Store().SetUserStripeSubscription(ctx, u.ID, canonical.ID); err != nil {
+		log.Printf("billing: reconcile could not adopt canonical subscription %s for user %s: %v (no cancel/refund performed)", canonical.ID, u.ID, err)
+		return false, err
+	}
 	// Cancel + fully refund every OTHER active subscription — the duplicates a
 	// double-checkout opened. Best-effort per sub: a failure is logged and the next
 	// event (idempotently) re-runs this; the duplicate is at least visible in the
@@ -531,7 +688,7 @@ func (s *Service) ReconcileStripeSubscriptions(ctx context.Context) {
 		// Paid plan but no live subscription → a cancellation whose webhook we
 		// never received. Downgrade to free, mirroring customer.subscription.deleted.
 		now := s.Now().Unix()
-		_ = s.Store().SetUserStripeSubscription(ctx, u.ID, "")
+		s.clearCanonicalSubscription(ctx, u.ID)
 		if err := s.Store().SetUserSubscription(ctx, u.ID, "free", "canceled", 0, "stripe", "", now, now); err != nil {
 			log.Printf("billing: reconcile sweep downgrade %s: %v", u.ID, err)
 			continue
@@ -553,11 +710,18 @@ func (s *Service) ReconcileStripeSubscriptions(ctx context.Context) {
 // the caller must stop because a response was already written (stale → 200, or a
 // store error → 500, which lets Stripe retry). created<=0 disables the guard
 // (no usable timestamp) so the event applies as before.
+//
+// The clock is STRIPE'S OWN, read from Stripe's source row. Comparing against a
+// clock shared with another provider would make Apple's event timestamps censor
+// Stripe's events (and vice versa) — the two streams are unrelated and their
+// timestamps are not comparable. As before, this is only a fast-path ACK: the
+// authoritative guard is inside the same transaction as the write (see
+// applySourceTx).
 func (s *Service) subEventIsStale(ctx context.Context, w http.ResponseWriter, userID string, created int64) bool {
 	if created <= 0 {
 		return false
 	}
-	last, err := s.Store().LastSubEventAt(ctx, userID)
+	last, err := s.Store().LastSourceEventAt(ctx, userID, ProviderStripe)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return true
@@ -663,10 +827,29 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		if s.subEventIsStale(ctx, w, u.ID, ev.Created) {
 			return
 		}
+		// Resolve what THIS event says Stripe is billing, before the admin branch:
+		// an admin-comped account still has its Stripe subscription recorded on
+		// Stripe's own source row, so if the comp is ever lifted the fallback is
+		// real state rather than a guess.
+		planID := "free"
+		cycle := ""
+		if ev.Status == "active" || ev.Status == "trialing" {
+			if p, ok, err := s.Store().PlanByStripePrice(ctx, ev.PriceID); err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			} else if ok {
+				planID = p.ID
+				cycle = cycleOfPrice(p, ev.PriceID)
+			}
+		}
 		if u.PlanSource == "admin" {
-			// Admin comp wins: record status/end for visibility, but never
-			// let a webhook change plan_id out from under an admin grant.
-			if err := s.Store().SetUserSubscription(ctx, u.ID, u.PlanID, ev.Status, ev.CurrentPeriodEnd, "admin", "", s.Now().Unix(), ev.Created); err != nil {
+			// Admin comp wins: the projection records status/end for visibility
+			// and leaves plan_id alone (see resolveEffective's first rule), so a
+			// webhook still cannot change a plan out from under an admin grant.
+			// The dedup/reconcile path below is skipped for the same reason it
+			// always was: reconcileSubscriptions cancels and refunds real
+			// subscriptions, and a comped account is not its responsibility.
+			if err := s.Store().SetUserSubscription(ctx, u.ID, planID, ev.Status, ev.CurrentPeriodEnd, "stripe", cycle, s.Now().Unix(), ev.Created); err != nil {
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			}
@@ -690,17 +873,24 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 			// Fall through to per-event logic if the Stripe list failed.
 		} else if u.StripeSubscriptionID == "" && ev.SubscriptionID != "" {
 			// First subscription seen → adopt it as canonical (no Stripe call).
-			_ = s.Store().SetUserStripeSubscription(ctx, u.ID, ev.SubscriptionID)
-		}
-		planID := "free"
-		cycle := ""
-		if ev.Status == "active" || ev.Status == "trialing" {
-			if p, ok, err := s.Store().PlanByStripePrice(ctx, ev.PriceID); err != nil {
+			//
+			// Adoption is where ownership is ENFORCED, so it fails closed and the
+			// grant below does not happen. A subscription already bound to another
+			// account cannot be allowed to justify this account's tier: that is a
+			// free paid plan, and one that can never be canceled or refunded
+			// against the user holding it. 500 rather than a 200 ACK — retrying
+			// will not resolve a genuine conflict, but it keeps the event visible
+			// as a failing delivery in Stripe instead of silently discarding the
+			// only signal that two accounts disagree about one subscription. The
+			// reconcile sweep is the backstop once Stripe gives up retrying.
+			if err := s.Store().SetUserStripeSubscription(ctx, u.ID, ev.SubscriptionID); err != nil {
+				if errors.Is(err, ErrExternalSubscriptionOwned) {
+					log.Printf("billing: refusing to adopt subscription %s for user %s: it is already owned by another account", ev.SubscriptionID, u.ID)
+				} else {
+					log.Printf("billing: adopting canonical subscription %s for user %s failed: %v", ev.SubscriptionID, u.ID, err)
+				}
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
-			} else if ok {
-				planID = p.ID
-				cycle = cycleOfPrice(p, ev.PriceID)
 			}
 		}
 		if err := s.Store().SetUserSubscription(ctx, u.ID, planID, ev.Status, ev.CurrentPeriodEnd, "stripe", cycle, s.Now().Unix(), ev.Created); err != nil {
@@ -735,8 +925,10 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if u.PlanSource == "admin" {
-			// Admin comp wins: record the cancellation for visibility but keep the plan.
-			if err := s.Store().SetUserSubscription(ctx, u.ID, u.PlanID, "canceled", ev.CurrentPeriodEnd, "admin", "", s.Now().Unix(), ev.Created); err != nil {
+			// Admin comp wins: the projection records the cancellation for
+			// visibility and keeps the comped plan, while Stripe's own row goes to
+			// free/canceled so a later fallback is truthful.
+			if err := s.Store().SetUserSubscription(ctx, u.ID, "free", "canceled", ev.CurrentPeriodEnd, "stripe", "", s.Now().Unix(), ev.Created); err != nil {
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			}
@@ -750,7 +942,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// The canonical (or an unknown) subscription was canceled → free + clear it.
-		_ = s.Store().SetUserStripeSubscription(ctx, u.ID, "")
+		s.clearCanonicalSubscription(ctx, u.ID)
 		if err := s.Store().SetUserSubscription(ctx, u.ID, "free", "canceled", ev.CurrentPeriodEnd, "stripe", "", s.Now().Unix(), ev.Created); err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return

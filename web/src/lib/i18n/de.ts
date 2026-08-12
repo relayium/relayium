@@ -187,6 +187,9 @@ const de: Messages = {
     pastDueNotice: "Zahlung fehlgeschlagen · bitte Zahlungsmethode aktualisieren",
     canceledUntil: (date) => `Gekündigt · aktiv bis ${date}`,
     scheduledDowngradeRow: (name, date) => `Geplant: Downgrade zu ${name} am ${date}`,
+    appleManagedBadge: "Wird im App Store verwaltet",
+    appleManagedNote: "Dieses Abo wurde im App Store gekauft. Ändere oder kündige es in deinen Apple-Kontoeinstellungen.",
+    multipleProvidersNote: "Du hast aktive Abos bei mehr als einem Anbieter. Kündige das nicht benötigte dort, wo du es gekauft hast.",
   },
   pricingPage: {
     navLink: "Preise",

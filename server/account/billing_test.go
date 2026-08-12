@@ -22,6 +22,8 @@ type fakeBiller struct {
 	lastPortalCustomer  string
 	lastPortalReturnURL string
 
+	portalCalls int
+
 	lastChangeCustomer string
 	lastChangePrice    string
 	changeCalls        int
@@ -83,6 +85,7 @@ func (f *fakeBiller) CreateCheckoutSession(ctx context.Context, in CheckoutInput
 }
 
 func (f *fakeBiller) CreatePortalSession(ctx context.Context, customerID, returnURL string) (string, error) {
+	f.portalCalls++
 	f.lastPortalCustomer = customerID
 	f.lastPortalReturnURL = returnURL
 	return f.portalURL, nil

@@ -41,6 +41,13 @@
 
   // 信息卡的四段派生态：是否付费档、周期徽章、价格行、状态行、排期降级行。
   const isPaid = $derived(!!plan && plan.priceMonthly > 0);
+  // 权益归属渠道来自 /api/me/usage 的 plan（和卡片其余数据同一份快照），不读
+  // session().user——两处混用必然漂移，理由同上面 $effect 的注释。
+  // 'apple' / 'multiple' 表示这张订阅不是（不只是）在本站买的：服务端会拒绝一切
+  // Stripe 管理调用，所以这里不能画出任何点了没用的按钮。
+  const managedElsewhere = $derived(
+    plan?.entitlementProvider === "apple" || plan?.entitlementProvider === "multiple",
+  );
   const cycleLabel = $derived(
     plan?.billingCycle === "yearly" ? t.billing.cycleYearly
     : plan?.billingCycle === "monthly" ? t.billing.cycleMonthly : "",
@@ -102,14 +109,19 @@
     {#if scheduledLine}<p class="sched">⏳ {scheduledLine}</p>{/if}
 
     <div class="actions">
-      {#if plan.isTop}
+      <!-- An entitlement bought elsewhere: neither the tier control (which goes
+           to /pricing, where every action is refused for this account) nor the
+           Stripe portal is something this card can honestly offer. -->
+      {#if managedElsewhere}
+        <span class="hint" data-testid="plan-managed-elsewhere">{t.billing.appleManagedBadge}</span>
+      {:else if plan.isTop}
         <span class="hint">{t.me.plan.topTier}</span>
       {:else}
         <button class="btn btn-primary" onclick={() => navigate("pricing")}>
           {isPaid ? t.billing.changePlan : t.billing.upgrade}
         </button>
       {/if}
-      {#if session().user?.hasBilling}
+      {#if !managedElsewhere && session().user?.hasBilling}
         <button class="btn" disabled={portalBusy} onclick={onManageBilling}>{t.billing.manageBilling}</button>
       {/if}
     </div>
@@ -117,7 +129,7 @@
          billing" — so it's discoverable without being an easy misclick, per
          click-to-cancel. Shown only when there's a live (non-canceled)
          subscription to cancel; it opens the same Stripe portal. -->
-    {#if session().user?.hasBilling && plan.subscriptionStatus && plan.subscriptionStatus !== "canceled"}
+    {#if !managedElsewhere && session().user?.hasBilling && plan.subscriptionStatus && plan.subscriptionStatus !== "canceled"}
       <button type="button" class="cancel-link" disabled={portalBusy} onclick={onManageBilling}>{t.billing.cancelSubscription}</button>
     {/if}
     {#if portalError}<p class="err">{portalError}</p>{/if}

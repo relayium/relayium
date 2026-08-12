@@ -79,6 +79,7 @@ var userLinkedTables = []struct {
 	{"node_tokens", "user_id=?"},
 	{"cli_tokens", "user_id=?"},
 	{"cli_device_auth", "user_id=?"},
+	{"subscription_sources", "user_id=?"},
 	{"nodes", "owner_type='user' AND owner_user_id=?"},
 }
 
@@ -146,6 +147,16 @@ func TestArchiveAndPurgeUserClearsEveryLinkedTable(t *testing.T) {
 	}
 	if err := st.CreateNodeToken(ctx, NodeToken{ID: authx.NewID(), TokenHash: authx.HashToken("nt"), UserID: u.ID, NodeID: node.ID, Name: "byo", CreatedAt: 1}); err != nil {
 		t.Fatalf("create node token: %v", err)
+	}
+	// Per-provider subscription state is user-attributed, so it belongs in this
+	// matrix from the moment the table exists — not once some later batch
+	// notices the orphan rows. Its sibling identifier, the Apple app account
+	// token, lives ON the users row and so has no entry of its own here.
+	if _, err := st.ApplySubscriptionSource(ctx, SourceEvent{
+		UserID: u.ID, Provider: ProviderStripe, PlanID: "pro", Status: "active",
+		Cycle: "monthly", PeriodEnd: 1 << 40, EventAt: 1, Now: 1,
+	}); err != nil {
+		t.Fatalf("apply subscription source: %v", err)
 	}
 
 	// Sanity: every table actually has a row before purging, so the

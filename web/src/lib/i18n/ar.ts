@@ -242,6 +242,9 @@ const ar: Messages = {
     pastDueNotice: "فشل الدفع · يُرجى تحديث طريقة الدفع",
     canceledUntil: (date) => `أُلغِي · ساري حتى ${date}`,
     scheduledDowngradeRow: (name, date) => `مجدول: سيُخفَّض إلى ${name} في ${date}`,
+    appleManagedBadge: "تُدار من App Store",
+    appleManagedNote: "اشتريت هذا الاشتراك من App Store. غيّره أو ألغِه من إعدادات حساب Apple الخاص بك.",
+    multipleProvidersNote: "لديك اشتراكات فعّالة لدى أكثر من مزوّد. ألغِ الاشتراك الذي لا تحتاجه من المكان الذي اشتريته منه.",
   },
   pricingPage: {
     navLink: "الأسعار",
