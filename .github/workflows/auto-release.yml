@@ -49,9 +49,16 @@ jobs:
         id: scan
         run: |
           set -euo pipefail
-          last="$(git describe --tags --abbrev=0 2>/dev/null || echo '')"
+          # NOT `git describe --tags`: this repo tags two components, and that
+          # call returns the newest tag of whichever family happened to move
+          # last. When the macOS app was ahead it returned `macos-v1.1.3`, and
+          # every line below — the commit count, the server/ diff, the release
+          # notes range, the version arithmetic — was computed from it. See
+          # scripts/release/server-tag.sh for the full incident and the rules;
+          # it returns a tag matching ^v[0-9]+\.[0-9]+\.[0-9]+$ or nothing.
+          last="$(sh scripts/release/server-tag.sh latest)"
           if [ -z "$last" ]; then
-            echo "no tags yet — refusing to invent the first version number" >> "$GITHUB_STEP_SUMMARY"
+            echo "no server tags yet — refusing to invent the first version number" >> "$GITHUB_STEP_SUMMARY"
             echo "skip=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -144,19 +151,11 @@ jobs:
         if: steps.scan.outputs.skip == 'false'
         run: |
           set -euo pipefail
-          last="${{ steps.scan.outputs.last }}"
-          v="${last#v}"
-          major="${v%%.*}"; rest="${v#*.}"; minor="${rest%%.*}"; patch="${rest#*.}"
-          subjects="$(git log --format='%s' "$last"..HEAD)"
-          # Pre-1.0 semantics: a breaking change bumps the minor, because there
-          # is no major to spend. feat does too; everything else is a patch.
-          if printf '%s\n' "$subjects" | grep -qE '^[a-z]+(\([^)]*\))?!:|^feat(\([^)]*\))?:' \
-             || git log --format='%B' "$last"..HEAD | grep -q 'BREAKING CHANGE'; then
-            minor=$((minor + 1)); patch=0
-          else
-            patch=$((patch + 1))
-          fi
-          next="v${major}.${minor}.${patch}"
+          # The arithmetic lives in the script with the shape check, so that a
+          # base tag which is not a server version cannot be bumped at all —
+          # the string arithmetic that produced `vmacos-v1.2.0` fails loudly
+          # there instead of yielding a tag name.
+          next="$(sh scripts/release/server-tag.sh next "${{ steps.scan.outputs.last }}")"
           echo "next=$next" >> "$GITHUB_OUTPUT"
           echo "Next version: **$next**" >> "$GITHUB_STEP_SUMMARY"
 

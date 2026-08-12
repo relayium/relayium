@@ -43,3 +43,20 @@ jobs:
       # id/systemctl/useradd and a file:// release — no root, no network.
       - name: install-node.sh unit generation
         run: sh scripts/test/install-node-test.sh
+
+  server-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      # scripts/release/server-tag.sh decides which tag auto-release.yml treats
+      # as the last server release, and therefore what it diffs, counts and
+      # publishes. It replaced a `git describe --tags` that returned the newest
+      # tag of ANY family: with the macOS app tagged ahead of the server, that
+      # produced the tag `vmacos-v1.2.0` and a release run that failed in
+      # GoReleaser. The suite reconstructs that exact repository shape.
+      #
+      # The same script also gates release.yml — which refs it will build and
+      # sign — so the suite covers both ends: what may be tagged, and what may
+      # be released.
+      - name: server-tag.sh selection, version arithmetic and release gate
+        run: sh scripts/test/server-tag-test.sh

@@ -2,7 +2,15 @@ name: release
 on:
   push:
     tags:
-      - 'v*'
+      # Narrowed from `v*`, which matched `vmacos-v1.2.0` — the malformed tag
+      # the auto-release incident created and then dispatched a build for.
+      # A leading digit is the cheapest way to keep another tag family out.
+      #
+      # This is a first cut, not the check. GitHub's filter globs cannot say
+      # "digits only, exactly three components, nothing after": `v1.2.3-rc1`
+      # and `v1.2.3.4` still match, and workflow_dispatch below ignores this
+      # list entirely. The job re-checks the ref it actually got.
+      - 'v[0-9]*.[0-9]*.[0-9]*'
   # Invoked with a tag ref by auto-release.yml, and available for a manual
   # re-run of a tag whose first attempt failed.
   #
@@ -29,6 +37,32 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
+      # DEFENSE IN DEPTH, and the last step before this job becomes trusted:
+      # everything below materializes the release signing key and hands the ref
+      # to GoReleaser, which publishes a GitHub release named after it.
+      #
+      # Two ways in exist and neither is self-limiting. The push filter is a
+      # glob, so it cannot reject `v1.2.3-rc1`; workflow_dispatch can be aimed
+      # at ANY ref, including a branch, which would publish a "release" built
+      # from an untagged commit. auto-release.yml no longer produces a
+      # malformed tag, but it was never the only thing that can create one —
+      # a hand-pushed or mistyped tag arrives here indistinguishably.
+      #
+      # The check is the same matcher auto-release bumps versions with, so the
+      # two ends cannot drift into disagreeing about what a server tag is.
+      #
+      # It is not a defence against someone who can already push here: a
+      # push-triggered run uses the workflow and scripts from the pushed ref,
+      # so they could change both. It stops the accident and the stray tag,
+      # which is what actually happened.
+      - name: Refuse any ref that is not a canonical server tag
+        run: |
+          set -eu
+          if ! tag="$(sh scripts/release/server-tag.sh validate-ref "$GITHUB_REF")"; then
+            echo "::error::refusing to build and sign a release from '$GITHUB_REF' — re-run this workflow against a v<major>.<minor>.<patch> tag"
+            exit 1
+          fi
+          echo "Building release **$tag** from \`$GITHUB_REF\`" >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: server/go.mod
