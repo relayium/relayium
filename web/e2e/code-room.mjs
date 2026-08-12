@@ -31,6 +31,9 @@ import {
   CODE_ROOM_ROUTES, CODE_ROOM_SIGNED_IN_ROUTES, codeRoomSignalingScript, pairMintScript,
 } from "./code-room-fixture.mjs";
 import { apiFixtureScript } from "./a11y-fixtures.mjs";
+// 只读的观测层。它对通过的那一次是**完全不可见**的，只在下面那两句"等工作区头部"
+// 超时的时候，把两边的时间线一起附到错误上——见 code-room-probe.mjs 的开头。
+import { codeRoomProbeScript, withTimelines } from "./code-room-probe.mjs";
 // 统一工作区的同意态同样是静态扫描器到不了的地方。哪一格长出了新的违规，都要在这里
 // 当场红——配对码房间是这套 UI 现在的**第二**条真实路径，不是一个副本。
 import { scanLiveState } from "./a11y-core.mjs";
@@ -139,8 +142,11 @@ async function codeRoomScenario(browser, base) {
   // 所以两边都在启动前显式打开它。
   const room = `${base}/cross-network#c=${ROOM_CODE}`;
   const common = VERIFY_ON + apiFixtureScript(CODE_ROOM_ROUTES);
-  const a = await newTab(browser, room, common + codeRoomSignalingScript({ selfId: "aaaa1111", name: "Tab A" }));
-  const b = await newTab(browser, room, common + codeRoomSignalingScript({ selfId: "bbbb2222", name: "Tab B" }) + SAVE_STUB);
+  // 探针必须排在信令夹具**后面**：它包的就是夹具刚装上去的那个 window.WebSocket。
+  const a = await newTab(browser, room,
+    common + codeRoomSignalingScript({ selfId: "aaaa1111", name: "Tab A" }) + codeRoomProbeScript());
+  const b = await newTab(browser, room,
+    common + codeRoomSignalingScript({ selfId: "bbbb2222", name: "Tab B" }) + codeRoomProbeScript() + SAVE_STUB);
   await setWideViewport(a, 390, 844);
   await setWideViewport(b, 390, 844);
 
@@ -175,8 +181,14 @@ async function codeRoomScenario(browser, base) {
 
   // ── 二、一个动作 → 一条链路、一个 SAS、默认就在的输入框 ────────────────────
   await a.evaluate(`(() => { document.querySelector('${OPEN_WORKSPACE}').click(); return true; })()`);
-  await a.waitFor(`!!document.querySelector('${HEAD_SAS}')`, "tab A's unified workspace header", 45_000);
-  await b.waitFor(`!!document.querySelector('${HEAD_SAS}')`, "tab B's unified workspace header", 45_000);
+  // 这两句是这套用例历史上唯一一处**只在托管 CI 上**红过的地方，而它红的时候只说
+  // 得出"某一边的头部没出来"。包一层时间线：等待本身一个字都没改（同样两句、同样
+  // 45 秒、同样的断言），只有超时抛出来的那一刻，会把两边的界面快照、信令帧、
+  // pc/通道状态和 close 调用栈一起附到错误上。通过的那一次这里什么都不发生。
+  await withTimelines([["tab A", a], ["tab B", b]], async () => {
+    await a.waitFor(`!!document.querySelector('${HEAD_SAS}')`, "tab A's unified workspace header", 45_000);
+    await b.waitFor(`!!document.querySelector('${HEAD_SAS}')`, "tab B's unified workspace header", 45_000);
+  });
 
   const sasA = await oneSas(a, "tab A", "on a freshly opened code-room workspace");
   const sasB = await oneSas(b, "tab B", "on a freshly opened code-room workspace");
