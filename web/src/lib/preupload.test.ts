@@ -720,8 +720,9 @@ describe("the capability gate", () => {
     // kind 12", and frame kind 12 is the only way an uploaded object's key ever
     // reaches the receiver. It stayed false for a whole checkpoint because
     // uploading what this client could not hand off is strictly worse than not
-    // uploading — the receiver joins, gets no key, and the objects sit in
-    // storage until the room's deadline deletes them.
+    // uploading — the receiver joins, gets no key, and the objects stay in
+    // storage for good: a joined room has no deadline and no fallback expiry,
+    // so nothing but an operator or account deletion removes them.
     expect(preuploadSenderReady()).toBe(true);
     const server = installFakeServer();
     addToOutbox([pf("a.bin")]);

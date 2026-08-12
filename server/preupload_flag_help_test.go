@@ -52,6 +52,25 @@ func TestPreUploadFlagHelpDoesNotClaimThereIsNoCompletionLifecycle(t *testing.T)
 			"instead.\nhelp: %s", line)
 	}
 
+	// The SAME rot, one commit later. "Built but nobody spends it" was true from
+	// the commit that added pairroom_complete.go until the Web receiver started
+	// posting completions (web/src/lib/preupload-receive.svelte.ts), and it is
+	// false now. It is the more dangerous of the two stale sentences, because it
+	// understates rather than overstates: an operator told that nothing ever ends
+	// a joined room will not think to ask which receivers can end one and which
+	// cannot — and that distinction is the whole shape of the storage commitment
+	// they are being asked to take on (docs/protocol/relayium-pair-room-v1.md
+	// §7.6: only a browser that commits files to disk itself completes at all).
+	for _, stale := range []string{"no receiver spends it", "no receiver spends one"} {
+		if strings.Contains(line, stale) {
+			t.Errorf("-enable-preupload help still claims %q.\n"+
+				"That was true before the Web receiver posted completions and is false\n"+
+				"now. What is still open is that a room nobody completes has no end, and\n"+
+				"that only a receiver whose browser commits files to disk can complete at\n"+
+				"all — say that instead.\nhelp: %s", stale, line)
+		}
+	}
+
 	// The other direction of the same rot, and the reason this guard is more than
 	// a banned-substring list: help that drops the pointer stops being checkable
 	// against anything. Naming the file that implements the capability is what

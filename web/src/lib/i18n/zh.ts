@@ -863,7 +863,7 @@ const zh: Messages = {
     dismiss: "知道了",
     retry: "重试",
     more: (count) => `还有 ${count} 个在路上。`,
-    errGone: "在你保存之前配对码就失效了，这些内容已被删除。请让对方重新生成一个配对码。",
+    errGone: "这些文件已不存在——在你保存之前它们就被删除了。请让对方用新的配对码重新发送一次。",
     errNet: "下载中断了。",
     errDecrypt: "用对方发来的密钥打不开这些文件。",
     errSave: "Relayium 无法把文件写入这台设备。",

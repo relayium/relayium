@@ -883,7 +883,7 @@ const en: Messages = {
     dismiss: "Dismiss",
     retry: "Try again",
     more: (count) => `${count} more on the way.`,
-    errGone: "The pairing code ran out before you saved these, so they were deleted. Ask the sender for a new code.",
+    errGone: "These files are no longer available — they were deleted before you could save them. Ask the sender to send them again with a new code.",
     errNet: "The download stopped before it finished.",
     errDecrypt: "These files could not be opened with the key the other device sent.",
     errSave: "Relayium could not write the files on this device.",

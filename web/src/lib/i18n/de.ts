@@ -873,7 +873,7 @@ const de: Messages = {
     dismiss: "Schließen",
     retry: "Erneut versuchen",
     more: (count) => `${count} weitere unterwegs.`,
-    errGone: "Der Kopplungscode lief ab, bevor du gespeichert hast — die Daten wurden gelöscht. Bitte um einen neuen Code.",
+    errGone: "Diese Dateien sind nicht mehr verfügbar — sie wurden gelöscht, bevor du sie speichern konntest. Bitte den Absender, sie mit einem neuen Code noch einmal zu senden.",
     errNet: "Der Download brach vorzeitig ab.",
     errDecrypt: "Diese Dateien ließen sich mit dem gesendeten Schlüssel nicht öffnen.",
     errSave: "Relayium konnte die Dateien auf diesem Gerät nicht schreiben.",

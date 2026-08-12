@@ -8,7 +8,7 @@
 // receiver gets its files or is quietly told it did.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createStoredReceiver } from "./preupload-receive.svelte";
-import { encryptFiles, encryptManifest, generateStoreKey, encodeKey, decodeKey, type StoredManifest } from "./store-crypto";
+import { completionProof, encryptFiles, encryptManifest, generateStoreKey, encodeKey, decodeKey, type StoredManifest } from "./store-crypto";
 import { SaveCancelledError, type FileMetaLite, type SaveTarget } from "./filesink";
 import type { HandoffItem } from "./preupload-handoff";
 
@@ -35,9 +35,22 @@ interface SinkGates {
   gateClose?(name: string): Promise<void> | undefined;
   /** Hold the open of `name` — a directory target creates the entry here. */
   gateOpen?(name: string): Promise<void> | undefined;
+  /** Hold `done()` — the batch's own commit on a bundled target. What lets a
+   *  case put a reset, or an assertion, INSIDE the finalisation step. */
+  gateDone?(): Promise<void> | undefined;
 }
 
-function memoryTarget(gates: SinkGates = {}): MemoryTarget {
+/**
+ * A save target that reports whatever delivery confidence a case needs.
+ *
+ * The default is DELIBERATELY the weak one. `delivery` is optional on
+ * SaveTarget and defaults to `browserHandoff` for exactly the reason it does in
+ * production — the direction that is merely wasteful rather than lossy — and a
+ * test double that quietly claimed `localCommit` would make every case in this
+ * file post completions it never meant to, hiding the one property that matters
+ * most: a browser-handoff target NEVER spends the capability.
+ */
+function memoryTarget(gates: SinkGates = {}, over: Partial<SaveTarget> = {}): MemoryTarget {
   const output = new Map<string, Uint8Array>();
   const opened: string[] = [];
   const t: MemoryTarget = {
@@ -45,6 +58,7 @@ function memoryTarget(gates: SinkGates = {}): MemoryTarget {
     output,
     opened,
     doneCalls: 0,
+    ...over,
     async file(name: string, _size: number, path?: string) {
       const keyName = path ?? name;
       opened.push(keyName);
@@ -62,10 +76,15 @@ function memoryTarget(gates: SinkGates = {}): MemoryTarget {
         },
       };
     },
-    async done() { t.doneCalls++; },
+    async done() { await gates.gateDone?.(); t.doneCalls++; },
   };
   return t;
 }
+
+/** A target whose `close()` really is a commit to this device's disk — what the
+ *  File System Access branches (Save As, a chosen folder) report. The ONLY kind
+ *  that may spend a completion. */
+const nativeTarget = (gates: SinkGates = {}) => memoryTarget(gates, { delivery: "localCommit" });
 
 const utf8 = (s: string) => new TextEncoder().encode(s);
 const text = (b: Uint8Array | undefined) => (b ? new TextDecoder().decode(b) : undefined);
@@ -121,6 +140,11 @@ interface ServerOpts {
   /** Hold one read of a frame-by-frame body open. `index` counts from 0, and
    *  the index one past the last frame is the read that reports `done`. */
   gateRead?(id: string, index: number): Promise<void> | undefined;
+  /** What POST /api/files/{id}/complete answers, per id. An ARRAY is consumed
+   *  one entry per attempt (the last repeats), which is how a case makes a
+   *  transient failure heal and then watches the retry actually land. Absent =
+   *  204, the server's "it is gone, or there was nothing to end". */
+  completeStatus?: Record<string, number | number[]>;
 }
 
 /** Mutable server options, so a case can HEAL a failure the way a real transient
@@ -134,12 +158,32 @@ function installServer(objects: Obj[], opts: ServerOpts = {}) {
   const signals: (AbortSignal | undefined)[] = [];
   /** Ids whose ciphertext stream was cancelled instead of read to the end. */
   const cancels: string[] = [];
+  /** Every completion this server was asked to perform, in order: the id and the
+   *  base64url proof that came in the BODY. The whole receiver-side contract is
+   *  read off this list — what was completed, what was not, and how many times. */
+  const completions: { id: string; proof: string | undefined }[] = [];
   const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     calls.push(url);
     signals.push(init?.signal ?? undefined);
-    const m = /^\/api\/files\/([^/]+)\/(meta|blob)$/.exec(url);
+    const m = /^\/api\/files\/([^/]+)\/(meta|blob|complete)$/.exec(url);
     if (!m) throw new Error(`unexpected fetch ${url}`);
     const id = decodeURIComponent(m[1]);
+    if (m[2] === "complete") {
+      const body = init?.body == null ? {} : JSON.parse(String(init.body));
+      // Recorded when the request is ISSUED — before the gate holds it and
+      // before any forced failure. Both matter: a case that suspends a
+      // completion has to be able to see that it is in flight, and a case that
+      // refuses one still asserts the proof it carried.
+      const attempt = completions.filter((c) => c.id === id).length;
+      completions.push({ id, proof: body.proof });
+      await opts.gate?.(url);
+      if (opts.networkFail?.includes(id)) throw new TypeError("Failed to fetch");
+      const forced = opts.completeStatus?.[id];
+      const status = Array.isArray(forced)
+        ? forced[Math.min(attempt, forced.length - 1)]
+        : forced ?? 204;
+      return { ok: status >= 200 && status < 300, status } as unknown as Response;
+    }
     await opts.gate?.(url);
     if (opts.networkFail?.includes(id)) throw new TypeError("Failed to fetch");
     const o = byId.get(id);
@@ -179,7 +223,7 @@ function installServer(objects: Obj[], opts: ServerOpts = {}) {
     } as unknown as Response;
   });
   vi.stubGlobal("fetch", fetchMock);
-  return { calls, signals, cancels };
+  return { calls, signals, cancels, completions };
 }
 
 /**
@@ -206,8 +250,19 @@ async function until(check: () => boolean, timeout = 4_000) {
 }
 
 let target: MemoryTarget;
-const make = (over: Partial<{ pick: (f: FileMetaLite[]) => Promise<SaveTarget> }> = {}) =>
-  createStoredReceiver({ pickSaveTarget: over.pick ?? (async () => target) });
+const make = (
+  over: Partial<{
+    pick: (f: FileMetaLite[]) => Promise<SaveTarget>;
+    backoff: readonly number[];
+  }> = {},
+) =>
+  createStoredReceiver({
+    pickSaveTarget: over.pick ?? (async () => target),
+    // Zero by default: these cases are about WHAT is retried and how often, and
+    // spending the production schedule in real time would only make them slow.
+    // One case below overrides it, to hold a retry open across a reset.
+    completionBackoffMs: over.backoff ?? [0, 0],
+  });
 
 beforeEach(() => { target = memoryTarget(); });
 afterEach(() => { vi.unstubAllGlobals(); });
@@ -365,9 +420,11 @@ describe("retry, idempotency and ordering", () => {
 });
 
 describe("failure is never reported as success", () => {
-  it("says the transfer expired when the room's deadline already deleted it", async () => {
+  it("reports a batch the server no longer holds as gone, not as something to retry", async () => {
     // The one failure with a different remedy: retrying cannot work, so the copy
-    // has to send the user to a new code instead.
+    // has to send the user to a new transfer instead. What it must NOT do is
+    // name a cause — 404/410 carries none, and this receiver has a handoff,
+    // which puts it in a joined room that has no deadline to have passed.
     const o = await makeObject("obj1", [{ name: "a.txt", body: "hello" }]);
     installServer([o], { metaStatus: { obj1: 410 } });
     const r = make();
@@ -377,7 +434,7 @@ describe("failure is never reported as success", () => {
     expect(target.output.size).toBe(0);
   });
 
-  it("distinguishes a server refusal from the room being gone", async () => {
+  it("distinguishes a server refusal from the object being gone", async () => {
     const o = await makeObject("obj1", [{ name: "a.txt", body: "hello" }]);
     installServer([o], { metaStatus: { obj1: 429 } });
     const r = make();
@@ -502,7 +559,9 @@ describe("failure is never reported as success", () => {
 // sender's blind whole-set resending correct used to be claimed at OFFER time,
 // which meant a single transient failure — one 500, one dropped socket — turned
 // every later resend into a no-op: the card said "try again", nothing ever
-// tried, and the files sat in storage until the room deleted them. What is
+// tried, and the files stayed in storage for good — a joined room has no
+// deadline and no fallback expiry, so nothing but an explicit completion, an
+// operator or account deletion ever removes them. What is
 // permanent is a DELIVERED id and a DECLINED id. A FAILED one is exactly the
 // thing a retry is for.
 describe("a failure is retried, and a success and a refusal are not", () => {
@@ -567,8 +626,9 @@ describe("a failure is retried, and a success and a refusal are not", () => {
   });
 
   it("offers no retry for the one failure a retry cannot fix", async () => {
-    // The room's deadline passed and the ciphertext was deleted with it. The
-    // remedy is a new code, and a retry button here would be a lie with a
+    // The ciphertext is not there any more — deleted before it could be saved,
+    // for a reason the server does not give and this client does not guess. The
+    // remedy is a new transfer, and a retry button here would be a lie with a
     // request behind it.
     const o = await makeObject("obj1", [{ name: "a.txt", body: "hello" }]);
     installServer([o], { metaStatus: { obj1: 410 } });
@@ -1140,5 +1200,446 @@ describe("a partial failure is reported as partial", () => {
     r.offer([o.item]);
     await until(() => r.status === "failed");
     expect(r.savedCount).toBe(0);
+  });
+});
+
+// --- Completion: telling the server it can let the ciphertext go -------------
+//
+// A joined pair room has NO deadline (§2), so the only thing that ever ends an
+// object's storage is a receiver saying "I have it" (§7). That makes this the
+// most consequential message this client sends: it deletes the only copy, and
+// the deletion is not reversible.
+//
+// Every case here asks one question — WHEN is that claim true? — and the answers
+// are asymmetric on purpose. NOT spending the capability costs the sender
+// storage that nothing else will release: a joined room has no fallback expiry,
+// so the object is held until the account is deleted. Spending it early costs
+// the user the file. Both are open-ended, and the second is the one nobody can
+// undo, so every ambiguity below resolves toward not spending it.
+
+/** The proof the receiver must send for an object, derived the way the protocol
+ *  says: HKDF over the file key it was handed. Recomputed here from the KEY
+ *  rather than read back off the implementation, so a change to the derivation
+ *  breaks this instead of travelling with it. */
+const proofFor = async (o: Obj) => encodeKey(await completionProof(decodeKey(o.item.key)));
+
+/** Wait for completion traffic to settle. Completions run AFTER the batch has
+ *  reached `done`, so "the status is done" is not on its own enough to assert
+ *  anything about them. */
+const settleCompletions = async (server: { completions: unknown[] }, want: number) => {
+  await until(() => server.completions.length >= want);
+  await settle();
+};
+
+describe("completion: a target that really commits locally", () => {
+  it("posts a completion for each object once the batch is saved", async () => {
+    const a = await makeObject("obj1", [{ name: "a.txt", body: "one" }]);
+    const b = await makeObject("obj2", [{ name: "b.txt", body: "two" }]);
+    const server = installServer([a, b]);
+    target = nativeTarget();
+    const r = make();
+    r.offer([a.item, b.item]);
+    await until(() => r.status === "prompt");
+    await r.accept();
+    expect(r.status).toBe("done");
+
+    await settleCompletions(server, 2);
+    expect(server.completions.map((c) => c.id).sort()).toEqual(["obj1", "obj2"]);
+    expect(server.completions.find((c) => c.id === "obj1")!.proof).toBe(await proofFor(a));
+    expect(server.completions.find((c) => c.id === "obj2")!.proof).toBe(await proofFor(b));
+  });
+
+  it("sends the derived proof, never the file key itself", async () => {
+    // The key decrypts; the proof only deletes. Sending the key would hand the
+    // server the one thing the whole zero-knowledge design keeps from it.
+    const o = await makeObject("obj1", [{ name: "a.txt", body: "hello" }]);
+    const server = installServer([o]);
+    target = nativeTarget();
+    const r = make();
+    r.offer([o.item]);
+    await until(() => r.status === "prompt");
+    await r.accept();
+    await settleCompletions(server, 1);
+    expect(server.completions[0].proof).not.toBe(o.item.key);
+    expect(server.completions[0].proof).toBe(await proofFor(o));
+  });
+
+  it("never puts the proof, or the key, in a URL", async () => {
+    // Every proxy and access log on the way records a request line, and this
+    // value is a bearer capability to delete an object.
+    const o = await makeObject("obj1", [{ name: "a.txt", body: "hello" }]);
+    const server = installServer([o]);
+    target = nativeTarget();
+    const r = make();
+    r.offer([o.item]);
+    await until(() => r.status === "prompt");
+    await r.accept();
+    await settleCompletions(server, 1);
+    const proof = await proofFor(o);
+    expect(server.calls.some((u) => u.includes(proof))).toBe(false);
+    expect(server.calls.some((u) => u.includes(o.item.key))).toBe(false);
+    expect(server.calls).toContain("/api/files/obj1/complete");
+  });
+
+  it("posts nothing until every file of the object is written", async () => {
+    // The proof is spent once. Spending it while bytes are still landing would
+    // let the server delete the ciphertext out from under the transfer that is
+    // still reading it.
+    let release!: () => void;
+    const held = new Promise<void>((res) => { release = res; });
+    const o = await makeObject("obj1", [{ name: "a.txt", body: "hello" }]);
+    const server = installServer([o]);
+    target = nativeTarget({ gateClose: () => held });
+    const r = make();
+    r.offer([o.item]);
+    await until(() => r.status === "prompt");
+    const running = r.accept();
+    await settle();
+    expect(r.status).toBe("receiving");
+    expect(server.completions).toHaveLength(0); // still mid-write
+    release();
+    await running;
+    await settleCompletions(server, 1);
+    expect(server.completions).toHaveLength(1);
+  });
+});
+
+describe("completion: a target that only hands off to the browser", () => {
+  it("never posts one — the download can still fail after we let go", async () => {
+    // blobSink's close() is an `<a download>` click and the ZIP branch's done()
+    // is another. Both can fail afterwards — a full disk, a download the user
+    // cancels, a tab the system reclaims — and none of that is visible from
+    // here. Telling the server to delete the only copy on the strength of one is
+    // how a user ends up with neither the file nor a way to ask for it again.
+    const o = await makeObject("obj1", [{ name: "a.txt", body: "hello" }]);
+    const server = installServer([o]);
+    target = memoryTarget(); // browserHandoff by default, like the real Blob/ZIP branches
+    const r = make();
+    r.offer([o.item]);
+    await until(() => r.status === "prompt");
+    await r.accept();
+    expect(r.status).toBe("done"); // the SAVE still succeeded, and still says so
+    await settle();
+    expect(server.completions).toHaveLength(0);
+    expect(server.calls.some((u) => u.endsWith("/complete"))).toBe(false);
+  });
+
+  it("does not post one for a bundled ZIP batch either", async () => {
+    const a = await makeObject("obj1", [{ name: "trip/a.txt", body: "one" }]);
+    const server = installServer([a]);
+    target = memoryTarget({}, { bundled: true });
+    const r = make();
+    r.offer([a.item]);
+    await until(() => r.status === "prompt");
+    await r.accept();
+    expect(r.status).toBe("done");
+    await settle();
+    expect(server.completions).toHaveLength(0);
+  });
+});
+
+describe("completion: the whole-batch boundary", () => {
+  it("waits for a bundled target's done() before spending any proof", async () => {
+    // done() is the COMMIT on a bundled target: before it, the batch exists
+    // nowhere. An object completed before it would have its ciphertext deleted
+    // while the user still had nothing at all.
+    let release!: () => void;
+    const held = new Promise<void>((res) => { release = res; });
+    const a = await makeObject("obj1", [{ name: "a.txt", body: "one" }]);
+    const b = await makeObject("obj2", [{ name: "b.txt", body: "two" }]);
+    const server = installServer([a, b]);
+    target = memoryTarget({ gateDone: () => held }, { bundled: true, delivery: "localCommit" });
+    const r = make();
+    r.offer([a.item, b.item]);
+    await until(() => r.status === "prompt");
+    const running = r.accept();
+    await settle();
+    // Both objects are fully written by now; only the finalisation is pending.
+    expect(target.output.size).toBe(2);
+    expect(server.completions).toHaveLength(0);
+    release();
+    await running;
+    await settleCompletions(server, 2);
+    expect(server.completions.map((c) => c.id).sort()).toEqual(["obj1", "obj2"]);
+  });
+
+  it("completes only the objects that finished when a later one fails", async () => {
+    // Per-file native target: obj1's files really are on the disk, so ending its
+    // storage is true. obj2 never arrived, and completing it would delete the
+    // ciphertext the retry is about to ask for.
+    const a = await makeObject("obj1", [{ name: "a.txt", body: "one" }]);
+    const b = await makeObject("obj2", [{ name: "b.txt", body: "two" }]);
+    const server = installServer([a, b], { blobStatus: { obj2: 500 } });
+    target = nativeTarget();
+    const r = make();
+    r.offer([a.item, b.item]);
+    await until(() => r.status === "prompt");
+    await r.accept();
+    expect(r.status).toBe("failed");
+    expect(r.savedCount).toBe(1);
+
+    await settleCompletions(server, 1);
+    expect(server.completions.map((c) => c.id)).toEqual(["obj1"]);
+  });
+
+  it("completes nothing from a failed batch on a bundled target", async () => {
+    // Nothing was delivered at all: done() never ran, so the archive was never
+    // produced. Every object is still worth retrying, and none is complete.
+    const a = await makeObject("obj1", [{ name: "a.txt", body: "one" }]);
+    const b = await makeObject("obj2", [{ name: "b.txt", body: "two" }]);
+    const server = installServer([a, b], { blobStatus: { obj2: 500 } });
+    target = memoryTarget({}, { bundled: true, delivery: "localCommit" });
+    const r = make();
+    r.offer([a.item, b.item]);
+    await until(() => r.status === "prompt");
+    await r.accept();
+    expect(r.status).toBe("failed");
+    await settle();
+    expect(server.completions).toHaveLength(0);
+  });
+
+  it("never completes a batch the user declined", async () => {
+    // §7.5: a decline is not a completion. The user refused delivery, and
+    // deleting the sender's ciphertext on the strength of "no thanks" is the one
+    // thing this must never do.
+    const o = await makeObject("obj1", [{ name: "a.txt", body: "hello" }]);
+    const server = installServer([o]);
+    target = nativeTarget();
+    const r = make();
+    r.offer([o.item]);
+    await until(() => r.status === "prompt");
+    r.reject();
+    await settle();
+    expect(server.completions).toHaveLength(0);
+    expect(r.status).toBe("idle");
+  });
+
+  it("never completes a batch whose save picker was cancelled", async () => {
+    const o = await makeObject("obj1", [{ name: "a.txt", body: "hello" }]);
+    const server = installServer([o]);
+    const r = make({ pick: async () => { throw new SaveCancelledError("no"); } });
+    r.offer([o.item]);
+    await until(() => r.status === "prompt");
+    await r.accept();
+    await settle();
+    expect(server.completions).toHaveLength(0);
+  });
+});
+
+describe("completion: the sync is separate from the files", () => {
+  it("a failed completion never re-downloads or re-writes anything", async () => {
+    // The files are ON THE DISK. Anything that reacts to a completion failure by
+    // fetching or writing again duplicates data the user already has — and on a
+    // directory target that means "a.txt" beside "a (1).txt".
+    const o = await makeObject("obj1", [{ name: "a.txt", body: "hello" }]);
+    const server = installServer([o], { completeStatus: { obj1: 500 } });
+    target = nativeTarget();
+    const r = make();
+    r.offer([o.item]);
+    await until(() => r.status === "prompt");
+    await r.accept();
+    expect(r.status).toBe("done");
+    const blobReads = server.calls.filter((u) => u.endsWith("/blob")).length;
+    const openedAfterSave = [...target.opened];
+
+    await settleCompletions(server, 3);
+    expect(r.status).toBe("done"); // the save is still what it was: saved
+    expect(r.errorKey).toBe("");
+    expect(server.calls.filter((u) => u.endsWith("/blob")).length).toBe(blobReads);
+    expect(target.opened).toEqual(openedAfterSave);
+    expect(target.output.size).toBe(1);
+    expect(target.doneCalls).toBe(1);
+  });
+
+  it("retries a transient failure and stops as soon as one succeeds", async () => {
+    const o = await makeObject("obj1", [{ name: "a.txt", body: "hello" }]);
+    const server = installServer([o], { completeStatus: { obj1: [500, 204] } });
+    target = nativeTarget();
+    const r = make();
+    r.offer([o.item]);
+    await until(() => r.status === "prompt");
+    await r.accept();
+    await settleCompletions(server, 2);
+    expect(server.completions.filter((c) => c.id === "obj1")).toHaveLength(2);
+  });
+
+  it("bounds the retries — a server that always fails does not loop forever", async () => {
+    const o = await makeObject("obj1", [{ name: "a.txt", body: "hello" }]);
+    const server = installServer([o], { completeStatus: { obj1: 500 } });
+    target = nativeTarget();
+    const r = make();
+    r.offer([o.item]);
+    await until(() => r.status === "prompt");
+    await r.accept();
+    await settleCompletions(server, 3);
+    // The schedule this receiver was made with is [0, 0]: one attempt, plus one
+    // per backoff step. More than that is an unbounded loop against a server
+    // that has already said no three times.
+    expect(server.completions).toHaveLength(3);
+  });
+
+  it("does not retry a 409 — no proof it can derive will ever work there", async () => {
+    // An older sender recorded no verifier at all. Retrying is a loop with a
+    // known end state, and it spends the shared per-IP budget getting there.
+    const o = await makeObject("obj1", [{ name: "a.txt", body: "hello" }]);
+    const server = installServer([o], { completeStatus: { obj1: 409 } });
+    target = nativeTarget();
+    const r = make();
+    r.offer([o.item]);
+    await until(() => r.status === "prompt");
+    await r.accept();
+    await settleCompletions(server, 1);
+    expect(server.completions).toHaveLength(1);
+    expect(r.status).toBe("done"); // and it is NOT reported to the user as a fault
+  });
+
+  it("does not retry a 403", async () => {
+    const o = await makeObject("obj1", [{ name: "a.txt", body: "hello" }]);
+    const server = installServer([o], { completeStatus: { obj1: 403 } });
+    target = nativeTarget();
+    const r = make();
+    r.offer([o.item]);
+    await until(() => r.status === "prompt");
+    await r.accept();
+    await settleCompletions(server, 1);
+    expect(server.completions).toHaveLength(1);
+  });
+
+  it("a completed object is never completed a second time by a resend", async () => {
+    // The sender re-sends the WHOLE set on every reconnect. A resend of an id
+    // that is already saved and completed must stay the no-op it is for the
+    // download: not a second prompt, not a second fetch, not a second proof.
+    const o = await makeObject("obj1", [{ name: "a.txt", body: "hello" }]);
+    const server = installServer([o]);
+    target = nativeTarget();
+    const r = make();
+    r.offer([o.item]);
+    await until(() => r.status === "prompt");
+    await r.accept();
+    await settleCompletions(server, 1);
+
+    r.offer([o.item]); // the reconnect resend
+    r.dismiss();
+    await settle();
+    expect(server.completions).toHaveLength(1);
+  });
+
+  it("keeps syncing a completion across a decline of the NEXT batch", async () => {
+    // Declining batch B says nothing about batch A, whose files are already on
+    // the disk. A reject() that killed A's pending completion would strand the
+    // sender's storage — a joined room has no deadline to fall back on.
+    const a = await makeObject("obj1", [{ name: "a.txt", body: "one" }]);
+    const b = await makeObject("obj2", [{ name: "b.txt", body: "two" }]);
+    let release!: () => void;
+    const held = new Promise<void>((res) => { release = res; });
+    const server = installServer([a, b], {
+      completeStatus: { obj1: [500, 204] },
+      gate: (url) => (url.endsWith("obj1/complete") ? held : undefined),
+    });
+    target = nativeTarget();
+    const r = make();
+    r.offer([a.item]);
+    await until(() => r.status === "prompt");
+    await r.accept();
+    r.dismiss();
+
+    r.offer([b.item]);
+    await until(() => r.status === "prompt");
+    r.reject(); // declines B — and must not touch A's completion
+    release();
+    await settleCompletions(server, 2);
+    expect(server.completions.filter((c) => c.id === "obj1")).toHaveLength(2);
+    expect(server.completions.some((c) => c.id === "obj2")).toBe(false);
+  });
+});
+
+describe("completion: a continuation never outlives its room", () => {
+  it("a reset during an in-flight completion stops the retry", async () => {
+    // Leaving the room ends everything this room started. A retry that survived
+    // it would be posting a proof from a pairing the user has left, from a
+    // client that may already be in a different one.
+    let release!: () => void;
+    const held = new Promise<void>((res) => { release = res; });
+    const o = await makeObject("obj1", [{ name: "a.txt", body: "hello" }]);
+    const server = installServer([o], {
+      completeStatus: { obj1: 500 },
+      gate: (url) => (url.endsWith("/complete") ? held : undefined),
+    });
+    target = nativeTarget();
+    const r = make();
+    r.offer([o.item]);
+    await until(() => r.status === "prompt");
+    await r.accept();
+    await until(() => server.completions.length === 1);
+
+    r.reset();
+    release();
+    await settle();
+    expect(server.completions).toHaveLength(1); // the retry never happened
+    expect(r.status).toBe("idle");
+  });
+
+  it("a reset during a completion's backoff stops the retry", async () => {
+    // The gap between two attempts is the longest window this loop has, and the
+    // one a token alone cannot cover: nothing is in flight to abort.
+    const o = await makeObject("obj1", [{ name: "a.txt", body: "hello" }]);
+    const server = installServer([o], { completeStatus: { obj1: 500 } });
+    target = nativeTarget();
+    const r = make({ backoff: [10_000, 10_000] });
+    r.offer([o.item]);
+    await until(() => r.status === "prompt");
+    await r.accept();
+    await until(() => server.completions.length === 1);
+
+    r.reset();
+    await settle();
+    expect(server.completions).toHaveLength(1);
+  });
+
+  it("a completion in flight when the room changes cannot touch the NEW room", async () => {
+    // The worst shape: the old room's continuation resumes while a new room is
+    // on screen, and acts on whatever state it finds.
+    let release!: () => void;
+    const held = new Promise<void>((res) => { release = res; });
+    const a = await makeObject("obj1", [{ name: "a.txt", body: "one" }]);
+    const b = await makeObject("obj2", [{ name: "b.txt", body: "two" }]);
+    const server = installServer([a, b], {
+      completeStatus: { obj1: 500 },
+      gate: (url) => (url.endsWith("obj1/complete") ? held : undefined),
+    });
+    target = nativeTarget();
+    const r = make();
+    r.offer([a.item]);
+    await until(() => r.status === "prompt");
+    await r.accept();
+    await until(() => server.completions.length === 1);
+
+    r.reset(); // left the room
+    r.offer([b.item]); // a NEW room, a different object
+    await until(() => r.status === "prompt");
+    release(); // the old room's completion finally answers
+    await settle();
+    expect(r.status).toBe("prompt"); // the new room's prompt is untouched
+    expect(r.files.map((f) => f.name)).toEqual(["b.txt"]);
+    expect(server.completions.filter((c) => c.id === "obj1")).toHaveLength(1);
+    expect(server.completions.some((c) => c.id === "obj2")).toBe(false);
+  });
+
+  it("a reset before a completion is even sent cancels it", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((res) => { release = res; });
+    const o = await makeObject("obj1", [{ name: "a.txt", body: "hello" }]);
+    const server = installServer([o]);
+    target = nativeTarget({ gateDone: () => held });
+    const r = make();
+    r.offer([o.item]);
+    await until(() => r.status === "prompt");
+    const running = r.accept();
+    await settle();
+    r.reset();
+    release();
+    await running;
+    await settle();
+    expect(server.completions).toHaveLength(0);
   });
 });

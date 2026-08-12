@@ -98,7 +98,7 @@ describe("the pre-uploaded batch's consent card", () => {
     expect(buttons()).toEqual([t().retry, t().dismiss]);
   });
 
-  it("offers no retry for a room whose ciphertext is already deleted", () => {
+  it("offers no retry when the stored ciphertext is already deleted", () => {
     const gone = fakeReceiver({ status: "failed", errorKey: "gone", retryable: false });
     open(gone);
     expect(text()).toContain(t().errGone);

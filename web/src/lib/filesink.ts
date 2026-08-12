@@ -125,11 +125,41 @@ export interface FileMetaLite {
   path?: string; // relative path within a sent folder; absent for a flat file
 }
 
+/**
+ * 一个目标的 close()/done() 到底**承诺了什么**。
+ *
+ * 不是 UI 文案，也不是可靠性打分：它回答的是一个会造成不可逆后果的问题 ——
+ * 「可以据此告诉服务器把密文删掉了吗」（预上传的 completion，见
+ * docs/protocol/relayium-pair-room-v1.md §7）。
+ *
+ * - `localCommit`：sink 的 close() 是**提交到这台设备的磁盘**。File System
+ *   Access 的 writable（Save As 与目录句柄）就是这样：close() 返回时文件已在
+ *   用户选的位置上，之后不再有会失败的一步。
+ * - `browserHandoff`：字节只是**交给了浏览器**——一次 `<a download>` 点击、一个
+ *   object URL、一条 SW 流。之后下载还可能失败（磁盘满、用户在下载栏取消、标签
+ *   页被系统回收、SW 换版），而那一步我们既看不见也管不着。
+ *
+ * 两个方向的代价不对称，这是缺省值的全部理由：把 localCommit 保守地说成
+ * browserHandoff，只会让密文在服务器上多留一会儿；反过来说错，是接收方替一个
+ * 还没落地的下载签了字，服务器把唯一一份密文删了 —— 文件就此丢失。所以缺省是
+ * `browserHandoff`，新目标必须**主动**声明自己更强。
+ */
+export type SaveDelivery = "localCommit" | "browserHandoff";
+
 /** A destination for a whole batch: hands out one sink per file, in arrival order. */
 export interface SaveTarget {
   /** Human-readable description of where files are going (for the UI). */
   label: string;
   file(name: string, size: number, path?: string): Promise<FileSink>;
+  /**
+   * 这个目标的交付确信度。见 SaveDelivery。
+   *
+   * 可选**且缺省为 `browserHandoff`**，和 `bundled` 同一个理由与同一个方向：
+   * 显式字段而不是从 label / done 的有无反推，缺省取安全的那一边。测试里的替身
+   * 目标因此不必逐个改口 —— 它们本来也不该被当成本地提交。真实分支必须逐条写
+   * 明，filesink.test.ts 里有用例真跑 pickSaveTarget 的每种能力组合守这一点。
+   */
+  delivery?: SaveDelivery;
   /** Finalise the batch (e.g. flush a bundled ZIP). Called once, after the last
    *  file's sink closes. Optional: streaming targets need no finalisation. */
   done?(): Promise<void>;
@@ -652,6 +682,8 @@ function directoryTarget(root: FsDirHandle): SaveTarget {
   };
   return {
     label: "已选择目标文件夹",
+    // 原生 writable：close() 返回时文件就在用户选的文件夹里，没有后续会失败的一步。
+    delivery: "localCommit",
     file: async (name, _size, path) => {
       // safeSegments drops any ".."/absolute components so a hostile peer
       // path can't escape the chosen directory (matches the ZIP sink).
@@ -709,6 +741,8 @@ export async function pickSaveTarget(files: FileMetaLite[], opts: SaveOptions = 
         let used = false;
         return {
           label: "已选择保存位置",
+          // 同上：Save As 拿到的也是原生 writable。
+          delivery: "localCommit",
           file: async () => {
             if (used) throw new Error("single-file target already consumed");
             used = true;
@@ -759,6 +793,9 @@ export async function pickSaveTarget(files: FileMetaLite[], opts: SaveOptions = 
       let used = false;
       return {
         label: "将流式下载到默认下载目录",
+        // ack 只代表 SW 把这一块塞进了 ReadableStream —— 和上面 SaveOptions 那段
+        // 注释是同一个判断。浏览器之后仍可能把这次下载丢掉。
+        delivery: "browserHandoff",
         file: async () => {
           if (used) throw new Error("single-file target already consumed");
           used = true;
@@ -794,6 +831,8 @@ export async function pickSaveTarget(files: FileMetaLite[], opts: SaveOptions = 
       label: "将打包为 ZIP 下载",
       // 整批攒在 zip 里，finish() 之前用户手上什么都没有。
       bundled: true,
+      // 而 finish() 之后交出去的也只是一次浏览器下载：那一步失败我们看不见。
+      delivery: "browserHandoff",
       file: async (name, _size, path) => {
         const parts: Uint8Array[] = [];
         return {
@@ -806,6 +845,8 @@ export async function pickSaveTarget(files: FileMetaLite[], opts: SaveOptions = 
   }
   return {
     label: "将逐个下载到默认下载目录",
+    // blobSink 的 close() 是一次 `<a download>` 点击：交给浏览器，不是落盘。
+    delivery: "browserHandoff",
     file: async (name) => blobSink(name),
   };
 }

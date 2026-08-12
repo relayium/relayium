@@ -443,8 +443,10 @@ are unreachable ciphertext: the keys can never be delivered, and an entry left i
 the "already uploaded" state is sent over neither transport — the user simply
 never sees the file arrive. The sender therefore returns those entries to the
 live-link lane at the moment it drains the batch for that peer. The bytes are
-spent either way; the transfer is not. The stored objects are not deleted — their
-life is the room's, and §2's deadline reclaims them.
+spent either way; the transfer is not. The stored objects are not deleted, and
+nothing reclaims them on a clock: the room is joined by then, so §2 leaves it no
+deadline and §7.5 no fallback one, and that ciphertext is held until an operator
+or account deletion removes it.
 
 **That fallback is only real if the gate in front of it is peer-specific.** The
 condition every send decision tests MUST be "how many entries does the live link
@@ -483,7 +485,9 @@ without a rule reads as "the receiver joined and then nothing happened".
   looks like the same rule and is not: it makes one transient failure — a single
   5xx, one dropped socket — permanently disable the retry the sender is
   faithfully performing on every reconnect, so the receiver shows a "try again"
-  that can never try and the objects sit in storage until the room deletes them.
+  that can never try and the objects stay in storage for good: the room is
+  joined, so §2 leaves it no deadline and §7.5 no fallback one, and nothing but
+  an explicit completion, an operator or account deletion ever removes them.
   A failure the receiver cannot survive by retrying (the ciphertext is gone; the
   key does not open its object) IS permanent, and must not be re-offered either —
   a retry there is a request with a guaranteed failure behind it.
@@ -491,8 +495,10 @@ without a rule reads as "the receiver joined and then nothing happened".
   leak them to the relay in plaintext or need a second sealed reverse seq space.
   Resending is cheaper and cannot get out of sync.
 - **A receiver that never got a handoff MUST NOT claim success.** It reports that
-  the sender left before handing over the keys. The objects then expire on the
-  room's own deadline and are deleted; nothing is silently half-transferred.
+  the sender left before handing over the keys. The objects are not deleted by
+  that report and no clock deletes them either — the room is joined, so they are
+  held until an operator or account deletion removes them (§2, §7.5) — but
+  nothing is silently half-transferred.
 - **A partial failure is reported as partial.** "All or nothing" is the rule for
   what the receiver CLAIMS, not a description of what a disk contains: on a save
   target that flushes each file as it closes (a chosen folder, per-file browser
@@ -571,11 +577,13 @@ without a rule reads as "the receiver joined and then nothing happened".
 
 ## 7. Completion (the receiver's "I have it")
 
-**Status: the FOUNDATION exists; production is OFF.** The server accepts and
-checks completions, and the Web sender records the capability. What is not built
-is the receiver posting one, and two questions below are still the owner's to
-answer. Nothing in this section is reachable on a deployment with pre-upload
-off, which is every deployment today.
+**Status: the LANE is complete end to end; production is OFF.** The server
+accepts and checks completions, the Web sender records the capability, and the
+Web receiver spends it — under the rules in §7.6, which are narrower than "after
+a successful save". The two questions in §7.5 are still the owner's to answer,
+and no other client posts one yet (the CLI and the native clients receive, and
+do not complete). Nothing in this section is reachable on a deployment with
+pre-upload off, which is every deployment today.
 
 §2 says a joined room's ciphertext has no deadline. Completion is the other half
 of that rule rather than a retreat from it: the thing that ends a joined
@@ -720,5 +728,92 @@ complete). A sweep closes such rooms after a grace period long enough that
   completes is an open owner decision. Inventing a timer to stand in for one
   would be exactly the reinterpretation of §2 that this document already refused
   once: a rule the code reinterprets is not the rule.
-- Until those are answered and a receiver actually posts completions, pre-upload
-  stays off.
+- Until those are answered, pre-upload stays off. The Web receiver now posts
+  completions (§7.6), so the lane no longer has a *missing* half — but a room
+  nobody completes still has no end, and §7.6 is explicit that a large class of
+  browsers (Firefox, Safari, every phone) can never honestly complete at all.
+  Both are reasons the flag is still a rollout decision rather than a switch.
+
+### 7.6 When a receiver may spend it
+
+A completion deletes the only remaining copy of the ciphertext, and the deletion
+is not reversible. So the rule is not "the save succeeded" — it is **"this
+device has taken delivery, and nothing between here and the user's disk can
+still fail."** The two errors are not symmetric, and every ambiguity below
+resolves the same way:
+
+- Not completing costs the SENDER storage — and §2 means it: a joined room has
+  no deadline and §7.5 has not given it a fallback one, so an object nobody
+  completes is held until an operator or account deletion removes it.
+- Completing early costs the USER the file, permanently.
+
+Both sides are unbounded, which is why the second one decides. Storage the owner
+can price, measure and reclaim by hand is not the same kind of loss as a file
+that no longer exists anywhere.
+
+**A save destination MUST declare which of two things its commit means.** The
+Web models this as `SaveTarget.delivery` (`web/src/lib/filesink.ts`), and the
+distinction is about the destination, not about how well the transfer went:
+
+| destination | commit means | may complete |
+|---|---|---|
+| File System Access writable ("Save As"), or a chosen directory | the bytes are in the file the user picked; nothing further can fail | **yes** |
+| in-memory Blob downloaded per file, bundled ZIP, service-worker stream | the bytes were handed to the BROWSER — an `<a download>` click or a stream | **no** |
+
+A browser handoff can still fail out of the client's sight: a full disk, a
+download the user cancels from the download shelf, a tab the system reclaims, a
+service worker replaced mid-stream. The receiver never learns, so it must not
+speak for it. **The default for a destination that does not say is the weak
+one** — silence must not be read as a promise.
+
+That table also says plainly who this feature reaches: today only desktop
+Chromium-family browsers have the File System Access API, so a Firefox, Safari
+or phone receiver saves its files perfectly and completes nothing. Their
+senders' ciphertext is then in exactly the position every joined room is in
+today: §2's unbounded commitment, with no completion ever coming for it.
+
+**The boundary is the whole batch, then the object.**
+
+- A **bundled** destination (one ZIP for the batch) delivers nothing until its
+  finalise step. No proof of any object in it may be spent before that step
+  succeeds, and if the batch fails, none may be spent at all.
+- A **per-file** destination commits as each file closes. An object's proof may
+  be spent once **every file of that object** is committed — and not before,
+  because the object is one ciphertext stream and a completion mid-stream would
+  delete what the transfer is still reading.
+- A batch that fails partway on a per-file destination MAY complete the objects
+  that finished, and MUST NOT complete the one that did not: the receiver is
+  about to ask for that ciphertext again.
+- **A decline never completes**, and neither does a cancelled save picker. See
+  §7.5.
+
+**A failed completion is not a failed transfer.** Once the files are on the
+disk, the completion is bookkeeping the user is not waiting for. A receiver
+therefore holds it as SEPARATE state from the transfer, and:
+
+- MUST NOT re-fetch or re-write anything because a completion failed. The bytes
+  are already on the disk; a second attempt would put a second copy beside them.
+- MUST NOT report it to the user as a transfer failure. Nothing failed.
+- SHOULD retry `retry`-class answers (network, 5xx, 429) **boundedly** — the Web
+  makes three attempts over about nine seconds — and MUST NOT retry `204`,
+  `409`, `403` or any other terminal answer. Retrying is safe because `204` is
+  idempotent by construction (§7.3): an attempt whose answer was never seen can
+  be repeated without consequence.
+- MUST abandon everything pending when the room ends. A proof posted after the
+  user has left is spent from a pairing they are no longer in, and possibly
+  while a different one is on screen. Ending ONE batch — a decline, a dismissal
+  — is not that event, and must not cancel a completion belonging to a batch
+  that was already delivered.
+
+**Neither the key nor the proof may be persisted.** Both live only as long as
+the room, in memory, and neither may reach a URL, a log or a bug report. The
+pending-completion state in particular should hold the derived PROOF and not the
+file key — that state outlives the batch's own card on purpose, and it must not
+be the reason something that can still decrypt an object is kept alive. A proof
+can only end that object's life.
+
+**No UI state is added for any of this.** The user's card says what it said —
+the files were saved — because that is what happened. A "finishing up" state
+would invite the reading that the save is not final yet, which is the opposite
+of the truth, and a failure notice would report a problem the user has neither
+suffered nor any way to act on.

@@ -186,9 +186,10 @@ function noteDeadline(code: string, expiresAt: number): void {
  * dressed up as a rule: the announcement means "I can send frame kind 12", and
  * frame kind 12 is the only way an uploaded object's key ever reaches the
  * receiver. A build that uploads without it produces ciphertext nobody can open
- * — the receiver joins, is handed nothing, and the objects sit in storage until
- * the room's deadline deletes them. That is strictly worse than not
- * pre-uploading at all.
+ * — the receiver joins, is handed nothing, and the objects stay in storage for
+ * good: a joined room has no deadline and no fallback expiry, so with no
+ * completion ever spent against them, nothing but an operator or account
+ * deletion removes them. That is strictly worse than not pre-uploading at all.
  *
  * So the checkpoint that wires the handoff turned the sender on by announcing
  * the capability, and nothing else can. It is true from that checkpoint on

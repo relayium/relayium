@@ -872,7 +872,7 @@ const es: Messages = {
     dismiss: "Cerrar",
     retry: "Reintentar",
     more: (count) => `Faltan ${count} por llegar.`,
-    errGone: "El código de emparejamiento caducó antes de que los guardaras y se eliminaron. Pide un código nuevo.",
+    errGone: "Estos archivos ya no están disponibles: se eliminaron antes de que pudieras guardarlos. Pide a quien los envía que los mande otra vez con un código nuevo.",
     errNet: "La descarga se interrumpió antes de terminar.",
     errDecrypt: "No se pudieron abrir estos archivos con la clave que envió el otro dispositivo.",
     errSave: "Relayium no pudo escribir los archivos en este dispositivo.",

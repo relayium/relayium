@@ -1031,7 +1031,11 @@ export interface Messages {
     dismiss: string;
     retry: string; // try a retryably-failed batch again, without a reconnect
     more: (count: number) => string; // another handoff is queued behind this one
-    errGone: string; // the pairing room expired; the ciphertext is deleted
+    // the stored ciphertext is no longer there — deleted before it could be
+    // saved. MUST NOT name a cause: the server answers 404/410 without one, and
+    // a receiver that has a handoff is in a joined room with no deadline to
+    // blame. Remedy is a new code/transfer, never a retry.
+    errGone: string;
     errNet: string;
     errDecrypt: string; // the key the peer sent does not open its object
     errSave: string; // nothing was wrong with the bytes; they could not be written

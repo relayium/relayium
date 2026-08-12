@@ -911,3 +911,97 @@ export function parseDownloadKey(hash: string): string {
 export async function keyFromFragment(k: string): Promise<CryptoKey> {
   return importStoreKey(decodeKey(k));
 }
+
+/** A proof is 32 bytes, exactly — see store-crypto's `completionProof` and
+ *  docs/protocol/relayium-pair-room-v1.md §7.1. A shorter value is not a weaker
+ *  credential, it is a malformed one, and the server says so with a 400. */
+const COMPLETION_PROOF_BYTES = 32;
+
+/**
+ * What a completion attempt settled as. Four outcomes because a caller deciding
+ * whether to try again has four genuinely different situations to be in:
+ *
+ * `completed` — 204. The object is gone; and, identically, there was nothing to
+ *   complete (already done, never existed, not a pair-room object). The server
+ *   conflates those four on purpose, so that an unauthenticated endpoint is not
+ *   an existence oracle, and a caller must conflate them too: in every one of
+ *   them there is nothing left to do.
+ * `unsupported` — 409. A live pair-room object whose sender predates the
+ *   capability, so it carries no verifier at all. Its own outcome because no
+ *   proof this receiver can ever derive will work on it: retrying is a loop with
+ *   a known end, and calling it a failure would be false as well.
+ * `refused` — the server declined, permanently: a wrong proof (403), a
+ *   malformed body (400), a route that is not there (an older deployment, or one
+ *   with pre-upload off), or any other answer this contract does not define. All
+ *   terminal, and none of them a completion.
+ * `retry` — nothing was decided: the network failed, the server erred (5xx), or
+ *   the per-IP budget is momentarily spent (429). The object is untouched, so a
+ *   later attempt is safe — and it is the caller's business how many to make.
+ *
+ * A CANCELLATION is not in this list, deliberately: it REJECTS with the same
+ * AbortError every other call here raises. A caller whose room has ended must
+ * stop, and folding that into `retry` would put it back in a queue.
+ */
+export type CompletionOutcome = "completed" | "unsupported" | "refused" | "retry";
+
+/**
+ * The receiver saying "I have this file, you can let it go".
+ *
+ * POST /api/files/{id}/complete with the proof in the BODY, per
+ * docs/protocol/relayium-pair-room-v1.md §7.3. The body is the whole point of the
+ * shape: this value is a bearer capability to DELETE an object, and a URL — path
+ * or query — is written down by every proxy and access log between here and the
+ * server. Nothing here logs one either, and no error this raises carries one.
+ *
+ * Never called on the strength of bytes having been fetched. Completion is
+ * something a receiver SAYS, after its save target has actually taken delivery;
+ * this function only performs the saying.
+ *
+ * Returns rather than throws for every answer the server can give, because
+ * "should I try again?" is the only question its caller has and a thrown status
+ * makes that a matter of re-classifying an exception. It still THROWS for the
+ * two things that are not answers: an id or a proof this client should never
+ * have sent, and a cancellation.
+ */
+export async function completeStoredObject(
+  id: string,
+  proof: Uint8Array,
+  signal?: AbortSignal,
+): Promise<CompletionOutcome> {
+  // Both checks before the request, and both raising rather than returning: a
+  // value Relayium could never have produced costs the network nothing, tells
+  // the server nothing about what was tried, and does not spend the per-IP
+  // budget that a real completion will need.
+  const checked = checkedStoredObjectId(id);
+  if (proof.length !== COMPLETION_PROOF_BYTES) {
+    throw new Error(`completion proof must be ${COMPLETION_PROOF_BYTES} bytes`);
+  }
+  // A caller whose room is already over gets no request — and, just as
+  // importantly, no `completed` it could record against a room that has ended.
+  throwIfAborted(signal);
+  let res: Response;
+  try {
+    res = await fetch(`/api/files/${encodeURIComponent(checked)}/complete`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ proof: encodeKey(proof) }),
+      signal,
+    });
+  } catch {
+    // A cancelled request rejects here too, and it is not a network fault: the
+    // caller pulled the plug. Telling it "retry" would queue an attempt for a
+    // room that no longer exists.
+    throwIfAborted(signal);
+    return "retry";
+  }
+  if (res.status === 204) return "completed";
+  if (res.status === 409) return "unsupported";
+  // 429 is a budget that refills and 5xx is a server that may recover; both
+  // leave the object exactly where it was, so both are worth another attempt.
+  if (res.status === 429 || res.status >= 500) return "retry";
+  // Everything else is terminal, INCLUDING a 2xx that is not 204. An answer this
+  // contract does not define is most likely not this endpoint at all — a proxy,
+  // or an index.html from a deployment where the route is not mounted — and
+  // reading one as success would record a completion that never happened.
+  return "refused";
+}

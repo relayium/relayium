@@ -33,9 +33,12 @@ import {
   keyFromFragment,
   fetchStoredManifest,
   isAbortError,
+  completeStoredObject,
   StoredDownloadHttpError,
   DownloadNetworkError,
+  type CompletionOutcome,
 } from "./stored-file";
+import { completionProof, decodeKey } from "./store-crypto";
 import { storedSaveSpecs, storedTotalBytes, writeStoredObject } from "./stored-download";
 import {
   pickSaveTarget as defaultPickSaveTarget,
@@ -65,9 +68,11 @@ export type StoredReceiveError = "" | "gone" | "netFail" | "decryptFail" | "save
 /**
  * The failures a second attempt could plausibly survive.
  *
- * `gone` cannot: the room's deadline passed and the ciphertext was deleted, so
- * every retry is a request for something that is not there, and the remedy is a
- * new code. `decryptFail` cannot either: the key the peer sent does not open its
+ * `gone` cannot: the object is not there any more, so every retry is a request
+ * for something that has been deleted, and the remedy is a fresh transfer. WHY
+ * it was deleted is not something this client is told — see `classify` — and
+ * neither this comment nor the copy may invent a cause for it. `decryptFail`
+ * cannot either: the key the peer sent does not open its
  * object, and it will not open it next time — §4.4 makes that a hard error with
  * no fallback. Offering a retry for either would be a button with a guaranteed
  * failure behind it.
@@ -82,8 +87,9 @@ const RETRYABLE_ERRORS: ReadonlySet<StoredReceiveError> = new Set<StoredReceiveE
  * moment it was OFFERED made every one of these states mean "never mention this
  * again" — so one transient 500, or one dropped socket, permanently disabled the
  * retry that the sender was faithfully performing on every reconnect. The card
- * said "try again", nothing ever tried, and the files sat in storage until the
- * room deleted them.
+ * said "try again", nothing ever tried, and the files stayed in storage for
+ * good — a joined room has no deadline and no fallback expiry, so nothing but
+ * an explicit completion, an operator or account deletion ever removes them.
  *
  * `held` — queued, being resolved, or on screen right now. Not offered twice.
  * `done` — written. Never fetched again: that would bill the sender for bytes
@@ -100,6 +106,54 @@ type Disposition = "held" | "done" | "rejected" | "spent";
 export interface StoredReceiveDeps {
   /** Test seam; production opens the real save picker inside the accept gesture. */
   pickSaveTarget?(files: FileMetaLite[], opts?: SaveOptions): Promise<SaveTarget>;
+  /** How long to wait before each completion RETRY, and — by its length — how
+   *  many retries there are at all. Defaults to COMPLETION_BACKOFF_MS. Injectable
+   *  so tests can assert the bound without spending it in real time. */
+  completionBackoffMs?: readonly number[];
+}
+
+/**
+ * The wait before each completion retry; its LENGTH is the retry budget.
+ *
+ * One attempt, plus one per entry here — three attempts over roughly nine
+ * seconds. Deliberately small, and the smallness is the point: a completion is
+ * housekeeping that runs AFTER the user's files are safely on disk. Nothing the
+ * user is waiting for depends on it, nothing they see changes with it, and what
+ * giving up costs is a sender's storage — not the user's file. It is a real
+ * cost and an open-ended one, because a joined room has no fallback expiry: an
+ * object this gives up on is held until the account is deleted. Grinding an
+ * unreachable server for minutes is still not how to buy that back: it spends
+ * the shared per-IP budget that the next receiver's DOWNLOAD needs, on
+ * something nobody is waiting for.
+ */
+export const COMPLETION_BACKOFF_MS: readonly number[] = [1_500, 6_000];
+
+/** One object whose files are on the disk and whose proof has not been spent
+ *  yet. Holds the PROOF, not the file key: the proof can only end this object's
+ *  life, while the key could still decrypt it, and the moment the batch is
+ *  delivered there is no longer any reason for this driver to be able to. */
+interface PendingCompletion {
+  id: string;
+  proof: Uint8Array;
+  /** Attempts made. Compared against the backoff schedule's length, which is
+   *  what makes the bound and the waiting one fact rather than two. */
+  tries: number;
+}
+
+/** Wait `ms`, or stop early if the room ends. Resolves either way — the caller's
+ *  epoch check is what decides whether there is still work to do, and a rejection
+ *  here would only be a second way to say the same thing. */
+function delay(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", done);
+      resolve();
+    };
+    if (signal.aborted) return resolve();
+    const timer = setTimeout(done, ms);
+    signal.addEventListener("abort", done, { once: true });
+  });
 }
 
 /**
@@ -167,6 +221,7 @@ export interface StoredReceiver {
 
 export function createStoredReceiver(deps: StoredReceiveDeps = {}): StoredReceiver {
   const choose = deps.pickSaveTarget ?? defaultPickSaveTarget;
+  const backoff = deps.completionBackoffMs ?? COMPLETION_BACKOFF_MS;
 
   let status = $state<StoredReceiveStatus>("idle");
   let errorKey = $state<StoredReceiveError>("");
@@ -256,14 +311,151 @@ export function createStoredReceiver(deps: StoredReceiveDeps = {}): StoredReceiv
     live = new AbortController();
   }
 
+  /**
+   * Objects that are on the user's disk and whose proof has not been spent yet.
+   *
+   * A SEPARATE state from everything above it, and that separation is the whole
+   * safety property. By the time an entry lands here the batch is over: the
+   * files are written, the card says what it says, and nothing about this list
+   * can change any of that. So a completion that fails — or fails three times —
+   * is never a reason to fetch an object again, write a file again, or tell the
+   * user something went wrong with their transfer. Nothing did.
+   */
+  let pending: PendingCompletion[] = [];
+  /** One completion runner at a time. Two would post the same proofs twice and
+   *  race each other's rounds over one list. */
+  let completing = false;
+  /**
+   * The ROOM's generation, and its cancellation — the pair `epoch`/`live` cannot
+   * serve here.
+   *
+   * `epoch` is bumped by `reject()` as well as `reset()`, because declining a
+   * batch has to invalidate that batch's own in-flight work (an open save picker
+   * above all). A completion belongs to a DIFFERENT batch — one already saved —
+   * and declining the next offer says nothing about it. Sharing the token would
+   * therefore strand the previous batch's completion silently, and a joined room
+   * has no deadline to fall back on: the sender's ciphertext would then be held
+   * until the account is deleted.
+   *
+   * So this pair is bumped and aborted by `reset()` alone, which is the one
+   * event that really does end everything: the user left the room, or a new
+   * pairing began. The two halves move together for the same reason `invalidate`
+   * exists — *invalidated* and *aborted* must not come apart.
+   */
+  let completionEpoch = 0;
+  let completionLive = new AbortController();
+
+  /**
+   * Take delivery of a set of objects: derive each proof and start the sync.
+   *
+   * Called ONLY from a truthful delivery boundary — see the two call sites in
+   * `accept()`.
+   *
+   * The proof is derived HERE and the pending entry keeps only that. The batch
+   * itself still holds its `HandoffItem`s, keys and all, until it is dismissed
+   * or the room is reset — that is unchanged. What this avoids is the completion
+   * state OUTLIVING the batch while holding a key: `pending` can survive a
+   * dismissal by design (the files are saved; the sync is not the user's
+   * business), and it must not be the reason a key that can still decrypt an
+   * object is kept alive past the card that needed it. A proof can only end that
+   * object's life.
+   */
+  async function queueCompletions(items: readonly HandoffItem[]): Promise<void> {
+    const mine = completionEpoch;
+    const signal = completionLive.signal;
+    for (const it of items) {
+      let proof: Uint8Array;
+      try {
+        proof = await completionProof(decodeKey(it.key));
+      } catch {
+        // Unreachable for anything `decodeHandoff` let through — it applies the
+        // same strict decoder and the same 32-byte rule. Caught anyway, and
+        // WITHOUT logging the value or the error: this is the one place holding
+        // a file key, and a thrown message is the classic way one reaches a
+        // console. Skipping costs the sender storage; it cannot cost the user a
+        // file, which is already written.
+        console.error("relayium stored handoff completion proof error");
+        continue;
+      }
+      // The key was still current when this derivation started; a room that
+      // ended while it ran must not leave a proof behind for the next one.
+      if (mine !== completionEpoch) return;
+      pending.push({ id: it.id, proof, tries: 0 });
+    }
+    void runCompletions(mine, signal);
+  }
+
+  /**
+   * Post the pending proofs, retrying boundedly while this room lives.
+   *
+   * Idempotent by the server's own contract: 204 is "it is gone — and,
+   * identically, there was nothing to end", so a retry of an attempt whose
+   * answer we never saw is safe. That is what makes retrying here correct rather
+   * than merely tolerable.
+   *
+   * Every await is followed by a token check, for the same reason every await in
+   * the download path is: the answer this work is for can stop being the current
+   * answer while it is pending. Here the stakes are one-directional — a stale
+   * continuation cannot write a file — but it CAN post a proof for a room the
+   * user has left, and it can put entries back into a list a new room now owns.
+   */
+  async function runCompletions(mine: number, signal: AbortSignal): Promise<void> {
+    if (completing) return;
+    completing = true;
+    try {
+      while (pending.length > 0) {
+        if (mine !== completionEpoch) return;
+        // The round is taken off the list, so anything queued while it runs
+        // waits for the next one instead of being retried on this one's clock.
+        const round = pending;
+        pending = [];
+        const keep: PendingCompletion[] = [];
+        for (const p of round) {
+          let outcome: CompletionOutcome;
+          try {
+            outcome = await completeStoredObject(p.id, p.proof, signal);
+          } catch {
+            // A cancellation, or a value this client should never have sent.
+            // Neither is worth another attempt, and neither is reported: no
+            // error here is about the user's files.
+            if (mine !== completionEpoch) return;
+            continue;
+          }
+          if (mine !== completionEpoch) return;
+          // `completed`, `unsupported` and `refused` are all settled: the object
+          // is gone, or no proof this receiver can derive will ever work on it.
+          if (outcome !== "retry") continue;
+          p.tries++;
+          if (p.tries <= backoff.length) keep.push(p);
+        }
+        if (mine !== completionEpoch) return;
+        if (keep.length === 0) continue; // only fresh arrivals left, if anything
+        pending = [...pending, ...keep];
+        // The least-tried entry sets the wait, so an object on its first failure
+        // is not made to serve another one's longest backoff.
+        await delay(backoff[Math.min(...keep.map((p) => p.tries)) - 1], signal);
+      }
+    } finally {
+      // Only this room's own runner may release the latch — the same rule the
+      // resolve pass follows, and for the same reason.
+      if (mine === completionEpoch) completing = false;
+    }
+  }
+
   function classify(e: unknown): StoredReceiveError {
     if (e instanceof DownloadNetworkError) return "netFail";
     if (e instanceof SinkTransportError || e instanceof SinkCancelledError) return "saveFail";
     if (e instanceof StoredDownloadHttpError) {
-      // 404/410 is the room's own deadline having passed and the ciphertext
-      // deleted with it — the one failure whose remedy is "ask for a new code",
-      // not "try again". Everything else the server says is a transport-shaped
-      // problem the user can retry.
+      // 404/410 is the object no longer being available — the one failure whose
+      // remedy is "ask for a new transfer", not "try again". What the status
+      // does NOT carry is a reason, and this driver is in no position to supply
+      // one: it only runs at all once a handoff has arrived, which means the
+      // room is joined and §2 has left it no deadline to have passed. A
+      // completion posted by another receiver, an operational cleanup, a
+      // deleted account and a join race all arrive here as the same two codes.
+      // So the class says "gone" and stops there; the copy does the same.
+      // Everything else the server says is a transport-shaped problem the user
+      // can retry.
       return e.status === 404 || e.status === 410 ? "gone" : "netFail";
     }
     // A cancellation is this driver stopping its OWN run, never a fault to
@@ -299,11 +491,15 @@ export function createStoredReceiver(deps: StoredReceiveDeps = {}): StoredReceiv
    *
    * The whole batch shares the verdict, deliberately, and the two non-retryable
    * classes are why that is right rather than merely simple. Every object in one
-   * handoff belongs to ONE pairing room: a `gone` on any of them is the room's
-   * own deadline having passed, which took the others with it. A `decryptFail`
-   * is a sender that is broken or hostile about the keys it sent, which is not a
-   * property of one item either. So there is no healthy remainder being written
-   * off — and the all-or-nothing report the user already saw stays true.
+   * handoff belongs to ONE sender's storage in ONE room, and the removals this
+   * client can name — an operational cleanup, a deleted account, the sender's
+   * own release — act on that storage rather than on a single item, so a `gone`
+   * on one of them is almost never a healthy remainder being written off. Where
+   * it is (one object completed elsewhere while its siblings survive), what the
+   * remainder needs is a fresh handoff carrying it again, which is exactly what
+   * the copy asks the user for. A `decryptFail` is a sender that is broken or
+   * hostile about the keys it sent, which is not a property of one item either.
+   * Either way the all-or-nothing report the user already saw stays true.
    */
   function settleFailure(items: readonly HandoffItem[], err: StoredReceiveError) {
     const canRetry = RETRYABLE_ERRORS.has(err);
@@ -488,6 +684,21 @@ export function createStoredReceiver(deps: StoredReceiveDeps = {}): StoredReceiv
         savedCount = 0;
         retryable = false;
         status = "done";
+        // THE DELIVERY BOUNDARY, and the only place a whole batch crosses it:
+        // every file of every object is closed AND the batch is finalised. Only
+        // now can a target that commits locally honestly say the bytes are the
+        // user's — which is what a completion tells the server, and what makes
+        // it delete the only remaining copy.
+        //
+        // A `browserHandoff` target says nothing of the kind, however well the
+        // save went: its close()/done() is an `<a download>` click or a service
+        // worker stream, and the download can still fail out of our sight. The
+        // user keeps their files either way; the sender keeps their ciphertext,
+        // and — a joined room having no fallback expiry — keeps it until the
+        // account is deleted. Open-ended storage is still the cheap side of this
+        // trade: it is the owner's to measure and reclaim, while a file lost to
+        // an early completion is nobody's to get back.
+        if (target.delivery === "localCommit") void queueCompletions(runningItems);
       } catch (e) {
         if (mine !== epoch) return;
         console.error("relayium stored handoff receive error", e);
@@ -501,6 +712,15 @@ export function createStoredReceiver(deps: StoredReceiveDeps = {}): StoredReceiv
           ? runningItems.filter((it) => !written.includes(it))
           : runningItems;
         settleFailure(unfinished, classify(e));
+        // A batch can fail and still have delivered part of itself. `written`
+        // holds the objects whose every file was closed BEFORE the failure, so
+        // on a per-file target that commits locally those are on the disk and
+        // their proofs are true — the same fact `savedCount` is reporting one
+        // line above. The object that failed is not in the list, and must not
+        // be: completing it would delete the ciphertext the retry is going to
+        // ask for. A `bundled` target delivered nothing at all (done() never
+        // ran), which is exactly what `perFile` already says.
+        if (perFile && target.delivery === "localCommit") void queueCompletions(written);
       } finally {
         if (mine === epoch) accepting = false;
       }
@@ -515,8 +735,10 @@ export function createStoredReceiver(deps: StoredReceiveDeps = {}): StoredReceiv
       // from being a lie. Every other terminal path leaves either `done`, `spent`
       // or absent behind, and an id parked in "queued, or on screen right now"
       // for a batch that is neither is the kind of thing a later reader cleans
-      // up, taking the refusal with it. The ciphertext expires with the room,
-      // which is what the sender's own deadline is for.
+      // up, taking the refusal with it. The ciphertext outlives the refusal: a
+      // decline is not a completion, and a joined room has no deadline to fall
+      // back on, so the sender's copy is held until an operator or account
+      // deletion removes it.
       for (const o of batch) decided.set(o.item.id, "rejected");
       // Anything already in flight for this batch — an open save picker above
       // all — is now answering a question that has been answered the other way.
@@ -578,6 +800,18 @@ export function createStoredReceiver(deps: StoredReceiveDeps = {}): StoredReceiv
       // download whose body is already streaming, never yield control back to
       // be checked at all, and simply go on writing the old room's files.
       invalidate();
+      // And the completion sync, which `invalidate()` deliberately does NOT
+      // touch — see `completionEpoch`. This is the one event that ends it:
+      // leaving the room ends the room's business, and a proof posted afterwards
+      // would be spent from a pairing the user has left, possibly while a
+      // different one is already on screen. What is dropped is a release that
+      // will now never happen — nothing else ends a joined room's storage — but
+      // it is only storage: the files were saved long ago.
+      completionEpoch++;
+      completionLive.abort();
+      completionLive = new AbortController();
+      pending = [];
+      completing = false;
       decided.clear();
       waiting = [];
       waitingCount = 0;

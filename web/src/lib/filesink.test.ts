@@ -311,6 +311,90 @@ describe("canStreamToDisk", () => {
   });
 });
 
+// --- 交付确信度：close() 到底承诺了什么 --------------------------------------
+//
+// `delivery` 不是给 UI 看的，是给「能不能让服务器删掉密文」这个判断看的
+// （docs/protocol/relayium-pair-room-v1.md §7）。预上传接收方拿它决定要不要花掉
+// 那张一次性的 completion 凭证，而花错了的代价是**不可逆的数据丢失**：浏览器下载
+// 后来失败（磁盘满、用户取消、标签页被回收），而密文已经按接收方的话删了。
+//
+// 所以这一组用例逐条钉住每个分支自报的值，而不是「有这个字段就行」。方向也不对
+// 称：把 localCommit 说成 browserHandoff 只是多留一会儿存储，反过来是丢文件。
+describe("SaveTarget.delivery", () => {
+  const single = [{ name: "a.bin", size: 1 }];
+  const folder = [
+    { name: "a.bin", size: 1, path: "trip/a.bin" },
+    { name: "b.bin", size: 1, path: "trip/b.bin" },
+  ];
+
+  it("Save As（原生 writable）自报 localCommit —— close() 就是提交到真实文件", async () => {
+    const restore = stubPickers({ save: true });
+    try {
+      const target = await pickSaveTarget(single);
+      expect(target.label).toBe("已选择保存位置");
+      expect(target.delivery).toBe("localCommit");
+    } finally { restore(); }
+  });
+
+  it("目录句柄自报 localCommit —— 每个 sink 的 close() 都落在用户选的文件夹里", async () => {
+    const restore = stubPickers({ dir: true });
+    try {
+      const target = await pickSaveTarget(flatN(3));
+      expect(target.label).toBe("已选择目标文件夹");
+      expect(target.delivery).toBe("localCommit");
+    } finally { restore(); }
+  });
+
+  it("ZIP 分支只自报 browserHandoff —— done() 触发的是一次浏览器下载，之后还会失败", async () => {
+    const restore = stubPickers({});
+    try {
+      const target = await pickSaveTarget(folder);
+      expect(target.label).toBe("将打包为 ZIP 下载");
+      expect(target.bundled).toBe(true);
+      expect(target.delivery).toBe("browserHandoff");
+    } finally { restore(); }
+  });
+
+  it("逐个 Blob 下载只自报 browserHandoff —— close() 只是把 blob 交给浏览器", async () => {
+    const restore = stubPickers({});
+    try {
+      const target = await pickSaveTarget(single);
+      expect(target.label).toBe("将逐个下载到默认下载目录");
+      expect(target.delivery).toBe("browserHandoff");
+    } finally { restore(); }
+  });
+
+  it("SW 流也只自报 browserHandoff —— ack 只代表进了 ReadableStream，不代表落盘", async () => {
+    // 这条和 SaveOptions 上那段注释是同一个判断的两次陈述：SW 的 ack ≠ 已落盘。
+    // 今天预上传接收路根本不开 swStream，但一旦有人打开，它绝不能被当成本地提交。
+    const restore = stubPickers({});
+    const s = await readySW();
+    try {
+      const target = await pickSaveTarget(single, SW_ON);
+      expect(target.label).toBe("将流式下载到默认下载目录");
+      expect(target.delivery).toBe("browserHandoff");
+    } finally { s.restore(); restore(); }
+  });
+
+  it("每一条分支都显式回答，没有一条靠默认值蒙混", async () => {
+    // 变异守卫：新增一个目标却忘了写 delivery，会被默认值静静地当成
+    // browserHandoff —— 那是安全的方向，但也意味着这个功能对那条路永久失效
+    // 而没有任何东西报警。这里真跑一遍所有能力组合，要求字段确实在。
+    for (const caps of [{}, { save: true }, { dir: true }, { save: true, dir: true }]) {
+      for (const files of [single, flatN(3), folder]) {
+        const restore = stubPickers(caps);
+        try {
+          const target = await pickSaveTarget(files);
+          expect(
+            target.delivery,
+            `caps=${JSON.stringify(caps)} label=${target.label}`,
+          ).toMatch(/^(localCommit|browserHandoff)$/);
+        } finally { restore(); }
+      }
+    }
+  });
+});
+
 // --- 手机：选择器分支整条关闭 -----------------------------------------------
 //
 // 线上事故（Android 真机，实时与局域网两条路都复现），两种坏法都来自真机：

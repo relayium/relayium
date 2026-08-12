@@ -164,6 +164,64 @@ describe("pairing-code expiry copy", () => {
       /Pick files, get a code|Transfer starts on join|starts automatically/i,
     );
   });
+
+  // The other side of this file's subject: where the code's deadline may NOT be
+  // claimed. A receiver only reaches `storedRecv.errGone` after a handoff, which
+  // means it JOINED — and §2 leaves a joined room no deadline, so the code
+  // running out is the one thing that cannot have caused this. The server says
+  // 404/410 and no more; a completion posted by another receiver, an operational
+  // cleanup, a deleted account and a join race all arrive identically. Every
+  // locale said "the pairing code expired" anyway, which reads as a fact and
+  // sends the user to look at a countdown that was never involved.
+  it("blames no deadline for stored files that are gone, and still offers the remedy", () => {
+    // What the line may say: the files are not there, and were deleted before
+    // they could be saved.
+    const deleted: Record<string, RegExp> = {
+      en: /no longer available|deleted/i,
+      zh: /不存在|删除/,
+      ja: /利用できません|削除/,
+      ko: /더 이상 없습니다|삭제/,
+      de: /nicht mehr verfügbar|gelöscht/i,
+      fr: /ne sont plus disponibles|supprim/i,
+      ar: /لم تعد|حُذفت/u,
+      es: /ya no están disponibles|elimin/i,
+      pt: /não estão mais disponíveis|exclu/i,
+    };
+    // What it must still say: this one is not retryable, so the copy is the only
+    // thing standing between the user and a card with no way forward on it.
+    const askForNew: Record<string, RegExp> = {
+      en: /new code/i,
+      zh: /新的配对码/,
+      ja: /新しいペアリングコード/,
+      ko: /새 코드/,
+      de: /neuen Code/i,
+      fr: /nouveau code/i,
+      ar: /جديد/u,
+      es: /código nuevo/i,
+      pt: /código novo/i,
+    };
+    // And what it may not say, in each locale's own words for expiry.
+    const blamesExpiry: Record<string, RegExp> = {
+      en: /expir|ran out|timed out/i,
+      zh: /过期|失效|到期|超时/,
+      ja: /期限|失効|切れ/,
+      ko: /만료|기한/,
+      de: /abgelaufen|lief ab|Ablauf/i,
+      fr: /expir/i,
+      ar: /انتهت|صلاحية/u,
+      es: /caduc|expir/i,
+      pt: /expir|caduc/i,
+    };
+    for (const [lang, messages] of Object.entries(locales)) {
+      const line = messages.storedRecv.errGone;
+      expect(line, `${lang}: errGone present`).toBeTruthy();
+      expect(line, `${lang}: says the content is gone`).toMatch(deleted[lang]);
+      expect(line, `${lang}: sends the user to a new code`).toMatch(askForNew[lang]);
+      expect(line, `${lang}: blames no expiry`).not.toMatch(blamesExpiry[lang]);
+      // A duration here would be the same claim wearing a number.
+      expect(line, `${lang}: states no time it cannot know`).not.toMatch(/\d/);
+    }
+  });
 });
 
 // ── the copy that lives outside the message catalogue ───────────────────────

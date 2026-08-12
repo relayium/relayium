@@ -872,7 +872,7 @@ const pt: Messages = {
     dismiss: "Fechar",
     retry: "Tentar de novo",
     more: (count) => `Mais ${count} a caminho.`,
-    errGone: "O código de pareamento expirou antes de você salvar, e o conteúdo foi excluído. Peça um código novo.",
+    errGone: "Estes arquivos não estão mais disponíveis: foram excluídos antes que você pudesse salvá-los. Peça a quem enviou para mandá-los de novo com um código novo.",
     errNet: "O download parou antes de terminar.",
     errDecrypt: "Não foi possível abrir estes arquivos com a chave enviada pelo outro dispositivo.",
     errSave: "A Relayium não conseguiu gravar os arquivos neste dispositivo.",

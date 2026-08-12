@@ -873,7 +873,7 @@ const fr: Messages = {
     dismiss: "Fermer",
     retry: "Réessayer",
     more: (count) => `${count} de plus en route.`,
-    errGone: "Le code d'appairage a expiré avant l'enregistrement et le contenu a été supprimé. Demandez un nouveau code.",
+    errGone: "Ces fichiers ne sont plus disponibles : ils ont été supprimés avant que vous puissiez les enregistrer. Demandez à l'expéditeur de les renvoyer avec un nouveau code.",
     errNet: "Le téléchargement s'est interrompu avant la fin.",
     errDecrypt: "Impossible d'ouvrir ces fichiers avec la clé envoyée par l'autre appareil.",
     errSave: "Relayium n'a pas pu écrire les fichiers sur cet appareil.",

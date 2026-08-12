@@ -86,9 +86,12 @@
     {:else if receiver.status === "failed"}
       <!-- Never "saved": a batch that did not complete says so, says what was
            actually left on the disk, and offers the retry only when a retry
-           could work. The one failure with a different remedy (the room expired
-           and the ciphertext is gone with it) renders no retry control at all,
-           because there is nothing left to fetch. -->
+           could work. The one failure with a different remedy (the stored
+           ciphertext is no longer there) renders no retry control at all,
+           because there is nothing left to fetch. Its copy says that and no
+           more: the server sends 404/410 without a reason, and the receiver
+           holding a handoff is in a joined room that has no deadline to blame
+           anyway — see `classify` in preupload-receive.svelte.ts. -->
       <p class="si-lead si-error">{errText}</p>
       <p class="si-note si-outcome">{outcomeText}</p>
       <div class="si-actions">
