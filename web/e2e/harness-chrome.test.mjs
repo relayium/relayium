@@ -9,6 +9,7 @@
 import { spawn } from "node:child_process";
 import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { createServer as createTcpServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -58,6 +59,10 @@ afterEach(async () => {
     server.closeAllConnections();
     await new Promise((resolve) => server.close(() => resolve()));
   }
+  // The plain TCP listeners standing in for a not-yet-dead stale browser. A
+  // leaked one would keep its port occupied for the whole file, so the NEXT test
+  // that uses that port would fail for a reason that has nothing to do with it.
+  for (const { shutdown } of heldPorts.splice(0)) await shutdown();
 });
 
 describe("Chrome path resolution", () => {
@@ -789,5 +794,165 @@ describe("stale-browser cleanup", () => {
     // And the cleanup child itself is gone, not left running against the port
     // the NEXT launch will use.
     expect(await reaped(calls[0].child.pid)).toBe(true);
+  }, 30_000);
+});
+
+// ── and after the kill: waiting for the port itself to come free ────────────
+//
+// `pkill` exiting 0 means SIGTERM was DELIVERED to a stale same-port browser.
+// Delivered is not dead: the target still has to run its shutdown and let go of
+// the listening socket, and pkill returns without waiting for any of that. So
+// waiting for the cleanup CHILD — which is what closed the self-kill race — says
+// nothing about the leftover it signalled.
+//
+// The new Chrome needs that exact port. Spawning it inside that window either
+// loses the bind, or leaves readiness talking to the LEFTOVER browser, which
+// answers CDP perfectly well and is not the browser this run started — a green
+// launch driving a browser from the previous run.
+//
+// The stand-in for the dying browser is a plain TCP listener, not a real Chrome:
+// what the harness observes is only "does 127.0.0.1:<port> still accept a
+// connection", and a socket the test opens and closes on demand makes exactly
+// that observable, without depending on how fast any browser shuts down.
+
+/** Listeners the tests are holding on a debug port, with the sockets each one
+ *  accepted. `net.Server` has no `closeAllConnections()` — that is the HTTP
+ *  server's — and `close()` alone waits for every accepted socket, so an
+ *  un-destroyed probe connection would hang the release this test is timing. */
+const heldPorts = [];
+
+/** Occupy `port` on loopback until the test says otherwise. */
+function holdPort(port) {
+  const accepted = [];
+  const server = createTcpServer((socket) => {
+    socket.on("error", () => {});
+    accepted.push(socket);
+  });
+  const shutdown = () => new Promise((done) => {
+    for (const socket of accepted.splice(0)) socket.destroy();
+    server.close(() => done());
+  });
+  heldPorts.push({ shutdown });
+  // Resolves once the LISTENING socket is gone, which is the moment the port
+  // starts refusing — i.e. the moment the harness is waiting for.
+  return new Promise((resolve) => server.listen(port, "127.0.0.1", () => resolve({ release: shutdown })));
+}
+
+describe("waiting for the killed browser to release the debug port", () => {
+  posixOnly("does not start Chrome until the port stops accepting connections", async () => {
+    const port = 9477;
+    const marker = markerPath();
+    const listener = await holdPort(port);
+    const { spawnCleanup, calls } = fakeCleanup("exit 0"); // pkill: matched, and signalled
+    process.env.CHROME_PATH = recordingBrowser(marker);
+    const before = profileDirs();
+
+    const launch = launchFailure({
+      debugPort: port,
+      cleanup: { spawnCleanup, portReleaseTimeoutMs: 10_000, portProbeIntervalMs: 25 },
+    });
+
+    // The PROFILE is what is watched, not the marker: it is created in the line
+    // before the spawn, whereas a marker only appears once the stand-in binary
+    // has exec'd — so "no marker yet" is also true of a Chrome that has already
+    // been started, which is the failure this test exists to catch.
+    for (let i = 0; i < 20; i++) {
+      expect(profileDirs().filter((n) => !before.includes(n))).toEqual([]);
+      await sleep(50);
+    }
+    expect(markerLines(marker)).toEqual([]);
+
+    await listener.release();
+    const err = await launch;
+
+    expect(err.message).toMatch(/Chrome exited before its debug port answered \(exit code 5\)/);
+    expect(markerLines(marker)).toEqual(["chrome-start"]); // it did launch, after
+    expect(calls).toHaveLength(1);
+    expect(profileDirs().filter((n) => !before.includes(n))).toEqual([]);
+  }, 30_000);
+
+  posixOnly("fails closed, with nothing started, when the port stays occupied", async () => {
+    const port = 9478;
+    const marker = markerPath();
+    await holdPort(port); // never released
+    const { spawnCleanup } = fakeCleanup("exit 0");
+    process.env.CHROME_PATH = recordingBrowser(marker);
+    const before = profileDirs();
+
+    const err = await launchFailure({
+      debugPort: port,
+      cleanup: { spawnCleanup, portReleaseTimeoutMs: 300, portProbeIntervalMs: 25 },
+    });
+
+    expect(err.message).toMatch(/still accepting connections/);
+    expect(err.message).toContain(`127.0.0.1:${port}`);
+    expect(err.message).toMatch(/300ms/);
+    // No Chrome and no profile: the whole point is that this launch stops
+    // BEFORE anything that would have to bind that port.
+    expect(markerLines(marker)).toEqual([]);
+    expect(profileDirs().filter((n) => !before.includes(n))).toEqual([]);
+  }, 30_000);
+
+  posixOnly("does not delay a launch whose port was already free", async () => {
+    const marker = markerPath();
+    const { spawnCleanup } = fakeCleanup("exit 0");
+    process.env.CHROME_PATH = recordingBrowser(marker);
+
+    const started = performance.now();
+    const err = await launchFailure({
+      debugPort: 9479,
+      // Far longer than this test is allowed to take: a wait that is SPENT
+      // rather than observed would blow the test's own timeout instead of
+      // quietly passing.
+      cleanup: { spawnCleanup, portReleaseTimeoutMs: 30_000, portProbeIntervalMs: 25 },
+    });
+    const elapsed = performance.now() - started;
+
+    expect(err.message).toMatch(/exit code 5/);
+    expect(markerLines(marker)).toEqual(["chrome-start"]);
+    expect(elapsed).toBeLessThan(8_000);
+  }, 25_000);
+
+  posixOnly("does not probe the port at all when nothing was killed", async () => {
+    const port = 9480;
+    const marker = markerPath();
+    // Occupied for the whole test, and irrelevant: pkill matched nothing, so
+    // whatever is on that port was not signalled by us and is not ours to wait
+    // for. Waiting anyway would turn every launch that shares a port with an
+    // unrelated process into a failure at a budget nobody could see.
+    await holdPort(port);
+    const { spawnCleanup } = fakeCleanup("exit 1"); // pkill: no match
+    process.env.CHROME_PATH = recordingBrowser(marker);
+
+    const { value: err, lines } = await withCapturedWarn(() => launchFailure({
+      debugPort: port,
+      cleanup: { spawnCleanup, portReleaseTimeoutMs: 300, portProbeIntervalMs: 25 },
+    }));
+
+    expect(err.message).toMatch(/exit code 5/);
+    expect(err.message).not.toMatch(/still accepting/);
+    expect(markerLines(marker)).toEqual(["chrome-start"]);
+    expect(lines).toEqual([]); // a healthy no-match warns about nothing
+  }, 30_000);
+
+  posixOnly("refuses a release budget or cadence that could not bound anything", async () => {
+    const marker = markerPath();
+    const { spawnCleanup, calls } = fakeCleanup("exit 0");
+    process.env.CHROME_PATH = recordingBrowser(marker);
+    const before = profileDirs();
+
+    for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, "300", null]) {
+      await expect(launchBrowser({ debugPort: 9481, cleanup: { spawnCleanup, portReleaseTimeoutMs: bad } }))
+        .rejects.toThrow(/portReleaseTimeoutMs/);
+      await expect(launchBrowser({ debugPort: 9481, cleanup: { spawnCleanup, portProbeIntervalMs: bad } }))
+        .rejects.toThrow(/portProbeIntervalMs/);
+    }
+    // Rejected before anything happened at all: no cleanup was spawned (so no
+    // browser was signalled), no Chrome ran, no profile exists. An unusable
+    // setting is a programming error, and killing processes on the way to
+    // reporting one would make it destructive as well as wrong.
+    expect(calls).toEqual([]);
+    expect(markerLines(marker)).toEqual([]);
+    expect(profileDirs().filter((n) => !before.includes(n))).toEqual([]);
   }, 30_000);
 });
