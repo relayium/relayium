@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
+import { watchChromeProcess } from "./chrome-process.mjs";
 
 export { sleep };
 
@@ -425,7 +426,12 @@ export async function launchBrowser({ debugPort, keep = false }) {
   // 先解析浏览器：没有浏览器就没必要 pkill、建临时 profile 或等 800ms，直接报清楚。
   const chromeBin = resolveChrome();
   try {
-    spawn("pkill", ["-f", `remote-debugging-port=${debugPort}`], { stdio: "ignore" });
+    // The `.on("error")` is not optional: a missing `pkill` is reported
+    // asynchronously as an `error` event, which this try/catch cannot see and
+    // which — unlistened — is an uncaught exception that kills the whole run.
+    // Swallowing it is right: no pkill means no leftovers of ours to kill.
+    spawn("pkill", ["-f", `remote-debugging-port=${debugPort}`], { stdio: "ignore" })
+      .on("error", () => {});
     await sleep(800);
   } catch { /* 没有残留就没得可杀 */ }
 
@@ -446,12 +452,23 @@ export async function launchBrowser({ debugPort, keep = false }) {
       "--use-fake-device-for-media-stream",
       "about:blank",
     ],
-    { stdio: "ignore" },
+    // stderr is piped rather than ignored ONLY so a failed launch can quote it:
+    // this is where Chrome says "Failed to move to new namespace", "cannot open
+    // display", "Failed to create a ProcessSingleton". Ignoring it is what
+    // reduced two hosted failures to a bare `TypeError: fetch failed`. It is
+    // drained continuously by the watcher below and reported bounded — an
+    // undrained pipe would fill its 64KB buffer and block Chrome itself.
+    // stdout stays ignored: headless Chrome puts nothing there worth a log line.
+    { stdio: ["ignore", "ignore", "pipe"] },
   );
+  // Same tick as the spawn, deliberately: `error` (ENOENT/EACCES/EAGAIN) can
+  // arrive on the next one, and with no listener it is an uncaught exception.
+  const watch = watchChromeProcess(chrome, { executable: chromeBin, debugPort });
 
   const close = async (browser) => {
     browser?.close();
     chrome.kill();
+    watch.dispose();
     await sleep(500); // 让 Chrome 先把 profile 目录里的文件句柄放掉
     if (!keep) {
       try { rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); }
@@ -460,8 +477,9 @@ export async function launchBrowser({ debugPort, keep = false }) {
   };
 
   let browser;
+  const startedAt = Date.now();
   try {
-    // 等 CDP 端口起来。
+    // 等 CDP 端口起来。探测的次数和节奏和以前一模一样；变的只有**失败时说什么**。
     for (let i = 0; ; i++) {
       try {
         const v = await fetch(`http://127.0.0.1:${debugPort}/json/version`).then((r) => r.json());
@@ -469,7 +487,19 @@ export async function launchBrowser({ debugPort, keep = false }) {
         await browser.open;
         break;
       } catch (e) {
-        if (i > 40) throw e;
+        // 先探测、后看进程，顺序是有意的：一次答上来的探测永远算成功，哪怕我们
+        // spawn 的那个进程自己已经退了（包装脚本、二次 exec 都可能这样）。诊断只在
+        // 真的连不上时才介入，所以成功路径一个字节都没变。
+        const waitedMs = Date.now() - startedAt;
+        // 进程已经不在了：再探 40 次也只会拿到同一条 ECONNREFUSED，而死因就在手里。
+        if (watch.deadState() || i > 40) {
+          // 抛之前给 stderr 一点时间到齐：'exit' 完全可能跑在最后几行输出前面，而
+          // 那几行往往就是死因本身。只在失败路径上等，且有上限。
+          await watch.drain(250);
+          throw watch.failure({ attempts: i + 1, waitedMs, cause: e });
+        }
+        // 和以前一模一样的 250ms：诊断不该改变重试的节奏。进程死掉之后最多再多等
+        // 这一轮，上面那个检查就会在下一次循环开头把死因抛出来。
         await sleep(250);
       }
     }
