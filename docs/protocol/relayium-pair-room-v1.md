@@ -455,12 +455,65 @@ will join. When the joiner turns out not to announce `preupload/1`, its objects
 are unreachable ciphertext: the keys can never be delivered, and an entry left in
 the "already uploaded" state is sent over neither transport — the user simply
 never sees the file arrive. The sender therefore returns those entries to the
-live-link lane at the moment it drains the batch for that peer. The bytes are
-spent either way; the transfer is not. The stored objects are not deleted, and
-nothing reclaims them on a clock: the room is joined by then, so §2 leaves it no
-deadline and §7.5 no fallback one. That ciphertext is held until the owner
-releases the room (§8) or the account is deleted — a completion is not coming
-for it, because the peer that would have spent one never learned the keys.
+live-link lane. The bytes are spent either way; the transfer is not. The stored
+objects are not deleted, and nothing reclaims them on a clock: the room is joined
+by then, so §2 leaves it no deadline and §7.5 no fallback one. That ciphertext is
+held until the owner releases the room (§8) or the account is deleted — a
+completion is not coming for it, because the peer that would have spent one never
+learned the keys.
+
+**That return is one-way, so "has not announced yet" is NOT "cannot take keys".**
+The two facts arrive as two different frames and the ROSTER ALWAYS WINS: the frame
+that first names a peer is also where a client announces TO it, and that peer's
+own hello is produced by its own roster handler and has to travel back across the
+relay. A sender that answers the capability question at the instant it drains the
+batch therefore answers it a full round trip early, every time — so the ordinary
+case (a batch finished uploading before anyone joined, and a current peer joins)
+released the keys and re-sent the whole batch over the live link, leaving stored
+ciphertext that only a manual release can remove. This is not a rare interleaving;
+it is what the ordering produces whenever the drain is not held up by something
+else, such as a sender-side verification step.
+
+So an already-uploaded entry has THREE states, not two, and the sender must not
+collapse them:
+
+| lane | when | what owns the entry |
+|---|---|---|
+| keys | the peer announced `preupload/1` | the handoff (§4.1) |
+| live | the peer announced without it, or will never announce | the live link; the return above runs |
+| wait | no announcement yet, and one is still expected | nobody — hold, release nothing, send nothing |
+
+**A `wait` peer must be treated as capable for the purpose of the return, and as
+incapable for the purpose of the frame.** Holding costs a moment; releasing costs
+the handoff permanently. The kind-12 gate at the top of this section is unchanged
+and stays exact: an undecided peer is never sent a frame it might not parse.
+
+**A batch that holds pre-uploaded entries waits as a batch.** Letting the
+never-uploaded half through while the rest is undecided splits one user action
+across two transports and two consent prompts, and — because the first half
+occupies the peer — can leave the second half with no link to hand keys over and
+no control that could reach it. A batch with nothing uploaded is untouched by any
+of this and behaves exactly as it did before pre-upload existed.
+
+**What ends `wait` is the announcement.** Every implementation that can join a
+room announces at the roster level, on join and on roster change
+(`relayium-text-v1.md`), so a real peer resolves one signalling round trip after
+the roster names it — on an event, with no clock. A bounded backstop is still
+required, because silence and lateness are indistinguishable by any other means:
+there is no acknowledgement frame (§4.4 says why one must not exist), and a peer
+with no capabilities never opens a link whose establishment could stand in for the
+answer. Implementations SHOULD reuse their existing "we signalled this peer and it
+never replied" bound rather than introduce a second number; the Web client uses
+its link-request timeout. Reaching that bound costs a delayed live fallback.
+Never reaching it would cost the batch.
+
+A peer the roster stops naming settles to `live` at once rather than waiting the
+bound out: nothing more is coming from it, and a peer that never announced holds
+no link either, so no working connection's answer is being discarded. Conversely
+an announcement already heard MUST survive the roster pruning that peer away — a
+peer's signalling socket can drop while its data channel keeps carrying files, and
+re-reading that as "never announced" spends the handoff on a peer that is still
+connected and still capable.
 
 **That fallback is only real if the gate in front of it is peer-specific.** The
 condition every send decision tests MUST be "how many entries does the live link
@@ -534,6 +587,101 @@ without a rule reads as "the receiver joined and then nothing happened".
   picker was already open when the answer came, or a stale resolve publishes its
   file list over the batch a NEW room is showing — so the user accepts one set of
   names and receives another.
+
+### 4.5 Sender authorization (when a confirmation stands in front of the batch)
+
+§4.4's "send it first" is an ORDERING rule about a handoff that is already
+allowed to happen. It is not permission, and an implementation that reads it as
+permission has a disclosure rather than a bug.
+
+A client MAY put a sender-side confirmation in front of a batch — the Web client
+does, in a code room with advanced verification on, because a joiner who guessed
+a live code is exactly who the pairing code cannot exclude, and the remedy it
+offers is "compare the verification code before you send". **Where such a
+confirmation exists, it MUST gate the key handoff too, and it must gate it at the
+emission and not at the button.**
+
+The reason it does not gate itself is the shape of the two mechanisms:
+
+- the confirmation holds a BATCH, and the handoff is not in that batch. It is a
+  frame on the link, emitted from link establishment;
+- a link exists as soon as the workspace is opened — and opening it is the only
+  way the code the user is being told to compare gets on screen. So the frame the
+  confirmation is supposed to hold rides the very step that makes the
+  confirmation answerable;
+- an inbound link the peer builds itself goes through no local control at all.
+
+The consequence of missing this is not symmetrical with a live batch. A live
+batch still faces the receiver's own accept step; keys face nothing — the
+ciphertext is already on a server that will serve it to whoever presents the
+object id, so an emission IS the disclosure. Note also that the earlier, broken
+form of §4.3 masked this: a sender that released the uploaded entries to the live
+lane one round trip early had nothing left for the handoff to name, so a
+deterministic §4.3 is what makes this rule load-bearing rather than theoretical.
+
+The rules:
+
+1. **The emission asks, and asks late.** The set MUST be pulled at emission time
+   (§4.4's whole-set rule already requires a pull rather than a remembered
+   partial), and the authorization MUST be read in that same pull, for the peer
+   the frame is addressed to. A decision cached by whoever scheduled the frame is
+   a decision about a world that may no longer exist: an emission can sit behind
+   another one's seal for as long as that seal takes.
+2. **Re-read at the wire boundary, as a SET.** Immediately before a sealed frame
+   enters the channel, the pull MUST be repeated and the answer MUST be the very
+   set the frame was sealed from — every id, every key, in the frame's order. A
+   frame carries the set as it was, so anything weaker is a frame that may
+   describe a world that has since moved: an authorization withdrawn mid-seal, an
+   entry released to the live lane (§4.3) and a different one finalized in its
+   place, an entry removed. A count in particular is NOT sufficient — one item
+   sealed, that item released, a different one finalized leaves the count
+   unchanged and hands the peer a key to ciphertext the live lane is now
+   delivering itself. Dropping a sealed frame spends its sequence number, which
+   is the same forward gap a transport dying mid-seal already produces (§4.4), so
+   the whole current set is still deliverable by the next pull.
+3. **An authorization is about a WORLD, not a flag.** It names the peer, the
+   room, the link identity and the confirmation preference in force. Anything
+   that moves underneath it — a different target, a reconnect (which renames the
+   peer), a new authentication step with a new SAS, a room switch, the link
+   ending — makes it stop matching, and the gate fails closed without anything
+   having to remember to revoke it. A transport replacement under one compared
+   SAS is deliberately NOT such a change.
+   The confirmation preference is the one member of that list a comparison cannot
+   carry on its own, and it MUST be revoked explicitly when it changes, in either
+   direction: on → off → on leaves the recorded preference equal to the current
+   one on both sides of the comparison, so a decision made before the user changed
+   their mind twice would come back into force. Revoking at the point the
+   preference MOVES (rather than in whichever control happens to move it) is what
+   makes "switching verification back on asks again" a property of the setting
+   instead of a habit of one call site, and it must happen before or with the
+   change so no reader can observe the new preference under the old grant.
+4. **Confirming releases both halves, once.** The live-lane batch is drained and
+   sent if there is one, and the whole current key set is emitted on the link
+   whose code was compared. An all-keys batch drains to nothing, and a client
+   MUST NOT send that emptiness as a transfer: an empty manifest raises a consent
+   prompt on the peer for something that does not exist.
+5. **Cancelling releases nothing and loses nothing.** No drain, no return to the
+   live lane (§4.3's return is one-way), no authorization — and the batch stays
+   reachable, which for a fully pre-uploaded one means a control that counts it.
+   Measured with the live lane's own count that batch is 0 entries and gets no
+   control at all.
+6. **A batch that is all keys still needs a link.** The live lane has nothing to
+   send for it, so nothing would ever build one — and with no link there is no
+   SAS, so a confirmation in front of it could never be answered. A client SHOULD
+   raise link establishment as its own intent there rather than by sending an
+   empty batch or by opening a conversation the user did not ask for. Doing so
+   releases nothing: the emission that follows attachment asks rule 1's question
+   and is told no.
+7. **An upload that lands later obeys the same gate.** The protocol lets an
+   upload in flight at the join finish (§3), so a new object can appear on an
+   already-open link; the resend it triggers is an emission like any other. Still
+   authorized, it goes; not authorized, it does not, and the batch is left in a
+   state the user can confirm again.
+
+None of this applies where no confirmation is in force — a LAN room, or a code
+room with the preference off. There is no code on screen to compare there, so a
+gate would be a prompt with nothing behind it, and the handoff rides
+establishment exactly as §4.4 describes.
 
 ## 5. Metering
 

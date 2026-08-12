@@ -85,6 +85,22 @@ export interface PeerWorkspace {
   routes(peerId: string): boolean;
   blocksNewIntent(peerId: string): boolean;
   sendFiles(peerId: string, files: PickedFile[]): void;
+  /**
+   * Bring up the link this peer's pre-uploaded entries need, and send nothing.
+   *
+   * The intent behind a batch that is ALL keys. A batch that finished uploading
+   * before anybody joined — the ordinary shape of a code room — has nothing for
+   * the live lane, so there is no `sendFiles` that could carry it: the transfer
+   * is frame kind 12, and that frame needs a link to travel on and the link's
+   * verification code to be on screen before a sender confirmation can mean
+   * anything. Its own call, rather than an empty batch (which is a manifest with
+   * no files in it) or a text session nobody asked for.
+   *
+   * Sends no keys by itself. The file lane pulls the current set on every
+   * (re)established transport, and what that pull answers is gated separately —
+   * see handoff-authorization.
+   */
+  prepareHandoff(peerId: string): void;
   /** Re-hand the peer the current pre-uploaded set. Used when an upload that was
    *  still in flight when the peer joined finishes on an already-open link. */
   sendStoredKeys(): void;
@@ -291,6 +307,24 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
     },
     routes,
     blocksNewIntent,
+    prepareHandoff(peerId) {
+      if (!peerId) return;
+      if (blocksNewIntent(peerId)) return;
+      // No legacy fallback, deliberately: the legacy transport has no handoff
+      // frame at all, so a link built for a peer that does not route would be a
+      // connection with nothing to say on it. Those entries reach that peer
+      // through the live lane's own one-way release instead (handoff-lane).
+      if (!routes(peerId)) return;
+      // The one intent that does NOT clear the explicit-disconnect suppression,
+      // because it is the one intent the user did not express. Clearing it would
+      // let a queue of pre-uploaded entries — which stay queued, and stay owed —
+      // rebuild the workspace the user just closed, immediately and repeatedly.
+      if (isSuppressed(peerId)) return;
+      // Failure is the link surface's to report: `linkStatus`, and the terminal
+      // reason behind it, are already on screen for every other way a link is
+      // built. There is no batch here whose state could be left half-set.
+      void mixed.ensure(peerId).catch(() => {});
+    },
     sendStoredKeys() { mixed.file.sendStoredKeys(); },
     sendFiles(peerId, files) {
       // An empty batch is never a transfer, and the one caller that can produce

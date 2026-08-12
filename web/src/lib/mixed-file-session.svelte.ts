@@ -35,7 +35,7 @@ import {
   type ResumePoint,
 } from "./transfer";
 import { wouldExceedDeclared } from "./transfer-session.svelte";
-import { isStoredKeysFrame, type HandoffItem } from "./preupload-handoff";
+import { isStoredKeysFrame, sameHandoffSet, type HandoffItem } from "./preupload-handoff";
 import { peerSupportsPreupload as defaultSupportsPreupload } from "./peer-caps.svelte";
 
 export const MIXED_FILE_CONSENT_TIMEOUT_MS = 10 * 60_000;
@@ -153,15 +153,23 @@ export interface MixedFileSessionDeps {
   /** Link owner uses lane traffic to refresh its idle lease. */
   onActivity?(): void;
   /**
-   * The complete set of pre-uploaded objects to hand this peer, asked once per
+   * The complete set of pre-uploaded objects to hand THIS PEER, asked once per
    * (re)established transport and again whenever `sendStoredKeys()` is called.
    *
    * A PULL, not a push, and that is what implements the protocol's retry rule:
    * "re-send the WHOLE current set on every (re)established link". A push would
    * have to remember what it sent and would then have a partial form to get
    * wrong; asking again always produces the current truth.
+   *
+   * It is handed the peer id because the answer is not a property of the outbox
+   * alone. The sender-side authorization behind it is a statement about one peer
+   * on one link (handoff-authorization), so a pull that could not name the peer
+   * could only answer "may anybody have these keys" — and a confirmation given
+   * for one peer would then release the set to whatever link came next. An empty
+   * answer is the refusal: nothing is emitted, nothing is logged as an error,
+   * and the next pull decides again.
    */
-  storedKeysToSend?(): readonly HandoffItem[];
+  storedKeysToSend?(peerId: string): readonly HandoffItem[];
   /** A validated handoff arrived from the peer. Called with the frame's items in
    *  wire order; merging and deduping by id belong to the receiver driver. */
   onStoredKeys?(items: HandoffItem[]): void;
@@ -621,11 +629,33 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
       // write a file the live lane is delivering at the same moment. Pulling
       // late means the frame always describes the set as it is when it is sent,
       // which is what "re-send the WHOLE current set" actually asks for.
-      const items = pull();
+      const items = pull(candidate.peerId);
       if (!items.length) return;
       const frame = await candidate.storedKeysSender.frame(items, candidate.keys.preuploadSend);
       if (candidate !== link || expectedGeneration !== generation) return;
       if (suspended || candidate.fileChannel.readyState !== "open") return;
+      // Asked ONE more time, immediately before the send, and compared as a SET
+      // rather than counted. The pull above is late, but the seal after it is
+      // not instant, and what the pull answers moves in two ways inside that
+      // window:
+      //
+      //   - the sender-side authorization ("the user compared this link's code
+      //     with this peer") can be withdrawn by a Disconnect, a room switch or
+      //     the preference changing, and
+      //   - the SET itself can change: an entry released to the live link, a
+      //     re-upload replacing the key that opens an id, an entry removed.
+      //
+      // A frame carries the set it was sealed from, so only the second question
+      // makes sending it honest — and "is the answer still non-empty" cannot ask
+      // it. One item sealed, that item released, a different one finalized: the
+      // count is 1 before and 1 after, and the frame that goes out hands the peer
+      // a key to ciphertext the live lane is now delivering itself.
+      //
+      // Dropping the frame spends a seq the peer never sees, which it absorbs as
+      // a forward gap exactly like a transport that died mid-seal; the whole
+      // current set is still deliverable by the next pull, which is what the
+      // protocol's whole-set retry rule is for.
+      if (!sameHandoffSet(items, pull(candidate.peerId))) return;
       candidate.fileChannel.send(frame);
       deps.onActivity?.();
     }).catch((err) => {
@@ -1876,6 +1906,13 @@ export function createMixedFileSession(deps: MixedFileSessionDeps): MixedFileSes
     // BYTES, and this frame can never be: the receiver dispatches it ahead of
     // the receive chain, and it carries its own key and counter, so neither side
     // has to order it against the file stream at all.
+    //
+    // "First" is an ORDERING rule about a handoff that is already allowed to
+    // happen — never permission for one (§4.5). Attachment is exactly where that
+    // distinction matters: a link exists as soon as the workspace is opened, and
+    // opening it is the only way a sender's verification code gets on screen. So
+    // what this hands over is whatever the pull answers, and the pull is where
+    // the sender-side stop lives.
     emitStoredKeys(candidate, expectedGeneration);
     if (resumingOutbound) armOutboundResumeTimer(resumingOutbound);
     if (resumingInbound) {

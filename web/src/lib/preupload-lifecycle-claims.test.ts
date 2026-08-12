@@ -41,6 +41,10 @@ const srcRoot = resolve(import.meta.dirname, "..");
  */
 const claimFiles = [
   "App.svelte",
+  // The sender's "declined to delete objects it cannot hand off" argument moved
+  // here with the drain it belongs to. It is one of the two irreversible
+  // decisions this guard exists for, so it has to be read wherever it lives.
+  "lib/handoff-lane.svelte.ts",
   "lib/preupload.svelte.ts",
   "lib/preupload-receive.svelte.ts",
   "lib/outbox.svelte.ts",

@@ -34,11 +34,26 @@
   import type { Peer } from "./lib/protocol";
   import { lang, dir, messages, legalUrl, pageUrl, type Messages, type StatusKey } from "./lib/i18n.svelte";
   import { applyHeadMeta, pageMeta } from "./lib/page-meta";
-  import { hasFiles, dropTarget, pickedFromInput, filesFromDataTransfer, type PickedFile } from "./lib/drag";
-  import { outbox, setOutbox, takeOutbox, clearOutbox, liveLinkCount, liveLinkFiles, uploadedRefs, uploadedFingerprint, releaseUploaded } from "./lib/outbox.svelte";
+  import { hasFiles, dropTarget, pickedFromInput, filesFromDataTransfer } from "./lib/drag";
+  import { outbox, setOutbox, clearOutbox, uploadedRefs, uploadedFingerprint } from "./lib/outbox.svelte";
   import { resetPreupload } from "./lib/preupload.svelte";
   import { createStoredReceiver } from "./lib/preupload-receive.svelte";
   import { peerSupportsPreupload } from "./lib/peer-caps.svelte";
+  // The pre-upload lane decision, and the gate and drain that read it. Not
+  // inline here, because the answer has three states and the middle one is a
+  // state machine over two signalling frames whose order this component cannot
+  // control — see handoff-lane.svelte.ts.
+  import {
+    drainFor, handoffOwed, liveLinkFor, noteRosterPeers, notePeerCaps,
+    pendingCountFor, pendingFilesFor, resetHandoffLanes,
+  } from "./lib/handoff-lane.svelte";
+  // …and the sender-side stop in front of that handoff. Separate from the lane
+  // on purpose: the lane answers "which transport owes this peer these entries",
+  // which is a protocol question, and this answers "may they leave yet", which
+  // is the user's. See handoff-authorization.svelte.ts.
+  import {
+    authorizeHandoff, handoffAllowed, revokeHandoff, type HandoffContext,
+  } from "./lib/handoff-authorization.svelte";
   import StoredIncoming from "./lib/StoredIncoming.svelte";
   import { needsSendConfirmation, shownSasCode, autoAcceptsIncomingText } from "./lib/verify-gates";
   import { canReleaseConfirmedSend, queuedReleaseTarget } from "./lib/confirm-send";
@@ -155,7 +170,21 @@
     // `resetPreupload`/`startPreupload` on a re-mint, this effect's on the way
     // out; this covers the window around it, when `roomCode` has changed and the
     // socket is still bound to the room being left.
-    storedKeysToSend: () => (roomCode && roomCode === socketRoomKey ? uploadedRefs() : []),
+    //
+    // And AUTHORIZATION-guarded, which is the sender-side stop itself. In a code
+    // room with advanced verification on the batch waits for an explicit Send,
+    // because the joiner might be someone who guessed a live code — but the
+    // handoff does not travel in that batch. It rides the link, and a link
+    // exists the moment the workspace is opened, which is the only way the code
+    // the user is told to compare gets on screen. So without this the keys are
+    // handed over one link BEFORE the person is asked anything, and there is no
+    // second stop behind it: the receiver's accept step gates bytes landing on a
+    // disk, and these bytes are already on a server that serves them to whoever
+    // holds the key. `keysReleasedTo` is the answer, asked here — late, at the
+    // wire — rather than remembered by whoever scheduled the frame.
+    storedKeysToSend: (peerId) => (
+      roomCode && roomCode === socketRoomKey && keysReleasedTo(peerId) ? uploadedRefs() : []
+    ),
     onStoredKeys: (items) => storedReceiver.offer(items),
     supportsPreupload: peerSupportsPreupload,
   });
@@ -384,7 +413,11 @@
     // A capability hello shares this envelope but is neither of the two things
     // below. The WebRTC handlers ignore it too (it carries no sdp/ice), which is
     // why it needs no generation tag.
-    if (recordPeerCaps(from, data)) return;
+    // A hello also SETTLES this peer's pre-upload lane, and it is recorded here
+    // rather than read later because the roster prunes announcements: a peer
+    // whose socket drops while its DataChannel keeps working must not read back
+    // as "never announced" and lose its handoff.
+    if (recordPeerCaps(from, data)) { notePeerCaps(from); return; }
     const d = data as { relayRtt?: Record<string, number>; rename?: string };
     const m = d.relayRtt;
     if (m && from !== selfId) {
@@ -605,58 +638,50 @@
     else wake.release();
   });
 
-  /**
-   * Take the batch the LIVE LINK is responsible for, for this exact peer.
-   *
-   * The extra step over `takeOutbox()` is the old/unknown-peer rule. Pre-upload
-   * happens while the room is still waiting, so the sender cannot know who will
-   * join; when the joiner turns out not to announce `preupload/1` — an older Web
-   * build, a native client, the CLI — its keys can never be delivered, because
-   * frame kind 12 is a hard error for a peer that does not know it. Left
-   * `uploaded`, those entries are drained by NEITHER lane and the user simply
-   * never sees the file arrive. Returning them to the live link costs the bytes
-   * that were already spent and delivers the transfer.
-   *
-   * Deliberately decided HERE, at the drain, rather than from a capability
-   * watcher: this is the instant the answer is actually needed, and it is the
-   * same instant `routes()` decides link-versus-legacy from the same
-   * announcement. If a caps hello were late, both decisions degrade together to
-   * "send it the ordinary way", which is wasteful and correct — the alternative
-   * failure (wait for an announcement that never comes) loses the files.
-   *
-   * The stored object is not deleted, and nothing reclaims it on a clock: by the
-   * time this runs the peer has JOINED, and a joined room has no deadline and no
-   * fallback expiry. No completion is coming either — the peer that would spend
-   * one never learned the keys — so it is held until the sender's own account
-   * releases that room (the pairing-transfer storage list on /me) or the account
-   * is deleted.
-   */
-  function drainFor(peerId: string): PickedFile[] {
-    if (!peerSupportsPreupload(peerId)) releaseUploaded();
-    return takeOutbox();
-  }
+  // `liveLinkFor` (the gate in front of every drain) and `drainFor` (the drain
+  // itself, plus the one-way release behind it) are imported rather than written
+  // here. Both used to read `peerSupportsPreupload` directly, and both were wrong
+  // in the same way: that predicate answers "has not announced yet" as "cannot
+  // take keys", and the roster frame that first names a peer ALWAYS arrives
+  // before that peer's capability hello — so a batch that finished uploading
+  // before anyone joined was released back to the live lane and re-sent, for a
+  // peer perfectly able to be handed its keys. The three-state answer, why the
+  // wait is bounded, and what an old peer still gets are all in
+  // handoff-lane.svelte.ts.
 
   /**
-   * How many entries the live link owes THIS peer — the gate in front of every
-   * `drainFor`, and it must be the peer-specific question.
+   * The world an emission of the stored key set would happen in, right now.
    *
-   * The whole fallback above is unreachable otherwise. Every send decision used
-   * to ask `stagedCount()`, which is 0 for a batch that finished uploading
-   * before anyone joined — so a peer that cannot be handed keys never reached
-   * the drain that would have released those entries to it, and the batch
-   * arrived as silence. The second edge is the same bug later in time: the peer
-   * is already here and already known not to speak `preupload/1` when an upload
-   * that was in flight completes, and `markUploaded` moves an entry out of
-   * `staged` rather than into it, so a `stagedCount()` gate sees the number go
-   * DOWN and stays shut.
+   * Every field is something a person could have checked, or something whose
+   * change means they checked a different thing — so an authorization recorded
+   * against one of these simply stops matching when any of them moves, and the
+   * gate fails closed without anybody having to remember to revoke it. That is
+   * deliberate: the emission does not go through the confirmation button, and an
+   * inbound link the peer builds itself goes through no button at all, so
+   * hiding a control cannot be the mechanism.
    *
-   * Reactive on both halves: `liveLinkCount` reads the per-entry state array
-   * (so `markUploaded`/`failUpload` wake it even though the file list is
-   * untouched) and `peerSupportsPreupload` reads the roster announcement (so a
-   * caps hello arriving after the peer does re-decides).
+   * `linkGeneration` is the identity of a LIVE link to THIS peer, or -1. Not
+   * `linkPeerId` alone, which still names the peer of a link that has ENDED
+   * (whose code is no longer on screen), and not another peer's link either: the
+   * six digits the user compared belong to one authentication step with one
+   * peer.
    */
-  function liveLinkFor(peerId: string): number {
-    return liveLinkCount(peerSupportsPreupload(peerId));
+  function handoffCtx(peerId: string): HandoffContext {
+    return {
+      peerId,
+      roomCode: roomCode ?? "",
+      linkGeneration: workspace.hasLink && workspace.linkPeerId === peerId
+        ? workspace.linkGeneration : -1,
+      verifyOn,
+    };
+  }
+  /** Whether this peer's pre-uploaded keys may leave this device right now. One
+   *  question, read by the pull that seals the frame, by the send gate that
+   *  decides there is still something to do, and by the release control that
+   *  describes what is left — so none of the three can mean a different thing by
+   *  "already handed over". */
+  function keysReleasedTo(peerId: string): boolean {
+    return handoffAllowed(handoffCtx(peerId));
   }
 
   // Queued files (OS share sheet, or picked before pairing) auto-send the
@@ -682,8 +707,31 @@
     //     `stagedCount()` of 0, so a gate on that number never opened and
     //     `drainFor`'s old-peer fallback — the only thing that can deliver those
     //     entries to a peer with no `preupload/1` — was never reached at all.
+    //  4. And the answer that fallback turns on is not available yet when this
+    //     effect first runs. The roster change that put `solo` here is the same
+    //     handler that broadcasts OUR capabilities; the peer's own hello is a
+    //     round trip behind it. So `liveLinkFor` holds a batch with uploaded
+    //     entries in it until that peer's lane is settled, rather than reading
+    //     silence as "cannot take keys" and spending the handoff on a peer that
+    //     was about to say otherwise — handoff-lane.svelte.ts.
+    //  5. And a fully pre-uploaded batch owes the live lane NOTHING — correctly,
+    //     because the keys are the whole transfer — which is the ordinary shape
+    //     of a code room: stage, mint, finalize, wait. A sender driven only by
+    //     the live-lane count therefore does nothing at all with the ordinary
+    //     case: no link is built, no frame kind 12 is emitted, and a batch whose
+    //     ciphertext is already paid for arrives as silence. That debt is
+    //     `handoffOwed`, and it is settled by a frame rather than by a batch, so
+    //     no count the live lane keeps can see it.
     const solo = visiblePeers.length === 1 ? visiblePeers[0] : null;
-    if (solo && liveLinkFor(solo.id) && surfaceShown
+    const liveOwed = solo ? liveLinkFor(solo.id) : 0;
+    // Owed AND not yet handed over: either no link to this peer exists to carry
+    // the frame, or one does and the keys are not authorized to leave it yet.
+    // Both are things to act on. Neither survives the handoff actually
+    // happening, which is what keeps the confirmation bar from coming straight
+    // back one flush after the user answered it.
+    const keysPending = solo !== null && handoffOwed(solo.id) > 0
+      && !(workspace.hasLink && workspace.linkPeerId === solo.id && keysReleasedTo(solo.id));
+    if (solo && (liveOwed > 0 || keysPending) && surfaceShown
       && !workspace.blocksNewIntent(solo.id)) {
       const peer = solo;
       // The extra sender confirmation belongs to advanced verification: its only
@@ -698,13 +746,31 @@
       // mode skips (autoAcceptsIncomingFile). Turning verification on restores
       // the sender-side confirmation as well.
       if (!needsSendConfirmation(verifyOn, roomCode)) {
-        workspace.sendFiles(peer.id, drainFor(peer.id));
+        const files = drainFor(peer.id);
+        // Only when there ARE some. An all-keys batch drains to nothing, and
+        // calling through with it seals a manifest with no files in it and
+        // raises a consent prompt on the peer for a transfer that does not
+        // exist. What that batch needs is a link for its frame to travel on,
+        // asked for as its own intent — never by opening a conversation nobody
+        // asked for, and never by an empty batch. The keys themselves ride the
+        // pull that follows attachment; with no confirmation in force that pull
+        // already answers yes.
+        if (files.length) workspace.sendFiles(peer.id, files);
+        else workspace.prepareHandoff(peer.id);
         return;
       }
       // Code room, verification on: surface a confirmation bar instead of
       // auto-sending, so a code-guesser who joined never receives the files
       // automatically.
       if (!pendingPeer && peer.id !== dismissedPeerId) pendingPeer = peer;
+      // The link is still built — and ONLY the link. The whole remedy this bar
+      // offers is "compare the verification code before you send", and that code
+      // does not exist until a link does; unlike a staged batch, an all-keys one
+      // has no live-lane send that would ever build one, so the bar would sit
+      // there telling the user to compare something they cannot see. Nothing is
+      // drained and no authorization is recorded here, so the pull behind the
+      // attachment still answers no.
+      if (keysPending) workspace.prepareHandoff(peer.id);
     } else if (!pendingPeer || pendingPeer.id !== releaseTarget) {
       // The peer left, or the conditions changed — EXCEPT in the one state where
       // an empty roster does not mean the peer left: a bar armed for the peer of
@@ -759,13 +825,15 @@
     const peerId = workspace.hasLink ? workspace.linkPeerId : "";
     return queuedReleaseTarget({
       linkPeerId: peerId,
-      // What the live link owes THIS peer. Not `outbox().length`: an entry
-      // still uploading is nobody's to release. Not the peer-independent
-      // staged count either: for a peer that cannot be handed keys the
-      // already-uploaded entries ARE this control's batch, and a gate that
-      // could not see them left a fully pre-uploaded queue with no control
-      // that could reach it.
-      queued: peerId === "" ? 0 : liveLinkFor(peerId),
+      // Everything this peer is still waiting on, whichever transport will
+      // carry it. Not `outbox().length`: an entry still uploading is nobody's
+      // to release. Not the peer-independent staged count either. And wider
+      // than the live lane's own question, because the Send this control
+      // re-arms hands over the keys as well: measured with the live lane's
+      // ruler a fully pre-uploaded batch counts 0, renders no control at all,
+      // and — after a Cancel, inside a workspace where the peer chooser is
+      // gone — leaves those files with nothing on screen that can reach them.
+      queued: peerId === "" ? 0 : pendingCountFor(peerId, keysReleasedTo(peerId)),
       // The same live policy every other outbound control reads, so the button
       // is never offered for a link that would refuse the batch anyway.
       blocked: peerId !== "" && workspace.blocksNewIntent(peerId),
@@ -803,7 +871,21 @@
     if (!pendingPeer || !canRelease) return;
     const id = pendingPeer.id;
     pendingPeer = null;
-    workspace.sendFiles(id, drainFor(id));
+    // The authorization FIRST, and for exactly this world: this peer, this room,
+    // this link, this preference. It is what the handoff pull answers to, and
+    // that pull happens late — inside the send chain, at seal time — so anything
+    // recorded after the release below would be a race with the frame it is
+    // supposed to authorize.
+    authorizeHandoff(handoffCtx(id));
+    const files = drainFor(id);
+    // Only when the live lane owes something: a batch that is all keys drains to
+    // nothing, and sending that is an empty manifest and a consent prompt for a
+    // transfer that does not exist.
+    if (files.length) workspace.sendFiles(id, files);
+    // And the keys, once, on the link whose code the user just compared.
+    // `attach()` already asked for them — before this authorization existed —
+    // and was told no, so nothing has carried them yet.
+    if (handoffOwed(id)) workspace.sendStoredKeys();
   }
   function cancelSend() {
     if (pendingPeer) {
@@ -1084,6 +1166,11 @@
     signaling.onPeers((p) => {
       peers = p;
       retainPeers(p.map((x) => x.id));
+      // Same handler, same instant, and deliberately alongside the broadcast
+      // below: this is where we announce to a peer, so it is where a peer that
+      // speaks the protocol starts announcing back. Until one of the two lands,
+      // that peer's pre-uploaded entries belong to neither lane.
+      noteRosterPeers(p.map((x) => x.id));
       workspace.syncPeers();
       broadcastRelayRtt();
       broadcastCaps();
@@ -1163,6 +1250,8 @@
     connState = "connecting";
     resetRelaySelection(); // the new room has its own relay pool + measurements
     resetPeerCaps(); // the new room has its own peers; nothing carries over
+    resetHandoffLanes(); // …including which of them had settled a pre-upload lane
+    revokeHandoff(); // …and any Send confirmed against the room being left
     textSession.end(); // 换房间就是换对端，消息会话跟着结束（历史留在页面上）
     const ice = await fetchIceConfig(roomCode);
     // A rapid second switch may have started (and possibly finished) while this
@@ -1472,6 +1561,11 @@
   function disconnectWorkspace() {
     textCompose = "";
     textOpener.reset();
+    // The link the user compared a code on is what they just ended. The context
+    // comparison already fails closed on it (a torn-down link reports no
+    // generation at all), but an authorization is the one piece of state whose
+    // stale form is a disclosure rather than a glitch, so it is dropped here too.
+    revokeHandoff();
     workspace.disconnect();
   }
   /** The action on a link that ended of something the user has to act on. Same
@@ -1684,10 +1778,12 @@
     <!-- Counted over exactly what releaseQueued will hand THIS peer, which is
          peer-specific: an entry still uploading is in nobody's batch, and an
          already-uploaded one is in this batch precisely when the peer cannot be
-         handed its key. Asking a different question here than the drain asks is
-         how the sentence and the send come to disagree about which files they
-         mean. -->
-    {@const releasing = liveLinkFiles(peerSupportsPreupload(releaseTarget))}
+         handed its key, or its key has not been released yet — and none of them
+         at all while that peer's lane is still undecided, because the control
+         must not name files it is not yet allowed to release. Asking a
+         different question here than the Send it re-arms will ask is how the
+         sentence and the send come to disagree about which files they mean. -->
+    {@const releasing = pendingFilesFor(releaseTarget, keysReleasedTo(releaseTarget))}
     <div class="ui-callout release-queued">
       <span>{t.workspace.queuedRelease(
         releasing.length,

@@ -28,6 +28,11 @@ import {
   type HandoffItem,
 } from "./preupload-handoff";
 import { encodeKey } from "./store-crypto";
+// The shipped sender-side gate, driven here through a real link rather than
+// stubbed: what this lane emits on attachment is exactly what that gate allows.
+import {
+  authorizeHandoff, handoffAllowed, revokeHandoff, type HandoffContext,
+} from "./handoff-authorization.svelte";
 
 interface FakeChannel {
   sent: ArrayBuffer[];
@@ -110,7 +115,7 @@ async function harness(opts: {
   consentTimeoutMsB?: number;
   /** Pre-upload key handoff wiring, per side. Omitted by every existing case, so
    *  the lane behaves exactly as it did before frame kind 12 existed. */
-  storedKeysA?: () => readonly HandoffItem[];
+  storedKeysA?: (peerId: string) => readonly HandoffItem[];
   onStoredKeysB?: (items: HandoffItem[]) => void;
   onStoredKeysA?: (items: HandoffItem[]) => void;
   /** Which peer ids announced `preupload/1`. Default: neither. */
@@ -1730,6 +1735,212 @@ describe("stored-key handoff on the file lane", () => {
     expect([...bTarget.output.get("hello.txt")!]).toEqual(bytes("hello"));
   });
 
+  it("asks WHO the frame is for, and takes no for an answer", async () => {
+    // The sender-side authorization (handoff-authorization) lives behind this
+    // pull, and it is peer-specific: "the user compared a code with THIS peer on
+    // THIS link". A pull that could not name the peer could only answer the
+    // question "may anybody have these keys", which is not the question — an
+    // authorization for one peer would release the set to whoever the next link
+    // happened to reach.
+    const got: HandoffItem[][] = [];
+    const asked: string[] = [];
+    let allowed = "";
+    const h = await harness({
+      preuploadPeers: ["a", "b"],
+      storedKeysA: (peerId) => {
+        asked.push(peerId);
+        return peerId === allowed ? [item("obj1", 1)] : [];
+      },
+      onStoredKeysB: (i) => got.push(i),
+    });
+    // attach() has already asked, about the peer this link points at.
+    await until(() => asked.length > 0);
+    expect(asked[0]).toBe("b");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(got).toEqual([]);
+    expect(h.file.a.sent.filter((f) => new Uint8Array(f)[0] === KIND_STORED_KEYS)).toEqual([]);
+
+    // The sender confirms: the same pull now answers with the whole set.
+    allowed = "b";
+    h.a.sendStoredKeys();
+    await until(() => got.length === 1);
+    expect(got[0].map((i) => i.id)).toEqual(["obj1"]);
+  });
+
+  it("carries nothing over a link built before the sender confirmed, and the whole set after", async () => {
+    // The two halves wired together over a real channel pair: the shipped gate
+    // (handoff-authorization) behind the shipped pull. This is the leak as the
+    // user meets it — a code room with advanced verification on, where the ONLY
+    // way the code the sender is told to compare gets on screen is a link, and
+    // the link is what used to hand the keys over.
+    const got: HandoffItem[][] = [];
+    const world = (peerId: string): HandoffContext =>
+      ({ peerId, roomCode: "room-1", linkGeneration: 7, verifyOn: true });
+    revokeHandoff();
+    const h = await harness({
+      preuploadPeers: ["a", "b"],
+      storedKeysA: (peerId) => (handoffAllowed(world(peerId)) ? [item("obj1", 1)] : []),
+      onStoredKeysB: (i) => got.push(i),
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(got).toEqual([]);
+    expect(h.file.a.sent.filter((f) => new Uint8Array(f)[0] === KIND_STORED_KEYS)).toEqual([]);
+
+    // A confirmation for somebody else is not a confirmation for this peer.
+    authorizeHandoff(world("somebody-else"));
+    h.a.sendStoredKeys();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(got).toEqual([]);
+
+    authorizeHandoff(world("b"));
+    h.a.sendStoredKeys();
+    await until(() => got.length === 1);
+    expect(got[0].map((i) => i.id)).toEqual(["obj1"]);
+
+    // And a withdrawal — Disconnect, a room switch, the preference changing —
+    // stops the next emission, including the automatic one a newly finished
+    // upload triggers.
+    revokeHandoff();
+    h.a.sendStoredKeys();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(got).toHaveLength(1);
+  });
+
+  it("re-asks at the wire boundary, so an authorization withdrawn mid-seal never lands", async () => {
+    // The seal is async and the emission can sit behind another one for as long
+    // as that takes. A Disconnect, a room switch or a peer change in that window
+    // revokes the authorization AFTER the set was pulled — so the last thing
+    // between the keys and the peer is a question asked again, immediately
+    // before the send.
+    const got: HandoffItem[][] = [];
+    let allowed = true;
+    const h = await harness({
+      preuploadPeers: ["a", "b"],
+      storedKeysA: () => (allowed ? [item("obj1", 1)] : []),
+      onStoredKeysB: (i) => got.push(i),
+    });
+    await until(() => got.length === 1);
+
+    let release!: () => void;
+    let sealing = false;
+    const gate = new Promise<void>((r) => { release = r; });
+    const realFrame = h.aLink.storedKeysSender.frame.bind(h.aLink.storedKeysSender);
+    h.aLink.storedKeysSender.frame = async (i, k) => {
+      const out = await realFrame(i, k); // the seq is spent right here
+      sealing = true;
+      await gate;
+      return out;
+    };
+    h.a.sendStoredKeys();
+    await until(() => sealing);
+    allowed = false; // the user disconnected while this frame was sealing
+    release();
+
+    await new Promise((r) => setTimeout(r, 20));
+    expect(got).toHaveLength(1);
+    // Dropping a sealed frame spends its seq, which the receiver absorbs as a
+    // forward gap — the same thing a dead transport mid-seal already does. So a
+    // later re-authorization is still deliverable.
+    h.aLink.storedKeysSender.frame = realFrame;
+    allowed = true;
+    h.a.sendStoredKeys();
+    await until(() => got.length === 2);
+    expect(got[1].map((i) => i.id)).toEqual(["obj1"]);
+    expect(h.b.errorKey).toBe("");
+  });
+
+  it("drops a sealed frame whose set was REPLACED mid-seal, then sends the whole current one", async () => {
+    // The other half of the same boundary, and the half a "is the answer still
+    // non-empty" check cannot see. The pull is not only an authorization; it is
+    // also the set itself, and both can move inside one seal. Here the sealed
+    // entry is released (its ciphertext is now the live lane's) and a different
+    // upload finalizes in its place — one item before, one item after — so the
+    // frame in hand names an object the peer must never be given a key to, while
+    // the count that would have vetoed it says exactly what it said before.
+    const got: HandoffItem[][] = [];
+    let set: readonly HandoffItem[] = [];
+    const h = await harness({
+      preuploadPeers: ["a", "b"],
+      storedKeysA: () => set,
+      onStoredKeysB: (i) => got.push(i),
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(got).toEqual([]); // nothing uploaded yet: attach had nothing to hand over
+
+    let release!: () => void;
+    let sealing = false;
+    const gate = new Promise<void>((r) => { release = r; });
+    const realFrame = h.aLink.storedKeysSender.frame.bind(h.aLink.storedKeysSender);
+    h.aLink.storedKeysSender.frame = async (i, k) => {
+      const out = await realFrame(i, k); // the seq is spent right here
+      sealing = true;
+      await gate;
+      return out;
+    };
+    set = [item("old", 1)];
+    h.a.sendStoredKeys();
+    await until(() => sealing);
+    set = [item("new", 2)];
+    release();
+
+    await new Promise((r) => setTimeout(r, 20));
+    // The stale frame is never sent, so the peer never learns the released key —
+    // not from this frame and not from any later one, which describe the set as
+    // it is now.
+    expect(got).toEqual([]);
+    expect(h.file.a.sent.filter((f) => new Uint8Array(f)[0] === KIND_STORED_KEYS)).toEqual([]);
+
+    // And the whole current set on the next ask, over the forward gap the
+    // dropped seq left — exactly the retry the protocol's whole-set rule buys.
+    h.aLink.storedKeysSender.frame = realFrame;
+    h.a.sendStoredKeys();
+    await until(() => got.length === 1);
+    expect(got[0].map((i) => i.id)).toEqual(["new"]);
+    expect(got.flat().map((i) => i.id)).not.toContain("old");
+    expect(h.b.errorKey).toBe("");
+  });
+
+  it("drops a sealed frame whose set SHRANK mid-seal, then sends what is left", async () => {
+    // Removal, the ordinary shape of the same hazard: two objects sealed, one
+    // released while the seal ran. The frame in hand still names both, and both
+    // a non-empty check and any count taken after the fact are satisfied by the
+    // survivor.
+    const got: HandoffItem[][] = [];
+    let set: readonly HandoffItem[] = [];
+    const h = await harness({
+      preuploadPeers: ["a", "b"],
+      storedKeysA: () => set,
+      onStoredKeysB: (i) => got.push(i),
+    });
+    await new Promise((r) => setTimeout(r, 20));
+
+    let release!: () => void;
+    let sealing = false;
+    const gate = new Promise<void>((r) => { release = r; });
+    const realFrame = h.aLink.storedKeysSender.frame.bind(h.aLink.storedKeysSender);
+    h.aLink.storedKeysSender.frame = async (i, k) => {
+      const out = await realFrame(i, k);
+      sealing = true;
+      await gate;
+      return out;
+    };
+    set = [item("keep", 1), item("gone", 2)];
+    h.a.sendStoredKeys();
+    await until(() => sealing);
+    set = [item("keep", 1)];
+    release();
+
+    await new Promise((r) => setTimeout(r, 20));
+    expect(got).toEqual([]);
+
+    h.aLink.storedKeysSender.frame = realFrame;
+    h.a.sendStoredKeys();
+    await until(() => got.length === 1);
+    expect(got[0].map((i) => i.id)).toEqual(["keep"]);
+    expect(got.flat().map((i) => i.id)).not.toContain("gone");
+    expect(h.b.errorKey).toBe("");
+  });
+
   it("sends nothing when there is nothing uploaded", async () => {
     const got: HandoffItem[][] = [];
     const { file } = await harness({
@@ -1847,12 +2058,17 @@ describe("stored-key handoff on the file lane", () => {
 
     items = [item("obj1", 1)]; // "released" went back to the live link
     release();
-    await until(() => got.length === 3);
-    // The frame that was already sealing may name it — it was true when that
-    // one was built. The frame that was still QUEUED must not: it is sent after
-    // the release, so a set captured at call time is a set that no longer
-    // exists.
-    expect(got[2].map((i) => i.id)).toEqual(["obj1"]);
+    await until(() => got.length === 2);
+    await new Promise((r) => setTimeout(r, 20));
+    // Neither frame may name it, and for the same reason on both: what a frame
+    // is allowed to say is decided where it ENTERS THE WIRE, not where it was
+    // built. The queued one pulls after the release and never names it at all;
+    // the one that was already sealing named it truthfully when it was built and
+    // is dropped at the boundary, because by the time it could be sent the set
+    // it describes no longer exists.
+    expect(got).toHaveLength(2);
+    expect(got[1].map((i) => i.id)).toEqual(["obj1"]);
+    expect(got.slice(1).flat().map((i) => i.id)).not.toContain("released");
   });
 
   it("recovers from a send that throws, and the peer takes the next set", async () => {

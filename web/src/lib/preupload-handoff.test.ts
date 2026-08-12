@@ -8,6 +8,7 @@ import {
   decodeHandoff,
   encodeHandoff,
   mergeHandoff,
+  sameHandoffSet,
 } from "./preupload-handoff";
 import {
   StoredKeysReceiver,
@@ -127,6 +128,42 @@ describe("handoff retry and idempotency", () => {
     const held = [item("a", 1)];
     mergeHandoff(held, [item("b", 2)]);
     expect(held).toHaveLength(1);
+  });
+});
+
+describe("a sealed set is still the current set", () => {
+  // The question asked immediately before a sealed handoff enters the channel.
+  // A frame describes the set it was sealed from, so the only thing that makes
+  // sending it honest is that set still being the current one — id for id, key
+  // for key, in the order the frame carries them.
+  it("accepts the identical set, by value", () => {
+    expect(sameHandoffSet([item("a", 1), item("b", 2)], [item("a", 1), item("b", 2)])).toBe(true);
+    expect(sameHandoffSet([], [])).toBe(true);
+  });
+
+  it("refuses a replacement of the same size", () => {
+    // The exact case a length check cannot see: the sealed object was released
+    // and a different one finalized while the seal ran.
+    expect(sameHandoffSet([item("old", 1)], [item("new", 1)])).toBe(false);
+  });
+
+  it("refuses a shrink, a growth and an empty answer", () => {
+    expect(sameHandoffSet([item("a", 1), item("b", 2)], [item("a", 1)])).toBe(false);
+    expect(sameHandoffSet([item("a", 1)], [item("a", 1), item("b", 2)])).toBe(false);
+    expect(sameHandoffSet([item("a", 1)], [])).toBe(false);
+  });
+
+  it("refuses the same id under a different key", () => {
+    // Re-uploading an entry keeps its name and changes what opens it. A frame
+    // naming the old key is a download the peer cannot decrypt.
+    expect(sameHandoffSet([item("a", 1)], [item("a", 2)])).toBe(false);
+  });
+
+  it("refuses the same members in a different order", () => {
+    // Not because order is meaningful to the receiver — it dedupes by id — but
+    // because "the set moved" is what this answers, and a reorder is a set that
+    // moved. The whole current set is re-sent afterwards either way.
+    expect(sameHandoffSet([item("a", 1), item("b", 2)], [item("b", 2), item("a", 1)])).toBe(false);
   });
 });
 

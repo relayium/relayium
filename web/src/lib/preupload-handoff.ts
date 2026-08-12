@@ -191,6 +191,29 @@ export function mergeHandoff(held: readonly HandoffItem[], incoming: readonly Ha
 }
 
 /**
+ * Is `current` the very set `sealed` was built from?
+ *
+ * The question a sender asks in the one place where a whole-set message stops
+ * being self-describing: between pulling the set and putting the sealed frame on
+ * the wire. Sealing is asynchronous, the set is not stable across it (an entry
+ * can be released to the live lane, replaced by a re-upload, or removed), and a
+ * frame carries the set as it was — so the last thing between the keys and the
+ * peer has to be "is this still true", not "is there still something to say".
+ *
+ * Equality is BY VALUE and ORDERED: every id, every key, in the frame's own
+ * order. Ordered because the answer is used to decide whether a frame may be
+ * sent, and a cheaper answer has to argue that some difference is harmless —
+ * which is exactly the argument that made "is it non-empty" look sufficient. A
+ * reorder costs one dropped frame and nothing else: the sender re-sends the
+ * WHOLE current set afterwards, so a false "no" here is a re-send and a false
+ * "yes" is a key the peer should not have.
+ */
+export function sameHandoffSet(sealed: readonly HandoffItem[], current: readonly HandoffItem[]): boolean {
+  if (sealed.length !== current.length) return false;
+  return sealed.every((it, i) => it.id === current[i].id && it.key === current[i].key);
+}
+
+/**
  * Cheap discriminator for the file channel's onmessage demux.
  *
  * The KIND decides, and nothing else — including for a frame too short to be a

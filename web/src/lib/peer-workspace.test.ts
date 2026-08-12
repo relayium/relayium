@@ -140,6 +140,71 @@ describe("peer workspace capability routing", () => {
     expect(mixedFiles).toHaveBeenCalledWith("z", picked);
   });
 
+  // The pre-upload handoff's own intent. A batch that finished uploading before
+  // anybody joined has NOTHING for the live link — the keys are the whole
+  // transfer — so there is no batch to send and no conversation to open, and yet
+  // a link has to exist for frame kind 12 to travel on and for the verification
+  // code to be on screen. Expressed as its own call rather than as an empty
+  // batch (a manifest with no files in it) or a text session nobody asked for.
+  describe("preparing the key handoff", () => {
+    it("builds a link for a routed peer without starting any transfer", async () => {
+      const h = setup();
+      const mixedFiles = vi.spyOn(h.workspace.mixed.file, "enqueue").mockImplementation(() => {});
+      const mixedText = vi.spyOn(h.workspace.mixed.text, "openWith").mockResolvedValue();
+
+      h.workspace.prepareHandoff("z");
+      await vi.waitFor(() => expect(h.workspace.hasLink).toBe(true));
+      expect(h.workspace.linkPeerId).toBe("z");
+      expect(mixedFiles).not.toHaveBeenCalled();
+      expect(mixedText).not.toHaveBeenCalled();
+      expect(h.legacyFiles.sendFiles).not.toHaveBeenCalled();
+      expect(h.legacyText.openWith).not.toHaveBeenCalled();
+      h.workspace.stop();
+    });
+
+    it("refuses a peer that cannot carry the frame at all", async () => {
+      // `old` does not speak link/1, so it has no unified link — and the legacy
+      // transport has no handoff frame. Building anything for it would be a
+      // connection with nothing to say; those entries reach it through the live
+      // lane's own release instead (handoff-lane's `drainFor`).
+      const h = setup();
+      h.workspace.prepareHandoff("old");
+      h.workspace.prepareHandoff("");
+      await new Promise((r) => setTimeout(r, 10));
+      expect(h.connect).not.toHaveBeenCalled();
+      expect(h.legacyFiles.sendFiles).not.toHaveBeenCalled();
+      expect(h.legacyText.openWith).not.toHaveBeenCalled();
+    });
+
+    it("does not rebuild a link the user just disconnected", async () => {
+      // It is an AUTOMATIC step, and the suppression window after an explicit
+      // Disconnect is what stops one. Without this the workspace the user closed
+      // comes straight back, because the pre-uploaded entries are still there
+      // and still owed.
+      const h = setup();
+      h.workspace.start();
+      await h.workspace.mixed.ensure("z");
+      expect(h.connect).toHaveBeenCalledOnce();
+      h.workspace.disconnect();
+
+      h.workspace.prepareHandoff("z");
+      await new Promise((r) => setTimeout(r, 10));
+      expect(h.connect).toHaveBeenCalledOnce();
+      // An explicit intent is not suppressed, exactly as before.
+      await h.workspace.openText("z");
+      expect(h.connect).toHaveBeenCalledTimes(2);
+      h.workspace.stop();
+    });
+
+    it("refuses while the workspace's own exclusion rules say no", async () => {
+      const h = setup();
+      Object.defineProperty(h.legacyFiles, "transferActive", { get: () => true });
+      h.workspace.prepareHandoff("z");
+      await new Promise((r) => setTimeout(r, 10));
+      expect(h.connect).not.toHaveBeenCalled();
+    });
+  });
+
   it("blocks both legacy inbound generations while one mixed link exists", async () => {
     const h = setup();
     await h.workspace.mixed.ensure("z");

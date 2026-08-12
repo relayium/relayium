@@ -24,6 +24,13 @@
 // Stored per-device in localStorage, like the transfer-history preference, and
 // for the same reasons: it is a property of this browser rather than of the
 // account, and there is no account at all on the joining side of a code room.
+//
+// Changing it is not only a display decision, which is why this module reaches
+// for the handoff authorization below: a confirmation the user gave while the
+// SAS was on screen is a decision made under this preference, and it does not
+// outlive it. See `apply`.
+
+import { revokeHandoff } from "./handoff-authorization.svelte";
 
 /** Present only once the user has turned the preference ON. An absent key is
  *  the default, so a device that never opens the setting keeps behaving the
@@ -49,8 +56,36 @@ export function verifyPeers(): boolean {
   return on;
 }
 
-export function setVerifyPeers(next: boolean): void {
+/**
+ * Move the preference, and drop anything the user decided under the old one.
+ *
+ * The only decision that qualifies today is the pre-upload handoff
+ * authorization, and it is exactly the kind that must not survive: it is a
+ * record of "the user compared this link's SAS with this peer", and the SAS is
+ * on screen only while this preference is ON. `handoffAllowed` already refuses a
+ * grant whose recorded preference differs from the current one, which catches a
+ * single change — and misses the ROUND TRIP. On → off → on puts `verifyOn: true`
+ * back on both sides of that comparison, so a confirmation given before the user
+ * changed their mind twice would come back into force without anyone being asked
+ * again.
+ *
+ * Here rather than in App's change handler, because a handler is one call site
+ * that has to remember and this is the only way the preference moves at all. The
+ * revocation happens BEFORE the value changes and in the same synchronous call,
+ * so no reactive reader — and no emission riding one — can ever observe the new
+ * preference while the old grant still answers yes.
+ *
+ * A write that does not change the value is not the user changing their mind, so
+ * it revokes nothing: dropping a live grant on a repeated write would put the
+ * confirmation bar back in the middle of a handoff the user already authorized.
+ */
+function apply(next: boolean): void {
+  if (next !== on) revokeHandoff();
   on = next;
+}
+
+export function setVerifyPeers(next: boolean): void {
+  apply(next);
   try {
     if (next) localStorage.setItem(ON_KEY, "1");
     else localStorage.removeItem(ON_KEY);
@@ -61,7 +96,9 @@ export function setVerifyPeers(next: boolean): void {
 }
 
 /** Test seam: drop the in-memory value back to whatever storage says. Not used
- *  by the app — a page load runs `load()` once, at module init. */
+ *  by the app — a page load runs `load()` once, at module init. Through the same
+ *  door as the setter, so a seam cannot be the one way the preference moves
+ *  without taking the decisions made under it with it. */
 export function reloadVerifyPeers(): void {
-  on = load();
+  apply(load());
 }

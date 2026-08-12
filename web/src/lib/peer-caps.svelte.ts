@@ -114,6 +114,32 @@ export function recordPeerCaps(peerId: string, data: unknown): boolean {
   return true;
 }
 
+/**
+ * Whether this peer has announced AT ALL — the third state the predicates below
+ * deliberately do not have.
+ *
+ * Every `peerSupportsX` here answers a two-valued question, because for the
+ * things they gate that is the right shape: not announcing `text/1` and
+ * announcing `text/2` both mean "do not offer this peer a message session", and
+ * the cost of being wrong for one roster tick is an offer not made. Nothing is
+ * destroyed by guessing "no" early.
+ *
+ * `preupload/1` is the one capability where that is false. The "no" branch there
+ * returns already-uploaded ciphertext to the live lane and discards the only
+ * keys that could ever open it (outbox' `releaseUploaded`), so a "no" said
+ * before the hello has had time to arrive is not a cheap guess — it is the
+ * handoff, spent. This separates "the peer said no" from "the peer has not said
+ * anything yet" so the one caller that must tell them apart can.
+ *
+ * It is about the ROSTER announcement only, exactly like the predicates above,
+ * and it is pruned by `retainPeers` with everything else. A caller that needs an
+ * answer to survive a roster prune has to remember it (handoff-lane.svelte.ts
+ * does, and says why).
+ */
+export function peerCapsKnown(peerId: string): boolean {
+  return announced[peerId] !== undefined;
+}
+
 /** Exact match, deliberately: "text/2" is a different wire and must not be
  *  read as this one. */
 export function peerSupportsText(peerId: string): boolean {

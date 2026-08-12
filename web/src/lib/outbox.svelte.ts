@@ -103,6 +103,25 @@ export function uploadedFingerprint(): string {
 }
 
 /**
+ * How many entries are finished ciphertext on the server right now.
+ *
+ * The question "does this batch have anything a key handoff could carry?", asked
+ * by the send gate before it knows WHO joined. A batch with none of these is a
+ * batch pre-upload never touched — every LAN queue, and every code room before
+ * the first finalize — and the gate must behave for it exactly as it did before
+ * pre-upload existed. A batch with some of them is one whose lane cannot be
+ * chosen until the joiner's capability is settled (handoff-lane.svelte.ts).
+ *
+ * Reads `states`, so it re-runs on the transition that creates one
+ * (`markUploaded`) and on the ones that end it (`releaseUploaded`, a removal).
+ */
+export function uploadedCount(): number {
+  let n = 0;
+  for (const e of states) if (e?.state === "uploaded" && e.ref) n++;
+  return n;
+}
+
+/**
  * How many entries the LIVE LINK is still responsible for.
  *
  * The number every "is there anything to send?" decision must read, and the
