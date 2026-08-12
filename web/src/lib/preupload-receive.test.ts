@@ -559,9 +559,9 @@ describe("failure is never reported as success", () => {
 // sender's blind whole-set resending correct used to be claimed at OFFER time,
 // which meant a single transient failure — one 500, one dropped socket — turned
 // every later resend into a no-op: the card said "try again", nothing ever
-// tried, and the files stayed in storage for good — a joined room has no
-// deadline and no fallback expiry, so nothing but an explicit completion, an
-// operator or account deletion ever removes them. What is
+// tried, and the files stayed in storage — a joined room has no deadline and no
+// fallback expiry, so nothing but an explicit completion, the sender's own
+// release of that room, or account deletion ever removes them. What is
 // permanent is a DELIVERED id and a DECLINED id. A FAILED one is exactly the
 // thing a retry is for.
 describe("a failure is retried, and a success and a refusal are not", () => {
@@ -1205,17 +1205,19 @@ describe("a partial failure is reported as partial", () => {
 
 // --- Completion: telling the server it can let the ciphertext go -------------
 //
-// A joined pair room has NO deadline (§2), so the only thing that ever ends an
-// object's storage is a receiver saying "I have it" (§7). That makes this the
-// most consequential message this client sends: it deletes the only copy, and
-// the deletion is not reversible.
+// A joined pair room has NO deadline (§2), so the only thing THIS side can ever
+// do about an object's storage is say "I have it" (§7) — the other exit, the
+// owner releasing the room (§8), is not the receiver's to reach. That makes this
+// the most consequential message this client sends: it deletes the only copy,
+// and the deletion is not reversible.
 //
 // Every case here asks one question — WHEN is that claim true? — and the answers
 // are asymmetric on purpose. NOT spending the capability costs the sender
-// storage that nothing else will release: a joined room has no fallback expiry,
-// so the object is held until the account is deleted. Spending it early costs
-// the user the file. Both are open-ended, and the second is the one nobody can
-// undo, so every ambiguity below resolves toward not spending it.
+// storage no clock will ever release: a joined room has no fallback expiry, so
+// the object is held until the sender releases that room by hand or deletes the
+// account. Spending it early costs the user the file. Neither side is bounded by
+// a clock, and the second is the one nobody can undo, so every ambiguity below
+// resolves toward not spending it.
 
 /** The proof the receiver must send for an object, derived the way the protocol
  *  says: HKDF over the file key it was handed. Recomputed here from the KEY

@@ -465,9 +465,10 @@ describe("the deadline a finished pre-upload reports", () => {
   it("drops it the moment the server says the room is over", async () => {
     // A 410 is the authority, and it outranks every deadline this client was
     // ever given: the window an earlier file bought can still be in the future
-    // when the room is voided early (an operator, a deleted account), and a card
-    // counting that window down would go on offering a rendezvous whose
-    // ciphertext the server has already deleted.
+    // when the room is already over on the server (a deleted account, or a
+    // deadline this client was never the authority on), and a card counting that
+    // window down would go on offering a rendezvous whose ciphertext the server
+    // has already deleted.
     installFakeServer({ finalizeExpiry: () => NOW() + 300 });
     addToOutbox([pf("a.bin")]);
     await run();
@@ -721,8 +722,9 @@ describe("the capability gate", () => {
     // reaches the receiver. It stayed false for a whole checkpoint because
     // uploading what this client could not hand off is strictly worse than not
     // uploading — the receiver joins, gets no key, and the objects stay in
-    // storage for good: a joined room has no deadline and no fallback expiry,
-    // so nothing but an operator or account deletion removes them.
+    // storage: a joined room has no deadline and no fallback expiry, so nothing
+    // but the account releasing that room by hand, or deleting itself, removes
+    // them.
     expect(preuploadSenderReady()).toBe(true);
     const server = installFakeServer();
     addToOutbox([pf("a.bin")]);

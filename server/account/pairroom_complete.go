@@ -17,10 +17,16 @@ import (
 //
 // THE PROBLEM IT EXISTS FOR. Invariant 5 in pairroom.go is literal — once a peer
 // joins, nothing about the transfer is on a clock — so a joined room's ciphertext
-// has no deadline that removes it. That is an unbounded storage commitment, and
-// it is the whole reason pre-upload is off unless a deployment opts in. The
-// missing piece was never a timer (a timer is the rule reinterpreted); it is a
-// receiver saying "I have it, you can let go".
+// has no deadline that removes it. That is a storage commitment nothing the
+// server runs will ever end, and it is the whole reason pre-upload is off unless
+// a deployment opts in. The missing piece was never a timer (a timer is the rule
+// reinterpreted); it is a receiver saying "I have it, you can let go".
+//
+// This is the RECEIVER's exit and it is not always reachable: only a destination
+// that commits the bytes to disk itself may spend a completion (protocol §7.6),
+// so a browser handoff — a Blob download, a ZIP, a service-worker stream — never
+// does. The owner's own release (pairroom_owner.go) is the exit that always
+// exists. Neither is a clock.
 //
 // WHY A DERIVED PROOF RATHER THAN THE OBJECT ID. The id is not a secret worth
 // anything on its own — it travels in the same sealed frame as the key, but it is

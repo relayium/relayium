@@ -185,11 +185,11 @@ function livesOnLink(index: number, peerTakesKeys: boolean): boolean {
  * the user staged simply never arrives.
  *
  * The stored object is deliberately NOT deleted here: asking the server to drop
- * it would be a second failure path on the way out of the first. Nothing else
+ * it would be a second failure path on the way out of the first. No clock
  * reclaims it either — the peer has JOINED, and a joined room has no deadline
- * and no fallback expiry, so an object no completion ever names is held until an
- * operator or account deletion removes it. The bytes are spent either way — the
- * transfer is not.
+ * and no fallback expiry — so an object no completion ever names is held until
+ * the account releases that room by hand or the account is deleted. The bytes
+ * are spent either way — the transfer is not.
  *
  * Returns how many entries moved, so a caller can tell "nothing to do" from
  * "the batch just changed lanes" without re-deriving it.

@@ -18,7 +18,7 @@ import (
 // (pairroom_complete.go). What was missing is the account's own view. A joined
 // room appears in no list — the share list is deliberately shares only
 // (handleListFiles) — so an account could be charged, permanently, for storage it
-// has no way to see and no way to release. Charged and invisible is the one
+// had no way to see and no way to release. Charged and invisible is the one
 // combination an account surface may not leave standing, and it is worth being
 // precise about which of the two this fixes: the charge is correct and stays;
 // the invisibility is the bug.
@@ -121,14 +121,14 @@ const (
 // to a 410 (see ClosePairRoom's doc). Nothing is left pointing at ciphertext.
 //
 // THE CLOSE reuses the same close transaction and physical reclaim machinery as
-// voidPairRoom. The room's code is revoked under the same owner-and-deadline
-// bound (so a release can never take back digits that have since been minted to
-// somebody else), and the close transaction
-// settles and deletes every bound session, deletes the object rows and queues a
-// DURABLE delete intent for every blob before anything can fail, and the physical
-// deletion is the bounded best-effort half that an unreachable node can only
-// delay. Quota is released when that transaction commits, not when a node
-// answers.
+// voidPairRoom, but only after that transaction proves no upload session remains
+// bound; otherwise it refuses the release. The room's code is revoked under the
+// same owner-and-deadline bound (so a release can never take back digits that
+// have since been minted to somebody else), and the close transaction deletes
+// the object rows and queues a DURABLE delete intent for every blob before
+// anything can fail. Physical deletion is the bounded best-effort half that an
+// unreachable node can only delay. Quota is released when that transaction
+// commits, not when a node answers.
 func (s *Service) releasePairRoom(ctx context.Context, userID, roomID string) (pairRoomRelease, error) {
 	room, found, err := s.store.GetPairRoom(ctx, roomID)
 	if err != nil {

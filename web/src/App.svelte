@@ -624,10 +624,12 @@
    * "send it the ordinary way", which is wasteful and correct — the alternative
    * failure (wait for an announcement that never comes) loses the files.
    *
-   * The stored object is not deleted, and nothing reclaims it: by the time this
-   * runs the peer has JOINED, and a joined room has no deadline and no fallback
-   * expiry, so an object no completion ever names is held until an operator or
-   * account deletion removes it.
+   * The stored object is not deleted, and nothing reclaims it on a clock: by the
+   * time this runs the peer has JOINED, and a joined room has no deadline and no
+   * fallback expiry. No completion is coming either — the peer that would spend
+   * one never learned the keys — so it is held until the sender's own account
+   * releases that room (the pairing-transfer storage list on /me) or the account
+   * is deleted.
    */
   function drainFor(peerId: string): PickedFile[] {
     if (!peerSupportsPreupload(peerId)) releaseUploaded();
@@ -723,9 +725,9 @@
    * still IN FLIGHT when the peer joined is allowed to finish (the protocol
    * refuses only a new init), so a new object appears on an already-open link
    * minutes after the first handoff. Without this the receiver is never told
-   * about it — and nothing ends it: the peer has joined, so the room has no
+   * about it — and no clock ends it: the peer has joined, so the room has no
    * deadline and no fallback expiry, and an object no completion names is held
-   * until an operator or account deletion removes it.
+   * until its owner releases the room or the account is deleted.
    *
    * Re-sending the whole set rather than the delta is the protocol's own rule,
    * and it is why over-sending here is CHEAP — the receiver dedupes by id, so a
@@ -1638,8 +1640,9 @@
   <!-- Files the peer uploaded against the pairing code before this device
        joined, handed over as keys the moment it did. Above the live-link cards
        because it is the thing that is already finished waiting: the ciphertext
-       exists, and nothing but taking delivery ends it — this device has joined,
-       so the room has no deadline and no fallback expiry. -->
+       exists, and no clock ends it — this device has joined, so the room has no
+       deadline and no fallback expiry. Taking delivery is the only thing THIS
+       device can do about it; the other end can release the room itself. -->
   <StoredIncoming receiver={storedReceiver} />
 
   {#if pendingPeer}

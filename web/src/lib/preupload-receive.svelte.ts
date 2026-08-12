@@ -87,9 +87,10 @@ const RETRYABLE_ERRORS: ReadonlySet<StoredReceiveError> = new Set<StoredReceiveE
  * moment it was OFFERED made every one of these states mean "never mention this
  * again" — so one transient 500, or one dropped socket, permanently disabled the
  * retry that the sender was faithfully performing on every reconnect. The card
- * said "try again", nothing ever tried, and the files stayed in storage for
- * good — a joined room has no deadline and no fallback expiry, so nothing but
- * an explicit completion, an operator or account deletion ever removes them.
+ * said "try again", nothing ever tried, and the files stayed in storage — a
+ * joined room has no deadline and no fallback expiry, so nothing but an explicit
+ * completion, the sender's own release of that room, or account deletion ever
+ * removes them.
  *
  * `held` — queued, being resolved, or on screen right now. Not offered twice.
  * `done` — written. Never fetched again: that would bill the sender for bytes
@@ -121,7 +122,8 @@ export interface StoredReceiveDeps {
  * user is waiting for depends on it, nothing they see changes with it, and what
  * giving up costs is a sender's storage — not the user's file. It is a real
  * cost and an open-ended one, because a joined room has no fallback expiry: an
- * object this gives up on is held until the account is deleted. Grinding an
+ * object this gives up on is held until its owner releases that room by hand, or
+ * the account is deleted. Grinding an
  * unreachable server for minutes is still not how to buy that back: it spends
  * the shared per-IP budget that the next receiver's DOWNLOAD needs, on
  * something nobody is waiting for.
@@ -335,7 +337,7 @@ export function createStoredReceiver(deps: StoredReceiveDeps = {}): StoredReceiv
    * and declining the next offer says nothing about it. Sharing the token would
    * therefore strand the previous batch's completion silently, and a joined room
    * has no deadline to fall back on: the sender's ciphertext would then be held
-   * until the account is deleted.
+   * until the sender releases that room by hand, or deletes the account.
    *
    * So this pair is bumped and aborted by `reset()` alone, which is the one
    * event that really does end everything: the user left the room, or a new
@@ -694,10 +696,11 @@ export function createStoredReceiver(deps: StoredReceiveDeps = {}): StoredReceiv
         // save went: its close()/done() is an `<a download>` click or a service
         // worker stream, and the download can still fail out of our sight. The
         // user keeps their files either way; the sender keeps their ciphertext,
-        // and — a joined room having no fallback expiry — keeps it until the
-        // account is deleted. Open-ended storage is still the cheap side of this
-        // trade: it is the owner's to measure and reclaim, while a file lost to
-        // an early completion is nobody's to get back.
+        // and — a joined room having no fallback expiry — keeps it until they
+        // release that room themselves or delete the account. Open-ended storage
+        // is still the cheap side of this trade: the sender can see it and take
+        // it back (the pairing-transfer storage list on /me), while a file lost
+        // to an early completion is nobody's to get back.
         if (target.delivery === "localCommit") void queueCompletions(runningItems);
       } catch (e) {
         if (mine !== epoch) return;
@@ -737,8 +740,9 @@ export function createStoredReceiver(deps: StoredReceiveDeps = {}): StoredReceiv
       // for a batch that is neither is the kind of thing a later reader cleans
       // up, taking the refusal with it. The ciphertext outlives the refusal: a
       // decline is not a completion, and a joined room has no deadline to fall
-      // back on, so the sender's copy is held until an operator or account
-      // deletion removes it.
+      // back on, so the sender's copy is held until the SENDER releases that room
+      // or deletes the account. Declining costs this user nothing and the sender
+      // storage, which is the trade the protocol chose deliberately.
       for (const o of batch) decided.set(o.item.id, "rejected");
       // Anything already in flight for this batch — an open save picker above
       // all — is now answering a question that has been answered the other way.

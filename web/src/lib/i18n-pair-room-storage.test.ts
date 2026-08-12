@@ -174,6 +174,47 @@ describe("pairStorage copy — 必须说的", () => {
     expect(m.releaseAria("room-abc"), `${code}.releaseAria`).toContain("room-abc");
     expect(m.truncated(200), `${code}.truncated`).toContain("200");
   });
+
+  // 生命周期本身，正面钉住，九种语言各一条。
+  //
+  // 隔壁那条「不能说的」只挡住了反面：文案不许暗示这些副本会自己到期。可它挡不住
+  // 文案对这件事**闭口不谈**——而沉默恰恰是最糟的那种，因为用户对"服务器上的东西"
+  // 的默认预期就是"过一阵子会清掉"。一段既没说会过期、也没说不会过期的介绍，读者
+  // 会自动补上错的那半句，然后什么都不做。
+  //
+  // 服务端 invariant 5 是字面意义的：已配对的房间没有任何时钟。副本只在三种情况下
+  // 消失——对方确认收到、你自己按下释放、账号被注销。这个界面是其中第二种的唯一
+  // 入口，所以这两句（"没有倒计时"和"要你来释放"）必须同时在场：只说前一句是在
+  // 陈述一个无解的问题，只说后一句会被读成"我不释放也会有别的机制兜底"。
+  it.each(codes)("%s 同时说清了没有倒计时、以及要由你来释放", (code) => {
+    const intro = locales[code].pairStorage.intro.toLowerCase();
+    // 一行一种语言手写：断言"这句话还在说这件事"，只有在有人真的读过那句译文、
+    // 并写下了它在那种语言里的说法时才算数。
+    const noTimer: Record<Code, string> = {
+      en: "no timer",
+      zh: "没有任何倒计时",
+      ja: "時間で消えることはありません",
+      ko: "시간이 지나도 사라지지",
+      de: "keine frist",
+      fr: "aucun délai",
+      ar: "لا مؤقّت",
+      es: "ningún temporizador",
+      pt: "nenhum temporizador",
+    };
+    const youRelease: Record<Code, string> = {
+      en: "until you release them",
+      zh: "在你释放之前",
+      ja: "解放するまで",
+      ko: "해제할 때까지",
+      de: "bis du sie freigibst",
+      fr: "jusqu'à ce que vous les libériez",
+      ar: "إلى أن تحرّرها",
+      es: "hasta que las liberes",
+      pt: "até você liberá-las",
+    };
+    expect(intro, `${code}.intro 必须明说没有任何倒计时会清掉它们`).toContain(noTimer[code].toLowerCase());
+    expect(intro, `${code}.intro 必须明说要由用户自己释放`).toContain(youRelease[code].toLowerCase());
+  });
 });
 
 describe("pairStorage copy — 不能说的", () => {

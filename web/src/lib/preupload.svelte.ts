@@ -186,10 +186,11 @@ function noteDeadline(code: string, expiresAt: number): void {
  * dressed up as a rule: the announcement means "I can send frame kind 12", and
  * frame kind 12 is the only way an uploaded object's key ever reaches the
  * receiver. A build that uploads without it produces ciphertext nobody can open
- * — the receiver joins, is handed nothing, and the objects stay in storage for
- * good: a joined room has no deadline and no fallback expiry, so with no
- * completion ever spent against them, nothing but an operator or account
- * deletion removes them. That is strictly worse than not pre-uploading at all.
+ * — the receiver joins, is handed nothing, and the objects stay in storage: a
+ * joined room has no deadline and no fallback expiry, so with no completion ever
+ * spent against them, nothing but the account releasing that room by hand, or
+ * deleting itself, removes them. That is strictly worse than not pre-uploading
+ * at all.
  *
  * So the checkpoint that wires the handoff turned the sender on by announcing
  * the capability, and nothing else can. It is true from that checkpoint on
@@ -483,9 +484,10 @@ function continueAfter(e: unknown, code: string, onWire: boolean): boolean {
       closed = true;
       notice = "expired";
       // And it outranks every deadline this module was ever handed. A window an
-      // earlier file bought can still be in the future when the room is voided
-      // early — an operator, a deleted account — and a card counting that window
-      // down would go on offering a rendezvous the server has already emptied.
+      // earlier file bought can still be in the future when the room is already
+      // over on the server — the account was deleted, or this client's copy of
+      // the deadline was simply never the authority — and a card counting that
+      // window down would go on offering a rendezvous the server has emptied.
       // The server is the authority on the room being over; nothing this client
       // was told before that may argue with it — including this module's own
       // "I could not tell", which is a statement about missing evidence and has

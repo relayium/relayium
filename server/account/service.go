@@ -241,23 +241,27 @@ type Service struct {
 	//
 	// Off by default, and that default is load-bearing rather than cautious. The
 	// owner's rule is that a joined transfer has NO deadline of any kind, so
-	// nothing removes a joined room's ciphertext except a receiver explicitly
-	// completing it.
+	// nothing the server RUNS ever removes a joined room's ciphertext: it goes
+	// when the receiver completes it (pairroom_complete.go), when the owning
+	// account releases the room (pairroom_owner.go), or when that account is
+	// deleted.
 	//
-	// That completion capability now EXISTS (pairroom_complete.go): a sender may
-	// record one at finalize and a receiver holding the file key may spend it. It
-	// is a foundation, not a rollout, and this flag stays off until three separate
-	// things are true, none of which this checkpoint settles:
+	// Both feature-specific exits are now built and wired — the Web receiver posts
+	// completions, and the account can list and release what is left. The flag
+	// still stays off, because what remains is not a missing mechanism:
 	//
-	//   1. the Web receiver actually posts a completion — until then the
-	//      capability is recorded and never exercised, so it frees nothing;
-	//   2. the owner has decided what becomes of a joined room nobody completes
-	//      (a decline is deliberately NOT treated as a completion, and no
-	//      fallback expiry has been invented to stand in for one);
-	//   3. the rollout gates for the storage commitment in (2) are closed.
+	//   1. only a receiver whose destination commits the bytes to disk itself may
+	//      complete (protocol §7.6), so every Firefox, Safari and phone receiver
+	//      saves normally and completes nothing;
+	//   2. the owner has not decided what becomes of a joined room nobody
+	//      completes (a decline is deliberately NOT treated as a completion, no
+	//      fallback expiry has been invented to stand in for one, and the release
+	//      in (pairroom_owner.go) is a control somebody operates rather than an
+	//      answer to this);
+	//   3. the rollout gates for the storage commitment in (1)+(2) are open.
 	//
-	// Enabling it before then means every joined room is stored indefinitely at
-	// the operator's expense. See pairroom.go's invariants 5 and 8.
+	// Enabling it before then means the rooms in (1) are stored until their owner
+	// hand-releases them. See pairroom.go's invariants 5 and 8.
 	preUpload bool
 	// pairJoins holds pairing-code joins the server observed on its own websocket
 	// but could not persist. It is both a retry queue and, while an entry is in
@@ -425,16 +429,20 @@ func (s *Service) SetDirectDownload(on bool) { s.directDownload = on }
 // SetPreUpload toggles pair-room pre-upload (default off). Read pairroom.go's
 // invariants 5 and 8 before turning it on.
 //
-// A joined room still has no deadline. The completion capability that can end one
-// is now built (pairroom_complete.go) but is not yet exercised by any client, the
-// question of what happens to a room nobody completes is still the owner's to
-// answer, and the rollout gates are open — so in practice a joined room's
-// ciphertext is stored until the account is deleted, exactly as before.
+// A joined room still has no deadline, and nothing here adds one. Its ciphertext
+// goes when the receiver completes it (pairroom_complete.go), when the account
+// releases the room (pairroom_owner.go), or when the account is deleted. The
+// rollout gates are open because most receivers cannot complete at all (protocol
+// §7.6) and what becomes of a room nobody completes is still the owner's to
+// answer — so a deployment that turns this on is agreeing to hold that storage
+// until somebody asks for it back.
 //
 // Off, `purpose=pair_room` is refused with 503 and no room is ever created, which
 // is exactly the behaviour of a server that never heard of the feature. The
-// completion route stays mounted either way and simply finds nothing to complete,
-// since without this flag no pair-room object can exist.
+// completion route and the owner's two routes stay mounted either way and simply
+// find nothing to complete or release, since without this flag no pair-room
+// object can exist — and a deployment that turns the flag off after rooms exist
+// must not thereby strand them.
 func (s *Service) SetPreUpload(on bool) { s.preUpload = on }
 
 // Store returns the account data store. Exported so the commercial

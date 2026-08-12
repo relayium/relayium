@@ -125,12 +125,25 @@ after the deadline that caused it (the GC sweep is ten minutes behind).
 
 **Joining ends every clock.** A joined transfer is never cut off by one, and
 that is meant literally: there is no transfer deadline and no readability
-deadline either. Nothing but an explicit COMPLETION (§7), account deletion, or an
-operator removes a joined room's bytes. A completion is a capability a receiver
-spends, not a clock: it cannot fire on its own, no amount of time performs one,
-and it therefore adds no deadline of any kind to this rule. Until a client
-actually posts completions this remains an unbounded storage commitment per
-joined room, which is exactly why pre-upload is off unless a deployment opts in.
+deadline either. Exactly three things remove a joined room's bytes, and none of
+them is a clock:
+
+1. an explicit COMPLETION the receiver spends (§7);
+2. an explicit RELEASE the owning account asks for, one room at a time (§8);
+3. the account being deleted.
+
+Both of the first two are things somebody DOES. A completion cannot fire on its
+own and no amount of time performs one; a release happens only because the owner
+named that room, by id, in a request. Neither adds a deadline of any kind to
+this rule, and neither may be turned into one. There is no route by which the
+server ends a joined room on its own, and no operator endpoint that removes one
+either — the account's own release is the manual exit, not an admin action.
+
+What that leaves is a storage commitment whose ceiling is the owner's attention
+rather than a number: a room whose receiver cannot complete (§7.6 — every
+Firefox, Safari and phone receiver is in that class) sits until somebody
+releases it. Visible and reclaimable is not the same as bounded, which is why
+pre-upload is still off unless a deployment opts in.
 The join is stamped exactly once — a reconnect does not re-stamp it.
 
 **Void means gone, now.** Every truth-bearing read or write of a pair-room
@@ -445,8 +458,9 @@ never sees the file arrive. The sender therefore returns those entries to the
 live-link lane at the moment it drains the batch for that peer. The bytes are
 spent either way; the transfer is not. The stored objects are not deleted, and
 nothing reclaims them on a clock: the room is joined by then, so §2 leaves it no
-deadline and §7.5 no fallback one, and that ciphertext is held until an operator
-or account deletion removes it.
+deadline and §7.5 no fallback one. That ciphertext is held until the owner
+releases the room (§8) or the account is deleted — a completion is not coming
+for it, because the peer that would have spent one never learned the keys.
 
 **That fallback is only real if the gate in front of it is peer-specific.** The
 condition every send decision tests MUST be "how many entries does the live link
@@ -485,9 +499,9 @@ without a rule reads as "the receiver joined and then nothing happened".
   looks like the same rule and is not: it makes one transient failure — a single
   5xx, one dropped socket — permanently disable the retry the sender is
   faithfully performing on every reconnect, so the receiver shows a "try again"
-  that can never try and the objects stay in storage for good: the room is
-  joined, so §2 leaves it no deadline and §7.5 no fallback one, and nothing but
-  an explicit completion, an operator or account deletion ever removes them.
+  that can never try and the objects stay in storage: the room is joined, so §2
+  leaves it no deadline and §7.5 no fallback one, and nothing but an explicit
+  completion, the owner's own release (§8) or account deletion ever removes them.
   A failure the receiver cannot survive by retrying (the ciphertext is gone; the
   key does not open its object) IS permanent, and must not be re-offered either —
   a retry there is a request with a guaranteed failure behind it.
@@ -497,8 +511,8 @@ without a rule reads as "the receiver joined and then nothing happened".
 - **A receiver that never got a handoff MUST NOT claim success.** It reports that
   the sender left before handing over the keys. The objects are not deleted by
   that report and no clock deletes them either — the room is joined, so they are
-  held until an operator or account deletion removes them (§2, §7.5) — but
-  nothing is silently half-transferred.
+  held until the owner releases the room or the account is deleted (§2, §7.5,
+  §8) — but nothing is silently half-transferred.
 - **A partial failure is reported as partial.** "All or nothing" is the rule for
   what the receiver CLAIMS, not a description of what a disk contains: on a save
   target that flushes each file as it closes (a chosen folder, per-file browser
@@ -580,14 +594,18 @@ without a rule reads as "the receiver joined and then nothing happened".
 **Status: the LANE is complete end to end; production is OFF.** The server
 accepts and checks completions, the Web sender records the capability, and the
 Web receiver spends it — under the rules in §7.6, which are narrower than "after
-a successful save". The two questions in §7.5 are still the owner's to answer,
-and no other client posts one yet (the CLI and the native clients receive, and
-do not complete). Nothing in this section is reachable on a deployment with
-pre-upload off, which is every deployment today.
+a successful save" and which no browser without File System Access can meet. The
+two questions in §7.5 are still the owner's to answer, and no other client posts
+one yet (the CLI and the native clients receive, and do not complete). Nothing in
+this section is reachable on a deployment with pre-upload off; Relayium's
+official production deployment is in that state today.
 
-§2 says a joined room's ciphertext has no deadline. Completion is the other half
-of that rule rather than a retreat from it: the thing that ends a joined
-transfer is the receiver saying it has the file, and nothing else.
+§2 says a joined room's ciphertext has no deadline. Completion is the
+receiver-controlled way §2 allows one to end, and it is the only exit the
+RECEIVER can reach: the transfer ends because the receiver says it has the file.
+The owner's release (§8) is the account-controlled exit, and it exists because
+§7.6 means a large class of receivers can never honestly say it. Account
+deletion remains the final, account-wide exit.
 
 ### 7.1 The capability
 
@@ -727,12 +745,17 @@ complete). A sweep closes such rooms after a grace period long enough that
 - **There is no fallback expiry.** What becomes of a joined room nobody ever
   completes is an open owner decision. Inventing a timer to stand in for one
   would be exactly the reinterpretation of §2 that this document already refused
-  once: a rule the code reinterprets is not the rule.
-- Until those are answered, pre-upload stays off. The Web receiver now posts
-  completions (§7.6), so the lane no longer has a *missing* half — but a room
-  nobody completes still has no end, and §7.6 is explicit that a large class of
-  browsers (Firefox, Safari, every phone) can never honestly complete at all.
-  Both are reasons the flag is still a rollout decision rather than a switch.
+  once: a rule the code reinterprets is not the rule. §8 is not that answer and
+  must not be read as one: it is a control the account operates, so a room whose
+  owner never looks at it is exactly where it was.
+- Until those are answered, pre-upload stays off, and this is a rollout decision
+  rather than a switch. Both halves the flag was waiting on now exist — the Web
+  receiver posts completions (§7.6) and the owner can see and release what is
+  left (§8) — so what remains is not a missing mechanism but an unresolved
+  shape: §7.6 is explicit that a large class of browsers (Firefox, Safari, every
+  phone) can never honestly complete at all, so for those senders the storage is
+  ended by hand or not at all. Whether that is an acceptable default for a
+  production deployment is the owner's call, and nothing in §7 or §8 makes it.
 
 ### 7.6 When a receiver may spend it
 
@@ -744,12 +767,13 @@ resolves the same way:
 
 - Not completing costs the SENDER storage — and §2 means it: a joined room has
   no deadline and §7.5 has not given it a fallback one, so an object nobody
-  completes is held until an operator or account deletion removes it.
+  completes is held until its owner releases the room (§8) or the account is
+  deleted.
 - Completing early costs the USER the file, permanently.
 
-Both sides are unbounded, which is why the second one decides. Storage the owner
-can price, measure and reclaim by hand is not the same kind of loss as a file
-that no longer exists anywhere.
+Neither side is bounded by a clock, which is why the second one decides. Storage
+the owner can see, price, measure and reclaim by hand (§8) is not the same kind
+of loss as a file that no longer exists anywhere.
 
 **A save destination MUST declare which of two things its commit means.** The
 Web models this as `SaveTarget.delivery` (`web/src/lib/filesink.ts`), and the
@@ -769,8 +793,10 @@ one** — silence must not be read as a promise.
 That table also says plainly who this feature reaches: today only desktop
 Chromium-family browsers have the File System Access API, so a Firefox, Safari
 or phone receiver saves its files perfectly and completes nothing. Their
-senders' ciphertext is then in exactly the position every joined room is in
-today: §2's unbounded commitment, with no completion ever coming for it.
+senders' ciphertext is then in the position §2 describes with no completion ever
+coming for it: no clock touches it, and the only thing that ends it is the owner
+releasing that room by hand (§8) — or deleting the account. This is the majority
+case, not the edge one, and §7.5 turns on it.
 
 **The boundary is the whole batch, then the object.**
 
@@ -817,3 +843,148 @@ the files were saved — because that is what happened. A "finishing up" state
 would invite the reading that the save is not final yet, which is the opposite
 of the truth, and a failure notice would report a problem the user has neither
 suffered nor any way to act on.
+
+## 8. Owner release (the account's "let it go")
+
+§7 is the receiver's exit and §7.6 says who can reach it: only a browser that
+commits files to disk itself. Everyone else — Firefox, Safari, every phone, the
+CLI, the native clients — saves the files and completes nothing, and §2 gives
+the room no clock. Without this section that ciphertext is billed to an account
+that cannot see it, cannot name it and cannot release it, which is the one
+combination an account surface may not leave standing. The charge is correct and
+stays; the invisibility was the defect.
+
+**This is not a fallback expiry and must never become one** (§7.5). Nothing
+fires. The server never releases a room on its own, and a release happens only
+because the account named one room, by id, in one request.
+
+### 8.1 Listing what is held
+
+```
+GET /api/pair-rooms        (authenticated)   → {"rooms": [
+                                                  {"id": <string>,
+                                                   "createdAt": <unix seconds>,
+                                                   "joinedAt":  <unix seconds>,
+                                                   "objects":   <int>,
+                                                   "bytes":     <int>,
+                                                   "releasable": <bool>}],
+                                                "totals": {"rooms": <int>,
+                                                           "objects": <int>,
+                                                           "bytes": <int>},
+                                                "limit": <int>,
+                                                "truncated": <bool>}
+```
+
+- **Session cookie OR bearer**, like `/api/me/usage` beside it: a read of the
+  caller's own account, so a token with no ambient authority is enough, and a
+  native client has the same right to see what it is charged for as the browser.
+  Anonymous is `401`.
+- **Scoped by ownership in the query itself**, not filtered afterwards. There is
+  no shape of this request that reaches another account's room.
+- **Only rooms that are JOINED, still open, and hold at least one finalized
+  object.** Each exclusion is a promise, not a convenience:
+  - an UNJOINED room is on `joinDeadline` (§2) and ends within minutes without
+    anybody's help — it is also the state a pre-upload is in WHILE it is
+    happening, so listing one would put a destructive control next to a transfer
+    that is still uploading;
+  - a CLOSED room's ciphertext is already gone; its row lingers only so a late
+    request can be answered;
+  - a room holding no finalized object is holding no ciphertext and costs
+    nothing.
+- **Opaque summary only.** A room is named by its instance id — never by its six
+  digits, which are recycled — and carries a count, a byte total and two
+  timestamps. No object id, no blob key, no completion verifier, no node, and
+  nothing about the peer. There are no filenames because there are none to
+  return: the one invariant at the top of this document means the server has
+  never held one. The listing is a storage figure, not a file manager.
+- **Bounded page, unbounded totals.** At most `limit` rooms come back, ordered
+  `createdAt DESC, id DESC` (a total order, so the page boundary is the same for
+  two identical requests). `totals` is computed over EVERY qualifying room
+  regardless of the cap, so an account past it still reads the true byte count it
+  is being charged for, and `truncated` says plainly that the LIST is partial
+  while the numbers are not.
+- `Cache-Control: private, no-store`. Account-scoped storage figures; a cached
+  copy would go on describing storage after it was released.
+
+### 8.2 Releasing one room
+
+```
+DELETE /api/pair-rooms/{id}    (authenticated, no body)
+```
+
+| status | body | meaning |
+|---|---|---|
+| `200` | `{"status":"ok"}` | released — **and, identically**, there was nothing to release: no such room, another account's, or already released. |
+| `409` | `{"error":"pair_room_uploading"}` | an upload session is still bound to the room. Nothing was removed. |
+| `409` | `{"error":"pair_room_waiting"}` | the caller's own room, but nobody has joined it. Nothing was removed. |
+| `500` | — | the store could not be read or written. Never `200`: a caller told its ciphertext was released has no reason to ask again. |
+
+- **The `200` is deliberately one answer for four situations**, exactly like
+  §7.3's `204`: an authenticated caller may not use this route to learn whether a
+  room id exists on somebody else's account. It also makes the request
+  **idempotent** — a retry of a request whose response was lost is a no-op, not
+  an error.
+- **The two `409`s are the caller's own rooms only.** Ownership is resolved
+  before anything can differ, so a refusal that distinguishes itself is never
+  reachable for a room the caller does not own, and the route stays
+  non-probing.
+- **The unsafe route passes through the service's Origin-based CSRF guard.** A
+  request that carries an Origin must use the site's own Origin. Browsers send
+  one for a JavaScript `DELETE`, so this protects an ambient session cookie; a
+  non-browser bearer request normally has no Origin and is accepted, with the
+  token as its explicit authority. Requests without an Origin pass through,
+  matching the account routes beside this one.
+- **A WHOLE ROOM, never one object.** The account cannot tell its objects apart —
+  it is shown a count, because the server holds no name for any of them — so an
+  object-level control would ask somebody to choose between things they cannot
+  see. The room is the unit that means something: one pairing transfer.
+- **`releasable` is the SERVER's verdict**, so a client never reconstructs the
+  eligibility rule and cannot put a delete control next to an upload in flight.
+  It is advisory: every precondition is re-derived at release time.
+- **An upload still in flight refuses the release**, because §3's promise that an
+  in-flight upload may finish outranks it, and because those bytes are being
+  billed. The refusal is repeatable once the upload lands.
+
+### 8.3 What a release does
+
+Every precondition — ownership, joined, no bound session — is re-derived inside
+the same writer transaction as the close, never taken from the listing the client
+is acting on, which it may have been holding for an hour. In that one
+transaction the absence of any bound upload session is confirmed, the room is
+closed, every object row is deleted, and a DURABLE delete intent is queued for
+every blob before anything can fail. **Storage and quota are released when that
+transaction commits** — not at a later sweep and not when a node answers.
+Physical blob deletion is the bounded best-effort half afterwards; an unreachable
+node costs only promptness, because GC keeps asking from the intents. This is the
+same machinery §2's void uses, and the room's code is revoked under the same
+owner-and-deadline bound, so a release can never take back digits that have since
+been minted to somebody else.
+
+Two consequences, stated because a user is about to be asked to accept them:
+
+- **It is irreversible.** There is no restore, no undo and no backup. The
+  ciphertext is the only copy the server has, and the server cannot re-create it
+  because it cannot read it.
+- **It can break a download in progress.** A receiver that is still fetching, or
+  has not fetched yet, gets a `404` from `/blob` afterwards. Release is the
+  owner's decision that the transfer is over; the server has no way to ask the
+  receiver whether it agrees.
+
+What it does NOT do: it does not reach the live peer-to-peer link, which the
+server does not carry and cannot cancel, and it does not touch shares or Device
+Inbox objects, which are not in this query's shape at all.
+
+### 8.4 Mounted whatever the flag says
+
+Neither route consults the pre-upload flag, deliberately. The flag stops rooms
+being CREATED; a deployment that turns it off after a room exists must not
+thereby strand that room's ciphertext on an account with no control over it. A
+kill switch that traps the thing it was meant to contain is not a kill switch.
+With the flag off and no room ever created, both routes have nothing to report
+and nothing to release.
+
+**Backward compatible in both directions.** A client that never calls either is
+unaffected — nothing about the upload, handoff, download or completion path
+changes — and a client that calls them against a server predating them gets
+`404`, which it must read as "this server has no such view", never as "there is
+nothing held".

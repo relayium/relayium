@@ -101,7 +101,7 @@ func main() {
 	nodeToken := flag.String("node-token", envStr("RELAYIUM_NODE_TOKEN", ""), "fleet bootstrap bearer token for relay-node /api/nodes/* (empty disables the node API)")
 	enableUserNodes := flag.Bool("enable-user-nodes", envBool("RELAYIUM_ENABLE_USER_NODES", true), "serve per-user BYO node tokens (account-bound relay/storage nodes)")
 	directDownload := flag.Bool("direct-download", envBool("RELAYIUM_DIRECT_DOWNLOAD", false), "redirect stored downloads straight to fleet nodes that advertise a public DownloadURL (default off = central proxies)")
-	enablePreUpload := flag.Bool("enable-preupload", envBool("RELAYIUM_ENABLE_PREUPLOAD", false), "let a sender stage encrypted files against a pairing code while its room waits for a peer (default OFF: a joined room has no deadline; the completion capability that ends one is built and mounted (server/account/pairroom_complete.go) and the Web receiver now spends it, but only where the browser can commit files to disk itself — a Firefox, Safari or phone receiver saves normally and completes nothing — what becomes of a room nobody completes is undecided, and the rollout gates are open, so a joined room's ciphertext can still be stored until the account is deleted, see server/account/pairroom.go)")
+	enablePreUpload := flag.Bool("enable-preupload", envBool("RELAYIUM_ENABLE_PREUPLOAD", false), "let a sender stage encrypted files against a pairing code while its room waits for a peer (default OFF. Once a peer joins, that ciphertext never expires on a clock — nothing here is a timer. It ends in exactly three ways: the receiver completes it (server/account/pairroom_complete.go), the owning account releases the whole room by hand (GET /api/pair-rooms, DELETE /api/pair-rooms/{id}, server/account/pairroom_owner.go), or the account is deleted. Plan for the second: only a receiver whose browser writes the files to disk itself can complete at all, so every Firefox, Safari and phone receiver saves normally and completes nothing, and those rooms sit in the owner's storage until somebody releases them. See server/account/pairroom.go)")
 	releaseCheck := flag.Bool("release-check", envBool("RELAYIUM_RELEASE_CHECK", true), "ask GitHub hourly for the newest release and offer it in /admin (default on; sends no instance data)")
 	enableGoogle := flag.Bool("enable-google", envBool("RELAYIUM_ENABLE_GOOGLE", false), "enable Google OAuth login (disabled by default)")
 	enableApple := flag.Bool("enable-apple", envBool("RELAYIUM_ENABLE_APPLE", false), "enable Sign in with Apple (disabled by default)")
@@ -471,18 +471,23 @@ func main() {
 		//     can present (server/account/pairroom.go, syncPairCode).
 		acct.SetPairCodes(pairReg)
 		// Pre-upload (staging ciphertext against a waiting code) is opt-in and off
-		// by default. Not because the server half is unfinished — it is finished and
-		// tested — but because the owner's rule that a joined transfer is never cut
-		// off by a clock is implemented literally, so the ONLY thing that ends a
-		// joined room is its receiver completing it (pairroom_complete.go). That
-		// half now exists and the Web receiver spends it, but only from a browser
-		// that can commit files to disk itself; every other receiver saves its
-		// files and completes nothing, and a room nobody completes is stored
-		// indefinitely. Turning this on is therefore still a storage commitment;
-		// see server/account/pairroom.go invariants 5 and 8.
+		// by default. Not because a half of it is unfinished — both feature-specific
+		// exits are built and tested — but because the owner's rule that a joined
+		// transfer is never cut off by a clock is implemented literally, so nothing
+		// the SERVER runs
+		// ever ends a joined room. Its ciphertext goes when the receiver completes
+		// it (pairroom_complete.go), when the account releases the room
+		// (pairroom_owner.go), or when the account is deleted.
+		//
+		// The one that decides the size of this commitment is the middle one: only
+		// a receiver whose browser writes files to disk itself may complete, so
+		// every Firefox, Safari and phone receiver saves its files and completes
+		// nothing, leaving a room that waits for its owner. Turning this on is
+		// therefore a storage commitment bounded by the owner's attention rather
+		// than by a number; see server/account/pairroom.go invariants 5 and 8.
 		acct.SetPreUpload(*enablePreUpload)
 		if *enablePreUpload {
-			log.Printf("pairing-code pre-upload: ENABLED — a joined room's ciphertext is released when its receiver completes it, and never by a clock; a room nobody completes has no expiry")
+			log.Printf("pairing-code pre-upload: ENABLED — a joined room's ciphertext never expires on a clock; it goes when its receiver completes it, when the account releases the room (DELETE /api/pair-rooms/{id}), or when the account is deleted. Receivers that cannot write files to disk themselves (Firefox, Safari, phones) save normally and complete nothing, so those rooms wait for their owner")
 		}
 		// Now that the lifecycle owner exists, let the /ws join observer above
 		// reach it. Bounded context: this is a background write, and a stuck

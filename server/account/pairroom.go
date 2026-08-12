@@ -58,16 +58,21 @@ import (
 //  5. JOINING ENDS EVERY CLOCK. Once a second participant is in the room there
 //     is NO deadline of any kind on the ciphertext — not a transfer deadline and
 //     not a readability one. This is the owner's rule taken literally, which is
-//     why it is expensive: nothing but an explicit completion or the account
-//     itself removes a joined room's bytes, so pre-upload is off unless a
-//     deployment turns it on (Service.SetPreUpload).
-//     The completion half now EXISTS (pairroom_complete.go): a receiver holding
-//     the file key can prove it has the file and the object goes, taking the room
-//     with it when it was the last one. That is a capability somebody exercises,
-//     not a clock — it adds nothing that expires — so this invariant is exactly
-//     what it was. What it does NOT yet do is run: the Web receiver does not post
-//     a completion, and what becomes of a joined room nobody ever completes is
-//     still an open owner decision. See invariant 8.
+//     why it is expensive, and it leaves EXACTLY THREE ways a joined room's bytes
+//     go — none of them a clock, and every one of them somebody acting:
+//     · the RECEIVER completes it (pairroom_complete.go): it proves it holds the
+//     file key, the object goes, and the room goes with it when that was the
+//     last one;
+//     · the OWNING ACCOUNT releases the whole room (pairroom_owner.go), by id,
+//     once, having been shown what it is holding;
+//     · the account is deleted (PurgeTransientUserData / ArchiveAndPurgeUser).
+//     There is no fourth, and in particular no admin route that removes one and
+//     no sweep that ages one out. Both of the first two are capabilities
+//     somebody exercises rather than clocks — they add nothing that expires — so
+//     this invariant is exactly what it always was. What is still open is what
+//     becomes of a joined room whose owner never looks: pre-upload therefore
+//     stays off unless a deployment turns it on (Service.SetPreUpload). See
+//     invariant 8.
 //  6. VOID MEANS GONE, NOW — AND GONE MEANS EVERYTHING THE ROOM HELD. Every
 //     truth-bearing read or write of a pair-room object re-derives the room's
 //     liveness and, if the room is over, closes it. The close is ONE database
@@ -87,25 +92,32 @@ import (
 //     same unauthenticated /api/files/{id}/meta and /blob endpoints a share uses.
 //     Holding the id (and the key the server never saw) is the whole capability.
 //  8. OFF UNLESS TURNED ON. A deployment must opt in (Service.SetPreUpload)
-//     before a single room can be created, and nothing in the Web client asks for
-//     one today either.
-//     The completion FOUNDATION is now in place — a sender may record a
-//     completion capability at finalize, and a receiver that holds the file key
-//     may spend it (pairroom_complete.go) — but production stays OFF, and the
-//     reasons are specific rather than caution:
-//     · RECEIVER INTEGRATION IS NOT WIRED. The Web receiver does not post a
-//       completion yet, so today every joined room is still ended only by the
-//       account or an operator. A capability nobody exercises frees nothing.
+//     before a single room can be created.
+//     Both feature-specific exits from rule 5 are now BUILT AND WIRED: a sender
+//     records a completion capability at finalize and the Web receiver spends it
+//     (pairroom_complete.go), and the owning account can see every joined room it
+//     is holding and release one (pairroom_owner.go). Production still stays OFF,
+//     and the reasons are specific rather than caution:
+//     · MOST RECEIVERS CANNOT COMPLETE AT ALL. A completion may only be spent
+//       when the destination itself commits the bytes to disk — a File System
+//       Access writable or a chosen directory. A Blob download, a bundled ZIP or
+//       a service-worker stream hands the bytes to the BROWSER and the client
+//       never learns whether they landed, so it must not speak for them. That
+//       covers Firefox, Safari and every phone: they save perfectly and complete
+//       nothing (docs/protocol/relayium-pair-room-v1.md §7.6). Those rooms end
+//       when their owner releases them, or not at all.
 //     · THE RESIDUAL LIFETIME IS AN OWNER DECISION AND IS STILL OPEN. What
 //       happens to a joined room whose receiver never completes — declines,
-//       closes the tab, never arrives at all — is unanswered. It is deliberately
-//       NOT answered here: a decline is not a completion, and inventing a
-//       fallback expiry would be exactly the reinterpretation of rule 5 this file
-//       already refused once.
+//       closes the tab, never arrives at all — is unanswered, and
+//       pairroom_owner.go is NOT that answer: it is a control the account
+//       operates, so a room whose owner never looks is exactly where it was. It
+//       is deliberately still unanswered here: a decline is not a completion, and
+//       inventing a fallback expiry would be exactly the reinterpretation of rule
+//       5 this file already refused once.
 //     · THE ROLLOUT GATES ARE NOT CLOSED. Enabling this is a storage commitment
 //       whose shape depends on both of the above.
-//     So the gate is still not a feature flag for a half-built feature: each half
-//     is finished on its own terms. It is the honest way to hold rule 5 as
+//     So the gate is still not a feature flag for a half-built feature: every
+//     half is finished on its own terms. It is the honest way to hold rule 5 as
 //     written instead of quietly trading it for a number.
 
 // StoredPurposePairRoom is ciphertext uploaded during a pairing code's wait, to
@@ -191,19 +203,21 @@ const pairRoomMaxJoinable int64 = 6 * 3600
 // readable and its bytes are deleted, which is a deadline whatever it is called.
 // A rule the code reinterprets is not the rule.
 //
-// So there is no clock. A joined room's ciphertext leaves only when a receiver
-// COMPLETES it (pairroom_complete.go — built, but not yet posted by any client),
-// when the owner's account is deleted, or when an operator deletes it. Note what
-// completion is and is not: a capability a receiver spends once it has the file.
-// It is not a deadline wearing another name, it cannot fire on its own, and no
-// amount of time passing performs one. This constant is therefore untouched by
-// it and stays what it says — never.
+// So there is no clock. A joined room's ciphertext leaves when a receiver
+// COMPLETES it (pairroom_complete.go), when the owning account RELEASES the room
+// (pairroom_owner.go), or when that account is deleted — and by nothing else.
+// Note what those two are and are not: capabilities somebody spends, one by the
+// receiver once it has the file and one by the owner once it has decided the
+// transfer is over. Neither is a deadline wearing another name, neither can fire
+// on its own, and no amount of time passing performs either. This constant is
+// therefore untouched by both and stays what it says — never.
 //
-// Until a client actually posts completions, and until the owner has answered
-// what becomes of a room nobody completes, this remains an unbounded storage
-// commitment per joined room — which is precisely why pre-upload is off unless a
-// deployment opts in (Service.SetPreUpload): the honest way to hold a rule we
-// cannot yet afford is to not run the feature, not to quietly weaken the rule.
+// What that leaves is a commitment bounded by attention rather than by a number:
+// a receiver that cannot commit files to disk itself never completes at all
+// (§7.6), so those rooms wait for an owner who may never look. Until the owner
+// has answered what becomes of one, pre-upload stays off unless a deployment
+// opts in (Service.SetPreUpload): the honest way to hold a rule we cannot yet
+// price is to not run the feature, not to quietly weaken the rule.
 //
 // Materialized as a real column value rather than a NULL/flag so every generic
 // mechanism keeps working untouched: the GC's expired-file sweep, liveFile's
