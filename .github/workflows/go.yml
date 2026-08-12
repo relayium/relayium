@@ -58,12 +58,24 @@ jobs:
   # production rather than in a red build.
   race:
     runs-on: ubuntu-latest
-    # The account package alone runs ~5 min locally and over 10 on a runner.
-    # Both bounds below exist because the FIRST version of this workflow hit
-    # Go's default 10-minute PER-PACKAGE timeout and reported it as a test
+    # The account package alone runs ~12 min locally and much longer on a
+    # runner. Both bounds below exist because the FIRST version of this workflow
+    # hit Go's default 10-minute PER-PACKAGE timeout and reported it as a test
     # failure with a goroutine dump — which reads like a hang in the code, not
     # a budget that was simply too small.
-    timeout-minutes: 30
+    #
+    # Raised again after run 31616382749 (exact SHA): every race package except
+    # account passed, and account showed no race and no failed assertion — it
+    # was terminated exactly at 1500.972s by the then-25m per-package timeout,
+    # i.e. the budget expired, the test did not fail. The identical full account
+    # race passed locally in 714.694s, so the hosted runner is at least ~2.1x
+    # slower here and its true duration is still unmeasured (only bounded from
+    # below). The per-package budget is therefore ~3.8x the local measurement,
+    # and the job budget leaves ~15 min on top for checkout, toolchain setup,
+    # module download and the remaining packages. Both stay finite on purpose:
+    # if a package ever exceeds these, that is a hang worth a goroutine dump,
+    # not a number to keep raising.
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -77,4 +89,4 @@ jobs:
       # finished inside a second.
       - name: go test -race
         working-directory: server
-        run: go test -race -timeout 25m ./...
+        run: go test -race -timeout 45m ./...
