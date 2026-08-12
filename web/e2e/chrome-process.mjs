@@ -83,7 +83,7 @@ function describeExit(exit) {
  * lines off the screen.
  */
 export function describeChromeFailure({
-  executable, debugPort, pid, spawnError, exit, output, attempts, waitedMs,
+  executable, debugPort, pid, spawnError, exit, output, attempts, waitedMs, deadlineMs,
 }) {
   const headline = spawnError
     ? `Chrome could not be started (${spawnError.code ?? "spawn failed"})`
@@ -102,6 +102,18 @@ export function describeChromeFailure({
   if (attempts != null) {
     const waited = waitedMs == null ? "" : ` over ~${(waitedMs / 1000).toFixed(1)}s`;
     rows.push(["cdp probes", `${attempts}${waited}, none answered`]);
+  }
+  // Only when the deadline is what ended the wait — a process that died has a
+  // better answer already, and offering both would blur the two.
+  //
+  // It names the configured budget AND the time actually waited, because those
+  // are different facts: the budget says what this run was willing to tolerate,
+  // the wait says what it really spent. A probe count said neither, which is how
+  // a hosted timeout could stop at exactly 42 refusals without anyone being able
+  // to tell whether Chrome was slow or stuck.
+  if (deadlineMs != null) {
+    const waited = waitedMs == null ? "" : ` (waited ~${Math.round(waitedMs)}ms)`;
+    rows.push(["gave up", `reached the configured ${deadlineMs}ms readiness deadline${waited}`]);
   }
 
   const width = Math.max(...rows.map(([k]) => k.length));
@@ -207,9 +219,10 @@ export function watchChromeProcess(child, { executable, debugPort }) {
      * not include a cause, so a cause that only lives on the property is a cause
      * nobody in CI will ever see.
      */
-    failure({ attempts, waitedMs, cause } = {}) {
+    failure({ attempts, waitedMs, cause, deadlineMs } = {}) {
       let text = describeChromeFailure({
-        executable, debugPort, pid: child.pid, spawnError, exit, output: output(), attempts, waitedMs,
+        executable, debugPort, pid: child.pid, spawnError, exit, output: output(),
+        attempts, waitedMs, deadlineMs,
       });
       if (cause) text += `\n    caused by: ${cause}`;
       return new Error(text, { cause });

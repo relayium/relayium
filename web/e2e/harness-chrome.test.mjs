@@ -8,9 +8,10 @@
  */
 import { spawn } from "node:child_process";
 import { chmodSync, mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { boundedTail, sanitizeOutputLine, watchChromeProcess } from "./chrome-process.mjs";
 import { launchBrowser, resolveChrome, sleep } from "./harness.mjs";
 
@@ -50,6 +51,13 @@ afterEach(async () => {
     try { child.kill("SIGKILL"); } catch { /* already gone */ }
   }
   for (const dir of temporary.splice(0)) rmSync(dir, { recursive: true, force: true });
+  // Held sockets first, then the server: an upgraded socket is detached from the
+  // server, so `close()` alone would neither reach it nor ever complete.
+  for (const { server, held } of silentServers.splice(0)) {
+    for (const socket of held) socket.destroy();
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(() => resolve()));
+  }
 });
 
 describe("Chrome path resolution", () => {
@@ -260,8 +268,14 @@ const nodeBrowserBinary = (body) => {
 };
 
 /** A stand-in that answers /json/version and completes ONE WebSocket handshake —
- *  just enough of CDP for `launchBrowser` to consider the browser up. */
-const FAKE_CDP_SERVER = `
+ *  just enough of CDP for `launchBrowser` to consider the browser up.
+ *
+ *  `startDelayMs` makes it a SLOW browser rather than a broken one: until it
+ *  listens, the port refuses connections instantly, which is exactly what hosted
+ *  run 31554507246 saw — a live child, empty stderr, and 42 immediate refusals.
+ *  A delayed listen reproduces that shape deterministically, without needing a
+ *  real Chrome to be slow on demand. */
+const cdpServerSource = ({ startDelayMs = 0 } = {}) => `
 import { createServer } from "node:http";
 import { createHash } from "node:crypto";
 
@@ -282,7 +296,8 @@ server.on("upgrade", (req, socket) => {
     \`Sec-WebSocket-Accept: \${accept}\\r\\n\\r\\n\`,
   );
 });
-server.listen(port, "127.0.0.1", () => process.stderr.write(\`DevTools listening on \${wsUrl}\\n\`));
+const listen = () => server.listen(port, "127.0.0.1", () => process.stderr.write(\`DevTools listening on \${wsUrl}\\n\`));
+${startDelayMs > 0 ? `setTimeout(listen, ${startDelayMs});` : "listen();"}
 `;
 
 const answers = async (port) => {
@@ -326,7 +341,7 @@ describe("launchBrowser", () => {
 
   posixOnly("still connects, and still cleans up, when the browser is healthy", async () => {
     const port = 9463;
-    process.env.CHROME_PATH = nodeBrowserBinary(FAKE_CDP_SERVER);
+    process.env.CHROME_PATH = nodeBrowserBinary(cdpServerSource());
     const before = profileDirs();
 
     const session = await launchBrowser({ debugPort: port });
@@ -350,4 +365,249 @@ describe("launchBrowser", () => {
     expect(kept).toHaveLength(1);
     rmSync(join(tmpdir(), kept[0]), { recursive: true, force: true });
   }, 20_000);
+});
+
+// ── how long a launch is willing to wait ────────────────────────────────────
+//
+// Hosted run 31554507246 attempt 4 gave up after exactly 42 refused probes in
+// ~10.3s — the old count-based ceiling, hit to the probe. That number answered
+// the wrong question: it said how many times we asked, not how long we were
+// prepared to wait, so the log could not tell "Chrome is slow" from "Chrome is
+// stuck". These tests pin the replacement: ONE slow stand-in browser, two
+// deadlines, opposite outcomes.
+
+/** Long enough that a give-up at a sub-second deadline cannot race the listen,
+ *  short enough that the run which waits it out stays about a second.
+ *
+ *  It used to be 3s, from when the deadline was only consulted between probes
+ *  and a give-up could therefore overshoot its budget by a whole probe. Now that
+ *  every phase is cut off at the deadline itself, the give-up lands within a few
+ *  ms of it and the margin no longer has to absorb that overshoot. */
+const SLOW_START_MS = 1_500;
+const SLOW_CDP_SERVER = cdpServerSource({ startDelayMs: SLOW_START_MS });
+
+/**
+ * A server on the debug port that ACCEPTS the connection and then goes silent.
+ *
+ * This is the shape a deadline checked only BETWEEN phases cannot bound: the
+ * connect succeeds, so there is no rejection to catch, and the harness sits
+ * inside one phase with every check after it unreachable. The refused port of
+ * the slow stand-in above never exercises that, because it fails fast.
+ *
+ * In-process, and already listening before the launch starts, on purpose:
+ *
+ *   - deterministic. A spawned Node stand-in needs ~0.1–0.8s to reach `listen`
+ *     (a freshly written executable pays a cold first spawn), which is longer
+ *     than the deadlines under test — the harness would give up on a refused
+ *     port and prove nothing about a hang.
+ *   - observable. "Did the harness let go of the connection it abandoned" is
+ *     not a question the client side can answer about itself; the server end
+ *     can see it directly.
+ *
+ * `deafUpgrade` chooses WHICH phase hangs. Without it, `/json/version` never
+ * answers. With it, the probe answers normally and the WebSocket upgrade is
+ * what never completes. Same symptom, different bug, and a harness that bounds
+ * only the fetch passes the first and hangs on the second.
+ */
+const silentServers = [];
+function silentServer(port, { deafUpgrade = false } = {}) {
+  const wsUrl = `ws://127.0.0.1:${port}/devtools/browser/3f2a1c9e-77bd-4f1a-9c02-5d6e0b1a2c34`;
+  /** The sockets whose phase is the one that hangs. */
+  const held = [];
+  const server = createServer((req, res) => {
+    req.resume();
+    if (!deafUpgrade) return; // no status line, no headers, no close — ever
+    res.setHeader("content-type", "application/json");
+    res.end(JSON.stringify({ Browser: "FakeChrome/1.0", webSocketDebuggerUrl: wsUrl }));
+  });
+  const hold = (socket) => { socket.on("error", () => {}); held.push(socket); };
+  // Accept the upgrade and never write the 101 that would open it. `resume()`
+  // so the peer's FIN is actually read — an upgraded socket is detached from the
+  // HTTP server and nothing else would pull from it. The probe's own connection
+  // is NOT held in this mode: undici keeps it alive in its pool after a
+  // successful fetch, so it says nothing about what the harness abandoned.
+  if (deafUpgrade) server.on("upgrade", (req, socket) => { socket.resume(); hold(socket); });
+  else server.on("connection", hold);
+  silentServers.push({ server, held });
+  return new Promise((resolve) => server.listen(port, "127.0.0.1", () => resolve({ held })));
+}
+
+/** Did the client end release every socket we are holding? A harness that gave
+ *  up on a phase without aborting it leaves them open indefinitely.
+ *
+ *  "Our end saw the peer go away", not `destroyed`: a socket detached by an HTTP
+ *  upgrade stays half-open until the SERVER closes its own side too, so
+ *  `destroyed` alone would be a fact about this stub rather than about the
+ *  harness. */
+const released = async (held) => {
+  const gone = (s) => s.destroyed || !s.readable;
+  for (let i = 0; i < 40 && held.some((s) => !gone(s)); i++) await sleep(50);
+  return held.length > 0 && held.every(gone);
+};
+
+/** Is the pid the diagnostic named really gone? Signal 0 is the ask-don't-send
+ *  probe; it throws ESRCH once the process no longer exists. */
+const reaped = async (pid) => {
+  for (let i = 0; i < 40; i++) {
+    try { process.kill(pid, 0); } catch { return true; }
+    await sleep(50);
+  }
+  return false;
+};
+
+/** A stand-in that is alive, silent, and — unlike every other one here —
+ *  deliberately does NOT open the debug port. Whatever the test put on that port
+ *  is what readiness then talks to. */
+const idleBrowser = () => browserBinary("exec sleep 60");
+
+/** Capture the harness's own stdout for the duration of `run`. */
+async function withCapturedLog(run) {
+  const lines = [];
+  const spy = vi.spyOn(console, "log").mockImplementation((line) => { lines.push(String(line)); });
+  try { return { value: await run(), lines }; } finally { spy.mockRestore(); }
+}
+
+describe("CDP readiness deadline", () => {
+  posixOnly("gives up at the configured deadline and says that is what happened", async () => {
+    process.env.CHROME_PATH = nodeBrowserBinary(SLOW_CDP_SERVER);
+    const before = profileDirs();
+
+    const err = await launchBrowser({ debugPort: 9465, cdpReadyTimeoutMs: 800 }).then(
+      (session) => { session.close(); throw new Error("a browser that never answered must not launch"); },
+      (e) => e,
+    );
+
+    // The child is alive and silent — the hosted shape. The diagnostic must
+    // therefore name the budget it exhausted, because "42 probes" never told
+    // anyone whether waiting longer would have worked.
+    expect(err.message).toMatch(/Chrome is running but never answered on its debug port/);
+    expect(err.message).toMatch(/reached the configured 800ms readiness deadline/);
+    // The reported wait is the REAL one, not the budget echoed back: a deadline
+    // report that just reprints its own setting proves nothing about the run.
+    const waited = Number(err.message.match(/waited ~(\d+)ms/)[1]);
+    expect(waited).toBeGreaterThanOrEqual(800);
+    expect(waited).toBeLessThan(SLOW_START_MS);
+    expect(err.cause).toBeInstanceOf(Error); // the raw fetch failure survives
+    expect(profileDirs().filter((n) => !before.includes(n))).toEqual([]);
+  }, 30_000);
+
+  posixOnly("lets the SAME slow browser through when the deadline is long enough", async () => {
+    const port = 9466;
+    process.env.CHROME_PATH = nodeBrowserBinary(SLOW_CDP_SERVER);
+    const before = profileDirs();
+
+    const { value: session, lines } = await withCapturedLog(() =>
+      launchBrowser({ debugPort: port, cdpReadyTimeoutMs: 20_000 }));
+    expect(session.browser).toBeTruthy();
+    expect(await answers(port)).toBe(true);
+
+    // One line, and it carries the two numbers a green hosted run has to
+    // contribute to the distribution: how long readiness took, over how many
+    // probes. Without them, the next timeout has nothing to be compared against.
+    const ready = lines.filter((l) => /CDP ready/.test(l));
+    expect(ready).toHaveLength(1);
+    expect(ready[0]).toMatch(/ready in \d+ms after \d+ probes/);
+    const elapsedMs = Number(ready[0].match(/ready in (\d+)ms/)[1]);
+    const probes = Number(ready[0].match(/after (\d+) probe/)[1]);
+    expect(elapsedMs).toBeGreaterThanOrEqual(SLOW_START_MS - 500);
+    expect(probes).toBeGreaterThan(1); // it really did have to wait and retry
+    // Nothing that identifies or grants control of the browser.
+    expect(ready[0]).not.toMatch(/devtools|ws:\/\/|3f2a1c9e|user-data-dir|relayium-e2e-/);
+
+    await session.close();
+    for (let i = 0; i < 20 && (await answers(port)); i++) await sleep(100);
+    expect(await answers(port)).toBe(false);
+    expect(profileDirs().filter((n) => !before.includes(n))).toEqual([]);
+  }, 30_000);
+
+  posixOnly("bounds a probe that connects and then never answers", async () => {
+    const port = 9469;
+    const { held } = await silentServer(port);
+    process.env.CHROME_PATH = idleBrowser();
+    const before = profileDirs();
+
+    const err = await launchBrowser({ debugPort: port, cdpReadyTimeoutMs: 500 }).then(
+      (session) => { session.close(); throw new Error("a port that never answers must not launch"); },
+      (e) => e,
+    );
+
+    expect(err.message).toMatch(/Chrome is running but never answered on its debug port/);
+    expect(err.message).toMatch(/reached the configured 500ms readiness deadline/);
+    // ONE probe, which spent the whole budget inside itself. Any count above 1
+    // would mean the fetch returned — i.e. that nothing here actually hung.
+    expect(Number(err.message.match(/cdp probes\s+: (\d+) over /)[1])).toBe(1);
+    const waited = Number(err.message.match(/waited ~(\d+)ms/)[1]);
+    expect(waited).toBeGreaterThanOrEqual(500);
+    expect(waited).toBeLessThan(1_500); // near the budget, not some fetch default
+    // The cause names the phase that ran out, so `err.stack` — which is all the
+    // e2e scripts print — still says WHICH half of readiness hung.
+    expect(String(err.cause)).toMatch(/\/json\/version probe did not finish/);
+    // Nothing survives the failure: not the abandoned request, not the child,
+    // not the temporary profile.
+    expect(await released(held)).toBe(true);
+    expect(await reaped(Number(err.message.match(/pid\s+: (\d+)/)[1]))).toBe(true);
+    expect(profileDirs().filter((n) => !before.includes(n))).toEqual([]);
+  }, 30_000);
+
+  posixOnly("bounds a websocket handshake that is accepted but never opens", async () => {
+    const port = 9470;
+    const { held } = await silentServer(port, { deafUpgrade: true });
+    process.env.CHROME_PATH = idleBrowser();
+    const before = profileDirs();
+
+    const err = await launchBrowser({ debugPort: port, cdpReadyTimeoutMs: 500 }).then(
+      (session) => { session.close(); throw new Error("a handshake that never opens must not launch"); },
+      (e) => e,
+    );
+
+    expect(err.message).toMatch(/Chrome is running but never answered on its debug port/);
+    expect(err.message).toMatch(/reached the configured 500ms readiness deadline/);
+    expect(Number(err.message.match(/cdp probes\s+: (\d+) over /)[1])).toBe(1);
+    const waited = Number(err.message.match(/waited ~(\d+)ms/)[1]);
+    expect(waited).toBeGreaterThanOrEqual(500);
+    expect(waited).toBeLessThan(1_500);
+    // Names the LATER phase: the probe answered here, so blaming
+    // `/json/version` would point the reader at the one part that worked.
+    expect(String(err.cause)).toMatch(/CDP websocket handshake did not finish/);
+    // The half-open CDP client is closed, not left holding a socket on a browser
+    // nobody is going to use.
+    expect(await released(held)).toBe(true);
+    expect(await reaped(Number(err.message.match(/pid\s+: (\d+)/)[1]))).toBe(true);
+    expect(profileDirs().filter((n) => !before.includes(n))).toEqual([]);
+  }, 30_000);
+
+  posixOnly("still fails a dead child promptly, nowhere near the 45s default", async () => {
+    process.env.CHROME_PATH = nodeBrowserBinary("process.exit(9);");
+    const before = profileDirs();
+
+    const started = performance.now();
+    const err = await launchBrowser({ debugPort: 9467 }).then(
+      (session) => { session.close(); throw new Error("a browser that exited 9 must not launch"); },
+      (e) => e,
+    );
+    const elapsed = performance.now() - started;
+
+    expect(err.message).toMatch(/Chrome exited before its debug port answered \(exit code 9\)/);
+    // No deadline talk: it never reached one, and saying otherwise would point
+    // the reader at "too slow" when the answer is "already dead".
+    expect(err.message).not.toMatch(/deadline/);
+    expect(elapsed).toBeLessThan(10_000);
+    expect(profileDirs().filter((n) => !before.includes(n))).toEqual([]);
+  }, 30_000);
+
+  posixOnly("refuses a deadline that would wait forever or not at all", async () => {
+    const port = 9468;
+    process.env.CHROME_PATH = nodeBrowserBinary(cdpServerSource());
+    const before = profileDirs();
+
+    for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, "20000", null]) {
+      await expect(launchBrowser({ debugPort: port, cdpReadyTimeoutMs: bad }))
+        .rejects.toThrow(/cdpReadyTimeoutMs/);
+    }
+    // Rejected before anything was spawned — CHROME_PATH points at a browser
+    // that WOULD have worked, and no temporary profile exists to prove it was
+    // never started. (A before/after diff, not an absolute check: a leftover
+    // from an earlier crashed run must not be read as this run's doing.)
+    expect(profileDirs().filter((n) => !before.includes(n))).toEqual([]);
+  }, 30_000);
 });

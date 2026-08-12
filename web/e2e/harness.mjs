@@ -415,14 +415,74 @@ export async function requireServer(base, hint) {
 }
 
 /**
+ * How long a launch waits for Chrome's debug port to answer, in wall-clock ms.
+ *
+ * This used to be a probe COUNT (41 sleeps at 250ms). A count answers the wrong
+ * question: hosted run 31554507246 attempt 4 gave up after exactly 42 refused
+ * probes in ~10.3s, with the child still alive and its stderr empty — and
+ * nothing in that log said whether Chrome was slow or stuck, because the limit
+ * it hit was an artefact of the loop rather than a budget anyone had chosen.
+ *
+ * A wall-clock deadline is the number a human can actually reason about, and it
+ * is directly comparable to the readiness line a green run prints. 45s is
+ * deliberately far above a healthy launch: the point is to stop turning "a slow
+ * hosted runner" into a red build, while still bounding the wait so a genuinely
+ * stuck browser cannot hang CI.
+ */
+export const CDP_READY_TIMEOUT_MS = 45_000;
+
+/**
+ * Marks the error a readiness phase throws when it ran out of budget.
+ *
+ * A flag rather than `waitedMs >= readyTimeoutMs`: the numeric comparison is a
+ * re-derivation of a fact the timer already knows, and it disagrees with the
+ * timer near the boundary (the timer may fire a hair before `performance.now()`
+ * agrees the budget is spent). Getting that wrong would report a genuine
+ * deadline as an ordinary probe failure, i.e. drop the one line that says
+ * whether waiting longer would have helped.
+ */
+const DEADLINE_HIT = Symbol("cdp readiness deadline");
+
+/**
+ * Reject a deadline that would make the wait meaningless, before spawning
+ * anything.
+ *
+ * The two failure modes are opposite and both bad: `Infinity`/`NaN` never
+ * expires, so a stuck browser hangs the job forever with no diagnostic at all
+ * (`NaN >= x` is false, so the loop would simply never end), while `0` or a
+ * negative would give up on the very first refusal — which, on a healthy but
+ * cold runner, looks exactly like a real regression. A string sneaks past both
+ * checks by comparing fine and then printing as `"20000"ms`.
+ */
+function checkedReadyTimeout(value) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    const shown = typeof value === "string" ? JSON.stringify(value) : String(value);
+    throw new Error(
+      `cdpReadyTimeoutMs must be a finite number of milliseconds greater than 0 — got ${shown}`,
+    );
+  }
+  return value;
+}
+
+/**
  * 起一个真 Chrome 并连上 CDP，返回 `{ browser, close }`。调用方在 finally 里 close。
  *
  * 先 pkill 掉上一轮跑崩/被 kill 掉留下的浏览器：它们的标签页还挂着 WebSocket，而
  * 服务器有每 IP 的并发 /ws 上限——攒够几个之后新标签页会**静默地**连不上信令，
  * 表现成"两边互相看不见"，和真回归一模一样。这一步不是洁癖，是在保证失败信号可信。
  * 只杀同一个 debugPort 的实例，所以两个脚本各用各的端口就不会互相误伤。
+ *
+ * `cdpReadyTimeoutMs` is an option rather than an environment variable on
+ * purpose: a test that has to mutate `process.env` to pick a deadline leaks that
+ * setting into every other test sharing the process, and the harness would have
+ * to parse and validate a string that any surrounding shell could also set by
+ * accident. An argument is passed by exactly one caller and validated once.
  */
-export async function launchBrowser({ debugPort, keep = false }) {
+export async function launchBrowser({ debugPort, keep = false, cdpReadyTimeoutMs = CDP_READY_TIMEOUT_MS }) {
+  // Before the pkill, the profile and the spawn: an unusable deadline is a
+  // programming error, and reporting it after killing browsers and creating a
+  // temp directory would mean cleaning up work that never should have started.
+  const readyTimeoutMs = checkedReadyTimeout(cdpReadyTimeoutMs);
   // 先解析浏览器：没有浏览器就没必要 pkill、建临时 profile 或等 800ms，直接报清楚。
   const chromeBin = resolveChrome();
   try {
@@ -477,37 +537,133 @@ export async function launchBrowser({ debugPort, keep = false }) {
   };
 
   let browser;
-  const startedAt = Date.now();
+  // Monotonic, not `Date.now()`: this is a duration, and a wall-clock step (NTP
+  // correcting a fresh runner's drift, a suspended VM resuming) would otherwise
+  // silently shorten the budget or extend it past the job's own timeout.
+  const startedAt = performance.now();
+  const elapsed = () => performance.now() - startedAt;
+  // ONE absolute deadline, and every blocking phase of the wait gets only what
+  // is left of it. A per-phase timeout would multiply: fetch, handshake and
+  // sleep would each be allowed the full budget, so the total wait would be a
+  // number nobody configured. And a deadline checked only BETWEEN phases bounds
+  // nothing at all — a server that accepts the connection and then never
+  // answers, or an upgrade that never completes, leaves the harness blocked
+  // inside a phase that the check after it will never get to run.
+  const remainingMs = () => readyTimeoutMs - elapsed();
+
+  const deadlineExceeded = (what) => {
+    const err = new Error(`${what} did not finish within the ${readyTimeoutMs}ms CDP readiness deadline`);
+    err[DEADLINE_HIT] = true;
+    return err;
+  };
+
+  /**
+   * Await one blocking phase — never past the shared deadline, and never past
+   * the death of the child.
+   *
+   * `abandon` is how the phase stops costing something after we stop waiting for
+   * it: an un-aborted `fetch` holds a socket (and an unread body) open, and an
+   * un-closed WebSocket holds the event loop. The rejection handler on `work` is
+   * equally load-bearing — abandoning a promise we raced against and never
+   * catching it is an unhandled rejection that lands long after the failure it
+   * belongs to, attributed to whatever test happens to be running then.
+   */
+  const bounded = (work, what, abandon) =>
+    new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (fn) => (value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        fn(value);
+      };
+      const rejectOnce = finish(reject);
+      const giveUp = (err) => {
+        if (settled) return;
+        rejectOnce(err);
+        try { abandon?.(); } catch { /* 已经没了 */ }
+      };
+      // Re-arm rather than trust one firing: libuv counts whole milliseconds
+      // against its own loop clock, so a timer can come back a hair before
+      // `performance.now()` agrees the budget is spent — and a failure that
+      // reports "waited ~799ms" against an 800ms deadline is a diagnostic
+      // contradicting itself in the same line.
+      const arm = () => setTimeout(() => {
+        if (remainingMs() > 0) { timer = arm(); return; }
+        giveUp(deadlineExceeded(what));
+      }, Math.max(0, remainingMs()));
+      let timer = arm();
+      // The child dying mid-phase must not cost the rest of the budget: the
+      // cause of death is already in hand, and waiting out 45s to print it is
+      // exactly the "slow or stuck?" ambiguity this whole deadline exists to end.
+      watch.died.then(() => giveUp(new Error(`Chrome exited while waiting for ${what}`)));
+      work.then(finish(resolve), rejectOnce);
+    });
+
+  let attempts = 0;
+  let readyMs = 0;
   try {
-    // 等 CDP 端口起来。探测的次数和节奏和以前一模一样；变的只有**失败时说什么**。
-    for (let i = 0; ; i++) {
+    // 等 CDP 端口起来。节奏和以前一模一样（250ms）；变的是**什么时候放弃**：一个墙钟
+    // 预算，而不是一个数出来的次数。
+    for (;;) {
+      attempts++;
+      // Per attempt, and closed by whichever path ends this iteration: a client
+      // whose handshake failed still owns a socket, and simply reassigning the
+      // variable on the next attempt would leak one per retry — up to ~180 of
+      // them at the default deadline.
+      let client = null;
       try {
-        const v = await fetch(`http://127.0.0.1:${debugPort}/json/version`).then((r) => r.json());
-        browser = cdp(v.webSocketDebuggerUrl);
-        await browser.open;
+        // The body is inside the phase, not after it: `fetch` resolving means
+        // the headers arrived, and a port that answers with headers and then
+        // stalls forever would hang in `.json()` — past every check below.
+        const probe = new AbortController();
+        const v = await bounded(
+          fetch(`http://127.0.0.1:${debugPort}/json/version`, { signal: probe.signal }).then((r) => r.json()),
+          "the /json/version probe",
+          () => probe.abort(),
+        );
+        client = cdp(v.webSocketDebuggerUrl);
+        await bounded(client.open, "the CDP websocket handshake", () => client.close());
+        readyMs = elapsed();
+        browser = client;
         break;
       } catch (e) {
+        try { client?.close(); } catch { /* 已经没了 */ }
         // 先探测、后看进程，顺序是有意的：一次答上来的探测永远算成功，哪怕我们
         // spawn 的那个进程自己已经退了（包装脚本、二次 exec 都可能这样）。诊断只在
         // 真的连不上时才介入，所以成功路径一个字节都没变。
-        const waitedMs = Date.now() - startedAt;
-        // 进程已经不在了：再探 40 次也只会拿到同一条 ECONNREFUSED，而死因就在手里。
-        if (watch.deadState() || i > 40) {
+        const waitedMs = elapsed();
+        // 进程已经不在了：把整个预算等满也只会拿到同一条 ECONNREFUSED，而死因就在
+        // 手里。这个短路必须排在超时前面——否则一个"启动就死"会被报成"太慢"，而这
+        // 正是拉长等待之后最容易犯的错。
+        const dead = watch.deadState();
+        if (dead || e?.[DEADLINE_HIT] === true || waitedMs >= readyTimeoutMs) {
           // 抛之前给 stderr 一点时间到齐：'exit' 完全可能跑在最后几行输出前面，而
           // 那几行往往就是死因本身。只在失败路径上等，且有上限。
           await watch.drain(250);
-          throw watch.failure({ attempts: i + 1, waitedMs, cause: e });
+          // `deadlineMs` only when the deadline is what we actually hit: a dead
+          // child says "exited", and adding "…and the deadline passed" to that
+          // would send the reader looking for slowness instead of a cause of death.
+          throw watch.failure({ attempts, waitedMs, cause: e, deadlineMs: dead ? null : readyTimeoutMs });
         }
-        // 和以前一模一样的 250ms：诊断不该改变重试的节奏。进程死掉之后最多再多等
-        // 这一轮，上面那个检查就会在下一次循环开头把死因抛出来。
-        await sleep(250);
+        // 还是 250ms 的节奏——但也被同一个 deadline 夹住，否则最后一轮 sleep 能把
+        // 实际等待推到预算之外，报出一个比配置值还大的 "waited"。
+        const pause = Math.min(250, remainingMs());
+        if (pause > 0) await Promise.race([sleep(pause), watch.died]);
       }
     }
   } catch (err) {
     // Chrome 起来了但 CDP 连不上：进程还在，不收就会留一个孤儿浏览器和一个孤儿 profile。
+    // 半个 CDP 客户端已经在上面那轮的 catch 里关掉了；这里收的是进程和 profile。
     await close(browser);
     throw err;
   }
+  // The evidence a GREEN run contributes. A timeout is only ever readable
+  // against a known distribution: without this line, the first hosted failure at
+  // 45s would again be a number with nothing to compare it to. Deliberately just
+  // the two figures — no DevTools URL (its UUID controls this browser), no
+  // profile path, no argv, no environment.
+  console.log(`  chrome CDP ready in ${Math.round(readyMs)}ms after ${attempts} probe${attempts === 1 ? "" : "s"}`);
   return { browser, close: () => close(browser) };
 }
 
