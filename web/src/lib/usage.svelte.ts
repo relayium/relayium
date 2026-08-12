@@ -75,9 +75,25 @@ function forget(p: Promise<Usage | null>): void {
   }
 }
 
-// 丢弃缓存，下次 fetchUsage 重新请求。用量或套餐变化后调用（上传完成、改档）。
-// 测试必须在 afterEach 里调它，否则 mock 的响应会跨用例串味。
+// 缓存的世代号。**清缓存本身不会让已经画出来的组件重画**——丢掉一个 promise 只是
+// 让"下一次 fetchUsage 会真的发请求"，而 QuotaMeters 的 $effect 只依赖 userId，
+// 用户没换就不会重跑。以前只有 MePage 在初始化时清一次缓存、紧接着子组件才挂载，
+// 所以这个缺口看不出来；一旦页面上出现了**会改变存储用量的操作**（释放配对房间的
+// 服务器副本），它就是"删完了，存储条还是旧数字"。
+//
+// 所以清缓存要顺带推一格世代号，读用量的组件把它当依赖，就能在原地重取。是 $state
+// 而非普通变量：普通变量的自增不是响应式的，$effect 读了也不会重跑。
+let version = $state(0);
+
+/** 当前用量世代号。读它的 $effect 会在 invalidateUsage() 之后重跑。 */
+export function usageVersion(): number {
+  return version;
+}
+
+// 丢弃缓存，下次 fetchUsage 重新请求。用量或套餐变化后调用（上传完成、改档、
+// 释放配对房间存储）。测试必须在 afterEach 里调它，否则 mock 的响应会跨用例串味。
 export function invalidateUsage(): void {
   cacheKey = null;
   cached = null;
+  version += 1;
 }

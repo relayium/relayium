@@ -127,6 +127,13 @@ func (f *flakyStore) ClosePairRoom(ctx context.Context, id string, at, holdUntil
 	return f.Store.ClosePairRoom(ctx, id, at, holdUntil)
 }
 
+func (f *flakyStore) CloseOwnedPairRoom(ctx context.Context, userID, id string, at, holdUntil int64) (PairRoomClosure, PairRoomOwnerReleaseOutcome, error) {
+	if f.shouldFail("ClosePairRoom") {
+		return PairRoomClosure{}, PairRoomOwnerReleaseGone, errInjected
+	}
+	return f.Store.CloseOwnedPairRoom(ctx, userID, id, at, holdUntil)
+}
+
 func (f *flakyStore) LivePairRoomByCode(ctx context.Context, code string) (PairRoom, bool, error) {
 	if f.shouldFail("LivePairRoomByCode") {
 		return PairRoom{}, false, errInjected

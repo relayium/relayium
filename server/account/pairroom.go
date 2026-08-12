@@ -1109,7 +1109,7 @@ var pairRoomReclaimBudget = 10 * time.Second
 // where the pending-join hold is honoured. This is the unconditional form, for
 // callers that already know the room is over for a reason no clock can be wrong
 // about.
-func (s *Service) voidPairRoom(ctx context.Context, room PairRoom) {
+func (s *Service) voidPairRoom(ctx context.Context, room PairRoom) error {
 	// The code goes FIRST, before anything that can fail. Reclaiming ciphertext
 	// is best-effort — a node may be unreachable — but "nobody else may join this
 	// rendezvous" must not be. Doing it here means a store that refuses the close
@@ -1130,20 +1130,15 @@ func (s *Service) voidPairRoom(ctx context.Context, room PairRoom) {
 		// to.
 		log.Printf("pair room %s: void failed, ciphertext survives until the next sweep: %v", room.ID, err)
 		cancelDB()
-		return
-	}
-	// The object rows, on the same database-only budget. Their blobs already have
-	// an intent, so this is only about the rows — and it is separate from the
-	// close because deleting a stored file settles anything pointing at it.
-	for _, sf := range closed.Objects {
-		if derr := s.store.DeleteStoredFile(dbCtx, sf.ID, now); derr != nil {
-			// The row survives, so GC's expired-file sweep will remove it (its
-			// deadline has passed, by definition). The blob goes either way.
-			log.Printf("pair room %s: removing object %s's row: %v", room.ID, sf.ID, derr)
-		}
+		return err
 	}
 	cancelDB()
+	return s.reclaimPairRoomClosure(base, room, closed, now)
+}
 
+// reclaimPairRoomClosure performs only the physical, best-effort half after an
+// authoritative close transaction has already committed.
+func (s *Service) reclaimPairRoomClosure(base context.Context, room PairRoom, closed PairRoomClosure, now int64) error {
 	// PHASE TWO. Budget checked before each artifact rather than during one: a
 	// probe or a delete against an unreachable node can take its own short
 	// timeout, and a fan-out of them must not make a request that is answering
@@ -1157,7 +1152,7 @@ func (s *Service) voidPairRoom(ctx context.Context, room PairRoom) {
 		if pctx.Err() != nil {
 			log.Printf("pair room %s: out of reclaim budget with %d of %d object blob(s) left; every one of them is queued for deletion and GC retries until it lands",
 				room.ID, len(closed.Objects)-i, len(closed.Objects))
-			return
+			return nil
 		}
 		s.dropReclaimedBlob(pctx, sf.BlobKey, sf.NodeID)
 	}
@@ -1165,10 +1160,11 @@ func (s *Service) voidPairRoom(ctx context.Context, room PairRoom) {
 		if pctx.Err() != nil {
 			log.Printf("pair room %s: out of reclaim budget with %d of %d upload session(s) left; their rows are already gone and their blobs are queued for deletion, so what is lost is the chance to bill an unrecorded residual",
 				room.ID, len(closed.Sessions)-i, len(closed.Sessions))
-			return
+			return nil
 		}
 		s.settleReclaimedUpload(pctx, r, now)
 	}
+	return nil
 }
 
 // settleReclaimedUpload does the physical half of reclaiming ONE upload a room's

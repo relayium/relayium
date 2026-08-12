@@ -151,6 +151,35 @@ describe("QuotaMeters", () => {
   });
 });
 
+describe("QuotaMeters — 用量被别的组件改掉之后要重画", () => {
+  it("re-reads /api/me/usage after invalidateUsage(), without a remount or a user change", async () => {
+    // PairRoomStorage 就在这条存储条下面，释放掉一批配对副本会直接改变 storage.used。
+    // 它做完调 invalidateUsage()；如果这条 $effect 不把世代号当依赖，用户会盯着一个
+    // 已经不成立的存储数字，直到离开 /me 再回来。清缓存本身**不会**让已经画出来的
+    // 组件重取——这正是这条用例守的东西。
+    await setSession({ id: "rf1", email: "rf1@b.com", displayName: "RF1" });
+    let used = 5000;
+    const f = vi.fn(async (url: string) => {
+      if (url === "/api/me/usage") return usageResponse(used, 100000);
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal("fetch", f as unknown as typeof fetch);
+    await loadLang("en");
+    const target = mountComponent(QuotaMeters);
+    await settle();
+    expect(f.mock.calls.filter((a) => a[0] === "/api/me/usage").length).toBe(1);
+    const first = target.textContent ?? "";
+
+    used = 0; // the pair-room copies were released
+    invalidateUsage();
+    await settle();
+
+    expect(f.mock.calls.filter((a) => a[0] === "/api/me/usage").length).toBe(2);
+    expect(target.querySelector(".quota")).not.toBeNull();
+    expect(target.textContent).not.toBe(first);
+  });
+});
+
 describe("usage.svelte.ts shared cache — cross-component dedup", () => {
   it("mounting QuotaMeters, QuotaNotice and PlanCard in the same frame issues exactly one /api/me/usage request", async () => {
     // This is the entire reason Task 6 exists: without the shared cache, three
@@ -216,6 +245,11 @@ describe("/me visits refresh usage", () => {
       if (url === "/api/stats") return { ok: true, status: 200, json: async () => ({ transfers: 0, downloads: 0, uploadBytes: 0, downloadBytes: 0, relayBytes: 0 }) };
       if (url === "/api/files") return { ok: true, status: 200, json: async () => ({ files: [] }) };
       if (url === "/api/nodes/mine") return { ok: true, status: 200, json: async () => ({ nodes: [] }) };
+      // PairRoomStorage sits under the meters on /me and reads this. An account
+      // with none renders nothing at all, which is the case every test here is in.
+      if (url === "/api/pair-rooms") {
+        return { ok: true, status: 200, json: async () => ({ rooms: [], totals: { rooms: 0, objects: 0, bytes: 0 }, limit: 200, truncated: false }) };
+      }
       throw new Error(`unexpected fetch ${url}`);
     });
   }

@@ -191,6 +191,18 @@ func (s *Service) routeMux() *http.ServeMux {
 	// sender), while pending/claim/report/accept are device-self because they
 	// assert what a machine is doing with a file. See deviceinbox_task.go.
 	s.registerDeviceInboxTaskRoutes(mux)
+	// The account's own view of its pair-room storage, and the control that
+	// releases it (pairroom_owner.go). RequireAuth for the same reason /api/me and
+	// DELETE /api/files/{id} carry it: both are scoped to the caller's user id in
+	// the store, so a bearer can only ever see or release its OWN rooms, and the
+	// native apps have the same right to see what they are charged for.
+	//
+	// Registered UNCONDITIONALLY — deliberately not behind s.preUpload. That flag
+	// stops rooms being created; turning it off after one exists must not strand
+	// that room's ciphertext on an account with no way to see or release it. With
+	// it off and no room ever created, these two simply have nothing to report.
+	mux.HandleFunc("GET /api/pair-rooms", s.RequireAuth(s.handlePairRoomHoldings))
+	mux.HandleFunc("DELETE /api/pair-rooms/{id}", s.RequireAuth(s.handleReleasePairRoom))
 	mux.HandleFunc("GET /api/ice", s.handleICE)
 	mux.HandleFunc("GET /api/config", s.handleConfig)
 	mux.HandleFunc("GET /api/usage", s.RequireSession(s.handleUsage))

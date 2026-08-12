@@ -15,6 +15,7 @@
   import { reveal, countUp } from "./reveal";
   import PlanCard from "./PlanCard.svelte";
   import QuotaMeters from "./QuotaMeters.svelte";
+  import PairRoomStorage from "./PairRoomStorage.svelte";
   import DeviceSendList from "./DeviceSendList.svelte";
   import { type RenameOutcome } from "./DeviceCard.svelte";
   import { DEVICE_REFRESH_MS, parseDeviceInbox } from "./device-inbox";
@@ -482,6 +483,10 @@
   {:else}
     <PlanCard />
     <QuotaMeters />
+    <!-- 存储条的正下方，因为它解释的正是存储条里那个数字的一部分：配对传输留在
+         服务器上、没有任何到期时间的加密副本。绝大多数账户没有这种存储，那时它
+         什么都不渲染。 -->
+    <PairRoomStorage />
 
     <div class="stats reveal" use:reveal>
       <div class="stat">

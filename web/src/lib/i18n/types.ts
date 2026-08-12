@@ -301,6 +301,33 @@ export interface Messages {
     warn: (pct: number) => string; // 用量达 80% 时的提醒
     upgrade: string; // 提醒条上的按钮文案
   };
+  // 配对传输留在服务器上的加密副本（个人中心，紧挨着用量表）。
+  //
+  // 这一组文案本身就是安全机制的一部分，和注销那组同理：release 是**不可逆**的，
+  // 而且可能让对方一个还没下完的下载直接失败。任何一种语言把这两句丢了，用户就会
+  // 在对后果的错误理解下按下一个破坏性按钮——而且只在那种语言里错。
+  // i18n-pair-room-storage.test.ts 逐语言钉住"必须说的"和"不能说的"。
+  pairStorage: {
+    title: string;
+    loadFailed: string; // 列表取数失败；不能把“未知”伪装成空列表
+    retry: string;
+    // 这些是什么：等对方确认收妥的**加密**副本，服务器解不开也不知道文件名。
+    intro: string;
+    noName: string; // 为什么列表里没有文件名
+    totals: (rooms: number, size: string) => string; // 合计：n 笔传输 · 体积
+    objects: (n: number) => string; // 单个房间里的加密对象数
+    since: (date: string) => string; // 这笔传输是什么时候的
+    release: string; // 释放按钮
+    releaseAria: (id: string) => string; // 每行按钮的无障碍名（房间短 id）
+    confirm: string; // 破坏性确认弹窗的正文（不可逆 + 可能让对方下载失败）
+    confirmAction: string; // 弹窗上的肯定按钮
+    busy: string; // releasable=false：还有文件正在上传，暂时不能释放
+    errBusy: string; // 409 pair_room_uploading
+    errWaiting: string; // 409 pair_room_waiting
+    errFailed: string; // 其它失败
+    released: string; // 成功后的提示
+    truncated: (shown: number) => string; // 列表被上限截断时的说明
+  };
   // 发版后仍开着的旧标签页会一直跑旧代码，全站更新提示条就是收口（见
   // app-update.svelte.ts）。ready 会进 aria-live 区域，三句都不含任何受保护内容。
   appUpdate: {

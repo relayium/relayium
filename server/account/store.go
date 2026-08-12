@@ -1035,6 +1035,93 @@ type PairRoomClosure struct {
 	Sessions []UploadSessionRow
 }
 
+type PairRoomOwnerReleaseOutcome int
+
+const (
+	PairRoomOwnerReleaseGone PairRoomOwnerReleaseOutcome = iota
+	PairRoomOwnerReleaseWaiting
+	PairRoomOwnerReleaseUploading
+	PairRoomOwnerReleaseDone
+)
+
+// PairRoomHolding is ONE of an account's own pair rooms, as the account is
+// allowed to see it.
+//
+// It is the answer to a question nothing could ask before: a joined room has no
+// deadline at all (pairroom.go, invariant 5), so its ciphertext sits on the
+// account's storage — and therefore against its plan's cap — with no expiry, no
+// entry in the share list (which is deliberately shares only, files.go) and no
+// control anywhere. Charged and invisible is the one combination an account
+// surface may not leave standing.
+//
+// NOTE WHAT IS NOT IN IT, because the omissions are the design rather than an
+// oversight. There is no CODE (six digits that may since have been minted to a
+// stranger, and a credential to a rendezvous either way), no object id, no blob
+// key, no node identity, no completion verifier, no encrypted manifest and
+// nothing at all about the peer who joined. What is left is the room's own
+// identity, when it opened, when somebody joined it, and how much ciphertext it
+// is holding — which is exactly the information needed to decide whether to let
+// it go, and nothing that helps anyone reach it.
+type PairRoomHolding struct {
+	// RoomID is the room INSTANCE id — opaque, never the pairing code. It is what
+	// a release names, and it is safe to show: it authorizes nothing on its own
+	// (release is owner-bound) and it cannot be resolved to ciphertext by anyone.
+	RoomID string
+	// CreatedAt is when the room opened; JoinedAt when a second participant
+	// entered it. JoinedAt is always > 0 here — an unjoined room is not listed at
+	// all (see ListPairRoomHoldings).
+	CreatedAt int64
+	JoinedAt  int64
+	// Objects and Bytes are the finalized ciphertext this room holds: the count
+	// of stored_files rows bound to it and the sum of their sizes. Bytes is the
+	// same number CurrentStorage counts for these rows, so the figure shown next
+	// to a storage meter and the figure the meter itself sums cannot disagree.
+	//
+	// Bytes deliberately excludes an upload still in flight: it has no
+	// stored_files row yet, so CurrentStorage does not count it either, and a
+	// surface that added it would be reporting storage the plan is not charging
+	// for.
+	Objects int64
+	Bytes   int64
+	// Releasable is the SERVER's own eligibility verdict, computed here so no
+	// client has to reconstruct it. False while an upload session is still bound
+	// to the room — a file of the batch that was already in flight when the peer
+	// joined, which §3 of the protocol promises is allowed to finish. Releasing
+	// then would throw away bytes the sender is being billed for and was told it
+	// could send, so the release endpoint refuses it with the same verdict.
+	//
+	// It can only ever go from false to true while a room is listed: no NEW
+	// upload can bind to a joined room (pairRoomForUpload refuses one with
+	// errPairRoomJoined), so the session set of a joined room only shrinks.
+	Releasable bool
+}
+
+// PairRoomHoldings is one answer to "what pair-room ciphertext is this account
+// holding": a BOUNDED page of rooms, plus totals that are not bounded.
+//
+// The split is deliberate. The row list has a hard cap so one account cannot ask
+// the server to materialize an unbounded result set, but the AGGREGATE has to
+// stay complete or the surface would under-report the storage it exists to
+// explain — a number smaller than the storage meter beside it is worse than no
+// number at all. Totals are therefore computed over every qualifying room, and
+// Truncated says plainly when the list is showing fewer rooms than the totals
+// count.
+type PairRoomHoldings struct {
+	Rooms []PairRoomHolding
+	// Total is over ALL qualifying rooms, including any the page left out.
+	Total PairRoomHoldingTotals
+	// Truncated reports that the cap bit: there are more rooms than Rooms holds.
+	Truncated bool
+}
+
+// PairRoomHoldingTotals is the account-wide aggregate over every joined, open
+// room holding ciphertext — the row count, the object count and the bytes.
+type PairRoomHoldingTotals struct {
+	Rooms   int64
+	Objects int64
+	Bytes   int64
+}
+
 // BlobRef names ONE piece of ciphertext to reclaim: the key, and the node
 // holding it ("" = central-local storage). It is everything the caller needs to
 // delete-or-enqueue a blob and deliberately nothing else — a finalized
@@ -1688,6 +1775,8 @@ type Store interface {
 	//     account is KNOWN to have sent stay billed, whatever happens next;
 	//   - DELETES those session rows, so the account's open-session slots and the
 	//     room's bindings are free immediately;
+	//   - DELETES every stored-file row through the shared removal helper, so the
+	//     account's storage quota is released in this same commit;
 	//   - queues a durable delete intent (pending_node_deletes) for every blob
 	//     the room held, finalized and half-uploaded alike, held until holdUntil
 	//     (see PendingNodeDelete.NotBefore).
@@ -1702,6 +1791,9 @@ type Store interface {
 	// The closure is that remaining work list (see PairRoomClosure); the rows it
 	// describes are already gone.
 	ClosePairRoom(ctx context.Context, id string, at, holdUntil int64) (PairRoomClosure, error)
+	// CloseOwnedPairRoom atomically binds an account-requested close to its owner,
+	// joined state and absence of active uploads.
+	CloseOwnedPairRoom(ctx context.Context, userID, id string, at, holdUntil int64) (PairRoomClosure, PairRoomOwnerReleaseOutcome, error)
 	// CompletePairRoomObject removes ONE pair-room object on a receiver's word,
 	// in one transaction: it checks `verifier` against the object's own stored
 	// one in constant time, queues the blob's durable delete intent (held until
@@ -1729,6 +1821,15 @@ type Store interface {
 	// backstop pass), newest-deadline-last, at most limit rows.
 	ListDeadPairRooms(ctx context.Context, now int64, limit int) ([]PairRoom, error)
 	PurgeClosedPairRooms(ctx context.Context, before int64) error
+	// ListPairRoomHoldings reports the pair-room ciphertext `userID` is holding:
+	// at most `limit` rooms in a deterministic order, plus totals over all of
+	// them. Scoped to the one account by the query itself, so there is no shape
+	// of this call that can see another user's room.
+	//
+	// It lists JOINED, OPEN rooms that hold at least one finalized object, and
+	// deliberately nothing else — see the SQLite implementation for why each of
+	// the three conditions is load-bearing rather than a filter of convenience.
+	ListPairRoomHoldings(ctx context.Context, userID string, limit int) (PairRoomHoldings, error)
 	IncDownloadCount(ctx context.Context, id string) error
 	// ClaimDownloadSlot atomically takes one of a file's remaining download
 	// slots: increments download_count only while download_count < max_downloads

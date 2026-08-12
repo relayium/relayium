@@ -289,26 +289,72 @@ func (s *SQLiteStore) JoinPairRoom(ctx context.Context, id string, at, expiresAt
 //     that is still streaming to the node right now, which will land after the
 //     delete and re-create the key (see PendingNodeDelete.NotBefore).
 //
-// The stored_files rows are the one thing NOT deleted here: their removal
-// carries side effects that belong in one place (SQLiteStore.DeleteStoredFile,
-// which also settles any inbox task pointing at the object), and unlike a
-// session row a stored_files row is its own durable owner — GC's expired-file
-// sweep finds it whatever else fails. The caller deletes them immediately
-// afterwards, still without touching a node.
+// The stored_files rows are removed here too, through deleteStoredFileOn rather
+// than a bare DELETE so its inbox-task side effects stay centralized. Keeping
+// this in the same transaction is what makes a successful close mean storage
+// quota was actually released: a caller must never report success after the
+// room closed while one of its forever-live accounting rows survived.
 func (s *SQLiteStore) ClosePairRoom(ctx context.Context, id string, at, holdUntil int64) (PairRoomClosure, error) {
-	var out PairRoomClosure
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return out, err
+		return PairRoomClosure{}, err
 	}
 	defer tx.Rollback()
+	out, err := closePairRoomOn(ctx, tx, id, at, holdUntil)
+	if err != nil {
+		return PairRoomClosure{}, err
+	}
+	return out, tx.Commit()
+}
+
+// CloseOwnedPairRoom is the account-facing destructive boundary. Ownership,
+// joined state, upload idleness and the close are decided under one writer
+// transaction. Foreign, absent and already-closed ids deliberately share one
+// outcome so this endpoint cannot become an existence oracle.
+func (s *SQLiteStore) CloseOwnedPairRoom(ctx context.Context, userID, id string, at, holdUntil int64) (PairRoomClosure, PairRoomOwnerReleaseOutcome, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return PairRoomClosure{}, PairRoomOwnerReleaseGone, err
+	}
+	defer tx.Rollback()
+	room, err := scanPairRoom(tx.QueryRowContext(ctx,
+		`SELECT `+pairRoomCols+` FROM pair_rooms WHERE id = ? AND user_id = ? AND closed_at = 0`, id, userID))
+	if err == sql.ErrNoRows {
+		return PairRoomClosure{}, PairRoomOwnerReleaseGone, tx.Commit()
+	}
+	if err != nil {
+		return PairRoomClosure{}, PairRoomOwnerReleaseGone, err
+	}
+	if room.JoinedAt == 0 {
+		return PairRoomClosure{}, PairRoomOwnerReleaseWaiting, tx.Commit()
+	}
+	var busy int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM upload_sessions WHERE pair_room_id = ?)`, id).Scan(&busy); err != nil {
+		return PairRoomClosure{}, PairRoomOwnerReleaseGone, err
+	}
+	if busy != 0 {
+		return PairRoomClosure{}, PairRoomOwnerReleaseUploading, tx.Commit()
+	}
+	out, err := closePairRoomOn(ctx, tx, id, at, holdUntil)
+	if err != nil {
+		return PairRoomClosure{}, PairRoomOwnerReleaseGone, err
+	}
+	if err := tx.Commit(); err != nil {
+		return PairRoomClosure{}, PairRoomOwnerReleaseGone, err
+	}
+	return out, PairRoomOwnerReleaseDone, nil
+}
+
+func closePairRoomOn(ctx context.Context, tx *sql.Tx, id string, at, holdUntil int64) (PairRoomClosure, error) {
+	var out PairRoomClosure
 	res, err := tx.ExecContext(ctx,
 		`UPDATE pair_rooms SET closed_at = ? WHERE id = ? AND closed_at = 0`, at, id)
 	if err != nil {
 		return out, err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return out, tx.Commit()
+		return out, nil
 	}
 	rows, err := tx.QueryContext(ctx,
 		`SELECT `+storedFileSelectCols+` FROM stored_files WHERE pair_room_id = ?`, id)
@@ -350,6 +396,11 @@ func (s *SQLiteStore) ClosePairRoom(ctx context.Context, id string, at, holdUnti
 			return PairRoomClosure{}, err
 		}
 	}
+	for _, sf := range out.Objects {
+		if err := deleteStoredFileOn(ctx, tx, sf.ID, at); err != nil {
+			return PairRoomClosure{}, err
+		}
+	}
 	for i, r := range out.Sessions {
 		// Own-node uploads spend the user's own disk and are never metered against
 		// a plan, so there is nothing to settle for them.
@@ -383,7 +434,7 @@ func (s *SQLiteStore) ClosePairRoom(ctx context.Context, id string, at, holdUnti
 		`DELETE FROM upload_sessions WHERE pair_room_id = ?`, id); err != nil {
 		return PairRoomClosure{}, err
 	}
-	return out, tx.Commit()
+	return out, nil
 }
 
 // ListDeadPairRooms returns open rooms whose deadline has passed — GC's backstop
@@ -415,6 +466,103 @@ func (s *SQLiteStore) PurgeClosedPairRooms(ctx context.Context, before int64) er
 	_, err := s.db.ExecContext(ctx,
 		`DELETE FROM pair_rooms WHERE closed_at > 0 AND closed_at <= ?`, before)
 	return err
+}
+
+// pairRoomHoldingWhere is the ONE definition of "a pair room this account is
+// being charged for and may release", shared byte for byte by the listing and by
+// its totals so a row can never appear in one and be missing from the other.
+//
+// Each condition is load-bearing:
+//
+//   - user_id = ?: the whole authorization. There is no shape of this query that
+//     can reach another account's room, so the listing is not "filtered" by
+//     ownership — it is defined by it.
+//   - closed_at = 0: a closed room's ciphertext is already gone. Its row lingers
+//     for pairRoomPurgeAfter so a late request can be answered, and offering a
+//     release button for it would be offering to delete nothing.
+//   - joined_at > 0: THE SAFETY BOUNDARY, and the one choice here worth arguing.
+//     An UNJOINED room is on a clock (pairRoomJoinDeadline) that ends it and
+//     deletes its ciphertext within minutes, entirely without the user; it is
+//     also the state a pre-upload is IN while it is happening, and while a batch
+//     is between its files there is no upload session bound to the room at all,
+//     so an eligibility test could not tell "idle" from "mid-batch". Listing one
+//     would put a delete control next to a transfer that is still being uploaded,
+//     and offer a destructive answer to a problem that solves itself. A JOINED
+//     room is the opposite on both counts: no clock will ever end it (invariant
+//     5), and no new upload can bind to it (pairRoomForUpload refuses a joined
+//     room), so its contents are settled. That is the storage this surface
+//     exists for.
+//   - the JOIN to stored_files: a room holding no finalized object is holding no
+//     ciphertext and is costing the account nothing. GC's own hygiene pass
+//     collects it (CloseEmptyJoinedPairRooms); a 0-byte row in a storage list is
+//     an invitation to click something for no reason.
+const pairRoomHoldingWhere = `r.user_id = ? AND r.closed_at = 0 AND r.joined_at > 0`
+
+// ListPairRoomHoldings answers "what pair-room ciphertext is this account
+// holding", bounded.
+//
+// TWO QUERIES, because the answer has two halves with different bounds: the page
+// is capped at `limit` rows, and the totals are not capped at all. Reporting a
+// total that stopped at the cap would understate the storage this surface exists
+// to explain, which is worse than showing no number.
+//
+// ORDER IS TOTAL, not merely "by date": created_at DESC, id DESC. Rooms created
+// in the same second are ordinary (a batch opens exactly one room, but two
+// separate transfers a moment apart are not), and an ORDER BY that leaves ties
+// to SQLite's discretion makes the page boundary — and therefore what a user
+// sees — nondeterministic between two identical requests.
+//
+// The two statements are not in one transaction. A room that ends between them
+// can make the totals disagree with the page by one room, which is a stale
+// number on a screen that is about to be refreshed rather than a wrong decision:
+// nothing is authorized from this answer — release re-derives every precondition
+// under the writer lock — and Truncated is derived so that the disagreement
+// cannot turn into a false "there is more than this".
+func (s *SQLiteStore) ListPairRoomHoldings(ctx context.Context, userID string, limit int) (PairRoomHoldings, error) {
+	var out PairRoomHoldings
+	if limit <= 0 {
+		return out, nil
+	}
+	if err := s.reader().QueryRowContext(ctx,
+		`SELECT COUNT(DISTINCT r.id), COUNT(f.id), COALESCE(SUM(f.size), 0)
+		   FROM pair_rooms r JOIN stored_files f ON f.pair_room_id = r.id
+		  WHERE `+pairRoomHoldingWhere, userID).
+		Scan(&out.Total.Rooms, &out.Total.Objects, &out.Total.Bytes); err != nil {
+		return PairRoomHoldings{}, err
+	}
+	if out.Total.Rooms == 0 {
+		return out, nil
+	}
+	rows, err := s.reader().QueryContext(ctx,
+		`SELECT r.id, r.created_at, r.joined_at, COUNT(f.id), COALESCE(SUM(f.size), 0),
+		        NOT EXISTS (SELECT 1 FROM upload_sessions u WHERE u.pair_room_id = r.id)
+		   FROM pair_rooms r JOIN stored_files f ON f.pair_room_id = r.id
+		  WHERE `+pairRoomHoldingWhere+`
+		  GROUP BY r.id
+		  ORDER BY r.created_at DESC, r.id DESC
+		  LIMIT ?`, userID, limit)
+	if err != nil {
+		return PairRoomHoldings{}, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var h PairRoomHolding
+		if err := rows.Scan(&h.RoomID, &h.CreatedAt, &h.JoinedAt, &h.Objects, &h.Bytes,
+			&h.Releasable); err != nil {
+			return PairRoomHoldings{}, err
+		}
+		out.Rooms = append(out.Rooms, h)
+	}
+	if err := rows.Err(); err != nil {
+		return PairRoomHoldings{}, err
+	}
+	// Both conditions, not just the second: the totals were read a statement
+	// earlier, so a room that ended in between would make "more rooms than rows"
+	// true for a page that is in fact complete — and tell the user their list is
+	// partial when it is not. A page that did not reach the cap cannot have been
+	// cut by it.
+	out.Truncated = len(out.Rooms) == limit && out.Total.Rooms > int64(len(out.Rooms))
+	return out, nil
 }
 
 // CompletePairRoomObject is the receiver's "I have it" — the authoritative half,

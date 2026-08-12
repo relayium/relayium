@@ -2,7 +2,7 @@
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { session } from "./auth.svelte";
   import { formatSize } from "./format";
-  import { fetchUsage, type Bucket, type Usage } from "./usage.svelte";
+  import { fetchUsage, usageVersion, type Bucket, type Usage } from "./usage.svelte";
 
   const t = $derived<Messages>(messages[lang()]);
 
@@ -12,9 +12,17 @@
   // /me 页在登出后不会立刻卸载，无条件写 usage 会把上一个账号的数字画出来。
   $effect(() => {
     const uid = session().user?.id ?? null;
+    // 世代号也是依赖：页面上有能改变存储用量的操作（PairRoomStorage 的释放），
+    // 它做完会调 invalidateUsage()，这条 $effect 因此在同一个账号下重跑一次，
+    // 把存储条重画成真值。少了它，用户会盯着一个已经不成立的数字。
+    //
+    // 它同时是守卫的第二个维度：换账号那条守卫拦不住"同一个账号、释放前后两次
+    // 请求乱序返回"——两次的 uid 一模一样，先发的那次要是后到，就会把刚删掉的
+    // 存储又画回去。
+    const gen = usageVersion();
     if (!uid) { usage = null; return; }
     fetchUsage(uid).then((u) => {
-      if (session().user?.id !== uid) return; // 陈旧响应，丢弃
+      if (session().user?.id !== uid || gen !== usageVersion()) return; // 陈旧响应，丢弃
       usage = u;
     });
   });

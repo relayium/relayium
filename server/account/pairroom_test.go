@@ -33,7 +33,12 @@ type pairHarness struct {
 	disk   *storage.DiskStore
 	cookie *http.Cookie
 	userID string
-	now    int64
+	// mail is the harness's mailer, kept so a test that needs a SECOND account
+	// can sign one in through the same magic-link path the first one used. The
+	// owner-facing suite (pairroom_owner_test.go) is what needs it: "user A
+	// cannot see or release user B's room" is not assertable with one user.
+	mail *capturingMailer
+	now  int64
 	// codes is the live pairing-code registry, in miniature. The real one is
 	// signal.PairRegistry, in memory in the signaling layer; the account layer
 	// only ever sees it through the PairCodes interface, which is exactly what
@@ -118,7 +123,7 @@ func newPairHarness(t *testing.T) *pairHarness {
 	}
 	svc.SetBlobStore(disk)
 	h := &pairHarness{
-		svc: svc, store: store, disk: disk,
+		svc: svc, store: store, disk: disk, mail: mail,
 		now: 1_767_312_000, // 2026-01-02 00:00:00 UTC
 	}
 	h.codes = &fakeCodes{now: func() int64 { return h.now }, codes: map[string]fakeCode{}}
