@@ -240,11 +240,24 @@ type Service struct {
 	// pairing code while its room waits for someone to join (pairroom.go).
 	//
 	// Off by default, and that default is load-bearing rather than cautious. The
-	// owner's rule is that a joined transfer has NO deadline of any kind, so a
-	// joined room's ciphertext has nothing that removes it until a completion
-	// lifecycle exists to end one — which is not built. Enabling this before then
-	// means every joined room is stored indefinitely at the operator's expense.
-	// See pairroom.go's invariants 5 and 8.
+	// owner's rule is that a joined transfer has NO deadline of any kind, so
+	// nothing removes a joined room's ciphertext except a receiver explicitly
+	// completing it.
+	//
+	// That completion capability now EXISTS (pairroom_complete.go): a sender may
+	// record one at finalize and a receiver holding the file key may spend it. It
+	// is a foundation, not a rollout, and this flag stays off until three separate
+	// things are true, none of which this checkpoint settles:
+	//
+	//   1. the Web receiver actually posts a completion — until then the
+	//      capability is recorded and never exercised, so it frees nothing;
+	//   2. the owner has decided what becomes of a joined room nobody completes
+	//      (a decline is deliberately NOT treated as a completion, and no
+	//      fallback expiry has been invented to stand in for one);
+	//   3. the rollout gates for the storage commitment in (2) are closed.
+	//
+	// Enabling it before then means every joined room is stored indefinitely at
+	// the operator's expense. See pairroom.go's invariants 5 and 8.
 	preUpload bool
 	// pairJoins holds pairing-code joins the server observed on its own websocket
 	// but could not persist. It is both a retry queue and, while an entry is in
@@ -410,11 +423,18 @@ func (s *Service) SetDownloadLimiter(rl rateLimiter) { s.downloadLimiter = rl }
 func (s *Service) SetDirectDownload(on bool) { s.directDownload = on }
 
 // SetPreUpload toggles pair-room pre-upload (default off). Read pairroom.go's
-// invariants 5 and 8 before turning it on: a joined room currently has no
-// deadline and no completion lifecycle, so its ciphertext is stored until the
-// account is deleted. Off, `purpose=pair_room` is refused with 503 and no room
-// is ever created, which is exactly the behaviour of a server that never heard
-// of the feature.
+// invariants 5 and 8 before turning it on.
+//
+// A joined room still has no deadline. The completion capability that can end one
+// is now built (pairroom_complete.go) but is not yet exercised by any client, the
+// question of what happens to a room nobody completes is still the owner's to
+// answer, and the rollout gates are open — so in practice a joined room's
+// ciphertext is stored until the account is deleted, exactly as before.
+//
+// Off, `purpose=pair_room` is refused with 503 and no room is ever created, which
+// is exactly the behaviour of a server that never heard of the feature. The
+// completion route stays mounted either way and simply finds nothing to complete,
+// since without this flag no pair-room object can exist.
 func (s *Service) SetPreUpload(on bool) { s.preUpload = on }
 
 // Store returns the account data store. Exported so the commercial

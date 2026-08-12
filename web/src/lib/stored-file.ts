@@ -9,6 +9,7 @@ import {
   cipherSizeFor,
   decodeKey,
   encodeKey,
+  completionVerifier,
   StoreDecryptor,
   STORE_CHUNK_SIZE,
   FRAME_OVERHEAD,
@@ -505,7 +506,26 @@ async function chunkedUpload(
   }
 
   // finalize (small; retried so a flaky moment doesn't waste the whole upload).
-  const fin = await uploadJSON("POST", `/api/uploads/${uploadId}/finalize`, undefined, signal, true);
+  //
+  // A PRE-UPLOAD additionally hands over its completion verifier — the sender's
+  // half of the capability that lets the receiver, and only the receiver, end this
+  // object's life once it has the file (docs/protocol/relayium-pair-room-v1.md).
+  // It is derived from the same file key that encrypted the ciphertext, so the
+  // server learns nothing it could decrypt with and nothing it could complete
+  // with; it can only CHECK a completion somebody else performs.
+  //
+  // Sent only for a pair-room upload, because it is refused with 400 on any other
+  // purpose: a share's life is its TTL and its download count, and there is
+  // nothing about it for a receiver to end. An ordinary upload's finalize stays
+  // byte-for-byte the request it always was — no body at all — which is what
+  // keeps this additive against a server that predates it.
+  const fin = await uploadJSON(
+    "POST",
+    `/api/uploads/${uploadId}/finalize`,
+    isPairRoom(opts) ? JSON.stringify({ completionVerifier: encodeKey(await completionVerifier(sk.raw)) }) : undefined,
+    signal,
+    true,
+  );
   // A second server-chosen id, and not necessarily the one init issued: this is
   // the one the key gets filed under and the /d/<id> the user is handed.
   // Checked before an UploadResult exists.

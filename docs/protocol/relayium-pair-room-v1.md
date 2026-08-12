@@ -125,9 +125,11 @@ after the deadline that caused it (the GC sweep is ten minutes behind).
 
 **Joining ends every clock.** A joined transfer is never cut off by one, and
 that is meant literally: there is no transfer deadline and no readability
-deadline either. Nothing but an explicit completion lifecycle (delivery
-confirmed / burn-after-download — NOT built), account deletion, or an operator
-removes a joined room's bytes. That is an unbounded storage commitment per
+deadline either. Nothing but an explicit COMPLETION (§7), account deletion, or an
+operator removes a joined room's bytes. A completion is a capability a receiver
+spends, not a clock: it cannot fire on its own, no amount of time performs one,
+and it therefore adds no deadline of any kind to this rule. Until a client
+actually posts completions this remains an unbounded storage commitment per
 joined room, which is exactly why pre-upload is off unless a deployment opts in.
 The join is stamped exactly once — a reconnect does not re-stamp it.
 
@@ -566,3 +568,157 @@ without a rule reads as "the receiver joined and then nothing happened".
   `preupload/1`, is never sent kind 12, never sends `purpose=pair_room`, and gets
   the live-link behaviour it always had — including the files a pre-uploading
   peer had already put in storage before it joined (§4.3).
+
+## 7. Completion (the receiver's "I have it")
+
+**Status: the FOUNDATION exists; production is OFF.** The server accepts and
+checks completions, and the Web sender records the capability. What is not built
+is the receiver posting one, and two questions below are still the owner's to
+answer. Nothing in this section is reachable on a deployment with pre-upload
+off, which is every deployment today.
+
+§2 says a joined room's ciphertext has no deadline. Completion is the other half
+of that rule rather than a retreat from it: the thing that ends a joined
+transfer is the receiver saying it has the file, and nothing else.
+
+### 7.1 The capability
+
+```
+proof    = HKDF-SHA256(ikm = fileKey, salt = empty, info = "relayium-preupload-complete-v1", 32 bytes)
+verifier = SHA-256(proof)
+```
+
+- `fileKey` is the object's own 32-byte stored-wire key — the one that travels
+  only inside `STORED_KEYS` (§4) and that the server has never seen.
+- The **sender** hands the server the `verifier` at finalize. The **receiver**
+  derives the `proof` and posts that. The server hashes what it was sent and
+  compares.
+- The asymmetry is the point. The verifier is all the server, its database and
+  its backups ever hold, and it yields neither the proof (so a stolen database
+  cannot complete anybody's transfer) nor the key (so zero-knowledge is exactly
+  what it was). HKDF rather than a bare hash of the key, so the value cannot be
+  replayed into any other context that hashes the same key; the info string is
+  the domain separator and changing it is a wire break.
+- The info string is exact ASCII with no trailing NUL, and both implementations
+  are pinned to one frozen key/proof/verifier vector
+  (`server/account/pairroom_complete_test.go`,
+  `web/src/lib/store-crypto.completion.test.ts`). Empty salt: HKDF's salt is
+  optional, and Go's nil salt and WebCrypto's zero-length salt derive the
+  identical PRK.
+- **Neither value may appear in a URL, a query string or a log.** The proof is a
+  bearer capability to delete an object, so it travels in a request body only.
+
+### 7.2 Recording it (sender, at finalize)
+
+```
+POST /api/uploads/{uploadId}/finalize
+{"completionVerifier":"<base64url, no padding, decoding to exactly 32 bytes>"}
+```
+
+- **Optional, and additive in both directions.** No body — which is what every
+  client before this sent — stores NULL and yields byte-for-byte the object it
+  always did. A client that sends one to a server predating this has it ignored.
+- **`pair_room` only.** The field on a `share` or `device_task` finalize is
+  `400`, refused rather than stored and ignored: neither has anything for a
+  receiver to end.
+- Strict: standard-base64 characters, padding, whitespace, and any decoded
+  length other than 32 are `400`. So are malformed JSON, trailing JSON after the
+  object, and a non-string value. Unknown fields are allowed through, so the body
+  stays extensible.
+- **Both completion bodies — this one and §7.3's — are bounded at 1 KiB
+  INCLUSIVE.** Exactly 1024 bytes is read and judged on its merits; the first
+  byte past it is a `400`, whatever it is and whatever preceded it. The bound is
+  on the body, not on the prefix the server read: a valid object followed by
+  padding that crosses the bound is refused rather than accepted on its first
+  kilobyte, because the "nothing may follow the object" rule and the length rule
+  are both read off the same end-of-body and a bound that truncated would forge
+  it. No client is anywhere near this — one 43-character token in a small object.
+- **The refusal is taken BEFORE the terminal claim.** Finalize is once-only, so a
+  `400` after the claim would turn one malformed field into an upload that can
+  never be finalized at all. A refused finalize is retryable.
+- The verifier is written in the SAME statement that inserts the object row, on
+  every storage-placement path. There is no window in which an object exists
+  without the capability its sender asked for — one would be unreachable by the
+  only thing that can end it, and no repair pass could invent the value.
+
+### 7.3 Spending it (receiver)
+
+```
+POST /api/files/{id}/complete
+{"proof":"<base64url, no padding, decoding to exactly 32 bytes>"}
+```
+
+Unauthenticated, like `/meta` and `/blob`, and for the same reason: the receiver
+has no account. The proof IS the authorization. `Cache-Control: private,
+no-store` on every answer, and the same per-IP download-start budget the blob
+route spends.
+
+| status | meaning |
+|---|---|
+| `204` | the proof was right and the object is gone — **and, identically**, there was nothing to complete: already completed, never existed, or not a pair-room object. |
+| `409` | a live pair-room object with no completion capability at all (an older sender). |
+| `403` | wrong proof. Nothing was deleted. |
+| `400` | malformed body or proof. |
+| `429` | the per-IP budget is spent. |
+
+- **The `204` is deliberately one answer for four situations.** Separating them
+  would make an unauthenticated endpoint an existence oracle over the whole
+  stored-object space. It is also what keeps `share` and `device_task` objects
+  out of reach: the purpose test is part of the same statement that finds the
+  row, so no completion can touch one, whatever verifier it happens to carry.
+- **`409` is not `403`.** A receiver told "wrong proof" will keep deriving proofs
+  from the key it holds, and no proof it can produce will ever work on an object
+  that has no verifier. The two must be distinguishable for a receiver to report
+  anything true.
+- The comparison is constant-time and happens INSIDE the transaction, so two
+  receivers racing — or one retrying an answer it never saw — cannot both act on
+  one verdict. Both get a safe `2xx`; exactly one removal happens.
+
+### 7.4 What a completion does
+
+In one transaction, in this order:
+
+1. the blob's durable delete intent is queued (held past the first success, like
+   a void's — see §2), **before** anything is removed;
+2. the authoritative `stored_files` row is deleted, which is what releases the
+   owner's storage immediately — not a later sweep, and not the node answering;
+3. if that was the last object AND no upload session remains AND the room is
+   **joined**, the room is closed too.
+
+Physical blob deletion is bounded best-effort AFTER the commit. A node that is
+unreachable costs only promptness: the intent is older than the attempt, so GC
+keeps asking. Intent-first is the whole crash-safety argument — deleting the row
+removes the only other thing pointing at the blob, so the responsibility has to
+exist first.
+
+**An UNJOINED room is never closed by a completion**, however empty it becomes.
+Nobody has arrived yet, so more files of the batch may still be on their way;
+closing would refuse them and strand a sender mid-batch. An unjoined room is
+ended by its deadline, exactly as §2 says.
+
+**A room with an upload still in flight is not empty.** §3's promise that an
+in-flight upload may finish outranks the tidiness of closing early.
+
+**Reading never completes.** `/meta`, a full `/blob`, a `Range` resume and an
+overlapping retry of one all leave the object exactly where it was. Completion is
+something a receiver SAYS; it is never inferred from bytes leaving the building,
+because a resume that looked like a finish would delete ciphertext mid-transfer.
+
+**GC hygiene.** A joined room that ends up holding nothing — the last object
+completed while an upload was still in flight, and that upload then abandoned
+rather than finalized — is reachable by ordinary use and can be closed by neither
+a deadline (a joined room has none) nor a completion (there is nothing left to
+complete). A sweep closes such rooms after a grace period long enough that
+"holds nothing" is settled rather than momentary.
+
+### 7.5 What is deliberately NOT decided here
+
+- **A decline is not a completion.** A receiver that refuses the batch has not
+  taken delivery, and treating the two the same would delete a sender's
+  ciphertext on the strength of a user saying "no thanks".
+- **There is no fallback expiry.** What becomes of a joined room nobody ever
+  completes is an open owner decision. Inventing a timer to stand in for one
+  would be exactly the reinterpretation of §2 that this document already refused
+  once: a rule the code reinterprets is not the rule.
+- Until those are answered and a receiver actually posts completions, pre-upload
+  stays off.

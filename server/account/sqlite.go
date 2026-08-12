@@ -903,6 +903,15 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		`ALTER TABLE pending_node_deletes ADD COLUMN bill_kind INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE pending_node_deletes ADD COLUMN bill_max INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE pending_node_deletes ADD COLUMN billed_through INTEGER NOT NULL DEFAULT 0`,
+		// SHA-256 of the completion proof a receiver must present to end a
+		// pair-room object's life (see pairroom_complete.go). NULLable, and
+		// deliberately without a DEFAULT: NULL is a real state that outranks every
+		// other — the row predates the column, the object is a share, or the sender
+		// never asked for a completion capability — and it is answered with its own
+		// status rather than folded into "wrong proof". A DEFAULT of '' would make
+		// an absent verifier indistinguishable from a zero-length one and put a
+		// length check on the critical path of that distinction.
+		`ALTER TABLE stored_files ADD COLUMN completion_verifier BLOB`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -3558,7 +3567,7 @@ func scanStoredFile(sc rowScanner) (StoredFile, error) {
 	var nodeID sql.NullString
 	err := sc.Scan(&f.ID, &f.UserID, &f.BlobKey, &f.EncManifest, &f.Size,
 		&burn, &f.CreatedAt, &f.ExpiresAt, &f.DownloadedAt, &nodeID, &f.MaxDownloads,
-		&f.Purpose, &f.InboxTaskID, &f.PairRoomID, &f.DownloadCount)
+		&f.Purpose, &f.InboxTaskID, &f.PairRoomID, &f.CompletionVerifier, &f.DownloadCount)
 	f.BurnAfterRead = burn != 0
 	f.NodeID = nodeID.String
 	// A row the purpose ALTER reached but no write ever touched reads as the
@@ -3574,7 +3583,7 @@ func scanStoredFile(sc rowScanner) (StoredFile, error) {
 // storedFileCols is the INSERT column list (CreateStoredFile). storedFileSelectCols
 // adds download_count, which defaults on insert (0) and is only ever read back /
 // mutated in place by ClaimDownloadSlot etc.
-const storedFileCols = `id, user_id, blob_key, enc_manifest, size, burn_after_read, created_at, expires_at, downloaded_at, node_id, max_downloads, purpose, inbox_task_id, pair_room_id`
+const storedFileCols = `id, user_id, blob_key, enc_manifest, size, burn_after_read, created_at, expires_at, downloaded_at, node_id, max_downloads, purpose, inbox_task_id, pair_room_id, completion_verifier`
 const storedFileSelectCols = storedFileCols + `, download_count`
 
 // CreateStoredFile inserts a stored file with no cap enforcement. An object bound
@@ -3599,12 +3608,18 @@ func (s *SQLiteStore) CreateStoredFile(ctx context.Context, f StoredFile) error 
 // that reach it (plain, storage-capped, pair-room) cannot drift on the column
 // list.
 func insertStoredFileOn(ctx context.Context, ex sqlExecer, f StoredFile) error {
+	// The completion verifier rides the SAME statement as the row, which is the
+	// whole of its atomicity story: there is no interval in which an object exists
+	// without the capability its sender asked for. An object in that state would be
+	// unreachable by the only thing that can end it — held for good by the very
+	// rule completion exists to close — and no repair pass could invent the value,
+	// since the server has never seen the key it comes from.
 	_, err := ex.ExecContext(ctx,
 		`INSERT INTO stored_files (`+storedFileCols+`)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		f.ID, f.UserID, f.BlobKey, f.EncManifest, f.Size,
 		b2i(f.BurnAfterRead), f.CreatedAt, f.ExpiresAt, f.DownloadedAt, nullStr(f.NodeID), f.MaxDownloads,
-		purposeOrShare(f.Purpose), f.InboxTaskID, f.PairRoomID)
+		purposeOrShare(f.Purpose), f.InboxTaskID, f.PairRoomID, nullBytes(f.CompletionVerifier))
 	return err
 }
 
@@ -3798,6 +3813,23 @@ func (s *SQLiteStore) DeleteStoredFile(ctx context.Context, id string, now int64
 		return err
 	}
 	defer tx.Rollback()
+	if err := deleteStoredFileOn(ctx, tx, id, now); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// deleteStoredFileOn is DeleteStoredFile's body, so a caller that must remove an
+// object as part of a LARGER transaction — a pair-room completion, which also
+// takes durable responsibility for the blob and may close the room — gets the
+// same removal rather than a second one written beside it.
+//
+// The inbox settle is why this has to be shared rather than reduced to a bare
+// DELETE at each site: removing an object silently fails any Device Inbox task
+// still pointing at it, and a second copy of that rule is a second place for it
+// to be forgotten. A pair-room object is never bound to a task, so for the
+// completion path the UPDATE matches nothing and costs one statement.
+func deleteStoredFileOn(ctx context.Context, tx *sql.Tx, id string, now int64) error {
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE inbox_tasks
 		    SET state = CASE WHEN expires_at <= ? THEN ? ELSE ? END,
@@ -3808,10 +3840,8 @@ func (s *SQLiteStore) DeleteStoredFile(ctx context.Context, id string, now int64
 		now, inbox.TaskErrStoredObjectUnavailable, now, now, id); err != nil {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM stored_files WHERE id = ?`, id); err != nil {
-		return err
-	}
-	return tx.Commit()
+	_, err := tx.ExecContext(ctx, `DELETE FROM stored_files WHERE id = ?`, id)
+	return err
 }
 
 // IncDownloadCount bumps a stored file's lifetime download tally by one. Used for
@@ -4412,6 +4442,21 @@ func nullStr(s string) any {
 		return nil
 	}
 	return s
+}
+
+// nullBytes converts an absent byte slice to SQL NULL — the same idea as
+// nullStr for an optional BLOB (stored_files.completion_verifier).
+//
+// It matters more here than the string case does, because "absent" is a state
+// the reader ACTS on rather than merely renders: an object with no completion
+// verifier is answered differently from one whose verifier did not match. A
+// zero-length blob would read back as a non-NULL empty credential and put that
+// distinction on a length check instead of on the column.
+func nullBytes(b []byte) any {
+	if len(b) == 0 {
+		return nil
+	}
+	return b
 }
 
 // nodeCols is the SELECT column list shared by every node read path

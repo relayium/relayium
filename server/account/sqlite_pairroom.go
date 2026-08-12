@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"crypto/subtle"
 	"database/sql"
 )
 
@@ -414,4 +415,252 @@ func (s *SQLiteStore) PurgeClosedPairRooms(ctx context.Context, before int64) er
 	_, err := s.db.ExecContext(ctx,
 		`DELETE FROM pair_rooms WHERE closed_at > 0 AND closed_at <= ?`, before)
 	return err
+}
+
+// CompletePairRoomObject is the receiver's "I have it" — the authoritative half,
+// in one transaction.
+//
+// It is the counterpart to ClosePairRoom rather than a variation on it. A close
+// is the room's DEADLINE arriving and takes everything; this is one object being
+// collected on purpose, by somebody holding a capability for that object alone,
+// while its siblings and any upload still arriving carry on untouched.
+//
+// THE CHECK IS INSIDE THE TRANSACTION, and that is not tidiness. Two receivers —
+// or one receiver retrying a request whose answer it never saw — reach this at
+// once, and a verdict reached outside would let both act on it: two delete
+// intents for one blob, two releases of one room. Checking under the writer lock
+// means the loser finds no row and is answered "already done", which is both true
+// and safe.
+//
+// THE ORDER INSIDE IT IS INTENT FIRST, exactly as ClosePairRoom's is, and for the
+// same reason. Deleting the row removes the only thing a generic sweep could ever
+// have found the blob through, so the responsibility has to be older than the
+// removal. Commit in this order and every crash leaves a blob with an owner;
+// commit in the other and a crash between the two leaves ciphertext nothing
+// points at.
+//
+// The PHYSICAL delete is not here and must not be: it talks to a node, which can
+// be slow, unreachable or hostile, and none of those may hold up an answer or
+// leave the database half-changed. The caller does it afterwards, best-effort,
+// against the intent this already wrote.
+//
+// Four outcomes, and the three refusals are deliberately not one:
+//
+//   - GONE covers absent, already completed, and not-a-pair-room-object. One
+//     answer for all three, because this endpoint is unauthenticated and telling
+//     them apart is an existence oracle over every stored object. It is also what
+//     makes a share or a Device Inbox object untouchable here: the purpose test
+//     is part of the same SELECT that finds the row.
+//   - NO VERIFIER is a pair-room object whose sender never asked for a completion
+//     capability. Its own outcome because the receiver has to be able to tell it
+//     from a wrong proof — one means "keep trying", the other means "this object
+//     cannot be ended this way at all".
+//   - MISMATCH is a wrong proof, and nothing is written.
+//   - DONE removed the row. RoomClosed says whether it also ended the room.
+//
+// THE ROOM'S OWN DEADLINE IS NOT CONSULTED, deliberately. An object whose room is
+// over is void either way, so completing it deletes ciphertext that was already
+// forfeit — the same outcome by a shorter path — and it cannot close the room,
+// because an expired room is by definition unjoined and the join test below
+// refuses it. The room's deadline stays exactly what ends an unjoined room.
+//
+// It opens the WRITE transaction even for the refusals, which on an
+// unauthenticated endpoint is worth stating rather than glossing: SQLite has one
+// writer, so a flood of wrong proofs serializes against every other write. The
+// protection is the per-IP budget the handler spends first — the same one the
+// blob route uses — and the work inside is one indexed lookup. The alternative,
+// a cheap read outside the transaction to reject early, would put the purpose and
+// verifier rules in two places and let a stale read answer differently from the
+// authoritative one; that is the wrong trade for a saved lock on a path that
+// cannot even reach a row unless pre-upload is enabled.
+func (s *SQLiteStore) CompletePairRoomObject(ctx context.Context, id string, verifier []byte, at, holdUntil int64) (PairRoomCompletion, error) {
+	var out PairRoomCompletion
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return out, err
+	}
+	defer tx.Rollback()
+	f, err := scanStoredFile(tx.QueryRowContext(ctx,
+		`SELECT `+storedFileSelectCols+` FROM stored_files WHERE id = ? AND purpose = ?`,
+		id, StoredPurposePairRoom))
+	if err == sql.ErrNoRows {
+		return out, tx.Commit() // gone, never was, or never this endpoint's to touch
+	}
+	if err != nil {
+		return out, err
+	}
+	if len(f.CompletionVerifier) == 0 {
+		out.Outcome = PairRoomCompletionNoVerifier
+		return out, tx.Commit()
+	}
+	// Constant time, because the alternative leaks how much of a guess was right
+	// and turns a 32-byte credential into a byte-at-a-time search. ConstantTimeCompare
+	// answers 0 for a length mismatch as well, which is the right answer for a
+	// value that is not a verifier at all.
+	if subtle.ConstantTimeCompare(f.CompletionVerifier, verifier) != 1 {
+		out.Outcome = PairRoomCompletionMismatch
+		return out, tx.Commit()
+	}
+	if err := enqueueNodeDeleteOn(ctx, tx, f.BlobKey, f.NodeID, at, holdUntil); err != nil {
+		return PairRoomCompletion{}, err
+	}
+	if err := deleteStoredFileOn(ctx, tx, f.ID, at); err != nil {
+		return PairRoomCompletion{}, err
+	}
+	out.Outcome, out.Object = PairRoomCompletionDone, f
+	closed, room, err := closeEmptiedPairRoomOn(ctx, tx, f.PairRoomID, at)
+	if err != nil {
+		return PairRoomCompletion{}, err
+	}
+	out.RoomClosed, out.Room = closed, room
+	return out, tx.Commit()
+}
+
+// closeEmptiedPairRoomOn ends a room that has just run out of things to hold —
+// but only if somebody has JOINED it.
+//
+// The join condition is the whole rule, and it is not a safety margin. An
+// unjoined room is still WAITING: nobody has arrived, more files of the batch may
+// be on their way, and closing it would refuse the next upload and strand a
+// sender mid-transfer. What ends an unjoined room is its deadline, which is
+// untouched by any of this. A joined room has no deadline at all (invariant 5),
+// so a completion is the only thing that can ever end one — which is precisely
+// why this is here.
+//
+// "Holds nothing" is objects AND upload sessions. A session is an upload still
+// arriving, and §3 of the protocol promises that an upload already in flight when
+// the peer joined is allowed to finish; closing the room out from under it would
+// break that promise and throw away bytes the sender has already been billed for.
+//
+// Read inside the caller's transaction, so the emptiness and the close cannot be
+// separated: SQLite has one writer, so nothing can bind a new object or session
+// to the room between the two.
+func closeEmptiedPairRoomOn(ctx context.Context, tx *sql.Tx, roomID string, at int64) (bool, PairRoom, error) {
+	if roomID == "" {
+		return false, PairRoom{}, nil
+	}
+	room, found, err := pairRoomRowOn(ctx, tx, roomID)
+	if err != nil || !found {
+		return false, PairRoom{}, err
+	}
+	if room.ClosedAt != 0 || room.JoinedAt == 0 {
+		return false, PairRoom{}, nil
+	}
+	empty, err := pairRoomHoldsNothingOn(ctx, tx, roomID)
+	if err != nil || !empty {
+		return false, PairRoom{}, err
+	}
+	res, err := tx.ExecContext(ctx,
+		`UPDATE pair_rooms SET closed_at = ? WHERE id = ? AND closed_at = 0`, at, roomID)
+	if err != nil {
+		return false, PairRoom{}, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return false, PairRoom{}, nil
+	}
+	room.ClosedAt = at
+	return true, room, nil
+}
+
+// pairRoomHoldsNothingOn reports whether a room has neither a stored object nor
+// an upload session left. Both halves, always: a room is empty when there is
+// nothing to fetch AND nothing still arriving.
+func pairRoomHoldsNothingOn(ctx context.Context, tx *sql.Tx, roomID string) (bool, error) {
+	var any int
+	err := tx.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM stored_files   WHERE pair_room_id = ?)
+		     OR EXISTS(SELECT 1 FROM upload_sessions WHERE pair_room_id = ?)`,
+		roomID, roomID).Scan(&any)
+	return any == 0, err
+}
+
+// CloseEmptyJoinedPairRooms is GC's hygiene pass for the one room shape nothing
+// else can ever collect.
+//
+// A joined room has no deadline (invariant 5), so ListDeadPairRooms cannot see
+// it, and a completion closes it only when the completion is what empties it. The
+// gap those two leave is real and is reachable by ordinary use: the last object
+// is completed while an upload is still in flight — correctly leaving the room
+// open — and that upload is then abandoned rather than finalized, so the generic
+// reaper takes its session and the room is left holding nothing, open, forever.
+// The row is small, but "forever" times one per abandoned transfer is not a
+// bound, and a table nothing can ever delete from is the kind of leak that is
+// discovered years later.
+//
+// THE AGE GUARD IS NOT COSMETIC. A room is created by the request that starts the
+// first pre-upload, and its session row is inserted a statement later; a sweep
+// landing in that gap, for a room joined in the same instant, would close a room
+// whose upload is about to bind to it. `before` is the caller's grace period and
+// is orders of magnitude longer than that gap, so the sweep only ever sees rooms
+// whose emptiness is settled rather than momentary.
+//
+// Bounded, like every other sweep here, so a backlog drains over several ticks
+// instead of holding the single writer for one long pass.
+//
+// IT ANSWERS WITH THE ROOMS, NOT A COUNT, and that is a requirement rather than a
+// convenience. Closing a room is only half of a void: a room that is over takes
+// its CODE with it (revokePairCode), and the revoke is bounded by the room's own
+// identity — owner and join deadline (PairCodes.RevokeFor). A count cannot be
+// revoked against, and re-reading the rows afterwards would be reading them after
+// the fact: the caller needs the row as it was when this transaction changed it,
+// because a re-read can be a different incarnation of the same digits. Each
+// returned room is its pre-close row with closed_at stamped, which is exactly what
+// the revoke's owner-and-deadline guard is defined over (the join deadline is
+// derived from created_at/last_upload_at and is untouched by the close).
+//
+// SELECT-then-UPDATE in ONE transaction rather than one UPDATE ... FROM/RETURNING:
+// this pool's transactions are IMMEDIATE (DSN _txlock), so the write lock is held
+// from the first statement and nothing can bind an object or a session to a
+// candidate room between the read and the write. The per-row `closed_at = 0` guard
+// is what makes the returned set exactly the set this call changed — a room some
+// other path closed first is simply not in it, so its code is not revoked twice.
+func (s *SQLiteStore) CloseEmptyJoinedPairRooms(ctx context.Context, before, at int64, limit int) ([]PairRoom, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	rows, err := tx.QueryContext(ctx,
+		`SELECT `+pairRoomCols+` FROM pair_rooms
+		  WHERE closed_at = 0 AND joined_at > 0 AND created_at <= ?
+		    AND NOT EXISTS (SELECT 1 FROM stored_files    WHERE pair_room_id = pair_rooms.id)
+		    AND NOT EXISTS (SELECT 1 FROM upload_sessions WHERE pair_room_id = pair_rooms.id)
+		  LIMIT ?`, before, limit)
+	if err != nil {
+		return nil, err
+	}
+	var candidates []PairRoom
+	for rows.Next() {
+		r, err := scanPairRoom(rows)
+		if err != nil {
+			rows.Close()
+			return nil, err
+		}
+		candidates = append(candidates, r)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	var closed []PairRoom
+	for _, r := range candidates {
+		res, err := tx.ExecContext(ctx,
+			`UPDATE pair_rooms SET closed_at = ? WHERE id = ? AND closed_at = 0`, at, r.ID)
+		if err != nil {
+			return nil, err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			continue
+		}
+		r.ClosedAt = at
+		closed = append(closed, r)
+	}
+	// Nothing is reported unless it committed. A caller that revoked codes for a
+	// close this transaction then rolled back would leave live rooms nobody can
+	// reach — so a failed commit answers with no rooms at all, not with the ones
+	// it meant to close.
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return closed, nil
 }

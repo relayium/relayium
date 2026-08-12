@@ -84,6 +84,56 @@ export async function decryptManifest(key: CryptoKey, ct: Uint8Array): Promise<S
   return { ...m, files: sanitizeNames(validateManifestFiles(m?.files)) };
 }
 
+/** Domain separator for the pair-room completion capability. Exact ASCII, no
+ *  trailing NUL, and part of the WIRE: this server, the Swift port and every
+ *  other implementation must agree on it byte for byte, or a receiver's proof
+ *  never matches the sender's verifier and every completion 403s. Frozen by the
+ *  vector in store-crypto.completion.test.ts, whose twin lives in
+ *  server/account/pairroom_complete_test.go. */
+export const PREUPLOAD_COMPLETE_INFO = "relayium-preupload-complete-v1";
+
+/** The receiver's proof that it holds a pre-uploaded object's file key —
+ *  `HKDF-SHA256(ikm = key, salt = empty, info = PREUPLOAD_COMPLETE_INFO)`, 32
+ *  bytes.
+ *
+ *  This is the value that ENDS an object's life, so it is a bearer capability
+ *  and is treated as one: it goes in a request BODY (never a URL, which proxies
+ *  and access logs record) and is never persisted or printed.
+ *
+ *  HKDF rather than a bare hash of the key, because a bare hash is replayable
+ *  into any other context that ever hashes the same key; the info string is the
+ *  promise that this one is not. The empty salt is the protocol's — HKDF's salt
+ *  is optional and there is nothing for one to buy over 32 uniformly random
+ *  bytes of IKM. Go's `crypto/hkdf` with a nil salt derives the identical PRK
+ *  (HMAC zero-pads any key shorter than its block size), which is what the
+ *  shared vector pins. */
+export async function completionProof(fileKey: Uint8Array): Promise<Bytes> {
+  // Length-checked here rather than left to WebCrypto, which happily derives
+  // from any IKM: a truncated key would produce a well-formed proof that simply
+  // never matches, and "the server rejected it" is a much worse diagnosis than
+  // "this is not a file key".
+  if (fileKey.length !== 32) throw new Error("completion proof needs a 32-byte file key");
+  const k = await crypto.subtle.importKey("raw", fileKey as Bytes, "HKDF", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits(
+    { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(0), info: enc.encode(PREUPLOAD_COMPLETE_INFO) },
+    k,
+    256,
+  );
+  return new Uint8Array(bits) as Bytes;
+}
+
+/** What the SENDER hands the server at finalize: `SHA-256(completionProof(key))`.
+ *
+ *  The asymmetry is the whole design. The server stores only this, so knowing it
+ *  — which is all a stolen database yields — does not produce the proof and
+ *  cannot complete anybody's transfer; and neither value yields the file key, so
+ *  the zero-knowledge property is untouched. The server's only job is to hash
+ *  what a receiver sends and compare it with this. */
+export async function completionVerifier(fileKey: Uint8Array): Promise<Bytes> {
+  const digest = await crypto.subtle.digest("SHA-256", await completionProof(fileKey));
+  return new Uint8Array(digest) as Bytes;
+}
+
 // length-prefixed frame: uint32BE(len(ct)) || ct.
 function frame(ct: Uint8Array): Bytes {
   const out = new Uint8Array(4 + ct.length);

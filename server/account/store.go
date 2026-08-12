@@ -578,6 +578,56 @@ type PairRoomTouch struct {
 	CodeDeadline int64
 }
 
+// PairRoomCompletionOutcome is what a completion attempt actually did. Four
+// values rather than an error and a bool, because each maps to a different thing
+// the receiver must do next and two of them are refusals that mean opposite
+// things.
+type PairRoomCompletionOutcome int
+
+const (
+	// PairRoomCompletionGone: there is nothing here to complete. The object was
+	// already completed, never existed, or is not a pair-room object at all —
+	// ONE outcome for all three, because this endpoint is unauthenticated and
+	// separating them would make it an existence oracle over every stored object.
+	// It is also the answer that keeps shares and Device Inbox objects out of
+	// reach of this path entirely.
+	PairRoomCompletionGone PairRoomCompletionOutcome = iota
+	// PairRoomCompletionNoVerifier: a live pair-room object whose sender never
+	// asked for a completion capability — a client predating it, or one that
+	// chose not to offer one. Distinct from a wrong proof on purpose: a receiver
+	// told "wrong proof" will keep deriving proofs from the key it holds, and no
+	// proof it can ever produce will work. Nothing is deleted.
+	PairRoomCompletionNoVerifier
+	// PairRoomCompletionMismatch: the proof does not open this object's
+	// capability. Nothing is deleted, and the object stays exactly as readable as
+	// it was — a failed completion is not a half-performed one.
+	PairRoomCompletionMismatch
+	// PairRoomCompletionDone: the row is gone, the blob has a durable owner, and
+	// the storage it held is released.
+	PairRoomCompletionDone
+)
+
+// PairRoomCompletion is what one completion transaction did, and the work list it
+// leaves behind. Every row it describes is ALREADY changed; what is left for the
+// caller is only the part that has to talk to a node or to the code registry,
+// neither of which may hold up a database transaction.
+type PairRoomCompletion struct {
+	Outcome PairRoomCompletionOutcome
+	// Object is the row that was removed, valid only for PairRoomCompletionDone.
+	// The caller needs its blob key and node for the physical delete — which is
+	// best-effort, because the intent queued in the same transaction is what
+	// actually guarantees the bytes go.
+	Object StoredFile
+	// RoomClosed reports that this completion also ended the room: it was the
+	// last thing the room held, nothing was still uploading into it, and somebody
+	// had joined. Never true for an unjoined room — that one is still waiting for
+	// files and for a receiver, and its deadline is what ends it.
+	RoomClosed bool
+	// Room is that room as it stood after being closed, for the caller to revoke
+	// the pairing code with. Zero unless RoomClosed.
+	Room PairRoom
+}
+
 // ErrPairRoomClosed is returned by a store write whose pairing-room
 // precondition failed: the room closed, expired, or vanished before the write
 // could land. It is a terminal condition, never a transient one — retrying it
@@ -619,6 +669,21 @@ type StoredFile struct {
 	// codes are recycled, and binding to one would let a reissued code reach the
 	// previous holder's ciphertext. See pairroom.go.
 	PairRoomID string
+	// CompletionVerifier is SHA-256 of the proof a receiver must present to end
+	// this object's life — 32 bytes, or nil for an object that has none.
+	//
+	// Set only by a pair-room finalize, only when the SENDER asked for it, and
+	// never derived by the server: it is the one end of a chain rooted in the file
+	// key, which this server has never seen and never will (pairroom_complete.go).
+	// Holding it lets the server CHECK a completion; it does not let the server
+	// perform one, and it says nothing about the ciphertext it guards.
+	//
+	// nil is the ordinary state, not a degraded one. Every row written before this
+	// column existed has it, every share and Device Inbox object has it, and a
+	// pair-room object whose sender predates the capability has it — which is why
+	// "no verifier" is answered with a distinct status rather than a refusal that
+	// looks like a wrong proof.
+	CompletionVerifier []byte
 }
 
 // StoredFileWrite is what a stored-file insert ACTUALLY landed — the row's own
@@ -1637,6 +1702,29 @@ type Store interface {
 	// The closure is that remaining work list (see PairRoomClosure); the rows it
 	// describes are already gone.
 	ClosePairRoom(ctx context.Context, id string, at, holdUntil int64) (PairRoomClosure, error)
+	// CompletePairRoomObject removes ONE pair-room object on a receiver's word,
+	// in one transaction: it checks `verifier` against the object's own stored
+	// one in constant time, queues the blob's durable delete intent (held until
+	// holdUntil) BEFORE deleting the row that is the only other thing pointing at
+	// it, and — when that was the last thing the room held and somebody has
+	// joined — closes the room too.
+	//
+	// The verdict is reached under the writer lock rather than by the caller, so
+	// two receivers racing cannot both act on it: exactly one gets Done and the
+	// other is told it is already gone. Nothing here touches a node; the physical
+	// delete is the caller's, best-effort, against the intent this wrote.
+	CompletePairRoomObject(ctx context.Context, id string, verifier []byte, at, holdUntil int64) (PairRoomCompletion, error)
+	// CloseEmptyJoinedPairRooms closes joined, open rooms created at or before
+	// `before` that hold neither an object nor an upload session, at most limit
+	// of them. GC's hygiene pass for the one room shape no deadline and no
+	// completion can reach (see the SQLite implementation).
+	//
+	// It returns THE ROOMS IT CLOSED — each one the row as this call found it,
+	// with closed_at stamped — and only those: a room another path closed first is
+	// not in the result. The caller needs the identity, not a tally, because
+	// closing a room is only half of a void and the other half (revoking the
+	// room's pairing code) is bounded by the room's own owner and join deadline.
+	CloseEmptyJoinedPairRooms(ctx context.Context, before, at int64, limit int) ([]PairRoom, error)
 	// ListDeadPairRooms returns open rooms whose deadline has passed (GC's
 	// backstop pass), newest-deadline-last, at most limit rows.
 	ListDeadPairRooms(ctx context.Context, now int64, limit int) ([]PairRoom, error)

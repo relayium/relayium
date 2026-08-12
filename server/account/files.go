@@ -76,6 +76,12 @@ func (s *Service) registerFileRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/files/{id}", s.RequireAuth(s.handleDeleteFile))
 	mux.HandleFunc("GET /api/files/{id}/meta", s.handleFileMeta)
 	mux.HandleFunc("GET /api/files/{id}/blob", s.handleFileBlob)
+	// The third public per-object route, and the only one that WRITES: a pair-room
+	// receiver reporting that it has the file, which is what lets a joined room
+	// end (pairroom_complete.go). Unauthenticated for the same reason the two
+	// above are — the receiver of a code-first transfer has no account — and
+	// authorized by a proof derived from the file key rather than by a session.
+	mux.HandleFunc("POST /api/files/{id}/complete", s.handleFileComplete)
 }
 
 func (s *Service) handleUploadFile(w http.ResponseWriter, r *http.Request, u User) {

@@ -58,9 +58,16 @@ import (
 //  5. JOINING ENDS EVERY CLOCK. Once a second participant is in the room there
 //     is NO deadline of any kind on the ciphertext — not a transfer deadline and
 //     not a readability one. This is the owner's rule taken literally, which is
-//     why it is expensive: nothing but an explicit completion lifecycle (not yet
-//     built) or the account itself removes a joined room's bytes, so pre-upload
-//     is off unless a deployment turns it on (Service.SetPreUpload).
+//     why it is expensive: nothing but an explicit completion or the account
+//     itself removes a joined room's bytes, so pre-upload is off unless a
+//     deployment turns it on (Service.SetPreUpload).
+//     The completion half now EXISTS (pairroom_complete.go): a receiver holding
+//     the file key can prove it has the file and the object goes, taking the room
+//     with it when it was the last one. That is a capability somebody exercises,
+//     not a clock — it adds nothing that expires — so this invariant is exactly
+//     what it was. What it does NOT yet do is run: the Web receiver does not post
+//     a completion, and what becomes of a joined room nobody ever completes is
+//     still an open owner decision. See invariant 8.
 //  6. VOID MEANS GONE, NOW — AND GONE MEANS EVERYTHING THE ROOM HELD. Every
 //     truth-bearing read or write of a pair-room object re-derives the room's
 //     liveness and, if the room is over, closes it. The close is ONE database
@@ -79,12 +86,27 @@ import (
 //  7. THE RECEIVER STAYS ACCOUNT-FREE. A pair-room object is fetched through the
 //     same unauthenticated /api/files/{id}/meta and /blob endpoints a share uses.
 //     Holding the id (and the key the server never saw) is the whole capability.
-//  8. OFF UNLESS TURNED ON. Invariant 5 is an unbounded storage commitment until
-//     a completion lifecycle exists to end a joined room, so a deployment must
-//     opt in (Service.SetPreUpload) before a single room can be created. Nothing
-//     in the Web client asks for one today either. The gate is not a feature
-//     flag for a half-built feature — this half is finished — it is the honest
-//     way to hold rule 5 as written instead of quietly trading it for a number.
+//  8. OFF UNLESS TURNED ON. A deployment must opt in (Service.SetPreUpload)
+//     before a single room can be created, and nothing in the Web client asks for
+//     one today either.
+//     The completion FOUNDATION is now in place — a sender may record a
+//     completion capability at finalize, and a receiver that holds the file key
+//     may spend it (pairroom_complete.go) — but production stays OFF, and the
+//     reasons are specific rather than caution:
+//     · RECEIVER INTEGRATION IS NOT WIRED. The Web receiver does not post a
+//       completion yet, so today every joined room is still ended only by the
+//       account or an operator. A capability nobody exercises frees nothing.
+//     · THE RESIDUAL LIFETIME IS AN OWNER DECISION AND IS STILL OPEN. What
+//       happens to a joined room whose receiver never completes — declines,
+//       closes the tab, never arrives at all — is unanswered. It is deliberately
+//       NOT answered here: a decline is not a completion, and inventing a
+//       fallback expiry would be exactly the reinterpretation of rule 5 this file
+//       already refused once.
+//     · THE ROLLOUT GATES ARE NOT CLOSED. Enabling this is a storage commitment
+//       whose shape depends on both of the above.
+//     So the gate is still not a feature flag for a half-built feature: each half
+//     is finished on its own terms. It is the honest way to hold rule 5 as
+//     written instead of quietly trading it for a number.
 
 // StoredPurposePairRoom is ciphertext uploaded during a pairing code's wait, to
 // be handed to whoever joins that code's room. Bound to one room for its whole
@@ -169,14 +191,19 @@ const pairRoomMaxJoinable int64 = 6 * 3600
 // readable and its bytes are deleted, which is a deadline whatever it is called.
 // A rule the code reinterprets is not the rule.
 //
-// So there is no clock. A joined room's ciphertext leaves only when an explicit
-// completion lifecycle removes it (delivery confirmed / burn-after-download —
-// NOT built, see the plan's remaining seams), when the owner's account is
-// deleted, or when an operator deletes it. Until that lifecycle exists this is
-// an unbounded storage commitment per joined room, which is precisely why
-// pre-upload is off unless a deployment opts in (Service.SetPreUpload): the
-// honest way to hold a rule we cannot yet afford is to not run the feature, not
-// to quietly weaken the rule.
+// So there is no clock. A joined room's ciphertext leaves only when a receiver
+// COMPLETES it (pairroom_complete.go — built, but not yet posted by any client),
+// when the owner's account is deleted, or when an operator deletes it. Note what
+// completion is and is not: a capability a receiver spends once it has the file.
+// It is not a deadline wearing another name, it cannot fire on its own, and no
+// amount of time passing performs one. This constant is therefore untouched by
+// it and stays what it says — never.
+//
+// Until a client actually posts completions, and until the owner has answered
+// what becomes of a room nobody completes, this remains an unbounded storage
+// commitment per joined room — which is precisely why pre-upload is off unless a
+// deployment opts in (Service.SetPreUpload): the honest way to hold a rule we
+// cannot yet afford is to not run the feature, not to quietly weaken the rule.
 //
 // Materialized as a real column value rather than a NULL/flag so every generic
 // mechanism keeps working untouched: the GC's expired-file sweep, liveFile's
@@ -1318,8 +1345,55 @@ func (s *Service) SweepPairRooms(ctx context.Context, now int64) {
 			s.endPairRoomIfOver(ctx, room)
 		}
 	}
+	// Hygiene for the one room shape neither a deadline nor a completion can
+	// reach: JOINED, open, and holding nothing at all.
+	//
+	// A joined room has no deadline (invariant 5), so the pass above cannot see
+	// it, and a completion closes the room only when the completion is what
+	// empties it. What falls between them is ordinary rather than exotic: the last
+	// object is completed while an upload is still in flight — which correctly
+	// leaves the room open, because that upload is entitled to finish — and the
+	// upload is then abandoned instead of finalized, so the generic reaper takes
+	// its session and nothing is left. Without this the row is immortal.
+	//
+	// It reclaims no bytes, because there are none: a room that holds no object and
+	// no session has no ciphertext, no blob and no slot left. What it does still owe
+	// is the OTHER half of a void — a room that is over takes its code with it —
+	// which is why the store hands back the rooms it closed rather than a count.
+	// The revoke runs AFTER the transaction committed, never before: a code taken
+	// away for a close that then failed to commit would be a live room nobody can
+	// reach. Each is bounded by that room's own owner and join deadline
+	// (revokePairCode), so a sweep can never take digits that have been minted
+	// again since. The grace period is what keeps this from racing the interval
+	// between a room being created and the first upload session binding to it.
+	if closed, err := s.store.CloseEmptyJoinedPairRooms(ctx, now-pairRoomEmptyGrace, now, pairRoomSweepBatch); err != nil {
+		log.Printf("pair rooms: closing joined rooms that hold nothing: %v", err)
+	} else if len(closed) > 0 {
+		for _, room := range closed {
+			s.revokePairCode(room)
+		}
+		log.Printf("pair rooms: closed %d joined room(s) with nothing left in them", len(closed))
+	}
 	_ = s.store.PurgeClosedPairRooms(ctx, now-pairRoomPurgeAfter)
 }
+
+// pairRoomEmptyGrace is how long a JOINED room must have existed before the
+// sweep is willing to read "holds nothing" as settled rather than momentary.
+//
+// The interval it guards is small and real: a room is created by the request
+// that starts the first pre-upload, and that upload's session row is inserted a
+// statement later. A sweep landing in between, on a room joined in that same
+// instant, would close a room whose upload is about to bind to it — turning a
+// hygiene pass into a 410 for a transfer that was doing nothing wrong.
+//
+// pairRoomJoinWindow is the length because it is already this feature's unit of
+// "long enough that nothing in flight is still in flight", and it is five orders
+// of magnitude above the gap being covered. Nothing is lost by waiting: the row
+// being collected is a few dozen bytes that no longer describe anything.
+//
+// A var only because pairRoomJoinWindow is one (it is signal.CodeTTLSeconds);
+// production never reassigns it.
+var pairRoomEmptyGrace = pairRoomJoinWindow
 
 // pairRoomSweepBatch bounds one sweep so a backlog is drained over several ticks
 // instead of holding the writer for an unbounded pass.

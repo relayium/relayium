@@ -560,10 +560,14 @@ func TestJoinEndsTheDeadlineAndImposesNoDeadlineAtAll(t *testing.T) {
 }
 
 // The other half of that rule, and the reason it is affordable to state: nothing
-// can create a room at all unless the deployment opted in. A joined room has no
-// expiry and no completion lifecycle yet, so an operator who has not asked for
-// that storage commitment does not get it — and gets it explicitly, not as a
-// 403 that reads like a bad code.
+// can create a room at all unless the deployment opted in. A joined room still
+// has no expiry, and the completion capability that would end one now exists —
+// but no receiver spends it yet, so in practice a joined room's ciphertext is
+// still held until somebody deletes it, and the residual lifetime question and
+// the rollout that would make completion routine are both still open. That is
+// what keeps default-off load-bearing rather than ceremonial: an operator who
+// has not asked for that storage commitment does not get it — and gets it
+// explicitly, not as a 403 that reads like a bad code.
 func TestPreUploadIsOffUnlessTheDeploymentTurnsItOn(t *testing.T) {
 	h := newPairHarness(t)
 	h.svc.SetPreUpload(false)

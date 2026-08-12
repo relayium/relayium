@@ -1134,6 +1134,32 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
+	// The OPTIONAL completion verifier, read before anything is claimed.
+	//
+	// BEFORE, and that ordering is the whole of it. The claim below is terminal by
+	// design — it is what makes finalize once-only — so a refusal taken after it
+	// would turn one malformed field into an upload that can never be finalized at
+	// all: the sender's bytes are on the node, the session is spent, and no retry
+	// can land them. A 400 here costs the sender a request and nothing else.
+	//
+	// It is additive in both directions. A client that sends no body is every
+	// client that exists today and is answered exactly as before; a client that
+	// sends one against a server predating this simply has it ignored.
+	completionVerifier, cerr := finalizeCompletionVerifier(r)
+	if cerr != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	// A completion capability belongs to a pair-room object and to nothing else. A
+	// share's life is its TTL and its download count; a Device Inbox object's is
+	// its task. Neither has anything for a receiver to end, so a verifier on one is
+	// a caller that has misread the endpoint — refused rather than stored and
+	// quietly ignored, which is the same choice the pre-upload path already makes
+	// for retention parameters it cannot honour.
+	if completionVerifier != nil && sess.Purpose != StoredPurposePairRoom {
+		http.Error(w, "completion verifier is only for a pair-room upload", http.StatusBadRequest)
+		return
+	}
 	// Claim the session terminally AND settle its meter, in one store transaction:
 	// the committed size at that instant, and a bill for every committed byte no
 	// append got to record. A racing finalize (or the reaper) that already claimed
@@ -1273,7 +1299,7 @@ func (s *Service) handleUploadFinalize(w http.ResponseWriter, r *http.Request, u
 		ID: fid, UserID: u.ID, BlobKey: sess.BlobKey, EncManifest: sess.EncManifest,
 		Size: size, BurnAfterRead: sess.MaxDL == 1, CreatedAt: now, ExpiresAt: now + sess.TTL,
 		NodeID: sess.NodeID, MaxDownloads: sess.MaxDL, Purpose: sess.Purpose,
-		PairRoomID: sess.PairRoomID,
+		PairRoomID: sess.PairRoomID, CompletionVerifier: completionVerifier,
 	}
 	// sf.ExpiresAt above is the SESSION's TTL, and for a pre-upload it is not the
 	// answer: the object inherits its ROOM's deadline, which is the same 300
