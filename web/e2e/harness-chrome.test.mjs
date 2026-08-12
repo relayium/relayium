@@ -7,7 +7,7 @@
  * `launchBrowser` will actually use.
  */
 import { spawn } from "node:child_process";
-import { chmodSync, mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -467,6 +467,15 @@ async function withCapturedLog(run) {
   try { return { value: await run(), lines }; } finally { spy.mockRestore(); }
 }
 
+/** The same for its warnings — the channel the cleanup step degrades onto.
+ *  Captured rather than allowed through: a warning printed by a passing test
+ *  reads, in a CI log, exactly like a warning from the code under test. */
+async function withCapturedWarn(run) {
+  const lines = [];
+  const spy = vi.spyOn(console, "warn").mockImplementation((line) => { lines.push(String(line)); });
+  try { return { value: await run(), lines }; } finally { spy.mockRestore(); }
+}
+
 describe("CDP readiness deadline", () => {
   posixOnly("gives up at the configured deadline and says that is what happened", async () => {
     process.env.CHROME_PATH = nodeBrowserBinary(SLOW_CDP_SERVER);
@@ -609,5 +618,176 @@ describe("CDP readiness deadline", () => {
     // never started. (A before/after diff, not an absolute check: a leftover
     // from an earlier crashed run must not be read as this run's doing.)
     expect(profileDirs().filter((n) => !before.includes(n))).toEqual([]);
+  }, 30_000);
+});
+
+// ── killing the previous run's leftovers, before starting this one ──────────
+//
+// The cleanup step spawns `pkill -f remote-debugging-port=<port>` — a pattern
+// that the Chrome spawned immediately afterwards ALSO matches, because that flag
+// is on its command line too. So the two must never overlap: a cleanup that is
+// still scanning the process table when the new Chrome appears can kill the
+// browser this run just started, and the resulting failure looks like a browser
+// that died on startup for no reason.
+//
+// The stand-in is injected rather than found on PATH: the real `pkill` would
+// make these assertions depend on how fast this machine forks and scans /proc,
+// and there is no portable way to make it slow, wedged or missing on demand.
+
+/** A cleanup stand-in: a shell script the test chooses, plus a record of what
+ *  `launchBrowser` asked it to match. */
+function fakeCleanup(script) {
+  const calls = [];
+  const spawnCleanup = (pattern) => {
+    const child = spawn("/bin/sh", ["-c", script], { stdio: "ignore" });
+    children.push(child);
+    calls.push({ pattern, child });
+    return child;
+  };
+  return { spawnCleanup, calls };
+}
+
+/** A path nothing has written yet: a "did the browser run at all" marker. */
+const markerPath = () => join(tempDir(), "marker.log");
+
+/** The lines written to a marker, in the order they were appended. */
+const markerLines = (path) =>
+  (existsSync(path) ? readFileSync(path, "utf8") : "").split("\n").filter((l) => l !== "");
+
+/** A browser stand-in that records that it ran, then fails in a way the
+ *  readiness diagnostics name exactly — so "did Chrome start?" is answered by
+ *  the thrown error as well as by the marker. */
+const recordingBrowser = (marker) =>
+  browserBinary(`echo chrome-start >> ${JSON.stringify(marker)}\nexit 5`);
+
+const launchFailure = (options) =>
+  launchBrowser(options).then(
+    (session) => { session.close(); throw new Error("this launch was supposed to fail"); },
+    (e) => e,
+  );
+
+describe("stale-browser cleanup", () => {
+  posixOnly("does not spawn Chrome until the cleanup child has exited", async () => {
+    const marker = markerPath();
+    // The cleanup runs until this test says otherwise, so the ordering below is
+    // decided by the harness rather than by a race between two sleeps.
+    const gate = join(tempDir(), "release");
+    const { spawnCleanup, calls } = fakeCleanup(`while [ ! -f ${JSON.stringify(gate)} ]; do sleep 0.05; done`);
+    process.env.CHROME_PATH = recordingBrowser(marker);
+    const before = profileDirs();
+
+    const launch = launchFailure({ debugPort: 9471, cleanup: { spawnCleanup } });
+
+    // Watched for well past the 800ms sleep this replaced, which is when the
+    // fire-and-forget shape reached the spawn.
+    //
+    // The PROFILE is what is watched, not the marker: it is created
+    // synchronously in the line before the spawn, whereas a marker only appears
+    // once the stand-in binary has actually exec'd — and a freshly written one
+    // can take most of a second to get there. "No marker yet" is therefore also
+    // true of a Chrome that HAS already been started, which is precisely the
+    // failure this test exists to catch.
+    for (let i = 0; i < 30; i++) {
+      expect(profileDirs().filter((n) => !before.includes(n))).toEqual([]);
+      await sleep(50);
+    }
+    expect(markerLines(marker)).toEqual([]);
+
+    writeFileSync(gate, "");
+    const err = await launch;
+
+    expect(err.message).toMatch(/Chrome exited before its debug port answered \(exit code 5\)/);
+    expect(markerLines(marker)).toEqual(["chrome-start"]); // it did launch, after
+    expect(profileDirs().filter((n) => !before.includes(n))).toEqual([]);
+    // The pattern is still the one that matches only THIS run's port, so two
+    // e2e scripts on different ports still cannot kill each other's browsers.
+    expect(calls).toHaveLength(1);
+    expect(calls[0].pattern).toBe("remote-debugging-port=9471");
+  }, 30_000);
+
+  posixOnly("treats \"no matching process\" as a successful cleanup", async () => {
+    const marker = markerPath();
+    // Exit 1 is what pkill reports on every healthy run: there was no leftover
+    // browser to kill. Treating it as a failure would warn on every launch.
+    const { spawnCleanup } = fakeCleanup("exit 1");
+    process.env.CHROME_PATH = recordingBrowser(marker);
+
+    const { value: err, lines } = await withCapturedWarn(() =>
+      launchFailure({ debugPort: 9472, cleanup: { spawnCleanup } }));
+
+    expect(err.message).toMatch(/exit code 5/);
+    expect(markerLines(marker)).toEqual(["chrome-start"]);
+    expect(lines).toEqual([]);
+  }, 30_000);
+
+  posixOnly("says so, and still launches, when the cleanup command is missing", async () => {
+    const marker = markerPath();
+    const missing = join(tempDir(), "no-pkill");
+    const spawnCleanup = () => {
+      const child = spawn(missing, [], { stdio: "ignore" });
+      children.push(child);
+      return child;
+    };
+    process.env.CHROME_PATH = recordingBrowser(marker);
+
+    const { value: err, lines } = await withCapturedWarn(() =>
+      launchFailure({ debugPort: 9473, cleanup: { spawnCleanup } }));
+
+    // A cleanup that never execed cannot kill anything, this run's Chrome
+    // included — so continuing is safe. It is not silent, because leftovers from
+    // an earlier run now survive into this one.
+    expect(err.message).toMatch(/exit code 5/);
+    expect(markerLines(marker)).toEqual(["chrome-start"]);
+    expect(lines.join("\n")).toMatch(/cleanup/);
+    expect(lines.join("\n")).toMatch(/ENOENT/);
+  }, 30_000);
+
+  posixOnly("says so, and still launches, when cleanup exits unexpectedly", async () => {
+    const marker = markerPath();
+    const { spawnCleanup } = fakeCleanup("exit 2"); // pkill's usage error
+    process.env.CHROME_PATH = recordingBrowser(marker);
+
+    const { value: err, lines } = await withCapturedWarn(() =>
+      launchFailure({ debugPort: 9474, cleanup: { spawnCleanup } }));
+
+    expect(err.message).toMatch(/exit code 5/);
+    expect(markerLines(marker)).toEqual(["chrome-start"]);
+    expect(lines.join("\n")).toMatch(/exit code 2/);
+  }, 30_000);
+
+  posixOnly("says so, and still launches, when cleanup is killed by a signal", async () => {
+    const marker = markerPath();
+    const { spawnCleanup } = fakeCleanup("kill -TERM $$; sleep 5");
+    process.env.CHROME_PATH = recordingBrowser(marker);
+
+    const { value: err, lines } = await withCapturedWarn(() =>
+      launchFailure({ debugPort: 9475, cleanup: { spawnCleanup } }));
+
+    expect(err.message).toMatch(/exit code 5/);
+    expect(markerLines(marker)).toEqual(["chrome-start"]);
+    expect(lines.join("\n")).toMatch(/SIGTERM/);
+  }, 30_000);
+
+  posixOnly("kills a wedged cleanup, reaps it, and refuses to start Chrome", async () => {
+    const marker = markerPath();
+    // `exec` so the pid we hold IS the sleeping process: otherwise the kill
+    // would land on the shell and leave the real sleeper behind, and `reaped`
+    // below would be asking about the wrong process.
+    const { spawnCleanup, calls } = fakeCleanup("exec sleep 60");
+    process.env.CHROME_PATH = recordingBrowser(marker);
+    const before = profileDirs();
+
+    const err = await launchFailure({ debugPort: 9476, cleanup: { spawnCleanup, timeoutMs: 300 } });
+
+    expect(err.message).toMatch(/cleanup/i);
+    expect(err.message).toMatch(/300ms/);
+    // Chrome must NOT have been started: a cleanup still scanning matches the
+    // new browser's own command line, so starting it is the very race this
+    // guards. No marker, and no temporary profile either.
+    expect(markerLines(marker)).toEqual([]);
+    expect(profileDirs().filter((n) => !before.includes(n))).toEqual([]);
+    // And the cleanup child itself is gone, not left running against the port
+    // the NEXT launch will use.
+    expect(await reaped(calls[0].child.pid)).toBe(true);
   }, 30_000);
 });

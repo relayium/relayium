@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { watchChromeProcess } from "./chrome-process.mjs";
+import { cleanupStaleBrowsers } from "./stale-cleanup.mjs";
 
 export { sleep };
 
@@ -477,23 +478,27 @@ function checkedReadyTimeout(value) {
  * setting into every other test sharing the process, and the harness would have
  * to parse and validate a string that any surrounding shell could also set by
  * accident. An argument is passed by exactly one caller and validated once.
+ *
+ * `cleanup` is the seam that lets that first step be tested (see
+ * stale-cleanup.mjs). No e2e script passes it; it exists so the tests never have
+ * to depend on this machine's real `pkill` — which cannot be made slow, broken
+ * or absent on demand.
  */
-export async function launchBrowser({ debugPort, keep = false, cdpReadyTimeoutMs = CDP_READY_TIMEOUT_MS }) {
-  // Before the pkill, the profile and the spawn: an unusable deadline is a
+export async function launchBrowser({ debugPort, keep = false, cdpReadyTimeoutMs = CDP_READY_TIMEOUT_MS, cleanup = {} }) {
+  // Before the cleanup, the profile and the spawn: an unusable deadline is a
   // programming error, and reporting it after killing browsers and creating a
   // temp directory would mean cleaning up work that never should have started.
   const readyTimeoutMs = checkedReadyTimeout(cdpReadyTimeoutMs);
-  // 先解析浏览器：没有浏览器就没必要 pkill、建临时 profile 或等 800ms，直接报清楚。
+  // 先解析浏览器：没有浏览器就没必要 pkill、建临时 profile，直接报清楚。
   const chromeBin = resolveChrome();
-  try {
-    // The `.on("error")` is not optional: a missing `pkill` is reported
-    // asynchronously as an `error` event, which this try/catch cannot see and
-    // which — unlistened — is an uncaught exception that kills the whole run.
-    // Swallowing it is right: no pkill means no leftovers of ours to kill.
-    spawn("pkill", ["-f", `remote-debugging-port=${debugPort}`], { stdio: "ignore" })
-      .on("error", () => {});
-    await sleep(800);
-  } catch { /* 没有残留就没得可杀 */ }
+  // Awaited, and NOT wrapped in a try/catch: the cleanup command matches the
+  // command line of the Chrome spawned below, so a cleanup that is still running
+  // can kill the browser this run just started. Waiting for it to be over is the
+  // whole point, and the one case it refuses to swallow — a cleanup still alive
+  // at its deadline — is the one where continuing would reintroduce that race.
+  // `debugPort` last: the seam may choose the timeouts and the command, but not
+  // which port's leftovers this is — that is the launch's own business.
+  await cleanupStaleBrowsers({ ...cleanup, debugPort });
 
   const profile = mkdtempSync(join(tmpdir(), "relayium-e2e-"));
   const chrome = spawn(
