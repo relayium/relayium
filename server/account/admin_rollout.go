@@ -554,8 +554,9 @@ func (s *Service) rolloutSetVersion(w http.ResponseWriter, r *http.Request, acti
 //     rollout (halted, but with the canary still in current_node_id, which
 //     HaltRolloutTrack leaves set on purpose). A hand-written
 //     `version == LatestTag` waved through a fleet target that was AHEAD of
-//     GitHub's releases/latest — routine while a tag is a pre-release rolled to
-//     the fleet first, or after a bad release is unpublished — where the panel
+//     the newest release the check found — routine while a tag is a pre-release
+//     rolled to the fleet first (release discovery skips pre-releases), or
+//     after a bad release is unpublished — where the panel
 //     correctly renders nothing and a stale page posted successfully anyway.
 //     Delegating collapses button and handler onto one predicate, so a future
 //     condition added to releaseNotice reaches this handler for free and the two

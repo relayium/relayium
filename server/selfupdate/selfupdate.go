@@ -224,32 +224,186 @@ func IsPlainVersion(s string) bool {
 	return ok
 }
 
-// LatestTag returns the newest release tag (tag_name from releases/latest).
+// isCanonicalServerTag reports whether s is exactly a server release tag:
+// ^v[0-9]+\.[0-9]+\.[0-9]+$. Stricter than IsPlainVersion, which accepts a bare
+// "1.2.3" because it also has to read main.version (goreleaser drops the "v").
+// Tag DISCOVERY is the other direction — it reads names out of a repository that
+// carries several tag families — so here the leading "v" is required and the
+// match must be exact. This is deliberately the same rule as
+// scripts/release/server-tag.sh's is_canonical: the shape that repo refuses to
+// tag or sign must not be a shape the updater agrees to install.
+//
+// The surrounding whitespace check is not decoration: parseVer trims space
+// before it parses (it reads human-supplied flag values too), so without it a
+// tag literally named "v1.2.3 " would match, and then every download URL built
+// from it would 404.
+func isCanonicalServerTag(s string) bool {
+	if !strings.HasPrefix(s, "v") || s != strings.TrimSpace(s) {
+		return false
+	}
+	_, ok := parseVer(s)
+	return ok
+}
+
+// ErrNoRelease means the scan completed and found no published canonical server
+// release — every release in the repository belonged to another tag family, or
+// was a draft or a pre-release. It is NOT an error about reaching GitHub, and it
+// must not be reported as "you are up to date": there is simply no server
+// release to compare against.
+var ErrNoRelease = errors.New("selfupdate: no published server release found")
+
+// ErrScanTruncated means the scan ran out of its page budget while the release
+// list still had more pages: the window it saw is incomplete, so no answer can
+// be drawn from it. Like a fetch failure and unlike ErrNoRelease, this says
+// "could not look", not "looked and there is nothing" — the repository may well
+// have a newer server release, or its only one, on a page that was never asked
+// for. The fix is to raise maxReleasePages, which is why the message names it.
+var ErrScanTruncated = errors.New("selfupdate: release scan hit its page limit before the end of the list")
+
+// releasesPerPage / maxReleasePages bound the scan below: at most
+// maxReleasePages requests covering the most recent
+// maxReleasePages*releasesPerPage releases. 100 is the API's maximum page size,
+// so a repository with fewer than 100 releases — this one, today — is one
+// request, the same cost as the releases/latest call this replaced.
+//
+// maxReleasePages is a budget for reaching the END of the list, not a sample
+// size: a list that is still full at the cap fails with ErrScanTruncated rather
+// than answering from what was read, so raising this number is the only way to
+// keep a bigger repository working. Each increment costs one more request per
+// check, per instance, per hour, against an unauthenticated 60/hour limit — but
+// only for repositories whose lists are actually that long, since the scan stops
+// at the first short page either way.
+const (
+	releasesPerPage = 100
+	maxReleasePages = 5
+)
+
+// githubRelease is the part of a GitHub release object that tag discovery reads.
+type githubRelease struct {
+	TagName    string `json:"tag_name"`
+	Draft      bool   `json:"draft"`
+	Prerelease bool   `json:"prerelease"`
+}
+
+// LatestTag returns the highest published canonical server release tag
+// (v<major>.<minor>.<patch>) in the repository.
+//
+// It does NOT use /releases/latest, and that is the whole point of this
+// function. That endpoint is repository-wide: it returns the most recent
+// non-draft, non-prerelease release of ANY tag family. This repo also releases
+// the macOS app as `macos-v1.1.3` and friends, so on 2026-08-12 the central
+// release check cached `macos-v1.1.3` as "the newest relayium release" — a
+// string that is not a server version at all. The admin panel dropped it on the
+// floor (releaseNotice refuses to offer a tag it cannot parse) and `relayium
+// update --check` compared the running version against it and could only ever
+// say "update available". The same failure returns on every macOS release, so
+// the fix belongs here, in discovery, not in each reader.
+//
+// The rules, and why each one is here:
+//
+//   - Only ^v[0-9]+\.[0-9]+\.[0-9]+$ counts. Other families are not errors, they
+//     are simply not server releases (see isCanonicalServerTag).
+//   - Drafts and pre-releases are skipped. /releases/latest excluded both; the
+//     list endpoint does not, so dropping them is what PRESERVES the old
+//     behaviour rather than changing it.
+//   - Every candidate is compared numerically and the highest wins. The API
+//     documents no ordering guarantee this may rely on, and the one it does have
+//     in practice — newest-created first — is the wrong key anyway: a hotfix
+//     v0.9.1 published after v0.10.0 is more recent and lower. Sorting as text
+//     would also put v0.9.0 above v0.10.0.
+//
+// The scan is bounded, because a repository's release list is unbounded and this
+// runs hourly on every self-hosted instance. The bound is a page budget, not a
+// coverage guarantee: pages are read until one comes back short, which is the
+// end of the list, or until maxReleasePages have been read.
+//
+// Reaching that cap with a full final page returns ErrScanTruncated and NO tag,
+// even when the pages already read held a perfectly good candidate. Returning
+// the best-so-far there would be a claim about what the NEWEST release is, drawn
+// from a window known to be missing releases — and the missing ones are the very
+// releases most likely to matter, since page N+1 can hold v0.20.0 while pages 1
+// through N hold v0.19.0, or hold the repository's only server tag while every
+// scanned page is a foreign family. Neither of the two shapes that answer would
+// take is survivable: naming an older release as the newest silently parks the
+// fleet on it, and reporting ErrNoRelease against a repository that HAS a server
+// release invites the reader to conclude the release channel is empty. 500 is
+// far above this repository's real list, so hitting the cap means the budget
+// needs raising, and an error is how that gets noticed rather than absorbed.
+//
+// Any page that fails to fetch or decode aborts the whole scan with its own
+// error, on the same reasoning, and again even when an earlier page already
+// produced a candidate. ReleaseChecker.CheckOnce turns any error into "keep the
+// last known value and stay quiet", which is the correct outcome for every one
+// of these: incomplete evidence leaves the panel showing what it last knew
+// instead of quietly presenting an older release as the newest one.
+//
+// The Link header's rel="next" is deliberately not parsed. It carries no
+// information this loop lacks — a page shorter than per_page is the last page —
+// and depending on it would make the scan stop after page 1 against any mirror
+// or proxy that drops the header, which is a silent truncation rather than a
+// visible failure.
 func LatestTag(ctx context.Context, o Options) (string, error) {
-	u := o.apiBase() + "/repos/" + o.Repo + "/releases/latest"
+	best := ""
+	reachedEnd := false
+	for page := 1; page <= maxReleasePages; page++ {
+		rels, err := fetchReleasePage(ctx, o, page)
+		if err != nil {
+			return "", err
+		}
+		for _, r := range rels {
+			if r.Draft || r.Prerelease || !isCanonicalServerTag(r.TagName) {
+				continue
+			}
+			if best == "" {
+				best = r.TagName
+				continue
+			}
+			// Both are canonical, so ok is always true. Checking it anyway
+			// keeps an unreadable version from silently comparing as "not
+			// newer" if that ever stops being true.
+			if n, ok := CompareVersions(r.TagName, best); ok && n > 0 {
+				best = r.TagName
+			}
+		}
+		if len(rels) < releasesPerPage {
+			reachedEnd = true // short page — this was the last one
+			break
+		}
+	}
+	// Checked before best, and deliberately not softened by having found one: a
+	// truncated scan cannot say what the newest release is, so it says nothing.
+	if !reachedEnd {
+		return "", fmt.Errorf("check latest release: %w in %s (read %d pages of %d and the last was still full, so newer releases may be unscanned; raise maxReleasePages)",
+			ErrScanTruncated, o.Repo, maxReleasePages, releasesPerPage)
+	}
+	if best == "" {
+		return "", fmt.Errorf("check latest release: %w in %s (scanned the whole release list; tags of other families, drafts and pre-releases are not server releases)",
+			ErrNoRelease, o.Repo)
+	}
+	return best, nil
+}
+
+// fetchReleasePage GETs one page of the repository's release list.
+func fetchReleasePage(ctx context.Context, o Options, page int) ([]githubRelease, error) {
+	u := fmt.Sprintf("%s/repos/%s/releases?per_page=%d&page=%d", o.apiBase(), o.Repo, releasesPerPage, page)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
 	resp, err := o.httpClient().Do(req)
 	if err != nil {
-		return "", fmt.Errorf("check latest release: %w", err)
+		return nil, fmt.Errorf("check latest release (page %d): %w", page, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("check latest release: unexpected status %d", resp.StatusCode)
+		return nil, fmt.Errorf("check latest release (page %d): unexpected status %d", page, resp.StatusCode)
 	}
-	var out struct {
-		TagName string `json:"tag_name"`
-	}
+	var out []githubRelease
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", fmt.Errorf("check latest release: %w", err)
+		return nil, fmt.Errorf("check latest release (page %d): %w", page, err)
 	}
-	if out.TagName == "" {
-		return "", errors.New("check latest release: response had no tag_name")
-	}
-	return out.TagName, nil
+	return out, nil
 }
 
 // Update upgrades the binary at o.TargetPath to o.TargetTag, or to the latest

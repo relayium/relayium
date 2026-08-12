@@ -139,9 +139,10 @@ func TestAdminRolloutRefusesAStaleVersion(t *testing.T) {
 	}
 }
 
-// The fleet can legitimately be AHEAD of GitHub's releases/latest: a tag
-// published as a pre-release and rolled to the fleet first, or a bad release
-// unpublished afterwards. The panel renders nothing in that state, so a page
+// The fleet can legitimately be AHEAD of the newest release the check found: a
+// tag published as a pre-release and rolled to the fleet first (release
+// discovery skips pre-releases), or a bad release unpublished afterwards. The
+// panel renders nothing in that state, so a page
 // left open from before must not be able to post successfully — it would
 // repoint the fleet BACKWARDS, and nodes.go sets AllowDowngrade automatically
 // for a downgrade, so the nodes install the older build.

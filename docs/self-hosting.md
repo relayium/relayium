@@ -128,14 +128,30 @@ entirely — it 404s and falls through to the SPA.
 Once at startup and then every hour, the server asks GitHub's public API for
 the newest release tag of
 [`relayium/relayium`](https://github.com/relayium/relayium) — a plain
-`GET https://api.github.com/repos/relayium/relayium/releases/latest`, the same
-call `relayium-node update` already makes when you run it by hand. The startup
-check matters if you are counting requests or writing an egress allowlist: a
-server that is restarted often (every deploy, every config change) asks once
-per restart on top of the hourly tick, so the interval is an upper bound on the
-gap between checks, not on their number. The host to allow is `api.github.com`
-— `github.com` itself is only the download host and this check never contacts
-it.
+`GET https://api.github.com/repos/relayium/relayium/releases` — the same call
+`relayium update --check` makes when you run it by hand. (`relayium-node update`
+does not make it: a node installs the exact version central hands it, or the one
+you name with `-to`.)
+
+It reads the release *list* rather than `releases/latest` because that endpoint
+is repository-wide, and this repository publishes more than one thing: the macOS
+app is released under its own `macos-v*` tags. The check takes the highest
+published `v<major>.<minor>.<patch>` release and ignores every other tag family,
+along with drafts and pre-releases.
+
+The startup check matters if you are counting requests or writing an egress
+allowlist: a server that is restarted often (every deploy, every config change)
+asks once per restart on top of the hourly tick, so the interval is an upper
+bound on the gap between checks, not on their number. Each check is a single
+request while the repository has fewer than 100 releases, and never more than
+five — it pages until the list ends, and stops at five pages. If those 500
+releases ever fail to reach the end of the list, the check reports an error and
+no version rather than guessing from what it read: the unread page could hold a
+newer release, or the only server release. That is a signal to raise the page
+limit in the code, not a state you can be left silently stale in — nothing is
+recorded, so `/admin` keeps showing the last version it did confirm. The host to
+allow is `api.github.com` — `github.com` itself is only the download host and
+this check never contacts it.
 
 If that tag is newer than what your fleet track is targeting, `/admin` shows a
 banner offering a one-click rollout to it (or, when a rollout on the fleet

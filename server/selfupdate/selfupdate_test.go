@@ -11,6 +11,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
@@ -77,7 +78,7 @@ func sha256hex(b []byte) string {
 	return hex.EncodeToString(s[:])
 }
 
-// fakeRelease serves a GitHub-shaped release: the releases/latest API plus the
+// fakeRelease serves a GitHub-shaped release: the release-list API plus the
 // per-tag download assets. checksumOverride, when non-empty, replaces the real
 // archive digest in checksums.txt so a mismatch can be exercised.
 type fakeRelease struct {
@@ -89,9 +90,13 @@ type fakeRelease struct {
 	// signKey, when set, serves a valid checksums.txt.sig (ECDSA over the served
 	// checksums bytes), mirroring the release workflow's openssl signing step.
 	signKey *ecdsa.PrivateKey
-	// latestTag, when set, is what /releases/latest reports while the assets
+	// latestTag, when set, is the tag the release list reports while the assets
 	// stay under tag. Lets a test prove TargetTag wins over "latest".
 	latestTag string
+	// listAlso are extra release-list entries served alongside the one above,
+	// for exercising Update's own resolve-latest step against a repository that
+	// releases more than one thing. Assets exist only under tag.
+	listAlso []fakeGHRelease
 }
 
 func (f *fakeRelease) server(t *testing.T) *httptest.Server {
@@ -102,12 +107,19 @@ func (f *fakeRelease) server(t *testing.T) *httptest.Server {
 	}
 	checksums := fmt.Sprintf("%s  %s\n", sum, f.asset)
 	mux := http.NewServeMux()
-	mux.HandleFunc("/repos/relayium/relayium/releases/latest", func(w http.ResponseWriter, r *http.Request) {
+	// The release list, as LatestTag reads it. One published canonical release,
+	// so these tests keep exercising the download/verify/replace path rather
+	// than discovery; discovery over a mixed-family repo is
+	// release_discovery_test.go's job.
+	mux.HandleFunc("/repos/relayium/relayium/releases", func(w http.ResponseWriter, r *http.Request) {
 		latest := f.latestTag
 		if latest == "" {
 			latest = f.tag
 		}
-		fmt.Fprintf(w, `{"tag_name":%q}`, latest)
+		list := append(append([]fakeGHRelease(nil), f.listAlso...), fakeGHRelease{TagName: latest})
+		if err := json.NewEncoder(w).Encode(list); err != nil {
+			t.Errorf("encode release list: %v", err)
+		}
 	})
 	base := "/relayium/relayium/releases/download/" + f.tag
 	mux.HandleFunc(base+"/"+f.asset, func(w http.ResponseWriter, r *http.Request) {
@@ -393,6 +405,38 @@ func TestLatestTag(t *testing.T) {
 	}
 	if tag != "v1.2.3" {
 		t.Fatalf("tag = %q, want v1.2.3", tag)
+	}
+}
+
+// End to end for `relayium update` with nothing pinned — the path that was
+// broken in production. A macOS release newer than every server release is
+// present and must not be what gets installed; before the discovery fix this
+// resolved to macos-v1.1.4 and then tried to download
+// relayium_<os>_<arch>.tar.gz from a release that has no such asset.
+func TestUpdateResolvesLatestAcrossTagFamilies(t *testing.T) {
+	const payload = "BINARY-v0.19.0"
+	fr := &fakeRelease{
+		tag:      "v0.19.0",
+		asset:    AssetName(runtime.GOOS, runtime.GOARCH),
+		archive:  tarGzWith(t, payload),
+		listAlso: []fakeGHRelease{{TagName: "macos-v1.1.4"}, {TagName: "macos-v1.1.3"}},
+	}
+	srv := fr.server(t)
+	defer srv.Close()
+
+	target := writeTarget(t, "OLD")
+	o := baseOpts(srv, target)
+	o.CurrentVersion = "v0.18.0"
+
+	_, to, changed, err := Update(context.Background(), o, io.Discard)
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	if !changed || to != "v0.19.0" {
+		t.Fatalf("to=%q changed=%v, want v0.19.0 and true", to, changed)
+	}
+	if got, _ := os.ReadFile(target); string(got) != payload {
+		t.Fatalf("installed binary = %q, want %q", got, payload)
 	}
 }
 
