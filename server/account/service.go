@@ -289,6 +289,12 @@ type Service struct {
 	// biller is the Stripe integration (phase-2 billing); nil when
 	// cfg.StripeSecretKey is empty, in which case billing endpoints 404.
 	biller Biller
+	// appleTx verifies App Store signed transactions against explicitly
+	// configured trust roots and app identities (apple_transaction.go). nil is
+	// the shipping default and means UNCONFIGURED: the intake route answers 503
+	// rather than trusting anything, which is the only safe reading of "this
+	// deployment has no Apple roots". Wired by SetAppleTransactionVerifier.
+	appleTx *AppleTransactionVerifier
 }
 
 // rateLimiter is the minimal per-key limiter account needs; *signal.RateLimiter
@@ -444,6 +450,24 @@ func (s *Service) SetDirectDownload(on bool) { s.directDownload = on }
 // object can exist — and a deployment that turns the flag off after rooms exist
 // must not thereby strand them.
 func (s *Service) SetPreUpload(on bool) { s.preUpload = on }
+
+// SetAppleTransactionVerifier wires (or clears, with nil) the App Store
+// signed-transaction verifier.
+//
+// Injected rather than derived from Config for two reasons. It is the only
+// arrangement in which a test can own its whole trust chain — its own root,
+// intermediate, leaf and signed payloads — and prove the adversarial cases a
+// hard-wired Apple root makes untestable. And it keeps the failure honest: a
+// deployment builds the verifier from explicit configuration through
+// NewAppleTransactionVerifier, which refuses a half-configured one outright,
+// rather than a Config field that quietly produces a verifier trusting nothing.
+//
+// NOTHING CALLS THIS YET outside tests. Wiring startup configuration (trust
+// roots, environment, bundle identities) is deliberately a later, separate
+// step; until it happens the verifier stays nil, POST
+// /api/billing/apple/transaction answers 503, and no Apple state can be
+// created.
+func (s *Service) SetAppleTransactionVerifier(v *AppleTransactionVerifier) { s.appleTx = v }
 
 // Store returns the account data store. Exported so the commercial
 // admin/billing layer (billing.go, admin.go, admin_rollout.go,

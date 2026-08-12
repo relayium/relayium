@@ -229,6 +229,13 @@ func (s *Service) routeMux() *http.ServeMux {
 	// one billing call they make; POST because it may mint the token. See
 	// handleAppleAccountToken for why it is not a credential.
 	mux.HandleFunc("POST /api/billing/apple/account-token", s.RequireAuth(s.handleAppleAccountToken))
+	// The signed-transaction intake the token above exists to be attached to.
+	// RequireAuth for the same reason: it is a native call with a bearer token,
+	// and the caller's identity is half the decision — the other half is Apple's
+	// signature. Unconfigured (no trust roots) it answers 503, so mounting it
+	// unconditionally changes nothing for a deployment that has no Apple apps.
+	// See billing_apple_transaction.go.
+	mux.HandleFunc("POST /api/billing/apple/transaction", s.RequireAuth(s.handleAppleTransaction))
 	mux.HandleFunc("GET /api/plans", s.handlePublicPlans)
 	// Stripe webhook: unauthenticated (no session, no CSRF token — Stripe
 	// can't provide either), authenticated instead by its own HMAC signature

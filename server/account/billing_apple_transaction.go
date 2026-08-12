@@ -1,0 +1,270 @@
+package account
+
+import (
+	"encoding/json"
+	"errors"
+	"io"
+	"log"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/relayium/relayium/httpx"
+)
+
+// POST /api/billing/apple/transaction — the authenticated intake for a signed
+// App Store transaction.
+//
+// THE SHAPE OF THE TRUST. A native client submits `signedTransactionInfo`
+// exactly as StoreKit handed it over: one compact JWS, unmodified. The client's
+// own StoreKit verification result is not an input and is not asked for — it
+// runs on the device, and a device is the thing being authenticated, not the
+// thing being trusted. Everything this handler grants comes from three places:
+//
+//  1. Apple's signature, chained to trust roots THIS server was configured with;
+//  2. this server's own product catalog (which tier, which cycle);
+//  3. this server's own app-account token (which Relayium account).
+//
+// Nothing else. There is no field in the request body but the JWS, so there is
+// nothing else a client could assert.
+//
+// WHAT IT IS NOT, YET. No purchase happens here — this is intake for a
+// StoreKit flow that does not exist in this batch, and with no trust roots and
+// no product mappings configured (the shipping default) it answers 503 and
+// changes nothing.
+const appleTransactionBodyLimit = 16 << 10
+
+// appleTransactionResult is the whole success body: the effective entitlement
+// the caller now holds. It deliberately echoes nothing back — not the JWS, not
+// the account token, not the transaction ids — because a response is the one
+// place where returning an identifier is indistinguishable from confirming it.
+type appleTransactionResult struct {
+	// Applied is false when the transaction was correct but older than what is
+	// already recorded (a redelivery of a previous period). The state reported
+	// alongside it is then the CURRENT one, not what the stale event would have
+	// produced.
+	Applied   bool   `json:"applied"`
+	PlanID    string `json:"planId"`
+	Status    string `json:"status"`
+	ExpiresAt int64  `json:"expiresAt"`
+	Provider  string `json:"provider"`
+}
+
+func writeAppleTransactionError(w http.ResponseWriter, status int, code string) {
+	httpx.WriteJSON(w, status, map[string]string{"error": code})
+}
+
+// handleAppleTransaction verifies one submitted transaction and, only then,
+// applies an Apple subscription source to the AUTHENTICATED caller.
+//
+// The error vocabulary is deliberately coarse where verification is concerned:
+// every cryptographic, identity and catalog refusal is one `invalid_transaction`
+// (400), because a per-reason answer is a tool for shaping the next attempt.
+// The specific reason is logged as a fixed code that quotes none of the
+// submitted material. The three answers that ARE distinct describe situations a
+// client must handle differently: `token_mismatch` (403 — this purchase belongs
+// to another account), `subscription_owned` (409 — this subscription already
+// has a different Relayium owner) and `verifier_unavailable` (503 — this
+// deployment cannot verify anything). An unexpected storage failure stays a 500.
+func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request, u User) {
+	verifier := s.appleTx
+	if verifier == nil {
+		writeAppleTransactionError(w, http.StatusServiceUnavailable, "verifier_unavailable")
+		return
+	}
+	var in struct {
+		SignedTransactionInfo string `json:"signedTransactionInfo"`
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, appleTransactionBodyLimit))
+	// One field, and only that field: an unknown key is either a client sending
+	// something this endpoint does not implement, or an attempt to smuggle a
+	// second assertion alongside the JWS. Both are better refused than ignored.
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&in); err != nil {
+		writeAppleTransactionError(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	// One JSON document per request. A second Decode that does not report EOF
+	// found something after it — dec.More() would miss trailing bytes that do
+	// not begin another value, and either way the meaning of the request would
+	// depend on where the reader stopped.
+	if err := dec.Decode(new(json.RawMessage)); err != io.EOF {
+		writeAppleTransactionError(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	// NOT trimmed. Verifying a normalized copy of what the client sent means the
+	// bytes checked are not the bytes submitted; the compact serialization has
+	// no whitespace in it, so a request carrying some is malformed, not untidy.
+	signed := in.SignedTransactionInfo
+	if signed == "" || strings.TrimSpace(signed) != signed {
+		writeAppleTransactionError(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+
+	now := s.now()
+	tx, err := verifier.Verify(signed, now)
+	if err != nil {
+		// The code names the rule that refused it; the material that broke the
+		// rule never reaches the log.
+		log.Printf("billing: apple transaction refused for user %s (%s)", u.ID, appleRejectionCode(err))
+		writeAppleTransactionError(w, http.StatusBadRequest, "invalid_transaction")
+		return
+	}
+
+	// WHOSE PURCHASE IS THIS? The token inside the verified payload is an
+	// attribution key the server issued; it is resolved here and compared with
+	// the caller resolved by RequireAuth. Possession is not authority: an
+	// unauthenticated submitter never reaches this line, and an authenticated one
+	// may claim only the token their own account holds.
+	//
+	// The resolution is stable rather than transactional by construction:
+	// EnsureAppleAccountToken is first-write-wins and never rebinds, so the
+	// answer cannot move between this lookup and the write below. What DOES need
+	// to be atomic — binding this subscription to this user in the same
+	// transaction as the entitlement it grants — is ApplySubscriptionSource's
+	// contract, used below.
+	owner, ok, err := s.Store().UserByAppleAccountToken(r.Context(), tx.AppAccountToken)
+	if err != nil {
+		log.Printf("billing: resolving an apple account token for user %s failed: %v", u.ID, err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if !ok || owner.ID != u.ID {
+		log.Printf("billing: apple transaction refused for user %s (app_account_token_owner)", u.ID)
+		writeAppleTransactionError(w, http.StatusForbidden, "token_mismatch")
+		return
+	}
+
+	// WHICH TIER? Only the server's catalog answers that, keyed by bundle AND
+	// product id so the macOS and iOS products cannot be confused for each other.
+	// An unmapped or retired product is refused: by the time we are here the
+	// money has already moved, and there is no safe way to guess a tier.
+	product, ok, err := s.Store().AppleProductPlan(r.Context(), tx.BundleID, tx.ProductID)
+	if err != nil {
+		log.Printf("billing: resolving an apple product for user %s failed: %v", u.ID, err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		log.Printf("billing: apple transaction refused for user %s (product_unmapped)", u.ID)
+		writeAppleTransactionError(w, http.StatusBadRequest, "invalid_transaction")
+		return
+	}
+
+	res, err := s.Store().ApplySubscriptionSource(r.Context(), appleSourceEvent(u.ID, tx, product, now))
+	switch {
+	case errors.Is(err, ErrExternalSubscriptionOwned):
+		// One App Store subscription, one Relayium account. The apply wrote
+		// nothing, so there is no half-granted tier to undo.
+		log.Printf("billing: apple transaction refused for user %s (external_subscription_owned)", u.ID)
+		writeAppleTransactionError(w, http.StatusConflict, "subscription_owned")
+		return
+	case err != nil:
+		log.Printf("billing: applying an apple subscription for user %s failed: %v", u.ID, err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, appleTransactionResult{
+		Applied:   res.Applied,
+		PlanID:    res.Effective.PlanID,
+		Status:    res.Effective.Status,
+		ExpiresAt: res.Effective.PeriodEnd,
+		Provider:  res.Effective.Source,
+	})
+}
+
+// appleSourceEvent turns a verified transaction plus the server's own product
+// mapping into one provider event.
+//
+// STATUS AND ACCESS come from the verified fields alone. A terminal
+// transaction — refunded or superseded by an upgrade — and one whose
+// paid-through instant has passed both drop to the free tier with a dead
+// status, so grantsAccess() is false for either; only a non-terminal
+// transaction whose expiresDate is still ahead of `now` grants the mapped tier.
+// The status vocabulary is Stripe's, because that is what
+// SubscriptionSource.Status is defined as and what liveSubStatus reads —
+// "canceled" is the existing spelling for "this source no longer pays".
+//
+// THE EVENT CLOCK is appleEventClock below.
+func appleSourceEvent(userID string, tx VerifiedAppleTransaction, product AppleProduct, now time.Time) SourceEvent {
+	ev := SourceEvent{
+		UserID:   userID,
+		Provider: ProviderApple,
+		// Bound in the SAME transaction as the state it pays for. Apple's
+		// originalTransactionId is the subscription's identity across every
+		// renewal, which is exactly what an external subscription id must be.
+		ExternalID: tx.OriginalTransactionID,
+		PeriodEnd:  appleSeconds(tx.ExpiresDateMS),
+		EventAt:    appleEventClock(tx),
+		Now:        now.Unix(),
+	}
+	if appleTransactionIsTerminal(tx) || tx.ExpiresDateMS <= now.UnixMilli() {
+		ev.PlanID = freePlanID
+		ev.Status = "canceled"
+		// '' leaves the recorded cycle alone (see SourceEvent.Cycle): a lapsed
+		// subscription is not evidence that we no longer know what it was.
+		ev.Cycle = ""
+		return ev
+	}
+	ev.PlanID = product.PlanID
+	ev.Status = "active"
+	ev.Cycle = product.Cycle
+	return ev
+}
+
+// appleTransactionIsTerminal reports whether this transaction has been ENDED by
+// something recorded in it, as opposed to merely having run out of time.
+//
+// Two things end one: a refund (revocationDate) and an upgrade that replaced it
+// (isUpgraded). Both mean the transaction will never grant again, whatever its
+// expiresDate says. Expiry is deliberately NOT terminal — it is a fact about
+// the clock, re-evaluated at every submission, and the same transaction is
+// live before it and lapsed after.
+func appleTransactionIsTerminal(tx VerifiedAppleTransaction) bool {
+	return tx.RevocationDateMS > 0 || tx.IsUpgraded
+}
+
+// appleEventClock is the per-provider replay/order clock for one transaction.
+//
+// THE PROBLEM IT SOLVES. `purchaseDate` alone is not enough. A refund does not
+// change the purchase date, so with a bare purchaseDate clock the live copy and
+// the refunded copy of ONE transaction carry the SAME clock value — and the
+// store's guard drops only strictly-older events. Replaying the live JWS after
+// the refund would therefore be applied again and resurrect the entitlement
+// somebody has already been given their money back for. The same hole exists
+// for an upgraded transaction and its pre-upgrade copy.
+//
+// THE ENCODING. Order by purchaseDate — the GENERATION of the subscription this
+// transaction is — and use the low bit as an "ended" flag within that
+// generation:
+//
+//	live:     purchaseDate*2
+//	terminal: purchaseDate*2 + 1
+//
+// Consequences, in the order they matter:
+//
+//   - replaying the live JWS after a refund is strictly older (2P < 2P+1) and is
+//     dropped — the entitlement stays gone;
+//   - redelivering the SAME form converges, because equal is not older;
+//   - every LATER generation beats every earlier one, terminal or not, because
+//     2P' > 2P+1 whenever P' > P. So a renewal supersedes a refunded earlier
+//     period, and — the case that matters — a refund of an OLD period that
+//     arrives after that renewal cannot cancel it.
+//
+// The revocation timestamp is deliberately NOT part of the ordering. Ordering
+// by when the refund was RECORDED would let a refund of last month's period
+// outrank this month's live renewal purely because the refund happened later in
+// wall-clock time, cancelling a subscription the user is still paying for. What
+// a refund ends is its own generation, and that is exactly what the low bit
+// says. (RevocationDateMS is still read and still makes the transaction
+// terminal — see appleTransactionIsTerminal; it just does not order anything.)
+//
+// Range: purchaseDate is bounded by appleMaxMillis (~2.5e14), so the doubled
+// value is ~5.1e14 — four orders of magnitude inside int64, with no overflow
+// to reason about.
+func appleEventClock(tx VerifiedAppleTransaction) int64 {
+	if appleTransactionIsTerminal(tx) {
+		return tx.PurchaseDateMS*2 + 1
+	}
+	return tx.PurchaseDateMS * 2
+}
