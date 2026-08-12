@@ -26,10 +26,43 @@ class FakeDataChannel {
   _message(data: ArrayBuffer) { this.onmessage?.({ data }); }
 }
 
+// A lane that models the Chrome race the hosted code room hit: the transition to
+// "open" and its one open dispatch happen *inside* the collecting read of
+// readyState. The read still reports the pre-transition value it observed, so a
+// collector that decides whether to install a handler based on that value and
+// only then installs it has already missed the lane's only open event.
+class RacingDataChannel {
+  binaryType = "";
+  bufferedAmountLowThreshold = 0;
+  onopen: (() => void) | null = null;
+  onmessage: ((ev: unknown) => void) | null = null;
+  onclose: (() => void) | null = null;
+  #state = "connecting";
+  #racePending = true;
+  constructor(readonly label = "relayium") {}
+  get readyState() {
+    const observed = this.#state;
+    if (this.#racePending) {
+      this.#racePending = false; // disarm before dispatching: the race happens once
+      this.#state = "open";
+      this.onopen?.(); // whoever is installed *now* is the only one who hears it
+    }
+    return observed;
+  }
+  set readyState(v: string) { this.#racePending = false; this.#state = v; }
+  send() {}
+  close() { this.readyState = "closed"; }
+  _open() { this.readyState = "open"; this.onopen?.(); }
+  _message(data: ArrayBuffer) { this.onmessage?.({ data }); }
+}
+
 const instances: FakePC[] = [];
 
 class FakePC {
   static inboundLabels: string[] = ["relayium"];
+  /** How a remotely-created (responder-side) lane is built. Swappable so a test
+   *  can hand the collector a lane with real-browser open-dispatch timing. */
+  static inboundChannel: (label: string) => FakeDataChannel = (label) => new FakeDataChannel(label);
   onicecandidate: ((e: unknown) => void) | null = null;
   ondatachannel: ((e: { channel: FakeDataChannel }) => void) | null = null;
   onconnectionstatechange: (() => void) | null = null;
@@ -51,7 +84,7 @@ class FakePC {
   async setRemoteDescription(desc: { type: string }) {
     if (desc.type === "offer" && this.ondatachannel) {
       for (const label of FakePC.inboundLabels) {
-        const ch = new FakeDataChannel(label);
+        const ch = FakePC.inboundChannel(label);
         this.channels.push(ch);
         this.channel ??= ch;
         this.ondatachannel({ channel: ch });
@@ -124,6 +157,7 @@ beforeAll(async () => { await ready(); });
 afterEach(() => {
   instances.length = 0;
   FakePC.inboundLabels = ["relayium"];
+  FakePC.inboundChannel = (label) => new FakeDataChannel(label);
   vi.useRealTimers(); // a test that installed the jumpable clock must not leak it
   vi.unstubAllGlobals();
 });
@@ -734,6 +768,71 @@ describe("connectResumeLink", () => {
     }
     expect([...LINK_CHANNEL_LABELS]).toEqual(["relayium", "relayium-text"]);
     ic.close();
+    rc.close();
+  });
+
+  // Drive a genuine, correctly-signed offer at a waiting responder so it answers
+  // and collects its inbound lanes — without standing up a second peer.
+  async function offerTo(hub: ReturnType<typeof makeHub>, auth: SignalAuth) {
+    const offer: InboundSignal = { sdp: { type: "offer", sdp: "real" }, resume: true };
+    offer.auth = await auth.sign(authPayload(offer));
+    hub.inject("R", "I", offer);
+    await flush();
+  }
+
+  // Regression: hosted Chrome (run 31550922651) opened both responder lanes at
+  // ~554/557ms, yet the responder never returned from transport setup and the
+  // no-progress timeout tore the connection down 30s later. Collecting a lane
+  // must not depend on readyState and the open dispatch being observed in a
+  // consistent order.
+  it("resolves when a lane opens between the readyState read and the handler", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    FakePC.inboundLabels = [...LINK_CHANNEL_LABELS];
+    FakePC.inboundChannel = (label) => new RacingDataChannel(label) as unknown as FakeDataChannel;
+    const hub = makeHub();
+    const a = await pairAuth();
+    const rP = connectResumeLink({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
+    let settled = false;
+    void rP.then(() => (settled = true), () => {});
+    await flush();
+    await offerTo(hub, a.I);
+
+    // Asserted before awaiting rP: under the losing order this is a clean
+    // failure here, not a test that hangs until the suite times out.
+    expect(settled).toBe(true);
+    const rc = await rP;
+    expect(rc.getChannel("relayium")?.label).toBe("relayium");
+    expect(rc.getChannel("relayium-text")?.label).toBe("relayium-text");
+    rc.close();
+  });
+
+  // The collector's other two jobs, pinned so the ordering fix cannot quietly
+  // drop them: a second lane on a label already held and a label nobody asked
+  // for are both closed, and neither counts toward readiness.
+  it("closes duplicate and unexpected lanes while both real lanes still open", async () => {
+    vi.stubGlobal("RTCPeerConnection", FakePC);
+    FakePC.inboundLabels = ["relayium", "relayium", "relayium-text", "bogus"];
+    const hub = makeHub();
+    const a = await pairAuth();
+    const rP = connectResumeLink({ signaling: hub.R, peerId: "I", role: "responder", auth: a.R });
+    let settled = false;
+    void rP.then(() => (settled = true), () => {});
+    await flush();
+    await offerTo(hub, a.I);
+
+    const [file, dupe, text, bogus] = instances[0].channels;
+    expect(dupe.readyState).toBe("closed");
+    expect(bogus.readyState).toBe("closed");
+
+    file._open();
+    await flush();
+    expect(settled).toBe(false); // the duplicate never stood in for the text lane
+    text._open();
+    await flush();
+    expect(settled).toBe(true);
+    const rc = await rP;
+    expect(rc.getChannel("relayium")).toBe(file);
+    expect(rc.getChannel("relayium-text")).toBe(text);
     rc.close();
   });
 

@@ -381,8 +381,15 @@ export async function establish(opts: CoreOpts): Promise<Conn> {
       }
       channels.set(ch.label, ch);
       arm(ch);
+      // Handler first, *then* read the state. A lane can flip to open and
+      // dispatch between those two steps, and that dispatch is the only one it
+      // ever makes: deciding from the state whether to install a handler loses
+      // the lane for good, and the connection hangs until the setup deadline
+      // kills it. Installing first can only over-notify, never under-notify —
+      // maybeOpen is idempotent and re-checks every lane, so the extra call
+      // costs nothing.
+      ch.onopen = maybeOpen;
       if (ch.readyState === "open") maybeOpen();
-      else ch.onopen = maybeOpen;
     };
     if (role === "initiator") {
       for (const label of channelLabels) collect(pc.createDataChannel(label));
