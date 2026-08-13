@@ -210,8 +210,11 @@ final class MacPrivacyManifestTests: XCTestCase {
         XCTAssertTrue(billing.contains("api/billing/apple/transaction"))
         XCTAssertTrue(storeKit.contains("jwsRepresentation"))
         XCTAssertTrue(schema.contains("CREATE TABLE IF NOT EXISTS subscription_sources"))
-        XCTAssertTrue(try text("server/account/billing_apple_transaction.go")
-            .contains("ExternalID: tx.OriginalTransactionID"))
+        let appleBilling = try text("server/account/billing_apple_transaction.go")
+        let appleIdentity = try text("server/account/apple_identity.go")
+        XCTAssertTrue(appleBilling.contains("ExternalID: externalID"))
+        XCTAssertTrue(appleBilling.contains("appleSubscriptionKeyOf(tx).externalID()"))
+        XCTAssertTrue(appleIdentity.contains("OriginalTransactionID: tx.OriginalTransactionID"))
 
         // User ID — the appAccountToken, minted per account, sent off device to
         // Apple with the purchase and kept on the users row.

@@ -32,6 +32,12 @@ for each signed candidate intended for owner review or public distribution.
 Local builds and ordinary CI checks do not consume a build number. Never reuse
 a build number for different shipped bytes, and never lower it in Sparkle.
 
+The direct-download and Mac App Store targets currently share this build
+setting, so treat the sequence as global across both channels. Uploading a build
+to App Store Connect consumes that number even if the build is only used in
+TestFlight or is later rejected. A corrected upload for the same public version
+must use the next integer; it must not reuse the previous upload's number.
+
 Examples:
 
 | Purpose | Public version | Build |
@@ -76,6 +82,12 @@ The exact commit used for a public release must pass all applicable macOS gates:
 The final publication commit must pass the complete gate even when each changed
 area passed a focused test earlier. Results from different commits must not be
 combined to claim that one release commit passed.
+
+For the Mac App Store channel, the corresponding publication gate is a signed
+App Store archive and export, App Store Connect upload processing, internal
+TestFlight purchase and restore validation against the production service, an
+accepted App Review submission, and the owner's explicit manual release. The
+Mac App Store build must not contain the direct channel's Sparkle updater.
 
 ## Platform boundary
 
