@@ -98,6 +98,7 @@ struct LoginView: View {
                     .disabled(!canSubmit)
                     .opacity(form.isBusy ? 0 : 1)
                     .accessibilityHidden(form.isBusy)
+                    .accessibilityIdentifier("account.submit")
                 if let busyTitle = form.activity.busyTitleKey {
                     ProgressView { Text(L10n.t(busyTitle)) }
                         .controlSize(.small)

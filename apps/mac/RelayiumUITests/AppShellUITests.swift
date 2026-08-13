@@ -1260,12 +1260,12 @@ final class AppShellUITests: XCTestCase {
         password.click()
         password.typeText("correct horse battery")
 
-        let signIn = window.buttons["Sign in"]
-        // SwiftUI may replace the button's accessibility node on the hosted
-        // macOS 15 runner when the last SecureField edit publishes. An
-        // instantaneous `exists` read can land in that replacement window even
-        // though the same form is ready a moment later, so wait for the actual
-        // contract: the submit action exists and is enabled.
+        // Locate the action by its stable identity only after the last field
+        // edit. SwiftUI replaces this button's accessibility node when
+        // `canSubmit` changes, and a label-based element captured across that
+        // replacement intermittently remains attached to the disabled node on
+        // hosted macOS 15 runners.
+        let signIn = window.descendants(matching: .any)["account.submit"].firstMatch
         let submitReady = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == true AND enabled == true"), object: signIn)
         XCTAssertEqual(XCTWaiter.wait(for: [submitReady], timeout: 10), .completed,
