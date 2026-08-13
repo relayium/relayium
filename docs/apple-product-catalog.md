@@ -132,3 +132,9 @@ silent wrong grant.
 - It does not change what the server trusts. See the two truth sources above.
 - It does not delete anything. There is no delete: a mapping is retired, and
   the row stays as the record that the product was once wired to that tier.
+
+## Related
+
+[App Store Server Notifications V2](apple-server-notifications.md) — how Apple
+reports renewals, refunds and expiries to this server, and why a retired
+mapping still lets a refund revoke access.

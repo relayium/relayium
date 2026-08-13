@@ -1633,6 +1633,33 @@ type Store interface {
 	ListAppleProducts(ctx context.Context) ([]AppleProductRow, error)
 	// UpsertAppleProduct records (or retires, with Active=false) one mapping.
 	UpsertAppleProduct(ctx context.Context, p AppleProduct) error
+
+	// ---- App Store Server Notifications V2 ledger (see sqlite_apple_notification.go) ----
+
+	// ClaimAppleNotification records a delivery of one notificationUUID and
+	// reports whether this caller created the row. It never overwrites an
+	// existing row, and the row it writes is a CLAIM rather than a completion:
+	// only a terminal state ends the work, so a crash between claiming and
+	// applying is redone by the next delivery instead of being short-circuited.
+	// These operations are exactly what the notification handler, deferred
+	// replay and bounded-retention sweep call. The ledger's two READ-ONLY methods
+	// — GetAppleNotification and
+	// CountAppleNotificationsByState — are deliberately left off this interface
+	// and live on SQLiteStore alone: nothing in the request path reads them, and
+	// widening a ~90-method interface for a diagnostic read would oblige every
+	// future implementation to provide one.
+	ClaimAppleNotification(ctx context.Context, rec AppleNotificationRecord) (AppleNotificationRecord, bool, error)
+	// SetAppleNotificationState moves a ledger row to its outcome. It refuses to
+	// move a row back out of a terminal state.
+	SetAppleNotificationState(ctx context.Context, uuid, state string, now int64) error
+	// PendingAppleNotificationsFor returns the deferred notifications for one
+	// external subscription, oldest generation first, for the drain that runs
+	// once attribution becomes resolvable.
+	PendingAppleNotificationsFor(ctx context.Context, originalTransactionID string) ([]AppleNotificationRecord, error)
+	// PruneTerminalAppleNotifications bounds completed notification history.
+	// Received, pending and conflict rows are unfinished and must never be
+	// discarded merely because they are old.
+	PruneTerminalAppleNotifications(ctx context.Context, before int64) error
 	// SetScheduledPlan records (or clears, with planID="" and cycle="") the tier
 	// AND cycle a pending period-end downgrade will switch to — a display hint for
 	// the pricing UI and the key the webhook uses to detect when the change lands.

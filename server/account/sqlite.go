@@ -1014,6 +1014,46 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
   active     INTEGER NOT NULL DEFAULT 1,
   updated_at INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (bundle_id, product_id))`,
+		// The App Store Server Notifications V2 ledger: one row per
+		// `notificationUUID`, holding both the idempotency claim and the verified
+		// projection needed to replay the event later. See
+		// sqlite_apple_notification.go for why those are deliberately one row.
+		//
+		// NO foreign key to users. The whole reason the deferred states exist is
+		// that a notification can arrive for a subscription this server cannot yet
+		// attribute to any account — a constraint requiring an owner would refuse
+		// exactly the rows whose preservation is the point. Ownership lives on
+		// subscription_sources, which is where it is enforced.
+		//
+		// Nothing seeds or backfills this table, and no existing deployment has
+		// one: an older binary rolled back onto this database simply never reads
+		// it, and a database written by an older binary starts empty, which is
+		// indistinguishable from "no notification has arrived yet" — the correct
+		// state for every deployment that has not configured the endpoint.
+		`CREATE TABLE IF NOT EXISTS apple_notifications (
+  notification_uuid       TEXT PRIMARY KEY,
+  state                   TEXT NOT NULL,
+  notification_type       TEXT NOT NULL DEFAULT '',
+  received_at             INTEGER NOT NULL DEFAULT 0,
+  updated_at              INTEGER NOT NULL DEFAULT 0,
+  supported               INTEGER NOT NULL DEFAULT 0,
+  bundle_id               TEXT NOT NULL DEFAULT '',
+  product_id              TEXT NOT NULL DEFAULT '',
+  original_transaction_id TEXT NOT NULL DEFAULT '',
+  app_account_token       TEXT NOT NULL DEFAULT '',
+  purchase_date_ms        INTEGER NOT NULL DEFAULT 0,
+  expires_date_ms         INTEGER NOT NULL DEFAULT 0,
+  revocation_date_ms      INTEGER NOT NULL DEFAULT 0,
+  is_upgraded             INTEGER NOT NULL DEFAULT 0)`,
+		// The drain's query: deferred rows for one external subscription. Partial,
+		// because the states that matter are a small minority of a table whose
+		// ordinary population is terminal rows nobody queries by subscription.
+		`CREATE INDEX IF NOT EXISTS idx_apple_notifications_pending
+		   ON apple_notifications(original_transaction_id, purchase_date_ms)
+		   WHERE state = 'pending'`,
+		`CREATE INDEX IF NOT EXISTS idx_apple_notifications_terminal_age
+		   ON apple_notifications(updated_at)
+		   WHERE state IN ('applied', 'ignored', 'unsupported')`,
 	} {
 		if _, err := db.ExecContext(context.Background(), alter); err != nil &&
 			!strings.Contains(err.Error(), "duplicate column name") {
@@ -2254,7 +2294,16 @@ func (s *SQLiteStore) ArchiveAndPurgeUser(ctx context.Context, userID string, no
 		// the confirm-time transient purge: an account inside the grace window
 		// can still be reactivated, and it must come back with its subscription.
 		// The Apple app account token needs no entry here — it is a column on the
-		// users row this transaction deletes.
+		// users row this transaction deletes. Notification projections are
+		// different: they intentionally have no user_id because they may arrive
+		// before attribution. Remove every row attributable through either the
+		// user's token or an Apple subscription binding before those lookup keys
+		// disappear, so a hard-purged account leaves no replayable billing identity.
+		{`DELETE FROM apple_notifications
+		    WHERE app_account_token=(SELECT apple_account_token FROM users WHERE id=? AND apple_account_token<>'')
+		       OR original_transaction_id IN (
+		            SELECT external_id FROM subscription_sources
+		             WHERE user_id=? AND provider='apple')`, []any{userID, userID}},
 		{`DELETE FROM subscription_sources WHERE user_id=?`, []any{userID}},
 		{`DELETE FROM nodes WHERE owner_type='user' AND owner_user_id=?`, []any{userID}},
 	}

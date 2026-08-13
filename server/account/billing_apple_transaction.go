@@ -164,6 +164,25 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
+	// This account has just presented a verified transaction for this
+	// subscription under its own attribution token, which is exactly the fact any
+	// notification deferred for want of an owner was waiting for. Apple routinely
+	// delivers a notification before the purchasing client finishes its own round
+	// trip, so this is the ordinary drain point rather than an exceptional one.
+	//
+	// The drain does NOT rely on the apply above having bound anything — a stale
+	// event binds nothing and still reaches this line. It does not need to:
+	// every replay goes through ApplySubscriptionSource, which settles ownership
+	// of the external subscription id inside the same transaction that would
+	// grant on it. A subscription owned by somebody else is refused there and the
+	// deferred row stays put, so the worst this can do on a stale event is
+	// nothing.
+	//
+	// Best effort and deliberately after the apply: the caller's own result is
+	// already durable, and a failure here leaves every deferred row exactly where
+	// it was, still replayable.
+	s.reconcileApplePendingNotifications(r.Context(), u.ID, tx.OriginalTransactionID, now)
+
 	httpx.WriteJSON(w, http.StatusOK, appleTransactionResult{
 		Applied:   res.Applied,
 		PlanID:    res.Effective.PlanID,
@@ -198,7 +217,7 @@ func appleSourceEvent(userID string, tx VerifiedAppleTransaction, product AppleP
 		EventAt:    appleEventClock(tx),
 		Now:        now.Unix(),
 	}
-	if appleTransactionIsTerminal(tx) || tx.ExpiresDateMS <= now.UnixMilli() {
+	if !appleTransactionGrants(tx, now) {
 		ev.PlanID = freePlanID
 		ev.Status = "canceled"
 		// '' leaves the recorded cycle alone (see SourceEvent.Cycle): a lapsed
@@ -210,6 +229,20 @@ func appleSourceEvent(userID string, tx VerifiedAppleTransaction, product AppleP
 	ev.Status = "active"
 	ev.Cycle = product.Cycle
 	return ev
+}
+
+// appleTransactionGrants reports whether this transaction currently pays for
+// anything: not ended by something recorded in it, and not yet past its
+// paid-through instant.
+//
+// Extracted so the notification path can ask the question BEFORE looking up a
+// product mapping — a transaction that no longer grants needs no tier, and
+// making revocation depend on the catalog would mean a retired mapping silently
+// disabled it (see appleNotificationProduct). One predicate, so the branch that
+// decides whether a product is REQUIRED and the branch that decides what the
+// event SAYS can never disagree about the same transaction.
+func appleTransactionGrants(tx VerifiedAppleTransaction, now time.Time) bool {
+	return !appleTransactionIsTerminal(tx) && tx.ExpiresDateMS > now.UnixMilli()
 }
 
 // appleTransactionIsTerminal reports whether this transaction has been ENDED by

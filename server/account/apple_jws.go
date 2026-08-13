@@ -44,10 +44,18 @@ import (
 // refusal is a fixed code (see appleRejection).
 
 const (
-	// appleMaxJWSBytes bounds the whole compact JWS. A real Apple transaction
-	// with its three certificates is ~5 KiB; this leaves room for growth while
-	// keeping a hostile body away from the parsers below. The HTTP layer has its
-	// own, larger, body limit — this one is about what the verifier will look at.
+	// appleMaxJWSBytes bounds a TRANSACTION's compact JWS. A real Apple
+	// transaction with its three certificates is ~5 KiB; this leaves room for
+	// growth while keeping a hostile body away from the parsers below. The HTTP
+	// layer has its own, larger, body limit — this one is about what the verifier
+	// will look at.
+	//
+	// It is deliberately NOT the bound for a notification envelope, which carries
+	// two whole JWS documents inside its own payload and is therefore several
+	// times larger; see appleMaxNotificationJWSBytes. Bounding both with one
+	// constant would mean either refusing real notifications or quadrupling what
+	// a transaction submitter may hand the parsers, so the limit is a parameter
+	// of verifyAppleCompactJWS rather than a fact about it.
 	appleMaxJWSBytes = 12 << 10
 	// appleChainCerts is EXACTLY the shape Apple sends and the shape its own
 	// App Store Server Library accepts: leaf, WWDR intermediate, root. A range
@@ -89,14 +97,26 @@ func appleRejectionCode(err error) string {
 // own signedDate may claim to be. The certificate chain is validated at that
 // signedDate — see appleCandidateSignedDate for why, and for the one narrow
 // thing the untrusted payload is allowed to decide before it is trusted.
-func verifyAppleCompactJWS(compact string, roots *x509.CertPool, serverNow time.Time) ([]byte, error) {
+//
+// `maxBytes` is the caller's own size bound. It is a parameter because a
+// notification envelope and the transaction nested inside it are two different
+// documents with two different reasonable sizes, and each layer is verified
+// INDEPENDENTLY: the outer signature says nothing about the inner one, so the
+// inner JWS goes through this same function again, with its own smaller bound,
+// rather than being trusted because its container verified.
+func verifyAppleCompactJWS(compact string, roots *x509.CertPool, serverNow time.Time, maxBytes int) ([]byte, error) {
 	// A nil pool is not "no opinion": x509.VerifyOptions treats it as "use the
 	// host's root store", which would silently trust every public CA. There is no
 	// path through this function that leaves Roots unset.
 	if roots == nil {
 		return nil, rejectApple("no_trust_roots")
 	}
-	if len(compact) == 0 || len(compact) > appleMaxJWSBytes {
+	if maxBytes <= 0 {
+		// A caller that forgot its bound must not inherit "unbounded". There is no
+		// document this function is asked to verify without a stated size.
+		return nil, rejectApple("jws_size")
+	}
+	if len(compact) == 0 || len(compact) > maxBytes {
 		return nil, rejectApple("jws_size")
 	}
 	// Exactly three components: header, payload, signature.
@@ -275,8 +295,13 @@ func parseAppleJWSHeader(raw []byte) (appleJWSHeader, error) {
 // are Apple-private OIDs with no standard meaning, so x509 path validation
 // cannot check them — but they are what distinguishes an Apple RECEIPT-SIGNING
 // leaf under the WWDR intermediate from any other certificate that happens to
-// chain to the same root, and Apple's own ChainVerifier requires exactly this
-// pair at exactly these positions.
+// chain to the same root.
+//
+// Apple's official Node server library checks this exact pair at these exact
+// positions in verifyCertificateChainWithoutCaching: the receipt-signing OID
+// on the leaf and the WWDR OID on the intermediate. Both Relayium callers share
+// this verifier, so the transaction and notification trust boundaries cannot
+// drift apart.
 var (
 	// appleWWDRIntermediateOID marks Apple Worldwide Developer Relations as the
 	// issuing intermediate (x5c[1]).

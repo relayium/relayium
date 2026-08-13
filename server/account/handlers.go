@@ -245,6 +245,14 @@ func (s *Service) routeMux() *http.ServeMux {
 	// all, so CSRFGuard's `if origin != ""` check is false and it falls
 	// through untouched (see CSRFGuard above).
 	mux.HandleFunc("POST /api/stripe/webhook", s.handleStripeWebhook)
+	// App Store Server Notifications V2: unauthenticated for exactly the reasons
+	// the Stripe webhook above is — Apple has no session and no CSRF token — and
+	// authenticated instead by the signature on its own payload, verified against
+	// trust roots this deployment configured. Apple's POST carries no Origin
+	// header, so CSRFGuard falls through it untouched. Unconfigured it answers a
+	// retryable 503, so mounting it unconditionally changes nothing for a
+	// deployment that has no Apple apps. See billing_apple_notification.go.
+	mux.HandleFunc("POST /api/apple/notifications", s.handleAppleNotification)
 	// Device-code CLI login flow (RFC 8628-style): start/poll are called by
 	// the unauthenticated CLI (it has no credential yet), approve is called
 	// by the logged-in web session that confirms the code.

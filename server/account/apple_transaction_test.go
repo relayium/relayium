@@ -1002,8 +1002,22 @@ func TestAppleVerifierRequiresExplicitConfiguration(t *testing.T) {
 	// a caller that reached this function without anchors would silently trust
 	// every public CA. NewAppleTransactionVerifier cannot produce that state,
 	// which is exactly why the check needs a test of its own.
-	if _, err := verifyAppleCompactJWS(c.sign(t, applePayload()), nil, time.Now()); err == nil {
+	if _, err := verifyAppleCompactJWS(c.sign(t, applePayload()), nil, time.Now(), appleMaxJWSBytes); err == nil {
 		t.Fatal("a nil trust pool verified a transaction")
+	}
+
+	// And a caller that supplies no size bound. Every real caller passes its own
+	// (a transaction and a notification envelope are different sizes), so the
+	// hazard is a future one whose bound is computed and comes out zero — which
+	// must mean "refuse", never "unbounded".
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(c.rootPEM) {
+		t.Fatal("seed pool")
+	}
+	for _, max := range []int{0, -1} {
+		if _, err := verifyAppleCompactJWS(c.sign(t, applePayload()), pool, time.Now(), max); appleRejectionCode(err) != "jws_size" {
+			t.Fatalf("max=%d: want jws_size, got %v", max, err)
+		}
 	}
 }
 

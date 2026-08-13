@@ -14,8 +14,10 @@ import (
 //
 //  1. UNCONFIGURED — no -apple-store-config-file / RELAYIUM_APPLE_STORE_CONFIG_FILE.
 //     This is the shipping default and what every existing deployment is. No
-//     verifier is built, none is installed, and POST /api/billing/apple/transaction
-//     keeps answering 503 `verifier_unavailable` exactly as it does today.
+//     verifier is built, none is installed, and both App Store routes keep
+//     answering 503 exactly as they do today: POST /api/billing/apple/transaction
+//     with `verifier_unavailable`, and Apple's own POST /api/apple/notifications
+//     with a retryable refusal so no delivery is discarded while unconfigured.
 //  2. CONFIGURED — the path names a readable, complete configuration. The
 //     verifier is built during startup validation and installed once the account
 //     service exists.
@@ -99,5 +101,5 @@ func (s appleStoreSetup) install(sink appleVerifierSink) {
 	sink.SetAppleTransactionVerifier(s.verifier)
 	// One line, no material: which store, how many apps. The configuration
 	// holds no secrets, but a boot log is not the place to restate it either.
-	log.Printf("app store transactions: ENABLED (%s, %d app identity/identities) — POST /api/billing/apple/transaction now verifies submitted transactions. Which product grants which plan still comes from the Apple product catalog in the database; a verified transaction for a product with no mapping is refused", s.env, s.apps)
+	log.Printf("app store: ENABLED (%s, %d app identity/identities) — POST /api/billing/apple/transaction now verifies submitted transactions, and POST /api/apple/notifications now verifies App Store Server Notifications V2. Which product grants which plan still comes from the Apple product catalog in the database; a verified transaction for a product with no mapping is refused on the intake and deferred for replay on a notification (see docs/apple-server-notifications.md)", s.env, s.apps)
 }

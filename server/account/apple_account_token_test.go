@@ -155,6 +155,71 @@ func TestAppleAccountTokenDisappearsWithTheAccount(t *testing.T) {
 	}
 }
 
+func TestAppleNotificationProjectionDisappearsWithTheAccount(t *testing.T) {
+	ts, _, store, mail := newBillingServer(t)
+	email := "apple-notification-purge@example.com"
+	cookie := loginCookie(t, ts, mail, email)
+	token := postAppleToken(t, ts, cookie)
+	uid := mustUserID(t, store, email)
+	ctx := context.Background()
+
+	rec := AppleNotificationRecord{
+		UUID: appleNotifyUUID(990), Type: "DID_RENEW", ReceivedAt: 1,
+		Projection: AppleNotificationProjection{
+			BundleID: "com.relayium.ios", ProductID: "relayium.pro.monthly",
+			OriginalTransactionID: "purged-original-transaction", AppAccountToken: token,
+			PurchaseDateMS: 1, ExpiresDateMS: 2,
+		},
+	}
+	if _, fresh, err := store.ClaimAppleNotification(ctx, rec); err != nil || !fresh {
+		t.Fatalf("claim notification: fresh=%v err=%v", fresh, err)
+	}
+	if err := store.SetAccountDeletion(ctx, uid, 1, 100); err != nil {
+		t.Fatalf("schedule deletion: %v", err)
+	}
+	if err := store.ArchiveAndPurgeUser(ctx, uid, 200); err != nil {
+		t.Fatalf("purge: %v", err)
+	}
+	if _, ok, err := store.GetAppleNotification(ctx, rec.UUID); err != nil || ok {
+		t.Fatalf("notification projection outlived account: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestAppleNotificationProjectionPurgesThroughSubscriptionBinding(t *testing.T) {
+	_, _, store, _ := newBillingServer(t)
+	ctx := context.Background()
+	u, err := store.UpsertUserByEmail(ctx, "apple-binding-purge@example.com", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalID := "binding-only-original-transaction"
+	if _, err := store.ApplySubscriptionSource(ctx, SourceEvent{
+		UserID: u.ID, Provider: ProviderApple, ExternalID: originalID,
+		PlanID: "free", Status: "canceled", EventAt: 1, Now: 1,
+	}); err != nil {
+		t.Fatalf("bind subscription: %v", err)
+	}
+	rec := AppleNotificationRecord{
+		UUID: appleNotifyUUID(991), Type: "EXPIRED", ReceivedAt: 1, Supported: true,
+		Projection: AppleNotificationProjection{
+			BundleID: "com.relayium.ios", ProductID: "relayium.pro.monthly",
+			OriginalTransactionID: originalID, PurchaseDateMS: 1, ExpiresDateMS: 2,
+		},
+	}
+	if _, fresh, err := store.ClaimAppleNotification(ctx, rec); err != nil || !fresh {
+		t.Fatalf("claim notification: fresh=%v err=%v", fresh, err)
+	}
+	if err := store.SetAccountDeletion(ctx, u.ID, 1, 100); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ArchiveAndPurgeUser(ctx, u.ID, 200); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := store.GetAppleNotification(ctx, rec.UUID); err != nil || ok {
+		t.Fatalf("binding-attributed projection outlived account: ok=%v err=%v", ok, err)
+	}
+}
+
 // appleTokenResult carries one call's outcome back to whoever asked for it.
 type appleTokenResult struct {
 	token  string

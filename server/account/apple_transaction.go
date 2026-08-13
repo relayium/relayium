@@ -171,12 +171,50 @@ type VerifiedAppleTransaction struct {
 // the expiry decision belongs to the caller (appleSourceEvent), which has the
 // product mapping the decision also depends on.
 func (v *AppleTransactionVerifier) Verify(signedTransaction string, serverNow time.Time) (VerifiedAppleTransaction, error) {
+	tx, err := v.verifyTransactionIdentity(signedTransaction, serverNow)
+	if err != nil {
+		return VerifiedAppleTransaction{}, err
+	}
+	// ATTRIBUTION IS REQUIRED HERE, and only here. This is the submission path:
+	// its entire ownership decision is "the token in the payload resolves to the
+	// authenticated caller", so a transaction carrying no token has nothing that
+	// decision could be made from and is refused with the same code a malformed
+	// one has always produced. The notification path has a second, independent
+	// key (the recorded originalTransactionId binding) and therefore does not
+	// need this one — see resolveAppleNotificationOwner.
+	if tx.AppAccountToken == "" {
+		return VerifiedAppleTransaction{}, rejectApple("app_account_token")
+	}
+	if err := appleSubscriptionShape(tx); err != nil {
+		return VerifiedAppleTransaction{}, err
+	}
+	return tx, nil
+}
+
+// verifyTransactionIdentity is everything Verify does EXCEPT the subscription
+// narrowing: the signature, the chain, the payload parse, and the identity of
+// the app and environment the transaction claims to belong to.
+//
+// It is split out for the notification path, and for one reason only. On the
+// authenticated intake there is exactly one useful answer to a transaction this
+// server does not model — refuse it, because a client submitting a consumable
+// or a family-shared purchase to a subscription endpoint has nothing to be
+// granted. A notification is not a submission: Apple is telling us something
+// happened, and "this is not a shape we grant for" is a different fact from
+// "this did not come from Apple". Collapsing them would make the notification
+// handler unable to tell a forged payload (refuse, never acknowledge) from a
+// genuine event about a subscription we may well own (acknowledge, but record —
+// see applyAppleNotification).
+//
+// Everything below the split is unchanged and stays in one place, so the two
+// callers cannot drift into two trust boundaries.
+func (v *AppleTransactionVerifier) verifyTransactionIdentity(signedTransaction string, serverNow time.Time) (VerifiedAppleTransaction, error) {
 	if v == nil {
 		// An unconfigured deployment. The caller turns this into 503; what it must
 		// never turn into is an accepted transaction.
 		return VerifiedAppleTransaction{}, rejectApple("verifier_absent")
 	}
-	payload, err := verifyAppleCompactJWS(signedTransaction, v.roots, serverNow)
+	payload, err := verifyAppleCompactJWS(signedTransaction, v.roots, serverNow, appleMaxJWSBytes)
 	if err != nil {
 		return VerifiedAppleTransaction{}, err
 	}
@@ -204,16 +242,31 @@ func (v *AppleTransactionVerifier) Verify(signedTransaction string, serverNow ti
 	// id we cannot match (any id at all in a sandbox deployment, which declares
 	// none) is refused rather than accepted unchecked: it did not come from an
 	// app this server is configured for.
+	//
+	// The notification path does NOT rely on this being reachable: it compares
+	// the envelope's own appAppleId against the same configured app explicitly
+	// (see appleNotificationCrossLayerIdentity), because that is the field Apple
+	// actually populates and it is the one an attacker would aim at.
 	if tx.AppAppleID != 0 && tx.AppAppleID != app.AppAppleID {
 		return VerifiedAppleTransaction{}, rejectApple("app_apple_id")
 	}
+	return tx, nil
+}
+
+// appleSubscriptionShape is the narrowing to what this server grants for: an
+// auto-renewable subscription the account holder bought themselves.
+//
+// Separated from the identity checks so a caller can ask the two questions
+// independently, and returning the SAME rejection codes it always did so the
+// intake's behaviour is byte-for-byte what it was.
+func appleSubscriptionShape(tx VerifiedAppleTransaction) error {
 	if tx.Type != appleAutoRenewableType {
-		return VerifiedAppleTransaction{}, rejectApple("type")
+		return rejectApple("type")
 	}
 	if tx.OwnershipType != appleOwnershipPurchased {
-		return VerifiedAppleTransaction{}, rejectApple("ownership")
+		return rejectApple("ownership")
 	}
-	return tx, nil
+	return nil
 }
 
 // parseAppleTransactionPayload reads the verified payload. Absent, malformed
@@ -271,9 +324,22 @@ func parseAppleTransactionPayload(raw []byte) (VerifiedAppleTransaction, error) 
 		tx.ProductID == "" || len(tx.ProductID) > appleMaxProductIDLen {
 		return VerifiedAppleTransaction{}, rejectApple("product_ids")
 	}
-	// Shape only. Whether this token is the submitter's is the store's answer,
-	// and possession of it authorizes nothing either way.
-	if !validAppAccountToken(tx.AppAccountToken) {
+	// Shape only, and only when there is one. Whether this token is the
+	// submitter's is the store's answer, and possession of it authorizes nothing
+	// either way.
+	//
+	// ABSENT is not refused HERE, and the distinction matters on exactly one
+	// path. A purchase made outside Relayium's own StoreKit flow carries no
+	// appAccountToken at all, and Apple still sends notifications about it. On
+	// the authenticated intake that transaction is useless — there is no
+	// attribution to compare the caller against — and Verify refuses it with this
+	// same code. On the notification path it is a real event about a real
+	// subscription, one this server may already own by originalTransactionId, and
+	// refusing it outright would mean Apple retries a few times and then drops
+	// the only notice we will ever get. So absence becomes "unattributed" for the
+	// caller to resolve, while a present-but-malformed value stays a refusal
+	// everywhere: that one is a claim, and a malformed claim is not a missing one.
+	if tx.AppAccountToken != "" && !validAppAccountToken(tx.AppAccountToken) {
 		return VerifiedAppleTransaction{}, rejectApple("app_account_token")
 	}
 

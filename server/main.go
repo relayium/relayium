@@ -114,10 +114,11 @@ func main() {
 	appleDomainAssoc := flag.String("apple-domain-assoc-file", envStr("RELAYIUM_APPLE_DOMAIN_ASSOC_FILE", ""), "path to apple-developer-domain-association.txt")
 	// App Store PURCHASES, which share nothing with the Sign in with Apple flags
 	// above — no Team ID, no .p8, no client secret. Empty (the default) means no
-	// transaction verifier is built and POST /api/billing/apple/transaction
-	// answers 503; set, the file must be complete or the server refuses to boot.
-	// See server/apple_store.go.
-	appleStoreConfig := flag.String("apple-store-config-file", envStr("RELAYIUM_APPLE_STORE_CONFIG_FILE", ""), "path to the App Store transaction verifier's JSON config (environment, app identities, Apple root CA file); empty = OFF, and POST /api/billing/apple/transaction answers 503")
+	// verifier is built, and BOTH App Store routes answer 503: the authenticated
+	// intake POST /api/billing/apple/transaction and Apple's own
+	// POST /api/apple/notifications. Set, the file must be complete or the server
+	// refuses to boot. See server/apple_store.go.
+	appleStoreConfig := flag.String("apple-store-config-file", envStr("RELAYIUM_APPLE_STORE_CONFIG_FILE", ""), "path to the App Store verifier's JSON config (environment, app identities, Apple root CA file); empty = OFF, and both POST /api/billing/apple/transaction and POST /api/apple/notifications answer 503")
 	enableMagic := flag.Bool("enable-magic", envBool("RELAYIUM_ENABLE_MAGIC", false), "enable email magic-link login (disabled by default)")
 	adminUser := flag.String("admin-user", envStr("RELAYIUM_ADMIN_USER", "admin"), "admin dashboard username at /admin (defaults to 'admin')")
 	adminPass := flag.String("admin-pass", envStr("RELAYIUM_ADMIN_PASS", ""), "admin dashboard password at /admin (empty disables the dashboard)")
