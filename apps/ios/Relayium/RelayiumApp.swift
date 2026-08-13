@@ -58,7 +58,9 @@ import RelayiumAppKit
 ///
 /// Still absent, and deliberately not stubbed: background transfer (no
 /// `URLSessionConfiguration.background`, no background mode — an upload never
-/// progresses while suspended, force-quit or rebooted), notifications and IAP.
+/// progresses while suspended, force-quit or rebooted) and notifications.
+/// StoreKit subscriptions are app-scoped below and reuse the same server-owned
+/// entitlement model as macOS; the Share extension never links that adapter.
 ///
 /// **Universal Links are wired, and their shape is unchanged here.**
 /// `Relayium.entitlements` claims `associated-domains` for `applinks:relayium.com`
@@ -82,6 +84,10 @@ struct RelayiumApp: App {
     /// being rebuilt, and the session outlives any one screen.
     @StateObject private var download: CloudDownloadModel
     @StateObject private var session: AccountSession
+    /// One purchase model for the process. Its update stream must remain alive
+    /// while Account is off screen so renewals, refunds and interrupted
+    /// purchases still reach Relayium's server and refresh the session.
+    private let appleSubscription: AppleSubscriptionModel?
     /// An upload in flight and the selection behind it survive a tab switch and
     /// a view rebuild for the same reason.
     @StateObject private var upload: CloudUploadModel
@@ -173,6 +179,12 @@ struct RelayiumApp: App {
         let account = AppEnvironment.makeSession(tokenStore: UITestMode.makeTokenStore(),
                                                  transport: UITestMode.makeAccountTransport())
         _session = StateObject(wrappedValue: account)
+        appleSubscription = UITestMode.makeSubscriptionModel(
+            bearer: { account.bearerToken },
+            refreshAccount: { await account.refresh() })
+            ?? IOSAppleSubscriptions.makeModel(
+                bearer: { account.bearerToken },
+                refreshAccount: { await account.refresh() })
         // ONE stored-link key store: the upload model WRITES a key here and the
         // account management model READS it back and removes it with the object.
         // Two instances would still address the same keychain items, so this is
@@ -351,6 +363,8 @@ struct RelayiumApp: App {
                 // receive structurally independent of an account.
                 .environmentObject(management)
                 .environmentObject(signOut)
+                .environment(\.appleSubscription, appleSubscription)
+                .task { appleSubscription?.startObservingUpdates() }
                 // The one lifecycle observer, on the scene root rather than on a
                 // tab. What it does with each phase is
                 // `NearbyResidencyCoordinator`'s decision — which includes when

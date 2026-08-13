@@ -29,8 +29,16 @@ final class AppleSubscriptionPresentationTests: XCTestCase {
     func testEachChannelOffersExactlyOneWayToChangeAPlan() {
         XCTAssertTrue(AppDistributionChannel.macAppStore.offersInAppPurchase)
         XCTAssertFalse(AppDistributionChannel.macAppStore.showsWebPlanHandoff)
+        XCTAssertTrue(AppDistributionChannel.iosAppStore.offersInAppPurchase)
+        XCTAssertFalse(AppDistributionChannel.iosAppStore.showsWebPlanHandoff)
         XCTAssertFalse(AppDistributionChannel.directDownload.offersInAppPurchase)
         XCTAssertTrue(AppDistributionChannel.directDownload.showsWebPlanHandoff)
+    }
+
+    func testSharedSubscriptionBodyDoesNotClaimTheIOSAppIsAMac() {
+        let body = L10n.t(.subscriptionBody, language: .en)
+        XCTAssertTrue(body.contains("this app"), body)
+        XCTAssertFalse(body.contains("Mac"), body)
     }
 
     /// And neither channel can end up with both routes or with none. Two
@@ -170,11 +178,13 @@ final class AppleSubscriptionPresentationTests: XCTestCase {
         let everyFailure: [AppleSubscriptionFailure] = [
             .billing(.notSignedIn), .billing(.network), .billing(.rateLimited),
             .billing(.invalidTransaction), .billing(.decoding), .billing(.tokenMismatch),
-            .billing(.subscriptionOwned), .billing(.verifierUnavailable),
+            .billing(.subscriptionOwned), .billing(.appleSubscriptionConflict),
+            .billing(.verifierUnavailable),
             .billing(.unknownBundle), .billing(.server(status: 418)),
             .unexpected(type: "StoreFailure"),
             .purchaseNotAllowed(blockedBy: "stripe"),
             .purchaseNotAllowed(blockedBy: "admin"),
+            .purchaseNotAllowed(blockedBy: "apple"),
             .purchaseNotAllowed(blockedBy: ""),
         ]
         var seen: [String: [String]] = [:]
@@ -184,12 +194,27 @@ final class AppleSubscriptionPresentationTests: XCTestCase {
             seen[text, default: []].append(String(describing: failure))
         }
         // A refused JWS and an unreadable 200 are the same fact to the user, and
-        // have the same repair. Nothing else may join them.
+        // have the same repair. Nothing else may join them: in particular a
+        // purchase already completed by Apple needs different recovery wording
+        // from a pre-purchase eligibility block.
         let collapsed = seen.values.filter { $0.count > 1 }.map { $0.sorted() }.sorted { $0[0] < $1[0] }
         XCTAssertEqual(collapsed,
                        [["billing(RelayiumKit.AppleBillingError.decoding)",
                          "billing(RelayiumKit.AppleBillingError.invalidTransaction)"]],
                        "failure classes share wording that was not argued: \(collapsed)")
+    }
+
+    func testCompletedAppleConflictNamesThePostChargeRecovery() {
+        let message = AppleSubscriptionPresentation.message(
+            for: .billing(.appleSubscriptionConflict), language: .en)
+        let preflight = AppleSubscriptionPresentation.message(
+            for: .purchaseNotAllowed(blockedBy: "apple"), language: .en)
+
+        XCTAssertNotEqual(message, preflight)
+        XCTAssertTrue(message.contains("completed this purchase"), message)
+        XCTAssertTrue(message.contains("retained"), message)
+        XCTAssertTrue(message.contains("refund"), message)
+        XCTAssertTrue(message.contains("restore"), message)
     }
 
     /// The self-repairing refusals say so. Most of these leave an unfinished
@@ -224,11 +249,18 @@ final class AppleSubscriptionPresentationTests: XCTestCase {
             AppleCatalogPurchase(allowed: false, blockedBy: "stripe"), language: .en)
         let admin = AppleSubscriptionPresentation.eligibilityNotice(
             AppleCatalogPurchase(allowed: false, blockedBy: "admin"), language: .en)
+        let apple = AppleSubscriptionPresentation.eligibilityNotice(
+            AppleCatalogPurchase(allowed: false, blockedBy: "apple"), language: .en)
         XCTAssertNotNil(web)
         XCTAssertNotNil(admin)
+        XCTAssertNotNil(apple)
         XCTAssertNotEqual(web, admin)
+        XCTAssertNotEqual(apple, web)
+        XCTAssertNotEqual(apple, admin)
         XCTAssertTrue(web?.contains("relayium.com") == true,
                       "the web notice does not say where to cancel: \(web ?? "")")
+        XCTAssertTrue(apple?.contains("restore") == true,
+                      "the Apple notice does not offer the safe recovery path: \(apple ?? "")")
     }
 
     /// **An unrecognised provider is still a refusal.** This layer never turns

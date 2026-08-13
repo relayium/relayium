@@ -203,6 +203,7 @@ final class AppleBillingClientTests: XCTestCase {
             (400, "invalid_transaction", .invalidTransaction),
             (403, "token_mismatch", .tokenMismatch),
             (409, "subscription_owned", .subscriptionOwned),
+            (409, "apple_subscription_conflict", .appleSubscriptionConflict),
             (503, "verifier_unavailable", .verifierUnavailable),
         ]
         for (status, code, expected) in cases {

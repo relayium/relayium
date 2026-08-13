@@ -85,6 +85,16 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/dd-ios" \
             CODE_SIGNING_ALLOWED=NO build
+      # TestFlight uses the device Release graph, not the simulator Debug graph.
+      # Keep signing disabled here so forks can still exercise the compiler,
+      # while catching release-only settings and device-SDK failures before an
+      # archive consumes a build number.
+      - name: Build (unsigned, iOS Device Release)
+        run: |
+          xcodebuild -project apps/ios/Relayium.xcodeproj -scheme Relayium \
+            -destination 'generic/platform=iOS' -configuration Release \
+            -derivedDataPath "$RUNNER_TEMP/dd-ios-release" \
+            CODE_SIGNING_ALLOWED=NO build
       # A compile cannot prove that TabView produced five usable screens. Pick
       # an installed iPhone runtime by id so this remains independent of the
       # device marketing name on each macOS runner image.

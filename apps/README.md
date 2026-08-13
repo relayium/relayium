@@ -1412,12 +1412,16 @@ renders on either platform.
 
 ### Capabilities
 
-`Relayium.entitlements` claims exactly two capabilities:
+`Relayium.entitlements` claims exactly three capabilities:
 `com.apple.developer.applesignin = [Default]`, which arrived with the native
 Sign in with Apple button described above, and
 `com.apple.developer.associated-domains = [applinks:relayium.com]`, which
-arrived with Universal Link routing below. Still absent: keychain access group,
-local network, background modes, push, IAP, App Group and shared keychain group.
+arrived with Universal Link routing below, plus
+`com.apple.security.application-groups = [group.com.relayium.app]`, which is the
+local handoff shared with the file-staging Share extension. Still absent:
+keychain access group, local network, background modes and push. StoreKit does
+not require an entitlement; its boundary is the adapter linked only into the
+main App Store app, never the extension.
 Each entitlement lands with the functional slice that needs it, and
 `IOSSurfaceGuardTests` fails on any other key appearing in the file — and on the
 associated-domains value being anything other than that one `applinks:` entry.

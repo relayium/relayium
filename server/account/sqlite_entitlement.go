@@ -24,13 +24,20 @@ import (
 // owner; the second claimant is refused rather than silently taking it over.
 var ErrExternalSubscriptionOwned = errors.New("account: external subscription already owned by another user")
 
+// ErrAppleSubscriptionConflict is returned when one Relayium account already
+// has a LIVE Apple subscription and an event tries to replace it with a
+// different original transaction or App Store app. Both are paid ownership
+// boundaries: replacing either would orphan the subscription that is still
+// billing the customer.
+var ErrAppleSubscriptionConflict = errors.New("account: another apple subscription is already live for this user")
+
 // subscriptionSourceCols is the column list every source-row read shares.
-const subscriptionSourceCols = `user_id, provider, plan_id, status, cycle, period_end, external_id, event_at, updated_at`
+const subscriptionSourceCols = `user_id, provider, plan_id, status, cycle, period_end, external_id, external_scope, event_at, updated_at`
 
 func scanSubscriptionSource(sc rowScanner) (SubscriptionSource, error) {
 	var s SubscriptionSource
 	err := sc.Scan(&s.UserID, &s.Provider, &s.PlanID, &s.Status, &s.Cycle,
-		&s.PeriodEnd, &s.ExternalID, &s.EventAt, &s.UpdatedAt)
+		&s.PeriodEnd, &s.ExternalID, &s.ExternalScope, &s.EventAt, &s.UpdatedAt)
 	return s, err
 }
 
@@ -102,9 +109,45 @@ func applySourceTx(ctx context.Context, tx *sql.Tx, ev SourceEvent) (Subscriptio
 	appleProductionSupersedesSandbox := ev.Provider == ProviderApple && havePrev &&
 		ev.ExternalID != "" && !appleExternalIDIsSandbox(ev.ExternalID) &&
 		appleExternalIDIsSandbox(prev.ExternalID)
+	// Resolve a canonical id already owned by ANOTHER Relayium user before the
+	// same-user live-source guard below. The two conflicts have different user
+	// recovery paths and HTTP codes; a claimant who also has their own Apple
+	// source must still be told that this particular subscription belongs to a
+	// different Relayium account.
+	if ev.Provider == ProviderApple && ev.ExternalID != "" {
+		if err := assertExternalSubscriptionUnowned(ctx, tx, ev.UserID, ev.Provider, ev.ExternalID); err != nil {
+			return SubscriptionApply{}, err
+		}
+	}
+	// A Sandbox purchase is a zero-charge test transaction, not a second
+	// commercial subscription. Once this account has a Production binding it may
+	// never displace that binding, but it must converge as an accepted no-op so
+	// StoreKit can finish the test transaction instead of redelivering it forever.
+	// Ownership is checked first above so a sandbox id bound to another Relayium
+	// account is still refused rather than consumed by the wrong account.
 	if ev.Provider == ProviderApple && havePrev && appleExternalIDIsSandbox(ev.ExternalID) &&
 		prev.ExternalID != "" && !appleExternalIDIsSandbox(prev.ExternalID) {
 		return unchanged, nil
+	}
+	// A live Apple source may only be advanced by the SAME original transaction
+	// in the SAME app. A different id in the same bundle is still a second paid
+	// subscription, while a different bundle is a second App Store product
+	// family; overwriting either would make the first subscription impossible to
+	// renew, revoke or show to the user. Check before replay ordering so an older
+	// competing transaction cannot be mistaken for a harmless no-op and then be
+	// finished by the client.
+	//
+	// Production replacing Sandbox is the one exception. It is an explicit trust
+	// transition rather than a second commercial subscription, and the existing
+	// environment rule requires the real store to win even when its clock is
+	// older. Empty migrated scope is safe to backfill only when the non-empty
+	// canonical id still matches; a different id is refused.
+	if ev.Provider == ProviderApple && havePrev && prev.stillBillingAt(ev.Now) && !appleProductionSupersedesSandbox {
+		differentID := ev.ExternalID != "" && prev.ExternalID != "" && ev.ExternalID != prev.ExternalID
+		differentScope := ev.ExternalScope != "" && prev.ExternalScope != "" && ev.ExternalScope != prev.ExternalScope
+		if differentID || differentScope {
+			return SubscriptionApply{}, ErrAppleSubscriptionConflict
+		}
 	}
 	if ev.EventAt > 0 && havePrev && ev.EventAt < prev.EventAt && !appleProductionSupersedesSandbox {
 		// Stale/replayed: leave BOTH the source row and the projection exactly as
@@ -120,29 +163,34 @@ func applySourceTx(ctx context.Context, tx *sql.Tx, ev SourceEvent) (Subscriptio
 	// carry none, and blanking it would drop the binding that cancel, refund and
 	// reconcile all resolve through.
 	externalID := prev.ExternalID // '' when there is no prior row
+	externalScope := prev.ExternalScope
 	if ev.ExternalID != "" {
 		if err := assertExternalSubscriptionUnowned(ctx, tx, ev.UserID, ev.Provider, ev.ExternalID); err != nil {
 			return SubscriptionApply{}, err
 		}
 		externalID = ev.ExternalID
 	}
+	if ev.ExternalScope != "" {
+		externalScope = ev.ExternalScope
+	}
 
 	// '' cycle leaves the stored one alone (see SourceEvent.Cycle); the clock is
 	// kept monotonic so an equal-timestamped redelivery cannot move it backwards.
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO subscription_sources (`+subscriptionSourceCols+`)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(user_id, provider) DO UPDATE SET
 		   plan_id = excluded.plan_id,
 		   status = excluded.status,
 		   cycle = CASE WHEN excluded.cycle = '' THEN subscription_sources.cycle ELSE excluded.cycle END,
 		   period_end = excluded.period_end,
 		   external_id = excluded.external_id,
+		   external_scope = excluded.external_scope,
 		   event_at = CASE WHEN excluded.event_at > subscription_sources.event_at
 		                   THEN excluded.event_at ELSE subscription_sources.event_at END,
 		   updated_at = excluded.updated_at`,
 		ev.UserID, ev.Provider, ev.PlanID, ev.Status, ev.Cycle, ev.PeriodEnd,
-		externalID, ev.EventAt, ev.Now); err != nil {
+		externalID, externalScope, ev.EventAt, ev.Now); err != nil {
 		// The precheck above normally answers first; the index is what refuses a
 		// claimant it could not see (see isExternalSubscriptionConflict), and the
 		// refusal must reach the caller in the same vocabulary either way.

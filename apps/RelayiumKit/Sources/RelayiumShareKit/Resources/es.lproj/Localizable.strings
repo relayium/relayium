@@ -745,7 +745,7 @@
    never written here: the store's own localized price is substituted in. */
 
 "subscription.heading" = "Suscripción";
-"subscription.body" = "En este Mac, tu plan de Relayium se cobra a través de la App Store. Apple gestiona el pago; Relayium solo registra qué plan tienes.";
+"subscription.body" = "En esta app, tu plan de Relayium se cobra a través de la App Store. Apple gestiona el pago; Relayium solo registra qué plan tienes.";
 "subscription.loading" = "Cargando planes…";
 "subscription.none" = "Ahora mismo no hay nada que suscribir desde esta app.";
 "subscription.subscribe" = "Suscribirse";
@@ -765,6 +765,8 @@
 "subscription.terms" = "Términos del servicio";
 "subscription.blockedByWeb" = "Tu suscripción se gestiona en relayium.com. Cancélala allí antes de suscribirte aquí para que no te cobren dos veces.";
 "subscription.blockedByAdmin" = "Relayium te concedió el plan directamente, así que aquí no hay nada que comprar.";
+"subscription.blockedByAppleApp" = "Esta cuenta ya tiene una suscripción de Apple. Gestiónala o restáurala en la app de Relayium donde se compró para evitar cobros duplicados.";
+"subscription.errorAppleConflict" = "Apple completó esta compra, pero esta cuenta ya tiene otra suscripción de Apple activa. Relayium conservó la transacción y volverá a intentarlo. Cancela la suscripción duplicada o solicita un reembolso en la App Store y, después, restaura las compras.";
 "subscription.blockedByOther" = "Tu suscripción se gestiona fuera de esta app.";
 "subscription.errorNotSignedIn" = "Inicia sesión en tu cuenta de Relayium para suscribirte.";
 "subscription.errorNetwork" = "No se pudo contactar con Relayium. No se pierde nada: la App Store volverá a ofrecer esta compra.";

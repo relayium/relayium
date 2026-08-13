@@ -249,6 +249,42 @@ final class AppShellUITests: XCTestCase {
                        "a signed-in Send task still offers the signed-out remedy")
     }
 
+    /// The iOS App Store surface reuses the production catalog, purchase and
+    /// submission orchestration while replacing only StoreKit with a local
+    /// deterministic adapter. No request or Apple account leaves the simulator.
+    func testSubscriptionsRenderAndPurchaseWithoutAWebCheckout() {
+        app.terminate()
+        app.launchArguments = offlineLaunchArguments + [
+            "--relayium-ui-testing-signed-in",
+            "--relayium-ui-testing-subscriptions",
+        ]
+        app.launch()
+
+        openTask("Account", title: "Account")
+        let monthly = app.buttons["subscription-buy-uitest.subscription.month"]
+        for _ in 0..<8 where !monthly.exists { app.swipeUp() }
+        XCTAssertTrue(monthly.waitForExistence(timeout: 20),
+                      "the server catalog and StoreKit price never rendered")
+        XCTAssertTrue(app.buttons["subscription-buy-uitest.subscription.year"].exists)
+        XCTAssertTrue(monthly.isEnabled)
+        XCTAssertTrue(app.buttons["subscription-restore"].exists,
+                      "an existing Apple purchase cannot be restored")
+        let privacy = app.descendants(matching: .any)["subscription-privacy"]
+        for _ in 0..<6 where !privacy.exists { app.swipeUp() }
+        XCTAssertTrue(privacy.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.descendants(matching: .any)["subscription-terms"].exists)
+        XCTAssertFalse(app.buttons["Manage plan"].exists,
+                       "the App Store build offers a competing web checkout")
+
+        for _ in 0..<6 where !monthly.isHittable { app.swipeDown() }
+        XCTAssertTrue(monthly.isHittable)
+        monthly.tap()
+        let notice = app.descendants(matching: .any)["subscription-notice"]
+        XCTAssertTrue(notice.waitForExistence(timeout: 20),
+                      "an accepted purchase produced no confirmation")
+        XCTAssertFalse(app.descendants(matching: .any)["subscription-failure"].exists)
+    }
+
     /// The off state a destination failure leaves behind — never resident,
     /// never paused — rendered by the running app.
     ///

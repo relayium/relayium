@@ -18,7 +18,7 @@ import XCTest
 ///     per target, not by searching it as text;
 ///  4. the App Store entitlements carry no Sparkle Mach-lookup exception, and
 ///     its Info.plist carries no Sparkle keys;
-///  5. no StoreKit reaches iOS, whose project is untouched by this batch;
+///  5. iOS links the adapter in the app target and never in its Share extension;
 ///  6. the shared source really is shared — one copy of the scene, the settings
 ///     window and the account screen, compiled by both targets through a
 ///     target-specific seam rather than duplicated;
@@ -125,25 +125,30 @@ final class StoreKitLinkageTests: XCTestCase {
                            "Product.PurchaseResult", "Product.PurchaseOption"]
         // The adapter's MODULE name is a link-level fact, allowed only where the
         // App Store target assembles its store.
-        let moduleImporter = "mac/Relayium/Distribution/AppStoreDistribution.swift"
+        let moduleImporters: Set<String> = [
+            "mac/Relayium/Distribution/AppStoreDistribution.swift",
+            "ios/Relayium/AppleSubscriptions.swift",
+        ]
         for (path, code) in try everyShippableSource() {
             guard !path.hasPrefix("RelayiumKit/Sources/RelayiumStoreKit/") else { continue }
             for symbol in storeKitAPI {
                 XCTAssertFalse(code.contains(symbol),
                                "\(path) names \(symbol) outside the isolated adapter")
             }
-            if path != moduleImporter {
+            if !moduleImporters.contains(path) {
                 XCTAssertFalse(code.contains("RelayiumStoreKit"),
-                               "\(path) names the adapter module; only \(moduleImporter) may")
+                               "\(path) names the adapter module outside an App Store app seam")
             }
         }
-        // And the exempt file really is what it claims to be, so the exemption
-        // cannot be inherited by a file that merely took its name.
-        let seam = try XCTUnwrap(try everyShippableSource().first { $0.path == moduleImporter },
-                                 "the App Store distribution seam is gone")
-        XCTAssertTrue(seam.code.contains("import RelayiumStoreKit"))
-        XCTAssertTrue(seam.code.contains("StoreKitSubscriptionStore()"),
-                      "the seam no longer builds the real store")
+        // And both exempt files really assemble the real adapter.
+        let shippable = try everyShippableSource()
+        for moduleImporter in moduleImporters {
+            let seam = try XCTUnwrap(shippable.first { $0.path == moduleImporter },
+                                     "the App Store app seam is gone: \(moduleImporter)")
+            XCTAssertTrue(seam.code.contains("import RelayiumStoreKit"))
+            XCTAssertTrue(seam.code.contains("StoreKitSubscriptionStore()"),
+                          "\(moduleImporter) no longer builds the real store")
+        }
     }
 
     /// The seam the rest of the app talks to names no store type at all — which
@@ -368,24 +373,29 @@ final class StoreKitLinkageTests: XCTestCase {
                        direct["LSApplicationCategoryType"] as? String)
     }
 
-    // MARK: - 5: iOS is untouched
+    // MARK: - 5: iOS contains StoreKit only in the app
 
-    /// The iOS app neither links the adapter nor gains a purchase surface in
-    /// this batch. Its own App Store work is a later checkpoint, and a StoreKit
-    /// dependency arriving there by accident would make that decision for it.
-    func testNoStoreKitReachesTheIOSProject() throws {
+    /// iOS is an App Store-only product, so its app links the adapter while its
+    /// Share extension remains a staging process with no account or network.
+    func testStoreKitReachesTheIOSAppButNotItsShareExtension() throws {
         let project = try projectText("ios")
-        for banned in ["RelayiumStoreKit", "StoreKit.framework", "StoreKitTest", "libStoreKit"] {
+        for banned in ["StoreKit.framework", "StoreKitTest", "libStoreKit"] {
             XCTAssertFalse(project.contains(banned), "the iOS project links \(banned)")
         }
-        XCTAssertTrue(project.contains("productName = RelayiumKit;"),
-                      "the iOS project no longer links the package at all")
-        for (path, code) in try sources(under: iosRoot, atLeast: 12) {
-            for symbol in ["StoreKit", "AppleSubscriptionModel", "SubscriptionStore",
-                           "AppleSubscriptionCard", "AppDistribution"] {
-                XCTAssertFalse(code.contains(symbol), "\(path) reaches the purchase path via \(symbol)")
-            }
-        }
+        let app = try linkedPackageProducts(ofTarget: "Relayium", in: project)
+        XCTAssertTrue(app.contains("RelayiumKit"))
+        XCTAssertTrue(app.contains("RelayiumStoreKit"),
+                      "the iOS app cannot sell subscriptions: \(app)")
+        let share = try linkedPackageProducts(ofTarget: "RelayiumShare", in: project)
+        XCTAssertEqual(share, ["RelayiumShareKit"],
+                       "the Share extension reached account or purchase code: \(share)")
+
+        let sources = try sources(under: iosRoot, atLeast: 14)
+        XCTAssertEqual(sources.filter { $0.code.contains("import RelayiumStoreKit") }.map(\.path),
+                       ["ios/Relayium/AppleSubscriptions.swift"])
+        XCTAssertTrue(sources.first { $0.path.hasSuffix("RelayiumApp.swift") }?.code
+            .contains("startObservingUpdates()") == true,
+                      "the iOS app does not drain StoreKit updates at app scope")
     }
 
     // MARK: - 6: the source really is shared
@@ -516,7 +526,9 @@ final class StoreKitLinkageTests: XCTestCase {
             // The acceptance fixtures name identifiers, and are compiled out of
             // Release entirely. Checked below rather than skipped silently.
             guard !path.hasSuffix("mac/Relayium/UITestMode.swift"),
-                  !path.hasSuffix("mac/Relayium/UITestSubscriptions.swift") else { continue }
+                  !path.hasSuffix("mac/Relayium/UITestSubscriptions.swift"),
+                  !path.hasSuffix("ios/Relayium/UITestMode.swift"),
+                  !path.hasSuffix("ios/Relayium/UITestSubscriptions.swift") else { continue }
             for shape in ["com.relayium.plus", "com.relayium.pro", "com.relayium.max",
                           ".monthly\"", ".yearly\"", "subscription.group"] {
                 XCTAssertFalse(code.contains(shape),
@@ -525,11 +537,13 @@ final class StoreKitLinkageTests: XCTestCase {
         }
         // The two exempt files are entirely inside `#if DEBUG`, so nothing they
         // name reaches a shipped binary.
-        for name in ["UITestMode.swift", "UITestSubscriptions.swift"] {
-            let text = try String(contentsOf: macRoot.appendingPathComponent("Relayium/\(name)"),
-                                  encoding: .utf8)
-            XCTAssertTrue(text.contains("#if DEBUG"),
-                          "\(name) names product identifiers outside a DEBUG guard")
+        for root in [macRoot, iosRoot] {
+            for name in ["UITestMode.swift", "UITestSubscriptions.swift"] {
+                let text = try String(contentsOf: root.appendingPathComponent("Relayium/\(name)"),
+                                      encoding: .utf8)
+                XCTAssertTrue(text.contains("#if DEBUG"),
+                              "\(root.lastPathComponent)/\(name) lacks a DEBUG guard")
+            }
         }
         // And the model takes its bundle identity rather than a catalog: there
         // is no default, no constant and no plist entry to find.
@@ -551,27 +565,31 @@ final class StoreKitLinkageTests: XCTestCase {
     /// purchase surface may exist; without this, a batch that deleted the
     /// existing button would satisfy all of them and leave direct-download users
     /// with no way to change a plan at all.
-    func testThePlanHandoffStillGoesToTheWebsiteOnBothPlatforms() throws {
-        let surfaces = ["ios/Relayium/AccountSummaryView.swift",
-                        "mac/Relayium/AccountView.swift"]
-        for surface in surfaces {
-            let text = try String(contentsOf: appsRoot.appendingPathComponent(surface),
-                                  encoding: .utf8)
-            XCTAssertTrue(text.contains("Button(L10n.t(.accountManagePlan))"),
-                          "\(surface) lost the plan handoff control")
-            XCTAssertTrue(text.contains("AppEnvironment.plansWebURL"),
-                          "\(surface) no longer sends a plan change to the website")
-        }
-        let mac = try String(contentsOf: appsRoot.appendingPathComponent(surfaces[1]),
+    func testOnlyTheDirectMacBuildKeepsTheWebsitePlanHandoff() throws {
+        let mac = try String(contentsOf: appsRoot.appendingPathComponent(
+            "mac/Relayium/AccountView.swift"),
                              encoding: .utf8)
+        XCTAssertTrue(mac.contains("Button(L10n.t(.accountManagePlan))"))
+        XCTAssertTrue(mac.contains("AppEnvironment.plansWebURL"))
         XCTAssertTrue(mac.contains("NSWorkspace.shared.open(AppEnvironment.plansWebURL)"))
         // …and the App Store build does NOT show it. Both terms of the rule are
         // required — see the call site — so both are pinned here.
         XCTAssertTrue(mac.contains("AppDistribution.channel.showsWebPlanHandoff && subscription == nil"),
                       "the web hand-off is no longer gated on the distribution channel")
-        let ios = try String(contentsOf: appsRoot.appendingPathComponent(surfaces[0]),
+        let ios = try String(contentsOf: appsRoot.appendingPathComponent(
+            "ios/Relayium/AccountSummaryView.swift"),
                              encoding: .utf8)
-        XCTAssertTrue(ios.contains("openURL(AppEnvironment.plansWebURL)"))
+        XCTAssertTrue(ios.contains("IOSAppleSubscriptions.channel.showsWebPlanHandoff"),
+                      "the iOS web hand-off is no longer gated on the distribution channel")
+        XCTAssertTrue(ios.contains("Button(L10n.t(.accountManagePlan))"))
+        XCTAssertTrue(ios.contains("AppEnvironment.plansWebURL"))
+        XCTAssertTrue(ios.contains("IOSAppleSubscriptions.channel.offersInAppPurchase"),
+                      "the iOS StoreKit surface is no longer gated on the distribution channel")
+        XCTAssertTrue(ios.contains("AppleSubscriptionCard("))
+        let subscriptions = try String(contentsOf: iosRoot.appendingPathComponent(
+            "Relayium/AppleSubscriptions.swift"), encoding: .utf8)
+        XCTAssertTrue(subscriptions.contains("channel: AppDistributionChannel = .iosAppStore"),
+                      "the iOS purchase boundary does not declare its distribution channel")
     }
 
     // MARK: - 9: the purchase surface carries its legal links
@@ -643,6 +661,28 @@ final class StoreKitLinkageTests: XCTestCase {
         let bodyOfProperty = String(property.prefix(while: { $0 != "}" }))
         XCTAssertFalse(bodyOfProperty.contains("if "),
                        "a legal link is rendered conditionally")
+    }
+
+    func testTheIOSPurchaseSurfaceCarriesUnconditionalLegalLinks() throws {
+        let card = try String(contentsOf: iosRoot.appendingPathComponent(
+            "Relayium/AppleSubscriptions.swift"), encoding: .utf8)
+        let flat = card.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        for (label, url) in [(".subscriptionPrivacy", "AppEnvironment.privacyWebURL"),
+                             (".subscriptionTerms", "AppEnvironment.termsWebURL")] {
+            XCTAssertTrue(flat.contains("Link(L10n.t(\(label)), destination: \(url))"),
+                          "the iOS purchase surface no longer links \(label) to \(url)")
+        }
+        for identifier in ["subscription-privacy", "subscription-terms"] {
+            XCTAssertEqual(card.components(separatedBy: "\"\(identifier)\"").count - 1, 1,
+                           "\(identifier) is not on the iOS card exactly once")
+        }
+        XCTAssertFalse(card.contains("https://"),
+                       "the iOS purchase card hard-codes a URL")
+
+        let marker = "HStack(spacing: 16) {"
+        let links = try XCTUnwrap(card.components(separatedBy: marker).dropFirst().first)
+        let block = try XCTUnwrap(links.components(separatedBy: "\n            .font(.caption)").first)
+        XCTAssertFalse(block.contains("if "), "an iOS legal link is rendered conditionally")
     }
 
     /// The addresses are written once, in `AppEnvironment`, like every other

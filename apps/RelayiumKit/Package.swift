@@ -30,12 +30,11 @@ let package = Package(
         //
         // Linking StoreKit into an app is a claim — it is what the purchase
         // machinery and App Store review look for, and an app that links it is
-        // an app that sells something. This batch builds the adapter without
-        // making that claim: **no macOS or iOS target links this product**,
-        // there is no `.storekit` configuration file, and there are no product
-        // identifiers anywhere in the tree. `StoreKitBoundaryTests` reads both
-        // Xcode projects and every Swift source under `apps/` to keep all three
-        // of those true.
+        // an app that sells something. Only the Mac App Store target and the
+        // iOS app link this product; the direct Mac build and both Share
+        // extensions do not. There is no `.storekit` configuration file and no
+        // production product identifier in the tree; the server owns catalog
+        // mappings for each bundle identity.
         //
         // It depends on `RelayiumAppKit` and must never gain a dependency the
         // other way round: the seam it implements (`SubscriptionStore`) is
@@ -101,9 +100,8 @@ let package = Package(
                 dependencies: ["RelayiumAppKit"]),
         .testTarget(
             name: "RelayiumKitTests",
-            // `RelayiumStoreKit` is linked by the TESTS and by nothing else, so
-            // `swift test` type-checks the real adapter on every run while no
-            // shipping binary contains it. The tests drive the purchase policy
+            // Tests also link `RelayiumStoreKit`, so `swift test` type-checks
+            // the real adapter on every run. The tests drive the purchase policy
             // through a fake store; what linking the real one buys is that the
             // StoreKit 2 API surface it names cannot rot unnoticed.
             dependencies: ["RelayiumKit", "RelayiumAppKit", "RelayiumShareKit",

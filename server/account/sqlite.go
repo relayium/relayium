@@ -962,9 +962,14 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
   cycle       TEXT NOT NULL DEFAULT '',
   period_end  INTEGER NOT NULL DEFAULT 0,
   external_id TEXT NOT NULL DEFAULT '',
+  external_scope TEXT NOT NULL DEFAULT '',
   event_at    INTEGER NOT NULL DEFAULT 0,
   updated_at  INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, provider))`,
+		// Existing databases predate the Apple app-scope binding. Empty means the
+		// historical source is unknown and therefore must fail closed in catalog
+		// eligibility until a verified event records it.
+		`ALTER TABLE subscription_sources ADD COLUMN external_scope TEXT NOT NULL DEFAULT ''`,
 		// One external subscription has exactly ONE owner, enforced by the
 		// database rather than by the care of every future adapter. Partial
 		// because the overwhelming majority of rows carry no id yet ('' would

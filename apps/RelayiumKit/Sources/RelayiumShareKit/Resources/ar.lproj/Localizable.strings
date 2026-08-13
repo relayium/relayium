@@ -792,7 +792,7 @@
    never written here: the store's own localized price is substituted in. */
 
 "subscription.heading" = "الاشتراك";
-"subscription.body" = "على هذا الـ Mac تُحصَّل خطة Relayium عبر App Store. تتولّى Apple الدفع، ولا يسجّل Relayium سوى الخطة التي تمتلكها.";
+"subscription.body" = "في هذا التطبيق تُحصَّل خطة Relayium عبر App Store. تتولّى Apple الدفع، ولا يسجّل Relayium سوى الخطة التي تمتلكها.";
 "subscription.loading" = "جارٍ تحميل الخطط…";
 "subscription.none" = "لا يوجد ما يمكن الاشتراك فيه من هذا التطبيق حاليًا.";
 "subscription.subscribe" = "اشتراك";
@@ -812,6 +812,8 @@
 "subscription.terms" = "شروط الخدمة";
 "subscription.blockedByWeb" = "اشتراكك مُدار على relayium.com. ألغِه هناك قبل الاشتراك هنا حتى لا تُحصَّل منك الرسوم مرتين.";
 "subscription.blockedByAdmin" = "خطتك مُنحت مباشرةً من Relayium، فلا شيء لشرائه هنا.";
+"subscription.blockedByAppleApp" = "يوجد اشتراك Apple بالفعل لهذا الحساب. أدِره أو استعده في تطبيق Relayium الذي اشتُري منه لتجنب تحصيل الرسوم مرتين.";
+"subscription.errorAppleConflict" = "أكملت Apple عملية الشراء هذه، لكن يوجد اشتراك Apple نشط آخر لهذا الحساب. احتفظ Relayium بالمعاملة وسيعيد المحاولة. ألغِ الاشتراك المكرر أو اطلب استرداد المبلغ من App Store، ثم استعد المشتريات.";
 "subscription.blockedByOther" = "اشتراكك مُدار خارج هذا التطبيق.";
 "subscription.errorNotSignedIn" = "سجّل الدخول إلى حساب Relayium للاشتراك.";
 "subscription.errorNetwork" = "تعذّر الوصول إلى Relayium. لن يضيع شيء — سيعيد App Store تسليم هذه العملية.";

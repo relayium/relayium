@@ -734,7 +734,7 @@
    never written here: the store's own localized price is substituted in. */
 
 "subscription.heading" = "サブスクリプション";
-"subscription.body" = "この Mac では、Relayium のプランは App Store 経由で請求されます。支払いは Apple が処理し、Relayium はどのプランをご利用かを記録するだけです。";
+"subscription.body" = "このアプリでは、Relayium のプランは App Store 経由で請求されます。支払いは Apple が処理し、Relayium はどのプランをご利用かを記録するだけです。";
 "subscription.loading" = "プランを読み込み中…";
 "subscription.none" = "現在、このアプリから購入できるプランはありません。";
 "subscription.subscribe" = "登録";
@@ -754,6 +754,8 @@
 "subscription.terms" = "利用規約";
 "subscription.blockedByWeb" = "サブスクリプションは relayium.com で管理されています。二重に請求されないよう、まずそちらで解約してから登録してください。";
 "subscription.blockedByAdmin" = "プランは Relayium から直接付与されているため、ここで購入するものはありません。";
+"subscription.blockedByAppleApp" = "このアカウントには Apple サブスクリプションがあります。二重請求を避けるため、購入した Relayium アプリで管理または復元してください。";
+"subscription.errorAppleConflict" = "Apple でこの購入は完了しましたが、このアカウントには別の有効な Apple サブスクリプションがあります。Relayium は取引を保持して再試行します。App Store で重複したサブスクリプションを解約するか返金を申請し、その後購入を復元してください。";
 "subscription.blockedByOther" = "サブスクリプションはこのアプリの外で管理されています。";
 "subscription.errorNotSignedIn" = "登録するには Relayium アカウントにサインインしてください。";
 "subscription.errorNetwork" = "Relayium に接続できませんでした。購入は失われません — App Store が再度届けます。";

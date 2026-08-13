@@ -2,7 +2,7 @@ import Foundation
 import RelayiumKit
 import RelayiumShareKit
 
-/// How this copy of Relayium reached the user's Mac.
+/// How this copy of Relayium reached the user.
 ///
 /// **It decides what the account screen may offer, and that is a compliance
 /// boundary rather than a preference.** An App Store build may not send a user
@@ -21,9 +21,16 @@ public enum AppDistributionChannel: String, Sendable, CaseIterable, Equatable {
     case directDownload
     /// Distributed by Apple, updated by the App Store, and billed by StoreKit.
     case macAppStore
+    /// The iOS app is distributed and billed only through the App Store.
+    case iosAppStore
 
     /// Whether this build sells subscriptions itself.
-    public var offersInAppPurchase: Bool { self == .macAppStore }
+    public var offersInAppPurchase: Bool {
+        switch self {
+        case .directDownload: return false
+        case .macAppStore, .iosAppStore: return true
+        }
+    }
 
     /// Whether the account screen may link out to the website's pricing page.
     ///
@@ -168,9 +175,10 @@ public enum AppleSubscriptionPresentation {
     /// leave an unfinished transaction that the App Store will deliver again —
     /// the money moved, and the purchase is not lost — and a message that said
     /// only "something went wrong" would send a paying customer to support, or
-    /// worse, to buying it a second time. The three that are NOT self-repairing
+    /// worse, to buying it a second time. The four that are NOT self-repairing
     /// (another account owns it, another account owns the subscription, this
-    /// build cannot sell) say what the user has to do instead.
+    /// account has a second Apple subscription, or this build cannot sell) say
+    /// what the user has to do instead.
     public static func message(for failure: AppleSubscriptionFailure,
                                language: AppLanguage? = nil) -> String {
         switch failure {
@@ -208,6 +216,8 @@ public enum AppleSubscriptionPresentation {
                 return L10n.t(.subscriptionErrorOtherAccount, language: language)
             case .subscriptionOwned:
                 return L10n.t(.subscriptionErrorAlreadyLinked, language: language)
+            case .appleSubscriptionConflict:
+                return L10n.t(.subscriptionErrorAppleConflict, language: language)
             case .verifierUnavailable:
                 return L10n.t(.subscriptionErrorNotReady, language: language)
             case .unknownBundle:
@@ -242,6 +252,7 @@ public enum AppleSubscriptionPresentation {
         switch blockedBy {
         case "stripe": return L10n.t(.subscriptionBlockedByWeb, language: language)
         case "admin":  return L10n.t(.subscriptionBlockedByAdmin, language: language)
+        case "apple":  return L10n.t(.subscriptionBlockedByAppleApp, language: language)
         default:       return L10n.t(.subscriptionBlockedByOther, language: language)
         }
     }

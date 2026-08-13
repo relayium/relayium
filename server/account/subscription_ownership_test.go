@@ -45,18 +45,18 @@ func TestSourceEventBindsExternalIDInTheSameTransaction(t *testing.T) {
 		t.Fatalf("owner lookup: %q ok=%v err=%v", owner, ok, err)
 	}
 
-	// A later event carrying a NEW id for the same user replaces it (Apple
-	// re-subscribes under a fresh original transaction id after a lapse).
+	// A live source cannot be replaced by a NEW id, even for the same user. It
+	// represents a second subscription that may still be billing.
 	if _, err := store.ApplySubscriptionSource(ctx, SourceEvent{
 		UserID: u.ID, Provider: ProviderApple, PlanID: "max", Status: "active",
 		Cycle: "monthly", PeriodEnd: 1_950_000_000, ExternalID: "orig_tx_2",
 		EventAt: 200, Now: fixedNow,
-	}); err != nil {
-		t.Fatalf("rebind: %v", err)
+	}); !errors.Is(err, ErrAppleSubscriptionConflict) {
+		t.Fatalf("live rebind: want ErrAppleSubscriptionConflict, got %v", err)
 	}
 	row, _, _ = store.GetSubscriptionSource(ctx, u.ID, ProviderApple)
-	if row.ExternalID != "orig_tx_2" {
-		t.Fatalf("new id did not replace the old: %+v", row)
+	if row.ExternalID != "orig_tx_1" {
+		t.Fatalf("refused id replaced the live binding: %+v", row)
 	}
 
 	// An event that carries NO id leaves the recorded one alone. Most events do
@@ -69,11 +69,174 @@ func TestSourceEventBindsExternalIDInTheSameTransaction(t *testing.T) {
 		t.Fatalf("status-only event: %v", err)
 	}
 	row, _, _ = store.GetSubscriptionSource(ctx, u.ID, ProviderApple)
-	if row.ExternalID != "orig_tx_2" {
+	if row.ExternalID != "orig_tx_1" {
 		t.Fatalf("a status-only event blanked the canonical id: %+v", row)
 	}
 	if row.Status != "past_due" {
 		t.Fatalf("status-only event did not apply: %+v", row)
+	}
+}
+
+func TestLiveAppleSourceCannotBeReboundToAnotherAppScope(t *testing.T) {
+	store := newTestStore(t)
+	seedTiers(t, store)
+	ctx := context.Background()
+	u := newEntitlementUser(t, store, "apple-scope-conflict@example.com")
+
+	if _, err := store.ApplySubscriptionSource(ctx, SourceEvent{
+		UserID: u.ID, Provider: ProviderApple, PlanID: "pro", Status: "active",
+		Cycle: "monthly", PeriodEnd: 1_900_000_000, ExternalID: "orig_mac",
+		ExternalScope: testBundleMac, EventAt: 100, Now: fixedNow,
+	}); err != nil {
+		t.Fatalf("seed mac subscription: %v", err)
+	}
+	beforeUser := mustUser(t, store, u.ID)
+	beforeSource, _, _ := store.GetSubscriptionSource(ctx, u.ID, ProviderApple)
+
+	_, err := store.ApplySubscriptionSource(ctx, SourceEvent{
+		UserID: u.ID, Provider: ProviderApple, PlanID: "max", Status: "active",
+		Cycle: "yearly", PeriodEnd: 1_950_000_000, ExternalID: "orig_ios",
+		// Deliberately older than the current Mac event. Scope ownership must be
+		// checked before replay ordering or this could be mistaken for a no-op.
+		ExternalScope: testBundleIOS, EventAt: 50, Now: fixedNow,
+	})
+	if !errors.Is(err, ErrAppleSubscriptionConflict) {
+		t.Fatalf("want ErrAppleSubscriptionConflict, got %v", err)
+	}
+	afterSource, _, _ := store.GetSubscriptionSource(ctx, u.ID, ProviderApple)
+	if afterSource != beforeSource {
+		t.Fatalf("scope conflict mutated source: %+v -> %+v", beforeSource, afterSource)
+	}
+	afterUser := mustUser(t, store, u.ID)
+	if afterUser.PlanID != beforeUser.PlanID || afterUser.SubscriptionEnd != beforeUser.SubscriptionEnd ||
+		afterUser.BillingCycle != beforeUser.BillingCycle || afterUser.PlanStartedAt != beforeUser.PlanStartedAt {
+		t.Fatalf("scope conflict mutated entitlement: %+v -> %+v", beforeUser, afterUser)
+	}
+}
+
+func TestLapsedAppleSourceCanMoveToAnotherAppScope(t *testing.T) {
+	store := newTestStore(t)
+	seedTiers(t, store)
+	ctx := context.Background()
+	u := newEntitlementUser(t, store, "apple-scope-lapsed@example.com")
+
+	for _, ev := range []SourceEvent{
+		{UserID: u.ID, Provider: ProviderApple, PlanID: "pro", Status: "active",
+			Cycle: "monthly", PeriodEnd: 1_900_000_000, ExternalID: "orig_mac",
+			ExternalScope: testBundleMac, EventAt: 100, Now: fixedNow},
+		{UserID: u.ID, Provider: ProviderApple, PlanID: freePlanID, Status: "canceled",
+			PeriodEnd: 1_900_000_000, ExternalScope: testBundleMac, EventAt: 200, Now: fixedNow},
+		{UserID: u.ID, Provider: ProviderApple, PlanID: "max", Status: "active",
+			Cycle: "yearly", PeriodEnd: 1_950_000_000, ExternalID: "orig_ios",
+			ExternalScope: testBundleIOS, EventAt: 300, Now: fixedNow},
+	} {
+		if _, err := store.ApplySubscriptionSource(ctx, ev); err != nil {
+			t.Fatalf("apply event at %d: %v", ev.EventAt, err)
+		}
+	}
+	row, ok, err := store.GetSubscriptionSource(ctx, u.ID, ProviderApple)
+	if err != nil || !ok {
+		t.Fatalf("source: ok=%v err=%v", ok, err)
+	}
+	if row.ExternalScope != testBundleIOS || row.ExternalID != "orig_ios" || row.PlanID != "max" {
+		t.Fatalf("lapsed source did not move to iOS: %+v", row)
+	}
+}
+
+// Apple's terminal expiry notification is not guaranteed to survive a long
+// outage. A known paid-through instant in the past is enough to prove the old
+// source is no longer a simultaneous charge even if its last recorded status
+// still says active, so a legitimate re-subscription must be able to bind its
+// fresh original transaction id.
+func TestExpiredAppleSourceCanRebindWithoutATerminalEvent(t *testing.T) {
+	store := newTestStore(t)
+	seedTiers(t, store)
+	ctx := context.Background()
+	u := newEntitlementUser(t, store, "apple-expired-without-event@example.com")
+
+	if _, err := store.ApplySubscriptionSource(ctx, SourceEvent{
+		UserID: u.ID, Provider: ProviderApple, PlanID: "pro", Status: "active",
+		Cycle: "monthly", PeriodEnd: fixedNow - 1, ExternalID: "orig_expired",
+		ExternalScope: testBundleMac, EventAt: 100, Now: fixedNow - 100,
+	}); err != nil {
+		t.Fatalf("seed expired source: %v", err)
+	}
+	if _, err := store.ApplySubscriptionSource(ctx, SourceEvent{
+		UserID: u.ID, Provider: ProviderApple, PlanID: "max", Status: "active",
+		Cycle: "yearly", PeriodEnd: fixedNow + 31_536_000, ExternalID: "orig_new",
+		ExternalScope: testBundleIOS, EventAt: 200, Now: fixedNow,
+	}); err != nil {
+		t.Fatalf("re-subscribe after known expiry: %v", err)
+	}
+	row, _, _ := store.GetSubscriptionSource(ctx, u.ID, ProviderApple)
+	if row.ExternalID != "orig_new" || row.ExternalScope != testBundleIOS || row.PlanID != "max" {
+		t.Fatalf("expired source did not rebind: %+v", row)
+	}
+}
+
+func TestAppleSourceWithUnknownEndStillFailsClosed(t *testing.T) {
+	store := newTestStore(t)
+	seedTiers(t, store)
+	ctx := context.Background()
+	u := newEntitlementUser(t, store, "apple-unknown-end@example.com")
+
+	if _, err := store.ApplySubscriptionSource(ctx, SourceEvent{
+		UserID: u.ID, Provider: ProviderApple, PlanID: "pro", Status: "active",
+		Cycle: "monthly", PeriodEnd: 0, ExternalID: "orig_unknown",
+		ExternalScope: testBundleMac, EventAt: 100, Now: fixedNow,
+	}); err != nil {
+		t.Fatalf("seed unknown-end source: %v", err)
+	}
+	_, err := store.ApplySubscriptionSource(ctx, SourceEvent{
+		UserID: u.ID, Provider: ProviderApple, PlanID: "max", Status: "active",
+		Cycle: "yearly", PeriodEnd: fixedNow + 31_536_000, ExternalID: "orig_other",
+		ExternalScope: testBundleIOS, EventAt: 200, Now: fixedNow,
+	})
+	if !errors.Is(err, ErrAppleSubscriptionConflict) {
+		t.Fatalf("unknown paid-through instant must fail closed, got %v", err)
+	}
+}
+
+func TestMigratedLiveAppleSourceOnlyBackfillsScopeForSameSubscription(t *testing.T) {
+	store := newTestStore(t)
+	seedTiers(t, store)
+	ctx := context.Background()
+	u := newEntitlementUser(t, store, "apple-scope-migrated@example.com")
+
+	if _, err := store.ApplySubscriptionSource(ctx, SourceEvent{
+		UserID: u.ID, Provider: ProviderApple, PlanID: "pro", Status: "active",
+		Cycle: "monthly", PeriodEnd: 1_900_000_000, ExternalID: "orig_migrated",
+		EventAt: 100, Now: fixedNow,
+	}); err != nil {
+		t.Fatalf("seed migrated source: %v", err)
+	}
+
+	// A different signed subscription cannot claim the unknown scope merely by
+	// naming an app. That would orphan the migrated paid subscription.
+	if _, err := store.ApplySubscriptionSource(ctx, SourceEvent{
+		UserID: u.ID, Provider: ProviderApple, PlanID: "max", Status: "active",
+		Cycle: "yearly", PeriodEnd: 1_950_000_000, ExternalID: "orig_other",
+		ExternalScope: testBundleIOS, EventAt: 200, Now: fixedNow,
+	}); !errors.Is(err, ErrAppleSubscriptionConflict) {
+		t.Fatalf("different migrated subscription: want ErrAppleSubscriptionConflict, got %v", err)
+	}
+	row, _, _ := store.GetSubscriptionSource(ctx, u.ID, ProviderApple)
+	if row.ExternalScope != "" || row.ExternalID != "orig_migrated" || row.PlanID != "pro" {
+		t.Fatalf("conflicting backfill mutated migrated source: %+v", row)
+	}
+
+	// The same canonical subscription supplies the missing verified bundle and
+	// repairs the row without changing ownership.
+	if _, err := store.ApplySubscriptionSource(ctx, SourceEvent{
+		UserID: u.ID, Provider: ProviderApple, PlanID: "pro", Status: "active",
+		Cycle: "monthly", PeriodEnd: 1_900_000_000, ExternalID: "orig_migrated",
+		ExternalScope: testBundleMac, EventAt: 300, Now: fixedNow,
+	}); err != nil {
+		t.Fatalf("same-subscription scope backfill: %v", err)
+	}
+	row, _, _ = store.GetSubscriptionSource(ctx, u.ID, ProviderApple)
+	if row.ExternalScope != testBundleMac || row.ExternalID != "orig_migrated" {
+		t.Fatalf("same-subscription backfill did not repair scope: %+v", row)
 	}
 }
 

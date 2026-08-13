@@ -81,6 +81,9 @@ public enum AppleSubmission: Equatable {
     ///  * **409 `subscription_owned`** — one App Store subscription, one
     ///    Relayium account. Ownership is server state, and server state can be
     ///    corrected;
+    ///  * **409 `apple_subscription_conflict`** — this Relayium account already
+    ///    has another live Apple subscription. The new transaction must remain
+    ///    available while the paid conflict is resolved;
     ///  * **429**, **500** — try again later, by definition;
     ///  * **503 `verifier_unavailable`** — this deployment cannot verify
     ///    anything yet. It is the shipping default TODAY, so finishing on it
@@ -513,6 +516,14 @@ public final class AppleSubscriptionModel: ObservableObject {
         // can only report what the screen already shows.
         if accepted != nil {
             await refreshAfterAcceptance()
+            // A restore is also the recovery path for a migrated Apple source
+            // whose app scope was unknown. The accepted transaction may have
+            // repaired that scope server-side, so refresh the catalog answer as
+            // well as /api/me; otherwise the screen keeps showing its stale
+            // "managed in another app" eligibility until it is reopened.
+            if !superseded(g) {
+                await refreshOffersAfterRestore(generation: g)
+            }
         }
         guard !superseded(g) else { return }
         if let accepted {
@@ -625,6 +636,33 @@ public final class AppleSubscriptionModel: ObservableObject {
     /// `.loggedOut` when there is none.
     private func refreshAfterAcceptance() async {
         await refreshAccount()
+    }
+
+    /// Refresh only the offer/eligibility facts after an accepted restore while
+    /// preserving the restore's final success state. Unlike `loadOffers()`, this
+    /// does not claim a new generation or render loading/failure UI: the paid
+    /// transaction was already accepted, so a secondary catalog failure must
+    /// not turn that success into an apparent purchase failure.
+    private func refreshOffersAfterRestore(generation g: Int) async {
+        guard let token = currentBearer() else { return }
+        do {
+            let catalog = try await billing.appleCatalog(bundleID: bundleID, token: token)
+            guard !superseded(g) else { return }
+            eligibility = catalog.purchase
+            guard !catalog.products.isEmpty else {
+                offers = []
+                return
+            }
+            let loaded = try await store.offers(for: catalog.products.map(\.productId))
+            guard !superseded(g) else { return }
+            offers = Self.join(catalog: catalog.products, store: loaded)
+        } catch {
+            guard !superseded(g) else { return }
+            // Preserve the accepted restore's success state, but never preserve
+            // a stale permission to buy. The visible offers remain disabled
+            // while eligibility is unknown, and the next ordinary load retries.
+            eligibility = nil
+        }
     }
 
     private func settle(_ delivery: SignedStoreTransaction) async -> AppleSubmission {

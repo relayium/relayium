@@ -172,6 +172,11 @@ public enum AppleBillingError: Error, Equatable {
     /// 409 `subscription_owned` — this App Store subscription already has a
     /// different Relayium owner. Nothing was written.
     case subscriptionOwned
+    /// 409 `apple_subscription_conflict` — this Relayium account already has a
+    /// different live Apple subscription, either in this app or another
+    /// Relayium App Store app. Finishing would strand the newly charged
+    /// transaction, so it remains pending for an operator/user resolution.
+    case appleSubscriptionConflict
     /// 503 `verifier_unavailable` — this deployment holds no Apple trust roots
     /// and can verify nothing. The shipping default today.
     case verifierUnavailable
@@ -346,10 +351,11 @@ extension AccountClient: AppleBillingService {
             }
             throw AppleBillingError.tokenMismatch
         case 409:
-            guard appleErrorCode(in: data) == "subscription_owned" else {
-                throw AppleBillingError.server(status: 409)
+            switch appleErrorCode(in: data) {
+            case "subscription_owned": throw AppleBillingError.subscriptionOwned
+            case "apple_subscription_conflict": throw AppleBillingError.appleSubscriptionConflict
+            default: throw AppleBillingError.server(status: 409)
             }
-            throw AppleBillingError.subscriptionOwned
         case 429: throw AppleBillingError.rateLimited
         case 503:
             guard appleErrorCode(in: data) == "verifier_unavailable" else {

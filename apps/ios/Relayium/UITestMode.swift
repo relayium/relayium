@@ -52,6 +52,24 @@ enum UITestMode {
     static let signInArgument = "--relayium-ui-testing-sign-in"
     static let answersAccountAPI = ProcessInfo.processInfo.arguments.contains(signInArgument)
     static let isSignedIn = ProcessInfo.processInfo.arguments.contains(signedInArgument)
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let subscriptionsArgument = "--relayium-ui-testing-subscriptions"
+    static let showsSubscriptions = ProcessInfo.processInfo.arguments.contains(
+        subscriptionsArgument)
+
+    @MainActor
+    static func makeSubscriptionModel(
+        bearer: @escaping @MainActor () -> String?,
+        refreshAccount: @escaping @MainActor () async -> Void
+    ) -> AppleSubscriptionModel? {
+        guard showsSubscriptions, let transport = makeAccountTransport() else { return nil }
+        return AppleSubscriptionModel(
+            store: UITestSubscriptionStore(),
+            billing: AppEnvironment.makeAppleBillingService(transport: transport),
+            bundleID: UITestAccountTransport.bundleID,
+            bearer: bearer,
+            refreshAccount: refreshAccount)
+    }
 
     /// Prefills the one long stored link whose acceptance path is about
     /// metadata retrieval and manifest decryption, not keyboard event delivery.
@@ -281,6 +299,12 @@ enum UITestMode {
     /// false, so a shipped launch can never be told it already holds an account.
     static let isSignedIn = false
     static let answersAccountAPI = false
+    static let showsSubscriptions = false
+    @MainActor
+    static func makeSubscriptionModel(
+        bearer: @escaping @MainActor () -> String?,
+        refreshAccount: @escaping @MainActor () async -> Void
+    ) -> AppleSubscriptionModel? { nil }
     static let stallsUpload = false
     static let failsUpload = false
     /// false, so a shipped launch always mints a real code over the network.
@@ -339,6 +363,10 @@ final class UITestAccountTransport: URLProtocol {
     static let thisDeviceName = "Studio Mac"
     // nonlocalized: an acceptance fixture row, absent from Release
     static let otherDeviceName = "Kitchen laptop"
+    // nonlocalized: acceptance fixture identifiers, absent from Release
+    static let bundleID = "com.relayium.app"
+    static let monthlyProductID = "uitest.subscription.month"
+    static let yearlyProductID = "uitest.subscription.year"
 
     /// JSON literals, each VALIDATED by decoding it through the very model the
     /// app will decode it into.
@@ -382,6 +410,20 @@ final class UITestAccountTransport: URLProtocol {
             "subscriptionEnd":0,"billingCycle":"","scheduledPlanId":"",
             "scheduledPlanName":"","scheduledCycle":""}}
             """, as: UsageResponse.self)
+        offer("/api/billing/apple/catalog", """
+            {"bundleId":"\(bundleID)","products":[
+            {"productId":"\(monthlyProductID)","planId":"pro","planName":"Pro",
+            "cycle":"monthly","sortOrder":20},
+            {"productId":"\(yearlyProductID)","planId":"pro","planName":"Pro",
+            "cycle":"yearly","sortOrder":20}],
+            "purchase":{"allowed":true,"blockedBy":""}}
+            """, as: AppleProductCatalog.self)
+        out["/api/billing/apple/account-token"] =
+            Data(#"{"appAccountToken":"3f2504e0-4f89-41d3-9a0c-0305e82c3302"}"#.utf8)
+        offer("/api/billing/apple/transaction", """
+            {"applied":true,"planId":"pro","status":"active",
+            "expiresAt":4102444800,"provider":"apple"}
+            """, as: AppleTransactionResult.self)
         // Two rows, one of them this app's own: a list with a single anonymous
         // entry cannot show that Revoke is per-row, and "Revoke" alone is the
         // same word on every row — which is right to look at and useless to

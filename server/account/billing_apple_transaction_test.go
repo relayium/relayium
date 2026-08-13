@@ -478,6 +478,55 @@ func TestAppleTransactionRejectsCrossAccountOriginalTransactionID(t *testing.T) 
 	}
 }
 
+func TestAppleTransactionRejectsSecondAppWhileAppleSourceIsLive(t *testing.T) {
+	f := newAppleTxFixture(t)
+	f.mustAccept(t, f.chain.sign(t, f.payload()))
+	before, ok := f.appleSource(t)
+	if !ok {
+		t.Fatal("accepted iOS purchase did not create an Apple source")
+	}
+
+	const macProduct = "com.relayium.mac.pro.monthly"
+	mustAppleProduct(t, f.store, AppleProduct{
+		BundleID: testBundleMac, ProductID: macProduct,
+		PlanID: "pro", Cycle: "monthly", Active: true,
+	})
+	f.mustReject(t, f.chain.sign(t, f.payload(func(p map[string]any) {
+		p["bundleId"] = testBundleMac
+		p["productId"] = macProduct
+		p["transactionId"] = "2000000000000002"
+		p["originalTransactionId"] = "2000000000000002"
+		p["purchaseDate"] = time.Now().Add(-24 * time.Hour).UnixMilli()
+	})), http.StatusConflict, "apple_subscription_conflict")
+
+	after, ok := f.appleSource(t)
+	if !ok || after != before {
+		t.Fatalf("cross-app transaction mutated source: %+v -> %+v", before, after)
+	}
+}
+
+func TestAppleTransactionRejectsSecondSubscriptionInSameAppWhileSourceIsLive(t *testing.T) {
+	f := newAppleTxFixture(t)
+	f.mustAccept(t, f.chain.sign(t, f.payload()))
+	before, ok := f.appleSource(t)
+	if !ok {
+		t.Fatal("accepted purchase did not create an Apple source")
+	}
+
+	// Same bundle and product, but a new originalTransactionId: this is another
+	// subscription (for example a different Apple ID), not a renewal or upgrade.
+	f.mustReject(t, f.chain.sign(t, f.payload(func(p map[string]any) {
+		p["transactionId"] = "2000000000000017"
+		p["originalTransactionId"] = "2000000000000017"
+		p["purchaseDate"] = time.Now().UnixMilli()
+	})), http.StatusConflict, "apple_subscription_conflict")
+
+	after, ok := f.appleSource(t)
+	if !ok || after != before {
+		t.Fatalf("second same-app subscription mutated source: %+v -> %+v", before, after)
+	}
+}
+
 // Redelivery is normal: StoreKit re-presents the current entitlement on every
 // launch. The same transaction must converge, and an OLDER one must never
 // rewind a newer state.

@@ -19,10 +19,15 @@ import (
 // appleSubscriber makes an existing user look like a live Apple subscriber
 // with no Stripe relationship whatsoever.
 func appleSubscriber(t *testing.T, store *SQLiteStore, uid, planID string) {
+	appleSubscriberForScope(t, store, uid, planID, "")
+}
+
+func appleSubscriberForScope(t *testing.T, store *SQLiteStore, uid, planID, bundleID string) {
 	t.Helper()
 	if _, err := store.ApplySubscriptionSource(context.Background(), SourceEvent{
 		UserID: uid, Provider: ProviderApple, PlanID: planID, Status: "active",
 		Cycle: "monthly", PeriodEnd: 1_900_000_000, EventAt: 100, Now: time.Now().Unix(),
+		ExternalID: "apple-test-" + uid, ExternalScope: bundleID,
 	}); err != nil {
 		t.Fatalf("ApplySubscriptionSource(apple): %v", err)
 	}

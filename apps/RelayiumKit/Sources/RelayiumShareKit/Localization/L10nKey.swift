@@ -919,9 +919,10 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// arrives at rather than a second name for it.
     case subscriptionPrivacy = "subscription.privacy"
     case subscriptionTerms = "subscription.terms"
-    /// The three ways the server can refuse a purchase before one starts.
+    /// The four ways the server can refuse a purchase before one starts.
     case subscriptionBlockedByWeb = "subscription.blockedByWeb"
     case subscriptionBlockedByAdmin = "subscription.blockedByAdmin"
+    case subscriptionBlockedByAppleApp = "subscription.blockedByAppleApp"
     case subscriptionBlockedByOther = "subscription.blockedByOther"
     case subscriptionErrorNotSignedIn = "subscription.errorNotSignedIn"
     case subscriptionErrorNetwork = "subscription.errorNetwork"
@@ -929,6 +930,9 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case subscriptionErrorNotAccepted = "subscription.errorNotAccepted"
     case subscriptionErrorOtherAccount = "subscription.errorOtherAccount"
     case subscriptionErrorAlreadyLinked = "subscription.errorAlreadyLinked"
+    /// Apple completed a second purchase which Relayium retained but could not
+    /// attach while another Apple subscription is still live on the account.
+    case subscriptionErrorAppleConflict = "subscription.errorAppleConflict"
     case subscriptionErrorNotReady = "subscription.errorNotReady"
     case subscriptionErrorWrongBuild = "subscription.errorWrongBuild"
     /// %@ — an HTTP status, isolated as a token.

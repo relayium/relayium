@@ -35,6 +35,7 @@ struct AccountSummaryView: View {
     /// view does not exist: a revoke of the current device can land after the
     /// user has switched tabs. See `AccountSignOutCoordinator`.
     @EnvironmentObject private var signOut: AccountSignOutCoordinator
+    @Environment(\.appleSubscription) private var appleSubscription
     @Environment(\.openURL) private var openURL
 
     /// The row a confirmation is currently asking about. Held here rather than
@@ -248,7 +249,19 @@ struct AccountSummaryView: View {
                             .background(.quaternary, in: Capsule())
                     }
                 }
+            }
+
+            if IOSAppleSubscriptions.channel.showsWebPlanHandoff {
                 Button(L10n.t(.accountManagePlan)) { openURL(AppEnvironment.plansWebURL) }
+            }
+
+            if IOSAppleSubscriptions.channel.offersInAppPurchase,
+               let appleSubscription {
+                AppleSubscriptionCard(
+                    model: appleSubscription,
+                    accountID: user.id,
+                    currentPlanID: usage.plan.id,
+                    entitlementProvider: user.entitlementProvider ?? "")
             }
 
             meter(L10n.t(.accountTraffic), UsagePresentation.display(usage.traffic))

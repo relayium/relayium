@@ -118,20 +118,25 @@ final class IOSPrivacyManifestTests: XCTestCase {
                         as? [[String: Any]])?.isEmpty, true)
     }
 
-    /// The email address is declared, and the files are not — which is the
-    /// product's central promise stated where Apple publishes it.
-    func testTheAppDeclaresTheEmailItSendsAndNoFileContent() throws {
+    /// The account identifier and Apple billing records are declared, and the
+    /// encrypted files are not — the product promise stated where Apple
+    /// publishes it.
+    func testTheAppDeclaresAccountAndPurchaseDataButNoFileContent() throws {
         let collected = try XCTUnwrap(
             try manifest(appManifest)["NSPrivacyCollectedDataTypes"] as? [[String: Any]])
         let types = collected.compactMap { $0["NSPrivacyCollectedDataType"] as? String }
-        XCTAssertEqual(types, ["NSPrivacyCollectedDataTypeEmailAddress"])
+        XCTAssertEqual(types, [
+            "NSPrivacyCollectedDataTypeEmailAddress",
+            "NSPrivacyCollectedDataTypePurchaseHistory",
+            "NSPrivacyCollectedDataTypeUserID",
+        ])
 
-        let email = try XCTUnwrap(collected.first)
-        XCTAssertEqual(email["NSPrivacyCollectedDataTypeLinked"] as? Bool, true,
-                       "the email IS the account identifier")
-        XCTAssertEqual(email["NSPrivacyCollectedDataTypeTracking"] as? Bool, false)
-        XCTAssertEqual(email["NSPrivacyCollectedDataTypePurposes"] as? [String],
-                       ["NSPrivacyCollectedDataTypePurposeAppFunctionality"])
+        for item in collected {
+            XCTAssertEqual(item["NSPrivacyCollectedDataTypeLinked"] as? Bool, true)
+            XCTAssertEqual(item["NSPrivacyCollectedDataTypeTracking"] as? Bool, false)
+            XCTAssertEqual(item["NSPrivacyCollectedDataTypePurposes"] as? [String],
+                           ["NSPrivacyCollectedDataTypePurposeAppFunctionality"])
+        }
 
         // The app really does send it — the declaration is not defensive.
         let client = try String(
@@ -140,5 +145,17 @@ final class IOSPrivacyManifestTests: XCTestCase {
             encoding: .utf8)
         XCTAssertTrue(client.contains("\"email\": email"),
                       "if the app stopped sending an email, this declaration would be wrong")
+        let billing = try String(
+            contentsOf: repoRoot.appendingPathComponent(
+                "apps/RelayiumKit/Sources/RelayiumKit/Account/AppleBillingClient.swift"),
+            encoding: .utf8)
+        XCTAssertTrue(billing.contains("submitAppleTransaction"),
+                      "the app no longer sends a transaction whose history it declares")
+        let store = try String(
+            contentsOf: repoRoot.appendingPathComponent(
+                "apps/RelayiumKit/Sources/RelayiumStoreKit/StoreKitSubscriptionStore.swift"),
+            encoding: .utf8)
+        XCTAssertTrue(store.contains(".appAccountToken(appAccountToken)"),
+                      "the app no longer sends the declared per-account identifier to Apple")
     }
 }

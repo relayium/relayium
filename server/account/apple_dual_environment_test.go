@@ -577,6 +577,9 @@ func TestAppleDualEnvironmentSandboxCannotDisplaceProductionForOneUser(t *testin
 		p["revocationDate"] = now + 1000
 		p["purchaseDate"] = now + 1000
 	}), http.StatusOK)
+	if got := f.ledger(t, appleNotifyUUID(0x5a2)).State; got != appleNotificationApplied {
+		t.Fatalf("ignored sandbox notification state = %q, want applied no-op", got)
+	}
 	if u := f.user(t); u.PlanID != "pro" {
 		t.Fatalf("a sandbox revocation revoked this account's production plan: %+v", u)
 	}
@@ -613,6 +616,9 @@ func TestAppleDualEnvironmentProductionSupersedesSandbox(t *testing.T) {
 		p["purchaseDate"] = now + 1000
 		p["revocationDate"] = now + 1000
 	}), http.StatusOK)
+	if got := f.ledger(t, appleNotifyUUID(0x5a5)).State; got != appleNotificationApplied {
+		t.Fatalf("superseded sandbox notification state = %q, want applied no-op", got)
+	}
 	if u := f.user(t); u.PlanID != "pro" || u.PlanSource != ProviderApple {
 		t.Fatalf("the sandbox expiry revoked the restored production plan: %+v", u)
 	}
@@ -650,8 +656,18 @@ func TestAppleDualEnvironmentPendingDrainIsolation(t *testing.T) {
 		t.Fatalf("a production purchase drained a sandbox deferred delivery: %q", got)
 	}
 
-	// The sandbox subscription's own owner appearing does drain it.
-	f.mustAccept(t, f.chain.sign(t, f.payloadIn(appleEnvSandbox)))
+	// The sandbox subscription's own, distinct owner appearing does drain it.
+	// Using the Production owner's account here would be accepted as the deliberate
+	// Sandbox-vs-Production no-op and would no longer exercise drain isolation.
+	sandboxCookie := loginCookie(t, f.ts, f.mail, "apple-pending-sandbox@example.com")
+	sandboxToken := postAppleToken(t, f.ts, sandboxCookie)
+	resp := f.submitAs(t, sandboxCookie, f.chain.sign(t, f.payloadIn(appleEnvSandbox, func(p map[string]any) {
+		p["appAccountToken"] = sandboxToken
+	})))
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("sandbox owner intake = %d, want 200", resp.StatusCode)
+	}
 	if got := f.ledger(t, uuid).State; got != appleNotificationApplied {
 		t.Fatalf("the sandbox drain did not run: %q", got)
 	}
@@ -693,9 +709,14 @@ func TestApplePendingNotificationWithoutEnvironmentIsSkippedAndLogged(t *testing
 	log.SetOutput(&logged)
 	defer log.SetOutput(original)
 
-	// A purchase for the same digits, in each store. Neither may replay it.
+	// A Production purchase reaches the drain, but may not replay the legacy row.
 	f.mustAccept(t, f.chain.sign(t, f.payloadIn(appleEnvProduction)))
-	f.mustAccept(t, f.chain.sign(t, f.payloadIn(appleEnvSandbox)))
+	// A Sandbox test transaction is accepted as a no-op beside Production; it
+	// still must not consume the legacy row with unknowable environment.
+	got, _ := f.mustAccept(t, f.chain.sign(t, f.payloadIn(appleEnvSandbox)))
+	if got.Applied {
+		t.Fatal("sandbox test transaction displaced Production")
+	}
 
 	if got := f.ledger(t, uuid).State; got != appleNotificationPending {
 		t.Fatalf("a row with no recorded environment was replayed as %q", got)

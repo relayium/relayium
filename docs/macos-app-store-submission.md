@@ -180,8 +180,17 @@ The following items are intentionally unresolved and must not be guessed:
 - Complete Apple's export-compliance questionnaire truthfully. The app embeds
   non-Apple cryptographic implementations for end-to-end encryption; do not set
   `ITSAppUsesNonExemptEncryption` to `NO` merely to suppress the questionnaire.
-- Decide storefront availability after export-compliance review, including any
-  France-specific documentation.
+- France availability is an owner-confirmed requirement (2026-08-13). Because
+  Relayium implements industry-standard encryption outside Apple's operating
+  system, App Store Connect requires a **French encryption declaration approval
+  form** before it will clear build `1.2.0 (6)`. Do not upload a self-authored
+  substitute or answer “No” to bypass this gate.
+- Obtain the declaration/attestation through France's ANSSI process. ANSSI's
+  published workflow requires the provider or first importer to submit the
+  completed electronic form, a signed scanned copy, and supporting product and
+  technical documentation. Upload the resulting official document to App Store
+  Connect, wait for Apple's approval, then attach the approved declaration to
+  the TestFlight build and add Apple's compliance code to the app Info.plist.
 - Publish the completed App Privacy draft only when the release candidate and
   submission metadata are ready. The age rating is already saved as `4+`.
 - Complete content-rights, copyright, review-contact, and demo-account fields

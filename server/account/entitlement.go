@@ -73,6 +73,10 @@ type SubscriptionSource struct {
 	// subscription id; later, an Apple original transaction id). Unique across
 	// users per provider — one external subscription has exactly one owner.
 	ExternalID string
+	// ExternalScope qualifies an external subscription inside its provider.
+	// For Apple this is the signed bundle id, so two separate App Store records
+	// cannot silently replace one another on the same Relayium account.
+	ExternalScope string
 	// EventAt is THIS provider's replay/order clock (the event's own emission
 	// timestamp). It is compared only against the same provider's previous
 	// value, never against another provider's.
@@ -86,6 +90,14 @@ type SubscriptionSource struct {
 // status is a lapsed subscription.
 func (s SubscriptionSource) grantsAccess() bool {
 	return s.PlanID != "" && s.PlanID != freePlanID && liveSubStatus(s.Status)
+}
+
+// stillBillingAt narrows grantsAccess with the only local evidence that a paid
+// source may already have lapsed even though its terminal provider event never
+// arrived. A zero end remains unknown and therefore fail-closed; a missing or
+// invalid comparison clock likewise cannot prove that billing ended.
+func (s SubscriptionSource) stillBillingAt(now int64) bool {
+	return s.grantsAccess() && (s.PeriodEnd == 0 || now <= 0 || s.PeriodEnd > now)
 }
 
 // SourceEvent is one provider event applied to one user's source row.
@@ -115,6 +127,9 @@ type SourceEvent struct {
 	// An id owned by a DIFFERENT user fails the whole apply with
 	// ErrExternalSubscriptionOwned; nothing is written.
 	ExternalID string
+	// ExternalScope is preserved when omitted, like ExternalID. Apple events set
+	// it to the verified transaction's bundle id; other providers currently omit it.
+	ExternalScope string
 	// EventAt is the provider's own clock for this event. 0 disables the replay
 	// guard (a caller with no usable timestamp), matching the existing webhook
 	// behaviour for events that carry no `created`.

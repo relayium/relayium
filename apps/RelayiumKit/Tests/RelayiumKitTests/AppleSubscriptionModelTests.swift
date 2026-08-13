@@ -253,6 +253,7 @@ private enum Fixture {
         .billing(.tokenMismatch),            // 403
         .billing(.server(status: 403)),
         .billing(.subscriptionOwned),        // 409
+        .billing(.appleSubscriptionConflict), // 409, another live Apple subscription
         .billing(.server(status: 409)),
         .billing(.rateLimited),              // 429
         .billing(.server(status: 500)),
@@ -784,6 +785,7 @@ final class AppleSubscriptionModelTests: XCTestCase {
             AppleBillingError.tokenMismatch,
             AppleBillingError.server(status: 403),
             AppleBillingError.subscriptionOwned,
+            AppleBillingError.appleSubscriptionConflict,
             AppleBillingError.server(status: 409),
             AppleBillingError.rateLimited,
             AppleBillingError.server(status: 500),
@@ -814,6 +816,7 @@ final class AppleSubscriptionModelTests: XCTestCase {
             (AppleBillingError.verifierUnavailable, .billing(.verifierUnavailable)),
             (AppleBillingError.tokenMismatch, .billing(.tokenMismatch)),
             (AppleBillingError.subscriptionOwned, .billing(.subscriptionOwned)),
+            (AppleBillingError.appleSubscriptionConflict, .billing(.appleSubscriptionConflict)),
             (AppleBillingError.invalidTransaction, .billing(.invalidTransaction)),
             (AppleBillingError.decoding, .billing(.decoding)),
             (StoreFailure(), .unexpected(type: "StoreFailure")),
@@ -965,10 +968,44 @@ final class AppleSubscriptionModelTests: XCTestCase {
 
         XCTAssertEqual(rig.journal.all,
                        ["catalog", "offers", "synchronize", "currentEntitlements",
-                        "submit", "finish", "submit", "finish", "refresh"])
+                        "submit", "finish", "submit", "finish", "refresh",
+                        "catalog", "offers"])
         XCTAssertEqual(rig.store.finished, [Fixture.delivery.id, second.id])
         XCTAssertEqual(rig.billing.submittedJWS, [Fixture.jws, "j2"])
         XCTAssertEqual(rig.model.state, .completed(Fixture.entitlement))
+    }
+
+    func testAcceptedRestoreRefreshesPurchaseEligibilityWithoutReplacingSuccess() async {
+        let rig = await makeReadyRig()
+        XCTAssertEqual(rig.model.eligibility, Fixture.serverCatalog().purchase)
+        rig.billing.setCatalog(.success(Fixture.serverCatalog(allowed: false, blockedBy: "apple")))
+        rig.store.setEntitlements([Fixture.delivery])
+        rig.billing.setSubmissions([.success(Fixture.entitlement)])
+
+        await rig.model.restore()
+
+        XCTAssertEqual(rig.model.eligibility,
+                       AppleCatalogPurchase(allowed: false, blockedBy: "apple"))
+        XCTAssertEqual(rig.model.state, .completed(Fixture.entitlement),
+                       "catalog refresh replaced an accepted restore with secondary UI state")
+        XCTAssertEqual(rig.journal.count("catalog"), 2,
+                       "restore did not re-read the eligibility it may have repaired")
+    }
+
+    func testAcceptedRestoreClearsStaleEligibilityWhenItsRefreshFails() async {
+        let rig = await makeReadyRig()
+        XCTAssertEqual(rig.model.eligibility, Fixture.serverCatalog().purchase)
+        rig.billing.setCatalog(.failure(AppleBillingError.network))
+        rig.store.setEntitlements([Fixture.delivery])
+        rig.billing.setSubmissions([.success(Fixture.entitlement)])
+
+        await rig.model.restore()
+
+        XCTAssertNil(rig.model.eligibility,
+                     "a failed refresh left the pre-restore permission to buy active")
+        XCTAssertEqual(rig.model.state, .completed(Fixture.entitlement),
+                       "a secondary catalog failure replaced an accepted restore")
+        XCTAssertEqual(rig.journal.count("catalog"), 2)
     }
 
     /// A restore is what a user reaches for when something has already gone

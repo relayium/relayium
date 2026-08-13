@@ -734,7 +734,7 @@
    never written here: the store's own localized price is substituted in. */
 
 "subscription.heading" = "구독";
-"subscription.body" = "이 Mac에서는 Relayium 요금제가 App Store를 통해 청구됩니다. 결제는 Apple이 처리하며, Relayium은 어떤 요금제를 사용 중인지만 기록합니다.";
+"subscription.body" = "이 앱에서는 Relayium 요금제가 App Store를 통해 청구됩니다. 결제는 Apple이 처리하며, Relayium은 어떤 요금제를 사용 중인지만 기록합니다.";
 "subscription.loading" = "요금제를 불러오는 중…";
 "subscription.none" = "지금은 이 앱에서 구독할 수 있는 요금제가 없습니다.";
 "subscription.subscribe" = "구독하기";
@@ -754,6 +754,8 @@
 "subscription.terms" = "이용약관";
 "subscription.blockedByWeb" = "구독이 relayium.com에서 관리되고 있습니다. 이중 청구를 피하려면 먼저 그곳에서 해지한 뒤 여기서 구독하세요.";
 "subscription.blockedByAdmin" = "요금제가 Relayium에서 직접 부여되었으므로 여기서 구매할 것이 없습니다.";
+"subscription.blockedByAppleApp" = "이 계정에는 Apple 구독이 있습니다. 이중 결제를 피하려면 구독을 구매한 Relayium 앱에서 관리하거나 복원하세요.";
+"subscription.errorAppleConflict" = "Apple에서 이 구매가 완료되었지만 이 계정에는 다른 활성 Apple 구독이 있습니다. Relayium은 거래를 보관하고 다시 시도합니다. App Store에서 중복 구독을 취소하거나 환불을 요청한 다음 구매를 복원하세요.";
 "subscription.blockedByOther" = "구독이 이 앱 외부에서 관리되고 있습니다.";
 "subscription.errorNotSignedIn" = "구독하려면 Relayium 계정에 로그인하세요.";
 "subscription.errorNetwork" = "Relayium에 연결하지 못했습니다. 구매는 사라지지 않으며 App Store가 다시 전달합니다.";

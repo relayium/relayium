@@ -314,14 +314,17 @@ pairing code requires sign-in; joining with that code does not.
   reads no account and holds no key — it stages local copies and stops, and the
   app is still the only thing that encrypts, uploads or produces a link. A
   waiting share is shown even when nobody is signed in, stays on the device until
-  it is sent or discarded, and is never expired or sent on its own. None of that
-  is verified against a real share sheet yet: the App Group has not been
-  registered on the developer portal, the extension has never run on a device,
-  and what real providers hand over for a shared folder is untested. There is
-  still no notification or push, no in-app purchase, no App Store release, and
-  no download to install. The link association itself is verified by the OS at
-  install time, so it is one of the things that still needs a real device rather
-  than a simulator.
+  it is sent or discarded, and is never expired or sent on its own. The App Group
+  and distribution profiles are now registered and a signed App Store archive
+  embeds the extension, but none of that has been verified against a real share
+  sheet yet: the extension has never run on a device, and what real providers
+  hand over for a shared folder is untested. StoreKit subscriptions now render
+  in Account with purchase, restore and Apple-management paths, but the iOS
+  products and server verifier are not activated and no TestFlight build has
+  been uploaded. There is still no notification or push and no public App Store
+  release. The link association itself is verified by the OS at install time,
+  so it is one of the things that still needs a real device rather than a
+  simulator.
 - **Next:** macOS has been through that sequence — the core was completed, the
   build was reviewed and installed by hand, and only then was 1.0 published as a
   Developer ID download. iOS has not, and the order is the same for it:
@@ -333,19 +336,21 @@ pairing code requires sign-in; joining with that code does not.
   notifications and push. Universal-link routing is
   wired and covered by tests, but its association is only verified on a real
   install, so it stays on the real-device list below rather than the built list
-  above. The share extension is in the same position and needs more: its App
-  Group has to be registered on the developer portal and carried by both
-  provisioning profiles, and only a signed install can show what the real share
+  above. The share extension is in the same position and needs more: only a
+  signed install can show what the real share
   sheet offers, what providers vend for a shared folder, and whether returning to
   the app puts the waiting share in front of the user as intended. It then needs
   hands-on real-device QA and an explicit native-versus-web workflow audit, and
-  it has had neither yet. Only once that verification passes do the iOS
-  distribution steps follow — TestFlight, in-app purchase and App Store
-  submission. There is no Mac App Store listing today: macOS currently ships as
-  a Developer ID download, and native Sign in with Apple on the Mac would be the
-  thing that made an App Store track worth reopening. Persistent
-  device identity, broader protocol documentation, and additional distribution
-  formats remain future work.
+  it has had neither yet. The immediate distribution work is to configure the
+  iOS subscription group and products, activate the bundle-scoped server
+  catalog/verifier, upload the signed archive to TestFlight, and perform the
+  real-device Sandbox purchase/restore and native-versus-web audit. Background
+  execution, notification and push remain later product work. Universal-link
+  routing is wired but still needs a real install, and the share extension still
+  needs real-device provider coverage. macOS now has a separate App Store record
+  and a processed TestFlight candidate, while the existing Developer ID channel
+  remains public. Persistent device identity, broader protocol documentation,
+  and additional distribution formats remain future work.
 
 **Self-hosting:** a root [`Dockerfile`](Dockerfile) + [`docker-compose.yml`](docker-compose.yml) build a
 single self-contained image (`docker compose up -d --build`). See [`docs/self-hosting.md`](docs/self-hosting.md).

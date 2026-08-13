@@ -64,8 +64,10 @@ func writeAppleTransactionError(w http.ResponseWriter, status int, code string) 
 // submitted material. The three answers that ARE distinct describe situations a
 // client must handle differently: `token_mismatch` (403 — this purchase belongs
 // to another account), `subscription_owned` (409 — this subscription already
-// has a different Relayium owner) and `verifier_unavailable` (503 — this
-// deployment cannot verify anything). An unexpected storage failure stays a 500.
+// belongs to another Relayium account), `apple_subscription_conflict` (409 —
+// this Relayium account already has another live Apple subscription), and
+// `verifier_unavailable` (503 — this deployment cannot verify anything). An
+// unexpected storage failure stays a 500.
 func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request, u User) {
 	verifier := s.appleTx
 	if verifier == nil {
@@ -159,6 +161,13 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 		log.Printf("billing: apple transaction refused for user %s (external_subscription_owned)", u.ID)
 		writeAppleTransactionError(w, http.StatusConflict, "subscription_owned")
 		return
+	case errors.Is(err, ErrAppleSubscriptionConflict):
+		// This account already has a live Apple subscription. Calling this
+		// "owned by another Relayium account" would send the customer to the
+		// wrong recovery path and hide a possible double charge.
+		log.Printf("billing: apple transaction refused for user %s (apple_subscription_conflict)", u.ID)
+		writeAppleTransactionError(w, http.StatusConflict, "apple_subscription_conflict")
+		return
 	case err != nil:
 		log.Printf("billing: applying an apple subscription for user %s failed: %v", u.ID, err)
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -218,8 +227,9 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 func appleSourceEvent(userID string, tx VerifiedAppleTransaction, product AppleProduct, now time.Time) SourceEvent {
 	externalID, _ := appleSubscriptionKeyOf(tx).externalID()
 	ev := SourceEvent{
-		UserID:   userID,
-		Provider: ProviderApple,
+		UserID:        userID,
+		Provider:      ProviderApple,
+		ExternalScope: tx.BundleID,
 		// Bound in the SAME transaction as the state it pays for. Apple's
 		// originalTransactionId is the subscription's identity across every renewal
 		// within one App Store, which — qualified by that store — is exactly what an

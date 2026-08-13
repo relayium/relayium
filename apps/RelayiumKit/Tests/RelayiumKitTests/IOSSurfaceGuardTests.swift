@@ -667,37 +667,23 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // because a scheme is unauthenticated and a link handoff is a trust
         // boundary.
         //
-        // **The bare `"StoreKit"` LEFT this list with the purchase-foundation
-        // batch, and unlike every departure above it, that batch does not make
-        // the feature reachable.** The ban had to go because a StoreKit adapter
-        // now exists and has to import the framework to be one; keeping a
-        // substring ban that the tree deliberately violates would have meant
-        // deleting the protection outright.
+        // **The StoreKit names LEFT this list when iOS subscriptions became
+        // reachable.** The app now owns the shared purchase model and links the
+        // isolated adapter, so retaining the old absence check would reject the
+        // feature this slice deliberately ships.
         //
         // What replaces it is narrower in what it names and STRONGER in what it
         // covers. This list only ever read the iOS app's own sources, so it
         // could never have seen the edit that actually matters — `RelayiumKit`
         // or `RelayiumAppKit`, which both apps link, acquiring the dependency
         // and dragging StoreKit into every binary regardless of what any view
-        // said. `StoreKitBoundaryTests` reads the whole tree and both Xcode
-        // projects instead, and asserts: exactly one file imports StoreKit and
-        // it is the isolated target's; no other shippable source names the
-        // framework or a type only it can provide; neither project links the
-        // product or the framework; no app source can name the purchase model,
-        // the seam or the adapter; the manifest names the adapter in exactly
-        // four accounted-for places; there is no `.storekit` file and no product
-        // identifier anywhere; and the plan handoff both apps ship today — a
-        // button to the website — is untouched. That last one is the half a ban
-        // cannot make at all.
-        //
-        // The three names below stay HERE as well, deliberately duplicating a
-        // subset of that file. This is the guard an iOS reviewer reads, and
-        // "the iOS app cannot name the purchase path" is worth failing twice.
+        // said. `StoreKitLinkageTests` reads the whole tree and both Xcode
+        // projects instead. The positive iOS ownership and observation wiring
+        // is asserted immediately below this test.
         let deferred = [
             "BrowserLoginModel",
             "acceptNearby", "NearbyError",
             "UNUserNotificationCenter",
-            "import StoreKit", "RelayiumStoreKit", "AppleSubscriptionModel",
             "NSWorkspace",
         ]
         // This is the wrong way to do THIS slice's work. Each of these compiles,
@@ -724,6 +710,22 @@ final class IOSSurfaceGuardTests: XCTestCase {
                 XCTAssertFalse(text.contains(symbol), "\(name) references \(symbol)")
             }
         }
+    }
+
+    func testTheIOSSubscriptionModelIsAppScopedAndObservedOnce() throws {
+        let app = try XCTUnwrap(try sources().first { $0.name == "RelayiumApp.swift" }?.text)
+        let account = try XCTUnwrap(try sources().first { $0.name == "AccountSummaryView.swift" }?.text)
+        let all = try sources().map(\.text).joined(separator: "\n")
+
+        XCTAssertEqual(app.components(separatedBy: "private let appleSubscription:").count - 1, 1)
+        XCTAssertEqual(app.components(separatedBy: ".environment(\\.appleSubscription,").count - 1, 1)
+        XCTAssertEqual(all.components(separatedBy: "startObservingUpdates()").count - 1, 1,
+                       "StoreKit update observation must have one scene-root owner")
+        XCTAssertTrue(account.contains("AppleSubscriptionCard("))
+        XCTAssertTrue(account.contains("IOSAppleSubscriptions.channel.offersInAppPurchase"),
+                      "the iOS purchase surface bypasses its distribution policy")
+        XCTAssertTrue(account.contains("IOSAppleSubscriptions.channel.showsWebPlanHandoff"),
+                      "the iOS web hand-off bypasses its distribution policy")
     }
 
     /// The eight keys whose wording still names a platform, each grouped with
@@ -1634,8 +1636,9 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "the site associates this app for AutoFill, which it does not use")
     }
 
-    /// The bearer is read at the moment of use, and only by the two surfaces
-    /// that spend it.
+    /// The bearer is read at the moment of use, only by the surfaces that spend
+    /// it and by the app-scoped billing seam that supplies a fresh token to the
+    /// shared subscription model.
     ///
     /// It is not `@Published` on purpose — a credential has no business in the
     /// view-update surface — so the send button's ENABLEMENT comes from
@@ -1659,8 +1662,11 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // created it. Joining a code is beside it in the same view and reaches
         // the transport with no credential at all.
         XCTAssertEqual(readers, ["AccountSummaryView.swift", "DirectView.swift",
-                                 "SendView.swift"],
-                       "a fourth view-layer holder of the credential")
+                                 "RelayiumApp.swift", "SendView.swift"],
+                       "an unaccounted-for view-layer holder of the credential")
+        let app = try XCTUnwrap(all.first { $0.name == "RelayiumApp.swift" })
+        XCTAssertTrue(app.text.contains("bearer: { account.bearerToken }"),
+                      "billing captured a token value instead of reading it at submission time")
         let summary = try XCTUnwrap(all.first { $0.name == "AccountSummaryView.swift" })
         XCTAssertTrue(summary.text.contains("private var scope: AccountScope {"),
                       "the scope must be recomputed per render, not stored")

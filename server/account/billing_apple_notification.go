@@ -243,6 +243,14 @@ func (s *Service) applyAppleNotification(ctx context.Context, n VerifiedAppleNot
 			s.recordAppleNotificationState(ctx, n.UUID, appleNotificationConflict, now)
 			return http.StatusInternalServerError, appleNotificationConflict, "ownership_conflict"
 		}
+		if errors.Is(err, ErrAppleSubscriptionConflict) {
+			// Permanent until the existing live subscription lapses or an operator
+			// resolves the paid conflict. Keep it visible as a conflict and answer
+			// non-2xx so Apple's retry can re-evaluate the invariant after that state
+			// changes; a local retry loop would only spin in the meantime.
+			s.recordAppleNotificationState(ctx, n.UUID, appleNotificationConflict, now)
+			return http.StatusInternalServerError, appleNotificationConflict, "apple_subscription_conflict"
+		}
 		log.Printf("apple notifications: applying %s failed: %v", n.UUID, err)
 		// Left non-terminal on purpose: the retry redoes the apply.
 		return http.StatusInternalServerError, current.State, "storage"

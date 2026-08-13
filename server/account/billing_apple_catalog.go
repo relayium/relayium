@@ -83,10 +83,8 @@ type appleCatalogPurchase struct {
 	Allowed bool `json:"allowed"`
 	// BlockedBy names WHO owns the live entitlement when Allowed is false, in the
 	// same vocabulary `/api/me`'s `entitlementProvider` uses: 'stripe', 'admin',
-	// or 'multiple' when more than one provider is live at once. '' when Allowed
-	// is true. Never 'apple' — an App Store subscription that is the SOLE live
-	// entitlement stays purchasable, because a change of tier inside the
-	// subscription group is how the App Store models it.
+	// or 'multiple' when more than one provider is live at once. 'apple' means
+	// another Relayium App Store record owns it. '' when Allowed is true.
 	BlockedBy string `json:"blockedBy"`
 }
 
@@ -195,7 +193,7 @@ func (s *Service) handleAppleCatalog(w http.ResponseWriter, r *http.Request, u U
 		return a.ProductID < b.ProductID
 	})
 
-	purchase, err := s.appleCatalogEligibility(r.Context(), u)
+	purchase, err := s.appleCatalogEligibility(r.Context(), u, app.BundleID)
 	if err != nil {
 		// NOT degraded to "allowed". The same rule /api/me applies to
 		// `entitlementProvider`: a failed lookup that defaulted open would put a
@@ -284,14 +282,33 @@ func (s *Service) applePlanSortOrders(ctx context.Context) (map[string]int64, er
 //   - more than one live provider blocks as 'multiple', Apple among them or
 //     not: the account is already double-billed, and selling it a further
 //     subscription can only deepen that.
-func (s *Service) appleCatalogEligibility(ctx context.Context, u User) (appleCatalogPurchase, error) {
+func (s *Service) appleCatalogEligibility(ctx context.Context, u User, bundleID string) (appleCatalogPurchase, error) {
 	live, err := s.Store().LiveEntitlementProviders(ctx, u.ID)
 	if err != nil {
 		return appleCatalogPurchase{}, err
 	}
 	owner := entitlementProviderWire(u, live)
-	if owner == "" || owner == ProviderApple {
+	if owner == "" {
 		return appleCatalogPurchase{Allowed: true}, nil
+	}
+	if owner == ProviderApple {
+		source, ok, err := s.Store().GetSubscriptionSource(ctx, u.ID, ProviderApple)
+		if err != nil {
+			return appleCatalogPurchase{}, err
+		}
+		// A terminal notification can be lost after Apple's retry window. The
+		// source then still says active even though its known paid-through instant
+		// is past. That is not a second live charge: permit a new purchase so a
+		// legitimate re-subscription can bind its fresh original transaction id.
+		if ok && !source.stillBillingAt(s.now().Unix()) {
+			return appleCatalogPurchase{Allowed: true}, nil
+		}
+		if ok && source.ExternalScope == bundleID {
+			return appleCatalogPurchase{Allowed: true}, nil
+		}
+		// Empty is a migrated source whose app cannot be proven. Fail closed: an
+		// unknown app scope is not permission to create a second Apple charge.
+		return appleCatalogPurchase{Allowed: false, BlockedBy: ProviderApple}, nil
 	}
 	return appleCatalogPurchase{Allowed: false, BlockedBy: owner}, nil
 }

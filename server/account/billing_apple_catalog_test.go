@@ -421,13 +421,92 @@ func TestNativeAppleCatalogBlocksPurchaseForAnAdminComp(t *testing.T) {
 // leave a subscriber with no way to upgrade from the app that sold to them.
 func TestNativeAppleCatalogKeepsAnExistingAppleSubscriberEligible(t *testing.T) {
 	f := newAppleCatalogFixture(t)
-	appleSubscriber(t, f.store, f.userID, "pro")
+	appleSubscriberForScope(t, f.store, f.userID, "pro", testBundleMac)
 
 	resp := f.get(t, macQuery)
 	defer resp.Body.Close()
 	body := f.decode(t, resp)
 	if !body.Purchase.Allowed || body.Purchase.BlockedBy != "" {
 		t.Fatalf("an Apple subscriber must stay able to change tier: %+v", body.Purchase)
+	}
+}
+
+func TestNativeAppleCatalogBlocksAnAppleSubscriberFromBuyingInAnotherApp(t *testing.T) {
+	f := newAppleCatalogFixture(t)
+	appleSubscriberForScope(t, f.store, f.userID, "pro", testBundleMac)
+
+	resp := f.get(t, "?bundleId="+testBundleIOS)
+	defer resp.Body.Close()
+	body := f.decode(t, resp)
+	if body.Purchase.Allowed || body.Purchase.BlockedBy != ProviderApple {
+		t.Fatalf("an Apple subscriber may not start a second app subscription: %+v", body.Purchase)
+	}
+}
+
+func TestNativeAppleCatalogAllowsResubscribeAfterKnownExpiryWithoutTerminalEvent(t *testing.T) {
+	f := newAppleCatalogFixture(t)
+	now := time.Now().Unix()
+	if _, err := f.store.ApplySubscriptionSource(context.Background(), SourceEvent{
+		UserID: f.userID, Provider: ProviderApple, PlanID: "pro", Status: "active",
+		Cycle: "monthly", PeriodEnd: now - 1, ExternalID: "apple-expired-" + f.userID,
+		ExternalScope: testBundleMac, EventAt: 100, Now: now - 100,
+	}); err != nil {
+		t.Fatalf("seed expired Apple source: %v", err)
+	}
+
+	resp := f.get(t, "?bundleId="+testBundleIOS)
+	defer resp.Body.Close()
+	body := f.decode(t, resp)
+	if !body.Purchase.Allowed || body.Purchase.BlockedBy != "" {
+		t.Fatalf("a known-expired Apple source blocked re-subscription: %+v", body.Purchase)
+	}
+}
+
+func TestNativeAppleCatalogFailsClosedWhenApplePaidThroughIsUnknown(t *testing.T) {
+	f := newAppleCatalogFixture(t)
+	now := time.Now().Unix()
+	if _, err := f.store.ApplySubscriptionSource(context.Background(), SourceEvent{
+		UserID: f.userID, Provider: ProviderApple, PlanID: "pro", Status: "active",
+		Cycle: "monthly", PeriodEnd: 0, ExternalID: "apple-unknown-" + f.userID,
+		ExternalScope: testBundleMac, EventAt: 100, Now: now,
+	}); err != nil {
+		t.Fatalf("seed unknown-end Apple source: %v", err)
+	}
+
+	resp := f.get(t, "?bundleId="+testBundleIOS)
+	defer resp.Body.Close()
+	body := f.decode(t, resp)
+	if body.Purchase.Allowed || body.Purchase.BlockedBy != ProviderApple {
+		t.Fatalf("an unknown Apple paid-through instant did not fail closed: %+v", body.Purchase)
+	}
+}
+
+func TestNativeAppleCatalogFailsClosedForMigratedAppleSourceWithoutAppScope(t *testing.T) {
+	f := newAppleCatalogFixture(t)
+	appleSubscriber(t, f.store, f.userID, "pro")
+
+	resp := f.get(t, macQuery)
+	defer resp.Body.Close()
+	body := f.decode(t, resp)
+	if body.Purchase.Allowed || body.Purchase.BlockedBy != ProviderApple {
+		t.Fatalf("an Apple source with unknown app scope must not authorize another charge: %+v", body.Purchase)
+	}
+
+	// A verified event from the original app safely repairs the migrated row;
+	// unlike the catalog request, the signed bundle id is authoritative.
+	if _, err := f.store.ApplySubscriptionSource(context.Background(), SourceEvent{
+		UserID: f.userID, Provider: ProviderApple, PlanID: "pro", Status: "active",
+		Cycle: "monthly", PeriodEnd: 1_900_000_000,
+		ExternalID: "apple-test-" + f.userID, ExternalScope: testBundleMac,
+		EventAt: 200, Now: time.Now().Unix(),
+	}); err != nil {
+		t.Fatalf("backfill verified app scope: %v", err)
+	}
+	resp = f.get(t, macQuery)
+	defer resp.Body.Close()
+	body = f.decode(t, resp)
+	if !body.Purchase.Allowed || body.Purchase.BlockedBy != "" {
+		t.Fatalf("a verified same-app event did not repair eligibility: %+v", body.Purchase)
 	}
 }
 
