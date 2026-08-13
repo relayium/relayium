@@ -779,22 +779,30 @@ final class AppShellUITests: XCTestCase {
         ]
         XCTAssertTrue(guidance.waitForExistence(timeout: 10),
                       "an invalid link does not explain the required shape")
+        XCTAssertEqual(link.value as? String, "not a link",
+                       "the refused text did not reach the real field")
 
         link.tap()
         link.typeText(XCUIKeyboardKey.delete.rawValue)
 
         // One delivered edit is the product boundary under test. Clearing the
         // whole field with a burst of synthetic deletes made this acceptance
-        // depend on every hosted keyboard event arriving, while the model's
-        // empty-value/button invariant already has deterministic package tests.
+        // depend on every hosted keyboard event arriving. The model's
+        // edit-clears-refusal invariant has deterministic package coverage, and
+        // the neighbouring malformed-link UI test owns empty-button disabling.
         let edited = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "value != %@", "not a link"), object: link)
+            predicate: NSPredicate(format: "exists == true AND value != %@", "not a link"),
+            object: link)
         XCTAssertEqual(XCTWaiter.wait(for: [edited], timeout: 10), .completed,
                        "the refused link did not accept the correction")
         let cleared = XCTNSPredicateExpectation(
             predicate: NSPredicate(format: "exists == false"), object: guidance)
         XCTAssertEqual(XCTWaiter.wait(for: [cleared], timeout: 10), .completed,
                        "the refusal outlived the input it described")
+        XCTAssertTrue(app.staticTexts[
+            "Paste a Relayium link. The key stays in the link and never reaches Relayium's servers."
+        ].waitForExistence(timeout: 10),
+                      "editing the refused link did not restore the idle receive state")
     }
 
     /// A stored send that finishes hands the result over, and offers the way to
