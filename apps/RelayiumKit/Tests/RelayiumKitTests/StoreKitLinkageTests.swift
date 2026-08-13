@@ -229,11 +229,27 @@ final class StoreKitLinkageTests: XCTestCase {
         // The extension embedded in each is the one signed for that channel.
         // One shared extension target would put a Developer ID signature inside
         // an App Store submission, which fails validation rather than review.
-        for (target, expected) in [("RelayiumShare", "Developer ID Application"),
-                                   ("RelayiumShareAppStore", "Apple Distribution")] {
-            XCTAssertTrue(try signingIdentity(ofTarget: target, in: project).contains(expected),
-                          "\(target) is not signed for its own channel")
-        }
+        //
+        // The two channels say that in opposite ways, so each half is asserted
+        // as what is actually true of it. The direct extension *names* its
+        // certificate, because manual signing is what the notarized channel
+        // needs. The App Store extension names none: it signs automatically, and
+        // an identity pinned beside automatic signing is the conflicting
+        // provisioning setting that made the archive fail before it began.
+        // `MacAppStoreSigningTests` owns that half in full; what belongs here is
+        // the risk this check was written for — that no Developer ID identity
+        // reaches the App Store extension.
+        XCTAssertTrue(try signingIdentity(ofTarget: "RelayiumShare", in: project)
+                        .contains("Developer ID Application"),
+                      "RelayiumShare is not signed for the direct channel")
+
+        let appStoreShare = try signingIdentity(ofTarget: "RelayiumShareAppStore", in: project)
+        XCTAssertFalse(appStoreShare.contains("Developer ID Application"),
+                       "RelayiumShareAppStore carries a Developer ID identity; a Developer ID "
+                       + "signature inside an App Store submission fails validation")
+        XCTAssertTrue(appStoreShare.isEmpty,
+                      "RelayiumShareAppStore pins a signing identity beside automatic signing, "
+                      + "which Xcode refuses to archive: \(appStoreShare)")
     }
 
     /// The `CODE_SIGN_IDENTITY` values a target's configurations declare.

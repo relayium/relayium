@@ -234,12 +234,12 @@ jobs:
       # The Mac App Store product, built unsigned.
       #
       # UNSIGNED deliberately, and it is the only build here that is: this
-      # target signs with `Apple Distribution` and needs a Mac App Store
-      # provisioning profile, which is an owner credential this workflow does
-      # not hold and must not create. What a compile CAN prove is the half that
-      # breaks silently — that the shared source really does build both ways
-      # through the distribution seam, that the App Store target's own file
-      # links the StoreKit adapter, and that its Share extension embeds. The
+      # target signs automatically, so Xcode resolves a Mac App Store
+      # certificate and profile against the signed-in account — credentials this
+      # workflow does not hold and must not create. What a compile CAN prove is
+      # the half that breaks silently — that the shared source really does build
+      # both ways through the distribution seam, that the App Store target's own
+      # file links the StoreKit adapter, and that its Share extension embeds. The
       # linkage and entitlement claims are asserted from the project file and
       # the plists by `StoreKitLinkageTests` in the Swift suite above.
       #
