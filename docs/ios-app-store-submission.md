@@ -27,14 +27,15 @@ TestFlight builds, so build `1` was not consumed at that time.
 A local signed archive and non-uploading App Store export pass with the intended
 distribution identities and profiles. The retained candidate artifacts are:
 
-- archive: `/tmp/Relayium-iOS-subscriptions-final.xcarchive`;
-- IPA: `/tmp/Relayium-iOS-subscriptions-final-export/Relayium.ipa`;
+- archive: `/tmp/Relayium-iOS-subscriptions-e4dd73d7.xcarchive`;
+- IPA: `/tmp/Relayium-iOS-subscriptions-e4dd73d7-export/Relayium.ipa`;
 - IPA SHA-256:
-  `adee61254e63bcfdcd1ddf4425f1a0ba50cebb3aad3e7f4d6b10c64943fab191`.
+  `45be4bbf6ac8f14482276804e42a624af6c9ba185159b621e403996378df8bbc`.
 
 These artifacts are local acceptance evidence, not permission to upload. Any
-source change after the archive requires a new exact-source archive and checksum
-before delivery.
+shipping source or build-setting change after the archive requires a new
+exact-source archive and checksum before delivery. A release-record-only edit
+to this document does not change the archived product.
 
 ## Subscription activation boundary
 
