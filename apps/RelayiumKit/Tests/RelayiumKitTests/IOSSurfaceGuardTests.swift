@@ -666,10 +666,38 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // banned by `testTheLinkHandOffAcceptsOnlyVerifiedUniversalLinks`,
         // because a scheme is unauthenticated and a link handoff is a trust
         // boundary.
+        //
+        // **The bare `"StoreKit"` LEFT this list with the purchase-foundation
+        // batch, and unlike every departure above it, that batch does not make
+        // the feature reachable.** The ban had to go because a StoreKit adapter
+        // now exists and has to import the framework to be one; keeping a
+        // substring ban that the tree deliberately violates would have meant
+        // deleting the protection outright.
+        //
+        // What replaces it is narrower in what it names and STRONGER in what it
+        // covers. This list only ever read the iOS app's own sources, so it
+        // could never have seen the edit that actually matters — `RelayiumKit`
+        // or `RelayiumAppKit`, which both apps link, acquiring the dependency
+        // and dragging StoreKit into every binary regardless of what any view
+        // said. `StoreKitBoundaryTests` reads the whole tree and both Xcode
+        // projects instead, and asserts: exactly one file imports StoreKit and
+        // it is the isolated target's; no other shippable source names the
+        // framework or a type only it can provide; neither project links the
+        // product or the framework; no app source can name the purchase model,
+        // the seam or the adapter; the manifest names the adapter in exactly
+        // four accounted-for places; there is no `.storekit` file and no product
+        // identifier anywhere; and the plan handoff both apps ship today — a
+        // button to the website — is untouched. That last one is the half a ban
+        // cannot make at all.
+        //
+        // The three names below stay HERE as well, deliberately duplicating a
+        // subset of that file. This is the guard an iOS reviewer reads, and
+        // "the iOS app cannot name the purchase path" is worth failing twice.
         let deferred = [
             "BrowserLoginModel",
             "acceptNearby", "NearbyError",
-            "UNUserNotificationCenter", "StoreKit",
+            "UNUserNotificationCenter",
+            "import StoreKit", "RelayiumStoreKit", "AppleSubscriptionModel",
             "NSWorkspace",
         ]
         // This is the wrong way to do THIS slice's work. Each of these compiles,

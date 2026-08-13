@@ -24,6 +24,24 @@ let package = Package(
         // Nothing in this target may gain a dependency. That is the constraint
         // that keeps the boundary real rather than documented.
         .library(name: "RelayiumShareKit", targets: ["RelayiumShareKit"]),
+        // The ONLY module in this repository that imports StoreKit, and a
+        // separate product for the same kind of reason `RelayiumShareKit` is:
+        // the boundary has to be structural rather than remembered.
+        //
+        // Linking StoreKit into an app is a claim — it is what the purchase
+        // machinery and App Store review look for, and an app that links it is
+        // an app that sells something. This batch builds the adapter without
+        // making that claim: **no macOS or iOS target links this product**,
+        // there is no `.storekit` configuration file, and there are no product
+        // identifiers anywhere in the tree. `StoreKitBoundaryTests` reads both
+        // Xcode projects and every Swift source under `apps/` to keep all three
+        // of those true.
+        //
+        // It depends on `RelayiumAppKit` and must never gain a dependency the
+        // other way round: the seam it implements (`SubscriptionStore`) is
+        // declared above it and names no StoreKit type, which is what lets the
+        // whole purchase policy run under `swift test` with no store at all.
+        .library(name: "RelayiumStoreKit", targets: ["RelayiumStoreKit"]),
     ],
     dependencies: [
         // Exact, not `from:` — this is the crypto the whole E2E guarantee rests
@@ -71,9 +89,25 @@ let package = Package(
         // `swift test` and reusable by the iOS app in R3.
         .target(name: "RelayiumAppKit",
                 dependencies: ["RelayiumKit", "RelayiumShareKit"]),
+        // The StoreKit adapter, alone. One file, one import, no resources and no
+        // product identifiers — everything it needs is passed in.
+        //
+        // It deliberately depends on nothing but `RelayiumAppKit`, whose
+        // `SubscriptionStore` protocol it implements. In particular it does NOT
+        // depend on `RelayiumKit`: an adapter with the account client one import
+        // away could submit a transaction itself, and the whole point of the
+        // seam is that the only thing it can do with a purchase is hand it up.
+        .target(name: "RelayiumStoreKit",
+                dependencies: ["RelayiumAppKit"]),
         .testTarget(
             name: "RelayiumKitTests",
-            dependencies: ["RelayiumKit", "RelayiumAppKit", "RelayiumShareKit"],
+            // `RelayiumStoreKit` is linked by the TESTS and by nothing else, so
+            // `swift test` type-checks the real adapter on every run while no
+            // shipping binary contains it. The tests drive the purchase policy
+            // through a fake store; what linking the real one buys is that the
+            // StoreKit 2 API surface it names cannot rot unnoticed.
+            dependencies: ["RelayiumKit", "RelayiumAppKit", "RelayiumShareKit",
+                           "RelayiumStoreKit"],
             path: "Tests",
             resources: [.process("Fixtures")]
         ),
