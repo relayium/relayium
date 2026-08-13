@@ -132,6 +132,28 @@ func NewAppleTransactionVerifier(cfg AppleStoreConfig) (*AppleTransactionVerifie
 	return &AppleTransactionVerifier{env: env, apps: apps, roots: roots}, nil
 }
 
+// ConfiguredApp resolves one bundle identifier against the verifier's OWN
+// allowlist, returning the configured entry.
+//
+// It exists so a caller can ask "is this an app this deployment is configured
+// for" WITHOUT a signed payload — the catalog read API is the only such caller,
+// and it needs the question answered before it will describe anything. The
+// answer is the configured value rather than the caller's string, so nothing
+// downstream can echo an attacker-shaped identifier back as though the server
+// had accepted it.
+//
+// It grants nothing. A true answer means only that the bundle is one this
+// server would ACCEPT a signed transaction for; every entitlement still goes
+// through Verify and the catalog, and a nil verifier answers false, which is
+// what keeps an unconfigured deployment fail-closed.
+func (v *AppleTransactionVerifier) ConfiguredApp(bundleID string) (AppleAppConfig, bool) {
+	if v == nil {
+		return AppleAppConfig{}, false
+	}
+	app, ok := v.apps[bundleID]
+	return app, ok
+}
+
 // VerifiedAppleTransaction is the ONLY projection of a transaction anything
 // downstream may read. Every field in it came out of a payload whose signature
 // chained to a configured root; there is no constructor that produces one

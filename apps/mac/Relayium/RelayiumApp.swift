@@ -1,39 +1,17 @@
 import SwiftUI
-import Sparkle
 import RelayiumAppKit
 // For the two protocol values the pairing-code fallback carries — the room's
 // deterministic `Role` and the `ICEConfig` its code was issued — which reach
 // this scene as themselves rather than as anything it re-derives.
 import RelayiumKit
 
-/// Keeps the SwiftUI command enabled state in sync with Sparkle's updater.
-///
-/// `canCheckForUpdates` is KVO-backed rather than SwiftUI state, so reading it
-/// directly from a button would leave the menu disabled state stale.
-@MainActor
-final class CheckForUpdatesViewModel: ObservableObject {
-    @Published var canCheckForUpdates = false
-
-    init(updater: SPUUpdater) {
-        updater.publisher(for: \.canCheckForUpdates)
-            .assign(to: &$canCheckForUpdates)
-    }
-}
-
-struct CheckForUpdatesView: View {
-    @ObservedObject private var model: CheckForUpdatesViewModel
-    private let updater: SPUUpdater
-
-    init(updater: SPUUpdater) {
-        self.updater = updater
-        model = CheckForUpdatesViewModel(updater: updater)
-    }
-
-    var body: some View {
-        Button(L10n.t(.appCheckForUpdates), action: updater.checkForUpdates)
-            .disabled(!model.canCheckForUpdates)
-    }
-}
+// **This file is shared source, compiled into BOTH macOS products**, and it does
+// not import Sparkle. The update mechanism is the one thing the two builds
+// cannot agree on — the direct download updates itself, the App Store build is
+// updated by the App Store, and shipping Sparkle in the latter is grounds for
+// rejection — so it reaches this scene through the distribution seam
+// (`AppUpdates`, `AppUpdatesMenuItem`), whose two implementations are each a
+// member of exactly one target. See `Distribution/DirectDistribution.swift`.
 
 /// Refuses a silent exit while work or the only text-history copy is at risk.
 ///
@@ -133,11 +111,9 @@ final class AppQuitGuard: NSObject, NSApplicationDelegate {
 
 @main
 struct RelayiumApp: App {
-    private let updaterController = SPUStandardUpdaterController(
-        startingUpdater: true,
-        updaterDelegate: nil,
-        userDriverDelegate: nil
-    )
+    /// Whatever this build's update mechanism is. Sparkle's updater in the
+    /// direct download; an object that owns nothing in the App Store build.
+    private let updates = AppUpdates()
     @NSApplicationDelegateAdaptor(AppQuitGuard.self) private var quitGuard
     /// Whether this app is frontmost. Read only to notice a return to `.active`,
     /// which is when a draft the Share extension staged in the meantime becomes
@@ -257,6 +233,22 @@ struct RelayiumApp: App {
     /// takes that in its stride: nothing can arrive, so nothing does, and the
     /// rest of the app is unaffected.
     private let sharedDrafts = SharedDraftInbox(store: AppEnvironment.makeSharedDraftStore())
+    /// The app's one in-app purchase model, or `nil` in a build that does not
+    /// sell — which is what the direct download's seam returns.
+    ///
+    /// **App-scoped, and not a `@StateObject`, for the same reason the drafts
+    /// inbox above is neither: it is created once and never replaced.** What
+    /// makes it app-scoped rather than owned by the account screen is the store's
+    /// update stream. A renewal, a refund, an Ask-to-Buy approval and a purchase
+    /// interrupted by a crash all arrive through it, at moments when no window
+    /// need exist — this app's window is closable without ending the process —
+    /// and each one has to reach the server and refresh the session.
+    ///
+    /// Assigned in `init` because both closures need the session, which is built
+    /// there. It holds no bearer and no user of its own: it reads the credential
+    /// at the moment of use and asks the session, not itself, what the account
+    /// now holds.
+    private let appleSubscription: AppleSubscriptionModel?
 
     /// The strings live in a Swift-package resource bundle, while SwiftUI asks
     /// the app bundle which way to lay out the scene. macOS therefore kept an
@@ -385,6 +377,22 @@ struct RelayiumApp: App {
                                                 logOut: { await account.logOut() })
         leaving.observe(management.$needsSignOut)
         _signOut = StateObject(wrappedValue: leaving)
+        // The purchase model, built from the session and from nothing else this
+        // scene owns. Both closures read through to the session at the moment of
+        // use rather than capturing its state, which is what keeps this object
+        // from becoming a second thing to invalidate on sign-out.
+        //
+        // The UI-test seam comes first and is absent from Release, exactly like
+        // the token store, the transport and the inbox controller above:
+        // acceptance has to drive a purchase surface without a store and without
+        // a server, and a shipped launch never evaluates it. In the direct
+        // download both arms answer nil, so no purchase model exists at all.
+        appleSubscription = UITestMode.makeSubscriptionModel(
+            bearer: { account.bearerToken },
+            refreshAccount: { await account.refresh() })
+            ?? AppDistribution.makeSubscriptionModel(
+                bearer: { account.bearerToken },
+                refreshAccount: { await account.refresh() })
         _notifications = StateObject(wrappedValue: TransferNotificationCenter(
             uploadModel: uploads,
             downloadModel: downloads,
@@ -592,7 +600,20 @@ struct RelayiumApp: App {
                 // that reason.
                 .environmentObject(inbox)
                 .environmentObject(loginItem)
+                // An environment VALUE, because the honest type is optional: the
+                // direct build has no purchase model, and `@EnvironmentObject`
+                // can only express that by crashing whoever asks.
+                .environment(\.appleSubscription, appleSubscription)
                 .task { await session.restore() }
+                .task {
+                    // The store's update stream, drained for as long as the
+                    // process runs. Started here rather than by the account
+                    // screen because a renewal, a refund or a purchase
+                    // interrupted by a crash arrives whether or not anybody is
+                    // looking — and this app keeps running with its window
+                    // closed. Idempotent, and a no-op in a build with no model.
+                    appleSubscription?.startObservingUpdates()
+                }
                 // Files the Share extension staged while this app was closed or
                 // in the background.
                 //
@@ -687,7 +708,10 @@ struct RelayiumApp: App {
         .defaultSize(width: 1040, height: 700)
         .commands {
             CommandGroup(after: .appInfo) {
-                CheckForUpdatesView(updater: updaterController.updater)
+                // Sparkle's "Check for Updates…" in the direct build; nothing at
+                // all in the App Store build, where an `EmptyView` contributes
+                // no menu item.
+                AppUpdatesMenuItem(updates: updates)
             }
         }
 
@@ -706,7 +730,7 @@ struct RelayiumApp: App {
         // scene injects exactly what its two panes read: nothing about the
         // account, the navigation model or the receiver.
         Settings {
-            SettingsView(updater: updaterController.updater)
+            SettingsView(updates: updates)
                 .environment(\.layoutDirection, appLayoutDirection)
                 .environmentObject(loginItem)
                 .environmentObject(verification)

@@ -742,3 +742,42 @@
 "help.account.step3" = "Review the devices signed in to your account and the files you have stored, and remove either.";
 "help.account.question" = "What needs an account and what does not?";
 "help.account.answer" = "Same-network transfer, and joining a code somebody else created, need no account. Creating a code, sending a stored link and the Device Inbox all do.";
+
+/* In-app subscription (Mac App Store build). The purchase surface the App Store
+   build renders instead of the direct build's link to the website. Prices are
+   never written here: the store's own localized price is substituted in. */
+
+"subscription.heading" = "Subscription";
+"subscription.body" = "Your Relayium plan is billed through the App Store on this Mac. Apple takes the payment; Relayium only records which plan you hold.";
+"subscription.loading" = "Loading plans…";
+"subscription.none" = "There is nothing to subscribe to from this app right now.";
+"subscription.subscribe" = "Subscribe";
+"subscription.current" = "Current plan";
+"subscription.priceMonthly" = "%@ per month";
+"subscription.priceYearly" = "%@ per year";
+"subscription.purchasing" = "Waiting for the App Store…";
+"subscription.submitting" = "Confirming your subscription with Relayium…";
+"subscription.restoring" = "Looking for earlier purchases…";
+"subscription.restore" = "Restore purchases";
+"subscription.nothingToRestore" = "This Apple ID has no Relayium subscription to restore.";
+"subscription.deferred" = "This purchase is waiting for approval. Relayium will update your plan as soon as it is approved.";
+"subscription.completed" = "Your subscription is active. The plan above has been updated.";
+"subscription.manage" = "Manage in the App Store";
+"subscription.managedByApple" = "This subscription is billed by Apple. Change or cancel it in the App Store.";
+/* The two legal links App Store review requires beside a subscription. Each is
+   the title relayium.com's own page carries in this language. */
+"subscription.privacy" = "Privacy Policy";
+"subscription.terms" = "Terms of Service";
+"subscription.blockedByWeb" = "Your subscription is managed on relayium.com. Cancel it there before subscribing here, so you are not billed twice.";
+"subscription.blockedByAdmin" = "Your plan was granted directly by Relayium, so there is nothing to buy here.";
+"subscription.blockedByOther" = "Your subscription is managed outside this app.";
+"subscription.errorNotSignedIn" = "Sign in to your Relayium account to subscribe.";
+"subscription.errorNetwork" = "Relayium could not be reached. Nothing is lost — the App Store will offer this purchase again.";
+"subscription.errorBusy" = "Too many attempts. Try again in a moment.";
+"subscription.errorNotAccepted" = "Relayium could not accept this purchase yet. Nothing is lost — the App Store will offer it again.";
+"subscription.errorOtherAccount" = "This purchase belongs to a different Relayium account. Sign in to that account to use it.";
+"subscription.errorAlreadyLinked" = "This App Store subscription is already linked to another Relayium account.";
+"subscription.errorNotReady" = "Relayium cannot confirm App Store purchases yet. Nothing is lost — the App Store will offer this again.";
+"subscription.errorWrongBuild" = "This build of Relayium cannot sell subscriptions.";
+"subscription.errorServer" = "Relayium answered with an unexpected error (%@).";
+"subscription.errorStore" = "The App Store could not complete this request (%@).";

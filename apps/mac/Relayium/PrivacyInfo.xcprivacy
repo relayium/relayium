@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!-- Apple requires this file for Mac App Store submission, and it is the app's
+     own public statement about what it does with data. Every entry is traced to
+     a call site AND to the server column that keeps the value, because Apple
+     defines collection as transmitting off device and retaining beyond the
+     request being serviced. `MacPrivacyManifestTests` re-derives the list from
+     those sources.
+
+     Over-declaring is as much a false statement as under-declaring, so nothing
+     here is included "to be safe".
+
+     ONE file for BOTH macOS channels: `Relayium` and `RelayiumAppStore` build
+     from this same synchronized folder and neither excludes it. Only the App
+     Store target links the purchase adapter, so Purchase History and the
+     `appAccountToken` are exercised on that channel alone — but the file is a
+     statement about the app, the two channels are one app, and only the App
+     Store build is submitted, so the union is what is declared.
+
+     The Share extension has its OWN manifest, and a shorter one: it reaches no
+     network and touches no user defaults. -->
+<dict>
+	<!-- Nothing here tracks. No analytics SDK, no advertising identifier and no
+	     third-party network destination, so there are no tracking domains
+	     either. -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array>
+		<!-- The "Name (optional)" field on the create-account form
+		     (`LoginView.displayNameField`), sent as `displayName` by
+		     `AccountClient.register` and kept in `users.display_name`. The Mac's
+		     computer name goes the same way: `AppEnvironment.deviceName()` reads
+		     `Host.current().localizedName` — which macOS seeds from the owner's
+		     full name — and `AccountClient.login` sends it as `deviceName` into
+		     `devices.name`. Either can carry a personal name, so Name is
+		     declared rather than filed under a device label. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeName</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<!-- The email address a user types to register or sign in, sent to
+		     Relayium's own server (`POST /api/auth/register`,
+		     `/api/auth/native/login`, `/api/auth/email/resend` —
+		     `AccountClient.swift`) and kept in
+		     `users.email`. Linked by definition: it IS the account identifier.
+
+		     **The files themselves are deliberately not listed, and that is not
+		     an omission.** They are encrypted on the device and the server sees
+		     ciphertext, so no file content or file metadata is collected in
+		     Apple's sense. That is the product's central promise, and stating it
+		     here is the same claim the website makes. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeEmailAddress</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<!-- In-app purchase. `StoreKitSubscriptionStore.purchase` hands the
+		     signed transaction to `AppleSubscriptionModel`, which submits its
+		     JWS verbatim through `AccountClient.submitAppleTransaction` to
+		     `POST /api/billing/apple/transaction`. The server verifies it and
+		     writes a `subscription_sources` row that OUTLIVES the request:
+		     plan_id, status, cycle, period_end, external_id (Apple's
+		     originalTransactionId) and an event clock derived from purchaseDate,
+		     projected onto the users row. That is an account's purchases, kept —
+		     which is exactly Apple's Purchase History. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypePurchaseHistory</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<!-- The `appAccountToken`: a server-minted per-account UUID the app
+		     fetches (`AccountClient.appleAccountToken`) and sends OFF DEVICE to
+		     Apple as `Product.PurchaseOption.appAccountToken`
+		     (`StoreKitSubscriptionStore.swift`). Apple keeps it in the
+		     transaction record and Relayium keeps it in `users.apple_account_token`.
+		     An assigned user-level id, retained by two parties — Apple's User ID
+		     in the plainest form, and the thing that makes the purchase history
+		     above "linked". -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeUserID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<!-- The installation identity: 32 random bytes minted by
+		     `InstallationIdentity`, held in this Mac's keychain across sign-out,
+		     and posted as `install_id` by `HTTPDeviceAuthClient.start` when the
+		     browser sign-in begins (`LoginView` → `AppEnvironment.makeBrowserLoginModel`).
+		     The server keeps it in `cli_device_auth.install_id` and then
+		     `devices.install_id`, unique per account — a device-level id,
+		     retained and linked. Random and never derived from the hardware, so
+		     it identifies an installation and nothing about the machine. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeDeviceID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<!-- Metering: how much of the service this account used, which is activity
+		     in the app and therefore Apple's "Other Usage Data". Three call sites
+		     produce it, and each one is retained past the request it served:
+
+		       · uploads — `HTTPResumableTransport` (`api/uploads`, then the chunk
+		         PATCH and `/finalize`) makes the server meter the bytes
+		         (`files.go`, `RecordMeter(… MeterUpload …)` → `usage_monthly`) and
+		         keep the ciphertext's `stored_files.size` against the storage quota;
+		       · stored downloads — `CloudClient` (`api/files/<id>/blob`) meter the
+		         same way (`RecordMeter(… MeterDownload …)`);
+		       · relayed bytes — `HTTPICEClient` (`api/ice`) takes TURN credentials
+		         whose username carries `<owner>.<code>` (`turn.go`), so a node's
+		         heartbeat books that allocation's bytes to the account (`nodes.go`,
+		         `RecordUsage` → `usage_events`/`usage_periods`).
+
+		     Byte counts and timestamps only — never what was transferred, which the
+		     server holds as ciphertext. They are kept as per-month, per-account
+		     totals because that is what enforces the quotas included in the plan
+		     and what the billing and account records rest on — a subscription is a
+		     fixed plan price, not a per-byte charge — and the app reads them back
+		     through `AccountClient.fetchUsage`. That purpose is App Functionality,
+		     and it is not tap-or-screen analytics — which is why Product
+		     Interaction stays absent. -->
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeOtherUsageData</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<!-- `VerificationPreference` stores whether this Mac blocks on the SAS
+		     comparison, in `UserDefaults.standard` — this app's own domain,
+		     readable by nothing else. `SharedDraftInbox` records which shared
+		     drafts have been handed to the send flow, and
+		     `UserDefaultsInboxFolderStore` the Device Inbox destination, in the
+		     same place. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+		<!-- `SharedDraftStore.stale(_:grace:now:)` reads `.modificationDate` to
+		     decide whether an interrupted draft is old enough to sweep. The files
+		     are inside the app group container and nowhere else, which is exactly
+		     what DDA9.1 covers. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>DDA9.1</string>
+			</array>
+		</dict>
+		<!-- `WebRTCLinkTransport` measures its establishment deadlines against
+		     `ProcessInfo.systemUptime` rather than a wall clock, so that changing
+		     the Mac's date cannot expire a live connection. That is elapsed time
+		     between events inside the app, which is 35F9.1. -->
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>35F9.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

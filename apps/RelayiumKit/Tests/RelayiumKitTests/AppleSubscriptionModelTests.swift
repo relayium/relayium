@@ -120,6 +120,9 @@ private final class FakeBilling: AppleBillingService, @unchecked Sendable {
     private let lock = NSLock()
     private let journal: PurchaseJournal
 
+    private var _catalog: Result<AppleProductCatalog, Error>
+    private var _catalogBundleIDs: [String] = []
+    private var _catalogBearers: [String] = []
     private var _accountToken: Result<UUID, Error>
     private var _submissions: [Result<AppleTransactionResult, Error>] = []
     private var _submittedJWS: [String] = []
@@ -132,8 +135,10 @@ private final class FakeBilling: AppleBillingService, @unchecked Sendable {
     init(journal: PurchaseJournal, accountToken: UUID) {
         self.journal = journal
         self._accountToken = .success(accountToken)
+        self._catalog = .success(Fixture.serverCatalog())
     }
 
+    func setCatalog(_ value: Result<AppleProductCatalog, Error>) { sync { _catalog = value } }
     func setAccountToken(_ value: Result<UUID, Error>) { sync { _accountToken = value } }
     /// Answers, consumed in order. The last one repeats once the list runs out.
     func setSubmissions(_ values: [Result<AppleTransactionResult, Error>]) {
@@ -145,9 +150,20 @@ private final class FakeBilling: AppleBillingService, @unchecked Sendable {
     func holdSubmit(after calls: Int) { sync { _holdSubmitAfter = calls } }
     func releaseSubmit() { sync { _holdSubmitAfter = nil } }
 
+    var catalogBundleIDs: [String] { sync { _catalogBundleIDs } }
+    var catalogBearers: [String] { sync { _catalogBearers } }
     var submittedJWS: [String] { sync { _submittedJWS } }
     var submittedBearers: [String] { sync { _submittedBearers } }
     var accountTokenBearers: [String] { sync { _accountTokenBearers } }
+
+    func appleCatalog(bundleID: String, token: String) async throws -> AppleProductCatalog {
+        journal.record("catalog")
+        sync {
+            _catalogBundleIDs.append(bundleID)
+            _catalogBearers.append(token)
+        }
+        return try sync { _catalog }.get()
+    }
 
     func appleAccountToken(token: String) async throws -> UUID {
         journal.record("accountToken")
@@ -189,6 +205,30 @@ private struct StoreFailure: Error {}
 /// main-actor-isolated constant cannot be one.
 private enum Fixture {
     static let catalog = ["com.relayium.plus.monthly", "com.relayium.pro.yearly"]
+    /// The bundle identity the model reports itself as. It is the ONE thing the
+    /// catalog request asserts, and the server narrows the answer with it.
+    static let bundleID = "com.relayium.mac"
+
+    /// The server's half of the catalog, in the order the deployment ranks its
+    /// tiers — which is the order the model must preserve.
+    static func products(_ ids: [String] = catalog) -> [AppleCatalogProduct] {
+        ids.enumerated().map { index, id in
+            AppleCatalogProduct(productId: id, planId: index == 0 ? "plus" : "pro",
+                                planName: index == 0 ? "Plus" : "Pro",
+                                cycle: index == 0 ? "monthly" : "yearly",
+                                sortOrder: Int64(10 * (index + 1)))
+        }
+    }
+
+    static func serverCatalog(_ ids: [String] = catalog,
+                              allowed: Bool = true,
+                              blockedBy: String = "",
+                              bundleId: String = bundleID,
+                              products: [AppleCatalogProduct]? = nil) -> AppleProductCatalog {
+        AppleProductCatalog(bundleId: bundleId, products: products ?? Self.products(ids),
+                            purchase: AppleCatalogPurchase(allowed: allowed,
+                                                           blockedBy: blockedBy))
+    }
     static let accountToken = UUID(uuidString: "3F2504E0-4F89-41D3-9A0C-0305E82C3301")!
     static let jws = "eyJhbGciOiJFUzI1NiJ9.eyJ0eCI6IjEifQ.SIG-not-touched_-~"
     static let delivery = SignedStoreTransaction(
@@ -218,6 +258,7 @@ private enum Fixture {
         .billing(.server(status: 500)),
         .billing(.verifierUnavailable),      // 503 — today's shipping default
         .billing(.server(status: 503)),
+        .billing(.unknownBundle),            // 400 unknown_bundle — the wrong build
         .unexpected(type: "StoreFailure"),   // anything this layer has no case for
     ]
 }
@@ -256,14 +297,13 @@ final class AppleSubscriptionModelTests: XCTestCase {
         func set(_ new: String?) { lock.lock(); value = new; lock.unlock() }
     }
 
-    private func makeRig(catalog: [String] = Fixture.catalog,
-                         bearer: String? = "rlm_app_T") -> Rig {
+    private func makeRig(bearer: String? = "rlm_app_T") -> Rig {
         let journal = PurchaseJournal()
         let store = FakeStore(journal: journal)
         let billing = FakeBilling(journal: journal, accountToken: Fixture.accountToken)
         let box = BearerBox(bearer)
         let model = AppleSubscriptionModel(
-            store: store, billing: billing, catalog: catalog,
+            store: store, billing: billing, bundleID: Fixture.bundleID,
             bearer: { box.current },
             refreshAccount: { journal.record("refresh") })
         return Rig(model: model, store: store, billing: billing, journal: journal, bearer: box)
@@ -271,10 +311,17 @@ final class AppleSubscriptionModelTests: XCTestCase {
 
     /// A rig whose offers are already loaded, which is the precondition every
     /// purchase has.
+    ///
+    /// The load ALWAYS runs signed in, and `bearer` is applied afterwards. The
+    /// catalog read is authenticated now, so a rig built signed out could never
+    /// have offers at all — and the signed-out cases below are about a session
+    /// that ended after the screen was drawn, which is the sequence that
+    /// actually happens.
     private func makeReadyRig(bearer: String? = "rlm_app_T") async -> Rig {
-        let rig = makeRig(bearer: bearer)
+        let rig = makeRig()
         rig.store.setOffers(.success(Fixture.offers(Fixture.catalog)))
         await rig.model.loadOffers()
+        rig.bearer.set(bearer)
         rig.store.setPurchase(.success(.delivered(Fixture.delivery)))
         rig.billing.setSubmissions([.success(Fixture.entitlement)])
         return rig
@@ -299,18 +346,21 @@ final class AppleSubscriptionModelTests: XCTestCase {
 
     // MARK: - the successful purchase, in order
 
-    /// The whole ordering claim in one test: attribute, buy, SUBMIT, then finish,
-    /// then reload the account from the server.
+    /// The whole ordering claim in one test: re-read the catalog, attribute,
+    /// buy, SUBMIT, then finish, then reload the account from the server.
     ///
-    /// `submit` before `finish` is the safety property. `refresh` after
-    /// acceptance is the authority property — what the user ends up seeing is
-    /// `/api/me`'s answer, not anything this model concluded.
+    /// The second `catalog` is the point-of-sale re-check — the sale proceeds
+    /// only because the fresh answer still carries the displayed offer. `submit`
+    /// before `finish` is the safety property. `refresh` after acceptance is
+    /// the authority property — what the user ends up seeing is `/api/me`'s
+    /// answer, not anything this model concluded.
     func testASuccessfulPurchaseSubmitsThenFinishesThenRefreshes() async {
         let rig = await makeReadyRig()
         await rig.model.purchase(productID: Fixture.catalog[0])
 
         XCTAssertEqual(rig.journal.all,
-                       ["offers", "accountToken", "purchase", "submit", "finish", "refresh"])
+                       ["catalog", "offers", "catalog", "accountToken", "purchase",
+                        "submit", "finish", "refresh"])
         XCTAssertEqual(rig.model.state, .completed(Fixture.entitlement))
         XCTAssertEqual(rig.store.finished, [Fixture.delivery.id])
     }
@@ -337,7 +387,7 @@ final class AppleSubscriptionModelTests: XCTestCase {
         rig.billing.setAccountToken(.failure(AppleBillingError.server(status: 500)))
         await rig.model.purchase(productID: Fixture.catalog[0])
 
-        XCTAssertEqual(rig.journal.all, ["offers", "accountToken"])
+        XCTAssertEqual(rig.journal.all, ["catalog", "offers", "catalog", "accountToken"])
         XCTAssertEqual(rig.model.state, .failed(.billing(.server(status: 500))))
         XCTAssertTrue(rig.store.finished.isEmpty)
     }
@@ -351,7 +401,7 @@ final class AppleSubscriptionModelTests: XCTestCase {
         rig.store.setPurchase(.success(.userCancelled))
         await rig.model.purchase(productID: Fixture.catalog[0])
 
-        XCTAssertEqual(rig.journal.all, ["offers", "accountToken", "purchase"])
+        XCTAssertEqual(rig.journal.all, ["catalog", "offers", "catalog", "accountToken", "purchase"])
         XCTAssertEqual(rig.model.state, .idle)
         XCTAssertTrue(rig.store.finished.isEmpty)
         XCTAssertEqual(rig.journal.count("refresh"), 0)
@@ -365,7 +415,7 @@ final class AppleSubscriptionModelTests: XCTestCase {
         rig.store.setPurchase(.success(.pending))
         await rig.model.purchase(productID: Fixture.catalog[0])
 
-        XCTAssertEqual(rig.journal.all, ["offers", "accountToken", "purchase"])
+        XCTAssertEqual(rig.journal.all, ["catalog", "offers", "catalog", "accountToken", "purchase"])
         XCTAssertEqual(rig.model.state, .deferred)
         XCTAssertTrue(rig.store.finished.isEmpty)
         XCTAssertEqual(rig.journal.count("refresh"), 0)
@@ -380,7 +430,7 @@ final class AppleSubscriptionModelTests: XCTestCase {
         let rig = await makeReadyRig(bearer: nil)
         await rig.model.purchase(productID: Fixture.catalog[0])
 
-        XCTAssertEqual(rig.journal.all, ["offers"], "a signed-out purchase reached a dependency")
+        XCTAssertEqual(rig.journal.all, ["catalog", "offers"], "a signed-out purchase reached a dependency")
         XCTAssertEqual(rig.model.state, .failed(.billing(.notSignedIn)))
     }
 
@@ -389,7 +439,7 @@ final class AppleSubscriptionModelTests: XCTestCase {
     func testAnEmptyBearerIsTreatedAsSignedOut() async {
         let rig = await makeReadyRig(bearer: "")
         await rig.model.purchase(productID: Fixture.catalog[0])
-        XCTAssertEqual(rig.journal.all, ["offers"])
+        XCTAssertEqual(rig.journal.all, ["catalog", "offers"])
         XCTAssertEqual(rig.model.state, .failed(.billing(.notSignedIn)))
     }
 
@@ -406,36 +456,72 @@ final class AppleSubscriptionModelTests: XCTestCase {
         rig.store.setOnPurchase { box.set(nil) }
         await rig.model.purchase(productID: Fixture.catalog[0])
 
-        XCTAssertEqual(rig.journal.all, ["offers", "accountToken", "purchase"])
+        XCTAssertEqual(rig.journal.all, ["catalog", "offers", "catalog", "accountToken", "purchase"])
         XCTAssertEqual(rig.model.state, .failed(.billing(.notSignedIn)))
         XCTAssertTrue(rig.store.finished.isEmpty)
     }
 
-    // MARK: - the empty catalog
+    // MARK: - the catalog is the server's
 
-    /// **The shipping state of this batch.** With no product identifiers the
-    /// feature is unavailable, and proving it is inert means proving that no
-    /// call reaches either dependency — not that a flag says so.
-    func testAnEmptyCatalogNeverTouchesTheStoreOrTheBillingService() async {
-        let rig = makeRig(catalog: [])
-        XCTAssertEqual(rig.model.state, .unavailable)
-        XCTAssertFalse(rig.model.hasCatalog)
+    /// **The identifiers come from the server, and the store is asked about
+    /// exactly those.** This is the property that replaced a compiled-in list:
+    /// a build cannot offer a product the deployment has no mapping for, because
+    /// it never learns such a product's identifier.
+    func testTheStoreIsAskedForExactlyWhatTheServerNamed() async {
+        let rig = makeRig()
+        rig.billing.setCatalog(.success(Fixture.serverCatalog(["only.one"])))
+        rig.store.setOffers(.success(Fixture.offers(["only.one"])))
 
         await rig.model.loadOffers()
-        await rig.model.purchase(productID: "com.relayium.plus.monthly")
-        await rig.model.restore()
-        rig.model.startObservingUpdates()
 
-        XCTAssertEqual(rig.journal.all, [],
-                       "an unavailable feature reached a dependency: \(rig.journal.all)")
-        XCTAssertEqual(rig.model.state, .unavailable)
-        XCTAssertTrue(rig.model.offers.isEmpty)
-        XCTAssertTrue(rig.store.finished.isEmpty)
+        XCTAssertEqual(rig.billing.catalogBundleIDs, [Fixture.bundleID])
+        XCTAssertEqual(rig.store.requestedIDs, [["only.one"]],
+                       "the store was asked about something the server did not name")
+        XCTAssertEqual(rig.model.offers.map(\.id), ["only.one"])
+        XCTAssertEqual(rig.model.state, .idle)
     }
 
-    /// A store that recognises none of the configured identifiers leaves the
-    /// user where an empty catalog does — nothing to buy — so it is reported the
-    /// same way rather than as an idle screen with no products on it.
+    /// The catalog read is authenticated with the credential held AT THE MOMENT
+    /// of the call — never a captured one.
+    func testTheCatalogIsReadWithTheSessionsCurrentBearer() async {
+        let rig = makeRig()
+        await rig.model.loadOffers()
+        XCTAssertEqual(rig.billing.catalogBearers, ["rlm_app_T"])
+    }
+
+    /// Signed out, nothing is asked of either dependency: the catalog answer is
+    /// per-account, so there is no useful one to fetch, and a 401 in front of
+    /// somebody who has simply not signed in yet is not an answer.
+    func testASignedOutLoadTouchesNeitherDependency() async {
+        let rig = makeRig(bearer: nil)
+        await rig.model.loadOffers()
+
+        XCTAssertEqual(rig.journal.all, [], "a signed-out load reached a dependency")
+        XCTAssertEqual(rig.model.state, .failed(.billing(.notSignedIn)))
+        XCTAssertTrue(rig.model.offers.isEmpty)
+        XCTAssertNil(rig.model.eligibility)
+    }
+
+    /// A configured deployment with no live mapping for this build. Nothing went
+    /// wrong, so it is not a failure — and the store is never asked, because
+    /// there is nothing to ask it about.
+    func testAnEmptyServerCatalogIsUnavailableAndNeverReachesTheStore() async {
+        let rig = makeRig()
+        rig.billing.setCatalog(.success(Fixture.serverCatalog([])))
+
+        await rig.model.loadOffers()
+
+        XCTAssertEqual(rig.journal.all, ["catalog"], "the store was asked about nothing")
+        XCTAssertEqual(rig.model.state, .unavailable)
+        XCTAssertTrue(rig.model.offers.isEmpty)
+        // The eligibility answer still lands: "you cannot buy here because your
+        // subscription is managed elsewhere" is owed even with nothing on sale.
+        XCTAssertEqual(rig.model.eligibility?.allowed, true)
+    }
+
+    /// A store that recognises none of the server's identifiers leaves the user
+    /// where an empty catalog does — nothing to buy — so it is reported the same
+    /// way rather than as an idle screen with no products on it.
     func testAStoreThatKnowsNoneOfTheCatalogIsAlsoUnavailable() async {
         let rig = makeRig()
         rig.store.setOffers(.success([]))
@@ -444,25 +530,42 @@ final class AppleSubscriptionModelTests: XCTestCase {
         XCTAssertTrue(rig.model.offers.isEmpty)
     }
 
+    /// A product the SERVER named but the store does not know is dropped rather
+    /// than rendered. It is a mapping whose App Store Connect record does not
+    /// exist yet, or is not approved in this storefront; offering it would put a
+    /// purchase behind a sheet that cannot open.
+    func testAProductTheStoreDoesNotKnowIsDroppedAndTheRestSurvive() async {
+        let rig = makeRig()
+        rig.store.setOffers(.success(Fixture.offers([Fixture.catalog[1]])))
+
+        await rig.model.loadOffers()
+
+        XCTAssertEqual(rig.model.offers.map(\.id), [Fixture.catalog[1]])
+        XCTAssertEqual(rig.model.state, .idle)
+    }
+
+    /// The SERVER's order is what the surface reads down — the deployment's own
+    /// tier rank — regardless of the order the store answered in.
+    func testTheServersTierOrderSurvivesTheStoresOwnOrdering() async {
+        let rig = makeRig()
+        rig.store.setOffers(.success(Fixture.offers(Fixture.catalog.reversed())))
+
+        await rig.model.loadOffers()
+
+        XCTAssertEqual(rig.model.offers.map(\.id), Fixture.catalog)
+        XCTAssertEqual(rig.model.offers.map(\.product.planName), ["Plus", "Pro"])
+    }
+
     /// A product that was never offered cannot be priced or described, and a
     /// charge behind it would be for something this build has never seen.
     func testAProductThatWasNeverOfferedCannotBePurchased() async {
         let rig = await makeReadyRig()
         await rig.model.purchase(productID: "com.relayium.something.else")
-        XCTAssertEqual(rig.journal.all, ["offers"])
+        XCTAssertEqual(rig.journal.all, ["catalog", "offers"])
         XCTAssertEqual(rig.model.state, .unavailable)
     }
 
-    func testLoadOffersPublishesExactlyWhatTheStoreReturned() async {
-        let rig = makeRig()
-        rig.store.setOffers(.success(Fixture.offers([Fixture.catalog[0]])))
-        await rig.model.loadOffers()
-        XCTAssertEqual(rig.store.requestedIDs, [Fixture.catalog])
-        XCTAssertEqual(rig.model.offers.map(\.id), [Fixture.catalog[0]])
-        XCTAssertEqual(rig.model.state, .idle)
-    }
-
-    func testAFailedCatalogLoadClearsTheOffersRatherThanKeepingStaleOnes() async {
+    func testAFailedStoreLoadClearsTheOffersRatherThanKeepingStaleOnes() async {
         let rig = makeRig()
         rig.store.setOffers(.success(Fixture.offers(Fixture.catalog)))
         await rig.model.loadOffers()
@@ -471,6 +574,190 @@ final class AppleSubscriptionModelTests: XCTestCase {
         await rig.model.loadOffers()
         XCTAssertTrue(rig.model.offers.isEmpty)
         XCTAssertEqual(rig.model.state, .failed(.unexpected(type: "StoreFailure")))
+    }
+
+    /// **A failed catalog read clears the eligibility answer too.** A stale
+    /// "you may buy", left beside a failure that may itself BE the eligibility
+    /// answer going missing, is the one combination that could leave a live
+    /// purchase control on a screen whose state is unknown.
+    func testAFailedCatalogReadClearsEligibilityAsWellAsOffers() async {
+        let rig = makeRig()
+        await rig.model.loadOffers()
+        XCTAssertEqual(rig.model.eligibility?.allowed, true)
+
+        rig.billing.setCatalog(.failure(AppleBillingError.network))
+        await rig.model.loadOffers()
+
+        XCTAssertNil(rig.model.eligibility)
+        XCTAssertTrue(rig.model.offers.isEmpty)
+        XCTAssertEqual(rig.model.state, .failed(.billing(.network)))
+    }
+
+    /// The wrong BUILD talking to this deployment. It is not a statement about a
+    /// purchase, so it must not be reported as one.
+    func testAnUnknownBundleIsReportedAsItsOwnFailure() async {
+        let rig = makeRig()
+        rig.billing.setCatalog(.failure(AppleBillingError.unknownBundle))
+        await rig.model.loadOffers()
+        XCTAssertEqual(rig.model.state, .failed(.billing(.unknownBundle)))
+    }
+
+    // MARK: - eligibility is the server's answer, re-checked at the point of sale
+
+    /// **The server said no, and no purchase is started.** The screen was
+    /// rendered from a catalog read that may be minutes old; a Stripe
+    /// subscription begun in a browser since then is exactly the double-billing
+    /// this refuses. Nothing reaches the store, so nothing is charged.
+    func testAPurchaseTheServerBlockedNeverReachesTheStore() async {
+        let rig = makeRig()
+        rig.billing.setCatalog(.success(
+            Fixture.serverCatalog(allowed: false, blockedBy: "stripe")))
+        rig.store.setOffers(.success(Fixture.offers(Fixture.catalog)))
+        await rig.model.loadOffers()
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.journal.all, ["catalog", "offers"],
+                       "a blocked purchase reached a dependency: \(rig.journal.all)")
+        XCTAssertEqual(rig.model.state, .failed(.purchaseNotAllowed(blockedBy: "stripe")))
+        XCTAssertTrue(rig.store.finished.isEmpty)
+    }
+
+    /// **Unknown is not permission**, and the two halves are cleared together so
+    /// the state cannot be reached from the other direction either: a failed
+    /// catalog read drops the offers AND the eligibility answer, so there is
+    /// nothing to press and nothing that could be mistaken for a yes.
+    func testAFailedCatalogReadLeavesNothingPurchasable() async {
+        let rig = await makeReadyRig()
+        rig.billing.setCatalog(.failure(AppleBillingError.network))
+        await rig.model.loadOffers()
+        XCTAssertNil(rig.model.eligibility)
+        XCTAssertTrue(rig.model.offers.isEmpty)
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.model.state, .unavailable)
+        XCTAssertTrue(rig.store.appAccountTokens.isEmpty,
+                      "a purchase started with no eligibility answer")
+        XCTAssertTrue(rig.store.finished.isEmpty)
+    }
+
+    /// And the guard itself, exercised directly: offers present, eligibility
+    /// explicitly absent. Unreachable through `loadOffers` by construction —
+    /// which is the point — so it is staged here rather than assumed.
+    func testTheEligibilityGuardRefusesWhenTheAnswerIsAbsent() async {
+        let rig = makeRig()
+        rig.billing.setCatalog(.success(Fixture.serverCatalog(allowed: false, blockedBy: "")))
+        rig.store.setOffers(.success(Fixture.offers(Fixture.catalog)))
+        await rig.model.loadOffers()
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.model.state, .failed(.purchaseNotAllowed(blockedBy: "")))
+        XCTAssertTrue(rig.store.appAccountTokens.isEmpty)
+    }
+
+    /// A restore is deliberately NOT gated on eligibility. It submits what this
+    /// Apple ID already owns, and refusing to run one because a browser session
+    /// blocks a NEW purchase would strand a subscription already paid for.
+    func testARestoreRunsEvenWhenANewPurchaseIsBlocked() async {
+        let rig = makeRig()
+        rig.billing.setCatalog(.success(
+            Fixture.serverCatalog(allowed: false, blockedBy: "stripe")))
+        await rig.model.loadOffers()
+        rig.store.setEntitlements([Fixture.delivery])
+        rig.billing.setSubmissions([.success(Fixture.entitlement)])
+
+        await rig.model.restore()
+
+        XCTAssertEqual(rig.store.finished, [Fixture.delivery.id])
+        XCTAssertEqual(rig.model.state, .completed(Fixture.entitlement))
+    }
+
+    // MARK: - the sale is re-checked against a fresh catalog
+
+    /// **Allowed when the screen was drawn, blocked by the time of the click.**
+    /// A Stripe subscription started in a browser in between is exactly the
+    /// double-billing the point-of-sale re-read exists to refuse. Nothing
+    /// reaches the account token or the store, so nothing can be charged.
+    func testAPurchaseBlockedSinceTheScreenWasDrawnIsRefusedByTheFreshCatalog() async {
+        let rig = await makeReadyRig()
+        rig.billing.setCatalog(.success(
+            Fixture.serverCatalog(allowed: false, blockedBy: "stripe")))
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.journal.all, ["catalog", "offers", "catalog"],
+                       "a freshly blocked purchase went past the re-check")
+        XCTAssertEqual(rig.model.state, .failed(.purchaseNotAllowed(blockedBy: "stripe")))
+        XCTAssertTrue(rig.store.appAccountTokens.isEmpty)
+        XCTAssertTrue(rig.store.finished.isEmpty)
+    }
+
+    /// The selected product was retired between the screen and the click. What
+    /// remains on sale is not what the user agreed to, so nothing is bought —
+    /// a purchase of a retired row is exactly the one the server's intake would
+    /// refuse AFTER the money moved.
+    func testAProductRetiredSinceTheScreenWasDrawnIsNotPurchased() async {
+        let rig = await makeReadyRig()
+        rig.billing.setCatalog(.success(Fixture.serverCatalog([Fixture.catalog[1]])))
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.journal.all, ["catalog", "offers", "catalog"],
+                       "a retired selection went past the re-check")
+        XCTAssertEqual(rig.model.state, .failed(.selectionChanged))
+        XCTAssertTrue(rig.store.appAccountTokens.isEmpty)
+        XCTAssertTrue(rig.store.finished.isEmpty)
+    }
+
+    /// The identifier survived but the mapping behind it changed — a different
+    /// tier, name or cycle than the screen showed. The comparison is the WHOLE
+    /// displayed row, not the identifier: buying through it would charge for a
+    /// tier the user never saw beside the price they agreed to.
+    func testAProductWhoseMappingChangedIsNotPurchasedAsDisplayed() async {
+        let rig = await makeReadyRig()
+        var remapped = Fixture.products()
+        remapped[0].planId = "max"
+        remapped[0].planName = "Max"
+        rig.billing.setCatalog(.success(Fixture.serverCatalog(products: remapped)))
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.journal.all, ["catalog", "offers", "catalog"],
+                       "a remapped selection went past the re-check")
+        XCTAssertEqual(rig.model.state, .failed(.selectionChanged))
+        XCTAssertTrue(rig.store.appAccountTokens.isEmpty)
+        XCTAssertTrue(rig.store.finished.isEmpty)
+    }
+
+    /// The fresh answer names a different app than this build ships as. Whatever
+    /// that catalog sells — even if it carries the same product identifiers — it
+    /// is not what the screen offered, and nothing is bought from it.
+    func testAFreshCatalogForTheWrongBundleStopsThePurchase() async {
+        let rig = await makeReadyRig()
+        rig.billing.setCatalog(.success(Fixture.serverCatalog(bundleId: "com.relayium.ios")))
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.journal.all, ["catalog", "offers", "catalog"],
+                       "a wrong-bundle answer went past the re-check")
+        XCTAssertEqual(rig.model.state, .failed(.selectionChanged))
+        XCTAssertTrue(rig.store.appAccountTokens.isEmpty)
+        XCTAssertTrue(rig.store.finished.isEmpty)
+    }
+
+    /// A failed point-of-sale re-read stops the purchase with the billing
+    /// failure itself — never optimistically proceeds on the stale screen.
+    func testAFailedFreshCatalogReadStopsThePurchase() async {
+        let rig = await makeReadyRig()
+        rig.billing.setCatalog(.failure(AppleBillingError.network))
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.journal.all, ["catalog", "offers", "catalog"])
+        XCTAssertEqual(rig.model.state, .failed(.billing(.network)))
+        XCTAssertTrue(rig.store.appAccountTokens.isEmpty)
     }
 
     // MARK: - no refusal ever finishes
@@ -511,7 +798,7 @@ final class AppleSubscriptionModelTests: XCTestCase {
             await rig.model.purchase(productID: Fixture.catalog[0])
 
             XCTAssertEqual(rig.journal.all,
-                           ["offers", "accountToken", "purchase", "submit"],
+                           ["catalog", "offers", "catalog", "accountToken", "purchase", "submit"],
                            "\(refusal) produced a finish or a refresh")
             XCTAssertTrue(rig.store.finished.isEmpty, "\(refusal) finished a transaction")
             guard case .failed = rig.model.state else {
@@ -677,7 +964,7 @@ final class AppleSubscriptionModelTests: XCTestCase {
         await rig.model.restore()
 
         XCTAssertEqual(rig.journal.all,
-                       ["offers", "synchronize", "currentEntitlements",
+                       ["catalog", "offers", "synchronize", "currentEntitlements",
                         "submit", "finish", "submit", "finish", "refresh"])
         XCTAssertEqual(rig.store.finished, [Fixture.delivery.id, second.id])
         XCTAssertEqual(rig.billing.submittedJWS, [Fixture.jws, "j2"])
@@ -730,7 +1017,7 @@ final class AppleSubscriptionModelTests: XCTestCase {
         rig.store.setEntitlements([Fixture.delivery])
         await rig.model.restore()
 
-        XCTAssertEqual(rig.journal.all, ["offers"])
+        XCTAssertEqual(rig.journal.all, ["catalog", "offers"])
         XCTAssertEqual(rig.model.state, .failed(.billing(.notSignedIn)))
     }
 
@@ -740,7 +1027,7 @@ final class AppleSubscriptionModelTests: XCTestCase {
         rig.store.setEntitlements([Fixture.delivery])
         await rig.model.restore()
 
-        XCTAssertEqual(rig.journal.all, ["offers", "synchronize"])
+        XCTAssertEqual(rig.journal.all, ["catalog", "offers", "synchronize"])
         XCTAssertEqual(rig.model.state, .failed(.unexpected(type: "StoreFailure")))
         XCTAssertTrue(rig.store.finished.isEmpty)
     }

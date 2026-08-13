@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- The Mac App Store build's entitlements.
+
+     It is the direct download's file with ONE key removed, and the removal is
+     the reason this file exists at all:
+
+       com.apple.security.temporary-exception.mach-lookup.global-name
+         $(PRODUCT_BUNDLE_IDENTIFIER)-spks
+         $(PRODUCT_BUNDLE_IDENTIFIER)-spki
+
+     Those two Mach service names are Sparkle's channel to its out-of-sandbox
+     installer. A temporary exception is exactly what its name says — a hole in
+     the sandbox — and App Store review does not grant one for a second update
+     mechanism, because the App Store IS this build's update mechanism. The
+     `RelayiumAppStore` target does not link Sparkle, does not compile the pane
+     that drives it, and therefore must not claim the exception its absence makes
+     pointless. `StoreKitLinkageTests` checks both halves: no Sparkle in the
+     target's link list, and no exception in this file.
+
+     The Info.plist beside it drops Sparkle's three keys (`SUFeedURL`,
+     `SUPublicEDKey`, `SUEnableInstallerLauncherService`) for the same reason: a
+     feed URL is a promise to download and run code Apple did not review.
+
+     Everything else is IDENTICAL to the direct build's, deliberately. The
+     sandbox, the two network entitlements, the two file entitlements, the
+     associated domain, the keychain group and the App Group are what the product
+     needs to work, not what a distribution channel needs, and a Mac App Store
+     build that quietly did less would be a different product wearing the same
+     name. Each is argued in `Relayium/Relayium.entitlements`; the reasoning is
+     not repeated here, so there is one place to correct it.
+
+     Two of them are worth naming as App Store review surface rather than as
+     mechanism:
+
+       - `network.server` is what makes WebRTC work under the sandbox at all.
+         ICE binds UDP sockets and must receive the peer's connectivity checks,
+         which arrive unsolicited; without it every transfer falls back to a
+         relay. It is a normal sandbox entitlement, not an exception.
+       - `com.apple.security.application-groups` is the Share extension's
+         hand-off container, and the extension embedded in THIS build
+         (`RelayiumShareAppStore`) claims the same identifier. Its value must
+         stay byte-identical to `AppGroup.macOSIdentifier`; a mismatch is the
+         failure that looks like everything working, where the sheet stages a
+         draft into one container and the app lists an empty one. -->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.network.server</key>
+	<true/>
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+	<key>com.apple.security.files.downloads.read-write</key>
+	<true/>
+	<key>com.apple.developer.associated-domains</key>
+	<array>
+		<string>applinks:relayium.com</string>
+	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.relayium.shared</string>
+	</array>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>7PVYUG4YQS.com.relayium.shared</string>
+	</array>
+</dict>
+</plist>

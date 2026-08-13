@@ -22,6 +22,25 @@ public enum AppleSubscriptionFailure: Equatable {
     /// message is not ours to show, and its associated values can name a
     /// product, an account or a receipt.
     case unexpected(type: String)
+    /// The server says this account may not start an App Store purchase, because
+    /// something else already pays for its entitlement.
+    ///
+    /// Not a `billing` case, because nothing was refused — the refusal happened
+    /// here, before any request, from an answer the catalog read already
+    /// carried. `blockedBy` is the server's own vocabulary (`"stripe"`,
+    /// `"admin"`, `"multiple"`), and `""` means the eligibility answer is
+    /// unknown, which is treated as "no" rather than as "yes".
+    case purchaseNotAllowed(blockedBy: String)
+    /// The offer on screen no longer matches the server's catalog. Found by the
+    /// fresh read every purchase makes immediately before the sale: the product
+    /// was retired, the mapping behind its identifier changed, or the server
+    /// answered for a different app entirely.
+    ///
+    /// Truthful about both halves: nothing was charged — no account token was
+    /// fetched and the store was never asked — and nothing on screen can be
+    /// retried as-is, because what the screen shows is no longer what the
+    /// server sells. The repair is to reload the offers.
+    case selectionChanged
 }
 
 /// What Relayium's server made of one submitted transaction.
@@ -78,11 +97,38 @@ public enum AppleSubmission: Equatable {
     }
 }
 
-/// What the purchase surface would be showing, if there were one.
+/// One thing the purchase surface can offer: the server's half and the store's
+/// half of the same product, joined.
+///
+/// **Neither half is sufficient and neither may be substituted for the other.**
+/// Which Relayium tier a product grants, and what that tier is called, is the
+/// server's answer — a device that decided it could grant itself anything. What
+/// it costs, in the currency and formatting of the storefront the user is
+/// actually in, is Apple's answer, and re-deriving it here would put a price on
+/// screen that Apple never agreed to.
+public struct AppleSubscriptionOffer: Equatable, Identifiable, Sendable {
+    /// The server's row: plan id, plan name, billing cycle, tier rank.
+    public let product: AppleCatalogProduct
+    /// The store's own localized product: display name, description, price.
+    public let store: SubscriptionOffer
+
+    /// The App Store product identifier, which both halves agree on — it is
+    /// what the catalog was asked for and what the store answered about.
+    public var id: String { product.productId }
+
+    public init(product: AppleCatalogProduct, store: SubscriptionOffer) {
+        self.product = product
+        self.store = store
+    }
+}
+
+/// What the purchase surface is showing.
 public enum AppleSubscriptionState: Equatable {
-    /// This build has nothing to sell: no product identifiers configured, or a
-    /// store that recognised none of them. The resting state of this batch, and
-    /// the state in which no store and no billing call is ever made.
+    /// This build has nothing to sell: the server's catalog holds no live
+    /// mapping for this bundle, or the store recognised none of the identifiers
+    /// it does hold. Distinct from a failure — nothing went wrong, there is
+    /// simply nothing on sale — and the state in which no purchase call is
+    /// possible.
     case unavailable
     case idle
     case loadingOffers
@@ -142,15 +188,23 @@ public enum AppleSubscriptionState: Equatable {
 /// See ``refreshAfterAcceptance()``, which is where that asymmetry is argued.
 @MainActor
 public final class AppleSubscriptionModel: ObservableObject {
-    @Published public private(set) var state: AppleSubscriptionState
-    /// What the store said is for sale. Empty until `loadOffers()`, and empty
-    /// forever in a build with no catalog.
-    @Published public private(set) var offers: [SubscriptionOffer] = []
+    @Published public private(set) var state: AppleSubscriptionState = .idle
+    /// What may be offered: the server's live catalog joined to what the store
+    /// actually knows about, in the order the deployment ranks its tiers. Empty
+    /// until `loadOffers()` succeeds.
+    @Published public private(set) var offers: [AppleSubscriptionOffer] = []
+    /// Whether this account may start a purchase at all, as the SERVER decided.
+    /// `nil` until a catalog has been read: unknown is not permission, and every
+    /// purchase path re-checks it rather than trusting an optimistic default.
+    @Published public private(set) var eligibility: AppleCatalogPurchase?
 
-    /// The product identifiers this build may sell. **Empty in this batch**, and
-    /// that is what makes the whole feature inert: with no catalog, nothing here
-    /// reaches the store or the billing service at all.
-    private let catalog: [String]
+    /// The bundle identity this build ships as, sent with every catalog read.
+    ///
+    /// It replaces the compiled-in product list this type used to take. That is
+    /// the whole point: product identifiers are the server's to state, and a
+    /// binary carrying its own could be shipped pointing at a product no row
+    /// maps — a failure that lands after the customer has been charged.
+    private let bundleID: String
     private let store: SubscriptionStore
     private let billing: AppleBillingService
     /// The session's bearer, read at the moment of use. Never cached: a token
@@ -166,18 +220,14 @@ public final class AppleSubscriptionModel: ObservableObject {
 
     public init(store: SubscriptionStore,
                 billing: AppleBillingService,
-                catalog: [String],
+                bundleID: String,
                 bearer: @escaping @MainActor () -> String?,
                 refreshAccount: @escaping @MainActor () async -> Void) {
         self.store = store
         self.billing = billing
-        self.catalog = catalog
+        self.bundleID = bundleID
         self.bearer = bearer
         self.refreshAccount = refreshAccount
-        // Stated at construction rather than discovered on first use: a surface
-        // that asked "can I sell?" before loading anything would otherwise get
-        // `.idle` from a build that can never sell.
-        self.state = catalog.isEmpty ? .unavailable : .idle
     }
 
     deinit {
@@ -187,61 +237,129 @@ public final class AppleSubscriptionModel: ObservableObject {
         updateTask?.cancel()
     }
 
-    /// Whether this build has any product identifiers at all. False in this
-    /// batch, so every caller of it is looking at an unreachable feature.
-    public nonisolated var hasCatalog: Bool { !catalog.isEmpty }
+    /// Whether anything is currently on sale. False before the first successful
+    /// load, and false in a deployment whose catalog holds no live mapping for
+    /// this bundle.
+    public var hasOffers: Bool { !offers.isEmpty }
 
     // MARK: - offers
 
-    /// Load what the store will sell, localized by the store.
+    /// Load what may be sold: the server's live catalog, then the store's own
+    /// localized products for exactly the identifiers it named.
     ///
-    /// With no catalog this touches NOTHING — not the store, not the billing
-    /// service — and reports `.unavailable`. That is the shipping path today,
-    /// and it is why this object can exist in a build with no StoreKit linked
-    /// at all.
+    /// **The order is not interchangeable.** The catalog decides which
+    /// identifiers exist; the store is asked about those and nothing else. A
+    /// store queried first would have to be asked about a hard-coded list, which
+    /// is the arrangement this method exists to remove.
+    ///
+    /// Signed out it asks nothing of either. The catalog read is authenticated —
+    /// it reports what THIS account may buy — so there is no useful answer to
+    /// fetch without a credential, and fetching one anyway would put a 401 in
+    /// front of somebody who is simply not signed in yet.
     public func loadOffers() async {
-        guard !catalog.isEmpty else {
+        // The generation is claimed BEFORE the signed-out arm, not after it. A
+        // load that starts while another is in flight has to supersede it either
+        // way: without this, a signed-out load would write `.failed` and let the
+        // older in-flight one paint offers over it afterwards.
+        let g = begin()
+        guard currentBearer() != nil else {
             offers = []
-            state = .unavailable
+            eligibility = nil
+            state = .failed(.billing(.notSignedIn))
             return
         }
-        let g = begin()
         state = .loadingOffers
         do {
-            let loaded = try await store.offers(for: catalog)
+            // Re-read at the moment of use, like every other call here: a load
+            // can be started and the session ended before it runs.
+            guard let token = currentBearer() else {
+                guard !superseded(g) else { return }
+                offers = []
+                eligibility = nil
+                state = .failed(.billing(.notSignedIn))
+                return
+            }
+            let catalog = try await billing.appleCatalog(bundleID: bundleID, token: token)
             guard !superseded(g) else { return }
-            offers = loaded
-            // A store that recognised none of the configured identifiers leaves
+            // Published even when there is nothing to sell: "you cannot buy here
+            // because your subscription is managed elsewhere" is the answer a
+            // deployment with an empty catalog still owes the user.
+            eligibility = catalog.purchase
+            guard !catalog.products.isEmpty else {
+                offers = []
+                state = .unavailable
+                return
+            }
+            let loaded = try await store.offers(for: catalog.products.map(\.productId))
+            guard !superseded(g) else { return }
+            offers = Self.join(catalog: catalog.products, store: loaded)
+            // A store that recognised none of the server's identifiers leaves
             // the user in the same place an empty catalog does — nothing to buy
             // — so it is reported the same way rather than as an idle screen
             // with no products on it.
-            state = loaded.isEmpty ? .unavailable : .idle
+            state = offers.isEmpty ? .unavailable : .idle
         } catch {
             guard !superseded(g) else { return }
             offers = []
+            // Deliberately cleared. A stale "you may buy" left over from an
+            // earlier load, beside a failure that may itself BE the eligibility
+            // answer going missing, is the one combination that could put a live
+            // purchase control on a screen whose state is unknown.
+            eligibility = nil
             state = .failed(Self.failure(for: error))
+        }
+    }
+
+    /// Pair each catalog row with the store's product of the same identifier,
+    /// **keeping the server's order** and dropping anything the store did not
+    /// answer for.
+    ///
+    /// Dropping is the correct handling of a missing product and not a
+    /// degradation: an identifier the store does not know cannot be priced,
+    /// cannot be described, and cannot be purchased — it is a row whose App
+    /// Store Connect record does not exist yet, or is not yet approved in this
+    /// storefront. Rendering it would offer a purchase that fails at the sheet.
+    ///
+    /// The store's own ordering is discarded on purpose. It answers in whatever
+    /// order it likes, while the server's order is the deployment's declared
+    /// tier rank — the one a purchase screen should read down.
+    private static func join(catalog: [AppleCatalogProduct],
+                             store offers: [SubscriptionOffer]) -> [AppleSubscriptionOffer] {
+        var byID: [String: SubscriptionOffer] = [:]
+        for offer in offers { byID[offer.id] = offer }
+        return catalog.compactMap { product in
+            byID[product.productId].map { AppleSubscriptionOffer(product: product, store: $0) }
         }
     }
 
     // MARK: - buying
 
-    /// Buy one of the loaded offers.
+    /// Buy one of the loaded offers — the EXACT offer the screen displayed,
+    /// re-verified against a fresh catalog immediately before the sale.
     ///
-    /// The order of the guards is the security-relevant part. The account token
-    /// is fetched BEFORE the store is asked to charge anybody, so a signed-out
-    /// user, an expired session or a server that cannot mint a token all end
-    /// with no purchase sheet and no money moved. A purchase started first and
-    /// attributed afterwards would be a payment with nowhere to land.
+    /// The order of the guards is the security-relevant part. The catalog is
+    /// re-read and the selection re-checked against it BEFORE the account token
+    /// is fetched, and the token BEFORE the store is asked to charge anybody —
+    /// so a selection the server no longer sells, a freshly blocked account, a
+    /// signed-out user and a server that cannot mint a token all end with no
+    /// purchase sheet and no money moved. A purchase started first and
+    /// justified afterwards would be a payment with nowhere to land.
     public func purchase(productID: String) async {
-        guard !catalog.isEmpty else {
+        // Only something BOTH the server's catalog and the store answered for.
+        // An identifier that was never loaded cannot be priced, cannot be
+        // described, and would put a charge behind a product no row maps. The
+        // whole displayed offer is kept, not just the identifier: it is what
+        // the fresh catalog below is compared against, field for field.
+        guard let selected = offers.first(where: { $0.id == productID }) else {
             state = .unavailable
             return
         }
-        // Only something the store actually offered. An identifier that was
-        // never loaded cannot be priced, cannot be described, and would put a
-        // charge behind a product this build has never seen.
-        guard offers.contains(where: { $0.id == productID }) else {
-            state = .unavailable
+        // The DISPLAYED eligibility answer, as a pre-flight: a screen already
+        // known to be blocked is refused without a request. Unknown (nil) is
+        // not permission — a failed load clears it. The authoritative re-check
+        // is the fresh read below.
+        guard eligibility?.allowed == true else {
+            state = .failed(.purchaseNotAllowed(blockedBy: eligibility?.blockedBy ?? ""))
             return
         }
         guard let token = currentBearer() else {
@@ -252,6 +370,40 @@ public final class AppleSubscriptionModel: ObservableObject {
         }
         let g = begin()
         state = .purchasing(productID: productID)
+
+        // The catalog, fresh from the server, immediately before anything can
+        // be charged. The screen was rendered from a read that may be minutes
+        // old, and every fact on it can have changed since: a Stripe
+        // subscription started in a browser is exactly the double-billing the
+        // eligibility re-check refuses, and a retired or remapped row is a
+        // purchase the intake would refuse AFTER the money moved.
+        let fresh: AppleProductCatalog
+        do {
+            fresh = try await billing.appleCatalog(bundleID: bundleID, token: token)
+        } catch {
+            guard !superseded(g) else { return }
+            state = .failed(Self.failure(for: error))
+            return
+        }
+        guard !superseded(g) else { return }
+        guard fresh.bundleId == bundleID else {
+            // The server resolved a different app identity than this build
+            // ships as. Whatever it is selling, it is not what the screen
+            // offered.
+            state = .failed(.selectionChanged)
+            return
+        }
+        guard fresh.purchase.allowed else {
+            state = .failed(.purchaseNotAllowed(blockedBy: fresh.purchase.blockedBy))
+            return
+        }
+        // The EXACT displayed row must still be in the catalog — every field,
+        // not just the identifier. A product whose plan mapping changed would
+        // charge for a tier the user never saw beside the price they agreed to.
+        guard fresh.products.contains(selected.product) else {
+            state = .failed(.selectionChanged)
+            return
+        }
 
         let appAccountToken: UUID
         do {
@@ -308,11 +460,12 @@ public final class AppleSubscriptionModel: ObservableObject {
     /// the path a user reaches for when something already went wrong, so it is
     /// the last place that should be allowed to finish a transaction the server
     /// has not taken.
+    /// Deliberately NOT gated on the catalog or on eligibility. A restore
+    /// submits what this Apple ID already owns; refusing to run one because
+    /// nothing is currently on sale — or because a Stripe subscription blocks a
+    /// NEW purchase — would strand a subscription the user has already paid for
+    /// behind a product whose row was retired or a browser session they opened.
     public func restore() async {
-        guard !catalog.isEmpty else {
-            state = .unavailable
-            return
-        }
         guard currentBearer() != nil else {
             // Deliberately before `synchronize()`: that call can prompt for App
             // Store credentials, and prompting for them in order to do nothing
@@ -375,11 +528,16 @@ public final class AppleSubscriptionModel: ObservableObject {
 
     /// Start draining the store's update stream.
     ///
-    /// Idempotent, and a no-op without a catalog: a build that sells nothing has
-    /// no reason to hold a subscription to the store's renewals, and this is the
-    /// half of the inertness claim that a source scan cannot make.
+    /// Idempotent, and deliberately NOT gated on a loaded catalog.
+    ///
+    /// The drain is what receives a renewal, a refund, an Ask-to-Buy approval
+    /// and — the case that matters — a redelivery of a purchase an earlier
+    /// submission never got accepted. Every one of those can arrive before any
+    /// screen has asked for a catalog, and a purchase interrupted by a crash
+    /// arrives at the NEXT launch. Gating it on offers would mean the app only
+    /// hears about the transaction it has already been told about.
     public func startObservingUpdates() {
-        guard updateTask == nil, !catalog.isEmpty else { return }
+        guard updateTask == nil else { return }
         let stream = store.updates()
         updateTask = Task { [weak self] in
             for await delivery in stream {

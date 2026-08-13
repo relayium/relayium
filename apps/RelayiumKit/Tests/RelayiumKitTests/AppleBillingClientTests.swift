@@ -276,6 +276,136 @@ final class AppleBillingClientTests: XCTestCase {
         }
     }
 
+    // MARK: - the catalog
+
+    private static let catalogBody = """
+    {"bundleId":"com.relayium.mac",
+     "products":[{"productId":"com.relayium.mac.plus.monthly","planId":"plus",
+                  "planName":"Plus","cycle":"monthly","sortOrder":10}],
+     "purchase":{"allowed":true,"blockedBy":""}}
+    """
+
+    /// GET, bearer in the header, and the bundle identity as the ONE query
+    /// parameter. It is the only thing this request asserts, and the server
+    /// compares it against its own configured app list — so it can narrow the
+    /// answer and never widen it.
+    func testTheCatalogIsReadWithABearerAndExactlyOneBundleParameter() async throws {
+        StubURLProtocol.stub = .init(
+            status: 200,
+            body: Data(Self.catalogBody.utf8),
+            check: { req in
+                XCTAssertEqual(req.url?.path, "/api/billing/apple/catalog")
+                XCTAssertEqual(req.httpMethod, "GET")
+                XCTAssertEqual(req.value(forHTTPHeaderField: "Authorization"), "Bearer rlm_app_T")
+                let items = URLComponents(url: req.url!, resolvingAgainstBaseURL: false)?
+                    .queryItems ?? []
+                XCTAssertEqual(items.map(\.name), ["bundleId"],
+                               "the request carries something other than the bundle identity")
+                XCTAssertEqual(items.first?.value, "com.relayium.mac")
+                // The layer above re-reads this catalog immediately before a
+                // sale to catch a row that changed since the screen was drawn;
+                // a cached answer would defeat that read entirely.
+                XCTAssertEqual(req.cachePolicy, .reloadIgnoringLocalCacheData,
+                               "the catalog read may be answered by a URL cache")
+            })
+
+        let catalog = try await client().appleCatalog(bundleID: "com.relayium.mac",
+                                                      token: "rlm_app_T")
+
+        XCTAssertEqual(catalog.bundleId, "com.relayium.mac")
+        XCTAssertEqual(catalog.products.map(\.productId), ["com.relayium.mac.plus.monthly"])
+        XCTAssertEqual(catalog.products.first?.planName, "Plus")
+        XCTAssertEqual(catalog.products.first?.cycle, "monthly")
+        XCTAssertEqual(catalog.products.first?.sortOrder, 10)
+        XCTAssertEqual(catalog.purchase, AppleCatalogPurchase(allowed: true, blockedBy: ""))
+        XCTAssertTrue(StubURLProtocol.lastBodyBytes.isEmpty)
+    }
+
+    /// A bundle identifier carrying URL punctuation is ENCODED rather than
+    /// pasted. Unencoded, `&` would split it into a second parameter — which the
+    /// server refuses, but only because it counts them; the request should say
+    /// what this method meant regardless.
+    func testABundleIdentifierWithURLPunctuationIsEncodedNotSplit() async throws {
+        StubURLProtocol.stub = .init(status: 200, body: Data(Self.catalogBody.utf8))
+        _ = try? await client().appleCatalog(bundleID: "a&bundleId=b", token: "t")
+
+        let url = try XCTUnwrap(StubURLProtocol.observed.first?.url)
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        XCTAssertEqual(items.count, 1, "the identifier became a second parameter: \(url)")
+        XCTAssertEqual(items.first?.value, "a&bundleId=b")
+    }
+
+    func testTheCatalogRequestKeepsTheBearerOutOfTheURL() async throws {
+        StubURLProtocol.stub = .init(status: 200, body: Data(Self.catalogBody.utf8))
+        _ = try await client().appleCatalog(bundleID: "com.relayium.mac", token: "rlm_app_SECRET")
+        for request in StubURLProtocol.observed {
+            XCTAssertFalse(request.url?.absoluteString.contains("rlm_app_SECRET") ?? false,
+                           "the bearer reached a URL: \(String(describing: request.url))")
+        }
+    }
+
+    /// An empty product list is a real answer — a configured deployment with
+    /// nothing mapped for this build — and must decode rather than throw. The
+    /// refusal that means "this deployment can verify nothing" is a 503, and the
+    /// two lead to different screens.
+    func testAnEmptyCatalogDecodesAsAnAnswerRatherThanAFailure() async throws {
+        StubURLProtocol.stub = .init(status: 200, body: Data(#"""
+        {"bundleId":"com.relayium.mac","products":[],"purchase":{"allowed":true,"blockedBy":""}}
+        """#.utf8))
+        let catalog = try await client().appleCatalog(bundleID: "com.relayium.mac", token: "t")
+        XCTAssertTrue(catalog.products.isEmpty)
+        XCTAssertTrue(catalog.purchase.allowed)
+    }
+
+    /// A body this client cannot read is a failure, not an empty catalog. An
+    /// unreadable answer silently becoming "nothing on sale" would render a
+    /// working deployment as one with no products.
+    func testAnUnreadableCatalogBodyIsADecodingFailure() async {
+        for body in [#"{"bundleId":"com.relayium.mac"}"#,
+                     #"{"products":[],"purchase":{"allowed":true,"blockedBy":""}}"#,
+                     #"{"bundleId":"x","products":[],"purchase":{"allowed":true}}"#,
+                     "not json at all"] {
+            StubURLProtocol.stub = .init(status: 200, body: Data(body.utf8))
+            await XCTAssertThrowsErrorAsync(
+                try await self.client().appleCatalog(bundleID: "com.relayium.mac", token: "t")) {
+                XCTAssertEqual($0 as? AppleBillingError, .decoding, "body \(body)")
+            }
+        }
+    }
+
+    /// Every refusal, in the vocabulary the surface above switches on. The two
+    /// coded 400s are distinguished by their body, and a 400 carrying neither
+    /// code is neither of them.
+    func testTheCatalogMapsEveryRefusal() async {
+        let cases: [(Int, String, AppleBillingError)] = [
+            (400, #"{"error":"unknown_bundle"}"#, .unknownBundle),
+            (400, #"{"error":"invalid_request"}"#, .server(status: 400)),
+            (400, "", .server(status: 400)),
+            (401, "", .notSignedIn),
+            (429, "", .rateLimited),
+            (503, #"{"error":"verifier_unavailable"}"#, .verifierUnavailable),
+            (503, "", .server(status: 503)),
+            (500, "", .server(status: 500)),
+        ]
+        for (status, body, expected) in cases {
+            StubURLProtocol.stub = .init(status: status, body: Data(body.utf8))
+            await XCTAssertThrowsErrorAsync(
+                try await self.client().appleCatalog(bundleID: "com.relayium.mac", token: "t")) {
+                XCTAssertEqual($0 as? AppleBillingError, expected, "status \(status) body \(body)")
+            }
+        }
+    }
+
+    func testACatalogTransportFailureIsThisEndpointsOwnNetworkCase() async {
+        StubURLProtocol.stub = .init(status: 200, body: Data(),
+                                     failure: URLError(.notConnectedToInternet))
+        await XCTAssertThrowsErrorAsync(
+            try await self.client().appleCatalog(bundleID: "com.relayium.mac", token: "t")) {
+            XCTAssertEqual($0 as? AppleBillingError, .network)
+            XCTAssertNil($0 as? AccountError, "the shared account vocabulary leaked out")
+        }
+    }
+
     /// The concrete client is what the app injects behind the protocol; if the
     /// conformance ever moved, every seam above would silently be talking to
     /// something else.

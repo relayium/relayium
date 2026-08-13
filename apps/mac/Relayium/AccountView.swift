@@ -26,6 +26,13 @@ struct AccountView: View {
     /// user has selected another destination or closed the window. See
     /// `AccountSignOutCoordinator`.
     @EnvironmentObject private var signOut: AccountSignOutCoordinator
+    /// The app's one purchase model, or `nil` in a build that does not sell.
+    ///
+    /// An environment VALUE rather than an `@EnvironmentObject` because the
+    /// honest type is optional — see `AppleSubscriptionCard`. This view only
+    /// decides WHERE it goes; everything it does is the model's and everything
+    /// it says is `AppleSubscriptionPresentation`'s.
+    @Environment(\.appleSubscription) private var subscription
 
     /// The row a confirmation dialog is currently asking about. Held here rather
     /// than in the model: nothing has been asked of the server yet, so it is a
@@ -56,6 +63,19 @@ struct AccountView: View {
         VStack(alignment: .leading, spacing: 20) {
             profileCard
                 .frame(maxWidth: 720, alignment: .leading)
+            // Directly under the plan it changes, and only in a build that has
+            // a purchase model to render. In the direct download there is none,
+            // and the plan card above keeps the web hand-off it always had.
+            if let subscription {
+                AppleSubscriptionCard(
+                    model: subscription,
+                    accountID: user.id,
+                    currentPlanID: usage.plan.id,
+                    // The SERVER's answer to "who owns this entitlement", not
+                    // anything this screen inferred from a purchase.
+                    entitlementProvider: usage.plan.entitlementProvider ?? "")
+                    .frame(maxWidth: 720, alignment: .leading)
+            }
             devicesCard
             filesCard
             deleteAccountCard
@@ -219,6 +239,12 @@ struct AccountView: View {
         user.displayName.isEmpty ? user.email : user.displayName
     }
 
+    /// Whether this build may send a plan change to the website. See the call
+    /// site for why both terms are required.
+    private var showsWebPlanHandoff: Bool {
+        AppDistribution.channel.showsWebPlanHandoff && subscription == nil
+    }
+
     @ViewBuilder
     private var profileCard: some View {
         SectionCard(title: profileTitle) {
@@ -239,10 +265,22 @@ struct AccountView: View {
                         .background(.quaternary, in: Capsule())
                 }
                 Spacer()
-                // The Mac build is a direct download, so billing is compliant on
-                // the web. The app shows the tier read-only and hands off — to the
-                // plans page, which is where a change of plan is actually made.
-                Button(L10n.t(.accountManagePlan)) { NSWorkspace.shared.open(AppEnvironment.plansWebURL) }
+                // The direct download is billed on the web, so it shows the tier
+                // read-only and hands off to the plans page, which is where a
+                // change of plan is actually made.
+                //
+                // **The App Store build must not show this**, and the condition
+                // is deliberately doubled. `channel` is the compliance rule: an
+                // App Store app may not send a user to a website to buy what it
+                // sells, and that must hold even if the purchase model failed to
+                // build. `subscription == nil` is the coherence rule: a screen
+                // that offered both an in-app purchase and a web page to make
+                // the same change would be asking the user to choose a billing
+                // relationship they have no way to reason about. Either alone
+                // leaves one of the two wrong.
+                if showsWebPlanHandoff {
+                    Button(L10n.t(.accountManagePlan)) { NSWorkspace.shared.open(AppEnvironment.plansWebURL) }
+                }
             }
 
             meter(L10n.t(.accountTraffic), UsagePresentation.display(usage.traffic))

@@ -16,12 +16,93 @@ import Foundation
 /// the server's own reading of a signature it verified — nothing here derives an
 /// entitlement from anything the device knows.
 public protocol AppleBillingService {
+    /// What this build may sell, for the bundle identity it actually ships as.
+    ///
+    /// The catalog is the SERVER's, and asking for it is not a formality: an app
+    /// that carried its own product identifiers could be shipped pointing at a
+    /// product the server has no mapping for, and the failure would land after
+    /// the customer had been charged. A binary cannot be corrected; a row can.
+    func appleCatalog(bundleID: String, token: String) async throws -> AppleProductCatalog
     /// This account's stable App Store `appAccountToken`, minted on first ask.
     func appleAccountToken(token: String) async throws -> UUID
     /// Submit one signed App Store transaction, exactly as the store handed it
     /// over, and report what the server made of it.
     func submitAppleTransaction(signedTransactionInfo: String,
                                 token: String) async throws -> AppleTransactionResult
+}
+
+/// What `GET /api/billing/apple/catalog` answered with on a 200: the products
+/// this build may offer, and whether this account may buy one at all.
+///
+/// It mirrors `appleCatalogResponse` on the server field for field, and like
+/// that type it deliberately carries **no entitlement and no price**. What the
+/// caller currently holds is `/api/me`'s answer and stays there; what a product
+/// costs is Apple's answer for the caller's storefront and comes from the store.
+public struct AppleProductCatalog: Codable, Equatable, Sendable {
+    /// The bundle identity the SERVER resolved. Echoed from its own configured
+    /// allowlist rather than from the request, so it is never a value this
+    /// client typed being reflected back as an accepted app identity.
+    public var bundleId: String
+    /// Every product a purchase would currently resolve for, in the order the
+    /// deployment ranks its tiers. Empty means "nothing on sale for this app" —
+    /// a real answer, distinct from the refusal an unconfigured server gives.
+    public var products: [AppleCatalogProduct]
+    public var purchase: AppleCatalogPurchase
+
+    public init(bundleId: String, products: [AppleCatalogProduct], purchase: AppleCatalogPurchase) {
+        self.bundleId = bundleId
+        self.products = products
+        self.purchase = purchase
+    }
+}
+
+/// One purchasable App Store product, and what the plan behind it is called.
+public struct AppleCatalogProduct: Codable, Equatable, Sendable, Identifiable {
+    /// The App Store product identifier — what the store is asked to load, and
+    /// what a purchase is started by.
+    public var productId: String
+    public var planId: String
+    /// The tier's display name, as this deployment names it.
+    public var planName: String
+    /// `"monthly"` or `"yearly"`. A vocabulary, not copy: the layer that renders
+    /// it owns the words.
+    public var cycle: String
+    /// The tier's declared rank. Carried so a client can order tiers the way the
+    /// deployment orders them, and tell an upgrade from a downgrade, without a
+    /// second table of its own.
+    public var sortOrder: Int64
+
+    public var id: String { productId }
+
+    public init(productId: String, planId: String, planName: String,
+                cycle: String, sortOrder: Int64) {
+        self.productId = productId
+        self.planId = planId
+        self.planName = planName
+        self.cycle = cycle
+        self.sortOrder = sortOrder
+    }
+}
+
+/// Whether this account may start an App Store purchase right now.
+///
+/// The answer is the server's because the rule is: an account already paying
+/// through a provider the App Store cannot see must not be sold a second
+/// subscription. A client that guessed would guess wrong in the expensive
+/// direction.
+public struct AppleCatalogPurchase: Codable, Equatable, Sendable {
+    public var allowed: Bool
+    /// Who owns the live entitlement when `allowed` is false — `"stripe"` or
+    /// `"admin"`, the same vocabulary `/api/me`'s `entitlementProvider` uses.
+    /// `""` when allowed. Never `"apple"`: an existing App Store subscription is
+    /// exactly the case that stays purchasable, because changing tier inside the
+    /// subscription group is itself a purchase.
+    public var blockedBy: String
+
+    public init(allowed: Bool, blockedBy: String) {
+        self.allowed = allowed
+        self.blockedBy = blockedBy
+    }
 }
 
 /// What `POST /api/billing/apple/transaction` answered with on a 200.
@@ -94,6 +175,12 @@ public enum AppleBillingError: Error, Equatable {
     /// 503 `verifier_unavailable` — this deployment holds no Apple trust roots
     /// and can verify nothing. The shipping default today.
     case verifierUnavailable
+    /// 400 `unknown_bundle` — this server is not configured for the bundle
+    /// identity this build ships as. Kept apart from `invalidTransaction`
+    /// because it is not a statement about a purchase at all: it is the wrong
+    /// BUILD talking to this deployment, and no retry and no repurchase fixes
+    /// it. The app has nothing to sell and says so.
+    case unknownBundle
     /// Any other non-200, including a 400/403/409/503 whose body did not carry
     /// the documented code. "Unmapped" is not "harmless": an unrecognised
     /// refusal is the case where the least is known.
@@ -108,6 +195,70 @@ public enum AppleBillingError: Error, Equatable {
 }
 
 extension AccountClient: AppleBillingService {
+    /// `GET /api/billing/apple/catalog?bundleId=…`.
+    ///
+    /// **The bundle identity is a parameter and is the caller's own.** It is the
+    /// one thing this request asserts, and it can only ever NARROW the answer:
+    /// the server compares it against its own configured app list and refuses
+    /// anything else with `unknown_bundle`, so there is no value this method
+    /// could send that makes a deployment describe an app it is not configured
+    /// for. The response's `bundleId` is the server's copy, not this one.
+    ///
+    /// Built through `URLComponents` rather than by pasting a query string: a
+    /// bundle identifier is reverse-DNS today, and a value carrying `&` would
+    /// otherwise become a second parameter — which the server refuses, but only
+    /// because it counts them. Percent-encoding it here means the request says
+    /// what this method meant regardless.
+    ///
+    /// Nothing here logs, for the same reason nothing else in this file does:
+    /// the bearer is a credential, and it reaches only the `Authorization`
+    /// header.
+    public func appleCatalog(bundleID: String, token: String) async throws -> AppleProductCatalog {
+        var components = URLComponents(
+            url: baseURL.appendingPathComponent("api/billing/apple/catalog"),
+            resolvingAgainstBaseURL: false)
+        components?.queryItems = [URLQueryItem(name: "bundleId", value: bundleID)]
+        guard let url = components?.url else {
+            // A bundle identifier that cannot be put in a URL is not a request
+            // worth sending. Reported as a decoding failure rather than a
+            // network one: nothing left this device.
+            throw AppleBillingError.decoding
+        }
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        // The caller re-reads this catalog immediately before a sale precisely
+        // to catch a row that changed since the screen was drawn, so a cached
+        // answer would defeat the read's whole purpose: what comes back must be
+        // the server's CURRENT catalog, not whatever a URL cache still holds.
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (data, resp) = try await appleSend(req)
+        switch resp.statusCode {
+        case 200:
+            guard let catalog = try? JSONDecoder().decode(AppleProductCatalog.self, from: data) else {
+                throw AppleBillingError.decoding
+            }
+            return catalog
+        case 400:
+            // Two documented refusals share this status. `unknown_bundle` is the
+            // one a correct client can provoke; `invalid_request` means this
+            // method built a request the server would not read, which is a
+            // defect here rather than a fact about the deployment.
+            guard appleErrorCode(in: data) == "unknown_bundle" else {
+                throw AppleBillingError.server(status: 400)
+            }
+            throw AppleBillingError.unknownBundle
+        case 401: throw AppleBillingError.notSignedIn
+        case 429: throw AppleBillingError.rateLimited
+        case 503:
+            guard appleErrorCode(in: data) == "verifier_unavailable" else {
+                throw AppleBillingError.server(status: 503)
+            }
+            throw AppleBillingError.verifierUnavailable
+        default:  throw AppleBillingError.server(status: resp.statusCode)
+        }
+    }
+
     /// `POST /api/billing/apple/account-token`.
     ///
     /// POST rather than GET because the first call MINTS the token, and because

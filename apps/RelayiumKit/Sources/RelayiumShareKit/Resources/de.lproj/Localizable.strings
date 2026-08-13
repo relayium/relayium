@@ -739,3 +739,40 @@
 "help.account.step3" = "Prüfe die in deinem Konto angemeldeten Geräte und die gespeicherten Dateien und entferne beides bei Bedarf.";
 "help.account.question" = "Wofür braucht man ein Konto und wofür nicht?";
 "help.account.answer" = "Übertragungen im selben Netzwerk und das Beitreten zu einem fremden Code brauchen kein Konto. Einen Code erstellen, einen gespeicherten Link senden und das Gerätepostfach brauchen eines.";
+
+/* In-app subscription (Mac App Store build). The purchase surface the App Store
+   build renders instead of the direct build's link to the website. Prices are
+   never written here: the store's own localized price is substituted in. */
+
+"subscription.heading" = "Abonnement";
+"subscription.body" = "Auf diesem Mac wird dein Relayium-Tarif über den App Store abgerechnet. Die Zahlung übernimmt Apple; Relayium hält nur fest, welchen Tarif du hast.";
+"subscription.loading" = "Tarife werden geladen …";
+"subscription.none" = "Aus dieser App lässt sich derzeit nichts abonnieren.";
+"subscription.subscribe" = "Abonnieren";
+"subscription.current" = "Aktueller Tarif";
+"subscription.priceMonthly" = "%@ pro Monat";
+"subscription.priceYearly" = "%@ pro Jahr";
+"subscription.purchasing" = "Warten auf den App Store …";
+"subscription.submitting" = "Abonnement wird mit Relayium bestätigt …";
+"subscription.restoring" = "Frühere Käufe werden gesucht …";
+"subscription.restore" = "Käufe wiederherstellen";
+"subscription.nothingToRestore" = "Für diese Apple-ID gibt es kein Relayium-Abonnement zum Wiederherstellen.";
+"subscription.deferred" = "Dieser Kauf wartet auf Freigabe. Sobald er freigegeben ist, aktualisiert Relayium deinen Tarif.";
+"subscription.completed" = "Dein Abonnement ist aktiv. Der Tarif oben wurde aktualisiert.";
+"subscription.manage" = "Im App Store verwalten";
+"subscription.managedByApple" = "Dieses Abonnement wird von Apple abgerechnet. Ändern oder kündigen kannst du es im App Store.";
+"subscription.privacy" = "Datenschutzerklärung";
+"subscription.terms" = "Nutzungsbedingungen";
+"subscription.blockedByWeb" = "Dein Abonnement wird auf relayium.com verwaltet. Kündige es dort, bevor du hier abonnierst — sonst wird doppelt abgerechnet.";
+"subscription.blockedByAdmin" = "Dein Tarif wurde direkt von Relayium gewährt, hier gibt es also nichts zu kaufen.";
+"subscription.blockedByOther" = "Dein Abonnement wird außerhalb dieser App verwaltet.";
+"subscription.errorNotSignedIn" = "Melde dich bei deinem Relayium-Konto an, um zu abonnieren.";
+"subscription.errorNetwork" = "Relayium war nicht erreichbar. Nichts geht verloren — der App Store bietet diesen Kauf erneut an.";
+"subscription.errorBusy" = "Zu viele Versuche. Versuche es gleich noch einmal.";
+"subscription.errorNotAccepted" = "Relayium konnte diesen Kauf noch nicht annehmen. Nichts geht verloren — der App Store bietet ihn erneut an.";
+"subscription.errorOtherAccount" = "Dieser Kauf gehört zu einem anderen Relayium-Konto. Melde dich mit diesem Konto an, um ihn zu nutzen.";
+"subscription.errorAlreadyLinked" = "Dieses App-Store-Abonnement ist bereits mit einem anderen Relayium-Konto verknüpft.";
+"subscription.errorNotReady" = "Relayium kann App-Store-Käufe noch nicht bestätigen. Nichts geht verloren — der App Store bietet den Kauf erneut an.";
+"subscription.errorWrongBuild" = "Dieser Build von Relayium kann keine Abonnements verkaufen.";
+"subscription.errorServer" = "Relayium hat mit einem unerwarteten Fehler geantwortet (%@).";
+"subscription.errorStore" = "Der App Store konnte diese Anfrage nicht abschließen (%@).";

@@ -59,13 +59,16 @@ final class BundleVersionTests: XCTestCase {
                        file: file, line: line)
     }
 
-    /// macOS: the app and its Share extension.
+    /// macOS: two products, each with its Share extension.
     func testTheMacAppAndItsExtensionShipOneVersion() throws {
-        // Six: the app, Share extension and UI test bundle, each in Debug and
-        // Release. The extension must match the containing app; keeping the UI
-        // host aligned avoids a different version during release automation.
-        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.1.3", occurrences: 6)
-        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "5", occurrences: 6)
+        // Ten: five targets — the direct app and its Share extension, the App
+        // Store app and ITS Share extension, and the UI test bundle — each in
+        // Debug and Release. Every extension must match its containing app, and
+        // the two products must not drift apart either: they are the same
+        // release of the same app through two channels, and a user who installs
+        // one after the other must not see the version go backwards.
+        try assertOneVersion("mac", key: "MARKETING_VERSION", expected: "1.1.3", occurrences: 10)
+        try assertOneVersion("mac", key: "CURRENT_PROJECT_VERSION", expected: "5", occurrences: 10)
     }
 
     /// iOS: the app and its Share extension, both Debug and Release.

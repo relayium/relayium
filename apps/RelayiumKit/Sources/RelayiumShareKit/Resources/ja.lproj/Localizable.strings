@@ -728,3 +728,40 @@
 "help.account.step3" = "アカウントにサインインしているデバイスと、保存したファイルを確認し、どちらも削除できます。";
 "help.account.question" = "アカウントが必要なのはどの機能ですか？";
 "help.account.answer" = "同じネットワーク内での転送と、他の人が作ったコードへの参加にはアカウントは不要です。コードの作成、保存リンクの送信、デバイス受信箱には必要です。";
+
+/* In-app subscription (Mac App Store build). The purchase surface the App Store
+   build renders instead of the direct build's link to the website. Prices are
+   never written here: the store's own localized price is substituted in. */
+
+"subscription.heading" = "サブスクリプション";
+"subscription.body" = "この Mac では、Relayium のプランは App Store 経由で請求されます。支払いは Apple が処理し、Relayium はどのプランをご利用かを記録するだけです。";
+"subscription.loading" = "プランを読み込み中…";
+"subscription.none" = "現在、このアプリから購入できるプランはありません。";
+"subscription.subscribe" = "登録";
+"subscription.current" = "現在のプラン";
+"subscription.priceMonthly" = "%@／月";
+"subscription.priceYearly" = "%@／年";
+"subscription.purchasing" = "App Store の応答を待っています…";
+"subscription.submitting" = "Relayium でサブスクリプションを確認しています…";
+"subscription.restoring" = "以前の購入を探しています…";
+"subscription.restore" = "購入を復元";
+"subscription.nothingToRestore" = "この Apple ID には復元できる Relayium のサブスクリプションがありません。";
+"subscription.deferred" = "この購入は承認待ちです。承認され次第、Relayium がプランを更新します。";
+"subscription.completed" = "サブスクリプションが有効になりました。上のプランが更新されています。";
+"subscription.manage" = "App Store で管理";
+"subscription.managedByApple" = "このサブスクリプションは Apple が請求します。変更や解約は App Store で行ってください。";
+"subscription.privacy" = "プライバシーポリシー";
+"subscription.terms" = "利用規約";
+"subscription.blockedByWeb" = "サブスクリプションは relayium.com で管理されています。二重に請求されないよう、まずそちらで解約してから登録してください。";
+"subscription.blockedByAdmin" = "プランは Relayium から直接付与されているため、ここで購入するものはありません。";
+"subscription.blockedByOther" = "サブスクリプションはこのアプリの外で管理されています。";
+"subscription.errorNotSignedIn" = "登録するには Relayium アカウントにサインインしてください。";
+"subscription.errorNetwork" = "Relayium に接続できませんでした。購入は失われません — App Store が再度届けます。";
+"subscription.errorBusy" = "試行回数が多すぎます。しばらくしてからもう一度お試しください。";
+"subscription.errorNotAccepted" = "Relayium はまだこの購入を受け付けられません。購入は失われません — App Store が再度届けます。";
+"subscription.errorOtherAccount" = "この購入は別の Relayium アカウントのものです。そのアカウントでサインインしてください。";
+"subscription.errorAlreadyLinked" = "この App Store のサブスクリプションは、すでに別の Relayium アカウントに紐づいています。";
+"subscription.errorNotReady" = "Relayium はまだ App Store の購入を確認できません。購入は失われません — App Store が再度届けます。";
+"subscription.errorWrongBuild" = "このビルドの Relayium はサブスクリプションを販売できません。";
+"subscription.errorServer" = "Relayium が予期しないエラーを返しました（%@）。";
+"subscription.errorStore" = "App Store はこのリクエストを完了できませんでした（%@）。";

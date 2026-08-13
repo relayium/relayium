@@ -52,6 +52,51 @@ does and does not include.
 That covers macOS only. The iOS app and its share extension are engineering
 builds and are published nowhere.
 
+### Two macOS products, one source
+
+The project builds the same app for two distribution channels. They share every
+source file; what differs is decided by target membership, not by an `#if` in
+the shared code.
+
+| | `Relayium` (scheme `Relayium`) | `RelayiumAppStore` (scheme `RelayiumAppStore`) |
+| --- | --- | --- |
+| Channel | Developer ID + notarized DMG from relayium.com | Mac App Store |
+| Updates | Sparkle | the App Store |
+| Billing | the website (`/pricing`) | in-app purchase, StoreKit |
+| Links | `Sparkle` | `RelayiumStoreKit` |
+| `Info.plist` | `Relayium/Info.plist` (Sparkle keys) | `RelayiumAppStore/Info.plist` (no Sparkle keys) |
+| Entitlements | `Relayium/Relayium.entitlements` (Sparkle Mach-lookup exception) | `RelayiumAppStore/Relayium.entitlements` (no exception) |
+| Share extension | `RelayiumShare` (Developer ID) | `RelayiumShareAppStore` (Apple Distribution) |
+
+Both apps ship bundle id `com.relayium.mac` and both extensions ship
+`com.relayium.mac.Share`: they are one app through two channels, and an
+extension's bundle id has to be prefixed by its host's. Both also produce
+`Relayium.app`, so **build them into separate `-derivedDataPath` directories** —
+otherwise the second build replaces the first's artifact in
+`Build/Products/<config>/`.
+
+The seam is two files, each a member of exactly one target and both declaring
+the same four names, so `RelayiumApp.swift`, `Settings/SettingsView.swift` and
+`AccountView.swift` compile unchanged into either product:
+
+- `Relayium/Distribution/DirectDistribution.swift` — Sparkle's updater, the
+  "Check for Updates…" menu item, the Updates settings tab, and no purchase
+  model.
+- `Relayium/Distribution/AppStoreDistribution.swift` — the StoreKit-backed
+  purchase model, and no updater UI at all.
+
+`StoreKitLinkageTests` (in the package suite) reads the project file per target
+and both plists, so "the App Store build ships no Sparkle" and "the direct build
+sells nothing" are checked rather than remembered.
+
+The App Store target signs with `Apple Distribution` and needs a Mac App Store
+provisioning profile, which does not exist yet. Until it does, build it
+unsigned:
+
+    xcodebuild -project apps/mac/Relayium.xcodeproj -scheme RelayiumAppStore \
+      -destination 'generic/platform=macOS' -configuration Release \
+      -derivedDataPath /tmp/dd-mas CODE_SIGNING_ALLOWED=NO build
+
 It is sandboxed (`Relayium/Relayium.entitlements`: network client, user-selected
 files, Downloads). Note that `CODE_SIGNING_ALLOWED=NO` **skips entitlements** —
 a build with that flag runs unsandboxed, so use a plain `-configuration Debug`

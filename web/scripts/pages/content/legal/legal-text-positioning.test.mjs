@@ -37,8 +37,11 @@ describe("legal pages describe temporary text accurately", () => {
       const all = blob(privacy, lang);
       const account = sectionBlob(privacy, lang, 1);
       const relay = sectionBlob(privacy, lang, 4);
+      // Section 5 answers the app privacy manifest's Other Usage Data entry:
+      // byte counters kept per account for a quota, and not analytics.
+      const metering = sectionBlob(privacy, lang, 5);
 
-      expect(privacy.langs[lang].updated).toBe("2026-07-31");
+      expect(privacy.langs[lang].updated).toBe("2026-08-13");
       expect(all).toMatch(TEXT_WORD[lang]);
       expect(all).toMatch(ONLINE_WORD[lang]);
       expect(account).toMatch(/account|账号|アカウント|계정|Konto|compte|حساب|cuenta|conta/i);
@@ -46,6 +49,9 @@ describe("legal pages describe temporary text accurately", () => {
       expect(relay).toContain("TURN");
       expect(relay).toContain("CLI");
       expect(relay).toMatch(/byte|字节|バイト|바이트|octet|بايت/i);
+      expect(metering).toMatch(/byte|字节|バイト|바이트|octet|بايت/i);
+      expect(metering).toMatch(/quota|配额|クォータ|할당량|Kontingent|حصة|cuota|cota/i);
+      expect(metering).toMatch(/analytic|analítica|análise|analyse|分析|분석|تحليلات/i);
     });
 
     it(`terms.${lang} keeps live text separate from stored files`, () => {

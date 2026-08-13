@@ -231,6 +231,52 @@ enum UITestMode {
     @MainActor
     static func makeInboxController() -> InboxController? { UITestInbox.makeController() }
 
+    /// A launch that renders the App Store build's purchase surface.
+    ///
+    /// **Why it can be driven from the direct build at all.** The purchase
+    /// surface is one card, injected as an app-scoped model; whether a build HAS
+    /// one is decided by target membership (`AppDistribution`), and whether the
+    /// account screen shows the web hand-off is decided by that model's presence
+    /// as well as by the channel. So injecting a model here reaches exactly the
+    /// shared source the App Store target compiles — the card, the rows, the
+    /// copy layer, the orchestration and the real `AccountClient` — without a
+    /// second UI-test target, a signed App Store build, a sandbox Apple ID or a
+    /// product record in App Store Connect, none of which acceptance can have.
+    ///
+    /// What it does NOT prove, and is not claimed to: that the App Store target
+    /// links StoreKit and the direct one does not. That is a linkage fact, and
+    /// `StoreKitLinkageTests` reads the project file for it.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let subscriptionsArgument = "--relayium-ui-testing-subscriptions"
+    static let showsSubscriptions = ProcessInfo.processInfo.arguments
+        .contains(subscriptionsArgument)
+    /// Blocks the purchase, so the "managed on the web" refusal has a runtime.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let blockedSubscriptionArgument = "--relayium-ui-testing-subscription-blocked"
+    static let blocksSubscription = ProcessInfo.processInfo.arguments
+        .contains(blockedSubscriptionArgument)
+
+    /// The purchase model an acceptance launch renders, or nil for every other
+    /// launch — including every Release one, where this whole type is absent.
+    ///
+    /// The billing half is the REAL `AccountClient` over the in-process
+    /// transport, so the catalog request, its query parameter, its status
+    /// mapping and its decoding are all production code. Only the store is a
+    /// fake, because a real one needs a signed build and an App Store account.
+    @MainActor
+    static func makeSubscriptionModel(
+        bearer: @escaping @MainActor () -> String?,
+        refreshAccount: @escaping @MainActor () async -> Void
+    ) -> AppleSubscriptionModel? {
+        guard showsSubscriptions, let transport = makeAccountTransport() else { return nil }
+        return AppleSubscriptionModel(
+            store: UITestSubscriptionStore(),
+            billing: AppEnvironment.makeAppleBillingService(transport: transport),
+            bundleID: UITestAccountTransport.bundleID,
+            bearer: bearer,
+            refreshAccount: refreshAccount)
+    }
+
     @MainActor
     static func makeWaitingFileModel(verification: VerificationPreference) -> RealtimeSessionModel? {
         guard showsGeneratedFileCode else { return nil }
@@ -290,6 +336,12 @@ enum UITestMode {
     /// real keychain, defaults, journal directory and transport.
     @MainActor
     static func makeInboxController() -> InboxController? { nil }
+    static let showsSubscriptions = false
+    @MainActor
+    static func makeSubscriptionModel(
+        bearer: @escaping @MainActor () -> String?,
+        refreshAccount: @escaping @MainActor () async -> Void
+    ) -> AppleSubscriptionModel? { nil }
 
     /// nil, so a shipped launch can never be handed a link by its own arguments.
     static var launchDeepLink: URL? { nil }
@@ -387,6 +439,18 @@ final class UITestAccountTransport: URLProtocol {
     static let thisDeviceName = "Studio Mac"
     // nonlocalized: an acceptance fixture row, absent from Release
     static let otherDeviceName = "Kitchen laptop"
+    /// The bundle identity the purchase fixture answers for, and the two product
+    /// identifiers it names.
+    ///
+    /// **They exist only inside `#if DEBUG`.** No shipped binary carries a
+    /// product identifier: the App Store build learns them from the server, and
+    /// `StoreKitLinkageTests` reads every shippable source to keep that true.
+    // nonlocalized: acceptance fixture identifiers, absent from Release
+    static let bundleID = "com.relayium.mac"
+    // nonlocalized: acceptance fixture identifiers, absent from Release
+    static let monthlyProductID = "uitest.subscription.month"
+    // nonlocalized: acceptance fixture identifiers, absent from Release
+    static let yearlyProductID = "uitest.subscription.year"
 
     /// JSON literals, each VALIDATED by decoding it through the very model the
     /// app will decode it into.
@@ -450,6 +514,29 @@ final class UITestAccountTransport: URLProtocol {
         // object uploaded from somewhere else was never on this device, so the
         // link cannot be rebuilt here. That is the row's honest arm, and the one
         // where no hand-off may be offered at all.
+        // The purchase catalog, in the shape the server answers with: two live
+        // products for THIS bundle, ordered by the deployment's own tier rank.
+        // Validated through the very model the app decodes it into, like every
+        // entry here, so a required field added to `AppleProductCatalog` drops
+        // the entry and fails the path loudly.
+        offer("/api/billing/apple/catalog", """
+            {"bundleId":"\(bundleID)",
+            "products":[
+            {"productId":"\(monthlyProductID)","planId":"pro","planName":"Pro",
+            "cycle":"monthly","sortOrder":20},
+            {"productId":"\(yearlyProductID)","planId":"pro","planName":"Pro",
+            "cycle":"yearly","sortOrder":20}],
+            "purchase":{"allowed":\(UITestMode.blocksSubscription ? "false" : "true"),
+            "blockedBy":"\(UITestMode.blocksSubscription ? "stripe" : "")"}}
+            """, as: AppleProductCatalog.self)
+        // The attribution token and the transaction intake, so a purchase can be
+        // completed end to end against the real orchestration.
+        out["/api/billing/apple/account-token"] =
+            Data(#"{"appAccountToken":"3f2504e0-4f89-41d3-9a0c-0305e82c3301"}"#.utf8)
+        offer("/api/billing/apple/transaction", """
+            {"applied":true,"planId":"pro","status":"active",
+            "expiresAt":4102444800,"provider":"apple"}
+            """, as: AppleTransactionResult.self)
         // Sign-out is a POST with no body. Modelled because it is the one way
         // out of a signed-in launch, and an unmodelled endpoint is refused —
         // which would have made a failed sign-out look like a product defect.

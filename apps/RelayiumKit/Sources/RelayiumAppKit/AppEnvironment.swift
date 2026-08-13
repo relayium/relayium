@@ -117,11 +117,59 @@ public enum AppEnvironment {
     /// `PRICING_PATH` on the web.
     public static var plansWebURL: URL { productionBaseURL.appendingPathComponent("pricing") }
 
+    /// Apple's own subscription management, for a subscription the App Store
+    /// bills.
+    ///
+    /// **Not a Relayium URL, and that is the point.** An App Store subscription
+    /// can only be changed or cancelled through Apple, so the App Store build's
+    /// "manage" control has to lead there — sending the user to relayium.com
+    /// would show them a page with no subscription on it and no control that
+    /// works. macOS routes this HTTPS address to the App Store app's account
+    /// pane; it is Apple's documented destination and needs no scheme this app
+    /// has to be entitled for.
+    ///
+    /// It is here rather than in the view for the same reason every URL above
+    /// is: one construction site, and one thing for a test to read.
+    // nonlocalized: an Apple destination, not user copy
+    public static var appleSubscriptionsURL: URL {
+        URL(string: "https://apps.apple.com/account/subscriptions")!
+    }
+
     /// The CLI's own page. `CLI_PATH` on the web, and English-only there — the
     /// site's decision, recorded in `router.svelte.ts` beside `/pricing`, so
     /// nothing here generates a language prefix that would 404.
     // nonlocalized: a URL path, not user copy
     public static var cliWebURL: URL { productionBaseURL.appendingPathComponent("cli") }
+
+    /// The privacy policy, and the terms a subscription is sold under.
+    ///
+    /// **These are a purchase-surface requirement, not a footer.** An App Store
+    /// build that sells an auto-renewing subscription has to show a working link
+    /// to both from the screen that sells it; without them the submission is
+    /// rejected before anybody looks at the app. `AppleSubscriptionCard` renders
+    /// them, and they are here for the same reason every URL above is: one
+    /// construction site, and one thing for a test to read.
+    ///
+    /// `isDirectory: true` is what produces the canonical trailing slash. These
+    /// are static pages built as `privacy/index.html` (see
+    /// `web/scripts/pages/build-pages.mjs`), and `/privacy/` is the address the
+    /// sitemap publishes — the slashless form only redirects, which is a
+    /// redirect a reviewer would watch happen.
+    ///
+    /// The English pages, deliberately. The site also builds `/<lang>/privacy/`,
+    /// but only for the eight languages it translated; deriving a prefix from
+    /// the app's own language would 404 for any language the app gains first,
+    /// and a dead legal link on the purchase screen is the exact failure these
+    /// exist to prevent.
+    // nonlocalized: a URL path, not user copy
+    public static var privacyWebURL: URL {
+        productionBaseURL.appendingPathComponent("privacy", isDirectory: true)
+    }
+
+    // nonlocalized: a URL path, not user copy
+    public static var termsWebURL: URL {
+        productionBaseURL.appendingPathComponent("terms", isDirectory: true)
+    }
 
     /// One-click reactivation for a pending-deletion account.
     ///
@@ -809,6 +857,18 @@ public enum AppEnvironment {
     /// `transport` exists for the same reason as `makeSession`'s: this model
     /// reads the account's devices and stored objects, and acceptance needs
     /// those answered without a server. A shipped launch passes nil.
+    /// The two authenticated billing endpoints an in-app purchase needs.
+    ///
+    /// Returned behind the protocol rather than as `AccountClient`, so the
+    /// purchase model above it is assembled against the seam its tests drive and
+    /// cannot reach anything else the account client can do. `transport` exists
+    /// for the same reason it does on every factory here: acceptance has to run
+    /// without a server.
+    public static func makeAppleBillingService(baseURL: URL = productionBaseURL,
+                                               transport: URLSession? = nil) -> AppleBillingService {
+        AccountClient(baseURL: baseURL, session: transport ?? .shared)
+    }
+
     @MainActor
     public static func makeAccountManagementModel(baseURL: URL = productionBaseURL,
                                                   keyStore: StoredLinkKeyStore,

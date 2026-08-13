@@ -786,3 +786,40 @@
 "help.account.step3" = "راجع الأجهزة المسجَّلة الدخول إلى حسابك والملفات التي خزّنتها، واحذف أيًّا منها.";
 "help.account.question" = "ما الذي يحتاج إلى حساب وما الذي لا يحتاج؟";
 "help.account.answer" = "النقل على الشبكة نفسها والانضمام إلى رمز أنشأه شخص آخر لا يحتاجان إلى حساب. أما إنشاء رمز وإرسال رابط مخزَّن وصندوق وارد الجهاز فتحتاج جميعها إليه.";
+
+/* In-app subscription (Mac App Store build). The purchase surface the App Store
+   build renders instead of the direct build's link to the website. Prices are
+   never written here: the store's own localized price is substituted in. */
+
+"subscription.heading" = "الاشتراك";
+"subscription.body" = "على هذا الـ Mac تُحصَّل خطة Relayium عبر App Store. تتولّى Apple الدفع، ولا يسجّل Relayium سوى الخطة التي تمتلكها.";
+"subscription.loading" = "جارٍ تحميل الخطط…";
+"subscription.none" = "لا يوجد ما يمكن الاشتراك فيه من هذا التطبيق حاليًا.";
+"subscription.subscribe" = "اشتراك";
+"subscription.current" = "الخطة الحالية";
+"subscription.priceMonthly" = "%@ شهريًا";
+"subscription.priceYearly" = "%@ سنويًا";
+"subscription.purchasing" = "في انتظار App Store…";
+"subscription.submitting" = "جارٍ تأكيد اشتراكك لدى Relayium…";
+"subscription.restoring" = "جارٍ البحث عن عمليات شراء سابقة…";
+"subscription.restore" = "استعادة المشتريات";
+"subscription.nothingToRestore" = "لا يوجد اشتراك Relayium قابل للاستعادة على معرّف Apple هذا.";
+"subscription.deferred" = "هذه العملية بانتظار الموافقة. سيحدّث Relayium خطتك فور الموافقة عليها.";
+"subscription.completed" = "اشتراكك فعّال، وقد جرى تحديث الخطة أعلاه.";
+"subscription.manage" = "الإدارة في App Store";
+"subscription.managedByApple" = "تتولّى Apple تحصيل هذا الاشتراك. غيّره أو ألغِه من App Store.";
+"subscription.privacy" = "سياسة الخصوصية";
+"subscription.terms" = "شروط الخدمة";
+"subscription.blockedByWeb" = "اشتراكك مُدار على relayium.com. ألغِه هناك قبل الاشتراك هنا حتى لا تُحصَّل منك الرسوم مرتين.";
+"subscription.blockedByAdmin" = "خطتك مُنحت مباشرةً من Relayium، فلا شيء لشرائه هنا.";
+"subscription.blockedByOther" = "اشتراكك مُدار خارج هذا التطبيق.";
+"subscription.errorNotSignedIn" = "سجّل الدخول إلى حساب Relayium للاشتراك.";
+"subscription.errorNetwork" = "تعذّر الوصول إلى Relayium. لن يضيع شيء — سيعيد App Store تسليم هذه العملية.";
+"subscription.errorBusy" = "محاولات كثيرة. أعد المحاولة بعد قليل.";
+"subscription.errorNotAccepted" = "تعذّر على Relayium قبول هذه العملية بعد. لن يضيع شيء — سيعيد App Store تسليمها.";
+"subscription.errorOtherAccount" = "هذه العملية تخصّ حساب Relayium آخر. سجّل الدخول بذلك الحساب لاستخدامها.";
+"subscription.errorAlreadyLinked" = "اشتراك App Store هذا مرتبط بالفعل بحساب Relayium آخر.";
+"subscription.errorNotReady" = "لا يستطيع Relayium تأكيد مشتريات App Store بعد. لن يضيع شيء — سيعيد App Store تسليمها.";
+"subscription.errorWrongBuild" = "هذه النسخة من Relayium لا يمكنها بيع الاشتراكات.";
+"subscription.errorServer" = "ردّ Relayium بخطأ غير متوقّع (%@).";
+"subscription.errorStore" = "تعذّر على App Store إتمام هذا الطلب (%@).";

@@ -4,7 +4,7 @@ const en = {
   description:
     "How Relayium handles files and ephemeral text: content is end-to-end encrypted, live message bodies are never stored by Relayium, and stored download links keep files zero-knowledge encrypted.",
   updatedLabel: "Last updated",
-  updated: "2026-07-31",
+  updated: "2026-08-13",
   otherDocLabel: "Terms of Service",
   lead: [
     "Relayium is built so that your files and ephemeral text stay yours. Local browser sessions are direct; cross-network browser sessions may carry end-to-end encrypted ciphertext through TURN; CLI text is direct-only; and stored download links hold only zero-knowledge encrypted file ciphertext.",
@@ -57,6 +57,18 @@ const en = {
       ],
     },
     {
+      heading: "Usage metering and quotas",
+      body: [
+        "Paid plans mean the service has to count how much of it each account uses. While you are signed in, we keep a running per-account record of the bytes you upload and download through Relayium, the size of the ciphertext your stored links are holding, and the relayed-byte totals attributed to pairing codes you created. These counters outlive the transfer that produced them — we keep them as monthly per-account totals — because they are what enforces the usage, storage and relay quotas included in your plan, and what our billing and account records rest on. A paid subscription is a fixed price for a plan, not a per-byte charge.",
+      ],
+      bullets: [
+        "What is recorded: byte volumes, stored-object sizes, and the times they were measured, linked to your account.",
+        "What is not: your file contents, file names, and message bodies stay encrypted and unreadable to us, and we do not record which screens you open or which features you use.",
+        "This is metering, not analytics. Our apps and website carry no advertising or third-party analytics SDK, and these counters are never used to track you across other apps or websites.",
+        "You can see your own current totals at any time on your account page, in the app or on the web.",
+      ],
+    },
+    {
       heading: "Cookies and local storage",
       body: [
         "We use one session cookie to keep you signed in. In your browser's local storage we keep a random device id so a device you registered can be recognized. We do not use advertising or tracking cookies.",
@@ -69,7 +81,7 @@ const en = {
         "Google, if you sign in with Google — we receive your email and basic profile to create the account.",
         "Apple, if you use Sign in with Apple — we receive a stable identifier and the email (or Apple's private relay address) you choose to share.",
         "Stripe, our payment processor for subscriptions purchased on the web — see Payments.",
-        "Apple, for subscriptions purchased inside the iOS app via in-app purchase — see Payments.",
+        "Apple, for subscriptions purchased inside our iOS and macOS apps via in-app purchase — see Payments.",
         "An email delivery provider, to send account emails such as magic-link sign-in and verification.",
       ],
     },
@@ -80,8 +92,8 @@ const en = {
       ],
       bullets: [
         "On the web, payments are handled by Stripe. Card details go to Stripe, not to us; we receive only a customer reference and the resulting subscription status.",
-        "In the iOS app, subscriptions are bought through Apple in-app purchase. Apple processes the payment under your Apple ID; we receive only that you hold an active subscription.",
-        "For your account we store only your current plan, subscription status, billing cycle, and period dates — never card data.",
+        "In our iOS and macOS apps, subscriptions are bought through Apple in-app purchase. Apple processes the payment under your Apple ID, and we never see your payment method. The app sends us Apple's signed record of the transaction, and we keep what it says about the purchase: which subscription product you bought, Apple's identifier for that subscription, and its status, billing period, and renewal or expiry dates. We also generate a random token that ties an App Store purchase to your Relayium account.",
+        "For your account we store only your current plan, subscription status, billing cycle, period dates, and your payment provider's reference for the subscription — never card data.",
       ],
     },
     {
@@ -131,7 +143,7 @@ const zh = {
   description:
     "Relayium 如何处理文件与临时文本：内容采用端到端加密，Relayium 不存储实时消息正文，暂存下载链接中的文件保持零知识加密。",
   updatedLabel: "最后更新",
-  updated: "2026-07-31",
+  updated: "2026-08-13",
   otherDocLabel: "服务条款",
   lead: [
     "Relayium 的设计宗旨是让你的文件与临时文本始终属于你。浏览器局域网会话直接连接；跨网络浏览器会话可能通过 TURN 传输端到端加密的密文；CLI 文本仅直连；暂存下载链接只保存零知识加密的文件密文。",
@@ -177,6 +189,18 @@ const zh = {
       ],
     },
     {
+      heading: "用量计量与配额",
+      body: [
+        "有付费套餐，服务就必须统计每个账号用了多少。在你登录期间，我们会按账号持续记录你经由 Relayium 上传和下载的字节量、你的暂存链接当前占用的密文大小，以及归属到你所创建配对码的中继字节总量。这些计数会在产生它们的那次传输结束后继续保留——我们按月以账号为单位保存这些累计值——因为正是它们在执行你套餐所含的用量、存储与中继配额，也是我们计费与账户记录的依据。付费订阅按套餐收取固定价格，不是按字节计费。",
+      ],
+      bullets: [
+        "会记录的：字节量、暂存对象大小，以及测量发生的时间，并与你的账号关联。",
+        "不会记录的：你的文件内容、文件名与消息正文始终加密，我们无法读取；我们也不记录你打开了哪些界面、使用了哪些功能。",
+        "这是计量，不是分析统计。我们的 App 与网站不含任何广告或第三方分析 SDK，这些计数也绝不会用于跨其他 App 或网站追踪你。",
+        "你随时可以在 App 或网页的账号页面查看自己当前的用量。",
+      ],
+    },
+    {
       heading: "Cookie 与本地存储",
       body: [
         "我们使用一个会话 cookie 来保持你的登录状态。在你浏览器的本地存储中，我们保存一个随机设备 id，以便识别你注册过的设备。我们不使用广告或追踪 cookie。",
@@ -189,7 +213,7 @@ const zh = {
         "Google——如果你用 Google 登录，我们会获取你的邮箱和基本资料以创建账号。",
         "Apple——如果你使用「通过 Apple 登录」，我们会获取一个稳定标识符，以及你选择分享的邮箱（或 Apple 的私密转发地址）。",
         "Stripe——我们在网页端订阅的支付处理方，详见「支付」。",
-        "Apple——在 iOS App 内通过应用内购买订阅时的处理方，详见「支付」。",
+        "Apple——在我们的 iOS 与 macOS App 内通过应用内购买订阅时的处理方，详见「支付」。",
         "邮件发送服务商——用于发送账号邮件，如魔法链接登录与验证邮件。",
       ],
     },
@@ -200,8 +224,8 @@ const zh = {
       ],
       bullets: [
         "在网页端，支付由 Stripe 处理。卡片信息提交给 Stripe，而非我们；我们只拿到一个客户标识和由此产生的订阅状态。",
-        "在 iOS App 内，订阅通过 Apple 应用内购买完成。Apple 从你的 Apple ID 处理支付；我们只获知你持有一个有效订阅。",
-        "就你的账号而言，我们只存储你当前的套餐、订阅状态、计费周期与周期起止日期——绝不存储卡片数据。",
+        "在我们的 iOS 与 macOS App 内，订阅通过 Apple 应用内购买完成。Apple 从你的 Apple ID 处理支付，我们绝不会看到你的支付方式。App 会把 Apple 签名的交易记录发给我们，我们保存其中关于这笔购买的内容：你购买的订阅商品、Apple 为该订阅分配的标识符，以及订阅状态、计费周期与续订或到期日期。我们还会生成一个随机令牌，把 App Store 购买与你的 Relayium 账号关联起来。",
+        "就你的账号而言，我们只存储你当前的套餐、订阅状态、计费周期、周期起止日期，以及支付服务商为该订阅提供的引用标识——绝不存储卡片数据。",
       ],
     },
     {
@@ -249,7 +273,7 @@ const ja = {
   description:
     "Relayium がファイルと一時テキストを扱う方法：コンテンツはエンドツーエンド暗号化され、Relayium はライブメッセージ本文を保存せず、一時保存ダウンロードリンクのファイルはゼロ知識暗号化されます。",
   updatedLabel: "最終更新",
-  updated: "2026-07-31",
+  updated: "2026-08-13",
   otherDocLabel: "利用規約",
   lead: [
     "Relayium はファイルと一時テキストがお客様のものであり続けるよう設計されています。ブラウザのローカルセッションは直接接続し、ネットワークをまたぐブラウザセッションは TURN 経由でエンドツーエンド暗号化された暗号文を運ぶ場合があります。CLI テキストは直接接続のみで、一時保存リンクにはゼロ知識暗号化されたファイル暗号文だけが保存されます。",
@@ -302,6 +326,18 @@ const ja = {
       ],
     },
     {
+      heading: "利用量の計測とクォータ",
+      body: [
+        "有料プランがある以上、各アカウントがサービスをどれだけ使ったかを数える必要があります。サインイン中は、Relayium を通じてアップロード・ダウンロードしたバイト量、一時保存リンクが保持している暗号文のサイズ、そしてお客様が作成したペアリングコードに帰属する中継バイトの合計を、アカウント単位で継続的に記録します。これらのカウンターは、それを生んだ転送が終わったあとも月ごとのアカウント別合計として保持されます。プランに含まれる利用量・保存容量・中継のクォータを適用し、当社の請求とアカウントの記録が拠って立つのがこれらだからです。有料サブスクリプションはプランごとの定額であり、バイト単位の従量課金ではありません。",
+      ],
+      bullets: [
+        "記録するもの：バイト量、一時保存オブジェクトのサイズ、そして計測された時刻で、いずれもお客様のアカウントに紐づきます。",
+        "記録しないもの：ファイルの内容、ファイル名、メッセージ本文は暗号化されたままで当社は読み取れません。どの画面を開いたか、どの機能を使ったかも記録しません。",
+        "これは計測であり、分析ではありません。当社のアプリとウェブサイトに広告や第三者の分析 SDK は含まれず、これらのカウンターを他のアプリやウェブサイトをまたぐ追跡に使うことは一切ありません。",
+        "現在の利用量は、アプリまたはウェブのアカウントページでいつでも確認できます。",
+      ],
+    },
+    {
       heading: "Cookie とローカルストレージ",
       body: [
         "サインイン状態を維持するために 1 つのセッション Cookie を使用します。ブラウザのローカルストレージには、登録済みデバイスを識別するためのランダムなデバイス ID を保存します。広告用または追跡用の Cookie は使用しません。",
@@ -314,7 +350,7 @@ const ja = {
         "Google——Google でサインインする場合、アカウント作成のためにメールアドレスと基本プロフィール情報を受け取ります。",
         "Apple——「Apple でサインイン」を使用する場合、安定した識別子と、お客様が共有を選択したメールアドレス（または Apple のプライベートリレーアドレス）を受け取ります。",
         "Stripe——ウェブで購入したサブスクリプションの決済処理業者です。詳しくは「支払い」をご覧ください。",
-        "Apple——iOS アプリ内でアプリ内課金により購入したサブスクリプションについて。詳しくは「支払い」をご覧ください。",
+        "Apple——iOS および macOS アプリ内でアプリ内課金により購入したサブスクリプションについて。詳しくは「支払い」をご覧ください。",
         "メール配信プロバイダー——マジックリンクのサインインや確認メールなど、アカウント関連メールの送信に使用します。",
       ],
     },
@@ -325,8 +361,8 @@ const ja = {
       ],
       bullets: [
         "ウェブでは、支払いは Stripe が処理します。カード情報は当社ではなく Stripe に送られます。当社が受け取るのは顧客参照情報と、その結果としてのサブスクリプション状況のみです。",
-        "iOS アプリでは、サブスクリプションは Apple のアプリ内課金を通じて購入されます。Apple がお客様の Apple ID のもとで支払いを処理します。当社が把握するのは、有効なサブスクリプションを保有しているという事実のみです。",
-        "アカウントについて当社が保存するのは、現在のプラン、サブスクリプションの状況、請求サイクル、期間の日付のみであり、カード情報は一切保存しません。",
+        "iOS および macOS アプリでは、サブスクリプションは Apple のアプリ内課金を通じて購入されます。Apple がお客様の Apple ID のもとで支払いを処理し、当社がお支払い方法を見ることはありません。アプリは Apple が署名した取引記録を当社に送信し、当社はその購入について記載された内容——購入したサブスクリプション商品、そのサブスクリプションに対する Apple の識別子、状況、請求期間、更新日または有効期限——を保存します。また、App Store での購入をお客様の Relayium アカウントに結び付けるためのランダムなトークンを生成します。",
+        "アカウントについて当社が保存するのは、現在のプラン、サブスクリプションの状況、請求サイクル、期間の日付、および決済事業者がそのサブスクリプションに付与する参照情報のみであり、カード情報は一切保存しません。",
       ],
     },
     {
@@ -376,7 +412,7 @@ const ko = {
   description:
     "Relayium이 파일과 임시 텍스트를 처리하는 방식: 콘텐츠는 종단간 암호화되고, Relayium은 실시간 메시지 본문을 저장하지 않으며, 임시 다운로드 링크의 파일은 영지식 암호화됩니다.",
   updatedLabel: "최종 업데이트",
-  updated: "2026-07-31",
+  updated: "2026-08-13",
   otherDocLabel: "이용약관",
   lead: [
     "Relayium은 파일과 임시 텍스트가 사용자의 것으로 남도록 설계되었습니다. 브라우저의 로컬 세션은 직접 연결되고, 네트워크 간 브라우저 세션은 TURN을 통해 종단간 암호화된 암호문을 전송할 수 있습니다. CLI 텍스트는 직접 연결만 사용하며, 임시 다운로드 링크에는 영지식 암호화된 파일 암호문만 저장됩니다.",
@@ -429,6 +465,18 @@ const ko = {
       ],
     },
     {
+      heading: "사용량 측정 및 할당량",
+      body: [
+        "유료 요금제가 있는 이상 각 계정이 서비스를 얼마나 사용했는지 집계해야 합니다. 로그인해 있는 동안 저희는 Relayium을 통해 업로드·다운로드한 바이트 양, 임시 보관 링크가 보유 중인 암호문의 크기, 그리고 귀하가 만든 페어링 코드에 귀속된 릴레이 바이트 총량을 계정 단위로 계속 기록합니다. 이 카운터는 이를 만들어낸 전송이 끝난 뒤에도 계정별 월간 합계로 보존됩니다. 요금제에 포함된 사용량·저장 용량·릴레이 할당량을 적용하고, 저희의 청구 및 계정 기록이 근거로 삼는 값이 바로 이것이기 때문입니다. 유료 구독은 요금제별 정액이며, 바이트 단위 종량 과금이 아닙니다.",
+      ],
+      bullets: [
+        "기록하는 것: 바이트 양, 임시 보관 객체의 크기, 그리고 측정된 시각이며 모두 귀하의 계정에 연결됩니다.",
+        "기록하지 않는 것: 파일 내용, 파일 이름, 메시지 본문은 암호화된 상태로 남아 저희가 읽을 수 없으며, 어떤 화면을 열었는지나 어떤 기능을 사용했는지도 기록하지 않습니다.",
+        "이는 측정이지 분석이 아닙니다. 저희 앱과 웹사이트에는 광고나 제3자 분석 SDK가 없으며, 이 카운터를 다른 앱이나 웹사이트에서 귀하를 추적하는 데 사용하는 일은 없습니다.",
+        "현재 사용량은 앱이나 웹의 계정 페이지에서 언제든지 확인할 수 있습니다.",
+      ],
+    },
+    {
       heading: "쿠키 및 로컬 스토리지",
       body: [
         "로그인 상태를 유지하기 위해 세션 쿠키 하나를 사용합니다. 브라우저의 로컬 스토리지에는 등록된 기기를 식별하기 위한 임의 기기 ID를 저장합니다. 광고 또는 추적 쿠키는 사용하지 않습니다.",
@@ -441,7 +489,7 @@ const ko = {
         "Google — Google로 로그인하는 경우, 계정 생성을 위해 이메일 주소와 기본 프로필 정보를 받습니다.",
         "Apple — ‘Apple로 로그인’을 사용하는 경우, 고정된 식별자와 사용자가 공유하기로 선택한 이메일(또는 Apple의 비공개 릴레이 주소)을 받습니다.",
         "Stripe — 웹에서 구매한 구독의 결제 처리업체입니다. 자세한 내용은 ‘결제’를 참고하세요.",
-        "Apple — iOS 앱 내 인앱 구매로 구매한 구독에 대해서입니다. 자세한 내용은 ‘결제’를 참고하세요.",
+        "Apple — iOS 및 macOS 앱 내 인앱 구매로 구매한 구독에 대해서입니다. 자세한 내용은 ‘결제’를 참고하세요.",
         "이메일 발송 서비스 제공업체 — 매직 링크 로그인, 인증 등 계정 관련 이메일 전송에 사용됩니다.",
       ],
     },
@@ -452,8 +500,8 @@ const ko = {
       ],
       bullets: [
         "웹에서는 결제가 Stripe를 통해 처리됩니다. 카드 정보는 저희가 아닌 Stripe로 전달되며, 저희는 고객 참조 정보와 그 결과로 나온 구독 상태만 받습니다.",
-        "iOS 앱에서는 Apple 인앱 구매를 통해 구독을 구매합니다. Apple이 사용자의 Apple ID로 결제를 처리하며, 저희는 사용자가 활성 구독을 보유하고 있다는 사실만 받습니다.",
-        "계정과 관련하여 저희는 현재 플랜, 구독 상태, 결제 주기, 기간 날짜만 저장하며 카드 데이터는 절대 저장하지 않습니다.",
+        "iOS 및 macOS 앱에서는 Apple 인앱 구매를 통해 구독을 구매합니다. Apple이 사용자의 Apple ID로 결제를 처리하며, 저희는 결제 수단을 볼 수 없습니다. 앱은 Apple이 서명한 거래 기록을 저희에게 전송하고, 저희는 그 기록이 해당 구매에 대해 말하는 내용, 즉 구매한 구독 상품, 그 구독에 대한 Apple의 식별자, 상태, 결제 주기, 갱신일 또는 만료일을 보관합니다. 또한 App Store 구매를 사용자의 Relayium 계정에 연결하는 무작위 토큰을 생성합니다.",
+        "계정과 관련하여 저희는 현재 플랜, 구독 상태, 결제 주기, 기간 날짜, 그리고 결제 제공업체가 해당 구독에 부여한 참조 값만 저장하며 카드 데이터는 절대 저장하지 않습니다.",
       ],
     },
     {
@@ -503,7 +551,7 @@ const de = {
   description:
     "Wie Relayium Dateien und temporären Text behandelt: Inhalte sind Ende-zu-Ende-verschlüsselt, Relayium speichert keine Live-Nachrichtentexte und Dateien in Download-Links bleiben Zero-Knowledge-verschlüsselt.",
   updatedLabel: "Zuletzt aktualisiert",
-  updated: "2026-07-31",
+  updated: "2026-08-13",
   otherDocLabel: "Nutzungsbedingungen",
   lead: [
     "Relayium ist so konzipiert, dass Ihre Dateien und temporären Texte Ihnen gehören. Lokale Browsersitzungen sind direkt; netzwerkübergreifende Browsersitzungen können Ende-zu-Ende-verschlüsselten Chiffretext über TURN übertragen; CLI-Text ist ausschließlich direkt; Download-Links speichern nur Zero-Knowledge-verschlüsselten Datei-Chiffretext.",
@@ -556,6 +604,18 @@ const de = {
       ],
     },
     {
+      heading: "Nutzungsmessung und Kontingente",
+      body: [
+        "Kostenpflichtige Tarife bedeuten, dass der Dienst zählen muss, wie viel jedes Konto von ihm nutzt. Solange Sie angemeldet sind, führen wir pro Konto eine laufende Aufzeichnung der Bytes, die Sie über Relayium hoch- und herunterladen, der Größe des Geheimtexts, den Ihre zwischengespeicherten Links halten, und der weitergeleiteten Bytes, die den von Ihnen erstellten Kopplungscodes zugerechnet werden. Diese Zähler überdauern die Übertragung, die sie erzeugt hat — wir bewahren sie als monatliche Summen pro Konto auf —, denn sie sind es, was die in Ihrem Tarif enthaltenen Kontingente für Nutzung, Speicher und Weiterleitung durchsetzt und worauf unsere Abrechnungs- und Kontounterlagen beruhen. Ein kostenpflichtiges Abonnement hat einen festen Tarifpreis und wird nicht nach Bytes abgerechnet.",
+      ],
+      bullets: [
+        "Was erfasst wird: Byte-Mengen, Größen zwischengespeicherter Objekte und die Zeitpunkte der Messung, jeweils mit Ihrem Konto verknüpft.",
+        "Was nicht: Ihre Dateiinhalte, Dateinamen und Nachrichtentexte bleiben verschlüsselt und für uns unlesbar, und wir erfassen nicht, welche Bildschirme Sie öffnen oder welche Funktionen Sie nutzen.",
+        "Das ist Messung, keine Analyse. Unsere Apps und unsere Website enthalten kein Werbe- oder Drittanbieter-Analyse-SDK, und diese Zähler werden nie dazu verwendet, Sie über andere Apps oder Websites hinweg zu verfolgen.",
+        "Ihre aktuellen Werte können Sie jederzeit auf Ihrer Kontoseite einsehen, in der App oder im Web.",
+      ],
+    },
+    {
       heading: "Cookies und lokaler Speicher",
       body: [
         "Wir verwenden ein Sitzungs-Cookie, um Sie angemeldet zu halten. Im lokalen Speicher Ihres Browsers speichern wir eine zufällige Geräte-ID, damit ein von Ihnen registriertes Gerät wiedererkannt werden kann. Wir verwenden keine Werbe- oder Tracking-Cookies.",
@@ -568,7 +628,7 @@ const de = {
         "Google, wenn Sie sich mit Google anmelden — wir erhalten Ihre E-Mail-Adresse und Ihr Basisprofil, um das Konto zu erstellen.",
         "Apple, wenn Sie „Anmelden mit Apple“ nutzen — wir erhalten eine stabile Kennung sowie die E-Mail-Adresse (oder Apples private Weiterleitungsadresse), die Sie zu teilen wählen.",
         "Stripe, unser Zahlungsdienstleister für über das Web erworbene Abonnements — siehe Zahlungen.",
-        "Apple, für Abonnements, die über In-App-Käufe in der iOS-App erworben werden — siehe Zahlungen.",
+        "Apple, für Abonnements, die über In-App-Käufe in unseren iOS- und macOS-Apps erworben werden — siehe Zahlungen.",
         "Ein E-Mail-Versanddienstleister, um kontobezogene E-Mails wie Magic-Link-Anmeldungen und Verifizierungen zu versenden.",
       ],
     },
@@ -579,8 +639,8 @@ const de = {
       ],
       bullets: [
         "Im Web werden Zahlungen von Stripe abgewickelt. Kartendaten gehen an Stripe, nicht an uns; wir erhalten nur eine Kundenreferenz und den daraus resultierenden Abonnementstatus.",
-        "In der iOS-App werden Abonnements über den In-App-Kauf von Apple erworben. Apple verarbeitet die Zahlung unter Ihrer Apple-ID; wir erfahren nur, dass Sie ein aktives Abonnement besitzen.",
-        "Für Ihr Konto speichern wir nur Ihren aktuellen Plan, den Abonnementstatus, den Abrechnungszyklus und die Zeitraumdaten — niemals Kartendaten.",
+        "In unseren iOS- und macOS-Apps werden Abonnements über den In-App-Kauf von Apple erworben. Apple verarbeitet die Zahlung unter Ihrer Apple-ID, und wir sehen Ihr Zahlungsmittel niemals. Die App sendet uns Apples signierten Transaktionsdatensatz, und wir speichern, was er über den Kauf aussagt: welches Abonnementprodukt Sie gekauft haben, Apples Kennung für dieses Abonnement sowie dessen Status, Abrechnungszeitraum und Verlängerungs- bzw. Ablaufdaten. Außerdem erzeugen wir ein zufälliges Token, das einen App-Store-Kauf mit Ihrem Relayium-Konto verknüpft.",
+        "Für Ihr Konto speichern wir nur Ihren aktuellen Plan, den Abonnementstatus, den Abrechnungszyklus, die Zeitraumdaten und die Referenz Ihres Zahlungsdienstleisters für das Abonnement — niemals Kartendaten.",
       ],
     },
     {
@@ -630,7 +690,7 @@ const fr = {
   description:
     "Comment Relayium traite les fichiers et le texte éphémère : le contenu est chiffré de bout en bout, Relayium ne stocke pas le corps des messages en direct et les liens de téléchargement conservent les fichiers chiffrés à divulgation nulle.",
   updatedLabel: "Dernière mise à jour",
-  updated: "2026-07-31",
+  updated: "2026-08-13",
   otherDocLabel: "Conditions d'utilisation",
   lead: [
     "Relayium est conçu pour que vos fichiers et textes éphémères restent les vôtres. Les sessions locales du navigateur sont directes ; les sessions inter-réseaux du navigateur peuvent transporter du chiffré de bout en bout via TURN ; le texte CLI est uniquement direct ; les liens de téléchargement ne stockent que du chiffré de fichier à divulgation nulle.",
@@ -683,6 +743,18 @@ const fr = {
       ],
     },
     {
+      heading: "Mesure d'utilisation et quotas",
+      body: [
+        "Qui dit offres payantes dit compter ce que chaque compte consomme du service. Tant que vous êtes connecté, nous tenons par compte un relevé continu des octets que vous téléversez et téléchargez via Relayium, de la taille du chiffré que conservent vos liens stockés, et des totaux d'octets relayés attribués aux codes d'appairage que vous avez créés. Ces compteurs survivent au transfert qui les a produits — nous les conservons sous forme de totaux mensuels par compte — car ce sont eux qui font respecter les quotas d'usage, de stockage et de relais compris dans votre offre, et sur lesquels reposent nos registres de facturation et de compte. Un abonnement payant est un prix fixe par offre, et non une facturation à l'octet.",
+      ],
+      bullets: [
+        "Ce qui est enregistré : des volumes d'octets, des tailles d'objets stockés et les moments où ils ont été mesurés, rattachés à votre compte.",
+        "Ce qui ne l'est pas : le contenu de vos fichiers, leurs noms et le corps de vos messages restent chiffrés et illisibles pour nous, et nous n'enregistrons pas les écrans que vous ouvrez ni les fonctionnalités que vous utilisez.",
+        "Il s'agit de mesure, pas d'analyse. Nos applications et notre site ne contiennent aucun SDK publicitaire ou d'analyse tiers, et ces compteurs ne servent jamais à vous suivre sur d'autres applications ou sites web.",
+        "Vous pouvez consulter vos totaux actuels à tout moment sur la page de votre compte, dans l'application ou sur le web.",
+      ],
+    },
+    {
       heading: "Cookies et stockage local",
       body: [
         "Nous utilisons un cookie de session pour maintenir votre connexion. Dans le stockage local de votre navigateur, nous conservons un identifiant d'appareil aléatoire afin qu'un appareil que vous avez enregistré puisse être reconnu. Nous n'utilisons pas de cookies publicitaires ou de suivi.",
@@ -695,7 +767,7 @@ const fr = {
         "Google, si vous vous connectez avec Google — nous recevons votre adresse e-mail et votre profil de base pour créer le compte.",
         "Apple, si vous utilisez « Se connecter avec Apple » — nous recevons un identifiant stable et l'adresse e-mail (ou l'adresse de relais privée d'Apple) que vous choisissez de partager.",
         "Stripe, notre prestataire de paiement pour les abonnements achetés sur le web — voir Paiements.",
-        "Apple, pour les abonnements achetés dans l'application iOS via un achat intégré — voir Paiements.",
+        "Apple, pour les abonnements achetés dans nos applications iOS et macOS via un achat intégré — voir Paiements.",
         "Un prestataire d'envoi d'e-mails, pour envoyer les e-mails liés au compte tels que la connexion par lien magique et la vérification.",
       ],
     },
@@ -706,8 +778,8 @@ const fr = {
       ],
       bullets: [
         "Sur le web, les paiements sont traités par Stripe. Les détails de la carte vont à Stripe, pas à nous ; nous ne recevons qu'une référence client et le statut d'abonnement qui en résulte.",
-        "Dans l'application iOS, les abonnements sont achetés via l'achat intégré d'Apple. Apple traite le paiement sous votre identifiant Apple ; nous savons seulement que vous détenez un abonnement actif.",
-        "Pour votre compte, nous ne stockons que votre offre actuelle, le statut de l'abonnement, le cycle de facturation et les dates de période — jamais les données de carte.",
+        "Dans nos applications iOS et macOS, les abonnements sont achetés via l'achat intégré d'Apple. Apple traite le paiement sous votre identifiant Apple et nous ne voyons jamais votre moyen de paiement. L'application nous transmet l'enregistrement de transaction signé par Apple ; nous conservons ce que cet enregistrement indique sur l'achat, à savoir le produit d'abonnement acheté, l'identifiant Apple de cet abonnement, ainsi que son statut, sa période de facturation et ses dates de renouvellement ou d'expiration. Nous générons également un jeton aléatoire qui rattache un achat sur l'App Store à votre compte Relayium.",
+        "Pour votre compte, nous ne stockons que votre offre actuelle, le statut de l'abonnement, le cycle de facturation, les dates de période et la référence de l'abonnement chez votre prestataire de paiement — jamais les données de carte.",
       ],
     },
     {
@@ -757,7 +829,7 @@ const ar = {
   description:
     "كيف تتعامل Relayium مع الملفات والنص المؤقت: يُشفَّر المحتوى من الطرف إلى الطرف، ولا تخزّن Relayium نصوص الرسائل المباشرة، وتبقى ملفات روابط التنزيل مُشفَّرة بمعرفة صفرية.",
   updatedLabel: "آخر تحديث",
-  updated: "2026-07-31",
+  updated: "2026-08-13",
   otherDocLabel: "شروط الخدمة",
   lead: [
     "صُمِّمت Relayium بحيث تظل ملفاتك ونصوصك المؤقتة مِلكًا لك. جلسات المتصفح المحلية مباشرة؛ وقد تحمل جلسات المتصفح عبر الشبكات نصًا مُشفَّرًا من الطرف إلى الطرف عبر TURN؛ ونص CLI مباشر فقط؛ ولا تحتفظ روابط التنزيل إلا بنص ملفات مُشفَّر بمعرفة صفرية.",
@@ -810,6 +882,18 @@ const ar = {
       ],
     },
     {
+      heading: "قياس الاستخدام والحصص",
+      body: [
+        "وجود خطط مدفوعة يعني أن على الخدمة أن تحصي مقدار ما يستهلكه كل حساب منها. أثناء تسجيل دخولك، نحتفظ لكل حساب بسجل جارٍ لعدد البايتات التي ترفعها وتنزّلها عبر Relayium، ولحجم النص المشفَّر الذي تحتفظ به روابطك المُخزَّنة، ولإجماليات البايتات المُرحَّلة المنسوبة إلى رموز الاقتران التي أنشأتها. تبقى هذه العدادات بعد انتهاء عملية النقل التي أنتجتها — إذ نحفظها كإجماليات شهرية لكل حساب — لأنها هي ما يفرض حصة خطتك من الاستخدام والتخزين والترحيل، وما تستند إليه سجلات الفوترة والحساب لدينا. الاشتراك المدفوع سعره ثابت حسب الخطة، وليس احتسابًا لكل بايت.",
+      ],
+      bullets: [
+        "ما يُسجَّل: أحجام البايتات، وأحجام الكائنات المُخزَّنة، وأوقات قياسها، مرتبطةً بحسابك.",
+        "وما لا يُسجَّل: محتويات ملفاتك وأسماؤها ونصوص رسائلك تبقى مشفَّرة ولا يمكننا قراءتها، ولا نسجّل أي الشاشات تفتح ولا أي الميزات تستخدم.",
+        "هذا قياس وليس تحليلات. لا تتضمن تطبيقاتنا ولا موقعنا أي حزمة إعلانات أو تحليلات من طرف ثالث، ولا تُستخدم هذه العدادات مطلقًا لتتبعك عبر تطبيقات أو مواقع أخرى.",
+        "يمكنك الاطلاع على إجمالياتك الحالية في أي وقت من صفحة حسابك، في التطبيق أو على الويب.",
+      ],
+    },
+    {
       heading: "ملفات تعريف الارتباط والتخزين المحلي",
       body: [
         "نستخدم ملف تعريف ارتباط جلسة واحدًا لإبقائك مُسجّل الدخول. ونحتفظ في التخزين المحلي لمتصفحك بمُعرِّف جهاز عشوائي حتى يمكن التعرّف على جهاز سجّلته. ولا نستخدم ملفات تعريف ارتباط للإعلانات أو التتبّع.",
@@ -822,7 +906,7 @@ const ar = {
         "Google، إذا سجّلت الدخول باستخدام Google — نتلقّى بريدك الإلكتروني وملفك التعريفي الأساسي لإنشاء الحساب.",
         "Apple، إذا استخدمت «تسجيل الدخول عبر Apple» — نتلقّى مُعرِّفًا ثابتًا والبريد الإلكتروني (أو عنوان ترحيل Apple الخاص) الذي تختار مشاركته.",
         "Stripe، مُعالِج المدفوعات الخاص بنا للاشتراكات التي تُشترى عبر الويب — راجع «المدفوعات».",
-        "Apple، للاشتراكات التي تُشترى داخل تطبيق iOS عبر الشراء داخل التطبيق — راجع «المدفوعات».",
+        "Apple، للاشتراكات التي تُشترى داخل تطبيقَي iOS وmacOS عبر الشراء داخل التطبيق — راجع «المدفوعات».",
         "مزوّد لتوصيل البريد الإلكتروني، لإرسال رسائل الحساب مثل رابط تسجيل الدخول والتحقق.",
       ],
     },
@@ -833,8 +917,8 @@ const ar = {
       ],
       bullets: [
         "على الويب، تُعالَج المدفوعات بواسطة Stripe. تذهب تفاصيل البطاقة إلى Stripe وليس إلينا؛ ولا نتلقّى سوى مرجع للعميل وحالة الاشتراك الناتجة عنه.",
-        "في تطبيق iOS، تُشترى الاشتراكات عبر الشراء داخل التطبيق من Apple. تُعالِج Apple الدفع باستخدام معرّف Apple الخاص بك؛ ولا نعلم سوى أنك تمتلك اشتراكًا نشطًا.",
-        "بخصوص حسابك، لا نخزّن سوى خطتك الحالية وحالة اشتراكك ودورة الفوترة وتواريخ الفترة — ولا نخزّن أبدًا بيانات البطاقة.",
+        "في تطبيقَي iOS وmacOS، تُشترى الاشتراكات عبر الشراء داخل التطبيق من Apple. تُعالِج Apple الدفع باستخدام معرّف Apple الخاص بك، ولا نرى وسيلة الدفع الخاصة بك أبدًا. يرسل إلينا التطبيق سجل المعاملة الموقَّع من Apple، ونحتفظ بما يذكره عن عملية الشراء: منتج الاشتراك الذي اشتريته، ومُعرِّف Apple لذلك الاشتراك، وحالته ودورة فوترته وتواريخ التجديد أو انتهاء الصلاحية. كما نولّد رمزًا عشوائيًا يربط عملية شراء من App Store بحسابك في Relayium.",
+        "بخصوص حسابك، لا نخزّن سوى خطتك الحالية وحالة اشتراكك ودورة الفوترة وتواريخ الفترة والمرجع الذي يمنحه مزوّد الدفع لهذا الاشتراك — ولا نخزّن أبدًا بيانات البطاقة.",
       ],
     },
     {
@@ -884,7 +968,7 @@ const es = {
   description:
     "Cómo Relayium gestiona archivos y texto efímero: el contenido se cifra de extremo a extremo, Relayium no almacena el cuerpo de los mensajes en directo y los enlaces de descarga mantienen los archivos cifrados con conocimiento cero.",
   updatedLabel: "Última actualización",
-  updated: "2026-07-31",
+  updated: "2026-08-13",
   otherDocLabel: "Términos del servicio",
   lead: [
     "Relayium está diseñado para que tus archivos y textos efímeros sigan siendo tuyos. Las sesiones locales del navegador son directas; las sesiones entre redes pueden transportar texto cifrado de extremo a extremo por TURN; el texto CLI es solo directo; y los enlaces de descarga solo almacenan archivos cifrados con conocimiento cero.",
@@ -937,6 +1021,18 @@ const es = {
       ],
     },
     {
+      heading: "Medición de uso y cuotas",
+      body: [
+        "Tener planes de pago obliga al servicio a contar cuánto usa cada cuenta. Mientras tienes la sesión iniciada, mantenemos por cuenta un registro continuo de los bytes que subes y descargas a través de Relayium, del tamaño del texto cifrado que retienen tus enlaces almacenados y de los totales de bytes retransmitidos atribuidos a los códigos de emparejamiento que creaste. Estos contadores sobreviven a la transferencia que los generó — los conservamos como totales mensuales por cuenta — porque son lo que aplica las cuotas de uso, almacenamiento y retransmisión incluidas en tu plan, y aquello en lo que se apoyan nuestros registros de facturación y de cuenta. Una suscripción de pago tiene un precio fijo por plan, no un cobro por byte.",
+      ],
+      bullets: [
+        "Qué se registra: volúmenes de bytes, tamaños de los objetos almacenados y los momentos en que se midieron, vinculados a tu cuenta.",
+        "Qué no: el contenido de tus archivos, sus nombres y el cuerpo de tus mensajes siguen cifrados e ilegibles para nosotros, y no registramos qué pantallas abres ni qué funciones usas.",
+        "Esto es medición, no analítica. Nuestras apps y nuestro sitio no incluyen ningún SDK publicitario ni de analítica de terceros, y estos contadores nunca se usan para rastrearte en otras apps o sitios web.",
+        "Puedes consultar tus totales actuales en cualquier momento en la página de tu cuenta, en la app o en la web.",
+      ],
+    },
+    {
       heading: "Cookies y almacenamiento local",
       body: [
         "Usamos una cookie de sesión para mantener tu sesión iniciada. En el almacenamiento local de tu navegador guardamos un id de dispositivo aleatorio para que un dispositivo que hayas registrado pueda ser reconocido. No usamos cookies de publicidad ni de seguimiento.",
@@ -949,7 +1045,7 @@ const es = {
         "Google, si inicias sesión con Google: recibimos tu correo electrónico y tu perfil básico para crear la cuenta.",
         "Apple, si usas Iniciar sesión con Apple: recibimos un identificador estable y el correo electrónico (o la dirección de retransmisión privada de Apple) que elijas compartir.",
         "Stripe, nuestro procesador de pagos para las suscripciones compradas en la web; consulta Pagos.",
-        "Apple, para las suscripciones compradas dentro de la app de iOS mediante compra dentro de la app; consulta Pagos.",
+        "Apple, para las suscripciones compradas dentro de nuestras apps de iOS y macOS mediante compra dentro de la app; consulta Pagos.",
         "Un proveedor de envío de correo electrónico, para enviar correos de la cuenta como el inicio de sesión con enlace mágico y la verificación.",
       ],
     },
@@ -960,8 +1056,8 @@ const es = {
       ],
       bullets: [
         "En la web, los pagos los gestiona Stripe. Los datos de la tarjeta van a Stripe, no a nosotros; solo recibimos una referencia de cliente y el estado de suscripción resultante.",
-        "En la app de iOS, las suscripciones se compran mediante la compra dentro de la app de Apple. Apple procesa el pago con tu Apple ID; solo sabemos que tienes una suscripción activa.",
-        "Para tu cuenta solo almacenamos tu plan actual, el estado de la suscripción, el ciclo de facturación y las fechas del período, nunca los datos de la tarjeta.",
+        "En nuestras apps de iOS y macOS, las suscripciones se compran mediante la compra dentro de la app de Apple. Apple procesa el pago con tu Apple ID y nunca vemos tu método de pago. La app nos envía el registro de la transacción firmado por Apple y conservamos lo que dice sobre la compra: qué producto de suscripción compraste, el identificador de Apple para esa suscripción y su estado, período de facturación y fechas de renovación o vencimiento. También generamos un token aleatorio que vincula una compra en la App Store con tu cuenta de Relayium.",
+        "Para tu cuenta solo almacenamos tu plan actual, el estado de la suscripción, el ciclo de facturación, las fechas del período y la referencia de la suscripción en tu proveedor de pagos, nunca los datos de la tarjeta.",
       ],
     },
     {
@@ -1011,7 +1107,7 @@ const pt = {
   description:
     "Como a Relayium lida com arquivos e texto temporário: o conteúdo é criptografado de ponta a ponta, a Relayium não armazena o corpo das mensagens ao vivo e os links de download mantêm os arquivos criptografados com conhecimento zero.",
   updatedLabel: "Última atualização",
-  updated: "2026-07-31",
+  updated: "2026-08-13",
   otherDocLabel: "Termos de Serviço",
   lead: [
     "A Relayium foi criada para que seus arquivos e textos temporários continuem sendo seus. As sessões locais do navegador são diretas; sessões entre redes podem transportar texto cifrado de ponta a ponta por TURN; o texto da CLI é somente direto; e os links de download guardam apenas arquivos cifrados com conhecimento zero.",
@@ -1064,6 +1160,18 @@ const pt = {
       ],
     },
     {
+      heading: "Medição de uso e cotas",
+      body: [
+        "Ter planos pagos significa que o serviço precisa contar quanto cada conta usa dele. Enquanto você está conectado, mantemos por conta um registro contínuo dos bytes que você envia e baixa pelo Relayium, do tamanho do texto cifrado que seus links armazenados guardam e dos totais de bytes retransmitidos atribuídos aos códigos de pareamento que você criou. Esses contadores sobrevivem à transferência que os gerou — nós os mantemos como totais mensais por conta — porque são eles que aplicam as cotas de uso, armazenamento e retransmissão incluídas no seu plano, e aquilo em que se apoiam nossos registros de cobrança e de conta. Uma assinatura paga tem preço fixo por plano, não é uma cobrança por byte.",
+      ],
+      bullets: [
+        "O que é registrado: volumes de bytes, tamanhos dos objetos armazenados e os momentos em que foram medidos, vinculados à sua conta.",
+        "O que não é: o conteúdo dos seus arquivos, os nomes deles e o corpo das suas mensagens continuam cifrados e ilegíveis para nós, e não registramos quais telas você abre nem quais recursos você usa.",
+        "Isto é medição, não análise. Nossos aplicativos e nosso site não contêm nenhum SDK de publicidade ou de análise de terceiros, e esses contadores nunca são usados para rastrear você em outros aplicativos ou sites.",
+        "Você pode ver seus totais atuais a qualquer momento na página da sua conta, no aplicativo ou na web.",
+      ],
+    },
+    {
       heading: "Cookies e armazenamento local",
       body: [
         "Usamos um cookie de sessão para manter você conectado. No armazenamento local do seu navegador, guardamos um id de dispositivo aleatório para que um dispositivo que você registrou possa ser reconhecido. Não usamos cookies de publicidade ou de rastreamento.",
@@ -1076,7 +1184,7 @@ const pt = {
         "O Google, se você fizer login com o Google — recebemos seu e-mail e seu perfil básico para criar a conta.",
         "A Apple, se você usar o Entrar com a Apple — recebemos um identificador estável e o e-mail (ou o endereço de retransmissão privado da Apple) que você optar por compartilhar.",
         "A Stripe, nossa processadora de pagamentos para assinaturas compradas na web — veja Pagamentos.",
-        "A Apple, para assinaturas compradas dentro do app iOS via compra no app — veja Pagamentos.",
+        "A Apple, para assinaturas compradas dentro dos nossos apps de iOS e macOS via compra no app — veja Pagamentos.",
         "Um provedor de envio de e-mail, para enviar e-mails da conta como login por link mágico e verificação.",
       ],
     },
@@ -1087,8 +1195,8 @@ const pt = {
       ],
       bullets: [
         "Na web, os pagamentos são processados pela Stripe. Os dados do cartão vão para a Stripe, não para nós; recebemos apenas uma referência de cliente e o status de assinatura resultante.",
-        "No app iOS, as assinaturas são compradas por meio da compra no app da Apple. A Apple processa o pagamento usando seu Apple ID; sabemos apenas que você possui uma assinatura ativa.",
-        "Para sua conta, armazenamos apenas seu plano atual, o status da assinatura, o ciclo de cobrança e as datas do período — nunca dados de cartão.",
+        "Nos nossos apps de iOS e macOS, as assinaturas são compradas por meio da compra no app da Apple. A Apple processa o pagamento usando seu Apple ID, e nunca vemos sua forma de pagamento. O app nos envia o registro da transação assinado pela Apple, e guardamos o que ele diz sobre a compra: qual produto de assinatura você comprou, o identificador da Apple para essa assinatura e seu status, período de cobrança e datas de renovação ou expiração. Também geramos um token aleatório que vincula uma compra na App Store à sua conta Relayium.",
+        "Para sua conta, armazenamos apenas seu plano atual, o status da assinatura, o ciclo de cobrança, as datas do período e a referência da assinatura no seu provedor de pagamento — nunca dados de cartão.",
       ],
     },
     {

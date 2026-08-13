@@ -728,3 +728,40 @@
 "help.account.step3" = "查看已登录你账户的设备和你存储的文件，并可移除其中任意一项。";
 "help.account.question" = "哪些功能需要账户，哪些不需要？";
 "help.account.answer" = "同一网络内的传输，以及加入别人创建的代码，都不需要账户。创建代码、发送存储链接和设备收件箱则都需要。";
+
+/* In-app subscription (Mac App Store build). The purchase surface the App Store
+   build renders instead of the direct build's link to the website. Prices are
+   never written here: the store's own localized price is substituted in. */
+
+"subscription.heading" = "订阅";
+"subscription.body" = "在这台 Mac 上，你的 Relayium 套餐通过 App Store 计费。付款由 Apple 处理，Relayium 只记录你所持有的套餐。";
+"subscription.loading" = "正在加载套餐…";
+"subscription.none" = "当前没有可在本应用内订阅的套餐。";
+"subscription.subscribe" = "订阅";
+"subscription.current" = "当前套餐";
+"subscription.priceMonthly" = "%@ / 月";
+"subscription.priceYearly" = "%@ / 年";
+"subscription.purchasing" = "正在等待 App Store…";
+"subscription.submitting" = "正在向 Relayium 确认你的订阅…";
+"subscription.restoring" = "正在查找此前的购买…";
+"subscription.restore" = "恢复购买";
+"subscription.nothingToRestore" = "此 Apple ID 没有可恢复的 Relayium 订阅。";
+"subscription.deferred" = "这笔购买正在等待批准。一旦通过，Relayium 会立即更新你的套餐。";
+"subscription.completed" = "订阅已生效，上方的套餐已更新。";
+"subscription.manage" = "在 App Store 中管理";
+"subscription.managedByApple" = "此订阅由 Apple 计费。请在 App Store 中更改或取消。";
+"subscription.privacy" = "隐私政策";
+"subscription.terms" = "服务条款";
+"subscription.blockedByWeb" = "你的订阅在 relayium.com 上管理。请先在那里取消，再在此处订阅，以免重复扣费。";
+"subscription.blockedByAdmin" = "你的套餐由 Relayium 直接授予，这里没有需要购买的内容。";
+"subscription.blockedByOther" = "你的订阅在本应用之外管理。";
+"subscription.errorNotSignedIn" = "请登录 Relayium 账户后再订阅。";
+"subscription.errorNetwork" = "无法连接 Relayium。购买不会丢失 — App Store 会再次交付这笔交易。";
+"subscription.errorBusy" = "尝试次数过多，请稍后再试。";
+"subscription.errorNotAccepted" = "Relayium 暂时无法接受这笔购买。购买不会丢失 — App Store 会再次交付。";
+"subscription.errorOtherAccount" = "这笔购买属于另一个 Relayium 账户。请登录该账户后使用。";
+"subscription.errorAlreadyLinked" = "此 App Store 订阅已绑定到另一个 Relayium 账户。";
+"subscription.errorNotReady" = "Relayium 尚无法确认 App Store 购买。购买不会丢失 — App Store 会再次交付。";
+"subscription.errorWrongBuild" = "此版本的 Relayium 无法销售订阅。";
+"subscription.errorServer" = "Relayium 返回了意外错误（%@）。";
+"subscription.errorStore" = "App Store 无法完成此请求（%@）。";

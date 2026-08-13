@@ -94,6 +94,34 @@ now**, with this precedence:
   refused, and nobody edited the mapping to cause it. Deactivating a tier does
   not sweep the mappings that point at it.
 
+## What the native apps see
+
+The Mac App Store build does not carry product identifiers. It asks
+`GET /api/billing/apple/catalog?bundleId=<its own bundle id>` — authenticated,
+like the purchase intake — and sells only what that answers with. Three
+properties matter to an operator:
+
+- **It is this same table**, read through the same store method and filtered by
+  the same status rule as the column above. Only **Live** rows are returned;
+  retired rows, rows whose tier is off sale and rows with no tier are absent,
+  because each one is a product whose purchase would be refused after the
+  customer had been charged.
+- **It is fail-closed with the rest.** With no verifier configured it answers
+  the same `503 verifier_unavailable`, so an unconfigured deployment advertises
+  nothing however many rows exist. A configured deployment with no rows for that
+  bundle answers `200` with an empty list, and the app says there is nothing to
+  buy.
+- **The bundle identity comes from the verifier configuration, not the
+  request.** A `bundleId` that is not in the configured app list is refused with
+  `unknown_bundle`; the response echoes the configured value. So adding a row
+  for a bundle the server is not configured for changes nothing a client can
+  see.
+
+Practical consequence for step 3 above: **the app picks up a new row on its next
+catalog read** — no client release is needed to start selling a product, and
+retiring a row stops it being offered. What a row cannot do is make an
+unconfigured deployment sell anything.
+
 ## If the catalog cannot be read
 
 The section shows a read error instead of a table, and **offers no editing at

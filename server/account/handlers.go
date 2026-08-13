@@ -236,6 +236,13 @@ func (s *Service) routeMux() *http.ServeMux {
 	// unconditionally changes nothing for a deployment that has no Apple apps.
 	// See billing_apple_transaction.go.
 	mux.HandleFunc("POST /api/billing/apple/transaction", s.RequireAuth(s.handleAppleTransaction))
+	// What a native build is allowed to SELL, read from the same operator-managed
+	// catalog the intake above resolves a purchase through. RequireAuth for the
+	// same reason both of those carry it — it is a bearer-authenticated native
+	// call — and GET because it reads. Unconfigured it answers the same 503, so a
+	// deployment with no Apple apps advertises nothing. See
+	// billing_apple_catalog.go.
+	mux.HandleFunc("GET /api/billing/apple/catalog", s.RequireAuth(s.handleAppleCatalog))
 	mux.HandleFunc("GET /api/plans", s.handlePublicPlans)
 	// Stripe webhook: unauthenticated (no session, no CSRF token — Stripe
 	// can't provide either), authenticated instead by its own HMAC signature

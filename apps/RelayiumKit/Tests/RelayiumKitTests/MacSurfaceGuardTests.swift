@@ -1750,10 +1750,23 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// window.
     func testSettingsLostTheDeviceInboxTabAndNothingElseLostTheDeviceInbox() throws {
         let settings = try source(named: "Settings/SettingsView.swift")
-        XCTAssertEqual(occurrences(of: ".tabItem {", in: settings), 2,
-                       "the settings window no longer has exactly General and Updates")
+        // ONE `.tabItem` here now, and that is not a lost tab. This file is
+        // shared source compiled into both macOS products, so the Updates pane
+        // moved behind the distribution seam: the direct build's
+        // `AppUpdatesSettingsTab` carries its own `.tabItem`, and the App Store
+        // build's is an `EmptyView` because the App Store updates that product.
+        // The count is still asserted so a THIRD tab appearing here is a
+        // failure rather than something nobody notices.
+        XCTAssertEqual(occurrences(of: ".tabItem {", in: settings), 1,
+                       "the shared settings window no longer has exactly the General tab")
         XCTAssertTrue(settings.contains("GeneralSettingsView()")
-                      && settings.contains("UpdateSettingsView(updater: updater)"))
+                      && settings.contains("AppUpdatesSettingsTab(updates: updates)"))
+        XCTAssertFalse(settings.contains("import Sparkle"),
+                       "shared settings source must not import the direct build's updater")
+        // And the pane itself still exists, in the target that has an updater.
+        let directUpdates = try source(named: "Distribution/DirectDistribution.swift")
+        XCTAssertTrue(directUpdates.contains("struct UpdateSettingsView: View"),
+                      "the Updates pane is gone from the build that has an updater")
         XCTAssertFalse(settings.contains("DeviceInboxSettingsView"),
                        "the Device Inbox settings tab is back")
         XCTAssertFalse(settings.contains("inboxTitle"),
@@ -2772,8 +2785,14 @@ final class MacSurfaceGuardTests: XCTestCase {
         // only the scene gets the standard app-menu placement and ⌘,.
         XCTAssertEqual(occurrences(of: "Settings {", in: app), 1,
                        "there is exactly one settings scene")
-        XCTAssertTrue(app.contains("SettingsView(updater: updaterController.updater)"),
+        XCTAssertTrue(app.contains("SettingsView(updates: updates)"),
                       "the settings scene must drive the app's one updater, not a second")
+        // And the scene builds exactly one of them, through the seam, so
+        // neither product can end up with a second updater object.
+        XCTAssertEqual(occurrences(of: "AppUpdates()", in: app), 1,
+                       "the scene owns more than one update mechanism")
+        XCTAssertFalse(app.contains("import Sparkle"),
+                       "shared scene source must not import the direct build's updater")
         // Same resolved direction as the other two scene roots. The catalogs
         // live in a package bundle, so SwiftUI does not mirror Arabic on its own
         // — a settings window left out of this is the one Arabic screen laid out
@@ -2900,8 +2919,12 @@ final class MacSurfaceGuardTests: XCTestCase {
 
     /// The updates pane says what the old lone menu item could not, and reads
     /// every one of those facts from the thing that owns it.
+    ///
+    /// It reads `Distribution/DirectDistribution.swift`, which is where the pane
+    /// lives now: the settings window became shared source when the App Store
+    /// target started compiling it, and Sparkle is the direct build's alone.
     func testTheUpdatesPaneReadsSparkleAndTheBundleRatherThanRestatingThem() throws {
-        let settings = try source(named: "Settings/SettingsView.swift")
+        let settings = try source(named: "Distribution/DirectDistribution.swift")
         XCTAssertTrue(settings.contains("updater.automaticallyChecksForUpdates = $0"),
                       "the toggle must write through to Sparkle")
         XCTAssertTrue(settings.contains("lastCheck = updater.lastUpdateCheckDate"),

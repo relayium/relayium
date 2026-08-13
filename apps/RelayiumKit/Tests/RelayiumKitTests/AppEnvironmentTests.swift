@@ -81,6 +81,37 @@ final class AppEnvironmentTests: XCTestCase {
         XCTAssertEqual(AppEnvironment.plansWebURL.absoluteString, "https://relayium.com/pricing")
     }
 
+    // The two legal pages a subscription is sold under, at the addresses the
+    // site actually publishes. `web/scripts/pages/build-pages.mjs` writes them as
+    // `privacy/index.html` and `terms/index.html`, and the sitemap's own `<loc>`
+    // carries the trailing slash — the slashless form is a redirect, and a
+    // redirect is what a reviewer would watch happen on the purchase screen.
+    func testTheLegalPagesAreTheSitesOwnPublishedAddresses() {
+        XCTAssertEqual(AppEnvironment.privacyWebURL.absoluteString,
+                       "https://relayium.com/privacy/")
+        XCTAssertEqual(AppEnvironment.termsWebURL.absoluteString,
+                       "https://relayium.com/terms/")
+    }
+
+    // Both are Relayium's own pages over TLS. An `http` link on a purchase
+    // surface is refused by ATS before anybody reads it, and a legal page on
+    // somebody else's host is not this product's policy.
+    func testTheLegalPagesAreRelayiumsOwnOverHTTPS() {
+        for url in [AppEnvironment.privacyWebURL, AppEnvironment.termsWebURL] {
+            XCTAssertEqual(url.scheme, "https", "\(url) is not over TLS")
+            XCTAssertEqual(url.host, AppEnvironment.productionBaseURL.host,
+                           "\(url) does not point at Relayium")
+            // No query and no fragment: nothing about which account is reading a
+            // policy belongs in a URL that leaves the app for a browser.
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            XCTAssertNil(components?.query)
+            XCTAssertNil(components?.fragment)
+        }
+        // And they are two different documents. One constant copied over the
+        // other would still satisfy every check above.
+        XCTAssertNotEqual(AppEnvironment.privacyWebURL, AppEnvironment.termsWebURL)
+    }
+
     // The token *is* the button: a frozen account cannot sign in, so without it
     // the "Reactivate" hand-off lands on a page that cannot help. The fragment
     // shape is what web/src/lib/Account.svelte reads on mount.

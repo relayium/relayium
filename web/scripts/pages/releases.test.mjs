@@ -62,7 +62,26 @@ const CLI_TAG = /^v\d+\.\d+\.\d+$/;
 const NATIVE_TAG = /^macos-v\d+(?:\.\d+){1,2}$/;
 
 /**
- * Sort a tag table into the three things a tag can be.
+ * Tags that are not a namespace at all — they are one incident's debris.
+ *
+ * On 2026-08-12 auto-release.yml still picked its base with `git describe
+ * --tags`, which returns the newest tag of ANY family. The macOS app was ahead,
+ * so it got `macos-v1.1.3`, stripped a leading `v` that was not there, did
+ * integer arithmetic on the string `macos-v1` and pushed `vmacos-v1.2.0`. The
+ * release it dispatched died inside GoReleaser before publishing anything —
+ * see scripts/release/server-tag.sh, which now owns that decision.
+ *
+ * So this tag publishes NOTHING: not the CLI and node a `v*` row promises, not
+ * a DMG a `macos-v*` tag delivers. Listing it would be the page's one real lie;
+ * widening NATIVE_TAG to absorb it would be a quieter one, since it would also
+ * green-light the next mistyped tag. It is enumerated by exact name instead —
+ * a published tag cannot be un-pushed, and pretending it is gone is what the
+ * `unknown` bucket below exists to prevent.
+ */
+const BROKEN_TAGS = new Set(["vmacos-v1.2.0"]);
+
+/**
+ * Sort a tag table into the four things a tag can be.
  *
  * Until 2026-08-10 every tag in this repository was a `v*` command-line release
  * and "the list equals `git tag`" was exactly right. Publishing macOS 1.0 added
@@ -79,13 +98,16 @@ const NATIVE_TAG = /^macos-v\d+(?:\.\d+){1,2}$/;
 function partitionTags(tags) {
   const listed = {};
   const native = [];
+  const broken = [];
   const unknown = [];
   for (const [tag, date] of Object.entries(tags)) {
-    if (CLI_TAG.test(tag)) listed[tag] = date;
+    // Checked first: a known-bad tag must not be able to match anything else.
+    if (BROKEN_TAGS.has(tag)) broken.push(tag);
+    else if (CLI_TAG.test(tag)) listed[tag] = date;
     else if (NATIVE_TAG.test(tag)) native.push(tag);
     else unknown.push(tag);
   }
-  return { listed, native, unknown };
+  return { listed, native, broken, unknown };
 }
 
 describe("the release list is internally consistent", () => {
@@ -137,14 +159,17 @@ describe("git tags are the source of truth", () => {
   });
 
   it.skipIf(tags === null)("accounts for every tag it does not list", () => {
-    const { native, unknown } = partitionTags(tags);
+    const { native, broken, unknown } = partitionTags(tags);
     // A namespace nobody has decided about yet. Fail here rather than let the
     // filter above swallow it.
     expect(unknown, "tags in an unrecognised namespace").toEqual([]);
     // And a native release may never appear as a row: the rows mean "this
     // version publishes the CLI and the node", which macos-v1.0 does not.
+    // Neither may the incident tag, which publishes nothing whatsoever.
     const rows = new Set(releases.releases.map((r) => r.version));
-    for (const tag of native) expect(rows.has(tag), `${tag} must not be listed`).toBe(false);
+    for (const tag of [...native, ...broken]) {
+      expect(rows.has(tag), `${tag} must not be listed`).toBe(false);
+    }
   });
 
   it.runIf(tags === null)("says so when git could not be asked", () => {
@@ -175,6 +200,23 @@ describe("which tags this page is responsible for", () => {
     // The first iOS release tag must stop this suite and force the decision,
     // not vanish into a filter.
     expect(partitionTags({ "ios-v1.0": "2026-09-01" }).unknown).toEqual(["ios-v1.0"]);
+  });
+
+  it("holds the incident tag apart from both real namespaces", () => {
+    // `vmacos-v1.2.0` is the one tag in this repository that publishes nothing.
+    // It must not become a row (it would claim a CLI and node build that does
+    // not exist) and must not be counted as a native release either.
+    const { listed, native, broken, unknown } = partitionTags({ "vmacos-v1.2.0": "2026-08-12" });
+    expect(listed).toEqual({});
+    expect(native).toEqual([]);
+    expect(broken).toEqual(["vmacos-v1.2.0"]);
+    expect(unknown).toEqual([]);
+  });
+
+  it("still surfaces a mistyped tag that is not the known one", () => {
+    // The enumeration is exact on purpose: absorbing `vmacos-*` by pattern
+    // would silently bless the next malformed tag the release path emits.
+    expect(partitionTags({ "vmacos-v1.3.0": "2026-09-01" }).unknown).toEqual(["vmacos-v1.3.0"]);
   });
 });
 

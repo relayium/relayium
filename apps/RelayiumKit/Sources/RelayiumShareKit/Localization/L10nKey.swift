@@ -873,6 +873,69 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case notifyIncomingText = "notify.incomingText"
     case notifyIncomingFailed = "notify.incomingFailed"
 
+    // MARK: - In-app subscription (Mac App Store build)
+    //
+    // The purchase surface the App Store build renders in place of the direct
+    // build's link to the website. Every string here describes a state the
+    // orchestration can actually reach; `AppleSubscriptionPresentation` is the
+    // one place that chooses between them, and its tests walk this list.
+    //
+    // Prices are deliberately absent from this catalog. What a subscription
+    // costs is the store's own localized answer for the caller's storefront, and
+    // the only thing owned here is the sentence it is placed into.
+
+    case subscriptionHeading = "subscription.heading"
+    case subscriptionBody = "subscription.body"
+    case subscriptionLoading = "subscription.loading"
+    /// Nothing on sale: no live mapping for this build, or a store that knows
+    /// none of the products there are. Not an error — nothing went wrong.
+    case subscriptionNone = "subscription.none"
+    case subscriptionSubscribe = "subscription.subscribe"
+    /// The badge on the offer whose tier this account already holds.
+    case subscriptionCurrent = "subscription.current"
+    /// %@ — the store's own formatted price, never reformatted here.
+    case subscriptionPriceMonthly = "subscription.priceMonthly"
+    /// %@ — the store's own formatted price, never reformatted here.
+    case subscriptionPriceYearly = "subscription.priceYearly"
+    case subscriptionPurchasing = "subscription.purchasing"
+    /// The gap between "Apple charged" and "Relayium recorded it". Named
+    /// separately from `purchasing` because it is the interval in which nothing
+    /// may be cancelled and nothing is lost if it fails.
+    case subscriptionSubmitting = "subscription.submitting"
+    case subscriptionRestoring = "subscription.restoring"
+    case subscriptionRestore = "subscription.restore"
+    case subscriptionNothingToRestore = "subscription.nothingToRestore"
+    /// Ask to Buy, or a bank approval. No transaction exists yet.
+    case subscriptionDeferred = "subscription.deferred"
+    case subscriptionCompleted = "subscription.completed"
+    /// Opens the App Store's own subscription management — the only place an
+    /// App Store subscription can be changed or cancelled.
+    case subscriptionManage = "subscription.manage"
+    case subscriptionManagedByApple = "subscription.managedByApple"
+    /// The two legal links the purchase surface must carry, worded as the pages
+    /// they open — Relayium's privacy policy and the terms the subscription is
+    /// sold under. Each language uses the title its own copy of that page
+    /// already has on relayium.com, so the label names the document the reader
+    /// arrives at rather than a second name for it.
+    case subscriptionPrivacy = "subscription.privacy"
+    case subscriptionTerms = "subscription.terms"
+    /// The three ways the server can refuse a purchase before one starts.
+    case subscriptionBlockedByWeb = "subscription.blockedByWeb"
+    case subscriptionBlockedByAdmin = "subscription.blockedByAdmin"
+    case subscriptionBlockedByOther = "subscription.blockedByOther"
+    case subscriptionErrorNotSignedIn = "subscription.errorNotSignedIn"
+    case subscriptionErrorNetwork = "subscription.errorNetwork"
+    case subscriptionErrorBusy = "subscription.errorBusy"
+    case subscriptionErrorNotAccepted = "subscription.errorNotAccepted"
+    case subscriptionErrorOtherAccount = "subscription.errorOtherAccount"
+    case subscriptionErrorAlreadyLinked = "subscription.errorAlreadyLinked"
+    case subscriptionErrorNotReady = "subscription.errorNotReady"
+    case subscriptionErrorWrongBuild = "subscription.errorWrongBuild"
+    /// %@ — an HTTP status, isolated as a token.
+    case subscriptionErrorServer = "subscription.errorServer"
+    /// %@ — an error type name, isolated as a token.
+    case subscriptionErrorStore = "subscription.errorStore"
+
     // MARK: - Account tab
 
     case accountManagePlan = "account.managePlan"
