@@ -104,6 +104,27 @@ func (s *Service) beforeImageFor(ctx context.Context, action, pathID string, for
 			},
 			rolloutAuditTarget("fleet"), nil
 
+	// The App Store product catalog. This is the one confirmable action whose
+	// "before" half must NOT come from the read path the rest of the server uses:
+	// SQLiteStore.AppleProductPlan is the live-only projection, and the rows an
+	// operator edits here are disproportionately the ones it hides (a retired
+	// mapping being brought back, a mapping whose tier was just taken off sale
+	// being retired). Reading it would show an empty before-image for exactly
+	// those rows — the confirmation page would describe an overwrite as a
+	// creation. GetAppleProduct reads the raw row instead.
+	case AuditAppleProduct:
+		p, perr := parseAppleProductForm(form)
+		if perr != nil {
+			return nil, nil, "", perr
+		}
+		before = map[string]any{}
+		if cur, ok, err := s.store.GetAppleProduct(ctx, p.BundleID, p.ProductID); err != nil {
+			return nil, nil, "", err
+		} else if ok {
+			before = appleProductImage(cur)
+		}
+		return before, appleProductImage(p), appleProductTarget(p), nil
+
 	case AuditPasskeyDelete:
 		return map[string]any{}, map[string]any{}, "passkey:" + form.Get("id"), nil
 

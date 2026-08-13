@@ -149,14 +149,32 @@ type SubscriptionApply struct {
 	Effective EffectiveEntitlement
 }
 
+// appleProductKeyMaxLen bounds a catalog row's bundle id and product id, in
+// BYTES.
+//
+// It is deliberately the verifier's own bound and not a second opinion: the only
+// thing that ever reads these keys is a lookup against a VerifiedAppleTransaction,
+// and Verify already refuses a payload whose bundleId or productId exceeds
+// appleMaxProductIDLen. A row keyed longer than that is therefore not merely
+// large, it is UNREACHABLE — no accepted transaction can ever name it — so an
+// operator who writes one has written a mapping that silently grants nothing,
+// which is the failure this catalog's whole guard rail exists to prevent.
+//
+// Tied by assignment rather than copied, so raising the verifier's bound cannot
+// leave the catalog refusing keys the verifier would now accept. It bounds the
+// LENGTH only. Nothing here restricts the FORM of an identifier: reverse-DNS is
+// Apple's convention, not a rule this boundary is entitled to enforce, and a
+// format check that is wrong rejects a product Relayium actually sells.
+const appleProductKeyMaxLen = appleMaxProductIDLen
+
 // AppleProduct maps one App Store product to a Relayium tier.
 //
 // It is keyed by BUNDLE IDENTITY as well as product id because Relayium ships
 // two apps — the Mac App Store build and the iOS build — under DIFFERENT bundle
-// ids, and Apple's product ids are namespaced per app. The same tier is
-// therefore two distinct products, and two `apple_product_monthly/yearly`
-// columns on `plans` could only ever hold one of them. Nothing seeds this
-// table: it is inert until real product records exist.
+// ids, so a purchase is only identified by the PAIR. Each bundle/product
+// combination a shipped app actually uses is its own mapping, which two
+// `apple_product_monthly/yearly` columns on `plans` could not hold. Nothing
+// seeds this table: it is inert until real product records exist.
 type AppleProduct struct {
 	BundleID  string
 	ProductID string
@@ -167,6 +185,37 @@ type AppleProduct struct {
 	// Active true, and AppleProductPlan is where that is caught.
 	Active    bool
 	UpdatedAt int64
+}
+
+// AppleProductRow is one RAW catalog row plus the current lifecycle facts about
+// the tier it points at. It is the OPERATOR's view of the table, and it is
+// deliberately not the same thing AppleProductPlan returns.
+//
+// AppleProductPlan answers "does this purchase grant anything right now", so it
+// is an inner join filtered to active mapping AND active plan: every row that
+// cannot grant is simply absent. That is exactly the wrong shape for an admin
+// list, where the rows an operator most needs to see are the ones that DO NOT
+// resolve — a mapping they retired, a mapping whose tier was taken off sale, a
+// mapping pointing at a tier that is not there at all. A console built on the
+// live projection would render those as "no such mapping" and invite an
+// operator to create a second row for a product that already has one.
+//
+// So: left join, no filtering, and the plan's state carried alongside rather
+// than folded into the row's own Active flag.
+type AppleProductRow struct {
+	AppleProduct
+	// PlanFound is false when no plans row has this plan_id. The foreign key on
+	// apple_products.plan_id makes that unreachable through any current write
+	// path, and it is still represented here: FK enforcement is a per-connection
+	// pragma, the table predates neither an older binary nor a hand-edited
+	// database, and the one place this must never happen is the place that shows
+	// an operator what is wrong.
+	PlanFound bool
+	// PlanActive is the TIER's switch (plans.active), never the mapping's.
+	// Meaningless when PlanFound is false.
+	PlanActive bool
+	// PlanName is for display only ('' when the plan is missing).
+	PlanName string
 }
 
 // planRank orders tiers for "which live subscription grants the most".

@@ -44,6 +44,12 @@ const (
 	// Identifier bounds. Apple's transaction ids are ~16 digits and product ids
 	// are short reverse-DNS strings; these keep an oversized value out of the
 	// database rather than describing Apple's format.
+	//
+	// appleMaxProductIDLen is also the product CATALOG's key bound — appleProductKeyMaxLen
+	// is defined as this value, so the admin console cannot write a mapping whose
+	// key this check would refuse to accept a purchase for. Raising it stays safe
+	// in that direction (the catalog widens with it); lowering it can orphan rows
+	// that already exist.
 	appleMaxIDLen        = 64
 	appleMaxProductIDLen = 200
 )

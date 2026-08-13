@@ -42,7 +42,28 @@ type adminHomeData struct {
 	Nodes       []adminNodeView
 	Plans       []planView
 	ActivePlans []planView // subset of Plans with Active==true; used for the per-user plan dropdown
-	Settings    adminSettingsView
+	// AppleProducts is the App Store product catalog, EVERY raw row in a stable
+	// order — including the ones no purchase can currently resolve. The tier
+	// dropdown on each row is fed from Plans (all tiers), not ActivePlans: a row
+	// whose tier has been taken off sale must still render its own current
+	// value, and retiring it is the operator's way out of that state.
+	AppleProducts []appleProductView
+	// AppleProductsErr means the catalog read FAILED. Same contract as ByoErr
+	// and PasskeysErr: an empty catalog is a legitimate, common state, so
+	// "could not read" must never render as "there are none".
+	AppleProductsErr bool
+	// AppleProductCycles is the cycle vocabulary for the row dropdowns, from the
+	// same list the parser accepts, so the form cannot offer a value the write
+	// would refuse.
+	AppleProductCycles []string
+	// AppleProductKeyMaxLen is the maxlength for the add form's key inputs, from
+	// the same constant the parser and the store enforce (appleProductKeyMaxLen)
+	// — same "the form cannot offer a value the write would refuse" rule as the
+	// cycle dropdown. It is a hint, not the check: browsers count UTF-16 units
+	// for maxlength while the bound is bytes, and nothing about a form field
+	// binds a client anyway. The parser is the boundary.
+	AppleProductKeyMaxLen int
+	Settings              adminSettingsView
 	// Passkeys are the registered admin credentials, listed so a never-used
 	// entry (an attacker's planted credential) is visible. PasskeysErr marks a
 	// failed read so the template can show an error instead of an empty table —
@@ -693,6 +714,17 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 .plan-row button{background:var(--a);color:#fff;border:0;cursor:pointer;font-size:12px}
 .plan-row label{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted)}
 .danger{background:#e5484d}
+/* App Store 商品目录。行内表单沿用 .plan-row 的排布；这里只加"状态"这一列的
+   配色 —— 它是操作员真正据以行动的那一列，绿/灰/红三档必须一眼分得开：
+   生效中、已停用（自己关的，正常），以及"看着没问题但收不了款"的两种坏状态。 */
+.apple-products{margin:0 0 28px}.apple-products h2{margin-bottom:6px}
+.apple-note{color:var(--muted);font-size:12px;margin:0 0 12px;max-width:760px}
+.ap-live{color:#2e9e4f;font-weight:600}
+.ap-retired{color:var(--muted)}
+.ap-broken{color:#e5484d;font-weight:600}
+.apple-products .plan-row select{font:inherit;padding:5px 7px;border:1px solid var(--bd);border-radius:6px;background:var(--card);color:var(--fg)}
+.apple-products .plan-row input[type=text]{width:200px}
+.apple-products .ap-add{margin-top:12px}
 .passkeys{margin:0 0 28px}.passkeys h2{margin-bottom:12px}
 .passkeys .mint{flex-wrap:wrap;margin-top:12px}
 .never{color:#e5484d;font-weight:600}
@@ -1013,6 +1045,72 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 </td></tr>
 {{end}}
 </tbody></table>
+</section>
+
+<section class="apple-products">
+<h2>{{t $.Lang "App Store 商品目录"}}{{if not .AppleProductsErr}}（{{len .AppleProducts}}）{{end}}</h2>
+<p class="apple-note">{{t $.Lang "决定「哪个 App Store 商品对应哪个套餐」。这张表不会打开购买校验：校验器由服务器启动时的配置文件决定，没有配置时购买接口一律返回 503，这里写什么都一样。「生效中」只表示映射本身和套餐都在售。"}}</p>
+{{/* 读取失败时，这一节除了那句错误提示什么都不渲染 —— 表格和"新增映射"表单
+     都在 else 里。少渲染一张表是显而易见的；少渲染新增表单才是这里的重点：
+     写入是 upsert，而"这个 key 是不是已经有行了"只有目录读得到。读失败时谁都
+     无法回答这个问题，于是新增表单唯一能提供的操作就是盲写——把一条已存在的
+     映射静默改指到别的档位上，而操作员看到的是空白页面，以为自己在新建。
+     读失败 ⇒ 本节不提供任何写入入口，修好读再改。 */}}
+{{if .AppleProductsErr}}
+<p class="err">{{t $.Lang "商品目录读取失败，请查看服务端日志（这不等于「没有映射」）；读取恢复前不提供编辑入口"}}</p>
+{{else}}
+<table>
+<thead><tr><th>{{t $.Lang "Bundle ID"}}</th><th>{{t $.Lang "商品 ID"}}</th><th>{{t $.Lang "套餐"}}</th><th>{{t $.Lang "周期"}}</th><th>{{t $.Lang "状态"}}</th><th>{{t $.Lang "更新时间(UTC)"}}</th></tr></thead>
+<tbody>
+{{range .AppleProducts}}
+<tr>
+<td>{{.BundleID}}</td><td>{{.ProductID}}</td>
+<td>{{if .PlanName}}{{.PlanName}}{{else}}{{.PlanID}}{{end}}</td>
+<td>{{.Cycle}}</td>
+<td>
+{{if eq .Status "live"}}<span class="ap-live">{{t $.Lang "生效中"}}</span>
+{{else if eq .Status "retired"}}<span class="ap-retired">{{t $.Lang "已停用"}}</span>
+{{else if eq .Status "plan_missing"}}<span class="ap-broken">{{t $.Lang "套餐不存在"}}</span>
+{{else}}<span class="ap-broken">{{t $.Lang "套餐已下架，购买会被拒绝"}}</span>{{end}}
+</td>
+<td>{{if .UpdatedAt}}{{ts .UpdatedAt}}{{else}}—{{end}}</td>
+</tr>
+<tr><td colspan="6">
+<form method="post" action="/admin/apple-products" class="plan-row">
+<input type="hidden" name="bundle_id" value="{{.BundleID}}">
+<input type="hidden" name="product_id" value="{{.ProductID}}">
+<select name="plan_id" title="{{t $.Lang "套餐"}}">
+{{/* 套餐不存在时先补一个"当前值"选项：否则下拉框里没有任何一项匹配这一行，
+     浏览器会替操作员选中第一个套餐——于是"我只是想把这行停用"会顺手把它改指到
+     另一个档位上。这一项必须排在最前且 selected。 */}}
+{{if not .PlanFound}}<option value="{{.PlanID}}" selected>{{.PlanID}}{{t $.Lang "（不存在）"}}</option>{{end}}
+{{$cur := .PlanID}}{{range $.Plans}}<option value="{{.ID}}"{{if eq .ID $cur}} selected{{end}}>{{.ID}}{{if not .Active}}{{t $.Lang "（已下架）"}}{{end}}</option>{{end}}
+</select>
+<select name="cycle" title="{{t $.Lang "周期"}}">
+{{$cyc := .Cycle}}{{range $.AppleProductCycles}}<option value="{{.}}"{{if eq . $cyc}} selected{{end}}>{{.}}</option>{{end}}
+</select>
+<label><input type="checkbox" name="active" value="1"{{if .Active}} checked{{end}}> {{t $.Lang "启用"}}</label>
+<button type="submit">{{t $.Lang "保存"}}</button>
+</form>
+</td></tr>
+{{else}}
+<tr><td colspan="6">{{t $.Lang "尚未配置任何 App Store 商品映射"}}</td></tr>
+{{end}}
+</tbody></table>
+
+<form method="post" action="/admin/apple-products" class="plan-row ap-add">
+<input type="text" name="bundle_id" placeholder="{{t $.Lang "Bundle ID"}}" maxlength="{{$.AppleProductKeyMaxLen}}" required>
+<input type="text" name="product_id" placeholder="{{t $.Lang "商品 ID"}}" maxlength="{{$.AppleProductKeyMaxLen}}" required>
+<select name="plan_id" title="{{t $.Lang "套餐"}}">
+{{range .Plans}}<option value="{{.ID}}">{{.ID}}{{if not .Active}}{{t $.Lang "（已下架）"}}{{end}}</option>{{end}}
+</select>
+<select name="cycle" title="{{t $.Lang "周期"}}">
+{{range .AppleProductCycles}}<option value="{{.}}">{{.}}</option>{{end}}
+</select>
+<label><input type="checkbox" name="active" value="1" checked> {{t $.Lang "启用"}}</label>
+<button type="submit">{{t $.Lang "新增映射"}}</button>
+</form>
+{{end}}
 </section>
 
 <section class="settings">

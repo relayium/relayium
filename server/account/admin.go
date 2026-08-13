@@ -535,6 +535,13 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 		s.CSRFGuard(s.RequireStepUp(AuditTokenMint, s.handleAdminMintToken)))
 	mux.Handle("POST /admin/nodes/{id}/delete",
 		s.CSRFGuard(s.RequireStepUp(AuditNodeDelete, s.handleAdminDeleteNode)))
+	// The App Store product catalog: which App Store product grants which tier.
+	// High-risk for a reason none of the others share — a wrong row here is read
+	// AFTER a customer's money has already moved, so the cost of a mis-click is
+	// not a rejected edit but a paid purchase resolving to the wrong tier or to
+	// nothing. Same guard pair as the writes above; see admin_apple_products.go.
+	mux.Handle("POST /admin/apple-products",
+		s.CSRFGuard(s.RequireStepUp(AuditAppleProduct, s.handleAdminUpsertAppleProduct)))
 	mux.Handle("POST /admin/confirm", s.CSRFGuard(http.HandlerFunc(s.HandleAdminConfirm)))
 	// Low-risk writes (no lockout/destructive-at-scale potential) apply
 	// directly — no confirmation page.
@@ -970,6 +977,19 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 			}
 		}
 	}
+	// The App Store product catalog. Same degradation contract as the passkey
+	// list below and the BYO tables above, and for the sharpest version of the
+	// same reason: an empty catalog table is a TRUE and ordinary state (nothing
+	// seeds it), so a failed read rendered as an empty table is indistinguishable
+	// from "no mappings exist yet" — and the operator's next move on that reading
+	// is to create a mapping that may already be there. Flag it and let the
+	// template say the read failed.
+	appleProducts, apErr := s.Store().ListAppleProducts(r.Context())
+	appleProductsErr := apErr != nil
+	if apErr != nil {
+		log.Printf("admin: ListAppleProducts failed: %v", apErr)
+		appleProducts = nil
+	}
 	// A passkey that was never used is how a planted credential shows itself,
 	// so the list is part of the security surface, not just a convenience. A
 	// failed read must therefore never render as an empty table. It must not
@@ -1035,10 +1055,14 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		ByoRemovedPages: byoPageLinks(q, byoSearch, byoRemPageParam, byoRemPage, byoRemTotalPages),
 		ByoRemovedErr:   remErr != nil,
 		Plans:           planVs, ActivePlans: activePlanVs,
-		CentralStoredBytes: centralStored,
-		Passkeys:           passkeys,
-		PasskeysErr:        passkeysErr,
-		Nonce:              CSPNonce(r),
+		AppleProducts:         appleProductViews(appleProducts),
+		AppleProductsErr:      appleProductsErr,
+		AppleProductCycles:    appleProductCycles,
+		AppleProductKeyMaxLen: appleProductKeyMaxLen,
+		CentralStoredBytes:    centralStored,
+		Passkeys:              passkeys,
+		PasskeysErr:           passkeysErr,
+		Nonce:                 CSPNonce(r),
 		Settings: adminSettingsView{
 			MaxFileSizeMB:          st.MaxFileSize / (1024 * 1024),
 			DailyQuotaMB:           st.DailyQuota / (1024 * 1024),

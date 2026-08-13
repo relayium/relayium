@@ -28,6 +28,17 @@ const (
 	AuditTokenMint      = "token.mint"
 	AuditTokenRevoke    = "token.revoke"
 	AuditPasskeyDelete  = "passkey.delete"
+	// AuditAppleProduct records an operator writing one row of the App Store
+	// product catalog — creating a mapping, repointing it at another tier or
+	// cycle, or retiring it.
+	//
+	// Its own action rather than a variant of plan.upsert: this table decides
+	// which tier an already-paid App Store purchase resolves to, and "who wired
+	// this product to this tier, and when" is a money question an incident
+	// review has to answer from the action name. One action covers create,
+	// change and retire because the changes field carries active's old and new
+	// value — the same shape plan.upsert uses for a plan's own retirement.
+	AuditAppleProduct = "apple.product"
 	// 节点版本发布。四个常规动作各自独立记账，紧急发布单列一个 action ——
 	// 事后翻审计日志时，"这次是谁跳过了分批" 必须一眼可查，不能混在
 	// rollout.target 里靠 changes 字段去猜。
@@ -96,7 +107,7 @@ var auditActions = []string{
 	AuditLoginOK, AuditLoginFail, AuditLogout, AuditSettings,
 	AuditPlanUpsert, AuditUserPlan, AuditNodeDelete, AuditNodeLimits,
 	AuditNodeLabel, AuditNodeDraining, AuditNodeRestore, AuditNodeRemove, AuditNodeDeregister,
-	AuditTokenMint, AuditTokenRevoke, AuditPasskeyDelete,
+	AuditTokenMint, AuditTokenRevoke, AuditPasskeyDelete, AuditAppleProduct,
 	AuditRolloutTarget, AuditRolloutPause, AuditRolloutResume,
 	AuditRolloutRollback, AuditRolloutEmergency, AuditRolloutRetry,
 	AuditRolloutFast, AuditRolloutFastCanary,

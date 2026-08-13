@@ -532,6 +532,86 @@ func (s *SQLiteStore) AppleProductPlan(ctx context.Context, bundleID, productID 
 	return p, true, nil
 }
 
+// GetAppleProduct reads one RAW catalog row by its exact key.
+//
+// No join and no filtering, and that is the entire difference between this and
+// AppleProductPlan above. It is what the admin confirmation page's "before"
+// image is built from: the operator must be shown the row that is actually
+// there, including the ones the live projection deliberately hides (retired
+// mapping, retired tier, missing tier). Reading the projection instead would
+// show an empty before-image for exactly those rows, and the confirmation page
+// would then say "creating a new mapping" while the write overwrote an existing
+// one — a diff that lies in the one place its whole job is to be true.
+//
+// The key is trimmed for the same reason UpsertAppleProduct trims it: a pasted
+// bundle id with a trailing newline must address the row the write will address,
+// or the before-image and the write disagree about which row they are about.
+func (s *SQLiteStore) GetAppleProduct(ctx context.Context, bundleID, productID string) (AppleProduct, bool, error) {
+	bundleID, productID = strings.TrimSpace(bundleID), strings.TrimSpace(productID)
+	if bundleID == "" || productID == "" {
+		return AppleProduct{}, false, nil
+	}
+	var p AppleProduct
+	var active int64
+	err := s.reader().QueryRowContext(ctx,
+		`SELECT bundle_id, product_id, plan_id, cycle, active, updated_at
+		   FROM apple_products WHERE bundle_id = ? AND product_id = ?`,
+		bundleID, productID).Scan(&p.BundleID, &p.ProductID, &p.PlanID, &p.Cycle, &active, &p.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return AppleProduct{}, false, nil
+	}
+	if err != nil {
+		return AppleProduct{}, false, err
+	}
+	p.Active = active != 0
+	return p, true, nil
+}
+
+// ListAppleProducts returns every raw catalog row with the state of the tier it
+// points at, for the admin console.
+//
+// LEFT JOIN, not the inner join AppleProductPlan uses: a row whose plan_id has
+// no plans row must still appear. That row should be unreachable — the foreign
+// key is real — but "unreachable" is a claim about the write paths, and the
+// admin list is the surface whose job is to show what is actually in the table.
+// Rendering it through an inner join would make a broken row invisible in the
+// one place someone could fix it.
+//
+// ORDER BY the primary key, which is total: the list is the same on every
+// render and in every test, and two rows can never swap places between the page
+// an operator read and the row they clicked.
+//
+// Unpaged, unlike the BYO node tables on the same dashboard, and the difference
+// is the population rather than the preference: BYO nodes grow with the user
+// base and have no ceiling, while this table is written only by an operator
+// through the step-up-confirmed console — its size is the number of App Store
+// products Relayium sells. If that ever stops being a handful, this needs the
+// same SQL paging treatment, not a bigger render.
+func (s *SQLiteStore) ListAppleProducts(ctx context.Context) ([]AppleProductRow, error) {
+	rows, err := s.reader().QueryContext(ctx,
+		`SELECT ap.bundle_id, ap.product_id, ap.plan_id, ap.cycle, ap.active, ap.updated_at,
+		        p.id IS NOT NULL, COALESCE(p.active, 0), COALESCE(p.name, '')
+		   FROM apple_products ap
+		   LEFT JOIN plans p ON p.id = ap.plan_id
+		  ORDER BY ap.bundle_id, ap.product_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AppleProductRow
+	for rows.Next() {
+		var r AppleProductRow
+		var active, planFound, planActive int64
+		if err := rows.Scan(&r.BundleID, &r.ProductID, &r.PlanID, &r.Cycle, &active, &r.UpdatedAt,
+			&planFound, &planActive, &r.PlanName); err != nil {
+			return nil, err
+		}
+		r.Active, r.PlanFound, r.PlanActive = active != 0, planFound != 0, planActive != 0
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // UpsertAppleProduct records (or retires, with Active=false) one mapping.
 //
 // It fails CLOSED, because this table is the whole of what stands between a
@@ -546,10 +626,18 @@ func (s *SQLiteStore) AppleProductPlan(ctx context.Context, bundleID, productID 
 //   - keys and plan are TRIMMED, then required non-empty. A pasted bundle id
 //     with a trailing newline must address the same product as the clean one,
 //     not create a second row nothing will ever match.
-//   - cycle must be exactly monthly or yearly. ” is what an unresolvable
-//     Stripe price yields and means UNKNOWN there; a catalog row is written by
-//     hand and has no excuse for not knowing, and every other value is a third
-//     cycle the projection cannot represent.
+//   - the keys must fit appleProductKeyMaxLen, which IS the purchase verifier's
+//     bound. Beyond it the row is unreachable by construction: Verify refuses
+//     the payload before any lookup, so the mapping could never resolve for
+//     anyone. Enforced here and not only in the admin parser because this method
+//     is the authority — every caller, including a future adapter or migration
+//     that never sees a form, has to be unable to write a row no purchase can
+//     reach. Length only; the FORM of an identifier is Apple's business, and a
+//     wrong format rule would reject a product Relayium sells.
+//   - cycle must be exactly monthly or yearly. The empty string is what an
+//     unresolvable Stripe price yields, where it means UNKNOWN; a catalog row is
+//     written by hand and has no excuse for not knowing, and every other value
+//     is a third cycle the projection cannot represent.
 //   - a LIVE mapping's plan must exist and be active. Pointing purchases at a
 //     tier that is not on sale is exactly the "unsafe state" this guards.
 //     AppleProductPlan re-checks the same thing at read time, because this
@@ -569,6 +657,10 @@ func (s *SQLiteStore) UpsertAppleProduct(ctx context.Context, p AppleProduct) er
 	p.Cycle = strings.TrimSpace(p.Cycle)
 	if p.BundleID == "" || p.ProductID == "" {
 		return errors.New("account: apple product needs a bundle id and a product id")
+	}
+	if len(p.BundleID) > appleProductKeyMaxLen || len(p.ProductID) > appleProductKeyMaxLen {
+		return fmt.Errorf("account: apple product bundle id and product id must each be at most %d bytes",
+			appleProductKeyMaxLen)
 	}
 	if p.PlanID == "" {
 		return errors.New("account: apple product needs a plan id")

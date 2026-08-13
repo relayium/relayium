@@ -133,6 +133,9 @@ func (s *Service) confirmHandlerFor(action string) (http.HandlerFunc, bool) {
 		AuditTokenMint:     s.handleAdminMintToken,
 		AuditNodeDelete:    s.handleAdminDeleteNode,
 		AuditPasskeyDelete: s.HandleAdminPasskeyDelete,
+		// The App Store product catalog write. It is on this path for the reason
+		// stated at its route: the row is read after the money has moved.
+		AuditAppleProduct: s.handleAdminUpsertAppleProduct,
 		// Emergency release is the one that ships a build to every node of a
 		// track at once, with no canary left to catch it.
 		AuditRolloutEmergency: s.handleAdminRolloutEmergency,

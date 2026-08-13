@@ -1622,6 +1622,15 @@ type Store interface {
 	// mapping whose tier has since been retired: the tier is re-checked at read
 	// time, because retiring a plan never revisits the mappings pointing at it.
 	AppleProductPlan(ctx context.Context, bundleID, productID string) (AppleProduct, bool, error)
+	// GetAppleProduct reads ONE raw catalog row by its exact key, whatever state
+	// it is in — retired, or pointing at a retired or missing tier. It is the
+	// read an admin confirmation "before" image needs; AppleProductPlan above is
+	// the live-only projection and would report every one of those as absent.
+	GetAppleProduct(ctx context.Context, bundleID, productID string) (AppleProduct, bool, error)
+	// ListAppleProducts returns every raw catalog row, in a stable order, with
+	// the state of the tier each one points at. No filtering: a mapping that
+	// cannot currently grant anything is the one an operator most needs to see.
+	ListAppleProducts(ctx context.Context) ([]AppleProductRow, error)
 	// UpsertAppleProduct records (or retires, with Active=false) one mapping.
 	UpsertAppleProduct(ctx context.Context, p AppleProduct) error
 	// SetScheduledPlan records (or clears, with planID="" and cycle="") the tier

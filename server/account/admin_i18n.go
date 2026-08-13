@@ -317,6 +317,23 @@ var adminEN = map[string]string{
 	"没有匹配": "no matches",
 	"的结果——是这次查询没跑成功。请查看服务端日志后重试；在确认之前不要据此认定某台节点不存在。": " — the query itself failed. Check the server log and retry; do not conclude a node is gone until you have.",
 	"的结果。请查看服务端日志后重试。": " result. Check the server log and retry.",
+
+	// App Store 商品目录。这一节的英文必须把"这张表不负责开启校验"说清楚：
+	// 一个只读到"生效中"的操作员，很容易以为写完映射购买就能走通了。
+	"App Store 商品目录": "App Store product catalog",
+	"决定「哪个 App Store 商品对应哪个套餐」。这张表不会打开购买校验：校验器由服务器启动时的配置文件决定，没有配置时购买接口一律返回 503，这里写什么都一样。「生效中」只表示映射本身和套餐都在售。": "Decides which App Store product grants which plan. This table does NOT switch purchase verification on: the verifier comes from the server's startup configuration file, and with none configured the purchase endpoint answers 503 no matter what is in here. \"Live\" only means the mapping itself and its plan are both on sale.",
+	"商品目录读取失败，请查看服务端日志（这不等于「没有映射」）；读取恢复前不提供编辑入口":                                                             "Could not read the product catalog — check the server log. This is NOT the same as \"there are no mappings\". No editing is offered until the read works: a write here is an upsert, and without the catalog nothing can tell whether a key already has a row.",
+	"商品 ID":        "Product ID",
+	"周期":           "Cycle",
+	"更新时间(UTC)":    "Updated (UTC)",
+	"生效中":          "Live",
+	"已停用":          "Retired",
+	"套餐不存在":        "No such plan",
+	"套餐已下架，购买会被拒绝": "Plan is off sale — purchases are refused",
+	"（已下架）":        " (off sale)",
+	"（不存在）":        " (missing)",
+	"尚未配置任何 App Store 商品映射": "No App Store product mappings configured yet",
+	"新增映射": "Add mapping",
 }
 
 // adminLangCookie holds an explicit choice made in the console's header.
