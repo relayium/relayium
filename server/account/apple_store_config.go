@@ -31,6 +31,23 @@ import (
 //	  "apps": [{"bundleId": "com.example.app", "appAppleId": 0}]
 //	}
 //
+// A deployment that must accept BOTH signed environments at once — the
+// TestFlight/App Review case, where a reviewer's purchase is always Sandbox
+// while customers are always Production — writes the plural key instead:
+//
+//	{
+//	  "environments": ["Production", "Sandbox"],
+//	  "rootCertsFile": "/etc/relayium/apple-root-cas.pem",
+//	  "apps": [{"bundleId": "com.example.app", "appAppleId": 1234567890}]
+//	}
+//
+// The two keys are ALTERNATIVES, never a merge: a file carrying both is refused
+// (see LoadAppleStoreConfig). `"environment": "Sandbox"` means exactly
+// `"environments": ["Sandbox"]`, so every existing file keeps its meaning
+// unchanged and the plural key adds a shape rather than replacing one. What the
+// plural key does NOT add is a wildcard — the set may hold only Apple's own two
+// spellings, and an empty set configures no verifier at all.
+//
 // The app list is a list of PAIRS. Spelled as environment variables it would be
 // two comma-separated lists that have to line up by index — a shape where one
 // missing element silently pairs every bundle id with the wrong numeric App
@@ -76,7 +93,19 @@ const (
 // AppleStoreConfig so the file format is a stated thing rather than whatever
 // the in-memory struct happens to look like today.
 type appleStoreConfigFile struct {
-	Environment   string                `json:"environment"`
+	// Environment is the original singular key: one environment, spelled
+	// directly. Kept because every deployed file uses it and it means precisely a
+	// one-element set.
+	//
+	// A POINTER so "the key is absent" and "the key is present and empty" stay
+	// distinguishable. Top-level key presence is checked separately below because
+	// encoding/json represents both an absent pointer field and an explicit null
+	// as nil.
+	Environment *string `json:"environment"`
+	// Environments is the plural alternative, for a deployment that accepts both
+	// signed environments. Decoded as a slice of strings so a scalar, an object
+	// or a nested array is a decode error rather than a value coerced into a set.
+	Environments  []string              `json:"environments"`
 	RootCertsFile string                `json:"rootCertsFile"`
 	Apps          []appleStoreConfigApp `json:"apps"`
 }
@@ -116,6 +145,19 @@ func LoadAppleStoreConfig(path string) (AppleStoreConfig, error) {
 		return AppleStoreConfig{}, fmt.Errorf("account: apple store config %s is not one unambiguous JSON object (%s)",
 			path, appleRejectionCode(err))
 	}
+	// The singular and plural keys are alternatives even when either value is
+	// null. The typed decoder cannot prove that by itself: encoding/json maps an
+	// absent pointer/slice and an explicit null to the same nil value.
+	var topLevel map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &topLevel); err != nil {
+		return AppleStoreConfig{}, fmt.Errorf("account: apple store config %s: %w", path, err)
+	}
+	_, singularPresent := topLevel["environment"]
+	_, pluralPresent := topLevel["environments"]
+	if singularPresent && pluralPresent {
+		return AppleStoreConfig{}, fmt.Errorf(
+			`account: apple store config %s sets both "environment" and "environments" — use one`, path)
+	}
 	var file appleStoreConfigFile
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	// An unknown key is a typo in a file whose every key changes who gets paid
@@ -129,12 +171,24 @@ func LoadAppleStoreConfig(path string) (AppleStoreConfig, error) {
 		return AppleStoreConfig{}, fmt.Errorf("account: apple store config %s lists %d apps (max %d)",
 			path, len(file.Apps), appleMaxConfiguredApps)
 	}
+	// ONE key decides the environment set. Both present is an ambiguous document
+	// in the same way two "environment" keys would be, and the same rule applies:
+	// this reader refuses rather than choosing. Neither present leaves the set
+	// empty, which NewAppleTransactionVerifier refuses — there is no default App
+	// Store, and never has been.
+	environments := file.Environments
+	if file.Environment != nil {
+		// The legacy shape, stated as what it always meant: a one-element set.
+		// Whether the element is a supported spelling is the verifier's rule, so
+		// an empty or misspelled value still fails with the message it always did.
+		environments = []string{*file.Environment}
+	}
 	roots, err := loadAppleRootCerts(file.RootCertsFile)
 	if err != nil {
 		return AppleStoreConfig{}, fmt.Errorf("account: apple store config %s: %w", path, err)
 	}
 	cfg := AppleStoreConfig{
-		Environment:  file.Environment,
+		Environments: environments,
 		RootCertsPEM: roots,
 		Apps:         make([]AppleAppConfig, 0, len(file.Apps)),
 	}

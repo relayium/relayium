@@ -54,10 +54,12 @@ var _ appleVerifierSink = (*account.Service)(nil)
 // value is state (1) above: nothing to install and nothing to say.
 type appleStoreSetup struct {
 	verifier *account.AppleTransactionVerifier
-	// env and apps exist only so the boot log can state which App Store this
+	// env and apps exist only so the boot log can state which App Store(s) this
 	// deployment is now talking to. A deployment that is verifying SANDBOX
 	// transactions in production would otherwise look identical to a working
-	// one until somebody noticed the free subscriptions.
+	// one until somebody noticed the free subscriptions — and one that accepts
+	// BOTH is a deliberate configuration an operator must be able to confirm
+	// from the log rather than infer from the file.
 	env  string
 	apps int
 }
@@ -84,7 +86,9 @@ func loadAppleStore(path string) (appleStoreSetup, error) {
 		// operator needs to know which document broke it.
 		return appleStoreSetup{}, fmt.Errorf("%w (from %s)", err, path)
 	}
-	return appleStoreSetup{verifier: v, env: cfg.Environment, apps: len(cfg.Apps)}, nil
+	// From the VERIFIER, not from the file: what is reported is the closed set the
+	// verifier actually accepts, after its own validation and normalization.
+	return appleStoreSetup{verifier: v, env: strings.Join(v.Environments(), "+"), apps: len(cfg.Apps)}, nil
 }
 
 // install wires the verifier into the account service, or does nothing at all.

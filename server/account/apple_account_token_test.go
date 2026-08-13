@@ -220,6 +220,62 @@ func TestAppleNotificationProjectionPurgesThroughSubscriptionBinding(t *testing.
 	}
 }
 
+// The same purge, through a SANDBOX binding. The ledger stores the raw id Apple
+// signed plus its environment, while the subscription binding stores the
+// environment-QUALIFIED id, so the join has to qualify before it compares.
+// Matching the raw column against the qualified id would leave a purged
+// account's replayable billing identity behind, which is the one thing this
+// delete exists to prevent.
+func TestAppleNotificationProjectionPurgesThroughSandboxBinding(t *testing.T) {
+	_, _, store, _ := newBillingServer(t)
+	ctx := context.Background()
+	u, err := store.UpsertUserByEmail(ctx, "apple-sandbox-binding-purge@example.com", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalID := "sandbox-binding-original-transaction"
+	if _, err := store.ApplySubscriptionSource(ctx, SourceEvent{
+		UserID: u.ID, Provider: ProviderApple,
+		ExternalID: appleSandboxExternalPrefix + originalID,
+		PlanID:     "free", Status: "canceled", EventAt: 1, Now: 1,
+	}); err != nil {
+		t.Fatalf("bind subscription: %v", err)
+	}
+	rec := AppleNotificationRecord{
+		UUID: appleNotifyUUID(992), Type: "EXPIRED", ReceivedAt: 1, Supported: true,
+		Projection: AppleNotificationProjection{
+			BundleID: testBundleMac, ProductID: "relayium.pro.monthly",
+			OriginalTransactionID: originalID, Environment: appleEnvSandbox,
+			PurchaseDateMS: 1, ExpiresDateMS: 2,
+		},
+	}
+	if _, fresh, err := store.ClaimAppleNotification(ctx, rec); err != nil || !fresh {
+		t.Fatalf("claim notification: fresh=%v err=%v", fresh, err)
+	}
+	// A Production row carrying the SAME digits belongs to nobody here and must
+	// survive: the purge is scoped to one account's subscriptions, not to a
+	// number that happens to appear in two stores.
+	other := rec
+	other.UUID = appleNotifyUUID(993)
+	other.Projection.Environment = appleEnvProduction
+	if _, fresh, err := store.ClaimAppleNotification(ctx, other); err != nil || !fresh {
+		t.Fatalf("claim production notification: fresh=%v err=%v", fresh, err)
+	}
+
+	if err := store.SetAccountDeletion(ctx, u.ID, 1, 100); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ArchiveAndPurgeUser(ctx, u.ID, 200); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := store.GetAppleNotification(ctx, rec.UUID); err != nil || ok {
+		t.Fatalf("sandbox-attributed projection outlived account: ok=%v err=%v", ok, err)
+	}
+	if _, ok, err := store.GetAppleNotification(ctx, other.UUID); err != nil || !ok {
+		t.Fatalf("the other store's projection was purged too: ok=%v err=%v", ok, err)
+	}
+}
+
 // appleTokenResult carries one call's outcome back to whoever asked for it.
 type appleTokenResult struct {
 	token  string

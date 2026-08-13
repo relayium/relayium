@@ -271,7 +271,7 @@ func TestAppleNotificationEnforcesProductionAppAppleID(t *testing.T) {
 	// A production deployment that declares one: a DIFFERENT id is refused and
 	// the configured id is accepted.
 	prod, err := NewAppleTransactionVerifier(AppleStoreConfig{
-		Environment:  appleEnvProduction,
+		Environments: []string{appleEnvProduction},
 		Apps:         []AppleAppConfig{{BundleID: testBundleIOS, AppAppleID: 6001234567}},
 		RootCertsPEM: c.rootPEM,
 	})

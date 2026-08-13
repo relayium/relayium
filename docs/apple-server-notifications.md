@@ -52,6 +52,56 @@ transaction must agree with them. Relayium ships two apps, so the cross-layer
 comparison is what stops a macOS purchase being presented inside an iOS
 notification.
 
+## Two environments at once
+
+TestFlight and App Review purchases are always **Sandbox**; customers are always
+**Production**. One deployment can therefore be required to accept both, which
+the verifier configuration states explicitly:
+
+```json
+{ "environments": ["Production", "Sandbox"] }
+```
+
+The singular `"environment": "Sandbox"` key still means exactly what it always
+did — a one-element set — and every existing file keeps working unchanged. The
+two keys are alternatives: a file that sets **both** is refused at startup
+rather than resolved. The set may hold only `Production` and `Sandbox`, spelled
+exactly, at most one of each, and it may not be empty. There is no wildcard and
+no fallback that retries a refused payload against the other environment; the
+boot log states the accepted set (`Production+Sandbox`).
+
+Accepting `Production` requires every configured app to name its real numeric
+App Store id, whether or not Sandbox is accepted beside it.
+
+**Environments do not share subscriptions.** Apple numbers transactions per
+store, so the same `originalTransactionId` names two unrelated subscriptions —
+one of them free. A Sandbox subscription is therefore recorded under a
+namespaced identity:
+
+| Environment | `subscription_sources.external_id` |
+| --- | --- |
+| Production | `2000000000000001` (Apple's id, unchanged) |
+| Sandbox | `sandbox:2000000000000001` |
+
+Production ids are unchanged byte for byte, so nothing already recorded moves.
+The separator cannot occur inside an Apple id — a transaction carrying one is
+refused — which is what makes the two namespaces disjoint rather than merely
+different-looking. Ownership lookups, entitlement writes and deferred-delivery
+drains all use the qualified identity, so a Sandbox purchase can neither adopt,
+drain nor revoke the Production subscription that shares its digits.
+
+One account still holds one Apple subscription row, so there is one further
+rule: a **Sandbox** event never displaces a binding already held by a
+**Production** subscription (the reverse is allowed — a real purchase supersedes
+a test one). A tester who is also a paying customer keeps what they paid for;
+their sandbox purchase is accepted, recorded and simply does not change their
+plan.
+
+In Production an envelope must carry the configured `appAppleId` and match it.
+In Sandbox the field is not an identity constraint: Relayium follows Apple's
+official server verifier and checks the globally unique `bundleId` instead,
+whether `appAppleId` is absent or present.
+
 ## The ledger, and what each outcome means
 
 Every verified delivery gets a durable row in `apple_notifications`, keyed by
@@ -101,9 +151,24 @@ To inspect the ledger directly:
 
 ```sql
 SELECT state, COUNT(*) FROM apple_notifications GROUP BY state;
-SELECT notification_uuid, notification_type, original_transaction_id, product_id
+SELECT notification_uuid, notification_type, original_transaction_id, environment,
+       product_id
   FROM apple_notifications WHERE state IN ('pending','conflict');
 ```
+
+A drain is scoped to one subscription in one store, so a `pending` row is only
+replayed by activity in its own `environment`.
+
+**Rows with an empty `environment`.** The column was added to an existing table.
+A `pending` row written before it carries `''`, and which store it came from is
+unknowable — guessing `Production` could let an old Sandbox event reach a paid
+binding, and guessing `Sandbox` would strand a real one. Such a row is therefore
+never replayed; each skip logs
+`apple notifications: skipped deferred <uuid> (unknown environment)`. It needs a
+human decision: look the `notificationUUID` up in App Store Connect and either
+apply the change by hand or move the row to a terminal state. Only deployments
+that were already running the notification endpoint can have any; a deployment
+that has never configured a verifier has none.
 
 A `notificationUUID` from that table can be looked up in App Store Connect's
 notification history. Every delivery also logs one line carrying that UUID and
@@ -128,9 +193,12 @@ Do these in order.
 2. **Product catalog populated.** Otherwise live purchases land in `pending`
    rather than granting.
 3. **Resolve the certificate-marker question below.** This is a hard gate.
-4. **Set the URL in App Store Connect** (Sandbox first), and send Apple's test
+4. **Decide the environment set.** A deployment that will receive TestFlight or
+   App Review purchases needs `"environments": ["Production", "Sandbox"]`;
+   anything else stays on the single environment it already names.
+5. **Set the URL in App Store Connect** (Sandbox first), and send Apple's test
    notification.
-5. **Verify the first real delivery** reaches `applied`, not a 4xx.
+6. **Verify the first real delivery** reaches `applied`, not a 4xx.
 
 ### Apple certificate marker compatibility
 
@@ -171,4 +239,10 @@ configuration and restart. The endpoint returns to `503`, the ledger stops
 growing, and existing rows are inert — nothing reads them except the drain,
 which needs an owner and a live mapping to do anything. No migration is
 required in either direction: an older binary rolled back onto this database
-simply never reads the table.
+simply never reads the table, and the `environment` column it does not know
+about is defaulted, so its own writes still land.
+
+Narrowing the environment set is also a plain configuration change and a
+restart. Deliveries from a store that is no longer configured are refused with
+`400`; the subscriptions recorded under that store's namespace are left exactly
+as they are.

@@ -1044,10 +1044,32 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
   purchase_date_ms        INTEGER NOT NULL DEFAULT 0,
   expires_date_ms         INTEGER NOT NULL DEFAULT 0,
   revocation_date_ms      INTEGER NOT NULL DEFAULT 0,
-  is_upgraded             INTEGER NOT NULL DEFAULT 0)`,
+  is_upgraded             INTEGER NOT NULL DEFAULT 0,
+  environment             TEXT NOT NULL DEFAULT '')`,
+		// The signed environment the projection came from, added to a table that
+		// already existed (2026-08). It is part of the subscription's identity, not
+		// a label: `originalTransactionId` is unique only within one App Store, so a
+		// deployment that verifies both must know which one a deferred row belongs
+		// to before it can replay it.
+		//
+		// ADDITIVE and defaulted, in both directions. A database this version
+		// migrates keeps working under an older binary, whose explicit column lists
+		// never name this column and whose INSERTs take the default. A row written
+		// by that older binary — or before the migration — carries '', which is an
+		// honest UNKNOWN: it is skipped and logged during a replay rather than
+		// guessed into either store (see reconcileApplePendingNotifications).
+		`ALTER TABLE apple_notifications ADD COLUMN environment TEXT NOT NULL DEFAULT ''`,
 		// The drain's query: deferred rows for one external subscription. Partial,
 		// because the states that matter are a small minority of a table whose
 		// ordinary population is terminal rows nobody queries by subscription.
+		//
+		// Deliberately NOT re-cut to include `environment`. CREATE INDEX IF NOT
+		// EXISTS is a no-op against an index of the same NAME with a different
+		// definition, so evolving this one in place would silently leave existing
+		// deployments on the old shape while new ones got the new one — two
+		// different query plans behind one name. The drain therefore keeps reading
+		// every pending row for the id and partitions by environment in Go, where
+		// the skip is also the thing that can be logged.
 		`CREATE INDEX IF NOT EXISTS idx_apple_notifications_pending
 		   ON apple_notifications(original_transaction_id, purchase_date_ms)
 		   WHERE state = 'pending'`,
@@ -2299,9 +2321,19 @@ func (s *SQLiteStore) ArchiveAndPurgeUser(ctx context.Context, userID string, no
 		// before attribution. Remove every row attributable through either the
 		// user's token or an Apple subscription binding before those lookup keys
 		// disappear, so a hard-purged account leaves no replayable billing identity.
+		// The subscription half of that join compares against the QUALIFIED
+		// external id (apple_identity.go), because that is what
+		// subscription_sources records: a Sandbox binding is stored as
+		// 'sandbox:<id>' while this ledger keeps the raw id Apple signed plus the
+		// environment beside it. Matching the raw column against the qualified id
+		// would silently stop purging Sandbox rows. Rows written before the
+		// environment column existed carry '', and the non-Sandbox branch matches
+		// them raw — which is exactly how they were bound.
 		{`DELETE FROM apple_notifications
 		    WHERE app_account_token=(SELECT apple_account_token FROM users WHERE id=? AND apple_account_token<>'')
-		       OR original_transaction_id IN (
+		       OR CASE WHEN environment='` + appleEnvSandbox + `'
+		               THEN '` + appleSandboxExternalPrefix + `' || original_transaction_id
+		               ELSE original_transaction_id END IN (
 		            SELECT external_id FROM subscription_sources
 		             WHERE user_id=? AND provider='apple')`, []any{userID, userID}},
 		{`DELETE FROM subscription_sources WHERE user_id=?`, []any{userID}},

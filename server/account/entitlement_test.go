@@ -90,6 +90,38 @@ func TestSingleProviderProjectsOntoUserRow(t *testing.T) {
 	}
 }
 
+// The Apple Sandbox namespace is an Apple-only policy. The provider-neutral
+// store must not refuse another provider merely because its opaque external id
+// happens to start with the same characters.
+func TestAppleSandboxPrefixDoesNotConstrainOtherProviders(t *testing.T) {
+	store := newTestStore(t)
+	seedTiers(t, store)
+	u := newEntitlementUser(t, store, "provider-prefix@example.com")
+	ctx := context.Background()
+
+	for i, externalID := range []string{"stripe-original", "sandbox:stripe-replacement"} {
+		res, err := store.ApplySubscriptionSource(ctx, SourceEvent{
+			UserID: u.ID, Provider: ProviderStripe, PlanID: "pro", Status: "active",
+			Cycle: "monthly", PeriodEnd: 1_900_000_000 + int64(i),
+			ExternalID: externalID, EventAt: int64(i + 1), Now: fixedNow,
+		})
+		if err != nil {
+			t.Fatalf("ApplySubscriptionSource(%q): %v", externalID, err)
+		}
+		if !res.Applied {
+			t.Fatalf("another provider's opaque id %q was treated as Apple Sandbox", externalID)
+		}
+	}
+
+	source, ok, err := store.GetSubscriptionSource(ctx, u.ID, ProviderStripe)
+	if err != nil || !ok {
+		t.Fatalf("GetSubscriptionSource: ok=%v err=%v", ok, err)
+	}
+	if source.ExternalID != "sandbox:stripe-replacement" {
+		t.Fatalf("replacement external id was refused: %q", source.ExternalID)
+	}
+}
+
 // Two live providers: the effective plan is the HIGHER tier, and the state is
 // explicitly reported as multi-provider rather than silently collapsing to one.
 func TestSimultaneousProvidersResolveHighestAndExposeMultiple(t *testing.T) {

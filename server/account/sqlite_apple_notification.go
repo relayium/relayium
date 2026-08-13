@@ -109,6 +109,17 @@ type AppleNotificationProjection struct {
 	BundleID              string
 	ProductID             string
 	OriginalTransactionID string
+	// Environment is the signed environment the transaction belongs to. It is
+	// part of the subscription's IDENTITY, not a label: originalTransactionId is
+	// unique only within a store, so a replay that did not know which store this
+	// row came from could apply a Sandbox event to a Production subscription.
+	//
+	// Rows written before this column existed carry ''. That is a genuine
+	// unknown and is never guessed — see reconcileApplePendingNotifications,
+	// which skips such a row and says so, rather than defaulting it to either
+	// store. Only `pending` rows are ever replayed, and a deployment that had no
+	// Apple configuration at all has none of those.
+	Environment string
 	// AppAccountToken is the attribution key, exactly as the transaction carried
 	// it. Possession still authorizes nothing; it is the lookup, not the proof.
 	AppAccountToken string
@@ -129,6 +140,7 @@ func appleNotificationProjection(tx VerifiedAppleTransaction) AppleNotificationP
 	return AppleNotificationProjection{
 		BundleID: tx.BundleID, ProductID: tx.ProductID,
 		OriginalTransactionID: tx.OriginalTransactionID,
+		Environment:           tx.Environment,
 		AppAccountToken:       tx.AppAccountToken,
 		PurchaseDateMS:        tx.PurchaseDateMS,
 		ExpiresDateMS:         tx.ExpiresDateMS,
@@ -141,15 +153,17 @@ func appleNotificationProjection(tx VerifiedAppleTransaction) AppleNotificationP
 // appleSourceEvent reads.
 //
 // The returned value is deliberately NOT a full VerifiedAppleTransaction: the
-// fields it leaves zero (transaction id, environment, type, ownership type,
-// signed date) are ones appleSourceEvent does not consult, and populating them
-// with plausible-looking values would invite a future reader to trust a field
-// this row never verified. Everything present here came out of a JWS that
-// verified at the time it was recorded.
+// fields it leaves zero (transaction id, type, ownership type, signed date) are
+// ones appleSourceEvent does not consult, and populating them with
+// plausible-looking values would invite a future reader to trust a field this
+// row never verified. Everything present here came out of a JWS that verified at
+// the time it was recorded — including the environment, which appleSourceEvent
+// DOES consult, because it is half of the subscription's external identity.
 func (p AppleNotificationProjection) transaction() VerifiedAppleTransaction {
 	return VerifiedAppleTransaction{
 		BundleID: p.BundleID, ProductID: p.ProductID,
 		OriginalTransactionID: p.OriginalTransactionID,
+		Environment:           p.Environment,
 		AppAccountToken:       p.AppAccountToken,
 		PurchaseDateMS:        p.PurchaseDateMS,
 		ExpiresDateMS:         p.ExpiresDateMS,
@@ -175,9 +189,15 @@ type AppleNotificationRecord struct {
 	Projection AppleNotificationProjection
 }
 
+// appleNotificationCols is the full column list. `environment` is LAST because
+// ALTER TABLE appends, so this list matches the physical order in a migrated
+// database as well as in a freshly created one. Every statement here names its
+// columns explicitly, which is what lets an older binary — whose list does not
+// include this column — keep reading and writing the same table; the column's
+// NOT NULL default is what makes its INSERT still land.
 const appleNotificationCols = `notification_uuid, state, notification_type, received_at, updated_at,
 	supported, bundle_id, product_id, original_transaction_id, app_account_token,
-	purchase_date_ms, expires_date_ms, revocation_date_ms, is_upgraded`
+	purchase_date_ms, expires_date_ms, revocation_date_ms, is_upgraded, environment`
 
 func scanAppleNotification(sc rowScanner) (AppleNotificationRecord, error) {
 	var r AppleNotificationRecord
@@ -186,7 +206,7 @@ func scanAppleNotification(sc rowScanner) (AppleNotificationRecord, error) {
 		&supported,
 		&r.Projection.BundleID, &r.Projection.ProductID, &r.Projection.OriginalTransactionID,
 		&r.Projection.AppAccountToken, &r.Projection.PurchaseDateMS, &r.Projection.ExpiresDateMS,
-		&r.Projection.RevocationDateMS, &upgraded)
+		&r.Projection.RevocationDateMS, &upgraded, &r.Projection.Environment)
 	r.Projection.IsUpgraded = upgraded != 0
 	r.Supported = supported != 0
 	return r, err
@@ -214,12 +234,12 @@ func (s *SQLiteStore) ClaimAppleNotification(ctx context.Context, rec AppleNotif
 	}
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO apple_notifications (`+appleNotificationCols+`)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(notification_uuid) DO NOTHING`,
 		rec.UUID, appleNotificationReceived, rec.Type, rec.ReceivedAt, rec.ReceivedAt, b2i(rec.Supported),
 		rec.Projection.BundleID, rec.Projection.ProductID, rec.Projection.OriginalTransactionID,
 		rec.Projection.AppAccountToken, rec.Projection.PurchaseDateMS, rec.Projection.ExpiresDateMS,
-		rec.Projection.RevocationDateMS, b2i(rec.Projection.IsUpgraded))
+		rec.Projection.RevocationDateMS, b2i(rec.Projection.IsUpgraded), rec.Projection.Environment)
 	if err != nil {
 		return AppleNotificationRecord{}, false, err
 	}
@@ -280,7 +300,16 @@ func (s *SQLiteStore) SetAppleNotificationState(ctx context.Context, uuid, state
 }
 
 // PendingAppleNotificationsFor returns the deferred notifications for one
-// external subscription, oldest generation first.
+// original transaction id, in EVERY environment, oldest generation first.
+//
+// The environment is deliberately not a parameter. The partial index behind
+// this query is cut on (original_transaction_id, purchase_date_ms), and
+// CREATE INDEX IF NOT EXISTS will not re-cut an index that already exists under
+// the same name — so adding the column to the WHERE clause would leave existing
+// deployments on the old plan while new ones got the new one. The caller
+// (reconcileApplePendingNotifications) partitions by environment instead, which
+// is also where a row that records no environment can be reported rather than
+// silently dropped.
 //
 // Ordered by the transaction's own purchaseDate rather than by arrival, so a
 // drain applies generations in the order they happened. The event clock would

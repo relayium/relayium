@@ -63,9 +63,20 @@ purchase until the last one is complete.
    purchase verifier applies to a signed transaction. A longer key is refused
    rather than stored, because no purchase could ever match it.
 4. **Configure the verifier and restart.** Only now install the configuration
-   file and restart the server. The boot log states which App Store environment
-   and how many app identities are active. A broken or half-filled configuration
-   refuses to start rather than falling back to the unconfigured state.
+   file and restart the server. The boot log states which App Store
+   environment(s) and how many app identities are active. A broken or
+   half-filled configuration refuses to start rather than falling back to the
+   unconfigured state.
+
+   A deployment that must accept TestFlight and App Review purchases alongside
+   real ones names both environments — `"environments": ["Production",
+   "Sandbox"]` — instead of the singular `"environment"` key; setting both keys
+   is refused. Accepting `Production` requires every app entry to carry its real
+   numeric `appAppleId`. A catalog row is shared by both stores: a mapping is
+   keyed by bundle id and product id, and the same product sold in Sandbox and
+   in Production resolves to the same tier. What is NOT shared is the
+   subscription itself — see [Two environments at
+   once](apple-server-notifications.md#two-environments-at-once).
 
 Steps 1–3 are safe to do at any time on a running production server: the
 endpoint keeps answering `503` throughout, so a partially built catalog is

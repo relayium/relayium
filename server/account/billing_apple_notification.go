@@ -185,6 +185,17 @@ func (s *Service) applyAppleNotification(ctx context.Context, n VerifiedAppleNot
 		return s.finishAppleNotification(ctx, n.UUID, appleNotificationUnsupported, "unsupported_shape", now)
 	}
 	tx := n.Transaction
+	// 3b. CAN THIS SUBSCRIPTION BE IDENTIFIED? Every verified delivery names its
+	//     environment, so this is unreachable for a payload just verified. It is
+	//     reachable for a REDELIVERY that replays a projection recorded before the
+	//     environment column existed (step 1 above), and there the answer must not
+	//     be a guess: without the store, originalTransactionId names two possible
+	//     subscriptions and one of them is somebody's paid one. Kept pending —
+	//     durable, non-terminal, and named in the log — rather than resolved as
+	//     "no owner", which would be a different and less honest reason.
+	if !appleSupportedEnvironment(tx.Environment) {
+		return s.finishAppleNotification(ctx, n.UUID, appleNotificationPending, "unknown_environment", now)
+	}
 
 	// 4. WHOSE SUBSCRIPTION IS THIS? Two independent keys, and they must agree.
 	owner, resolved, err := s.resolveAppleNotificationOwner(ctx, tx)
@@ -249,7 +260,7 @@ func (s *Service) applyAppleNotification(ctx context.Context, n VerifiedAppleNot
 	// Any EARLIER delivery for this subscription that was deferred for want of an
 	// owner can now be replayed. Best effort: this delivery is already durably
 	// applied, and a failure here leaves those rows exactly where they were.
-	s.reconcileApplePendingNotifications(ctx, owner, tx.OriginalTransactionID, now)
+	s.reconcileApplePendingNotifications(ctx, owner, appleSubscriptionKeyOf(tx), now)
 	return http.StatusOK, appleNotificationApplied, "applied"
 }
 
@@ -296,7 +307,16 @@ func (s *Service) recordAppleNotificationState(ctx context.Context, uuid, state 
 // transaction for yet. Neither resolving is "unknown", not "refuse": the
 // notification is real and gets preserved.
 func (s *Service) resolveAppleNotificationOwner(ctx context.Context, tx VerifiedAppleTransaction) (string, bool, error) {
-	boundOwner, bound, err := s.Store().UserByExternalSubscription(ctx, ProviderApple, tx.OriginalTransactionID)
+	// The binding is looked up under the ENVIRONMENT-QUALIFIED id. Under the bare
+	// originalTransactionId a Sandbox notification would resolve to the owner of
+	// the Production subscription that happens to carry the same digits — and
+	// then grant, revoke or conflict on somebody else's paid subscription. An
+	// unqualifiable identity resolves to nothing rather than to a wider match.
+	externalID, ok := appleSubscriptionKeyOf(tx).externalID()
+	if !ok {
+		return "", false, nil
+	}
+	boundOwner, bound, err := s.Store().UserByExternalSubscription(ctx, ProviderApple, externalID)
 	if err != nil {
 		return "", false, err
 	}
@@ -355,16 +375,40 @@ func (s *Service) appleNotificationProduct(ctx context.Context, tx VerifiedApple
 // ApplySubscriptionSource with the clock derived from its own transaction, so a
 // pending row describing an older generation is dropped by the store even
 // though it is being applied later in wall-clock time.
-func (s *Service) reconcileApplePendingNotifications(ctx context.Context, userID, originalTransactionID string, now time.Time) {
-	if userID == "" || originalTransactionID == "" {
+//
+// ENVIRONMENT IS PART OF THE KEY. The stored rows are looked up by the raw
+// originalTransactionId — that is what the column and its partial index hold —
+// and partitioned here, so a Sandbox drain can never consume the deferred
+// deliveries of the Production subscription with the same digits, or the other
+// way round. Two skips come out of that partition and they are different facts:
+//
+//   - a row from the OTHER store is not this subscription's row at all. It stays
+//     pending for its own drain, and there is nothing to report;
+//   - a row with NO recorded environment predates that column. Which store it
+//     came from is unknowable, and both guesses are unsafe — "Production" would
+//     let an old Sandbox event reach a paid binding, "Sandbox" would strand a
+//     real one — so it is skipped and LOGGED. Silence would make an undrainable
+//     row indistinguishable from an absent one.
+func (s *Service) reconcileApplePendingNotifications(ctx context.Context, userID string, key appleSubscriptionKey, now time.Time) {
+	if userID == "" || key.OriginalTransactionID == "" || !appleSupportedEnvironment(key.Environment) {
 		return
 	}
-	pending, err := s.Store().PendingAppleNotificationsFor(ctx, originalTransactionID)
+	pending, err := s.Store().PendingAppleNotificationsFor(ctx, key.OriginalTransactionID)
 	if err != nil {
 		log.Printf("apple notifications: listing deferred deliveries failed: %v", err)
 		return
 	}
 	for _, rec := range pending {
+		if rec.Projection.Environment == "" {
+			// One line per undrainable row, carrying only the UUID an operator can
+			// look up. These exist only in a database that recorded pending rows
+			// before the environment column, and they need a human decision.
+			log.Printf("apple notifications: skipped deferred %s (unknown environment)", rec.UUID)
+			continue
+		}
+		if rec.Projection.Environment != key.Environment {
+			continue
+		}
 		tx := rec.Projection.transaction()
 		product, mapped, err := s.appleNotificationProduct(ctx, tx, now)
 		if err != nil {

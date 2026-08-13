@@ -73,10 +73,18 @@ type AppleAppConfig struct {
 // It is injected, never discovered: absent configuration leaves the endpoint
 // answering "unavailable" rather than trusting a default.
 type AppleStoreConfig struct {
-	// Environment is the server's own answer to "which App Store is this
-	// deployment talking to" — Sandbox or Production. It is NOT read from the
-	// payload, because a payload that names its own environment can name either.
-	Environment string
+	// Environments is the server's own answer to "which App Stores is this
+	// deployment talking to" — a CLOSED SET drawn from Sandbox and Production.
+	// It is NOT read from the payload, because a payload that names its own
+	// environment can name either.
+	//
+	// One element is the ordinary deployment and the only shape that existed
+	// before: a legacy `"environment": "Sandbox"` file is exactly a one-element
+	// set. Two elements is the TestFlight/App Review case — a reviewer's purchase
+	// is always Sandbox and a customer's is always Production, and one deployment
+	// must accept both without letting either reach the other's subscriptions
+	// (see apple_identity.go).
+	Environments []string
 	// Apps is the allowlist of bundle identities.
 	Apps []AppleAppConfig
 	// RootCertsPEM holds the Apple root CA(s) that anchor the signing chain, as
@@ -89,22 +97,32 @@ type AppleStoreConfig struct {
 // transaction, or into a refusal. It is immutable after construction and safe
 // for concurrent use.
 type AppleTransactionVerifier struct {
-	env   string
-	apps  map[string]AppleAppConfig
-	roots *x509.CertPool
+	// envs is the configured closed set. Membership is the whole rule: there is
+	// no "any" mode and no fallback that retries a refused payload against the
+	// other environment.
+	envs map[string]struct{}
+	// envList is the same set in configuration order, for the boot log and for
+	// error messages. Never consulted by a decision.
+	envList []string
+	apps    map[string]AppleAppConfig
+	roots   *x509.CertPool
 }
 
 // NewAppleTransactionVerifier validates the configuration and builds the
 // verifier. It fails rather than degrading: half a trust boundary is worse than
 // none, because the endpoint in front of it would start returning 200.
 func NewAppleTransactionVerifier(cfg AppleStoreConfig) (*AppleTransactionVerifier, error) {
-	env := strings.TrimSpace(cfg.Environment)
-	if env != appleEnvSandbox && env != appleEnvProduction {
-		return nil, fmt.Errorf("account: apple store environment must be %q or %q", appleEnvSandbox, appleEnvProduction)
+	envs, envList, err := appleEnvironmentSet(cfg.Environments)
+	if err != nil {
+		return nil, err
 	}
 	if len(cfg.Apps) == 0 {
 		return nil, errors.New("account: apple store needs at least one configured app")
 	}
+	// Whether Production is ACCEPTED, not whether it is the only thing accepted.
+	// A dual-environment deployment verifies real money, so it owes the same
+	// answer to "which App Store record is this" that a Production-only one does.
+	_, acceptsProduction := envs[appleEnvProduction]
 	apps := make(map[string]AppleAppConfig, len(cfg.Apps))
 	for _, app := range cfg.Apps {
 		bundle := strings.TrimSpace(app.BundleID)
@@ -120,7 +138,13 @@ func NewAppleTransactionVerifier(cfg AppleStoreConfig) (*AppleTransactionVerifie
 		// Production must be able to say which App Store record it means, so the
 		// day a payload carries an appAppleId there is something to compare it
 		// with. Sandbox has no such record.
-		if env == appleEnvProduction && app.AppAppleID == 0 {
+		//
+		// A deployment that accepts Production AND Sandbox owes this too, and for
+		// a sharper reason than a Production-only one: its Production envelopes
+		// carry an appAppleId that must be matched, and leaving the configured
+		// value at 0 would make that comparison compare against nothing. The
+		// requirement is therefore on ACCEPTANCE of Production, not on exclusivity.
+		if acceptsProduction && app.AppAppleID == 0 {
 			return nil, fmt.Errorf("account: production apple store app %q needs its appAppleId", bundle)
 		}
 		apps[bundle] = AppleAppConfig{BundleID: bundle, AppAppleID: app.AppAppleID}
@@ -129,7 +153,73 @@ func NewAppleTransactionVerifier(cfg AppleStoreConfig) (*AppleTransactionVerifie
 	if !roots.AppendCertsFromPEM(cfg.RootCertsPEM) {
 		return nil, errors.New("account: apple store trust roots are missing or unparsable")
 	}
-	return &AppleTransactionVerifier{env: env, apps: apps, roots: roots}, nil
+	return &AppleTransactionVerifier{envs: envs, envList: envList, apps: apps, roots: roots}, nil
+}
+
+// appleEnvironmentSet validates the configured environments into a closed set.
+//
+// The rules are all refusals to build a verifier, because every one of them
+// describes a deployment that would be verifying against something other than
+// what its author wrote down:
+//
+//   - EMPTY is not "accept whatever arrives". There is no Any mode here; a
+//     deployment states which App Stores it is talking to or it does not verify.
+//   - Only Apple's own two spellings, exactly. "sandbox" and " Production " are
+//     the shapes a hand-edited file produces, and a case-insensitive match would
+//     make the configured set and the signed payload comparable under two
+//     different rules. Surrounding whitespace IS trimmed, which is what the
+//     single-environment reader always did.
+//   - A DUPLICATE is refused rather than deduplicated. It is a one-element set
+//     written twice, and silently collapsing it hides the edit that meant to add
+//     the other environment and repeated this one.
+//   - TWO is the maximum, which is the whole set. The bound is stated rather
+//     than implied by the value check so the intent survives a future spelling.
+func appleEnvironmentSet(configured []string) (map[string]struct{}, []string, error) {
+	if len(configured) == 0 {
+		return nil, nil, fmt.Errorf("account: apple store needs at least one environment (%q and/or %q)",
+			appleEnvProduction, appleEnvSandbox)
+	}
+	if len(configured) > 2 {
+		return nil, nil, fmt.Errorf("account: apple store lists %d environments (max 2: %q and %q)",
+			len(configured), appleEnvProduction, appleEnvSandbox)
+	}
+	envs := make(map[string]struct{}, len(configured))
+	list := make([]string, 0, len(configured))
+	for _, raw := range configured {
+		env := strings.TrimSpace(raw)
+		if !appleSupportedEnvironment(env) {
+			// The offending value is named: with a two-element set, "one of these is
+			// wrong" is not something an operator can act on. Configuration values
+			// are public material and already appear in startup errors.
+			return nil, nil, fmt.Errorf("account: apple store environment %q must be %q or %q",
+				raw, appleEnvSandbox, appleEnvProduction)
+		}
+		if _, dup := envs[env]; dup {
+			return nil, nil, fmt.Errorf("account: apple store environment %q is configured twice", env)
+		}
+		envs[env] = struct{}{}
+		list = append(list, env)
+	}
+	return envs, list, nil
+}
+
+// Environments reports the configured closed set, in configuration order. It is
+// operator-facing only — the boot log states which App Stores a deployment is
+// now verifying — and no decision reads it. A nil verifier configures nothing.
+func (v *AppleTransactionVerifier) Environments() []string {
+	if v == nil {
+		return nil
+	}
+	return append([]string(nil), v.envList...)
+}
+
+// acceptsEnvironment reports whether a VERIFIED payload's own environment is one
+// this deployment configured. Membership in a closed set, with no fallback: a
+// payload from the other store is refused outright rather than retried under a
+// different rule.
+func (v *AppleTransactionVerifier) acceptsEnvironment(env string) bool {
+	_, ok := v.envs[env]
+	return ok
 }
 
 // ConfiguredApp resolves one bundle identifier against the verifier's OWN
@@ -244,9 +334,14 @@ func (v *AppleTransactionVerifier) verifyTransactionIdentity(signedTransaction s
 	if err != nil {
 		return VerifiedAppleTransaction{}, err
 	}
-	// Environment first: a sandbox purchase is free, and accepting one in
-	// production would make every paid tier free.
-	if tx.Environment != v.env {
+	// Environment first: a sandbox purchase is free, and accepting one in a
+	// deployment that did not ask for sandbox would make every paid tier free.
+	//
+	// A deployment that DID ask for both is not thereby accepting a free paid
+	// tier: the environment stays part of the subscription's identity all the way
+	// through (appleSubscriptionKey), so a Sandbox transaction can only ever
+	// grant on a Sandbox subscription of its own.
+	if !v.acceptsEnvironment(tx.Environment) {
 		return VerifiedAppleTransaction{}, rejectApple("environment")
 	}
 	app, ok := v.apps[tx.BundleID]
@@ -340,6 +435,19 @@ func parseAppleTransactionPayload(raw []byte) (VerifiedAppleTransaction, error) 
 	}
 	if tx.TransactionID == "" || len(tx.TransactionID) > appleMaxIDLen ||
 		tx.OriginalTransactionID == "" || len(tx.OriginalTransactionID) > appleMaxIDLen {
+		return VerifiedAppleTransaction{}, rejectApple("transaction_ids")
+	}
+	// The separator that divides the environment namespace from the id
+	// (apple_identity.go) may not occur INSIDE an id. Apple's transaction ids are
+	// digits, so this refuses nothing real — and it is what makes the Sandbox
+	// namespace a partition rather than a naming convention: without it, a
+	// Sandbox subscription could present `sandbox:2000000000000001` and be
+	// qualified into another Sandbox subscription's external id, or a Production
+	// one could spell itself into the Sandbox namespace. Checked on BOTH ids: the
+	// original is the one that becomes the external id today, and a transactionId
+	// carrying the separator is the same malformed value one field over.
+	if strings.Contains(tx.TransactionID, appleExternalIDSeparator) ||
+		strings.Contains(tx.OriginalTransactionID, appleExternalIDSeparator) {
 		return VerifiedAppleTransaction{}, rejectApple("transaction_ids")
 	}
 	if tx.BundleID == "" || len(tx.BundleID) > appleMaxProductIDLen ||

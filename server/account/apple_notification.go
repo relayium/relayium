@@ -172,11 +172,15 @@ func (v *AppleTransactionVerifier) VerifyNotification(signedPayload string, serv
 	// reachable substitution rather than a theoretical one: without this, a macOS
 	// purchase could be presented inside an iOS notification.
 	//
-	// bundleId is the half that does the work. environment is compared beside it
-	// as belt-and-braces and is not load-bearing today: a deployment configures
-	// exactly ONE environment and both layers were just pinned to it, so they
-	// cannot currently disagree. It is kept because that argument is a property of
-	// the two checks above rather than of this one, and it costs a comparison.
+	// BOTH halves do work now. bundleId always did. environment became
+	// load-bearing the moment a deployment could configure both: the two layers
+	// are each pinned to a SET rather than to a single value, so a Production
+	// envelope carrying a genuine Sandbox transaction passes both membership
+	// checks and only this comparison refuses it. Exact equality, not membership
+	// — one notification describes one event in one store, and the environment
+	// decides which subscription the nested transaction may touch
+	// (appleSubscriptionKey). Getting it from the wrong layer would be an
+	// entitlement written into the other store's namespace.
 	//
 	// appAppleId deliberately gets NO cross-layer comparison. Both layers are
 	// pinned to the same configured app's numeric id — the envelope in
@@ -203,21 +207,38 @@ func (v *AppleTransactionVerifier) VerifyNotification(signedPayload string, serv
 // Apple signs every developer's notifications with the same certificate chain,
 // so "the signature verifies" narrows the sender to Apple and not to us.
 //
-// In Production, appAppleId is required to equal the configured App Store
-// record. In Sandbox, Apple does not use it as an identity constraint. This is
-// intentionally the same environment-dependent rule as Apple's official server
-// libraries; applying the transaction-intake rule here would be subtly wrong
-// because App Store Server Notification envelopes have their own schema.
+// The appAppleId rule is per-DELIVERY, not per-deployment, and it only ever
+// tightens:
+//
+//   - a PRODUCTION envelope must carry the configured App Store record's numeric
+//     id and match it. Apple documents the field on the production `data` object,
+//     and the configuration cannot be built without it once Production is
+//     accepted, so there is always something to compare against;
+//   - a SANDBOX envelope does not use it as an identity constraint. This matches
+//     Apple's official server verifier, whose Sandbox mode checks bundleId but
+//     deliberately ignores appAppleId whether the payload omits or supplies it.
+//     Bundle identifiers are globally unique, and imposing an undocumented
+//     Sandbox comparison would risk refusing a genuine delivery permanently.
+//
+// Reading the environment from the (already verified, already set-checked)
+// envelope rather than from the deployment is what makes this correct for a
+// deployment that accepts both: a Production delivery gets the Production rule
+// even while Sandbox is also configured.
 func (v *AppleTransactionVerifier) checkAppleNotificationApp(env appleNotificationEnvelope) error {
-	if env.Environment != v.env {
+	if !v.acceptsEnvironment(env.Environment) {
 		return rejectApple("environment")
 	}
 	app, ok := v.apps[env.BundleID]
 	if !ok {
 		return rejectApple("bundle")
 	}
-	if v.env == appleEnvProduction && env.AppAppleID != app.AppAppleID {
-		return rejectApple("app_apple_id")
+	// Production: required and matched. NewAppleTransactionVerifier guarantees
+	// app.AppAppleID is non-zero here, so an absent envelope id (0) is a refusal
+	// rather than a comparison against nothing.
+	if env.Environment == appleEnvProduction {
+		if env.AppAppleID != app.AppAppleID {
+			return rejectApple("app_apple_id")
+		}
 	}
 	return nil
 }

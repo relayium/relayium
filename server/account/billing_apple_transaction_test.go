@@ -191,11 +191,19 @@ func TestAppleTransactionGrantsOnlyTheAuthenticatedUser(t *testing.T) {
 		t.Fatalf("cycle came from somewhere other than the mapping: %q", u.BillingCycle)
 	}
 	src, ok := f.appleSource(t)
-	if !ok || src.PlanID != "pro" || src.ExternalID != "2000000000000001" {
+	// The recorded subscription identity is ENVIRONMENT-QUALIFIED: this fixture
+	// signs Sandbox payloads, so the binding lives in the sandbox namespace and
+	// the bare originalTransactionId — which is a different, Production
+	// subscription's identity — resolves to nobody.
+	if !ok || src.PlanID != "pro" || src.ExternalID != testAppleSandboxExternalID {
 		t.Fatalf("apple source row: ok=%v %+v", ok, src)
 	}
-	// The original transaction id is owned by exactly this account.
-	owner, ok, err := f.store.UserByExternalSubscription(context.Background(), ProviderApple, "2000000000000001")
+	if owner, ok, err := f.store.UserByExternalSubscription(context.Background(), ProviderApple, "2000000000000001"); err != nil || ok {
+		t.Fatalf("the raw originalTransactionId must own nothing: %q ok=%v err=%v", owner, ok, err)
+	}
+	// The original transaction id, in its own environment, is owned by exactly
+	// this account.
+	owner, ok, err := f.store.UserByExternalSubscription(context.Background(), ProviderApple, testAppleSandboxExternalID)
 	if err != nil || !ok || owner != f.userID {
 		t.Fatalf("external subscription owner: %q ok=%v err=%v", owner, ok, err)
 	}
@@ -464,7 +472,7 @@ func TestAppleTransactionRejectsCrossAccountOriginalTransactionID(t *testing.T) 
 	if u := f.user(t); u.PlanID != "pro" || u.PlanSource != ProviderApple {
 		t.Fatalf("the owner's entitlement moved: %+v", u)
 	}
-	owner, _, err := f.store.UserByExternalSubscription(context.Background(), ProviderApple, "2000000000000001")
+	owner, _, err := f.store.UserByExternalSubscription(context.Background(), ProviderApple, testAppleSandboxExternalID)
 	if err != nil || owner != f.userID {
 		t.Fatalf("ownership moved to %q (err=%v)", owner, err)
 	}

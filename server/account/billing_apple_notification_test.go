@@ -534,7 +534,9 @@ func TestAppleNotificationRefusesAnOwnershipConflict(t *testing.T) {
 	other := loginCookie(t, f.ts, f.mail, "apple-other@example.com")
 	_ = other
 	otherID := mustUserID(t, f.store, "apple-other@example.com")
-	if err := f.store.BindExternalSubscription(ctx, otherID, ProviderApple, "2000000000000001"); err != nil {
+	// Bound under the SAME environment-qualified identity a real Sandbox purchase
+	// would have produced; the bare id names a different (Production) subscription.
+	if err := f.store.BindExternalSubscription(ctx, otherID, ProviderApple, testAppleSandboxExternalID); err != nil {
 		t.Fatal(err)
 	}
 

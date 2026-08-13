@@ -277,7 +277,7 @@ func applePayload(mut ...func(map[string]any)) map[string]any {
 func testVerifier(t *testing.T, c *appleTestChain) *AppleTransactionVerifier {
 	t.Helper()
 	v, err := NewAppleTransactionVerifier(AppleStoreConfig{
-		Environment:  appleEnvSandbox,
+		Environments: []string{appleEnvSandbox},
 		Apps:         []AppleAppConfig{{BundleID: testBundleIOS}, {BundleID: testBundleMac}},
 		RootCertsPEM: c.rootPEM,
 	})
@@ -897,7 +897,7 @@ func TestAppleVerifierEnforcesConfiguredEnvironment(t *testing.T) {
 	}
 
 	prod, err := NewAppleTransactionVerifier(AppleStoreConfig{
-		Environment:  appleEnvProduction,
+		Environments: []string{appleEnvProduction},
 		Apps:         []AppleAppConfig{{BundleID: testBundleIOS, AppAppleID: 6791918822}},
 		RootCertsPEM: c.rootPEM,
 	})
@@ -917,7 +917,7 @@ func TestAppleVerifierEnforcesConfiguredEnvironment(t *testing.T) {
 func TestAppleVerifierEnforcesConfiguredBundle(t *testing.T) {
 	c := newAppleTestChain(t)
 	v, err := NewAppleTransactionVerifier(AppleStoreConfig{
-		Environment:  appleEnvSandbox,
+		Environments: []string{appleEnvSandbox},
 		Apps:         []AppleAppConfig{{BundleID: testBundleIOS}},
 		RootCertsPEM: c.rootPEM,
 	})
@@ -938,7 +938,7 @@ func TestAppleVerifierEnforcesProductionAppAppleID(t *testing.T) {
 
 	// Production without the app's App Store id is not a verifier at all.
 	if _, err := NewAppleTransactionVerifier(AppleStoreConfig{
-		Environment:  appleEnvProduction,
+		Environments: []string{appleEnvProduction},
 		Apps:         []AppleAppConfig{{BundleID: testBundleIOS}},
 		RootCertsPEM: c.rootPEM,
 	}); err == nil {
@@ -946,7 +946,7 @@ func TestAppleVerifierEnforcesProductionAppAppleID(t *testing.T) {
 	}
 
 	prod, err := NewAppleTransactionVerifier(AppleStoreConfig{
-		Environment:  appleEnvProduction,
+		Environments: []string{appleEnvProduction},
 		Apps:         []AppleAppConfig{{BundleID: testBundleIOS, AppAppleID: appleID}},
 		RootCertsPEM: c.rootPEM,
 	})
@@ -978,14 +978,14 @@ func TestAppleVerifierEnforcesProductionAppAppleID(t *testing.T) {
 func TestAppleVerifierRequiresExplicitConfiguration(t *testing.T) {
 	c := newAppleTestChain(t)
 	for name, cfg := range map[string]AppleStoreConfig{
-		"no roots":     {Environment: appleEnvSandbox, Apps: []AppleAppConfig{{BundleID: testBundleIOS}}},
-		"junk roots":   {Environment: appleEnvSandbox, Apps: []AppleAppConfig{{BundleID: testBundleIOS}}, RootCertsPEM: []byte("-----BEGIN CERTIFICATE-----\nnope\n-----END CERTIFICATE-----\n")},
-		"no apps":      {Environment: appleEnvSandbox, RootCertsPEM: c.rootPEM},
-		"empty bundle": {Environment: appleEnvSandbox, Apps: []AppleAppConfig{{BundleID: "  "}}, RootCertsPEM: c.rootPEM},
-		"dup bundle":   {Environment: appleEnvSandbox, Apps: []AppleAppConfig{{BundleID: testBundleIOS}, {BundleID: testBundleIOS}}, RootCertsPEM: c.rootPEM},
+		"no roots":     {Environments: []string{appleEnvSandbox}, Apps: []AppleAppConfig{{BundleID: testBundleIOS}}},
+		"junk roots":   {Environments: []string{appleEnvSandbox}, Apps: []AppleAppConfig{{BundleID: testBundleIOS}}, RootCertsPEM: []byte("-----BEGIN CERTIFICATE-----\nnope\n-----END CERTIFICATE-----\n")},
+		"no apps":      {Environments: []string{appleEnvSandbox}, RootCertsPEM: c.rootPEM},
+		"empty bundle": {Environments: []string{appleEnvSandbox}, Apps: []AppleAppConfig{{BundleID: "  "}}, RootCertsPEM: c.rootPEM},
+		"dup bundle":   {Environments: []string{appleEnvSandbox}, Apps: []AppleAppConfig{{BundleID: testBundleIOS}, {BundleID: testBundleIOS}}, RootCertsPEM: c.rootPEM},
 		"no env":       {Apps: []AppleAppConfig{{BundleID: testBundleIOS}}, RootCertsPEM: c.rootPEM},
-		"unknown env":  {Environment: "Xcode", Apps: []AppleAppConfig{{BundleID: testBundleIOS}}, RootCertsPEM: c.rootPEM},
-		"negative id":  {Environment: appleEnvSandbox, Apps: []AppleAppConfig{{BundleID: testBundleIOS, AppAppleID: -1}}, RootCertsPEM: c.rootPEM},
+		"unknown env":  {Environments: []string{"Xcode"}, Apps: []AppleAppConfig{{BundleID: testBundleIOS}}, RootCertsPEM: c.rootPEM},
+		"negative id":  {Environments: []string{appleEnvSandbox}, Apps: []AppleAppConfig{{BundleID: testBundleIOS, AppAppleID: -1}}, RootCertsPEM: c.rootPEM},
 	} {
 		if _, err := NewAppleTransactionVerifier(cfg); err == nil {
 			t.Fatalf("configuration %q built a verifier", name)

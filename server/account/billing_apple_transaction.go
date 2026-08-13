@@ -181,7 +181,7 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 	// Best effort and deliberately after the apply: the caller's own result is
 	// already durable, and a failure here leaves every deferred row exactly where
 	// it was, still replayable.
-	s.reconcileApplePendingNotifications(r.Context(), u.ID, tx.OriginalTransactionID, now)
+	s.reconcileApplePendingNotifications(r.Context(), u.ID, appleSubscriptionKeyOf(tx), now)
 
 	httpx.WriteJSON(w, http.StatusOK, appleTransactionResult{
 		Applied:   res.Applied,
@@ -205,14 +205,26 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 // "canceled" is the existing spelling for "this source no longer pays".
 //
 // THE EVENT CLOCK is appleEventClock below.
+//
+// THE EXTERNAL ID is the environment-qualified subscription identity
+// (apple_identity.go), not the bare originalTransactionId. A transaction whose
+// identity cannot be qualified — an environment this server did not verify, or
+// an id carrying the namespace separator — yields NO external id, which
+// SourceEvent reads as "preserve whatever is recorded". That is the safe
+// direction and it is unreachable from either live path: the verifier pins the
+// environment to the configured set and refuses a separator in an id, and the
+// replay path (reconcileApplePendingNotifications) skips a row it cannot
+// qualify before it gets here.
 func appleSourceEvent(userID string, tx VerifiedAppleTransaction, product AppleProduct, now time.Time) SourceEvent {
+	externalID, _ := appleSubscriptionKeyOf(tx).externalID()
 	ev := SourceEvent{
 		UserID:   userID,
 		Provider: ProviderApple,
 		// Bound in the SAME transaction as the state it pays for. Apple's
-		// originalTransactionId is the subscription's identity across every
-		// renewal, which is exactly what an external subscription id must be.
-		ExternalID: tx.OriginalTransactionID,
+		// originalTransactionId is the subscription's identity across every renewal
+		// within one App Store, which — qualified by that store — is exactly what an
+		// external subscription id must be.
+		ExternalID: externalID,
 		PeriodEnd:  appleSeconds(tx.ExpiresDateMS),
 		EventAt:    appleEventClock(tx),
 		Now:        now.Unix(),

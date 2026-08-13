@@ -82,19 +82,36 @@ func applySourceTx(ctx context.Context, tx *sql.Tx, ev SourceEvent) (Subscriptio
 	} else if err != nil {
 		return SubscriptionApply{}, err
 	}
-	if ev.EventAt > 0 && havePrev && ev.EventAt < prev.EventAt {
+	// Both branches below leave the row and the projection exactly as they are,
+	// and both must report the CURRENT state rather than what the refused event
+	// would have produced.
+	unchanged := SubscriptionApply{
+		Applied: false,
+		Effective: EffectiveEntitlement{
+			PlanID: curPlan, Status: curStatus, Cycle: curCycle,
+			PeriodEnd: curEnd, Source: curSource,
+		},
+	}
+	// Environment transitions are ordered by trust, not by purchase clocks from
+	// two independent stores. Sandbox may never take a Production binding. A real
+	// Production subscription must always be allowed to replace a Sandbox binding,
+	// even when the real subscription was purchased earlier (for example, an
+	// annual subscription restored after a fresh TestFlight purchase). Otherwise
+	// the newer Sandbox clock would permanently stale-drop every restore of the
+	// still-valid paid subscription, and the Sandbox expiry could revoke access.
+	appleProductionSupersedesSandbox := ev.Provider == ProviderApple && havePrev &&
+		ev.ExternalID != "" && !appleExternalIDIsSandbox(ev.ExternalID) &&
+		appleExternalIDIsSandbox(prev.ExternalID)
+	if ev.Provider == ProviderApple && havePrev && appleExternalIDIsSandbox(ev.ExternalID) &&
+		prev.ExternalID != "" && !appleExternalIDIsSandbox(prev.ExternalID) {
+		return unchanged, nil
+	}
+	if ev.EventAt > 0 && havePrev && ev.EventAt < prev.EventAt && !appleProductionSupersedesSandbox {
 		// Stale/replayed: leave BOTH the source row and the projection exactly as
 		// they are. Advancing the clock without applying the state (or vice
 		// versa) is what makes a replay permanently corrupting.
-		return SubscriptionApply{
-			Applied: false,
-			Effective: EffectiveEntitlement{
-				PlanID: curPlan, Status: curStatus, Cycle: curCycle,
-				PeriodEnd: curEnd, Source: curSource,
-			},
-		}, nil
+		return unchanged, nil
 	}
-
 	// Ownership is settled BEFORE anything is written, inside this same
 	// transaction: an event that names a subscription belonging to somebody else
 	// must leave the source row and the projection exactly as they were, not
