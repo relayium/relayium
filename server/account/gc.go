@@ -73,12 +73,6 @@ const auditRetentionDefault = int64(730 * 24 * 3600) // 2 years
 // touched by this cap — see SQLiteStore.PruneNodeAudit.
 const auditNodeRowsMax = 100_000
 
-// appleNotificationRetention keeps completed App Store notification claims for
-// two years. That is long enough for delayed support and billing investigations,
-// while bounding a renewal-driven ledger that would otherwise retain Apple
-// subscription identifiers forever. Unfinished states are never age-pruned.
-const appleNotificationRetention = int64(730 * 24 * 3600) // 2 years
-
 // GC periodically deletes expired stored files (and their blobs) and prunes the
 // upload-events ledger. Modeled on metering.Worker; Now is injected for tests.
 type GC struct {
@@ -168,9 +162,6 @@ func (g *GC) sweep(ctx context.Context) {
 	// download (24h) so a duplicate receipt can never re-appear as "first".
 	if err := g.Store.PruneDownloadReceipts(ctx, now-receiptRetention); err != nil {
 		g.Log.Printf("gc: prune download receipts: %v", err)
-	}
-	if err := g.Store.PruneTerminalAppleNotifications(ctx, now-appleNotificationRetention); err != nil {
-		g.Log.Printf("gc: prune terminal apple notifications: %v", err)
 	}
 	// Admin audit trail: age-based prune (long window — see
 	// auditRetentionDefault) plus a ceiling on the machine-written rows, which

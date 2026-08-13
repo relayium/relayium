@@ -560,6 +560,16 @@ func main() {
 		// to reason about, and no order in which a purchase could be verified
 		// against half a configuration.
 		appleStore.install(acct)
+		// Notification retention is account storage maintenance, not blob-storage
+		// maintenance. Keep it outside the stored-transfers branch so deployments
+		// that deliberately disable file storage still bound completed Apple
+		// subscription identifiers. Unfinished work is never age-pruned.
+		appleNotificationPruner := &account.AppleNotificationPruner{
+			Store: store,
+			Now:   func() int64 { return time.Now().Unix() },
+			Log:   log.Default(),
+		}
+		go appleNotificationPruner.Run(context.Background(), 10*time.Minute)
 		// /api/pair requires a logged-in owner: the receiver still joins the code
 		// room anonymously via /ws?code= and /api/ice?code=, but minting a
 		// cross-network rendezvous code needs an account for attribution. The
