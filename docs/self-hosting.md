@@ -74,8 +74,10 @@ definitions in [`server/main.go`](../server/main.go). The essentials:
 | `RELAYIUM_BIND` | Docker-compose only (not read by the server itself) — the host address the container's port 8080 is published on. Defaults to the loopback interface only, so a public host doesn't expose plaintext HTTP; set it to the wildcard address (all interfaces) for direct LAN access without a reverse proxy. |
 
 `server/.env.example` also documents optional Google/Apple sign-in, Stripe
-billing, and multi-node fleet settings — none of those are required to run a
-basic instance; leave them unset. If you do turn on `RELAYIUM_REDIS_ADDR`
+billing, App Store purchases (see
+[App Store purchases](#app-store-purchases-off-by-default) below), and
+multi-node fleet settings — none of those are required to run a basic
+instance; leave them unset. If you do turn on `RELAYIUM_REDIS_ADDR`
 and/or `RELAYIUM_STRIPE_SECRET_KEY`, see
 [`docs/billing-transparency.md`](billing-transparency.md) for exactly what
 that starts recording and metering, and what stays off when you leave them
@@ -122,6 +124,143 @@ secrets:
 
 Leaving `RELAYIUM_ADMIN_PASS` empty (the default) disables `/admin`
 entirely — it 404s and falls through to the SPA.
+
+## App Store purchases (off by default)
+
+If you ship your own native macOS/iOS build, the server can verify the signed
+transactions StoreKit hands it. **Leave this unset unless you do** — it is off
+by default, and off means `POST /api/billing/apple/transaction` answers
+`503 {"error":"verifier_unavailable"}` and nothing about your instance changes.
+
+One variable turns it on:
+
+```bash
+RELAYIUM_APPLE_STORE_CONFIG_FILE=/etc/relayium/apple-store.json
+```
+
+It is entirely separate from Sign in with Apple — no Team ID, no Key ID, no
+`.p8`, no client secret — and the file it points at holds no secrets either:
+
+```json
+{
+  "environment": "Sandbox",
+  "rootCertsFile": "/etc/relayium/apple-root-cas.pem",
+  "apps": [
+    {"bundleId": "com.example.app", "appAppleId": 0},
+    {"bundleId": "com.example.mac", "appAppleId": 0}
+  ]
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `environment` | `Sandbox` or `Production`, exactly — *your* answer to which App Store this deployment talks to, never read from the submitted transaction. Sandbox purchases are free, so a production deployment left on `Sandbox` hands out paid tiers. |
+| `apps` | One entry per App Store record. A macOS build and an iOS build are two apps with two bundle ids, never one merged entry. `appAppleId` is the numeric App Store id ("Apple ID" in App Store Connect) and is **required** (non-zero) when `environment` is `Production`. |
+| `rootCertsFile` | Absolute path to a PEM file holding the Apple root CA(s) you downloaded from Apple. **Roots only** — Apple publishes its intermediates on the same page, and an intermediate is a CA that would otherwise become a trust anchor in its own right, so anything that has not signed itself is refused at startup. These are the only trust anchors: the host's system root store is never used, and the certificate chain inside a submitted transaction is never allowed to anchor itself. |
+
+Both files belong to the user the server runs as, mode `0600` (or `0640` if a
+group needs to read them), and neither is committed to your fork. They must be
+regular files — a symlink, a directory or a FIFO in either path is refused at
+startup, as is a file that is empty, oversized, or not the material it claims
+to be.
+
+Running in Docker? Both paths are read *inside* the container, so both files
+have to be mounted in — see
+[Docker: mounting the two files](#docker-mounting-the-two-files) below.
+
+**It fails closed, in both directions.** Unset, no verifier is built at all.
+Set, the configuration must be complete and readable or **the server refuses to
+start** — a mistyped path or a half-filled file is a failed boot rather than a
+purchase path that looks live and answers 503 to every customer forever.
+
+**Order matters.** This file says nothing about products. Which
+bundle id + product id grants which plan and billing cycle lives in the
+database (the Apple product catalog), and a verified transaction for a product
+with no mapping is refused *after* the customer's money has already moved. So:
+create the product mappings first, then set the variable, then restart, then
+ship the client that can purchase.
+
+**Rolling back has an order.** Unset the variable *first*: comment out or
+delete `RELAYIUM_APPLE_STORE_CONFIG_FILE` in `server/.env`, then restart
+(`docker compose up -d` to recreate the container). The endpoint returns to
+`503` and nothing else in the server is affected — Stripe billing, existing
+subscriptions and every other route are untouched either way.
+
+Only **after** the variable is gone are the files inert and safe to delete, and
+the bind mounts safe to drop from your compose file. Doing it the other way
+round is the fatal case above, not a rollback: a variable that is still set
+with the file missing is a server that refuses to start. Removing a bind mount
+is deleting the file as far as the container can tell, so it belongs in the
+same edit as unsetting the variable — never in an earlier one.
+
+### Docker: mounting the two files
+
+Both paths above are resolved **inside the container**, and `docker-compose.yml`
+mounts nothing but the `relayium-data` volume at `/data`. A JSON file sitting at
+`/etc/relayium/apple-store.json` on the *host* therefore does not exist as far
+as the server is concerned — and because a path that is set but unreadable is a
+fatal startup error, the container refuses to boot. Bind-mount both files
+read-only at the same absolute paths they already have on the host, so the host
+path, the container path and the `rootCertsFile` value inside the JSON are all
+one string:
+
+```yaml
+services:
+  server:
+    volumes:
+      - relayium-data:/data     # keep this line: SQLite DB + stored blobs
+      - /etc/relayium/apple-store.json:/etc/relayium/apple-store.json:ro
+      - /etc/relayium/apple-root-cas.pem:/etc/relayium/apple-root-cas.pem:ro
+```
+
+Either add the two `/etc/relayium/…` lines to the `server` service's existing
+`volumes:` in `docker-compose.yml`, or — if you'd rather not edit a tracked
+file — save the block above as `docker-compose.override.yml` beside it, which
+Compose picks up automatically. It is a valid file on its own: the named volume
+stays declared in the base file, so no top-level `volumes:` section is needed
+here.
+
+Keep `relayium-data:/data` in whichever file you edit. Replacing that list
+rather than adding to it detaches the database and every stored transfer from
+the volume that holds them, and the server will start perfectly happily on an
+empty `/data`. (Compose merges a service's `volumes:` by container path, so
+repeating the line in an override is a harmless no-op — and it keeps the mount
+whichever way your Compose version merges.)
+
+Two things that otherwise cost you a boot:
+
+- **Create both files before `docker compose up -d`.** A bind-mount source that
+  doesn't exist is created as an empty *directory* (Docker Desktop may instead
+  refuse the mount outright), and the server refuses a path that is not a
+  regular file — so a mistyped filename surfaces as a complaint about a
+  directory, which is a confusing way to learn you mistyped it.
+- **The image runs as the distroless `nonroot` user, uid/gid `65532`.** Mode
+  `0600` files owned by `root` or by your login account are unreadable inside
+  the container. Hand them to that uid on the host:
+  `sudo chown 65532:65532 /etc/relayium/apple-store.json /etc/relayium/apple-root-cas.pem`.
+  The `:ro` stops the container from writing to them regardless.
+
+`RELAYIUM_APPLE_STORE_CONFIG_FILE` itself goes in `./server/.env` like every
+other setting — the `server` service already reads that file. And when you roll
+back, drop these two mounts in the same edit that unsets the variable, never in
+an earlier one.
+
+Plain `docker run` needs the same two mounts:
+
+```bash
+docker run -d -p 8080:8080 \
+  -v relayium-data:/data \
+  -v /etc/relayium/apple-store.json:/etc/relayium/apple-store.json:ro \
+  -v /etc/relayium/apple-root-cas.pem:/etc/relayium/apple-root-cas.pem:ro \
+  -e RELAYIUM_APPLE_STORE_CONFIG_FILE=/etc/relayium/apple-store.json \
+  relayium
+```
+
+**Native deployments need none of this.** A binary run under systemd or by hand
+reads `/etc/relayium/apple-store.json` and the PEM straight off the filesystem:
+no bind mounts, no compose changes, nothing to keep in sync. Just make sure
+both files are owned by the account in the unit's `User=` (or whatever user you
+start the server as).
 
 ## Release check (on by default)
 

@@ -112,6 +112,12 @@ func main() {
 	appleKeyID := flag.String("apple-key-id", envStr("RELAYIUM_APPLE_KEY_ID", ""), "Apple .p8 Key ID (client_secret JWT kid)")
 	applePrivKeyFile := flag.String("apple-private-key-file", envStr("RELAYIUM_APPLE_PRIVATE_KEY_FILE", ""), "path to the Apple Sign in with Apple .p8 private key")
 	appleDomainAssoc := flag.String("apple-domain-assoc-file", envStr("RELAYIUM_APPLE_DOMAIN_ASSOC_FILE", ""), "path to apple-developer-domain-association.txt")
+	// App Store PURCHASES, which share nothing with the Sign in with Apple flags
+	// above — no Team ID, no .p8, no client secret. Empty (the default) means no
+	// transaction verifier is built and POST /api/billing/apple/transaction
+	// answers 503; set, the file must be complete or the server refuses to boot.
+	// See server/apple_store.go.
+	appleStoreConfig := flag.String("apple-store-config-file", envStr("RELAYIUM_APPLE_STORE_CONFIG_FILE", ""), "path to the App Store transaction verifier's JSON config (environment, app identities, Apple root CA file); empty = OFF, and POST /api/billing/apple/transaction answers 503")
 	enableMagic := flag.Bool("enable-magic", envBool("RELAYIUM_ENABLE_MAGIC", false), "enable email magic-link login (disabled by default)")
 	adminUser := flag.String("admin-user", envStr("RELAYIUM_ADMIN_USER", "admin"), "admin dashboard username at /admin (defaults to 'admin')")
 	adminPass := flag.String("admin-pass", envStr("RELAYIUM_ADMIN_PASS", ""), "admin dashboard password at /admin (empty disables the dashboard)")
@@ -228,6 +234,22 @@ func main() {
 		if !allowed {
 			log.Fatal("apple: RELAYIUM_APPLE_SERVICES_ID must be included in RELAYIUM_APPLE_CLIENT_IDS")
 		}
+	}
+
+	// App Store transaction verification, read and BUILT here — for the same
+	// reason as the .p8 above, and one more. A trust file that is missing, a
+	// bundle id that is a typo or an environment that is spelled "production"
+	// must fail on every startup, not on the first purchase; and the deployment
+	// that discovers it must not be the one whose customer has already paid.
+	// Nothing is installed yet: the account service does not exist here, and the
+	// verifier only reaches it below (appleStore.install). An unconfigured
+	// deployment — every current one — gets the zero value and no verifier at
+	// all, which is what keeps POST /api/billing/apple/transaction on 503.
+	appleStore, err := loadAppleStore(*appleStoreConfig)
+	if err != nil {
+		// The message already names the rule and the file; it is not wrapped
+		// again here, because a boot failure is read in a hurry.
+		log.Fatalf("%v", err)
 	}
 
 	// X-Forwarded-For is only trusted from configured reverse proxies; otherwise
@@ -529,6 +551,14 @@ func main() {
 		acct.SetPasskeyBeginLimiter(passkeyBeginLimiter)
 		acct.SetDownloadLimiter(downloadLimiter)
 		acct.SetDirectDownload(*directDownload)
+		// The App Store verifier, if one was configured. Installed HERE, after
+		// everything it depends on has already been read and validated: by this
+		// point a broken configuration has long since ended the process, so the
+		// only two outcomes left are a service with a fully-built verifier and a
+		// service that never heard of one. There is no partially-activated state
+		// to reason about, and no order in which a purchase could be verified
+		// against half a configuration.
+		appleStore.install(acct)
 		// /api/pair requires a logged-in owner: the receiver still joins the code
 		// room anonymously via /ws?code= and /api/ice?code=, but minting a
 		// cross-network rendezvous code needs an account for attribution. The
