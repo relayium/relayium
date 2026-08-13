@@ -4,7 +4,7 @@ const en = {
   description:
     "The terms for using Relayium — an open-source service for end-to-end encrypted file and real-time text transfers between devices. The core service is free; optional paid plans are available.",
   updatedLabel: "Last updated",
-  updated: "2026-07-31",
+  updated: "2026-08-13",
   otherDocLabel: "Privacy Policy",
   lead: [
     "By using Relayium you agree to these terms. Relayium is an open-source service that lets you send files and real-time text between devices, end-to-end encrypted. The core service is free; some optional plans are paid — see Subscriptions and billing.",
@@ -41,6 +41,7 @@ const en = {
       heading: "Subscriptions and billing",
       body: [
         "Relayium offers a free tier and optional paid plans. Paid plans are billed in advance on a recurring basis — monthly or yearly, as you choose — and renew automatically until you cancel.",
+        "Who sells and bills a subscription depends on where you buy it. On the web, Relayium sells it and Stripe processes the payment, and the terms in this section apply. In a Relayium app installed from the Apple App Store — including the Mac App Store — Apple sells and bills it, and the section below applies instead.",
       ],
       bullets: [
         "Upgrading to a higher plan takes effect immediately and is charged a prorated amount for the remainder of the current period.",
@@ -48,18 +49,19 @@ const en = {
         "You can cancel at any time. Paid features remain active until the end of the period you have already paid for.",
         "We do not provide refunds for partial periods except where required by law.",
         "We may change plan prices or features. We will give notice before a price change applies to your next renewal, and you may cancel if you do not agree.",
-        "On the web, payments are processed by Stripe. In the iOS app, subscriptions are sold and billed by Apple — see the next section.",
+        "On the web, payments are processed by Stripe. In an App Store version of the Relayium app, subscriptions are sold and billed by Apple — see the next section.",
       ],
     },
     {
       heading: "Apple App Store and in-app purchases",
       body: [
-        "If you download Relayium from the Apple App Store, Apple's standard Licensed Application End User License Agreement also applies to your use of the app, and Apple is a third-party beneficiary of these terms with the right to enforce them against you.",
+        "If you download Relayium from the Apple App Store — including the Mac App Store — Apple's standard Licensed Application End User License Agreement also applies to your use of the app, and Apple is a third-party beneficiary of these terms with the right to enforce them against you.",
       ],
       bullets: [
-        "Subscriptions bought inside the iOS app are sold and billed by Apple through in-app purchase, charged to your Apple ID.",
+        "Subscriptions bought inside an App Store version of the Relayium app, including the Mac App Store version, are sold and billed by Apple through in-app purchase, charged to your Apple ID.",
         "They renew automatically unless you turn off auto-renewal at least 24 hours before the current period ends.",
-        "Manage or cancel an Apple-billed subscription in your Apple ID account settings — we cannot cancel or refund it for you. Refunds for App Store purchases are handled by Apple.",
+        "Manage or cancel an Apple-billed subscription in your Apple ID account settings — we cannot cancel it for you. Refunds for App Store purchases are requested from Apple and decided by Apple; we cannot issue them.",
+        "We can still help: if your Relayium plan does not match what you bought, or you see a charge you do not recognize, write to support@relayium.com and we will check what Apple has told us about your subscription.",
       ],
     },
     {
@@ -121,7 +123,7 @@ const zh = {
   title: "服务条款",
   description: "使用 Relayium 的条款——一项开源、端到端加密的设备间文件与实时文本传输服务。核心服务免费，另有可选的付费套餐。",
   updatedLabel: "最后更新",
-  updated: "2026-07-31",
+  updated: "2026-08-13",
   otherDocLabel: "隐私政策",
   lead: [
     "使用 Relayium 即表示你同意本条款。Relayium 是一项开源服务，让你在设备之间端到端加密地发送文件与实时文本。核心服务免费，部分可选套餐需付费——详见「订阅与计费」。",
@@ -156,6 +158,7 @@ const zh = {
       heading: "订阅与计费",
       body: [
         "Relayium 提供免费档和可选的付费套餐。付费套餐按你选择的周期（按月或按年）预先、周期性计费，并自动续订，直至你取消。",
+        "由谁销售订阅并向你收费，取决于你在哪里购买。在网页端，订阅由 Relayium 销售、由 Stripe 处理支付，适用本节条款；在从 Apple App Store（含 Mac App Store）安装的 Relayium App 内购买时，由 Apple 销售并计费，改为适用下一节。",
       ],
       bullets: [
         "升级到更高套餐立即生效，并按当前周期剩余时间收取按比例的差额。",
@@ -163,18 +166,19 @@ const zh = {
         "你可以随时取消。已付费的权益会保留到你已支付的周期结束为止。",
         "除法律另有要求外，我们不对未满周期提供退款。",
         "我们可能调整套餐价格或功能。价格调整在应用于你的下一次续订前我们会提前通知，你如不同意可取消。",
-        "在网页端，支付由 Stripe 处理；在 iOS App 内，订阅由 Apple 销售并计费——见下一节。",
+        "在网页端，支付由 Stripe 处理；在 App Store 版本的 Relayium App 内，订阅由 Apple 销售并计费——见下一节。",
       ],
     },
     {
       heading: "Apple App Store 与应用内购买",
       body: [
-        "如果你从 Apple App Store 下载 Relayium，Apple 的标准《授权应用最终用户许可协议》同样适用于你对 App 的使用，且 Apple 是本条款的第三方受益人，有权对你强制执行本条款。",
+        "如果你从 Apple App Store（含 Mac App Store）下载 Relayium，Apple 的标准《授权应用最终用户许可协议》同样适用于你对 App 的使用，且 Apple 是本条款的第三方受益人，有权对你强制执行本条款。",
       ],
       bullets: [
-        "在 iOS App 内购买的订阅由 Apple 通过应用内购买销售并计费，从你的 Apple ID 扣款。",
+        "在 App Store 版本的 Relayium App（包括 Mac App Store 版本）内购买的订阅，由 Apple 通过应用内购买销售并计费，从你的 Apple ID 扣款。",
         "除非你在当前周期结束前至少 24 小时关闭自动续订，否则订阅将自动续订。",
-        "请在你的 Apple ID 账号设置中管理或取消由 Apple 计费的订阅——我们无法为你取消或退款。App Store 购买的退款由 Apple 处理。",
+        "请在你的 Apple ID 账号设置中管理或取消由 Apple 计费的订阅——我们无法代你取消。App Store 购买的退款需向 Apple 申请、由 Apple 决定，我们无法办理。",
+        "我们仍然可以帮忙：如果你的 Relayium 套餐与你所购买的不符，或你看到不认识的扣费，请写信到 support@relayium.com，我们会核对 Apple 告知我们的订阅信息。",
       ],
     },
     {
@@ -235,7 +239,7 @@ const ja = {
   description:
     "Relayium の利用規約——デバイス間でファイルとリアルタイムテキストをエンドツーエンド暗号化して転送するオープンソースサービスです。コア機能は無料で、オプションの有料プランもご利用いただけます。",
   updatedLabel: "最終更新",
-  updated: "2026-07-31",
+  updated: "2026-08-13",
   otherDocLabel: "プライバシーポリシー",
   lead: [
     "本サービスをご利用いただいた時点で、お客様は本規約に同意したものとみなされます。Relayium は、デバイス間でエンドツーエンドで暗号化されたファイルとリアルタイムテキストの送信を可能にする、オープンソースのサービスです。コア機能は無料で、一部のオプションプランは有料です——詳細は「サブスクリプションと請求」をご覧ください。",
@@ -272,6 +276,7 @@ const ja = {
       heading: "サブスクリプションと請求",
       body: [
         "Relayium は無料プランとオプションの有料プランを提供しています。有料プランは、選択した周期（月次または年次）で前払いにより定期的に請求され、お客様が解約するまで自動更新されます。",
+        "サブスクリプションを販売・請求するのが誰かは、どこで購入したかによって決まります。ウェブでは Relayium が販売し、Stripe が支払いを処理するため、本セクションの条件が適用されます。Apple App Store（Mac App Store を含む）からインストールした Relayium アプリ内で購入した場合は、Apple が販売・請求し、代わりに次のセクションが適用されます。",
       ],
       bullets: [
         "上位プランへのアップグレードは即座に適用され、当該期間の残り分に応じた日割り金額が請求されます。",
@@ -279,18 +284,19 @@ const ja = {
         "いつでも解約できます。有料機能は、すでに支払い済みの期間の終了まで有効です。",
         "法律で義務付けられている場合を除き、期間途中の返金は行いません。",
         "プランの価格や機能を変更する場合があります。価格変更が次回の更新に適用される前に通知し、同意いただけない場合は解約できます。",
-        "ウェブでは、支払いは Stripe によって処理されます。iOS アプリでは、サブスクリプションは Apple によって販売・請求されます——次のセクションをご覧ください。",
+        "ウェブでは、支払いは Stripe によって処理されます。App Store 版の Relayium アプリでは、サブスクリプションは Apple によって販売・請求されます——次のセクションをご覧ください。",
       ],
     },
     {
       heading: "Apple App Store とアプリ内課金",
       body: [
-        "Relayium を Apple App Store からダウンロードした場合、Apple の標準的な「ライセンス供与アプリケーション使用許諾契約（Licensed Application End User License Agreement）」もアプリの利用に適用され、Apple は本規約の第三者受益者として、これをお客様に対して執行する権利を有します。",
+        "Relayium を Apple App Store（Mac App Store を含む）からダウンロードした場合、Apple の標準的な「ライセンス供与アプリケーション使用許諾契約（Licensed Application End User License Agreement）」もアプリの利用に適用され、Apple は本規約の第三者受益者として、これをお客様に対して執行する権利を有します。",
       ],
       bullets: [
-        "iOS アプリ内で購入したサブスクリプションは、アプリ内課金を通じて Apple が販売・請求し、お客様の Apple ID に課金されます。",
+        "App Store 版の Relayium アプリ（Mac App Store 版を含む）内で購入したサブスクリプションは、アプリ内課金を通じて Apple が販売・請求し、お客様の Apple ID に課金されます。",
         "現在の期間終了の少なくとも 24 時間前に自動更新をオフにしない限り、自動的に更新されます。",
-        "Apple が請求するサブスクリプションの管理・解約は、お客様の Apple ID のアカウント設定から行ってください——当社がお客様に代わって解約や返金を行うことはできません。App Store 購入の返金は Apple が対応します。",
+        "Apple が請求するサブスクリプションの管理・解約は、お客様の Apple ID のアカウント設定から行ってください——当社がお客様に代わって解約することはできません。App Store 購入の返金は Apple に申請し、Apple が判断するもので、当社が返金することはできません。",
+        "それでもお手伝いできることがあります。Relayium のプランが購入内容と一致しない場合や、心当たりのない請求がある場合は support@relayium.com までご連絡ください。Apple から当社に届いているサブスクリプションの情報を確認します。",
       ],
     },
     {
@@ -353,7 +359,7 @@ const ko = {
   description:
     "Relayium 이용약관 — 기기 간 파일 및 실시간 텍스트를 종단간 암호화하여 전송하는 오픈소스 서비스입니다. 핵심 서비스는 무료이며, 선택적인 유료 플랜을 이용할 수 있습니다.",
   updatedLabel: "최종 업데이트",
-  updated: "2026-07-31",
+  updated: "2026-08-13",
   otherDocLabel: "개인정보 처리방침",
   lead: [
     "Relayium을 사용함으로써 귀하는 이 약관에 동의하는 것으로 간주됩니다. Relayium은 기기 간에 종단간 암호화된 파일과 실시간 텍스트 전송을 지원하는 오픈소스 서비스입니다. 핵심 서비스는 무료이며, 일부 선택적 플랜은 유료입니다 — 자세한 내용은 ‘구독 및 결제’를 참고하세요.",
@@ -390,6 +396,7 @@ const ko = {
       heading: "구독 및 결제",
       body: [
         "Relayium은 무료 등급과 선택적 유료 플랜을 제공합니다. 유료 플랜은 귀하가 선택한 주기(월간 또는 연간)로 선불 방식으로 정기 청구되며, 귀하가 취소할 때까지 자동으로 갱신됩니다.",
+        "구독을 판매하고 청구하는 주체는 어디에서 구매했는지에 따라 달라집니다. 웹에서는 Relayium이 판매하고 Stripe가 결제를 처리하며, 이 절의 조건이 적용됩니다. Apple App Store(Mac App Store 포함)에서 설치한 Relayium 앱 안에서 구매한 경우에는 Apple이 판매하고 청구하며, 대신 아래의 절이 적용됩니다.",
       ],
       bullets: [
         "상위 플랜으로 업그레이드하면 즉시 적용되며, 현재 기간의 남은 기간에 대해 일할 계산된 금액이 청구됩니다.",
@@ -397,18 +404,19 @@ const ko = {
         "언제든지 취소할 수 있습니다. 유료 기능은 이미 결제한 기간이 끝날 때까지 계속 사용할 수 있습니다.",
         "법률상 요구되는 경우를 제외하고 부분 기간에 대한 환불은 제공하지 않습니다.",
         "당사는 플랜 가격이나 기능을 변경할 수 있습니다. 가격 변경이 다음 갱신에 적용되기 전에 통지하며, 동의하지 않으시면 취소할 수 있습니다.",
-        "웹에서는 결제가 Stripe를 통해 처리됩니다. iOS 앱에서는 구독이 Apple을 통해 판매 및 청구됩니다 — 다음 섹션을 참고하세요.",
+        "웹에서는 결제가 Stripe를 통해 처리됩니다. App Store 버전의 Relayium 앱에서는 구독이 Apple을 통해 판매 및 청구됩니다 — 다음 섹션을 참고하세요.",
       ],
     },
     {
       heading: "Apple App Store 및 인앱 구매",
       body: [
-        "Apple App Store에서 Relayium을 다운로드하는 경우, Apple의 표준 ‘라이선스 애플리케이션 최종 사용자 사용권 계약(Licensed Application End User License Agreement)’도 앱 사용에 적용되며, Apple은 이 약관의 제3자 수익자로서 귀하에게 이를 집행할 권리를 가집니다.",
+        "Apple App Store(Mac App Store 포함)에서 Relayium을 다운로드하는 경우, Apple의 표준 ‘라이선스 애플리케이션 최종 사용자 사용권 계약(Licensed Application End User License Agreement)’도 앱 사용에 적용되며, Apple은 이 약관의 제3자 수익자로서 귀하에게 이를 집행할 권리를 가집니다.",
       ],
       bullets: [
-        "iOS 앱 내에서 구매한 구독은 인앱 구매를 통해 Apple이 판매 및 청구하며, 귀하의 Apple ID로 청구됩니다.",
+        "App Store 버전의 Relayium 앱(Mac App Store 버전 포함)에서 구매한 구독은 인앱 구매를 통해 Apple이 판매 및 청구하며, 귀하의 Apple ID로 청구됩니다.",
         "현재 기간이 끝나기 최소 24시간 전에 자동 갱신을 끄지 않는 한 자동으로 갱신됩니다.",
-        "Apple이 청구하는 구독은 귀하의 Apple ID 계정 설정에서 관리하거나 취소하세요 — 당사는 이를 대신 취소하거나 환불할 수 없습니다. App Store 구매에 대한 환불은 Apple이 처리합니다.",
+        "Apple이 청구하는 구독은 귀하의 Apple ID 계정 설정에서 관리하거나 취소하세요 — 당사는 이를 대신 취소할 수 없습니다. App Store 구매에 대한 환불은 Apple에 요청하고 Apple이 결정하며, 당사가 환불해 드릴 수 없습니다.",
+        "그래도 도와드릴 수 있습니다. Relayium 요금제가 구매하신 내용과 다르거나 알 수 없는 청구가 보이면 support@relayium.com으로 문의해 주십시오. Apple이 당사에 알려준 구독 정보를 확인해 드리겠습니다.",
       ],
     },
     {
@@ -471,7 +479,7 @@ const de = {
   description:
     "Die Nutzungsbedingungen für Relayium — einen quelloffenen Dienst für Ende-zu-Ende-verschlüsselte Datei- und Echtzeittextübertragungen zwischen Geräten. Der Kerndienst ist kostenlos; optionale kostenpflichtige Pläne sind verfügbar.",
   updatedLabel: "Zuletzt aktualisiert",
-  updated: "2026-07-31",
+  updated: "2026-08-13",
   otherDocLabel: "Datenschutzerklärung",
   lead: [
     "Durch die Nutzung von Relayium stimmen Sie diesen Bedingungen zu. Relayium ist ein quelloffener Dienst, mit dem Sie Dateien und Echtzeittext Ende-zu-Ende-verschlüsselt zwischen Geräten senden können. Der Kerndienst ist kostenlos; einige optionale Pläne sind kostenpflichtig — siehe Abonnements und Abrechnung.",
@@ -508,6 +516,7 @@ const de = {
       heading: "Abonnements und Abrechnung",
       body: [
         "Relayium bietet eine kostenlose Stufe und optionale kostenpflichtige Pläne an. Kostenpflichtige Pläne werden im Voraus wiederkehrend abgerechnet — monatlich oder jährlich, je nach Wahl — und verlängern sich automatisch, bis Sie kündigen.",
+        "Wer ein Abonnement verkauft und abrechnet, hängt davon ab, wo Sie es kaufen. Im Web verkauft Relayium es und Stripe verarbeitet die Zahlung; dann gilt dieser Abschnitt. In einer Relayium-App, die aus dem Apple App Store — einschließlich des Mac App Store — installiert wurde, verkauft und berechnet Apple es, und stattdessen gilt der folgende Abschnitt.",
       ],
       bullets: [
         "Ein Upgrade auf einen höheren Plan wird sofort wirksam und für den verbleibenden Teil des aktuellen Zeitraums anteilig berechnet.",
@@ -515,18 +524,19 @@ const de = {
         "Sie können jederzeit kündigen. Kostenpflichtige Funktionen bleiben bis zum Ende des bereits bezahlten Zeitraums aktiv.",
         "Wir erstatten keine anteiligen Zeiträume, außer wenn gesetzlich vorgeschrieben.",
         "Wir können Preise oder Funktionen von Plänen ändern. Wir informieren Sie vor Inkrafttreten einer Preisänderung bei Ihrer nächsten Verlängerung, und Sie können kündigen, wenn Sie damit nicht einverstanden sind.",
-        "Im Web werden Zahlungen von Stripe verarbeitet. In der iOS-App werden Abonnements von Apple verkauft und abgerechnet — siehe nächster Abschnitt.",
+        "Im Web werden Zahlungen von Stripe verarbeitet. In einer App-Store-Version der Relayium-App werden Abonnements von Apple verkauft und abgerechnet — siehe nächster Abschnitt.",
       ],
     },
     {
       heading: "Apple App Store und In-App-Käufe",
       body: [
-        "Wenn Sie Relayium aus dem Apple App Store herunterladen, gilt für Ihre Nutzung der App zusätzlich Apples standardmäßige „Licensed Application End User License Agreement“ (Endbenutzer-Lizenzvertrag für lizenzierte Anwendungen), und Apple ist begünstigter Dritter dieser Bedingungen mit dem Recht, sie Ihnen gegenüber durchzusetzen.",
+        "Wenn Sie Relayium aus dem Apple App Store — einschließlich des Mac App Store — herunterladen, gilt für Ihre Nutzung der App zusätzlich Apples standardmäßige „Licensed Application End User License Agreement“ (Endbenutzer-Lizenzvertrag für lizenzierte Anwendungen), und Apple ist begünstigter Dritter dieser Bedingungen mit dem Recht, sie Ihnen gegenüber durchzusetzen.",
       ],
       bullets: [
-        "Abonnements, die innerhalb der iOS-App gekauft werden, werden von Apple über In-App-Käufe verkauft und abgerechnet und Ihrer Apple-ID belastet.",
+        "Abonnements, die in einer App-Store-Version der Relayium-App gekauft werden — einschließlich der Version aus dem Mac App Store —, werden von Apple über In-App-Käufe verkauft und abgerechnet und Ihrer Apple-ID belastet.",
         "Sie verlängern sich automatisch, sofern Sie die automatische Verlängerung nicht mindestens 24 Stunden vor Ablauf des aktuellen Zeitraums deaktivieren.",
-        "Verwalten oder kündigen Sie ein von Apple abgerechnetes Abonnement in Ihren Apple-ID-Kontoeinstellungen — wir können es nicht für Sie kündigen oder erstatten. Erstattungen für App-Store-Käufe werden von Apple bearbeitet.",
+        "Verwalten oder kündigen Sie ein von Apple abgerechnetes Abonnement in Ihren Apple-ID-Kontoeinstellungen — wir können es nicht für Sie kündigen. Erstattungen für App-Store-Käufe werden bei Apple beantragt und von Apple entschieden; wir können sie nicht auszahlen.",
+        "Wir können trotzdem helfen: Wenn Ihr Relayium-Tarif nicht zu dem passt, was Sie gekauft haben, oder Ihnen eine Abbuchung unbekannt vorkommt, schreiben Sie an support@relayium.com — wir prüfen, was Apple uns zu Ihrem Abonnement gemeldet hat.",
       ],
     },
     {
@@ -589,7 +599,7 @@ const fr = {
   description:
     "Les conditions d'utilisation de Relayium — un service open source de transfert de fichiers et de texte en temps réel entre appareils, chiffré de bout en bout. Le service de base est gratuit ; des offres payantes optionnelles sont disponibles.",
   updatedLabel: "Dernière mise à jour",
-  updated: "2026-07-31",
+  updated: "2026-08-13",
   otherDocLabel: "Politique de confidentialité",
   lead: [
     "En utilisant Relayium, vous acceptez ces conditions. Relayium est un service open source qui vous permet d'envoyer des fichiers et du texte en temps réel entre appareils, chiffrés de bout en bout. Le service de base est gratuit ; certaines offres optionnelles sont payantes — voir Abonnements et facturation.",
@@ -626,6 +636,7 @@ const fr = {
       heading: "Abonnements et facturation",
       body: [
         "Relayium propose un niveau gratuit et des offres payantes optionnelles. Les offres payantes sont facturées à l'avance de façon récurrente — mensuellement ou annuellement, selon votre choix — et se renouvellent automatiquement jusqu'à ce que vous annuliez.",
+        "Qui vend et facture un abonnement dépend de l'endroit où vous l'achetez. Sur le web, Relayium le vend et Stripe traite le paiement : la présente section s'applique. Dans une application Relayium installée depuis l'Apple App Store — y compris le Mac App Store —, Apple le vend et le facture, et c'est la section suivante qui s'applique.",
       ],
       bullets: [
         "Le passage à une offre supérieure prend effet immédiatement et est facturé au prorata pour le reste de la période en cours.",
@@ -633,18 +644,19 @@ const fr = {
         "Vous pouvez annuler à tout moment. Les fonctionnalités payantes restent actives jusqu'à la fin de la période déjà payée.",
         "Nous ne remboursons pas les périodes partielles, sauf lorsque la loi l'exige.",
         "Nous pouvons modifier les prix ou les fonctionnalités des offres. Nous vous préviendrons avant qu'un changement de prix ne s'applique à votre prochain renouvellement, et vous pourrez annuler si vous n'êtes pas d'accord.",
-        "Sur le web, les paiements sont traités par Stripe. Dans l'application iOS, les abonnements sont vendus et facturés par Apple — voir la section suivante.",
+        "Sur le web, les paiements sont traités par Stripe. Dans une version App Store de l'application Relayium, les abonnements sont vendus et facturés par Apple — voir la section suivante.",
       ],
     },
     {
       heading: "Apple App Store et achats intégrés",
       body: [
-        "Si vous téléchargez Relayium depuis l'Apple App Store, le contrat de licence utilisateur final standard d'Apple pour les applications sous licence (« Licensed Application End User License Agreement ») s'applique également à votre utilisation de l'application, et Apple est un bénéficiaire tiers des présentes conditions, avec le droit de les faire appliquer à votre encontre.",
+        "Si vous téléchargez Relayium depuis l'Apple App Store — y compris le Mac App Store —, le contrat de licence utilisateur final standard d'Apple pour les applications sous licence (« Licensed Application End User License Agreement ») s'applique également à votre utilisation de l'application, et Apple est un bénéficiaire tiers des présentes conditions, avec le droit de les faire appliquer à votre encontre.",
       ],
       bullets: [
-        "Les abonnements achetés dans l'application iOS sont vendus et facturés par Apple via un achat intégré, débité sur votre identifiant Apple.",
+        "Les abonnements achetés dans une version App Store de l'application Relayium, y compris la version Mac App Store, sont vendus et facturés par Apple via un achat intégré, débité sur votre identifiant Apple.",
         "Ils se renouvellent automatiquement sauf si vous désactivez le renouvellement automatique au moins 24 heures avant la fin de la période en cours.",
-        "Gérez ou annulez un abonnement facturé par Apple dans les paramètres de votre compte identifiant Apple — nous ne pouvons pas l'annuler ni le rembourser à votre place. Les remboursements pour les achats sur l'App Store sont gérés par Apple.",
+        "Gérez ou annulez un abonnement facturé par Apple dans les paramètres de votre compte identifiant Apple — nous ne pouvons pas l'annuler à votre place. Les remboursements des achats sur l'App Store se demandent auprès d'Apple et sont décidés par Apple ; nous ne pouvons pas les effectuer.",
+        "Nous pouvons tout de même vous aider : si votre offre Relayium ne correspond pas à ce que vous avez acheté, ou si un prélèvement vous est inconnu, écrivez à support@relayium.com et nous vérifierons ce qu'Apple nous a communiqué sur votre abonnement.",
       ],
     },
     {
@@ -707,7 +719,7 @@ const ar = {
   description:
     "شروط استخدام Relayium — خدمة مفتوحة المصدر لنقل الملفات والنصوص الفورية بين الأجهزة بتشفير من الطرف إلى الطرف. الخدمة الأساسية مجانية؛ وتتوفر خطط مدفوعة اختيارية.",
   updatedLabel: "آخر تحديث",
-  updated: "2026-07-31",
+  updated: "2026-08-13",
   otherDocLabel: "سياسة الخصوصية",
   lead: [
     "باستخدامك Relayium فإنك توافق على هذه الشروط. Relayium خدمة مفتوحة المصدر تتيح لك إرسال الملفات والنصوص الفورية بين الأجهزة، مُشفَّرة من الطرف إلى الطرف. الخدمة الأساسية مجانية؛ وبعض الخطط الاختيارية مدفوعة — راجع «الاشتراكات والفوترة».",
@@ -744,6 +756,7 @@ const ar = {
       heading: "الاشتراكات والفوترة",
       body: [
         "تقدّم Relayium مستوى مجانيًا وخططًا مدفوعة اختيارية. تُفوتَر الخطط المدفوعة مسبقًا وبشكل متكرر — شهريًا أو سنويًا، حسب اختيارك — وتُجدَّد تلقائيًا إلى أن تُلغيها.",
+        "يعتمد تحديد مَن يبيع الاشتراك ويُفوتره على مكان الشراء. فعلى الويب، تبيعه Relayium وتُعالِج Stripe الدفع، وتسري أحكام هذا القسم. أما داخل تطبيق Relayium المُثبَّت من Apple App Store — بما في ذلك Mac App Store — فتبيعه Apple وتُفوتره، ويسري القسم التالي بدلًا من ذلك.",
       ],
       bullets: [
         "تسري الترقية إلى خطة أعلى فورًا وتُحتسب بمبلغ تناسبي عن الجزء المتبقي من الفترة الحالية.",
@@ -751,18 +764,19 @@ const ar = {
         "يمكنك الإلغاء في أي وقت. تظل الميزات المدفوعة نشطة حتى نهاية الفترة التي سبق أن دفعت مقابلها.",
         "لا نقدّم استردادًا للفترات الجزئية إلا حين يقتضي القانون ذلك.",
         "قد نُغيِّر أسعار الخطط أو ميزاتها. سنُخطرك قبل سريان أي تغيير في السعر على تجديدك التالي، ويمكنك الإلغاء إن لم توافق.",
-        "على الويب، تُعالَج المدفوعات عبر Stripe. وفي تطبيق iOS، تُباع الاشتراكات وتُفوتَر بواسطة Apple — راجع القسم التالي.",
+        "على الويب، تُعالَج المدفوعات عبر Stripe. وفي نسخة App Store من تطبيق Relayium، تُباع الاشتراكات وتُفوتَر بواسطة Apple — راجع القسم التالي.",
       ],
     },
     {
       heading: "Apple App Store والمشتريات داخل التطبيق",
       body: [
-        "إذا نزّلت Relayium من Apple App Store، تسري أيضًا اتفاقية Apple القياسية لترخيص المستخدم النهائي للتطبيقات المرخَّصة («Licensed Application End User License Agreement») على استخدامك للتطبيق، وتُعَدّ Apple مستفيدًا من الغير في هذه الشروط ولها الحق في إنفاذها ضدك.",
+        "إذا نزّلت Relayium من Apple App Store — بما في ذلك Mac App Store — تسري أيضًا اتفاقية Apple القياسية لترخيص المستخدم النهائي للتطبيقات المرخَّصة («Licensed Application End User License Agreement») على استخدامك للتطبيق، وتُعَدّ Apple مستفيدًا من الغير في هذه الشروط ولها الحق في إنفاذها ضدك.",
       ],
       bullets: [
-        "الاشتراكات المُشتراة داخل تطبيق iOS تبيعها وتُفوترها Apple عبر الشراء داخل التطبيق، وتُخصَم من مُعرِّف Apple الخاص بك.",
+        "الاشتراكات المُشتراة داخل نسخة App Store من تطبيق Relayium، بما في ذلك نسخة Mac App Store، تبيعها وتُفوترها Apple عبر الشراء داخل التطبيق، وتُخصَم من مُعرِّف Apple الخاص بك.",
         "تُجدَّد تلقائيًا ما لم تُوقِف التجديد التلقائي قبل 24 ساعة على الأقل من انتهاء الفترة الحالية.",
-        "أدِر أو ألغِ اشتراكًا تُفوتِره Apple من إعدادات حساب مُعرِّف Apple الخاص بك — إذ لا يمكننا إلغاءه أو استرداد قيمته نيابةً عنك. تتولى Apple عمليات استرداد مشتريات App Store.",
+        "أدِر أو ألغِ اشتراكًا تُفوتِره Apple من إعدادات حساب مُعرِّف Apple الخاص بك — إذ لا يمكننا إلغاؤه نيابةً عنك. أما استرداد مشتريات App Store فيُطلَب من Apple وتقرّره Apple، ولا يمكننا تنفيذه.",
+        "ومع ذلك يمكننا المساعدة: إذا لم تتطابق باقتك في Relayium مع ما اشتريته، أو ظهر لك رسم لا تعرفه، راسِلنا على support@relayium.com وسنتحقق مما أبلغتنا به Apple عن اشتراكك.",
       ],
     },
     {
@@ -825,7 +839,7 @@ const es = {
   description:
     "Los términos para usar Relayium: un servicio de código abierto para transferir archivos y texto en tiempo real entre dispositivos, cifrado de extremo a extremo. El servicio básico es gratuito; hay planes de pago opcionales disponibles.",
   updatedLabel: "Última actualización",
-  updated: "2026-07-31",
+  updated: "2026-08-13",
   otherDocLabel: "Política de privacidad",
   lead: [
     "Al usar Relayium aceptas estos términos. Relayium es un servicio de código abierto que te permite enviar archivos y texto en tiempo real entre dispositivos, cifrados de extremo a extremo. El servicio básico es gratuito; algunos planes opcionales son de pago — consulta Suscripciones y facturación.",
@@ -862,6 +876,7 @@ const es = {
       heading: "Suscripciones y facturación",
       body: [
         "Relayium ofrece un nivel gratuito y planes de pago opcionales. Los planes de pago se facturan por adelantado de forma recurrente —mensual o anualmente, según elijas— y se renuevan automáticamente hasta que canceles.",
+        "Quién vende y factura una suscripción depende de dónde la compres. En la web la vende Relayium y Stripe procesa el pago, y se aplica esta sección. En una aplicación Relayium instalada desde el Apple App Store —incluido el Mac App Store— la vende y la factura Apple, y se aplica en su lugar la sección siguiente.",
       ],
       bullets: [
         "Actualizar a un plan superior se aplica de inmediato y se cobra un importe prorrateado por el resto del período actual.",
@@ -869,18 +884,19 @@ const es = {
         "Puedes cancelar en cualquier momento. Las funciones de pago permanecen activas hasta el final del período que ya has pagado.",
         "No ofrecemos reembolsos por períodos parciales, salvo cuando la ley lo exija.",
         "Podemos cambiar los precios o las funciones de los planes. Te avisaremos antes de que un cambio de precio se aplique a tu próxima renovación, y podrás cancelar si no estás de acuerdo.",
-        "En la web, los pagos los procesa Stripe. En la aplicación de iOS, las suscripciones las vende y factura Apple — consulta la siguiente sección.",
+        "En la web, los pagos los procesa Stripe. En una versión del App Store de la aplicación Relayium, las suscripciones las vende y factura Apple — consulta la siguiente sección.",
       ],
     },
     {
       heading: "Apple App Store y compras dentro de la aplicación",
       body: [
-        "Si descargas Relayium desde el Apple App Store, el Contrato de licencia de usuario final estándar de Apple para aplicaciones con licencia («Licensed Application End User License Agreement») también se aplica a tu uso de la aplicación, y Apple es un tercero beneficiario de estos términos con derecho a hacerlos cumplir frente a ti.",
+        "Si descargas Relayium desde el Apple App Store —incluido el Mac App Store—, el Contrato de licencia de usuario final estándar de Apple para aplicaciones con licencia («Licensed Application End User License Agreement») también se aplica a tu uso de la aplicación, y Apple es un tercero beneficiario de estos términos con derecho a hacerlos cumplir frente a ti.",
       ],
       bullets: [
-        "Las suscripciones compradas dentro de la aplicación de iOS son vendidas y facturadas por Apple mediante compras dentro de la aplicación, con cargo a tu Apple ID.",
+        "Las suscripciones compradas dentro de una versión del App Store de la aplicación Relayium, incluida la versión del Mac App Store, son vendidas y facturadas por Apple mediante compras dentro de la aplicación, con cargo a tu Apple ID.",
         "Se renuevan automáticamente a menos que desactives la renovación automática al menos 24 horas antes de que finalice el período actual.",
-        "Gestiona o cancela una suscripción facturada por Apple en los ajustes de tu cuenta de Apple ID — no podemos cancelarla ni reembolsarla en tu nombre. Los reembolsos de compras del App Store los gestiona Apple.",
+        "Gestiona o cancela una suscripción facturada por Apple en los ajustes de tu cuenta de Apple ID — no podemos cancelarla en tu nombre. Los reembolsos de compras del App Store se solicitan a Apple y los decide Apple; nosotros no podemos emitirlos.",
+        "Aun así podemos ayudarte: si tu plan de Relayium no coincide con lo que compraste, o ves un cargo que no reconoces, escribe a support@relayium.com y comprobaremos lo que Apple nos ha comunicado sobre tu suscripción.",
       ],
     },
     {
@@ -943,7 +959,7 @@ const pt = {
   description:
     "Os termos para usar a Relayium — um serviço de código aberto para transferir arquivos e texto em tempo real entre dispositivos, com criptografia de ponta a ponta. O serviço principal é gratuito; há planos pagos opcionais disponíveis.",
   updatedLabel: "Última atualização",
-  updated: "2026-07-31",
+  updated: "2026-08-13",
   otherDocLabel: "Política de Privacidade",
   lead: [
     "Ao usar a Relayium, você concorda com estes termos. A Relayium é um serviço de código aberto que permite enviar arquivos e texto em tempo real entre dispositivos, com criptografia de ponta a ponta. O serviço principal é gratuito; alguns planos opcionais são pagos — veja Assinaturas e cobrança.",
@@ -980,6 +996,7 @@ const pt = {
       heading: "Assinaturas e cobrança",
       body: [
         "A Relayium oferece um nível gratuito e planos pagos opcionais. Os planos pagos são cobrados antecipadamente de forma recorrente — mensal ou anualmente, conforme sua escolha — e se renovam automaticamente até que você cancele.",
+        "Quem vende e cobra uma assinatura depende de onde você a compra. Na web, quem vende é a Relayium e o pagamento é processado pela Stripe, e vale esta seção. Em um aplicativo Relayium instalado pela Apple App Store — incluindo a Mac App Store — quem vende e cobra é a Apple, e vale a seção seguinte.",
       ],
       bullets: [
         "Fazer upgrade para um plano superior tem efeito imediato e é cobrado um valor proporcional pelo restante do período atual.",
@@ -987,18 +1004,19 @@ const pt = {
         "Você pode cancelar a qualquer momento. Os recursos pagos permanecem ativos até o final do período que você já pagou.",
         "Não oferecemos reembolsos por períodos parciais, exceto quando exigido por lei.",
         "Podemos alterar os preços ou recursos dos planos. Avisaremos antes que uma mudança de preço se aplique à sua próxima renovação, e você poderá cancelar se não concordar.",
-        "Na web, os pagamentos são processados pela Stripe. No aplicativo iOS, as assinaturas são vendidas e cobradas pela Apple — veja a próxima seção.",
+        "Na web, os pagamentos são processados pela Stripe. Em uma versão da App Store do aplicativo Relayium, as assinaturas são vendidas e cobradas pela Apple — veja a próxima seção.",
       ],
     },
     {
       heading: "Apple App Store e compras no aplicativo",
       body: [
-        "Se você baixar a Relayium da Apple App Store, o Contrato de Licença de Usuário Final padrão da Apple para aplicativos licenciados (\"Licensed Application End User License Agreement\") também se aplica ao seu uso do aplicativo, e a Apple é uma terceira beneficiária destes termos, com o direito de aplicá-los contra você.",
+        "Se você baixar a Relayium da Apple App Store — incluindo a Mac App Store —, o Contrato de Licença de Usuário Final padrão da Apple para aplicativos licenciados (\"Licensed Application End User License Agreement\") também se aplica ao seu uso do aplicativo, e a Apple é uma terceira beneficiária destes termos, com o direito de aplicá-los contra você.",
       ],
       bullets: [
-        "As assinaturas compradas dentro do aplicativo iOS são vendidas e cobradas pela Apple por meio de compra no aplicativo, debitadas do seu Apple ID.",
+        "As assinaturas compradas dentro de uma versão da App Store do aplicativo Relayium, incluindo a versão da Mac App Store, são vendidas e cobradas pela Apple por meio de compra no aplicativo, debitadas do seu Apple ID.",
         "Elas se renovam automaticamente, a menos que você desative a renovação automática pelo menos 24 horas antes do fim do período atual.",
-        "Gerencie ou cancele uma assinatura cobrada pela Apple nas configurações da sua conta Apple ID — não podemos cancelá-la ou reembolsá-la por você. Reembolsos de compras na App Store são tratados pela Apple.",
+        "Gerencie ou cancele uma assinatura cobrada pela Apple nas configurações da sua conta Apple ID — não podemos cancelá-la por você. Os reembolsos de compras na App Store são solicitados à Apple e decididos pela Apple; nós não podemos efetuá-los.",
+        "Ainda assim podemos ajudar: se o seu plano da Relayium não corresponder ao que você comprou, ou se você vir uma cobrança que não reconhece, escreva para support@relayium.com e verificaremos o que a Apple nos informou sobre a sua assinatura.",
       ],
     },
     {

@@ -65,7 +65,7 @@ describe("legal pages describe temporary text accurately", () => {
         ),
       );
 
-      expect(terms.langs[lang].updated).toBe("2026-07-31");
+      expect(terms.langs[lang].updated).toBe("2026-08-13");
       expect(all).toMatch(TEXT_WORD[lang]);
       expect(liveText, `terms.${lang}.liveText`).toBeDefined();
       expect(JSON.stringify(liveText)).toMatch(ONLINE_WORD[lang]);

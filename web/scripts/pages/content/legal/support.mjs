@@ -8,7 +8,7 @@ const en = {
   description:
     "How to get help with Relayium: contact for billing and subscriptions, transfer problems, self-hosted nodes, and security reports.",
   updatedLabel: "Last updated",
-  updated: "2026-07-20",
+  updated: "2026-08-13",
   otherDocLabel: "Terms of Service",
   lead: [
     "Relayium is run by a small team. Every message reaches a person who works on the product — there is no ticket maze and no chatbot in front of us.",
@@ -18,11 +18,13 @@ const en = {
     {
       heading: "Billing and subscriptions",
       body: [
-        "You can manage most of it yourself without writing to us. From your account page you can upgrade, downgrade, or cancel at any time; cancelling keeps your plan running until the end of the period you already paid for, and then drops you to Free.",
-        "Write to support@relayium.com for anything the account page cannot do — a refund request, a wrong charge, an invoice or VAT detail, or a payment that failed for a reason you cannot see.",
+        "Who you deal with depends on where you subscribed. A subscription bought on the web is billed by Stripe and managed here, on your Relayium account page. A subscription bought inside a Relayium app installed from the Apple App Store, including the Mac App Store, is billed by Apple and managed in your Apple account settings.",
+        "For a web subscription you can manage most of it yourself without writing to us. From your account page you can upgrade, downgrade, or cancel at any time; cancelling keeps your plan running until the end of the period you already paid for, and then drops you to Free. Write to support@relayium.com for anything the account page cannot do — a refund request, a wrong charge, an invoice or VAT detail, or a payment that failed for a reason you cannot see.",
+        "For an Apple-billed subscription, change the plan or turn off auto-renewal in your Apple account settings, and ask Apple for a refund — we cannot cancel or refund an App Store purchase for you. We can still help you work out what happened: if your Relayium plan does not match what you bought, or a charge looks wrong, write to support@relayium.com and we will check what Apple has told us about your subscription.",
       ],
       bullets: [
-        "Upgrades take effect immediately and are prorated; downgrades take effect at the end of the current billing period, so you keep what you paid for.",
+        "On the web, upgrades take effect immediately and are prorated; downgrades take effect at the end of the current billing period, so you keep what you paid for.",
+        "Apple-billed plan changes, cancellations and refund requests go through Apple, not through us.",
         "Include the email address on the account. Never send us your card number — we never see it, and we will never ask for it.",
       ],
     },
@@ -56,7 +58,7 @@ const zh = {
   description:
     "如何获得 Relayium 的帮助：账单与订阅、传输故障、自建节点以及安全问题的联系方式。",
   updatedLabel: "最后更新",
-  updated: "2026-07-20",
+  updated: "2026-08-13",
   otherDocLabel: "服务条款",
   lead: [
     "Relayium 由一个小团队运营。每一封来信都会送到真正开发这个产品的人手里——没有层层转派的工单系统，也没有挡在前面的聊天机器人。",
@@ -66,11 +68,13 @@ const zh = {
     {
       heading: "账单与订阅",
       body: [
-        "大部分事情你都可以自己处理，无需写信给我们。在账号页面你可以随时升级、降级或取消；取消后套餐仍会持续到你已付费周期的结束，之后转为免费版。",
-        "凡是账号页面做不到的事，请写信到 support@relayium.com——退款申请、扣错费用、发票或税务信息，以及你看不出原因的支付失败。",
+        "该找谁，取决于你在哪里订阅。在网页端购买的订阅由 Stripe 计费，在 Relayium 账号页面管理；在从 Apple App Store（含 Mac App Store）安装的 Relayium App 内购买的订阅由 Apple 计费，在你的 Apple 账号设置中管理。",
+        "网页端订阅的大部分事情你都可以自己处理，无需写信给我们。在账号页面你可以随时升级、降级或取消；取消后套餐仍会持续到你已付费周期的结束，之后转为免费版。凡是账号页面做不到的事，请写信到 support@relayium.com——退款申请、扣错费用、发票或税务信息，以及你看不出原因的支付失败。",
+        "由 Apple 计费的订阅，请在你的 Apple 账号设置中更改套餐或关闭自动续订，并向 Apple 申请退款——App Store 购买我们无法代你取消或退款。但我们仍能帮你查清情况：如果你的 Relayium 套餐与所购买的不符，或某笔扣费看起来有问题，请写信到 support@relayium.com，我们会核对 Apple 告知我们的订阅信息。",
       ],
       bullets: [
-        "升级立即生效并按比例计费；降级在当前计费周期结束时生效，因此你付过的部分不会白付。",
+        "在网页端，升级立即生效并按比例计费；降级在当前计费周期结束时生效，因此你付过的部分不会白付。",
+        "由 Apple 计费的套餐变更、取消与退款申请都通过 Apple 办理，而不是通过我们。",
         "请附上账号所用的邮箱地址。切勿把卡号发给我们——我们看不到它，也永远不会索要。",
       ],
     },
@@ -104,7 +108,7 @@ const ja = {
   description:
     "Relayium のサポート窓口：請求とサブスクリプション、転送のトラブル、セルフホストのノード、セキュリティ報告について。",
   updatedLabel: "最終更新",
-  updated: "2026-07-20",
+  updated: "2026-08-13",
   otherDocLabel: "利用規約",
   lead: [
     "Relayium は少人数のチームで運営しています。いただいたメッセージは必ず、製品を実際に作っている人間に届きます。たらい回しのチケットシステムも、前面に立ちはだかるチャットボットもありません。",
@@ -114,11 +118,13 @@ const ja = {
     {
       heading: "請求とサブスクリプション",
       body: [
-        "ほとんどのことはご自身で完結でき、こちらへご連絡いただく必要はありません。アカウントページからいつでもアップグレード・ダウングレード・解約ができます。解約しても、すでにお支払い済みの期間の終わりまではプランがそのまま有効で、その後は無料プランに戻ります。",
-        "アカウントページで対応できないこと——返金のご依頼、誤った請求、請求書や税務情報、原因の分からない支払い失敗——については support@relayium.com までご連絡ください。",
+        "お問い合わせ先は、どこでサブスクリプションを購入したかによって変わります。ウェブで購入したサブスクリプションは Stripe が請求し、Relayium のアカウントページで管理します。Apple App Store（Mac App Store を含む）からインストールした Relayium アプリ内で購入したサブスクリプションは Apple が請求し、お客様の Apple アカウントの設定で管理します。",
+        "ウェブのサブスクリプションは、ほとんどのことをご自身で完結でき、こちらへご連絡いただく必要はありません。アカウントページからいつでもアップグレード・ダウングレード・解約ができます。解約しても、すでにお支払い済みの期間の終わりまではプランがそのまま有効で、その後は無料プランに戻ります。アカウントページで対応できないこと——返金のご依頼、誤った請求、請求書や税務情報、原因の分からない支払い失敗——については support@relayium.com までご連絡ください。",
+        "Apple が請求するサブスクリプションについては、プランの変更や自動更新の停止をお客様の Apple アカウントの設定で行い、返金は Apple にご請求ください——App Store での購入を当社が解約したり返金したりすることはできません。それでも状況の確認はお手伝いできます。Relayium のプランが購入内容と一致しない場合や、請求に心当たりがない場合は support@relayium.com までご連絡ください。Apple から当社に届いているサブスクリプションの情報を確認します。",
       ],
       bullets: [
-        "アップグレードは即時に有効になり日割りで計算されます。ダウングレードは現在の請求期間の終了時に有効になるため、お支払い済みの分は無駄になりません。",
+        "ウェブでは、アップグレードは即時に有効になり日割りで計算されます。ダウングレードは現在の請求期間の終了時に有効になるため、お支払い済みの分は無駄になりません。",
+        "Apple が請求するプランの変更・解約・返金のご依頼は、当社ではなく Apple を通じて行われます。",
         "アカウントに登録されているメールアドレスを併記してください。カード番号は絶対にお送りにならないでください——当社が目にすることはなく、お尋ねすることもありません。",
       ],
     },
@@ -152,7 +158,7 @@ const ko = {
   description:
     "Relayium 도움을 받는 방법: 결제와 구독, 전송 문제, 직접 운영하는 노드, 보안 신고 문의처.",
   updatedLabel: "최종 업데이트",
-  updated: "2026-07-20",
+  updated: "2026-08-13",
   otherDocLabel: "이용약관",
   lead: [
     "Relayium은 소규모 팀이 운영합니다. 보내주신 모든 메시지는 이 제품을 직접 만드는 사람에게 전달됩니다. 복잡한 티켓 미로도, 앞을 가로막는 챗봇도 없습니다.",
@@ -162,11 +168,13 @@ const ko = {
     {
       heading: "결제와 구독",
       body: [
-        "대부분은 저희에게 연락하지 않고 직접 처리하실 수 있습니다. 계정 페이지에서 언제든지 업그레이드, 다운그레이드, 해지할 수 있으며, 해지하더라도 이미 결제한 기간이 끝날 때까지는 요금제가 그대로 유지되고 그 후 무료로 전환됩니다.",
-        "계정 페이지에서 해결할 수 없는 일 — 환불 요청, 잘못된 청구, 인보이스나 세금 정보, 이유를 알 수 없는 결제 실패 — 은 support@relayium.com으로 문의해 주십시오.",
+        "어디에 문의해야 하는지는 어디에서 구독했는지에 따라 달라집니다. 웹에서 구매한 구독은 Stripe가 청구하며 Relayium 계정 페이지에서 관리합니다. Apple App Store(Mac App Store 포함)에서 설치한 Relayium 앱 안에서 구매한 구독은 Apple이 청구하며 Apple 계정 설정에서 관리합니다.",
+        "웹 구독은 대부분 저희에게 연락하지 않고 직접 처리하실 수 있습니다. 계정 페이지에서 언제든지 업그레이드, 다운그레이드, 해지할 수 있으며, 해지하더라도 이미 결제한 기간이 끝날 때까지는 요금제가 그대로 유지되고 그 후 무료로 전환됩니다. 계정 페이지에서 해결할 수 없는 일 — 환불 요청, 잘못된 청구, 인보이스나 세금 정보, 이유를 알 수 없는 결제 실패 — 은 support@relayium.com으로 문의해 주십시오.",
+        "Apple이 청구하는 구독은 Apple 계정 설정에서 요금제를 변경하거나 자동 갱신을 끄고, 환불은 Apple에 요청하십시오 — App Store 구매는 당사가 대신 해지하거나 환불할 수 없습니다. 그래도 무슨 일이 있었는지 확인하는 것은 도와드릴 수 있습니다. Relayium 요금제가 구매하신 내용과 다르거나 청구가 이상해 보이면 support@relayium.com으로 문의해 주십시오. Apple이 당사에 알려준 구독 정보를 확인해 드리겠습니다.",
       ],
       bullets: [
-        "업그레이드는 즉시 적용되며 일할 계산됩니다. 다운그레이드는 현재 결제 기간이 끝날 때 적용되므로 결제하신 만큼은 그대로 사용하실 수 있습니다.",
+        "웹에서는 업그레이드가 즉시 적용되며 일할 계산됩니다. 다운그레이드는 현재 결제 기간이 끝날 때 적용되므로 결제하신 만큼은 그대로 사용하실 수 있습니다.",
+        "Apple이 청구하는 요금제의 변경, 해지, 환불 요청은 당사가 아니라 Apple을 통해 이루어집니다.",
         "계정에 등록된 이메일 주소를 함께 적어 주십시오. 카드 번호는 절대 보내지 마십시오 — 저희는 카드 번호를 볼 수 없으며 요청하지도 않습니다.",
       ],
     },
@@ -200,7 +208,7 @@ const de = {
   description:
     "So erhalten Sie Hilfe zu Relayium: Kontakt für Abrechnung und Abonnements, Übertragungsprobleme, selbst betriebene Nodes und Sicherheitsmeldungen.",
   updatedLabel: "Zuletzt aktualisiert",
-  updated: "2026-07-20",
+  updated: "2026-08-13",
   otherDocLabel: "Nutzungsbedingungen",
   lead: [
     "Relayium wird von einem kleinen Team betrieben. Jede Nachricht landet bei einem Menschen, der am Produkt arbeitet — es gibt kein Ticket-Labyrinth und keinen Chatbot davor.",
@@ -210,11 +218,13 @@ const de = {
     {
       heading: "Abrechnung und Abonnements",
       body: [
-        "Das meiste können Sie selbst erledigen, ohne uns zu schreiben. Auf Ihrer Kontoseite können Sie jederzeit ein Upgrade oder eine Herabstufung vornehmen oder kündigen; nach einer Kündigung läuft Ihr Tarif bis zum Ende des bereits bezahlten Zeitraums weiter und wechselt danach zu Free.",
-        "Schreiben Sie an support@relayium.com für alles, was die Kontoseite nicht abdeckt — eine Rückerstattungsanfrage, eine falsche Abbuchung, eine Rechnungs- oder Umsatzsteuerangabe oder eine Zahlung, die aus einem für Sie nicht ersichtlichen Grund fehlgeschlagen ist.",
+        "An wen Sie sich wenden, hängt davon ab, wo Sie abonniert haben. Ein im Web gekauftes Abonnement wird von Stripe abgerechnet und auf Ihrer Relayium-Kontoseite verwaltet. Ein Abonnement, das in einer aus dem Apple App Store — einschließlich des Mac App Store — installierten Relayium-App gekauft wurde, wird von Apple abgerechnet und in Ihren Apple-Kontoeinstellungen verwaltet.",
+        "Bei einem Web-Abonnement können Sie das meiste selbst erledigen, ohne uns zu schreiben. Auf Ihrer Kontoseite können Sie jederzeit ein Upgrade oder eine Herabstufung vornehmen oder kündigen; nach einer Kündigung läuft Ihr Tarif bis zum Ende des bereits bezahlten Zeitraums weiter und wechselt danach zu Free. Schreiben Sie an support@relayium.com für alles, was die Kontoseite nicht abdeckt — eine Rückerstattungsanfrage, eine falsche Abbuchung, eine Rechnungs- oder Umsatzsteuerangabe oder eine Zahlung, die aus einem für Sie nicht ersichtlichen Grund fehlgeschlagen ist.",
+        "Bei einem von Apple abgerechneten Abonnement ändern Sie den Tarif oder deaktivieren die automatische Verlängerung in Ihren Apple-Kontoeinstellungen und beantragen eine Rückerstattung bei Apple — einen Kauf im App Store können wir weder für Sie kündigen noch erstatten. Bei der Klärung helfen wir trotzdem: Wenn Ihr Relayium-Tarif nicht zu Ihrem Kauf passt oder eine Abbuchung falsch aussieht, schreiben Sie an support@relayium.com, und wir prüfen, was Apple uns zu Ihrem Abonnement gemeldet hat.",
       ],
       bullets: [
-        "Upgrades gelten sofort und werden anteilig berechnet; Herabstufungen werden zum Ende des laufenden Abrechnungszeitraums wirksam, sodass Ihnen das Bezahlte erhalten bleibt.",
+        "Im Web gelten Upgrades sofort und werden anteilig berechnet; Herabstufungen werden zum Ende des laufenden Abrechnungszeitraums wirksam, sodass Ihnen das Bezahlte erhalten bleibt.",
+        "Tarifwechsel, Kündigungen und Erstattungsanfragen für von Apple abgerechnete Abonnements laufen über Apple, nicht über uns.",
         "Geben Sie die E-Mail-Adresse des Kontos an. Senden Sie uns niemals Ihre Kartennummer — wir sehen sie nie und werden niemals danach fragen.",
       ],
     },
@@ -248,7 +258,7 @@ const fr = {
   description:
     "Comment obtenir de l'aide sur Relayium : contact pour la facturation et les abonnements, les problèmes de transfert, les nœuds auto-hébergés et les signalements de sécurité.",
   updatedLabel: "Dernière mise à jour",
-  updated: "2026-07-20",
+  updated: "2026-08-13",
   otherDocLabel: "Conditions d'utilisation",
   lead: [
     "Relayium est géré par une petite équipe. Chaque message parvient à une personne qui travaille sur le produit — il n'y a ni dédale de tickets, ni robot conversationnel en première ligne.",
@@ -258,11 +268,13 @@ const fr = {
     {
       heading: "Facturation et abonnements",
       body: [
-        "Vous pouvez gérer l'essentiel vous-même sans nous écrire. Depuis votre page de compte, vous pouvez à tout moment passer à une offre supérieure, rétrograder ou résilier ; en cas de résiliation, votre offre reste active jusqu'à la fin de la période déjà payée, puis bascule vers Gratuit.",
-        "Écrivez à support@relayium.com pour tout ce que la page de compte ne permet pas — une demande de remboursement, un prélèvement erroné, une facture ou une mention de TVA, ou un paiement échoué pour une raison que vous ne pouvez pas identifier.",
+        "Votre interlocuteur dépend de l'endroit où vous vous êtes abonné. Un abonnement souscrit sur le web est facturé par Stripe et se gère depuis votre page de compte Relayium. Un abonnement souscrit dans une application Relayium installée depuis l'Apple App Store, y compris le Mac App Store, est facturé par Apple et se gère dans les paramètres de votre compte Apple.",
+        "Pour un abonnement web, vous pouvez gérer l'essentiel vous-même sans nous écrire. Depuis votre page de compte, vous pouvez à tout moment passer à une offre supérieure, rétrograder ou résilier ; en cas de résiliation, votre offre reste active jusqu'à la fin de la période déjà payée, puis bascule vers Gratuit. Écrivez à support@relayium.com pour tout ce que la page de compte ne permet pas — une demande de remboursement, un prélèvement erroné, une facture ou une mention de TVA, ou un paiement échoué pour une raison que vous ne pouvez pas identifier.",
+        "Pour un abonnement facturé par Apple, changez d'offre ou désactivez le renouvellement automatique dans les paramètres de votre compte Apple, et demandez le remboursement à Apple — nous ne pouvons ni résilier ni rembourser un achat App Store à votre place. Nous pouvons tout de même vous aider à y voir clair : si votre offre Relayium ne correspond pas à ce que vous avez acheté, ou si un prélèvement semble erroné, écrivez à support@relayium.com et nous vérifierons ce qu'Apple nous a communiqué sur votre abonnement.",
       ],
       bullets: [
-        "Les mises à niveau prennent effet immédiatement et sont calculées au prorata ; les rétrogradations prennent effet à la fin de la période de facturation en cours, de sorte que vous conservez ce que vous avez payé.",
+        "Sur le web, les mises à niveau prennent effet immédiatement et sont calculées au prorata ; les rétrogradations prennent effet à la fin de la période de facturation en cours, de sorte que vous conservez ce que vous avez payé.",
+        "Les changements d'offre, les résiliations et les demandes de remboursement des abonnements facturés par Apple passent par Apple, et non par nous.",
         "Indiquez l'adresse e-mail associée au compte. Ne nous envoyez jamais votre numéro de carte — nous ne le voyons jamais et ne vous le demanderons jamais.",
       ],
     },
@@ -296,7 +308,7 @@ const ar = {
   description:
     "كيف تحصل على المساعدة في Relayium: جهة الاتصال للفوترة والاشتراكات، ومشكلات النقل، والعُقد التي تشغّلها بنفسك، وبلاغات الأمان.",
   updatedLabel: "آخر تحديث",
-  updated: "2026-07-20",
+  updated: "2026-08-13",
   otherDocLabel: "شروط الخدمة",
   lead: [
     "يدير Relayium فريق صغير. وكل رسالة تصل إلى شخص يعمل فعلًا على المنتج — فلا متاهة تذاكر ولا روبوت محادثة يقف بيننا وبينك.",
@@ -306,11 +318,13 @@ const ar = {
     {
       heading: "الفوترة والاشتراكات",
       body: [
-        "يمكنك إدارة معظم الأمور بنفسك دون مراسلتنا. فمن صفحة حسابك يمكنك الترقية أو خفض الباقة أو الإلغاء في أي وقت؛ والإلغاء يُبقي باقتك فعّالة حتى نهاية الفترة التي دفعت ثمنها بالفعل، ثم تعود إلى الباقة المجانية.",
-        "راسِلنا على support@relayium.com لكل ما لا تستطيع صفحة الحساب فعله — طلب استرداد، أو رسم خاطئ، أو تفصيل يخصّ فاتورة أو ضريبة القيمة المضافة، أو دفعة أخفقت لسبب لا يظهر لك.",
+        "تعتمد الجهة التي تتعامل معها على مكان اشتراكك. فالاشتراك المُشترى على الويب تُفوتره Stripe ويُدار من صفحة حسابك في Relayium. أما الاشتراك المُشترى داخل تطبيق Relayium المُثبَّت من Apple App Store، بما في ذلك Mac App Store، فتُفوتره Apple ويُدار من إعدادات حساب Apple الخاص بك.",
+        "في اشتراك الويب يمكنك إدارة معظم الأمور بنفسك دون مراسلتنا. فمن صفحة حسابك يمكنك الترقية أو خفض الباقة أو الإلغاء في أي وقت؛ والإلغاء يُبقي باقتك فعّالة حتى نهاية الفترة التي دفعت ثمنها بالفعل، ثم تعود إلى الباقة المجانية. وراسِلنا على support@relayium.com لكل ما لا تستطيع صفحة الحساب فعله — طلب استرداد، أو رسم خاطئ، أو تفصيل يخصّ فاتورة أو ضريبة القيمة المضافة، أو دفعة أخفقت لسبب لا يظهر لك.",
+        "أما الاشتراك الذي تُفوتره Apple، فغيِّر الباقة أو أوقِف التجديد التلقائي من إعدادات حساب Apple الخاص بك، واطلب الاسترداد من Apple — إذ لا يمكننا إلغاء شراء App Store أو استرداد قيمته نيابةً عنك. ومع ذلك يمكننا مساعدتك على معرفة ما جرى: إذا لم تتطابق باقتك في Relayium مع ما اشتريته، أو بدا أحد الرسوم خاطئًا، راسِلنا على support@relayium.com وسنتحقق مما أبلغتنا به Apple عن اشتراكك.",
       ],
       bullets: [
-        "تسري الترقيات فورًا وتُحتسب بالتناسب؛ أما خفض الباقة فيسري في نهاية دورة الفوترة الحالية، فتحتفظ بما دفعت مقابله.",
+        "على الويب، تسري الترقيات فورًا وتُحتسب بالتناسب؛ أما خفض الباقة فيسري في نهاية دورة الفوترة الحالية، فتحتفظ بما دفعت مقابله.",
+        "تغييرات الباقة وعمليات الإلغاء وطلبات الاسترداد للاشتراكات التي تُفوترها Apple تتم عبر Apple لا عبرنا.",
         "أرفِق عنوان البريد الإلكتروني المسجَّل في الحساب. ولا ترسل إلينا رقم بطاقتك أبدًا — فنحن لا نراه إطلاقًا ولن نطلبه منك أبدًا.",
       ],
     },
@@ -344,7 +358,7 @@ const es = {
   description:
     "Cómo obtener ayuda con Relayium: contacto para facturación y suscripciones, problemas de transferencia, nodos autoalojados e informes de seguridad.",
   updatedLabel: "Última actualización",
-  updated: "2026-07-20",
+  updated: "2026-08-13",
   otherDocLabel: "Términos del servicio",
   lead: [
     "Relayium lo lleva un equipo pequeño. Cada mensaje llega a una persona que trabaja en el producto: no hay laberinto de tickets ni un chatbot por delante.",
@@ -354,11 +368,13 @@ const es = {
     {
       heading: "Facturación y suscripciones",
       body: [
-        "Casi todo puedes gestionarlo tú mismo sin escribirnos. Desde tu página de cuenta puedes mejorar, bajar de plan o cancelar cuando quieras; al cancelar, tu plan sigue activo hasta el final del período que ya pagaste y después pasa a Gratis.",
-        "Escribe a support@relayium.com para todo lo que la página de cuenta no cubre: una solicitud de reembolso, un cargo erróneo, un dato de factura o de IVA, o un pago que falló por un motivo que no puedes ver.",
+        "Con quién tratas depende de dónde te suscribiste. Una suscripción comprada en la web la factura Stripe y se gestiona desde tu página de cuenta de Relayium. Una suscripción comprada dentro de una aplicación Relayium instalada desde el Apple App Store, incluido el Mac App Store, la factura Apple y se gestiona en los ajustes de tu cuenta de Apple.",
+        "En una suscripción web, casi todo puedes gestionarlo tú mismo sin escribirnos. Desde tu página de cuenta puedes mejorar, bajar de plan o cancelar cuando quieras; al cancelar, tu plan sigue activo hasta el final del período que ya pagaste y después pasa a Gratis. Escribe a support@relayium.com para todo lo que la página de cuenta no cubre: una solicitud de reembolso, un cargo erróneo, un dato de factura o de IVA, o un pago que falló por un motivo que no puedes ver.",
+        "En una suscripción facturada por Apple, cambia de plan o desactiva la renovación automática en los ajustes de tu cuenta de Apple, y pide el reembolso a Apple: no podemos cancelar ni reembolsar una compra del App Store en tu nombre. Aun así podemos ayudarte a entender qué pasó: si tu plan de Relayium no coincide con lo que compraste, o un cargo parece incorrecto, escribe a support@relayium.com y comprobaremos lo que Apple nos ha comunicado sobre tu suscripción.",
       ],
       bullets: [
-        "Las mejoras surten efecto de inmediato y se prorratean; las bajadas de plan se aplican al final del período de facturación actual, así que conservas lo que pagaste.",
+        "En la web, las mejoras surten efecto de inmediato y se prorratean; las bajadas de plan se aplican al final del período de facturación actual, así que conservas lo que pagaste.",
+        "Los cambios de plan, las cancelaciones y las solicitudes de reembolso de las suscripciones facturadas por Apple pasan por Apple, no por nosotros.",
         "Incluye la dirección de correo de la cuenta. Nunca nos envíes el número de tu tarjeta: no lo vemos nunca y jamás te lo pediremos.",
       ],
     },
@@ -392,7 +408,7 @@ const pt = {
   description:
     "Como obter ajuda com a Relayium: contato para cobrança e assinaturas, problemas de transferência, nós auto-hospedados e relatos de segurança.",
   updatedLabel: "Última atualização",
-  updated: "2026-07-20",
+  updated: "2026-08-13",
   otherDocLabel: "Termos de Serviço",
   lead: [
     "A Relayium é tocada por uma equipe pequena. Cada mensagem chega a uma pessoa que trabalha no produto — não há labirinto de tíquetes nem chatbot na nossa frente.",
@@ -402,11 +418,13 @@ const pt = {
     {
       heading: "Cobrança e assinaturas",
       body: [
-        "Você mesmo pode resolver a maior parte sem nos escrever. Na página da sua conta é possível fazer upgrade, downgrade ou cancelar a qualquer momento; ao cancelar, seu plano continua ativo até o fim do período que você já pagou e depois passa para o Gratuito.",
-        "Escreva para support@relayium.com para o que a página da conta não resolve — um pedido de reembolso, uma cobrança indevida, um dado de nota fiscal ou de imposto, ou um pagamento que falhou por um motivo que você não consegue ver.",
+        "Com quem você fala depende de onde assinou. Uma assinatura comprada na web é cobrada pela Stripe e gerenciada na página da sua conta Relayium. Uma assinatura comprada dentro de um aplicativo Relayium instalado pela Apple App Store, incluindo a Mac App Store, é cobrada pela Apple e gerenciada nas configurações da sua conta Apple.",
+        "Em uma assinatura na web, você mesmo pode resolver a maior parte sem nos escrever. Na página da sua conta é possível fazer upgrade, downgrade ou cancelar a qualquer momento; ao cancelar, seu plano continua ativo até o fim do período que você já pagou e depois passa para o Gratuito. Escreva para support@relayium.com para o que a página da conta não resolve — um pedido de reembolso, uma cobrança indevida, um dado de nota fiscal ou de imposto, ou um pagamento que falhou por um motivo que você não consegue ver.",
+        "Em uma assinatura cobrada pela Apple, mude de plano ou desative a renovação automática nas configurações da sua conta Apple e peça o reembolso à Apple — não podemos cancelar nem reembolsar uma compra na App Store por você. Ainda assim podemos ajudar a entender o que aconteceu: se o seu plano da Relayium não corresponder ao que você comprou, ou se uma cobrança parecer errada, escreva para support@relayium.com e verificaremos o que a Apple nos informou sobre a sua assinatura.",
       ],
       bullets: [
-        "Os upgrades entram em vigor imediatamente e são proporcionais; os downgrades passam a valer no fim do período de cobrança atual, então você mantém aquilo que pagou.",
+        "Na web, os upgrades entram em vigor imediatamente e são proporcionais; os downgrades passam a valer no fim do período de cobrança atual, então você mantém aquilo que pagou.",
+        "Mudanças de plano, cancelamentos e pedidos de reembolso de assinaturas cobradas pela Apple passam pela Apple, não por nós.",
         "Informe o e-mail cadastrado na conta. Nunca nos envie o número do seu cartão — nós nunca o vemos e jamais vamos pedi-lo.",
       ],
     },
