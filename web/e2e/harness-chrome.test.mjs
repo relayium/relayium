@@ -419,20 +419,38 @@ function silentServer(port, { deafUpgrade = false } = {}) {
   const wsUrl = `ws://127.0.0.1:${port}/devtools/browser/3f2a1c9e-77bd-4f1a-9c02-5d6e0b1a2c34`;
   /** The sockets whose phase is the one that hangs. */
   const held = [];
+  // Idempotent: holding is driven by a request now, and one kept-alive socket
+  // could deliver more than one. The same socket twice would not change
+  // `released`, but it would make a held list nobody can read against the probe
+  // count the test asserts beside it.
+  const hold = (socket) => {
+    if (held.includes(socket)) return;
+    socket.on("error", () => {});
+    held.push(socket);
+  };
   const server = createServer((req, res) => {
     req.resume();
-    if (!deafUpgrade) return; // no status line, no headers, no close — ever
+    // The socket the probe ARRIVED on — deliberately not every socket that
+    // connects. `server.on("connection", hold)` was the obvious hook and the
+    // wrong one: an aborted `fetch` leaves undici's own pool opening one further
+    // connection to the same port about a millisecond later. That one sends no
+    // request, belongs to undici rather than to the harness, and closes on
+    // undici's schedule — which is free to keep it pooled for its keep-alive
+    // rather than dropping it at once. Holding it made `released` wait on a
+    // socket `launchBrowser` never opened and has no handle to abort: green
+    // whenever undici dropped it immediately, red on hosted run 31796086589
+    // where it did not. A socket that carried a request is exactly the one the
+    // harness abandons, and that is the whole claim this assertion makes.
+    if (!deafUpgrade) { hold(req.socket); return; } // no status line, no headers, no close — ever
     res.setHeader("content-type", "application/json");
     res.end(JSON.stringify({ Browser: "FakeChrome/1.0", webSocketDebuggerUrl: wsUrl }));
   });
-  const hold = (socket) => { socket.on("error", () => {}); held.push(socket); };
   // Accept the upgrade and never write the 101 that would open it. `resume()`
   // so the peer's FIN is actually read — an upgraded socket is detached from the
   // HTTP server and nothing else would pull from it. The probe's own connection
   // is NOT held in this mode: undici keeps it alive in its pool after a
   // successful fetch, so it says nothing about what the harness abandoned.
   if (deafUpgrade) server.on("upgrade", (req, socket) => { socket.resume(); hold(socket); });
-  else server.on("connection", hold);
   silentServers.push({ server, held });
   return new Promise((resolve) => server.listen(port, "127.0.0.1", () => resolve({ held })));
 }

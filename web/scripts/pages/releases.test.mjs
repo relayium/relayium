@@ -10,6 +10,7 @@
 // is what pays for it. It bites in any full clone, which is every environment
 // where the file could be edited in the first place.
 import { execFileSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -32,6 +33,41 @@ const APP_TABLES = { en, zh, ja, ko, de, fr, ar, es, pt };
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const pages = buildReleasesPages(releases);
 const byLang = Object.fromEntries(LANGS.map((l, i) => [l, pages[i].html]));
+
+/**
+ * The published macOS release, read rather than written down again.
+ *
+ * `native-releases.json` is the one manifest the /apps download CTA, the Device
+ * Inbox badge and the release workflow already resolve against, so deriving the
+ * expected tag from it is the difference between "the page names A tag" and
+ * "the page names THE tag whose DMG a reader can actually fetch". Duplicating
+ * the literal here would only move the drift one file over: that is precisely
+ * how `macos-v1.0` stayed asserted, and green, for five releases after it
+ * stopped being current.
+ */
+const MAC = JSON.parse(
+  await readFile(resolve(process.cwd(), "native-releases.json"), "utf8"),
+).macos;
+
+/** The one macOS release tag this page is allowed to name. */
+const CURRENT_TAG = `macos-v${MAC.version}`;
+
+/** Every distinct `macos-v…` tag in a string. Set, not count: how many times a
+ *  locale repeats the tag is editorial, but each one has to be the current one. */
+const macTags = (text) => new Set([...text.matchAll(/macos-v[0-9]+(?:\.[0-9]+)*/g)].map((m) => m[0]));
+
+/** Every distinct `macOS <version>` claim in a string — the lead's half of the
+ *  same fact, which carries the bare version rather than the tag. At least one
+ *  dot is required, so "the macOS app" is not swept in.
+ *
+ *  This deliberately cannot tell "Relayium macOS 1.2.1" from a system
+ *  requirement like "requires macOS 14.0 or later". The page carries no such
+ *  sentence today, and the set-equality below is what makes the guard real
+ *  rather than vacuous — so the first one added fails HERE, loudly, and whoever
+ *  adds it decides how to distinguish the two claims. Quietly loosening this to
+ *  a substring check would restore exactly the hole that let `macOS 1.0` ride
+ *  through five releases. */
+const macVersions = (text) => new Set([...text.matchAll(/macOS [0-9]+(?:\.[0-9]+)+/g)].map((m) => m[0]));
 
 /**
  * Every tag in this clone as { version: date }, or null where git cannot answer
@@ -309,9 +345,25 @@ describe("what /releases says about the native apps", () => {
       const bullet = releases.langs[lang].sections[0].bullets[1];
       // The tag is the checkable part: a reader can paste it after
       // /releases/tag/ and land on the artifact this sentence describes.
-      expect(bullet, `${lang} does not name the macOS release tag`).toContain("macos-v1.0");
+      expect(bullet, `${lang} does not name the macOS release tag`).toContain(CURRENT_TAG);
+      expect(macTags(bullet), `${lang} names a superseded macOS release tag`)
+        .toEqual(new Set([CURRENT_TAG]));
       expect(bullet, `${lang} does not rule out the Mac App Store`).toMatch(NOT_APP_STORE[lang]);
       expect(bullet, `${lang} stops saying the iOS app is unreleased`).toMatch(IOS_UNRELEASED[lang]);
+    }
+  });
+
+  it("names the current macOS version in every locale's lead", () => {
+    // The bullet's tag and the lead's bare version are two claims about one
+    // release, written in two different places by two different sentences. Only
+    // the bullet was pinned before, so the lead kept saying "macOS 1.0" while
+    // the bullet had moved on — the same page contradicting itself.
+    for (const lang of LANGS) {
+      const lead = releases.langs[lang].lead[0];
+      expect(lead, `${lang} lead does not name the current macOS version`)
+        .toContain(`macOS ${MAC.version}`);
+      expect(macVersions(lead), `${lang} lead names a superseded macOS version`)
+        .toEqual(new Set([`macOS ${MAC.version}`]));
     }
   });
 
@@ -319,8 +371,49 @@ describe("what /releases says about the native apps", () => {
     // The bullet exists in the content module; this is the half that proves the
     // template renders it, in the locale's own page.
     for (const lang of LANGS) {
-      expect(byLang[lang], lang).toContain("macos-v1.0");
+      expect(byLang[lang], lang).toContain(CURRENT_TAG);
+      expect(macTags(byLang[lang]), `${lang} page renders a superseded tag`)
+        .toEqual(new Set([CURRENT_TAG]));
+      expect(macVersions(byLang[lang]), `${lang} page renders a superseded version`)
+        .toEqual(new Set([`macOS ${MAC.version}`]));
     }
+  });
+
+  // The generator's output and the bytes committed under public/ are two
+  // different things, and only the first is checked above. content/releases.mjs
+  // can be corrected and `npm run gen:pages` forgotten, which leaves the source
+  // truthful and the pages a reader actually fetches still lying — which is the
+  // exact state this batch found the site in.
+  it("has regenerated every committed release page from that source", async () => {
+    for (const lang of LANGS) {
+      const path = lang === "en" ? "releases/index.html" : `${lang}/releases/index.html`;
+      const html = await readFile(resolve(process.cwd(), "public", path), "utf8");
+      expect(macTags(html), `public/${path} is stale`).toEqual(new Set([CURRENT_TAG]));
+      expect(macVersions(html), `public/${path} is stale`)
+        .toEqual(new Set([`macOS ${MAC.version}`]));
+    }
+  });
+
+  // Both predicates above are set-equality against a value derived from the
+  // manifest, so they are only guards if they actually see a superseded tag.
+  // Driven directly here with the tag that was really stale — nine locales and
+  // nine committed pages sat on `macos-v1.0` through 1.1, 1.1.1, 1.1.2, 1.1.3
+  // and 1.2.1 — so a refactor that made either scanner match nothing fails here
+  // rather than passing everywhere.
+  it("rejects the stale macos-v1.0 claim it was written for", () => {
+    const stale =
+      "The macOS app is released under its own tag, macos-v1.0: a Developer ID-signed, "
+      + "Apple-notarized direct download from GitHub, not a Mac App Store listing.";
+    expect(macTags(stale)).toEqual(new Set(["macos-v1.0"]));
+    expect(macTags(stale)).not.toEqual(new Set([CURRENT_TAG]));
+    expect(macVersions("macOS 1.0 is a signed download from GitHub"))
+      .toEqual(new Set(["macOS 1.0"]));
+    // And the manifest this suite derives from is a released one, so the
+    // assertions above are comparing against a real published tag rather than a
+    // null placeholder that would make every set-equality trivially agree.
+    expect(MAC.available).toBe(true);
+    expect(MAC.version).toMatch(/^[0-9]+(?:\.[0-9]+){1,2}$/);
+    expect(CURRENT_TAG).not.toBe("macos-v1.0");
   });
 });
 

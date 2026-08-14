@@ -33,14 +33,23 @@
 //
 // The native apps sit outside that list on purpose, and since 2026-08-10 the two
 // of them are in DIFFERENT states, which the copy has to carry: the macOS app is
-// released publicly under its own tag namespace (`macos-v1.0`, a Developer
-// ID-signed and Apple-notarized DMG attached to that GitHub Release — not a Mac
-// App Store listing), while the iOS app is still an engineering build that has
-// been released nowhere. "The native apps are engineering builds" was one true
-// sentence about two things; it is now false about one of them, and a page whose
-// whole purpose is being checkable cannot carry it. See releases.test.mjs, which
-// also keeps the `v*` list from being failed by the `macos-v*` tag it must not
-// contain.
+// released publicly under its own tag namespace (currently `macos-v1.2.1`, a
+// Developer ID-signed and Apple-notarized DMG attached to that GitHub Release —
+// not a Mac App Store listing), while the iOS app is still an engineering build
+// that has been released nowhere. "The native apps are engineering builds" was
+// one true sentence about two things; it is now false about one of them, and a
+// page whose whole purpose is being checkable cannot carry it. See
+// releases.test.mjs, which also keeps the `v*` list from being failed by the
+// `macos-v*` tag it must not contain.
+//
+// The version in that sentence is the CURRENT release, not the first one, and it
+// moves. `macos-v1.0` sat here — and in all nine locales below — through 1.1,
+// 1.1.1, 1.1.2, 1.1.3 and 1.2.1, telling every reader to fetch a tag five
+// releases behind the DMG the site was actually offering. The claim is not
+// derivable at render time (this module is plain data, and the copy is
+// translated prose), so releases.test.mjs ties all nine locales to the version in
+// web/native-releases.json — the same manifest /apps and the Device Inbox badge
+// resolve against — and rejects any superseded tag left behind here.
 
 /**
  * Every published version, newest first: the tag and the date it was created.
@@ -90,7 +99,7 @@ const en = {
   updatedLabel: "Last updated",
   otherDocLabel: "Privacy Policy",
   lead: [
-    "Relayium ships in three rhythms, and this page is honest about all three: the web app is deployed continuously, the command-line tools are numbered and tagged, and the native apps are released on their own — macOS 1.0 is a signed download from GitHub, while the iOS app is still an engineering build that has not been released publicly.",
+    "Relayium ships in three rhythms, and this page is honest about all three: the web app is deployed continuously, the command-line tools are numbered and tagged, and the native apps are released on their own — macOS 1.2.1 is a signed download from GitHub, while the iOS app is still an engineering build that has not been released publicly.",
     "Every version below was tagged automatically from the main branch, and only after the checks on that exact commit passed. A version's complete notes — every commit it contains — are one click away on GitHub.",
   ],
   sections: [
@@ -101,7 +110,7 @@ const en = {
       ],
       bullets: [
         "The web app has no version number. It is deployed from the main branch as soon as its checks pass, so what you use in a browser is usually newer than the newest version listed here.",
-        "The macOS app is released under its own tag, macos-v1.0: a Developer ID-signed, Apple-notarized direct download from GitHub, not a Mac App Store listing. No version below ships it. The iOS app is an engineering build and has not been released publicly.",
+        "The macOS app is released under its own tag, macos-v1.2.1: a Developer ID-signed, Apple-notarized direct download from GitHub, not a Mac App Store listing. No version below ships it. The iOS app is an engineering build and has not been released publicly.",
         "A node does not follow this list by itself: it asks the server it belongs to which version to run, so a new version changes nothing until someone starts a rollout. The command-line tool updates with relayium update.",
       ],
     },
@@ -137,7 +146,7 @@ const zh = {
   updatedLabel: "最后更新",
   otherDocLabel: "隐私政策",
   lead: [
-    "Relayium 有三种发布节奏，这一页对三种都如实说明：网页版持续部署，命令行工具带版本号打标签发布，原生应用则各自单独发布——macOS 1.0 已可从 GitHub 下载，iOS 应用仍是开发版，尚未公开发布。",
+    "Relayium 有三种发布节奏，这一页对三种都如实说明：网页版持续部署，命令行工具带版本号打标签发布，原生应用则各自单独发布——macOS 1.2.1 已可从 GitHub 下载，iOS 应用仍是开发版，尚未公开发布。",
     "下面每一个版本都是从 main 分支自动打标签的，而且只在该提交的检查全部通过之后才发布。某个版本的完整说明——它包含的每一条提交——在 GitHub 上一点即达。",
   ],
   sections: [
@@ -148,7 +157,7 @@ const zh = {
       ],
       bullets: [
         "网页版没有版本号。它在检查通过后就从 main 分支部署，所以你在浏览器里用到的，通常比这里最新的版本还要新。",
-        "macOS 应用用自己的标签 macos-v1.0 单独发布：这是一份经过 Developer ID 签名、通过 Apple 公证、直接从 GitHub 下载的安装包，不是 Mac App Store 上架版本。下面任何一个版本都不包含它。iOS 应用仍是开发版，尚未公开发布。",
+        "macOS 应用用自己的标签 macos-v1.2.1 单独发布：这是一份经过 Developer ID 签名、通过 Apple 公证、直接从 GitHub 下载的安装包，不是 Mac App Store 上架版本。下面任何一个版本都不包含它。iOS 应用仍是开发版，尚未公开发布。",
         "节点不会自己跟着这个列表走：它会向所属的服务器询问该运行哪个版本，所以在有人发起灰度更新之前，新版本什么也不会改变。命令行工具用 relayium update 更新。",
       ],
     },
@@ -184,7 +193,7 @@ const ja = {
   updatedLabel: "最終更新",
   otherDocLabel: "プライバシーポリシー",
   lead: [
-    "Relayium のリリースには3つのリズムがあり、このページはその3つすべてを正直に書いています。ウェブアプリは継続的にデプロイされ、コマンドラインツールは番号を付けてリリースされ、ネイティブアプリはそれぞれ独自にリリースされます。macOS 1.0 は署名済みのダウンロードとして GitHub で公開されており、iOS アプリはまだ公開されていない開発ビルドです。",
+    "Relayium のリリースには3つのリズムがあり、このページはその3つすべてを正直に書いています。ウェブアプリは継続的にデプロイされ、コマンドラインツールは番号を付けてリリースされ、ネイティブアプリはそれぞれ独自にリリースされます。macOS 1.2.1 は署名済みのダウンロードとして GitHub で公開されており、iOS アプリはまだ公開されていない開発ビルドです。",
     "以下のバージョンはすべて main ブランチから自動でタグ付けされたもので、そのコミットのチェックが通ったときにだけ公開されます。各バージョンの完全な変更履歴——含まれるすべてのコミット——は GitHub でワンクリックで読めます。",
   ],
   sections: [
@@ -195,7 +204,7 @@ const ja = {
       ],
       bullets: [
         "ウェブアプリにバージョン番号はありません。チェックが通り次第 main ブランチからデプロイされるので、ブラウザで使っているものは、たいていここに並ぶ最新バージョンより新しいです。",
-        "macOS アプリは macos-v1.0 という独自のタグで別にリリースされます。Developer ID で署名し Apple の公証を通した、GitHub からの直接ダウンロードで、Mac App Store 版ではありません。以下のどのバージョンにも含まれていません。iOS アプリは開発ビルドであり、まだ公開されていません。",
+        "macOS アプリは macos-v1.2.1 という独自のタグで別にリリースされます。Developer ID で署名し Apple の公証を通した、GitHub からの直接ダウンロードで、Mac App Store 版ではありません。以下のどのバージョンにも含まれていません。iOS アプリは開発ビルドであり、まだ公開されていません。",
         "ノードはこの一覧を自分で追いかけません。所属するサーバーにどのバージョンを動かすか尋ねるため、誰かがロールアウトを始めるまで新しいバージョンは何も変えません。コマンドラインツールは relayium update で更新します。",
       ],
     },
@@ -231,7 +240,7 @@ const ko = {
   updatedLabel: "마지막 업데이트",
   otherDocLabel: "개인정보처리방침",
   lead: [
-    "Relayium은 세 가지 리듬으로 배포되며, 이 페이지는 셋 모두를 있는 그대로 밝힙니다. 웹 앱은 계속 배포되고, 명령줄 도구는 번호를 붙여 릴리스하며, 네이티브 앱은 각자 따로 릴리스합니다. macOS 1.0은 서명된 다운로드로 GitHub에 공개되어 있고, iOS 앱은 아직 공개되지 않은 개발 빌드입니다.",
+    "Relayium은 세 가지 리듬으로 배포되며, 이 페이지는 셋 모두를 있는 그대로 밝힙니다. 웹 앱은 계속 배포되고, 명령줄 도구는 번호를 붙여 릴리스하며, 네이티브 앱은 각자 따로 릴리스합니다. macOS 1.2.1은 서명된 다운로드로 GitHub에 공개되어 있고, iOS 앱은 아직 공개되지 않은 개발 빌드입니다.",
     "아래 모든 버전은 main 브랜치에서 자동으로 태그되었고, 해당 커밋의 검사가 통과한 뒤에만 공개되었습니다. 각 버전의 전체 변경 내역——포함된 모든 커밋——은 GitHub에서 한 번의 클릭으로 볼 수 있습니다.",
   ],
   sections: [
@@ -242,7 +251,7 @@ const ko = {
       ],
       bullets: [
         "웹 앱에는 버전 번호가 없습니다. 검사가 통과하는 대로 main 브랜치에서 배포되므로, 브라우저에서 쓰는 것은 대개 여기 있는 최신 버전보다 새롭습니다.",
-        "macOS 앱은 macos-v1.0이라는 자체 태그로 따로 릴리스합니다. Developer ID로 서명하고 Apple 공증을 마친 GitHub 직접 다운로드이며, Mac App Store 등록이 아닙니다. 아래 어떤 버전에도 포함되어 있지 않습니다. iOS 앱은 개발 빌드이며 아직 공개 릴리스가 아닙니다.",
+        "macOS 앱은 macos-v1.2.1이라는 자체 태그로 따로 릴리스합니다. Developer ID로 서명하고 Apple 공증을 마친 GitHub 직접 다운로드이며, Mac App Store 등록이 아닙니다. 아래 어떤 버전에도 포함되어 있지 않습니다. iOS 앱은 개발 빌드이며 아직 공개 릴리스가 아닙니다.",
         "노드는 이 목록을 스스로 따라가지 않습니다. 소속된 서버에 어떤 버전을 실행할지 물어보므로, 누군가 롤아웃을 시작하기 전까지 새 버전은 아무것도 바꾸지 않습니다. 명령줄 도구는 relayium update로 업데이트합니다.",
       ],
     },
@@ -280,7 +289,7 @@ const de = {
   updatedLabel: "Zuletzt aktualisiert",
   otherDocLabel: "Datenschutzerklärung",
   lead: [
-    "Relayium erscheint in drei Rhythmen, und diese Seite benennt alle drei ehrlich: Die Web-App wird laufend ausgeliefert, die Kommandozeilenwerkzeuge bekommen Nummern und Tags, und die nativen Apps werden eigenständig veröffentlicht — macOS 1.0 gibt es als signierten Download bei GitHub, während die iOS-App weiterhin ein Entwicklungs-Build ist, der noch nicht öffentlich veröffentlicht wurde.",
+    "Relayium erscheint in drei Rhythmen, und diese Seite benennt alle drei ehrlich: Die Web-App wird laufend ausgeliefert, die Kommandozeilenwerkzeuge bekommen Nummern und Tags, und die nativen Apps werden eigenständig veröffentlicht — macOS 1.2.1 gibt es als signierten Download bei GitHub, während die iOS-App weiterhin ein Entwicklungs-Build ist, der noch nicht öffentlich veröffentlicht wurde.",
     "Jede Version unten wurde automatisch aus dem main-Branch getaggt, und nur dann, wenn die Prüfungen auf genau diesem Commit grün waren. Die vollständigen Änderungen einer Version — jeder enthaltene Commit — sind auf GitHub einen Klick entfernt.",
   ],
   sections: [
@@ -291,7 +300,7 @@ const de = {
       ],
       bullets: [
         "Die Web-App hat keine Versionsnummer. Ausgeliefert wird aus dem main-Branch, sobald ihre Prüfungen grün sind — was du im Browser benutzt, ist also meist neuer als die neueste Version in dieser Liste.",
-        "Die macOS-App wird unter einem eigenen Tag veröffentlicht, macos-v1.0: ein mit Developer ID signierter, von Apple notarisierter Direkt-Download bei GitHub, kein Mac-App-Store-Eintrag. Keine der Versionen unten enthält sie. Die iOS-App ist ein Entwicklungs-Build und wurde nicht öffentlich veröffentlicht.",
+        "Die macOS-App wird unter einem eigenen Tag veröffentlicht, macos-v1.2.1: ein mit Developer ID signierter, von Apple notarisierter Direkt-Download bei GitHub, kein Mac-App-Store-Eintrag. Keine der Versionen unten enthält sie. Die iOS-App ist ein Entwicklungs-Build und wurde nicht öffentlich veröffentlicht.",
         "Ein Node folgt dieser Liste nicht von selbst: Er fragt den Server, zu dem er gehört, welche Version er ausführen soll. Eine neue Version ändert also nichts, bis jemand einen Rollout startet. Die CLI aktualisierst du mit relayium update.",
       ],
     },
@@ -327,7 +336,7 @@ const fr = {
   updatedLabel: "Dernière mise à jour",
   otherDocLabel: "Politique de confidentialité",
   lead: [
-    "Relayium avance à trois rythmes, et cette page les décrit honnêtement tous les trois : l'application web est déployée en continu, les outils en ligne de commande sont numérotés et publiés, et les applications natives sont publiées séparément — macOS 1.0 se télécharge depuis GitHub, signée et notarisée, tandis que l'application iOS reste une version d'ingénierie qui n'est pas diffusée publiquement.",
+    "Relayium avance à trois rythmes, et cette page les décrit honnêtement tous les trois : l'application web est déployée en continu, les outils en ligne de commande sont numérotés et publiés, et les applications natives sont publiées séparément — macOS 1.2.1 se télécharge depuis GitHub, signée et notarisée, tandis que l'application iOS reste une version d'ingénierie qui n'est pas diffusée publiquement.",
     "Chaque version ci-dessous a été étiquetée automatiquement depuis la branche main, et seulement après que les vérifications de ce commit précis sont passées. Les modifications complètes d'une version — chacun de ses commits — sont à un clic sur GitHub.",
   ],
   sections: [
@@ -338,7 +347,7 @@ const fr = {
       ],
       bullets: [
         "L'application web n'a pas de numéro de version. Elle est déployée depuis la branche main dès que ses vérifications passent : ce que vous utilisez dans le navigateur est donc généralement plus récent que la dernière version listée ici.",
-        "L'application macOS est publiée sous son propre tag, macos-v1.0 : un téléchargement direct depuis GitHub, signé Developer ID et notarisé par Apple, et non une fiche sur le Mac App Store. Aucune version ci-dessous ne la contient. L'application iOS reste une version d'ingénierie, non diffusée publiquement.",
+        "L'application macOS est publiée sous son propre tag, macos-v1.2.1 : un téléchargement direct depuis GitHub, signé Developer ID et notarisé par Apple, et non une fiche sur le Mac App Store. Aucune version ci-dessous ne la contient. L'application iOS reste une version d'ingénierie, non diffusée publiquement.",
         "Un nœud ne suit pas cette liste de lui-même : il demande au serveur auquel il appartient quelle version exécuter, si bien qu'une nouvelle version ne change rien tant que personne n'a lancé de déploiement progressif. La CLI se met à jour avec relayium update.",
       ],
     },
@@ -374,7 +383,7 @@ const ar = {
   updatedLabel: "آخر تحديث",
   otherDocLabel: "سياسة الخصوصية",
   lead: [
-    "يصدر Relayium بثلاثة إيقاعات، وهذه الصفحة تذكرها الثلاثة بصراحة: تطبيق الويب يُنشر باستمرار، وأدوات سطر الأوامر تحمل أرقامًا وعلامات إصدار، والتطبيقات الأصلية تصدر على حدة — إصدار macOS 1.0 متاح للتنزيل موقّعًا من GitHub، أما تطبيق iOS فما يزال نسخة تطوير لم تُنشر للعموم بعد.",
+    "يصدر Relayium بثلاثة إيقاعات، وهذه الصفحة تذكرها الثلاثة بصراحة: تطبيق الويب يُنشر باستمرار، وأدوات سطر الأوامر تحمل أرقامًا وعلامات إصدار، والتطبيقات الأصلية تصدر على حدة — إصدار macOS 1.2.1 متاح للتنزيل موقّعًا من GitHub، أما تطبيق iOS فما يزال نسخة تطوير لم تُنشر للعموم بعد.",
     "كل إصدار في الأسفل وُسم تلقائيًا من فرع main، وبعد اجتياز فحوص ذلك الالتزام بالتحديد فقط. أما ملاحظات الإصدار الكاملة — كل التزام يحتويه — فهي على بعد نقرة واحدة على GitHub.",
   ],
   sections: [
@@ -385,7 +394,7 @@ const ar = {
       ],
       bullets: [
         "تطبيق الويب ليس له رقم إصدار. يُنشر من فرع main حالما تجتاز فحوصه، فما تستخدمه في المتصفح يكون عادة أحدث من أحدث إصدار مذكور هنا.",
-        "تطبيق macOS يصدر بعلامته الخاصة macos-v1.0: تنزيل مباشر من GitHub موقّع بـ Developer ID وموثّق من Apple، وليس إدراجًا في Mac App Store. ولا يتضمنه أي إصدار في الأسفل. أما تطبيق iOS فنسخة تطوير لم تُنشر للعموم.",
+        "تطبيق macOS يصدر بعلامته الخاصة macos-v1.2.1: تنزيل مباشر من GitHub موقّع بـ Developer ID وموثّق من Apple، وليس إدراجًا في Mac App Store. ولا يتضمنه أي إصدار في الأسفل. أما تطبيق iOS فنسخة تطوير لم تُنشر للعموم.",
         "العقدة لا تتبع هذه القائمة من تلقاء نفسها: تسأل الخادم الذي تنتمي إليه أي إصدار تشغّل، فلا يغير الإصدار الجديد شيئًا حتى يبدأ أحدهم طرحًا تدريجيًا. أما أداة سطر الأوامر فتُحدَّث بالأمر relayium update.",
       ],
     },
@@ -421,7 +430,7 @@ const es = {
   updatedLabel: "Última actualización",
   otherDocLabel: "Política de privacidad",
   lead: [
-    "Relayium avanza a tres ritmos, y esta página los cuenta los tres con honestidad: la aplicación web se despliega de forma continua, las herramientas de línea de comandos llevan número y etiqueta, y las aplicaciones nativas se publican por su cuenta: macOS 1.0 ya se descarga firmada desde GitHub, mientras que la aplicación de iOS sigue siendo una compilación de ingeniería que aún no se ha publicado.",
+    "Relayium avanza a tres ritmos, y esta página los cuenta los tres con honestidad: la aplicación web se despliega de forma continua, las herramientas de línea de comandos llevan número y etiqueta, y las aplicaciones nativas se publican por su cuenta: macOS 1.2.1 ya se descarga firmada desde GitHub, mientras que la aplicación de iOS sigue siendo una compilación de ingeniería que aún no se ha publicado.",
     "Todas las versiones de abajo se etiquetaron automáticamente desde la rama main, y solo después de que pasaran las comprobaciones de ese commit exacto. Las notas completas de una versión — cada commit que contiene — están a un clic en GitHub.",
   ],
   sections: [
@@ -432,7 +441,7 @@ const es = {
       ],
       bullets: [
         "La aplicación web no tiene número de versión. Se despliega desde la rama main en cuanto pasan sus comprobaciones, así que lo que usas en el navegador suele ser más reciente que la última versión de esta lista.",
-        "La aplicación de macOS se publica con su propia etiqueta, macos-v1.0: una descarga directa desde GitHub, firmada con Developer ID y notarizada por Apple, no una ficha en la Mac App Store. Ninguna versión de abajo la incluye. La aplicación de iOS es una compilación de ingeniería y no se ha publicado.",
+        "La aplicación de macOS se publica con su propia etiqueta, macos-v1.2.1: una descarga directa desde GitHub, firmada con Developer ID y notarizada por Apple, no una ficha en la Mac App Store. Ninguna versión de abajo la incluye. La aplicación de iOS es una compilación de ingeniería y no se ha publicado.",
         "Un nodo no sigue esta lista por su cuenta: le pregunta al servidor al que pertenece qué versión ejecutar, así que una versión nueva no cambia nada hasta que alguien inicia un despliegue gradual. La CLI se actualiza con relayium update.",
       ],
     },
@@ -468,7 +477,7 @@ const pt = {
   updatedLabel: "Última atualização",
   otherDocLabel: "Política de Privacidade",
   lead: [
-    "O Relayium sai em três ritmos, e esta página conta os três com honestidade: o app web é implantado continuamente, as ferramentas de linha de comando recebem número e tag, e os apps nativos são publicados por conta própria — o macOS 1.0 já pode ser baixado assinado no GitHub, enquanto o app de iOS ainda é um build de engenharia que não foi publicado.",
+    "O Relayium sai em três ritmos, e esta página conta os três com honestidade: o app web é implantado continuamente, as ferramentas de linha de comando recebem número e tag, e os apps nativos são publicados por conta própria — o macOS 1.2.1 já pode ser baixado assinado no GitHub, enquanto o app de iOS ainda é um build de engenharia que não foi publicado.",
     "Todas as versões abaixo foram marcadas automaticamente a partir do branch main, e só depois que as verificações daquele commit exato passaram. As notas completas de uma versão — cada commit que ela contém — estão a um clique no GitHub.",
   ],
   sections: [
@@ -479,7 +488,7 @@ const pt = {
       ],
       bullets: [
         "O app web não tem número de versão. Ele é implantado a partir do branch main assim que as verificações passam, então o que você usa no navegador costuma ser mais novo do que a versão mais recente desta lista.",
-        "O app de macOS é publicado com a própria tag, macos-v1.0: um download direto do GitHub, assinado com Developer ID e notarizado pela Apple, e não uma listagem na Mac App Store. Nenhuma versão abaixo o inclui. O app de iOS é um build de engenharia e não foi publicado.",
+        "O app de macOS é publicado com a própria tag, macos-v1.2.1: um download direto do GitHub, assinado com Developer ID e notarizado pela Apple, e não uma listagem na Mac App Store. Nenhuma versão abaixo o inclui. O app de iOS é um build de engenharia e não foi publicado.",
         "Um nó não segue esta lista sozinho: ele pergunta ao servidor a que pertence qual versão executar, então uma versão nova não muda nada até alguém iniciar uma implantação gradual. A CLI se atualiza com relayium update.",
       ],
     },

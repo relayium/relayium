@@ -47,10 +47,10 @@ or server-side history, though either endpoint can retain received text — one 
 and anything larger is a file.
 
 The production web app and CLI are live, and the CLI and node binaries are still
-in **pre-1.0 versioning** (`v0.x`). The macOS app is on its own track and has
-reached **1.0**: a universal, Developer ID-signed, Apple-notarized and stapled
+in **pre-1.0 versioning** (`v0.x`). The macOS app is on its own track and is at
+**1.2.1**: a universal, Developer ID-signed, Apple-notarized and stapled
 build, published as a direct download from its own GitHub Release,
-[`macos-v1.0`](https://github.com/relayium/relayium/releases/tag/macos-v1.0).
+[`macos-v1.2.1`](https://github.com/relayium/relayium/releases/tag/macos-v1.2.1).
 There is no Mac App Store listing; a Developer ID download is the channel.
 The iOS app runs its transfer, nearby and account workflows in the
 foreground and is **not public**: there is no App Store listing and nothing to
@@ -72,7 +72,7 @@ is **how seriously we take end-to-end encryption**:
   (SAS)**: turn on *advanced verification* (off by default) and two humans can compare it out of band to
   detect a key-swapping server.
 - **A protocol, not just a page.** The crypto layer is deliberately decoupled
-  from transport. It already backs the shipped CLI, the released macOS 1.0 app,
+  from transport. It already backs the shipped CLI, the released macOS app,
   and the iOS app now under development (see
   [Delivery status](#delivery-status)).
 
@@ -242,7 +242,7 @@ pairing code requires sign-in; joining with that code does not.
 - **CLI and nodes — live:** published binaries provide pairing-code file/text
   transfer, encrypted upload/download links, SSH and daemon-direct transfer,
   folder sync, self-hosting, and managed relay/storage nodes.
-- **macOS — 1.0, published as a direct download:** the universal app supports account
+- **macOS — 1.2.1, published as a direct download:** the universal app supports account
   registration and sign-in with device and stored-file management, six-digit
   pairing-code transfer of files and text, folder transfer, nearby sending and
   passive receiving, encrypted stored links to send and open, notifications and
@@ -266,9 +266,9 @@ pairing code requires sign-in; joining with that code does not.
   window with automatic update checks, the last check and the running version,
   and an *Open at login* switch that reports what macOS actually did with it —
   including the "registered, waiting for your approval" state a checkbox cannot
-  express. The 1.0 DMG is universal, Developer ID-signed, accepted by Apple
+  express. The 1.2.1 DMG is universal, Developer ID-signed, accepted by Apple
   notarization, stapled and Gatekeeper-validated, and is attached to the
-  [`macos-v1.0`](https://github.com/relayium/relayium/releases/tag/macos-v1.0)
+  [`macos-v1.2.1`](https://github.com/relayium/relayium/releases/tag/macos-v1.2.1)
   GitHub Release with its SHA-256 published beside it; in-app updates come from
   the signed Sparkle appcast at `https://relayium.com/apps/macos/appcast.xml`.
   A Developer ID download **is** the distribution channel here — there is no Mac
