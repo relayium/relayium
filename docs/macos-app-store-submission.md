@@ -25,7 +25,8 @@ or releasing a version. Relayium uses manual App Store release.
 | Support URL | `https://relayium.com/support/` |
 | Marketing URL | `https://relayium.com/` |
 
-The archive candidate is version `1.2.0`, build `6`.
+Version `1.2.0`, build `6` is the App Store artifact and is already uploaded and
+export-compliance cleared (2026-08-14). Build `6` is therefore consumed.
 
 Version `1.1.3`, build `5` is **already public** as a direct download: those
 exact Developer ID-signed bytes are behind the `macos-v1.1.3` tag and are offered
@@ -66,8 +67,17 @@ Use **Relayium** as the English subscription-group display name. The product
 IDs above are API contracts: they must exactly match the active rows in the
 server's `apple_products` catalog before a TestFlight purchase is attempted.
 
-Storefront availability remains an owner/export-compliance decision. Do not
-select all territories merely to make the App Store Connect form pass.
+Storefront availability was set deliberately and verified on 2026-08-14: the
+App Store app record and all six subscriptions each select **173 of 175**
+territories. France and China mainland are excluded; Hong Kong, Taiwan, and
+Macau are retained. Excluding France is what keeps the French encryption
+declaration off the critical path — see the export-compliance note below.
+Re-adding either excluded territory is an owner decision with its own
+regulatory work, not a form-passing convenience.
+
+As of 2026-08-14 the subscription group and all six products read **Prepare for
+Submission**, and each offers **Add for Review**. Nothing here authorizes
+pressing it.
 
 App Store Connect was checked on 2026-08-13: the Paid Apps Agreement, bank
 account, and required U.S. tax forms all report **Active**. Keep those statuses
@@ -107,7 +117,37 @@ The full description and What's New text still need owner approval. They must
 not imply that the relay can read user content, that every transfer is peer to
 peer, or that a web/Stripe subscription is managed by Apple.
 
-## TestFlight information draft
+## TestFlight state and information draft
+
+Verified 2026-08-14: build `1.2.0 (6)` is uploaded, its export compliance is
+**cleared**, and it is assigned to the internal group **Relayium Internal**.
+Compliance cleared truthfully through the questionnaire's non-France answer —
+the app does use non-exempt encryption, and France is not a selected territory,
+so no French declaration was required and none was faked.
+
+**Relayium Internal** still holds **zero testers** and **one build** and uses
+**Manual** distribution for Xcode builds, but it is **no longer the selected
+invitation path**. Inviting a tester sends mail immediately, so it requires
+explicit owner confirmation; no invitation has been sent from this group.
+
+The owner-selected path is a single external group, **Relayium External Beta**,
+verified 2026-08-14. Its public invitation link is **enabled** and **capped at
+three testers**. The link value and any tester email addresses are deliberately
+absent from this document and must never be written into the repository. The
+group currently holds **zero testers** and **zero builds**.
+
+Opening that link today reports that the group is **not accepting testers**.
+That is correct, not a defect: build `1.2.0 (6)` is not attached to the group
+and not Beta App Review approved, so there is nothing for a tester to install.
+
+Attaching build `6` to the external group is what exposes the next gate. Because
+Relayium requires sign-in, external distribution makes the **Beta App Review**
+information mandatory: contact **first name**, **last name**, **phone number**,
+and **email**, plus a working Relayium **username and password** for a review
+account. Those values are **missing**. The owner should enter them directly in
+App Store Connect; never commit review credentials to this repository.
+
+**No Beta App Review has been submitted.**
 
 Beta description:
 
@@ -156,9 +196,19 @@ observed end to end.
 
 ## Screenshots
 
-Formal Mac App Store submission needs 1–10 screenshots at an accepted 16:10
-size: 1280×800, 1440×900, 2560×1600, or 2880×1800. Each subscription product
-also needs its own review screenshot in App Store Connect.
+Two different controls are easy to confuse; only the first is a submission
+blocker.
+
+**Storefront screenshots — still required.** Formal Mac App Store submission
+needs 1–10 screenshots at an accepted 16:10 size: 1280×800, 1440×900, 2560×1600,
+or 2880×1800. These are not yet supplied.
+
+**Per-product Review Information screenshot — not a blocker today.** Each
+subscription's Review Information section has its own screenshot control. As
+checked on 2026-08-14, all six are empty and none shows a required marker, and
+the products still offer Add for Review. Do not upload the Debug UI-test fixture
+to satisfy an unmarked field. If Apple later flags a specific product, capture a
+real one for that product rather than backfilling all six.
 
 Capture a signed non-UI-test build with real App Store products. The debug UI
 test fixture contains synthetic prices and must not be submitted. Remove email
@@ -177,20 +227,19 @@ Suggested set:
 
 The following items are intentionally unresolved and must not be guessed:
 
-- Complete Apple's export-compliance questionnaire truthfully. The app embeds
-  non-Apple cryptographic implementations for end-to-end encryption; do not set
+- Export compliance is **resolved for build `1.2.0 (6)`** (2026-08-14) and must
+  stay truthful for every later build. The app embeds non-Apple cryptographic
+  implementations for end-to-end encryption; never set
   `ITSAppUsesNonExemptEncryption` to `NO` merely to suppress the questionnaire.
-- France availability is an owner-confirmed requirement (2026-08-13). Because
-  Relayium implements industry-standard encryption outside Apple's operating
-  system, App Store Connect requires a **French encryption declaration approval
-  form** before it will clear build `1.2.0 (6)`. Do not upload a self-authored
-  substitute or answer “No” to bypass this gate.
-- Obtain the declaration/attestation through France's ANSSI process. ANSSI's
-  published workflow requires the provider or first importer to submit the
-  completed electronic form, a signed scanned copy, and supporting product and
-  technical documentation. Upload the resulting official document to App Store
-  Connect, wait for Apple's approval, then attach the approved declaration to
-  the TestFlight build and add Apple's compliance code to the app Info.plist.
+  The build cleared because France is not a selected territory, so the French
+  declaration question is answered No on the facts.
+- The French encryption declaration only returns if France is re-added. That
+  path runs through ANSSI: the provider or first importer submits the completed
+  electronic form, a signed scanned copy, and supporting product and technical
+  documentation, then the official document is uploaded to App Store Connect for
+  Apple's approval and Apple's compliance code goes into the app Info.plist.
+  Treat re-adding France as opening this work, not as a checkbox. Do not upload
+  a self-authored substitute.
 - Publish the completed App Privacy draft only when the release candidate and
   submission metadata are ready. The age rating is already saved as `4+`.
 - Complete content-rights, copyright, review-contact, and demo-account fields
@@ -215,10 +264,12 @@ The following items are intentionally unresolved and must not be guessed:
   that does arrive is refused. Before TestFlight and before review, confirm
   every one of the six rows reads **Live** rather than assuming an enabled row
   is a sellable one.
-- Set the intended storefront availability deliberately, after export-compliance
-  review. Products are only offered where they are available, and Apple can take
-  up to an hour to propagate metadata to Sandbox — so decide availability before
-  reading an empty StoreKit result as an app defect.
+- Storefront availability is already set (173/175, France and China mainland
+  excluded) and needs no further decision unless the owner changes it. Products
+  are only offered where they are available, and Apple can take up to an hour to
+  propagate metadata to Sandbox — so test Sandbox from an account whose
+  storefront is actually selected before reading an empty StoreKit result as an
+  app defect.
 - Configure Apple Server Notifications V2 in App Store Connect for **both**
   environments — the Production URL and the Sandbox URL — each set to
   `https://relayium.com/api/apple/notifications`. One endpoint serves both; the
@@ -227,5 +278,9 @@ The following items are intentionally unresolved and must not be guessed:
   purchases (always Sandbox) to be accepted alongside customer purchases (always
   Production). Send Apple's test notification on the Sandbox URL first, then
   prove a real Sandbox delivery reaches `applied`.
-- Upload the signed package, test internally in TestFlight, and only then add
-  the version and subscriptions for review. Keep manual release selected.
+- The signed package is uploaded and compliance-cleared. External TestFlight is
+  still gated on the owner supplying the Beta App Review contact details and a
+  working review sign-in, attaching build `1.2.0 (6)` to **Relayium External
+  Beta**, and passing Beta App Review; a real Sandbox purchase must be observed
+  before Add for Review is used on the version and subscriptions. Keep manual
+  release selected.
