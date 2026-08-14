@@ -71,6 +71,10 @@ struct AccountView: View {
                     model: subscription,
                     accountID: user.id,
                     currentPlanID: usage.plan.id,
+                    // Both halves of "what this account holds" come from the
+                    // same server projection. The cycle is what keeps the badge
+                    // off the other billing period of the same tier.
+                    currentCycle: usage.plan.billingCycle,
                     // The SERVER's answer to "who owns this entitlement", not
                     // anything this screen inferred from a purchase.
                     entitlementProvider: usage.plan.entitlementProvider ?? "")

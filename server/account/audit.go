@@ -39,6 +39,18 @@ const (
 	// change and retire because the changes field carries active's old and new
 	// value — the same shape plan.upsert uses for a plan's own retirement.
 	AuditAppleProduct = "apple.product"
+	// AuditApplePurchases records an operator opening or closing the global
+	// App Store new-purchase gate (billing_apple_pause.go).
+	//
+	// Its own action rather than a settings.update, and not a variant of
+	// apple.product either. It is the only control that changes what EVERY
+	// already-installed App Store build may sell, in one click, and the question
+	// an incident review asks of it — "when did we stop selling, and when did we
+	// start again, and who decided" — has to be answerable from the action name
+	// with no reading of a changes field. One action covers both directions
+	// because the changes field carries the old and new value, the same shape
+	// plan.upsert uses for a tier's retirement.
+	AuditApplePurchases = "apple.purchases"
 	// 节点版本发布。四个常规动作各自独立记账，紧急发布单列一个 action ——
 	// 事后翻审计日志时，"这次是谁跳过了分批" 必须一眼可查，不能混在
 	// rollout.target 里靠 changes 字段去猜。
@@ -108,6 +120,7 @@ var auditActions = []string{
 	AuditPlanUpsert, AuditUserPlan, AuditNodeDelete, AuditNodeLimits,
 	AuditNodeLabel, AuditNodeDraining, AuditNodeRestore, AuditNodeRemove, AuditNodeDeregister,
 	AuditTokenMint, AuditTokenRevoke, AuditPasskeyDelete, AuditAppleProduct,
+	AuditApplePurchases,
 	AuditRolloutTarget, AuditRolloutPause, AuditRolloutResume,
 	AuditRolloutRollback, AuditRolloutEmergency, AuditRolloutRetry,
 	AuditRolloutFast, AuditRolloutFastCanary,

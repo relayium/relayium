@@ -890,7 +890,24 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// Nothing on sale: no live mapping for this build, or a store that knows
     /// none of the products there are. Not an error — nothing went wrong.
     case subscriptionNone = "subscription.none"
+    /// An operator has closed this deployment's global App Store purchase gate.
+    /// Distinct from `subscriptionNone`: that is a standing fact about what this
+    /// build has to sell, this is a temporary one about the server, and the
+    /// sentence has to say so — and say that nothing already paid for is
+    /// affected, which is the second question a reader asks.
+    case subscriptionPaused = "subscription.paused"
     case subscriptionSubscribe = "subscription.subscribe"
+    /// The billing period as a label of its own, beside the tier's name. The
+    /// two products of one tier are otherwise told apart only by their prices,
+    /// and what is being chosen there is a commitment length.
+    case subscriptionCycleMonthly = "subscription.cycleMonthly"
+    case subscriptionCycleYearly = "subscription.cycleYearly"
+    /// %1$@ storage, %2$@ monthly traffic — both already formatted by
+    /// `L10n.bytes`, or the "Unlimited" word for a cap of 0. The FIGURES come
+    /// from the server's own plan row; nothing in the app carries a copy of what
+    /// a tier grants. Worded to match the web pricing page's own perks line, so
+    /// the same tier reads the same way in a browser and in the app.
+    case subscriptionEntitlements = "subscription.entitlements"
     /// The badge on the offer whose tier this account already holds.
     case subscriptionCurrent = "subscription.current"
     /// %@ — the store's own formatted price, never reformatted here.

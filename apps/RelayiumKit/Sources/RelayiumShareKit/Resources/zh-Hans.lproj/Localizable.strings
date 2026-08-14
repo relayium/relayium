@@ -737,7 +737,11 @@
 "subscription.body" = "在此应用中，你的 Relayium 套餐通过 App Store 计费。付款由 Apple 处理，Relayium 只记录你所持有的套餐。";
 "subscription.loading" = "正在加载套餐…";
 "subscription.none" = "当前没有可在本应用内订阅的套餐。";
+"subscription.paused" = "当前暂停接受新的订阅。这是临时的，你已有的订阅不受影响。";
 "subscription.subscribe" = "订阅";
+"subscription.cycleMonthly" = "月付";
+"subscription.cycleYearly" = "年付";
+"subscription.entitlements" = "%1$@ 存储 · %2$@/月流量";
 "subscription.current" = "当前套餐";
 "subscription.priceMonthly" = "%@ / 月";
 "subscription.priceYearly" = "%@ / 年";

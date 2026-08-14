@@ -748,7 +748,11 @@
 "subscription.body" = "In dieser App wird dein Relayium-Tarif über den App Store abgerechnet. Die Zahlung übernimmt Apple; Relayium hält nur fest, welchen Tarif du hast.";
 "subscription.loading" = "Tarife werden geladen …";
 "subscription.none" = "Aus dieser App lässt sich derzeit nichts abonnieren.";
+"subscription.paused" = "Neue Abos sind derzeit pausiert. Das ist vorübergehend, und ein bereits bestehendes Abo ist davon nicht betroffen.";
 "subscription.subscribe" = "Abonnieren";
+"subscription.cycleMonthly" = "Monatlich";
+"subscription.cycleYearly" = "Jährlich";
+"subscription.entitlements" = "%1$@ Speicher · %2$@/Monat Traffic";
 "subscription.current" = "Aktueller Tarif";
 "subscription.priceMonthly" = "%@ pro Monat";
 "subscription.priceYearly" = "%@ pro Jahr";

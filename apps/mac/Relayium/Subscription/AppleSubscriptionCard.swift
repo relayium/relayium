@@ -43,6 +43,14 @@ struct AppleSubscriptionCard: View {
     /// The plan the SERVER says this account holds, for the "current plan"
     /// badge. Never anything derived here.
     let currentPlanID: String
+    /// The billing period the SERVER says this account is on (`"monthly"` /
+    /// `"yearly"`, or `""` when it could not be resolved).
+    ///
+    /// Carried beside the plan id because the badge needs BOTH: a monthly
+    /// subscriber looking at the yearly row of their own tier is looking at a
+    /// different product and a real purchase, and marking it "current" would
+    /// tell them they already have it.
+    let currentCycle: String
     /// `/api/me`'s `entitlementProvider`, which decides whether Apple's
     /// management control belongs on screen.
     let entitlementProvider: String
@@ -185,7 +193,8 @@ struct AppleSubscriptionCard: View {
     }
 
     private var rows: [AppleSubscriptionOfferRow] {
-        AppleSubscriptionPresentation.offerRows(model.offers, currentPlanID: currentPlanID)
+        AppleSubscriptionPresentation.offerRows(model.offers, currentPlanID: currentPlanID,
+                                                currentCycle: currentCycle)
     }
 
     @ViewBuilder
@@ -194,30 +203,58 @@ struct AppleSubscriptionCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(row.title).font(.subheadline.weight(.semibold))
+                    // The billing period, beside the name rather than only
+                    // inside the price sentence: with two rows per tier, this
+                    // is the field the reader is choosing between.
+                    if !row.cycleLabel.isEmpty {
+                        Text(row.cycleLabel)
+                            .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
+                            .background(.quaternary, in: Capsule())
+                            // nonlocalized: an accessibility identifier
+                            .accessibilityIdentifier("subscription-cycle-\(row.productID)")
+                    }
                     if row.isCurrentPlan {
                         Text(L10n.t(.subscriptionCurrent))
                             .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
                             .background(.quaternary, in: Capsule())
+                            // nonlocalized: an accessibility identifier
+                            .accessibilityIdentifier("subscription-current-\(row.productID)")
                     }
                 }
                 // The store's own price, in this language's per-period sentence.
                 // Nothing here reformats the number or the currency.
                 Text(row.price).font(.caption).foregroundStyle(.secondary)
+                // What the tier actually grants, from the server's own plan row.
+                // Absent only against a deployment that does not send it.
+                if let entitlements = row.entitlements {
+                    Text(entitlements).font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        // nonlocalized: an accessibility identifier
+                        .accessibilityIdentifier("subscription-entitlements-\(row.productID)")
+                }
             }
             Spacer(minLength: 8)
-            Button(L10n.t(.subscriptionSubscribe)) {
-                Task { await model.purchase(productID: row.productID) }
+            // No button at all on the row the account already holds — buying the
+            // exact product it is already paying for is a second charge, and a
+            // disabled control would still read as "you may buy this". The
+            // decision is the presentation layer's (`offersSubscribe`), not this
+            // view's.
+            if row.offersSubscribe {
+                Button(L10n.t(.subscriptionSubscribe)) {
+                    Task { await model.purchase(productID: row.productID) }
+                }
+                // Disabled by the SERVER's answer as well as by the app being
+                // busy. The model refuses again at the point of sale — this is
+                // the visible half of the same rule, not a substitute for it.
+                .disabled(isBusy || model.eligibility?.allowed != true)
+                // The visible label is one word on every row, which is right to
+                // look at and useless to hear when there are four of them. Same
+                // rule the device and stored-file rows follow.
+                .accessibilityLabel(
+                    "\(L10n.t(.subscriptionSubscribe)) \(row.title) \(row.cycleLabel), \(row.price)")
+                // nonlocalized: an accessibility identifier
+                .accessibilityIdentifier("subscription-buy-\(row.productID)")
             }
-            // Disabled by the SERVER's answer as well as by the app being busy.
-            // The model refuses again at the point of sale — this is the visible
-            // half of the same rule, not a substitute for it.
-            .disabled(isBusy || model.eligibility?.allowed != true)
-            // The visible label is one word on every row, which is right to look
-            // at and useless to hear when there are four of them. Same rule the
-            // device and stored-file rows follow.
-            .accessibilityLabel("\(L10n.t(.subscriptionSubscribe)) \(row.title), \(row.price)")
-            // nonlocalized: an accessibility identifier
-            .accessibilityIdentifier("subscription-buy-\(row.productID)")
         }
     }
 
@@ -236,7 +273,12 @@ struct AppleSubscriptionCard: View {
     private var isBusy: Bool {
         switch model.state {
         case .loadingOffers, .purchasing, .submitting, .restoring: return true
-        case .unavailable, .idle, .deferred, .nothingToRestore, .completed, .failed: return false
+        // `.purchasesPaused` is deliberately NOT busy: the restore button above
+        // has to stay pressable while new sales are stopped, because the person
+        // reaching for it has already paid.
+        case .unavailable, .purchasesPaused, .idle, .deferred, .nothingToRestore,
+             .completed, .failed:
+            return false
         }
     }
 }

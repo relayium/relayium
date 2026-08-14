@@ -358,6 +358,57 @@ final class AppleBillingClientTests: XCTestCase {
         XCTAssertTrue(catalog.purchase.allowed)
     }
 
+    /// **The gate and the quota figures decode when they are there, and their
+    /// absence is not a failure.**
+    ///
+    /// Both directions of compatibility live in this one test because both are
+    /// real deployments. `catalogBody` above is exactly what a server that
+    /// predates these fields sends, and it must still decode into a catalog this
+    /// client can sell from — a self-hoster on an older build is the common
+    /// case, and refusing their payload would leave the app unable to offer
+    /// anything at all. A current server sends them, and they must arrive
+    /// intact.
+    func testTheGateAndQuotaFieldsDecodeAndTheirAbsenceIsNotAFailure() async throws {
+        StubURLProtocol.stub = .init(status: 200, body: Data(Self.catalogBody.utf8))
+        let old = try await client().appleCatalog(bundleID: "com.relayium.mac", token: "t")
+        XCTAssertNil(old.purchases, "a server with no gate field decoded one anyway")
+        XCTAssertFalse(old.purchasesArePaused, "a server with no gate field was read as paused")
+        XCTAssertNil(old.products.first?.storageBytes)
+        XCTAssertNil(old.products.first?.trafficBytes)
+
+        StubURLProtocol.stub = .init(status: 200, body: Data(#"""
+        {"bundleId":"com.relayium.mac",
+         "products":[{"productId":"com.relayium.mac.plus.monthly","planId":"plus",
+                      "planName":"Plus","cycle":"monthly","sortOrder":10,
+                      "storageBytes":1073741824,"trafficBytes":21474836480}],
+         "purchase":{"allowed":true,"blockedBy":""},
+         "purchases":{"enabled":true,"reason":""}}
+        """#.utf8))
+        let current = try await client().appleCatalog(bundleID: "com.relayium.mac", token: "t")
+        XCTAssertEqual(current.purchases, AppleCatalogPurchases(enabled: true, reason: ""))
+        XCTAssertFalse(current.purchasesArePaused)
+        XCTAssertEqual(current.products.first?.storageBytes, 1_073_741_824)
+        XCTAssertEqual(current.products.first?.trafficBytes, 21_474_836_480)
+    }
+
+    /// What a PAUSED deployment answers with, decoded: the gate closed and no
+    /// products at all. Both halves matter — the empty list is what stops the
+    /// build that is already shipped, and the flag is what lets this one say why.
+    func testAPausedCatalogDecodesAsPausedWithNoProducts() async throws {
+        StubURLProtocol.stub = .init(status: 200, body: Data(#"""
+        {"bundleId":"com.relayium.mac","products":[],
+         "purchase":{"allowed":true,"blockedBy":""},
+         "purchases":{"enabled":false,"reason":"paused"}}
+        """#.utf8))
+        let catalog = try await client().appleCatalog(bundleID: "com.relayium.mac", token: "t")
+        XCTAssertTrue(catalog.products.isEmpty)
+        XCTAssertTrue(catalog.purchasesArePaused)
+        XCTAssertEqual(catalog.purchases?.reason, "paused")
+        // The account's own eligibility is untouched by a global pause: a Stripe
+        // subscriber must still be told where their subscription lives.
+        XCTAssertTrue(catalog.purchase.allowed)
+    }
+
     /// A body this client cannot read is a failure, not an empty catalog. An
     /// unreadable answer silently becoming "nothing on sale" would render a
     /// working deployment as one with no products.

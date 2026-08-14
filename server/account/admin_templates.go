@@ -63,7 +63,13 @@ type adminHomeData struct {
 	// for maxlength while the bound is bytes, and nothing about a form field
 	// binds a client anyway. The parser is the boundary.
 	AppleProductKeyMaxLen int
-	Settings              adminSettingsView
+	// ApplePurchaseGate is the global App Store new-purchase switch, rendered as
+	// its own panel above the mapping table. It is deliberately NOT a column on
+	// those rows: it changes nothing about any mapping, and an operator reaching
+	// for it during an incident must not have to find it inside a table of
+	// per-product edits.
+	ApplePurchaseGate applePurchaseGateView
+	Settings          adminSettingsView
 	// Passkeys are the registered admin credentials, listed so a never-used
 	// entry (an attacker's planted credential) is visible. PasskeysErr marks a
 	// failed read so the template can show an error instead of an empty table —
@@ -725,6 +731,7 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 .apple-products .plan-row select{font:inherit;padding:5px 7px;border:1px solid var(--bd);border-radius:6px;background:var(--card);color:var(--fg)}
 .apple-products .plan-row input[type=text]{width:200px}
 .apple-products .ap-add{margin-top:12px}
+.apple-gate .ap-gate-state{margin:0 0 8px}
 .passkeys{margin:0 0 28px}.passkeys h2{margin-bottom:12px}
 .passkeys .mint{flex-wrap:wrap;margin-top:12px}
 .never{color:#e5484d;font-weight:600}
@@ -1045,6 +1052,33 @@ th a{text-decoration:none;color:inherit}th a:hover{color:var(--a)}
 </td></tr>
 {{end}}
 </tbody></table>
+</section>
+
+<section class="apple-products apple-gate">
+<h2>{{t $.Lang "App Store 新购买总闸"}}</h2>
+{{/* 这一节和下面的商品目录是两件事，所以是两个 section：目录决定「买了算哪个档」，
+     总闸决定「现在还能不能买」。总闸关掉时，GET /api/billing/apple/catalog 一个商品
+     都不返回——已经上架的旧版本客户端只能从服务器给的商品 ID 发起购买，于是它连购买
+     都发不起来；新版本客户端还会读到 purchases.enabled=false，界面上说明是暂时的。
+
+     它绝不影响已经付过钱的那一侧：交易上报、Transaction.updates、恢复购买、自动续订、
+     App Store 服务端通知、以及已经生效的权益，一律照常。理由见 billing_apple_pause.go。*/}}
+<p class="apple-note">{{t $.Lang "紧急停售开关：关掉之后，所有已发布的 App 版本都无法再发起新的 App Store 购买。它不改动任何商品映射，重新打开即恢复原样。它不会影响已经付过钱的交易上报、恢复购买、自动续订与已生效的权益。"}}</p>
+{{if .ApplePurchaseGate.Err}}
+<p class="err">{{t $.Lang "总闸状态读取失败，请查看服务端日志；读取恢复前不提供开关（这不等于「已暂停」）"}}</p>
+{{else if .ApplePurchaseGate.Enabled}}
+<p class="ap-gate-state"><span class="ap-live">{{t $.Lang "购买开放中"}}</span></p>
+<form method="post" action="/admin/apple-purchases" class="plan-row">
+<input type="hidden" name="enabled" value="0">
+<button type="submit">{{t $.Lang "暂停新购买"}}</button>
+</form>
+{{else}}
+<p class="ap-gate-state"><span class="ap-broken">{{t $.Lang "新购买已暂停"}}</span></p>
+<form method="post" action="/admin/apple-purchases" class="plan-row">
+<input type="hidden" name="enabled" value="1">
+<button type="submit">{{t $.Lang "恢复新购买"}}</button>
+</form>
+{{end}}
 </section>
 
 <section class="apple-products">

@@ -334,6 +334,18 @@ var adminEN = map[string]string{
 	"（不存在）":        " (missing)",
 	"尚未配置任何 App Store 商品映射": "No App Store product mappings configured yet",
 	"新增映射": "Add mapping",
+
+	// The global new-purchase gate. The English has to carry BOTH halves of what
+	// the switch does, because an operator reaching for it during an incident
+	// will read exactly one sentence: it stops already-shipped builds selling,
+	// and it does not touch anything already paid for.
+	"App Store 新购买总闸": "App Store new-purchase gate",
+	"紧急停售开关：关掉之后，所有已发布的 App 版本都无法再发起新的 App Store 购买。它不改动任何商品映射，重新打开即恢复原样。它不会影响已经付过钱的交易上报、恢复购买、自动续订与已生效的权益。": "Emergency stop-selling switch: once paused, no already-shipped build of the app can start a new App Store purchase. It changes no product mapping — resuming restores exactly what was there. It does NOT affect anything already paid for: transaction submission, restore purchases, renewals and existing entitlements all continue.",
+	"总闸状态读取失败，请查看服务端日志；读取恢复前不提供开关（这不等于「已暂停」）":                                                               "Could not read the gate's state — check the server log. This is NOT the same as \"paused\". No control is offered until the read works: nobody can be asked to confirm a change away from a state nobody could determine.",
+	"购买开放中":  "Purchases open",
+	"新购买已暂停": "New purchases paused",
+	"暂停新购买":  "Pause new purchases",
+	"恢复新购买":  "Resume new purchases",
 }
 
 // adminLangCookie holds an explicit choice made in the console's header.

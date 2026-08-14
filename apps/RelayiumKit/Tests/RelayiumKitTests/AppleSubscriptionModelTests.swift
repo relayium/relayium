@@ -216,18 +216,35 @@ private enum Fixture {
             AppleCatalogProduct(productId: id, planId: index == 0 ? "plus" : "pro",
                                 planName: index == 0 ? "Plus" : "Pro",
                                 cycle: index == 0 ? "monthly" : "yearly",
-                                sortOrder: Int64(10 * (index + 1)))
+                                sortOrder: Int64(10 * (index + 1)),
+                                storageBytes: Int64(index + 1) << 30,
+                                trafficBytes: Int64(20 * (index + 1)) << 30)
         }
     }
+
+    /// A server that IS selling, and says so. `purchases: nil` — the shape an
+    /// older deployment sends — is a separate fixture below, because "no gate
+    /// field" and "gate open" must be provably the same answer.
+    static let gateOpen = AppleCatalogPurchases(enabled: true, reason: "")
+    static let gatePaused = AppleCatalogPurchases(enabled: false, reason: "paused")
 
     static func serverCatalog(_ ids: [String] = catalog,
                               allowed: Bool = true,
                               blockedBy: String = "",
                               bundleId: String = bundleID,
-                              products: [AppleCatalogProduct]? = nil) -> AppleProductCatalog {
+                              products: [AppleCatalogProduct]? = nil,
+                              purchases: AppleCatalogPurchases? = gateOpen) -> AppleProductCatalog {
         AppleProductCatalog(bundleId: bundleId, products: products ?? Self.products(ids),
                             purchase: AppleCatalogPurchase(allowed: allowed,
-                                                           blockedBy: blockedBy))
+                                                           blockedBy: blockedBy),
+                            purchases: purchases)
+    }
+
+    /// What a PAUSED deployment actually answers: the gate closed and no
+    /// products at all, because zero products is what stops the already-shipped
+    /// build starting a purchase.
+    static func pausedCatalog() -> AppleProductCatalog {
+        serverCatalog(products: [], purchases: gatePaused)
     }
     static let accountToken = UUID(uuidString: "3F2504E0-4F89-41D3-9A0C-0305E82C3301")!
     static let jws = "eyJhbGciOiJFUzI1NiJ9.eyJ0eCI6IjEifQ.SIG-not-touched_-~"
@@ -673,6 +690,125 @@ final class AppleSubscriptionModelTests: XCTestCase {
 
         XCTAssertEqual(rig.store.finished, [Fixture.delivery.id])
         XCTAssertEqual(rig.model.state, .completed(Fixture.entitlement))
+    }
+
+    // MARK: - the global purchase gate
+
+    /// A paused deployment reads as PAUSED, not as "nothing on sale".
+    ///
+    /// The two arrive at this layer looking identical — a paused server answers
+    /// with an empty product list, because that is what stops the build that is
+    /// already in the App Store — so the gate flag is the only thing that can
+    /// tell them apart. The store is never asked for products, since there are
+    /// none to ask about.
+    func testAPausedServerLoadsAsPausedRatherThanNothingOnSale() async {
+        let rig = makeRig()
+        rig.billing.setCatalog(.success(Fixture.pausedCatalog()))
+
+        await rig.model.loadOffers()
+
+        XCTAssertEqual(rig.model.state, .purchasesPaused)
+        XCTAssertTrue(rig.model.offers.isEmpty)
+        XCTAssertEqual(rig.journal.all, ["catalog"])
+    }
+
+    /// **A server that sends no gate field at all is not paused.** That is every
+    /// deployment older than the field, including self-hosted ones, and treating
+    /// the absence as "closed" would stop them selling anything the moment this
+    /// client shipped.
+    func testAServerWithNoGateFieldStillSells() async {
+        let rig = makeRig()
+        rig.billing.setCatalog(.success(Fixture.serverCatalog(purchases: nil)))
+        rig.store.setOffers(.success(Fixture.offers(Fixture.catalog)))
+
+        await rig.model.loadOffers()
+
+        XCTAssertEqual(rig.model.state, .idle)
+        XCTAssertEqual(rig.model.offers.map(\.id), Fixture.catalog)
+    }
+
+    /// Resuming is a plain reload away: nothing about the pause is remembered
+    /// locally, so the next load offers exactly what it offered before.
+    func testResumingTheGateRestoresTheSameOffers() async {
+        let rig = makeRig()
+        rig.store.setOffers(.success(Fixture.offers(Fixture.catalog)))
+        rig.billing.setCatalog(.success(Fixture.pausedCatalog()))
+        await rig.model.loadOffers()
+        XCTAssertEqual(rig.model.state, .purchasesPaused)
+
+        rig.billing.setCatalog(.success(Fixture.serverCatalog()))
+        await rig.model.loadOffers()
+
+        XCTAssertEqual(rig.model.state, .idle)
+        XCTAssertEqual(rig.model.offers.map(\.id), Fixture.catalog)
+    }
+
+    /// **Losing the race against the operator costs the user nothing.**
+    ///
+    /// The screen was drawn while the server was selling and Subscribe is
+    /// pressed after the gate closed. The point-of-sale re-read catches it
+    /// BEFORE the account token is minted and before the store is asked, so
+    /// nothing is charged and nothing is finished — and the refusal is reported
+    /// as the pause it is rather than as the `.selectionChanged` the empty
+    /// product list alone would produce.
+    func testRacingThePauseRefusesTheSaleBeforeAnythingCanBeCharged() async {
+        let rig = await makeReadyRig()
+        rig.billing.setCatalog(.success(Fixture.pausedCatalog()))
+
+        await rig.model.purchase(productID: Fixture.catalog[0])
+
+        XCTAssertEqual(rig.model.state, .failed(.purchasesPaused))
+        XCTAssertEqual(rig.journal.all, ["catalog", "offers", "catalog"])
+        XCTAssertTrue(rig.store.appAccountTokens.isEmpty)
+        XCTAssertTrue(rig.store.finished.isEmpty)
+    }
+
+    /// **Restoring works while new purchases are paused.** The person reaching
+    /// for it has already paid, and a pause on SELLING must never become a pause
+    /// on honouring what was sold.
+    func testARestoreRunsWhileNewPurchasesArePaused() async {
+        let rig = makeRig()
+        rig.billing.setCatalog(.success(Fixture.pausedCatalog()))
+        await rig.model.loadOffers()
+        XCTAssertEqual(rig.model.state, .purchasesPaused)
+        rig.store.setEntitlements([Fixture.delivery])
+        rig.billing.setSubmissions([.success(Fixture.entitlement)])
+
+        await rig.model.restore()
+
+        XCTAssertEqual(rig.store.finished, [Fixture.delivery.id])
+        XCTAssertEqual(rig.model.state, .completed(Fixture.entitlement))
+        XCTAssertEqual(rig.journal.count("refresh"), 1)
+    }
+
+    /// **And so does a delivery the store makes on its own.** A renewal, an
+    /// Ask-to-Buy approval or a redelivery of an unaccepted purchase all arrive
+    /// through the update stream, all represent money that has already moved,
+    /// and none of them is a new purchase. The gate is not consulted anywhere on
+    /// this path.
+    func testAStoreDeliveryIsSubmittedAndFinishedWhilePurchasesArePaused() async {
+        let rig = makeRig()
+        rig.billing.setCatalog(.success(Fixture.pausedCatalog()))
+        await rig.model.loadOffers()
+        rig.billing.setSubmissions([.success(Fixture.entitlement)])
+        rig.model.startObservingUpdates()
+
+        rig.store.deliverUpdate(Fixture.delivery)
+        await waitFor(rig) { $0.journal.count("refresh") == 1 }
+
+        XCTAssertEqual(rig.billing.submittedJWS, [Fixture.jws])
+        XCTAssertEqual(rig.store.finished, [Fixture.delivery.id])
+        rig.model.stop()
+    }
+
+    /// What a tier grants travels from the server through the model untouched,
+    /// so the row the surface words is describing the deployment's own figures.
+    func testTheServersQuotaFiguresReachTheOffers() async {
+        let rig = await makeReadyRig()
+        XCTAssertEqual(rig.model.offers.map(\.product.storageBytes),
+                       [1 << 30, 2 << 30])
+        XCTAssertEqual(rig.model.offers.map(\.product.trafficBytes),
+                       [20 << 30, 40 << 30])
     }
 
     // MARK: - the sale is re-checked against a fresh catalog

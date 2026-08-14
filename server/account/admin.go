@@ -542,6 +542,16 @@ func (s *Service) RegisterAdmin(mux *http.ServeMux) {
 	// nothing. Same guard pair as the writes above; see admin_apple_products.go.
 	mux.Handle("POST /admin/apple-products",
 		s.CSRFGuard(s.RequireStepUp(AuditAppleProduct, s.handleAdminUpsertAppleProduct)))
+	// The global App Store new-purchase gate — the emergency brake that stops
+	// ALREADY-SHIPPED builds starting a purchase, without touching a single
+	// mapping. Same guard pair as the catalog write above, in BOTH directions:
+	// closing it stops every sale this deployment can make, and re-opening it is
+	// the click that starts charging customers again for whatever the pause was
+	// called for. See billing_apple_pause.go, and note what it deliberately does
+	// not reach — the transaction intake, which must keep accepting purchases
+	// Apple has already charged for.
+	mux.Handle("POST /admin/apple-purchases",
+		s.CSRFGuard(s.RequireStepUp(AuditApplePurchases, s.handleAdminApplePurchases)))
 	mux.Handle("POST /admin/confirm", s.CSRFGuard(http.HandlerFunc(s.HandleAdminConfirm)))
 	// Low-risk writes (no lockout/destructive-at-scale potential) apply
 	// directly — no confirmation page.
@@ -1059,10 +1069,14 @@ func (s *Service) buildAdminHomeData(r *http.Request) (adminHomeData, error) {
 		AppleProductsErr:      appleProductsErr,
 		AppleProductCycles:    appleProductCycles,
 		AppleProductKeyMaxLen: appleProductKeyMaxLen,
-		CentralStoredBytes:    centralStored,
-		Passkeys:              passkeys,
-		PasskeysErr:           passkeysErr,
-		Nonce:                 CSPNonce(r),
+		// Read independently of the mapping table above: the gate is what an
+		// operator reaches for when the catalog is the thing that is wrong, so a
+		// failed catalog read must not take the brake down with it.
+		ApplePurchaseGate:  s.applePurchaseGatePanel(r.Context()),
+		CentralStoredBytes: centralStored,
+		Passkeys:           passkeys,
+		PasskeysErr:        passkeysErr,
+		Nonce:              CSPNonce(r),
 		Settings: adminSettingsView{
 			MaxFileSizeMB:          st.MaxFileSize / (1024 * 1024),
 			DailyQuotaMB:           st.DailyQuota / (1024 * 1024),

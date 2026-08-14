@@ -737,7 +737,11 @@
 "subscription.body" = "このアプリでは、Relayium のプランは App Store 経由で請求されます。支払いは Apple が処理し、Relayium はどのプランをご利用かを記録するだけです。";
 "subscription.loading" = "プランを読み込み中…";
 "subscription.none" = "現在、このアプリから購入できるプランはありません。";
+"subscription.paused" = "現在、新規のご登録を一時停止しています。一時的なもので、すでにご利用中のサブスクリプションには影響しません。";
 "subscription.subscribe" = "登録";
+"subscription.cycleMonthly" = "月払い";
+"subscription.cycleYearly" = "年払い";
+"subscription.entitlements" = "ストレージ %1$@ · 月間トラフィック %2$@";
 "subscription.current" = "現在のプラン";
 "subscription.priceMonthly" = "%@／月";
 "subscription.priceYearly" = "%@／年";

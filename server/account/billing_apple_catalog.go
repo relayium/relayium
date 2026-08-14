@@ -67,6 +67,24 @@ type appleCatalogProduct struct {
 	// rather than by whatever order product identifiers happen to sort in. It is
 	// the same axis planRank treats as authoritative.
 	SortOrder int64 `json:"sortOrder"`
+	// StorageBytes and TrafficBytes are what the tier actually GRANTS, straight
+	// off the `plans` row this mapping points at.
+	//
+	// They are here because a purchase screen that names a tier and a price and
+	// nothing else asks the user to buy a word. The alternative — a client
+	// carrying its own table of "Pro means 5 GB" — is the same defect the
+	// product identifiers were moved to the server to fix, one step worse: a
+	// deployment (self-hosted, or ours after a plan edit) can change a tier's
+	// quota in the admin console, and a shipped binary that hard-coded the old
+	// figure would state a quantity beside Apple's real price. There is one
+	// authority for what a tier grants, it is the `plans` row, and this is it
+	// travelling to the only surface that has to describe it.
+	//
+	// Normalized through nonNegCap, so 0 means UNLIMITED on the wire — the same
+	// convention `/api/me/usage` already publishes for the same two figures, and
+	// the reason internal negatives never reach a client.
+	StorageBytes int64 `json:"storageBytes"`
+	TrafficBytes int64 `json:"trafficBytes"`
 }
 
 // appleCatalogPurchase is the eligibility half: may this caller start an App
@@ -88,6 +106,35 @@ type appleCatalogPurchase struct {
 	BlockedBy string `json:"blockedBy"`
 }
 
+// appleCatalogPurchases is the DEPLOYMENT-WIDE gate: may this server sell App
+// Store subscriptions to anybody at all right now.
+//
+// Kept apart from appleCatalogPurchase (singular) rather than folded into it,
+// because the two answer different questions about different subjects and a
+// client has to be able to say which one it is looking at. `purchase` is about
+// THIS account — "your subscription is managed on relayium.com" — and its
+// `blockedBy` vocabulary is a list of billing providers. A global pause belongs
+// to none of them, and reporting it through that field would make every paused
+// deployment tell every user that somebody else owns their subscription.
+//
+// A new FIELD rather than a changed one, for the client that is already
+// shipped: build 6 decodes this response, has no case for this key, and ignores
+// it. What stops build 6 selling is `products` being empty — the only thing it
+// can start a purchase from — and this field is what lets an updated build say
+// WHY the list is empty instead of "there is nothing to subscribe to".
+type appleCatalogPurchases struct {
+	Enabled bool `json:"enabled"`
+	// Reason names why, in a closed vocabulary a client switches on: 'paused'
+	// when an operator closed the gate, '' when Enabled is true. It is not a
+	// sentence — the words belong to the surface that renders them, in the
+	// user's own language.
+	Reason string `json:"reason"`
+}
+
+// applePurchasesReasonPaused is the only non-empty Reason today: an operator
+// closed the global gate.
+const applePurchasesReasonPaused = "paused"
+
 type appleCatalogResponse struct {
 	// BundleID is the CONFIGURED value, echoed from this server's own allowlist
 	// rather than from the request. A client that asked with a stray byte gets
@@ -96,6 +143,10 @@ type appleCatalogResponse struct {
 	BundleID string                `json:"bundleId"`
 	Products []appleCatalogProduct `json:"products"`
 	Purchase appleCatalogPurchase  `json:"purchase"`
+	// Purchases is the global gate. Always emitted, including when it is open,
+	// so a client can tell "this server has a gate and it is open" from "this
+	// server predates the gate" without a version negotiation.
+	Purchases appleCatalogPurchases `json:"purchases"`
 }
 
 // handleAppleCatalog answers the effective live catalog for ONE configured app.
@@ -139,39 +190,76 @@ func (s *Service) handleAppleCatalog(w http.ResponseWriter, r *http.Request, u U
 		return
 	}
 
-	rows, err := s.Store().ListAppleProducts(r.Context())
+	// The global gate, read BEFORE the catalog and applied by describing NO
+	// product. It is the only thing in the billing package that reads this row —
+	// see billing_apple_pause.go for why it may never be read on the intake
+	// path — and it acts on `products` alone: the eligibility answer below stays
+	// this account's true one, because a paused deployment still owes a Stripe
+	// subscriber the sentence that says where their subscription lives.
+	//
+	// Zero products is what stops the ALREADY-SHIPPED build: a purchase can only
+	// be started from an identifier this response named, and there are none. The
+	// `purchases` field beside it is what lets an updated build say why.
+	purchasesEnabled, err := s.applePurchasesEnabled(r.Context())
 	if err != nil {
-		log.Printf("billing: listing the apple catalog for user %s failed: %v", u.ID, err)
+		// Never degraded to "enabled". This row is 0 only during an incident,
+		// and a transient read failure that re-opened sales would re-open them
+		// at exactly the wrong moment.
+		log.Printf("billing: reading the apple purchase gate for user %s failed: %v", u.ID, err)
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	// The tier's rank, read once for the tiers actually referenced. ListPlans is
-	// the same method /api/me/usage reads for the same reason: `plans` has single
-	// digits of rows and every replacement store already implements it.
-	ranks, err := s.applePlanSortOrders(r.Context())
-	if err != nil {
-		log.Printf("billing: listing plans for the apple catalog for user %s failed: %v", u.ID, err)
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return
-	}
-	products := make([]appleCatalogProduct, 0, len(rows))
-	for _, row := range rows {
-		if row.BundleID != app.BundleID {
-			continue
+	// Non-nil even when empty, so the field encodes as `[]` rather than `null`:
+	// a decoder that treats the two differently must not be able to tell a
+	// paused deployment from a broken response.
+	products := []appleCatalogProduct{}
+	// Paused, nothing below this point is even READ. That is deliberate rather
+	// than an optimisation: a broken catalog or plans table is one of the
+	// reasons an operator reaches for the gate, and the emergency lever must
+	// not depend on the read it is being used to work around.
+	if purchasesEnabled {
+		rows, err := s.Store().ListAppleProducts(r.Context())
+		if err != nil {
+			log.Printf("billing: listing the apple catalog for user %s failed: %v", u.ID, err)
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
 		}
-		// The SAME predicate the admin console labels rows with. Anything but
-		// `live` is a product a purchase would be refused for: a retired mapping,
-		// a tier taken off sale, or a tier that is not there at all.
-		if appleProductStatusOf(row) != appleProductLive {
-			continue
+		// The tiers themselves, read once. ListPlans is the same method
+		// /api/me/usage reads for the same reason: `plans` has single digits of
+		// rows and every replacement store already implements it. What is taken
+		// from it is the tier's declared RANK and what it GRANTS — the two facts
+		// a purchase screen cannot make up for itself.
+		plans, err := s.applePlanFacts(r.Context())
+		if err != nil {
+			log.Printf("billing: listing plans for the apple catalog for user %s failed: %v", u.ID, err)
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
 		}
-		products = append(products, appleCatalogProduct{
-			ProductID: row.ProductID,
-			PlanID:    row.PlanID,
-			PlanName:  row.PlanName,
-			Cycle:     row.Cycle,
-			SortOrder: ranks[row.PlanID],
-		})
+		for _, row := range rows {
+			if row.BundleID != app.BundleID {
+				continue
+			}
+			// The SAME predicate the admin console labels rows with. Anything but
+			// `live` is a product a purchase would be refused for: a retired
+			// mapping, a tier taken off sale, or a tier that is not there at all.
+			if appleProductStatusOf(row) != appleProductLive {
+				continue
+			}
+			plan := plans[row.PlanID]
+			products = append(products, appleCatalogProduct{
+				ProductID: row.ProductID,
+				PlanID:    row.PlanID,
+				PlanName:  row.PlanName,
+				Cycle:     row.Cycle,
+				SortOrder: plan.SortOrder,
+				// nonNegCap, so the "unlimited" the enforcement layer spells as
+				// a non-positive number reaches a client as the 0 it publishes
+				// everywhere else. A client must not have to know that -1 and 0
+				// are the same tier.
+				StorageBytes: nonNegCap(plan.StorageBytes),
+				TrafficBytes: nonNegCap(plan.TrafficBytes),
+			})
+		}
 	}
 	// Deterministic, and ordered the way a purchase screen wants to read: cheapest
 	// tier first by the deployment's own rank, monthly before yearly inside a
@@ -203,10 +291,15 @@ func (s *Service) handleAppleCatalog(w http.ResponseWriter, r *http.Request, u U
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
+	gate := appleCatalogPurchases{Enabled: purchasesEnabled}
+	if !purchasesEnabled {
+		gate.Reason = applePurchasesReasonPaused
+	}
 	httpx.WriteJSON(w, http.StatusOK, appleCatalogResponse{
-		BundleID: app.BundleID,
-		Products: products,
-		Purchase: purchase,
+		BundleID:  app.BundleID,
+		Products:  products,
+		Purchase:  purchase,
+		Purchases: gate,
 	})
 }
 
@@ -247,19 +340,30 @@ func appleCatalogBundleParam(query url.Values) (string, error) {
 	return bundleID, nil
 }
 
-// applePlanSortOrders is plan id → declared rank, for the tiers this deployment
-// has. A tier absent from the map yields 0, which is also the default rank of a
-// deployment that never set sort_order.
-func (s *Service) applePlanSortOrders(ctx context.Context) (map[string]int64, error) {
+// applePlanFacts is plan id → the tier row, for the tiers this deployment has.
+//
+// The whole row rather than the one field the ordering needs, because the two
+// callers of this map want different columns off the same read: the sort uses
+// `sort_order`, and the product description uses `storage_bytes` /
+// `traffic_bytes`. A second read for the second set of columns could observe a
+// plan edit in between and describe a tier by one row while ranking it by
+// another.
+//
+// A tier absent from the map yields the zero Plan. That is the correct answer
+// for every field: rank 0 is the default rank of a deployment that never set
+// sort_order, and 0 bytes is the wire spelling of "unlimited"... which is why
+// an absent tier cannot actually reach here — `live` requires the tier to exist
+// (appleProductStatusOf), and only live rows are described.
+func (s *Service) applePlanFacts(ctx context.Context) (map[string]Plan, error) {
 	plans, err := s.Store().ListPlans(ctx)
 	if err != nil {
 		return nil, err
 	}
-	ranks := make(map[string]int64, len(plans))
+	byID := make(map[string]Plan, len(plans))
 	for _, p := range plans {
-		ranks[p.ID] = p.SortOrder
+		byID[p.ID] = p
 	}
-	return ranks, nil
+	return byID, nil
 }
 
 // appleCatalogEligibility answers "may this account start an App Store purchase".

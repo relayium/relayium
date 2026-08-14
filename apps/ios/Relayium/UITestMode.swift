@@ -413,10 +413,13 @@ final class UITestAccountTransport: URLProtocol {
         offer("/api/billing/apple/catalog", """
             {"bundleId":"\(bundleID)","products":[
             {"productId":"\(monthlyProductID)","planId":"pro","planName":"Pro",
-            "cycle":"monthly","sortOrder":20},
+            "cycle":"monthly","sortOrder":20,
+            "storageBytes":5368709120,"trafficBytes":107374182400},
             {"productId":"\(yearlyProductID)","planId":"pro","planName":"Pro",
-            "cycle":"yearly","sortOrder":20}],
-            "purchase":{"allowed":true,"blockedBy":""}}
+            "cycle":"yearly","sortOrder":20,
+            "storageBytes":5368709120,"trafficBytes":107374182400}],
+            "purchase":{"allowed":true,"blockedBy":""},
+            "purchases":{"enabled":true,"reason":""}}
             """, as: AppleProductCatalog.self)
         out["/api/billing/apple/account-token"] =
             Data(#"{"appAccountToken":"3f2504e0-4f89-41d3-9a0c-0305e82c3302"}"#.utf8)

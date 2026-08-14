@@ -748,7 +748,11 @@
 "subscription.body" = "Nesta app, o seu plano Relayium é cobrado através da App Store. A Apple trata do pagamento; o Relayium apenas regista que plano tem.";
 "subscription.loading" = "A carregar planos…";
 "subscription.none" = "De momento não há nada para subscrever a partir desta app.";
+"subscription.paused" = "As novas subscrições estão pausadas neste momento. É temporário, e a subscrição que já tem não é afetada.";
 "subscription.subscribe" = "Subscrever";
+"subscription.cycleMonthly" = "Mensal";
+"subscription.cycleYearly" = "Anual";
+"subscription.entitlements" = "%1$@ de armazenamento · %2$@/mês de tráfego";
 "subscription.current" = "Plano atual";
 "subscription.priceMonthly" = "%@ por mês";
 "subscription.priceYearly" = "%@ por ano";

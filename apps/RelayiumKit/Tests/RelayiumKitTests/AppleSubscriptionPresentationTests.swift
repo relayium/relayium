@@ -13,10 +13,14 @@ import XCTest
 final class AppleSubscriptionPresentationTests: XCTestCase {
 
     private func offer(_ id: String, plan: String, name: String, cycle: String,
-                       price: String = "$1.99") -> AppleSubscriptionOffer {
+                       price: String = "$1.99",
+                       storageBytes: Int64? = nil,
+                       trafficBytes: Int64? = nil) -> AppleSubscriptionOffer {
         AppleSubscriptionOffer(
             product: AppleCatalogProduct(productId: id, planId: plan, planName: name,
-                                         cycle: cycle, sortOrder: 10),
+                                         cycle: cycle, sortOrder: 10,
+                                         storageBytes: storageBytes,
+                                         trafficBytes: trafficBytes),
             store: SubscriptionOffer(id: id, displayName: name, description: "d",
                                      displayPrice: price))
     }
@@ -57,7 +61,7 @@ final class AppleSubscriptionPresentationTests: XCTestCase {
     func testARowJoinsTheServersPlanNameToTheStoresPrice() {
         let rows = AppleSubscriptionPresentation.offerRows(
             [offer("p.m", plan: "pro", name: "Pro", cycle: "monthly", price: "US$4.99")],
-            currentPlanID: "free", language: .en)
+            currentPlanID: "free", currentCycle: "monthly", language: .en)
         XCTAssertEqual(rows.map(\.productID), ["p.m"])
         XCTAssertEqual(rows.first?.title, "Pro")
         XCTAssertTrue(rows.first?.price.contains("US$4.99") == true,
@@ -77,13 +81,39 @@ final class AppleSubscriptionPresentationTests: XCTestCase {
         XCTAssertEqual(unknown, "$1")
     }
 
-    /// The badge follows the account's own plan id, from `/api/me`.
-    func testTheCurrentPlanBadgeFollowsTheAccountsOwnPlan() {
+    /// The badge follows the account's own plan id AND billing period, both from
+    /// `/api/me`.
+    func testTheCurrentPlanBadgeFollowsTheAccountsOwnPlanAndCycle() {
         let offers = [offer("plus.m", plan: "plus", name: "Plus", cycle: "monthly"),
                       offer("pro.y", plan: "pro", name: "Pro", cycle: "yearly")]
         let rows = AppleSubscriptionPresentation.offerRows(offers, currentPlanID: "pro",
-                                                           language: .en)
+                                                           currentCycle: "yearly", language: .en)
         XCTAssertEqual(rows.map(\.isCurrentPlan), [false, true])
+    }
+
+    /// **The other billing period of the account's own tier is NOT current.**
+    ///
+    /// It is a different App Store product, a different commitment and a real
+    /// charge. Marking it "current plan" tells a monthly subscriber they already
+    /// hold the yearly plan they are reading about — and, because the badge also
+    /// withdraws the button, takes away the only way they had to switch to it.
+    func testTheSameTierOnTheOtherCycleIsNeitherCurrentNorUnbuyable() {
+        let offers = [offer("pro.m", plan: "pro", name: "Pro", cycle: "monthly"),
+                      offer("pro.y", plan: "pro", name: "Pro", cycle: "yearly")]
+        let rows = AppleSubscriptionPresentation.offerRows(offers, currentPlanID: "pro",
+                                                           currentCycle: "monthly", language: .en)
+        XCTAssertEqual(rows.map(\.isCurrentPlan), [true, false])
+        XCTAssertEqual(rows.map(\.offersSubscribe), [false, true])
+    }
+
+    /// **The exact product an account holds offers no Subscribe button.**
+    /// Pressing it would be a second charge for what it is already paying for.
+    func testTheExactHeldProductCannotBeBoughtAgain() {
+        let rows = AppleSubscriptionPresentation.offerRows(
+            [offer("pro.m", plan: "pro", name: "Pro", cycle: "monthly")],
+            currentPlanID: "pro", currentCycle: "monthly", language: .en)
+        XCTAssertEqual(rows.first?.isCurrentPlan, true)
+        XCTAssertEqual(rows.first?.offersSubscribe, false)
     }
 
     /// **An empty plan id never matches.** It is what a signed-in account that
@@ -92,8 +122,87 @@ final class AppleSubscriptionPresentationTests: XCTestCase {
     func testAnEmptyCurrentPlanMarksNothing() {
         let rows = AppleSubscriptionPresentation.offerRows(
             [offer("plus.m", plan: "", name: "Plus", cycle: "monthly")],
-            currentPlanID: "", language: .en)
+            currentPlanID: "", currentCycle: "", language: .en)
         XCTAssertEqual(rows.map(\.isCurrentPlan), [false])
+        XCTAssertEqual(rows.map(\.offersSubscribe), [true])
+    }
+
+    /// **An unknown billing period never matches either**, even when the tier
+    /// does. `""` is what a migrated source or a cancellation that carried no
+    /// price leaves behind, and "we could not tell" is not "this is the one you
+    /// are looking at". Failing this way leaves the row buyable, which is the
+    /// safe direction: the alternative withdraws the button on the strength of a
+    /// field nobody could read.
+    func testAnUnknownCurrentCycleMarksNothingAndLeavesTheRowBuyable() {
+        let offers = [offer("pro.m", plan: "pro", name: "Pro", cycle: "monthly"),
+                      offer("pro.y", plan: "pro", name: "Pro", cycle: "yearly")]
+        let rows = AppleSubscriptionPresentation.offerRows(offers, currentPlanID: "pro",
+                                                           currentCycle: "", language: .en)
+        XCTAssertEqual(rows.map(\.isCurrentPlan), [false, false])
+        XCTAssertEqual(rows.map(\.offersSubscribe), [true, true])
+    }
+
+    // MARK: - what a tier grants, and which period it is billed on
+
+    /// **The row states the tier's real quota, from the server's own figures.**
+    /// A purchase screen that named a tier and a price and nothing else would be
+    /// asking the reader to buy a word.
+    func testARowStatesTheStorageAndTrafficTheServerSent() {
+        let rows = AppleSubscriptionPresentation.offerRows(
+            [offer("pro.m", plan: "pro", name: "Pro", cycle: "monthly",
+                   storageBytes: 5 << 30, trafficBytes: 100 << 30)],
+            currentPlanID: "", currentCycle: "", language: .en)
+        let entitlements = rows.first?.entitlements
+        XCTAssertNotNil(entitlements)
+        XCTAssertTrue(entitlements?.contains("5.0 GB") == true, entitlements ?? "")
+        XCTAssertTrue(entitlements?.contains("100.0 GB") == true, entitlements ?? "")
+        XCTAssertTrue(entitlements?.contains("storage") == true, entitlements ?? "")
+        XCTAssertTrue(entitlements?.contains("traffic") == true, entitlements ?? "")
+    }
+
+    /// A cap of 0 is the wire spelling of UNLIMITED — the same convention
+    /// `/api/me/usage` publishes — and must read as the word, not as "0 B".
+    func testAnUnlimitedCapReadsAsTheWordRatherThanZeroBytes() {
+        let text = AppleSubscriptionPresentation.entitlements(
+            storageBytes: 0, trafficBytes: 1 << 30, language: .en)
+        XCTAssertEqual(text?.contains("0 B"), false, text ?? "")
+        XCTAssertTrue(text?.contains(L10n.t(.usageUnlimited, language: .en)) == true, text ?? "")
+    }
+
+    /// **A server that sent no figures gets no sentence.** Zero-filling would
+    /// advertise an unlimited plan on every deployment that predates the field,
+    /// because 0 means unlimited — the most expensive possible default.
+    func testAServerThatSentNoQuotaFiguresIsNotRenderedAsUnlimited() {
+        let rows = AppleSubscriptionPresentation.offerRows(
+            [offer("pro.m", plan: "pro", name: "Pro", cycle: "monthly")],
+            currentPlanID: "", currentCycle: "", language: .en)
+        XCTAssertNil(rows.first?.entitlements)
+        XCTAssertNil(AppleSubscriptionPresentation.entitlements(storageBytes: 1, trafficBytes: nil))
+        XCTAssertNil(AppleSubscriptionPresentation.entitlements(storageBytes: nil, trafficBytes: 1))
+    }
+
+    /// The two billing periods are labelled distinctly, in every language, and
+    /// an unrecognised one is left blank rather than guessed — the same rule the
+    /// price sentence follows, for the same reason.
+    func testTheBillingPeriodIsLabelledDistinctlyAndNeverGuessed() {
+        for language in AppLanguage.allCases {
+            let monthly = AppleSubscriptionPresentation.cycleLabel("monthly", language: language)
+            let yearly = AppleSubscriptionPresentation.cycleLabel("yearly", language: language)
+            XCTAssertFalse(monthly.isEmpty, "\(language.rawValue) has no monthly label")
+            XCTAssertFalse(yearly.isEmpty, "\(language.rawValue) has no yearly label")
+            XCTAssertNotEqual(monthly, yearly, "\(language.rawValue) cannot tell the periods apart")
+        }
+        XCTAssertEqual(AppleSubscriptionPresentation.cycleLabel("weekly", language: .en), "")
+    }
+
+    /// And the label reaches the row, so the two products of one tier are
+    /// distinguishable by something other than their prices.
+    func testEachRowCarriesItsOwnPeriodLabel() {
+        let offers = [offer("pro.m", plan: "pro", name: "Pro", cycle: "monthly"),
+                      offer("pro.y", plan: "pro", name: "Pro", cycle: "yearly")]
+        let rows = AppleSubscriptionPresentation.offerRows(offers, currentPlanID: "",
+                                                           currentCycle: "", language: .en)
+        XCTAssertEqual(rows.map(\.cycleLabel), ["Monthly", "Yearly"])
     }
 
     /// The server's order is preserved. It is the deployment's declared tier
@@ -103,7 +212,8 @@ final class AppleSubscriptionPresentationTests: XCTestCase {
                       offer("b", plan: "pro", name: "Pro", cycle: "monthly"),
                       offer("c", plan: "max", name: "Max", cycle: "monthly")]
         XCTAssertEqual(
-            AppleSubscriptionPresentation.offerRows(offers, currentPlanID: "", language: .en)
+            AppleSubscriptionPresentation.offerRows(offers, currentPlanID: "",
+                                                    currentCycle: "", language: .en)
                 .map(\.productID),
             ["a", "b", "c"])
     }
@@ -116,7 +226,8 @@ final class AppleSubscriptionPresentationTests: XCTestCase {
     /// sitting beside it.
     func testEveryStateHasADecidedNotice() {
         let everyState: [AppleSubscriptionState] = [
-            .unavailable, .idle, .loadingOffers, .purchasing(productID: "p"), .submitting,
+            .unavailable, .purchasesPaused, .idle, .loadingOffers,
+            .purchasing(productID: "p"), .submitting,
             .restoring, .deferred, .nothingToRestore,
             .completed(AppleTransactionResult(applied: true, planId: "pro", status: "active",
                                               expiresAt: 1, provider: "apple")),
@@ -159,6 +270,52 @@ final class AppleSubscriptionPresentationTests: XCTestCase {
         }
     }
 
+    // MARK: - the global purchase gate
+
+    /// **A paused server is not a broken one, and not an empty product either.**
+    ///
+    /// Three things about the sentence matter, and each is a claim to somebody
+    /// who was about to pay: it is INFORMATION rather than a failure (nothing
+    /// went wrong, nothing was charged, there is nothing to retry), it says the
+    /// state is temporary, and it says an existing subscription is unaffected —
+    /// which is the second question anybody reading it asks.
+    func testAPausedServerReadsAsTemporaryInformationRatherThanAFailure() {
+        guard case .info(let text) = AppleSubscriptionPresentation.notice(
+            for: .purchasesPaused, language: .en) else {
+            return XCTFail("a paused server is rendered as something other than information")
+        }
+        XCTAssertTrue(text.contains("paused"), text)
+        XCTAssertTrue(text.contains("temporary"), text)
+        XCTAssertTrue(text.contains("unaffected"), text)
+    }
+
+    /// And it is NOT the "there is nothing to subscribe to" sentence. A paused
+    /// deployment answers with an empty catalog, so the two states arrive at the
+    /// surface looking identical; saying "there is nothing to subscribe to from
+    /// this app" would be a false statement about the product rather than a true
+    /// one about the moment.
+    func testPausedAndNothingOnSaleAreDifferentSentences() {
+        for language in AppLanguage.allCases {
+            let paused = AppleSubscriptionPresentation.notice(
+                for: .purchasesPaused, language: language)?.text
+            let none = L10n.t(.subscriptionNone, language: language)
+            XCTAssertNotNil(paused, "\(language.rawValue) has no paused sentence")
+            XCTAssertNotEqual(paused, none,
+                              "\(language.rawValue) says the same thing for both states")
+        }
+    }
+
+    /// Losing the race against the operator — the screen was drawn while the
+    /// server was selling, and Subscribe was pressed after it stopped — reads as
+    /// the SAME sentence a user who arrived a second later would see. Nothing
+    /// was charged, and a second differently-worded explanation would suggest
+    /// something else had gone wrong.
+    func testRacingThePauseSaysTheSameThingAsArrivingAfterIt() {
+        XCTAssertEqual(AppleSubscriptionPresentation.message(for: .purchasesPaused, language: .en),
+                       AppleSubscriptionPresentation.notice(for: .purchasesPaused,
+                                                            language: .en)?.text)
+    }
+
     func testACompletedPurchaseReadsAsSuccess() {
         let notice = AppleSubscriptionPresentation.notice(
             for: .completed(AppleTransactionResult(applied: true, planId: "pro", status: "active",
@@ -186,6 +343,7 @@ final class AppleSubscriptionPresentationTests: XCTestCase {
             .purchaseNotAllowed(blockedBy: "admin"),
             .purchaseNotAllowed(blockedBy: "apple"),
             .purchaseNotAllowed(blockedBy: ""),
+            .purchasesPaused,
         ]
         var seen: [String: [String]] = [:]
         for failure in everyFailure {

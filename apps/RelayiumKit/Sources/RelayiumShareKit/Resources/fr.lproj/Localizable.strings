@@ -748,7 +748,11 @@
 "subscription.body" = "Dans cette app, votre offre Relayium est facturée via l’App Store. Apple encaisse le paiement ; Relayium se contente d’enregistrer l’offre dont vous disposez.";
 "subscription.loading" = "Chargement des offres…";
 "subscription.none" = "Il n’y a rien à souscrire depuis cette app pour le moment.";
+"subscription.paused" = "Les nouveaux abonnements sont suspendus pour le moment. C’est temporaire, et un abonnement existant n’est pas affecté.";
 "subscription.subscribe" = "S’abonner";
+"subscription.cycleMonthly" = "Mensuel";
+"subscription.cycleYearly" = "Annuel";
+"subscription.entitlements" = "%1$@ de stockage · %2$@/mois de trafic";
 "subscription.current" = "Offre actuelle";
 "subscription.priceMonthly" = "%@ par mois";
 "subscription.priceYearly" = "%@ par an";

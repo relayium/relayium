@@ -261,6 +261,9 @@ struct AccountSummaryView: View {
                     model: appleSubscription,
                     accountID: user.id,
                     currentPlanID: usage.plan.id,
+                    // Read off the SAME projection as the plan id, so the badge
+                    // cannot mark the other billing period of this tier.
+                    currentCycle: usage.plan.billingCycle,
                     entitlementProvider: user.entitlementProvider ?? "")
             }
 

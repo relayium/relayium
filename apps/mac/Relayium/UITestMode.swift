@@ -523,11 +523,14 @@ final class UITestAccountTransport: URLProtocol {
             {"bundleId":"\(bundleID)",
             "products":[
             {"productId":"\(monthlyProductID)","planId":"pro","planName":"Pro",
-            "cycle":"monthly","sortOrder":20},
+            "cycle":"monthly","sortOrder":20,
+            "storageBytes":5368709120,"trafficBytes":107374182400},
             {"productId":"\(yearlyProductID)","planId":"pro","planName":"Pro",
-            "cycle":"yearly","sortOrder":20}],
+            "cycle":"yearly","sortOrder":20,
+            "storageBytes":5368709120,"trafficBytes":107374182400}],
             "purchase":{"allowed":\(UITestMode.blocksSubscription ? "false" : "true"),
-            "blockedBy":"\(UITestMode.blocksSubscription ? "stripe" : "")"}}
+            "blockedBy":"\(UITestMode.blocksSubscription ? "stripe" : "")"},
+            "purchases":{"enabled":true,"reason":""}}
             """, as: AppleProductCatalog.self)
         // The attribution token and the transaction intake, so a purchase can be
         // completed end to end against the real orchestration.

@@ -50,10 +50,41 @@ public struct AppleSubscriptionOfferRow: Equatable, Identifiable, Sendable {
     /// The store's own price, placed into this language's per-period sentence.
     /// The NUMBER and CURRENCY are Apple's and are never reformatted here.
     public let price: String
-    /// Whether this row's tier is the one the account already holds. It is a
-    /// label, not a lock: the same tier on the other billing period is a real
-    /// purchase, and so is re-subscribing after a cancellation.
+    /// Which billing period this row IS — "Monthly" / "Yearly" — as a label of
+    /// its own, not only as part of the price sentence.
+    ///
+    /// It is separate copy because the two products of one tier are otherwise
+    /// distinguishable only by their prices, and a reader scanning four rows of
+    /// the same tier name is choosing a commitment length, not a number.
+    /// `""` for a cycle this build has no word for, which is the same refusal
+    /// ``price(_:cycle:language:)`` makes: a WRONG period is a false statement
+    /// about what is being agreed to, and a missing one is merely incomplete.
+    public let cycleLabel: String
+    /// What the tier grants, in this language — storage and monthly traffic.
+    ///
+    /// `nil` when the server did not say (a deployment older than the catalog's
+    /// quota fields). The surface then renders nothing rather than a figure it
+    /// made up: an app that carried its own copy of "Pro means 5 GB" would
+    /// eventually print a quantity beside Apple's real price that the
+    /// deployment does not actually grant.
+    public let entitlements: String?
+    /// Whether this row's tier AND billing period are the ones the account
+    /// already holds.
+    ///
+    /// Both halves are required. The same tier on the other billing period is a
+    /// different product, a real purchase and a real charge, so labelling it
+    /// "current" would tell a monthly subscriber that the yearly plan they are
+    /// looking at is something they already have.
     public let isCurrentPlan: Bool
+    /// Whether this row may start a purchase.
+    ///
+    /// The inverse of ``isCurrentPlan``, stated as its own field rather than
+    /// left for each surface to re-derive: buying the exact product an account
+    /// already holds is a second charge for what it is already paying for, and
+    /// two view layers deriving that rule independently is how one of them ends
+    /// up not deriving it. Eligibility and busy-ness are separate gates the
+    /// surface still applies on top.
+    public let offersSubscribe: Bool
 
     public var id: String { productID }
 }
@@ -92,23 +123,87 @@ public enum AppleSubscriptionPresentation {
 
     /// The rows to render, in the server's tier order.
     ///
-    /// `currentPlanID` is the account's own plan from `/api/me` — the
-    /// authoritative projection — and never anything this layer derived from a
-    /// purchase. A device does not decide what it holds.
+    /// `currentPlanID` and `currentCycle` are the account's own plan and
+    /// billing period from `/api/me` — the authoritative projection — and never
+    /// anything this layer derived from a purchase. A device does not decide
+    /// what it holds.
     public static func offerRows(_ offers: [AppleSubscriptionOffer],
                                  currentPlanID: String,
+                                 currentCycle: String,
                                  language: AppLanguage? = nil) -> [AppleSubscriptionOfferRow] {
         offers.map { offer in
-            AppleSubscriptionOfferRow(
+            // BOTH halves have to match, and both have to be non-empty.
+            //
+            // '' as a plan id is the free tier and every signed-in account that
+            // has never subscribed, so it must never match: marking "Free" as
+            // the current plan on a paid row is exactly backwards. '' as a cycle
+            // is an account whose billing period could not be resolved — a
+            // migrated source, or a cancellation that carried no price — and it
+            // must not match either, because "unknown" is not "the one you are
+            // looking at". The row then simply carries no badge, and the account
+            // can still buy, which is the safe direction: the alternative marks
+            // a product current on the strength of a field nobody could read.
+            let isCurrent = !currentPlanID.isEmpty && !currentCycle.isEmpty
+                && offer.product.planId == currentPlanID
+                && offer.product.cycle == currentCycle
+            return AppleSubscriptionOfferRow(
                 productID: offer.product.productId,
                 title: offer.product.planName,
                 price: price(offer.store.displayPrice, cycle: offer.product.cycle,
                              language: language),
-                // '' is the free tier and every signed-in account that has never
-                // subscribed, so it must never match: marking "Free" as the
-                // current plan on a paid row is exactly backwards.
-                isCurrentPlan: !currentPlanID.isEmpty && offer.product.planId == currentPlanID)
+                cycleLabel: cycleLabel(offer.product.cycle, language: language),
+                entitlements: entitlements(storageBytes: offer.product.storageBytes,
+                                           trafficBytes: offer.product.trafficBytes,
+                                           language: language),
+                isCurrentPlan: isCurrent,
+                // The exact product an account already holds may not be bought
+                // again — that is a second charge for the thing it is already
+                // paying for. The other cycle of the same tier is a different
+                // product and stays purchasable, which is how an Apple
+                // subscriber switches between monthly and yearly at all.
+                offersSubscribe: !isCurrent)
         }
+    }
+
+    /// The billing period as a label of its own.
+    ///
+    /// An unrecognised cycle yields `""` rather than a guess, on the same rule
+    /// ``price(_:cycle:language:)`` follows: a wrong period is a false statement
+    /// about the commitment being made.
+    public static func cycleLabel(_ cycle: String,
+                                  language: AppLanguage? = nil) -> String {
+        switch cycle {
+        case "monthly": return L10n.t(.subscriptionCycleMonthly, language: language)
+        case "yearly":  return L10n.t(.subscriptionCycleYearly, language: language)
+        default:        return ""
+        }
+    }
+
+    /// What a tier grants, worded: storage and monthly traffic.
+    ///
+    /// `nil` when the server sent neither figure — a deployment older than the
+    /// catalog's quota fields. **Not zero-filled**: `0` is the wire spelling of
+    /// UNLIMITED (the same convention `/api/me/usage` uses), so treating an
+    /// absent field as `0` would advertise an unlimited plan on every server
+    /// that has not been updated.
+    ///
+    /// The bytes go through `L10n.bytes`, the one primitive the account meters
+    /// already use, so the same tier reads the same way on the plan card above
+    /// this surface and in the offer row below it.
+    public static func entitlements(storageBytes: Int64?,
+                                    trafficBytes: Int64?,
+                                    language: AppLanguage? = nil) -> String? {
+        guard let storageBytes, let trafficBytes else { return nil }
+        return L10n.t(.subscriptionEntitlements,
+                      [quantity(storageBytes, language: language),
+                       quantity(trafficBytes, language: language)],
+                      language: language)
+    }
+
+    /// A byte cap in words: the figure, or "Unlimited" for the 0 the wire uses.
+    private static func quantity(_ bytes: Int64, language: AppLanguage? = nil) -> String {
+        bytes <= 0 ? L10n.t(.usageUnlimited, language: language)
+                   : L10n.bytes(bytes, language: language)
     }
 
     /// The store's price inside this language's per-period phrase.
@@ -144,6 +239,13 @@ public enum AppleSubscriptionPresentation {
         switch state {
         case .idle, .unavailable:
             return nil
+        case .purchasesPaused:
+            // `.info`, never `.failure`: nothing went wrong, nothing was
+            // charged, and there is nothing for the user to retry or repair.
+            // The sentence says it is temporary and that existing subscriptions
+            // are untouched, because the two questions somebody reading it is
+            // about to ask are "is it me?" and "did I lose what I paid for?".
+            return .info(L10n.t(.subscriptionPaused, language: language))
         case .loadingOffers:
             return .progress(L10n.t(.subscriptionLoading, language: language))
         case .purchasing:
@@ -184,6 +286,14 @@ public enum AppleSubscriptionPresentation {
         switch failure {
         case .purchaseNotAllowed(let blockedBy):
             return blockedNotice(blockedBy: blockedBy, language: language)
+        case .purchasesPaused:
+            // The same sentence the paused SURFACE shows, deliberately. This
+            // case is only reachable by racing the operator — the screen was
+            // drawn while the server was selling — and the user's situation is
+            // identical to somebody who opened the screen a second later, so
+            // reading a second, differently-worded explanation of it would
+            // suggest something else had gone wrong. Nothing was charged.
+            return L10n.t(.subscriptionPaused, language: language)
         case .selectionChanged:
             // The offer on screen is no longer what the server sells — retired,
             // remapped, or answered for another app — and nothing was charged.

@@ -125,6 +125,24 @@ func (s *Service) beforeImageFor(ctx context.Context, action, pathID string, for
 		}
 		return before, appleProductImage(p), appleProductTarget(p), nil
 
+	// The global App Store purchase gate. One row, so the "before" half is a
+	// live read of it rather than anything reconstructed from the form — and a
+	// FAILED read is returned as an error rather than defaulted, because the
+	// confirmation page's only job is to state what is true now: a page that
+	// showed "enabled: true -> false" while the row already held false would ask
+	// an operator to confirm an action that has already happened.
+	case AuditApplePurchases:
+		want, perr := parseApplePurchaseGateForm(form)
+		if perr != nil {
+			return nil, nil, "", perr
+		}
+		cur, cerr := s.applePurchasesEnabled(ctx)
+		if cerr != nil {
+			return nil, nil, "", cerr
+		}
+		return applePurchaseGateImage(cur), applePurchaseGateImage(want),
+			applePurchaseGateTarget, nil
+
 	case AuditPasskeyDelete:
 		return map[string]any{}, map[string]any{}, "passkey:" + form.Get("id"), nil
 

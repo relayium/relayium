@@ -136,6 +136,9 @@ func (s *Service) confirmHandlerFor(action string) (http.HandlerFunc, bool) {
 		// The App Store product catalog write. It is on this path for the reason
 		// stated at its route: the row is read after the money has moved.
 		AuditAppleProduct: s.handleAdminUpsertAppleProduct,
+		// The global App Store purchase gate. On this path in both directions:
+		// pausing stops every sale, resuming re-opens them.
+		AuditApplePurchases: s.handleAdminApplePurchases,
 		// Emergency release is the one that ships a build to every node of a
 		// track at once, with no canary left to catch it.
 		AuditRolloutEmergency: s.handleAdminRolloutEmergency,

@@ -133,6 +133,53 @@ catalog read** — no client release is needed to start selling a product, and
 retiring a row stops it being offered. What a row cannot do is make an
 unconfigured deployment sell anything.
 
+The catalog also carries **what each tier grants** — its storage ceiling and its
+monthly relayed-traffic allowance, straight off the `plans` row the mapping
+points at, with `0` meaning unlimited. The purchase screen prints those figures
+beside Apple's price, so editing a tier's quota in **套餐 / Plans** changes what
+the apps say a subscription is worth on their next catalog read, with no client
+release. Nothing in an app carries its own copy of a tier's quota.
+
+## Emergency stop: the new-purchase gate
+
+Above the mapping table is **App Store 新购买总闸 / App Store new-purchase gate**:
+one confirmed, audited click that stops this deployment selling App Store
+subscriptions at all.
+
+It exists because a shipped App Store binary cannot be corrected, and retiring
+mappings one at a time is the wrong shape for an emergency — several confirmed
+writes, each of which destroys a mapping an accepted-but-unfinished transaction
+may still need, and a second round of the same edits to undo.
+
+**Paused:**
+
+- `GET /api/billing/apple/catalog` answers `200` with **zero products**, for
+  every configured bundle. A build can only start a purchase from an identifier
+  the server named, so builds that are already in the App Store cannot start
+  one. This is the half that acts on binaries you can no longer change.
+- The response also carries `"purchases":{"enabled":false,"reason":"paused"}`.
+  Builds that understand that field say the pause is temporary and that existing
+  subscriptions are unaffected; older builds simply see an empty catalog.
+- **Restore purchases stays available**, in every build.
+- No mapping is changed. Resuming restores exactly the catalog that was there.
+
+**What a pause never touches** — this is the whole safety argument, and it is
+why the gate is read in one place (`handleAppleCatalog`) and nowhere else:
+
+- `POST /api/billing/apple/transaction`. A customer Apple has already charged
+  may be mid-flight when the gate closes; refusing them would take the money and
+  give nothing back, since the device's only automatic repair is redelivery to a
+  server that would refuse it again.
+- `Transaction.updates`, restores, renewals and App Store Server Notifications.
+  Every one of those is already-paid money arriving late, not a new purchase.
+- Existing entitlements. Pausing sales cancels nobody.
+
+Both directions go through the confirmation page and a second factor, and both
+are audited as `apple.purchases` — resuming is the click that starts charging
+customers again for whatever the pause was called for. The state is one row in
+the `settings` table, so it survives restarts and is shared by every instance;
+a deployment that has never touched it is selling.
+
 ## If the catalog cannot be read
 
 The section shows a read error instead of a table, and **offers no editing at

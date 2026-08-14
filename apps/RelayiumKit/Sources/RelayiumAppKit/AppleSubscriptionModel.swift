@@ -41,6 +41,20 @@ public enum AppleSubscriptionFailure: Equatable {
     /// retried as-is, because what the screen shows is no longer what the
     /// server sells. The repair is to reload the offers.
     case selectionChanged
+    /// The server has closed its global App Store purchase gate. Nobody may
+    /// start a new purchase against this deployment right now.
+    ///
+    /// Its own case rather than a `purchaseNotAllowed` with some new
+    /// `blockedBy` value, because it is not a statement about this account at
+    /// all: nothing owns this user's entitlement, nothing is double-billed, and
+    /// there is nothing for them to cancel anywhere. Folding it into that case
+    /// would put "your subscription is managed elsewhere" in front of somebody
+    /// whose subscription is managed nowhere.
+    ///
+    /// Nothing was charged — the gate is re-read before the store is ever asked
+    /// — and it is temporary by construction: the operator reopens the gate and
+    /// the next load offers the same products again.
+    case purchasesPaused
 }
 
 /// What Relayium's server made of one submitted transaction.
@@ -133,6 +147,19 @@ public enum AppleSubscriptionState: Equatable {
     /// simply nothing on sale — and the state in which no purchase call is
     /// possible.
     case unavailable
+    /// The server is not selling to ANYBODY right now — an operator has closed
+    /// the global purchase gate. Distinct from `.unavailable`, which says this
+    /// deployment has nothing mapped for this build: that is a standing fact
+    /// about the catalog, this is a temporary one about the server, and the two
+    /// warrant different sentences. Also distinct from `.failed`: nothing went
+    /// wrong and nothing needs retrying.
+    ///
+    /// **Restoring stays reachable in this state**, which is the whole reason
+    /// it is a state of the SURFACE rather than a reason offers are missing: a
+    /// user whose purchase is stuck is exactly who reaches for restore, and a
+    /// pause on new sales must not take that away from somebody who has already
+    /// paid.
+    case purchasesPaused
     case idle
     case loadingOffers
     case purchasing(productID: String)
@@ -288,6 +315,17 @@ public final class AppleSubscriptionModel: ObservableObject {
             // because your subscription is managed elsewhere" is the answer a
             // deployment with an empty catalog still owes the user.
             eligibility = catalog.purchase
+            // The global gate is read BEFORE the empty-catalog arm, because a
+            // paused server answers with an empty catalog and the two mean
+            // opposite things to a user: "there is nothing to subscribe to from
+            // this app" is a statement about the product, and it is false when
+            // the truth is "not right now". A server that sends no gate at all
+            // is not paused, so an older deployment keeps the old wording.
+            guard !catalog.purchasesArePaused else {
+                offers = []
+                state = .purchasesPaused
+                return
+            }
             guard !catalog.products.isEmpty else {
                 offers = []
                 state = .unavailable
@@ -396,13 +434,28 @@ public final class AppleSubscriptionModel: ObservableObject {
             state = .failed(.selectionChanged)
             return
         }
+        // The global gate, re-read as part of the same fresh catalog and
+        // checked BEFORE the row comparison below. This is the race the gate
+        // exists to win: the screen was drawn while the server was selling, an
+        // operator has closed it since, and the user has just pressed Subscribe.
+        // Nothing has been charged at this point — no account token has been
+        // fetched and the store has not been asked — and the paused answer is
+        // reported as itself rather than as the `.selectionChanged` the empty
+        // product list would otherwise produce.
+        guard !fresh.purchasesArePaused else {
+            state = .failed(.purchasesPaused)
+            return
+        }
         guard fresh.purchase.allowed else {
             state = .failed(.purchaseNotAllowed(blockedBy: fresh.purchase.blockedBy))
             return
         }
         // The EXACT displayed row must still be in the catalog — every field,
         // not just the identifier. A product whose plan mapping changed would
-        // charge for a tier the user never saw beside the price they agreed to.
+        // charge for a tier the user never saw beside the price they agreed to,
+        // and that now includes the tier's quota: the row on screen states what
+        // the plan grants, so a deployment that edited the figure between the
+        // render and the sale is selling something the user did not read.
         guard fresh.products.contains(selected.product) else {
             state = .failed(.selectionChanged)
             return

@@ -795,7 +795,11 @@
 "subscription.body" = "في هذا التطبيق تُحصَّل خطة Relayium عبر App Store. تتولّى Apple الدفع، ولا يسجّل Relayium سوى الخطة التي تمتلكها.";
 "subscription.loading" = "جارٍ تحميل الخطط…";
 "subscription.none" = "لا يوجد ما يمكن الاشتراك فيه من هذا التطبيق حاليًا.";
+"subscription.paused" = "الاشتراكات الجديدة متوقّفة مؤقتًا الآن. هذا إجراء مؤقت، ولا يؤثّر على أي اشتراك لديك بالفعل.";
 "subscription.subscribe" = "اشتراك";
+"subscription.cycleMonthly" = "شهري";
+"subscription.cycleYearly" = "سنوي";
+"subscription.entitlements" = "%1$@ تخزين · %2$@/شهر حركة بيانات";
 "subscription.current" = "الخطة الحالية";
 "subscription.priceMonthly" = "%@ شهريًا";
 "subscription.priceYearly" = "%@ سنويًا";

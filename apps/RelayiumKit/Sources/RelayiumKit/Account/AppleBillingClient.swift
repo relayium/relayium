@@ -48,11 +48,49 @@ public struct AppleProductCatalog: Codable, Equatable, Sendable {
     /// a real answer, distinct from the refusal an unconfigured server gives.
     public var products: [AppleCatalogProduct]
     public var purchase: AppleCatalogPurchase
+    /// The DEPLOYMENT-WIDE gate: whether this server is selling App Store
+    /// subscriptions to anybody at all right now.
+    ///
+    /// **Optional, and absent means open.** A server that predates the gate
+    /// sends no such key, and a client that refused those payloads would stop
+    /// selling against every self-hosted deployment that has not updated yet —
+    /// the exact failure the optionality of ``NativeUser/entitlementProvider``
+    /// exists to avoid. ``purchasesArePaused`` is the one place that reading is
+    /// written down, so no call site re-derives it.
+    ///
+    /// Distinct from ``purchase``, which is about THIS account. Both can refuse
+    /// a purchase and they refuse it for unrelated reasons, so neither may be
+    /// rendered with the other's words.
+    public var purchases: AppleCatalogPurchases? = nil
 
-    public init(bundleId: String, products: [AppleCatalogProduct], purchase: AppleCatalogPurchase) {
+    /// Whether the server has closed the global gate.
+    ///
+    /// An absent field is NOT paused (an older server), and an unrecognised
+    /// `reason` beside `enabled: false` is still paused — the flag is the
+    /// decision and the reason is only how it is worded.
+    public var purchasesArePaused: Bool { purchases?.enabled == false }
+
+    public init(bundleId: String, products: [AppleCatalogProduct],
+                purchase: AppleCatalogPurchase,
+                purchases: AppleCatalogPurchases? = nil) {
         self.bundleId = bundleId
         self.products = products
         self.purchase = purchase
+        self.purchases = purchases
+    }
+}
+
+/// Whether this deployment is selling at all, and why not when it is not.
+public struct AppleCatalogPurchases: Codable, Equatable, Sendable {
+    public var enabled: Bool
+    /// `"paused"` when an operator closed the gate, `""` when enabled. A closed
+    /// vocabulary rather than a sentence: the words belong to the surface that
+    /// renders them, in the reader's own language.
+    public var reason: String
+
+    public init(enabled: Bool, reason: String) {
+        self.enabled = enabled
+        self.reason = reason
     }
 }
 
@@ -71,16 +109,35 @@ public struct AppleCatalogProduct: Codable, Equatable, Sendable, Identifiable {
     /// deployment orders them, and tell an upgrade from a downgrade, without a
     /// second table of its own.
     public var sortOrder: Int64
+    /// What the tier GRANTS, from the deployment's own `plans` row: the storage
+    /// ceiling and the monthly relayed-traffic allowance, in bytes. `0` means
+    /// unlimited, the same convention `/api/me/usage` publishes.
+    ///
+    /// **Optional for the same reason ``AppleProductCatalog/purchases`` is**: a
+    /// server that predates these fields sends neither, and a client that
+    /// refused those payloads could not sell against it at all. `nil` therefore
+    /// means "this deployment did not say", which the purchase surface renders
+    /// by saying nothing rather than by guessing a figure.
+    ///
+    /// They are the server's answer and never a compiled-in table. A tier's
+    /// quota is editable in the admin console, so a binary carrying its own copy
+    /// would eventually print a quantity the deployment does not grant, beside
+    /// Apple's real price.
+    public var storageBytes: Int64? = nil
+    public var trafficBytes: Int64? = nil
 
     public var id: String { productId }
 
     public init(productId: String, planId: String, planName: String,
-                cycle: String, sortOrder: Int64) {
+                cycle: String, sortOrder: Int64,
+                storageBytes: Int64? = nil, trafficBytes: Int64? = nil) {
         self.productId = productId
         self.planId = planId
         self.planName = planName
         self.cycle = cycle
         self.sortOrder = sortOrder
+        self.storageBytes = storageBytes
+        self.trafficBytes = trafficBytes
     }
 }
 

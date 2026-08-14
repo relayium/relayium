@@ -40,6 +40,10 @@ struct AppleSubscriptionCard: View {
     @ObservedObject var model: AppleSubscriptionModel
     let accountID: String
     let currentPlanID: String
+    /// The billing period the server says this account is on. The badge needs it
+    /// as well as the plan id — the other cycle of the same tier is a different
+    /// product and a real purchase.
+    let currentCycle: String
     let entitlementProvider: String
 
     @Environment(\.openURL) private var openURL
@@ -112,27 +116,48 @@ struct AppleSubscriptionCard: View {
     }
 
     private var rows: [AppleSubscriptionOfferRow] {
-        AppleSubscriptionPresentation.offerRows(model.offers, currentPlanID: currentPlanID)
+        AppleSubscriptionPresentation.offerRows(model.offers, currentPlanID: currentPlanID,
+                                                currentCycle: currentCycle)
     }
 
+    @ViewBuilder
     private func offerRow(_ row: AppleSubscriptionOfferRow) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Text(row.title).font(.subheadline.weight(.semibold))
+                if !row.cycleLabel.isEmpty {
+                    Text(row.cycleLabel)
+                        .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(.quaternary, in: Capsule())
+                        .accessibilityIdentifier("subscription-cycle-\(row.productID)")
+                }
                 if row.isCurrentPlan {
                     Text(L10n.t(.subscriptionCurrent))
                         .font(.caption2).padding(.horizontal, 5).padding(.vertical, 1)
                         .background(.quaternary, in: Capsule())
+                        .accessibilityIdentifier("subscription-current-\(row.productID)")
                 }
             }
             Text(row.price).font(.caption).foregroundStyle(.secondary)
-            Button(L10n.t(.subscriptionSubscribe)) {
-                Task { await model.purchase(productID: row.productID) }
+            // What the tier grants, from the server's own plan row — never a
+            // figure this build carries.
+            if let entitlements = row.entitlements {
+                Text(entitlements).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("subscription-entitlements-\(row.productID)")
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(isBusy || model.eligibility?.allowed != true)
-            .accessibilityLabel("\(L10n.t(.subscriptionSubscribe)) \(row.title), \(row.price)")
-            .accessibilityIdentifier("subscription-buy-\(row.productID)")
+            // No button on the product the account already holds: buying it
+            // again is a second charge for what it is already paying for.
+            if row.offersSubscribe {
+                Button(L10n.t(.subscriptionSubscribe)) {
+                    Task { await model.purchase(productID: row.productID) }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isBusy || model.eligibility?.allowed != true)
+                .accessibilityLabel(
+                    "\(L10n.t(.subscriptionSubscribe)) \(row.title) \(row.cycleLabel), \(row.price)")
+                .accessibilityIdentifier("subscription-buy-\(row.productID)")
+            }
         }
         .padding(.vertical, 4)
     }
@@ -145,7 +170,11 @@ struct AppleSubscriptionCard: View {
     private var isBusy: Bool {
         switch model.state {
         case .loadingOffers, .purchasing, .submitting, .restoring: return true
-        case .unavailable, .idle, .deferred, .nothingToRestore, .completed, .failed: return false
+        // Not busy while paused: restore has to stay pressable for somebody who
+        // has already paid.
+        case .unavailable, .purchasesPaused, .idle, .deferred, .nothingToRestore,
+             .completed, .failed:
+            return false
         }
     }
 }

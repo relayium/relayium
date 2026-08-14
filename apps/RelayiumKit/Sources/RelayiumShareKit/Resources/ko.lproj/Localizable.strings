@@ -737,7 +737,11 @@
 "subscription.body" = "이 앱에서는 Relayium 요금제가 App Store를 통해 청구됩니다. 결제는 Apple이 처리하며, Relayium은 어떤 요금제를 사용 중인지만 기록합니다.";
 "subscription.loading" = "요금제를 불러오는 중…";
 "subscription.none" = "지금은 이 앱에서 구독할 수 있는 요금제가 없습니다.";
+"subscription.paused" = "현재 신규 구독을 일시 중단했습니다. 일시적인 조치이며, 이미 이용 중인 구독에는 영향이 없습니다.";
 "subscription.subscribe" = "구독하기";
+"subscription.cycleMonthly" = "월간";
+"subscription.cycleYearly" = "연간";
+"subscription.entitlements" = "저장 공간 %1$@ · 월 트래픽 %2$@";
 "subscription.current" = "현재 요금제";
 "subscription.priceMonthly" = "월 %@";
 "subscription.priceYearly" = "연 %@";

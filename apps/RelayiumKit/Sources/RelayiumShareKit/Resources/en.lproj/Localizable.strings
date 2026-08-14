@@ -751,7 +751,11 @@
 "subscription.body" = "Your Relayium plan in this app is billed through the App Store. Apple takes the payment; Relayium only records which plan you hold.";
 "subscription.loading" = "Loading plans…";
 "subscription.none" = "There is nothing to subscribe to from this app right now.";
+"subscription.paused" = "New subscriptions are paused right now. This is temporary, and any subscription you already have is unaffected.";
 "subscription.subscribe" = "Subscribe";
+"subscription.cycleMonthly" = "Monthly";
+"subscription.cycleYearly" = "Yearly";
+"subscription.entitlements" = "%1$@ storage · %2$@/mo traffic";
 "subscription.current" = "Current plan";
 "subscription.priceMonthly" = "%@ per month";
 "subscription.priceYearly" = "%@ per year";
