@@ -263,13 +263,20 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(nearby.waitForExistence(timeout: 10))
         nearby.click()
 
-        XCTAssertTrue(window.buttons["Look again"].waitForExistence(timeout: 10))
+        // The action is named for what it does. It calls
+        // `LanDiscoveryModel.start()`, which opens the room socket and makes
+        // this Mac reachable — so beside a status line reading "off", "Look
+        // again" described a search that was not happening and hid the one
+        // thing the user actually had to do.
+        XCTAssertTrue(window.buttons["Start receiving"].waitForExistence(timeout: 10))
+        XCTAssertFalse(window.buttons["Look again"].exists,
+                       "the off state still names its recovery after a search")
         XCTAssertEqual(window.progressIndicators.count, 0,
                        "an off listener must not show a spinner beside the manual retry")
         XCTAssertFalse(window.buttons["Pause receiving"].exists,
                        "an off listener offers the contradictory action to pause")
         XCTAssertFalse(window.buttons["Resume receiving"].exists,
-                       "Look again is the one recovery for a listener that never started")
+                       "Start receiving is the one recovery for a listener that never started")
         XCTAssertTrue(window.staticTexts[
             "This device is not listening for nearby devices. It can still send, and pairing codes still work."
         ].exists, "the off state claims this Mac is still listening")
@@ -604,7 +611,7 @@ final class AppShellUITests: XCTestCase {
         lan.click()
 
         // Same-network discovery, and no page heading repeating the row.
-        XCTAssertTrue(window.buttons["Look again"].waitForExistence(timeout: 10),
+        XCTAssertTrue(window.buttons["Start receiving"].waitForExistence(timeout: 10),
                       "LAN Transfer lost same-network discovery")
         XCTAssertEqual(window.title, "LAN Transfer",
                        "the window no longer names the destination it is on")
@@ -653,7 +660,7 @@ final class AppShellUITests: XCTestCase {
                       "the pairing screen does not say a shared network is unnecessary")
 
         // No same-network discovery here at all.
-        XCTAssertFalse(window.buttons["Look again"].exists,
+        XCTAssertFalse(window.buttons["Start receiving"].exists,
                        "Cross-network Transfer still offers same-network discovery")
         XCTAssertFalse(window.buttons["Pause receiving"].exists,
                        "Cross-network Transfer still carries the residency control")
@@ -674,7 +681,8 @@ final class AppShellUITests: XCTestCase {
                        "a file code can be created with nothing to send")
     }
 
-    /// **Same-network residency is a LAN Transfer fact, and it appears there.**
+    /// **Same-network residency is stated once, on the pane that can change
+    /// it.**
     ///
     /// `testCrossNetworkTransferOffersOnlyPairingCodeConnecting…` above already
     /// forbids the residency *control* on the pairing screen. It passed while
@@ -683,21 +691,30 @@ final class AppShellUITests: XCTestCase {
     /// that the two devices share no network — because that footer is one
     /// column to the left of everything that test looks at.
     ///
-    /// The absence is asserted per destination, and each check first waits for
-    /// the window to actually be on that destination: an absence observed on a
-    /// window that had not navigated yet would be about nothing. The final
-    /// return to LAN Transfer is what makes it a routing rule rather than a
-    /// footer that disappeared and stayed gone.
-    func testLanResidencyAppearsOnLanTransferAndOnNoOtherDestination() {
+    /// Scoping the footer to LAN Transfer answered that and left the smaller
+    /// defect behind: on the one screen it could still appear on, the LAN pane
+    /// states the same sentence with Pause and Resume beside it. So the footer
+    /// is gone, and this asserts both halves — the sidebar reports nothing on
+    /// any destination, and the LAN pane still says whether this Mac can be
+    /// reached. Each absence waits for the window to actually be on the
+    /// destination it is claimed about; an absence observed before navigating
+    /// would be about nothing.
+    func testResidencyIsStatedOnTheLanPaneAndNotInTheSidebar() {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let residency = window.descendants(matching: .any)["sidebar-lan-residency"].firstMatch
+        let footer = window.descendants(matching: .any)["sidebar-lan-residency"].firstMatch
 
         let lan = sidebarDestination("LAN Transfer", in: window)
         XCTAssertTrue(lan.waitForExistence(timeout: 10))
         lan.click()
-        XCTAssertTrue(residency.waitForExistence(timeout: 10),
-                      "LAN Transfer lost the residency footer this test is about")
+        expectation(for: NSPredicate(format: "title == %@", "LAN Transfer"),
+                    evaluatedWith: window)
+        waitForExpectations(timeout: 10)
+        // The fact, on the surface that owns it and offers the controls.
+        XCTAssertTrue(window.staticTexts["Nearby receiving: off"].waitForExistence(timeout: 10),
+                      "the LAN pane no longer says whether this Mac can be reached")
+        XCTAssertFalse(footer.exists,
+                       "the sidebar repeats the LAN pane's own residency line")
 
         for destination in ["Cross-network Transfer", "Send a link",
                             "Device Inbox", "Account"] {
@@ -708,13 +725,9 @@ final class AppShellUITests: XCTestCase {
             expectation(for: NSPredicate(format: "title == %@", destination),
                         evaluatedWith: window)
             waitForExpectations(timeout: 10)
-            XCTAssertFalse(residency.exists,
+            XCTAssertFalse(footer.exists,
                            "\(destination) still reports same-network residency")
         }
-
-        lan.click()
-        XCTAssertTrue(residency.waitForExistence(timeout: 10),
-                      "returning to LAN Transfer no longer restores its residency")
     }
 
     /// A live session is on the destination that owns it, and on no other.
@@ -741,12 +754,12 @@ final class AppShellUITests: XCTestCase {
         let lan = sidebarDestination("LAN Transfer", in: window)
         XCTAssertTrue(lan.waitForExistence(timeout: 10))
         lan.click()
-        XCTAssertTrue(window.buttons["Look again"].waitForExistence(timeout: 10),
+        XCTAssertTrue(window.buttons["Start receiving"].waitForExistence(timeout: 10),
                       "the other destination did not return to its own connect phase")
         XCTAssertFalse(window.descendants(matching: .any)["pairing-code-value"]
             .firstMatch.exists,
                        "one session is rendered on both transfer destinations")
-        XCTAssertFalse(window.buttons["Look again"].isEnabled,
+        XCTAssertFalse(window.buttons["Start receiving"].isEnabled,
                        "the other destination can start a session over a live one")
         let transferChooser = window.descendants(matching: .any)["transfer-choose-files"].firstMatch
         XCTAssertTrue(transferChooser.exists,
@@ -791,7 +804,7 @@ final class AppShellUITests: XCTestCase {
                        "a new create path replaced a terminal session before the exit")
         XCTAssertFalse(window.buttons["Join messages"].exists,
                        "a new join path replaced a terminal session before the exit")
-        XCTAssertFalse(window.buttons["Look again"].exists,
+        XCTAssertFalse(window.buttons["Start receiving"].exists,
                        "the roster replaced a terminal session before the exit")
 
         leave.click()
@@ -825,7 +838,7 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(back.waitForExistence(timeout: 10),
                       "the retained session owner made its own exit unreachable")
         back.click()
-        XCTAssertTrue(window.buttons["Look again"].waitForExistence(timeout: 10),
+        XCTAssertTrue(window.buttons["Start receiving"].waitForExistence(timeout: 10),
                       "leaving did not release the terminal task")
         XCTAssertFalse(window.staticTexts["Session with Studio Mac · 19af02"].exists,
                        "the released task kept stale peer context on screen")

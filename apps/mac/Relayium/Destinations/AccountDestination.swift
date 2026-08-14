@@ -17,7 +17,7 @@ struct AccountDestination: View {
 
     var body: some View {
         DestinationScaffold(title: L10n.t(.navAccount),
-                            symbol: MacSurface.account.symbol,
+                            surface: .account,
                             purpose: L10n.t(.navAccountSubtitle),
                             contentMaxWidth: nil) {
             switch session.state {

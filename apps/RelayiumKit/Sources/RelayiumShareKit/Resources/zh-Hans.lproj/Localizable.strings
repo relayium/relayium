@@ -104,7 +104,7 @@
 "nav.nearby" = "附近设备";
 "nav.pairingCodeSubtitle" = "跨网络发送文本和小文件——双方须同时在线";
 "nav.lanTransfer" = "局域网传输";
-"nav.lanTransferSubtitle" = "与同一网络内的设备互传消息和文件——直连，无需账户；双方须同时在线";
+"nav.lanTransferSubtitle" = "与同一网络内的设备互传消息和文件——无需账户；双方须同时在线";
 "nav.crossNetwork" = "跨网络传输";
 "nav.crossNetworkSubtitle" = "用六位配对码与任意位置的设备互传消息和文件——不要求同一网络；双方须同时在线";
 "nav.storedSend" = "发送链接";
@@ -115,7 +115,6 @@
 "nav.accountSubtitle" = "套餐、设备与已存文件";
 "nav.a11ySections" = "Relayium 功能页";
 "nav.a11yLiveSession" = "此处有正在进行的传输";
-"nav.residency" = "接收";
 
 /* MARK: 能力门槛 */
 "gate.sendLinkTitle" = "发送链接需要账户";
@@ -201,6 +200,7 @@
 "upload.expiresAfter" = "有效期";
 "upload.burnAfterRead" = "首次下载后即删除";
 "upload.keepOpen" = "请保持 Relayium 打开，直到这次传输完成。离开或关闭应用会暂停上传——它不会在后台继续——但文件已保存在本机，重新打开 Relayium 后可以继续上传。";
+"upload.macKeepOpen" = "请保持 Relayium 打开，直到这次上传完成。关闭应用会终止上传；重新打开 Relayium 后需要再次开始上传。";
 "upload.preparing" = "正在准备你的文件……";
 "upload.checkingRecovery" = "正在检查是否有暂停的上传……";
 "upload.interruptedTitle" = "上传已暂停";
@@ -309,6 +309,7 @@
 "nearby.safetySummary" = "与这台设备处于同一公网地址、并且正在运行 Relayium 的设备。在运营商、VPN 或共用网关下，这个地址里也可能有陌生人，所以请自己决定发给谁。";
 "nearby.howItWorks" = "这个列表是怎么来的";
 "nearby.lookAgain" = "重新查找";
+"nearby.startReceiving" = "开始接收";
 "nearby.resumeReceiving" = "恢复接收";
 "nearby.pauseReceiving" = "暂停接收";
 "nearby.pausedBody" = "这台设备当前不监听附近设备。它仍然可以发送，配对码也照常可用。";
@@ -323,8 +324,8 @@
 "nearby.sendTo" = "发送给 %@";
 "nearby.sessionWith" = "与 %@ 的会话";
 "nearby.sessionPeerDisclaimer" = "此名称由对方设备提供，并非经过验证的身份。";
-"nearby.selectionSendHint" = "%@。可直接发送到那台设备。";
-"nearby.addFilesHint" = "先在上方添加文件或文件夹，然后直接发送到那台设备。";
+"nearby.selectionSendHint" = "%@。可发送到那台设备。";
+"nearby.addFilesHint" = "先在上方添加文件或文件夹，然后发送到那台设备。";
 "nearby.textIntent" = "将打开一个端到端加密的消息会话。Relayium 不存储任何内容。";
 "nearby.startMessageSession" = "发起消息会话";
 "nearby.acceptanceNote" = "在 relayium.com 上，对方仍需自行选择传入文件的保存位置；除非任一设备开启了高级验证（见下方），消息会话会在对方那里直接打开而不弹出提示。只要接收处于开启状态，这台设备也以同样的方式接受附近设备的传入传输。";
@@ -538,6 +539,7 @@
 "inbox.explain" = "在这台 Mac 上选择一个文件夹，再决定来自你自己账户的文件是自动保存，还是经你同意后才保存。Relayium 永远看不到其中的内容。";
 "inbox.signedOut" = "登录后即可使用设备收件箱";
 "inbox.signedOutBody" = "设备收件箱投递的是来自你自己账户的文件，因此需要你在这台 Mac 上登录。";
+"inbox.statusHeading" = "状态";
 "inbox.folderHeading" = "接收文件夹";
 "inbox.folderExplain" = "发送到这台 Mac 的文件会保存在这里。已有文件永远不会被覆盖。选择文件夹并不会开启接收。";
 "inbox.folderNone" = "尚未选择文件夹";
@@ -622,7 +624,7 @@
 "workspace.stagingOptional" = "可选。你可以先连接、之后再选文件；发消息则什么都不用选。";
 "workspace.dropHint" = "把文件或文件夹拖到这里，或点击选择。";
 "workspace.sendMessage" = "发送消息";
-"workspace.addFilesHint" = "在下方选择文件或文件夹，然后直接发送到该设备。";
+"workspace.addFilesHint" = "在下方选择文件或文件夹，然后发送到该设备。";
 "workspace.sendMessageHint" = "与这台设备开启消息会话，无需先选择任何内容。";
 "workspace.sendFiles" = "发送文件";
 "workspace.createMessageCode" = "创建消息配对码";
@@ -712,7 +714,7 @@
 "help.lan.step2" = "从列表中选择另一台设备，然后发送消息，或发送你已添加的文件。";
 "help.lan.step3" = "若已开启验证，请先确认两边屏幕显示相同的代码，再点击接受。";
 "help.lan.question" = "文件会经过 Relayium 的服务器吗？";
-"help.lan.answer" = "不会。Relayium 的服务只负责让两台设备互相发现；连接建立后，文件直接在两者之间传输。";
+"help.lan.answer" = "有时会，但这不影响 Relayium 能读到什么。该服务只负责让两台设备互相发现；根据网络条件，连接可能在两台设备之间建立，也可能由 Relayium 中继承载，本设备无法分辨实际使用了哪条路径。无论哪种方式，文件都经过端到端加密，Relayium 永远拿不到密钥。";
 
 "help.cross.step1" = "在这台设备上，为消息或文件创建一个代码。";
 "help.cross.step2" = "在另一台设备的 Relayium 中输入该代码并加入。";

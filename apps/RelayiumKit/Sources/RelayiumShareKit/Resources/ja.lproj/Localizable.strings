@@ -104,7 +104,7 @@
 "nav.nearby" = "近くのデバイス";
 "nav.pairingCodeSubtitle" = "ネットワークを越えてテキストと小さめのファイル。双方がオンラインで";
 "nav.lanTransfer" = "LAN 転送";
-"nav.lanTransferSubtitle" = "同じネットワークにあるデバイスとメッセージやファイルを — 直接、アカウント不要。双方がオンラインで";
+"nav.lanTransferSubtitle" = "同じネットワークにあるデバイスとメッセージやファイルを — アカウント不要。双方がオンラインで";
 "nav.crossNetwork" = "ネットワーク越しの転送";
 "nav.crossNetworkSubtitle" = "6桁のコードで、どこにあるデバイスとでもメッセージやファイルを — 同じネットワークでなくても利用可能。双方がオンラインで";
 "nav.storedSend" = "リンクを送る";
@@ -115,7 +115,6 @@
 "nav.accountSubtitle" = "プラン、デバイス、保存済みファイル";
 "nav.a11ySections" = "Relayium の画面一覧";
 "nav.a11yLiveSession" = "ここで転送が進行中です";
-"nav.residency" = "受信";
 
 /* MARK: 機能の利用条件 */
 "gate.sendLinkTitle" = "リンクの送信にはアカウントが必要です";
@@ -201,6 +200,7 @@
 "upload.expiresAfter" = "有効期間";
 "upload.burnAfterRead" = "最初のダウンロード後に削除";
 "upload.keepOpen" = "完了するまで Relayium を開いたままにしてください。アプリを離れたり終了したりするとアップロードは一時停止します（バックグラウンドでは続きません）。ただしファイルはこの端末に保存されるので、Relayium を開き直せばアップロードを続けられます。";
+"upload.macKeepOpen" = "このアップロードが完了するまで Relayium を開いたままにしてください。アプリを終了するとアップロードは停止します。Relayium を開き直して、もう一度アップロードを開始してください。";
 "upload.preparing" = "ファイルを準備しています…";
 "upload.checkingRecovery" = "一時停止したアップロードを確認しています…";
 "upload.interruptedTitle" = "アップロードを一時停止しました";
@@ -309,6 +309,7 @@
 "nearby.safetySummary" = "このデバイスと同じグローバルアドレスで Relayium を実行しているデバイスです。通信事業者・VPN・共有ゲートウェイでは、そのアドレスに見知らぬ人が含まれることがあるため、送る相手は自分で選んでください。";
 "nearby.howItWorks" = "この一覧のしくみ";
 "nearby.lookAgain" = "もう一度探す";
+"nearby.startReceiving" = "受信を開始";
 "nearby.resumeReceiving" = "受信を再開";
 "nearby.pauseReceiving" = "受信を一時停止";
 "nearby.pausedBody" = "このデバイスは近くのデバイスを待ち受けていません。送信はできますし、ペアリングコードもこれまでどおり使えます。";
@@ -323,8 +324,8 @@
 "nearby.sendTo" = "%@ に送信";
 "nearby.sessionWith" = "%@ とのセッション";
 "nearby.sessionPeerDisclaimer" = "この名前は相手のデバイスが提示したもので、確認済みの身元ではありません。";
-"nearby.selectionSendHint" = "%@。そのデバイスへ直接送れます。";
-"nearby.addFilesHint" = "上でファイルやフォルダを追加してから、そのデバイスへ直接送ってください。";
+"nearby.selectionSendHint" = "%@。そのデバイスへ送れます。";
+"nearby.addFilesHint" = "上でファイルやフォルダを追加してから、そのデバイスへ送ってください。";
 "nearby.textIntent" = "エンドツーエンドで暗号化されたメッセージセッションを開きます。Relayium には何も保存されません。";
 "nearby.startMessageSession" = "メッセージセッションを開始";
 "nearby.acceptanceNote" = "relayium.com では、受信側の人が受け取るファイルの保存先を自分で選びます。メッセージセッションは、どちらかのデバイスで高度な検証（下記）がオンでない限り、相手側では確認なしに開きます。このデバイスも、受信がオンの間は同じように近くからの転送を受け入れます。";
@@ -538,6 +539,7 @@
 "inbox.explain" = "この Mac 上のフォルダを選び、自分のアカウントから送られたファイルを自動で保存するか、承認してから保存するかを決めます。Relayium が中身を見ることはありません。";
 "inbox.signedOut" = "デバイス受信ボックスを使うにはサインインしてください";
 "inbox.signedOutBody" = "デバイス受信ボックスは自分のアカウントから送られたファイルを届けるため、この Mac でのサインインが必要です。";
+"inbox.statusHeading" = "状況";
 "inbox.folderHeading" = "受信フォルダ";
 "inbox.folderExplain" = "この Mac に送られたファイルはここに保存されます。既存のファイルが置き換えられることはありません。フォルダを選んでも受信は有効になりません。";
 "inbox.folderNone" = "フォルダが未選択です";
@@ -622,7 +624,7 @@
 "workspace.stagingOptional" = "任意です。先に接続してから選んでもかまいません。メッセージなら何も選ぶ必要はありません。";
 "workspace.dropHint" = "ファイルやフォルダをここにドロップするか、クリックして選択します。";
 "workspace.sendMessage" = "メッセージを送る";
-"workspace.addFilesHint" = "下でファイルやフォルダを選び、そのデバイスへ直接送信します。";
+"workspace.addFilesHint" = "下でファイルやフォルダを選び、そのデバイスへ送信します。";
 "workspace.sendMessageHint" = "このデバイスとのメッセージセッションを開きます。何も選択する必要はありません。";
 "workspace.sendFiles" = "ファイルを送る";
 "workspace.createMessageCode" = "メッセージ用のコードを作成";
@@ -712,7 +714,7 @@
 "help.lan.step2" = "一覧から相手のデバイスを選び、メッセージを送るか、追加したファイルを送ります。";
 "help.lan.step3" = "確認が有効な場合は、両方の画面に同じコードが表示されていることを確かめてから承認します。";
 "help.lan.question" = "ファイルは Relayium のサーバーを経由しますか？";
-"help.lan.answer" = "いいえ。Relayium のサービスは 2 台を引き合わせるだけで、接続が確立した後は、ファイルは 2 台の間を直接やり取りされます。";
+"help.lan.answer" = "場合によります。ただし Relayium が読めるものは変わりません。サービスは 2 台を引き合わせるだけで、ネットワークの状態に応じて接続は 2 台の間で行われるか、Relayium のリレーを経由します。このデバイスにはどちらの経路か分かりません。いずれの場合もファイルはエンドツーエンドで暗号化され、Relayium が鍵を持つことはありません。";
 
 "help.cross.step1" = "このデバイスで、メッセージ用またはファイル用のコードを作成します。";
 "help.cross.step2" = "もう一方のデバイスの Relayium にそのコードを入力して参加します。";

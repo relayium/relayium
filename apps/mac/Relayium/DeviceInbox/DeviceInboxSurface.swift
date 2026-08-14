@@ -128,16 +128,25 @@ struct DeviceInboxSurface: View {
     /// merely unverified was told to sign in, which they had already done.
     private func accountSection(_ gate: AccountGate) -> some View {
         Section {
+            // Signed out, this gate is the entire surface — the status, folder,
+            // policy and results sections are not rendered at all — so Sign in
+            // is the page's primary exit and is drawn as one.
             CapabilityGateView(gate: gate,
                                title: L10n.t(.inboxSignedOut),
                                body: L10n.t(.inboxSignedOutBody),
+                               isWholeSurface: true,
                                onAccount: onAccount)
         } header: {
+            // **Account, not Device Inbox.** The window title and the sidebar row
+            // both already say Device Inbox, and this section is not the feature
+            // — it is the one thing standing between the reader and it. Naming
+            // the requirement is what a section header is for.
+            //
             // The identifier is on the header LEAF, never on the `Section`. This
-            // branch now contains two buttons, and a container identifier renames
+            // branch contains two buttons, and a container identifier renames
             // every control inside it — the propagation defect this pane has
             // already lost a control to twice.
-            Text(L10n.t(.inboxTitle))
+            Text(L10n.t(.navAccount))
                 .accessibilityIdentifier("inbox-signed-out")
         } footer: {
             // What the feature actually does, said to somebody who has not
@@ -167,9 +176,14 @@ struct DeviceInboxSurface: View {
             // per-delivery position to be part-way through, and the live state —
             // ready, working, paused, offline — is the badge directly above, in
             // words. What the rail adds is the shape of the path those words
-            // describe, and the one fact the route is useless without: which
-            // folder on this Mac, or that none is chosen yet.
-            PathRail(stops: PathRailPresentation.deviceInbox(folder: inbox.folder))
+            // describe, and it stops there.
+            //
+            // It used to hang the receive folder off its last stop, which put
+            // "No folder chosen" — or the whole path — on screen twice, a short
+            // scroll above the folder section that owns the fact and carries the
+            // buttons that change it. One authoritative place per fact, and for
+            // the folder that place is `folderSection`, not this.
+            PathRail(stops: PathRailPresentation.deviceInbox())
             // `.answer` is deliberately absent: its controls are the Receive and
             // Decline buttons in the section below, and a button here would carry
             // the recovery's name while doing nothing when pressed.
@@ -207,7 +221,12 @@ struct DeviceInboxSurface: View {
                     .accessibilityIdentifier("inbox-open-account")
             }
         } header: {
-            Text(L10n.t(.inboxTitle))
+            // The section, not the surface. `inboxTitle` here printed *Device
+            // Inbox* directly under a window title and a highlighted sidebar row
+            // that had both just said it, and named the whole feature rather than
+            // the part of it this section is — the answer to "can this Mac take a
+            // delivery right now".
+            Text(L10n.t(.inboxStatusHeading))
         } footer: {
             caption(L10n.t(.inboxExplain))
         }
@@ -461,6 +480,13 @@ struct DeviceInboxSurface: View {
                 }
             }
             .pickerStyle(.inline)
+            // The label is kept and hidden, not removed. The enclosing section
+            // header says *Receiving* two lines above, so an inline picker
+            // repeating its own title printed the same word twice with nothing
+            // between them; a picker built with no label at all would read as
+            // "radio group" and nothing else to VoiceOver, which is the opposite
+            // mistake. `labelsHidden()` drops the glyphs and keeps the name.
+            .labelsHidden()
         } header: {
             // The section's own marker moved here when it came off the picker
             // above, matching the Ask section: a header `Text` is a leaf, so it

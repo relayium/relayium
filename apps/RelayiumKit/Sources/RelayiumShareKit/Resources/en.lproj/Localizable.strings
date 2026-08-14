@@ -105,7 +105,7 @@
 "nav.nearby" = "Nearby";
 "nav.pairingCodeSubtitle" = "Text and small files across networks — both sides online";
 "nav.lanTransfer" = "LAN Transfer";
-"nav.lanTransferSubtitle" = "Messages and files with a device on this network — direct, no account; both sides online";
+"nav.lanTransferSubtitle" = "Messages and files with a device on this network — no account; both sides online";
 "nav.crossNetwork" = "Cross-network Transfer";
 "nav.crossNetworkSubtitle" = "Messages and files with a device anywhere, using a six-digit code — same network not required; both sides online";
 "nav.storedSend" = "Send a link";
@@ -116,7 +116,6 @@
 "nav.accountSubtitle" = "Plan, devices and stored files";
 "nav.a11ySections" = "Relayium destinations";
 "nav.a11yLiveSession" = "A transfer is running here";
-"nav.residency" = "Receiving";
 
 /* MARK: capability gates */
 "gate.sendLinkTitle" = "Sending a link needs an account";
@@ -202,6 +201,7 @@
 "upload.expiresAfter" = "Expires after";
 "upload.burnAfterRead" = "Delete after first download";
 "upload.keepOpen" = "Keep Relayium open until this finishes. Leaving the app or closing it can pause the upload — it never continues in the background — but your files are saved on this device, so reopening Relayium lets you continue the upload.";
+"upload.macKeepOpen" = "Keep Relayium open until this upload finishes. Closing the app stops it; reopen Relayium and start the upload again.";
 "upload.preparing" = "Preparing your files…";
 "upload.checkingRecovery" = "Checking for a paused upload…";
 "upload.interruptedTitle" = "Upload paused";
@@ -313,6 +313,7 @@
 "nearby.safetySummary" = "Devices running Relayium at the same public address as this device. On a carrier, VPN or shared gateway that address can include strangers, so choose who you send to.";
 "nearby.howItWorks" = "How this list works";
 "nearby.lookAgain" = "Look again";
+"nearby.startReceiving" = "Start receiving";
 "nearby.resumeReceiving" = "Resume receiving";
 "nearby.pauseReceiving" = "Pause receiving";
 "nearby.pausedBody" = "This device is not listening for nearby devices. It can still send, and pairing codes still work.";
@@ -327,8 +328,8 @@
 "nearby.sendTo" = "Send to %@";
 "nearby.sessionWith" = "Session with %@";
 "nearby.sessionPeerDisclaimer" = "This name is provided by the other device and is not verified identity.";
-"nearby.selectionSendHint" = "%@. Send it straight to that device.";
-"nearby.addFilesHint" = "Add files or folders above, then send them straight to that device.";
+"nearby.selectionSendHint" = "%@. Send it to that device.";
+"nearby.addFilesHint" = "Add files or folders above, then send them to that device.";
 "nearby.textIntent" = "Opens an end-to-end encrypted message session. Nothing is stored on Relayium.";
 "nearby.startMessageSession" = "Start a message session";
 "nearby.acceptanceNote" = "On relayium.com the other person still chooses where to save incoming files; a message session opens on their side without a prompt unless advanced verification is on for either device (below). This device accepts incoming nearby transfers the same way while receiving is on.";
@@ -548,6 +549,7 @@
 "inbox.explain" = "Choose a folder on this Mac, then decide whether files sent from your own account are saved automatically or only after you say yes. Relayium never sees what is inside them.";
 "inbox.signedOut" = "Sign in to use Device Inbox";
 "inbox.signedOutBody" = "Device Inbox delivers files sent from your own account, so it needs you signed in on this Mac.";
+"inbox.statusHeading" = "Status";
 "inbox.folderHeading" = "Receive folder";
 "inbox.folderExplain" = "Files sent to this Mac are saved here. Existing files are never replaced. Choosing a folder does not switch receiving on.";
 "inbox.folderNone" = "No folder chosen";
@@ -634,7 +636,7 @@
 "workspace.stagingOptional" = "Optional. You can connect first and choose files afterwards — a message needs nothing at all.";
 "workspace.dropHint" = "Drop files or folders here, or click to choose.";
 "workspace.sendMessage" = "Send a message";
-"workspace.addFilesHint" = "Choose files or folders below, then send them straight to that device.";
+"workspace.addFilesHint" = "Choose files or folders below, then send them to that device.";
 "workspace.sendMessageHint" = "Opens a message session with this device. Nothing needs to be selected.";
 "workspace.sendFiles" = "Send files";
 "workspace.createMessageCode" = "Create a code for messages";
@@ -726,7 +728,7 @@
 "help.lan.step2" = "Choose the other device from the list, then send a message or send the files you have added.";
 "help.lan.step3" = "If verification is on, check that both screens show the same code before you accept.";
 "help.lan.question" = "Do the files pass through Relayium's servers?";
-"help.lan.answer" = "No. Relayium's service only introduces the two devices to each other; once they are connected the files travel straight between them.";
+"help.lan.answer" = "Sometimes, and it makes no difference to what Relayium can read. The service introduces the two devices to each other; depending on network conditions, the connection may run between them or a Relayium relay may carry it, and this device cannot tell which. Either way the files are encrypted end to end and Relayium never has the key.";
 
 "help.cross.step1" = "On this device, create a code for a message or for files.";
 "help.cross.step2" = "Type that code into Relayium on the other device and join.";

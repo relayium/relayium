@@ -15,6 +15,17 @@ import SwiftUI
 /// already uses: VoiceOver announces the group's name once and then navigates
 /// into it, instead of reading every control as a peer of everything else on the
 /// screen.
+///
+/// ## A fill and a hairline, because the fill alone is not a boundary
+///
+/// The card was fill-only. In Dark appearance that works — `controlBackground`
+/// sits well clear of `windowBackground` there — and in Light the two are close
+/// enough that a screen of stacked cards read as one column with headings in it,
+/// which is the audit's Light-appearance finding. The repair is the smallest one
+/// that answers both appearances at once: keep the adaptive system fill and draw
+/// the system separator around it. `strokeBorder` insets by half the line width,
+/// so the rule sits inside the clipped shape instead of straddling it and
+/// half-disappearing into whatever is behind.
 struct SectionCard<Content: View>: View {
     let title: String
     @ViewBuilder let content: () -> Content
@@ -31,6 +42,10 @@ struct SectionCard<Content: View>: View {
         .padding(Metrics.section)
         .background(Palette.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: Metrics.corner))
+        .overlay(
+            RoundedRectangle(cornerRadius: Metrics.corner)
+                .strokeBorder(Palette.cardBorder, lineWidth: 1)
+        )
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
     }

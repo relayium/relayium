@@ -125,9 +125,13 @@ struct UploadPane: View {
 
     private var gateCard: some View {
         SectionCard(title: L10n.t(.uploadHeading)) {
+            // The whole destination is behind this gate — there is no ungated
+            // half of sending a link — so Sign in is the one thing to press on
+            // the screen and is drawn as the primary exit.
             CapabilityGateView(gate: gate,
                                title: L10n.t(.gateSendLinkTitle),
                                body: L10n.t(.gateSendLinkBody),
+                               isWholeSurface: true,
                                onAccount: { navigation.selectAccount(intent: $0) })
         }
     }
@@ -233,6 +237,10 @@ struct UploadPane: View {
                     L10n.percent(done: sent, total: total) ?? L10n.t(.commonStarting))
             Text(L10n.percent(done: sent, total: total) ?? L10n.t(.commonStarting))
                 .font(.caption).foregroundStyle(.secondary)
+            Text(L10n.t(.uploadMacKeepOpen))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             PendingFileList(sessionFiles: model.sessionFiles)
             Button(L10n.t(.commonCancel)) { model.cancel() }
         }

@@ -165,7 +165,17 @@ struct LanConnectPane: View {
                     roster
                 } else if !discovery.isPaused {
                     HStack {
-                        Button(L10n.t(.nearbyLookAgain)) { discovery.start() }
+                        // **Start receiving, because that is what it does.** It
+                        // was `nearby.lookAgain` — "Look again" — which names a
+                        // rescan of a roster that is already being listened for.
+                        // `discovery.start()` is not a rescan: it opens the room
+                        // socket, so it is also what makes this Mac reachable,
+                        // and the status line directly above says *off* until it
+                        // is pressed. A user reading "Look again" beside "off"
+                        // is told the app is searching when nothing is
+                        // listening. iOS keeps `nearby.lookAgain` for its own
+                        // control, which really is a rescan.
+                        Button(L10n.t(.nearbyStartReceiving)) { discovery.start() }
                             .disabled(sessionLocked)
                         // `off` is waiting for the user and must not animate as
                         // if work were running. A dropped resident socket really
@@ -222,8 +232,10 @@ struct LanConnectPane: View {
                     Button(L10n.t(.nearbyPauseReceiving)) { discovery.pause() }
                         .disabled(sessionLocked)
                 case .off:
-                    // The matching recovery is Look again below. Offering Pause
-                    // while the status says off is a contradictory action.
+                    // The matching recovery is Start receiving below. Offering
+                    // Pause while the status says off is a contradictory action,
+                    // and a second copy of the start control here would be two
+                    // buttons for one decision.
                     EmptyView()
                 }
             }

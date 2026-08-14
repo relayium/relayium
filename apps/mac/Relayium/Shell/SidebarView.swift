@@ -16,7 +16,8 @@ import RelayiumAppKit
 /// wide and only one of them is on screen. **Nothing was lost to anyone**: every
 /// row still carries the complete sentence as its `accessibilityHint`, so
 /// VoiceOver reads exactly what it read before, and as its `help` tooltip, so a
-/// pointer user can still read it before choosing.
+/// pointer user can still read it before choosing. A keyboard user sees the
+/// complete purpose immediately after selecting a row in the detail column.
 ///
 /// **The selected state is the system's.** `List` selection already draws the
 /// row in the app's own `AccentColor` — the brand violet — with the correct
@@ -33,11 +34,16 @@ import RelayiumAppKit
 /// code without requiring a shared network — and that difference is the first thing a
 /// person choosing between them needs.
 ///
-/// **The residency footer belongs to LAN Transfer, not to the sidebar.** It
-/// answers "can this Mac be reached on this network right now", which is a fact
-/// about one of those two destinations and about none of the others. It sits in
-/// the sidebar's safe area because that is where it fits, not because it
-/// describes the sidebar — so it renders only while LAN Transfer is selected.
+/// **The residency footer is gone, and the fact it carried is not.** It reported
+/// `NearbyStatusPresentation.text(for: receive.state)` in the sidebar's safe
+/// area. Rendered under every row it was worse than useless — it put same-network
+/// reachability on Cross-network Transfer, whose whole premise is that no shared
+/// network exists — so it was scoped to LAN Transfer, and that scoping is what
+/// finished the argument: on the only screen it ever appeared on, the LAN pane's
+/// own receive section states the identical string, with the Pause and Resume
+/// controls beside it. Two renderings of one sentence, a column apart, and the
+/// sidebar's copy was the one nobody could act on. So the pane keeps it and the
+/// sidebar spends its bottom on nothing.
 ///
 /// **Open a link is deliberately not a row.** It is where a link the OS handed
 /// this app is opened, not somewhere to set out for; the destination is still
@@ -58,9 +64,6 @@ struct SidebarView: View {
     /// the sidebar marks the row the session is actually on rather than a row
     /// that merely might be.
     @EnvironmentObject private var presence: TransferPresence
-    /// Residency, and only residency: whether this Mac can be reached right now.
-    /// It has no opinion about which row owns a running session.
-    @EnvironmentObject private var receive: NearbyReceiveModel
     /// The two app-scoped session models, read for one fact each: whether a
     /// transfer is actually running. `TransferPresence` answers which row is
     /// drawing the session, and deliberately does not cache this — see
@@ -136,7 +139,6 @@ struct SidebarView: View {
                 subtitle: L10n.t(.navAccountSubtitle))
         }
         .accessibilityLabel(L10n.t(.navA11ySections))
-        .safeAreaInset(edge: .bottom) { residency }
     }
 
     /// A `Section` promotes its visual header to `AXHeading`, but on macOS it
@@ -211,65 +213,5 @@ struct SidebarView: View {
     private func hasLiveSession(_ surface: MacSurface) -> Bool {
         let busy = fileModel.isBusy || textModel.isBusy
         return presence.announcesRunningTransfer(surface.route, sessionIsBusy: busy)
-    }
-
-    /// Read-only on purpose: pause and resume live in Nearby and in the menu
-    /// bar, and a third control site for one toggle is worse than a slightly
-    /// longer path to it. What the footer owes the user is the answer to "can
-    /// this Mac be reached right now", which is exactly what it reports.
-    ///
-    /// **On LAN Transfer, and nowhere else.** `NearbyReceiveModel` is
-    /// same-network residency: whether this Mac is announcing itself on the
-    /// local network and can be reached by a device that shares it. Rendered
-    /// under every row, it put that answer on Cross-network Transfer — the one
-    /// destination whose entire premise is that no shared network exists — and
-    /// on Stored Send, Device Inbox and Account, none of which it describes
-    /// either. `testCrossNetworkTransferOffersOnlyPairingCodeConnecting…`
-    /// already forbade the residency *control* on the pairing screen; this
-    /// footer was the same claim, one column to the left, in a container the
-    /// destination does not own.
-    ///
-    /// This is presentation only. Residency itself is unchanged and app-scoped:
-    /// this Mac keeps receiving from anywhere in the app, and the LAN row's own
-    /// live-session marker still says when a transfer is running there.
-    @ViewBuilder private var residency: some View {
-        if navigation.selection.macSurface == .lanTransfer {
-            VStack(alignment: .leading, spacing: Metrics.hairline) {
-                Divider()
-                Text(L10n.t(.navResidency))
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                StatusBadge(symbol: residencySymbol,
-                            tint: residencyTint,
-                            label: NearbyStatusPresentation.text(for: receive.state))
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, Metrics.inner)
-            .padding(.bottom, Metrics.inner)
-            .accessibilityElement(children: .combine)
-            // The footer is an absence on four of five rows, and an absence
-            // needs a name a runtime check can ask for. The AX container for a
-            // safe-area inset is not stable across macOS versions, so the
-            // identity is on the content rather than on the inset.
-            .accessibilityIdentifier("sidebar-lan-residency")
-        }
-    }
-
-    private var residencySymbol: String {
-        switch receive.state {
-        case .ready:                     return "checkmark.circle.fill"
-        case .active:                    return "arrow.down.circle.fill"
-        case .connecting, .reconnecting: return "arrow.triangle.2.circlepath"
-        case .paused:                    return "pause.circle.fill"
-        case .off:                       return "circle.slash"
-        }
-    }
-
-    private var residencyTint: Color {
-        switch receive.state {
-        case .ready, .active:            return .green
-        case .connecting, .reconnecting: return .orange
-        case .paused, .off:              return .secondary
-        }
     }
 }

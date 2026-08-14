@@ -104,7 +104,7 @@
 "nav.nearby" = "Por perto";
 "nav.pairingCodeSubtitle" = "Texto e ficheiros pequenos entre redes — ambos online";
 "nav.lanTransfer" = "Transferência na rede local";
-"nav.lanTransferSubtitle" = "Mensagens e ficheiros com um dispositivo na mesma rede — direto, sem conta; ambos online";
+"nav.lanTransferSubtitle" = "Mensagens e ficheiros com um dispositivo na mesma rede — sem conta; ambos online";
 "nav.crossNetwork" = "Transferência entre redes";
 "nav.crossNetworkSubtitle" = "Mensagens e ficheiros com um dispositivo em qualquer lugar, com um código de seis dígitos — mesma rede não obrigatória; ambos online";
 "nav.storedSend" = "Enviar uma ligação";
@@ -115,7 +115,6 @@
 "nav.accountSubtitle" = "Plano, dispositivos e ficheiros guardados";
 "nav.a11ySections" = "Destinos do Relayium";
 "nav.a11yLiveSession" = "Está a decorrer uma transferência aqui";
-"nav.residency" = "Receção";
 
 /* MARK: condições de acesso */
 "gate.sendLinkTitle" = "Enviar uma ligação exige uma conta";
@@ -201,6 +200,7 @@
 "upload.expiresAfter" = "Expira após";
 "upload.burnAfterRead" = "Eliminar após a primeira transferência";
 "upload.keepOpen" = "Mantenha o Relayium aberto até isto terminar. Sair da app ou fechá-la pausa o envio — ele nunca continua em segundo plano —, mas os seus ficheiros ficam guardados neste dispositivo: ao reabrir o Relayium pode continuar o envio.";
+"upload.macKeepOpen" = "Mantenha o Relayium aberto até este envio terminar. Fechar a app interrompe-o; volte a abrir o Relayium e inicie o envio novamente.";
 "upload.preparing" = "A preparar os seus ficheiros…";
 "upload.checkingRecovery" = "A procurar um envio em pausa…";
 "upload.interruptedTitle" = "Envio em pausa";
@@ -312,6 +312,7 @@
 "nearby.safetySummary" = "Dispositivos com o Relayium no mesmo endereço público que este dispositivo. Atrás de um gateway de operadora, de VPN ou partilhado podem estar desconhecidos, por isso escolha a quem envia.";
 "nearby.howItWorks" = "Como funciona esta lista";
 "nearby.lookAgain" = "Procurar de novo";
+"nearby.startReceiving" = "Começar a receber";
 "nearby.resumeReceiving" = "Retomar a receção";
 "nearby.pauseReceiving" = "Pausar a receção";
 "nearby.pausedBody" = "Este dispositivo não está à escuta de dispositivos por perto. Continua a poder enviar, e os códigos de emparelhamento continuam a funcionar.";
@@ -326,8 +327,8 @@
 "nearby.sendTo" = "Enviar para %@";
 "nearby.sessionWith" = "Sessão com %@";
 "nearby.sessionPeerDisclaimer" = "Este nome é fornecido pelo outro dispositivo e não é uma identidade verificada.";
-"nearby.selectionSendHint" = "%@. Envie-os diretamente para esse dispositivo.";
-"nearby.addFilesHint" = "Adicione ficheiros ou pastas acima e envie-os diretamente para esse dispositivo.";
+"nearby.selectionSendHint" = "%@. Envie-os para esse dispositivo.";
+"nearby.addFilesHint" = "Adicione ficheiros ou pastas acima e envie-os para esse dispositivo.";
 "nearby.textIntent" = "Abre uma sessão de mensagens cifrada ponta a ponta. Nada é armazenado no Relayium.";
 "nearby.startMessageSession" = "Iniciar uma sessão de mensagens";
 "nearby.acceptanceNote" = "Em relayium.com, a outra pessoa continua a escolher onde guardar os ficheiros recebidos; uma sessão de mensagens abre-se do lado dela sem aviso, a não ser que a verificação avançada esteja ligada num dos dispositivos (abaixo). Este dispositivo aceita transferências recebidas por perto da mesma forma enquanto a receção estiver ligada.";
@@ -547,6 +548,7 @@
 "inbox.explain" = "Escolha uma pasta neste Mac e decida depois se os ficheiros enviados a partir da sua própria conta são guardados automaticamente ou apenas depois de os aceitar. O Relayium nunca vê o respetivo conteúdo.";
 "inbox.signedOut" = "Inicie sessão para usar a caixa de entrada do dispositivo";
 "inbox.signedOutBody" = "A caixa de entrada do dispositivo entrega ficheiros enviados a partir da sua própria conta, pelo que precisa que tenha sessão iniciada neste Mac.";
+"inbox.statusHeading" = "Estado";
 "inbox.folderHeading" = "Pasta de receção";
 "inbox.folderExplain" = "Os ficheiros enviados para este Mac são guardados aqui. Os ficheiros existentes nunca são substituídos. Escolher uma pasta não ativa a receção.";
 "inbox.folderNone" = "Nenhuma pasta escolhida";
@@ -633,7 +635,7 @@
 "workspace.stagingOptional" = "Opcional. Podes ligar primeiro e escolher ficheiros depois — uma mensagem não precisa de nada.";
 "workspace.dropHint" = "Arrasta ficheiros ou pastas para aqui, ou clica para escolher.";
 "workspace.sendMessage" = "Enviar uma mensagem";
-"workspace.addFilesHint" = "Escolhe ficheiros ou pastas abaixo e envia-os diretamente para esse dispositivo.";
+"workspace.addFilesHint" = "Escolhe ficheiros ou pastas abaixo e envia-os para esse dispositivo.";
 "workspace.sendMessageHint" = "Abre uma sessão de mensagens com este dispositivo. Não é preciso selecionar nada.";
 "workspace.sendFiles" = "Enviar ficheiros";
 "workspace.createMessageCode" = "Criar um código para mensagens";
@@ -723,7 +725,7 @@
 "help.lan.step2" = "Escolha o outro dispositivo na lista e envie uma mensagem ou os arquivos que você adicionou.";
 "help.lan.step3" = "Se a verificação estiver ativada, confira se as duas telas mostram o mesmo código antes de aceitar.";
 "help.lan.question" = "Os arquivos passam pelos servidores do Relayium?";
-"help.lan.answer" = "Não. O serviço do Relayium apenas apresenta os dois dispositivos um ao outro; depois de conectados, os arquivos vão direto de um para o outro.";
+"help.lan.answer" = "Às vezes, e isso não muda nada do que o Relayium consegue ler. O serviço apresenta os dois dispositivos; conforme as condições da rede, a ligação pode passar entre eles ou por um relé do Relayium, e este dispositivo não consegue saber qual foi o caminho usado. Em qualquer dos casos os ficheiros são cifrados de ponta a ponta e o Relayium nunca tem a chave.";
 
 "help.cross.step1" = "Neste dispositivo, crie um código para uma mensagem ou para arquivos.";
 "help.cross.step2" = "Digite esse código no Relayium do outro dispositivo e entre.";

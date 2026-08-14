@@ -230,9 +230,6 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// Announced on the row whose destination is presenting a live session, so
     /// a VoiceOver user is not told to look for it on the wrong screen.
     case navA11yLiveSession = "nav.a11yLiveSession"
-    /// The sidebar footer's heading. Background receive — what makes this Mac
-    /// reachable — reports its own state beneath it.
-    case navResidency = "nav.residency"
     /// The macOS LAN Transfer row: the other device is on this network.
     ///
     /// Its subtitle carries the limitation that rules the destination out —
@@ -610,6 +607,9 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// stays silent about is one the user discovers by losing a transfer, and a
     /// recovery it stays silent about is one they never use.
     case uploadKeepOpen = "upload.keepOpen"
+    /// macOS has no `PendingUploadSupport`: closing the app ends this upload,
+    /// and reopening requires starting it again rather than offering Resume.
+    case uploadMacKeepOpen = "upload.macKeepOpen"
     /// Copying the selection into this app's own storage, before any upload.
     case uploadPreparing = "upload.preparing"
     /// Checking local disk and Keychain for an interrupted stored upload.
@@ -818,7 +818,16 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// The disclosure's own title, which has to say what is behind it — a
     /// chevron labelled nothing is a control nobody opens.
     case nearbyHowItWorks = "nearby.howItWorks"
+    /// A rescan of a roster that is already being listened for — the iOS
+    /// residency refresh. **Not** the recovery for a listener that never
+    /// started: that one begins receiving, so it is `nearbyStartReceiving`
+    /// below and the two must not be swapped.
     case nearbyLookAgain = "nearby.lookAgain"
+    /// The recovery offered when nearby receiving is off. It calls
+    /// `LanDiscoveryModel.start()`, which opens the room socket and makes this
+    /// device reachable, so it says so — this used to be `nearbyLookAgain`,
+    /// which named a search and performed a subscription.
+    case nearbyStartReceiving = "nearby.startReceiving"
     case nearbyResumeReceiving = "nearby.resumeReceiving"
     case nearbyPauseReceiving = "nearby.pauseReceiving"
     case nearbyPausedBody = "nearby.pausedBody"
@@ -1345,6 +1354,15 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case inboxExplain = "inbox.explain"
     case inboxSignedOut = "inbox.signedOut"
     case inboxSignedOutBody = "inbox.signedOutBody"
+    /// The heading of the first Device Inbox section — the one holding the
+    /// status badge, the route and the recovery action.
+    ///
+    /// It used to be `inboxTitle`, which printed *Device Inbox* a third time on
+    /// a screen the window title and the sidebar row had already named twice,
+    /// and named the whole surface rather than the section. A section heading
+    /// says what a PART of a screen is; this one is the part that answers
+    /// "can this Mac take a delivery right now".
+    case inboxStatusHeading = "inbox.statusHeading"
 
     // The folder grant. Separate from the policy in the copy as well as in the
     // storage, because the whole product invariant is that they are two

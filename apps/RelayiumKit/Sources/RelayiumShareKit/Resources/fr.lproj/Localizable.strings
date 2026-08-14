@@ -104,7 +104,7 @@
 "nav.nearby" = "À proximité";
 "nav.pairingCodeSubtitle" = "Texte et petits fichiers entre réseaux — les deux en ligne";
 "nav.lanTransfer" = "Transfert sur le réseau local";
-"nav.lanTransferSubtitle" = "Messages et fichiers avec un appareil sur le même réseau — en direct, sans compte ; les deux en ligne";
+"nav.lanTransferSubtitle" = "Messages et fichiers avec un appareil sur le même réseau — sans compte ; les deux en ligne";
 "nav.crossNetwork" = "Transfert entre réseaux";
 "nav.crossNetworkSubtitle" = "Messages et fichiers avec un appareil où qu’il soit, via un code à six chiffres — même réseau non requis ; les deux en ligne";
 "nav.storedSend" = "Envoyer un lien";
@@ -115,7 +115,6 @@
 "nav.accountSubtitle" = "Forfait, appareils et fichiers stockés";
 "nav.a11ySections" = "Destinations Relayium";
 "nav.a11yLiveSession" = "Un transfert est en cours ici";
-"nav.residency" = "Réception";
 
 /* MARK: conditions d’accès */
 "gate.sendLinkTitle" = "L’envoi d’un lien nécessite un compte";
@@ -201,6 +200,7 @@
 "upload.expiresAfter" = "Expire après";
 "upload.burnAfterRead" = "Supprimer après le premier téléchargement";
 "upload.keepOpen" = "Gardez Relayium ouvert jusqu’à la fin. Quitter ou fermer l’app met l’envoi en pause — il ne continue jamais en arrière-plan —, mais vos fichiers sont enregistrés sur cet appareil : rouvrez Relayium pour poursuivre l’envoi.";
+"upload.macKeepOpen" = "Gardez Relayium ouvert jusqu’à la fin de cet envoi. Fermer l’app l’arrête ; rouvrez Relayium et recommencez l’envoi.";
 "upload.preparing" = "Préparation de vos fichiers…";
 "upload.checkingRecovery" = "Recherche d’un envoi en pause…";
 "upload.interruptedTitle" = "Envoi en pause";
@@ -312,6 +312,7 @@
 "nearby.safetySummary" = "Appareils exécutant Relayium à la même adresse publique que cet appareil. Derrière une passerelle d’opérateur, de VPN ou partagée, des inconnus peuvent en faire partie : choisissez vous-même le destinataire.";
 "nearby.howItWorks" = "Comment cette liste fonctionne";
 "nearby.lookAgain" = "Chercher à nouveau";
+"nearby.startReceiving" = "Démarrer la réception";
 "nearby.resumeReceiving" = "Reprendre la réception";
 "nearby.pauseReceiving" = "Suspendre la réception";
 "nearby.pausedBody" = "Cet appareil n’écoute pas les appareils à proximité. Il peut toujours envoyer, et les codes d’appairage fonctionnent toujours.";
@@ -326,8 +327,8 @@
 "nearby.sendTo" = "Envoyer à %@";
 "nearby.sessionWith" = "Session avec %@";
 "nearby.sessionPeerDisclaimer" = "Ce nom est fourni par l’autre appareil et ne constitue pas une identité vérifiée.";
-"nearby.selectionSendHint" = "%@. Envoyez-les directement à cet appareil.";
-"nearby.addFilesHint" = "Ajoutez des fichiers ou des dossiers ci-dessus, puis envoyez-les directement à cet appareil.";
+"nearby.selectionSendHint" = "%@. Envoyez-les à cet appareil.";
+"nearby.addFilesHint" = "Ajoutez des fichiers ou des dossiers ci-dessus, puis envoyez-les à cet appareil.";
 "nearby.textIntent" = "Ouvre une session de messages chiffrée de bout en bout. Rien n’est stocké sur Relayium.";
 "nearby.startMessageSession" = "Démarrer une session de messages";
 "nearby.acceptanceNote" = "Sur relayium.com, l’autre personne choisit toujours où enregistrer les fichiers reçus ; une session de messages s’ouvre de son côté sans invite, sauf si la vérification avancée est active sur l’un des appareils (ci-dessous). Cet appareil accepte les transferts entrants de proximité de la même manière tant que la réception est active.";
@@ -547,6 +548,7 @@
 "inbox.explain" = "Choisissez un dossier sur ce Mac, puis décidez si les fichiers envoyés depuis votre propre compte sont enregistrés automatiquement ou seulement après votre accord. Relayium ne voit jamais leur contenu.";
 "inbox.signedOut" = "Connectez-vous pour utiliser la boîte de réception";
 "inbox.signedOutBody" = "La boîte de réception livre les fichiers envoyés depuis votre propre compte : vous devez donc être connecté sur ce Mac.";
+"inbox.statusHeading" = "État";
 "inbox.folderHeading" = "Dossier de réception";
 "inbox.folderExplain" = "Les fichiers envoyés à ce Mac sont enregistrés ici. Les fichiers existants ne sont jamais remplacés. Choisir un dossier n'active pas la réception.";
 "inbox.folderNone" = "Aucun dossier choisi";
@@ -633,7 +635,7 @@
 "workspace.stagingOptional" = "Facultatif. Vous pouvez vous connecter d’abord et choisir les fichiers ensuite — un message ne demande rien.";
 "workspace.dropHint" = "Déposez des fichiers ou dossiers ici, ou cliquez pour choisir.";
 "workspace.sendMessage" = "Envoyer un message";
-"workspace.addFilesHint" = "Choisissez des fichiers ou dossiers ci-dessous, puis envoyez-les directement à cet appareil.";
+"workspace.addFilesHint" = "Choisissez des fichiers ou dossiers ci-dessous, puis envoyez-les à cet appareil.";
 "workspace.sendMessageHint" = "Ouvre une session de messages avec cet appareil. Aucune sélection n’est nécessaire.";
 "workspace.sendFiles" = "Envoyer des fichiers";
 "workspace.createMessageCode" = "Créer un code pour les messages";
@@ -723,7 +725,7 @@
 "help.lan.step2" = "Choisissez l’autre appareil dans la liste, puis envoyez un message ou les fichiers que vous avez ajoutés.";
 "help.lan.step3" = "Si la vérification est active, contrôlez que les deux écrans affichent le même code avant d’accepter.";
 "help.lan.question" = "Les fichiers passent-ils par les serveurs de Relayium ?";
-"help.lan.answer" = "Non. Le service Relayium ne fait que mettre les deux appareils en relation ; une fois connectés, les fichiers circulent directement de l’un à l’autre.";
+"help.lan.answer" = "Parfois, et cela ne change rien à ce que Relayium peut lire. Le service met les deux appareils en relation ; selon les conditions réseau, la connexion passe entre eux ou par un relais Relayium, et cet appareil ne peut pas savoir quel chemin est utilisé. Dans les deux cas, les fichiers sont chiffrés de bout en bout et Relayium n’a jamais la clé.";
 
 "help.cross.step1" = "Sur cet appareil, créez un code pour un message ou pour des fichiers.";
 "help.cross.step2" = "Saisissez ce code dans Relayium sur l’autre appareil, puis rejoignez.";

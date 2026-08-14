@@ -12,6 +12,16 @@ struct EmptyStateView: View {
     private let message: String?
     private let actionTitle: String?
     private let action: (() -> Void)?
+    /// Whether this action is the way off a screen that offers nothing else.
+    ///
+    /// Default false: an empty state is usually one part of a screen with live
+    /// controls around it, and a prominent button there would outrank the work
+    /// the user actually came to do. It is true only where the empty state IS
+    /// the destination — a whole surface behind an account gate — because there
+    /// the one button on screen is the only thing to press, and drawing it as an
+    /// ordinary bordered control leaves a screenful of explanation with no
+    /// visible exit.
+    private let actionIsProminent: Bool
 
     /// `body:` is the outward name; it is stored as `message` because `body` is
     /// already taken by `View`.
@@ -19,11 +29,13 @@ struct EmptyStateView: View {
          title: String,
          body: String? = nil,
          actionTitle: String? = nil,
+         actionIsProminent: Bool = false,
          action: (() -> Void)? = nil) {
         self.symbol = symbol
         self.title = title
         self.message = body
         self.actionTitle = actionTitle
+        self.actionIsProminent = actionIsProminent
         self.action = action
     }
 
@@ -43,7 +55,18 @@ struct EmptyStateView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let actionTitle, let action {
-                Button(actionTitle, action: action)
+                // Two branches rather than a conditional style: `buttonStyle`
+                // takes a concrete type, and there is no state inside a `Button`
+                // for the structural identity change to reset. Prominent is
+                // still only a STYLE — no `keyboardShortcut(.defaultAction)` —
+                // because ⏎ belongs to whatever form the user is actually
+                // typing in, and this view is rendered inside several.
+                if actionIsProminent {
+                    Button(actionTitle, action: action)
+                        .buttonStyle(.borderedProminent)
+                } else {
+                    Button(actionTitle, action: action)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

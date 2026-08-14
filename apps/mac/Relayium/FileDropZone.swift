@@ -25,7 +25,8 @@ import RelayiumAppKit
 /// bytes that go out are the ones the user approved even if the paths are
 /// rearranged while the transfer waits for a peer.
 struct FileDropZone<Label: View>: View {
-    /// Where the drop lands. Appends, so a second drop adds to the selection.
+    /// Where a drop and a click both land. Both append, so neither a second
+    /// drop nor a trip through the picker can discard what is already staged.
     let store: SelectionStore
     /// Drops and clicks are ignored while a transfer owns the selection. The
     /// zone still renders — a target that vanishes mid-drag is worse than one
@@ -96,8 +97,22 @@ func chooseFilesOrFolders(into store: SelectionStore) {
     panel.canChooseFiles = true
     panel.canChooseDirectories = true
     panel.prompt = L10n.t(.pickerPrompt)
-    // A picker REPLACES: what the panel showed when the user pressed Choose is
-    // exactly what they meant to send. A drop appends, because there is no such
-    // moment of confirmation for a drag.
-    if panel.runModal() == .OK { store.replace(with: panel.urls) }
+    // **The picker appends, exactly like the drop.**
+    //
+    // It used to replace, on the argument that the panel shows the user their
+    // whole intended selection at the moment they press Choose. It does not:
+    // `NSOpenPanel` shows the file system, and nothing in it names — or can
+    // name — the batch already staged behind it. So a user who dropped a folder
+    // and then reached for the button to add one more file silently lost the
+    // folder, with no message, no undo and nothing on screen that had said the
+    // button was destructive.
+    //
+    // One rule for every way a file arrives is what makes that impossible:
+    // drop appends, an OS-opened batch appends (`adoptOpenedFiles`), and this
+    // appends. `SelectionStore.add` de-duplicates against what is already
+    // staged, so re-choosing the same items is a no-op rather than a doubled
+    // manifest, and **Clear** — already beside this button whenever the
+    // selection is non-empty — is the one control that discards a batch, which
+    // is where a destructive action belongs.
+    if panel.runModal() == .OK { store.add(panel.urls) }
 }

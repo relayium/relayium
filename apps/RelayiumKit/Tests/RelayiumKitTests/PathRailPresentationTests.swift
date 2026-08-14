@@ -68,32 +68,42 @@ final class PathRailPresentationTests: XCTestCase {
 
     // MARK: - the rails that claim nothing
 
-    /// The Device Inbox is a standing route, not a task with a position. Every
-    /// stop is unclaimed, and the destination carries the one live fact the
-    /// route is useless without.
+    /// The Device Inbox is a standing route, not a task with a position, so
+    /// every stop is unclaimed.
     func testTheDeviceInboxRailStatesARouteAndNoProgress() {
-        let stops = PathRailPresentation.deviceInbox(folder: .none, language: .en)
+        let stops = PathRailPresentation.deviceInbox(language: .en)
         XCTAssertEqual(stops.count, 3)
         XCTAssertTrue(stops.allSatisfy { $0.progress == nil },
                       "a standing route is being drawn as a task in progress")
-        XCTAssertEqual(stops.last?.detail,
-                       InboxFolderPresentation.description(.none, language: .en))
-        XCTAssertEqual(stops.last?.detail, L10n.t(.inboxFolderNone, language: .en),
-                       "the destination stop hides that no folder is chosen")
+        XCTAssertEqual(stops.last?.title, L10n.t(.pathThisMac, language: .en))
     }
 
-    /// And it follows the folder rather than restating it: a chosen folder shows
-    /// its own name, which is what makes the last stop worth drawing.
-    func testTheDeviceInboxDestinationStopFollowsTheChosenFolder() {
-        let url = URL(fileURLWithPath: "/Users/someone/Deliveries", isDirectory: true)
-        let folder = InboxFolderSummary(url: url, isChosen: true, problem: nil)
-        let stops = PathRailPresentation.deviceInbox(folder: folder, language: .en)
-        XCTAssertEqual(stops.last?.detail,
-                       InboxFolderPresentation.description(folder, language: .en))
-        // The folder's NAME, never its path: the path carries the user's short
-        // name and possibly other people's.
-        XCTAssertFalse(stops.last?.detail?.contains("/Users/") ?? true,
-                       "the rail puts a filesystem path on screen")
+    /// **The rail states the route and no stop restates the receive folder.**
+    ///
+    /// The destination stop used to carry `InboxFolderPresentation.description`,
+    /// which put "No folder chosen" — or the folder's name — on screen twice:
+    /// once in `caption2` under the rail, where nothing could be done about it,
+    /// and once in the folder section that owns the fact and the two buttons
+    /// that change it. Asserted as an absence, because that is what regressed:
+    /// a `detail` on any stop of this rail is a second answer to a question one
+    /// section already answers.
+    func testTheDeviceInboxRailDoesNotRestateTheReceiveFolder() {
+        let chosen = InboxFolderSummary(
+            url: URL(fileURLWithPath: "/Users/someone/Deliveries", isDirectory: true),
+            isChosen: true, problem: nil)
+        for language in AppLanguage.allCases {
+            let stops = PathRailPresentation.deviceInbox(language: language)
+            XCTAssertTrue(stops.allSatisfy { $0.detail == nil },
+                          "\(language.rawValue) rail carries a detail the sections own")
+            // Neither spelling of the folder fact reaches the rail, whether or
+            // not one has been chosen.
+            let words = stops.compactMap(\.detail).joined(separator: " ")
+            for restated in [InboxFolderPresentation.description(.none, language: language),
+                             InboxFolderPresentation.description(chosen, language: language)] {
+                XCTAssertFalse(words.contains(restated),
+                               "\(language.rawValue) rail repeats the folder section")
+            }
+        }
     }
 
     /// The cross-network rail is drawn before a peer exists, so there is nothing
@@ -126,7 +136,7 @@ final class PathRailPresentationTests: XCTestCase {
     func testEveryRailLabelIsLocalizedInEveryLanguage() {
         for language in AppLanguage.allCases {
             let all = PathRailPresentation.storedSend(.idle, language: language)
-                + PathRailPresentation.deviceInbox(folder: .none, language: language)
+                + PathRailPresentation.deviceInbox(language: language)
                 + PathRailPresentation.crossNetwork(language: language)
                 + PathRailPresentation.lan(language: language)
             for stop in all {
@@ -148,7 +158,7 @@ final class PathRailPresentationTests: XCTestCase {
         let done = UploadState.done(link: "x", expiresAt: 0, keyWarning: nil)
         let all = PathRailPresentation.storedSend(.idle)
             + PathRailPresentation.storedSend(done)
-            + PathRailPresentation.deviceInbox(folder: .none)
+            + PathRailPresentation.deviceInbox()
             + PathRailPresentation.crossNetwork()
             + PathRailPresentation.lan()
         // The checkmark the view substitutes for a reached stop's own symbol.

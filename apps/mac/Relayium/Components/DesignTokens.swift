@@ -79,4 +79,26 @@ enum Palette {
     static var cardBackground: Color { Color(nsColor: .controlBackgroundColor) }
     /// A hairline that separates without drawing a line the eye stops at.
     static var hairline: Color { Color(nsColor: .separatorColor) }
+    /// The edge of a card.
+    ///
+    /// **A card needs one because its fill alone does not carry it in Light
+    /// appearance.** `controlBackgroundColor` on `windowBackgroundColor` is
+    /// roughly `#FFFFFF` on `#ECECEC` in Light and about six times that
+    /// separation in Dark, so the same two colours that make a card obvious at
+    /// night make it a barely-there rectangle by day — the audit's finding, and
+    /// the reason four stacked cards read as one undifferentiated column.
+    ///
+    /// It is the SAME role as `hairline`, deliberately: `separatorColor` is the
+    /// system's answer to "a line that bounds without being looked at", it
+    /// tracks Increase Contrast and both appearances on its own, and giving a
+    /// card edge a second, louder colour of its own would be exactly the kind of
+    /// invented vocabulary this file exists to prevent. Named separately only so
+    /// the intent at the call site is a boundary rather than a division, and so
+    /// a future change to one does not silently move the other.
+    ///
+    /// Not a shadow and not a gradient. A drop shadow under every card is depth
+    /// the app does not have — there are two levels, and the second has no
+    /// background at all — and it costs offscreen rendering per card for a cue
+    /// a one-pixel line already gives.
+    static var cardBorder: Color { Color(nsColor: .separatorColor) }
 }

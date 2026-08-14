@@ -56,7 +56,7 @@ struct CrossNetworkTransferDestination: View {
 
     var body: some View {
         DestinationScaffold(title: L10n.t(.navCrossNetwork),
-                            symbol: MacSurface.crossNetworkTransfer.symbol,
+                            surface: .crossNetworkTransfer,
                             purpose: L10n.t(.navCrossNetworkSubtitle),
                             contentMaxWidth: nil) {
             switch pane {

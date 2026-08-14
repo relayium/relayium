@@ -26,7 +26,9 @@ import Foundation
 /// a stable, loggable name that UI automation can address, and one list the
 /// sidebar and the shell both enumerate rather than two that can drift.
 public enum MacSurface: String, CaseIterable, Hashable, Sendable {
-    /// Same-network discovery and direct transfer. No account, no code.
+    /// Same-network discovery, then an end-to-end encrypted transfer. No
+    /// account, no code — and deliberately no claim that the path is direct
+    /// rather than relayed, because the client cannot tell.
     case lanTransfer
     /// Pairing code. The devices do **not need** to share a network.
     case crossNetworkTransfer

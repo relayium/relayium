@@ -127,16 +127,28 @@ public final class SelectionStore: ObservableObject {
         return text
     }
 
-    /// A picker result replaces the selection, because that is what the panel
-    /// showed the user: everything they had highlighted when they pressed Open.
+    /// Set the selection to exactly these roots, discarding whatever was staged.
+    ///
+    /// **Only for a caller that owns the whole batch.** iOS stages through
+    /// `SendSelectionModel`/`DirectSendSelection`, which replace the
+    /// security-scoped access set and these roots in one step — the two have to
+    /// agree, so a partial append would leave roots the access set no longer
+    /// holds. `TransferLinkPane` is the same shape: it publishes the batch a
+    /// session already accepted.
+    ///
+    /// It is deliberately NOT what a file picker calls. `NSOpenPanel` cannot
+    /// show what is already staged, so replacing from it discards a batch the
+    /// user can no longer see — see `chooseFilesOrFolders`, which appends.
     public func replace(with urls: [URL]) {
         roots = urls
         reload()
     }
 
-    /// A drop APPENDS, because a drop zone that silently discarded what was
-    /// already staged would lose a folder the user dropped ten seconds earlier
-    /// with no way to notice. Duplicate roots are dropped by
+    /// **How a file normally arrives: it joins what is already staged.** A drop,
+    /// a click through the picker and a batch the OS opened all land here,
+    /// because any of them silently discarding the rest would lose a folder the
+    /// user staged ten seconds earlier with no way to notice. Duplicate roots
+    /// are dropped by
     /// `expandSelection`, so dropping the same folder twice is a no-op rather
     /// than a guaranteed duplicate-path refusal on the far side.
     public func add(_ urls: [URL]) {

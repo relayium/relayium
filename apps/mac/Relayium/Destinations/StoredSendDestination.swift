@@ -31,7 +31,7 @@ struct StoredSendDestination: View {
 
     var body: some View {
         DestinationScaffold(title: L10n.t(.navStoredSend),
-                            symbol: MacSurface.storedSend.symbol,
+                            surface: .storedSend,
                             purpose: L10n.t(.navStoredSendSubtitle)) {
             UploadPane(model: model, gate: gate)
             // Below the pane in every state it can be in — including the account

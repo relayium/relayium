@@ -116,7 +116,8 @@ public enum PathRailPresentation {
 
     // MARK: - Device Inbox
 
-    /// **A standing route, with no progress at all.**
+    /// **A standing route, with no progress at all — and no second copy of a
+    /// fact another section owns.**
     ///
     /// Every stop's `progress` is nil, and that is the whole point: the Device
     /// Inbox is not a task with a position — it is a permanent path that
@@ -125,10 +126,14 @@ public enum PathRailPresentation {
     /// Giving the stops a progress would either duplicate that sentence or
     /// contradict it.
     ///
-    /// The destination stop carries the one fact the route is useless without:
-    /// which folder on this Mac, or that none is chosen yet.
-    public static func deviceInbox(folder: InboxFolderSummary,
-                                   language: AppLanguage? = nil) -> [PathStop] {
+    /// The destination stop used to carry the receive folder as its detail, and
+    /// that is the same argument pointed the other way. The surface has a folder
+    /// section a short scroll below with the authoritative answer and the two
+    /// buttons that change it, so the rail was printing "No folder chosen" — or
+    /// an entire path, wrapped — twice on one screen, in the smaller of the two
+    /// type sizes, where nothing could be done about it. A rail states the shape
+    /// of the route; the section states the fact.
+    public static func deviceInbox(language: AppLanguage? = nil) -> [PathStop] {
         [
             // nonlocalized: SF Symbol name
             PathStop(id: 0, symbol: "person.crop.circle",
@@ -138,8 +143,7 @@ public enum PathRailPresentation {
                      title: L10n.t(.pathEncryptedOnRelayium, language: language)),
             // nonlocalized: SF Symbol name
             PathStop(id: 2, symbol: "laptopcomputer",
-                     title: L10n.t(.pathThisMac, language: language),
-                     detail: InboxFolderPresentation.description(folder, language: language)),
+                     title: L10n.t(.pathThisMac, language: language)),
         ]
     }
 

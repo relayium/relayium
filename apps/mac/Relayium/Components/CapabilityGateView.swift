@@ -19,6 +19,15 @@ struct CapabilityGateView: View {
     /// `body:` is the outward name; stored as `message` because `body` is
     /// already taken by `View`.
     private let message: String
+    /// Whether this gate is the whole screen or only part of one.
+    ///
+    /// The Device Inbox and Send a link are gated entire — signed out, the gate
+    /// IS the destination — so their sign-in action is the page's primary exit
+    /// and is drawn as one. The Cross-network screen gates only the half that
+    /// spends an account: joining a code is right beside it and needs nothing,
+    /// so a prominent Sign in there would outrank the control the reader can
+    /// actually use.
+    private let isWholeSurface: Bool
     private let onAccount: (AuthMode) -> Void
 
     @EnvironmentObject private var session: AccountSession
@@ -33,10 +42,12 @@ struct CapabilityGateView: View {
     /// one thing and produces another, which is the same defect as the greyed
     /// control this whole view exists to replace.
     init(gate: AccountGate, title: String, body: String,
+         isWholeSurface: Bool = false,
          onAccount: @escaping (AuthMode) -> Void) {
         self.gate = gate
         self.title = title
         self.message = body
+        self.isWholeSurface = isWholeSurface
         self.onAccount = onAccount
     }
 
@@ -60,6 +71,7 @@ struct CapabilityGateView: View {
                                title: title,
                                body: message,
                                actionTitle: L10n.t(.gateSignIn),
+                               actionIsProminent: isWholeSurface,
                                action: { onAccount(.signIn) })
                 // Registration is in the app. This used to open relayium.com,
                 // which was the only place an account could be created; it now
@@ -71,7 +83,7 @@ struct CapabilityGateView: View {
 
             case let .unavailable(text):
                 InlineMessage(.failure, text)
-                Button(L10n.t(.commonTryAgain)) { Task { await session.refresh() } }
+                exit(L10n.t(.commonTryAgain)) { Task { await session.refresh() } }
 
             case let .verifyEmail(email):
                 Text(L10n.t(.contentCheckEmailTitle)).font(.headline)
@@ -83,7 +95,7 @@ struct CapabilityGateView: View {
                 // the way back — not to a website, and not to a second copy of
                 // the resend button that would have to keep its own busy state
                 // in step with the first.
-                Button(L10n.t(.gateOpenAccount)) { onAccount(.signIn) }
+                exit(L10n.t(.gateOpenAccount)) { onAccount(.signIn) }
 
             case let .pendingDeletion(purgeAfter, reactivateToken):
                 Text(L10n.t(.contentPendingDeletionTitle)).font(.headline)
@@ -95,12 +107,34 @@ struct CapabilityGateView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 // The token is the whole button: it is what makes reactivation
                 // one click on a web session the frozen account cannot create.
-                Button(L10n.t(.contentReactivate)) {
+                exit(L10n.t(.contentReactivate)) {
                     NSWorkspace.shared.open(
                         AppEnvironment.reactivateWebURL(token: reactivateToken))
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The one action a gated branch offers, drawn at the weight its scope
+    /// earns.
+    ///
+    /// Every branch here except `.loading` ends in exactly one control, and on a
+    /// whole-surface gate that control is the only thing on the screen — so it
+    /// is the primary exit in all of them, not only in `.signInRequired`.
+    /// Applying it per branch would have left a signed-out reader with a
+    /// prominent Sign in and an unverified one with the same screenful of
+    /// explanation and a control that looks incidental.
+    ///
+    /// A style and nothing more: no `keyboardShortcut(.defaultAction)`, because
+    /// this view renders inside forms that own Return.
+    @ViewBuilder
+    private func exit(_ title: String, action: @escaping () -> Void) -> some View {
+        if isWholeSurface {
+            Button(title, action: action)
+                .buttonStyle(.borderedProminent)
+        } else {
+            Button(title, action: action)
+        }
     }
 }

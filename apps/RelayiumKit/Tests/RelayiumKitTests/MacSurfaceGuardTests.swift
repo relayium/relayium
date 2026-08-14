@@ -30,6 +30,19 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(nearby.contains("case .off:"))
         XCTAssertTrue(nearby.contains("case .connecting, .ready, .reconnecting, .active:"))
         XCTAssertTrue(nearby.contains("receive.state == .paused || receive.state == .off"))
+        // **The recovery is named for what it does.** The one control offered
+        // beside an `off` listener calls `discovery.start()`, which opens the
+        // room socket and is therefore what makes this Mac reachable — not a
+        // rescan of a roster nothing is listening for. Asserted as the pairing
+        // of the label with the call, because the defect was precisely that the
+        // two had drifted: `nearby.lookAgain` named a search and performed a
+        // subscription. That key still exists and is still correct — on iOS,
+        // where the control it labels really does refresh a live roster.
+        XCTAssertTrue(nearby.contains(
+            "Button(L10n.t(.nearbyStartReceiving)) { discovery.start() }"),
+            "the off-state recovery does not name the receiving it starts")
+        XCTAssertFalse(nearby.contains("nearbyLookAgain"),
+                       "the LAN pane calls its start action a search again")
         // The sentence naming where an incoming file lands is the same claim as
         // the explanation above it, so it follows the same rendered state. Left
         // on the pause flag it kept promising a Downloads delivery to a listener
@@ -74,6 +87,75 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(ui.contains("testStoppedNearbyDiscoveryAsksForActionWithoutPretendingToWork"))
         XCTAssertTrue(ui.contains("window.buttons[\"Pause receiving\"].exists"))
         XCTAssertTrue(ui.contains("window.buttons[\"Resume receiving\"].exists"))
+        XCTAssertTrue(ui.contains("window.buttons[\"Start receiving\"].waitForExistence"),
+                      "no runtime check presses the renamed off-state recovery")
+        XCTAssertFalse(ui.contains("window.buttons[\"Look again\"].waitForExistence"),
+                       "a runtime check still expects the old search-shaped label")
+    }
+
+    /// **The screens claim an encrypted path, never a direct one.**
+    ///
+    /// `PathRailPresentation` has refused to name the middle of a live transfer
+    /// since it was written — there is no `.direct` stop, because at the moment
+    /// the rail is drawn the client cannot distinguish a peer-to-peer connection
+    /// from a TURN-relayed one. The copy around it did not follow: the LAN
+    /// sidebar caption sold the destination as *direct*, its help answer said
+    /// the files "travel straight between them", and both staging hints promised
+    /// to send *straight to that device*. So the rail said the client could not
+    /// know and the sentence beside it said it did.
+    ///
+    /// Checked as rendered strings in every language rather than as source, so a
+    /// translation that keeps the promise the English dropped fails too. The
+    /// positive half matters as much: dropping the false claim must not drop the
+    /// true ones — same network, no account, both sides online, encrypted.
+    func testNoLanCopyPromisesARouteTheClientCannotObserve() throws {
+        // Per language, in the form each one actually uses to promise a
+        // straight-through path. Written down by hand: the point is that
+        // somebody read every translation.
+        let directClaim: [AppLanguage: [String]] = [
+            .en: ["direct", "straight between", "straight to"],
+            .de: ["direkt"],
+            .fr: ["directement", "en direct"],
+            .es: ["directo", "directamente"],
+            .pt: ["direto", "diretamente"],
+            .zh: ["直连", "直接"],
+            .ja: ["直接"],
+            .ko: ["직접", "바로"],
+            .ar: ["مباشر"],
+        ]
+        let promises: [L10nKey] = [.navLanTransferSubtitle, .helpLanAnswer,
+                                   .nearbySelectionSendHint, .nearbyAddFilesHint,
+                                   .workspaceAddFilesHint]
+        for language in AppLanguage.allCases {
+            let forbidden = try XCTUnwrap(directClaim[language])
+            for key in promises {
+                let text = L10n.t(key, language: language).lowercased()
+                for claim in forbidden {
+                    XCTAssertFalse(text.contains(claim.lowercased()),
+                                   "\(key.rawValue) [\(language.rawValue)] promises a route "
+                                   + "this build cannot observe (\(claim)): \(text)")
+                }
+            }
+        }
+
+        // The truthful half is still there. LocalizedCopyTests already pins the
+        // network and both-online tokens per language, in
+        // `testSidebarSubtitlesKeepTheDecisiveLimitation`; what belongs here is
+        // the help answer, which is where somebody goes to ask what the servers
+        // actually see.
+        let answer = L10n.t(.helpLanAnswer, language: .en)
+        for kept in ["encrypted end to end", "never has the key", "relay"] {
+            XCTAssertTrue(answer.localizedCaseInsensitiveContains(kept),
+                          "the corrected LAN answer dropped \(kept): \(answer)")
+        }
+
+        // And the rail it now agrees with still names no route either.
+        let words = PathRailPresentation.lan(language: .en)
+            .map(\.title).joined(separator: " ").lowercased()
+        for guess in ["direct", "relay", "peer"] {
+            XCTAssertFalse(words.contains(guess),
+                           "the LAN rail started guessing a route: \(guess)")
+        }
     }
 
     /// The macOS transfer files, named once so a rename is one edit rather than
@@ -194,66 +276,77 @@ final class MacSurfaceGuardTests: XCTestCase {
             "the destination smoke test does not observe the rendered detail surface")
     }
 
-    /// **LAN Transfer and Cross-network Transfer are sibling products, and the
-    /// sidebar chrome has to know that too.**
+    /// **Same-network residency is reported once, by the surface that can act
+    /// on it.**
     ///
-    /// The two destinations were split precisely because their preconditions
-    /// are opposite, and the split was then contradicted by one view that is
-    /// not a destination: the sidebar rendered `NearbyReceiveModel`'s
-    /// same-network residency under every row through `safeAreaInset`, so
-    /// Cross-network Transfer — which exists for devices that share no network
-    /// — permanently displayed whether this Mac could be reached on the local
-    /// one. Stored Send, Device Inbox and Account carried it too, and it
-    /// describes none of them either.
+    /// It began under every sidebar row, through `safeAreaInset`, which put
+    /// "can this Mac be reached on this network right now" on Cross-network
+    /// Transfer — the one destination whose entire premise is that no shared
+    /// network exists — and on Stored Send, Device Inbox and Account, none of
+    /// which it describes either. Scoping the footer to LAN Transfer fixed that
+    /// and exposed the remaining defect: on the only screen it could still
+    /// appear on, the LAN pane states the identical
+    /// `NearbyStatusPresentation.text(for:)` string, with Pause and Resume
+    /// beside it. Two renderings of one sentence, one column apart, and the
+    /// sidebar's was the copy nobody could act on.
     ///
-    /// Asserted structurally rather than as a screenshot: the reachability read
-    /// (`receive.state`) may appear in this file only under the LAN condition,
-    /// so restoring the global footer cannot pass by moving the badge.
-    func testSidebarResidencyIsScopedToLanTransfer() throws {
+    /// So the footer is gone and the fact is not. This is asserted from both
+    /// ends, because either alone would pass a regression: the sidebar must not
+    /// read the receive model at all, and the LAN pane must still report it.
+    func testResidencyIsReportedOnceByThePaneThatCanActOnIt() throws {
         let sidebar = try source(named: "Shell/SidebarView.swift")
-        XCTAssertTrue(sidebar.contains("if navigation.selection.macSurface == .lanTransfer {"),
-                      "the sidebar residency footer is not scoped to a destination")
-        XCTAssertTrue(sidebar.contains("@ViewBuilder private var residency: some View"),
-                      "a non-optional residency view cannot express the absence")
-        XCTAssertTrue(sidebar.contains(".accessibilityIdentifier(\"sidebar-lan-residency\")"),
-                      "the residency footer has no stable identity to assert an absence against")
+        for gone in ["NearbyReceiveModel", "receive.state", "safeAreaInset",
+                     "sidebar-lan-residency", "navResidency"] {
+            XCTAssertFalse(sidebar.contains(gone),
+                           "the sidebar residency footer is back: \(gone)")
+        }
 
-        // Everything that reads reachability must sit inside the gate. The
-        // condition opens the property and the property is the file's last
-        // member, so "after the gate" is the whole remainder.
-        let gate = try XCTUnwrap(sidebar.range(of:
-            "if navigation.selection.macSurface == .lanTransfer {"))
-        let beforeGate = String(sidebar[..<gate.lowerBound])
-        XCTAssertFalse(beforeGate.contains("NearbyStatusPresentation.text(for: receive.state)"),
-                       "same-network residency is rendered outside the LAN destination")
-        XCTAssertEqual(occurrences(of: "NearbyStatusPresentation.text(for: receive.state)",
-                                   in: sidebar), 1,
-                       "a second residency render site is a second answer to which rows show it")
-        // `hasLiveSession` is the OTHER thing the sidebar says about a
-        // transfer, and it is per row by design. Residency must not be folded
-        // into it: ownership and reachability are different facts, which is
-        // the mistake `hasLiveSession`'s own comment records.
-        XCTAssertFalse(sidebar.contains("receive.activeKind != nil"),
-                       "residency is being read as session ownership again")
+        // …and the one surface that owns the fact still states it, next to the
+        // controls that change it. Removing the duplicate must not have removed
+        // the answer.
+        let connect = try source(named: lanConnect)
+        XCTAssertTrue(connect.contains("NearbyStatusPresentation.text(for: receive.state)"),
+                      "the LAN pane no longer says whether this Mac can be reached")
+        for control in ["L10n.t(.nearbyPauseReceiving)", "L10n.t(.nearbyResumeReceiving)",
+                        "L10n.t(.nearbyStartReceiving)"] {
+            XCTAssertTrue(connect.contains(control),
+                          "the LAN pane lost a residency control: \(control)")
+        }
 
+        // Two render sites in the whole app, and they are two different places
+        // rather than two copies: the LAN pane inside the window, and the menu
+        // bar, which is the surface a user reads with the window closed and the
+        // one route back to the pane. A third — or a second inside the window —
+        // is the duplication this batch removed.
+        let renderers = try sources(under: macRoot, atLeast: 30)
+            .filter { $0.text.contains("NearbyStatusPresentation.text(for: receive.state)") }
+            .map(\.name)
+        XCTAssertEqual(renderers, ["MenuBarView.swift", lanConnect],
+                       "same-network residency is rendered on more than one window surface")
+
+        // The key the footer rendered is retired rather than left translated in
+        // nine catalogs for nothing.
+        XCTAssertFalse(L10nKey.allCases.contains { $0.rawValue == "nav.residency" },
+                       "the retired sidebar-footer heading is still a live key")
+
+        // And a runtime check observes both halves. An absence alone would pass
+        // for a residency that vanished from the product entirely, so the same
+        // test has to find the sentence on the LAN pane.
         let uiURL = macRoot.deletingLastPathComponent()
             .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
         let ui = try String(contentsOf: uiURL, encoding: .utf8)
-        XCTAssertTrue(ui.contains("testLanResidencyAppearsOnLanTransferAndOnNoOtherDestination"),
-                      "no runtime check observes where residency is drawn")
-        XCTAssertTrue(ui.contains("\"sidebar-lan-residency\""),
-                      "the runtime check does not use the footer's stable identity")
-        // An absence is only evidence once the window has actually arrived on
-        // the destination it is claimed about.
         let runtime = try XCTUnwrap(ui.components(
-            separatedBy: "func testLanResidencyAppearsOnLanTransferAndOnNoOtherDestination()")
-            .dropFirst().first?.components(separatedBy: "\n    /// ").first)
+            separatedBy: "func testResidencyIsStatedOnTheLanPaneAndNotInTheSidebar()")
+            .dropFirst().first?.components(separatedBy: "\n    /// ").first,
+            "no runtime check observes where residency is drawn")
+        XCTAssertTrue(runtime.contains("\"sidebar-lan-residency\""),
+                      "the runtime check cannot name the footer it asserts is gone")
+        XCTAssertTrue(runtime.contains("\"Nearby receiving: off\""),
+                      "the runtime check does not confirm the LAN pane kept the fact")
         XCTAssertTrue(runtime.contains("NSPredicate(format: \"title == %@\", destination)"),
                       "the absence is asserted before the destination is on screen")
         XCTAssertTrue(runtime.contains("\"Cross-network Transfer\""),
                       "the sibling destination is not among the checked absences")
-        XCTAssertTrue(runtime.contains("returning to LAN Transfer no longer restores its residency"),
-                      "a footer that vanished for good would pass every absence")
     }
 
     func testMacRuntimeSuiteIsAHostedProductGate() throws {
@@ -1909,43 +2002,59 @@ final class MacSurfaceGuardTests: XCTestCase {
         }
     }
 
-    // MARK: - one heading, and it is not a banner
+    // MARK: - the destination's name is said once, and it is not a banner
 
-    /// **A destination heading is allowed again, and it is a label rather than a
-    /// banner.**
+    /// **A destination heading is allowed, and it names the destination only
+    /// where the sidebar does not.**
     ///
-    /// The rule this replaces banned it outright, and the reason was sound: every
-    /// screen opened with a `largeTitle` and a caption copied verbatim from the
-    /// sidebar row that had just been clicked, which told a reader looking at
-    /// the highlighted row nothing and cost three lines of a 560pt window six
-    /// times over. Removing it was right; leaving the sentences behind in a
-    /// 208pt sidebar was not, and at the supported floor in the longest locales
-    /// the sidebar stopped fitting.
+    /// The rule before this one banned a heading outright, and its reason was
+    /// sound: every screen opened with a `largeTitle` and a caption copied
+    /// verbatim from the sidebar row that had just been clicked, which told a
+    /// reader looking at the highlighted row nothing and cost three lines of a
+    /// 560pt window six times over. Removing it was right; leaving the sentences
+    /// behind in a 208pt sidebar was not, and at the supported floor in the
+    /// longest locales the sidebar stopped fitting.
     ///
-    /// So the sentence moved rather than came back, and this guard now enforces
-    /// the shape of what came with it:
+    /// So the sentence moved to the detail column — and arrived with the title
+    /// still attached, which is the defect the second audit found. A
+    /// `navigationTitle` on the detail column of a `NavigationSplitView` IS the
+    /// window's title, so the name was on screen three times at once: the
+    /// highlighted row, the title bar directly above the content, and a heading
+    /// between them.
     ///
-    ///  - the header is a real one — a symbol, the title and the destination's
-    ///    own sentence — and the scaffold is the only thing that draws it, so a
-    ///    destination cannot grow a second one inside its content;
-    ///  - it is `title3`, and nothing in the app may set a display-sized font.
-    ///    `.largeTitle` is checked as a FONT rather than as a substring, because
-    ///    `@ScaledMetric(relativeTo: .largeTitle)` — which is how the pairing
-    ///    code now scales — names the same text style for a legitimate reason;
-    ///  - `navigationTitle` still names the window for Mission Control, window
-    ///    menus and VoiceOver's window chrome;
+    /// This guard is that correction, stated as a rule rather than as five
+    /// screens:
+    ///
+    ///  - `navigationTitle` stays. It is what names the window for Mission
+    ///    Control, window menus and VoiceOver's window chrome, and removing it
+    ///    to fix the repetition would have been the wrong end.
+    ///  - `DetailHeader` prints the title only for a surface the sidebar does
+    ///    NOT offer, and `MacSurface.isBrowseable` is the one list that decides
+    ///    — so the header cannot drift from which rows actually exist.
+    ///  - The purpose sentence survives on every destination that has one. The
+    ///    whole point is to compact the chrome, not to delete the explanation.
+    ///  - Nothing in the app sets a display-sized font. `.largeTitle` is checked
+    ///    as a FONT rather than as a substring, because
+    ///    `@ScaledMetric(relativeTo: .largeTitle)` — how the pairing code scales
+    ///    — names the same text style for a legitimate reason.
     ///  - `SectionCard` and `OpenSection` titles are untouched. They say what a
     ///    PART of a screen is, which neither the sidebar nor this header claims.
-    func testEveryDestinationHeaderIsALabelAndNotABanner() throws {
+    func testTheDestinationNameIsSaidByTheChromeAndNotRepeatedInTheContent() throws {
         let scaffold = try source(named: "Components/DestinationScaffold.swift")
         XCTAssertTrue(scaffold.contains(".navigationTitle(title)"),
                       "the window lost its title")
-        XCTAssertTrue(scaffold.contains("DetailHeader(symbol: symbol, title: title, purpose: purpose)"),
+        XCTAssertTrue(scaffold.contains("DetailHeader(symbol: surface.symbol,"),
                       "the scaffold no longer renders the one destination header")
+        // The decisive line: whether the header names the destination is read
+        // from the sidebar's own list, never passed per screen.
+        XCTAssertTrue(scaffold.contains("namesDestination: !surface.isBrowseable"),
+                      "the header no longer derives its title rule from MacSurface.browseable")
         XCTAssertFalse(scaffold.contains("Text(title)"),
                        "the scaffold draws the name itself instead of through DetailHeader")
 
         let header = try source(named: "Components/DetailHeader.swift")
+        XCTAssertTrue(header.contains("if namesDestination {"),
+                      "the header prints its title unconditionally again")
         XCTAssertTrue(header.contains(".font(.title3.weight(.semibold))"),
                       "the destination header is no longer a label-sized heading")
         XCTAssertTrue(header.contains(".accessibilityAddTraits(.isHeader)"),
@@ -1954,17 +2063,41 @@ final class MacSurfaceGuardTests: XCTestCase {
                       && header.contains(".accessibilityIdentifier(\"destination-purpose\")"),
                       "the header has no stable runtime identity to assert against")
 
+        // Exactly one surface is not offered by the sidebar, so exactly one
+        // screen may still print its own name. Derived from `browseable` rather
+        // than spelled out, so adding a row cannot silently leave a second
+        // screen titling itself.
+        XCTAssertEqual(MacSurface.allCases.filter { !$0.isBrowseable }, [.storedReceive],
+                       "the set of screens allowed to name themselves changed")
+
         for surface in MacSurface.allCases {
             let name = surface.rawValue.prefix(1).uppercased() + surface.rawValue.dropFirst()
             let file = "Destinations/\(name)Destination.swift"
             let text = try source(named: file)
             XCTAssertTrue(text.contains("DestinationScaffold(title: L10n.t("),
                           "\(file) no longer names the window")
-            XCTAssertTrue(text.contains("symbol: MacSurface.\(surface.rawValue).symbol"),
-                          "\(file) does not mark itself with the symbol its sidebar row carries")
+            XCTAssertTrue(text.contains("surface: .\(surface.rawValue)"),
+                          "\(file) does not identify the surface it draws")
+            XCTAssertFalse(text.contains("symbol:"),
+                           "\(file) names its own symbol instead of taking MacSurface's")
             XCTAssertFalse(text.contains("subtitle:"),
                            "\(file) passes an introductory subtitle again")
         }
+
+        // Compacting the chrome must not have deleted the explanation: every
+        // destination the sidebar offers still hands its sentence to the header,
+        // and the one it does not offer still has no sentence to hand.
+        for (file, key) in [(lanDestination, ".navLanTransferSubtitle"),
+                            (crossDestination, ".navCrossNetworkSubtitle"),
+                            ("Destinations/StoredSendDestination.swift", ".navStoredSendSubtitle"),
+                            ("Destinations/DeviceInboxDestination.swift", ".navDeviceInboxSubtitle"),
+                            ("Destinations/AccountDestination.swift", ".navAccountSubtitle")] {
+            XCTAssertTrue(try source(named: file).contains("purpose: L10n.t(\(key))"),
+                          "\(file) stopped explaining itself when it stopped titling itself")
+        }
+        XCTAssertFalse(try source(named: "Destinations/StoredReceiveDestination.swift")
+            .contains("purpose:"),
+            "the deep-link-only screen invented a sidebar sentence it has no row for")
 
         // And nothing anywhere in the app sets a display-sized font of its own.
         // Comments are stripped by the loader, so the sentences explaining this
@@ -2219,9 +2352,15 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(gate.contains("Button(L10n.t(.gateCreateAccount)) { onAccount(.register) }"),
                       "Create an account must open the native form on its create half")
         XCTAssertTrue(gate.contains(".accessibilityIdentifier(\"account.create\")"))
-        XCTAssertTrue(gate.contains("Button(L10n.t(.gateOpenAccount)) { onAccount(.signIn) }"),
+        // `exit(_:action:)` rather than a bare `Button`: the control is drawn at
+        // the weight its gate's scope earns (see
+        // `testOnlyAWholeSurfaceGateDrawsItsSignInAsThePrimaryAction`). What
+        // this guard is about is unchanged and still asserted — where it goes.
+        XCTAssertTrue(gate.contains("exit(L10n.t(.gateOpenAccount)) { onAccount(.signIn) }"),
                       "an unverified address is finished on the Account destination, "
                       + "which owns the resend action — not on a website")
+        XCTAssertFalse(gate.contains("NSWorkspace.shared.open(AppEnvironment.webURL"),
+                       "a gate finishes an account step on a website again")
         for caller in ["UploadPane.swift", crossConnect] {
             XCTAssertTrue(try source(named: caller)
                 .contains("onAccount: { navigation.selectAccount(intent: $0) }"),
@@ -3226,8 +3365,12 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "the marker must not be hard-coded to one surface")
         XCTAssertFalse(sidebar.contains("receive.activeKind"),
                        "NearbyReceiveModel keeps residency and loses the session marker")
-        XCTAssertTrue(sidebar.contains("NearbyStatusPresentation.text(for: receive.state)"),
-                      "residency is still NearbyReceiveModel's to report")
+        // The sidebar no longer reads `NearbyReceiveModel` at all: residency is
+        // reported once, by the LAN pane that also owns Pause and Resume. See
+        // `testResidencyIsReportedOnceByThePaneThatCanActOnIt`. The negative is
+        // asserted here too so the two facts cannot be re-merged from this end.
+        XCTAssertFalse(sidebar.contains("receive.state"),
+                       "the sidebar is reading same-network residency again")
 
         let presence = try String(
             contentsOf: appsRoot.appendingPathComponent(
@@ -3456,6 +3599,205 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertFalse(rest[..<shortcut.lowerBound].contains("Button("),
                        "\(name): the keyboard default after \(anchor) belongs to a later button",
                        file: file, line: line)
+    }
+
+    // MARK: - the corrections the second audit asked for
+
+    /// **A card has a visible edge, and it is the system's own separator.**
+    ///
+    /// The card was fill-only: `controlBackgroundColor` on
+    /// `windowBackgroundColor`. In Dark appearance those two are far enough
+    /// apart to read as a container; in Light they are near enough that a screen
+    /// of stacked cards read as one column with headings in it, which is the
+    /// audit's Light-appearance finding.
+    ///
+    /// What this pins is the shape of the fix as much as its presence. The
+    /// boundary is a one-pixel `strokeBorder` in a named `Palette` role that
+    /// resolves to `separatorColor` — so it answers Light, Dark and Increase
+    /// Contrast the way the rest of the app does, and Dark is not restyled to
+    /// fix Light. The alternatives are checked as absences because each is a
+    /// plausible next edit and each would break something else: a hex value
+    /// answers no appearance, a gradient or material is decoration this app's
+    /// two-level vocabulary has no room for, and a shadow under every card costs
+    /// offscreen rendering for a cue a line already gives.
+    func testThePrimaryCardHasAnAdaptiveBoundaryAndNoInventedColour() throws {
+        let card = try source(named: "Components/SectionCard.swift")
+        XCTAssertTrue(card.contains(".background(Palette.cardBackground)"),
+                      "the card lost its adaptive system fill")
+        XCTAssertTrue(card.contains(".strokeBorder(Palette.cardBorder, lineWidth: 1)"),
+                      "the card has no boundary, so Light appearance flattens it again")
+        XCTAssertTrue(card.contains("RoundedRectangle(cornerRadius: Metrics.corner)"),
+                      "the boundary does not follow the card's own corner")
+        for invented in ["Color(red:", "Color(hue:", "#colorLiteral", "LinearGradient",
+                         "RadialGradient", ".ultraThinMaterial", ".regularMaterial",
+                         ".shadow("] {
+            XCTAssertFalse(card.contains(invented),
+                           "the card grew chrome the design vocabulary does not have: \(invented)")
+        }
+
+        // The role is a token, and the token is the system's. A literal here
+        // would be a colour that answers neither appearance nor Increase
+        // Contrast — the exact reason `DesignTokens` holds no colours of its own.
+        let tokens = try source(named: "Components/DesignTokens.swift")
+        XCTAssertTrue(tokens.contains(
+            "static var cardBorder: Color { Color(nsColor: .separatorColor) }"),
+            "the card boundary is no longer an adaptive system colour")
+        XCTAssertFalse(tokens.contains("Color(red:") || tokens.contains("#colorLiteral"),
+                       "DesignTokens named a colour of its own")
+
+        // And the second level stays chrome-free: a bordered `OpenSection` would
+        // be the box-in-a-box this vocabulary exists to prevent, and Help — the
+        // quietest thing on a screen — must not acquire the cards' weight.
+        for quiet in ["Components/OpenSection.swift", "Components/HelpSection.swift"] {
+            let text = try source(named: quiet)
+            XCTAssertFalse(text.contains("Palette.cardBorder") || text.contains("SectionCard("),
+                           "\(quiet) took the primary card's chrome")
+        }
+    }
+
+    /// **The Device Inbox says each thing once.**
+    ///
+    /// Three duplications on one screen, all of them the same mistake — a label
+    /// repeated at a level that had already stated it:
+    ///
+    ///  1. The first `Form` section was headed `inbox.title`, printing *Device
+    ///     Inbox* under a window title and a highlighted sidebar row that had
+    ///     both just said it. The signed-out branch did the same.
+    ///  2. The policy `Picker` carried its own `inbox.policyHeading` title two
+    ///     lines under a section header rendering that identical string.
+    ///  3. The path rail hung the receive folder off its last stop, a short
+    ///     scroll above the folder section that owns the fact and the buttons
+    ///     that change it.
+    ///
+    /// Each fix has a matching negative, because each could be "fixed" by
+    /// deleting the information instead of the repetition: the picker keeps its
+    /// accessibility label (`labelsHidden`, not a `Picker("")`), the folder
+    /// section keeps the folder, and both headers keep an identifier the runtime
+    /// suite addresses them by.
+    func testTheDeviceInboxDoesNotRepeatItsOwnNameOrItsSectionsLabels() throws {
+        let surface = try source(named: "DeviceInbox/DeviceInboxSurface.swift")
+
+        // 1. No section calls itself after the whole destination.
+        XCTAssertFalse(surface.contains("L10n.t(.inboxTitle)"),
+                       "a Device Inbox section still repeats the destination's name")
+        XCTAssertTrue(surface.contains("Text(L10n.t(.inboxStatusHeading))"),
+                      "the status section lost its own heading")
+        let signedOutHeader = "Text(L10n.t(.navAccount))\n"
+            + "                .accessibilityIdentifier(\"inbox-signed-out\")"
+        XCTAssertTrue(surface.contains(signedOutHeader),
+                      "the signed-out header lost its leaf identifier or its own name")
+
+        // 2. The picker's label is hidden, not removed — a picker with no label
+        //    at all reads as "radio group" and nothing else.
+        XCTAssertTrue(surface.contains("Picker(L10n.t(.inboxPolicyHeading), selection:"),
+                      "the policy picker lost the accessibility label it is named by")
+        XCTAssertTrue(surface.contains(".labelsHidden()"),
+                      "the policy picker prints its title under a header saying the same word")
+        let policyHeader = "Text(L10n.t(.inboxPolicyHeading))\n"
+            + "                .accessibilityIdentifier(\"inbox-policy\")"
+        XCTAssertTrue(surface.contains(policyHeader),
+                      "the policy section header lost its name or its identifier")
+
+        // 3. The rail states the route; the folder section states the folder.
+        XCTAssertTrue(surface.contains("PathRailPresentation.deviceInbox()"),
+                      "the rail is being handed the folder to restate again")
+        XCTAssertTrue(surface.contains("Text(InboxFolderPresentation.description(inbox.folder))")
+                      && surface.contains(".accessibilityIdentifier(\"inbox-folder\")"),
+                      "removing the duplicate removed the folder itself")
+        XCTAssertEqual(occurrences(of: "InboxFolderPresentation.description", in: surface), 1,
+                       "the receive folder is rendered in two places on one screen")
+    }
+
+    /// **Every way a file arrives adds to the selection; only Clear removes.**
+    ///
+    /// The drop zone appended and the picker replaced, so a user who dropped a
+    /// folder and then reached for **Choose Files or Folders…** to add one more
+    /// file silently lost the folder — no message, no undo, and nothing on
+    /// screen that had said the button was destructive. `NSOpenPanel` cannot
+    /// show what is already staged, so it cannot be the confirmation that a
+    /// replacement needs.
+    ///
+    /// `SelectionStore.replace` survives and is not the regression: iOS stages
+    /// through it, and it swaps the security-scoped access set and the roots
+    /// together. What is asserted is that no macOS entry point for a
+    /// user-supplied file calls it.
+    func testEveryStagingEntryPointAppendsAndOnlyClearDiscards() throws {
+        let zone = try source(named: "FileDropZone.swift")
+        XCTAssertTrue(zone.contains("if panel.runModal() == .OK { store.add(panel.urls) }"),
+                      "the picker discards a batch it never showed the user")
+        XCTAssertFalse(zone.contains("store.replace("),
+                       "a user-supplied file still replaces the staged selection")
+        XCTAssertTrue(zone.contains("store.add(urls)"),
+                      "the drop stopped appending")
+
+        // The OS-opened batches take the same route, on all three send panes.
+        for pane in [lanConnect, crossConnect, "UploadPane.swift"] {
+            let text = try source(named: pane)
+            XCTAssertTrue(text.contains("selection.add(batch.urls)"),
+                          "\(pane) adopts an opened batch by replacing the selection")
+            XCTAssertFalse(text.contains("selection.replace("),
+                           "\(pane) discards the staged selection")
+        }
+
+        // And the one destructive control is still on screen and still named.
+        XCTAssertTrue(try source(named: transferStaging).contains(
+            "Button(L10n.t(.commonClear)) { selection.clear() }"),
+            "the explicit way to discard a batch is gone, so append is a trap")
+    }
+
+    /// **A gate that IS the screen offers a primary exit; a gate beside working
+    /// controls does not.**
+    ///
+    /// Signed out, Send a link and the Device Inbox render nothing but their
+    /// gate — so the sign-in button is the only thing on screen to press and is
+    /// drawn as the primary action. The Cross-network screen gates only the half
+    /// that spends an account: joining a code sits right beside it and needs
+    /// nothing, so a prominent Sign in there would outrank the control the
+    /// reader can actually use. The asymmetry is the point, so both directions
+    /// are asserted.
+    ///
+    /// Prominence is a STYLE and not a keyboard default — `defaultAction` is
+    /// guarded separately, and a gate claiming Return would take it from the
+    /// forms this view renders inside.
+    func testOnlyAWholeSurfaceGateDrawsItsSignInAsThePrimaryAction() throws {
+        for whole in ["UploadPane.swift", "DeviceInbox/DeviceInboxSurface.swift"] {
+            XCTAssertTrue(try source(named: whole).contains("isWholeSurface: true"),
+                          "\(whole) is gated entire but offers no visible exit")
+        }
+        XCTAssertFalse(try source(named: crossConnect).contains("isWholeSurface"),
+                       "the half-gated pairing screen outranks the join controls beside it")
+
+        let gate = try source(named: "Components/CapabilityGateView.swift")
+        XCTAssertTrue(gate.contains("actionIsProminent: isWholeSurface"),
+                      "the gate no longer passes its own scope to the action")
+        XCTAssertFalse(gate.contains(".keyboardShortcut("),
+                       "the gate claims the window's default action")
+        // Every branch, not only the signed-out one. An unverified or frozen
+        // reader gets the same screenful of explanation and the same single way
+        // out of it, so a bare `Button(` in one of those arms is a whole-surface
+        // gate with an incidental-looking exit.
+        XCTAssertFalse(gate.contains("Button(L10n.t(.commonTryAgain))")
+                       || gate.contains("Button(L10n.t(.gateOpenAccount))")
+                       || gate.contains("Button(L10n.t(.contentReactivate))"),
+                       "a gated branch draws its exit without asking its own scope")
+        XCTAssertEqual(occurrences(of: "exit(L10n.t(", in: gate), 3,
+                       "the gate has a branch whose exit does not follow its scope")
+
+        let empty = try source(named: "Components/EmptyStateView.swift")
+        XCTAssertTrue(empty.contains("actionIsProminent: Bool = false"),
+                      "an empty state is prominent by default, so every one of them shouts")
+        XCTAssertTrue(empty.contains(".buttonStyle(.borderedProminent)"),
+                      "the primary exit is drawn as an ordinary bordered button")
+    }
+
+    /// macOS cannot resume a stored upload after the app closes, so its running
+    /// surface must not reuse iOS's durable-resume explanation.
+    func testMacUploadShowsItsOwnForegroundOnlyWarning() throws {
+        let upload = try source(named: "UploadPane.swift")
+        XCTAssertTrue(upload.contains("Text(L10n.t(.uploadMacKeepOpen))"),
+                      "the Mac upload does not warn that closing stops it")
+        XCTAssertFalse(upload.contains("Text(L10n.t(.uploadKeepOpen))"),
+                       "the Mac promises iOS-only upload recovery")
     }
 
     // MARK: - the component vocabulary, everywhere

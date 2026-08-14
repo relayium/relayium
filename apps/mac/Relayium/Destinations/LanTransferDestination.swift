@@ -5,9 +5,16 @@ import RelayiumKit
 /// **LAN Transfer — the other device is on this network.**
 ///
 /// One destination, one connection method: find the device in the roster and
-/// open a connection straight to it. No account, no code, and — the part the
-/// user actually needs to know before choosing between this screen and the next
-/// one — no server between the two Macs for the bytes.
+/// open an end-to-end encrypted connection to it. No account and no code, which
+/// is the part the user actually needs before choosing between this screen and
+/// the next one.
+///
+/// **It does not promise a direct path, because this client cannot see one.**
+/// Depending on network conditions, a same-network connection may run between
+/// the devices or over a TURN relay — and nothing available here distinguishes
+/// the two, which is exactly why `PathRailPresentation.lan` has no `.direct`
+/// stop and why the copy on this screen says encrypted rather than direct. What
+/// is true either way is that Relayium never holds the key.
 ///
 /// ## Why this is a destination again
 ///
@@ -52,7 +59,7 @@ struct LanTransferDestination: View {
     /// bearer and no gate — `MacSurfaceGuardTests` checks that by name, because
     /// an account reference here is how a capability that works signed out ends
     /// up behind a sign-in form that does not gate it. Minting a pairing code is
-    /// the one direct action that spends an account, and it lives on the
+    /// the one user action that spends an account, and it lives on the
     /// Cross-network destination.
     private let route = AppDestination.nearby
 
@@ -77,7 +84,7 @@ struct LanTransferDestination: View {
 
     var body: some View {
         DestinationScaffold(title: L10n.t(.navLanTransfer),
-                            symbol: MacSurface.lanTransfer.symbol,
+                            surface: .lanTransfer,
                             purpose: L10n.t(.navLanTransferSubtitle),
                             contentMaxWidth: nil) {
             switch pane {
