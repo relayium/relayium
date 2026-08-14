@@ -120,34 +120,37 @@ peer, or that a web/Stripe subscription is managed by Apple.
 ## TestFlight state and information draft
 
 Verified 2026-08-14: build `1.2.0 (6)` is uploaded, its export compliance is
-**cleared**, and it is assigned to the internal group **Relayium Internal**.
+**cleared**, and it is attached to **both** the internal group **Relayium
+Internal** and the external group **Relayium External Beta**.
 Compliance cleared truthfully through the questionnaire's non-France answer —
 the app does use non-exempt encryption, and France is not a selected territory,
 so no French declaration was required and none was faked.
 
-**Relayium Internal** still holds **zero testers** and **one build** and uses
-**Manual** distribution for Xcode builds, but it is **no longer the selected
-invitation path**. Inviting a tester sends mail immediately, so it requires
-explicit owner confirmation; no invitation has been sent from this group.
+**Relayium Internal** reads **one tester** and **one build**, and uses **Manual
+for Xcode Builds** distribution. Build `1.2.0 (6)` is **Ready to Test** there
+and expires in **90 days**. The single tester is an invitation Apple has already
+sent; whether it has been accepted or installed is not recorded here. No
+address, personal name, or invitation value belongs in this document or anywhere
+else in the repository.
 
-The owner-selected path is a single external group, **Relayium External Beta**,
-verified 2026-08-14. Its public invitation link is **enabled** and **capped at
-three testers**. The link value and any tester email addresses are deliberately
-absent from this document and must never be written into the repository. The
-group currently holds **zero testers** and **zero builds**.
+Internal readiness is not external readiness. A build that internal testers can
+install says nothing about whether the external group is approved.
 
-Opening that link today reports that the group is **not accepting testers**.
-That is correct, not a defect: build `1.2.0 (6)` is not attached to the group
-and not Beta App Review approved, so there is nothing for a tester to install.
+**Relayium External Beta**, verified 2026-08-14, reads **zero testers** and
+**one build**. Its public invitation link is **enabled** and its capacity reads
+**0 of 3**. The link value and any tester email addresses are deliberately
+absent from this document and must never be written into the repository.
 
-Attaching build `6` to the external group is what exposes the next gate. Because
-Relayium requires sign-in, external distribution makes the **Beta App Review**
-information mandatory: contact **first name**, **last name**, **phone number**,
-and **email**, plus a working Relayium **username and password** for a review
-account. Those values are **missing**. The owner should enter them directly in
-App Store Connect; never commit review credentials to this repository.
+The link still **cannot accept joiners**. That is correct, not a defect:
+**Beta App Review** is **Waiting for Review**, and an external build only
+becomes installable once that review passes. It has not passed.
 
-**No Beta App Review has been submitted.**
+Because Relayium requires sign-in, external distribution makes the Beta App
+Review information mandatory. The owner has confirmed that a separate Relayium
+review account for Apple's reviewers now exists. Its credentials and the review
+contact details are entered and maintained only in App Store Connect for the
+Apple review workflow: never commit review credentials, contact details, or
+account identifiers to this repository.
 
 Beta description:
 
@@ -166,9 +169,8 @@ What to test:
 > Privacy Policy and Terms links open from the purchase surface. Also send a
 > short text and a small file between two signed-in devices.
 
-The feedback email, review contact, phone number, and a non-expiring review
-account must be entered by the owner. Never commit review credentials to this
-repository.
+The feedback email, review contact, and review sign-in are maintained directly
+in App Store Connect. Never commit review credentials to this repository.
 
 ## App Review notes draft
 
@@ -278,9 +280,8 @@ The following items are intentionally unresolved and must not be guessed:
   purchases (always Sandbox) to be accepted alongside customer purchases (always
   Production). Send Apple's test notification on the Sandbox URL first, then
   prove a real Sandbox delivery reaches `applied`.
-- The signed package is uploaded and compliance-cleared. External TestFlight is
-  still gated on the owner supplying the Beta App Review contact details and a
-  working review sign-in, attaching build `1.2.0 (6)` to **Relayium External
-  Beta**, and passing Beta App Review; a real Sandbox purchase must be observed
-  before Add for Review is used on the version and subscriptions. Keep manual
-  release selected.
+- The signed package is uploaded, compliance-cleared, and attached to both
+  TestFlight groups. External TestFlight is still gated on **Beta App Review**,
+  which is **Waiting for Review**; until it passes, the public link cannot
+  accept joiners. A real Sandbox purchase must be observed before Add for Review
+  is used on the version and subscriptions. Keep manual release selected.
