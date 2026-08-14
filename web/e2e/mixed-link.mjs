@@ -56,7 +56,7 @@ const SHOTS = shotsArg === null || !shotsArg || shotsArg.startsWith("--")
 const MSG_BODY = "  \tif x:\n\n\t\tprint('\u4f60\u597d \u0645\u0631\u062d\u0628\u0627 \ud83c\udf0d')\n   \n  trailing   ";
 const utf8Hex = (s) => [...Buffer.from(s, "utf8")].map((b) => b.toString(16).padStart(2, "0")).join("");
 
-/** 默认 LAN UI 的**唯一**主动作。语义选择器，九种语言和换图标都打不断。 */
+/** 默认 LAN UI 的**唯一**主动作。语义选择器，中英文或换图标都打不断。 */
 const OPEN_WORKSPACE = ".open-workspace";
 /** 附件住在统一工作区里，不在对端卡片上——工作区一开，卡片就整个收走了。 */
 const ATTACH_FILE = ".msgpanel .attach-file";
@@ -673,18 +673,18 @@ async function mixedScenario(browser) {
     + `(A ${pcCounts.a}→${senderPcs}, B ${pcCounts.b}→${resumed.peerConnections}), `
     + "keeping the transcript, the attachments and the SAS, and offering one explicit restart");
 
-  // ── 九、320px、RTL 和深色：最窄的屏幕上头部仍然是可读、可操作、不溢出的 ────
+  // ── 九、320px、中英文和深色：最窄屏幕上头部仍可读、可操作、不溢出 ──────
   const painted = {};
   for (const variant of [
-    { name: "320-ltr-light", width: 320, locale: "en", theme: "light", rtl: false },
-    { name: "320-rtl-dark", width: 320, locale: "ar", theme: "dark", rtl: true },
-    { name: "390-rtl-dark", width: 390, locale: "ar", theme: "dark", rtl: true },
+    { name: "320-ltr-light", width: 320, locale: "en", theme: "light" },
+    { name: "320-zh-dark", width: 320, locale: "zh", theme: "dark" },
+    { name: "390-zh-dark", width: 390, locale: "zh", theme: "dark" },
   ]) {
     await setWideViewport(b, variant.width, 568);
     await setLocale(b, variant.locale);
     await setTheme(b, variant.theme);
     await b.waitFor(
-      `document.documentElement.dir === ${JSON.stringify(variant.rtl ? "rtl" : "ltr")}`,
+      "document.documentElement.dir === 'ltr'",
       `${variant.name} writing direction`,
     );
     const layout = await b.evaluate(`(() => {
@@ -694,7 +694,6 @@ async function mixedScenario(browser) {
       const dc = head.querySelector('.wh-disconnect').getBoundingClientRect();
       const panel = document.querySelector('.msgpanel');
       const attach = document.querySelector('.msgpanel .attach');
-      const rtl = document.documentElement.dir === 'rtl';
       return {
         pageOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
         headOverflow: head.scrollWidth - head.clientWidth,
@@ -703,11 +702,8 @@ async function mixedScenario(browser) {
         inside: rect.left >= -1 && rect.right <= innerWidth + 1,
         sasInside: sas.left >= -1 && sas.right <= innerWidth + 1 && sas.top >= 0,
         disconnectInside: dc.left >= -1 && dc.right <= innerWidth + 1 && dc.height >= 24,
-        // 行尾就是"逻辑上的末端"：LTR 靠右、RTL 靠左。这条断言是在证明镜像真的发生了，
-        // 而不是布局用了写死的 left/right。
-        disconnectAtRowEnd: rtl
-          ? dc.left - rect.left < rect.right - dc.right
-          : rect.right - dc.right < dc.left - rect.left,
+        // 两种维护语言都是 LTR；断开操作必须留在这一行的末端。
+        disconnectAtRowEnd: rect.right - dc.right < dc.left - rect.left,
         headBackground: getComputedStyle(head).backgroundColor,
         headText: getComputedStyle(head.querySelector('.wh-state')).color,
       };
@@ -727,7 +723,7 @@ async function mixedScenario(browser) {
     await oneSas(b, "tab B", `at ${variant.name}`);
     await scanLiveState(b, `mixed workspace at ${variant.name}`);
     await screenshot(b, variant.name);
-    ok(`${variant.name}: the workspace stayed inside the viewport, mirrored correctly and kept one SAS`);
+    ok(`${variant.name}: the workspace stayed inside the viewport, kept its row-end action and one SAS`);
   }
   // 不这么比的话，"深色"那一格其实什么也没验证：一个只有浅色 token 的头部同样能
   // 通过上面每一条几何断言。这一条要求深浅两套真的画出了不同的东西。

@@ -376,9 +376,11 @@ export const OBSERVE_CAPS = `
  * put there. A runtime flag inside the product would be a shipped way to
  * downgrade the protocol, reachable by whoever can set it.
  *
- * It strips `link/1` from EVERY signal frame carrying a caps list: the roster
- * hello and the caps confirmation piggybacked on the SDP offer/answer. Halving
- * that would simulate an inconsistent peer, not an old one.
+ * It strips `link/1` and its coupled `preupload/1` capability from EVERY signal
+ * frame carrying a caps list: the roster hello and the caps confirmation
+ * piggybacked on the SDP offer/answer. Halving that would simulate an
+ * inconsistent peer, not an old one: production advertises preupload only with
+ * the unified link that can hand its keys over.
  *
  * The counters are the point, not bookkeeping. `sawLink` proves the build under
  * test really did announce `link/1` before the filter removed it — without it, a
@@ -397,7 +399,7 @@ export const STRIP_LINK_CAP = `
             const announced = e.data.caps.slice();
             window.__legacyPeer.capsFrames++;
             if (announced.includes("link/1")) window.__legacyPeer.sawLink++;
-            e.data.caps = announced.filter((c) => c !== "link/1");
+            e.data.caps = announced.filter((c) => c !== "link/1" && c !== "preupload/1");
             // 只有名册那一帧（data 里只有 caps）算"这个对端自称支持什么"。
             if (Object.keys(e.data).length === 1) window.__legacyPeer.hello = e.data.caps.slice();
             return realSend.call(this, JSON.stringify(e));

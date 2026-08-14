@@ -560,7 +560,7 @@ const MSG_BODY = "  \tif x:\n\n\t\tprint('\u4f60\u597d \u0645\u0631\u062d\u0628\
 const MSG_INJECTION = '<script>alert(1)</script><img src=x onerror=alert(2)>';
 
 /** The only <button> among the peer actions — the file/folder controls are <label>s.
- *  Structural rather than text- or emoji-matched, so nine translations and an icon
+ *  Structural rather than text- or emoji-matched, so either maintained translation and an icon
  *  change cannot break it. */
 const MSG_OPEN_BTN = ".peer-actions button";
 
@@ -623,8 +623,8 @@ async function messageScenario(browser) {
   // 两件事一起钉，缺一件这一幕都证明不了什么：
   //   sawLink > 0 —— 这个产物在**无配对码的 LAN 房间**里真的通告了 link/1。哪天
   //     谁把通告整个关掉，下面所有"老路照旧工作"的断言都会因为错误的原因通过。
-  //   hello === ["text/1"] —— 但这两个标签页互相看到的是老对端，因为线上帧被降级
-  //     过滤器改写过。
+  //   hello === ["text/1"] —— 但这两个标签页互相看到的是不支持 link/1 的老对端；
+  //     与统一链路耦合的 preupload/1 也必须一起移除，避免模拟生产不可能发出的能力组合。
   for (const [who, tab] of [["A", a], ["B", b]]) {
     const seen = await tab.evaluate("window.__legacyPeer");
     if (!seen || seen.capsFrames === 0) {
@@ -1423,7 +1423,7 @@ async function authLandingScenario(browser) {
 
   await tab.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
   await setWideViewport(tab, 320, 844);
-  const locales = ["zh", "en", "ja", "ko", "de", "fr", "ar", "es", "pt"];
+  const locales = ["zh", "en"];
   const mobile = [];
   for (const code of locales) {
     await tab.evaluate(`(() => {
@@ -1448,7 +1448,7 @@ async function authLandingScenario(browser) {
   }
   const bad = mobile.filter((m) =>
     m.pageOverflow !== 0 || m.cardLeft < -.5 || m.cardRight > 320.5 ||
-    m.actionHeight < 44 || m.h1s !== 1 || (m.lang === "ar" ? m.dir !== "rtl" : m.dir !== "ltr")
+    m.actionHeight < 44 || m.h1s !== 1 || m.dir !== "ltr"
   );
   if (bad.length) throw new Error(`mobile auth landing contract failed: ${JSON.stringify(bad)}`);
 
@@ -1468,12 +1468,12 @@ async function authLandingScenario(browser) {
   }))()`);
   if (
     publicHead.canonical !== `${BASE}/` || publicHead.og !== `${BASE}/` ||
-    publicHead.alternates !== 10 || !publicHead.robots.startsWith("index, follow")
+    publicHead.alternates !== 3 || !publicHead.robots.startsWith("index, follow")
   ) throw new Error(`private-to-public head restoration failed: ${JSON.stringify(publicHead)}`);
 
   const errs = tab.errors.filter((e) => !/401|Failed to load resource/.test(e));
   if (errs.length) throw new Error(`auth landing pages logged errors:\n    ${errs.join("\n    ")}`);
-  ok("auth landings stayed named, private, labelled and responsive across all nine locales");
+  ok("auth landings stayed named, private, labelled and responsive in both maintained languages");
   await browser.send("Target.closeTarget", { targetId: tab.targetId });
 }
 
@@ -1548,13 +1548,14 @@ async function appsHierarchyScenario(browser) {
     };
   })()`);
   if (
-    JSON.stringify(desktop.available) !== JSON.stringify(["app-web", "app-cli"]) ||
-    JSON.stringify(desktop.future) !== JSON.stringify(["app-mac", "app-ios"]) ||
+    JSON.stringify(desktop.available) !== JSON.stringify(["app-web", "app-cli", "app-mac"]) ||
+    JSON.stringify(desktop.future) !== JSON.stringify(["app-ios", "app-android", "app-windows"]) ||
     desktop.headings.filter((tag) => tag === "H1").length !== 1 ||
-    desktop.headings.filter((tag) => tag === "H2").length !== 2 ||
-    desktop.headings.filter((tag) => tag === "H3").length !== 4 ||
-    JSON.stringify(desktop.actions) !== JSON.stringify(["/", "/cli"]) || desktop.futureControls !== 0 ||
-    desktop.sharedCards !== 4 ||
+    desktop.headings.filter((tag) => tag === "H2").length !== 3 ||
+    desktop.headings.filter((tag) => tag === "H3").length !== 8 ||
+    desktop.actions.length !== 3 || desktop.actions[0] !== "/" || desktop.actions[1] !== "/cli" ||
+    !desktop.actions[2]?.endsWith("/Relayium.dmg") || desktop.futureControls !== 0 ||
+    desktop.sharedCards !== 6 ||
     [...desktop.lightFuture, ...desktop.darkFuture].some((metric) => metric.contrast < 4.5 || metric.opacity !== 1) ||
     !desktop.platformMarker.id || desktop.platformMarker.border !== desktop.platformMarker.neutral ||
     desktop.platformMarker.border === desktop.platformMarker.accent ||
@@ -1565,7 +1566,7 @@ async function appsHierarchyScenario(browser) {
 
   await tab.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 5 });
   await setWideViewport(tab, 390, 844);
-  const locales = ["zh", "en", "ja", "ko", "de", "fr", "ar", "es", "pt"];
+  const locales = ["zh", "en"];
   const mobile = [];
   for (const code of locales) {
     await tab.evaluate(`(() => {
@@ -1602,7 +1603,7 @@ async function appsHierarchyScenario(browser) {
   const bad = mobile.filter((m) =>
     m.pageOverflow !== 0 || m.elementOverflow || m.minAction < 44 || m.futureControls !== 0 ||
     m.command.dir !== "ltr" || m.command.tabIndex !== 0 || m.command.scrollLeft !== 0 || m.command.codeStartsAt < 0 ||
-    (m.lang === "ar" ? m.dir !== "rtl" : m.dir !== "ltr")
+    m.dir !== "ltr"
   );
   if (bad.length) throw new Error(`mobile apps hierarchy contract failed: ${JSON.stringify(bad)}`);
 
@@ -1631,13 +1632,13 @@ async function appsHierarchyScenario(browser) {
 
   const errs = tab.errors.filter((e) => !/401|Failed to load resource/.test(e));
   if (errs.length) throw new Error(`apps page logged errors:\n    ${errs.join("\n    ")}`);
-  ok("apps separated executable choices from native futures across all nine locales");
+  ok("apps separated executable choices from native futures in both maintained languages");
   await browser.send("Target.closeTarget", { targetId: tab.targetId });
 }
 
 /**
- * 定价页是购买入口：真正的方案必须先于长解释出现，而且这个层级要在九种语言和
- * RTL 下仍然成立。它跟 LAN 传输共享同一份全局样式，因此放在完整浏览器回归里，
+ * 定价页是购买入口：真正的方案必须先于长解释出现，而且这个层级要在中英文下
+ * 都成立。它跟 LAN 传输共享同一份全局样式，因此放在完整浏览器回归里，
  * 避免一个只在 jsdom 里通过的 DOM 顺序测试掩盖真实折叠线/溢出回归。
  */
 async function pricingHierarchyScenario(browser) {
@@ -1668,7 +1669,7 @@ async function pricingHierarchyScenario(browser) {
 
   await tab.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
   await setWideViewport(tab, 390, 844);
-  const locales = ["zh", "en", "ja", "ko", "de", "fr", "ar", "es", "pt"];
+  const locales = ["zh", "en"];
   const mobile = [];
   for (const code of locales) {
     await tab.evaluate(`(() => {
@@ -1696,7 +1697,7 @@ async function pricingHierarchyScenario(browser) {
     m.firstTierY >= 1000 || m.pageOverflow !== 0 ||
     m.cardOverflows.some((n) => n > 1) || m.controlOverflows.some((n) => n > 1) ||
     m.cycleTargets.some((n) => n < 44) || m.priceIsolates.some((dir) => dir !== "ltr") ||
-    (m.lang === "ar" ? m.dir !== "rtl" : m.dir !== "ltr")
+    m.dir !== "ltr"
   );
   if (bad.length) throw new Error(`mobile pricing hierarchy contract failed: ${JSON.stringify(bad)}`);
 
@@ -1715,7 +1716,7 @@ async function pricingHierarchyScenario(browser) {
 
   const errs = tab.errors.filter((e) => !/401|Failed to load resource/.test(e));
   if (errs.length) throw new Error(`pricing page logged errors:\n    ${errs.join("\n    ")}`);
-  ok("pricing exposed real tiers early across all nine locales with honest touch targets");
+  ok("pricing exposed real tiers early in both maintained languages with honest touch targets");
   await browser.send("Target.closeTarget", { targetId: tab.targetId });
 }
 
@@ -2375,10 +2376,11 @@ async function main() {
     }
 
     // Exercise the rules that are easiest to accidentally defeat with scoped CSS:
-    // the coarse-pointer floor, the three narrow rows and long localized labels.
+    // the coarse-pointer floor, the primary file row and the shared secondary
+    // row in both maintained languages.
     await sender.send("Emulation.setTouchEmulationEnabled", { enabled: true, maxTouchPoints: 1 });
     await setWideViewport(sender, 390, 844);
-    for (const code of ["en", "fr", "pt", "de", "ar", "zh", "ja", "ko", "es"]) {
+    for (const code of ["en", "zh"]) {
       await sender.evaluate(`(() => {
         const select = document.querySelector('select.lang');
         select.value = ${JSON.stringify(code)};
@@ -2403,8 +2405,9 @@ async function main() {
       })()`);
       if (
         !narrow.coarse || narrow.count !== 3 ||
-        narrow.heights.some((n) => n < 43.5) || new Set(narrow.tops).size !== 3 ||
-        Math.max(...narrow.widths) - narrow.widths[0] > 1 ||
+        narrow.heights.some((n) => n < 43.5) || new Set(narrow.tops).size !== 2 ||
+        narrow.tops[0] === narrow.tops[1] || narrow.tops[1] !== narrow.tops[2] ||
+        narrow.widths[1] < 165 || narrow.widths[2] < 165 ||
         narrow.labelRects.some((n) => n !== 1) ||
         narrow.fileBottom > 844 || narrow.overflow !== 0
       ) {
@@ -2412,7 +2415,7 @@ async function main() {
       }
     }
     await setWideViewport(sender, 430, 844);
-    for (const code of ["en", "fr", "pt", "de", "ar", "zh", "ja", "ko", "es"]) {
+    for (const code of ["en", "zh"]) {
       await sender.evaluate(`(() => {
         const select = document.querySelector('select.lang');
         select.value = ${JSON.stringify(code)};
@@ -2449,7 +2452,7 @@ async function main() {
     await sender.waitFor("document.documentElement.lang === 'en'", "English locale to return");
     await sender.send("Emulation.setTouchEmulationEnabled", { enabled: false });
     await setWideViewport(sender);
-    ok("all nine locales kept honest 390px rows and unbroken 430px shared rows with 44px touch targets");
+    ok("both maintained languages kept honest 390px rows and unbroken 430px shared rows with 44px touch targets");
 
     const widePeerCard = await sender.evaluate("document.querySelector('.peers li.peer').getBoundingClientRect().width");
     if (widePeerCard < 500 || widePeerCard > 561) {
@@ -2465,7 +2468,7 @@ async function main() {
 
     // 首页折叠线以下的营销区块是懒加载的（HomeSections）。它在首屏之外，坏掉了
     // 不会有任何报错——页面只是从此少了一半内容。这里明确等它出现。
-    // 用结构选择器而不是文案匹配：文案有 9 种语言、还会改，拿它当断言只会制造
+    // 用结构选择器而不是文案匹配：中英文文案都会改，拿它当断言只会制造
     // 假红——第一版就踩了（英文标题是 "Frequently asked questions"，并不含 "FAQ"）。
     // .how / .crosscta / .faq 分别来自 HomeSections 里的三个子组件，三个都在才说明
     // 这个懒加载边界整块挂上了。

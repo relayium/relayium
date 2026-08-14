@@ -9,7 +9,7 @@
  * 房间——`/api/pair` 铸码要一个登录且验证过的账号，ws 路由又会拒掉没被铸出来的码。
  * 现在这条路由的答案反过来了（DECISION-LOG 2026-08-10），而"反过来"这件事必须有一次
  * **真浏览器**的证明：默认可见的输入框、下面的发送文件/文件夹、一条链路一个 SAS、
- * 文本与文件走同一条连接、手机与 RTL 布局、以及断开之后的收尾。
+ * 文本与文件走同一条连接、手机与中英文布局、以及断开之后的收尾。
  *
  * 会合与 ICE 由一份受控夹具提供（`code-room-fixture.mjs`），页面本身是原样的构建
  * 产物、跑原样的策略。**这条路径上没有 TURN**：中继凭据的有效期边界因此在这里一次
@@ -244,9 +244,11 @@ async function codeRoomScenario(browser, base) {
   await scanLiveState(a, "code-room unified workspace (390px)");
   ok("the code room's chooser and availability hint went away with the workspace open");
 
-  // ── 三、RTL：同一条工作区在阿拉伯语下不横向溢出，头部仍然只有一个 SAS ──────
-  await setLocale(a, "ar");
-  const rtl = await a.evaluate(`(() => {
+  // ── 三、维护语言：同一条工作区切到中文后不横向溢出，头部仍只有一个 SAS ──────
+  // 阿拉伯语已是静态归档翻译，不再是运行时 selector 的可达状态；其 RTL
+  // 渲染由静态阿拉伯语页面的 axe/模板门禁覆盖。这里验证真实运行时的中文切换。
+  await setLocale(a, "zh");
+  const localized = await a.evaluate(`(() => {
     const head = document.querySelector('${HEAD}');
     const composer = document.querySelector('${COMPOSER}');
     return {
@@ -255,22 +257,23 @@ async function codeRoomScenario(browser, base) {
       head: !!head,
       composer: !!composer,
       overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
-      // 断开按钮靠的是 margin-inline-start:auto（逻辑属性），RTL 下应该镜像到左边。
-      disconnectAtStart: (() => {
+      // 断开按钮靠 margin-inline-start:auto；在维护中的 LTR 语言里应位于右侧。
+      disconnectAtEnd: (() => {
         const btn = head.querySelector('.wh-disconnect');
         const box = btn.getBoundingClientRect();
-        return box.left < innerWidth / 2;
+        return box.left > innerWidth / 2;
       })(),
     };
   })()`);
-  if (rtl.dir !== "rtl" || !rtl.head || !rtl.composer || rtl.overflow !== 0 || !rtl.disconnectAtStart) {
-    throw new Error(`the code-room workspace did not survive RTL at 390px: ${JSON.stringify(rtl)}`);
+  if (localized.lang !== "zh" || localized.dir !== "ltr" || !localized.head || !localized.composer ||
+      localized.overflow !== 0 || !localized.disconnectAtEnd) {
+    throw new Error(`the code-room workspace did not survive Chinese at 390px: ${JSON.stringify(localized)}`);
   }
-  await oneSas(a, "tab A", "in Arabic (RTL)");
-  await screenshot(a, "code-room-workspace-rtl");
-  await scanLiveState(a, "code-room unified workspace (Arabic RTL, 390px)");
+  await oneSas(a, "tab A", "in Chinese");
+  await screenshot(a, "code-room-workspace-zh");
+  await scanLiveState(a, "code-room unified workspace (Chinese, 390px)");
   await setLocale(a, "en");
-  ok("the same workspace held up in Arabic RTL at 390px with its single SAS");
+  ok("the same workspace held up in Chinese at 390px with its single SAS");
 
   // ── 四、同一条连接上先文本、再文件 ────────────────────────────────────────
   // 文本通道两边都会自动开一次；哪一边收到同意提示取决于真实时序，所以先把它答掉。
