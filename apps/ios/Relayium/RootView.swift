@@ -64,6 +64,11 @@ struct RootView: View {
     @ObservedObject var download: CloudDownloadModel
     @ObservedObject var upload: CloudUploadModel
     @ObservedObject var send: SendSelectionModel
+    // The device-delivery half of the Send tab, passed through for the same
+    // reason every other model here is: this file renders none of it and decides
+    // none of it.
+    @ObservedObject var deliveries: InboxSendModel
+    @ObservedObject var sendRoutes: SendRouteSelection
     // The direct half's app-scoped owners, passed through rather than read:
     // this file renders none of their state and decides none of it. The four
     // that both direct tabs share are handed to BOTH — one set of models, one
@@ -91,6 +96,7 @@ struct RootView: View {
                 .tag(AppDestination.storedReceive)
 
             SendView(upload: upload, selection: send,
+                     deliveries: deliveries, routes: sendRoutes,
                      onOpenAccount: { navigation.select(.account) })
                 .tabItem { Label(L10n.t(.tabSend), systemImage: "arrow.up.doc") }
                 .tag(AppDestination.storedSend)

@@ -1661,9 +1661,31 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // action that needs one — minting a code, which is billed to whoever
         // created it. Joining a code is beside it in the same view and reaches
         // the transport with no credential at all.
-        XCTAssertEqual(readers, ["AccountSummaryView.swift", "DirectView.swift",
-                                 "RelayiumApp.swift", "SendView.swift"],
+        //
+        // P3A adds `DeviceSendView`, and it is the same shape as `DirectView`'s:
+        // every read is inside an action, none is stored, and each pairs the
+        // token with an `AccountGate` so a sign-out landing between a control
+        // being enabled and that control being tapped routes to the Account tab
+        // rather than issuing a request with a dead credential. The positive
+        // claims about that shape are asserted immediately below, because "is in
+        // the list" is the weaker half.
+        XCTAssertEqual(readers, ["AccountSummaryView.swift", "DeviceSendView.swift",
+                                 "DirectView.swift", "RelayiumApp.swift", "SendView.swift"],
                        "an unaccounted-for view-layer holder of the credential")
+        let devices = try XCTUnwrap(all.first { $0.name == "DeviceSendView.swift" })
+        XCTAssertFalse(devices.text.contains("@State private var token"),
+                       "a stored credential would outlive the account that issued it")
+        XCTAssertEqual(devices.text.components(
+            separatedBy: "case .allowed = AccountGate.from(session.state, bearer: token)").count - 1, 2,
+            "a device send or a recovery action can be activated on a dead credential")
+        // The list read is the one deliberate exception, and it is not a gap: an
+        // empty or rejected bearer has to reach the model, because the model is
+        // what turns it into the unauthorized DIRECTORY state whose remedy names
+        // the account. Routing it to the Account tab instead would leave the
+        // picker silently empty.
+        XCTAssertTrue(devices.text.contains(
+            "deliveries.refreshTargets(token: session.bearerToken ?? \"\")"),
+            "a rejected credential must surface as an unauthorized device list")
         let app = try XCTUnwrap(all.first { $0.name == "RelayiumApp.swift" })
         XCTAssertTrue(app.text.contains("bearer: { account.bearerToken }"),
                       "billing captured a token value instead of reading it at submission time")
@@ -1684,6 +1706,111 @@ final class IOSSurfaceGuardTests: XCTestCase {
                       "the refresh decision must see the LIVE credential, not the rendered scope")
         XCTAssertFalse(summary.text.contains("@State private var scope"),
                        "a stored scope would outlive the credential it names")
+    }
+
+    // MARK: - P3A: sending to one of the account's own devices
+
+    /// The two halves of the Send tab are ONE object each, built before any view
+    /// exists and sharing the one staging root.
+    ///
+    /// Every clause here is a defect that compiles and reads plausibly:
+    ///
+    ///  - a second `PendingUploadSupport` would be a second staging root and a
+    ///    second keychain namespace over one directory. It would work until one
+    ///    of them was pointed elsewhere, and the symptom would be device
+    ///    deliveries the recovery path cannot see;
+    ///  - a `.task`-installed session observation would be absent for exactly
+    ///    the case it exists for, because a `TabView` may tear an off-screen tab
+    ///    down — leaving an account-owned delivery running, and described on
+    ///    screen, under an account that has gone;
+    ///  - a missing commit seam would leave the Share Extension's copy of the
+    ///    user's files on disk forever, offered as a second send of bytes
+    ///    already on their way.
+    func testTheDeviceSendHalfIsAppScopedAndSharesTheOneStagingRoot() throws {
+        let app = try XCTUnwrap(try sources().first { $0.name == "RelayiumApp.swift" }?.text)
+        XCTAssertEqual(app.components(separatedBy: "AppEnvironment.makePendingUploadSupport(")
+                        .count - 1, 1,
+                       "the two halves of the Send tab must stage into one root")
+        XCTAssertEqual(app.components(separatedBy: "AppEnvironment.makeInboxSendModel(").count - 1, 1)
+        XCTAssertTrue(app.contains("pending: pending"),
+                      "the delivery model must be built from the shared staging support")
+        XCTAssertTrue(app.contains("delivering.observe(account.$state)"),
+                      "an account leaving must reach the delivery model with no view mounted")
+        XCTAssertTrue(app.contains("delivering.onSelectionCommitted = "),
+                      "nothing would retire a shared draft a durable delivery took over")
+        XCTAssertTrue(app.contains(
+            "sending?.deviceSendCommitted(accountId: accountId, sourceDraftId: draftId)"),
+            "the retirement must carry the ACCOUNT, or it cannot refuse a stale report")
+        XCTAssertTrue(app.contains("@StateObject private var deliveries: InboxSendModel"))
+        XCTAssertTrue(app.contains("@StateObject private var sendRoutes: SendRouteSelection"))
+    }
+
+    /// The route is a choice the user makes before anything is encrypted, and
+    /// its consequence is stated where the choice is made.
+    ///
+    /// A link publishes the content key in a URL fragment and a delivery seals
+    /// it to one device. Those are different answers to "who can read this", so
+    /// neither may be entered by default from the other's failure and the
+    /// difference may not be something the user discovers afterwards.
+    func testTheSendRouteIsChosenExplicitlyAndExplainsItsConsequence() throws {
+        let all = try sources()
+        let chooser = try XCTUnwrap(all.first { $0.name == "DeviceSendView.swift" }?.text)
+        XCTAssertTrue(chooser.contains("InboxSendPresentation.explanation(for: routes.route)"),
+                      "the two kinds of send are offered without saying how they differ")
+        XCTAssertTrue(chooser.contains("routes.select($0)"))
+        XCTAssertFalse(chooser.contains("@State private var route"),
+                       "a view-local route would reset to the other kind of send on a rebuild")
+
+        let send = try XCTUnwrap(all.first { $0.name == "SendView.swift" }?.text)
+        XCTAssertTrue(send.contains("SendRouteChooser(routes: routes)"))
+        XCTAssertTrue(send.contains("if routes.route == .device, isChoosingFilesToSend {"),
+                      "a live or finished link upload must not be hidden behind the chooser")
+        XCTAssertTrue(send.contains("DeviceDeliveryList(deliveries: deliveries,"),
+                      "outstanding deliveries must be rendered under BOTH routes")
+    }
+
+    /// An upload is not a delivery, and no view may decide otherwise.
+    ///
+    /// Every sentence on this surface comes from `InboxSendPresentation`, where
+    /// `InboxSendModelTests` can drive it. A `switch` in a view is a `switch` no
+    /// `swift test` can reach, and the one mistake this screen must not make is
+    /// rendering a finished upload as an arrival.
+    func testTheDeliverySurfaceRendersNoStateItDecidedForItself() throws {
+        let view = try XCTUnwrap(try sources().first { $0.name == "DeviceSendView.swift" }?.text)
+        XCTAssertTrue(view.contains("InboxSendPresentation.status(for: item.activity)"))
+        XCTAssertTrue(view.contains("InboxSendActions.offered(for: item)"),
+                      "the offered recovery must be derived, not tabulated in a view")
+        XCTAssertTrue(view.contains("InboxSendActions.warnsDeliveryMayStillArrive(action, for: item)"),
+                      "the warning a discard carries must not be re-decided here")
+        for invented in ["Saved on", "isSavedOnTarget ?", "case .saved:"] {
+            XCTAssertFalse(view.contains(invented),
+                           "the view reaches for an arrival it is not allowed to decide")
+        }
+        // A bar only while bytes move, and never as the whole story.
+        XCTAssertTrue(view.contains("if case let .uploading(sent, total) = item.activity"))
+        XCTAssertTrue(view.contains("PendingFileList(sessionFiles: item.files)"),
+                      "a recovered delivery offers Send without naming what it holds")
+    }
+
+    /// Blocked devices are shown and are not tappable.
+    ///
+    /// Dropping them is what turns a two-second fix into "Relayium cannot see my
+    /// Mac"; making them tappable is a dead end the user finds by pressing it.
+    func testTheTargetPickerShowsBlockedDevicesWithoutOfferingThem() throws {
+        let view = try XCTUnwrap(try sources().first { $0.name == "DeviceSendView.swift" }?.text)
+        XCTAssertTrue(view.contains("ForEach(blocked) { candidate in"))
+        XCTAssertTrue(view.contains("L10n.t(.sendDeviceBlockedHeading)"))
+        let blocked = try XCTUnwrap(view.components(separatedBy: "private func blockedRow(")
+            .dropFirst().first?.components(separatedBy: "private func failureLine").first)
+        XCTAssertFalse(blocked.contains("Button"),
+                       "a blocked device must not be selectable")
+        XCTAssertTrue(blocked.contains("InboxSendPresentation.detail(for: candidate)"),
+                      "a blocked device must say which remedy it needs")
+        // The three list states that are not a list, each with its own remedy.
+        for state in ["L10n.t(.sendDeviceNone)", "L10n.t(.sendDeviceNoneHelp)",
+                      "InboxSendPresentation.text(for: deliveries.directory)"] {
+            XCTAssertTrue(view.contains(state), "the target list cannot render \(state)")
+        }
     }
 
     // MARK: - R3-D: device and stored-file management

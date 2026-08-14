@@ -1515,6 +1515,117 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case helpAccountStep3 = "help.account.step3"
     case helpAccountQuestion = "help.account.question"
     case helpAccountAnswer = "help.account.answer"
+
+    // MARK: - Sending to one of the account's own devices (iOS → Mac/CLI)
+    //
+    // The rules this whole section is written against:
+    //
+    //  1. **An upload is not a delivery.** There is exactly ONE arrival sentence
+    //     here, `send.stateSaved`, and it is reachable only from central
+    //     reporting that a target device authenticated, verified and atomically
+    //     committed the files. `send.stateUploading` says the opposite in so
+    //     many words, because a progress bar that finishes is the exact place a
+    //     person concludes their file has landed.
+    //  2. **A refusal keeps its name.** Every block and every create refusal has
+    //     its own sentence, because the remedies are in different places — on
+    //     the other device, in the account, or in a later version of this app —
+    //     and an empty list or a generic failure hides which.
+    //  3. **Nothing here names a file, a path, a device id or a task id.** A
+    //     rejection contributes a token this protocol already defines.
+    //
+    // These deliberately DO name a Mac and the command line: unlike the copy in
+    // `iosSendSurface`, which describes the device in the user's hand, these
+    // describe the TARGET, and "set up Device Inbox on a computer somewhere"
+    // would be advice nobody could follow.
+
+    case sendDeviceHeading = "send.deviceHeading"
+    case sendDeviceExplain = "send.deviceExplain"
+    case sendLinkHeading = "send.linkHeading"
+    case sendLinkExplain = "send.linkExplain"
+    case sendChooseHow = "send.chooseHow"
+    // The refresh control reuses `common.refresh`: a second word for the same
+    // action in one corner of one screen is a second thing to translate and a
+    // second thing to keep consistent.
+    case sendDeviceChooseTarget = "send.deviceChooseTarget"
+    case sendDeviceLoading = "send.deviceLoading"
+    case sendDeviceNone = "send.deviceNone"
+    case sendDeviceNoneHelp = "send.deviceNoneHelp"
+    case sendDeviceUnreachable = "send.deviceUnreachable"
+    case sendDeviceUnauthorized = "send.deviceUnauthorized"
+    case sendDeviceBlockedHeading = "send.deviceBlockedHeading"
+    /// A recovered delivery records the device ID and deliberately not its name.
+    case sendDeviceUnknownTarget = "send.deviceUnknownTarget"
+    case sendTargetOnline = "send.targetOnline"
+    case sendTargetOffline = "send.targetOffline"
+
+    // Truthful qualifications on a send that IS allowed, said BEFORE the file is
+    // encrypted and uploaded rather than after.
+    case sendCaveatNeedsApproval = "send.caveatNeedsApproval"
+    case sendCaveatDirectoryNotReady = "send.caveatDirectoryNotReady"
+    case sendCaveatQueuedUntilOnline = "send.caveatQueuedUntilOnline"
+
+    // Why a device may not be sent to. One per distinct remedy.
+    case sendBlockUnusableIdentifier = "send.blockUnusableIdentifier"
+    case sendBlockNotEnrolled = "send.blockNotEnrolled"
+    case sendBlockRevoked = "send.blockRevoked"
+    case sendBlockCannotReceive = "send.blockCannotReceive"
+    case sendBlockUnsupportedCapability = "send.blockUnsupportedCapability"
+    case sendBlockUnsupportedKey = "send.blockUnsupportedKey"
+    case sendBlockReceiveOff = "send.blockReceiveOff"
+
+    // The three local phases…
+    case sendStateStaged = "send.stateStaged"
+    case sendStatePreparing = "send.statePreparing"
+    case sendStateUploading = "send.stateUploading"
+    case sendStateCreating = "send.stateCreating"
+    // …and central's own state, which is the only authority on arrival.
+    case sendStateQueued = "send.stateQueued"
+    case sendStateNotified = "send.stateNotified"
+    case sendStateDownloading = "send.stateDownloading"
+    case sendStateVerifying = "send.stateVerifying"
+    case sendStateSaved = "send.stateSaved"
+    case sendStateAttention = "send.stateAttention"
+    case sendStateExpired = "send.stateExpired"
+    case sendStateRevoked = "send.stateRevoked"
+    case sendStateFailedRetryable = "send.stateFailedRetryable"
+    case sendStateFailedTerminal = "send.stateFailedTerminal"
+    /// The ambiguous outcome. It has to say that nothing was deleted, because
+    /// the safe behaviour — keeping everything — looks like a stuck send.
+    case sendStateUnknown = "send.stateUnknown"
+
+    // Why one attempt stopped.
+    case sendErrorNotADelivery = "send.errorNotADelivery"
+    case sendErrorContentKey = "send.errorContentKey"
+    case sendErrorUpload = "send.errorUpload"
+    case sendErrorTargetMissing = "send.errorTargetMissing"
+    case sendErrorStaleKey = "send.errorStaleKey"
+    case sendErrorSeal = "send.errorSeal"
+    case sendErrorRefused = "send.errorRefused"
+    case sendErrorNotAuthorized = "send.errorNotAuthorized"
+    case sendErrorRecoveryWrite = "send.errorRecoveryWrite"
+    case sendErrorRecoveryRead = "send.errorRecoveryRead"
+    case sendErrorNoTask = "send.errorNoTask"
+    case sendErrorConflict = "send.errorConflict"
+    case sendErrorAlreadyBound = "send.errorAlreadyBound"
+    case sendErrorObjectUnavailable = "send.errorObjectUnavailable"
+    case sendErrorQueueFull = "send.errorQueueFull"
+
+    // Refusals of one user action, decided before a byte moves.
+    case sendRefusalNoSelection = "send.refusalNoSelection"
+    case sendRefusalNoTarget = "send.refusalNoTarget"
+    case sendRefusalNotSignedIn = "send.refusalNotSignedIn"
+    case sendRefusalStaging = "send.refusalStaging"
+    case sendRefusalKeyStorage = "send.refusalKeyStorage"
+    case sendRefusalAlreadySending = "send.refusalAlreadySending"
+
+    case sendActionStop = "send.actionStop"
+    case sendActionCancelDelivery = "send.actionCancelDelivery"
+    case sendCancelRefused = "send.cancelRefused"
+    /// The warning discarding an AMBIGUOUS send has to carry.
+    case sendDiscardMayArrive = "send.discardMayArrive"
+
+    case sendOutstandingHeading = "send.outstandingHeading"
+    case sendOutstandingExplain = "send.outstandingExplain"
 }
 
 /// Keys whose value depends on a count.

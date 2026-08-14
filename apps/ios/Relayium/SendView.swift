@@ -23,6 +23,16 @@ import RelayiumAppKit
 struct SendView: View {
     @ObservedObject var upload: CloudUploadModel
     @ObservedObject var selection: SendSelectionModel
+    /// The other destination: one of this account's own Macs or command line
+    /// receivers. App-scoped, like everything else here, because a delivery
+    /// outlives this tab in three separate ways — a torn-down tab, a killed
+    /// process, and an account leaving while work nobody is watching runs.
+    @ObservedObject var deliveries: InboxSendModel
+    /// Which of the two kinds of send this screen is offering. App-scoped so
+    /// SwiftUI rebuilding the tab cannot silently reset the user's choice — and
+    /// reset it to the OTHER kind, which is the one distinction on this screen
+    /// that must never be made on the user's behalf.
+    @ObservedObject var routes: SendRouteSelection
     /// Selects the Account tab. A closure rather than a session read, which is
     /// what lets `RootView` stay ignorant of the account entirely.
     let onOpenAccount: () -> Void
@@ -173,7 +183,39 @@ struct SendView: View {
                          message: L10n.t(.sendAccountUnavailableBody))
 
         case .ready:
+            ready
+        }
+    }
+
+    /// The signed-in screen: which kind of send, that send's own surface, and
+    /// every delivery already on its way.
+    ///
+    /// **The device pane is offered only while the link flow is at rest.** A
+    /// live or finished link upload owns the screen whichever route is
+    /// selected, because that transfer is not rendered anywhere else and hiding
+    /// it behind a segmented control would leave bytes moving with nothing on
+    /// screen able to name or cancel them. Outstanding DELIVERIES are the
+    /// opposite case and are rendered under both routes: they survive the app
+    /// being closed, so the route that started one is not where it lives.
+    @ViewBuilder
+    private var ready: some View {
+        SendRouteChooser(routes: routes)
+        if routes.route == .device, isChoosingFilesToSend {
+            choosing
+            DeviceTargetPicker(deliveries: deliveries, selection: selection,
+                               onOpenAccount: onOpenAccount)
+        } else {
             flow
+        }
+        DeviceDeliveryList(deliveries: deliveries, onOpenAccount: onOpenAccount)
+    }
+
+    /// Whether the link half is at rest — nothing staged, nothing in flight and
+    /// no result waiting to be read.
+    private var isChoosingFilesToSend: Bool {
+        switch upload.state {
+        case .idle, .picked: return true
+        default: return false
         }
     }
 

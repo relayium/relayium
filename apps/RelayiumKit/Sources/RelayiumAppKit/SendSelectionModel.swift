@@ -537,6 +537,54 @@ public final class SendSelectionModel: ObservableObject {
         publishRenderState()
     }
 
+    /// A durable DEVICE delivery has taken ownership of the current selection.
+    ///
+    /// The device path's equivalent of `CloudUploadModel.consumeSourceDraft`,
+    /// and it exists separately for one structural reason: that method's
+    /// authority to delete comes from the pending job the upload model itself
+    /// committed, and a device delivery is committed by `InboxSendModel`, which
+    /// holds no draft store and no selection. So the send model is told, and it
+    /// is told the ACCOUNT as well as the draft.
+    ///
+    /// **The account check is the whole safety argument.** Retiring a draft
+    /// deletes the only copy of files another app handed the user that is not
+    /// still inside that app. It is safe only because a durable, account-bound
+    /// job now holds those bytes — so a report that arrives after the account
+    /// has left is a report about a job this screen no longer has, and it
+    /// retires nothing. `InboxSendModel` guards on its own generation before
+    /// calling, and this guards again anyway, for the same reason the upload
+    /// model's own guard is doubled: the cost of getting it wrong is the user's
+    /// files.
+    ///
+    /// The selection goes with it. It described staged copies that have been
+    /// superseded by the durable job — and, for an adopted draft, copies this
+    /// call has just deleted — so leaving it on screen would offer Send for
+    /// bytes that are gone or a second delivery of bytes already on their way.
+    public func deviceSendCommitted(accountId: String, sourceDraftId: String?) {
+        guard let accountUserId, accountUserId == accountId else { return }
+        if let sourceDraftId, let drafts {
+            // Idempotent, and it records the retirement durably before deleting
+            // anything — so a failed removal is a copy taking up space, not a
+            // draft that comes back around as a second send of the same files.
+            if !drafts.retire(id: sourceDraftId) {
+                selectionError = L10n.t(.uploadCleanupFailed)
+            }
+            if adoptedDraft?.id == sourceDraftId { adoptedDraft = nil }
+        }
+        // Not `clear()`: that hands an adopted draft BACK to the inbox, which is
+        // the opposite of what has just happened to it. Everything else it does
+        // — superseding an import in flight, releasing the security scopes,
+        // deleting the staged photo batch — applies exactly.
+        supersedeImports()
+        access.clear()
+        photos.clear()
+        store.clear()
+        upload.sourceDraftId = nil
+        upload.clearSelection()
+        refreshSharedDrafts()
+        publishRenderState()
+    }
+
     // MARK: - what the send screen's own buttons mean
 
     /// "Send another" after a finished upload, and "Try again" after a failed

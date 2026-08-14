@@ -773,6 +773,39 @@ public enum AppEnvironment {
             platform: inboxPlatform, appVersion: appVersion))
     }
 
+    /// The iOS send half: this account's own devices as delivery targets.
+    ///
+    /// One factory rather than five call sites in the scene, for the reason the
+    /// receiver's is one — an acceptance launch substitutes ONE thing and cannot
+    /// half-wire it, which is the failure `WORKFLOW-LEARNINGS` records from the
+    /// signed-in fixture that replaced the session's transport and left the
+    /// account model talking to production.
+    ///
+    /// **The sender transport is a closure taking the bearer, not an object.**
+    /// A sender is bound to one credential for the life of one call, and this
+    /// model deliberately stores none: it has no property that could hold a
+    /// token, so a credential cannot outlive the account that issued it or be
+    /// spent by a task belonging to a previous one.
+    ///
+    /// `pending` is the SAME `PendingUploadSupport` the upload model was built
+    /// with. Two would be two staging roots and two keychain namespaces over one
+    /// directory — which would work until one of them was pointed elsewhere, and
+    /// would then leave device deliveries the recovery path cannot see.
+    @MainActor
+    public static func makeInboxSendModel(baseURL: URL = productionBaseURL,
+                                          pending: PendingUploadSupport,
+                                          transport: URLSession? = nil) -> InboxSendModel {
+        let session = transport ?? .shared
+        return InboxSendModel(
+            pending: pending,
+            uploader: CloudUploader(transport: HTTPResumableTransport(baseURL: baseURL,
+                                                                      session: session)),
+            makeSender: { token in
+                InboxSenderClient(baseURL: baseURL, token: token, session: session)
+            },
+            objects: AccountClient(baseURL: baseURL, session: session))
+    }
+
     /// A local precondition the Device Inbox cannot run without.
     public enum InboxSupportError: Error, Equatable, Sendable {
         /// Application Support could not be created, so there is nowhere durable

@@ -92,6 +92,17 @@ struct RelayiumApp: App {
     /// a view rebuild for the same reason.
     @StateObject private var upload: CloudUploadModel
     @StateObject private var send: SendSelectionModel
+    /// Delivering to one of the account's own devices, and which of the two
+    /// kinds of send the tab is offering.
+    ///
+    /// App-scoped for the sharpest version of the reason the upload model is: a
+    /// device delivery outlives the screen that started it in three separate
+    /// ways. SwiftUI may tear an off-screen tab down mid-upload; the durable
+    /// plan survives the process itself; and an account leaving has to cancel
+    /// work no view is watching. A view-scoped owner would be absent for exactly
+    /// those three cases.
+    @StateObject private var deliveries: InboxSendModel
+    @StateObject private var sendRoutes: SendRouteSelection
     /// The account's devices and stored objects, app-scoped for a sharper
     /// reason than the others: a revoke can end THIS app's own session, and a
     /// `TabView` tears down off-screen tabs. A view-scoped model would have that
@@ -210,10 +221,17 @@ struct RelayiumApp: App {
         // development build. Everything else on this tab goes on working; the
         // shared-draft surface simply never appears, because nothing can arrive.
         let drafts = AppEnvironment.makeSharedDraftStore()
+        // ONE `PendingUploadSupport`, held as a local and handed to BOTH halves
+        // that stage bytes: the link upload model and the device delivery model.
+        // Two would be two staging roots and two keychain namespaces over one
+        // directory — which would work, right up until one of them was pointed
+        // elsewhere, and would then leave device deliveries the recovery path
+        // cannot see. Same shape and same reason as `keys` and `drafts` above.
+        let pending = AppEnvironment.makePendingUploadSupport(
+            drafts: drafts, root: UITestMode.pendingUploadRoot())
         let uploads = AppEnvironment.makeUploadModel(
             keyStore: keys,
-            pending: AppEnvironment.makePendingUploadSupport(
-                drafts: drafts, root: UITestMode.pendingUploadRoot()),
+            pending: pending,
             transport: UITestMode.makeAccountTransport())
         let managing = AppEnvironment.makeAccountManagementModel(
             keyStore: keys, transport: UITestMode.makeAccountTransport())
@@ -241,6 +259,33 @@ struct RelayiumApp: App {
         // gone.
         sending.observe(account.$state)
         _send = StateObject(wrappedValue: sending)
+
+        // The device-delivery half, built from the SAME pending support and
+        // observing the SAME session — and both for reasons that are safety
+        // rather than symmetry.
+        //
+        // The observation is installed HERE, before any view exists, for the
+        // reason `sending.observe` is: a `TabView` may tear an off-screen tab
+        // down, so a user who signs out while looking at Receive would otherwise
+        // get no isolation at all and an account-owned delivery would keep
+        // running — and keep being described on screen — under an account that
+        // is gone.
+        let delivering = AppEnvironment.makeInboxSendModel(
+            pending: pending, transport: UITestMode.makeAccountTransport())
+        delivering.observe(account.$state)
+        // The one seam between the two halves of the Send tab, and the only
+        // thing in this app allowed to retire a shared draft on a delivery's
+        // behalf. It fires the moment a durable, account-bound job owns those
+        // bytes and never before: until then the staged draft is the user's only
+        // copy of what another app handed them. The ACCOUNT travels with it so
+        // the receiver can refuse a report that arrives after the account it
+        // belongs to has left, which is the case a closure alone could not
+        // express. `SendSelectionModel.deviceSendCommitted` owns what it means.
+        delivering.onSelectionCommitted = { [weak sending] accountId, draftId in
+            sending?.deviceSendCommitted(accountId: accountId, sourceDraftId: draftId)
+        }
+        _deliveries = StateObject(wrappedValue: delivering)
+        _sendRoutes = StateObject(wrappedValue: SendRouteSelection())
 
         // The direct half. Built against ONE preference instance, because both
         // models read it through a closure when the SAS lands — a second object
@@ -344,6 +389,7 @@ struct RelayiumApp: App {
     var body: some Scene {
         WindowGroup {
             RootView(download: download, upload: upload, send: send,
+                     deliveries: deliveries, sendRoutes: sendRoutes,
                      direct: direct, directText: directText,
                      directSelection: directSelection, directModes: directModes,
                      foreground: foreground,

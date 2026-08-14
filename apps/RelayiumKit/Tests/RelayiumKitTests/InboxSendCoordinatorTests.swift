@@ -705,7 +705,20 @@ final class InboxSendCoordinatorTests: XCTestCase {
 
     // MARK: - target eligibility at the moment of sending
 
-    func testADeviceThatLeftTheAccountIsADefinitiveFailure() async throws {
+    /// Definitive about the DELIVERY, and deliberately not destructive of the
+    /// user's files.
+    ///
+    /// **This assertion was inverted during P3A's UI batch, and the inversion is
+    /// the point.** It previously required the staged job to be gone, on the
+    /// reasoning that a definitive no means nothing can own this ciphertext.
+    /// That reasoning is right about the OBJECT and wrong about the local copy:
+    /// nothing was uploaded, so there is no quota to reclaim, and purging
+    /// achieves only the deletion of the user's files. It became reachable data
+    /// loss once the main app wired draft retirement — the Share Extension's
+    /// copy is retired the instant this plan becomes durable, so the staged copy
+    /// is the last one Relayium holds, and the failure the user reads invites a
+    /// retry that would have had nothing left to retry.
+    func testADeviceThatLeftTheAccountFailsWithoutDeletingTheUsersFiles() async throws {
         let plan = try await staged()
         sender.deviceRows = []
 
@@ -713,7 +726,9 @@ final class InboxSendCoordinatorTests: XCTestCase {
             XCTAssertEqual($0 as? InboxSendFailure, .targetMissing)
         }
         XCTAssertEqual(objects.deleted, [], "nothing was uploaded, so there is nothing to release")
-        try await assertJobIsGone(plan)
+        try await assertJobIsIntact(plan)
+        XCTAssertFalse(try XCTUnwrap(store.deviceSendPlans(for: "acct-1").first).retired,
+                       "a retryable refusal must not tombstone the job")
     }
 
     func testADeviceThatTurnedReceivingOffIsRefusedByNameBeforeAnythingIsUploaded() async throws {
@@ -789,9 +804,15 @@ final class InboxSendCoordinatorTests: XCTestCase {
         XCTAssertEqual(sender.calls, [], "a share must not even read the device list")
     }
 
-    /// The bytes are up and nothing on this device can seal them. Continuing
-    /// would create a task no target could ever open.
-    func testALostContentKeyFailsAndReleasesRatherThanSealingSomethingElse() async throws {
+    /// Nothing on this device can seal these bytes, so no task may be created —
+    /// and no ciphertext went up, so nothing is deleted either.
+    ///
+    /// The send is over: without the content key this job can never succeed, and
+    /// the copy asks the user to discard it rather than promising a retry. But
+    /// the staged plaintext is still the user's, and this failure is exactly the
+    /// one where it may be their last copy. Discard removes it, on a decision
+    /// they made; a lost key does not.
+    func testALostContentKeyFailsWithoutCreatingATaskOrDeletingTheStagedFiles() async throws {
         let plan = try await staged()
         try await keys.remove(id: plan.jobId)
 
@@ -799,6 +820,20 @@ final class InboxSendCoordinatorTests: XCTestCase {
             XCTAssertEqual($0 as? InboxSendFailure, .contentKeyMissing)
         }
         XCTAssertEqual(sender.creates.count, 0)
+        XCTAssertEqual(objects.deleted, [], "nothing was uploaded, so there is nothing to release")
+        XCTAssertEqual(store.deviceSendPlans(for: "acct-1").map(\.jobId), [plan.jobId])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.jobURL(for: plan.jobId).path),
+                      "a lost key is not authority to delete the user's staged files")
+    }
+
+    /// And the one case that still purges everything: the user asked.
+    func testDiscardRemovesTheStagedJobEvenWhenNothingWasEverUploaded() async throws {
+        let plan = try await staged()
+
+        try await coordinator().discard(plan, token: "bearer")
+
+        XCTAssertEqual(sender.calls, [], "an un-uploaded job needs no server call to discard")
+        XCTAssertEqual(objects.deleted, [])
         try await assertJobIsGone(plan)
     }
 

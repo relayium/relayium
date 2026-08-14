@@ -44,11 +44,37 @@ final class LocalizationIntegrityTests: XCTestCase {
         }
     }
 
+    // MARK: - maintained and frozen
+
+    /// The owner's supported-language decision (2026-08-14), as a value the
+    /// tests below are written against rather than a rule in a document.
+    ///
+    /// English is the source and the fallback; Simplified Chinese is maintained
+    /// beside it. The other seven are FROZEN: their existing translations stay
+    /// shipped and stay correct, and new or changed product copy is not added to
+    /// them. That is a deliberate product decision, not neglect — a locale
+    /// updated only sometimes produces a screen that is half one language and
+    /// half another, which is worse than a screen that is consistently English.
+    ///
+    /// Restoring one is an explicit decision, made one locale at a time with a
+    /// complete translation of the CURRENT copy. Nothing here makes that easier
+    /// or harder; it only stops a frozen locale being mistaken for a maintained
+    /// one by a test that cannot tell the difference.
+    private static let maintained: Set<AppLanguage> = [.en, .zh]
+    private static var frozen: [AppLanguage] {
+        AppLanguage.allCases.filter { !maintained.contains($0) }
+    }
+
     // MARK: - coverage
 
-    /// Every canonical key present and non-empty everywhere.
-    func testEveryKeyIsDefinedAndNonEmptyInEveryLanguage() {
-        for language in AppLanguage.allCases {
+    /// Every canonical key present and non-empty in both maintained languages.
+    ///
+    /// This is the gate new copy has to pass. It is the whole of the
+    /// localization acceptance requirement for a product change now, and it is
+    /// strictly stronger for these two than the old nine-language rule was in
+    /// practice: it is checked rather than approximated by whoever remembered.
+    func testEveryKeyIsDefinedAndNonEmptyInEveryMaintainedLanguage() {
+        for language in AppLanguage.allCases where Self.maintained.contains(language) {
             let catalog = try? XCTUnwrap(StringsCatalog.load(language))
             guard let catalog else {
                 XCTFail("catalog for \(language.rawValue) is missing or unparseable")
@@ -62,6 +88,49 @@ final class LocalizationIntegrityTests: XCTestCase {
                 XCTAssertFalse(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                                "\(language.rawValue) has an empty \(key.rawValue)")
             }
+        }
+        XCTAssertEqual(Self.maintained, [.en, .zh],
+                       "the maintained set is a product decision, not a convenience")
+    }
+
+    /// A frozen catalog may lack a key. What it may NOT do is define one badly.
+    ///
+    /// Freezing a locale removes the obligation to translate new copy. It does
+    /// not remove the obligation that what is still shipped there works: an
+    /// empty value renders as a blank label rather than falling back, because
+    /// the key IS present — which is the one failure a frozen locale can still
+    /// introduce and the reason this is not simply skipped.
+    func testEveryFrozenCatalogEntryThatExistsIsStillUsable() {
+        for language in Self.frozen {
+            guard let catalog = StringsCatalog.load(language) else {
+                XCTFail("catalog for \(language.rawValue) is missing or unparseable")
+                continue
+            }
+            XCTAssertFalse(catalog.isEmpty,
+                           "\(language.rawValue) lost its existing translations")
+            for key in L10nKey.allCases {
+                guard let value = catalog[key.rawValue] else { continue }
+                XCTAssertFalse(value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                               "\(language.rawValue) has an empty \(key.rawValue)")
+            }
+        }
+    }
+
+    /// And a key a frozen catalog lacks renders ENGLISH, not the raw key.
+    ///
+    /// This is the whole safety argument for freezing. It is asserted against a
+    /// key that genuinely is absent from the frozen catalogs rather than against
+    /// an invented one, so it fails if the fallback chain is ever shortened.
+    func testAKeyAFrozenCatalogLacksFallsBackToEnglish() throws {
+        let english = try XCTUnwrap(StringsCatalog.load(.en))
+        for language in Self.frozen {
+            guard let catalog = StringsCatalog.load(language) else { continue }
+            let absent = L10nKey.allCases.filter { catalog[$0.rawValue] == nil }
+            guard let key = absent.first else { continue }
+            XCTAssertEqual(L10n.t(key, language: language), english[key.rawValue],
+                           "\(language.rawValue) \(key.rawValue) did not fall back to English")
+            XCTAssertNotEqual(L10n.t(key, language: language), key.rawValue,
+                              "a frozen locale rendered a raw key at the user")
         }
     }
 
@@ -223,7 +292,13 @@ final class LocalizationIntegrityTests: XCTestCase {
                 continue
             }
             for key in L10nKey.allCases {
-                XCTAssertEqual(L10n.t(key, language: language), catalog[key.rawValue],
+                // A key a frozen catalog does not define is English by design,
+                // and `testAKeyAFrozenCatalogLacksFallsBackToEnglish` owns that
+                // half. What is asserted here is the half a freeze must not
+                // weaken: every entry a catalog DOES define is the one that
+                // renders, so a whole language cannot quietly fall through.
+                guard let own = catalog[key.rawValue] else { continue }
+                XCTAssertEqual(L10n.t(key, language: language), own,
                                "\(language.rawValue) \(key.rawValue) did not come from "
                                + "its own catalog")
             }

@@ -22,7 +22,10 @@ import RelayiumKit
 ///  * a DEFINITIVE answer that is not a success means central's transaction
 ///    rolled back and no task can own this ciphertext. The object is invisible
 ///    — no link, no list row, no control — so leaving it behind is storage the
-///    account pays for and cannot see. Release it.
+///    account pays for and cannot see. Release it. What that releases is the
+///    OBJECT and the local job that described it; a send that never uploaded an
+///    object releases neither, because there is no storage to reclaim and the
+///    staged copy may be the last one Relayium holds. See `abandon`.
 ///  * an AMBIGUOUS outcome — the request never arrived, or its answer was lost
 ///    — means a delivery MAY be live. Nothing is released, because the mistake
 ///    in that direction destroys a real transfer of the user's file. The staged
@@ -108,8 +111,7 @@ public final class InboxSendCoordinator: @unchecked Sendable {
             // and a definitive one: nothing was created, so the ciphertext this
             // job uploaded is provably unbound and goes back now.
             guard !current.targetKeyWasResealed else {
-                try await release(current, token: token,
-                                  includingObject: current.finalizedStoredId != nil)
+                try await abandon(current, token: token, includingObject: true)
                 throw InboxSendFailure.staleTargetKey
             }
             (current, wrapped) = try persistReseal(current, to: sealTarget,
@@ -145,7 +147,7 @@ public final class InboxSendCoordinator: @unchecked Sendable {
             } catch {
                 // Locally malformed, so nothing was sent and nothing can own the
                 // ciphertext. Definitive by construction.
-                try await release(current, token: token, includingObject: true)
+                try await abandon(current, token: token, includingObject: true)
                 throw InboxSendFailure.sealFailed
             }
 
@@ -165,7 +167,7 @@ public final class InboxSendCoordinator: @unchecked Sendable {
                     // binding back, so the retry is the first binding rather
                     // than a rebinding, and no byte is re-uploaded.
                     guard !current.targetKeyWasResealed else {
-                        try await release(current, token: token, includingObject: true)
+                        try await abandon(current, token: token, includingObject: true)
                         throw InboxSendFailure.staleTargetKey
                     }
                     sealTarget = try await eligibleTarget(target.deviceId, plan: current,
@@ -188,11 +190,11 @@ public final class InboxSendCoordinator: @unchecked Sendable {
                     // NOT release. It says a task we did not create owns these
                     // bytes; deleting them would destroy somebody else's live
                     // delivery in order to tidy up ours.
-                    try await release(current, token: token,
+                    try await abandon(current, token: token,
                                       includingObject: token_ != .storedObjectAlreadyBound)
                     throw InboxSendFailure.refused(token_)
                 case .rejected(let status):
-                    try await release(current, token: token, includingObject: true)
+                    try await abandon(current, token: token, includingObject: true)
                     throw InboxSendFailure.rejected(status: status)
                 case .unauthorized:
                     // Deliberately releases NOTHING. The create provably did not
@@ -255,7 +257,7 @@ public final class InboxSendCoordinator: @unchecked Sendable {
             // Central says the task is gone — deleted or expired. Its ciphertext
             // went with it inside the same transaction, so only the local
             // remains are ours to remove.
-            try await release(plan, token: token, includingObject: false)
+            try await abandon(plan, token: token, includingObject: false)
             throw InboxSendFailure.noTaskCreated
         } catch {
             throw InboxSendFailure.unknownOutcome
@@ -338,7 +340,7 @@ public final class InboxSendCoordinator: @unchecked Sendable {
             // Nothing on this device can seal these bytes, so a task created now
             // would be one no target could ever open. Whatever was uploaded is
             // unopenable too, which makes releasing it the honest outcome.
-            try await release(plan, token: token, includingObject: plan.finalizedStoredId != nil)
+            try await abandon(plan, token: token, includingObject: true)
             throw InboxSendFailure.contentKeyMissing
         }
         return key
@@ -361,12 +363,12 @@ public final class InboxSendCoordinator: @unchecked Sendable {
         guard let row = rows.first(where: { $0.id == deviceID }) else {
             // Definitive: the account no longer has this device, so no task
             // could ever be created against it.
-            try await release(plan, token: token, includingObject: plan.finalizedStoredId != nil)
+            try await abandon(plan, token: token, includingObject: true)
             throw InboxSendFailure.targetMissing
         }
         guard let target = InboxTargetEligibility.target(for: row) else {
             let block = InboxTargetEligibility.availability(for: row).block ?? .cannotReceive
-            try await release(plan, token: token, includingObject: plan.finalizedStoredId != nil)
+            try await abandon(plan, token: token, includingObject: true)
             throw InboxSendFailure.targetUnavailable(block)
         }
         return target
@@ -437,6 +439,28 @@ public final class InboxSendCoordinator: @unchecked Sendable {
     }
 
     // MARK: - release
+
+    /// Give up on this send, giving back only what it actually owns.
+    ///
+    /// **A send that never reached the server keeps the user's staged files.**
+    /// The point of `release` is to return the quota of an object nothing can
+    /// see; when no object was ever created there is no quota to return, and
+    /// purging the staged copy accomplishes exactly one thing — deleting the
+    /// user's files. That matters most for a job copied out of a Share
+    /// Extension draft: the draft is retired the moment this plan becomes
+    /// durable, so the staged copy IS the last copy Relayium holds, and every
+    /// refusal that lands here names a remedy on the other device and invites a
+    /// retry. Deleting the bytes would make that invitation false.
+    ///
+    /// The job stays outstanding instead, with its idempotency key and content
+    /// key intact, and the user decides: Retry once the other device is fixed,
+    /// or Discard. Discard goes through `release` directly, because a person
+    /// asking for their copy to be removed is not this branch.
+    private func abandon(_ plan: PendingUploadPlan, token: String?,
+                         includingObject: Bool) async throws {
+        guard plan.finalizedStoredId != nil else { return }
+        try await release(plan, token: token, includingObject: includingObject)
+    }
 
     /// Give back what this send no longer owns.
     ///
