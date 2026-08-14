@@ -27,7 +27,7 @@ struct SendRouteChooser: View {
     @ObservedObject var routes: SendRouteSelection
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Metrics.tight) {
             Text(L10n.t(.sendChooseHow)).font(.headline)
             Picker(L10n.t(.sendChooseHow),
                    selection: Binding(get: { routes.route },
@@ -60,7 +60,7 @@ struct DeviceTargetPicker: View {
     @EnvironmentObject private var session: AccountSession
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Metrics.inner) {
             HStack(alignment: .firstTextBaseline) {
                 Text(L10n.t(.sendDeviceChooseTarget)).font(.headline)
                 Spacer(minLength: 0)
@@ -84,13 +84,17 @@ struct DeviceTargetPicker: View {
             }
 
             if deliveries.directory == .loaded && deliveries.candidates.isEmpty {
-                Text(L10n.t(.sendDeviceNone))
-                    .font(.callout)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(L10n.t(.sendDeviceNoneHelp))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                // The shared empty-state role, so an account with no receiver
+                // set up meets the same designed state as a nearby roster with
+                // nobody in it — a landmark, the fact, and the remedy — rather
+                // than two loose paragraphs where a list should be.
+                // nonlocalized: SF Symbol name. The computer that WOULD
+                // receive, not a slashed one — the same choice the empty nearby
+                // roster makes, and `laptopcomputer.slash` is an iOS 16.1 symbol
+                // that would silently draw nothing on this app's 16.0 floor.
+                EmptyStateView(symbol: "laptopcomputer.and.arrow.down",
+                               message: L10n.t(.sendDeviceNone),
+                               detail: L10n.t(.sendDeviceNoneHelp))
             }
 
             ForEach(sendable) { candidate in
@@ -147,8 +151,8 @@ struct DeviceTargetPicker: View {
             // back would leave the user unable to stop before Send.
             deliveries.selectTarget(chosen ? nil : candidate.id)
         } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: Metrics.inner) {
+                VStack(alignment: .leading, spacing: Metrics.hairline) {
                     Text(InboxSendPresentation.name(of: candidate))
                         .font(.callout)
                         .fixedSize(horizontal: false, vertical: true)
@@ -159,9 +163,17 @@ struct DeviceTargetPicker: View {
                 }
                 Spacer(minLength: 0)
                 if chosen {
-                    Image(systemName: "checkmark").foregroundStyle(.tint)
+                    Image(systemName: "checkmark").foregroundStyle(Palette.action)
                 }
             }
+            // The same floor and the same selected treatment the nearby roster
+            // uses: a row is a target before it is a label, and the tint behind
+            // it is the second carrier of "this is the one you chose" for anyone
+            // a checkmark's colour does not reach.
+            .frame(minHeight: Metrics.hitTarget)
+            .padding(.horizontal, Metrics.tight)
+            .background(chosen ? Palette.actionSurface : Color.clear,
+                        in: RoundedRectangle(cornerRadius: Metrics.corner, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -174,7 +186,7 @@ struct DeviceTargetPicker: View {
     }
 
     private func blockedRow(_ candidate: InboxSendCandidate) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Metrics.hairline) {
             Text(InboxSendPresentation.name(of: candidate))
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -190,13 +202,7 @@ struct DeviceTargetPicker: View {
     }
 
     private func failureLine(_ text: String) -> some View {
-        Label {
-            Text(text)
-        } icon: {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-        }
-        .font(.callout)
-        .fixedSize(horizontal: false, vertical: true)
+        InlineMessage(.warning, text)
     }
 
     // MARK: - actions
@@ -246,8 +252,11 @@ struct DeviceDeliveryList: View {
 
     var body: some View {
         if !deliveries.items.isEmpty {
-            VStack(alignment: .leading, spacing: 16) {
-                Text(L10n.t(.sendOutstandingHeading)).font(.headline)
+            // The shared card role. Contained rather than combined, which the
+            // card already does: each delivery has its own actions, and
+            // combining would leave VoiceOver reading three of them as one
+            // label with six buttons after it.
+            SectionCard(L10n.t(.sendOutstandingHeading)) {
                 // Both halves of the truth, and the second is the one that
                 // matters: this app has no background transfer, but once a
                 // delivery is waiting the OTHER device is what fetches it.
@@ -259,12 +268,6 @@ struct DeviceDeliveryList: View {
                     card(item)
                 }
             }
-            .padding(16)
-            .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
-            // Contained rather than combined: each card has its own actions, and
-            // combining would leave VoiceOver reading three deliveries as one
-            // label with six buttons after it.
-            .accessibilityElement(children: .contain)
             .confirmationDialog(
                 L10n.t(.uploadDiscard),
                 isPresented: Binding(get: { confirmingDiscard != nil },
@@ -288,7 +291,7 @@ struct DeviceDeliveryList: View {
     }
 
     private func card(_ item: InboxSendItem) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Metrics.tight) {
             Text(InboxSendPresentation.targetName(of: item))
                 .font(.callout.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)
@@ -392,12 +395,6 @@ struct DeviceDeliveryList: View {
     }
 
     private func failureLine(_ text: String) -> some View {
-        Label {
-            Text(text)
-        } icon: {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-        }
-        .font(.callout)
-        .fixedSize(horizontal: false, vertical: true)
+        InlineMessage(.warning, text)
     }
 }

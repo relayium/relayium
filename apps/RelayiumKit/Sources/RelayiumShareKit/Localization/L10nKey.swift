@@ -260,7 +260,7 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// sidebar marks the row the session is on.
     case transferBusyElsewhere = "transfer.busyElsewhere"
 
-    // MARK: - The path a transfer travels (macOS)
+    // MARK: - The path a transfer travels (macOS and iOS)
     //
     // Six nouns and one accessibility name, shared by every Path Rail. They name
     // the two ends of a transfer and the encrypted middle, and NOTHING else:
@@ -271,8 +271,16 @@ public enum L10nKey: String, CaseIterable, Sendable {
     // stored copy is encrypted and unreadable to Relayium (`help.storedSend.*`),
     // the key rides in the link (`upload.keyKept`) — so the rail adds a shape
     // for a fact rather than a fact.
-    /// The near end of a path: the machine the window is open on.
+    /// The near end of a path, on macOS: the machine the window is open on.
     case pathThisMac = "path.thisMac"
+    /// The same near end, on a platform where "this Mac" is a false sentence.
+    ///
+    /// A separate key rather than a rewrite of `path.thisMac`: that string is
+    /// rendered by four shipped macOS rails, where naming the Mac is the more
+    /// concrete truth, and changing it there is not this batch's to make. The
+    /// two are the same role in different words, which is exactly what a second
+    /// key is for.
+    case pathThisDevice = "path.thisDevice"
     /// The far end of a live transfer. Deliberately not a name: before
     /// verification there is nothing this side can honestly call the peer.
     case pathOtherDevice = "path.otherDevice"
@@ -901,6 +909,21 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case nearbyA11yChooseDevice = "nearby.a11yChooseDevice"
     /// %@ — the peer's own device name, never translated.
     case nearbySendTo = "nearby.sendTo"
+    /// The name of the tab's primary task, on the card that holds all of it.
+    ///
+    /// The tab is a send surface with a passive receiver attached, and before
+    /// this the two were one undifferentiated column: an explanation, a
+    /// receiving status, a mode picker, a file chooser and a roster, each a peer
+    /// of the others. Naming the task is what lets the receiving half be
+    /// second without being hidden.
+    case nearbySendTaskTitle = "nearby.sendTaskTitle"
+    /// The first of the task's two acts. Both headings restate a fact the
+    /// surface already relies on — choosing what to send and choosing who to
+    /// send it to are separate, and only Send combines them — so they are
+    /// structure rather than decoration.
+    case nearbyWhatToSend = "nearby.whatToSend"
+    /// The second act.
+    case nearbyWhoToSend = "nearby.whoToSend"
     /// %@ — the snapshotted peer label shown throughout an admitted session.
     case nearbySessionWith = "nearby.sessionWith"
     case nearbySessionPeerDisclaimer = "nearby.sessionPeerDisclaimer"

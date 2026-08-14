@@ -323,6 +323,9 @@
 "nearby.a11yDevices" = "附近设备";
 "nearby.a11yChooseDevice" = "选择这台设备作为发送目标。";
 "nearby.sendTo" = "发送给 %@";
+"nearby.sendTaskTitle" = "发送给附近的设备";
+"nearby.whatToSend" = "发送什么";
+"nearby.whoToSend" = "发送给谁";
 "nearby.sessionWith" = "与 %@ 的会话";
 "nearby.sessionPeerDisclaimer" = "此名称由对方设备提供，并非经过验证的身份。";
 "nearby.selectionSendHint" = "%@。可发送到那台设备。";
@@ -611,8 +614,9 @@
 "crossNetwork.explain" = "两台设备不要求处于同一网络。一方创建六位配对码，另一方输入，Relayium 的会合服务会连接两端；只需双方同时在线。";
 "transfer.busyElsewhere" = "Relayium 中已有一个传输在进行。请先完成或离开它，再从这里开始新的传输。";
 
-/* The path a transfer travels (macOS Path Rail). */
+/* The path a transfer travels (the Path Rail, on both platforms). */
 "path.thisMac" = "这台 Mac";
+"path.thisDevice" = "这台设备";
 "path.otherDevice" = "对方设备";
 "path.yourAccount" = "你的账户";
 "path.encryptedConnection" = "加密连接";

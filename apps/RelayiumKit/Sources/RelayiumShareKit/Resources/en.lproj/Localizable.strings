@@ -327,6 +327,9 @@
 "nearby.a11yDevices" = "Nearby devices";
 "nearby.a11yChooseDevice" = "Choose this device to send to.";
 "nearby.sendTo" = "Send to %@";
+"nearby.sendTaskTitle" = "Send to a nearby device";
+"nearby.whatToSend" = "What to send";
+"nearby.whoToSend" = "Who to send it to";
 "nearby.sessionWith" = "Session with %@";
 "nearby.sessionPeerDisclaimer" = "This name is provided by the other device and is not verified identity.";
 "nearby.selectionSendHint" = "%@. Send it to that device.";
@@ -623,8 +626,9 @@
 "crossNetwork.explain" = "The two devices do not need to be on the same network. One side creates a six-digit code, the other types it in, and Relayium's rendezvous service introduces them; both sides only have to be online at the same time.";
 "transfer.busyElsewhere" = "Another transfer is open in Relayium. Finish or leave it before starting one here.";
 
-/* The path a transfer travels (macOS Path Rail). */
+/* The path a transfer travels (the Path Rail, on both platforms). */
 "path.thisMac" = "This Mac";
+"path.thisDevice" = "This device";
 "path.otherDevice" = "The other device";
 "path.yourAccount" = "Your account";
 "path.encryptedConnection" = "Encrypted connection";

@@ -101,7 +101,7 @@ struct NearbyView: View {
             // largest accessibility content sizes anything not in a `ScrollView`
             // puts its own action off the bottom with no way to reach it.
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: Metrics.section) {
                     if let owner = presence.owner, owner != .nearby {
                         busyElsewhere(owner)
                     } else if presence.rendersSession(.nearby) {
@@ -146,8 +146,7 @@ struct NearbyView: View {
     /// never a second copy of the session with its own Cancel, which is what
     /// rendering both would produce, since both drive the same two models.
     private func busyElsewhere(_ owner: AppDestination) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(L10n.t(.presenceBusyTitle)).font(.headline)
+        SectionCard(L10n.t(.presenceBusyTitle)) {
             Text(L10n.t(.presenceBusyBody))
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -168,27 +167,19 @@ struct NearbyView: View {
 
         if let notice = foreground.interruption { interruption(notice) }
 
+        // **The tab's one task, and the reason it is first.**
+        //
+        // Receiving is on by default and runs whether or not this tab is on
+        // screen; sending is the thing a person opened this tab to DO. Before
+        // this they were peers in one flat column — an explanation, a receiving
+        // status with its own button, a mode picker, a chooser and a roster,
+        // each twenty points below the last — so the screen had no primary
+        // anything, and at accessibility content sizes the chooser was three
+        // swipes down. The receiving card keeps every word it had; it is
+        // second, not smaller.
+        sendTask
+
         receiving
-
-        modePicker
-
-        // Staging is deliberately ABOVE and independent of the roster: choosing
-        // what to send and choosing who to send it to are two separate acts, and
-        // only the Send button combines them.
-        if modes.mode == .files { filesToSend }
-
-        if case let .reconnecting(message) = discovery.state {
-            failureLine(message)
-        }
-
-        roster
-
-        if let device = discovery.selectedDevice {
-            Divider()
-            actions(for: device)
-        }
-
-        if let actionError { failureLine(actionError) }
 
         Text(L10n.t(.nearbyNoAccountNeeded))
             .font(.footnote)
@@ -196,6 +187,38 @@ struct NearbyView: View {
             .fixedSize(horizontal: false, vertical: true)
 
         verificationSetting
+    }
+
+    /// One card, two acts, one action.
+    ///
+    /// The rail states the route before either act: this device, an encrypted
+    /// middle whose shape the client cannot prove, and the device the user
+    /// picks. Staging stays deliberately ABOVE and independent of the roster —
+    /// choosing what to send and choosing who to send it to are separate, and
+    /// only Send combines them — which is what the two headings now say out
+    /// loud instead of leaving it to the order.
+    private var sendTask: some View {
+        SectionCard(L10n.t(.nearbySendTaskTitle)) {
+            PathRail(stops: PathRailPresentation.iosNearby())
+
+            OpenSection(L10n.t(.nearbyWhatToSend)) {
+                modePicker
+                if modes.mode == .files { filesToSend }
+            }
+
+            OpenSection(L10n.t(.nearbyWhoToSend)) {
+                if case let .reconnecting(message) = discovery.state {
+                    failureLine(message)
+                }
+                roster
+            }
+
+            if let device = discovery.selectedDevice {
+                actions(for: device)
+            }
+
+            if let actionError { failureLine(actionError) }
+        }
     }
 
     /// **The claim that may never be behind a tap, and the paragraph that may.**
@@ -213,11 +236,15 @@ struct NearbyView: View {
     /// stays short, and the mechanism moves into a disclosure that starts
     /// closed. The order changed; nothing was removed and nothing was softened.
     private var safetySummary: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.t(.nearbySafetySummary))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: Metrics.tight) {
+            // The shared inline-message role rather than another grey
+            // paragraph: it is the one thing on this screen a person has to
+            // read before choosing a device, and a symbol is what tells it
+            // apart from the explanation underneath it at a glance. `.info`,
+            // not `.warning` — nothing has gone wrong, and spending the
+            // warning colour here would leave the real failures below it
+            // looking the same as the standing caution above them.
+            InlineMessage(.info, L10n.t(.nearbySafetySummary))
             // Labelled, because a bare chevron says nothing about what it
             // hides — and a disclosure nobody opens is the same as deleting the
             // explanation.
@@ -227,12 +254,17 @@ struct NearbyView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 4)
+                    .padding(.top, Metrics.hairline)
             } label: {
                 Text(L10n.t(.nearbyHowItWorks))
                     .font(.footnote)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            // Grey, not violet. A disclosure over an explanation is a control,
+            // but it is not THE control: drawn in the accent it read as loud as
+            // the task below it, which is the one thing the accent is for. The
+            // chevron still says it opens.
+            .tint(Color.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -252,12 +284,20 @@ struct NearbyView: View {
         !(receive.state == .paused || receive.state == .off)
     }
 
+    /// The status IS the title, which is the whole hierarchy change here: the
+    /// one question this card answers — is this device listening right now — is
+    /// now the thing the eye lands on and the thing VoiceOver reads on entering
+    /// the group, rather than a semibold line among five other lines.
     @ViewBuilder
     private var receiving: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(NearbyStatusPresentation.text(for: receive.state))
-                .font(.subheadline.weight(.semibold))
-                .fixedSize(horizontal: false, vertical: true)
+        SectionCard(NearbyStatusPresentation.text(for: receive.state)) {
+            receivingBody
+        }
+    }
+
+    @ViewBuilder
+    private var receivingBody: some View {
+        VStack(alignment: .leading, spacing: Metrics.tight) {
             // The default is no prompt, by the same decision that made advanced
             // verification opt-in. Stating the consequence is not a
             // contradiction of that decision; hiding it would be.
@@ -335,10 +375,13 @@ struct NearbyView: View {
     /// will be sent to.
     @ViewBuilder
     private var filesToSend: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Metrics.inner) {
             if let summary = selection.summary {
-                HStack(spacing: 12) {
-                    Text(summary).font(.subheadline)
+                HStack(spacing: Metrics.inner) {
+                    // The staged batch is the answer to this section's own
+                    // question, so it is stated at the weight of an answer
+                    // rather than as another line of body text.
+                    Text(summary).font(.subheadline.weight(.semibold))
                     Spacer(minLength: 0)
                     Button(L10n.t(.commonClear)) { selection.clear() }
                         .disabled(busy)
@@ -349,12 +392,28 @@ struct NearbyView: View {
             }
             PendingFileList(files: selection.selectedFiles)
             if let message = selection.errorMessage { failureLine(message) }
-            Button { isChoosingFiles = true } label: {
-                Text(L10n.t(.commonChooseFilesOrFolders)).frame(maxWidth: .infinity)
+            // **Exactly one prominent control on the screen at a time.**
+            //
+            // With nothing staged this IS the task — Send below is disabled and
+            // there is nothing else to press — so it is drawn as the action.
+            // Once something is staged the emphasis moves to Send and this
+            // becomes the ordinary way to change what is going: two prominent
+            // buttons in one card is the same as none.
+            if selection.isEmpty {
+                Button { isChoosingFiles = true } label: {
+                    Text(L10n.t(.commonChooseFilesOrFolders)).frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(busy)
+            } else {
+                Button { isChoosingFiles = true } label: {
+                    Text(L10n.t(.commonChooseFilesOrFolders)).frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .disabled(busy)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .disabled(busy)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -365,19 +424,14 @@ struct NearbyView: View {
             if discovery.devices.isEmpty {
                 // The state a first-time user is most likely to be in, and the
                 // copy is the one thing that tells them what to do about it.
-                VStack(alignment: .leading, spacing: 8) {
-                    Image(systemName: "dot.radiowaves.left.and.right")
-                        .font(.title2)
-                        .foregroundStyle(.secondary)
-                        .accessibilityHidden(true)
-                    Text(L10n.t(.nearbyEmptyRoster))
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                // The shared empty-state role, so this and the device list on
+                // the Send tab are the same designed state rather than two
+                // hand-built ones.
+                // nonlocalized: SF Symbol name
+                EmptyStateView(symbol: "dot.radiowaves.left.and.right",
+                               message: L10n.t(.nearbyEmptyRoster))
             } else {
-                VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: Metrics.inner) {
                     // Keyed by peer id, never by position: the hub's roster
                     // order is not stable, and a row that moves under the
                     // finger between two frames is how the wrong device gets
@@ -413,15 +467,26 @@ struct NearbyView: View {
             // to hold exactly one other device.
             if selected { discovery.clearSelection() } else { discovery.select(device.id) }
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: Metrics.inner) {
                 Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(selected ? Color.accentColor : Color.secondary)
+                    .foregroundStyle(selected ? Palette.action : Color.secondary)
                 // The peer's own name, already stripped of control and bidi
                 // characters by `safeDisplayName`.
                 Text(device.label)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
             }
+            // A row is a target before it is a label: 44pt is the platform's own
+            // floor and a row that happens to measure less because the peer
+            // named itself "TV" is a row somebody misses.
+            .frame(minHeight: Metrics.hitTarget)
+            .padding(.horizontal, Metrics.tight)
+            // The second carrier of "this is the one you chose", after the
+            // symbol. It is the accent at background weight — the one place a
+            // tint may sit behind text — so selection survives a colour filter
+            // and does not depend on telling a filled circle from an empty one.
+            .background(selected ? Palette.actionSurface : Color.clear,
+                        in: RoundedRectangle(cornerRadius: Metrics.corner, style: .continuous))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -432,7 +497,7 @@ struct NearbyView: View {
 
     @ViewBuilder
     private func actions(for device: NearbyDevice) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Metrics.inner) {
             Text(L10n.t(.nearbySendTo, [L10n.token(device.label)]))
                 .font(.subheadline.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)
@@ -475,7 +540,7 @@ struct NearbyView: View {
 
     @ViewBuilder
     private var session: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: Metrics.inner) {
             if let notice = foreground.interruption { interruption(notice) }
             sessionPeer
             switch modes.mode {
@@ -506,7 +571,7 @@ struct NearbyView: View {
     @ViewBuilder
     private var sessionPeer: some View {
         if let label = presence.sessionPeerLabel {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Metrics.hairline) {
                 Text(L10n.t(.nearbySessionWith, [L10n.token(label)]))
                     .font(.headline)
                 Text(L10n.t(.nearbySessionPeerDisclaimer))
@@ -525,7 +590,11 @@ struct NearbyView: View {
     /// when the SAS arrives and flipping it mid-handshake would make the gate
     /// depend on timing.
     private var verificationSetting: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        // In a card, untitled: the toggle's own label is the title, and the two
+        // paragraphs under it are what it does and what it does NOT change.
+        // Left loose at the bottom of the screen it was a wall of grey with no
+        // boundary, which is how a setting starts reading as a footer.
+        SectionCard {
             Toggle(L10n.t(.verifyToggle), isOn: Binding(
                 get: { verification.requiresSASConfirmation },
                 set: { if !isLocked { verification.requiresSASConfirmation = $0 } }
@@ -545,7 +614,7 @@ struct NearbyView: View {
     /// What the app could not carry into the background, said after the fact
     /// because that is the only moment it can be read.
     private func interruption(_ notice: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Metrics.tight) {
             failureLine(notice)
             Button(L10n.t(.commonDismiss)) { foreground.dismissInterruption() }
         }
@@ -554,13 +623,7 @@ struct NearbyView: View {
     /// A failure line. The icon carries the label rather than sitting beside an
     /// unlabelled image, so VoiceOver reads the sentence and not "image".
     private func failureLine(_ message: String) -> some View {
-        Label {
-            Text(message)
-        } icon: {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-        }
-        .font(.callout)
-        .fixedSize(horizontal: false, vertical: true)
+        InlineMessage(.warning, message)
     }
 
     // MARK: - actions

@@ -50,7 +50,7 @@ struct SendView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: Metrics.section) {
                     // ABOVE the account gate, and outside it.
                     //
                     // The share extension can be used from any app at any time,
@@ -93,8 +93,11 @@ struct SendView: View {
     @ViewBuilder
     private var sharedDrafts: some View {
         if !selection.sharedDrafts.isEmpty {
-            VStack(alignment: .leading, spacing: 16) {
-                Text(L10n.t(.shareWaitingTitle)).font(.headline)
+            // The shared card role rather than the hand-rolled
+            // `.quaternary.opacity(0.35)` this and the delivery list each had
+            // their own copy of — two fills that were meant to be the same one
+            // and were only equal by coincidence.
+            SectionCard(L10n.t(.shareWaitingTitle)) {
                 ForEach(selection.sharedDrafts) { draft in
                     sharedDraftCard(draft)
                 }
@@ -103,17 +106,11 @@ struct SendView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(16)
-            .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
-            // Contained rather than combined: each card has its own actions, and
-            // combining would leave VoiceOver reading five drafts as one label
-            // with ten buttons after it.
-            .accessibilityElement(children: .contain)
         }
     }
 
     private func sharedDraftCard(_ draft: SharedDraftSummary) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Metrics.inner) {
             Text(SharedDraftGate.waitingBody(fileCount: draft.fileCount))
                 .font(.callout)
                 .fixedSize(horizontal: false, vertical: true)
@@ -200,12 +197,27 @@ struct SendView: View {
     @ViewBuilder
     private var ready: some View {
         SendRouteChooser(routes: routes)
+        // **One untitled card per route, and the rail is the title.**
+        //
+        // A card here could only be titled "Send files" or "As a link", and
+        // both are already on the screen — the first as the navigation title,
+        // the second as the chosen segment two rows above. That is the exact
+        // repetition the Mac's second audit found and removed. What the card
+        // needed instead was a statement of where the bytes go, which is what
+        // the rail is: three stops, no new claim, and on the link route a real
+        // position along them read from `upload.state`.
         if routes.route == .device, isChoosingFilesToSend {
-            choosing
-            DeviceTargetPicker(deliveries: deliveries, selection: selection,
-                               onOpenAccount: onOpenAccount)
+            SectionCard {
+                PathRail(stops: PathRailPresentation.iosDeviceSend())
+                choosing
+                DeviceTargetPicker(deliveries: deliveries, selection: selection,
+                                   onOpenAccount: onOpenAccount)
+            }
         } else {
-            flow
+            SectionCard {
+                PathRail(stops: PathRailPresentation.iosStoredSend(upload.state))
+                flow
+            }
         }
         DeviceDeliveryList(deliveries: deliveries, onOpenAccount: onOpenAccount)
     }
@@ -219,9 +231,11 @@ struct SendView: View {
         }
     }
 
+    /// In a card, and its heading is the card's: this is the whole screen for a
+    /// signed-out sender, and a bare heading with a paragraph and a button under
+    /// it on an otherwise empty page reads as something that failed to load.
     private func accountPanel(title: String, message: String) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title).font(.headline)
+        SectionCard(title) {
             Text(message)
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -245,7 +259,7 @@ struct SendView: View {
             choosing
             options
         case .checkingRecovery:
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: Metrics.inner) {
                 ProgressView { Text(L10n.t(.uploadCheckingRecovery)) }
                 Button(L10n.t(.commonCancel)) { upload.cancel() }
                     .buttonStyle(.bordered)
@@ -255,7 +269,7 @@ struct SendView: View {
             // Copying the selection into this app's own storage. Labelled, not
             // a bare spinner: on a large video this is the longest part of the
             // send, and a spinner says nothing at all to VoiceOver.
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: Metrics.inner) {
                 ProgressView { Text(L10n.t(.uploadPreparing)) }
                 Button(L10n.t(.commonCancel)) { upload.cancel() }
                     .buttonStyle(.bordered)
@@ -280,7 +294,7 @@ struct SendView: View {
     /// this device's only copy of what the user chose. Nothing here happens on
     /// its own — the app never resumes an upload the user did not ask it to.
     private func interrupted(files: Int, bytes: Int, message: String?) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: Metrics.inner) {
             Text(L10n.t(.uploadInterruptedTitle)).font(.headline)
             Text(L10n.t(.uploadInterruptedBody, [
                 L10n.plural(.selectionFiles, files),
@@ -327,7 +341,7 @@ struct SendView: View {
     /// zero. Said out loud, because a progress bar that restarts silently reads
     /// as a bug rather than as the honest thing that just happened.
     private var restarting: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Metrics.inner) {
             ProgressView { Text(L10n.t(.uploadHeading)) }
             Text(L10n.t(.uploadRestarting))
                 .font(.footnote)
@@ -360,10 +374,14 @@ struct SendView: View {
     /// supersedes a newer intent correctly either way, which is exactly what
     /// makes disabling them safe to be merely cosmetic.
     private var choosing: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Metrics.inner) {
             if let summary = selection.summary {
-                HStack(spacing: 12) {
-                    Text(summary).font(.headline)
+                HStack(spacing: Metrics.inner) {
+                    // The same weight the nearby tab states its staged batch
+                    // at. It was `.headline` here and `.subheadline` there for
+                    // no reason anybody wrote down, which is what a token layer
+                    // is for.
+                    Text(summary).font(.subheadline.weight(.semibold))
                     Spacer(minLength: 0)
                     Button(L10n.t(.commonClear)) { selection.clear() }
                         .disabled(busy)
@@ -386,12 +404,30 @@ struct SendView: View {
             if let preparationError = selection.selectionError { failureLine(preparationError) }
             if let cleanupWarning = upload.cleanupWarning { failureLine(cleanupWarning) }
 
-            Button { isChoosingFiles = true } label: {
-                Text(L10n.t(.commonChooseFilesOrFolders)).frame(maxWidth: .infinity)
+            // **Exactly one prominent control on the screen at a time.**
+            //
+            // With nothing chosen this IS the task: Send does not exist yet,
+            // and the screen was two identical grey capsules with no first
+            // move. Once something is chosen the emphasis moves to Send and
+            // both choosers become the ordinary way to change what is going.
+            // Files rather than Photos carries it because it is the superset —
+            // the Photos library is reachable from the document browser, and
+            // the reverse is not true.
+            if selection.selectedFiles.isEmpty {
+                Button { isChoosingFiles = true } label: {
+                    Text(L10n.t(.commonChooseFilesOrFolders)).frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(busy)
+            } else {
+                Button { isChoosingFiles = true } label: {
+                    Text(L10n.t(.commonChooseFilesOrFolders)).frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .disabled(busy)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .disabled(busy)
 
             PhotosPicker(selection: $picked,
                          maxSelectionCount: PHOTO_IMPORT_MAX,
@@ -438,7 +474,7 @@ struct SendView: View {
     /// `GET /api/config` supply — so an option shown here is one the server will
     /// accept.
     private var options: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: Metrics.inner) {
             Picker(L10n.t(.uploadExpiresAfter), selection: $upload.ttl) {
                 ForEach(upload.ttlChoices, id: \.self) { secs in
                     Text(TtlPresentation.label(seconds: secs)).tag(secs)
@@ -462,7 +498,7 @@ struct SendView: View {
     }
 
     private func uploading(sent: Int, total: Int) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Metrics.inner) {
             ProgressView(value: Double(sent), total: Double(max(total, 1))) {
                 Text(L10n.t(.uploadHeading))
             } currentValueLabel: {
@@ -486,7 +522,7 @@ struct SendView: View {
     /// Finished: one statement about the key, the link itself, and the
     /// platform's own hand-off.
     private func linkReady(link: String, expiresAt: Int64, keyWarning: String?) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: Metrics.inner) {
             Text(L10n.t(.uploadLinkReady)).font(.headline)
             PendingFileList(sessionFiles: upload.sessionFiles)
             // Exactly one statement, decided in `UploadPresentation` where it is
@@ -550,7 +586,7 @@ struct SendView: View {
     }
 
     private func failure(_ text: String) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: Metrics.inner) {
             failureLine(text)
             PendingFileList(sessionFiles: upload.sessionFiles)
             // A reset, not a clear: a failure must not make the user choose
@@ -579,13 +615,7 @@ struct SendView: View {
     /// A failure line. The icon carries the label rather than sitting beside an
     /// unlabelled image, so VoiceOver reads the sentence and not "image".
     private func failureLine(_ text: String) -> some View {
-        Label {
-            Text(text)
-        } icon: {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-        }
-        .font(.callout)
-        .fixedSize(horizontal: false, vertical: true)
+        InlineMessage(.warning, text)
     }
 
     // MARK: - actions

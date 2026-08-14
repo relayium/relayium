@@ -3603,4 +3603,350 @@ final class IOSSurfaceGuardTests: XCTestCase {
                       "no runtime path drives the iOS pairing-code handoff")
     }
 
+    // MARK: - Phase C: the shared visual layer
+
+    /// The five files the two refreshed surfaces are built out of.
+    ///
+    /// Asserted by NAME rather than by what they contain, because the failure
+    /// this catches is the next screen quietly not using them: a component layer
+    /// with one call site is a literal with extra steps.
+    func testTheIOSAppHasOneTokenAndComponentLayerRatherThanFortyLiterals() throws {
+        let all = try sources()
+        for component in ["Components/DesignTokens.swift", "Components/SectionCard.swift",
+                          "Components/InlineMessage.swift", "Components/EmptyStateView.swift",
+                          "Components/PathRail.swift"] {
+            XCTAssertTrue(all.contains { $0.name == component },
+                          "the shared layer lost \(component)")
+        }
+        let tokens = try XCTUnwrap(all.first { $0.name == "Components/DesignTokens.swift" }?.text)
+        // No hex anywhere. UIKit's semantic colours answer light, dark and
+        // Increase Contrast; a literal written here would answer none of them,
+        // and the ONE brand colour is an asset reached through `accentColor`.
+        XCTAssertFalse(tokens.contains("Color(red:"), "the token layer names a raw colour")
+        XCTAssertFalse(tokens.contains("#"), "the token layer names a hex colour")
+        XCTAssertTrue(tokens.contains("static var action: Color { .accentColor }"),
+                      "the brand colour is not the asset")
+
+        // Every ad-hoc container fill is gone from the two refreshed surfaces,
+        // and both now spend the tokens instead of literals.
+        for name in ["NearbyView.swift", "SendView.swift", "DeviceSendView.swift"] {
+            let view = try XCTUnwrap(all.first { $0.name == name }?.text)
+            XCTAssertFalse(view.contains(".quaternary.opacity("),
+                           "\(name) still hand-rolls a container fill")
+            XCTAssertTrue(view.contains("Metrics."), "\(name) does not use the token layer")
+            XCTAssertFalse(view.contains("spacing: 1"),
+                           "\(name) still spaces itself with a literal")
+        }
+
+        // One failure presentation, four call sites. The helpers keep their
+        // names — the panes' own ordering guards address them — and delegate.
+        for name in ["NearbyView.swift", "SendView.swift", "DeviceSendView.swift"] {
+            let view = try XCTUnwrap(all.first { $0.name == name }?.text)
+            XCTAssertTrue(view.contains("InlineMessage(.warning,"),
+                          "\(name) states a failure without the shared role")
+            XCTAssertFalse(view.contains("Image(systemName: \"exclamationmark.triangle.fill\")"),
+                           "\(name) kept its own copy of the failure line")
+        }
+    }
+
+    /// **The branded accent is an asset, it matches the Mac exactly, and the
+    /// project actually resolves it.**
+    ///
+    /// All three halves are needed. A colorset nothing names is dead weight; a
+    /// build setting with no asset silently falls back to system blue; and two
+    /// hand-copied violets that drift are worse than one blue, because the two
+    /// apps then look like two products.
+    func testTheAccentColourIsOneBrandedAssetSharedWithTheMac() throws {
+        func colorset(_ target: String) throws -> [[String: Any]] {
+            let url = appsRoot.appendingPathComponent(
+                "\(target)/Assets.xcassets/AccentColor.colorset/Contents.json")
+            let json = try JSONSerialization.jsonObject(with: try Data(contentsOf: url))
+            return try XCTUnwrap((json as? [String: Any])?["colors"] as? [[String: Any]])
+        }
+        // The channel values themselves, which is the only part of a colorset
+        // that is a colour. Compared through `String`, not through the parsed
+        // `[String: Any]`: `Any` is not `Equatable`, so an assertion written
+        // over the raw dictionaries does not compile at all.
+        func components(_ colors: [[String: Any]]) -> [[String: String]] {
+            colors.compactMap {
+                ($0["color"] as? [String: Any])?["components"] as? [String: String]
+            }
+        }
+        /// Which appearance each entry answers for, alongside its channels — so
+        /// a catalog that kept both violets and swapped or dropped the dark
+        /// appearance is not equal to one that did not.
+        func appearances(_ colors: [[String: Any]]) -> [String] {
+            colors.map { entry in
+                let marks = (entry["appearances"] as? [[String: Any]] ?? [])
+                    .compactMap { "\($0["appearance"] ?? "?")=\($0["value"] ?? "?")" }
+                    .sorted()
+                return (marks.isEmpty ? ["universal"] : marks).joined(separator: ",")
+            }
+        }
+        let ios = try colorset("ios/Relayium")
+        let mac = try colorset("mac/Relayium")
+        // The share extension too. It is a separate binary with its own asset
+        // catalog, so before this it drew system blue inside somebody else's app
+        // while the app it belongs to drew violet — which is the one place a
+        // user sees Relayium next to another product's chrome.
+        let share = try colorset("ios/RelayiumShare")
+        XCTAssertEqual(components(share), components(ios),
+                       "the share sheet is a different brand from the app")
+        XCTAssertEqual(appearances(share), appearances(ios),
+                       "the share sheet answers light and dark differently from the app")
+        XCTAssertEqual(appearances(ios), appearances(mac),
+                       "the two apps answer light and dark differently")
+        XCTAssertEqual(appearances(ios), ["universal", "luminosity=dark"],
+                       "the accent asset is not one base colour plus a dark override")
+        XCTAssertEqual(components(ios).count, 2,
+                       "the accent asset has no separate dark appearance")
+        XCTAssertEqual(components(ios), components(mac),
+                       "the two apps' brand violets have drifted apart")
+        // The values themselves, so a coordinated edit to both still has to be
+        // a decision: #6D28D9, and #7C3AED in dark.
+        XCTAssertEqual(components(ios).first, ["alpha": "1.000", "red": "0x6D",
+                                               "green": "0x28", "blue": "0xD9"])
+        XCTAssertEqual(components(ios).last, ["alpha": "1.000", "red": "0x7C",
+                                              "green": "0x3A", "blue": "0xED"])
+
+        let project = try String(
+            contentsOf: appsRoot.appendingPathComponent("ios/Relayium.xcodeproj/project.pbxproj"),
+            encoding: .utf8)
+        XCTAssertEqual(project.components(
+            separatedBy: "ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;").count - 1,
+            4, "both targets, Debug and Release, must resolve the branded accent")
+    }
+
+    /// **The nearby tab leads with the task, and the receiver keeps every word.**
+    ///
+    /// It was one flat column: a caution, a receiving status with its own
+    /// button, a mode picker, a chooser and a roster, each twenty points below
+    /// the last and none of them the point of the screen. The order asserted
+    /// here is the repair — caution, then the send task, then receiving — and it
+    /// is asserted as an order rather than as presence, because a card added
+    /// below the receiver would pass a containment check while leaving the
+    /// screen exactly as it was.
+    func testTheNearbyTabLeadsWithItsOwnTaskWithoutDemotingTheReceiver() throws {
+        let view = try nearby()
+        let section = try XCTUnwrap(view.text.components(
+            separatedBy: "private var discoverySection:").dropFirst().first?
+            .components(separatedBy: "private var sendTask:").first)
+        let caution = try XCTUnwrap(section.range(of: "safetySummary"))
+        let task = try XCTUnwrap(section.range(of: "sendTask"))
+        let receiving = try XCTUnwrap(section.range(of: "receiving"))
+        XCTAssertTrue(caution.lowerBound < task.lowerBound,
+                      "the task is drawn above the caution that changes the decision")
+        XCTAssertTrue(task.lowerBound < receiving.lowerBound,
+                      "the passive receiver still outranks the tab's own task")
+
+        // The task's two acts are named, and both live in the one card.
+        let card = try XCTUnwrap(view.text.components(
+            separatedBy: "private var sendTask:").dropFirst().first?
+            .components(separatedBy: "private var safetySummary:").first)
+        XCTAssertTrue(card.contains("SectionCard(L10n.t(.nearbySendTaskTitle))"))
+        XCTAssertTrue(card.contains("OpenSection(L10n.t(.nearbyWhatToSend))"))
+        XCTAssertTrue(card.contains("OpenSection(L10n.t(.nearbyWhoToSend))"))
+        for act in ["modePicker", "filesToSend", "roster"] {
+            XCTAssertTrue(card.contains(act), "the send card does not hold \(act)")
+        }
+
+        // The receiving card's TITLE is the status, which is the hierarchy
+        // change: one question, answered where the eye and VoiceOver both land
+        // first. It must still come from the shared mapping.
+        XCTAssertTrue(view.text.contains(
+            "SectionCard(NearbyStatusPresentation.text(for: receive.state))"),
+            "the receiving card no longer leads with the state it is reporting")
+        XCTAssertFalse(view.text.contains("Divider()"),
+                       "the tab went back to separating groups with rules")
+    }
+
+    /// Exactly one prominent control while nothing is staged, on both surfaces.
+    ///
+    /// Before this the idle Send tab was two identical grey capsules and the
+    /// nearby tab was three, so neither screen had a first move. The emphasis
+    /// moves to Send the moment there is something to send — two prominent
+    /// buttons in one card is the same as none.
+    func testTheChooserCarriesTheEmphasisOnlyUntilThereIsSomethingToSend() throws {
+        let all = try sources()
+        for (name, emptiness) in [("NearbyView.swift", "if selection.isEmpty {"),
+                                  ("SendView.swift", "if selection.selectedFiles.isEmpty {")] {
+            let view = try XCTUnwrap(all.first { $0.name == name }?.text)
+            let choose = try XCTUnwrap(view.components(separatedBy: emptiness)
+                .dropFirst().first?.components(separatedBy: "} else {").first)
+            XCTAssertTrue(choose.contains("L10n.t(.commonChooseFilesOrFolders)"),
+                          "\(name)'s empty branch does not offer the chooser")
+            XCTAssertTrue(choose.contains(".buttonStyle(.borderedProminent)"),
+                          "\(name) leaves an empty task with no first move")
+            let staged = try XCTUnwrap(view.components(separatedBy: emptiness)
+                .dropFirst().first?.components(separatedBy: "} else {").dropFirst().first)
+            XCTAssertTrue(staged.contains(".buttonStyle(.bordered)"),
+                          "\(name) keeps two prominent controls once something is staged")
+        }
+    }
+
+    /// **The rail may state a route and may not animate one.**
+    ///
+    /// Reduced Motion is not the reason it has no animation — the reason is that
+    /// a rail whose meaning lives in a moving dash means nothing on a still
+    /// screen, in a screenshot, or to anyone who has asked the system to stop
+    /// moving things. So there is no animation to reduce, and the guard is an
+    /// absence.
+    func testTheIOSPathRailIsFactualStillAndAdaptsToTheReadersOwnTextSize() throws {
+        let rail = try XCTUnwrap(
+            try sources().first { $0.name == "Components/PathRail.swift" }?.text)
+        for motion in [".animation(", "withAnimation", "repeatForever", "TimelineView",
+                       "accessibilityReduceMotion"] {
+            XCTAssertFalse(rail.contains(motion),
+                           "the rail moves, so it means nothing when motion is off: \(motion)")
+        }
+        // Order is the direction. An arrow would point the wrong way in Arabic.
+        for arrow in ["arrow.right", "arrow.forward", "chevron.right"] {
+            XCTAssertFalse(rail.contains(arrow), "the rail draws a direction glyph")
+        }
+        XCTAssertTrue(rail.contains("@Environment(\\.dynamicTypeSize)"),
+                      "the rail cannot turn, so it is three two-word columns at AX sizes")
+        XCTAssertTrue(rail.contains("typeSize >= .xxLarge"))
+        XCTAssertTrue(rail.contains("PathRailPresentation.routeLabel()"),
+                      "the rail's stops read as loose fragments to VoiceOver")
+        XCTAssertTrue(rail.contains(".accessibilityIdentifier(\"path-rail\")"))
+        // The stops themselves are the package's decision, not this view's.
+        XCTAssertFalse(rail.contains("L10n.t(.path"),
+                       "the view composes a rail label of its own")
+
+        // And each surface draws the rail its own state can actually support.
+        let nearby = try nearby().text
+        XCTAssertTrue(nearby.contains("PathRail(stops: PathRailPresentation.iosNearby())"))
+        let send = try XCTUnwrap(
+            try sources().first { $0.name == "SendView.swift" }?.text)
+        XCTAssertTrue(send.contains(
+            "PathRail(stops: PathRailPresentation.iosStoredSend(upload.state))"),
+            "the one rail with real progress is not reading the model that has it")
+        XCTAssertTrue(send.contains("PathRail(stops: PathRailPresentation.iosDeviceSend())"))
+        for view in [nearby, send] {
+            XCTAssertFalse(view.contains("PathRailPresentation.storedSend("),
+                           "an iOS surface draws the Mac's rail, which says This Mac")
+            XCTAssertFalse(view.contains("PathRailPresentation.lan("),
+                           "an iOS surface draws the Mac's rail, which says This Mac")
+        }
+    }
+
+    /// **Every SF Symbol this app draws exists on the oldest iOS it ships to.**
+    ///
+    /// A symbol added after the deployment target renders as nothing at all —
+    /// no crash, no warning, no log — so the rail keeps its labels and loses its
+    /// badges, and the empty state loses its landmark. It cannot be caught on a
+    /// simulator, because the only simulator runtime installed is current; it
+    /// cannot be caught by `NSImage(systemSymbolName:)`, because that answers
+    /// for the Mac the test is running on. This batch shipped two of them —
+    /// `macbook.and.iphone` and `laptopcomputer.slash`, both iOS 16.1 against a
+    /// 16.0 floor — before this guard existed.
+    ///
+    /// The availability data is Apple's own, read from CoreGlyphs on the test
+    /// host rather than copied into a table here that would go stale. If a
+    /// future macOS moves or reshapes that file the test SKIPS rather than
+    /// fails: a guard that cannot read its evidence must not claim a verdict.
+    func testEverySymbolTheIOSAppDrawsExistsOnItsOldestSupportedIOS() throws {
+        let plist = URL(fileURLWithPath:
+            "/System/Library/CoreServices/CoreGlyphs.bundle/Contents/Resources/"
+            + "name_availability.plist")
+        guard let data = try? Data(contentsOf: plist),
+              let root = try? PropertyListSerialization.propertyList(
+                from: data, options: [], format: nil) as? [String: Any],
+              let firstYear = root["symbols"] as? [String: String],
+              let releases = root["year_to_release"] as? [String: [String: String]]
+        else {
+            throw XCTSkip("CoreGlyphs availability data is not readable on this host")
+        }
+
+        // The floor the project actually declares, not a number repeated here.
+        let project = try String(
+            contentsOf: appsRoot.appendingPathComponent("ios/Relayium.xcodeproj/project.pbxproj"),
+            encoding: .utf8)
+        let targets = project.components(separatedBy: "IPHONEOS_DEPLOYMENT_TARGET = ")
+            .dropFirst()
+            .compactMap { $0.components(separatedBy: ";").first }
+        XCTAssertFalse(targets.isEmpty, "the project declares no iOS deployment target")
+        let floor = try XCTUnwrap(targets.map(ordered).min())
+        XCTAssertEqual(Set(targets).count, 1,
+                       "the targets disagree about the oldest iOS: \(Set(targets))")
+        let floorName = try XCTUnwrap(targets.min { ordered($0) < ordered($1) })
+
+        // Both places a symbol name can be written: the views and components
+        // themselves, and the rail stops the package hands them. Comments are
+        // already stripped by `sources()`, so a name discussed in prose is not
+        // mistaken for a name drawn.
+        //
+        // Two sweeps, because one is precise and one is complete. The named
+        // parameters are certainly symbols; but `InlineMessage` returns its two
+        // out of a `switch` with no parameter label anywhere near them, and a
+        // guard that silently skips a whole component is not a guard. So every
+        // remaining string literal is also looked up, and kept only when Apple's
+        // own table recognises it — ordinary copy and identifiers are not in
+        // that table and drop out on their own.
+        var used = Set<String>()
+        let named = try NSRegularExpression(
+            pattern: "(?:systemName|systemImage|symbol):\\s*\"([^\"]+)\"")
+        let anyLiteral = try NSRegularExpression(pattern: "\"([^\"\\\\]+)\"")
+        for file in try sources() {
+            let text = file.text
+            let whole = NSRange(text.startIndex..., in: text)
+            for match in named.matches(in: text, range: whole) {
+                if let range = Range(match.range(at: 1), in: text) {
+                    used.insert(String(text[range]))
+                }
+            }
+            for match in anyLiteral.matches(in: text, range: whole) {
+                if let range = Range(match.range(at: 1), in: text),
+                   firstYear[String(text[range])] != nil {
+                    used.insert(String(text[range]))
+                }
+            }
+        }
+        XCTAssertGreaterThan(used.count, 10, "the symbol scan found almost nothing")
+        // The three rails drawn on iOS, plus the checkmark `PathRail`
+        // substitutes for a reached stop's own symbol.
+        let done = UploadState.done(link: "x", expiresAt: 0, keyWarning: nil)
+        for stop in PathRailPresentation.iosStoredSend(.idle)
+            + PathRailPresentation.iosStoredSend(done)
+            + PathRailPresentation.iosDeviceSend()
+            + PathRailPresentation.iosNearby() {
+            used.insert(stop.symbol)
+        }
+        used.insert("checkmark")
+
+        for symbol in used.sorted() {
+            guard let year = firstYear[symbol], let shipped = releases[year]?["iOS"] else {
+                XCTFail("\(symbol) is not an SF Symbol Apple ships at all")
+                continue
+            }
+            XCTAssertLessThanOrEqual(
+                ordered(shipped), floor,
+                "\(symbol) first shipped in iOS \(shipped) and draws nothing on iOS "
+                + "\(floorName), which this app still supports")
+        }
+    }
+
+    /// `16.10` sorts above `16.4`, which a string comparison would get backwards.
+    private func ordered(_ version: String) -> Int {
+        let parts = version.split(separator: ".").compactMap { Int($0) }
+        return (parts.first ?? 0) * 1_000 + (parts.count > 1 ? parts[1] : 0)
+    }
+
+    /// The two empty states that are not merely absent content.
+    func testBothEmptyDeviceListsAreDesignedStatesWithTheirRemedy() throws {
+        let all = try sources()
+        let nearby = try XCTUnwrap(all.first { $0.name == "NearbyView.swift" }?.text)
+        XCTAssertTrue(nearby.contains("EmptyStateView(symbol: \"dot.radiowaves.left.and.right\","))
+        XCTAssertTrue(nearby.contains("message: L10n.t(.nearbyEmptyRoster)"))
+        let devices = try XCTUnwrap(all.first { $0.name == "DeviceSendView.swift" }?.text)
+        XCTAssertTrue(devices.contains("message: L10n.t(.sendDeviceNone)"))
+        XCTAssertTrue(devices.contains("detail: L10n.t(.sendDeviceNoneHelp)"),
+                      "the empty device list dropped its remedy")
+        // No action of its own on either: the thing to press next — Look again,
+        // Refresh — is already on the screen, and a second button here would
+        // look like the primary one.
+        let empty = try XCTUnwrap(all.first { $0.name == "Components/EmptyStateView.swift" }?.text)
+        XCTAssertFalse(empty.contains("Button"), "the empty state grew a competing action")
+    }
+
 }

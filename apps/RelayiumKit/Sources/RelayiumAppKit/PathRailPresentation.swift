@@ -114,6 +114,80 @@ public enum PathRailPresentation {
         }
     }
 
+    /// The same three stops, from a device that is not a Mac.
+    ///
+    /// One word differs — the origin — and it is the only word that could be
+    /// false here. Everything else about a stored send is identical on both
+    /// platforms, so the stage arithmetic is the macOS function's rather than a
+    /// second copy that can drift from it: a rail that advanced differently on
+    /// one platform would be the exact false-completion bug `PathStop` exists to
+    /// prevent.
+    public static func iosStoredSend(_ state: UploadState,
+                                     language: AppLanguage? = nil) -> [PathStop] {
+        storedSend(state, language: language).map { stop in
+            guard stop.id == 0 else { return stop }
+            return PathStop(id: stop.id,
+                            // nonlocalized: SF Symbol name
+                            symbol: "iphone",
+                            title: L10n.t(.pathThisDevice, language: language),
+                            detail: stop.detail,
+                            progress: stop.progress)
+        }
+    }
+
+    /// A delivery to one of the account's own devices, from the sending side.
+    ///
+    /// Not `deviceInbox`, which is the same route seen from the far end — that
+    /// rail is drawn on the Mac that RECEIVES, so its origin is the account and
+    /// its destination is that Mac. Here the user is the sender, and stating it
+    /// the other way round would put this device at the end of a delivery it is
+    /// about to start.
+    ///
+    /// No progress, for the reason every standing route has none: the middle
+    /// stop is ciphertext waiting on Relayium, and the delivery list directly
+    /// below states in words what each individual send is actually doing.
+    public static func iosDeviceSend(language: AppLanguage? = nil) -> [PathStop] {
+        [
+            // nonlocalized: SF Symbol name
+            PathStop(id: 0, symbol: "iphone",
+                     title: L10n.t(.pathThisDevice, language: language)),
+            // nonlocalized: SF Symbol name
+            PathStop(id: 1, symbol: "lock.fill",
+                     title: L10n.t(.pathEncryptedOnRelayium, language: language)),
+            // nonlocalized: SF Symbol name.
+            //
+            // NOT the Mac rails' `macbook.and.iphone`, which SF Symbols first
+            // shipped in iOS 16.1 — one minor version above this app's 16.0
+            // floor, where it would render as nothing at all and leave the far
+            // end of the rail an empty circle. `laptopcomputer.and.iphone` is
+            // the same pair of devices, back to iOS 14.
+            PathStop(id: 2, symbol: "laptopcomputer.and.iphone",
+                     title: L10n.t(.pathOtherDevice, language: language)),
+        ]
+    }
+
+    /// A nearby transfer's standing route, from this device to the one the user
+    /// picks, with an encrypted middle and no claim about its shape.
+    ///
+    /// Every `progress` is nil, for `lan`'s reason: the rail is drawn while the
+    /// roster is still being chosen from, so there is no position to be part of
+    /// the way along — and it must not imply that picking a device has already
+    /// connected to it.
+    public static func iosNearby(language: AppLanguage? = nil) -> [PathStop] {
+        [
+            // nonlocalized: SF Symbol name
+            PathStop(id: 0, symbol: "iphone",
+                     title: L10n.t(.pathThisDevice, language: language)),
+            // nonlocalized: SF Symbol name
+            PathStop(id: 1, symbol: "lock.fill",
+                     title: L10n.t(.pathEncryptedConnection, language: language)),
+            // nonlocalized: SF Symbol name — `iosDeviceSend` records why this is
+            // not the Mac rails' `macbook.and.iphone`.
+            PathStop(id: 2, symbol: "laptopcomputer.and.iphone",
+                     title: L10n.t(.pathOtherDevice, language: language)),
+        ]
+    }
+
     // MARK: - Device Inbox
 
     /// **A standing route, with no progress at all — and no second copy of a
