@@ -123,7 +123,7 @@ final class MacSurfaceGuardTests: XCTestCase {
             .ko: ["직접", "바로"],
             .ar: ["مباشر"],
         ]
-        let promises: [L10nKey] = [.navLanTransferSubtitle, .helpLanAnswer,
+        let promises: [L10nKey] = [.navLanTransferSubtitle, .helpLanBoundary,
                                    .nearbySelectionSendHint, .nearbyAddFilesHint,
                                    .workspaceAddFilesHint]
         for language in AppLanguage.allCases {
@@ -141,9 +141,9 @@ final class MacSurfaceGuardTests: XCTestCase {
         // The truthful half is still there. LocalizedCopyTests already pins the
         // network and both-online tokens per language, in
         // `testSidebarSubtitlesKeepTheDecisiveLimitation`; what belongs here is
-        // the help answer, which is where somebody goes to ask what the servers
-        // actually see.
-        let answer = L10n.t(.helpLanAnswer, language: .en)
+        // the help topic's BOUNDARY — the answer this used to name, under the
+        // heading somebody actually looks under to ask what the servers see.
+        let answer = L10n.t(.helpLanBoundary, language: .en)
         for kept in ["encrypted end to end", "never has the key", "relay"] {
             XCTAssertTrue(answer.localizedCaseInsensitiveContains(kept),
                           "the corrected LAN answer dropped \(kept): \(answer)")
@@ -491,15 +491,23 @@ final class MacSurfaceGuardTests: XCTestCase {
         // which is what stops a code being minted for a selection that cannot be
         // read — and what gives minting and handoff one manifest to keep visible.
         let connect = try source(named: crossConnect)
-        guard let create = connect.range(of: "private func createCode(mode: TransferMode) {"),
+        guard let create = connect.range(of: "private func createCode() {"),
               let stage = connect.range(of: "guard let ready = stage() else { return }",
                                         range: create.lowerBound..<connect.endIndex),
               let mint = connect.range(of: "await fileModel.mintCode(token: token)",
                                        range: stage.upperBound..<connect.endIndex) else {
-            return XCTFail("the file-code action lost staging or minting")
+            return XCTFail("the create action lost staging or minting")
         }
         XCTAssertLessThan(stage.lowerBound, mint.lowerBound,
                           "a code can be minted for a selection that cannot be read")
+        // Staging is CONDITIONAL now, and that is the product change rather than
+        // a weakening: one Create action mints with or without a batch, exactly
+        // as the Web does, so the batch can be assembled during the wait. What
+        // must not weaken is the refusal — a selection the user DID pick and
+        // that cannot be read still stops the mint.
+        XCTAssertTrue(connect.contains("if !selection.isEmpty {"),
+                      "creating a code either requires a batch again, or mints for an "
+                      + "unreadable one")
 
         let session = try source(named: "RealtimeFileSessionView.swift")
         let connecting = try XCTUnwrap(session.components(
@@ -901,15 +909,30 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(handoff.contains("L10n.t(.commonExpires,"))
     }
 
-    /// The join link a code hands over still carries the kind the code was
-    /// minted for. That is the one thing that makes a link-driven join
-    /// unambiguous where a typed code cannot be.
-    func testPairingHandoffPreservesTheModeThatCreatedTheCode() throws {
+    /// **The join link is the code and nothing else.**
+    ///
+    /// It used to carry `?mode=file` or `?mode=text`, so a recipient opening it
+    /// landed in the lane the sender had chosen. There is no such choice to
+    /// preserve: one Create action mints one code, and a hint naming a lane the
+    /// sender never picked would be the removed question smuggled back into a
+    /// URL. This is now byte-identical to the web's own `#c=<code>`.
+    ///
+    /// PARSING a mode is untouched, and deliberately: links already passed on
+    /// have to keep working. That is `AppDeepLinkTests`' half.
+    func testPairingHandoffCarriesTheCodeAndNoLaneHint() throws {
         let pane = try source(named: transferSession)
-        XCTAssertTrue(pane.contains("productionPairingJoinURL(code: code, mode: mode)"),
-                      "the handoff link must carry the lane it was minted for")
-        XCTAssertTrue(pane.contains("mode: .files,") && pane.contains("mode: .text,"),
-                      "both lanes must reach the shared handoff with their own kind")
+        XCTAssertTrue(pane.contains("productionPairingJoinURL(code: code)"),
+                      "the handoff link is built with something other than the bare code")
+        XCTAssertFalse(pane.contains("productionPairingJoinURL(code: code, mode:"),
+                       "the handoff link still names a lane the sender never chose")
+        // No macOS surface emits one at all — the parser keeps its `mode`
+        // parameter for inbound links, and this is what stops a second caller
+        // quietly using it to send one.
+        for (name, text) in try sources(under: macRoot, atLeast: 20) {
+            XCTAssertFalse(text.contains("PairingJoinURL(code:") && text.contains("mode:")
+                           && text.contains("PairingJoinURL(code: code, mode:"),
+                           "\(name) emits a lane hint in a join link")
+        }
     }
 
     func testPairingHandoffShowsTheWholeCurrentLink() throws {
@@ -1199,41 +1222,62 @@ final class MacSurfaceGuardTests: XCTestCase {
             "the Device Inbox stopped supplying its own scrolling")
     }
 
-    /// **Help collapses; the decisive line does not.**
+    /// **Help is a control, and it is the size of a control.**
     ///
-    /// The compact form is only an improvement if what is hidden is genuinely
-    /// secondary. Three properties make that true, and each has a way of
-    /// silently regressing:
+    /// It was a `DisclosureGroup`, whose macOS affordance is a triangle roughly
+    /// twelve points square beside grey caption text: the smallest target on the
+    /// screen, aimed at the reader who understands the screen least, and
+    /// indistinguishable from the prose around it in either appearance. Five
+    /// properties replace it, and every one of them has a way of silently
+    /// regressing:
     ///
-    ///  1. Step one renders in the disclosure's own LABEL, so a reader who needs
-    ///     only "what do I do first" never opens anything.
-    ///  2. It starts collapsed, which is the whole point of the change.
-    ///  3. Everything else is complete when opened — the remaining steps, the
-    ///     question with its answer, and the guide link where one exists.
-    ///
-    /// The numbering is continuous across the fold rather than restarting at 1
-    /// inside, which is why the remaining steps are `dropFirst()` over the
-    /// enumerated list rather than a second list of their own.
-    func testHelpCollapsesWithoutHidingItsFirstStep() throws {
+    ///  1. It is a `Button`, so it takes a focus ring under Full Keyboard
+    ///     Access, hovers, and is spoken as a button rather than as text.
+    ///  2. The whole ROW is the target, at least `Metrics.hitTarget` tall, with
+    ///     the frame on the LABEL so the border the style draws is the size of
+    ///     the target rather than of the words inside it.
+    ///  3. It starts collapsed, which is what keeps help from crowding a 560pt
+    ///     window.
+    ///  4. The collapsed row still answers something — `topic.purpose`, what the
+    ///     screen is for — so a reader who needs only that never opens anything.
+    ///  5. Opened, it is complete: the numbered path from one, the boundary, the
+    ///     destination, the failure with its recovery, and the guide link where
+    ///     one exists.
+    func testHelpIsAFullRowButtonAndStartsCollapsed() throws {
         let help = try source(named: "Components/HelpSection.swift")
         XCTAssertTrue(help.contains("@State private var expanded = false"),
                       "help no longer starts collapsed, or is no longer collapsible")
-        XCTAssertTrue(help.contains("DisclosureGroup(isExpanded: $expanded)"),
-                      "help is not a disclosure the reader controls")
-        XCTAssertTrue(help.contains(".accessibilityIdentifier(\"destination-help-first-step\")"),
-                      "the always-visible first step has no stable identity")
-        // The identifier stays on the heading LEAF, never on the stack: a
-        // container identifier propagates down and would rename the step below
-        // it, which is the defect this pane has already lost controls to.
+        XCTAssertTrue(help.contains("Button {\n            expanded.toggle()\n        } label: {"),
+                      "help is not a button the reader can press anywhere on")
+        XCTAssertTrue(help.contains(".buttonStyle(.bordered)"),
+                      "the help control has no chrome, so it does not read as a control")
         XCTAssertTrue(help.contains(
-            "Text(L10n.t(.helpHeading))\n                .font(.subheadline.weight(.semibold))\n"
-            + "                .accessibilityIdentifier(\"destination-help\")"),
-            "the help heading lost its leaf identifier")
-        // Opened, it is complete. Each of these is one thing a reader would have
-        // had before the change and could silently lose to it.
-        for required in ["topic.steps.enumerated().dropFirst()",
-                         "Text(L10n.t(topic.question))",
-                         "Text(L10n.t(topic.answer))",
+            ".frame(maxWidth: .infinity, minHeight: Metrics.hitTarget, alignment: .leading)"),
+            "the help control is not a full row at the minimum hit height")
+        XCTAssertTrue(help.contains(".contentShape(Rectangle())"),
+                      "only the drawn glyphs of the help row are clickable")
+        // The state and the action are separate things to assistive technology,
+        // and the chevron that shows the first is hidden from it.
+        XCTAssertTrue(help.contains(
+            ".accessibilityValue(L10n.t(expanded ? .helpExpandedValue : .helpCollapsedValue))"),
+            "the help control does not say whether it is open")
+        XCTAssertTrue(help.contains(
+            ".accessibilityHint(L10n.t(expanded ? .helpCollapseHint : .helpExpandHint))"),
+            "the help control does not say what pressing it does")
+        XCTAssertEqual(occurrences(of: ".accessibilityIdentifier(\"destination-help\")", in: help), 1)
+        // The collapsed row carries the purpose, not step one: a reader who has
+        // not worked out what the screen IS cannot use its first step.
+        XCTAssertTrue(help.contains("Text(L10n.t(topic.purpose))"),
+                      "the collapsed row answers nothing")
+        XCTAssertFalse(help.contains("destination-help-first-step"),
+                       "the collapsed row is back to a numbered fragment")
+        // Opened, it is complete. Each of these is one of the six answers, and
+        // any of them could be silently dropped by an edit to the layout.
+        for required in ["ForEach(Array(topic.steps.enumerated()), id: \\.offset)",
+                         "block(heading: .helpBoundaryHeading, body: topic.boundary)",
+                         "block(heading: .helpWhereHeading, body: topic.destination)",
+                         "prose(topic.failure)",
+                         "prose(topic.recovery)",
                          "L10n.t(.helpGuideLink)",
                          "L10n.t(.formatHelpStep, [L10n.number(number), L10n.t(key)])"] {
             XCTAssertTrue(help.contains(required),
@@ -1241,8 +1285,68 @@ final class MacSurfaceGuardTests: XCTestCase {
         }
         // Both shapes render the same body, so the Form surface cannot drift
         // into a second, permanently open version.
-        XCTAssertEqual(occurrences(of: "HelpDisclosure(topic: topic", in: help), 2,
+        XCTAssertEqual(occurrences(of: "HelpBlock(topic: topic", in: help), 2,
                        "the card and the Form section no longer share one help body")
+    }
+
+    /// **One affordance, five destinations, and it survives the smallest window
+    /// the app supports.**
+    ///
+    /// The complaint the button replaces was not that help was missing — it was
+    /// on every screen — but that on every screen it was the same hard-to-hit,
+    /// hard-to-see label. So consistency is the property worth guarding: exactly
+    /// one help view type, reached one way, with no destination growing a
+    /// variant of its own.
+    ///
+    /// The minimum-size half is the part a screenshot review would miss. At
+    /// 560pt the purpose line wraps to two or three lines in the longer locales,
+    /// and a row that truncated it instead would leave the collapsed state
+    /// saying nothing at all — which is the whole of what it says.
+    func testTheHelpAffordanceIsTheSameOnEveryDestinationAndSurvivesTheMinimumWindow() throws {
+        let help = try source(named: "Components/HelpSection.swift")
+
+        // Every browseable destination reaches help through one of exactly two
+        // containers, and both wrap the same block. Nothing else in the app may
+        // build a help view of its own.
+        let builders = try sources(under: macRoot, atLeast: 20)
+            .filter { $0.text.contains("HelpBlock(") }.map(\.name)
+        XCTAssertEqual(builders, ["Components/HelpSection.swift"],
+                       "a destination builds its own help block")
+        let hosts = try sources(under: macRoot, atLeast: 20)
+            .filter { $0.text.contains("HelpCard(surface:") || $0.text.contains("HelpFormSection(surface:") }
+            .map(\.name).sorted()
+        XCTAssertEqual(hosts, ["Destinations/AccountDestination.swift",
+                               "Destinations/CrossNetworkTransferDestination.swift",
+                               "Destinations/LanTransferDestination.swift",
+                               "Destinations/StoredSendDestination.swift",
+                               "DeviceInbox/DeviceInboxSurface.swift"],
+                       "the five browseable destinations no longer offer the same help")
+
+        // Wrapping, not truncating: the collapsed row's one sentence has to
+        // survive the narrowest supported detail column and the longest locale.
+        guard let purpose = help.range(of: "Text(L10n.t(topic.purpose))") else {
+            return XCTFail("the collapsed row lost its purpose line")
+        }
+        let styling = String(help[purpose.upperBound...].prefix(400))
+        XCTAssertTrue(styling.contains(".fixedSize(horizontal: false, vertical: true)"),
+                      "the collapsed help row truncates the only thing it says")
+        XCTAssertTrue(styling.contains(".multilineTextAlignment(.leading)"),
+                      "a wrapped help row centres its second line")
+        XCTAssertFalse(help.contains(".lineLimit("),
+                       "the help row caps its own lines rather than wrapping")
+        // And the block is held to the reading measure rather than to the
+        // window, so a wide window does not set six answers at a thousand points.
+        XCTAssertTrue(help.contains(".frame(maxWidth: Metrics.readingMeasure, alignment: .leading)"))
+
+        // No colour of its own beyond the one accent role the app already
+        // spends: light mode, dark mode and Increase Contrast are the system's
+        // answers, and a hex value here would answer none of them.
+        for invented in ["Color(red:", "Color(white:", "#colorLiteral", ".opacity(0."] {
+            XCTAssertFalse(help.contains(invented),
+                           "the help affordance invented a colour: \(invented)")
+        }
+        XCTAssertTrue(help.contains("Palette.action"),
+                      "the help symbol is not the app's one action colour")
     }
 
     // MARK: - the path a transfer takes
@@ -1353,10 +1457,61 @@ final class MacSurfaceGuardTests: XCTestCase {
         // The socket's answer, not the system's.
         XCTAssertTrue(pane.contains("if let announced = discovery.announcedName, isListening {"),
                       "the announced name is rendered without a socket or without listening")
-        XCTAssertTrue(pane.contains("L10n.t(.nearbyAnnouncedAs, [L10n.token(announced)])"))
-        for live in ["AppEnvironment.deviceName", "Host.current", "ProcessInfo"] {
+        // **The name is the card's primary line, rendered as itself.** It used
+        // to be interpolated into a `.caption` sentence at the end of the
+        // receive-status block, in the same grey as the disclaimers below it —
+        // the one fact somebody reads this screen out loud for was the smallest
+        // type on it. It is now a `.title3` in its own card, with the sentence
+        // demoted to the caption underneath.
+        XCTAssertTrue(pane.contains("Text(L10n.token(announced))\n"
+                                    + "                .font(.title3.weight(.semibold))"),
+                      "the announced name is no longer the identity card's primary line")
+        XCTAssertTrue(pane.contains("L10n.t(.nearbyAnnouncedNameCaption)"),
+                      "the announced name is shown with nothing saying what it is")
+        XCTAssertTrue(pane.contains("SectionCard(title: L10n.t(.nearbyThisMacHeading))"),
+                      "identity is filed back inside the receive status")
+        // It is the FIRST thing under the route rail, above the card that holds
+        // the roster: a first-viewport answer or it is not an answer.
+        guard let rail = pane.range(of: "PathRail(stops: PathRailPresentation.lan())"),
+              let identity = pane.range(of: "thisMac", range: rail.upperBound..<pane.endIndex),
+              let roster = pane.range(of: "sameNetwork", range: identity.upperBound..<pane.endIndex)
+        else {
+            return XCTFail("the LAN pane no longer has the shape this guards")
+        }
+        XCTAssertLessThan(identity.upperBound, roster.lowerBound)
+        // The two states a card with no name has to distinguish, because their
+        // remedies are opposite: waiting, and not started.
+        for state in ["nearbyIdentityAnnouncing", "nearbyIdentityNotListening"] {
+            XCTAssertTrue(pane.contains(state),
+                          "the identity card goes blank rather than saying \(state)")
+        }
+        XCTAssertTrue(pane.contains("case .connecting, .reconnecting: return true"),
+                      "a Mac on its way into the room is reported as not listening at all")
+        // **Independent of the receive-status sentence.** The two answer
+        // different questions — who this Mac IS, and whether it is listening —
+        // and filing the first under the second is what made the identity four
+        // grey caption lines below a failure notice.
+        guard let receiving = pane.range(of: "private var receiving: some View"),
+              let identityBlock = pane.range(of: "private var identity: some View") else {
+            return XCTFail("the LAN pane no longer has the shape this guards")
+        }
+        let receivingBody = String(pane[receiving.upperBound..<identityBlock.lowerBound])
+        for moved in ["announcedName", "localAddresses", "nearbyAddressesPrivacyNote"] {
+            XCTAssertFalse(receivingBody.contains(moved),
+                           "the receive-status block still owns the identity: \(moved)")
+        }
+        // Off is still allowed to answer the owner's first question: the
+        // configured name is shown as what the NEXT join will use, never as a
+        // claim about what peers currently see. Once a socket exists, the
+        // announced snapshot above remains authoritative.
+        XCTAssertTrue(pane.contains("Text(L10n.token(AppEnvironment.deviceName()))"),
+                      "the device name disappears exactly when receiving is off")
+        XCTAssertTrue(pane.contains("L10n.t(.nearbyConfiguredNameCaption)"),
+                      "the configured name is presented as if peers already see it")
+        XCTAssertTrue(pane.contains(".accessibilityIdentifier(\"lan-configured-name\")"))
+        for live in ["Host.current", "ProcessInfo"] {
             XCTAssertFalse(pane.contains(live),
-                           "the surface recomputes a name the room was never told: \(live)")
+                           "the surface bypasses the shared device-name rule: \(live)")
         }
 
         // Read while listening, emptied otherwise. The clearing half is the one
@@ -1607,21 +1762,19 @@ final class MacSurfaceGuardTests: XCTestCase {
         for (name, text) in try sources(under: macRoot, atLeast: 20) {
             for s in banned { XCTAssertFalse(text.contains(s), "\(name) contains \(s)") }
         }
-        // **`DisclosureGroup` is allowed in exactly one file, and the ban stays
-        // everywhere else.**
+        // **`DisclosureGroup` is banned outright again, including in help.**
         //
-        // It was banned outright because the root view once hid every signed-out
-        // CAPABILITY inside two collapsed groups and nobody found them. What the
-        // blanket ban could not distinguish is what is being collapsed: a group
-        // that hides the way to send a file removes the feature; a group that
-        // hides the third paragraph explaining it does not, and the permanently
-        // open version ran to eight or nine lines under every screen in a 560pt
-        // window. Naming the one file is what keeps that argument from being
-        // extended to a control.
+        // It was banned because the root view once hid every signed-out
+        // CAPABILITY inside two collapsed groups and nobody found them. Help
+        // held the one exception, on the argument that hiding the third
+        // paragraph about a feature is not hiding the feature — which was true,
+        // and left the app's quietest reader aiming at its smallest target. A
+        // `Button` collapses the same paragraph with an affordance the control
+        // never had, so the exception has nothing left to buy.
         let collapsers = try sources(under: macRoot, atLeast: 20)
             .filter { $0.text.contains("DisclosureGroup") }.map(\.name).sorted()
-        XCTAssertEqual(collapsers, ["Components/HelpSection.swift"],
-                       "a macOS surface collapses something that is not help")
+        XCTAssertEqual(collapsers, [],
+                       "a macOS surface hides something behind a bare disclosure triangle")
     }
 
     func testExactlyOneFileCarriesAFixedFontSize() throws {
@@ -2837,9 +2990,12 @@ final class MacSurfaceGuardTests: XCTestCase {
             "guard presence.beginSession(route, mode: .files, peerLabel: live.label) else { return }",
         ]
         let crossClaims = [
-            "guard presence.beginSession(route, mode: mode) else { return }",
+            // Two paths — create and connect — and both take `.files`
+            // PROVISIONALLY rather than as a kind the user chose: the file model
+            // is the one that holds a minted code and a staged batch, and
+            // `adoptLegacyRoom` moves the surface if the room resolves to a
+            // legacy text peer.
             "guard presence.beginSession(route, mode: .files) else { return }",
-            "guard presence.beginSession(route, mode: .text) else { return }",
         ]
         // The two unified-link starts. They take the mode-less claim, because a
         // link has no files-or-text mode to arbitrate — and each RELEASES the
@@ -2851,19 +3007,20 @@ final class MacSurfaceGuardTests: XCTestCase {
             "both link starts claim the surface before connecting")
         XCTAssertEqual(occurrences(of: "presence.release(route)", in: lan), 2,
                        "a refused link must hand the surface back rather than strand it")
-        for (claim, text, name) in lanClaims.map({ ($0, lan, lanConnect) })
-            + crossClaims.map({ ($0, cross, crossConnect) }) {
-            XCTAssertEqual(occurrences(of: claim, in: text), 1,
-                           "\(name) can start a shared model after losing ownership: \(claim)")
+        for claim in lanClaims {
+            XCTAssertEqual(occurrences(of: claim, in: lan), 1,
+                           "\(lanConnect) can start a shared model after losing ownership: "
+                           + claim)
         }
         // Every start is behind one. A bare `Task { await` that no claim
         // precedes is the regression this counts.
         XCTAssertEqual(occurrences(of: "presence.beginSession(", in: lan),
                        lanClaims.count + 2,
                        "a LAN start path exists with no ownership claim, or the reverse")
-        XCTAssertEqual(occurrences(of: "presence.beginSession(", in: cross),
-                       crossClaims.count,
+        XCTAssertEqual(occurrences(of: "presence.beginSession(", in: cross), 2,
                        "a pairing start path exists with no ownership claim, or the reverse")
+        XCTAssertEqual(occurrences(of: crossClaims[0], in: cross), 2,
+                       "\(crossConnect) can start a shared model after losing ownership")
         // Neither screen may claim the other's route.
         XCTAssertFalse(lan.contains("beginSession(.pairingCode"),
                        "the same-network screen claims the pairing-code route")
@@ -2871,19 +3028,28 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "the pairing-code screen claims the same-network route")
     }
 
+    /// One Connect verb, and the snapshot rule it inherited unchanged.
+    ///
+    /// The code is read once, validated, and then only the local `code` is used.
+    /// The field stays editable until the asynchronous start publishes state, so
+    /// reading it again inside the `Task` would turn one valid click into a
+    /// different or incomplete code.
     func testPairingJoinSnapshotsAValidatedCodeBeforeClaimAndTask() throws {
         let source = try source(named: crossConnect)
+        XCTAssertTrue(source.contains("let code = fileModel.joinCode"))
+        XCTAssertTrue(source.contains("guard fileModel.canJoin else { return }"))
+        // The join itself runs inside `watch`'s fallback closure — the room is
+        // watched for a `link/1` peer first.
+        XCTAssertTrue(source.contains("await fileModel.join(code: code)"))
         for model in ["fileModel", "textModel"] {
-            XCTAssertTrue(source.contains("let code = \(model).joinCode"))
-            XCTAssertTrue(source.contains("guard \(model).canJoin else { return }"))
-            // The join itself now runs inside `watch`'s fallback closure — the
-            // room is watched for a `link/1` peer first — but the SNAPSHOT rule
-            // is unchanged and is what this guards: the code is read once,
-            // validated, and then only the local `code` is used.
-            XCTAssertTrue(source.contains("await \(model).join(code: code)"))
             XCTAssertFalse(source.contains("\(model).join(code: \(model).joinCode)"),
                            "the join reads mutable input after taking ownership")
         }
+        // And there is exactly ONE of them. A second join verb would be the
+        // removed kind-question wearing a different label.
+        XCTAssertEqual(occurrences(of: "private func join()", in: source), 1)
+        XCTAssertFalse(source.contains("func join(mode:"),
+                       "joining asks which kind again")
     }
 
     /// **One field, both models.** The two join verbs share a code, so the
@@ -2907,7 +3073,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         let uiURL = macRoot.deletingLastPathComponent()
             .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
         let ui = try String(contentsOf: uiURL, encoding: .utf8)
-        XCTAssertTrue(ui.contains("testCrossNetworkJoinKeepsACompleteCodeActionableForBothVerbs"))
+        XCTAssertTrue(ui.contains("testCrossNetworkJoinKeepsACompleteCodeActionable"))
         XCTAssertTrue(ui.contains("window.textFields[\"pairing.joinCode\"]"))
     }
 
@@ -2923,38 +3089,37 @@ final class MacSurfaceGuardTests: XCTestCase {
     }
 
     /// Everything a Create must settle SYNCHRONOUSLY, in order: expand and open
-    /// the batch (a useless code for an unreadable selection is worse than a
-    /// refusal), re-read live access, claim ownership, and only then start async
-    /// work. One `createCode(mode:)` now, so the ordering is stated once instead
-    /// of twice with a chance to disagree.
+    /// the batch the user picked (a useless code for an unreadable selection is
+    /// worse than a refusal), re-read live access, claim ownership, and only
+    /// then start async work.
+    ///
+    /// One `createCode()` — no argument, because there is nothing left to ask —
+    /// so the ordering is stated once instead of twice with a chance to disagree.
     func testPairingCreateSettlesIntentBeforeStartingAsyncMint() throws {
         let connect = try source(named: crossConnect)
         XCTAssertTrue(connect.contains(
-            "Button(L10n.t(.workspaceCreateMessageCode)) { createCode(mode: .text) }"))
-        XCTAssertTrue(connect.contains(
-            "Button(L10n.t(.workspaceCreateFileCode)) { createCode(mode: .files) }"))
-        guard let create = connect.range(of: "private func createCode(mode: TransferMode) {"),
+            "Button(L10n.t(.workspaceCreatePairingCode)) { createCode() }"))
+        guard let create = connect.range(of: "private func createCode() {"),
               let staged = connect.range(of: "guard let ready = stage() else { return }",
                                          range: create.lowerBound..<connect.endIndex),
               let access = connect.range(of: "guard let access = accessNow() else {",
                                          range: staged.lowerBound..<connect.endIndex),
               let claim = connect.range(of:
-                "guard presence.beginSession(route, mode: mode) else { return }",
+                "guard presence.beginSession(route, mode: .files) else { return }",
                 range: access.lowerBound..<connect.endIndex),
               let task = connect.range(
-                of: "Task { await mintAndWatch(mode: .files, token: access.token, staged: staged) }",
-                range: claim.lowerBound..<connect.endIndex),
-              let textTask = connect.range(
-                of: "Task { await mintAndWatch(mode: .text, token: access.token, staged: nil) }",
+                of: "Task { await mintAndWatch(token: access.token, staged: staged) }",
                 range: claim.lowerBound..<connect.endIndex) else {
             return XCTFail("code creation lost its synchronous intent boundary")
         }
-        XCTAssertLessThan(task.lowerBound, textTask.lowerBound)
-        // A message code needs nothing staged, and that asymmetry has to be
-        // visible in the source rather than only in the disabled state: only the
-        // files arm expands a selection.
-        XCTAssertTrue(connect.contains("if mode == .files {"),
-                      "creating a message code must not require a staged batch")
+        XCTAssertLessThan(claim.lowerBound, task.lowerBound)
+        // A code needs nothing staged, and that has to be visible in the source
+        // rather than only in the disabled state: the expansion is conditional
+        // on the user having picked something at all.
+        XCTAssertTrue(connect.contains("if !selection.isEmpty {"),
+                      "creating a code requires a staged batch again")
+        XCTAssertFalse(connect.contains(".disabled(selection.isEmpty"),
+                       "the create action is gated on a staged batch again")
     }
 
     /// Account gating is presentation, not authorization. A button from the
@@ -3442,13 +3607,22 @@ final class MacSurfaceGuardTests: XCTestCase {
             XCTAssertFalse(cross.contains(identifier),
                            "the pairing screen offers a same-network control: \(identifier)")
         }
-        for identifier in ["cross-network-create-message-code", "cross-network-create-file-code",
-                           "cross-network-join-messages", "cross-network-join-files",
+        for identifier in ["cross-network-create-code", "cross-network-join-code",
                            "cross-network-explain"] {
             XCTAssertTrue(cross.contains(".accessibilityIdentifier(\"\(identifier)\")"),
                           "the pairing screen lost its \(identifier) control")
             XCTAssertFalse(connect.contains(identifier),
                            "the LAN screen offers a pairing control: \(identifier)")
+        }
+        // **And the four it replaced are gone by name.** An identifier is the
+        // one part of a removed product choice that survives a visual review:
+        // a UI test, a screenshot script or a later edit can reintroduce
+        // "create a code for messages" without a single word of copy changing.
+        for retired in ["cross-network-create-message-code", "cross-network-create-file-code",
+                        "cross-network-join-messages", "cross-network-join-files",
+                        "cross-network-join-kind-hint"] {
+            XCTAssertFalse(cross.contains(retired),
+                           "the pairing screen still exposes a kind choice: \(retired)")
         }
         for identifier in ["transfer-choose-files", "transfer-staging-optional"] {
             XCTAssertTrue(staging.contains(".accessibilityIdentifier(\"\(identifier)\")"),
@@ -3467,17 +3641,66 @@ final class MacSurfaceGuardTests: XCTestCase {
                            "the pairing screen still offers same-network discovery: \(banned)")
         }
 
-        // The pairing screen leads with messages too.
-        let createMessage = try XCTUnwrap(cross.range(
-            of: "Button(L10n.t(.workspaceCreateMessageCode)) { createCode(mode: .text) }"))
-        let createFile = try XCTUnwrap(cross.range(
-            of: "Button(L10n.t(.workspaceCreateFileCode)) { createCode(mode: .files) }"))
-        XCTAssertLessThan(createMessage.lowerBound, createFile.lowerBound)
-        let joinMessages = try XCTUnwrap(cross.range(
-            of: "Button(L10n.t(.workspaceJoinMessages)) { join(mode: .text) }"))
-        let joinFiles = try XCTUnwrap(cross.range(
-            of: "Button(L10n.t(.workspaceJoinFiles)) { join(mode: .files) }"))
-        XCTAssertLessThan(joinMessages.lowerBound, joinFiles.lowerBound)
+        // **The pairing screen has no message-or-files lead, because it has no
+        // message-or-files question.** Create comes before Connect, which is the
+        // only ordering claim left on it: one action, then the other.
+        let create = try XCTUnwrap(cross.range(
+            of: "Button(L10n.t(.workspaceCreatePairingCode)) { createCode() }"))
+        let connectVerb = try XCTUnwrap(cross.range(
+            of: "Button(L10n.t(.workspaceConnectWithCode)) { join() }"))
+        XCTAssertLessThan(create.lowerBound, connectVerb.lowerBound)
+        XCTAssertEqual(occurrences(of: "createCode()", in: cross), 2,
+                       "one Create action, called from exactly one control")
+        XCTAssertEqual(occurrences(of: "{ join() }", in: cross), 1,
+                       "one Connect action, called from exactly one control")
+    }
+
+    /// **Exactly one create action and one join action, and no residue of the
+    /// four they replaced.**
+    ///
+    /// The removed distinction is the kind of thing that comes back a piece at a
+    /// time — a hint sentence, an accessibility identifier, a `mode:` argument —
+    /// so this asserts the absence of every name it had, in the copy, in the
+    /// source and in the link the screen hands over.
+    func testTheCrossNetworkScreenOffersOneCreateAndOneJoinAndNoKindChoice() throws {
+        let cross = try source(named: crossConnect)
+
+        // One of each control, by identifier.
+        for identifier in ["cross-network-create-code", "cross-network-join-code"] {
+            XCTAssertEqual(occurrences(of: ".accessibilityIdentifier(\"\(identifier)\")",
+                                       in: cross), 1,
+                           "the pairing screen offers \(identifier) more than once")
+        }
+        // And exactly two `Button(`s in total on the connect surface: create and
+        // connect. A third is either a kind choice returning or a control that
+        // belongs on a different screen.
+        XCTAssertEqual(occurrences(of: "Button(L10n.t(", in: cross), 2,
+                       "the pairing screen grew a third action")
+
+        // No retired copy anywhere in the app, not merely on this screen: these
+        // keys are gone from `L10nKey`, so a reference would not compile — what
+        // this catches is a NEW string reintroducing the same product idea.
+        for (name, text) in try sources(under: macRoot, atLeast: 20) {
+            for retired in ["createMessageCode", "createFileCode", "joinMessages",
+                            "joinFiles", "joinKindHint"] {
+                XCTAssertFalse(text.contains(retired),
+                               "\(name) reintroduces a pairing-code kind choice: \(retired)")
+            }
+        }
+
+        // The model takes no kind either. `watchPairingCode` lost its `mode:`
+        // parameter, which is what makes "the screen cannot ask" structural
+        // rather than a convention this file describes.
+        XCTAssertFalse(cross.contains("mode: .text"),
+                       "the pairing screen still names a lane at connect time")
+        XCTAssertTrue(cross.contains("link.watchPairingCode(code,"))
+        XCTAssertFalse(cross.contains("watchPairingCode(code, legacyRole: legacyRole, mode:"),
+                       "the room is still watched for one kind")
+
+        // The staging section stays: a batch is what the connection CARRIES, and
+        // it was never the thing the code was for.
+        XCTAssertTrue(cross.contains("TransferStagingSection(selection: selection"),
+                       "the pairing screen lost the batch its connection carries")
     }
 
     /// **Never claim that one legacy connection carries both lanes.**
@@ -3557,11 +3780,11 @@ final class MacSurfaceGuardTests: XCTestCase {
         let text = try source(named: crossConnect)
         XCTAssertEqual(occurrences(of: ".keyboardShortcut(.defaultAction)", in: text), 1,
                        "the pairing screen must not offer two competing default buttons")
-        assertDefaultAction(attachesTo: "Button(L10n.t(.workspaceJoinMessages))",
+        assertDefaultAction(attachesTo: "Button(L10n.t(.workspaceConnectWithCode))",
                             in: text, named: crossConnect)
         XCTAssertFalse(try source(named: lanConnect).contains(".keyboardShortcut(.defaultAction)"),
                        "the same-network screen competes for the window's default action")
-        XCTAssertTrue(text.contains(".disabled(!textModel.canJoin || sessionLocked)"),
+        XCTAssertTrue(text.contains(".disabled(!fileModel.canJoin || sessionLocked)"),
                       "the default action must stay inert until six digits are in")
         XCTAssertTrue(text.contains("fileModel.updateJoinCode($0)")
                       && text.contains("textModel.updateJoinCode($0)"),
@@ -3582,6 +3805,89 @@ final class MacSurfaceGuardTests: XCTestCase {
             XCTAssertFalse(try source(named: file).contains(".keyboardShortcut(.defaultAction)"),
                            "\(file) must not claim the window's default action")
         }
+    }
+
+    // MARK: - the composer
+
+    /// **Return writes a newline; ⌘Return sends. Both composers, one contract.**
+    ///
+    /// The link's composer was a one-line `TextField` growing to four, with
+    /// `.defaultAction` on Send — so Return, the key that starts a paragraph
+    /// everywhere else a message is written, delivered the message instead. The
+    /// only way to find that out was to lose one.
+    ///
+    /// Four properties carry the repair, and each fails in a different way:
+    ///
+    ///  1. It is a `TextEditor`. A `TextField` handles Return itself, so no
+    ///     amount of shortcut wiring makes it a place to write a paragraph.
+    ///  2. Send carries `.keyboardShortcut(.return, modifiers: .command)` and
+    ///     NOT `.defaultAction`. `.defaultAction` IS plain Return; one modifier
+    ///     less and the newline is gone again.
+    ///  3. The height is bounded at both ends — big enough to write in, capped
+    ///     so a long draft scrolls inside it rather than pushing the transcript
+    ///     and the exit out of a 560pt window.
+    ///  4. The binding is stated on screen. A shortcut nobody is told about is a
+    ///     shortcut for whoever wrote it, and both composers say it with the
+    ///     SAME key, so a user cannot learn it on one screen and doubt it on the
+    ///     other.
+    func testBothComposersTakeReturnAsANewlineAndSendOnCommandReturn() throws {
+        let link = try source(named: "Transfer/TransferLinkPane.swift")
+        let legacy = try source(named: "RealtimeTextSessionView.swift")
+
+        // 1. A real editor, with a bounded, writable height.
+        XCTAssertTrue(link.contains("TextEditor(text: $draft)"),
+                      "the link composer is a one-line field again")
+        XCTAssertTrue(link.contains(".frame(minHeight: Metrics.composerMinHeight,\n"
+                                    + "                           maxHeight: Metrics.composerMaxHeight)"),
+                      "the link composer has no practical minimum or no bounded growth")
+        XCTAssertTrue(legacy.contains(".frame(minHeight: Metrics.composerMinHeight,\n"
+                                      + "                       maxHeight: Metrics.composerMaxHeight)"),
+                      "the legacy composer is still shorter or grows without a bound")
+        XCTAssertFalse(link.contains("axis: .vertical") || link.contains(".lineLimit(1...4)"),
+                       "the link composer is a growing text field rather than an editor")
+
+        // 2. ⌘Return sends, on both, and plain Return belongs to neither Send.
+        for (name, text) in [("TransferLinkPane", link), ("RealtimeTextSessionView", legacy)] {
+            XCTAssertTrue(text.contains(".keyboardShortcut(.return, modifiers: .command)"),
+                          "\(name) does not send on ⌘Return")
+            XCTAssertFalse(text.contains(".keyboardShortcut(.defaultAction)"),
+                           "\(name) took plain Return away from its editor")
+            // 4. …and says so.
+            XCTAssertTrue(text.contains("L10n.t(.composerShortcutHint)"),
+                          "\(name) leaves its keyboard contract to be discovered")
+        }
+
+        // Whitespace-only stays refused, and the trim is what makes internal
+        // newlines survive: it strips the ends, never the middle.
+        XCTAssertTrue(link.contains("draft.trimmingCharacters(in: .whitespacesAndNewlines)"))
+        XCTAssertTrue(link.contains(".disabled(!link.canCompose || trimmedDraft.isEmpty)"),
+                      "a whitespace-only draft can be sent")
+        XCTAssertTrue(link.contains("guard !body.isEmpty else { return }"),
+                      "the send action does not re-check the trimmed draft")
+
+        // A draft handed back is restored EXACTLY, and only over an empty field:
+        // overwriting something the user has since typed would lose the newer of
+        // the two.
+        XCTAssertTrue(link.contains("guard let returned = link.takeReturnedDraft() else { return }"))
+        XCTAssertTrue(link.contains("guard trimmedDraft.isEmpty else { return }"))
+        XCTAssertTrue(link.contains("draft = returned"),
+                      "a returned draft is transformed on its way back to the field")
+        XCTAssertTrue(link.contains(".task(id: link.returnedDraft) { restoreReturnedDraft() }"),
+                      "the hand-back is a view-on-appear side effect again")
+
+        // The placeholder is decoration; the editor carries the name. A
+        // placeholder doing double duty disappears from VoiceOver the moment
+        // somebody types.
+        XCTAssertTrue(link.contains(".accessibilityLabel(L10n.t(.linkComposerLabel))"))
+        XCTAssertTrue(link.contains("Text(L10n.t(.linkComposerPlaceholder))"))
+        guard let placeholder = link.range(of: "Text(L10n.t(.linkComposerPlaceholder))") else {
+            return XCTFail("the composer lost its placeholder")
+        }
+        let placeholderStyling = String(link[placeholder.upperBound...].prefix(400))
+        XCTAssertTrue(placeholderStyling.contains(".accessibilityHidden(true)"),
+                      "the placeholder is read as a second name for the editor")
+        XCTAssertTrue(placeholderStyling.contains(".allowsHitTesting(false)"),
+                      "the placeholder swallows clicks aimed at the editor under it")
     }
 
     private func assertDefaultAction(attachesTo anchor: String,
@@ -3933,7 +4239,8 @@ final class MacSurfaceGuardTests: XCTestCase {
     ///     notarized and green is still "in development".
     ///  2. After the owner approved 1.0 it kept banning them, because approval
     ///     is permission to publish and there was still nothing to download.
-    ///  3. On 2026-08-10 the immutable GitHub Release `macos-v1.0` was published
+    ///  3. The current immutable GitHub Release uses the macOS target's exact
+    ///     marketing version.
     ///     at this exact commit, with a Developer ID-signed, Apple-notarized,
     ///     stapled `Relayium.dmg` and its SHA-256 attached. A reader can now go
     ///     and fetch it, so "available for download" is a FACT about macOS, and
@@ -3995,8 +4302,8 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// without the documents quietly going vague instead.
     ///
     /// A reader has to be able to check this. So the claim surfaces must name
-    /// the exact immutable tag — `macos-v1.0`, which resolves to one GitHub
-    /// Release and one DMG — rather than say "released" and leave the reader to
+    /// the exact immutable tag for the source marketing version, which resolves
+    /// to one GitHub Release and one DMG, rather than say "released" and leave the reader to
     /// find out where. They must also say what the artifact IS (Developer
     /// ID-signed and Apple-notarized), because "there is a download" and "the
     /// download is one Gatekeeper will run" are different promises.
@@ -4007,9 +4314,20 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// guard that conflated the two would go red every time the site and the
     /// release moved in separate commits — which is exactly how they move.
     func testTheDocsNameTheMacOSReleaseAReaderCanActuallyFetch() throws {
+        let project = try claimSurfaceText("apps/mac/Relayium.xcodeproj/project.pbxproj")
+        let pattern = #"MARKETING_VERSION = ([0-9]+(?:\.[0-9]+){1,2});"#
+        let regex = try NSRegularExpression(pattern: pattern)
+        let range = NSRange(project.startIndex..., in: project)
+        let versions = Set(regex.matches(in: project, range: range).compactMap { match -> String? in
+            guard let captured = Range(match.range(at: 1), in: project) else { return nil }
+            return String(project[captured])
+        })
+        let version = try XCTUnwrap(versions.first)
+        XCTAssertEqual(versions, [version], "the macOS project carries more than one marketing version")
+        let tag = "macos-v\(version)"
         for path in ["README.md", "apps/README.md"] {
             let text = try claimSurfaceText(path)
-            XCTAssertTrue(text.contains("macos-v1.0"),
+            XCTAssertTrue(text.contains(tag),
                           "\(path) must name the exact release tag a reader can fetch")
             let lowered = flattened(text).lowercased()
             XCTAssertTrue(lowered.contains("developer id-signed"),

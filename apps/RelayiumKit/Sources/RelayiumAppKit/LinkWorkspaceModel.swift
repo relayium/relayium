@@ -260,6 +260,11 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// object's; the callee builds its connection on it through
     /// `RealtimeConnectionFactory.connectInRoom`. Nil in a headless test, where
     /// the fallback is observed rather than performed.
+    ///
+    /// `mode` is this object's own answer — see `legacyFallbackMode` — and never
+    /// a verb the user pressed. The callee has to move the surface to it as well
+    /// as start the session, because the lane it names may not be the one the
+    /// code was minted in.
     public var adoptLegacyRoom: ((_ peerId: String,
                                   _ role: Role,
                                   _ config: ICEConfig,
@@ -690,11 +695,15 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// are ephemeral, so nothing here is reused across codes.
     private final class PairingRoom {
         let code: String
-        let mode: TransferMode
         /// The role the LEGACY path must use if the fallback fires. It is the
         /// verb the user pressed — creating a code offers, joining one answers —
         /// and it is not `linkRole`'s: that rule is the link's and is computed
         /// from the two room ids.
+        ///
+        /// It is the ONE thing about the fallback the user still decides, and it
+        /// is not a product choice: which of the two actions they took is a fact,
+        /// not a question. Which LANE the fallback runs is no longer theirs —
+        /// see `legacyFallbackMode`.
         let legacyRole: Role
         let signaling: SignalingClient
         let capabilities: PeerCapabilityRegistry
@@ -714,11 +723,10 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         var decided: Set<String> = []
         var resolved = false
 
-        init(code: String, mode: TransferMode, legacyRole: Role,
+        init(code: String, legacyRole: Role,
              signaling: SignalingClient, capabilities: PeerCapabilityRegistry,
              config: ICEConfig) {
             self.code = code
-            self.mode = mode
             self.legacyRole = legacyRole
             self.signaling = signaling
             self.capabilities = capabilities
@@ -770,16 +778,22 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     ///     and configuration, and this object steps out of the way.
     ///  3. The code could not be joined at all: `.ended(.roomUnavailable)`.
     ///
+    /// **There is no `mode` parameter, and that is the product decision this
+    /// carries.** A pairing code names a rendezvous, not a kind of transfer: the
+    /// server mints one code for both, the Web has exactly one Create and one
+    /// Enter action, and asking a macOS user to pick "messages" or "files"
+    /// before there is a peer was asking them to guess what a stranger's client
+    /// speaks. Outcome 1 never needed the answer — one link carries both lanes.
+    /// Outcome 2 does, and it is now derived from evidence rather than from a
+    /// question; see `legacyFallbackMode`.
+    ///
     /// - Parameters:
     ///   - code: the live pairing code, already minted or typed.
     ///   - legacyRole: what the fallback must use — see `PairingRoom.legacyRole`.
-    ///   - mode: which legacy session the fallback runs, which is the verb the
-    ///     user pressed. A link ignores it: one link carries both.
     ///   - files/sources: a batch to arm, exactly as `connect` arms one.
     @discardableResult
     public func watchPairingCode(_ code: String,
                                  legacyRole: Role,
-                                 mode: TransferMode,
                                  files: [FileMeta] = [],
                                  sources: [PlaintextSource] = []) -> Bool {
         guard !connection.isActive, pairing == nil else { return false }
@@ -799,7 +813,7 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
                     self.finish(.roomUnavailable)
                     return
                 }
-                self.openPairingRoom(code: code, legacyRole: legacyRole, mode: mode,
+                self.openPairingRoom(code: code, legacyRole: legacyRole,
                                      config: config, connect: connect, generation: mine)
             }
         }
@@ -808,7 +822,6 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
 
     private func openPairingRoom(code: String,
                                  legacyRole: Role,
-                                 mode: TransferMode,
                                  config: ICEConfig,
                                  connect: (String) -> SignalingClient,
                                  generation mine: Int) {
@@ -817,7 +830,7 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         // change takes effect on the next decision rather than the next launch.
         let capabilities = PeerCapabilityRegistry(
             linkRoomActive: { linkRoomActive(isCodelessRoom: false) })
-        let room = PairingRoom(code: code, mode: mode, legacyRole: legacyRole,
+        let room = PairingRoom(code: code, legacyRole: legacyRole,
                                signaling: socket, capabilities: capabilities,
                                config: config)
         room.announcer = LinkCapabilityAnnouncer(
@@ -903,12 +916,57 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         // From here it is the ordinary unified path: the router decides the role
         // from the two room ids, claims the room, and assembles.
         beginLinkAttempt(peerId: peerId, peerLabel: room.code)
+        // `beginLinkAttempt` publishes a real link session synchronously before
+        // this fires. The pairing-code surface may therefore retire the legacy
+        // model that minted or held the code without passing through an all-idle
+        // state that would release this room underneath the new link.
+        onPairingLinkActivated?()
+    }
+
+    /// **Which lane a legacy peer gets, decided from evidence rather than from a
+    /// question nobody could answer.**
+    ///
+    /// The shipped wire has two generations and they do not interoperate: a file
+    /// session offers with no capability at all, a text session announces
+    /// `text/1` and refuses to build until the peer announces it back
+    /// (`RealtimeConnectionFactory.connectInRoom`). So *something* has to pick,
+    /// and until this batch it was the user, before there was a peer, out of two
+    /// buttons that named a distinction the code itself does not carry.
+    ///
+    /// Two facts decide it instead, in this order:
+    ///
+    ///  1. **This side has a batch armed.** Then the answer is files whatever the
+    ///     peer said. A staged batch is the user's stated intent, it is the one
+    ///     thing a text lane cannot carry at all, and the file lane moves bytes
+    ///     in either direction.
+    ///  2. **The peer announced exact `text/1`.** On the shipped native wire that
+    ///     announcement is only ever sent BY a text session — `Mode.file` has no
+    ///     local capabilities — so it is a direct statement of what the peer is
+    ///     doing. A current Web peer never reaches here at all: it announces
+    ///     `link/1` and takes outcome 1.
+    ///
+    /// Anything else is files, and that is the honest reading rather than a
+    /// coin toss: a legacy peer that announced NOTHING is a file peer by
+    /// construction, and answering it with a text offer would guarantee the one
+    /// failure this decision exists to avoid.
+    ///
+    /// The one case it can still get wrong is a stale Web tab, which broadcasts
+    /// `text/1` at roster level whatever its user is doing. It is no worse than
+    /// the guess it replaces — the user picking "Join files" against a stranger's
+    /// message code was the same coin — and it is bounded: a mismatched lane
+    /// reaches a truthful terminal state (`.unsupported`) rather than a hang.
+    private func legacyFallbackMode(peerId: String, room: PairingRoom) -> TransferMode {
+        guard armedBatches.isEmpty else { return .files }
+        return room.capabilities.supports(peerId, TEXT_CAPABILITY) ? .text : .files
     }
 
     /// Hand this room to the path that ships today. Exactly once per room.
     private func fallBackToLegacy(peerId: String, generation mine: Int) {
         guard generation == mine, let room = pairing, !room.resolved else { return }
         room.resolved = true
+        // Read BEFORE `armedBatches` is cleared below: the batch the user staged
+        // is the first and strongest input to the decision.
+        let mode = legacyFallbackMode(peerId: peerId, room: room)
         room.timers.forEach { $0.cancel() }
         room.timers.removeAll()
 
@@ -938,12 +996,17 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         // Handed back to the caller, which staged it: the legacy models have
         // their own staging and this object must not enqueue into one.
         onLegacyFallbackBatch?(armed.flatMap(\.files), armed.flatMap(\.sources))
-        adoptLegacyRoom?(peerId, room.legacyRole, room.config, room.mode)
+        adoptLegacyRoom?(peerId, room.legacyRole, room.config, mode)
     }
 
     /// A batch the user armed before the room resolved, handed back when the
     /// room turns out to be legacy. Nothing is lost and nothing is sent twice.
     public var onLegacyFallbackBatch: (([FileMeta], [PlaintextSource]) -> Void)?
+
+    /// The watched pairing room resolved to `link/1`, after `hasSession` became
+    /// true. macOS uses this to retire the legacy model that rendered the code;
+    /// otherwise that stale `.showingCode` state reappears when the link ends.
+    public var onPairingLinkActivated: (() -> Void)?
 
     /// Close a room that was handed to the legacy path once nothing is using it.
     ///
@@ -1256,7 +1319,11 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
                 returnedDraft = held
                 pendingMessage = nil
             }
-        case .idle, .waitingAccept, .incomingRequest:
+        case .incomingRequest:
+            // The peer asked to talk on a link this side already consented to.
+            // See `admitConversation` — the answer is not a question.
+            admitConversation()
+        case .idle, .waitingAccept:
             break
         }
     }
@@ -1325,6 +1392,10 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     private func releaseHeldWork() {
         guard acceptsWork else { return }
         releaseArmedBatches()
+        // A request that arrived while the digits were on screen was held, not
+        // refused. It is admitted here rather than by the status observer,
+        // because the status has not changed — the BOUNDARY has.
+        admitConversation()
         if pendingMessage != nil { flushOrOpenConversation() }
     }
 
@@ -1355,11 +1426,6 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// side opened. What the composer's "waiting" note renders on.
     public var isWaitingForConversation: Bool {
         textModel?.textStatus == .waitingAccept || pendingMessage != nil
-    }
-
-    /// The peer asked for a conversation and this side has not answered.
-    public var hasIncomingConversationRequest: Bool {
-        connection.isOpen && textModel?.textStatus == .incomingRequest
     }
 
     /// Send one message, opening the conversation if this is the first.
@@ -1410,17 +1476,39 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         }
     }
 
-    /// Consent to the peer's conversation request. Held behind the verification
-    /// boundary like everything else.
-    public func acceptConversation() {
-        guard acceptsWork, let attempt = attemptBinding else { return }
+    /// **Take the peer's conversation request, because it was already answered.**
+    ///
+    /// A link is entered on purpose. One side minted a pairing code and passed it
+    /// on, or typed a code they were given, or picked a named device off a roster
+    /// — and then both sides compared six digits out loud. Asking again, in a
+    /// two-button strip three lines high, was asking a user to consent to talking
+    /// to the person they had just verified they were talking to. Every real
+    /// answer was yes, and the one thing the prompt reliably did was leave the
+    /// peer's `waitingAccept` spinner running until somebody noticed it.
+    ///
+    /// What did NOT move is the boundary that matters. This is admission, not
+    /// authorisation, and it is bounded by exactly three facts, each of which is
+    /// re-read here rather than assumed by whoever called:
+    ///
+    ///  - **`acceptsWork`** — the link is open AND the digits are answered. While
+    ///    `verification` is `pending` nothing is admitted, and `releaseHeldWork`
+    ///    is the only thing that revisits it. So a request that arrives during
+    ///    the SAS is held, exactly as an armed batch is, and a link the user
+    ///    rejects is torn down having admitted nothing.
+    ///  - **an attempt** — `attemptBinding` is nil before a link is assembled and
+    ///    again the instant `finish` runs, so a request settling after the
+    ///    session ended reaches no lane.
+    ///  - **the lane's own state** — `incomingRequest` and nothing else, so this
+    ///    is idempotent and cannot re-answer a conversation that is already open.
+    ///
+    /// It stays deliberately narrow: the file lane's `acceptInboundBatch` is
+    /// untouched, because accepting a manifest releases a write to this user's
+    /// disk and is a decision about content rather than about the connection.
+    private func admitConversation() {
+        guard acceptsWork,
+              let attempt = attemptBinding,
+              textModel?.textStatus == .incomingRequest else { return }
         do { try attempt.acceptTextConversation(); actionError = nil }
-        catch { actionError = ErrorCopy.message(for: error) }
-    }
-
-    public func rejectConversation() {
-        guard let attempt = attemptBinding else { return }
-        do { try attempt.rejectTextConversation(); actionError = nil }
         catch { actionError = ErrorCopy.message(for: error) }
     }
 

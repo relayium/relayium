@@ -189,12 +189,14 @@ enum UITestMode {
         return store
     }
 
-    /// Holds the FILE pairing surface on its generated code.
+    /// Holds the pairing surface on its generated code with a batch staged.
     ///
-    /// The text half of this flow has had a runtime path since batch 8; the file
-    /// half never did, so the mode a user is most likely to pick was the one
-    /// without evidence. Minting succeeds locally and the ICE lookup then waits,
-    /// so the handoff screen holds without a network call.
+    /// It was the FILE half of a two-button create, which was the half with no
+    /// runtime evidence. There is one Create action now and no lane to choose,
+    /// so what this launch still buys is the other variable it always carried:
+    /// a code minted with a batch already staged. Minting succeeds locally and
+    /// the ICE lookup then waits, so the handoff screen holds without a network
+    /// call.
     // nonlocalized: a test-only launch argument, absent from Release
     static let fileCodeArgument = "--relayium-ui-testing-file-code"
     static let showsGeneratedFileCode = ProcessInfo.processInfo.arguments.contains(

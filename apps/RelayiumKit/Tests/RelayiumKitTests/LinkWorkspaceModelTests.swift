@@ -458,6 +458,102 @@ final class LinkWorkspaceModelTests: XCTestCase {
         XCTAssertNotNil(rig.model.actionError)
     }
 
+    // MARK: - 3b. the conversation is admitted, not asked about
+
+    /// **A request on a verified link is taken, and it is taken by the model.**
+    ///
+    /// Entering a link is the consent: one side minted a code and passed it on,
+    /// or picked a named device off a roster, and both sides then compared six
+    /// digits. A second two-button prompt asked the user to consent to talking
+    /// to the person they had just verified they were talking to, and its only
+    /// reliable effect was to leave the peer's spinner running.
+    ///
+    /// It is a state rule rather than something a view does on appear, which is
+    /// what makes it hold when this window is closed, when the pane is being
+    /// rebuilt by the very change that produced the request, and in a headless
+    /// test with no view at all.
+    func testAConversationRequestOnAVerifiedLinkIsAdmittedWithoutAsking() async {
+        let rig = rig()
+        let transport = await openLink(rig)
+
+        transport.onFrame?(.text, [LINK_TEXT_REQUEST])
+        await settle()
+
+        XCTAssertEqual(rig.model.textModel?.textStatus, .open,
+                       "the peer is still waiting for an answer nobody can give")
+        XCTAssertTrue((transport.sent[.text] ?? []).contains([RealtimeControl.accept.rawValue]),
+                      "the conversation was never accepted on the wire")
+        XCTAssertNil(rig.model.actionError)
+    }
+
+    /// **Nothing is admitted before the digits are compared.**
+    ///
+    /// The adversarial case: a peer that asks for a conversation the instant the
+    /// transport publishes, while the SAS is still on screen. Admission is
+    /// `acceptsWork`, which is false for the whole of that window, so the
+    /// request waits exactly as an armed batch does.
+    func testNoConversationIsAdmittedWhileTheDigitsAreUnanswered() async {
+        let rig = rig(requiresVerification: true)
+        let transport = await openLink(rig)
+
+        transport.onFrame?(.text, [LINK_TEXT_REQUEST])
+        await settle()
+
+        XCTAssertFalse(rig.model.acceptsWork)
+        XCTAssertEqual(rig.model.textModel?.textStatus, .incomingRequest,
+                       "the request was answered before it was allowed to be")
+        XCTAssertFalse((transport.sent[.text] ?? []).contains([RealtimeControl.accept.rawValue]),
+                       "consent was given before the digits were compared")
+
+        // And confirming is what releases it — the same boundary, the same turn,
+        // as the armed batch beside it.
+        rig.model.confirmSAS()
+        await settle()
+
+        XCTAssertEqual(rig.model.textModel?.textStatus, .open)
+        XCTAssertTrue((transport.sent[.text] ?? []).contains([RealtimeControl.accept.rawValue]))
+    }
+
+    /// And rejecting the digits admits nothing at all. The link is torn down
+    /// with the request still unanswered, which is the only honest outcome: the
+    /// user has just said they do not believe this is the right peer.
+    func testRejectingTheDigitsAdmitsNoHeldConversation() async {
+        let rig = rig(requiresVerification: true)
+        let transport = await openLink(rig)
+
+        transport.onFrame?(.text, [LINK_TEXT_REQUEST])
+        await settle()
+        rig.model.rejectSAS()
+        await settle()
+
+        XCTAssertEqual(rig.model.connection, .ended(.verificationRejected))
+        XCTAssertFalse((transport.sent[.text] ?? []).contains([RealtimeControl.accept.rawValue]),
+                       "a rejected link admitted a conversation on its way out")
+    }
+
+    /// **And nothing is admitted after the session ends.**
+    ///
+    /// A request can settle on a later turn than the teardown that raced it —
+    /// the projection's own status change is delivered a hop behind the runtime
+    /// — so admission re-reads the link rather than trusting the caller.
+    /// `attemptBinding` is nil the instant `finish` runs, and `connection.isOpen`
+    /// is false, so both halves of the guard hold independently.
+    func testNoConversationIsAdmittedAfterTheLinkHasEnded() async {
+        let rig = rig()
+        let transport = await openLink(rig)
+
+        rig.model.leave()
+        await settle()
+        XCTAssertFalse(rig.model.acceptsWork)
+        let before = (transport.sent[.text] ?? []).count
+
+        transport.onFrame?(.text, [LINK_TEXT_REQUEST])
+        await settle()
+
+        XCTAssertEqual((transport.sent[.text] ?? []).count, before,
+                       "an ended link answered a conversation request")
+    }
+
     /// The same rule when the link itself ends with a message still held.
     func testALinkThatEndsHandsBackAnUndeliveredDraft() async {
         let rig = rig()

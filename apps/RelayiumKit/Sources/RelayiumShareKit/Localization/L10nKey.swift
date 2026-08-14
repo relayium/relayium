@@ -322,15 +322,18 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case workspaceAddFilesHint = "workspace.addFilesHint"
     case workspaceSendMessageHint = "workspace.sendMessageHint"
     case workspaceSendFiles = "workspace.sendFiles"
-    case workspaceCreateMessageCode = "workspace.createMessageCode"
-    case workspaceCreateFileCode = "workspace.createFileCode"
-    case workspaceCreateFileCodeHint = "workspace.createFileCodeHint"
-    case workspaceJoinMessages = "workspace.joinMessages"
-    case workspaceJoinFiles = "workspace.joinFiles"
-    /// Why joining asks which kind: a code does not say what the peer who minted
-    /// it chose, and a speculative offer is read by an older peer as the wrong
-    /// kind entirely.
-    case workspaceJoinKindHint = "workspace.joinKindHint"
+    /// **The two pairing-code actions, and there are only two.**
+    ///
+    /// They replace four — create a code for messages, create a code for files,
+    /// join messages, join files — which asked the user to answer a question a
+    /// pairing code does not carry. One code is minted for both; which legacy
+    /// lane an older peer ends up on is decided from evidence once that peer
+    /// exists (`LinkWorkspaceModel.legacyFallbackMode`), and on a current peer
+    /// the question never arises at all.
+    case workspaceCreatePairingCode = "workspace.createPairingCode"
+    /// What the code is for, and that nothing has to be picked first.
+    case workspaceCreatePairingCodeHint = "workspace.createPairingCodeHint"
+    case workspaceConnectWithCode = "workspace.connectWithCode"
     /// The bounded limitation, stated once before anything is connected.
     case workspaceOneConnectionNote = "workspace.oneConnectionNote"
     /// The same fact from inside a live session, per lane.
@@ -351,7 +354,13 @@ public enum L10nKey: String, CaseIterable, Sendable {
 
     /// The composer's placeholder. Present from the moment the link opens,
     /// because pressing Send is what opens the conversation.
+    ///
+    /// A placeholder and NOT a name: the editor it sits over carries
+    /// `link.composerLabel`, and a placeholder that doubled as the accessible
+    /// name would disappear from VoiceOver the moment somebody typed.
     case linkComposerPlaceholder = "link.composerPlaceholder"
+    /// The multiline editor's accessible name.
+    case linkComposerLabel = "link.composerLabel"
     case linkSend = "link.send"
     /// Under the composer: the two file verbs, side by side with it rather than
     /// behind a mode.
@@ -365,10 +374,11 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case linkMessagesDeclined = "link.messagesDeclined"
     /// A command arrived before the link could take it.
     case linkNotReady = "link.notReady"
-    /// The peer is asking to start a conversation on the open link.
-    case linkConversationRequest = "link.conversationRequest"
-    case linkAcceptMessages = "link.acceptMessages"
-    case linkDeclineMessages = "link.declineMessages"
+    //
+    // There is no copy here for an incoming conversation request, and that is
+    // the point: entering a link and comparing its digits IS the consent, so a
+    // request on a verified link is admitted rather than asked about. See
+    // `LinkWorkspaceModel.admitConversation`.
 
     /// The one verification boundary, and the promise that it is the only one.
     case linkVerifyTitle = "link.verifyTitle"
@@ -774,6 +784,13 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case textNoServerHistory = "text.noServerHistory"
     case textNoMessages = "text.noMessages"
     case textComposerLabel = "text.composerLabel"
+    /// The keyboard contract, shown beside every Send button in the app rather
+    /// than left to be discovered: plain Return is a newline, ⌘Return sends. One
+    /// key, so the legacy composer and the unified link's cannot describe the
+    /// same binding in two ways.
+    ///
+    /// The symbols are not translated — they are what is printed on the keys.
+    case composerShortcutHint = "composer.shortcutHint"
     /// %1$@ draft byte count, %2$@ the limit.
     case textByteCounter = "text.byteCounter"
     case textClipboardNotice = "text.clipboardNotice"
@@ -851,9 +868,25 @@ public enum L10nKey: String, CaseIterable, Sendable {
     // logged or transmitted, and rooms are grouped by the network path the
     // service observes rather than by anything shown here.
 
-    /// %@ — the name the CURRENT room socket announced. Not the live system
-    /// name: renaming the Mac changes that and not what the room was told.
-    case nearbyAnnouncedAs = "nearby.announcedAs"
+    /// The identity card's own title.
+    case nearbyThisMacHeading = "nearby.thisMacHeading"
+    /// Under the announced name, which is rendered as itself rather than
+    /// interpolated into a sentence: the name IS the answer, and a sentence
+    /// around it made the one readable fact on the card the smallest thing on
+    /// it. Not the live system name either — renaming the Mac changes that and
+    /// not what the room was told.
+    case nearbyAnnouncedNameCaption = "nearby.announcedNameCaption"
+    /// Under the live system name while receiving is off. It promises only the
+    /// name the next room join will use; once joined, the socket snapshot above
+    /// replaces it and remains the authoritative value other devices see.
+    case nearbyConfiguredNameCaption = "nearby.configuredNameCaption"
+    /// No peer id yet, so no name to show and no reachability to claim. Work is
+    /// in flight and the only thing to do is wait.
+    case nearbyIdentityAnnouncing = "nearby.identityAnnouncing"
+    /// Nothing is listening, so no other device can see this Mac at all. The
+    /// recovery is the Start receiving button below, which this points at rather
+    /// than duplicating.
+    case nearbyIdentityNotListening = "nearby.identityNotListening"
     case nearbyLocalAddressesHeading = "nearby.localAddressesHeading"
     /// %1$@ the address, %2$@ the interface it is on. Both technical values.
     case nearbyLocalAddressRow = "nearby.localAddressRow"
@@ -1472,49 +1505,80 @@ public enum L10nKey: String, CaseIterable, Sendable {
 
     // MARK: - Help, below the controls on every browseable destination
     //
-    // Three steps and one common question per screen, chosen to be short: every
-    // string here is nine translations, and help nobody reads because it is long
-    // is worse than help that stops at the useful part. Not collapsible — this
-    // app's rules ban `DisclosureGroup`, and for the reason the root view once
-    // demonstrated: a capability hidden behind a triangle is a capability nobody
-    // finds.
+    // Six answers per screen, in the order somebody needs them: what it is for,
+    // the shortest path, what Relayium can see, where things end up, what goes
+    // wrong, and what to do about it. `HelpTopic` holds that shape, so a screen
+    // cannot quietly answer four of the six.
+    //
+    // It was three steps and one question, which was enough to be a caption. The
+    // three it did not answer — the boundary, the destination and the dead end —
+    // are the ones somebody is actually stuck on, and each screen's old question
+    // is now its `boundary`, which is where readers were looking for it.
+    //
+    // Only `purpose` is always on screen. Everything else is behind one button,
+    // so length here costs a reader nothing until they ask for it.
     //
     // `help.guideLink` is rendered only where a maintained document actually
     // exists (`HelpPresentation.topic`), so it is one label rather than five.
 
     case helpHeading = "help.heading"
     case helpStepsHeading = "help.stepsHeading"
+    case helpBoundaryHeading = "help.boundaryHeading"
+    case helpWhereHeading = "help.whereHeading"
+    case helpTroubleHeading = "help.troubleHeading"
     case helpGuideLink = "help.guideLink"
+    /// The expandable button's state and its action, kept apart because
+    /// assistive technology reads them for different reasons: the VALUE is what
+    /// it is now, the HINT is what pressing it will do.
+    case helpCollapsedValue = "help.collapsedValue"
+    case helpExpandedValue = "help.expandedValue"
+    case helpExpandHint = "help.expandHint"
+    case helpCollapseHint = "help.collapseHint"
 
+    case helpLanPurpose = "help.lan.purpose"
     case helpLanStep1 = "help.lan.step1"
     case helpLanStep2 = "help.lan.step2"
     case helpLanStep3 = "help.lan.step3"
-    case helpLanQuestion = "help.lan.question"
-    case helpLanAnswer = "help.lan.answer"
+    case helpLanBoundary = "help.lan.boundary"
+    case helpLanWhere = "help.lan.where"
+    case helpLanFailure = "help.lan.failure"
+    case helpLanRecovery = "help.lan.recovery"
 
+    case helpCrossPurpose = "help.cross.purpose"
     case helpCrossStep1 = "help.cross.step1"
     case helpCrossStep2 = "help.cross.step2"
     case helpCrossStep3 = "help.cross.step3"
-    case helpCrossQuestion = "help.cross.question"
-    case helpCrossAnswer = "help.cross.answer"
+    case helpCrossBoundary = "help.cross.boundary"
+    case helpCrossWhere = "help.cross.where"
+    case helpCrossFailure = "help.cross.failure"
+    case helpCrossRecovery = "help.cross.recovery"
 
+    case helpStoredSendPurpose = "help.storedSend.purpose"
     case helpStoredSendStep1 = "help.storedSend.step1"
     case helpStoredSendStep2 = "help.storedSend.step2"
     case helpStoredSendStep3 = "help.storedSend.step3"
-    case helpStoredSendQuestion = "help.storedSend.question"
-    case helpStoredSendAnswer = "help.storedSend.answer"
+    case helpStoredSendBoundary = "help.storedSend.boundary"
+    case helpStoredSendWhere = "help.storedSend.where"
+    case helpStoredSendFailure = "help.storedSend.failure"
+    case helpStoredSendRecovery = "help.storedSend.recovery"
 
+    case helpInboxPurpose = "help.inbox.purpose"
     case helpInboxStep1 = "help.inbox.step1"
     case helpInboxStep2 = "help.inbox.step2"
     case helpInboxStep3 = "help.inbox.step3"
-    case helpInboxQuestion = "help.inbox.question"
-    case helpInboxAnswer = "help.inbox.answer"
+    case helpInboxBoundary = "help.inbox.boundary"
+    case helpInboxWhere = "help.inbox.where"
+    case helpInboxFailure = "help.inbox.failure"
+    case helpInboxRecovery = "help.inbox.recovery"
 
+    case helpAccountPurpose = "help.account.purpose"
     case helpAccountStep1 = "help.account.step1"
     case helpAccountStep2 = "help.account.step2"
     case helpAccountStep3 = "help.account.step3"
-    case helpAccountQuestion = "help.account.question"
-    case helpAccountAnswer = "help.account.answer"
+    case helpAccountBoundary = "help.account.boundary"
+    case helpAccountWhere = "help.account.where"
+    case helpAccountFailure = "help.account.failure"
+    case helpAccountRecovery = "help.account.recovery"
 
     // MARK: - Sending to one of the account's own devices (iOS → Mac/CLI)
     //

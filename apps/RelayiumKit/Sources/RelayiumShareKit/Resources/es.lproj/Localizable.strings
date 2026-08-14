@@ -638,12 +638,6 @@
 "workspace.addFilesHint" = "Elige archivos o carpetas abajo y envíalos a ese dispositivo.";
 "workspace.sendMessageHint" = "Abre una sesión de mensajes con este dispositivo. No hace falta seleccionar nada.";
 "workspace.sendFiles" = "Enviar archivos";
-"workspace.createMessageCode" = "Crear un código para mensajes";
-"workspace.createFileCode" = "Crear un código para archivos";
-"workspace.createFileCodeHint" = "Elige primero archivos o carpetas abajo; el código lleva ese lote.";
-"workspace.joinMessages" = "Unirse a mensajes";
-"workspace.joinFiles" = "Unirse a archivos";
-"workspace.joinKindHint" = "Un código no dice de cuál se trata. Pregunta a quien lo creó, o usa el enlace que te envió.";
 "workspace.oneConnectionNote" = "Una conexión lleva mensajes o archivos, no ambos. Enviar el otro tipo abre una conexión nueva, con un código de verificación nuevo.";
 "workspace.messagesOnlyNote" = "Esta sesión lleva mensajes, no archivos. Enviar archivos necesita una sesión propia: sal de esta para abrirla.";
 "workspace.filesOnlyNote" = "Esta sesión lleva archivos, no mensajes. Enviar un mensaje necesita una sesión propia: sal de esta para abrirla.";
@@ -658,9 +652,6 @@
 "link.waitingForPeer" = "Esperando a que el otro dispositivo acepte mensajes. Tu mensaje se enviará en cuanto lo haga.";
 "link.messagesDeclined" = "El otro dispositivo rechazó los mensajes. Tu texto sigue aquí; los archivos no se ven afectados.";
 "link.notReady" = "Esta conexión todavía no puede hacer eso.";
-"link.conversationRequest" = "El otro dispositivo quiere iniciar una conversación.";
-"link.acceptMessages" = "Aceptar mensajes";
-"link.declineMessages" = "Rechazar";
 "link.verifyTitle" = "Compara este código";
 "link.verifyBody" = "Léelo en voz alta al otro dispositivo. Se pide una sola vez para esta conexión: cada mensaje y cada archivo posterior usan la misma verificación.";
 "link.verifyMatches" = "Coinciden";
@@ -702,7 +693,6 @@
 "settings.loginStillUnconfirmed" = "Relayium pidió a macOS que lo registrara y macOS sigue sin informar de ningún registro. No se ha eliminado nada y cualquier registro que ya existiera queda intacto. Abre Ítems de inicio para comprobarlo y reinicia este Mac si Relayium no aparece ahí.";
 
 /* MARK: 1.1.2 — what this Mac is on the network */
-"nearby.announcedAs" = "Los demás dispositivos de esta sala ven este Mac como %@.";
 "nearby.localAddressesHeading" = "Las direcciones propias de este Mac en este momento:";
 "nearby.localAddressRow" = "%1$@ (%2$@)";
 "nearby.noLocalAddresses" = "No se encontró ninguna dirección utilizable. Puede que este Mac solo llegue a la red a través de una VPN o de un enlace que no admite una transferencia directa.";
@@ -724,32 +714,22 @@
 "help.lan.step1" = "Abre Relayium en ambos dispositivos y mantenlos en la misma red.";
 "help.lan.step2" = "Elige el otro dispositivo de la lista y envía un mensaje o los archivos que hayas añadido.";
 "help.lan.step3" = "Si la verificación está activada, comprueba que ambas pantallas muestran el mismo código antes de aceptar.";
-"help.lan.question" = "¿Los archivos pasan por los servidores de Relayium?";
-"help.lan.answer" = "A veces, y eso no cambia nada de lo que Relayium puede leer. El servicio pone en contacto a los dos dispositivos; según las condiciones de la red, la conexión puede ir entre ellos o por un relé de Relayium, y este dispositivo no puede saber qué ruta se usa. En ambos casos los archivos van cifrados de extremo a extremo y Relayium nunca tiene la clave.";
 
 "help.cross.step1" = "En este dispositivo, crea un código para un mensaje o para archivos.";
 "help.cross.step2" = "Escribe ese código en Relayium en el otro dispositivo y únete.";
 "help.cross.step3" = "Comprueba que ambas pantallas muestran el mismo código y acepta la transferencia.";
-"help.cross.question" = "¿Los dos dispositivos tienen que estar en la misma red?";
-"help.cross.answer" = "No: para eso está esta pantalla. Crear un código requiere una cuenta, porque la conexión puede tener que retransmitirse y eso se le factura a quien la creó. Unirse al código de otra persona no requiere nada.";
 
 "help.storedSend.step1" = "Elige archivos o carpetas, decide cuánto tiempo debe seguir funcionando el enlace y envía.";
 "help.storedSend.step2" = "Relayium cifra todo en este Mac antes de subir nada.";
 "help.storedSend.step3" = "Comparte el enlace. La clave que lo abre viaja dentro del propio enlace y nunca llega a Relayium.";
-"help.storedSend.question" = "¿Quién puede abrir el enlace?";
-"help.storedSend.answer" = "Cualquiera que tenga el enlace completo, incluida la parte posterior al #. Relayium solo guarda el archivo cifrado y no puede leerlo, así que trata el propio enlace como un secreto.";
 
 "help.inbox.step1" = "Inicia sesión con la misma cuenta aquí y en el dispositivo desde el que quieras enviar.";
 "help.inbox.step2" = "Elige una carpeta en este Mac y decide si las entregas se guardan automáticamente o esperan tu respuesta.";
 "help.inbox.step3" = "Envía a este Mac desde relayium.com o desde otro dispositivo con la sesión iniciada, y los archivos llegarán a esa carpeta.";
-"help.inbox.question" = "¿Qué ocurre mientras este Mac duerme o Relayium está cerrado?";
-"help.inbox.answer" = "Las entregas esperan en el servidor hasta que Relayium vuelva a ejecutarse aquí. Solo puede recibir mientras está en ejecución, y para eso sirve el ajuste de inicio de sesión de arriba.";
 
 "help.account.step1" = "Crea una cuenta o inicia sesión: enviar un enlace y la bandeja del dispositivo necesitan una.";
 "help.account.step2" = "Consulta qué plan tienes y cuánto has consumido en este periodo.";
 "help.account.step3" = "Revisa los dispositivos con sesión iniciada en tu cuenta y los archivos que has almacenado, y elimina unos u otros.";
-"help.account.question" = "¿Qué necesita una cuenta y qué no?";
-"help.account.answer" = "La transferencia en la misma red y unirse a un código creado por otra persona no necesitan cuenta. Crear un código, enviar un enlace almacenado y la bandeja del dispositivo sí la necesitan.";
 
 /* In-app subscription (Mac App Store build). The purchase surface the App Store
    build renders instead of the direct build's link to the website. Prices are

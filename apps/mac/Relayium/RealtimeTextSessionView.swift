@@ -157,7 +157,8 @@ struct RealtimeTextSessionView: View {
 
             TextEditor(text: $model.draft)
                 .font(.body.monospaced())
-                .frame(minHeight: 72)
+                .frame(minHeight: Metrics.composerMinHeight,
+                       maxHeight: Metrics.composerMaxHeight)
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
                 .accessibilityLabel(L10n.t(.textComposerLabel))
 
@@ -178,6 +179,15 @@ struct RealtimeTextSessionView: View {
                     .foregroundStyle(overByteLimit ? AnyShapeStyle(Color.orange)
                                                    : AnyShapeStyle(.secondary))
                 Spacer()
+                // The same sentence the unified link's composer carries, from
+                // the same key: both editors take plain Return as a newline and
+                // send on ⌘Return, and two wordings for one binding is how a
+                // user learns the shortcut on one screen and doubts it on the
+                // other.
+                Text(L10n.t(.composerShortcutHint))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("text-composer-shortcut")
                 Button(L10n.t(.commonSend)) { model.sendDraft() }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.return, modifiers: .command)

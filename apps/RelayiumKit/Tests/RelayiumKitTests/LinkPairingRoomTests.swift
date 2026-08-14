@@ -162,6 +162,7 @@ final class LinkPairingRoomTests: XCTestCase {
         var relayOnly: [Bool] = []
         var adopted: [(peerId: String, role: Role, mode: TransferMode)] = []
         var handedBackBatches: [[FileMeta]] = []
+        var pairingLinkActivations = 0
 
         init(model: LinkWorkspaceModel, scheduler: ManualScheduler,
              ice: StubICEClient, handle: LinkRoomHandle) {
@@ -235,6 +236,7 @@ final class LinkPairingRoomTests: XCTestCase {
             rig.adopted.append((peerId, role, mode))
         }
         model.onLegacyFallbackBatch = { metas, _ in rig.handedBackBatches.append(metas) }
+        model.onPairingLinkActivated = { rig.pairingLinkActivations += 1 }
         // The self id makes this side the SMALLER of the two, so it offers and
         // assembles as soon as the peer announces — the deterministic role rule,
         // not a preference. A larger self id would leave the room `requesting`
@@ -253,11 +255,10 @@ final class LinkPairingRoomTests: XCTestCase {
                                 code: String = "AB12CD",
                                 peer: String = "zzz-web",
                                 legacyRole: Role = .responder,
-                                mode: TransferMode = .text,
                                 files: [FileMeta] = [],
                                 sources: [PlaintextSource] = []) async -> PairingTransport? {
         XCTAssertTrue(rig.model.watchPairingCode(code, legacyRole: legacyRole,
-                                                 mode: mode, files: files, sources: sources))
+                                                 files: files, sources: sources))
         await settle()
         rig.welcome("aaa-mac")
         rig.announce(peer, [TEXT_CAPABILITY, LINK_CAPABILITY])
@@ -273,7 +274,7 @@ final class LinkPairingRoomTests: XCTestCase {
 
     func testWatchingACodeJoinsExactlyOneRoomForThatCode() async {
         let rig = rig(config: stunOnlyConfig())
-        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .initiator, mode: .text))
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .initiator))
         await settle()
 
         XCTAssertEqual(rig.joinedCodes, ["AB12CD"], "one socket, for that code")
@@ -286,9 +287,9 @@ final class LinkPairingRoomTests: XCTestCase {
 
     func testASecondCodeIsRefusedWhileOneIsWatched() async {
         let rig = rig(config: stunOnlyConfig())
-        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .initiator, mode: .text))
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .initiator))
         await settle()
-        XCTAssertFalse(rig.model.watchPairingCode("EF34GH", legacyRole: .initiator, mode: .text))
+        XCTAssertFalse(rig.model.watchPairingCode("EF34GH", legacyRole: .initiator))
         await settle()
         XCTAssertEqual(rig.joinedCodes, ["AB12CD"])
     }
@@ -310,7 +311,7 @@ final class LinkPairingRoomTests: XCTestCase {
                 XCTFail("nothing may be assembled")
                 fatalError()
             })
-        XCTAssertTrue(model.watchPairingCode("AB12CD", legacyRole: .initiator, mode: .text))
+        XCTAssertTrue(model.watchPairingCode("AB12CD", legacyRole: .initiator))
         for _ in 0..<14 { await Task.yield() }
         XCTAssertEqual(model.connection, .ended(.roomUnavailable))
     }
@@ -326,6 +327,8 @@ final class LinkPairingRoomTests: XCTestCase {
         XCTAssertTrue(rig.model.connection.isOpen)
         XCTAssertTrue(rig.adopted.isEmpty, "the legacy path must not have been handed the room")
         XCTAssertEqual(rig.transports.count, 1)
+        XCTAssertEqual(rig.pairingLinkActivations, 1,
+                       "the code-rendering legacy model was not retired exactly once")
     }
 
     /// **Capability stripping in a code room.** A relay that removes the
@@ -333,7 +336,7 @@ final class LinkPairingRoomTests: XCTestCase {
     /// not in. What happens instead is the legacy path, on the SAME socket.
     func testAStrippedAnnouncementFallsBackToLegacyOnTheSameSocket() async {
         let rig = rig(config: stunOnlyConfig())
-        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder, mode: .files))
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
         await settle()
         rig.welcome("aaa-mac")
         rig.roster(["zzz-web"])          // present, and silent: the hello was stripped
@@ -346,6 +349,8 @@ final class LinkPairingRoomTests: XCTestCase {
         XCTAssertEqual(rig.adopted.map(\.peerId), ["zzz-web"])
         XCTAssertEqual(rig.adopted.map(\.role), [.responder], "the verb the user pressed")
         XCTAssertEqual(rig.adopted.map(\.mode), [.files])
+        XCTAssertEqual(rig.pairingLinkActivations, 0,
+                       "a legacy fallback was mistaken for a unified link")
         XCTAssertTrue(rig.transports.isEmpty, "no link may be assembled for a silent peer")
         XCTAssertEqual(rig.joinedCodes.count, 1, "and no second socket was opened")
         XCTAssertTrue(rig.handle.signaling === rig.sockets[0],
@@ -358,7 +363,7 @@ final class LinkPairingRoomTests: XCTestCase {
     /// the answer is already known, so the window is not worth waiting out.
     func testATextOnlyPeerFallsBackWithoutWaitingOutTheWindow() async {
         let rig = rig(config: stunOnlyConfig())
-        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .initiator, mode: .text))
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .initiator))
         await settle()
         rig.welcome("aaa-mac")
         rig.announce("zzz-web", [TEXT_CAPABILITY])
@@ -373,7 +378,7 @@ final class LinkPairingRoomTests: XCTestCase {
     /// `link/2` is a different wire. A peer announcing it is legacy here.
     func testALaterProtocolVersionIsNotReadAsThisOne() async {
         let rig = rig(config: stunOnlyConfig())
-        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .initiator, mode: .text))
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .initiator))
         await settle()
         rig.welcome("aaa-mac")
         rig.announce("zzz-web", [TEXT_CAPABILITY, "link/2"])
@@ -389,7 +394,7 @@ final class LinkPairingRoomTests: XCTestCase {
     func testAnArmedBatchIsHandedBackToTheLegacyPath() async {
         let rig = rig(config: stunOnlyConfig())
         XCTAssertTrue(rig.model.watchPairingCode(
-            "AB12CD", legacyRole: .initiator, mode: .files,
+            "AB12CD", legacyRole: .initiator,
             files: [FileMeta(name: "a.bin", size: 8, path: nil)],
             sources: [DataSource(name: "a.bin", bytes: [1, 2, 3, 4, 5, 6, 7, 8])]))
         await settle()
@@ -402,12 +407,103 @@ final class LinkPairingRoomTests: XCTestCase {
         XCTAssertTrue(rig.model.armedFiles.isEmpty, "the model may not keep a copy it will not send")
     }
 
+    // MARK: - 2b. which legacy lane, decided from evidence
+
+    /// **A staged batch outranks anything the peer announced.**
+    ///
+    /// This is the case the removed "create a code for files" button used to
+    /// carry, and it is the one the user's own action already answers: they
+    /// picked files. A text lane cannot carry a file at all, so an announcement
+    /// of `text/1` must not talk this side out of the only lane that can.
+    ///
+    /// The peer here announces `text/1` — which is what a stale Web tab does
+    /// unconditionally, whatever its user is doing — so this is exactly the
+    /// input that would flip the decision if the announcement were weighed
+    /// first.
+    func testAnArmedBatchDecidesTheLegacyLaneWhateverThePeerAnnounced() async {
+        let rig = rig(config: stunOnlyConfig())
+        XCTAssertTrue(rig.model.watchPairingCode(
+            "AB12CD", legacyRole: .initiator,
+            files: [FileMeta(name: "a.bin", size: 8, path: nil)],
+            sources: [DataSource(name: "a.bin", bytes: [1, 2, 3, 4, 5, 6, 7, 8])]))
+        await settle()
+        rig.welcome("aaa-mac")
+        rig.announce("zzz-web", [TEXT_CAPABILITY])
+        rig.roster(["zzz-web"])
+        await settle()
+
+        XCTAssertEqual(rig.adopted.map(\.mode), [.files],
+                       "a staged batch was handed to a lane that cannot carry it")
+        // And the batch went with it, so the lane that was chosen for it has it.
+        XCTAssertEqual(rig.handedBackBatches.map { $0.map(\.name) }, [["a.bin"]])
+    }
+
+    /// With nothing staged, the peer's own announcement decides — and `text/1`
+    /// is a statement rather than a guess. On the shipped native wire it is sent
+    /// only BY a text session (`RealtimeConnectionFactory.Mode.file` announces
+    /// nothing at all), so answering it with a text lane is answering what the
+    /// peer said it is doing.
+    func testWithNothingStagedAnAnnouncedTextPeerDecidesTheLane() async {
+        let rig = rig(config: stunOnlyConfig())
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("aaa-mac")
+        rig.announce("zzz-web", [TEXT_CAPABILITY])
+        rig.roster(["zzz-web"])
+        await settle()
+
+        XCTAssertEqual(rig.adopted.map(\.mode), [.text])
+        XCTAssertTrue(rig.handedBackBatches.flatMap { $0 }.isEmpty)
+    }
+
+    /// **Silence means files, and that is a reading rather than a default.**
+    ///
+    /// A legacy peer that announces nothing is a FILE peer by construction: the
+    /// text path announces `text/1` and refuses to build without it, so a peer
+    /// running one would have said so. Answering silence with a text offer would
+    /// guarantee the mismatch this decision exists to avoid, and the file lane
+    /// carries bytes in either direction, so it is also the answer that
+    /// forecloses least.
+    func testASilentLegacyPeerIsReadAsAFilePeer() async {
+        let rig = rig(config: stunOnlyConfig())
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("aaa-mac")
+        rig.roster(["zzz-web"])
+        await settle()
+        rig.scheduler.advance(to: LinkWorkspaceModel.pairingCapabilityWait)
+        await settle()
+
+        XCTAssertEqual(rig.adopted.map(\.mode), [.files])
+    }
+
+    /// The decision is never the caller's, in either direction. Creating and
+    /// joining reach the same rule with the same evidence and get the same
+    /// answer; only the legacy ROLE differs, because which action the user took
+    /// is a fact rather than a question.
+    func testTheLegacyLaneDoesNotDependOnWhichActionOpenedTheRoom() async {
+        for role in [Role.initiator, .responder] {
+            let rig = rig(config: stunOnlyConfig())
+            XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: role))
+            await settle()
+            rig.welcome("aaa-mac")
+            rig.announce("zzz-web", [TEXT_CAPABILITY])
+            rig.roster(["zzz-web"])
+            await settle()
+
+            XCTAssertEqual(rig.adopted.map(\.mode), [.text],
+                           "\(role) got a different lane from the same evidence")
+            XCTAssertEqual(rig.adopted.map(\.role), [role],
+                           "the fallback lost the verb the user actually pressed")
+        }
+    }
+
     // MARK: - 3. the TURN credential's lifetime
 
     func testARelayedRoomDerivesItsBoundFromTheIssuedCredential() async {
         let now = Date(timeIntervalSince1970: 1_000_000)
         let rig = rig(config: relayedConfig(expiresIn: 3600, now: now), now: now)
-        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .initiator, mode: .text))
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .initiator))
         await settle()
 
         let deadline = rig.model.relayDeadline
@@ -528,7 +624,7 @@ final class LinkPairingRoomTests: XCTestCase {
         let rig = rig(config: relayedConfig(expiresIn: 3600, now: now),
                       requiresVerification: true, now: now)
         let opened = await openPairedLink(
-            rig, mode: .files,
+            rig,
             files: [FileMeta(name: "held.bin", size: 8, path: nil)],
             sources: [DataSource(name: "held.bin", bytes: [1, 2, 3, 4, 5, 6, 7, 8])])
         let transport = try XCTUnwrap(opened)
@@ -555,7 +651,7 @@ final class LinkPairingRoomTests: XCTestCase {
     func testAnArmedBatchCanBeCancelledAndReArmedOverAPairingCode() async throws {
         let rig = rig(config: stunOnlyConfig(), requiresVerification: true)
         let opened = await openPairedLink(
-            rig, mode: .files,
+            rig,
             files: [FileMeta(name: "wrong.bin", size: 4, path: nil)],
             sources: [DataSource(name: "wrong.bin", bytes: [1, 2, 3, 4])])
         let transport = try XCTUnwrap(opened)
@@ -595,7 +691,7 @@ final class LinkPairingRoomTests: XCTestCase {
     /// The same loss BEFORE anything published cannot finish, and says so.
     func testARoomSocketLostBeforePublicationFailsClosed() async {
         let rig = rig(config: stunOnlyConfig())
-        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .initiator, mode: .text))
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .initiator))
         await settle()
         rig.welcome("aaa-mac")
         rig.announce("zzz-web", [TEXT_CAPABILITY, LINK_CAPABILITY])
@@ -627,7 +723,7 @@ final class LinkPairingRoomTests: XCTestCase {
     /// not arm a second capability window or a second fallback.
     func testARepeatedRosterFrameDoesNotDecideAPeerTwice() async {
         let rig = rig(config: stunOnlyConfig())
-        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .initiator, mode: .text))
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .initiator))
         await settle()
         rig.welcome("aaa-mac")
         rig.roster(["zzz-web"])

@@ -502,7 +502,7 @@ final class AppShellUITests: XCTestCase {
         XCTAssertEqual(window.radioButtons.count, 0,
                        "the pairing screen still offers a segmented transfer-type choice")
 
-        let create = window.buttons["Create a code for messages"]
+        let create = window.buttons["Create a pairing code"]
         XCTAssertTrue(create.waitForExistence(timeout: 10))
         create.click()
 
@@ -516,9 +516,12 @@ final class AppShellUITests: XCTestCase {
                        "VoiceOver no longer reads the pairing code digit by digit")
         XCTAssertTrue(window.staticTexts["Join link"].exists,
                       "the generated code has no visible browser handoff")
-        let expectedLink = "https://relayium.com/cross-network?mode=text#c=483920"
+        // The code and nothing else. A `?mode=` hint would name a lane the
+        // sender was never asked to choose, which is the removed question
+        // smuggled back into a URL.
+        let expectedLink = "https://relayium.com/cross-network#c=483920"
         XCTAssertTrue(window.staticTexts[expectedLink].exists,
-                      "the visible handoff did not preserve the created Text mode")
+                      "the visible handoff is not the bare code the sender created")
         XCTAssertTrue(window.buttons["Copy"].exists,
                       "the join link cannot be copied")
         XCTAssertTrue(window.buttons["Share"].exists,
@@ -541,9 +544,9 @@ final class AppShellUITests: XCTestCase {
         // No conversation or transcript exists yet. Cancel must be the whole
         // exit, not the first half of Cancel -> Session ended -> Done.
         window.buttons["Cancel"].click()
-        XCTAssertTrue(window.buttons["Create a code for messages"].waitForExistence(timeout: 10),
+        XCTAssertTrue(window.buttons["Create a pairing code"].waitForExistence(timeout: 10),
                       "Cancel did not return directly to code creation")
-        XCTAssertTrue(window.buttons["Join messages"].exists,
+        XCTAssertTrue(window.buttons["Connect"].exists,
                       "Cancel did not restore the pairing-code join path")
         XCTAssertFalse(window.buttons["Done"].exists,
                        "Cancel manufactured an empty terminal task requiring Done")
@@ -552,13 +555,16 @@ final class AppShellUITests: XCTestCase {
                        "the cancelled pairing code remained on screen")
     }
 
-    /// **One field, both join verbs.** A code does not say whether the peer who
-    /// minted it chose messages or files, and this side cannot probe for it — a
-    /// speculative offer is read by an older peer as the wrong kind entirely. So
-    /// the joiner states which, and both statements have to be reachable from
-    /// the one complete code. Fast entry must be canonicalized once without an
-    /// older partial value replacing later digits.
-    func testCrossNetworkJoinKeepsACompleteCodeActionableForBothVerbs() {
+    /// **One field, one verb, and it is inert until six digits are in.**
+    ///
+    /// It used to be two verbs — join messages, join files — because the joiner
+    /// had to state what a stranger's client was doing. That question is gone:
+    /// the room decides for itself once the peer announces, so the screen offers
+    /// the one action a person actually has in mind, which is connecting.
+    ///
+    /// Fast entry must still be canonicalized once, without an older partial
+    /// value replacing later digits.
+    func testCrossNetworkJoinKeepsACompleteCodeActionable() {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
         let cross = sidebarDestination("Cross-network Transfer", in: window)
@@ -568,23 +574,22 @@ final class AppShellUITests: XCTestCase {
         let field = window.textFields["pairing.joinCode"]
         XCTAssertTrue(field.waitForExistence(timeout: 10),
                       "Cross-network Transfer has no pairing-code field")
-        XCTAssertFalse(window.buttons["Join messages"].isEnabled,
-                       "an empty code left a join verb actionable")
-        XCTAssertFalse(window.buttons["Join files"].isEnabled,
-                       "an empty code left a join verb actionable")
+        XCTAssertFalse(window.buttons["Connect"].isEnabled,
+                       "an empty code left the connect action actionable")
+        // And there is no second verb to disagree with it.
+        XCTAssertFalse(window.buttons["Connect"].exists,
+                       "the pairing screen still asks which kind to join")
+        XCTAssertFalse(window.buttons["Connect"].exists,
+                       "the pairing screen still asks which kind to join")
 
         field.click()
         field.typeText("123456")
         XCTAssertEqual(field.value as? String, "123456",
                        "the join field lost digits during fast entry")
-        // BOTH verbs, from the one field: writing only one model is how the two
-        // buttons end up disagreeing about which code this device is joining.
-        XCTAssertTrue(window.buttons["Join messages"].isEnabled,
-                      "a complete code cannot join a message session")
-        XCTAssertTrue(window.buttons["Join files"].isEnabled,
-                      "a complete code cannot join a file transfer")
+        XCTAssertTrue(window.buttons["Connect"].isEnabled,
+                      "a complete code cannot be connected with")
 
-        window.buttons["Join messages"].click()
+        window.buttons["Connect"].click()
         XCTAssertTrue(window.descendants(matching: .any)["transfer-waiting-pairing-peer"]
             .firstMatch.waitForExistence(timeout: 10),
                       "joining a code leaves a blank screen while it waits")
@@ -617,9 +622,7 @@ final class AppShellUITests: XCTestCase {
                        "the window no longer names the destination it is on")
 
         // Not one pairing control anywhere on this screen.
-        XCTAssertFalse(window.buttons["Create a code for messages"].exists,
-                       "LAN Transfer still offers pairing-code creation")
-        XCTAssertFalse(window.buttons["Create a code for files"].exists,
+        XCTAssertFalse(window.buttons["Create a pairing code"].exists,
                        "LAN Transfer still offers pairing-code creation")
         XCTAssertFalse(window.textFields["pairing.joinCode"].exists,
                        "LAN Transfer still offers pairing-code joining")
@@ -642,11 +645,11 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(cross.waitForExistence(timeout: 10))
         cross.click()
 
-        // Pairing-code create AND join.
-        XCTAssertTrue(window.buttons["Create a code for messages"].waitForExistence(timeout: 10),
+        // Pairing-code create AND connect, one of each.
+        XCTAssertTrue(window.buttons["Create a pairing code"].waitForExistence(timeout: 10),
                       "Cross-network Transfer lost pairing-code creation")
-        XCTAssertTrue(window.buttons["Create a code for files"].exists,
-                      "Cross-network Transfer lost the file half of pairing-code creation")
+        XCTAssertTrue(window.buttons["Connect"].exists,
+                      "Cross-network Transfer lost pairing-code joining")
         XCTAssertTrue(window.textFields["pairing.joinCode"].exists,
                       "Cross-network Transfer lost pairing-code joining")
         XCTAssertEqual(window.title, "Cross-network Transfer",
@@ -673,12 +676,17 @@ final class AppShellUITests: XCTestCase {
         XCTAssertFalse(window.descendants(matching: .any)["lan-device-connection-note"]
             .firstMatch.exists,
                        "the pairing screen claimed a legacy limit before knowing the peer")
-        // Creating a message code needs nothing staged; creating a file code
-        // does. That asymmetry IS message-first.
-        XCTAssertTrue(window.buttons["Create a code for messages"].isEnabled,
-                      "the default intent requires a staged selection")
-        XCTAssertFalse(window.buttons["Create a code for files"].isEnabled,
-                       "a file code can be created with nothing to send")
+        // **One create action, and it needs nothing staged.** Minting first is
+        // the Web's ordering and the reason the staging box is in the waiting
+        // room: picking files before the code exists leaves the sender with
+        // nothing to do while six digits sit unclaimed.
+        XCTAssertTrue(window.buttons["Create a pairing code"].isEnabled,
+                      "creating a code requires a staged selection")
+        for retired in ["Create a code for messages", "Create a code for files",
+                        "Join messages", "Join files"] {
+            XCTAssertFalse(window.buttons[retired].exists,
+                           "the pairing screen still offers a kind choice: \(retired)")
+        }
     }
 
     /// **Same-network residency is stated once, on the pane that can change
@@ -742,7 +750,7 @@ final class AppShellUITests: XCTestCase {
         let cross = sidebarDestination("Cross-network Transfer", in: window)
         XCTAssertTrue(cross.waitForExistence(timeout: 10))
         cross.click()
-        let create = window.buttons["Create a code for messages"]
+        let create = window.buttons["Create a pairing code"]
         XCTAssertTrue(create.waitForExistence(timeout: 10))
         create.click()
         XCTAssertTrue(window.descendants(matching: .any)["pairing-code-value"]
@@ -794,23 +802,23 @@ final class AppShellUITests: XCTestCase {
         let cross = sidebarDestination("Cross-network Transfer", in: window)
         XCTAssertTrue(cross.waitForExistence(timeout: 10))
         cross.click()
-        XCTAssertTrue(window.buttons["Create a code for messages"].waitForExistence(timeout: 10))
-        window.buttons["Create a code for messages"].click()
+        XCTAssertTrue(window.buttons["Create a pairing code"].waitForExistence(timeout: 10))
+        window.buttons["Create a pairing code"].click()
 
         let leave = window.buttons["Leave this session"]
         XCTAssertTrue(leave.waitForExistence(timeout: 10),
                       "the failed session has no cleanup boundary")
-        XCTAssertFalse(window.buttons["Create a code for messages"].exists,
+        XCTAssertFalse(window.buttons["Create a pairing code"].exists,
                        "a new create path replaced a terminal session before the exit")
-        XCTAssertFalse(window.buttons["Join messages"].exists,
+        XCTAssertFalse(window.buttons["Connect"].exists,
                        "a new join path replaced a terminal session before the exit")
         XCTAssertFalse(window.buttons["Start receiving"].exists,
                        "the roster replaced a terminal session before the exit")
 
         leave.click()
-        XCTAssertTrue(window.buttons["Create a code for messages"].waitForExistence(timeout: 10),
+        XCTAssertTrue(window.buttons["Create a pairing code"].waitForExistence(timeout: 10),
                       "the start controls did not return after cleanup")
-        XCTAssertTrue(window.buttons["Join messages"].exists)
+        XCTAssertTrue(window.buttons["Connect"].exists)
     }
 
     /// A terminal Nearby task retains both its peer context and a real cleanup
@@ -1377,7 +1385,7 @@ final class AppShellUITests: XCTestCase {
                        "a transfer-type picker can still hide the staging surface")
         // Connecting is reachable with nothing staged: the message verbs are the
         // ones with no precondition at all.
-        XCTAssertTrue(window.buttons["Create a code for messages"].isEnabled,
+        XCTAssertTrue(window.buttons["Create a pairing code"].isEnabled,
                       "connecting was made to depend on choosing files first")
     }
 
@@ -1429,13 +1437,15 @@ final class AppShellUITests: XCTestCase {
             "a failed upload produced a capability link anyway")
     }
 
-    /// Creating a FILE pairing code stays on Pairing code and shows every
-    /// handoff, with the mode the user actually chose preserved in the link.
+    /// Creating a pairing code with a batch already staged stays on
+    /// Cross-network Transfer and shows every handoff.
     ///
-    /// The text half of this flow has had a runtime path since the eighth batch.
-    /// The file half — the mode most people reach for — had none, so the link's
-    /// mode parameter was only ever proven for Text.
-    func testCreatingAFilePairingCodeStaysOnPairingAndShowsEveryHandoff() throws {
+    /// It used to be the FILE half of a two-button create, proving that the
+    /// link's `?mode=file` survived. There is one create action now and no mode
+    /// to preserve, so what this proves is what is left and what actually
+    /// matters: a batch staged before the code is minted does not change the
+    /// action, does not change the link, and does not leave the screen.
+    func testCreatingAPairingCodeWithAStagedBatchShowsEveryHandoff() throws {
         app.terminate()
         app.launchArguments = offlineLaunchArguments + ["--relayium-ui-testing-file-code"]
         app.launch()
@@ -1465,11 +1475,11 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(choose.waitForExistence(timeout: 10))
         choose.click()
 
-        let create = window.buttons["Create a code for files"]
+        let create = window.buttons["Create a pairing code"]
         XCTAssertTrue(create.waitForExistence(timeout: 10),
                       "a staged file offers no way to create a code")
         XCTAssertTrue(create.isEnabled,
-                      "a staged batch left the file-code action inert")
+                      "a staged batch left the create action inert")
         create.click()
 
         XCTAssertTrue(window.descendants(matching: .any)["pairing-code-value"]
@@ -1478,8 +1488,8 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(window.staticTexts["Join link"].exists,
                       "the generated code has no visible browser handoff")
         XCTAssertTrue(window.staticTexts[
-            "https://relayium.com/cross-network?mode=file#c=483920"
-        ].exists, "the visible handoff did not preserve the created Files mode")
+            "https://relayium.com/cross-network#c=483920"
+        ].exists, "the handoff link is not the bare code the sender created")
         XCTAssertTrue(window.buttons["Copy"].exists, "the join link cannot be copied")
         XCTAssertTrue(window.buttons["Share"].exists,
                       "the join link cannot use the system share sheet")
@@ -1715,7 +1725,7 @@ final class AppShellUITests: XCTestCase {
         let pairing = sidebarDestination("Cross-network Transfer", in: window)
         XCTAssertTrue(pairing.waitForExistence(timeout: 10))
         pairing.click()
-        let create = window.buttons["Create a code for messages"]
+        let create = window.buttons["Create a pairing code"]
         XCTAssertTrue(create.waitForExistence(timeout: 10))
         create.click()
         XCTAssertTrue(window.descendants(matching: .any)["pairing-code-value"]

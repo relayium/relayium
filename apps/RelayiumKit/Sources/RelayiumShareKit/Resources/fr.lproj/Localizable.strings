@@ -638,12 +638,6 @@
 "workspace.addFilesHint" = "Choisissez des fichiers ou dossiers ci-dessous, puis envoyez-les à cet appareil.";
 "workspace.sendMessageHint" = "Ouvre une session de messages avec cet appareil. Aucune sélection n’est nécessaire.";
 "workspace.sendFiles" = "Envoyer des fichiers";
-"workspace.createMessageCode" = "Créer un code pour les messages";
-"workspace.createFileCode" = "Créer un code pour les fichiers";
-"workspace.createFileCodeHint" = "Choisissez d’abord des fichiers ou dossiers ci-dessous ; le code porte ce lot.";
-"workspace.joinMessages" = "Rejoindre les messages";
-"workspace.joinFiles" = "Rejoindre les fichiers";
-"workspace.joinKindHint" = "Un code ne dit pas de quoi il s’agit. Demandez à la personne qui l’a créé, ou utilisez le lien envoyé.";
 "workspace.oneConnectionNote" = "Une connexion transporte des messages ou des fichiers, pas les deux. L’autre type ouvre une nouvelle connexion, avec un nouveau code de vérification.";
 "workspace.messagesOnlyNote" = "Cette session transporte des messages, pas des fichiers. Envoyer des fichiers demande une session à part — quittez celle-ci pour l’ouvrir.";
 "workspace.filesOnlyNote" = "Cette session transporte des fichiers, pas des messages. Envoyer un message demande une session à part — quittez celle-ci pour l’ouvrir.";
@@ -658,9 +652,6 @@
 "link.waitingForPeer" = "En attente de l’acceptation des messages par l’autre appareil. Votre message partira dès que ce sera fait.";
 "link.messagesDeclined" = "L’autre appareil a refusé les messages. Votre texte est toujours là — les fichiers ne sont pas concernés.";
 "link.notReady" = "Cette connexion n’est pas encore prête pour cela.";
-"link.conversationRequest" = "L’autre appareil souhaite démarrer une conversation.";
-"link.acceptMessages" = "Accepter les messages";
-"link.declineMessages" = "Refuser";
 "link.verifyTitle" = "Comparez ce code";
 "link.verifyBody" = "Lisez-le à voix haute à l’autre appareil. Il n’est demandé qu’une fois pour cette connexion — chaque message et chaque fichier ensuite utilise la même vérification.";
 "link.verifyMatches" = "Ils correspondent";
@@ -702,7 +693,6 @@
 "settings.loginStillUnconfirmed" = "Relayium a demandé son enregistrement à macOS, qui ne signale toujours aucun enregistrement. Rien n’a été supprimé et un enregistrement déjà existant reste intact. Ouvrez les Éléments d’ouverture pour vérifier, et redémarrez ce Mac si Relayium n’y figure pas.";
 
 /* MARK: 1.1.2 — what this Mac is on the network */
-"nearby.announcedAs" = "Les autres appareils de ce salon voient ce Mac sous le nom %@.";
 "nearby.localAddressesHeading" = "Les adresses propres à ce Mac en ce moment :";
 "nearby.localAddressRow" = "%1$@ (%2$@)";
 "nearby.noLocalAddresses" = "Aucune adresse utilisable n’a été trouvée. Ce Mac n’atteint peut-être le réseau que via un VPN ou une liaison incapable de porter un transfert direct.";
@@ -724,32 +714,22 @@
 "help.lan.step1" = "Ouvrez Relayium sur les deux appareils et laissez-les sur le même réseau.";
 "help.lan.step2" = "Choisissez l’autre appareil dans la liste, puis envoyez un message ou les fichiers que vous avez ajoutés.";
 "help.lan.step3" = "Si la vérification est active, contrôlez que les deux écrans affichent le même code avant d’accepter.";
-"help.lan.question" = "Les fichiers passent-ils par les serveurs de Relayium ?";
-"help.lan.answer" = "Parfois, et cela ne change rien à ce que Relayium peut lire. Le service met les deux appareils en relation ; selon les conditions réseau, la connexion passe entre eux ou par un relais Relayium, et cet appareil ne peut pas savoir quel chemin est utilisé. Dans les deux cas, les fichiers sont chiffrés de bout en bout et Relayium n’a jamais la clé.";
 
 "help.cross.step1" = "Sur cet appareil, créez un code pour un message ou pour des fichiers.";
 "help.cross.step2" = "Saisissez ce code dans Relayium sur l’autre appareil, puis rejoignez.";
 "help.cross.step3" = "Vérifiez que les deux écrans affichent le même code, puis acceptez le transfert.";
-"help.cross.question" = "Les deux appareils doivent-ils être sur le même réseau ?";
-"help.cross.answer" = "Non, c’est précisément l’objet de cet écran. Créer un code exige un compte, car la connexion peut devoir être relayée et cela est facturé à celui qui l’a créée. Rejoindre le code de quelqu’un d’autre n’exige rien.";
 
 "help.storedSend.step1" = "Choisissez des fichiers ou des dossiers, décidez combien de temps le lien doit rester actif, puis envoyez.";
 "help.storedSend.step2" = "Relayium chiffre tout sur ce Mac avant le moindre envoi.";
 "help.storedSend.step3" = "Partagez le lien. La clé qui l’ouvre voyage à l’intérieur du lien et n’atteint jamais Relayium.";
-"help.storedSend.question" = "Qui peut ouvrir le lien ?";
-"help.storedSend.answer" = "Toute personne disposant du lien complet, y compris la partie après le #. Relayium ne conserve que le fichier chiffré et ne peut pas le lire : traitez donc le lien lui-même comme un secret.";
 
 "help.inbox.step1" = "Connectez-vous au même compte ici et sur l’appareil depuis lequel vous voulez envoyer.";
 "help.inbox.step2" = "Choisissez un dossier sur ce Mac, puis décidez si les livraisons sont enregistrées automatiquement ou soumises à votre accord.";
 "help.inbox.step3" = "Envoyez vers ce Mac depuis relayium.com ou un autre appareil connecté : les fichiers arrivent dans ce dossier.";
-"help.inbox.question" = "Que se passe-t-il pendant que ce Mac dort ou que Relayium est fermé ?";
-"help.inbox.answer" = "Les livraisons attendent sur le serveur jusqu’à ce que Relayium tourne de nouveau ici. Il ne peut recevoir que lorsqu’il est en cours d’exécution : c’est à cela que sert le réglage d’ouverture de session ci-dessus.";
 
 "help.account.step1" = "Créez un compte ou connectez-vous : envoyer un lien et la boîte de réception d’appareil en demandent un.";
 "help.account.step2" = "Consultez votre formule et ce que vous en avez consommé sur la période.";
 "help.account.step3" = "Passez en revue les appareils connectés à votre compte et les fichiers que vous avez stockés, et supprimez les uns comme les autres.";
-"help.account.question" = "Qu’est-ce qui demande un compte et qu’est-ce qui n’en demande pas ?";
-"help.account.answer" = "Le transfert sur le même réseau et le fait de rejoindre un code créé par quelqu’un d’autre n’en demandent aucun. Créer un code, envoyer un lien stocké et la boîte de réception d’appareil en demandent un.";
 
 /* In-app subscription (Mac App Store build). The purchase surface the App Store
    build renders instead of the direct build's link to the website. Prices are

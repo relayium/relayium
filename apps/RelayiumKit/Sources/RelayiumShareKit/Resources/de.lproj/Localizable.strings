@@ -638,12 +638,6 @@
 "workspace.addFilesHint" = "Wähle unten Dateien oder Ordner und sende sie an dieses Gerät.";
 "workspace.sendMessageHint" = "Öffnet eine Nachrichtensitzung mit diesem Gerät. Es muss nichts ausgewählt sein.";
 "workspace.sendFiles" = "Dateien senden";
-"workspace.createMessageCode" = "Code für Nachrichten erstellen";
-"workspace.createFileCode" = "Code für Dateien erstellen";
-"workspace.createFileCodeHint" = "Wähle zuerst unten Dateien oder Ordner; der Code trägt genau diese Auswahl.";
-"workspace.joinMessages" = "Nachrichten beitreten";
-"workspace.joinFiles" = "Dateien beitreten";
-"workspace.joinKindHint" = "Ein Code sagt nicht, worum es geht. Frag die Person, die ihn erstellt hat, oder nutze den gesendeten Link.";
 "workspace.oneConnectionNote" = "Eine Verbindung überträgt Nachrichten oder Dateien, nicht beides. Die andere Art öffnet eine neue Verbindung mit einem neuen Bestätigungscode.";
 "workspace.messagesOnlyNote" = "Diese Sitzung überträgt Nachrichten, keine Dateien. Dateien brauchen eine eigene Sitzung — verlasse diese, um sie zu starten.";
 "workspace.filesOnlyNote" = "Diese Sitzung überträgt Dateien, keine Nachrichten. Eine Nachricht braucht eine eigene Sitzung — verlasse diese, um sie zu starten.";
@@ -658,9 +652,6 @@
 "link.waitingForPeer" = "Warten, bis das andere Gerät Nachrichten annimmt. Deine Nachricht geht sofort danach raus.";
 "link.messagesDeclined" = "Das andere Gerät hat Nachrichten abgelehnt. Dein Text ist noch da – Dateien sind nicht betroffen.";
 "link.notReady" = "Diese Verbindung ist dafür noch nicht bereit.";
-"link.conversationRequest" = "Das andere Gerät möchte ein Gespräch beginnen.";
-"link.acceptMessages" = "Nachrichten annehmen";
-"link.declineMessages" = "Ablehnen";
 "link.verifyTitle" = "Diesen Code vergleichen";
 "link.verifyBody" = "Lies ihn dem anderen Gerät vor. Er wird für diese Verbindung einmal abgefragt – jede Nachricht und jede Datei danach nutzt dieselbe Bestätigung.";
 "link.verifyMatches" = "Stimmt überein";
@@ -702,7 +693,6 @@
 "settings.loginStillUnconfirmed" = "Relayium hat macOS um Registrierung gebeten, und macOS meldet weiterhin keinen Eintrag. Es wurde nichts entfernt, und eine bereits vorhandene Registrierung bleibt unangetastet. Öffne die Anmeldeobjekte, um nachzusehen, und starte diesen Mac neu, falls Relayium dort nicht aufgeführt ist.";
 
 /* MARK: 1.1.2 — what this Mac is on the network */
-"nearby.announcedAs" = "Andere Geräte in diesem Raum sehen diesen Mac als %@.";
 "nearby.localAddressesHeading" = "Die eigenen Adressen dieses Mac im Moment:";
 "nearby.localAddressRow" = "%1$@ (%2$@)";
 "nearby.noLocalAddresses" = "Es wurde keine nutzbare Adresse gefunden. Möglicherweise erreicht dieser Mac das Netzwerk nur über ein VPN oder über eine Verbindung, die keine Direktübertragung tragen kann.";
@@ -724,32 +714,22 @@
 "help.lan.step1" = "Öffne Relayium auf beiden Geräten und lass sie im selben Netzwerk.";
 "help.lan.step2" = "Wähle das andere Gerät aus der Liste und sende dann eine Nachricht oder die hinzugefügten Dateien.";
 "help.lan.step3" = "Wenn die Bestätigung aktiv ist, prüfe vor dem Annehmen, dass beide Bildschirme denselben Code zeigen.";
-"help.lan.question" = "Laufen die Dateien über die Server von Relayium?";
-"help.lan.answer" = "Manchmal, und für das, was Relayium lesen kann, ändert das nichts. Der Dienst bringt die beiden Geräte zusammen; je nach Netzwerkbedingungen läuft die Verbindung zwischen ihnen oder über ein Relayium-Relay, und dieses Gerät kann nicht erkennen, welcher Weg verwendet wird. In beiden Fällen sind die Dateien Ende-zu-Ende verschlüsselt und Relayium hat den Schlüssel nie.";
 
 "help.cross.step1" = "Erstelle auf diesem Gerät einen Code für eine Nachricht oder für Dateien.";
 "help.cross.step2" = "Gib diesen Code in Relayium auf dem anderen Gerät ein und tritt bei.";
 "help.cross.step3" = "Prüfe, dass beide Bildschirme denselben Code zeigen, und nimm die Übertragung dann an.";
-"help.cross.question" = "Müssen beide Geräte im selben Netzwerk sein?";
-"help.cross.answer" = "Nein – genau dafür ist dieser Bildschirm da. Einen Code zu erstellen erfordert ein Konto, weil die Verbindung unter Umständen weitergeleitet werden muss und das dem Ersteller berechnet wird. Einem fremden Code beizutreten erfordert gar nichts.";
 
 "help.storedSend.step1" = "Wähle Dateien oder Ordner, lege fest, wie lange der Link funktionieren soll, und sende.";
 "help.storedSend.step2" = "Relayium verschlüsselt alles auf diesem Mac, bevor irgendetwas hochgeladen wird.";
 "help.storedSend.step3" = "Teile den Link. Der Schlüssel zum Öffnen steckt im Link selbst und erreicht Relayium nie.";
-"help.storedSend.question" = "Wer kann den Link öffnen?";
-"help.storedSend.answer" = "Jede Person mit dem vollständigen Link, einschließlich des Teils nach dem #. Relayium speichert nur die verschlüsselte Datei und kann sie nicht lesen – behandle den Link also selbst als Geheimnis.";
 
 "help.inbox.step1" = "Melde dich hier und auf dem Gerät, von dem du senden willst, im selben Konto an.";
 "help.inbox.step2" = "Wähle einen Ordner auf diesem Mac und entscheide, ob Lieferungen automatisch gesichert oder erst nachgefragt werden.";
 "help.inbox.step3" = "Sende von relayium.com oder einem anderen angemeldeten Gerät an diesen Mac – die Dateien landen in diesem Ordner.";
-"help.inbox.question" = "Was passiert, während dieser Mac schläft oder Relayium geschlossen ist?";
-"help.inbox.answer" = "Lieferungen warten auf dem Server, bis Relayium hier wieder läuft. Empfangen kann es nur im laufenden Betrieb – dafür ist die Anmeldeeinstellung oben da.";
 
 "help.account.step1" = "Erstelle ein Konto oder melde dich an – einen Link zu senden und das Gerätepostfach brauchen beides.";
 "help.account.step2" = "Sieh, welchen Tarif du hast und wie viel davon du in diesem Zeitraum verbraucht hast.";
 "help.account.step3" = "Prüfe die in deinem Konto angemeldeten Geräte und die gespeicherten Dateien und entferne beides bei Bedarf.";
-"help.account.question" = "Wofür braucht man ein Konto und wofür nicht?";
-"help.account.answer" = "Übertragungen im selben Netzwerk und das Beitreten zu einem fremden Code brauchen kein Konto. Einen Code erstellen, einen gespeicherten Link senden und das Gerätepostfach brauchen eines.";
 
 /* In-app subscription (Mac App Store build). The purchase surface the App Store
    build renders instead of the direct build's link to the website. Prices are

@@ -48,9 +48,9 @@ and anything larger is a file.
 
 The production web app and CLI are live, and the CLI and node binaries are still
 in **pre-1.0 versioning** (`v0.x`). The macOS app is on its own track and is at
-**1.2.1**: a universal, Developer ID-signed, Apple-notarized and stapled
+**1.2.2**: a universal, Developer ID-signed, Apple-notarized and stapled
 build, published as a direct download from its own GitHub Release,
-[`macos-v1.2.1`](https://github.com/relayium/relayium/releases/tag/macos-v1.2.1).
+[`macos-v1.2.2`](https://github.com/relayium/relayium/releases/tag/macos-v1.2.2).
 There is no Mac App Store listing; a Developer ID download is the channel.
 The iOS app runs its transfer, nearby and account workflows in the
 foreground and is **not public**: there is no App Store listing and nothing to
@@ -242,7 +242,7 @@ pairing code requires sign-in; joining with that code does not.
 - **CLI and nodes — live:** published binaries provide pairing-code file/text
   transfer, encrypted upload/download links, SSH and daemon-direct transfer,
   folder sync, self-hosting, and managed relay/storage nodes.
-- **macOS — 1.2.1, published as a direct download:** the universal app supports account
+- **macOS — 1.2.2, published as a direct download:** the universal app supports account
   registration and sign-in with device and stored-file management, six-digit
   pairing-code transfer of files and text, folder transfer, nearby sending and
   passive receiving, encrypted stored links to send and open, notifications and
@@ -266,9 +266,9 @@ pairing code requires sign-in; joining with that code does not.
   window with automatic update checks, the last check and the running version,
   and an *Open at login* switch that reports what macOS actually did with it —
   including the "registered, waiting for your approval" state a checkbox cannot
-  express. The 1.2.1 DMG is universal, Developer ID-signed, accepted by Apple
+  express. The 1.2.2 DMG is universal, Developer ID-signed, accepted by Apple
   notarization, stapled and Gatekeeper-validated, and is attached to the
-  [`macos-v1.2.1`](https://github.com/relayium/relayium/releases/tag/macos-v1.2.1)
+  [`macos-v1.2.2`](https://github.com/relayium/relayium/releases/tag/macos-v1.2.2)
   GitHub Release with its SHA-256 published beside it; in-app updates come from
   the signed Sparkle appcast at `https://relayium.com/apps/macos/appcast.xml`.
   A Developer ID download **is** the distribution channel here — there is no Mac

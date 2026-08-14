@@ -81,6 +81,7 @@ struct LanConnectPane: View {
             // the client can truthfully name both endpoints and encryption, but
             // it cannot mark any stop complete or promise a direct path.
             PathRail(stops: PathRailPresentation.lan())
+            thisMac
             sameNetwork
             InlineMessage(.info, L10n.t(.nearbyNoAccountNeeded))
                 .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
@@ -145,8 +146,11 @@ struct LanConnectPane: View {
     /// a true and worth-having paragraph, and it was the first thing on the
     /// destination whose whole job is "pick the device and send". So the order is
     /// now what somebody came here to do: who can be reached, who is here, what
-    /// to send them, what this Mac is called — and only then how the room is
-    /// formed at all.
+    /// to send them, and only then how the room is formed at all.
+    ///
+    /// What this Mac is CALLED left this card entirely: it is the identity card
+    /// above, because it is the question somebody arrives with rather than a
+    /// detail of the receive state it used to be filed under.
     ///
     /// The dividers that used to separate those groups are `OpenSection`s: the
     /// same second level of hierarchy, with the name attached to the group rather
@@ -256,15 +260,16 @@ struct LanConnectPane: View {
             if let failure = receive.lastFailure {
                 InlineMessage(.warning, failure)
             }
-            listeningIdentity
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(L10n.t(.nearbyA11yReceiving))
         .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
     }
 
+    // MARK: - what this Mac is on the network
+
     /// **What this Mac is called in the room, and which network it is actually
-    /// on.**
+    /// on — as the first thing on the screen.**
     ///
     /// Two questions the receive surface could not answer, and both of them are
     /// what somebody asks when the device they expect is not in the roster.
@@ -278,65 +283,143 @@ struct LanConnectPane: View {
     ///    VLAN, a hotspot or a VPN looks identical to one that is fine. Its own
     ///    addresses are the only local evidence there is.
     ///
-    /// Both are stated with what they do NOT mean, because the inference is
-    /// otherwise irresistible and wrong: peers are grouped by the network path
-    /// the service observes, not by anything measured here, so two Macs sharing
-    /// a printer subnet can still be in different rooms.
+    /// ## Why it is a card of its own now
     ///
-    /// Shown only while a socket is actually listening, and dropped the moment it
-    /// is not — an address list is a fingerprint of somebody's home network, and
-    /// this app writes it nowhere, sends it nowhere and keeps it no longer than
-    /// the screen that shows it.
-    @ViewBuilder
-    private var listeningIdentity: some View {
-        if let announced = discovery.announcedName, isListening {
-            VStack(alignment: .leading, spacing: 4) {
-                // The peer-supplied-name rules do not apply: this is our own
-                // announcement. It is isolated rather than translated so a name
-                // with Latin characters keeps its reading order inside Arabic.
-                Text(L10n.t(.nearbyAnnouncedAs, [L10n.token(announced)]))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .textSelection(.enabled)
-                    .accessibilityIdentifier("lan-announced-name")
-                if localAddresses.isEmpty {
-                    Text(L10n.t(.nearbyNoLocalAddresses))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .accessibilityIdentifier("lan-local-addresses-empty")
-                } else {
-                    Text(L10n.t(.nearbyLocalAddressesHeading))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    ForEach(localAddresses) { address in
-                        // Address and interface both isolated: they are technical
-                        // values, and a bidi run would reorder the octets of one
-                        // inside an Arabic sentence.
-                        Text(L10n.t(.nearbyLocalAddressRow,
-                                    [L10n.token(address.text), L10n.token(address.interfaceName)]))
-                            .font(.system(.caption, design: .monospaced))
-                            .textSelection(.enabled)
-                            // On the LEAF, never on the `ForEach`: a container
-                            // identifier propagates down and renames what is
-                            // inside it, which is the defect the Device Inbox
-                            // pane has already lost two controls to.
-                            .accessibilityIdentifier("lan-local-address")
-                    }
-                }
-                // The two disclaimers this section cannot be honest without.
-                Text(L10n.t(.nearbyAddressesPrivacyNote))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(L10n.t(.nearbyAddressesNotGroupingNote))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+    /// It shipped as four `.caption` lines at the end of the receive-status
+    /// block — under the listening sentence, under the Downloads promise, under
+    /// any failure — in the same grey as the disclaimers that follow it. The one
+    /// fact somebody reads this screen out loud for was the smallest type on it
+    /// and below the fold on a 560pt window, and the two paragraphs explaining
+    /// what it does not mean were the same size as the answer itself.
+    ///
+    /// So the name is the card's own primary line, at a size somebody can read
+    /// across a desk; the addresses are the secondary line, monospaced and
+    /// selectable because they are values to be transcribed rather than prose;
+    /// and the disclaimers keep their `.caption2` at the bottom, where they
+    /// qualify the answer instead of competing with it. The receive-status
+    /// sentence stays exactly where it was, in the card below, and stays subtle:
+    /// this card is identity, that one is state, and merging them is what made
+    /// neither legible.
+    ///
+    /// ## The three states, and none of them is a guess
+    ///
+    /// The address list and the claim about what peers see require a live
+    /// socket. The Mac's configured name does not: while receiving is off the
+    /// card shows that name as the value Relayium will use on the next join, so
+    /// the page still answers “what is this device called?” before the user
+    /// starts anything. Once joined, the socket snapshot replaces it.
+    ///
+    ///  - **connecting or reconnecting**: this Mac is on its way into the room
+    ///    and has no peer id yet, so it has no announced name to show and no
+    ///    reachability to claim. There is nothing to do but wait, and the line
+    ///    says so.
+    ///  - **off or paused**: nothing is listening, so no other device can see
+    ///    this Mac at all. The recovery is the button in the card below, which
+    ///    the line points at rather than duplicating.
+    ///
+    /// The addresses are dropped the moment the socket stops — an address list
+    /// is a fingerprint of somebody's home network, and this app writes it
+    /// nowhere, sends it nowhere and keeps it no longer than the screen that
+    /// shows it.
+    private var thisMac: some View {
+        SectionCard(title: L10n.t(.nearbyThisMacHeading)) {
+            VStack(alignment: .leading, spacing: Metrics.tight) {
+                identity
             }
+            .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
             .accessibilityElement(children: .contain)
             .accessibilityLabel(L10n.t(.nearbyA11yThisMac))
+        }
+    }
+
+    @ViewBuilder
+    private var identity: some View {
+        if let announced = discovery.announcedName, isListening {
+            // The peer-supplied-name rules do not apply: this is our own
+            // announcement. It is isolated rather than translated so a name
+            // with Latin characters keeps its reading order inside Arabic.
+            Text(L10n.token(announced))
+                .font(.title3.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+                .accessibilityIdentifier("lan-announced-name")
+            Text(L10n.t(.nearbyAnnouncedNameCaption))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            addresses
+            // The two disclaimers this card cannot be honest without, kept
+            // exactly where they were in the reading order — after the answer —
+            // and in the smallest type on the card. They belong to the address
+            // list and go with it: two paragraphs qualifying a list that is not
+            // on screen are noise, and the state line above already says why it
+            // is not.
+            Text(L10n.t(.nearbyAddressesPrivacyNote))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(L10n.t(.nearbyAddressesNotGroupingNote))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            Text(L10n.token(AppEnvironment.deviceName()))
+                .font(.title3.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+                .accessibilityIdentifier("lan-configured-name")
+            Text(L10n.t(.nearbyConfiguredNameCaption))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(L10n.t(isStarting ? .nearbyIdentityAnnouncing : .nearbyIdentityNotListening))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("lan-identity-unavailable")
+        }
+    }
+
+    /// The secondary half: values, not prose. Monospaced so the octets line up
+    /// and selectable so they can be copied into whatever is asking for them.
+    @ViewBuilder
+    private var addresses: some View {
+        if localAddresses.isEmpty {
+            Text(L10n.t(.nearbyNoLocalAddresses))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("lan-local-addresses-empty")
+        } else {
+            VStack(alignment: .leading, spacing: Metrics.hairline) {
+                Text(L10n.t(.nearbyLocalAddressesHeading))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                ForEach(localAddresses) { address in
+                    // Address and interface both isolated: they are technical
+                    // values, and a bidi run would reorder the octets of one
+                    // inside an Arabic sentence.
+                    Text(L10n.t(.nearbyLocalAddressRow,
+                                [L10n.token(address.text), L10n.token(address.interfaceName)]))
+                        .font(.system(.body, design: .monospaced))
+                        .textSelection(.enabled)
+                        // On the LEAF, never on the `ForEach`: a container
+                        // identifier propagates down and renames what is
+                        // inside it, which is the defect the Device Inbox
+                        // pane has already lost two controls to.
+                        .accessibilityIdentifier("lan-local-address")
+                }
+            }
+        }
+    }
+
+    /// On its way into the room rather than staying out of it. `connecting` and
+    /// `reconnecting` are the two states with no peer id yet and work actually
+    /// in flight; `off` and `paused` are waiting for the user.
+    private var isStarting: Bool {
+        switch receive.state {
+        case .connecting, .reconnecting: return true
+        case .off, .paused, .ready, .active: return false
         }
     }
 

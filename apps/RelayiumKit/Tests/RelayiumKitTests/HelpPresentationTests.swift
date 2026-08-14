@@ -62,19 +62,70 @@ final class HelpPresentationTests: XCTestCase {
         for surface in MacSurface.allCases {
             guard let topic = HelpPresentation.topic(for: surface) else { continue }
             XCTAssertEqual(topic.steps.count, 3, "\(surface.rawValue)")
-            for key in topic.steps + [topic.question, topic.answer] {
+            for key in Self.allKeys(of: topic) {
                 XCTAssertTrue(seen.insert(key.rawValue).inserted,
                               "\(key.rawValue) is used by two destinations")
             }
         }
     }
 
+    /// **Every screen answers all six, and none of them is a copy of another.**
+    ///
+    /// The shape is the whole point of `HelpTopic` being a struct with named
+    /// fields rather than a bag of paragraphs: a topic that answers what the
+    /// screen is for and how to use it, and then says nothing about the
+    /// boundary, the destination or the dead end, is exactly the help this batch
+    /// replaced — and it would compile.
+    func testEveryTopicAnswersAllSixQuestions() {
+        for surface in MacSurface.browseable {
+            guard let topic = HelpPresentation.topic(for: surface) else {
+                return XCTFail("\(surface.rawValue) has no topic at all")
+            }
+            // Distinct KEYS, not merely non-empty ones: the way this degrades is
+            // one paragraph doing duty for two questions.
+            let keys = Self.allKeys(of: topic).map(\.rawValue)
+            XCTAssertEqual(Set(keys).count, keys.count,
+                           "\(surface.rawValue) answers two questions with one string")
+            // Six answers, one of which — the path — is three numbered steps.
+            XCTAssertEqual(keys.count, 8, "\(surface.rawValue) is not the six-answer shape")
+            // And each one is real English rather than a placeholder somebody
+            // meant to come back to.
+            for key in Self.allKeys(of: topic) {
+                let text = L10n.t(key, language: .en)
+                XCTAssertGreaterThan(text.count, 20,
+                                     "\(key.rawValue) is too short to be an answer: \(text)")
+            }
+        }
+    }
+
+    /// The purpose is the only part that renders collapsed, so it is the only
+    /// part that has to work as a standalone line — short enough for a button
+    /// row, and a sentence rather than a fragment.
+    func testThePurposeIsALineAButtonRowCanCarry() {
+        for surface in MacSurface.browseable {
+            guard let purpose = HelpPresentation.topic(for: surface)?.purpose else { continue }
+            for language in [AppLanguage.en, .zh] {
+                let text = L10n.t(purpose, language: language)
+                XCTAssertLessThanOrEqual(text.count, 160,
+                                         "\(purpose.rawValue) [\(language.rawValue)] is a "
+                                         + "paragraph, and it renders on a collapsed row: \(text)")
+                XCTAssertFalse(text.hasSuffix(":"),
+                               "\(purpose.rawValue) [\(language.rawValue)] is a lead-in rather "
+                               + "than an answer")
+            }
+        }
+    }
+
     /// Every key resolves to real copy in every one of the nine languages, and
     /// none of it is the raw key falling through.
+    ///
+    /// The seven frozen locales reach English through the catalog fallback,
+    /// which is the shipped behaviour rather than a gap — what must never happen
+    /// is a raw `help.lan.boundary` on somebody's screen.
     func testEveryHelpStringExistsInEveryLanguage() {
         for surface in MacSurface.allCases {
             guard let topic = HelpPresentation.topic(for: surface) else { continue }
-            for key in topic.steps + [topic.question, topic.answer] {
+            for key in Self.allKeys(of: topic) {
                 for language in AppLanguage.allCases {
                     let text = L10n.t(key, language: language)
                     XCTAssertFalse(text.isEmpty, "\(key.rawValue) is empty in \(language)")
@@ -83,12 +134,39 @@ final class HelpPresentationTests: XCTestCase {
                 }
             }
         }
-        for shared in [L10nKey.helpHeading, .helpStepsHeading, .helpGuideLink] {
+        for shared in [L10nKey.helpHeading, .helpStepsHeading, .helpBoundaryHeading,
+                       .helpWhereHeading, .helpTroubleHeading, .helpGuideLink,
+                       .helpCollapsedValue, .helpExpandedValue,
+                       .helpExpandHint, .helpCollapseHint] {
             for language in AppLanguage.allCases {
                 XCTAssertNotEqual(L10n.t(shared, language: language), shared.rawValue,
                                   "\(shared.rawValue) is missing in \(language)")
             }
         }
+    }
+
+    /// Both maintained languages carry every help string as their OWN copy
+    /// rather than through the English fallback. This is the localization gate
+    /// for this batch's new copy, asserted against the catalogs rather than
+    /// against what renders.
+    func testBothMaintainedLanguagesDefineEveryHelpStringThemselves() throws {
+        for language in [AppLanguage.en, .zh] {
+            let catalog = try XCTUnwrap(StringsCatalog.load(language),
+                                        "catalog for \(language.rawValue) is missing")
+            for surface in MacSurface.allCases {
+                guard let topic = HelpPresentation.topic(for: surface) else { continue }
+                for key in Self.allKeys(of: topic) {
+                    XCTAssertNotNil(catalog[key.rawValue],
+                                    "\(language.rawValue) does not define \(key.rawValue)")
+                }
+            }
+        }
+    }
+
+    /// Every string one topic owns, in the order the screen renders them.
+    private static func allKeys(of topic: HelpTopic) -> [L10nKey] {
+        [topic.purpose] + topic.steps
+            + [topic.boundary, topic.destination, topic.failure, topic.recovery]
     }
 
     /// The numbered-step format positions the numeral and its separator in the
@@ -113,22 +191,60 @@ final class HelpPresentationTests: XCTestCase {
         }
     }
 
-    /// …and it is on disk in all nine languages, checked against the repository
-    /// rather than against the list above — a slug can be published in English
-    /// and missing in Arabic, which is exactly the failure a per-language URL
-    /// creates and a hard-coded list would not notice.
-    func testEveryLinkedGuideExistsOnDiskInAllNineLanguages() throws {
+    /// …and the page each LINK actually resolves to is on disk, checked against
+    /// the repository rather than against the list above.
+    ///
+    /// It walks all nine app languages but asserts on the URL the app would
+    /// build for each, which is the thing that can 404. A frozen locale resolves
+    /// to the English page, so this passes for it by checking that page — and
+    /// would fail if the maintained-language rule ever generated a prefix the
+    /// site does not publish.
+    func testEveryGuideLinkResolvesToAPageOnDisk() throws {
         for surface in MacSurface.allCases {
             guard case let .localizedGuide(slug)? = HelpPresentation.topic(for: surface)?.guide
             else { continue }
             for language in AppLanguage.allCases {
-                let prefix = language == .en ? "" : language.rawValue + "/"
-                let page = repoRoot.appendingPathComponent(
-                    "web/public/" + prefix + "guides/" + slug + "/index.html")
+                let url = HelpPresentation.url(for: .localizedGuide(slug: slug),
+                                               language: language)
+                let path = url.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                let page = repoRoot.appendingPathComponent("web/public/" + path + "/index.html")
                 XCTAssertTrue(FileManager.default.fileExists(atPath: page.path),
-                              "\(slug) is not published in \(language.rawValue): \(page.path)")
+                              "\(slug) link for \(language.rawValue) points at nothing: "
+                              + page.path)
             }
         }
+    }
+
+    /// **A frozen locale is sent to the maintained guide, not to its own
+    /// archive.**
+    ///
+    /// The seven frozen translations are still published and still reachable by
+    /// URL — the site keeps them as labelled archives — but nobody is updating
+    /// them, and an app already rendering its new copy in English through the
+    /// catalog fallback must not be the one place that promises current
+    /// documentation in a language it stopped maintaining.
+    ///
+    /// Asserted as an exhaustive pair rather than as a list of exceptions, so
+    /// restoring a locale is one edit and this test is what says the edit
+    /// happened.
+    func testOnlyMaintainedLanguagesLinkToTheirOwnGuide() {
+        let slug = "send-a-file-to-someone"
+        for language in AppLanguage.allCases {
+            let url = HelpPresentation.url(for: .localizedGuide(slug: slug),
+                                           language: language).absoluteString
+            switch language {
+            case .en:
+                XCTAssertEqual(url, "https://relayium.com/guides/\(slug)")
+            case .zh:
+                XCTAssertEqual(url, "https://relayium.com/zh/guides/\(slug)")
+            default:
+                XCTAssertEqual(url, "https://relayium.com/guides/\(slug)",
+                               "\(language.rawValue) is frozen and must not be sent to an "
+                               + "archived translation as though it were current")
+            }
+        }
+        XCTAssertEqual(HelpPresentation.maintainedGuideLanguages, [.en, .zh],
+                       "the maintained set is a product decision, not a convenience")
     }
 
     /// The English-only pages get no language prefix, because the site does not
@@ -142,9 +258,10 @@ final class HelpPresentationTests: XCTestCase {
         }
     }
 
-    /// English lives at the root and every other language under its own prefix —
-    /// the site's rule, mirrored. The prefix is the Relayium language id, so
-    /// Chinese is `zh` and never the `zh-Hans` that names the resource bundle.
+    /// English lives at the root and a maintained translation under its own
+    /// prefix — the site's rule, mirrored. The prefix is the Relayium language
+    /// id, so Chinese is `zh` and never the `zh-Hans` that names the resource
+    /// bundle.
     func testALocalizedGuideURLMatchesTheSitesOwnLayout() {
         XCTAssertEqual(HelpPresentation.url(for: .localizedGuide(slug: "send-a-file-to-someone"),
                                             language: .en).absoluteString,
@@ -152,9 +269,6 @@ final class HelpPresentationTests: XCTestCase {
         XCTAssertEqual(HelpPresentation.url(for: .localizedGuide(slug: "send-a-file-to-someone"),
                                             language: .zh).absoluteString,
                        "https://relayium.com/zh/guides/send-a-file-to-someone")
-        XCTAssertEqual(HelpPresentation.url(for: .localizedGuide(slug: "send-a-file-to-someone"),
-                                            language: .ar).absoluteString,
-                       "https://relayium.com/ar/guides/send-a-file-to-someone")
     }
 
     /// A guide link is a promise, so the Account screen — which has no document
@@ -171,8 +285,8 @@ final class HelpPresentationTests: XCTestCase {
     func testGuideURLsAreBuiltFromTheGivenOrigin() {
         let hosted = URL(string: "https://files.example.org")!
         XCTAssertEqual(HelpPresentation.url(for: .localizedGuide(slug: "x"),
-                                            language: .de, baseURL: hosted).absoluteString,
-                       "https://files.example.org/de/guides/x")
+                                            language: .zh, baseURL: hosted).absoluteString,
+                       "https://files.example.org/zh/guides/x")
         XCTAssertEqual(HelpPresentation.url(for: .englishPage(path: "cli"),
                                             language: .de, baseURL: hosted).absoluteString,
                        "https://files.example.org/cli")

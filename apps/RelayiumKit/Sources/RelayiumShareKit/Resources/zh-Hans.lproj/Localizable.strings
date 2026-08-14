@@ -276,6 +276,7 @@
 "text.noServerHistory" = "Relayium 不保存任何消息正文，也没有服务端历史。屏幕上的这份历史不会保存，应用关闭后可能消失；任何一方设备仍然可以复制或自行留存文本。";
 "text.noMessages" = "还没有消息。";
 "text.composerLabel" = "消息";
+"composer.shortcutHint" = "⌘↩ 发送 · ↩ 换行";
 "text.byteCounter" = "%1$@ / %2$@ UTF-8 字节";
 "text.clipboardNotice" = "复制会把内容放进系统剪贴板，其他应用或剪贴板历史工具可能会留存它。";
 "text.clipboardNoticeShort" = "复制可能会在系统剪贴板或剪贴板历史中留下内容。";
@@ -627,12 +628,9 @@
 "workspace.addFilesHint" = "在下方选择文件或文件夹，然后发送到该设备。";
 "workspace.sendMessageHint" = "与这台设备开启消息会话，无需先选择任何内容。";
 "workspace.sendFiles" = "发送文件";
-"workspace.createMessageCode" = "创建消息配对码";
-"workspace.createFileCode" = "创建文件配对码";
-"workspace.createFileCodeHint" = "请先在下方选择文件或文件夹；配对码携带的就是这一批。";
-"workspace.joinMessages" = "加入消息";
-"workspace.joinFiles" = "加入文件";
-"workspace.joinKindHint" = "配对码本身不说明是哪一种。请问创建它的人，或使用对方发来的链接。";
+"workspace.createPairingCode" = "创建配对码";
+"workspace.createPairingCodeHint" = "把配对码交给对方，对方用它连接过来。一条连接同时承载消息和任意多的文件或文件夹——可以先在下方添加，也可以连上之后再发送。";
+"workspace.connectWithCode" = "连接";
 "workspace.oneConnectionNote" = "一条连接只承载消息或文件，不能同时承载两者。发送另一种会新建一条连接，并产生新的验证码。";
 "workspace.messagesOnlyNote" = "本会话承载消息，不承载文件。发送文件需要单独的会话——离开本会话后再开始。";
 "workspace.filesOnlyNote" = "本会话承载文件，不承载消息。发送消息需要单独的会话——离开本会话后再开始。";
@@ -640,6 +638,7 @@
 "workspace.sessionWithCode" = "已通过配对码连接";
 /* MARK: - 统一连接 (link/1) */
 "link.composerPlaceholder" = "写条消息";
+"link.composerLabel" = "消息";
 "link.send" = "发送";
 "link.sendFile" = "发送文件";
 "link.sendFolder" = "发送文件夹";
@@ -647,9 +646,6 @@
 "link.waitingForPeer" = "正在等对方接受消息。对方一同意就会发出去。";
 "link.messagesDeclined" = "对方拒绝了消息。你写的内容还在，文件不受影响。";
 "link.notReady" = "这条连接还不能做这件事。";
-"link.conversationRequest" = "对方想开始一段对话。";
-"link.acceptMessages" = "接受消息";
-"link.declineMessages" = "拒绝";
 "link.verifyTitle" = "核对这串验证码";
 "link.verifyBody" = "念给对方听。这条连接只问这一次——之后每条消息、每个文件都用同一次验证。";
 "link.verifyMatches" = "一致";
@@ -691,7 +687,11 @@
 "settings.loginStillUnconfirmed" = "Relayium 已请求 macOS 注册，但 macOS 仍报告没有记录。没有删除任何内容，已有的注册也未被改动。请打开“登录项”查看；若其中仍没有 Relayium，请重新启动这台 Mac。";
 
 /* MARK: 1.1.2 — what this Mac is on the network */
-"nearby.announcedAs" = "此房间中的其他设备看到这台 Mac 的名称为 %@。";
+"nearby.thisMacHeading" = "这台 Mac";
+"nearby.announcedNameCaption" = "同一网络上的其他设备看到的名称。它在 Relayium 加入网络时确定，因此重命名这台 Mac 要等下次开始接收才会生效。";
+"nearby.configuredNameCaption" = "这台 Mac 下次开始接收时，Relayium 将使用这个名称。";
+"nearby.identityAnnouncing" = "正在加入网络。其他设备暂时还找不到这台 Mac。";
+"nearby.identityNotListening" = "未在接收，其他设备看不到这台 Mac。点击下方的“开始接收”，把它公布到网络上。";
 "nearby.localAddressesHeading" = "这台 Mac 当前自己的地址：";
 "nearby.localAddressRow" = "%1$@（%2$@）";
 "nearby.noLocalAddresses" = "未找到可用地址。这台 Mac 可能只通过 VPN 或无法承载直接传输的链路连接网络。";
@@ -708,37 +708,59 @@
 /* MARK: 1.1.2 — help, below the controls on every browseable destination */
 "help.heading" = "帮助";
 "help.stepsHeading" = "工作方式";
+"help.boundaryHeading" = "Relayium 能看到什么";
+"help.whereHeading" = "东西最后在哪里";
+"help.troubleHeading" = "如果不成功";
 "help.guideLink" = "在 relayium.com 上阅读指南";
+"help.collapsedValue" = "已收起";
+"help.expandedValue" = "已展开";
+"help.expandHint" = "查看这个界面怎么用、Relayium 能看到什么，以及不成功时该怎么办";
+"help.collapseHint" = "收起详细说明";
 
+"help.lan.purpose" = "在同一网络的两台设备之间传文件或发消息。不需要账户，服务器上也不会留下任何内容。";
 "help.lan.step1" = "在两台设备上打开 Relayium，并让它们保持在同一网络中。";
 "help.lan.step2" = "从列表中选择另一台设备，然后发送消息，或发送你已添加的文件。";
 "help.lan.step3" = "若已开启验证，请先确认两边屏幕显示相同的代码，再点击接受。";
-"help.lan.question" = "文件会经过 Relayium 的服务器吗？";
-"help.lan.answer" = "有时会，但这不影响 Relayium 能读到什么。该服务只负责让两台设备互相发现；根据网络条件，连接可能在两台设备之间建立，也可能由 Relayium 中继承载，本设备无法分辨实际使用了哪条路径。无论哪种方式，文件都经过端到端加密，Relayium 永远拿不到密钥。";
+"help.lan.boundary" = "文件是端到端加密的：在离开这台 Mac 之前就已加密，只有对方设备能解开，Relayium 始终没有密钥。Relayium 的服务做的是把两台设备互相引荐。根据网络状况，连接可能在两台设备之间建立，也可能由 Relayium 的中继承载，这台 Mac 无法分辨是哪一种——而这对 Relayium 能读到什么毫无影响。";
+"help.lan.where" = "收到的文件会保存到你的“下载”文件夹。对话只存在于这两台设备上，连接结束即丢弃，服务器上不留任何内容。";
+"help.lan.failure" = "另一台设备不在列表里。设备是按 Relayium 服务观察到的网络路径分组的，因此访客网络、VPN，或者会隔离客户端的路由器，都可能把同一条网线上的两台设备分到不同的组。";
+"help.lan.recovery" = "确认两台设备都在接收，关闭 VPN，并加入同一个网络。若仍然互相看不到，改用“跨网络”界面的配对码——那条路不需要共享网络。";
 
-"help.cross.step1" = "在这台设备上，为消息或文件创建一个代码。";
-"help.cross.step2" = "在另一台设备的 Relayium 中输入该代码并加入。";
-"help.cross.step3" = "确认两边屏幕显示相同的代码，然后接受传输。";
-"help.cross.question" = "两台设备必须在同一网络中吗？";
-"help.cross.answer" = "不必——这正是本页面的用途。创建代码需要账户，因为连接可能需要中继，而费用记在创建者名下。加入别人创建的代码则完全不需要账户。";
+"help.cross.purpose" = "把六位配对码交给对方，就能连上任何地方的设备。两台设备不必在同一网络。";
+"help.cross.step1" = "创建配对码，然后把配对码或旁边的链接交给对方。";
+"help.cross.step2" = "对方在 Relayium 中输入该配对码，或直接打开链接。";
+"help.cross.step3" = "确认两边屏幕显示相同的代码，然后就在这一条连接上收发消息和文件。";
+"help.cross.boundary" = "文件在离开这台 Mac 之前就已加密，Relayium 始终没有密钥。创建配对码需要账户，因为连接可能要经由中继，这些流量记在创建者账上。输入别人创建的配对码则完全不需要账户。";
+"help.cross.where" = "收到的文件会保存到你的“下载”文件夹。消息只留在这两台设备上，连接结束即丢弃。这条路发送的内容不会存储在 Relayium 的服务器上。";
+"help.cross.failure" = "配对码只有几分钟有效期。过期之后，对方会看到“无效或已过期”——输错配对码时看到的也是同一句。";
+"help.cross.recovery" = "新建一个配对码，把新的交给对方。你已经添加的内容都还在，不用重新选。";
 
+"help.storedSend.purpose" = "把加密后的文件上传一次，拿到一个即使这台 Mac 睡眠或关闭也依然可用的链接。";
 "help.storedSend.step1" = "选择文件或文件夹，决定链接的有效时长，然后发送。";
 "help.storedSend.step2" = "在任何内容上传之前，Relayium 会先在这台 Mac 上完成加密。";
 "help.storedSend.step3" = "分享该链接。打开它所需的密钥就在链接之中，绝不会传到 Relayium。";
-"help.storedSend.question" = "谁能打开这个链接？";
-"help.storedSend.answer" = "任何持有完整链接（包括 # 之后那部分）的人。Relayium 只保存加密后的文件且无法读取，因此请把链接本身当作机密。";
+"help.storedSend.boundary" = "在任何内容上传之前，文件就已在这台 Mac 上加密。密钥位于链接中 # 之后的部分，浏览器从不会把这一段发给服务器，所以 Relayium 存的是它读不懂的内容。任何拿到完整链接的人都能打开这些文件，所以请把链接本身当作机密。";
+"help.storedSend.where" = "加密后的文件会留在 Relayium 的服务器上，直到链接过期，或你在“账户”界面删除它们。在那里删除会立即让链接失效。";
+"help.storedSend.failure" = "被缩短、被聊天软件重新包装，或复制时漏掉 # 之后那一段的链接，都打不开。缺的是密钥，不是文件。";
+"help.storedSend.recovery" = "从“账户”界面重新复制链接，并通过不会改动它的方式发出去。如果已经过期，就重新发送一次文件。";
 
+"help.inbox.purpose" = "给这台 Mac 一个自己的地址，让你其他已登录的设备可以直接把文件发过来。";
 "help.inbox.step1" = "在这台 Mac 和你要发送的设备上登录同一个账户。";
 "help.inbox.step2" = "在这台 Mac 上选择一个文件夹，然后决定投递是自动保存，还是先等你确认。";
 "help.inbox.step3" = "从 relayium.com 或另一台已登录的设备发送到这台 Mac，文件就会落到该文件夹中。";
-"help.inbox.question" = "这台 Mac 睡眠或 Relayium 关闭时会怎样？";
-"help.inbox.answer" = "投递会在服务器上等待，直到 Relayium 在这里重新运行。它只能在运行时接收，这正是上面那个登录设置的用途。";
+"help.inbox.boundary" = "投递是用这台 Mac 自己的密钥加密的，而那把密钥从不离开本机。Relayium 只是保管加密后的投递直到这台 Mac 取走，既读不到里面的内容，也说不出文件叫什么。";
+"help.inbox.where" = "已接受的投递会落到上面选定的文件夹中。仍在等待的投递会留在服务器上，直到这台 Mac 取走或它过期。";
+"help.inbox.failure" = "这台 Mac 睡眠、已退出登录，或 Relayium 没有运行时，什么都不会到达。它只能在运行时接收。";
+"help.inbox.recovery" = "打开 Relayium 并登录同一个账户，等待中的投递就会到达。打开上面的登录设置，它就会在你不必惦记的时候保持运行。";
 
+"help.account.purpose" = "你的套餐、本周期的用量、已登录你账户的设备，以及你存储的文件。";
 "help.account.step1" = "创建账户或登录——发送链接和设备收件箱都需要账户。";
 "help.account.step2" = "查看你所用的套餐，以及本周期已用掉多少。";
 "help.account.step3" = "查看已登录你账户的设备和你存储的文件，并可移除其中任意一项。";
-"help.account.question" = "哪些功能需要账户，哪些不需要？";
-"help.account.answer" = "同一网络内的传输，以及加入别人创建的代码，都不需要账户。创建代码、发送存储链接和设备收件箱则都需要。";
+"help.account.boundary" = "Relayium 保存的是你的邮箱地址、你用的套餐，以及你传输了多少字节。它从不保存你文件的密钥，所以这个界面上的任何内容——以及 Relayium 数据库里的任何内容——都打不开它们。";
+"help.account.where" = "移除已存储的文件会把它从 Relayium 的服务器上删除，并立刻让它的链接失效。让某台设备退出登录只会结束那台设备的会话，它已经收到的文件仍留在它上面。";
+"help.account.failure" = "本周期的额度用完后，创建配对码和发送链接都会停止工作。同一网络传输，以及用别人创建的配对码连接，都不受影响——两者都不记在你账上。";
+"help.account.recovery" = "等待周期滚动，或更换套餐。无论哪种情况，同一网络传输都照常可用，因为它不经由 Relayium 传输任何字节。";
 
 /* In-app subscription (Mac App Store build). The purchase surface the App Store
    build renders instead of the direct build's link to the website. Prices are

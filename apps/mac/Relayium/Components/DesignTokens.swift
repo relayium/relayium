@@ -40,6 +40,27 @@ enum Metrics {
     static let readingMeasure: CGFloat = 720
     /// One card's corner.
     static let corner: CGFloat = 10
+    /// The smallest thing a pointer or a Full Keyboard Access ring is allowed to
+    /// have to find.
+    ///
+    /// 44pt is the platform's own answer and it is written here rather than at
+    /// the call site because it is a floor rather than a look: a control that
+    /// happens to measure 40 because its label is short is a control somebody
+    /// misses, and the miss is invisible in a screenshot.
+    static let hitTarget: CGFloat = 44
+    /// A composer that is a place to write rather than a line to fill, and a cap
+    /// so a long draft scrolls inside it instead of pushing everything below it
+    /// out of a 560pt window.
+    static let composerMinHeight: CGFloat = 96
+    static let composerMaxHeight: CGFloat = 220
+    /// `NSTextView`'s own horizontal text-container inset, which `TextEditor`
+    /// inherits and does not expose.
+    ///
+    /// It is here rather than as a literal at the one call site because it is
+    /// not a spacing choice: it is the offset a placeholder has to match to sit
+    /// where the caret actually is. A few points out and the line jumps sideways
+    /// the moment somebody types the first character.
+    static let textEditorInset: CGFloat = 5
 }
 
 /// The two container weights a destination is allowed to use, and nothing

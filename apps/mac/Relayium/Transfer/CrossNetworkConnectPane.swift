@@ -18,15 +18,26 @@ import RelayiumKit
 /// signed out — `MacSurfaceGuardTests` checks that the gate wraps only the
 /// create half.
 ///
-/// ## Why the kind is still attached to the verb
+/// ## One code, one thing it is for
 ///
-/// A pairing code does not say what the peer who minted it chose, and this side
-/// cannot probe: a speculative text offer is read by an older peer as a file
-/// offer. So each verb states its own kind — for creating, because the legacy
-/// wire puts files and messages on separate signalling generations; for joining,
-/// because the joiner is stating what they were told to expect. A peer that
-/// announces exact `link/1` after joining is promoted to `TransferLinkPane`,
-/// where the distinction stops existing.
+/// There are exactly two actions here — create a code, or connect with somebody
+/// else's — and neither asks what kind of thing the connection will carry. That
+/// matches the Web, which has had one Create and one Enter for as long as the
+/// screen has existed, and it matches the server, which mints one code for both.
+///
+/// It replaces four buttons that asked the user to answer a question the code
+/// cannot hold: create a code *for messages* or *for files*, join *messages* or
+/// *files*. The distinction was never about the code. It was about which of two
+/// legacy signalling generations the connection would use if the peer turned out
+/// not to speak `link/1` — a property of a stranger's client, guessed at by a
+/// person who could not see it, minutes before the peer arrived. On a `link/1`
+/// peer, which is every current client, the answer was discarded entirely.
+///
+/// So the question is gone and the decision is not: `LinkWorkspaceModel`
+/// resolves the legacy lane from what this side actually staged and what the
+/// peer actually announced (`legacyFallbackMode`), at the one moment both are
+/// known. A peer that announces exact `link/1` is promoted to
+/// `TransferLinkPane`, where the distinction never existed.
 struct CrossNetworkConnectPane: View {
     @ObservedObject var fileModel: RealtimeSessionModel
     @ObservedObject var textModel: RealtimeTextSessionModel
@@ -122,26 +133,32 @@ struct CrossNetworkConnectPane: View {
         }
     }
 
+    /// **One action, and it needs nothing staged.**
+    ///
+    /// Minting first is deliberate and is the Web's own ordering: the code is
+    /// what the other person is waiting for, and picking files before it exists
+    /// leaves the sender with nothing to do while six digits sit unclaimed. The
+    /// staging section below is where the batch is assembled, during the wait,
+    /// and everything staged there travels on the connection when the peer
+    /// arrives.
     private var createControls: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Button(L10n.t(.workspaceCreateMessageCode)) { createCode(mode: .text) }
+            Button(L10n.t(.workspaceCreatePairingCode)) { createCode() }
                 .buttonStyle(.borderedProminent)
                 .disabled(sessionLocked)
-                .accessibilityIdentifier("cross-network-create-message-code")
-            Text(L10n.t(.textStartBody))
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Button(L10n.t(.workspaceCreateFileCode)) { createCode(mode: .files) }
-                .buttonStyle(.bordered)
-                .disabled(selection.isEmpty || sessionLocked)
-                .accessibilityIdentifier("cross-network-create-file-code")
-            Text(L10n.t(.workspaceCreateFileCodeHint))
+                .accessibilityIdentifier("cross-network-create-code")
+            Text(L10n.t(.workspaceCreatePairingCodeHint))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    /// One field, two verbs, and both models kept in step by the one binding.
+    /// One field, one verb, and both models kept in step by the one binding.
+    ///
+    /// Both are still written because either may end up running the connection —
+    /// which of them does is `LinkWorkspaceModel`'s answer, arrived at once the
+    /// peer is known — and a code typed into one of them only would leave the
+    /// other about to join a different room.
     private var joinControls: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
@@ -150,28 +167,19 @@ struct CrossNetworkConnectPane: View {
                     .frame(maxWidth: 140)
                     .accessibilityLabel(L10n.t(.commonCode))
                     .accessibilityIdentifier("pairing.joinCode")
-                // **The one keyboard default on this surface.** Create and join
-                // sit on screen together, and two `.defaultAction` buttons is an
-                // undefined Return that SwiftUI resolves without telling anyone
-                // which it picked. Join takes it: its whole precondition is one
-                // field, so the default is inert until Return can only mean one
-                // thing, and it is the keystroke that naturally ends typing a
-                // code. Message-first decides which of the two join verbs gets it.
-                Button(L10n.t(.workspaceJoinMessages)) { join(mode: .text) }
+                // **The one keyboard default on this surface.** Create and
+                // connect sit on screen together, and two `.defaultAction`
+                // buttons is an undefined Return that SwiftUI resolves without
+                // telling anyone which it picked. Connect takes it: its whole
+                // precondition is one field, so the default is inert until
+                // Return can only mean one thing, and it is the keystroke that
+                // naturally ends typing a code.
+                Button(L10n.t(.workspaceConnectWithCode)) { join() }
                     .buttonStyle(.borderedProminent)
                     .keyboardShortcut(.defaultAction)
-                    .disabled(!textModel.canJoin || sessionLocked)
-                    .accessibilityIdentifier("cross-network-join-messages")
-                Button(L10n.t(.workspaceJoinFiles)) { join(mode: .files) }
-                    .buttonStyle(.bordered)
                     .disabled(!fileModel.canJoin || sessionLocked)
-                    .accessibilityIdentifier("cross-network-join-files")
+                    .accessibilityIdentifier("cross-network-join-code")
             }
-            Text(L10n.t(.workspaceJoinKindHint))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("cross-network-join-kind-hint")
             InlineMessage(.info, L10n.t(.directJoinNoAccountNeeded))
         }
     }
@@ -194,13 +202,15 @@ struct CrossNetworkConnectPane: View {
 
     // MARK: - actions
 
-    private func createCode(mode: TransferMode) {
+    private func createCode() {
         guard !sessionLocked else { return }
-        // Validate and stage BEFORE the picker disappears. Besides avoiding a
-        // useless minted code for an unreadable selection, this gives minting and
-        // handoff one model-owned manifest to keep visible throughout.
+        // Validate and stage BEFORE the picker disappears. A batch is optional
+        // here — a code with nothing behind it is an ordinary way to start a
+        // conversation — but one the user DID pick and that cannot be read is a
+        // refusal they are owed now, rather than a code that turns out to carry
+        // nothing.
         var staged: (sources: [PlaintextSource], metas: [FileMeta])?
-        if mode == .files {
+        if !selection.isEmpty {
             guard let ready = stage() else { return }
             staged = ready
         }
@@ -214,40 +224,36 @@ struct CrossNetworkConnectPane: View {
             return
         }
         actionError = nil
-        guard presence.beginSession(route, mode: mode) else { return }
-        switch mode {
-        case .files:
-            guard let staged else { return }
-            Task { await mintAndWatch(mode: .files, token: access.token, staged: staged) }
-        case .text:
-            Task { await mintAndWatch(mode: .text, token: access.token, staged: nil) }
-        }
+        // **`.files` is the surface's provisional lane, not a kind of code.**
+        // One of the two legacy models has to hold the minted code and its
+        // expiry so `TransferSessionPane` can render them, and the file lane is
+        // the one that can carry a staged batch. If the peer turns out to be a
+        // legacy TEXT peer, `adoptLegacyRoom` moves the surface to the text lane
+        // and retires this one — see `RelayiumApp`.
+        guard presence.beginSession(route, mode: .files) else { return }
+        Task { await mintAndWatch(token: access.token, staged: staged) }
     }
 
-    private func join(mode: TransferMode) {
+    private func join() {
         guard !sessionLocked else { return }
         // Snapshot before ownership: the field remains editable until the
         // asynchronous model start publishes state. Reading it inside the Task
         // could turn one valid click into a different or incomplete code.
-        switch mode {
-        case .files:
-            let code = fileModel.joinCode
-            guard fileModel.canJoin else { return }
-            actionError = nil
-            guard presence.beginSession(route, mode: .files) else { return }
-            // A joiner ANSWERS on the legacy wire, so `.responder` is what the
-            // fallback must use. Watched first, exactly as a minted code is.
-            watch(code: code, legacyRole: .responder, mode: .files, staged: nil) {
-                await fileModel.join(code: code)
-            }
-        case .text:
-            let code = textModel.joinCode
-            guard textModel.canJoin else { return }
-            actionError = nil
-            guard presence.beginSession(route, mode: .text) else { return }
-            watch(code: code, legacyRole: .responder, mode: .text, staged: nil) {
-                await textModel.join(code: code)
-            }
+        let code = fileModel.joinCode
+        guard fileModel.canJoin else { return }
+        actionError = nil
+        guard presence.beginSession(route, mode: .files) else { return }
+        // A joiner ANSWERS on the legacy wire, so `.responder` is what the
+        // fallback must use. Watched first, exactly as a minted code is.
+        //
+        // Nothing is staged, and that is a rule rather than an omission:
+        // `RealtimeSessionModel.join(role: .responder)` tears its previous state
+        // down for exactly this reason — a batch picked for one device must not
+        // be uploaded to whoever's code the user typed next. Files still travel
+        // in this direction once the connection exists, from the link pane's own
+        // Send file, where the user aims them at a peer they can see.
+        watch(code: code, legacyRole: .responder, staged: nil) {
+            await fileModel.join(code: code)
         }
     }
 
@@ -278,25 +284,14 @@ struct CrossNetworkConnectPane: View {
     /// The creator is the offerer on the legacy wire, so `.initiator` is what
     /// the fallback must use. A LINK computes its own role from the two room
     /// ids and ignores this one.
-    private func mintAndWatch(mode: TransferMode,
-                              token: String,
+    private func mintAndWatch(token: String,
                               staged: (sources: [PlaintextSource], metas: [FileMeta])?) async {
-        switch mode {
-        case .files:
-            await fileModel.mintCode(token: token)
-            guard case let .showingCode(code, _) = fileModel.state else { return }
-            watch(code: code, legacyRole: .initiator, mode: .files, staged: staged) {
-                // The legacy fallback for a FILE code stages the batch itself —
-                // `onLegacyFallbackBatch` hands it back — so nothing is staged
-                // before the room has answered.
-                await fileModel.join(code: code, role: .initiator)
-            }
-        case .text:
-            await textModel.mintCode(token: token)
-            guard case let .showingCode(code, _) = textModel.state else { return }
-            watch(code: code, legacyRole: .initiator, mode: .text, staged: nil) {
-                await textModel.join(code: code, role: .initiator)
-            }
+        await fileModel.mintCode(token: token)
+        guard case let .showingCode(code, _) = fileModel.state else { return }
+        watch(code: code, legacyRole: .initiator, staged: staged) {
+            // The legacy fallback stages the batch itself — `onLegacyFallbackBatch`
+            // hands it back — so nothing is staged before the room has answered.
+            await fileModel.join(code: code, role: .initiator)
         }
     }
 
@@ -306,18 +301,22 @@ struct CrossNetworkConnectPane: View {
     /// runs unchanged when the link model refuses the room — a client with no
     /// pairing socket factory, or one already holding a session. That is what
     /// keeps "pairing code works" true regardless of which half answers.
+    ///
+    /// It is the FILE lane, and it has to be: this branch is reached before any
+    /// peer exists, so the evidence `legacyFallbackMode` weighs — a staged batch,
+    /// an announced capability — is either absent or already says files. The file
+    /// lane is also the one that carries bytes in either direction, so it is the
+    /// answer that forecloses least.
     private func watch(code: String,
                        legacyRole: Role,
-                       mode: TransferMode,
                        staged: (sources: [PlaintextSource], metas: [FileMeta])?,
                        legacyStart: @escaping () async -> Void) {
         let watched = link.watchPairingCode(code,
                                             legacyRole: legacyRole,
-                                            mode: mode,
                                             files: staged?.metas ?? [],
                                             sources: staged?.sources ?? [])
         guard !watched else { return }
-        if let staged, mode == .files {
+        if let staged {
             fileModel.stageSend(sources: staged.sources, metas: staged.metas)
         }
         Task { await legacyStart() }

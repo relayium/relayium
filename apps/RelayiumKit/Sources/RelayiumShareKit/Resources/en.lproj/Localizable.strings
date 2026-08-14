@@ -280,6 +280,7 @@
 "text.noServerHistory" = "Relayium stores no message body or server-side history. This on-screen history is not saved and can disappear if the app closes. Either device can still copy or retain text.";
 "text.noMessages" = "No messages yet.";
 "text.composerLabel" = "Message";
+"composer.shortcutHint" = "⌘↩ sends · ↩ starts a new line";
 "text.byteCounter" = "%1$@ / %2$@ UTF-8 bytes";
 "text.clipboardNotice" = "Copying places content on the system clipboard, where other apps or clipboard history tools may retain it.";
 "text.clipboardNoticeShort" = "Copying may leave content in the system clipboard or clipboard history.";
@@ -639,12 +640,9 @@
 "workspace.addFilesHint" = "Choose files or folders below, then send them to that device.";
 "workspace.sendMessageHint" = "Opens a message session with this device. Nothing needs to be selected.";
 "workspace.sendFiles" = "Send files";
-"workspace.createMessageCode" = "Create a code for messages";
-"workspace.createFileCode" = "Create a code for files";
-"workspace.createFileCodeHint" = "Choose files or folders below first; the code carries that batch.";
-"workspace.joinMessages" = "Join messages";
-"workspace.joinFiles" = "Join files";
-"workspace.joinKindHint" = "A code doesn't say which it is. Ask whoever created it, or use the link they sent.";
+"workspace.createPairingCode" = "Create a pairing code";
+"workspace.createPairingCodeHint" = "Pass the code on, and the other device connects with it. One connection carries messages and as many files or folders as you like — add them below before you create the code, or send them once you are connected.";
+"workspace.connectWithCode" = "Connect";
 "workspace.oneConnectionNote" = "One connection carries messages or files, not both. Sending the other kind opens a new connection, with a new verification code.";
 "workspace.messagesOnlyNote" = "This session carries messages, not files. Sending files needs a session of its own — leave this one to start it.";
 "workspace.filesOnlyNote" = "This session carries files, not messages. Sending a message needs a session of its own — leave this one to start it.";
@@ -654,6 +652,7 @@
    One connection carrying messages and repeated file/folder batches behind one
    verification. Reachable only while such a link is live or has just ended. */
 "link.composerPlaceholder" = "Write a message";
+"link.composerLabel" = "Message";
 "link.send" = "Send";
 "link.sendFile" = "Send file";
 "link.sendFolder" = "Send folder";
@@ -661,9 +660,6 @@
 "link.waitingForPeer" = "Waiting for the other device to accept messages. Your message will send as soon as it does.";
 "link.messagesDeclined" = "The other device declined messages. Your text is still here — files are unaffected.";
 "link.notReady" = "This connection isn't ready for that yet.";
-"link.conversationRequest" = "The other device wants to start a conversation.";
-"link.acceptMessages" = "Accept messages";
-"link.declineMessages" = "Decline";
 "link.verifyTitle" = "Compare this code";
 "link.verifyBody" = "Read it aloud to the other device. It is asked once for this connection — every message and every file after it uses the same one.";
 "link.verifyMatches" = "They match";
@@ -705,7 +701,11 @@
 "settings.loginStillUnconfirmed" = "Relayium asked macOS to register it and macOS still reports no record. Nothing was removed, and any registration that already existed is untouched. Open Login Items to check, and restart this Mac if Relayium is not listed there.";
 
 /* MARK: 1.1.2 — what this Mac is on the network */
-"nearby.announcedAs" = "Other devices in this room see this Mac as %@.";
+"nearby.thisMacHeading" = "This Mac";
+"nearby.announcedNameCaption" = "The name other devices on this network see. It is set when Relayium joins the network, so renaming this Mac takes effect the next time it starts receiving.";
+"nearby.configuredNameCaption" = "The name Relayium will use the next time this Mac starts receiving.";
+"nearby.identityAnnouncing" = "Joining the network. This Mac is not reachable by other devices yet.";
+"nearby.identityNotListening" = "Not receiving, so no other device can see this Mac. Start receiving below to announce it.";
 "nearby.localAddressesHeading" = "This Mac's own addresses right now:";
 "nearby.localAddressRow" = "%1$@ (%2$@)";
 "nearby.noLocalAddresses" = "No usable address was found. This Mac may be reaching the network only through a VPN or a link that cannot carry a direct transfer.";
@@ -722,37 +722,59 @@
 /* MARK: 1.1.2 — help, below the controls on every browseable destination */
 "help.heading" = "Help";
 "help.stepsHeading" = "How it works";
+"help.boundaryHeading" = "What Relayium can see";
+"help.whereHeading" = "Where things end up";
+"help.troubleHeading" = "If it doesn't work";
 "help.guideLink" = "Read the guide on relayium.com";
+"help.collapsedValue" = "Collapsed";
+"help.expandedValue" = "Expanded";
+"help.expandHint" = "Show how this screen works, what Relayium can see, and what to do when it doesn't work";
+"help.collapseHint" = "Hide the details";
 
+"help.lan.purpose" = "Move files or send a message between two devices on the same network. No account, and nothing is stored on a server.";
 "help.lan.step1" = "Open Relayium on both devices and keep them on the same network.";
 "help.lan.step2" = "Choose the other device from the list, then send a message or send the files you have added.";
 "help.lan.step3" = "If verification is on, check that both screens show the same code before you accept.";
-"help.lan.question" = "Do the files pass through Relayium's servers?";
-"help.lan.answer" = "Sometimes, and it makes no difference to what Relayium can read. The service introduces the two devices to each other; depending on network conditions, the connection may run between them or a Relayium relay may carry it, and this device cannot tell which. Either way the files are encrypted end to end and Relayium never has the key.";
+"help.lan.boundary" = "Files are encrypted end to end: encrypted on this Mac before they leave and decrypted only on the other device, so Relayium never has the key. What Relayium's service does is introduce the two devices to each other. Depending on the network the connection may run between the two devices, or a Relayium relay may carry it, and this Mac cannot tell which — it makes no difference to what Relayium can read.";
+"help.lan.where" = "Files you receive are saved to your Downloads folder. A conversation lives only on the two devices and is discarded when the connection ends; nothing is kept on a server.";
+"help.lan.failure" = "The other device is not in the list. Devices are grouped by the network path Relayium's service observes, so a guest network, a VPN, or a router that keeps clients apart can put two devices on the same cable into different groups.";
+"help.lan.recovery" = "Check that both devices are receiving, turn off any VPN, and join the same network. If they still can't see each other, use a pairing code on the Cross-network screen instead — that one needs no shared network.";
 
-"help.cross.step1" = "On this device, create a code for a message or for files.";
-"help.cross.step2" = "Type that code into Relayium on the other device and join.";
-"help.cross.step3" = "Check that both screens show the same code, then accept the transfer.";
-"help.cross.question" = "Do both devices have to be on the same network?";
-"help.cross.answer" = "No — that is what this screen is for. Creating a code needs an account, because the connection may have to be relayed and that is billed to whoever created it. Joining a code someone else made needs nothing at all.";
+"help.cross.purpose" = "Reach a device anywhere by passing on a six-digit code. The two devices do not have to be on the same network.";
+"help.cross.step1" = "Create a pairing code, then pass on the code or the link beside it.";
+"help.cross.step2" = "The other person enters that code in Relayium, or opens the link.";
+"help.cross.step3" = "Check that both screens show the same code, then send messages and files on that one connection.";
+"help.cross.boundary" = "Files are encrypted on this Mac before they leave and Relayium never has the key. Creating a code needs an account because the connection may have to be relayed, and those bytes are billed to whoever created the code. Entering a code somebody else created needs no account at all.";
+"help.cross.where" = "Files you receive are saved to your Downloads folder. Messages stay on the two devices and are discarded when the connection ends. Nothing you send this way is stored on Relayium's servers.";
+"help.cross.failure" = "A pairing code lasts only a few minutes. After that the other device is told the code is invalid or expired, which is also what it sees if the code was mistyped.";
+"help.cross.recovery" = "Create a fresh code and pass on the new one. Anything you added is still here and does not have to be chosen again.";
 
+"help.storedSend.purpose" = "Upload encrypted files once and hand out a link that keeps working while this Mac is asleep or closed.";
 "help.storedSend.step1" = "Choose files or folders, decide how long the link should keep working, and send.";
 "help.storedSend.step2" = "Relayium encrypts everything on this Mac before any of it is uploaded.";
 "help.storedSend.step3" = "Share the link. The key that opens it travels inside the link and never reaches Relayium.";
-"help.storedSend.question" = "Who can open the link?";
-"help.storedSend.answer" = "Anyone holding the whole link, including the part after the #. Relayium stores only the encrypted file and cannot read it, so treat the link itself as the secret.";
+"help.storedSend.boundary" = "The files are encrypted on this Mac before any of them are uploaded. The key lives in the part of the link after the #, which a browser never sends to a server, so Relayium stores something it cannot read. Anyone holding the whole link can open the files, so treat the link itself as the secret.";
+"help.storedSend.where" = "The encrypted files sit on Relayium's servers until the link expires or you delete them from the Account screen. Deleting them there breaks the link immediately.";
+"help.storedSend.failure" = "A link that was shortened, wrapped by a chat app, or copied without the part after the # cannot be opened. What is missing is the key, not the file.";
+"help.storedSend.recovery" = "Copy the link again from the Account screen and send it somewhere that keeps it intact. If it has already expired, send the files again.";
 
+"help.inbox.purpose" = "Give this Mac an address of its own, so your other signed-in devices can send files straight to it.";
 "help.inbox.step1" = "Sign in to the same account here and on the device you want to send from.";
 "help.inbox.step2" = "Choose a folder on this Mac, then decide whether deliveries are saved automatically or held for your answer.";
 "help.inbox.step3" = "Send to this Mac from relayium.com or another signed-in device, and the files land in that folder.";
-"help.inbox.question" = "What happens while this Mac is asleep or Relayium is closed?";
-"help.inbox.answer" = "Deliveries wait on the server until Relayium is running here again. It can receive only while it is running, which is what the login setting above is for.";
+"help.inbox.boundary" = "Deliveries are encrypted for this Mac's own key, which never leaves it. Relayium holds the encrypted delivery until this Mac collects it and cannot read what is inside, or tell you what the files are called.";
+"help.inbox.where" = "Accepted deliveries land in the folder chosen above. Anything still waiting stays on the server until this Mac collects it or it expires.";
+"help.inbox.failure" = "Nothing arrives while this Mac is asleep, signed out, or Relayium is not running. It can receive only while it is running.";
+"help.inbox.recovery" = "Open Relayium and sign in to the same account, and whatever was waiting arrives. Turn on the login setting above so it is running without you having to think about it.";
 
+"help.account.purpose" = "Your plan, what you have used this period, the devices signed in to your account, and the files you have stored.";
 "help.account.step1" = "Create an account or sign in — sending a link and the Device Inbox both need one.";
 "help.account.step2" = "See which plan you are on and how much of it you have used this period.";
 "help.account.step3" = "Review the devices signed in to your account and the files you have stored, and remove either.";
-"help.account.question" = "What needs an account and what does not?";
-"help.account.answer" = "Same-network transfer, and joining a code somebody else created, need no account. Creating a code, sending a stored link and the Device Inbox all do.";
+"help.account.boundary" = "Relayium holds your email address, which plan you are on, and how many bytes you have moved. It never holds the keys to your files, so nothing on this screen — and nothing in Relayium's database — can open them.";
+"help.account.where" = "Removing a stored file deletes it from Relayium's servers and breaks its link straight away. Signing a device out ends that device's session and nothing else; files it has already received stay on it.";
+"help.account.failure" = "Creating a pairing code and sending a link stop working once this period's allowance is spent. Same-network transfer, and connecting with a code somebody else created, are unaffected — neither is billed to you.";
+"help.account.recovery" = "Wait for the period to roll over, or change plan. Same-network transfer keeps working either way, because it moves no bytes through Relayium.";
 
 /* In-app subscription (Mac App Store build). The purchase surface the App Store
    build renders instead of the direct build's link to the website. Prices are

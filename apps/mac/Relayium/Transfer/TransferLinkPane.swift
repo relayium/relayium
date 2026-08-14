@@ -131,7 +131,6 @@ struct TransferLinkPane: View {
         } else {
             composer
             fileActions
-            conversationRequest
             transcript
             transfers
         }
@@ -167,20 +166,86 @@ struct TransferLinkPane: View {
         }
     }
 
-    /// Always present on a verified link. Enabled before the conversation
-    /// exists, because pressing Send is what creates one.
+    /// **A place to write, not a place to fit one line.**
+    ///
+    /// It was a single-line `TextField` growing to four lines, with Return bound
+    /// to Send. Two things were wrong with that and only one of them is size. A
+    /// composer on a two-way link is where somebody pastes a command, an address
+    /// or a paragraph, and a field that shows one line of it while Return fires
+    /// the send makes a multi-line message something you discover you cannot
+    /// write by losing one.
+    ///
+    /// So the keys mean what they mean everywhere else a message is written:
+    ///
+    ///  - **Return inserts a newline.** `TextEditor` does that natively, and the
+    ///    `.defaultAction` shortcut is gone from Send — it was what took Return
+    ///    away.
+    ///  - **⌘Return sends**, which is the same binding the legacy text session
+    ///    already uses, so the two composers in this app do not disagree.
+    ///  - **The hint is on screen**, not learned. A shortcut nobody is told about
+    ///    is a shortcut for the person who wrote it.
+    ///
+    /// The height is bounded at both ends: tall enough to write in, capped so a
+    /// long draft scrolls inside the editor instead of pushing the transcript,
+    /// the transfers and the exit off a 560pt window.
+    ///
+    /// Enabled before the conversation exists, because pressing Send is what
+    /// creates one.
     private var composer: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .bottom, spacing: 8) {
-                TextField(L10n.t(.linkComposerPlaceholder), text: $draft, axis: .vertical)
-                    .textFieldStyle(.roundedBorder)
-                    .lineLimit(1...4)
+        VStack(alignment: .leading, spacing: Metrics.tight) {
+            ZStack(alignment: .topLeading) {
+                TextEditor(text: $draft)
+                    .font(.body)
+                    // The editor draws its own opaque background, which on the
+                    // window background reads as a second surface rather than
+                    // as a field.
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: Metrics.composerMinHeight,
+                           maxHeight: Metrics.composerMaxHeight)
+                    .padding(Metrics.hairline)
+                    .accessibilityLabel(L10n.t(.linkComposerLabel))
                     .accessibilityIdentifier("link-composer")
+                if draft.isEmpty {
+                    // A placeholder, and only that: the editor above already
+                    // carries the accessible name, so this is decoration to
+                    // VoiceOver and must not be read as a second label.
+                    //
+                    // Positioned against the editor's own text container rather
+                    // than against its frame — `Metrics.textEditorInset` is what
+                    // keeps this line from sitting a few points left of the
+                    // caret it is standing in for.
+                    Text(L10n.t(.linkComposerPlaceholder))
+                        .font(.body)
+                        .foregroundStyle(.tertiary)
+                        .padding(.leading, Metrics.hairline + Metrics.textEditorInset)
+                        .padding(.top, Metrics.hairline)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
+            // Before the background, so the field's surface is the width of the
+            // row rather than of whatever the editor asked for.
+            .frame(maxWidth: .infinity)
+            .background(Palette.cardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: Metrics.corner))
+            .overlay(
+                RoundedRectangle(cornerRadius: Metrics.corner)
+                    .strokeBorder(Palette.cardBorder, lineWidth: 1)
+            )
+
+            HStack(spacing: Metrics.tight) {
                 Button(L10n.t(.linkSend)) { sendDraft() }
                     .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.defaultAction)
+                    // NOT `.defaultAction`: that is plain Return, and plain
+                    // Return belongs to the editor above.
+                    .keyboardShortcut(.return, modifiers: .command)
                     .disabled(!link.canCompose || trimmedDraft.isEmpty)
                     .accessibilityIdentifier("link-send-message")
+                Text(L10n.t(.composerShortcutHint))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("link-composer-shortcut")
+                Spacer(minLength: 0)
             }
             if link.isWaitingForConversation {
                 Text(L10n.t(.linkWaitingForPeer))
@@ -202,22 +267,6 @@ struct TransferLinkPane: View {
                 .buttonStyle(.bordered)
                 .disabled(!link.acceptsWork)
                 .accessibilityIdentifier("link-send-folder")
-        }
-    }
-
-    @ViewBuilder
-    private var conversationRequest: some View {
-        if link.hasIncomingConversationRequest {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(L10n.t(.linkConversationRequest)).font(.subheadline)
-                HStack {
-                    Button(L10n.t(.linkAcceptMessages)) { link.acceptConversation() }
-                        .buttonStyle(.borderedProminent)
-                        .accessibilityIdentifier("link-accept-messages")
-                    Button(L10n.t(.linkDeclineMessages)) { link.rejectConversation() }
-                        .buttonStyle(.bordered)
-                }
-            }
         }
     }
 

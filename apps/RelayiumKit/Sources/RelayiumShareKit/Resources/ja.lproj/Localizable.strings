@@ -627,12 +627,6 @@
 "workspace.addFilesHint" = "下でファイルやフォルダを選び、そのデバイスへ送信します。";
 "workspace.sendMessageHint" = "このデバイスとのメッセージセッションを開きます。何も選択する必要はありません。";
 "workspace.sendFiles" = "ファイルを送る";
-"workspace.createMessageCode" = "メッセージ用のコードを作成";
-"workspace.createFileCode" = "ファイル用のコードを作成";
-"workspace.createFileCodeHint" = "先に下でファイルまたはフォルダを選んでください。コードはその内容を運びます。";
-"workspace.joinMessages" = "メッセージに参加";
-"workspace.joinFiles" = "ファイルに参加";
-"workspace.joinKindHint" = "コードだけではどちらか分かりません。作成した相手に確認するか、送られたリンクを使ってください。";
 "workspace.oneConnectionNote" = "1つの接続が運べるのはメッセージかファイルのどちらかで、両方ではありません。もう一方を送ると、新しい確認コードを持つ別の接続が開きます。";
 "workspace.messagesOnlyNote" = "このセッションが運ぶのはメッセージで、ファイルではありません。ファイルの送信には別のセッションが必要です。開始するにはこのセッションを終了してください。";
 "workspace.filesOnlyNote" = "このセッションが運ぶのはファイルで、メッセージではありません。メッセージの送信には別のセッションが必要です。開始するにはこのセッションを終了してください。";
@@ -647,9 +641,6 @@
 "link.waitingForPeer" = "相手がメッセージを受け入れるのを待っています。受け入れ次第、すぐに送信されます。";
 "link.messagesDeclined" = "相手がメッセージを拒否しました。入力した文章は残っています。ファイルには影響しません。";
 "link.notReady" = "この接続はまだそれを実行できません。";
-"link.conversationRequest" = "相手が会話を始めようとしています。";
-"link.acceptMessages" = "メッセージを受け入れる";
-"link.declineMessages" = "拒否";
 "link.verifyTitle" = "このコードを照合";
 "link.verifyBody" = "相手の端末に読み上げてください。この接続で聞かれるのは一度だけで、以降のメッセージもファイルも同じ確認を使います。";
 "link.verifyMatches" = "一致している";
@@ -691,7 +682,6 @@
 "settings.loginStillUnconfirmed" = "Relayium は macOS に登録を依頼しましたが、macOS は依然として記録がないと報告しています。何も削除されておらず、既存の登録にも変更はありません。「ログイン項目」を開いて確認し、そこに Relayium がない場合はこの Mac を再起動してください。";
 
 /* MARK: 1.1.2 — what this Mac is on the network */
-"nearby.announcedAs" = "このルーム内の他のデバイスからは、この Mac は %@ として見えています。";
 "nearby.localAddressesHeading" = "現在のこの Mac 自身のアドレス:";
 "nearby.localAddressRow" = "%1$@（%2$@）";
 "nearby.noLocalAddresses" = "使用できるアドレスが見つかりませんでした。この Mac は VPN 経由か、直接転送を行えない接続だけでネットワークにつながっている可能性があります。";
@@ -713,32 +703,22 @@
 "help.lan.step1" = "両方のデバイスで Relayium を開き、同じネットワークに接続したままにします。";
 "help.lan.step2" = "一覧から相手のデバイスを選び、メッセージを送るか、追加したファイルを送ります。";
 "help.lan.step3" = "確認が有効な場合は、両方の画面に同じコードが表示されていることを確かめてから承認します。";
-"help.lan.question" = "ファイルは Relayium のサーバーを経由しますか？";
-"help.lan.answer" = "場合によります。ただし Relayium が読めるものは変わりません。サービスは 2 台を引き合わせるだけで、ネットワークの状態に応じて接続は 2 台の間で行われるか、Relayium のリレーを経由します。このデバイスにはどちらの経路か分かりません。いずれの場合もファイルはエンドツーエンドで暗号化され、Relayium が鍵を持つことはありません。";
 
 "help.cross.step1" = "このデバイスで、メッセージ用またはファイル用のコードを作成します。";
 "help.cross.step2" = "もう一方のデバイスの Relayium にそのコードを入力して参加します。";
 "help.cross.step3" = "両方の画面に同じコードが表示されていることを確認し、転送を承認します。";
-"help.cross.question" = "2 台は同じネットワークにいる必要がありますか？";
-"help.cross.answer" = "いいえ。そのための画面です。コードの作成にはアカウントが必要です。接続が中継される場合があり、その費用は作成者に請求されるためです。他の人が作ったコードへの参加には何も必要ありません。";
 
 "help.storedSend.step1" = "ファイルまたはフォルダを選び、リンクを有効にしておく期間を決めて送信します。";
 "help.storedSend.step2" = "Relayium はアップロードの前に、この Mac 上ですべてを暗号化します。";
 "help.storedSend.step3" = "リンクを共有します。リンクを開く鍵はリンクの中にあり、Relayium には届きません。";
-"help.storedSend.question" = "誰がこのリンクを開けますか？";
-"help.storedSend.answer" = "# より後ろの部分を含む完全なリンクを持っている人は誰でも開けます。Relayium は暗号化されたファイルだけを保存し、その中身を読むことはできません。リンクそのものを秘密として扱ってください。";
 
 "help.inbox.step1" = "この Mac と送信元のデバイスで、同じアカウントにサインインします。";
 "help.inbox.step2" = "この Mac 上のフォルダを選び、届いたものを自動的に保存するか、確認を待つかを決めます。";
 "help.inbox.step3" = "relayium.com またはサインイン済みの別のデバイスからこの Mac に送ると、ファイルはそのフォルダに保存されます。";
-"help.inbox.question" = "この Mac がスリープ中、または Relayium が終了しているときはどうなりますか？";
-"help.inbox.answer" = "配信は Relayium がここで再び動き出すまでサーバー上で待機します。受信できるのは動作中だけで、上のログイン設定はそのためにあります。";
 
 "help.account.step1" = "アカウントを作成するかサインインします。リンクの送信とデバイス受信箱にはアカウントが必要です。";
 "help.account.step2" = "利用中のプランと、今期の使用量を確認します。";
 "help.account.step3" = "アカウントにサインインしているデバイスと、保存したファイルを確認し、どちらも削除できます。";
-"help.account.question" = "アカウントが必要なのはどの機能ですか？";
-"help.account.answer" = "同じネットワーク内での転送と、他の人が作ったコードへの参加にはアカウントは不要です。コードの作成、保存リンクの送信、デバイス受信箱には必要です。";
 
 /* In-app subscription (Mac App Store build). The purchase surface the App Store
    build renders instead of the direct build's link to the website. Prices are

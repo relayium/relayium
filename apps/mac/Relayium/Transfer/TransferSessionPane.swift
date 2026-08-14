@@ -153,7 +153,6 @@ struct TransferSessionPane: View {
                 codeHandoff(title: L10n.t(.directGiveCode),
                             code: code,
                             expiresAt: expiresAt,
-                            mode: .files,
                             cancel: { fileModel.cancel() })
             }
         case .failed(let message):
@@ -186,7 +185,6 @@ struct TransferSessionPane: View {
             codeHandoff(title: L10n.t(.textGiveCode),
                         code: code,
                         expiresAt: expiresAt,
-                        mode: .text,
                         cancel: { textModel.reset() })
         case .failed, .ended, .refused, .unsupported,
              .joining, .connecting, .verifying, .waitingAccept,
@@ -195,10 +193,20 @@ struct TransferSessionPane: View {
         }
     }
 
+    /// **The code, and a link that is the same code and nothing more.**
+    ///
+    /// The link used to carry `?mode=file` or `?mode=text` beside the code, so a
+    /// recipient opening it landed in the lane the sender had chosen. There is no
+    /// such choice to preserve any more — one Create action mints one code — and
+    /// a hint that named a lane the sender never picked would be the removed
+    /// question smuggled back into a URL. The web's own join link is `#c=<code>`
+    /// and this is now byte-identical to it.
+    ///
+    /// `parseAppDeepLink` still READS a mode, because links already passed on
+    /// have to keep working.
     private func codeHandoff(title: String,
                              code: String,
                              expiresAt: Int64,
-                             mode: TransferMode,
                              cancel: @escaping () -> Void) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title).font(.subheadline.weight(.semibold))
@@ -213,7 +221,7 @@ struct TransferSessionPane: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("pairing-code-expiry-note")
-            if let joinURL = productionPairingJoinURL(code: code, mode: mode) {
+            if let joinURL = productionPairingJoinURL(code: code) {
                 PairingCodeHandoffView(url: joinURL, cancel: cancel)
             }
         }

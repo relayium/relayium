@@ -313,20 +313,46 @@ struct RelayiumApp: App {
         #endif
         // The one place a watched code becomes an ordinary legacy session. The
         // socket is already open and already the room's; this only chooses which
-        // model runs on it, from the verb the user pressed.
+        // model runs on it from the staged batch and peer capabilities.
         // Installed below, once `presenting` exists: the fallback has to move
         // the surface's mode as well as start the session, and that object is
         // built a few lines further down.
         let adoptLegacy: (String, Role, ICEConfig, TransferMode,
                           TransferPresence) -> Void = { peerID, role, config, mode, presence in
-            // The mode the user pressed decides which legacy model runs, and the
+            // The lane the LINK MODEL decided on — from what was staged and what
+            // the peer announced, never from a verb the user pressed — and the
             // surface has to follow it: the pane renders one lane at a time.
             presence.claim(AppDestination.pairingCode, mode: mode)
             switch mode {
             case .files:
                 Task { await files.adoptRoom(peerId: peerID, role: role, config: config) }
             case .text:
-                Task { await text.adoptRoom(peerId: peerID, role: role, config: config) }
+                // **The minted code has to be retired, and only after the text
+                // lane is live.**
+                //
+                // A code is always minted through the FILE model: that is the
+                // lane whose `showingCode`, expiry and manifest the pairing
+                // surface renders, and the only one that can hold a staged
+                // batch. A room that resolves to a legacy TEXT peer therefore
+                // leaves that model parked in `.showingCode` — never idle — so
+                // `sessionIsLiveOrRetained` would hold both transfer
+                // destinations locked for the rest of the launch and the
+                // surface would never return to its connect phase.
+                //
+                // The ORDER is the load-bearing half. `TransferPresence` gives
+                // the surface up the moment every model and the link all read
+                // idle, and that release closes the handed-over pairing socket
+                // (`observeSurfaceIdle`) — the socket this connection is being
+                // built on. Cancelling first would pass through exactly that
+                // state. So the text lane publishes `.connecting` first, and the
+                // file lane is cleared behind it.
+                //
+                // Safe on the batch: `legacyFallbackMode` answers `.files` for
+                // anything staged, so a text room is one with nothing to send.
+                Task {
+                    await text.adoptRoom(peerId: peerID, role: role, config: config)
+                    files.cancel()
+                }
             }
         }
         // A batch armed while the room was still being watched. The legacy file
@@ -335,6 +361,13 @@ struct RelayiumApp: App {
             guard !metas.isEmpty else { return }
             files.stageSend(sources: sources, metas: metas)
         }
+        // Pairing codes are rendered by the legacy file model until a peer is
+        // known. Once the room resolves to `link/1`, the link has already
+        // published `.requesting`, so clearing that stale code cannot create an
+        // all-idle ownership gap. Without this handoff the old code would
+        // reappear after the unified link ended and keep both transfer routes
+        // locked.
+        unified.onPairingLinkActivated = { files.cancel() }
         // One key store for the whole app: the upload model writes a key here,
         // the account model reads it back and removes it with the object. Two
         // instances would still work — they address the same keychain items —
