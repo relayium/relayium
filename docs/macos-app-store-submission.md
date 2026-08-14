@@ -25,8 +25,10 @@ or releasing a version. Relayium uses manual App Store release.
 | Support URL | `https://relayium.com/support/` |
 | Marketing URL | `https://relayium.com/` |
 
-Version `1.2.0`, build `6` is the App Store artifact and is already uploaded and
-export-compliance cleared (2026-08-14). Build `6` is therefore consumed.
+Version `1.2.0`, build `6` was uploaded and export-compliance cleared
+(2026-08-14), so build `6` is consumed and must not be rebuilt or re-uploaded.
+The project now carries build `7`, the corrected replacement for the same public
+version `1.2.0`; it is the number every new archive of this version uses.
 
 Version `1.1.3`, build `5` is **already public** as a direct download: those
 exact Developer ID-signed bytes are behind the `macos-v1.1.3` tag and are offered
@@ -34,7 +36,7 @@ by the Sparkle feed. Because the project shares its version and build settings
 across the direct-download and App Store targets, an App Store archive built at
 `1.1.3` build `5` would be different bytes under a public version and a consumed
 build number. **Any archive or export already produced at `1.1.3` build `5` must
-not be uploaded — delete it and archive again at `1.2.0` build `6`.** Apple
+not be uploaded — delete it and archive again at `1.2.0` build `7`.** Apple
 subscriptions are a new user-visible capability, which is why the public version
 moves by a minor step rather than a patch.
 
