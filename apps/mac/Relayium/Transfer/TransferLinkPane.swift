@@ -71,7 +71,7 @@ struct TransferLinkPane: View {
             }
             exit
         }
-        .frame(maxWidth: 720, alignment: .leading)
+        .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
         // A draft the lane never took comes back to the field rather than
         // vanishing. `task(id:)` rather than `onChange`, because the hand-back
         // can happen while this pane is being rebuilt by the state change that

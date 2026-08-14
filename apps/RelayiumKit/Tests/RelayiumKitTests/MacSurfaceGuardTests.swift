@@ -1106,6 +1106,141 @@ final class MacSurfaceGuardTests: XCTestCase {
             "the Device Inbox stopped supplying its own scrolling")
     }
 
+    /// **Help collapses; the decisive line does not.**
+    ///
+    /// The compact form is only an improvement if what is hidden is genuinely
+    /// secondary. Three properties make that true, and each has a way of
+    /// silently regressing:
+    ///
+    ///  1. Step one renders in the disclosure's own LABEL, so a reader who needs
+    ///     only "what do I do first" never opens anything.
+    ///  2. It starts collapsed, which is the whole point of the change.
+    ///  3. Everything else is complete when opened — the remaining steps, the
+    ///     question with its answer, and the guide link where one exists.
+    ///
+    /// The numbering is continuous across the fold rather than restarting at 1
+    /// inside, which is why the remaining steps are `dropFirst()` over the
+    /// enumerated list rather than a second list of their own.
+    func testHelpCollapsesWithoutHidingItsFirstStep() throws {
+        let help = try source(named: "Components/HelpSection.swift")
+        XCTAssertTrue(help.contains("@State private var expanded = false"),
+                      "help no longer starts collapsed, or is no longer collapsible")
+        XCTAssertTrue(help.contains("DisclosureGroup(isExpanded: $expanded)"),
+                      "help is not a disclosure the reader controls")
+        XCTAssertTrue(help.contains(".accessibilityIdentifier(\"destination-help-first-step\")"),
+                      "the always-visible first step has no stable identity")
+        // The identifier stays on the heading LEAF, never on the stack: a
+        // container identifier propagates down and would rename the step below
+        // it, which is the defect this pane has already lost controls to.
+        XCTAssertTrue(help.contains(
+            "Text(L10n.t(.helpHeading))\n                .font(.subheadline.weight(.semibold))\n"
+            + "                .accessibilityIdentifier(\"destination-help\")"),
+            "the help heading lost its leaf identifier")
+        // Opened, it is complete. Each of these is one thing a reader would have
+        // had before the change and could silently lose to it.
+        for required in ["topic.steps.enumerated().dropFirst()",
+                         "Text(L10n.t(topic.question))",
+                         "Text(L10n.t(topic.answer))",
+                         "L10n.t(.helpGuideLink)",
+                         "L10n.t(.formatHelpStep, [L10n.number(number), L10n.t(key)])"] {
+            XCTAssertTrue(help.contains(required),
+                          "the opened help block lost \(required)")
+        }
+        // Both shapes render the same body, so the Form surface cannot drift
+        // into a second, permanently open version.
+        XCTAssertEqual(occurrences(of: "HelpDisclosure(topic: topic", in: help), 2,
+                       "the card and the Form section no longer share one help body")
+    }
+
+    // MARK: - the path a transfer takes
+
+    /// **The rail may not say more than the model knows, and it may not say it
+    /// with motion.**
+    ///
+    /// A route diagram is the easiest thing in a UI to make dishonest: a
+    /// completed-looking step costs nothing to draw and is read as fact. So the
+    /// rules live in the tested seam (`PathRailPresentationTests` holds the
+    /// mapping itself) and this guards the view around it:
+    ///
+    ///  - every stop it draws comes from `PathRailPresentation`. A surface that
+    ///    built a `PathStop` inline would be a rail with no test behind it;
+    ///  - it never animates. Not "less under Reduce Motion" — never, so its
+    ///    meaning survives a still screen, a screenshot and a motion-sensitive
+    ///    reader identically, and there is no reduced-motion branch that could
+    ///    be wrong;
+    ///  - it draws a rule rather than an arrow, so it mirrors in Arabic with the
+    ///    `HStack` instead of pointing the wrong way;
+    ///  - a tick appears only for `.reached`, and the state a rail claims is
+    ///    also said in words — `common.done`, an existing string — rather than
+    ///    in a private vocabulary for VoiceOver.
+    func testThePathRailIsFactualStillAndMirrorSafe() throws {
+        let rail = try source(named: "Components/PathRail.swift")
+        for banned in ["withAnimation", ".animation(", "chevron.right", "arrow.right",
+                       "accessibilityReduceMotion"] {
+            XCTAssertFalse(rail.contains(banned), "the path rail contains \(banned)")
+        }
+        XCTAssertTrue(rail.contains("stop.progress == .reached"),
+                      "the rail no longer distinguishes a finished step")
+        XCTAssertTrue(rail.contains("Image(systemName: \"checkmark\")"),
+                      "completion is carried by colour alone")
+        XCTAssertTrue(rail.contains("stop.progress == .reached ? L10n.t(.commonDone) : \"\""),
+                      "the rail states a step's completion to the eye and not to VoiceOver")
+        XCTAssertTrue(rail.contains(".accessibilityLabel(PathRailPresentation.routeLabel())"),
+                      "the rail's stops read as loose fragments")
+
+        // Exactly four surfaces draw one, each through the seam. Keeping LAN in
+        // this set makes the path signature visible on every transfer surface;
+        // its presentation is a route with nil progress, not a fabricated task.
+        let railUsers = try sources(under: macRoot, atLeast: 30)
+            .filter { $0.text.contains("PathRail(stops:") }.map(\.name).sorted()
+        XCTAssertEqual(railUsers, ["DeviceInbox/DeviceInboxSurface.swift",
+                                   "Transfer/CrossNetworkConnectPane.swift",
+                                   "Transfer/LanConnectPane.swift",
+                                   "UploadPane.swift"])
+        for (name, text) in try sources(under: macRoot, atLeast: 30)
+            where name != "Components/PathRail.swift" {
+            XCTAssertFalse(text.contains("PathStop("),
+                           "\(name) builds a path stop outside the tested seam")
+        }
+    }
+
+    /// **Two levels of container, and no third.**
+    ///
+    /// `SectionCard` is the only chrome; `OpenSection` is a titled group with no
+    /// background, nested inside it. A card inside a card is the box-in-a-box
+    /// this round removed, and it is exactly what a well-meaning edit produces
+    /// when a group inside a card needs a name.
+    func testHierarchyIsTwoLevelsAndNeverACardInsideACard() throws {
+        let card = try source(named: "Components/SectionCard.swift")
+        XCTAssertTrue(card.contains("Palette.cardBackground"),
+                      "the one card background is written as a literal again")
+        let open = try source(named: "Components/OpenSection.swift")
+        XCTAssertFalse(open.contains("background("),
+                       "the second level grew chrome of its own, so it is a card")
+        XCTAssertTrue(open.contains(".accessibilityElement(children: .contain)")
+                      && open.contains(".accessibilityLabel(title)"),
+                      "an open section is not a named group in the accessibility outline")
+        // The staged batch is the group this replaced a hand-placed divider and
+        // floating heading with, on both transfer screens.
+        XCTAssertTrue(try source(named: transferStaging)
+            .contains("OpenSection(title: L10n.t(.workspaceStagingHeading))"),
+            "staging went back to a heading floating above a rule")
+        // Stored send is one card and one task: choosing, the expiry options and
+        // Send were two peer cards of equal weight, which read as two things to
+        // do rather than three steps of one.
+        let upload = try source(named: "UploadPane.swift")
+        XCTAssertTrue(upload.contains("OpenSection(title: L10n.t(.uploadExpiresAfter))"),
+                      "the expiry options are a peer card again")
+        XCTAssertFalse(upload.contains("optionsCard"),
+                       "the second stored-send card is back")
+        // Nobody nests the chrome. `SectionCard` may appear many times per file;
+        // what must not appear is one inside another's content.
+        for (name, text) in try sources(under: macRoot, atLeast: 30) {
+            XCTAssertFalse(text.contains("SectionCard(title: L10n.t(.uploadHeading)) {\n            SectionCard"),
+                           "\(name) nests a card inside a card")
+        }
+    }
+
     // MARK: - what this Mac is on the network
 
     /// **The LAN receive surface says what this Mac is called and where it is,
@@ -1373,18 +1508,67 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "a late refresh must leave the old scope deactivated")
     }
 
-    func testNoDisclosureGroupAndNoMacOS14API() throws {
-        let banned = ["DisclosureGroup", "ContentUnavailableView", "onChange(of:initial:)",
+    func testNoMacOS14APIAndOnlyHelpMayCollapse() throws {
+        let banned = ["ContentUnavailableView", "onChange(of:initial:)",
                       "@Observable", ".symbolEffect", ".containerRelativeFrame", ".inspector"]
         for (name, text) in try sources(under: macRoot, atLeast: 20) {
             for s in banned { XCTAssertFalse(text.contains(s), "\(name) contains \(s)") }
         }
+        // **`DisclosureGroup` is allowed in exactly one file, and the ban stays
+        // everywhere else.**
+        //
+        // It was banned outright because the root view once hid every signed-out
+        // CAPABILITY inside two collapsed groups and nobody found them. What the
+        // blanket ban could not distinguish is what is being collapsed: a group
+        // that hides the way to send a file removes the feature; a group that
+        // hides the third paragraph explaining it does not, and the permanently
+        // open version ran to eight or nine lines under every screen in a 560pt
+        // window. Naming the one file is what keeps that argument from being
+        // extended to a control.
+        let collapsers = try sources(under: macRoot, atLeast: 20)
+            .filter { $0.text.contains("DisclosureGroup") }.map(\.name).sorted()
+        XCTAssertEqual(collapsers, ["Components/HelpSection.swift"],
+                       "a macOS surface collapses something that is not help")
     }
 
     func testExactlyOneFileCarriesAFixedFontSize() throws {
         XCTAssertEqual(try sources(under: macRoot, atLeast: 20)
             .filter { $0.text.contains(".system(size:") }.map(\.name),
                        ["Components/SecurityCodeText.swift"])
+    }
+
+    /// **The one string in the app a person reads across a room now follows
+    /// their text size — and still cannot wrap.**
+    ///
+    /// The pairing code and the SAS were 34 and 26 points flat, so raising the
+    /// system text size grew every label around the code and left the code
+    /// itself alone. `@ScaledMetric` keeps the ratio and the monospaced grid
+    /// while tracking the setting.
+    ///
+    /// The negative half is the safety one. These are transcribed by hand onto
+    /// another device: a code broken across two lines, or scaled down to fit its
+    /// container, is a code somebody copies wrongly. `lineLimit(1)` plus a
+    /// HORIZONTAL `fixedSize` is what lays it out at its full width whatever the
+    /// container offers, and `minimumScaleFactor` is the modifier that would
+    /// quietly undo it.
+    func testTheTranscribedCodesScaleAndStillCannotWrapOrShrink() throws {
+        let code = try source(named: "Components/SecurityCodeText.swift")
+        XCTAssertTrue(code.contains("@ScaledMetric(relativeTo: .largeTitle) private var pairingSize"),
+                      "the pairing code ignores the user's text size")
+        XCTAssertTrue(code.contains("@ScaledMetric(relativeTo: .title) private var verificationSize"),
+                      "the verification phrase ignores the user's text size")
+        XCTAssertTrue(code.contains(".font(.system(size: scaledSize, weight: .semibold, design: .monospaced))"),
+                      "the rendered size is not the scaled one")
+        XCTAssertTrue(code.contains(".lineLimit(1)"),
+                      "a transcribed code may not wrap")
+        XCTAssertTrue(code.contains(".fixedSize(horizontal: true, vertical: false)"),
+                      "a container can still compress the code it is offered")
+        XCTAssertFalse(code.contains("minimumScaleFactor"),
+                       "a shrunk code is a mis-transcribed code")
+        // And no second copy of the two bases, which is how the scaled and
+        // unscaled sizes would drift apart.
+        XCTAssertFalse(code.contains("case .pairing: return 34"),
+                       "the unscaled sizes exist twice")
     }
 
     func testTheDisplayedCodeIsSelectableAndSpokenAsDigits() throws {
@@ -1637,15 +1821,44 @@ final class MacSurfaceGuardTests: XCTestCase {
         }
     }
 
-    /// Sidebar captions are product navigation, not decorative metadata. macOS
-    /// List rows otherwise inherit a single-line limit and silently replace the
-    /// end of the promise with an ellipsis at the supported window floor.
+    /// **The row's sentence moved to the destination; it did not disappear.**
+    ///
+    /// Every row printed its full explanatory sentence, up to three wrapped
+    /// lines, five rows over — which at the supported 208×560 floor spent most
+    /// of the sidebar on prose about screens the reader was not looking at, and
+    /// in the longest locales did not fit at all. The sentence is now rendered
+    /// once, by `DetailHeader`, on the destination that is actually open.
+    ///
+    /// So this guard is the OPPOSITE of the one it replaces, and both halves are
+    /// load-bearing:
+    ///
+    ///  - the sidebar draws no caption, so the compaction cannot silently
+    ///    regress by someone re-adding a visible subtitle;
+    ///  - and every row still passes the complete sentence to
+    ///    `accessibilityHint` **and** to `help`, so a VoiceOver user hears
+    ///    exactly what they heard before and a pointer user can still read it
+    ///    before choosing a row. Dropping either turns a compaction into a
+    ///    removal.
+    ///
     /// Section labels are explicit because the AX outline does not infer useful
     /// names from the custom section headers reliably.
-    func testSidebarKeepsVisibleSubtitlesAndNamedSections() throws {
+    func testSidebarMovesItsCaptionsWithoutLosingThem() throws {
         let sidebar = try source(named: "Shell/SidebarView.swift")
-        XCTAssertTrue(sidebar.contains(".lineLimit(3)"),
-                      "sidebar subtitles must be visible rather than one-line ellipses")
+        XCTAssertFalse(sidebar.contains("Text(subtitle)"),
+                       "the sidebar prints the destination sentences again, five rows deep")
+        XCTAssertTrue(sidebar.contains(".help(subtitle)"),
+                      "the sentence is unreachable to a pointer user")
+        XCTAssertTrue(sidebar.contains(".accessibilityHint(subtitle)"),
+                      "the sentence is unreachable to VoiceOver")
+        // The row and the screen it opens draw the same glyph, from the one
+        // place that names it — a row and a header marked differently is a
+        // screen that does not look like the thing that was clicked.
+        XCTAssertTrue(sidebar.contains("Label(title, systemImage: surface.symbol)"),
+                      "the sidebar names its own symbols again, so a row can drift from its screen")
+        for (name, text) in try sources(under: macRoot, atLeast: 30) {
+            XCTAssertFalse(text.contains("systemImage: \"dot.radiowaves.left.and.right\""),
+                           "\(name) hard-codes a destination symbol MacSurface already names")
+        }
         // Three now: the two transfer groups and the one this Mac is itself the
         // destination for. A group without the named header is a heading macOS
         // promotes to `AXHeading` and then leaves empty.
@@ -1660,12 +1873,23 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the Device Inbox row invented a second name for the feature")
         XCTAssertTrue(sidebar.contains("subtitle: L10n.t(.navDeviceInboxSubtitle)"),
                       "the Device Inbox row has no subtitle, so it has no accessibility hint")
-        // Every row has one, because the sidebar is now the ONLY place a
-        // destination is explained: the page headings that used to repeat these
-        // sentences are gone.
+        // Every row still passes one, because the hint and the tooltip are
+        // rendered from it — a row that stopped passing a subtitle would lose
+        // the sentence for VoiceOver as well as for the eye.
         XCTAssertEqual(occurrences(of: "subtitle: L10n.t(", in: sidebar),
                        MacSurface.browseable.count,
-                       "a sidebar row lost the compact explanation that is now its only one")
+                       "a sidebar row lost the sentence its hint and tooltip are made of")
+        // And the same five sentences reach the screens they belong to. This is
+        // the other end of the move: a header that dropped its `purpose:` would
+        // delete the explanation from the product rather than relocate it.
+        for (file, key) in [(lanDestination, ".navLanTransferSubtitle"),
+                            (crossDestination, ".navCrossNetworkSubtitle"),
+                            ("Destinations/StoredSendDestination.swift", ".navStoredSendSubtitle"),
+                            ("Destinations/DeviceInboxDestination.swift", ".navDeviceInboxSubtitle"),
+                            ("Destinations/AccountDestination.swift", ".navAccountSubtitle")] {
+            XCTAssertTrue(try source(named: file).contains("purpose: L10n.t(\(key))"),
+                          "\(file) no longer explains itself; the sentence exists nowhere visible")
+        }
         for kept in [".accessibilityElement(children: .ignore)",
                      ".accessibilityLabel(title)",
                      ".accessibilityAddTraits(.isHeader)"] {
@@ -1685,36 +1909,50 @@ final class MacSurfaceGuardTests: XCTestCase {
         }
     }
 
-    // MARK: - the sidebar row is not printed twice
+    // MARK: - one heading, and it is not a banner
 
-    /// **No destination opens with its own title and subtitle.**
+    /// **A destination heading is allowed again, and it is a label rather than a
+    /// banner.**
     ///
-    /// Every screen used to: a `largeTitle` and a one-line caption, both copied
-    /// verbatim from the sidebar row that had just been clicked, at the top of
-    /// every destination forever. On a Mac the sidebar is on screen at the same
-    /// time with that row highlighted, so the heading told the reader nothing
-    /// they were not already looking at and cost three lines of a 560pt-tall
-    /// window on all six screens.
+    /// The rule this replaces banned it outright, and the reason was sound: every
+    /// screen opened with a `largeTitle` and a caption copied verbatim from the
+    /// sidebar row that had just been clicked, which told a reader looking at
+    /// the highlighted row nothing and cost three lines of a 560pt window six
+    /// times over. Removing it was right; leaving the sentences behind in a
+    /// 208pt sidebar was not, and at the supported floor in the longest locales
+    /// the sidebar stopped fitting.
     ///
-    /// Checked in three places, because there are three ways to put it back:
-    /// the scaffold could render one again, a destination could pass one, or a
-    /// destination could draw its own inside its content. The last is the one a
-    /// screenshot review would call a nice touch.
+    /// So the sentence moved rather than came back, and this guard now enforces
+    /// the shape of what came with it:
     ///
-    /// What is deliberately still allowed: `navigationTitle` (window chrome,
-    /// Mission Control and VoiceOver's window name) and `SectionCard` titles,
-    /// which say what a PART of a screen is — something the sidebar never
-    /// claimed to.
-    func testNoDestinationPrintsItsSidebarRowAsAPageHeading() throws {
+    ///  - the header is a real one — a symbol, the title and the destination's
+    ///    own sentence — and the scaffold is the only thing that draws it, so a
+    ///    destination cannot grow a second one inside its content;
+    ///  - it is `title3`, and nothing in the app may set a display-sized font.
+    ///    `.largeTitle` is checked as a FONT rather than as a substring, because
+    ///    `@ScaledMetric(relativeTo: .largeTitle)` — which is how the pairing
+    ///    code now scales — names the same text style for a legitimate reason;
+    ///  - `navigationTitle` still names the window for Mission Control, window
+    ///    menus and VoiceOver's window chrome;
+    ///  - `SectionCard` and `OpenSection` titles are untouched. They say what a
+    ///    PART of a screen is, which neither the sidebar nor this header claims.
+    func testEveryDestinationHeaderIsALabelAndNotABanner() throws {
         let scaffold = try source(named: "Components/DestinationScaffold.swift")
         XCTAssertTrue(scaffold.contains(".navigationTitle(title)"),
-                      "the window lost its title along with the heading")
+                      "the window lost its title")
+        XCTAssertTrue(scaffold.contains("DetailHeader(symbol: symbol, title: title, purpose: purpose)"),
+                      "the scaffold no longer renders the one destination header")
         XCTAssertFalse(scaffold.contains("Text(title)"),
-                       "the scaffold prints the destination's name in its body again")
-        XCTAssertFalse(scaffold.contains("let subtitle"),
-                       "the scaffold accepts an introductory subtitle again")
-        XCTAssertFalse(scaffold.contains("private var heading"),
-                       "the scaffold grew a page heading again")
+                       "the scaffold draws the name itself instead of through DetailHeader")
+
+        let header = try source(named: "Components/DetailHeader.swift")
+        XCTAssertTrue(header.contains(".font(.title3.weight(.semibold))"),
+                      "the destination header is no longer a label-sized heading")
+        XCTAssertTrue(header.contains(".accessibilityAddTraits(.isHeader)"),
+                      "the header is not a heading in the accessibility outline")
+        XCTAssertTrue(header.contains(".accessibilityIdentifier(\"destination-header\")")
+                      && header.contains(".accessibilityIdentifier(\"destination-purpose\")"),
+                      "the header has no stable runtime identity to assert against")
 
         for surface in MacSurface.allCases {
             let name = surface.rawValue.prefix(1).uppercased() + surface.rawValue.dropFirst()
@@ -1722,15 +1960,17 @@ final class MacSurfaceGuardTests: XCTestCase {
             let text = try source(named: file)
             XCTAssertTrue(text.contains("DestinationScaffold(title: L10n.t("),
                           "\(file) no longer names the window")
+            XCTAssertTrue(text.contains("symbol: MacSurface.\(surface.rawValue).symbol"),
+                          "\(file) does not mark itself with the symbol its sidebar row carries")
             XCTAssertFalse(text.contains("subtitle:"),
                            "\(file) passes an introductory subtitle again")
         }
 
-        // And nothing anywhere in the app draws a display-sized title of its
-        // own. Comments are stripped by the loader, so the sentence explaining
-        // this rule in the scaffold does not satisfy it.
+        // And nothing anywhere in the app sets a display-sized font of its own.
+        // Comments are stripped by the loader, so the sentences explaining this
+        // rule do not satisfy it.
         for (name, text) in try sources(under: macRoot, atLeast: 30) {
-            XCTAssertFalse(text.contains(".largeTitle"),
+            XCTAssertFalse(text.contains("font(.largeTitle"),
                            "\(name) draws a page heading of its own")
         }
     }
@@ -1847,7 +2087,7 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(connect.contains(".frame(maxWidth: .infinity, alignment: .leading)"),
                       "the roster's container must accept the available width")
         XCTAssertGreaterThanOrEqual(
-            occurrences(of: ".frame(maxWidth: 720, alignment: .leading)", in: connect), 4,
+            occurrences(of: ".frame(maxWidth: Metrics.readingMeasure, alignment: .leading)", in: connect), 4,
             "prose on a full-width destination must keep the reading measure")
     }
 

@@ -17,6 +17,8 @@ struct AccountDestination: View {
 
     var body: some View {
         DestinationScaffold(title: L10n.t(.navAccount),
+                            symbol: MacSurface.account.symbol,
+                            purpose: L10n.t(.navAccountSubtitle),
                             contentMaxWidth: nil) {
             switch session.state {
             case .restoring:
@@ -24,7 +26,7 @@ struct AccountDestination: View {
                 // its own is free.
                 ProgressView { Text(L10n.t(.accountRestoring)) }
                     .controlSize(.small)
-                .frame(maxWidth: 720, alignment: .leading)
+                .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
 
             case .loggedOut, .authenticating, .registering, .failed:
                 // ONE branch for all four. Each branch of a ViewBuilder `switch`
@@ -44,7 +46,7 @@ struct AccountDestination: View {
                         LoginView(form: form)
                     }
                 }
-                .frame(maxWidth: 720)
+                .frame(maxWidth: Metrics.readingMeasure)
 
             case let .unavailable(message):
                 // We still hold a valid-looking token — offer a retry, not a form.
@@ -57,7 +59,7 @@ struct AccountDestination: View {
                             .buttonStyle(.link)
                     }
                 }
-                .frame(maxWidth: 720, alignment: .leading)
+                .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
 
             case let .emailUnverified(email):
                 checkEmail(email: email)
@@ -135,7 +137,7 @@ struct AccountDestination: View {
                     .buttonStyle(.link)
             }
         }
-        .frame(maxWidth: 720, alignment: .leading)
+        .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
     }
 
     private var isResending: Bool {
@@ -158,6 +160,6 @@ struct AccountDestination: View {
                     .buttonStyle(.link)
             }
         }
-        .frame(maxWidth: 720, alignment: .leading)
+        .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
     }
 }

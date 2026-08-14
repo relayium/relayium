@@ -59,6 +59,29 @@ public enum MacSurface: String, CaseIterable, Hashable, Sendable {
     /// Whether the sidebar offers this surface at all.
     public var isBrowseable: Bool { Self.browseable.contains(self) }
 
+    /// The SF Symbol that stands for this surface, named ONCE.
+    ///
+    /// The sidebar row and the destination's own header draw the same glyph, and
+    /// they draw it from here rather than each holding a literal: a row and the
+    /// screen it opens marked with two different symbols is a screen that does
+    /// not look like the thing the user clicked. Nonlocalized by nature — these
+    /// are system symbol names, not copy.
+    ///
+    /// `storedReceive` has no sidebar row and still has a symbol, because
+    /// arriving from a link is still arriving somewhere that should say what it
+    /// is.
+    // nonlocalized: SF Symbol names
+    public var symbol: String {
+        switch self {
+        case .lanTransfer:          return "dot.radiowaves.left.and.right"
+        case .crossNetworkTransfer: return "number.circle"
+        case .storedSend:           return "link.badge.plus"
+        case .storedReceive:        return "arrow.down.circle"
+        case .deviceInbox:          return "tray.and.arrow.down"
+        case .account:              return "person.crop.circle"
+        }
+    }
+
     /// The destination a click on this row selects.
     ///
     /// One route each now: the two transfer surfaces no longer share a canonical

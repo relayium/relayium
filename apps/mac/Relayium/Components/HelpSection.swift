@@ -1,7 +1,8 @@
 import RelayiumAppKit
 import SwiftUI
 
-/// **The short tutorial that now ends every browseable destination.**
+/// **The short tutorial that ends every browseable destination — one line of it
+/// always on screen, the rest one click away.**
 ///
 /// The owner's report: a screen says what it is and hands you the controls, and
 /// somebody who does not already know what a pairing code is, or where a sent
@@ -9,18 +10,30 @@ import SwiftUI
 /// three steps, one common question, and — only where a maintained document
 /// exists — a link to it.
 ///
-/// ## Non-collapsed, on purpose, and not a `DisclosureGroup`
+/// ## Why this is a disclosure now, and why that is not the old mistake
 ///
-/// `DisclosureGroup` is banned in this app and `MacSurfaceGuardTests` enforces
-/// that by name: the root view once hid every signed-out capability inside two
-/// collapsed groups, and nobody found them. Help that has to be opened before it
-/// can be read is help for people who already know it is there. It is short
-/// enough to sit open — three steps and one answer — and it sits at the BOTTOM,
-/// below the controls, so it costs a reader who does not need it nothing but
-/// scroll.
+/// It shipped permanently open, and the reason was sound: the root view once hid
+/// every signed-out CAPABILITY inside two collapsed groups, nobody found them,
+/// and `MacSurfaceGuardTests` banned `DisclosureGroup` by name across the app so
+/// it could not come back. What the ban could not distinguish is what is being
+/// hidden. A collapsed group that hides the way to send a file removes the
+/// feature; a collapsed group that hides the third paragraph about it does not.
 ///
-/// It also adds no heading of the destination's own. The sidebar names the
-/// screen and explains it; this names itself and nothing else.
+/// Open, this block ran to eight or nine lines under every screen, permanently,
+/// competing with the controls above it for a 560pt window — which is the defect
+/// the audit actually found. So:
+///
+///  - **The decisive line stays visible.** Step one is rendered in the
+///    disclosure's own label, numbered exactly as it is inside, so a reader who
+///    needs only "what do I do first" never opens anything.
+///  - **Everything else is one click away and complete when opened** — the
+///    remaining steps, the common question with its answer, and the guide link.
+///  - **The ban survives where it was aimed.** This file is the only place in
+///    the app allowed to use `DisclosureGroup`, and the guard now says so by
+///    name rather than banning the control outright.
+///
+/// It still adds no heading of the destination's own, and it still sits at the
+/// bottom, below the controls.
 ///
 /// ## Two shapes, one body
 ///
@@ -33,10 +46,11 @@ struct HelpCard: View {
 
     var body: some View {
         if let topic = HelpPresentation.topic(for: surface) {
-            SectionCard(title: L10n.t(.helpHeading)) {
-                HelpBody(topic: topic)
-            }
-            .accessibilityIdentifier("destination-help")
+            HelpDisclosure(topic: topic)
+                // Not a `SectionCard`: help is the quietest thing on the screen
+                // and giving it the same chrome as the controls says the
+                // opposite. The rule above it is what separates it instead.
+                .padding(.top, Metrics.tight)
         }
     }
 }
@@ -53,53 +67,90 @@ struct HelpFormSection: View {
     var body: some View {
         if let topic = HelpPresentation.topic(for: surface) {
             Section {
-                HelpBody(topic: topic)
-            } header: {
-                // On the header LEAF, never on the `Section`: a container
-                // identifier propagates down and renames the controls inside it,
-                // which on this surface has already cost two controls.
-                Text(L10n.t(.helpHeading))
-                    .accessibilityIdentifier("destination-help")
+                HelpDisclosure(topic: topic, showsRule: false)
             }
         }
     }
 }
 
-/// The content both shapes render.
-private struct HelpBody: View {
+/// The content both shapes render: one visible step, and the rest behind a
+/// disclosure.
+private struct HelpDisclosure: View {
     let topic: HelpTopic
+    /// The hairline above the label. The `Form` shape does not want one — a
+    /// grouped section already draws its own boundary.
+    var showsRule: Bool = true
+
+    /// Collapsed by default, and per screen rather than per app: a reader who
+    /// opened the Device Inbox's help has said nothing about wanting the LAN
+    /// screen's. `@State` also means it resets when the destination is left,
+    /// which is the behaviour a reader who opened it once expects.
+    @State private var expanded = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            steps
-            question
-            guideLink
+        VStack(alignment: .leading, spacing: Metrics.tight) {
+            if showsRule {
+                Divider()
+            }
+            DisclosureGroup(isExpanded: $expanded) {
+                VStack(alignment: .leading, spacing: Metrics.inner) {
+                    remainingSteps
+                    question
+                    guideLink
+                }
+                .padding(.top, Metrics.tight)
+                .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
+            } label: {
+                label
+            }
         }
-        .frame(maxWidth: 720, alignment: .leading)
+    }
+
+    /// The heading and the one step that is always readable.
+    private var label: some View {
+        VStack(alignment: .leading, spacing: Metrics.hairline) {
+            Text(L10n.t(.helpHeading))
+                .font(.subheadline.weight(.semibold))
+                // On the leaf, never on the stack: a container identifier
+                // propagates down and would rename the step under it.
+                .accessibilityIdentifier("destination-help")
+            if let first = topic.steps.first {
+                step(first, number: 1)
+                    .accessibilityIdentifier("destination-help-first-step")
+            }
+        }
+        .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
+    }
+
+    /// Steps two onward. Step one is in the label above and is deliberately not
+    /// repeated here — the numbering is continuous across the fold, so opening
+    /// the group extends the list rather than restarting it.
+    private var remainingSteps: some View {
+        VStack(alignment: .leading, spacing: Metrics.hairline) {
+            Text(L10n.t(.helpStepsHeading))
+                .font(.subheadline.weight(.semibold))
+            ForEach(Array(topic.steps.enumerated().dropFirst()), id: \.offset) { index, text in
+                step(text, number: index + 1)
+            }
+        }
+        // One spoken group. Read control by control, numbered fragments
+        // announce as unrelated sentences.
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(L10n.t(.helpStepsHeading))
     }
 
     /// Numbered, with the numeral and its separator positioned by the catalog
     /// rather than composed here — `"\(n). "` is English punctuation, and this
     /// renders in nine languages including one that reads right to left.
-    private var steps: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(L10n.t(.helpStepsHeading))
-                .font(.subheadline.weight(.semibold))
-            ForEach(Array(topic.steps.enumerated()), id: \.offset) { index, step in
-                Text(L10n.t(.formatHelpStep, [L10n.number(index + 1), L10n.t(step)]))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        // One spoken group. Read control by control, three numbered fragments
-        // announce as three unrelated sentences.
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(L10n.t(.helpStepsHeading))
+    private func step(_ key: L10nKey, number: Int) -> some View {
+        Text(L10n.t(.formatHelpStep, [L10n.number(number), L10n.t(key)]))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     private var question: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Metrics.hairline) {
             Text(L10n.t(topic.question))
                 .font(.subheadline.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)

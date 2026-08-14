@@ -1,7 +1,8 @@
 import SwiftUI
 import RelayiumAppKit
 
-/// A pairing code or a verification phrase, set at a fixed size.
+/// A pairing code or a verification phrase, set at a deliberate size that still
+/// scales.
 ///
 /// **The only file under `apps/mac/Relayium` allowed to contain `.system(size:`,
 /// and `MacSurfaceGuardTests` counts the files to keep it that way.** The
@@ -10,6 +11,21 @@ import RelayiumAppKit
 /// room, and both have to present a stable character grid that cannot reflow or
 /// shrink under a container. Every other string in the app uses a semantic text
 /// style and scales with the user's settings.
+///
+/// ## The size is fixed relative to the user's text, not to the pixel
+///
+/// It used to be 34 and 26 points flat, which meant the one string in the app a
+/// person has to read across a room was the one string that ignored their text
+/// size entirely — larger system text made every label around the code grow and
+/// left the code itself alone. `@ScaledMetric` keeps the ratio and the character
+/// grid while following the setting, so the code is still the biggest thing on
+/// its screen at every size.
+///
+/// **It must never wrap and never shrink.** `lineLimit(1)` plus a horizontal
+/// `fixedSize` means the code is laid out at its full width whatever the
+/// container offers: a six-digit code broken across two lines, or scaled down to
+/// fit, is a code somebody transcribes wrongly. At the largest accessibility
+/// sizes the six digits still occupy well under the 860pt minimum window.
 ///
 /// It also fixes what VoiceOver says. A six-digit code read as a *number* is
 /// "four hundred two thousand nine hundred seventeen", which nobody can type;
@@ -23,16 +39,24 @@ struct SecurityCodeText: View {
         /// The short-authentication-string phrase compared with the peer.
         case verification
 
-        var size: CGFloat {
-            switch self {
-            case .pairing: return 34
-            case .verification: return 26
-            }
-        }
     }
 
     let code: String
     let style: Style
+
+    /// Both bases are declared, and the style picks between the two scaled
+    /// results. `@ScaledMetric` is a property wrapper reading the environment,
+    /// so it cannot be built from `style` inside `body` — declaring both and
+    /// choosing afterwards is the form that actually tracks the setting.
+    @ScaledMetric(relativeTo: .largeTitle) private var pairingSize: CGFloat = 34
+    @ScaledMetric(relativeTo: .title) private var verificationSize: CGFloat = 26
+
+    private var scaledSize: CGFloat {
+        switch style {
+        case .pairing: return pairingSize
+        case .verification: return verificationSize
+        }
+    }
 
     @ViewBuilder
     var body: some View {
@@ -58,7 +82,11 @@ struct SecurityCodeText: View {
 
     private var codeText: some View {
         Text(L10n.token(code))
-            .font(.system(size: style.size, weight: .semibold, design: .monospaced))
+            .font(.system(size: scaledSize, weight: .semibold, design: .monospaced))
+            .lineLimit(1)
+            // Horizontal only: the code takes the width it needs rather than the
+            // width it is offered, so no container can wrap or truncate it.
+            .fixedSize(horizontal: true, vertical: false)
             .textSelection(.enabled)
     }
 

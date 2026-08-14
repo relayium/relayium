@@ -62,7 +62,7 @@ struct AccountView: View {
         // load and drop a dialog mid-question.
         VStack(alignment: .leading, spacing: 20) {
             profileCard
-                .frame(maxWidth: 720, alignment: .leading)
+                .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
             // Directly under the plan it changes, and only in a build that has
             // a purchase model to render. In the direct download there is none,
             // and the plan card above keeps the web hand-off it always had.
@@ -78,7 +78,7 @@ struct AccountView: View {
                     // The SERVER's answer to "who owns this entitlement", not
                     // anything this screen inferred from a purchase.
                     entitlementProvider: usage.plan.entitlementProvider ?? "")
-                    .frame(maxWidth: 720, alignment: .leading)
+                    .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
             }
             devicesCard
             filesCard

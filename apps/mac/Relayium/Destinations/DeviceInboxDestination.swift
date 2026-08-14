@@ -33,6 +33,8 @@ struct DeviceInboxDestination: View {
         // a `Form` scrolls itself, so wrapping it in the scaffold's `ScrollView`
         // would nest two scroll views around one list of sections.
         DestinationScaffold(title: L10n.t(.inboxTitle),
+                            symbol: MacSurface.deviceInbox.symbol,
+                            purpose: L10n.t(.navDeviceInboxSubtitle),
                             contentMaxWidth: nil,
                             scrolls: false) {
             DeviceInboxSurface { intent in

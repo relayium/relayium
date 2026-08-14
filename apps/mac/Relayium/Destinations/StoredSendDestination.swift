@@ -30,7 +30,9 @@ struct StoredSendDestination: View {
     }
 
     var body: some View {
-        DestinationScaffold(title: L10n.t(.navStoredSend)) {
+        DestinationScaffold(title: L10n.t(.navStoredSend),
+                            symbol: MacSurface.storedSend.symbol,
+                            purpose: L10n.t(.navStoredSendSubtitle)) {
             UploadPane(model: model, gate: gate)
             // Below the pane in every state it can be in — including the account
             // gate, where a reader who cannot yet use the feature is the one most

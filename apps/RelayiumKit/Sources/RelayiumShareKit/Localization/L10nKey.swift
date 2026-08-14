@@ -263,6 +263,38 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// sidebar marks the row the session is on.
     case transferBusyElsewhere = "transfer.busyElsewhere"
 
+    // MARK: - The path a transfer travels (macOS)
+    //
+    // Six nouns and one accessibility name, shared by every Path Rail. They name
+    // the two ends of a transfer and the encrypted middle, and NOTHING else:
+    // there is deliberately no word here for "direct", "relayed", "peer to peer"
+    // or "fast", because the client cannot prove any of them at the moment the
+    // rail is drawn. Each one restates something the same screen already says in
+    // full — the connection is encrypted (`session.checkMatchesBody`), the
+    // stored copy is encrypted and unreadable to Relayium (`help.storedSend.*`),
+    // the key rides in the link (`upload.keyKept`) — so the rail adds a shape
+    // for a fact rather than a fact.
+    /// The near end of a path: the machine the window is open on.
+    case pathThisMac = "path.thisMac"
+    /// The far end of a live transfer. Deliberately not a name: before
+    /// verification there is nothing this side can honestly call the peer.
+    case pathOtherDevice = "path.otherDevice"
+    /// The far end of a Device Inbox delivery, which is the user's own account
+    /// rather than a second person.
+    case pathYourAccount = "path.yourAccount"
+    /// The middle of a live transfer. It says encrypted, and stops there: this
+    /// build cannot tell a direct connection from a relayed one at draw time.
+    case pathEncryptedConnection = "path.encryptedConnection"
+    /// The middle of a stored transfer — a link, or a queued Device Inbox
+    /// delivery. Both are ciphertext Relayium holds and cannot read.
+    case pathEncryptedOnRelayium = "path.encryptedOnRelayium"
+    /// The far end of a stored link, which is whoever holds the whole link and
+    /// not an identity Relayium knows.
+    case pathAnyoneWithLink = "path.anyoneWithLink"
+    /// The rail's own accessibility name. Without it the stops read as loose
+    /// fragments between the controls above and below them.
+    case pathA11yRoute = "path.a11yRoute"
+
     // MARK: - Transfer surfaces (macOS)
     //
     // Two destinations, one connection method each, one live session between

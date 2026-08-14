@@ -619,6 +619,15 @@
 /* MARK: macOS transfer destinations */
 "crossNetwork.explain" = "The two devices do not need to be on the same network. One side creates a six-digit code, the other types it in, and Relayium's rendezvous service introduces them; both sides only have to be online at the same time.";
 "transfer.busyElsewhere" = "Another transfer is open in Relayium. Finish or leave it before starting one here.";
+
+/* The path a transfer travels (macOS Path Rail). */
+"path.thisMac" = "This Mac";
+"path.otherDevice" = "The other device";
+"path.yourAccount" = "Your account";
+"path.encryptedConnection" = "Encrypted connection";
+"path.encryptedOnRelayium" = "Encrypted on Relayium";
+"path.anyoneWithLink" = "Anyone with the link";
+"path.a11yRoute" = "The path this transfer takes";
 "workspace.sameNetworkHeading" = "Same network";
 "workspace.pairingHeading" = "Pairing code";
 "workspace.stagingHeading" = "Files and folders";

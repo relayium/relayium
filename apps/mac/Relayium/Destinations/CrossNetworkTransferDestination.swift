@@ -55,7 +55,10 @@ struct CrossNetworkTransferDestination: View {
     }
 
     var body: some View {
-        DestinationScaffold(title: L10n.t(.navCrossNetwork), contentMaxWidth: nil) {
+        DestinationScaffold(title: L10n.t(.navCrossNetwork),
+                            symbol: MacSurface.crossNetworkTransfer.symbol,
+                            purpose: L10n.t(.navCrossNetworkSubtitle),
+                            contentMaxWidth: nil) {
             switch pane {
             case .link:
                 TransferLinkPane(link: link)

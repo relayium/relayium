@@ -81,7 +81,7 @@ struct TransferSessionPane: View {
             if peerCapabilityIsKnown { laneNote }
             exit
         }
-        .frame(maxWidth: 720, alignment: .leading)
+        .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
         // A session that ends by any route — Cancel, Done, a failure the user
         // dismissed — returns the surface to the connect phase rather than
         // stranding it on an empty session view.
@@ -281,7 +281,7 @@ struct TransferSessionPane: View {
             .font(.caption)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: 720, alignment: .leading)
+            .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
             .accessibilityIdentifier("transfer-lane-note")
     }
 

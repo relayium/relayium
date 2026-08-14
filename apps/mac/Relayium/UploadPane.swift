@@ -46,7 +46,14 @@ struct UploadPane: View {
     @State private var copiedCommand: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: Metrics.section) {
+            // **The one rail in the app with real progress**, because this is
+            // the one surface whose model publishes a position: chosen,
+            // encrypting and uploading, link ready. Nothing is drawn as finished
+            // that the model has not finished — a failure leaves the rail back
+            // at the step the user can retry rather than crediting the bytes
+            // that did move. See `PathRailPresentation.storedSend`.
+            PathRail(stops: PathRailPresentation.storedSend(model.state))
             content
         }
         // The store owns "what the user chose"; the model owns "what is being
@@ -89,11 +96,10 @@ struct UploadPane: View {
     private var content: some View {
         switch model.state {
         case .idle:
-            if case .allowed = gate { selectionCard } else { gateCard }
+            if case .allowed = gate { sendCard(showsOptions: false) } else { gateCard }
         case .picked:
             if case .allowed = gate {
-                selectionCard
-                optionsCard
+                sendCard(showsOptions: true)
             } else {
                 gateCard
             }
@@ -109,7 +115,7 @@ struct UploadPane: View {
         case .interrupted:
             // Same: unreachable without a pending store. Falling back to the
             // selection keeps the user's files in front of them.
-            if case .allowed = gate { selectionCard } else { gateCard }
+            if case .allowed = gate { sendCard(showsOptions: false) } else { gateCard }
         case let .done(link, expiresAt, keyWarning):
             linkReadyCard(link: link, expiresAt: expiresAt, keyWarning: keyWarning)
         case let .failed(message):
@@ -128,7 +134,13 @@ struct UploadPane: View {
 
     // MARK: - choosing
 
-    private var selectionCard: some View {
+    /// **One card, one task.** Choosing the files, deciding how long the link
+    /// lives and sending it were two peer cards of equal weight, which read as
+    /// two things to do rather than three steps of one. The options are now the
+    /// second level of hierarchy inside the same card — an `OpenSection`, no
+    /// second background — and they appear only once there is a selection for
+    /// them to apply to.
+    private func sendCard(showsOptions: Bool) -> some View {
         SectionCard(title: L10n.t(.uploadHeading)) {
             FileDropZone(store: selection, isBusy: { model.isBusy }) {
                 if isEmptySelection {
@@ -153,6 +165,7 @@ struct UploadPane: View {
                         .buttonStyle(.bordered)
                 }
             }
+            if showsOptions { options }
         }
     }
 
@@ -181,9 +194,9 @@ struct UploadPane: View {
     /// The picker's own label is hidden rather than removed: the card title
     /// already says it, and a control with no accessibility label at all would
     /// read as "pop-up button" and nothing else.
-    private var optionsCard: some View {
-        SectionCard(title: L10n.t(.uploadExpiresAfter)) {
-            HStack(spacing: 16) {
+    private var options: some View {
+        OpenSection(title: L10n.t(.uploadExpiresAfter)) {
+            HStack(spacing: Metrics.section) {
                 Picker(L10n.t(.uploadExpiresAfter), selection: $model.ttl) {
                     ForEach(model.ttlChoices, id: \.self) { secs in
                         Text(TtlPresentation.label(seconds: secs)).tag(secs)
@@ -193,7 +206,7 @@ struct UploadPane: View {
                 .frame(maxWidth: 220)
                 Toggle(L10n.t(.uploadBurnAfterRead), isOn: $model.burnAfterRead)
             }
-            // No `.disabled`: reaching this card at all means a file is chosen
+            // No `.disabled`: reaching this group at all means a file is chosen
             // and the gate is `.allowed`, so there is nothing left to be missing.
             Button(L10n.t(.commonSend)) { send() }
                 .buttonStyle(.borderedProminent)
@@ -329,7 +342,7 @@ struct UploadPane: View {
                 .font(.caption)
                 .accessibilityIdentifier("storedSend.cliDocs")
         }
-        .frame(maxWidth: 720, alignment: .leading)
+        .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
     }
 
     private func failureCard(_ message: String) -> some View {

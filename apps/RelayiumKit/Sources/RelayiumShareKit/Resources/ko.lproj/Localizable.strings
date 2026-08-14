@@ -607,6 +607,15 @@
 /* MARK: macOS transfer destinations */
 "crossNetwork.explain" = "두 기기가 같은 네트워크에 있을 필요는 없습니다. 한쪽이 여섯 자리 코드를 만들고 다른 쪽이 입력하면 Relayium의 랑데부 서비스가 두 기기를 이어 줍니다. 양쪽이 동시에 온라인이기만 하면 됩니다.";
 "transfer.busyElsewhere" = "Relayium에서 다른 전송이 열려 있습니다. 여기서 새로 시작하기 전에 그 전송을 끝내거나 나가세요.";
+
+/* The path a transfer travels (macOS Path Rail). */
+"path.thisMac" = "이 Mac";
+"path.otherDevice" = "상대 기기";
+"path.yourAccount" = "내 계정";
+"path.encryptedConnection" = "암호화된 연결";
+"path.encryptedOnRelayium" = "Relayium에 암호화되어 보관";
+"path.anyoneWithLink" = "링크를 가진 누구나";
+"path.a11yRoute" = "이 전송이 지나는 경로";
 "workspace.sameNetworkHeading" = "같은 네트워크";
 "workspace.pairingHeading" = "페어링 코드";
 "workspace.stagingHeading" = "파일 및 폴더";

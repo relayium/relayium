@@ -39,6 +39,6 @@ struct VerificationSetting: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(maxWidth: 720, alignment: .leading)
+        .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
     }
 }

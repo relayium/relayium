@@ -74,15 +74,19 @@ struct LanConnectPane: View {
             // marks the row the session is actually on.
             if sessionLocked {
                 InlineMessage(.info, L10n.t(.transferBusyElsewhere))
-                    .frame(maxWidth: 720, alignment: .leading)
+                    .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
                     .accessibilityIdentifier("transfer-busy-elsewhere")
             }
+            // This is a route, not transfer progress: before a device is chosen
+            // the client can truthfully name both endpoints and encryption, but
+            // it cannot mark any stop complete or promise a direct path.
+            PathRail(stops: PathRailPresentation.lan())
             sameNetwork
             InlineMessage(.info, L10n.t(.nearbyNoAccountNeeded))
-                .frame(maxWidth: 720, alignment: .leading)
+                .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
             if let actionError {
                 InlineMessage(.failure, actionError)
-                    .frame(maxWidth: 720, alignment: .leading)
+                    .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
             }
         }
         // Files opened from Finder or dropped on the Dock icon. `task(id:)` keyed
@@ -133,20 +137,28 @@ struct LanConnectPane: View {
 
     // MARK: - same network
 
+    /// **The roster first, the mechanism last.**
+    ///
+    /// This card used to open with `nearby.explain` — a five-line paragraph about
+    /// how the rendezvous service groups devices — above the receive status,
+    /// above the list of devices and above the verb that starts a transfer. It is
+    /// a true and worth-having paragraph, and it was the first thing on the
+    /// destination whose whole job is "pick the device and send". So the order is
+    /// now what somebody came here to do: who can be reached, who is here, what
+    /// to send them, what this Mac is called — and only then how the room is
+    /// formed at all.
+    ///
+    /// The dividers that used to separate those groups are `OpenSection`s: the
+    /// same second level of hierarchy, with the name attached to the group rather
+    /// than floating above a line.
     private var sameNetwork: some View {
         SectionCard(title: L10n.t(.workspaceSameNetworkHeading)) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(L10n.t(.nearbyExplain))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: 720, alignment: .leading)
-
+            VStack(alignment: .leading, spacing: Metrics.inner) {
                 receiving
 
                 if case let .reconnecting(message) = discovery.state {
                     InlineMessage(.warning, message)
-                        .frame(maxWidth: 720, alignment: .leading)
+                        .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
                 }
 
                 if discovery.isScanning {
@@ -171,11 +183,22 @@ struct LanConnectPane: View {
                     actions(for: device)
                 }
 
-                // Inside this card, and last: the sentences above point at it
-                // ("Choose files or folders below…"), and staging is what this
-                // connection carries rather than a third way to send anything.
-                Divider()
+                // Inside this card: the sentences above point at it ("Choose
+                // files or folders below…"), and staging is what this connection
+                // carries rather than a third way to send anything.
                 TransferStagingSection(selection: selection, isBusy: { sessionLocked })
+
+                // How the room is formed at all. Reference rather than task, and
+                // a footnote to the whole card rather than a group of its own —
+                // so it gets a rule and no second title, and it is where
+                // somebody whose device is missing from the list above will go
+                // looking for it.
+                Divider()
+                Text(L10n.t(.nearbyExplain))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -225,7 +248,7 @@ struct LanConnectPane: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(L10n.t(.nearbyA11yReceiving))
-        .frame(maxWidth: 720, alignment: .leading)
+        .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
     }
 
     /// **What this Mac is called in the room, and which network it is actually
@@ -404,7 +427,7 @@ struct LanConnectPane: View {
                                         : .workspaceOneConnectionNote))
                 .accessibilityIdentifier("lan-device-connection-note")
         }
-        .frame(maxWidth: 720, alignment: .leading)
+        .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
     }
 
     // MARK: - actions

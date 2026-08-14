@@ -162,6 +162,14 @@ struct DeviceInboxSurface: View {
             StatusBadge(symbol: symbol, tint: tint,
                         label: InboxStatusPresentation.text(for: inbox.state))
                 .accessibilityIdentifier("inbox-status")
+            // **A route, not a progress bar, and it says so by claiming
+            // nothing.** Every stop's `progress` is nil: the Device Inbox has no
+            // per-delivery position to be part-way through, and the live state —
+            // ready, working, paused, offline — is the badge directly above, in
+            // words. What the rail adds is the shape of the path those words
+            // describe, and the one fact the route is useless without: which
+            // folder on this Mac, or that none is chosen yet.
+            PathRail(stops: PathRailPresentation.deviceInbox(folder: inbox.folder))
             // `.answer` is deliberately absent: its controls are the Receive and
             // Decline buttons in the section below, and a button here would carry
             // the recovery's name while doing nothing when pressed.

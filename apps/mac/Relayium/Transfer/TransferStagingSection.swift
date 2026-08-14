@@ -29,10 +29,12 @@ struct TransferStagingSection: View {
     /// accepted and its URLs arriving.
     let isBusy: () -> Bool
 
+    /// An `OpenSection` rather than a heading above a hand-placed `Divider`: it
+    /// is the app's second level of hierarchy, which is exactly what this is —
+    /// a named group inside the connection card, not a card of its own and not a
+    /// paragraph break.
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(L10n.t(.workspaceStagingHeading))
-                .font(.subheadline.weight(.semibold))
+        OpenSection(title: L10n.t(.workspaceStagingHeading)) {
             Text(L10n.t(.workspaceStagingOptional))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -62,6 +64,6 @@ struct TransferStagingSection: View {
                 }
             }
         }
-        .frame(maxWidth: 720, alignment: .leading)
+        .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
     }
 }

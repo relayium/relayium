@@ -27,7 +27,11 @@ struct StoredReceiveDestination: View {
     @EnvironmentObject private var model: CloudDownloadModel
 
     var body: some View {
-        DestinationScaffold(title: L10n.t(.navStoredReceive)) {
+        // No `purpose:`. This is the one destination with no sidebar row, so
+        // there is no compact sentence of its own that moved here — the pane
+        // below states what an opened link is and what to do with it.
+        DestinationScaffold(title: L10n.t(.navStoredReceive),
+                            symbol: MacSurface.storedReceive.symbol) {
             SectionCard(title: L10n.t(.downloadHeading)) {
                 DownloadPane(model: model)
             }

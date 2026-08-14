@@ -57,13 +57,19 @@ struct CrossNetworkConnectPane: View {
             // a disabled control has to say why it is disabled.
             if sessionLocked {
                 InlineMessage(.info, L10n.t(.transferBusyElsewhere))
-                    .frame(maxWidth: 720, alignment: .leading)
+                    .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
                     .accessibilityIdentifier("transfer-busy-elsewhere")
             }
+            // Two ends and an encrypted middle, and no claim about what shape
+            // the middle takes: this build cannot tell a direct connection from
+            // a relayed one, so the rail says encrypted and stops. There is no
+            // peer yet either, so no stop is marked reached or current — see
+            // `PathRailPresentation.crossNetwork`.
+            PathRail(stops: PathRailPresentation.crossNetwork())
             pairingCode
             if let actionError {
                 InlineMessage(.failure, actionError)
-                    .frame(maxWidth: 720, alignment: .leading)
+                    .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
             }
         }
         .task(id: FileOpenAdoption(staged: fileOpenRouting.staged, busy: sessionLocked)) {
@@ -73,17 +79,18 @@ struct CrossNetworkConnectPane: View {
 
     // MARK: - pairing code
 
+    /// **The code first, the explanation last.**
+    ///
+    /// The card used to open with `crossNetwork.explain` — five lines about the
+    /// rendezvous service — above the two verbs that actually mint a code. The
+    /// destination's header now carries the one-sentence version of the same
+    /// fact ("same network not required"), so the paragraph is a footnote to the
+    /// controls rather than a preface to them. It keeps its identifier: a
+    /// runtime check that this screen states its own premise must go on
+    /// passing.
     private var pairingCode: some View {
         SectionCard(title: L10n.t(.workspacePairingHeading)) {
-            VStack(alignment: .leading, spacing: 12) {
-                // The one thing this destination exists to say, said on the
-                // destination: the two devices do not have to share a network.
-                Text(L10n.t(.crossNetworkExplain))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: 720, alignment: .leading)
-                    .accessibilityIdentifier("cross-network-explain")
+            VStack(alignment: .leading, spacing: Metrics.inner) {
                 if case .allowed = gate {
                     createControls
                 } else {
@@ -99,12 +106,18 @@ struct CrossNetworkConnectPane: View {
                 // Inside this card, and last, for the same reason it is on the
                 // LAN screen: the create hint above points at it, and what a
                 // connection carries is not a third way to connect.
-                Divider()
                 TransferStagingSection(selection: selection, isBusy: { sessionLocked })
                 // The peer is not known yet, so neither the unified-link claim
                 // nor the legacy one-lane warning is true here. Once a peer
                 // appears, capability negotiation selects the link pane or the
                 // legacy session pane; each states its actual connection shape.
+                Divider()
+                Text(L10n.t(.crossNetworkExplain))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
+                    .accessibilityIdentifier("cross-network-explain")
             }
         }
     }

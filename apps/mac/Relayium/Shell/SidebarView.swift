@@ -3,12 +3,27 @@ import RelayiumAppKit
 
 /// Five rows, all visible at once, in three sections plus a standalone Account row.
 ///
-/// **The sidebar is now the ONLY place a destination is named and explained.**
-/// Every screen used to reprint its row's title and subtitle as a page heading,
-/// which said nothing a user looking at the highlighted row did not already
-/// know. So the rows carry that weight alone: a title, a compact subtitle that
-/// may wrap, and that same sentence as the row's accessibility hint — a
-/// destination understandable before it is opened rather than after.
+/// **The sidebar names the destinations; the screen it opens explains the one
+/// you are on.** For one round it did both: every row printed its full
+/// explanatory sentence, up to three wrapped lines, five times over. Two of
+/// those sentences run past a hundred characters in English and further in
+/// German, so a 208pt column at the supported 560pt window height was spending
+/// most of itself on prose about four screens the reader was not looking at —
+/// and in the longest locales it did not fit at all.
+///
+/// So each row is now a title and its symbol, and the sentence moved to
+/// `DetailHeader` on the destination itself, where the column is three times as
+/// wide and only one of them is on screen. **Nothing was lost to anyone**: every
+/// row still carries the complete sentence as its `accessibilityHint`, so
+/// VoiceOver reads exactly what it read before, and as its `help` tooltip, so a
+/// pointer user can still read it before choosing.
+///
+/// **The selected state is the system's.** `List` selection already draws the
+/// row in the app's own `AccentColor` — the brand violet — with the correct
+/// contrast, focus behaviour and Increase Contrast handling. There is no second
+/// indicator painted over it: the saturated violet paragraph block this replaces
+/// was the single loudest thing in the window, and a bar drawn inside a
+/// highlight the system already drew is decoration.
 ///
 /// **LAN Transfer and Cross-network Transfer are two rows.** They were briefly
 /// one, called Workspace, on the argument that they are two ways to reach one
@@ -83,11 +98,9 @@ struct SidebarView: View {
         List(selection: selection) {
             Section {
                 row(.lanTransfer,
-                    symbol: "dot.radiowaves.left.and.right",
                     title: L10n.t(.navLanTransfer),
                     subtitle: L10n.t(.navLanTransferSubtitle))
                 row(.crossNetworkTransfer,
-                    symbol: "number.circle",
                     title: L10n.t(.navCrossNetwork),
                     subtitle: L10n.t(.navCrossNetworkSubtitle))
             } header: {
@@ -95,7 +108,6 @@ struct SidebarView: View {
             }
             Section {
                 row(.storedSend,
-                    symbol: "link.badge.plus",
                     title: L10n.t(.navStoredSend),
                     subtitle: L10n.t(.navStoredSendSubtitle))
             } header: {
@@ -111,7 +123,6 @@ struct SidebarView: View {
                 // settings tab and the destination heading render — so the
                 // feature has one name in the product rather than four.
                 row(.deviceInbox,
-                    symbol: "tray.and.arrow.down",
                     title: L10n.t(.inboxTitle),
                     subtitle: L10n.t(.navDeviceInboxSubtitle))
             } header: {
@@ -121,7 +132,6 @@ struct SidebarView: View {
             // a transport, and grouping it under a heading would imply it is one
             // more way to move a file.
             row(.account,
-                symbol: "person.crop.circle",
                 title: L10n.t(.navAccount),
                 subtitle: L10n.t(.navAccountSubtitle))
         }
@@ -144,32 +154,28 @@ struct SidebarView: View {
     }
 
     private func row(_ surface: MacSurface,
-                     symbol: String,
                      title: String,
                      subtitle: String) -> some View {
         let live = hasLiveSession(surface)
-        return VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-                Label(title, systemImage: symbol)
-                if live {
-                    Image(systemName: liveSessionSymbol)
-                        .foregroundStyle(.tint)
-                        // The words are already on the row's own accessibility
-                        // label, and a badge that announced itself separately
-                        // would read the state twice.
-                        .accessibilityHidden(true)
-                }
+        return HStack(spacing: Metrics.tight) {
+            Label(title, systemImage: surface.symbol)
+                .lineLimit(2)
+            if live {
+                Image(systemName: liveSessionSymbol)
+                    .foregroundStyle(.tint)
+                    // The words are already on the row's own accessibility
+                    // label, and a badge that announced itself separately
+                    // would read the state twice.
+                    .accessibilityHidden(true)
             }
-            Text(subtitle)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                // Sidebar lists inherit a single-line limit on macOS. Without
-                // an explicit override the full string remains in AXHelp while
-                // the visible row ends in an ellipsis at every window size.
-                .lineLimit(3)
-                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 3)
+        // The sentence that used to be printed under the title, kept where a
+        // pointer can still reach it. This is the SAME string the row's
+        // accessibility hint carries, so the tooltip and VoiceOver cannot drift
+        // apart, and it is the reason dropping the visible caption costs a
+        // browsing reader nothing rather than hiding the explanation.
+        .help(subtitle)
         .accessibilityElement(children: .combine)
         // The AX container for a SwiftUI List changed between macOS 15 and 26
         // (table vs outline). The task identity must not depend on that private
@@ -228,7 +234,7 @@ struct SidebarView: View {
     /// live-session marker still says when a transfer is running there.
     @ViewBuilder private var residency: some View {
         if navigation.selection.macSurface == .lanTransfer {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: Metrics.hairline) {
                 Divider()
                 Text(L10n.t(.navResidency))
                     .font(.caption.weight(.semibold))
@@ -238,8 +244,8 @@ struct SidebarView: View {
                             label: NearbyStatusPresentation.text(for: receive.state))
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.bottom, 10)
+            .padding(.horizontal, Metrics.inner)
+            .padding(.bottom, Metrics.inner)
             .accessibilityElement(children: .combine)
             // The footer is an absence on four of five rows, and an absence
             // needs a name a runtime check can ask for. The AX container for a

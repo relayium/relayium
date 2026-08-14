@@ -76,7 +76,10 @@ struct LanTransferDestination: View {
     }
 
     var body: some View {
-        DestinationScaffold(title: L10n.t(.navLanTransfer), contentMaxWidth: nil) {
+        DestinationScaffold(title: L10n.t(.navLanTransfer),
+                            symbol: MacSurface.lanTransfer.symbol,
+                            purpose: L10n.t(.navLanTransferSubtitle),
+                            contentMaxWidth: nil) {
             switch pane {
             case .link:
                 TransferLinkPane(link: link)

@@ -665,6 +665,15 @@
 /* MARK: macOS transfer destinations */
 "crossNetwork.explain" = "لا يلزم أن يكون الجهازان على الشبكة نفسها. ينشئ أحد الطرفين رمزًا من ستة أرقام ويكتبه الطرف الآخر، فتُعرّف خدمة الالتقاء في Relayium الطرفين ببعضهما؛ يكفي أن يكون الطرفان متصلين في الوقت نفسه.";
 "transfer.busyElsewhere" = "هناك عملية نقل أخرى مفتوحة في Relayium. أنهِها أو غادرها قبل بدء واحدة هنا.";
+
+/* The path a transfer travels (macOS Path Rail). */
+"path.thisMac" = "هذا الـ Mac";
+"path.otherDevice" = "الجهاز الآخر";
+"path.yourAccount" = "حسابك";
+"path.encryptedConnection" = "اتصال مُشفَّر";
+"path.encryptedOnRelayium" = "مُشفَّر لدى Relayium";
+"path.anyoneWithLink" = "أي شخص يملك الرابط";
+"path.a11yRoute" = "المسار الذي يسلكه هذا النقل";
 "workspace.sameNetworkHeading" = "الشبكة نفسها";
 "workspace.pairingHeading" = "رمز الاقتران";
 "workspace.stagingHeading" = "الملفات والمجلدات";
