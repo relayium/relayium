@@ -460,7 +460,7 @@
 "error.apple.emailUnavailable" = "Apple no proporcionó una dirección de correo. Elimina Relayium de «Iniciar sesión con Apple» en Ajustes e inténtalo de nuevo.";
 "error.apple.incompleteCredential" = "Apple no devolvió todo lo necesario para iniciar sesión, así que no se envió nada. Inténtalo de nuevo o entra con tu correo y contraseña.";
 "error.apple.authorizationFailed" = "El inicio de sesión con Apple no se completó. Inténtalo de nuevo o entra con tu correo y contraseña.";
-"error.keychain.signIn" = "macOS no pudo guardar tu inicio de sesión (error de llavero %@). Seguirás con la sesión iniciada hasta que salgas de la app.";
+"error.keychain.signIn" = "Este dispositivo no pudo guardar tu inicio de sesión (error de llavero %@). Seguirás con la sesión iniciada hasta que salgas de la app.";
 "error.storedKey.keychain.save" = "El llavero no pudo guardar la clave de este archivo (error de llavero %@).";
 "error.storedKey.keychain.read" = "No se pudo leer la clave de este archivo del llavero (error de llavero %@).";
 "error.storedKey.keychain.remove" = "El llavero no pudo quitar la clave de este archivo (error de llavero %@).";

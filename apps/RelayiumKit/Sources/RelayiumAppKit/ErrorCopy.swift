@@ -43,7 +43,7 @@ public enum ErrorCopy {
     /// meaning by default.
     ///
     /// `KeychainError` is raised by two stores that mean entirely different
-    /// things by it. `KeychainTokenStore` holds this Mac's bearer, so
+    /// things by it. `KeychainTokenStore` holds this device's bearer, so
     /// `message(for:)`'s wording — the sign-in was not stored, you will stay
     /// signed in until you quit — is exactly right there and is left alone.
     /// `KeychainStoredLinkKeyStore` holds one file's key, and for it that same

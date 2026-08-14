@@ -460,7 +460,7 @@
 "error.apple.emailUnavailable" = "A Apple não forneceu um endereço de e-mail. Remova o Relayium de «Iniciar sessão com a Apple» nas Definições e tente novamente.";
 "error.apple.incompleteCredential" = "A Apple não devolveu tudo o que é preciso para entrar, por isso nada foi enviado. Tente de novo ou entre com o seu e-mail e palavra-passe.";
 "error.apple.authorizationFailed" = "O início de sessão com a Apple não foi concluído. Tente de novo ou entre com o seu e-mail e palavra-passe.";
-"error.keychain.signIn" = "O macOS não conseguiu guardar o seu início de sessão (erro do porta-chaves %@). Continuará com sessão iniciada até sair da app.";
+"error.keychain.signIn" = "Este dispositivo não conseguiu guardar o seu início de sessão (erro do porta-chaves %@). Continuará com sessão iniciada até sair da app.";
 "error.storedKey.keychain.save" = "O porta-chaves não conseguiu guardar a chave deste ficheiro (erro do porta-chaves %@).";
 "error.storedKey.keychain.read" = "Não foi possível ler a chave deste ficheiro do porta-chaves (erro do porta-chaves %@).";
 "error.storedKey.keychain.remove" = "O porta-chaves não conseguiu remover a chave deste ficheiro (erro do porta-chaves %@).";

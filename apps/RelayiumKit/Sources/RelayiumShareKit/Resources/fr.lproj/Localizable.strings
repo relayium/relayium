@@ -460,7 +460,7 @@
 "error.apple.emailUnavailable" = "Apple n’a fourni aucune adresse e-mail. Supprimez Relayium de « Connexion avec Apple » dans Réglages, puis réessayez.";
 "error.apple.incompleteCredential" = "Apple n’a pas renvoyé tout ce qu’il faut pour se connecter ; rien n’a été envoyé. Réessayez ou connectez-vous avec votre e-mail et votre mot de passe.";
 "error.apple.authorizationFailed" = "La connexion avec Apple ne s’est pas terminée. Réessayez ou connectez-vous avec votre e-mail et votre mot de passe.";
-"error.keychain.signIn" = "macOS n’a pas pu enregistrer votre connexion (erreur de trousseau %@). Vous resterez connecté jusqu’à ce que vous quittiez l’app.";
+"error.keychain.signIn" = "Cet appareil n’a pas pu enregistrer votre connexion (erreur de trousseau %@). Vous resterez connecté jusqu’à ce que vous quittiez l’app.";
 "error.storedKey.keychain.save" = "Le trousseau n’a pas pu enregistrer la clé de ce fichier (erreur de trousseau %@).";
 "error.storedKey.keychain.read" = "La clé de ce fichier n’a pas pu être lue dans le trousseau (erreur de trousseau %@).";
 "error.storedKey.keychain.remove" = "Le trousseau n’a pas pu retirer la clé de ce fichier (erreur de trousseau %@).";

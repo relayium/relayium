@@ -686,6 +686,28 @@ final class LocalizedCopyTests: XCTestCase {
         }
     }
 
+    /// The sign-in token store is shared by the two Apple clients. A keychain
+    /// refusal on iPhone must not tell the user that macOS failed, and merely
+    /// deleting the platform name would leave the sentence unclear about where
+    /// persistence failed. The existing quit consequence stays byte-for-byte
+    /// after the first sentence; guard the changed device noun and diagnostic
+    /// status in every still-shipped catalog.
+    func testTheSignInKeychainFailureNamesADeviceAndNoPlatform() throws {
+        for language in AppLanguage.allCases {
+            let text = ErrorCopy.message(for: KeychainError.status(-34018),
+                                         language: language)
+            let word = try XCTUnwrap(deviceWord[language])
+            XCTAssertTrue(text.contains(word),
+                          "\(language.rawValue) stopped naming the device: \(text)")
+            XCTAssertTrue(text.contains("-34018"),
+                          "\(language.rawValue) dropped the diagnostic status: \(text)")
+            for platform in ["Mac", "macOS", "iPhone", "iPad", "iOS"] {
+                XCTAssertFalse(text.contains(platform),
+                               "\(language.rawValue) names \(platform): \(text)")
+            }
+        }
+    }
+
     // MARK: - in-app registration
 
     /// Every string the create-account flow adds is real copy in all nine, not a

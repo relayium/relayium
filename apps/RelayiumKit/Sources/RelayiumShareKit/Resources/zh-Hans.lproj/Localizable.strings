@@ -455,7 +455,7 @@
 "error.apple.emailUnavailable" = "Apple 未提供邮箱地址。请在系统设置的“通过 Apple 登录”中移除 Relayium，然后重试。";
 "error.apple.incompleteCredential" = "Apple 未返回登录所需的全部信息，因此没有发送任何内容。请重试，或改用邮箱和密码登录。";
 "error.apple.authorizationFailed" = "Apple 登录未能完成。请重试，或改用邮箱和密码登录。";
-"error.keychain.signIn" = "macOS 未能保存你的登录凭据（钥匙串错误 %@）。在退出应用之前你会保持登录状态。";
+"error.keychain.signIn" = "这台设备未能保存你的登录凭据（钥匙串错误 %@）。在退出应用之前你会保持登录状态。";
 "error.storedKey.keychain.save" = "钥匙串未能保存这个文件的密钥（钥匙串错误 %@）。";
 "error.storedKey.keychain.read" = "钥匙串未能读取这个文件的密钥（钥匙串错误 %@）。";
 "error.storedKey.keychain.remove" = "钥匙串未能移除这个文件的密钥（钥匙串错误 %@）。";

@@ -465,7 +465,7 @@
 "error.apple.emailUnavailable" = "Apple didn't provide an email address. Remove Relayium from Sign in with Apple in Settings, then try again.";
 "error.apple.incompleteCredential" = "Apple didn't return everything needed to sign in, so nothing was sent. Try again, or sign in with your email and password.";
 "error.apple.authorizationFailed" = "Signing in with Apple didn't complete. Try again, or sign in with your email and password.";
-"error.keychain.signIn" = "macOS wouldn't store your sign-in (keychain error %@). You'll stay signed in until you quit.";
+"error.keychain.signIn" = "This device couldn't store your sign-in (keychain error %@). You'll stay signed in until you quit.";
 "error.storedKey.keychain.save" = "The keychain wouldn't save this file's key (keychain error %@).";
 "error.storedKey.keychain.read" = "The keychain wouldn't read this file's key (keychain error %@).";
 "error.storedKey.keychain.remove" = "The keychain wouldn't remove this file's key (keychain error %@).";

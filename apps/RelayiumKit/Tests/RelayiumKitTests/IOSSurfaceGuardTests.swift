@@ -772,9 +772,11 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// here on, and they carry the half a ban cannot: that each sentence still
     /// names the device it is about instead of merely dropping the noun.
     ///
-    /// Seven of the remaining eight are still blocked behind a feature this app
-    /// does not have, so rendering one has to be a decision rather than an
-    /// oversight. The eighth is rendered by nothing on either platform.
+    /// The two remaining keys are notifications, which this slice deliberately
+    /// does not add — a foreground inbound session navigates in app instead.
+    /// The shared sign-in-keychain error is reachable indirectly through
+    /// `AccountSession`, so it is guarded by rendered copy in
+    /// `LocalizedCopyTests` rather than falsely listed as unreachable here.
     func testNoPlatformNamingCopyKeyIsRenderedOnIOS() throws {
         // **R3-E takes a ninth off by the same route.** This slice renders the
         // advanced-verification setting, so `verify.explainEncryption` — which
@@ -795,15 +797,10 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // from here on, together with the half a ban cannot make: that each
         // sentence still names the device it is about.
         //
-        // What remains is notifications, which this slice deliberately does not
-        // add — a foreground inbound session navigates in app instead — and one
-        // key rendered by nothing on either platform.
         let platformNaming: [L10nKey] = [
             .notifyIncomingFiles, .notifyIncomingText,
-            // Rendered by nothing on either platform yet.
-            .errorKeychainSignIn,
         ]
-        XCTAssertEqual(platformNaming.count, 3)
+        XCTAssertEqual(platformNaming.count, 2)
         for (name, text) in try sources() {
             for key in platformNaming {
                 XCTAssertFalse(text.contains(".\(key)"),

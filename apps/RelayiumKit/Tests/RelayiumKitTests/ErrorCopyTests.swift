@@ -30,6 +30,8 @@ final class ErrorCopyTests: XCTestCase {
         let m = ErrorCopy.message(for: KeychainError.status(-25300), language: .en).lowercased()
         XCTAssertTrue(m.contains("sign-in"), m)
         XCTAssertTrue(m.contains("quit"), m)
+        XCTAssertTrue(m.contains("device"), m)
+        XCTAssertFalse(m.contains("macos"), m)
     }
     /// The same error type also reaches three stored-link-key paths, where that
     /// copy is false in every part: no sign-in was involved, nothing about the

@@ -460,7 +460,7 @@
 "error.apple.emailUnavailable" = "Apple hat keine E-Mail-Adresse bereitgestellt. Entferne Relayium in den Einstellungen unter „Mit Apple anmelden“ und versuche es erneut.";
 "error.apple.incompleteCredential" = "Apple hat nicht alles zurückgegeben, was für die Anmeldung nötig ist – es wurde nichts gesendet. Versuche es erneut oder melde dich mit E-Mail und Passwort an.";
 "error.apple.authorizationFailed" = "Die Anmeldung mit Apple wurde nicht abgeschlossen. Versuche es erneut oder melde dich mit E-Mail und Passwort an.";
-"error.keychain.signIn" = "macOS konnte deine Anmeldung nicht sichern (Schlüsselbund-Fehler %@). Du bleibst angemeldet, bis du die App beendest.";
+"error.keychain.signIn" = "Dieses Gerät konnte deine Anmeldung nicht sichern (Schlüsselbund-Fehler %@). Du bleibst angemeldet, bis du die App beendest.";
 "error.storedKey.keychain.save" = "Der Schlüsselbund konnte den Schlüssel dieser Datei nicht sichern (Schlüsselbund-Fehler %@).";
 "error.storedKey.keychain.read" = "Der Schlüssel dieser Datei konnte nicht aus dem Schlüsselbund gelesen werden (Schlüsselbund-Fehler %@).";
 "error.storedKey.keychain.remove" = "Der Schlüsselbund konnte den Schlüssel dieser Datei nicht entfernen (Schlüsselbund-Fehler %@).";

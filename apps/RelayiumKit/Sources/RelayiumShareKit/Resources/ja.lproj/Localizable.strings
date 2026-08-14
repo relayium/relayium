@@ -451,7 +451,7 @@
 "error.apple.emailUnavailable" = "Apple からメールアドレスが提供されませんでした。設定の「Apple でサインイン」から Relayium を削除して、もう一度お試しください。";
 "error.apple.incompleteCredential" = "サインインに必要な情報が Apple から返されなかったため、何も送信されていません。もう一度お試しいただくか、メールアドレスとパスワードでサインインしてください。";
 "error.apple.authorizationFailed" = "Apple でのサインインが完了しませんでした。もう一度お試しいただくか、メールアドレスとパスワードでサインインしてください。";
-"error.keychain.signIn" = "macOS がサインイン情報を保存できませんでした（キーチェーンエラー %@）。アプリを終了するまではサインインしたままです。";
+"error.keychain.signIn" = "このデバイスにサインイン情報を保存できませんでした（キーチェーンエラー %@）。アプリを終了するまではサインインしたままです。";
 "error.storedKey.keychain.save" = "キーチェーンにこのファイルの鍵を保存できませんでした（キーチェーンエラー %@）。";
 "error.storedKey.keychain.read" = "キーチェーンからこのファイルの鍵を読み取れませんでした（キーチェーンエラー %@）。";
 "error.storedKey.keychain.remove" = "キーチェーンからこのファイルの鍵を削除できませんでした（キーチェーンエラー %@）。";
