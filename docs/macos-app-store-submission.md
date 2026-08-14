@@ -125,9 +125,11 @@ peer, or that a web/Stripe subscription is managed by Apple.
 
 ## TestFlight state and information draft
 
-**Build `1.2.0 (7)` — uploaded, nothing beyond that confirmed.** Xcode
-successfully uploaded build `7` to App Store Connect at 2026-08-14 09:57
-Asia/Dubai, and Apple reported that the package is processing.
+**Build `1.2.0 (7)` — processed, compliance-answered, and installed
+internally.** Xcode successfully uploaded build `7` to App Store Connect at
+2026-08-14 09:57 Asia/Dubai. Processing has since **finished**, its
+export-compliance question has been answered, and App Store Connect now reports
+build `7` as **Ready to Submit**.
 
 Before that upload, the single retained `1.2.0 (7)` archive passed local
 inspection of its version, signature, entitlements, universal architecture,
@@ -135,19 +137,21 @@ StoreKit configuration, privacy manifest, and absence of Sparkle. The
 exact-source Swift/package tests and the signed macOS CI gate passed for the
 same commit.
 
+Export compliance for build `7` was answered on the same facts as build `6`:
+the app uses standard, non-exempt encryption, and distribution excludes France,
+so no French declaration was required and none was faked.
+
+Build `7` was **manually added** to the internal group **Relayium Internal**.
+
 The following have **not** happened for build `7` and must not be assumed:
 
-- App Store Connect processing has **not been independently read back**. The
-  authenticated browser session expired, so Apple's own reported processing
-  state is the last thing observed; no later status was confirmed from the
-  console.
-- No export-compliance answer has been given for build `7`.
-- It is assigned to **no** TestFlight group, internal or external.
-- No Beta App Review submission has been made for it.
+- It is in **no external group**. Build `7` is deliberately absent from
+  **Relayium External Beta**: App Store Connect currently permits only one
+  build of version `1.2.0` in Beta App Review, and build `1.2.0 (6)` is still
+  **Waiting for Review** there. Do **not** remove build `6` to make room for
+  build `7`.
+- No Beta App Review submission has been made for build `7`.
 - No public release has occurred.
-
-The TestFlight group and review state recorded below describes build
-`1.2.0 (6)` and remains accurate for it.
 
 Verified 2026-08-14: build `1.2.0 (6)` is uploaded, its export compliance is
 **cleared**, and it is attached to **both** the internal group **Relayium
@@ -156,20 +160,22 @@ Compliance cleared truthfully through the questionnaire's non-France answer —
 the app does use non-exempt encryption, and France is not a selected territory,
 so no French declaration was required and none was faked.
 
-**Relayium Internal** reads **one tester** and **one build**, and uses **Manual
-for Xcode Builds** distribution. Build `1.2.0 (6)` is **Ready to Test** there
-and expires in **90 days**. The single tester is an invitation Apple has already
-sent; whether it has been accepted or installed is not recorded here. No
-address, personal name, or invitation value belongs in this document or anywhere
-else in the repository.
+**Relayium Internal**, from a fresh readback on 2026-08-14, reads **one tester**
+and **two builds**: build `1.2.0 (6)` and build `1.2.0 (7)` both read
+**Testing**. The group still uses **Manual** distribution (**Manual for Xcode
+Builds**) — adding build `7` did not switch it to automatic. The tester has
+**installed build `7`**. No address, personal name, or invitation value belongs
+in this document or anywhere else in the repository.
 
 Internal readiness is not external readiness. A build that internal testers can
-install says nothing about whether the external group is approved.
+install says nothing about whether the external group is approved. Nothing
+above reports external approval: none has been granted.
 
 **Relayium External Beta**, verified 2026-08-14, reads **zero testers** and
-**one build**. Its public invitation link is **enabled** and its capacity reads
-**0 of 3**. The link value and any tester email addresses are deliberately
-absent from this document and must never be written into the repository.
+**one build** — build `1.2.0 (6)`. Its public invitation link is **enabled** and
+its capacity reads **0 of 3**. The link value and any tester email addresses are
+deliberately absent from this document and must never be written into the
+repository.
 
 The link still **cannot accept joiners**. That is correct, not a defect:
 **Beta App Review** is **Waiting for Review**, and an external build only
@@ -202,14 +208,45 @@ What to test:
 The feedback email, review contact, and review sign-in are maintained directly
 in App Store Connect. Never commit review credentials to this repository.
 
+### Observed in the installed TestFlight build `1.2.0 (7)`
+
+Checked directly in the installed build on 2026-08-14, on the account
+subscription surface:
+
+- All **six** mapped products render. Apple supplies only the **localized price
+  and currency formatting** for each one. Relayium supplies everything else on
+  the row: the plan name and tier order, the billing-cycle wording, and the
+  authoritative storage and monthly-traffic entitlement copy — all taken from
+  the Relayium catalog.
+- The current plan is identified exactly — **Plus monthly** — and that
+  product's duplicate **Subscribe** action is omitted.
+- The other **five** products keep their **Subscribe** action.
+- **Restore purchases** and **Manage in the App Store** are both shown.
+
+This is a readback of the offer surface, not a new purchase. The **Plus
+monthly** entitlement it identifies was established earlier: a real Sandbox
+purchase of Plus monthly was completed in build `1.2.0 (6)`, its signed
+StoreKit 2 transaction was verified by the Relayium server, and the resulting
+entitlement was **applied** to the account. Build `7` read that
+already-existing entitlement back and identified Plus monthly as current; it
+did **not** create a second transaction.
+
+That boundary matters in both directions. The StoreKit purchase-and-verify path
+has been observed working once, in Sandbox, for one product. **App Store Server
+Notifications V2 delivery is still a separate, unverified gate** — no V2
+delivery has been observed reaching `applied`, so the lifecycle events Apple
+sends after a purchase (renewal, cancellation, refund, billing retry) remain
+unproven.
+
 ## App Review notes draft
 
 > The subscription UI is in Account. Relayium first fetches its provider-neutral
-> product catalog from the Relayium server, which supplies the plan each product
-> grants, its monthly or yearly billing cycle, and the order the tiers are shown
-> in. It then asks StoreKit about exactly those product identifiers and shows
-> Apple's localized display metadata and price. A product the server does not
-> list is never offered, and a product StoreKit does not answer for is not shown.
+> product catalog from the Relayium server, which supplies the plan names, the
+> benefits, the monthly or yearly cycle wording, and the order the tiers are
+> shown in. It then asks StoreKit about exactly those product identifiers;
+> StoreKit supplies the localized price and currency formatting for them. A
+> product the server does not list is never offered, and a product StoreKit does
+> not answer for is not shown.
 > A successful signed StoreKit 2 transaction is sent to the
 > Relayium server for Apple verification before the account entitlement changes.
 > Restore Purchases is always available. Manage Subscription appears when the
@@ -222,9 +259,10 @@ in App Store Connect. Never commit review credentials to this repository.
 > verify text or file transfer.
 
 Before submission, append the exact demo-account instructions and any special
-network setup. Do not claim a purchase is functional until a real Sandbox
-transaction and an Apple Server Notifications V2 delivery have both been
-observed end to end.
+network setup. A real Sandbox transaction has been observed end to end — Plus
+monthly, purchased in build `1.2.0 (6)`, verified, and applied. An Apple Server
+Notifications V2 delivery has **not**: do not claim the subscription lifecycle
+is functional until one is observed reaching `applied`.
 
 ## Screenshots
 
@@ -259,14 +297,14 @@ Suggested set:
 
 The following items are intentionally unresolved and must not be guessed:
 
-- Export compliance is **resolved for build `1.2.0 (6)`** (2026-08-14) and must
-  stay truthful for every later build. The app embeds non-Apple cryptographic
-  implementations for end-to-end encryption; never set
+- Export compliance is **resolved for builds `1.2.0 (6)` and `1.2.0 (7)`**
+  (2026-08-14) and must stay truthful for every later build. The app embeds
+  non-Apple cryptographic implementations for end-to-end encryption; never set
   `ITSAppUsesNonExemptEncryption` to `NO` merely to suppress the questionnaire.
-  The build cleared because France is not a selected territory, so the French
-  declaration question is answered No on the facts. Build `1.2.0 (7)` has **no
-  export-compliance answer yet**; it carries the same encryption facts, but the
-  questionnaire still has to be answered truthfully for that build.
+  Both builds cleared on the same facts — standard, non-exempt encryption, and
+  France is not a selected territory, so the French declaration question is
+  answered No on the facts. A later build inherits the encryption facts but not
+  the answer: the questionnaire still has to be answered truthfully for it.
 - The French encryption declaration only returns if France is re-added. That
   path runs through ANSSI: the provider or first importer submits the completed
   electronic form, a signed scanned copy, and supporting product and technical
@@ -313,9 +351,15 @@ The following items are intentionally unresolved and must not be guessed:
   Production). Send Apple's test notification on the Sandbox URL first, then
   prove a real Sandbox delivery reaches `applied`.
 - Build `1.2.0 (6)` is uploaded, compliance-cleared, and attached to both
-  TestFlight groups. Build `1.2.0 (7)` is uploaded and was reported processing,
-  but has no compliance answer, no group assignment, and no Beta App Review
-  submission. External TestFlight is still gated on **Beta App Review**,
-  which is **Waiting for Review**; until it passes, the public link cannot
-  accept joiners. A real Sandbox purchase must be observed before Add for Review
-  is used on the version and subscriptions. Keep manual release selected.
+  TestFlight groups. Build `1.2.0 (7)` has finished processing, is
+  compliance-answered, reads **Ready to Submit**, and is **Testing** in the
+  internal group alongside build `6`; it has no external group assignment and
+  no Beta App Review submission, because only one build of version `1.2.0` may
+  be in Beta App Review at a time and build `6` holds that slot. External
+  TestFlight is still gated on **Beta App Review**, which is **Waiting for
+  Review**; until it passes, the public link cannot accept joiners. The real
+  Sandbox purchase gate is **met**: Plus monthly was purchased in build
+  `1.2.0 (6)`, verified, and applied, and build `7` only read that existing
+  entitlement back. The purchase-path gate still open before Add for Review is
+  used on the version and subscriptions is an observed **App Store Server
+  Notifications V2** delivery reaching `applied`. Keep manual release selected.
