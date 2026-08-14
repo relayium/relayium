@@ -35,7 +35,8 @@ final class AppShellUITests: XCTestCase {
     }
 
     private var offlineLaunchArguments: [String] {
-        ["--relayium-ui-testing", "-AppleLanguages", "(en)",
+        ["--relayium-ui-testing", "--relayium-ui-testing-file-code",
+         "-AppleLanguages", "(en)",
          "-AppleLocale", "en_US", "-SUEnableAutomaticChecks", "NO"]
     }
 
@@ -576,11 +577,11 @@ final class AppShellUITests: XCTestCase {
                       "Cross-network Transfer has no pairing-code field")
         XCTAssertFalse(window.buttons["Connect"].isEnabled,
                        "an empty code left the connect action actionable")
-        // And there is no second verb to disagree with it.
-        XCTAssertFalse(window.buttons["Connect"].exists,
-                       "the pairing screen still asks which kind to join")
-        XCTAssertFalse(window.buttons["Connect"].exists,
-                       "the pairing screen still asks which kind to join")
+        // And neither retired kind-specific verb survives beside it.
+        XCTAssertFalse(window.buttons["Join messages"].exists,
+                       "the pairing screen still asks whether to join messages")
+        XCTAssertFalse(window.buttons["Join files"].exists,
+                       "the pairing screen still asks whether to join files")
 
         field.click()
         field.typeText("123456")
@@ -1447,7 +1448,7 @@ final class AppShellUITests: XCTestCase {
     /// action, does not change the link, and does not leave the screen.
     func testCreatingAPairingCodeWithAStagedBatchShowsEveryHandoff() throws {
         app.terminate()
-        app.launchArguments = offlineLaunchArguments + ["--relayium-ui-testing-file-code"]
+        app.launchArguments = offlineLaunchArguments
         app.launch()
         ensureProductWindowIsOpen()
 
