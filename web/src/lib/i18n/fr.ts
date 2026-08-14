@@ -485,7 +485,7 @@ const fr: Messages = {
     noToken: "Cette page n'est accessible que depuis un lien de connexion.",
     home: "Retour à l'accueil",
   },
-  nav: { footerLegalLabel: "Mentions légales", footerGuidesLabel: "Ressources", primaryLabel: "Navigation principale", footerLabel: "Navigation de pied de page", lanTab: "LAN", crossTab: "Entre réseaux", offlineTab: "Asynchrone", cliTab: "CLI", appsTab: "Applis", deviceInboxTab: "Boîte appareil" },
+  nav: { footerLegalLabel: "Mentions légales", footerGuidesLabel: "Ressources", primaryLabel: "Navigation principale", footerLabel: "Navigation de pied de page", lanTab: "LAN", crossTab: "Entre réseaux", offlineTab: "Asynchrone", cliTab: "CLI", appsTab: "Applis", deviceInboxTab: "Boîte appareil", railPrev: "Afficher les pages précédentes", railNext: "Afficher les pages suivantes" },
   crossTitle: "Transfert entre réseaux",
   offlineTitle: "Transfert asynchrone",
   cli: { subtitle: "Transférez des fichiers et du texte éphémère depuis votre terminal — chiffré de bout en bout, auto-hébergeable." },

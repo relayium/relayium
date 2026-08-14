@@ -1,6 +1,5 @@
 <script lang="ts">
   import { lang, messages, type Messages } from "./i18n.svelte";
-  import Logo from "./Logo.svelte";
   let { connState, unsupported, selfName, selfIP, onRename, workspace = false }:
     { connState: "connecting" | "ready" | "reconnecting"; unsupported: boolean; selfName: string; selfIP: string; onRename: (name: string) => void; workspace?: boolean } = $props();
   const t = $derived<Messages>(messages[lang()]);
@@ -30,9 +29,15 @@
   }
 </script>
 
+<!-- This device, and what the page promises about it. Deliberately NOT the
+     page's heading any more: Nav already renders the Relayium mark and
+     wordmark, so a second brand mark and an <h1> reading "Relayium" spent the
+     top of the LAN screen — and the page's only h1 — repeating the chrome
+     directly above them. The page title is now the localized "Nearby devices"
+     that App renders over the task column, which is what this destination is
+     actually for. Every behaviour here is unchanged: the tagline in full, the
+     live connection sentence, the inline rename and the public IP. -->
 <header class="hero" class:workspace>
-  <div class="logo"><Logo size={64} /></div>
-  <h1>Relayium</h1>
   <p class="tagline">{t.tagline}</p>
   <!-- Two deliberate groups: the live connection sentence (with its inline rename
        control) and, separately, the public IP as secondary metadata. On one desktop
@@ -72,32 +77,18 @@
 </header>
 
 <style>
-  .hero { text-align: center; padding-top: var(--space-9); }
-  /* Staggered entrance on mount — the hero assembles top-to-bottom on load and
+  /* Without the 64px mark and the display-size wordmark this block is a short
+     identity rail, so the old marketing-hero top padding would now be an empty
+     gap above one line of type. */
+  .hero { text-align: center; padding-top: var(--space-5); }
+  /* Staggered entrance on mount — the block assembles top-to-bottom on load and
      on each return to the LAN page. */
   .hero > :global(*) { animation: fade-up .5s ease both; }
-  .logo { animation-delay: .04s; }
-  h1 { animation-delay: .1s; }
-  .tagline { animation-delay: .16s; }
-  .statusbar { animation-delay: .22s; }
-  .logo {
-    display: inline-flex;
-    margin: 0 auto var(--space-3);
-    border-radius: 15px;
-    /* Brand-tinted glow instead of a plain drop shadow — the mark floats. */
-    box-shadow: 0 12px 36px -10px color-mix(in srgb, var(--accent) 55%, transparent);
-    transition: transform .25s cubic-bezier(.22, 1, .36, 1), box-shadow .25s ease;
-  }
-  .logo:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 18px 44px -10px color-mix(in srgb, var(--accent) 70%, transparent);
-  }
+  .tagline { animation-delay: .04s; }
+  .statusbar { animation-delay: .1s; }
   @media (prefers-reduced-motion: reduce) {
     .hero > :global(*) { animation: none; }
-    .logo { transition: none; }
-    .logo:hover { transform: none; }
   }
-  h1 { font-size: var(--fs-display); margin: 0 0 var(--space-2); letter-spacing: -1.6px; }
   .tagline { color: var(--text); font-size: var(--fs-body); max-width: 44ch; margin: 0 auto; }
   .statusbar {
     display: inline-flex; align-items: center; gap: var(--space-2);
@@ -155,16 +146,12 @@
   @media (prefers-reduced-motion: reduce) {
     .dot, .dot.on { animation: none; opacity: 1; }
   }
-  @media (max-width: 1024px) { .hero { padding-top: var(--space-7); } h1 { font-size: 36px; } }
+  @media (max-width: 1024px) { .hero { padding-top: var(--space-4); } }
 
-  /* Phone: a masthead, not a second marketing hero. Nav already renders the
-     brand mark, so only the duplicate 64px mark is dropped — the h1 and tagline
-     stay, start-aligned, and the status pill becomes a full-width status block.
-     Logical alignment means Arabic mirrors without a separate rule. */
+  /* Phone: start-aligned, and the status pill becomes a full-width status
+     block. Logical alignment means Arabic mirrors without a separate rule. */
   @media (max-width: 700px) {
     .hero { text-align: start; padding-top: var(--space-3); }
-    .logo { display: none; }
-    h1 { font-size: 23px; letter-spacing: -0.8px; margin-block-end: var(--space-1); }
     .tagline { font-size: var(--fs-sm); max-width: none; margin-inline: 0; }
     .statusbar {
       display: flex; flex-direction: column; align-items: flex-start;
@@ -185,13 +172,11 @@
     .ip { min-width: 0; font-size: var(--fs-xs); overflow-wrap: anywhere; }
   }
 
-  /* At the wide LAN-workspace breakpoint the nav has already rendered the full
-     logo + wordmark. Reuse the proven mobile masthead as a compact "this device"
-     rail while preserving the page's unique h1 and every rename/status behavior. */
+  /* At the wide LAN-workspace breakpoint this is the "this device" column of a
+     two-column workspace. Reuse the proven mobile treatment while preserving
+     every rename/status behavior. */
   @media (min-width: 1180px) {
     .hero.workspace { text-align: start; padding-top: 0; }
-    .hero.workspace .logo { display: none; }
-    .hero.workspace h1 { font-size: 23px; letter-spacing: -0.8px; margin-block-end: var(--space-1); }
     .hero.workspace .tagline {
       font-size: var(--fs-sm); line-height: 1.55;
       max-width: none; margin-inline: 0;

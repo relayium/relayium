@@ -485,7 +485,7 @@ const de: Messages = {
     noToken: "Diese Seite ist nur über einen Anmeldelink erreichbar.",
     home: "Zurück zur Startseite",
   },
-  nav: { footerLegalLabel: "Rechtliches", footerGuidesLabel: "Ressourcen", primaryLabel: "Hauptnavigation", footerLabel: "Fußzeilennavigation", lanTab: "LAN", crossTab: "Netzwerkübergreifend", offlineTab: "Asynchron", cliTab: "CLI", appsTab: "Apps", deviceInboxTab: "Geräte-Posteingang" },
+  nav: { footerLegalLabel: "Rechtliches", footerGuidesLabel: "Ressourcen", primaryLabel: "Hauptnavigation", footerLabel: "Fußzeilennavigation", lanTab: "LAN", crossTab: "Netzwerkübergreifend", offlineTab: "Asynchron", cliTab: "CLI", appsTab: "Apps", deviceInboxTab: "Geräte-Posteingang", railPrev: "Vorherige Seiten anzeigen", railNext: "Nächste Seiten anzeigen" },
   crossTitle: "Netzwerkübergreifende Übertragung",
   offlineTitle: "Asynchron senden",
   cli: { subtitle: "Dateien und flüchtigen Text vom Terminal übertragen — Ende-zu-Ende-verschlüsselt, selbst hostbar." },

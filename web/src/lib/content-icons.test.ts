@@ -61,6 +61,20 @@ describe("content icon ownership", () => {
     expect(data.match(/(?:g|icon): "network"/g)).toHaveLength(2);
   });
 
+  it("draws the Device Inbox hero mark from the shared icon set, not from an emoji", () => {
+    const page = source("DeviceInboxPage.svelte");
+    // An emoji here was a different picture per platform and font (and a tofu
+    // box where the font had none), and it was the one product glyph on the page
+    // that no design token could reach — it could not take the accent colour or
+    // the narrow-viewport size the badge around it already had.
+    expect(page).not.toContain("📥");
+    expect(page).toContain('<div class="logo" aria-hidden="true"><Icon name="inbox" /></div>');
+    // Decorative on purpose: the localized <h1> immediately below it is what
+    // names this page, so a title or label here would be a second, untranslated
+    // accessible name for the same thing.
+    expect(page).toMatch(/<div class="logo" aria-hidden="true">[\s\S]*?<h1>\{t\.deviceInboxPage\.heading\}/);
+  });
+
   it("keeps the stored-mode heading glyph in code rather than translations", () => {
     const offline = source("OfflinePage.svelte");
     expect(offline).toContain('<Icon name="package" size={18} />');

@@ -66,6 +66,7 @@
   import Hero from "./lib/Hero.svelte";
   import DeviceRadar from "./lib/DeviceRadar.svelte";
   import PeerLink from "./lib/PeerLink.svelte";
+  import LanPathRail from "./lib/LanPathRail.svelte";
   import QuotaNotice from "./lib/QuotaNotice.svelte";
   import ReceiveActions from "./lib/ReceiveActions.svelte";
   import WorkspaceHeader from "./lib/WorkspaceHeader.svelte";
@@ -1951,11 +1952,15 @@
        yet, open this page on another device on the same network" describes a
        network that destination does not use. -->
   {#if !mixed && showsPeerRoster(currentRoute(), visiblePeers.length)}
-  <section class="peers" class:cross={currentRoute() === "cross"} class:after-activity={hasActivity}>
+  <section class="peers" class:cross={currentRoute() === "cross"} class:after-activity={hasActivity} aria-labelledby={currentRoute() === "lan" ? "lan-peers-title" : undefined}>
     <!-- A pairing room currently has one remote target (the signalling room cap
          is two participants), and the roster on this route is that room — the
-         socket is bound to the code, so “Nearby devices” is LAN's title alone. -->
-    <h2>{currentRoute() === "cross" ? t.crossPeersTitle : t.peersTitle}</h2>
+         socket is bound to the code, so “Connected peer” is its own title.
+         LAN renders no heading here: its page <h1> IS “Nearby devices”, and the
+         section points at it rather than printing the same words twice. -->
+    {#if currentRoute() === "cross"}
+      <h2>{t.crossPeersTitle}</h2>
+    {/if}
     <QuotaNotice />
     {#if outbox().length && visiblePeers.length !== 1}
       <PendingFiles
@@ -1996,6 +2001,12 @@
         />
       {/if}
       {#if selectedPeer}
+        <!-- The route this send would take, stated only once there is a real
+             recipient to state it about. Inside the same branch as the send
+             card on purpose: `selectedPeer` is a live entry of the visible
+             roster, so the empty and still-scanning states draw no rail at all.
+             What it may and may not claim is documented in the component. -->
+        <LanPathRail {selfName} peerName={selectedPeer.name} />
         <ul bind:this={peerCardList} class:solo class:dragging={dragActive && dropTarget(visiblePeers.length, dropBusy) === "pick"}>
           {@render peerCard(selectedPeer, solo)}
         </ul>
@@ -2105,6 +2116,15 @@
       <Hero {connState} {unsupported} {selfName} {selfIP} onRename={commitName} workspace={!unsupported} />
 
       <div class="lan-task">
+        <!-- The LAN destination's one page heading, and the only <h1> on it.
+             It sits here rather than inside the roster below because the roster
+             is replaced whole by a unified workspace — a heading in there would
+             leave the page with no h1 at all in exactly the state someone is
+             using it hardest. It also survives the unsupported-browser branch,
+             where the page still needs a title over its explanation.
+             The roster section is named by this heading instead of repeating
+             it: the page must say "Nearby devices" once. -->
+        <h1 class="lan-title" id="lan-peers-title">{t.peersTitle}</h1>
         {#if unsupported}
           <div class="ui-callout ui-callout-danger banner">{t.unsupported}</div>
         {:else}
@@ -2221,6 +2241,9 @@
       align-items: start;
     }
     .lan-task { min-width: 0; }
+    /* The task column starts at the top of the grid, so its heading carries no
+       separating margin here — the column gap already does that job. */
+    .lan-workspace.two-col .lan-title { margin-block-start: 0; }
     .lan-workspace.two-col .peers { margin-top: 0; }
     .lan-workspace.two-col .empty {
       box-sizing: border-box;
@@ -2231,6 +2254,15 @@
 
   /* In-app section headings stay modest; marketing sections use the larger global --fs-h2. */
   h2 { font-size: var(--fs-h3); margin: 0 0 var(--space-3); }
+  /* The LAN page title. Same size the roster heading it replaces had: the global
+     h1 is the marketing display size, and an application workspace's title is a
+     label for the column under it, not a masthead. It also carries the spacing
+     the roster's own top margin used to provide, so the heading and the devices
+     it names stay one block. */
+  .lan-title {
+    font-size: 20px; line-height: 1.15; letter-spacing: -0.4px;
+    margin: var(--space-7) 0 var(--space-3);
+  }
 
   /* Fixed overlay (not sticky-in-flow) so appearing/dismissing the toast doesn't
      shove the page content below it up and down. */
@@ -2315,7 +2347,9 @@
   /* Exclude the old peer control from browser scroll anchoring: when an activity
      card is inserted above it, the explicit one-shot reveal below is the only
      source of scroll movement across Chrome/Firefox/Safari. */
-  .peers { margin-top: var(--space-7); overflow-anchor: none; }
+  /* The heading above owns the separation from the identity rail now; what is
+     left here is the gap that opens once activity cards sit between them. */
+  .peers { margin-top: 0; overflow-anchor: none; }
   .peers.after-activity { margin-top: var(--space-4); }
   .activity-reveal-marker {
     block-size: 0;
@@ -2346,7 +2380,7 @@
   /* 48px of separation is desktop rhythm; on a phone it is a third of the
      distance between the masthead and the send action. */
   @media (max-width: 700px) {
-    .peers { margin-top: var(--space-5); }
+    .lan-title { margin-block-start: var(--space-5); }
   }
   /* Cross already lives in a .ui-stack; the homepage's Hero-to-task margin would
      otherwise add another 48px on top of that parent gap. */

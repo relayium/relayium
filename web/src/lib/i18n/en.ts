@@ -485,7 +485,7 @@ const en: Messages = {
     noToken: "This page is only reachable from a sign-in link.",
     home: "Back to home",
   },
-  nav: { footerLegalLabel: "Legal", footerGuidesLabel: "Resources", primaryLabel: "Main", footerLabel: "Footer", lanTab: "LAN", crossTab: "Cross-network", offlineTab: "Async", cliTab: "CLI", appsTab: "Apps", deviceInboxTab: "Device Inbox" },
+  nav: { footerLegalLabel: "Legal", footerGuidesLabel: "Resources", primaryLabel: "Main", footerLabel: "Footer", lanTab: "LAN", crossTab: "Cross-network", offlineTab: "Async", cliTab: "CLI", appsTab: "Apps", deviceInboxTab: "Device Inbox", railPrev: "Show previous pages", railNext: "Show next pages" },
   crossTitle: "Cross-network transfer",
   offlineTitle: "Async transfer",
   cli: { subtitle: "Transfer files and ephemeral text from your terminal — end-to-end encrypted, self-hostable." },

@@ -485,7 +485,7 @@ const ko: Messages = {
     noToken: "이 페이지는 로그인 링크로만 열 수 있습니다.",
     home: "홈으로",
   },
-  nav: { footerLegalLabel: "법적 고지", footerGuidesLabel: "리소스", primaryLabel: "기본 탐색", footerLabel: "푸터 탐색", lanTab: "LAN 전송", crossTab: "네트워크 간 전송", offlineTab: "비동기 전송", cliTab: "CLI", appsTab: "앱", deviceInboxTab: "기기 수신함" },
+  nav: { footerLegalLabel: "법적 고지", footerGuidesLabel: "리소스", primaryLabel: "기본 탐색", footerLabel: "푸터 탐색", lanTab: "LAN 전송", crossTab: "네트워크 간 전송", offlineTab: "비동기 전송", cliTab: "CLI", appsTab: "앱", deviceInboxTab: "기기 수신함", railPrev: "이전 페이지 보기", railNext: "다음 페이지 보기" },
   crossTitle: "네트워크 간 전송",
   offlineTitle: "비동기 전송",
   cli: { subtitle: "터미널에서 파일과 임시 텍스트 전송 — 종단간 암호화, 자체 호스팅 가능." },

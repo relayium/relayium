@@ -657,6 +657,12 @@ export interface Messages {
      *  Keep it SHORT — six labels share one row, and nine languages have to fit
      *  a 320px rail without any of them being truncated. */
     deviceInboxTab: string;
+    /** Accessible names for the two rail controls that appear only while the
+     *  mobile destination row actually overflows. They carry no visible copy —
+     *  the buttons are direction-aware chevrons — so these strings are the only
+     *  thing that names them, and they must say what the control does rather
+     *  than which way it points (the pointing flips in Arabic). */
+    railPrev: string; railNext: string;
   };
   // Full page headings for the cross/offline pages. The nav.*Tab strings are the
   // short pill labels; these are the descriptive <h1> titles.

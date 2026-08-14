@@ -48,6 +48,7 @@
     type PlatformStatus,
   } from "./device-inbox-platforms";
   import CommandBlock from "./CommandBlock.svelte";
+  import Icon from "./Icon.svelte";
   import DeviceSendList from "./DeviceSendList.svelte";
   import releases from "../../native-releases.json";
 
@@ -292,7 +293,11 @@
 
 <section class="dinbox page-enter">
   <header class="hero">
-    <div class="logo" aria-hidden="true">📥</div>
+    <!-- Decorative, and deliberately so: the localized <h1> right below names
+         this page. An emoji here was neither: it rendered as a different
+         picture (or as a tofu box) per platform and font, and it was the one
+         product glyph on this page that no design token could reach. -->
+    <div class="logo" aria-hidden="true"><Icon name="inbox" /></div>
     <h1>{t.deviceInboxPage.heading}</h1>
     <p class="sub">{t.deviceInboxPage.subhead}</p>
     <ul class="badges">
@@ -539,15 +544,21 @@
     padding: var(--space-6) 0 var(--space-4);
   }
   .logo {
+    display: grid;
+    place-items: center;
     width: 60px;
     height: 60px;
-    line-height: 60px;
     margin: 0 auto var(--space-3);
-    font-size: 30px;
     border-radius: 14px;
     background: var(--surface-2);
     border: 1px solid var(--border);
+    /* The text-contrast accent, not the decorative one: this badge is 60px of
+       flat surface and the glyph inside it is the only thing on it. */
+    color: var(--accent-fg);
   }
+  /* Sized here rather than through the component's `size` prop so the
+     narrow-viewport rule further down can shrink it with its badge. */
+  .logo :global(svg) { width: 28px; height: 28px; }
   .hero h1 {
     font-size: var(--fs-display);
     letter-spacing: -1.2px;
@@ -862,11 +873,10 @@
     .logo {
       width: 40px;
       height: 40px;
-      line-height: 40px;
-      font-size: 21px;
       margin: 0 0 var(--space-2);
       border-radius: 10px;
     }
+    .logo :global(svg) { width: 20px; height: 20px; }
     .hero h1 {
       /* The token that already means "page header, not marketing hero". */
       font-size: var(--fs-page-title);

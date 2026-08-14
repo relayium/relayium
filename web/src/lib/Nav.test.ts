@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mount, unmount, flushSync } from "svelte";
 import Nav from "./Nav.svelte";
-import { loadLang } from "./i18n.svelte";
+import { loadLang, setLang, messages } from "./i18n.svelte";
 import {
   navigate, syncRouteFromLocation,
   CROSS_PATH, OFFLINE_PATH, CLI_PATH, APPS_PATH, DEVICE_INBOX_PATH,
@@ -51,6 +51,34 @@ afterEach(() => {
 
 const tabs = () => [...target.querySelectorAll<HTMLAnchorElement>(".tabs a.tab")];
 const current = () => target.querySelectorAll(".tabs [aria-current='page']");
+const railNav = () => target.querySelector(".rail-nav");
+const prevBtn = () => target.querySelector<HTMLButtonElement>(".rail-prev");
+const nextBtn = () => target.querySelector<HTMLButtonElement>(".rail-next");
+
+function rect(left: number, right: number): DOMRect {
+  return { left, right, top: 0, bottom: 40, width: right - left, height: 40, x: left, y: 0, toJSON: () => ({}) } as DOMRect;
+}
+
+/**
+ * jsdom has no layout, so the rail's geometry is stated rather than measured.
+ * `from`..`to` are the destination indices fully inside the 280px-wide rail;
+ * everything before sits off the start edge and everything after off the end.
+ * `overflowing: false` states a rail whose six chips genuinely fit.
+ */
+function layoutRail(from: number, to: number, overflowing = true) {
+  const rail = target.querySelector<HTMLElement>(".tabs")!;
+  Object.defineProperty(rail, "scrollWidth", { configurable: true, value: overflowing ? 600 : 280 });
+  Object.defineProperty(rail, "clientWidth", { configurable: true, value: 280 });
+  rail.getBoundingClientRect = () => rect(0, 280);
+  tabs().forEach((a, i) => {
+    const box = i < from ? rect(-300, -200) : i > to ? rect(400, 500) : rect(10 + (i - from) * 60, 60 + (i - from) * 60);
+    a.getBoundingClientRect = () => box;
+  });
+  // The component re-measures whenever the rail scrolls; a scroll is exactly
+  // what changes which destinations are inside it.
+  rail.dispatchEvent(new Event("scroll"));
+  flushSync();
+}
 
 describe("Nav destinations", () => {
   it("renders all six destinations as real links, never as fake tabs", () => {
@@ -132,6 +160,130 @@ describe("Nav destinations", () => {
     navigate("apps");
     flushSync();
     expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+// Six primary destinations do not fit a 320px row in any language, so the row
+// scrolls. A fade at its edges tells a sighted swiper that there is more; these
+// controls are what tell everyone else, and what makes the hidden destinations
+// reachable without a horizontal-scroll gesture at all.
+describe("Nav rail overflow controls", () => {
+  it("offers no controls while every destination already fits", () => {
+    layoutRail(0, 5, false);
+    expect(railNav()).toBeNull();
+    // …and the rail is not claiming an edge fade it does not need either.
+    expect(target.querySelector(".tabs")!.classList.contains("overflowing")).toBe(false);
+  });
+
+  it("appears only once the row overflows, as two real buttons", () => {
+    layoutRail(0, 2);
+    expect(railNav()).not.toBeNull();
+    for (const btn of [prevBtn()!, nextBtn()!]) {
+      expect(btn.tagName).toBe("BUTTON");
+      expect(btn.getAttribute("type")).toBe("button");
+      // Native buttons: focusable and Enter/Space-operable with no key handler
+      // of their own, which is the only version of this that cannot rot.
+      expect(btn.tabIndex).toBe(0);
+      // No visible copy — the row is already the tightest thing on the screen.
+      expect(btn.textContent!.trim()).toBe("");
+    }
+  });
+
+  it("names both controls from the active locale, never from a hardcoded string", async () => {
+    layoutRail(0, 2);
+    expect(prevBtn()!.getAttribute("aria-label")).toBe(messages.en.nav.railPrev);
+    expect(nextBtn()!.getAttribute("aria-label")).toBe(messages.en.nav.railNext);
+
+    await setLang("ja");
+    flushSync();
+    layoutRail(0, 2);
+    expect(prevBtn()!.getAttribute("aria-label")).toBe(messages.ja.nav.railPrev);
+    expect(prevBtn()!.getAttribute("aria-label")).not.toBe(messages.en.nav.railPrev);
+    await setLang("en");
+    flushSync();
+  });
+
+  it("disables the direction that has nothing left to reveal", () => {
+    layoutRail(0, 2);
+    expect(prevBtn()!.disabled).toBe(true);
+    expect(nextBtn()!.disabled).toBe(false);
+
+    layoutRail(2, 4);
+    expect(prevBtn()!.disabled).toBe(false);
+    expect(nextBtn()!.disabled).toBe(false);
+
+    layoutRail(3, 5);
+    expect(prevBtn()!.disabled).toBe(false);
+    expect(nextBtn()!.disabled).toBe(true);
+  });
+
+  it("reveals the next hidden destination in reading order, and the previous one going back", () => {
+    const spy = Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>;
+    layoutRail(2, 4);
+
+    spy.mockClear();
+    nextBtn()!.click();
+    flushSync();
+    expect(spy.mock.instances.at(-1)).toBe(tabs()[5]);
+    // Centre, not "nearest". The rail snaps its chips on their centres, so a
+    // minimal scroll is undone by proximity snapping and the control pages once
+    // and then freezes — reproduced in Chrome at 320px before this was fixed.
+    expect(spy.mock.calls.at(-1)![0]).toEqual({ block: "nearest", inline: "center" });
+
+    spy.mockClear();
+    prevBtn()!.click();
+    flushSync();
+    expect(spy.mock.instances.at(-1)).toBe(tabs()[1]);
+  });
+
+  // The route reveal is a different job with a different rule: move the page as
+  // little as possible. Collapsing the two would make every route change
+  // recentre the rail under the reader.
+  it("leaves the route reveal on its minimal-movement alignment", () => {
+    const spy = Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>;
+    layoutRail(0, 2);
+    spy.mockClear();
+    navigate("apps");
+    flushSync();
+    expect(spy.mock.calls.at(-1)![0]).toEqual({ block: "nearest", inline: "nearest" });
+  });
+
+  // The whole point of doing this geometrically instead of with scrollLeft
+  // arithmetic: "previous" means the destination earlier in the row in BOTH
+  // directions, and engines disagree about the sign and origin of scrollLeft
+  // under dir=rtl. Only the chevrons flip.
+  it("keeps previous/next meaning the same destinations in Arabic, and flips only the glyphs", async () => {
+    const spy = Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>;
+    layoutRail(2, 4);
+    expect(prevBtn()!.classList.contains("flip")).toBe(true);
+    expect(nextBtn()!.classList.contains("flip")).toBe(false);
+
+    await setLang("ar");
+    flushSync();
+    layoutRail(2, 4);
+    expect(prevBtn()!.classList.contains("flip")).toBe(false);
+    expect(nextBtn()!.classList.contains("flip")).toBe(true);
+
+    spy.mockClear();
+    nextBtn()!.click();
+    flushSync();
+    expect(spy.mock.instances.at(-1)).toBe(tabs()[5]);
+
+    spy.mockClear();
+    prevBtn()!.click();
+    flushSync();
+    expect(spy.mock.instances.at(-1)).toBe(tabs()[1]);
+
+    await setLang("en");
+    flushSync();
+  });
+
+  it("still renders all six destinations as links while the controls are up", () => {
+    layoutRail(1, 3);
+    // The controls page the row; they never replace, collapse or hide a
+    // destination behind a menu.
+    expect(tabs().length).toBe(6);
+    expect(tabs().every((a) => a.getAttribute("href"))).toBe(true);
   });
 });
 

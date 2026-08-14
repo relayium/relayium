@@ -3,7 +3,7 @@
     | "bolt" | "file" | "folder" | "message"
     | "link" | "pairing-code" | "lock" | "download" | "package"
     | "globe" | "clock" | "devices" | "network"
-    | "nearby" | "shield" | "file-download" | "close";
+    | "nearby" | "shield" | "file-download" | "close" | "inbox";
 </script>
 
 <script lang="ts">
@@ -73,6 +73,11 @@
     <path d="M11.5 11v5.5m0 0-2-2m2 2 2-2" />
   {:else if name === "close"}
     <path d="M6 6l12 12M18 6 6 18" />
+  {:else if name === "inbox"}
+    <!-- A receiving tray: sloped lid into the body, then the drop channel.
+         Symmetric about x=12, so it needs no mirroring in RTL. -->
+    <path d="M3 12.2 6.3 5.4a1.6 1.6 0 0 1 1.45-.9h8.5a1.6 1.6 0 0 1 1.45.9L21 12.2v6.1a1.4 1.4 0 0 1-1.4 1.4H4.4A1.4 1.4 0 0 1 3 18.3z" />
+    <path d="M3 12.2h5l1.4 2.6h5.2l1.4-2.6h5" />
   {/if}
 </svg>
 

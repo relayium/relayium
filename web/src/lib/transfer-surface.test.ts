@@ -144,11 +144,16 @@ describe("App.svelte asks this seam rather than restating the rule", () => {
   });
 
   it("never labels the cross-network roster with LAN's own heading", () => {
-    const heading = app.slice(app.indexOf('<h2>{currentRoute() === "cross"'), app.indexOf("<QuotaNotice />"));
+    const heading = app.slice(app.indexOf('<section class="peers"'), app.indexOf("<QuotaNotice />"));
     expect(heading).toContain("t.crossPeersTitle");
     // The shipped `currentRoute() === "cross" && roomCode` fell through to
     // "Nearby devices" for the room-less LAN auto-surface this batch removed.
     expect(heading).not.toContain("roomCode");
+    // LAN's title moved OUT of this section and became the page's <h1>, so the
+    // section must not print it a second time — and the cross branch must not
+    // have been collapsed along with it.
+    expect(heading).not.toContain("t.peersTitle");
+    expect(heading).toMatch(/\{#if currentRoute\(\) === "cross"\}\s*<h2>\{t\.crossPeersTitle\}<\/h2>\s*\{\/if\}/);
   });
 });
 

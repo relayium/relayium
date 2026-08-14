@@ -485,7 +485,7 @@ const zh: Messages = {
     noToken: "本页面只能从登录链接进入。",
     home: "返回首页",
   },
-  nav: { footerLegalLabel: "法律", footerGuidesLabel: "资源", primaryLabel: "主导航", footerLabel: "页脚导航", lanTab: "局域网传输", crossTab: "跨网络传输", offlineTab: "异步传输", cliTab: "CLI", appsTab: "应用", deviceInboxTab: "设备收件箱" },
+  nav: { footerLegalLabel: "法律", footerGuidesLabel: "资源", primaryLabel: "主导航", footerLabel: "页脚导航", lanTab: "局域网传输", crossTab: "跨网络传输", offlineTab: "异步传输", cliTab: "CLI", appsTab: "应用", deviceInboxTab: "设备收件箱", railPrev: "显示前面的页面", railNext: "显示后面的页面" },
   crossTitle: "跨网络传输",
   offlineTitle: "异步传输",
   cli: { subtitle: "在终端里传文件和临时文本 —— 端到端加密，可自托管。" },

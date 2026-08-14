@@ -485,7 +485,7 @@ const es: Messages = {
     noToken: "A esta página solo se llega desde un enlace de acceso.",
     home: "Volver al inicio",
   },
-  nav: { footerLegalLabel: "Aviso legal", footerGuidesLabel: "Recursos", primaryLabel: "Navegación principal", footerLabel: "Navegación de pie de página", lanTab: "LAN", crossTab: "Entre redes", offlineTab: "Asíncrono", cliTab: "CLI", appsTab: "Apps", deviceInboxTab: "Buzón de dispositivo" },
+  nav: { footerLegalLabel: "Aviso legal", footerGuidesLabel: "Recursos", primaryLabel: "Navegación principal", footerLabel: "Navegación de pie de página", lanTab: "LAN", crossTab: "Entre redes", offlineTab: "Asíncrono", cliTab: "CLI", appsTab: "Apps", deviceInboxTab: "Buzón de dispositivo", railPrev: "Mostrar las páginas anteriores", railNext: "Mostrar las páginas siguientes" },
   crossTitle: "Transferencia entre redes",
   offlineTitle: "Transferencia asíncrona",
   cli: { subtitle: "Transfiere archivos y texto efímero desde tu terminal — cifrado de extremo a extremo, autoalojable." },

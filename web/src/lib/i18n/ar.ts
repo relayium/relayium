@@ -540,7 +540,7 @@ const ar: Messages = {
     noToken: "لا يمكن الوصول إلى هذه الصفحة إلا من رابط تسجيل الدخول.",
     home: "العودة إلى الصفحة الرئيسية",
   },
-  nav: { footerLegalLabel: "الشؤون القانونية", footerGuidesLabel: "الموارد", primaryLabel: "التنقل الرئيسي", footerLabel: "تنقل التذييل", lanTab: "LAN", crossTab: "عبر الشبكات", offlineTab: "غير متزامن", cliTab: "CLI", appsTab: "التطبيقات", deviceInboxTab: "بريد الأجهزة" },
+  nav: { footerLegalLabel: "الشؤون القانونية", footerGuidesLabel: "الموارد", primaryLabel: "التنقل الرئيسي", footerLabel: "تنقل التذييل", lanTab: "LAN", crossTab: "عبر الشبكات", offlineTab: "غير متزامن", cliTab: "CLI", appsTab: "التطبيقات", deviceInboxTab: "بريد الأجهزة", railPrev: "إظهار الصفحات السابقة", railNext: "إظهار الصفحات التالية" },
   crossTitle: "النقل عبر الشبكات",
   offlineTitle: "نقل غير متزامن",
   cli: { subtitle: "انقل الملفات والنصوص العابرة من سطر الأوامر — مشفَّر من الطرف إلى الطرف، وقابل للاستضافة الذاتية." },

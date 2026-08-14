@@ -4,7 +4,7 @@
     LAN_PATH, CROSS_PATH, OFFLINE_PATH, CLI_PATH, APPS_PATH, DEVICE_INBOX_PATH,
     type Route,
   } from "./router.svelte";
-  import { lang, setLang, LANGS, messages, type Lang, type Messages } from "./i18n.svelte";
+  import { lang, setLang, LANGS, messages, dir, type Lang, type Messages } from "./i18n.svelte";
   import { loginOpen, setLoginOpen } from "./login.svelte";
   import ThemeSelect from "./ThemeSelect.svelte";
   import Account from "./Account.svelte";
@@ -47,10 +47,73 @@
   // direction-free `scrollWidth > clientWidth` test: no scrollLeft arithmetic,
   // so it behaves identically under RTL.
   let railOverflows = $state(false);
+  // Whether a destination is hidden BEFORE / AFTER the visible run, in reading
+  // order. Not "scrolled to the left/right edge": those are different edges in
+  // Arabic, and every scrollLeft-based version of this question has a different
+  // answer per engine under RTL.
+  let hiddenBefore = $state(false);
+  let hiddenAfter = $state(false);
+
+  const rtl = $derived(dir(lang()) === "rtl");
+
+  function tabLinks(): HTMLAnchorElement[] {
+    return rail ? [...rail.querySelectorAll<HTMLAnchorElement>("a.tab")] : [];
+  }
+
+  /** Indices of the links fully inside the rail's own box, as a [first, last]
+   *  pair (`[-1, -1]` when none is). Deliberately geometric rather than
+   *  arithmetic on scrollLeft: an intersection test means the same thing in
+   *  both directions, and DOM order is the reading order in both. */
+  function visibleRun(): [number, number] {
+    const links = tabLinks();
+    if (!rail || links.length === 0) return [-1, -1];
+    const box = rail.getBoundingClientRect();
+    const boxes = links.map((a) => a.getBoundingClientRect());
+    const inside = boxes.map((r) => r.left >= box.left - 1 && r.right <= box.right + 1);
+    const first = inside.indexOf(true);
+    if (first >= 0) return [first, inside.lastIndexOf(true)];
+    // Nothing fits entirely — one chip is wider than the rail. Fall back to
+    // whatever overlaps it, so the controls still page instead of locking into
+    // a pair that is permanently disabled over a row that does scroll.
+    const touching = boxes.map((r) => r.right > box.left + 1 && r.left < box.right - 1);
+    return [touching.indexOf(true), touching.lastIndexOf(true)];
+  }
 
   function measureRail() {
     if (!rail) return;
     railOverflows = rail.scrollWidth - rail.clientWidth > 1;
+    if (!railOverflows) {
+      hiddenBefore = false;
+      hiddenAfter = false;
+      return;
+    }
+    const [first, last] = visibleRun();
+    const links = tabLinks();
+    hiddenBefore = first > 0;
+    hiddenAfter = last >= 0 && last < links.length - 1;
+  }
+
+  /** Bring the first destination hidden on the given side into view. Same
+   *  `scrollIntoView` the route reveal uses, and for the same reason: it is the
+   *  one scroll API that needs no direction handling.
+   *
+   *  `inline: "center"`, NOT the reveal's `"nearest"`. The rail snaps, and its
+   *  chips snap on their CENTRES (`scroll-snap-align: center`). A minimal
+   *  "nearest" scroll lands between two snap points, proximity snapping pulls
+   *  it back to the chip it started on, and the control then pages exactly once
+   *  and freezes — measured in Chrome at 320px, where every click after the
+   *  first returned the rail to scrollLeft 87. Asking for the same alignment
+   *  the snap engine is going to impose anyway makes the step land where it was
+   *  aimed. The route reveal keeps "nearest" on purpose: it must move the page
+   *  as little as possible, and it is not competing with a repeat press. */
+  function stepRail(back: boolean) {
+    const links = tabLinks();
+    const [first, last] = visibleRun();
+    const target = back
+      ? links[(first < 0 ? links.length : first) - 1]
+      : links[(last < 0 ? -1 : last) + 1];
+    target?.scrollIntoView?.({ block: "nearest", inline: "center" });
+    measureRail();
   }
 
   // Labels change width with the locale, and the rail's own box does not resize
@@ -77,6 +140,9 @@
     if (!rail || rail.scrollWidth - rail.clientWidth <= 1) return;
     const active = rail?.querySelector<HTMLAnchorElement>("a.tab.active");
     active?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    // The reveal moves the rail, so the two controls' boundary state is stale
+    // the instant it lands.
+    measureRail();
   });
 </script>
 
@@ -88,7 +154,7 @@
   <!-- These switch pages, not tab panels, so they're navigation links with
        aria-current — not role="tab" (which would promise a tabpanel that
        doesn't exist). Real hrefs keep right-click/open-in-new-tab working. -->
-  <div class="tabs" class:overflowing={railOverflows} bind:this={rail}>
+  <div class="tabs" class:overflowing={railOverflows} bind:this={rail} onscroll={measureRail}>
     {#each tabs as tab (tab.id)}
       <a
         href={tab.href}
@@ -100,6 +166,31 @@
       >{tab.label()}</a>
     {/each}
   </div>
+
+  <!-- Explicit paging for the scrolling rail. A fade at the edges says
+       "there is more" to someone who can see it and swipe it; these say the
+       same thing to a keyboard, a trackpad without horizontal scroll, and to a
+       reader who never saw the fade. They exist ONLY while the row actually
+       overflows: six destinations that already fit need no controls at all, and
+       a pair of dead buttons under them would read as a rendering bug.
+       They add no visible copy to a row that is already the tightest thing on
+       the screen: a localized aria-label is their whole name. Each chevron
+       points along the reading direction, so both glyphs flip in Arabic while
+       "previous" keeps meaning the same destination it does in English. -->
+  {#if railOverflows}
+    <div class="rail-nav">
+      <button
+        type="button" class="rail-btn rail-prev" class:flip={!rtl}
+        aria-label={t.nav.railPrev} disabled={!hiddenBefore}
+        onclick={() => stepRail(true)}
+      ><span class="chev" aria-hidden="true"></span></button>
+      <button
+        type="button" class="rail-btn rail-next" class:flip={rtl}
+        aria-label={t.nav.railNext} disabled={!hiddenAfter}
+        onclick={() => stepRail(false)}
+      ><span class="chev" aria-hidden="true"></span></button>
+    </div>
+  {/if}
 
   <div class="util">
     <select
@@ -147,6 +238,45 @@
   }
   .tab:hover { border-color: var(--accent-border); }
   .tab.active { color: #fff; background: var(--grad-action); border-color: transparent; }
+
+  /* The rail controls belong to the scrolling rail, and the rail only scrolls
+     below the desktop breakpoint. Hidden here rather than only by the
+     `railOverflows` guard so a desktop row that is briefly measured as
+     overflowing (mid-resize, mid-font-swap) can never paint two controls that
+     have nothing to scroll. */
+  .rail-nav { display: none; }
+  .rail-btn {
+    display: inline-grid; place-items: center;
+    inline-size: 30px; block-size: 30px; padding: 0;
+    border: 1px solid var(--border); border-radius: 999px;
+    background: var(--social-bg); color: var(--text-h); cursor: pointer;
+    transition: border-color .13s, opacity .13s;
+  }
+  .rail-btn:hover:not(:disabled) { border-color: var(--accent-border); }
+  /* Disabled, not removed: the control keeps its place, so reaching the end of
+     the row does not shuffle the other one sideways under the finger. */
+  .rail-btn:disabled { opacity: .38; cursor: default; }
+  /* Mirrors the whole control. Which of the two is mirrored depends on the
+     document direction, so "previous" always points back along the reading
+     order — see the `flip` class in the markup. */
+  .rail-btn.flip { transform: scaleX(-1); }
+  /* Physical borders on purpose: the mirroring above is what handles RTL, and a
+     logical pair would flip the glyph a second time and cancel it out. */
+  .chev {
+    inline-size: 7px; block-size: 7px;
+    border-top: 2px solid currentColor; border-right: 2px solid currentColor;
+    transform: rotate(45deg);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .rail-btn { transition: none; }
+  }
+  /* A 30px circle is the right visual weight next to the chips and too small to
+     hit. Grow only the hit area on touch, exactly as the inline rename control
+     does, so the row's height and rhythm are unchanged. */
+  @media (pointer: coarse) {
+    .rail-btn { position: relative; }
+    .rail-btn::after { content: ""; position: absolute; inset: -7px; }
+  }
 
   .lang {
     font: inherit; font-size: var(--fs-xs); padding-block: 5px; padding-inline: 10px 28px;
@@ -213,6 +343,15 @@
     }
     /* Natural width — never truncate one of six primary destinations. */
     .tab { flex: none; padding-inline: var(--space-3); scroll-snap-align: center; }
+    /* Its own line under the rail, one control at each end of the row it pages.
+       `space-between` and the logical box mean Arabic mirrors with no second
+       rule: the button that sits at the start of the row is the one that pages
+       back in both directions. */
+    .rail-nav {
+      display: flex; order: 4; inline-size: 100%;
+      align-items: center; justify-content: space-between;
+      margin-block-start: 2px;
+    }
     /* Native selects size themselves from their longest option, not just the
        selected label. Japanese's longest theme label used to make the utility
        group 302px wide and push it onto a third row even at 390px. Bound both

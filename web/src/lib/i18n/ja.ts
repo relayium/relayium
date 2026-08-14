@@ -485,7 +485,7 @@ const ja: Messages = {
     noToken: "このページはサインインリンクからのみ開けます。",
     home: "ホームへ戻る",
   },
-  nav: { footerLegalLabel: "法務情報", footerGuidesLabel: "リソース", primaryLabel: "メインナビゲーション", footerLabel: "フッターナビゲーション", lanTab: "LAN", crossTab: "ネットワーク間", offlineTab: "非同期", cliTab: "CLI", appsTab: "アプリ", deviceInboxTab: "デバイス受信箱" },
+  nav: { footerLegalLabel: "法務情報", footerGuidesLabel: "リソース", primaryLabel: "メインナビゲーション", footerLabel: "フッターナビゲーション", lanTab: "LAN", crossTab: "ネットワーク間", offlineTab: "非同期", cliTab: "CLI", appsTab: "アプリ", deviceInboxTab: "デバイス受信箱", railPrev: "前のページを表示", railNext: "次のページを表示" },
   crossTitle: "ネットワーク間転送",
   offlineTitle: "非同期転送",
   cli: { subtitle: "ターミナルからファイルと一時的なテキストを転送 — エンドツーエンド暗号化、セルフホスト可能。" },

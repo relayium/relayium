@@ -2120,7 +2120,11 @@ async function main() {
         empty: rect('.empty'),
         history: rect('.history'),
         h1s: document.querySelectorAll('h1').length,
-        logo: getComputedStyle(document.querySelector('.hero .logo')).display,
+        h1: (document.querySelector('h1')?.textContent ?? '').trim(),
+        // Nav owns the brand at every width now, so the identity rail renders no
+        // mark of its own at all — the old check was that the same element was
+        // present and hidden here.
+        heroMarks: document.querySelectorAll('.hero .logo, .hero h1').length,
         ipInside,
       };
     })()`);
@@ -2133,7 +2137,10 @@ async function main() {
       wideWorkspace.empty.width > 641 ||
       wideWorkspace.history.bottom > 900 ||
       wideWorkspace.h1s !== 1 ||
-      wideWorkspace.logo !== "none" ||
+      // The single h1 is the page's own title, not the product name Nav is
+      // already showing two rows above it.
+      wideWorkspace.h1 === "Relayium" ||
+      wideWorkspace.heroMarks !== 0 ||
       !wideWorkspace.ipInside
     ) {
       throw new Error(`wide LAN workspace contract failed: ${JSON.stringify(wideWorkspace)}`);
