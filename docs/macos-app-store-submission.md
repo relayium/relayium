@@ -232,11 +232,39 @@ already-existing entitlement back and identified Plus monthly as current; it
 did **not** create a second transaction.
 
 That boundary matters in both directions. The StoreKit purchase-and-verify path
-has been observed working once, in Sandbox, for one product. **App Store Server
-Notifications V2 delivery is still a separate, unverified gate** — no V2
-delivery has been observed reaching `applied`, so the lifecycle events Apple
-sends after a purchase (renewal, cancellation, refund, billing retry) remain
-unproven.
+has been observed working once, in Sandbox, for one product.
+
+### App Store Server Notifications V2 — verified
+
+V2 delivery is a separate path from the client's own transaction round trip, and
+it is now verified in its own right. Checked against the live service on
+2026-08-14:
+
+- App Store Connect's **App Information** page shows **both** the **Production
+  Server URL** and the **Sandbox Server URL** saved to the documented Relayium
+  endpoint, `https://relayium.com/api/apple/notifications`.
+- The live endpoint answers a deliberately malformed compact JWS with **HTTP
+  `400`, invalid notification** — not the `503` an unconfigured deployment
+  returns. The verifier is built and running, not inert.
+- The production notification ledger holds exactly **one `TEST` notification**,
+  correctly terminal as **`ignored`** at 2026-08-13 16:39:41 UTC. A `TEST`
+  carries no transaction, so there is nothing to derive and `ignored` is the
+  right terminal state rather than a failure.
+- It also holds exactly **one `SUBSCRIBED` notification from Sandbox**, terminal
+  as **`applied`** at 2026-08-14 04:20:01 UTC — a real Apple delivery that
+  Relayium verified, mapped, and turned into an entitlement.
+- The service reads **active**, and both the local and the public health checks
+  read **ok**.
+
+The required gate — a real Sandbox Notifications V2 delivery reaching `applied`
+— is therefore **met**.
+
+One narrower thing remains true and should not be overstated in either
+direction: the later lifecycle event types Apple sends over a subscription's
+life — renewal, cancellation, refund, billing retry — have **not each been
+observed in production**. That is a limit on what has been exercised, not an
+open release blocker; the checklist gate is the delivery-to-`applied` proof
+above, and it is met.
 
 ## App Review notes draft
 
@@ -260,9 +288,13 @@ unproven.
 
 Before submission, append the exact demo-account instructions and any special
 network setup. A real Sandbox transaction has been observed end to end — Plus
-monthly, purchased in build `1.2.0 (6)`, verified, and applied. An Apple Server
-Notifications V2 delivery has **not**: do not claim the subscription lifecycle
-is functional until one is observed reaching `applied`.
+monthly, purchased in build `1.2.0 (6)`, verified, and applied — and a real
+Apple Server Notifications V2 delivery from Sandbox has been observed reaching
+`applied` (2026-08-14 04:20:01 UTC). Describe only what has actually been
+exercised: the purchase, the server-side verification, the entitlement, restore,
+and one notification-driven apply. Do not describe the later lifecycle events —
+renewal, cancellation, refund, billing retry — as observed, because they have
+not each been.
 
 ## Screenshots
 
@@ -322,14 +354,26 @@ The following items are intentionally unresolved and must not be guessed:
 - Confirm the tiers themselves are **active** in `/admin` under 套餐 / Plans.
   A catalog row may only be created live against a tier that exists and is on
   sale.
-- Confirm every one of the six products exists in App Store Connect under
-  bundle `com.relayium.mac`, with the product IDs above matching byte for byte.
-  A catalog mapping is keyed by the (bundle id, product id) pair.
-- Add and activate all six products through the authenticated `/admin` catalog,
-  then install the production Apple verifier configuration for bundle
-  `com.relayium.mac` and Apple ID `6801142976` with Production and Sandbox
-  verification enabled (`"environments": ["Production", "Sandbox"]`, which
-  requires the real numeric Apple ID on the app entry).
+- All six products **exist** in App Store Connect under bundle
+  `com.relayium.mac`, with the product IDs above matching byte for byte —
+  checked on 2026-08-14, when the group and all six read **Prepare for
+  Submission** and each offered **Add for Review**. A catalog mapping is keyed
+  by the (bundle id, product id) pair, so re-check the byte-for-byte match if a
+  product ID is ever edited on either side.
+- The production Apple verifier configuration for bundle `com.relayium.mac` and
+  Apple ID `6801142976` is **installed and running**: the live endpoint rejects
+  a malformed payload with `400` instead of the inert `503`, and a Sandbox
+  delivery has been verified, mapped, and applied end to end. Keep
+  `"environments": ["Production", "Sandbox"]` in place — the Sandbox half is
+  what TestFlight and App Review purchases need, and accepting Production
+  requires the real numeric Apple ID on the app entry. The `/admin` catalog is
+  **done as well**: an authenticated readback on 2026-08-14 showed all four
+  plans **Enabled** and exactly six macOS mappings **Live**, and the installed
+  build `1.2.0 (7)` rendered all six products with real StoreKit-localized
+  prices — which proves the live server catalog and its intersection with
+  StoreKit return the full six, not a subset. What stays narrow is the paid
+  path: only **Plus monthly** has been carried through an actual transaction, so
+  the other five mappings are proven live and offered, not proven purchased.
 - **Watch the plan-off-sale trap.** Deactivating a tier does not sweep the
   catalog rows pointing at it: the row still looks enabled, `/admin` reports
   **Plan is off sale**, the app stops being offered that product, and a purchase
@@ -342,14 +386,17 @@ The following items are intentionally unresolved and must not be guessed:
   propagate metadata to Sandbox — so test Sandbox from an account whose
   storefront is actually selected before reading an empty StoreKit result as an
   app defect.
-- Configure Apple Server Notifications V2 in App Store Connect for **both**
-  environments — the Production URL and the Sandbox URL — each set to
-  `https://relayium.com/api/apple/notifications`. One endpoint serves both; the
+- Apple Server Notifications V2 is **configured and proven**, not an open item.
+  App Store Connect's App Information page shows both the **Production Server
+  URL** and the **Sandbox Server URL** saved to
+  `https://relayium.com/api/apple/notifications`. One endpoint serves both: the
   server distinguishes them from the signed envelope, and the verifier
-  configuration must name both environments for TestFlight and App Review
-  purchases (always Sandbox) to be accepted alongside customer purchases (always
-  Production). Send Apple's test notification on the Sandbox URL first, then
-  prove a real Sandbox delivery reaches `applied`.
+  configuration names both environments so TestFlight and App Review purchases
+  (always Sandbox) are accepted alongside customer purchases (always
+  Production). Apple's test notification arrived and is terminal as `ignored`
+  (2026-08-13 16:39:41 UTC — a `TEST` carries no transaction), and a real
+  Sandbox `SUBSCRIBED` delivery is terminal as `applied` (2026-08-14 04:20:01
+  UTC). Do not change or remove either URL without re-running that proof.
 - Build `1.2.0 (6)` is uploaded, compliance-cleared, and attached to both
   TestFlight groups. Build `1.2.0 (7)` has finished processing, is
   compliance-answered, reads **Ready to Submit**, and is **Testing** in the
@@ -360,6 +407,14 @@ The following items are intentionally unresolved and must not be guessed:
   Review**; until it passes, the public link cannot accept joiners. The real
   Sandbox purchase gate is **met**: Plus monthly was purchased in build
   `1.2.0 (6)`, verified, and applied, and build `7` only read that existing
-  entitlement back. The purchase-path gate still open before Add for Review is
-  used on the version and subscriptions is an observed **App Store Server
-  Notifications V2** delivery reaching `applied`. Keep manual release selected.
+  entitlement back. The **App Store Server Notifications V2** gate is **also
+  met**: both server URLs are saved in App Store Connect, the live endpoint
+  verifies rather than sitting inert, and a real Sandbox delivery reached
+  `applied` on 2026-08-14. **No purchase-path gate remains open.** What still
+  gates Add for Review on the version and the subscriptions is the remaining
+  submission work above — storefront screenshots, the owner-approved description
+  and What's New, the published App Privacy draft, and the content-rights,
+  review-contact and demo-account fields — plus the owner's decision to press
+  it. Not every later lifecycle event type (renewal, cancellation, refund,
+  billing retry) has been seen in production; that is a known limit on coverage,
+  not a blocker. Keep manual release selected.
