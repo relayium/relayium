@@ -27,8 +27,11 @@ or releasing a version. Relayium uses manual App Store release.
 
 Version `1.2.0`, build `6` was uploaded and export-compliance cleared
 (2026-08-14), so build `6` is consumed and must not be rebuilt or re-uploaded.
-The project now carries build `7`, the corrected replacement for the same public
-version `1.2.0`; it is the number every new archive of this version uses.
+Public commit `cab50d9e88378318228b8467be3aaafef83cdda9` carries public version
+`1.2.0` at build `7`, the corrected replacement for the same version. Build `7`
+was uploaded on 2026-08-14 and is **also consumed**: it must not be rebuilt or
+re-uploaded either. Any further archive of version `1.2.0` needs a strictly
+higher build number.
 
 Version `1.1.3`, build `5` is **already public** as a direct download: those
 exact Developer ID-signed bytes are behind the `macos-v1.1.3` tag and are offered
@@ -36,7 +39,8 @@ by the Sparkle feed. Because the project shares its version and build settings
 across the direct-download and App Store targets, an App Store archive built at
 `1.1.3` build `5` would be different bytes under a public version and a consumed
 build number. **Any archive or export already produced at `1.1.3` build `5` must
-not be uploaded — delete it and archive again at `1.2.0` build `7`.** Apple
+not be uploaded — delete it.** Builds `5`, `6` and `7` are all consumed, so a
+new archive of this version needs a strictly higher build number. Apple
 subscriptions are a new user-visible capability, which is why the public version
 moves by a minor step rather than a patch.
 
@@ -120,6 +124,30 @@ not imply that the relay can read user content, that every transfer is peer to
 peer, or that a web/Stripe subscription is managed by Apple.
 
 ## TestFlight state and information draft
+
+**Build `1.2.0 (7)` — uploaded, nothing beyond that confirmed.** Xcode
+successfully uploaded build `7` to App Store Connect at 2026-08-14 09:57
+Asia/Dubai, and Apple reported that the package is processing.
+
+Before that upload, the single retained `1.2.0 (7)` archive passed local
+inspection of its version, signature, entitlements, universal architecture,
+StoreKit configuration, privacy manifest, and absence of Sparkle. The
+exact-source Swift/package tests and the signed macOS CI gate passed for the
+same commit.
+
+The following have **not** happened for build `7` and must not be assumed:
+
+- App Store Connect processing has **not been independently read back**. The
+  authenticated browser session expired, so Apple's own reported processing
+  state is the last thing observed; no later status was confirmed from the
+  console.
+- No export-compliance answer has been given for build `7`.
+- It is assigned to **no** TestFlight group, internal or external.
+- No Beta App Review submission has been made for it.
+- No public release has occurred.
+
+The TestFlight group and review state recorded below describes build
+`1.2.0 (6)` and remains accurate for it.
 
 Verified 2026-08-14: build `1.2.0 (6)` is uploaded, its export compliance is
 **cleared**, and it is attached to **both** the internal group **Relayium
@@ -236,7 +264,9 @@ The following items are intentionally unresolved and must not be guessed:
   implementations for end-to-end encryption; never set
   `ITSAppUsesNonExemptEncryption` to `NO` merely to suppress the questionnaire.
   The build cleared because France is not a selected territory, so the French
-  declaration question is answered No on the facts.
+  declaration question is answered No on the facts. Build `1.2.0 (7)` has **no
+  export-compliance answer yet**; it carries the same encryption facts, but the
+  questionnaire still has to be answered truthfully for that build.
 - The French encryption declaration only returns if France is re-added. That
   path runs through ANSSI: the provider or first importer submits the completed
   electronic form, a signed scanned copy, and supporting product and technical
@@ -282,8 +312,10 @@ The following items are intentionally unresolved and must not be guessed:
   purchases (always Sandbox) to be accepted alongside customer purchases (always
   Production). Send Apple's test notification on the Sandbox URL first, then
   prove a real Sandbox delivery reaches `applied`.
-- The signed package is uploaded, compliance-cleared, and attached to both
-  TestFlight groups. External TestFlight is still gated on **Beta App Review**,
+- Build `1.2.0 (6)` is uploaded, compliance-cleared, and attached to both
+  TestFlight groups. Build `1.2.0 (7)` is uploaded and was reported processing,
+  but has no compliance answer, no group assignment, and no Beta App Review
+  submission. External TestFlight is still gated on **Beta App Review**,
   which is **Waiting for Review**; until it passes, the public link cannot
   accept joiners. A real Sandbox purchase must be observed before Add for Review
   is used on the version and subscriptions. Keep manual release selected.
