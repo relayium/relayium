@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/compare/scp/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/compare/scp/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/scp/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/scp/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/scp/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/scp/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/scp/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/compare/scp/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/compare/scp/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/compare/scp/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/scp/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -73,7 +66,10 @@ footer a{color:var(--text-h);text-decoration:none}
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>Relayium vs scp: simpler file transfer over SSH</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -84,7 +80,7 @@ footer a{color:var(--text-h);text-decoration:none}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">Last updated: <bdi>2026-07-12</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/compare/scp/" aria-current="true">English</a><a href="/zh/compare/scp/">中文</a><a href="/ja/compare/scp/">日本語</a><a href="/ko/compare/scp/">한국어</a><a href="/de/compare/scp/">Deutsch</a><a href="/fr/compare/scp/">Français</a><a href="/ar/compare/scp/">العربية</a><a href="/es/compare/scp/">Español</a><a href="/pt/compare/scp/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/compare/scp/" aria-current="true">English</a><a href="/zh/compare/scp/">中文</a></nav>
       <p class="lead">scp has been the default way to move a file over SSH for decades: it&#39;s on almost every Unix-like machine already, everyone knows the syntax, and it just works. There&#39;s no reason to pretend otherwise — scp earned its place.</p>
       <p class="lead">Relayium&#39;s CLI doesn&#39;t replace SSH; it rides on top of the exact same SSH access you already have. push and pull use your SSH connection the same way scp does, but add a few things scp was never built to do: resuming a broken transfer, verifying every file with a checksum, showing real progress, and working even when the remote has nothing installed at all.</p>
       <h2>Where scp is genuinely simpler</h2>

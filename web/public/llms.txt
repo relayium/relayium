@@ -37,7 +37,7 @@
 - Platforms: any modern browser with WebRTC over HTTPS — Chrome, Edge, Firefox, Safari, on desktop and mobile.
 - Large files: Chrome/Edge stream straight to disk (no memory cap); Firefox/Safari buffer in memory, so Relayium warns above roughly 256 MB — a deliberately conservative estimate, not a hard limit.
 - Multi-file: up to 1,000 files per batch, streamed to disk.
-- Languages: English, Chinese (中文), Japanese (日本語), Korean (한국어), German (Deutsch), French (Français), Arabic (العربية), Spanish (Español), Portuguese (Português) — auto-detected.
+- Languages: the app is maintained in English and Simplified Chinese (中文), auto-detected, with English as the fallback. Japanese, Korean, German, French, Arabic, Spanish and Portuguese tutorials and documents remain published as archived translations under /ja/, /ko/, /de/, /fr/, /ar/, /es/ and /pt/; each says so on the page and links to its current English and Chinese version. The app interface itself is not offered in those seven.
 - Network scope: same network and across networks / over the internet — realtime file and ephemeral text via a pairing code (and the join link it generates; browser sessions use encrypted TURN by design, while CLI text is direct-only), or an asynchronous stored file download link.
 - Tech stack: Svelte single-page app + a single Go server (WebRTC signaling, accounts, and the stored-file API), SQLite for account data, libsodium for browser crypto; optional coturn for the TURN relay and Redis for relay-byte metering.
 

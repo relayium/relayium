@@ -495,17 +495,16 @@ const en: Messages = {
     cta: "Explore the CLI →",
   },
   appsPage: {
-    metaTitle: "Get Relayium — apps for web, CLI, macOS & iOS",
+    metaTitle: "Get Relayium — Web, CLI, macOS, iOS, Android & Windows",
     metaDesc:
-      "Download Relayium: use it in any browser, install the command-line tool, or see what the native apps do. End-to-end encrypted file and ephemeral text transfer everywhere you work — web, command line, macOS and iOS.",
+      "Use Relayium on the Web, install the CLI, download the macOS app, or check development status for iOS, Android and Windows. End-to-end encrypted file and ephemeral text transfer.",
     heading: "Get Relayium",
     subhead:
       "One end-to-end encrypted transfer for files and ephemeral text, everywhere you work. Pick your platform.",
     availableBadge: "Available",
-    comingSoonBadge: "Coming soon",
+    inDevelopmentBadge: "In development",
     yourPlatformNote: (os) => `Looks like you're on ${os} — highlighted below.`,
     cliInstallLabel: "Install from your terminal:",
-    androidNote: "On Android? Use the web app — it runs right in your browser, nothing to install.",
     cards: {
       web: {
         name: "Web app",
@@ -526,6 +525,38 @@ const en: Messages = {
         name: "iOS app",
         desc: "A native iPhone & iPad app (com.relayium.app): open an encrypted link with no account, send files and text to nearby devices or by six-digit code, and manage your account — while the app is open.",
       },
+      android: {
+        name: "Android app",
+        desc: "A native Android app is being built. Until it lands, the web app is the way to use Relayium on Android — it opens in your browser, with nothing to install.",
+      },
+      windows: {
+        name: "Windows app",
+        desc: "A native Windows desktop app is being built. The command line already works on Windows today, and it covers transfers, folder sync and scheduled backups.",
+      },
+    },
+    chooser: {
+      heading: "Web or a native app?",
+      lead: "Both move the same encrypted bytes over the same connection. What differs is how the app reaches the rest of your machine.",
+      web: {
+        title: "Use the web app",
+        points: [
+          "Nothing to install, and nothing to update. Open the page and transfer.",
+          "Any modern browser on any operating system — including the ones with no native app.",
+          "Right for a one-off transfer, a borrowed computer, or a device you do not administer.",
+        ],
+      },
+      mac: {
+        title: "Get the macOS app",
+        points: [
+          "Lives in the menu bar, so it is one click away without a window or a tab to keep track of.",
+          "Send from the Share menu in Finder, Photos and other apps — files, images and video go straight to Relayium.",
+          "Open With in Finder, or drop files and folders on the Dock icon, to start a transfer from where the files already are.",
+          "A relayium.com transfer link opens in the app instead of the browser.",
+          "Receive with Device Inbox: files sent to this Mac from your own account are written into the folder you chose on it, and are only reported saved once they are on disk.",
+        ],
+      },
+      iosNote:
+        "The iOS app is in development and is not publicly available. It moves files and text while it is open, like the web app does.",
     },
   },
   deviceInboxPage: {

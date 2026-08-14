@@ -3,15 +3,8 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import en from "./i18n/en";
 import zh from "./i18n/zh";
-import ja from "./i18n/ja";
-import ko from "./i18n/ko";
-import de from "./i18n/de";
-import fr from "./i18n/fr";
-import ar from "./i18n/ar";
-import es from "./i18n/es";
-import pt from "./i18n/pt";
 
-const locales = { en, zh, ja, ko, de, fr, ar, es, pt };
+const locales = { en, zh };
 
 describe("pairing-code expiry copy", () => {
   it("matches the server's five-minute code TTL in every locale", () => {
@@ -228,7 +221,7 @@ describe("pairing-code expiry copy", () => {
 //
 // The tests above cover `messages`. But the same number is also written out by
 // hand in the CLI page's sample output and in the static-page generator's prose,
-// in nine languages — and that is exactly where the last TTL change was left
+// in every language at once — and that is exactly where the last TTL change was left
 // behind: the server moved to 30 minutes while ja/ar articles and every locale's
 // long CLI description still promised 5.
 //
@@ -262,7 +255,12 @@ const DURATIONS = /(\d+|five|ten|fifteen|thirty|خمس|عشر|ثلاثين)[  ]
 // rule can be absolute: each match must be the server's number.
 const PAIRING_COPY = [
   "web/src/lib/CliPage.svelte",
-  ...["en", "zh", "ja", "ko", "de", "fr", "ar", "es", "pt"].map((l) => `web/src/lib/i18n/${l}.ts`),
+  // The shipped message tables. Two since the 2026-08-14 language freeze: the
+  // seven archived tables under src/lib/i18n/archive/ are not bundled, not
+  // loaded and not readable by any user, so a TTL change must not turn them red.
+  // The generated page corpus below is still every language, because those
+  // pages are public.
+  ...["en", "zh"].map((l) => `web/src/lib/i18n/${l}.ts`),
   "web/scripts/pages/content/cross-network.mjs",
   "web/scripts/pages/content/spa-pages.mjs",
   "web/scripts/pages/content/articles/cli-send-to-someone.mjs",
@@ -305,7 +303,7 @@ describe("hand-written pairing-TTL copy outside the catalogue", () => {
 // The pairing code went from six characters over a 24-glyph alphabet to six
 // decimal digits, and the SAS comparison went from a step everyone was walked
 // through to an opt-in preference that is OFF by default. Both changes make
-// previously-true sentences false, in nine languages, across a message
+// previously-true sentences false, in every language at once, across a message
 // catalogue, a static-page generator, hand-written articles and llms.txt.
 //
 // The TTL tests above exist because exactly that kind of change was left
@@ -313,7 +311,7 @@ describe("hand-written pairing-TTL copy outside the catalogue", () => {
 
 /** Every first-party English-or-mixed source that describes the pairing code. */
 const CLAIM_SOURCES = [
-  ...["en", "zh", "ja", "ko", "de", "fr", "ar", "es", "pt"].map((l) => `web/src/lib/i18n/${l}.ts`),
+  ...["en", "zh"].map((l) => `web/src/lib/i18n/${l}.ts`),
   "web/src/lib/CliPage.svelte",
   "web/public/llms.txt",
   "web/scripts/pages/content/cross-network.mjs",
@@ -476,7 +474,7 @@ describe("SAS is described as optional, everywhere it is described", () => {
 
 const CLI_TEXT_DOCS = [
   "web/src/lib/CliPage.svelte",
-  ...["en", "zh", "ja", "ko", "de", "fr", "ar", "es", "pt"].map((l) => `web/src/lib/i18n/${l}.ts`),
+  ...["en", "zh"].map((l) => `web/src/lib/i18n/${l}.ts`),
   "web/scripts/pages/content/articles/howto-send-text-between-devices.mjs",
   "README.md",
   "docs/TESTING.md",

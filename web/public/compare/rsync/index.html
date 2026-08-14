@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/compare/rsync/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/compare/rsync/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/rsync/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/rsync/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/rsync/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/rsync/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/rsync/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/compare/rsync/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/compare/rsync/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/compare/rsync/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/rsync/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -73,7 +66,10 @@ footer a{color:var(--text-h);text-decoration:none}
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>Relayium vs rsync: sync folders without the SSH setup</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -84,7 +80,7 @@ footer a{color:var(--text-h);text-decoration:none}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">Last updated: <bdi>2026-07-12</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/compare/rsync/" aria-current="true">English</a><a href="/zh/compare/rsync/">中文</a><a href="/ja/compare/rsync/">日本語</a><a href="/ko/compare/rsync/">한국어</a><a href="/de/compare/rsync/">Deutsch</a><a href="/fr/compare/rsync/">Français</a><a href="/ar/compare/rsync/">العربية</a><a href="/es/compare/rsync/">Español</a><a href="/pt/compare/rsync/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/compare/rsync/" aria-current="true">English</a><a href="/zh/compare/rsync/">中文</a></nav>
       <p class="lead">rsync has mirrored folders since 1996 for a reason: bidirectional sync, a rolling-checksum delta algorithm that transfers only the bytes that actually changed inside a file, and decades of flags for every edge case. If you already have SSH access and know rsync, it is very hard to beat.</p>
       <p class="lead">Relayium&#39;s sync command covers a narrower job — a one-way incremental mirror — but it removes a step rsync assumes you&#39;ve already done: setting up SSH. It runs over SSH if you already have it, or connects two machines directly with no SSH server at all. This article compares the two honestly; sync is not a full rsync replacement, and the FAQ says so plainly.</p>
       <h2>What rsync gets right</h2>

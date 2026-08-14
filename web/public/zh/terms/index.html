@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/zh/terms/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/terms/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/terms/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/terms/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/terms/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/terms/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/terms/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/terms/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/terms/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/terms/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/terms/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -50,7 +43,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <!-- The legal text is the main landmark. The site header and footer are
            outside it; the language bar is inside, after the h1, matching its
-           visual position — it is a labelled <nav> landmark either way. -->
+           visual position — it is a labelled <nav> landmark either way. On an
+           archived page that slot holds the archived-translation notice, a
+           labelled <aside>, which is a landmark in its own right too. -->
       <main>
       <h1>服务条款</h1>
       <!-- The date is isolated for the same reason the release rows are: an ISO
@@ -60,7 +55,7 @@ footer a{color:var(--text-h);text-decoration:none}
            a browser, not deduced. <bdi> resolves LTR (no strong character
            inside) and pins the order. -->
       <p class="updated">最后更新: <bdi>2026-08-13</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/terms/">English</a><a href="/zh/terms/" aria-current="true">中文</a><a href="/ja/terms/">日本語</a><a href="/ko/terms/">한국어</a><a href="/de/terms/">Deutsch</a><a href="/fr/terms/">Français</a><a href="/ar/terms/">العربية</a><a href="/es/terms/">Español</a><a href="/pt/terms/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/terms/">English</a><a href="/zh/terms/" aria-current="true">中文</a></nav>
       <p>使用 Relayium 即表示你同意本条款。Relayium 是一项开源服务，让你在设备之间端到端加密地发送文件与实时文本。核心服务免费，部分可选套餐需付费——详见「订阅与计费」。</p>
       <h2>服务说明</h2><p>Relayium 在设备之间端到端加密地传输文件与实时文本。核心服务免费，其源代码以 AGPL-3.0 许可证开源。可选的付费套餐可提高存储、传输与保留时长上限——详见「订阅与计费」。</p>
       <h2>使用资格</h2><p>你须达到能够订立有约束力协议、并能就你所在地的数据处理作出同意的年龄——至少 13 岁，你所在国家要求更高时以其为准。Relayium 并非面向儿童，我们不会在知情的情况下允许儿童创建账号。</p>

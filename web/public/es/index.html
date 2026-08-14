@@ -7,16 +7,6 @@
     <meta name="description" content="Relayium es una herramienta de código abierto, sin instalación, para transferir archivos y texto con cifrado de extremo a extremo. En la misma red, los archivos van directos. Entre redes, el navegador usa TURN por diseño y el retransmisor solo ve datos cifrados de extremo a extremo. El texto efímero exige ambos dispositivos conectados. Los servidores de Relayium no guardan cuerpos ni historial, pero el navegador o destinatario puede copiar o conservar el texto. En la misma red no hace falta cuenta; crear un código entre redes exige iniciar sesión, unirse con él no." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/es/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -82,19 +72,28 @@ section.reveal:nth-of-type(4){animation-delay:.25s}
 section.reveal:nth-of-type(5){animation-delay:.32s}
 @keyframes sec-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.reveal{animation:none}header .logo,.cta{transition:none}header a:hover .logo,.cta:hover{transform:none}}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=es">Relayium</a></header>
-      <nav class="langbar" aria-label="Language"><a href="/">English</a><a href="/zh/">中文</a><a href="/ja/">日本語</a><a href="/ko/">한국어</a><a href="/de/">Deutsch</a><a href="/fr/">Français</a><a href="/ar/">العربية</a><a href="/es/" aria-current="true">Español</a><a href="/pt/">Português</a></nav>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
+      <aside class="archived" aria-label="Traducción archivada"><p class="archived-label">Traducción archivada</p><p>Esta página es una traducción al español archivada. El producto Relayium y su documentación actual se mantienen en inglés y en chino simplificado; la propia aplicación ya no ofrece español. Por eso las pantallas y los detalles descritos aquí pueden diferir del comportamiento actual.</p><p class="archived-links">Versión actual: <a href="/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <!-- The language bar and the footer are navigation, so the main landmark
            starts after them: a screen-reader user jumping to the main content
-           should land on this page's own words, not on a row of language links. -->
+           should land on this page's own words, not on a row of language links.
+           On an archived page this slot holds the archived-translation notice
+           instead, which is a labelled complementary landmark of its own — so it
+           is still reachable by landmark navigation, and it sits above the title
+           where a status banner belongs. -->
       <main>
       <h1>Transferencia P2P de archivos y texto cifrada de extremo a extremo</h1>
       <p class="pitch">Relayium es una herramienta de código abierto, sin instalación, para transferir archivos y texto con cifrado de extremo a extremo. En la misma red, los archivos van directos. Entre redes, el navegador usa TURN por diseño y el retransmisor solo ve datos cifrados de extremo a extremo. El texto efímero exige ambos dispositivos conectados. Los servidores de Relayium no guardan cuerpos ni historial, pero el navegador o destinatario puede copiar o conservar el texto. En la misma red no hace falta cuenta; crear un código entre redes exige iniciar sesión, unirse con él no.</p>
-      <a class="cta" href="/?lang=es">Iniciar transferencia</a>
+      <a class="cta" href="/">Iniciar transferencia</a>
 
       <section class="reveal">
       <h2>Transferir en cuatro pasos</h2>
@@ -152,10 +151,10 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <section class="reveal"><h2>Más información</h2>
       <div class="learn-groups"><div><h3>Guías</h3><ul class="learn"><li><a href="/es/guides/transfer-files-from-terminal/">Transfiere archivos y texto desde la terminal con la CLI de Relayium</a></li><li><a href="/es/guides/back-up-a-server-over-ssh/">Haz copias de seguridad de archivos en tu propio servidor por SSH con la CLI de Relayium</a></li><li><a href="/es/guides/send-a-file-to-someone/">Enviar un archivo a alguien entre redes con la CLI de Relayium</a></li><li><a href="/es/guides/server-to-server-transfers/">Transferencias de servidor a servidor con la CLI de Relayium (daemon directo)</a></li><li><a href="/es/guides/sync-a-large-folder-between-servers/">Sincronizar una carpeta grande entre dos servidores (reanudable, en segundo plano)</a></li></ul></div><div><h3>Cómo</h3><ul class="learn"><li><a href="/es/how-to/transfer-files-android-to-iphone/">Cómo transferir archivos de Android a iPhone (sin cable)</a></li><li><a href="/es/how-to/send-files-pc-to-phone-wirelessly/">Enviar archivos del PC al teléfono sin cables, sin cable ni app</a></li><li><a href="/es/how-to/send-large-files-without-cloud/">Cómo enviar archivos grandes sin la nube</a></li><li><a href="/es/how-to/share-a-file-with-an-expiring-link/">Compartir un archivo con un enlace de descarga seguro y con caducidad</a></li><li><a href="/es/how-to/send-files-between-two-computers-over-the-internet/">Enviar archivos entre dos ordenadores por Internet</a></li></ul></div><div><h3>Comparativas</h3><ul class="learn"><li><a href="/es/compare/snapdrop/">Relayium vs Snapdrop y PairDrop: ¿qué transferencia P2P segura?</a></li><li><a href="/es/compare/airdrop/">Relayium vs AirDrop: una alternativa a AirDrop multiplataforma</a></li><li><a href="/es/compare/wetransfer/">Relayium vs WeTransfer: enlaces cifrados y entregas en vivo</a></li><li><a href="/es/compare/croc/">Relayium vs croc: transferencia de archivos cifrada desde la terminal</a></li><li><a href="/es/compare/google-drive/">Relayium frente a Google Drive para enviar archivos</a></li></ul></div></div>
       <p class="learn-all"><a href="/es/guides/">Guías</a></p>
-      <p class="close-cta"><a class="cta" href="/?lang=es">Iniciar transferencia</a></p></section>
+      <p class="close-cta"><a class="cta" href="/">Iniciar transferencia</a></p></section>
       </main>
       <footer>
-        <a href="/?lang=es">← Relayium</a>
+        <a href="/">← Relayium</a>
         <a href="/es/apps/">Apps</a>
         <a href="/es/guides/">Guías</a>
         <a href="/es/privacy/">Privacidad</a>

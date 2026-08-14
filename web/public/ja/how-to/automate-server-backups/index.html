@@ -7,16 +7,6 @@
     <meta name="description" content="cron から relayium push または sync を定期実行して、ディレクトリを別のサーバーへ自動コピー。暗号化、再開可能、SHA-256 検証付きで、しかも無料です。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/how-to/automate-server-backups/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/automate-server-backups/" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/automate-server-backups/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/automate-server-backups/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/automate-server-backups/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/automate-server-backups/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/automate-server-backups/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/how-to/automate-server-backups/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/how-to/automate-server-backups/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/how-to/automate-server-backups/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/automate-server-backups/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -64,6 +54,11 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
 .cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
@@ -85,12 +80,15 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">cron で暗号化されたサーバーバックアップを自動化する</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>cron で暗号化されたサーバーバックアップを自動化する</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -101,7 +99,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最終更新: <bdi>2026-08-06</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/how-to/automate-server-backups/">English</a><a href="/zh/how-to/automate-server-backups/">中文</a><a href="/ja/how-to/automate-server-backups/" aria-current="true">日本語</a><a href="/ko/how-to/automate-server-backups/">한국어</a><a href="/de/how-to/automate-server-backups/">Deutsch</a><a href="/fr/how-to/automate-server-backups/">Français</a><a href="/ar/how-to/automate-server-backups/">العربية</a><a href="/es/how-to/automate-server-backups/">Español</a><a href="/pt/how-to/automate-server-backups/">Português</a></nav>
+      <aside class="archived" aria-label="アーカイブされた翻訳"><p class="archived-label">アーカイブされた翻訳</p><p>このページは記録として残している日本語訳です。Relayium の製品と最新のドキュメントは英語と簡体字中国語で管理されており、アプリ自体も日本語を提供していません。ここに書かれている画面表示や細部は、現在の動作と異なる場合があります。</p><p class="archived-links">最新版：<a href="/how-to/automate-server-backups/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/how-to/automate-server-backups/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">自分で覚えて実行しなければならないバックアップは、たいてい実行されません。cron は覚えていてくれますし、Relayium CLI はまさにそのために作られています。ディレクトリを別のマシンへコピー（またはミラー）し、すべてのファイルを検証し、ネットワークが切れても中断した所から再開する、単一の非対話型コマンドです。</p>
       <p class="lead">本ガイドでは、cron から relayium push と増分同期の relayium sync をスケジュール実行する方法、どちらでも使える2つの転送方式、そしてそのままコピーできる crontab の行を扱います。</p>
       <h2>push と sync：全体コピーか増分ミラーか</h2>
@@ -164,7 +162,7 @@ $ echo $?
       <ul class="related"><li><a href="/ja/guides/back-up-a-server-over-ssh/">Relayium CLI と SSH で自分のサーバーにファイルをバックアップする</a></li><li><a href="/ja/guides/run-relayium-as-an-always-on-service/">Relayium を常時稼働の受信サービスとして実行する</a></li><li><a href="/ja/guides/sync-a-large-folder-between-servers/">2台のサーバー間で大きなフォルダーを同期する（再開可能・バックグラウンド）</a></li><li><a href="/ja/compare/rsync/">Relayium vs rsync: SSH 設定なしでフォルダーを同期</a></li><li><a href="/ja/">Relayium</a></li></ul>
       </main>
       <footer>
-        <a href="/?lang=ja">← Relayium</a>
+        <a href="/">← Relayium</a>
         <a href="/ja/apps/">アプリ</a>
         <a href="/ja/guides/">ガイド</a>
         <a href="/ja/privacy/">プライバシーポリシー</a>

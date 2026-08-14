@@ -7,16 +7,6 @@
     <meta name="description" content="Doze guias passo a passo para transferir arquivos, pastas e texto com o Relayium entre celular, computador e servidor, com criptografia de ponta a ponta." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/pt/how-to/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/how-to/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/how-to/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/how-to/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -55,21 +45,26 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:0}
 h2 a{color:inherit;text-decoration:none}h2 a:hover{text-decoration:underline}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=pt">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <!-- Everything between the site header and the footer is this page's own
            content, so it belongs to one main landmark. -->
       <main>
       <h1>Como</h1>
       <p class="lead">Doze guias práticos: do celular para o computador, entre Mac e Windows, uma pasta inteira, por código QR, com um link de download que expira e até um backup de servidor criptografado e automatizado. Na mesma rede, arquivos e texto ao vivo não exigem conta.</p>
-      <nav class="langbar" aria-label="Language"><a href="/how-to/">English</a><a href="/zh/how-to/">中文</a><a href="/ja/how-to/">日本語</a><a href="/ko/how-to/">한국어</a><a href="/de/how-to/">Deutsch</a><a href="/fr/how-to/">Français</a><a href="/ar/how-to/">العربية</a><a href="/es/how-to/">Español</a><a href="/pt/how-to/" aria-current="true">Português</a></nav>
+      <aside class="archived" aria-label="Tradução arquivada"><p class="archived-label">Tradução arquivada</p><p>Esta página é uma tradução em português arquivada. O produto Relayium e sua documentação atual são mantidos em inglês e em chinês simplificado; o próprio aplicativo não oferece mais português. Por isso as telas e os detalhes descritos aqui podem diferir do comportamento atual.</p><p class="archived-links">Versão atual: <a href="/how-to/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/how-to/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <ul class="guidelist"><li><a href="/pt/how-to/send-files-on-the-same-wifi/">Enviar arquivos entre dispositivos na mesma rede Wi-Fi</a></li><li><a href="/pt/how-to/send-files-between-two-computers-over-the-internet/">Enviar arquivos entre dois computadores pela Internet</a></li><li><a href="/pt/how-to/send-files-pc-to-phone-wirelessly/">Enviar arquivos do PC para o celular sem fio, sem cabo nem app</a></li><li><a href="/pt/how-to/transfer-files-android-to-iphone/">Como transferir arquivos do Android para o iPhone (sem cabo)</a></li><li><a href="/pt/how-to/transfer-files-between-mac-and-windows/">Transferir arquivos entre um Mac e um PC com Windows</a></li><li><a href="/pt/how-to/airdrop-for-windows-and-android/">AirDrop para Windows, Linux e Android</a></li><li><a href="/pt/how-to/transfer-files-by-scanning-a-qr-code/">Transferir arquivos escaneando um código QR</a></li><li><a href="/pt/how-to/automate-server-backups/">Automatize backups criptografados do servidor com uma tarefa cron</a></li><li><a href="/pt/how-to/send-a-folder/">Como enviar uma pasta inteira, não só arquivos</a></li><li><a href="/pt/how-to/send-text-between-devices/">Enviar texto, links e comandos entre dispositivos</a></li><li><a href="/pt/how-to/send-large-files-without-cloud/">Como enviar arquivos grandes sem a nuvem</a></li><li><a href="/pt/how-to/share-a-file-with-an-expiring-link/">Compartilhar um arquivo com um link de download seguro e com validade</a></li></ul>
       </main>
       <footer>
-        <a href="/?lang=pt">← Relayium</a>
+        <a href="/">← Relayium</a>
         <a href="/pt/guides/">Guias</a>
         <a href="/pt/apps/">Apps</a>
         <a href="/pt/privacy/">undefined</a>

@@ -26,15 +26,8 @@
 import { describe, expect, it } from "vitest";
 import en from "./i18n/en";
 import zh from "./i18n/zh";
-import ja from "./i18n/ja";
-import ko from "./i18n/ko";
-import de from "./i18n/de";
-import fr from "./i18n/fr";
-import ar from "./i18n/ar";
-import es from "./i18n/es";
-import pt from "./i18n/pt";
 
-const locales = { en, zh, ja, ko, de, fr, ar, es, pt };
+const locales = { en, zh };
 type Code = keyof typeof locales;
 
 type Tokens = {
@@ -60,50 +53,6 @@ const t: Record<Code, Tokens> = {
     lan: /局域网|LAN/,
     stale: /^实时传输$|^实时$/,
     liveDescription: /实时|在线/,
-  },
-  ja: {
-    crossNetwork: /ネットワーク間/,
-    lan: /LAN/,
-    stale: /^リアルタイム転送$|^リアルタイム$/,
-    liveDescription: /リアルタイム|オンライン/,
-  },
-  ko: {
-    crossNetwork: /네트워크 간/,
-    lan: /LAN/,
-    stale: /^실시간 전송$|^실시간$/,
-    liveDescription: /실시간|온라인/,
-  },
-  de: {
-    crossNetwork: /netzwerkübergreifend/i,
-    lan: /\bLAN\b/,
-    stale: /^Echtzeitübertragung$|^Echtzeit$/,
-    liveDescription: /Echtzeit|online/i,
-  },
-  fr: {
-    crossNetwork: /entre réseaux/i,
-    lan: /\bLAN\b/,
-    stale: /^Transfert en temps réel$|^Temps réel$/,
-    liveDescription: /temps réel|en ligne/i,
-  },
-  ar: {
-    // Arabic writes it as "across the networks"; the definite article is part
-    // of the phrase, so match the noun run rather than a bare word.
-    crossNetwork: /عبر الشبكات/,
-    lan: /الشبكة المحلية|LAN/,
-    stale: /^نقل فوري$|^فوري$/,
-    liveDescription: /فوري|متصل/,
-  },
-  es: {
-    crossNetwork: /entre redes/i,
-    lan: /red local|\bLAN\b/i,
-    stale: /^Transferencia en tiempo real$|^Tiempo real$/,
-    liveDescription: /tiempo real|en línea/i,
-  },
-  pt: {
-    crossNetwork: /entre redes/i,
-    lan: /rede local|\bLAN\b/i,
-    stale: /^Transferência em tempo real$|^Tempo real$/,
-    liveDescription: /tempo real|online/i,
   },
 };
 

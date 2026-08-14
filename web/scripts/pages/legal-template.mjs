@@ -7,7 +7,7 @@
 // and the shared footer — plus one list this template knows how to render. A
 // second near-identical template would have meant maintaining this file's head,
 // bidi handling and inlined stylesheet twice.
-import { LANGS, DEFAULT_LANG, LANG_LABELS, APPS_LABELS, pricingLabel, PRICING_URL, RELEASES_LABELS, BCP47, SITE, urlPath, absUrl, esc, dirAttr, rtlHead } from "./shared.mjs";
+import { MAINTAINED_LANGS, DEFAULT_LANG, LANG_LABELS, APPS_LABELS, pricingLabel, PRICING_URL, RELEASES_LABELS, BCP47, SITE, urlPath, absUrl, esc, dirAttr, rtlHead, isFrozen, archiveNotice, ARCHIVE_STYLE } from "./shared.mjs";
 
 const STYLE = `
 :root{--text:#6b6375;--text-h:#08060d;--bg:#fff;--border:#e5e4e7;--card:rgba(244,243,236,.5);--accent:#aa3bff;--accent-fg:#7e22ce;--accent-action:#6d28d9;--accent-action-deep:#4338ca;color-scheme:light dark}
@@ -33,16 +33,21 @@ footer a{color:var(--text-h);text-decoration:none}
 .releases .date{font-size:14px;font-variant-numeric:tabular-nums}
 `;
 
+// Maintained pages get the two-language selector; archived ones get the notice
+// in the same slot. See article-template.mjs for why they are the same slot.
 function langBar(slug, lang) {
-  const links = LANGS.map((l) => {
+  if (isFrozen(lang)) return archiveNotice(lang, { en: urlPath(slug, "en"), zh: urlPath(slug, "zh") });
+  const links = MAINTAINED_LANGS.map((l) => {
     const cur = l === lang ? " aria-current=\"true\"" : "";
     return `<a href="${urlPath(slug, l)}"${cur}>${esc(LANG_LABELS[l])}</a>`;
   });
   return `<nav class="langbar" aria-label="Language">${links.join("")}</nav>`;
 }
 
+// The maintained cluster only — en, zh, x-default at en. Archived pages emit
+// none; see article-template.mjs's alternates() for the reciprocity reasoning.
 function alternates(slug) {
-  const links = LANGS.map(
+  const links = MAINTAINED_LANGS.map(
     (l) => `<link rel="alternate" hreflang="${BCP47[l]}" href="${absUrl(urlPath(slug, l))}" />`
   );
   links.push(`<link rel="alternate" hreflang="x-default" href="${absUrl(urlPath(slug, DEFAULT_LANG))}" />`);
@@ -81,6 +86,7 @@ function releasesHtml(doc, releases) {
 }
 
 export function renderLegalPage({ slug, lang, doc, releases = [] }) {
+  const archived = isFrozen(lang);
   const otherSlug = slug === "privacy" ? "terms" : "privacy";
   const canonical = absUrl(urlPath(slug, lang));
   const ld = {
@@ -115,20 +121,21 @@ export function renderLegalPage({ slug, lang, doc, releases = [] }) {
     <title>${headTitle} · ${SITE.name}</title>
     <meta name="description" content="${headDesc}" />
     <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="${canonical}" />
-    ${alternates(slug)}
+    <link rel="canonical" href="${canonical}" />${archived ? "" : "\n    " + alternates(slug)}
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
     <script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>
-    <style>${STYLE}</style>
+    <style>${STYLE}${archived ? ARCHIVE_STYLE : ""}</style>
   </head>
   <body>
     <div class="wrap">
       <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <!-- The legal text is the main landmark. The site header and footer are
            outside it; the language bar is inside, after the h1, matching its
-           visual position — it is a labelled <nav> landmark either way. -->
+           visual position — it is a labelled <nav> landmark either way. On an
+           archived page that slot holds the archived-translation notice, a
+           labelled <aside>, which is a landmark in its own right too. -->
       <main>
       <h1>${esc(doc.title)}</h1>
       <!-- The date is isolated for the same reason the release rows are: an ISO

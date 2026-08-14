@@ -25,7 +25,7 @@ function asset() {
 }
 
 const SRC = "/repo/web/src";
-/** 九个语言目录各自单独成块，就是当前构建的真实形状。 */
+/** 每个语言目录各自单独成块，就是当前构建的真实形状。冻结之后只剩 en/zh 两种。 */
 function langChunks(codes = LANGS.map((l) => l.code)): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [i, code] of codes.entries()) {
@@ -34,7 +34,7 @@ function langChunks(codes = LANGS.map((l) => l.code)): Record<string, unknown> {
   return out;
 }
 
-/** 一份有代表性的 bundle：入口 + 样式 + 一个懒加载路由 + 九个语言目录 + 若干非代码资源。 */
+/** 一份有代表性的 bundle：入口 + 样式 + 一个懒加载路由 + 全部语言目录 + 若干非代码资源。 */
 function representativeBundle(extra: Record<string, unknown> = {}) {
   return {
     "assets/index-Aaaaaaaa.js": chunk([`${SRC}/main.ts`, `${SRC}/App.svelte`]),
@@ -92,7 +92,7 @@ describe("pwaPlugin 的 precache 名单", () => {
   // 本轮修的缺陷：SW 是在页面加载**之后**才注册/接管的，首屏那次取语言包根本不经过
   // SW，所以进不了任何缓存。运行时回填补不上——它只在已被接管的加载里发生。名单里少
   // 一种语言，那种语言的用户首次安装后离线就起不来。
-  it("九个语言目录一个不落地进名单", () => {
+  it("每个维护中的语言目录一个不落地进名单", () => {
     const { precache } = run(representativeBundle());
 
     for (const { code } of LANGS) {
@@ -131,16 +131,16 @@ describe("pwaPlugin 的 precache 名单", () => {
   it("只有语言文件名变了，版本和名单也跟着变", () => {
     const before = run(representativeBundle());
 
-    // ja 的文案改了 → 内容 hash 变 → 文件名变。**替换**而不是新增，否则这条会退化成
+    // zh 的文案改了 → 内容 hash 变 → 文件名变。**替换**而不是新增，否则这条会退化成
     // 「多了一个文件所以版本变了」，根本没在考语言包参不参与版本推导。
     const renamed = representativeBundle();
-    const old = Object.keys(renamed).find((f) => f.startsWith("assets/ja-"))!;
+    const old = Object.keys(renamed).find((f) => f.startsWith("assets/zh-"))!;
     delete (renamed as Record<string, unknown>)[old];
-    (renamed as Record<string, unknown>)["assets/ja-CHANGEDHASH.js"] = chunk([`${SRC}/lib/i18n/ja.ts`]);
+    (renamed as Record<string, unknown>)["assets/zh-CHANGEDHASH.js"] = chunk([`${SRC}/lib/i18n/zh.ts`]);
     const after = run(renamed);
 
     expect(after.precache).toHaveLength(before.precache.length); // 条数没变，只换了名字
-    expect(after.precache).toContain("/assets/ja-CHANGEDHASH.js");
+    expect(after.precache).toContain("/assets/zh-CHANGEDHASH.js");
     expect(after.precache).not.toContain("/" + old);
     expect(after.version, "语言包没参与版本推导的话，改了文案也不会产生新一代缓存")
       .not.toBe(before.version);
@@ -151,8 +151,10 @@ describe("pwaPlugin 的 precache 名单", () => {
   it("有语言目录没进名单时，构建直接失败并点名", () => {
     // 语言 chunk 被打成一个非 JS 的产物（或被别的插件改了名），落不进名单。
     const bundle = representativeBundle();
-    delete (bundle as Record<string, unknown>)["assets/ko-Hash30000000.js"];
-    (bundle as Record<string, unknown>)["assets/ko-Hash30000000.woff2"] = chunk([`${SRC}/lib/i18n/ko.ts`]);
+    const missing = LANGS[1].code; // en
+    const file = Object.keys(bundle).find((f) => f.startsWith(`assets/${missing}-`))!;
+    delete (bundle as Record<string, unknown>)[file];
+    (bundle as Record<string, unknown>)[file.replace(/\.js$/, ".woff2")] = chunk([`${SRC}/lib/i18n/${missing}.ts`]);
     // this.error 之外还会直接打一行 stderr（理由见插件里的注释）。这里接住它，
     // 顺便断言那行确实发出去了。
     const logged: string[] = [];
@@ -162,15 +164,15 @@ describe("pwaPlugin 的 precache 名单", () => {
     spy.mockRestore();
 
     expect(threw, "必须抛出来把构建停掉").toBeTruthy();
-    expect(errors[0]).toContain("ko");
-    expect(errors[0]).not.toContain("ja"); // 只点名真缺的那个
-    expect(logged[0], "真正的原因必须自己出现在终端上").toContain("ko");
+    expect(errors[0]).toContain(missing);
+    expect(errors[0]).not.toContain(LANGS[0].code); // 只点名真缺的那个
+    expect(logged[0], "真正的原因必须自己出现在终端上").toContain(missing);
   });
 
   it("语言目录被并进别的 chunk 时也算覆盖（认源模块，不认文件名）", () => {
     const bundle: Record<string, unknown> = {
       "assets/index-Aaaaaaaa.js": chunk([`${SRC}/main.ts`]),
-      // 九种语言全被合进同一个 chunk —— 文件名里一个语言代码都没有。
+      // 所有语言全被合进同一个 chunk —— 文件名里一个语言代码都没有。
       "assets/merged-Ffffffff.js": chunk(LANGS.map((l) => `${SRC}/lib/i18n/${l.code}.ts`)),
     };
 

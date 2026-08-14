@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/zh/how-to/automate-server-backups/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/automate-server-backups/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/automate-server-backups/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/automate-server-backups/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/automate-server-backups/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/automate-server-backups/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/automate-server-backups/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/how-to/automate-server-backups/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/how-to/automate-server-backups/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/how-to/automate-server-backups/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/automate-server-backups/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -90,7 +83,10 @@ ol.steps>li>pre{margin:8px 0 0}
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>用 cron 任务自动化加密的服务器备份</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -101,7 +97,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最近更新: <bdi>2026-08-06</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/how-to/automate-server-backups/">English</a><a href="/zh/how-to/automate-server-backups/" aria-current="true">中文</a><a href="/ja/how-to/automate-server-backups/">日本語</a><a href="/ko/how-to/automate-server-backups/">한국어</a><a href="/de/how-to/automate-server-backups/">Deutsch</a><a href="/fr/how-to/automate-server-backups/">Français</a><a href="/ar/how-to/automate-server-backups/">العربية</a><a href="/es/how-to/automate-server-backups/">Español</a><a href="/pt/how-to/automate-server-backups/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/automate-server-backups/">English</a><a href="/zh/how-to/automate-server-backups/" aria-current="true">中文</a></nav>
       <p class="lead">需要你记得手动运行的备份，往往就不会发生。cron 会记得，而 Relayium CLI 正是为此而生：一条非交互式命令，把目录复制（或镜像）到另一台机器，逐个校验文件，网络断了也能从断点接着传。</p>
       <p class="lead">本文介绍如何用 cron 定时运行 relayium push 和增量的 relayium sync、两者共用的两种传输方式，以及可以直接抄走的 crontab 行。</p>
       <h2>push 与 sync：整体复制还是增量镜像</h2>

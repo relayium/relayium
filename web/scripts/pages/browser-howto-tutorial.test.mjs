@@ -9,7 +9,7 @@
 //     chrome://downloads) or an exact on-screen reading they compare — never a
 //     command line. So the executable-first-token rule from the CLI file would
 //     reject every honest check here, and a separate allowlist carries it.
-//   • The app is localized. A guide that quotes an English button at a German
+//   • The app is localized. A guide that quotes an English button at a Chinese
 //     reader is telling them to click something their UI never shows
 //     (content/GLOSSARY.md, "UI labels must match the shipped app"). So the
 //     labels in these articles are DIFFERENT per locale on purpose, and what is
@@ -17,6 +17,11 @@
 //     src/lib/i18n/<lang>.ts actually ships. That is the strongest rule in this
 //     file: the expected values are read out of the app rather than typed here,
 //     so a UI rename fails the tutorials that quote it.
+//
+//     Since the 2026-08-14 language freeze that rule runs on MAINTAINED_LANGS.
+//     The seven archived locales keep every structural and product-truth check
+//     below, but there is no German UI string left to compare a German page
+//     against — see the APP comment for the full split.
 //   • What must stay byte-identical is the machine half: URLs and the `#c=` /
 //     `#k=` fragments. Those are compared against English.
 //
@@ -60,17 +65,10 @@ import compareSnapdrop from "./content/articles/compare-snapdrop.mjs";
 
 import en from "../../src/lib/i18n/en.ts";
 import zh from "../../src/lib/i18n/zh.ts";
-import ja from "../../src/lib/i18n/ja.ts";
-import ko from "../../src/lib/i18n/ko.ts";
-import de from "../../src/lib/i18n/de.ts";
-import fr from "../../src/lib/i18n/fr.ts";
-import ar from "../../src/lib/i18n/ar.ts";
-import es from "../../src/lib/i18n/es.ts";
-import pt from "../../src/lib/i18n/pt.ts";
 
 import { buildArticlePages } from "./build-pages.mjs";
 import { renderArticlePage } from "./article-template.mjs";
-import { LANGS } from "./shared.mjs";
+import { LANGS, MAINTAINED_LANGS } from "./shared.mjs";
 
 /**
  * The exact eleven this batch covers. Named rather than globbed: `howto-*` also
@@ -106,8 +104,24 @@ const MATERIAL_REWRITE_DATES = {
   "howto-share-file-expiring-link": "2026-08-05",
 };
 
-/** The shipped app tables, so every expected label is read from the app. */
-const APP = { en, zh, ja, ko, de, fr, ar, es, pt };
+/**
+ * The shipped app tables, so every expected label is read from the app.
+ *
+ * Two, since the 2026-08-14 language freeze. That is what splits this file's
+ * checks in half, and the split is the honest one:
+ *
+ *   • STRUCTURE and PRODUCT FACTS stay on all nine locales. The archived
+ *     tutorials are still public, and a German page that claims a cross-network
+ *     browser session is direct is still wrong.
+ *   • The LABEL rule — "quote the string this locale's UI actually shows" —
+ *     runs on MAINTAINED_LANGS only. There is no German UI string to compare
+ *     against any more; a German reader following the archived German tutorial
+ *     will see the app in English or Chinese, and that is exactly what the
+ *     archived-translation notice on the page tells them. Asserting a
+ *     correspondence that no longer exists would either fail forever or force
+ *     seven unmaintained locales to be rewritten.
+ */
+const APP = { en, zh };
 
 /** A dotted path into a locale table, or undefined when it is not a string. */
 function label(lang, path) {
@@ -800,10 +814,10 @@ describe("the eleven browser how-tos are runnable tutorials in all nine locales"
     expect(serverBackups.slug).toBe("how-to/automate-server-backups");
   });
 
-  it("quotes the labels the app actually ships, in each locale's own language", () => {
+  it("quotes the labels the app actually ships, in each maintained locale's own language", () => {
     const bad = [];
     for (const [name, article] of Object.entries(TUTORIALS))
-      for (const lang of LANGS) bad.push(...labelComplaints(name, lang, article.langs[lang]));
+      for (const lang of MAINTAINED_LANGS) bad.push(...labelComplaints(name, lang, article.langs[lang]));
     expect(bad).toEqual([]);
   });
 
@@ -815,7 +829,7 @@ describe("the eleven browser how-tos are runnable tutorials in all nine locales"
     for (const [name, article] of Object.entries(TUTORIALS)) {
       const enText = docText(article.langs.en);
       for (const key of UI_ANCHORS[name]) {
-        for (const lang of LANGS) {
+        for (const lang of MAINTAINED_LANGS) {
           if (lang === "en") continue;
           const other = label(lang, key);
           // Some labels are legitimately identical across locales (LAN direct in
@@ -837,10 +851,10 @@ describe("the eleven browser how-tos are runnable tutorials in all nine locales"
     expect(bad).toEqual([]);
   });
 
-  it("never quotes the legacy message button as a peer-card action, in any locale", () => {
+  it("never quotes the legacy message button as a peer-card action, in any maintained locale", () => {
     const bad = [];
     for (const [name, article] of Object.entries(TUTORIALS))
-      for (const lang of LANGS) bad.push(...legacyOpenComplaints(name, lang, article.langs[lang]));
+      for (const lang of MAINTAINED_LANGS) bad.push(...legacyOpenComplaints(name, lang, article.langs[lang]));
     expect(bad).toEqual([]);
   });
 
@@ -869,10 +883,10 @@ describe("the eleven browser how-tos are runnable tutorials in all nine locales"
 });
 
 describe("a cross-network browser session is reported as relayed, never as direct", () => {
-  it("shows the shipped relayed badge as the success state, in all nine locales", () => {
+  it("shows the shipped relayed badge as the success state, in every maintained locale", () => {
     const bad = [];
     for (const name of CROSS_NETWORK)
-      for (const lang of LANGS)
+      for (const lang of MAINTAINED_LANGS)
         bad.push(...relayPathComplaints(name, lang, TUTORIALS[name].langs[lang], { english: lang === "en" }));
     expect(bad).toEqual([]);
   });
@@ -904,7 +918,7 @@ describe("a cross-network browser session is reported as relayed, never as direc
   it("keeps the same-network guides saying LAN direct, so the contrast is real", () => {
     // The other half of the same fact. If both families said the same thing the
     // rule above would be decoration.
-    for (const lang of LANGS) {
+    for (const lang of MAINTAINED_LANGS) {
       const shown = withSuccess(sameWifi.langs[lang])[0].success.code.join("\n");
       expect(shown, `same-wifi[${lang}]`).toContain(label(lang, "pathLan"));
       expect(shown, `same-wifi[${lang}]`).not.toContain(label(lang, "pathRelay"));
@@ -1248,11 +1262,13 @@ describe("the browser guard fails when a tutorial regresses", () => {
   });
 
   it("catches a locale that quotes a button its own UI never shows", () => {
-    const doc = clone(TUTORIALS["howto-same-wifi"].langs.de);
+    // zh rather than de: the mutation has to run on a locale whose app table
+    // still exists, because that is the correspondence the rule checks.
+    const doc = clone(TUTORIALS["howto-same-wifi"].langs.zh);
     doc.sections = JSON.parse(
-      JSON.stringify(doc.sections).replace(new RegExp(label("de", "peersTitle"), "g"), "Nearby devices"),
+      JSON.stringify(doc.sections).replace(new RegExp(label("zh", "peersTitle"), "g"), "Nearby devices"),
     );
-    const bad = labelComplaints("howto-same-wifi", "de", doc).join("\n");
+    const bad = labelComplaints("howto-same-wifi", "zh", doc).join("\n");
     expect(bad).toMatch(/never quotes the shipped peersTitle label/);
   });
 
@@ -1302,12 +1318,13 @@ describe("the browser guard fails when a tutorial regresses", () => {
   });
 
   it("catches a QR guide dropping the acceptance gate from the shipped labels", () => {
-    // The mechanical half of the same fact, and the half that carries the other
-    // eight locales: every page has to quote its own `accept` label.
+    // The mechanical half of the same fact, and the half that carries the
+    // non-English maintained locale: every maintained page has to quote its own
+    // `accept` label.
     const doc = JSON.parse(
-      JSON.stringify(TUTORIALS["howto-transfer-by-qr-code"].langs.de).replaceAll(label("de", "accept"), "sofort"),
+      JSON.stringify(TUTORIALS["howto-transfer-by-qr-code"].langs.zh).replaceAll(label("zh", "accept"), "立刻"),
     );
-    expect(labelComplaints("howto-transfer-by-qr-code", "de", doc).join("\n")).toMatch(
+    expect(labelComplaints("howto-transfer-by-qr-code", "zh", doc).join("\n")).toMatch(
       /never quotes the shipped accept label/,
     );
   });
@@ -1331,14 +1348,15 @@ describe("the browser guard fails when a tutorial regresses", () => {
     );
   });
 
-  // Nine independent matchers, so a green corpus proves nothing about any one of
-  // them. This puts the defect into each locale in turn — the peer card's action
-  // quoted as the legacy message button, which is what all nine articles said
-  // about pairing-code rooms before 2026-08-10 — and fails if a locale shrugs.
-  it("catches the legacy message button in every locale, and not in ordinary prose", () => {
+  // One matcher per maintained locale, so a green corpus proves nothing about
+  // either of them on its own. This puts the defect into each locale in turn —
+  // the peer card's action quoted as the legacy message button, which is what
+  // all nine articles said about pairing-code rooms before 2026-08-10 — and
+  // fails if a locale shrugs.
+  it("catches the legacy message button in every maintained locale, and not in ordinary prose", () => {
     const deaf = [];
     const falsePositives = [];
-    for (const lang of LANGS) {
+    for (const lang of MAINTAINED_LANGS) {
       const [open, close] = QUOTES[lang];
       const legacy = label(lang, "text.open");
       const doc = clone(TUTORIALS["howto-send-text-between-devices"].langs[lang]);
@@ -1472,15 +1490,15 @@ describe("the browser guard fails when a tutorial regresses", () => {
   it("catches a stored-link guide losing the same-browser My files recovery", () => {
     // The key never reaches the server, but the browser that uploaded keeps it
     // in localStorage, so Account → My files there rebuilds the link. Both
-    // halves are guarded: the shipped label has to survive in every locale, and
-    // the "only copy" wording is banned in the English master.
+    // halves are guarded: the shipped label has to survive in every maintained
+    // locale, and the "only copy" wording is banned in the English master.
     const doc = JSON.parse(
-      JSON.stringify(TUTORIALS["howto-share-file-expiring-link"].langs.de).replaceAll(
-        label("de", "me.filesTitle"),
-        "die Kontoseite",
+      JSON.stringify(TUTORIALS["howto-share-file-expiring-link"].langs.zh).replaceAll(
+        label("zh", "me.filesTitle"),
+        "账户页面",
       ),
     );
-    expect(labelComplaints("howto-share-file-expiring-link", "de", doc).join("\n")).toMatch(
+    expect(labelComplaints("howto-share-file-expiring-link", "zh", doc).join("\n")).toMatch(
       /never quotes the shipped me\.filesTitle label/,
     );
 

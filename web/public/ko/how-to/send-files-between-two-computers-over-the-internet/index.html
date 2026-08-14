@@ -7,16 +7,6 @@
     <meta name="description" content="브라우저 사이에서 파일을 보내는 단계별 가이드. 같은 LAN에서는 직접 연결하고, 네트워크를 넘을 때는 TURN으로 종단간 암호문을 전달합니다. 클라우드 업로드와 설치가 필요 없습니다." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ko/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-files-between-two-computers-over-the-internet/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -64,6 +54,11 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
 .cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
@@ -85,12 +80,15 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ko">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">인터넷으로 컴퓨터 두 대 사이에 파일 보내는 방법</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>인터넷으로 컴퓨터 두 대 사이에 파일 보내는 방법</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -101,7 +99,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">마지막 업데이트: <bdi>2026-08-05</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-between-two-computers-over-the-internet/">English</a><a href="/zh/how-to/send-files-between-two-computers-over-the-internet/">中文</a><a href="/ja/how-to/send-files-between-two-computers-over-the-internet/">日本語</a><a href="/ko/how-to/send-files-between-two-computers-over-the-internet/" aria-current="true">한국어</a><a href="/de/how-to/send-files-between-two-computers-over-the-internet/">Deutsch</a><a href="/fr/how-to/send-files-between-two-computers-over-the-internet/">Français</a><a href="/ar/how-to/send-files-between-two-computers-over-the-internet/">العربية</a><a href="/es/how-to/send-files-between-two-computers-over-the-internet/">Español</a><a href="/pt/how-to/send-files-between-two-computers-over-the-internet/">Português</a></nav>
+      <aside class="archived" aria-label="보관된 번역"><p class="archived-label">보관된 번역</p><p>이 페이지는 기록으로 보관 중인 한국어 번역입니다. Relayium 제품과 최신 문서는 영어와 중국어 간체로 관리되며, 앱 자체도 더 이상 한국어를 제공하지 않습니다. 여기에 적힌 화면과 세부 사항은 현재 동작과 다를 수 있습니다.</p><p class="archived-links">최신 버전: <a href="/how-to/send-files-between-two-computers-over-the-internet/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/how-to/send-files-between-two-computers-over-the-internet/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">다른 컴퓨터에 파일을 보내려면 보통 먼저 어딘가에 올려야 합니다 — 클라우드 드라이브, 메일 첨부, 채팅 앱 — 그리고 상대가 무사히 다시 꺼낼 수 있길 바라야 합니다. Relayium은 이 저장 단계를 건너뜁니다. 같은 LAN에서는 브라우저끼리 직접 연결하고, 네트워크를 넘는 전송은 TURN 릴레이가 종단간 암호문만 운반하며 서버 측에 실시간 내용 복사본이나 기록을 남기지 않습니다.</p>
       <p class="lead">이 가이드는 두 가지 경우 — 같은 네트워크의 컴퓨터 두 대, 그리고 완전히 다른 네트워크(다른 집, 다른 사무실, 다른 나라)에 있는 컴퓨터 두 대 — 를 모두 다루고, 각 쪽이 정확히 무엇을 해야 하는지 보여줍니다.</p>
       <h2>직접 연결 방식: 중간에 클라우드가 없다</h2>
@@ -138,13 +136,13 @@ ol.steps>li>pre{margin:8px 0 0}
       <p>한 배치에 최대 1,000개의 파일을 보낼 수 있습니다. Relayium 서버가 강제하는 크기 상한은 없고, 남는 것은 현실적인 한계들입니다. 데스크톱 Chrome이나 Edge는 묶음을 곧장 디스크로 스트리밍하므로 거기서 한계를 정하는 것은 브라우저 자체, 운영체제, 그 디스크의 남은 공간, 그리고 실시간 세션이 얼마나 오래 유지되는지입니다. Firefox와 Safari는 묶음을 메모리에 담기 때문에 대략 256MB를 넘으면 Relayium이 경고합니다. 이 기준선은 고정된 천장이 아니라 보수적으로 잡은 값이며, 진짜 한계는 그 컴퓨터에 달려 있습니다.</p>
       <div class="ctacard">
         <p>두 컴퓨터 모두에서 Relayium을 열고 인터넷으로 첫 파일을 보내 보세요 — 클라우드 업로드도, 설치도 필요 없고, 받는 쪽은 언제나 계정이 필요 없습니다.</p>
-        <a class="cta" href="/?lang=ko">지금 Relayium 사용해보기</a>
+        <a class="cta" href="/">지금 Relayium 사용해보기</a>
       </div>
       <h2>계속 읽기</h2>
       <ul class="related"><li><a href="/ko/how-to/transfer-files-by-scanning-a-qr-code/">QR 코드를 스캔해서 파일 전송하기</a></li><li><a href="/ko/how-to/send-files-on-the-same-wifi/">같은 Wi-Fi에 있는 기기끼리 파일 보내기</a></li><li><a href="/ko/guides/what-is-peer-to-peer-file-transfer/">P2P(피어투피어) 파일 전송이란?</a></li><li><a href="/ko/how-to/send-large-files-without-cloud/">클라우드 없이 대용량 파일 보내는 방법</a></li><li><a href="/ko/">Relayium</a></li></ul>
       </main>
       <footer>
-        <a href="/?lang=ko">← Relayium</a>
+        <a href="/">← Relayium</a>
         <a href="/ko/apps/">앱</a>
         <a href="/ko/guides/">가이드</a>
         <a href="/ko/privacy/">개인정보 처리방침</a>

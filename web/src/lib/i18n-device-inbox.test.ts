@@ -1,5 +1,5 @@
 // web/src/lib/i18n-device-inbox.test.ts — the Device Inbox sender copy, in all
-// nine languages.
+// every maintained language.
 //
 // Two claims in this section are product requirements rather than wording, and
 // a translation that loses either is a lie only speakers of that language will
@@ -20,16 +20,9 @@
 import { describe, expect, it } from "vitest";
 import en from "./i18n/en";
 import zh from "./i18n/zh";
-import ja from "./i18n/ja";
-import ko from "./i18n/ko";
-import de from "./i18n/de";
-import fr from "./i18n/fr";
-import ar from "./i18n/ar";
-import es from "./i18n/es";
-import pt from "./i18n/pt";
 import type { Messages } from "./i18n/types";
 
-const locales = { en, zh, ja, ko, de, fr, ar, es, pt };
+const locales = { en, zh };
 type Code = keyof typeof locales;
 
 const NAME = "Lily's MacBook — 家里那台";
@@ -67,62 +60,6 @@ const claims: Record<Code, Claims> = {
     cancelDestroys: /密文会被删除/,
     enableThere: /只能在那台设备上打开/,
     namesStayLocal: /从不接收它们/,
-  },
-  ja: {
-    notSaved: /まだ保存されていません/,
-    queues: /キューで待ち/,
-    saved: /デバイスに保存されました/,
-    cancelDestroys: /暗号文は削除され/,
-    enableThere: /そのデバイス上だけ/,
-    namesStayLocal: /受け取ることはありません/,
-  },
-  ko: {
-    notSaved: /아직 저장되지 않았습니다/,
-    queues: /대기열에서 기다렸다가/,
-    saved: /기기에 저장됨/,
-    cancelDestroys: /암호문이 삭제되고/,
-    enableThere: /그 기기에서만 켤 수 있고/,
-    namesStayLocal: /절대 받지 않습니다/,
-  },
-  de: {
-    notSaved: /noch nicht gespeichert/i,
-    queues: /wartet .* in der Warteschlange/i,
-    saved: /Auf dem Gerät gespeichert/i,
-    cancelDestroys: /vom Server gelöscht/i,
-    enableThere: /nur dort einschalten/i,
-    namesStayLocal: /erhält sie nie/i,
-  },
-  fr: {
-    notSaved: /pas encore enregistré/i,
-    queues: /attend dans la file/i,
-    saved: /Enregistré sur l'appareil/i,
-    cancelDestroys: /supprimées du serveur/i,
-    enableThere: /ne s'active que là-bas/i,
-    namesStayLocal: /ne les reçoit jamais/i,
-  },
-  ar: {
-    notSaved: /لم يُحفَظ على الجهاز بعد/,
-    queues: /ينتظر الملف في الطابور/,
-    saved: /حُفِظ على الجهاز/,
-    cancelDestroys: /ستُحذَف البيانات المشفّرة من الخادم/,
-    enableThere: /لا يمكن تفعيله إلا هناك/,
-    namesStayLocal: /لا يستلمها Relayium أبدًا/,
-  },
-  es: {
-    notSaved: /todavía no está guardado/i,
-    queues: /espera en la cola/i,
-    saved: /Guardado en el dispositivo/i,
-    cancelDestroys: /se borran del servidor/i,
-    enableThere: /Solo se puede activar allí/i,
-    namesStayLocal: /nunca los recibe/i,
-  },
-  pt: {
-    notSaved: /ainda não salvo/i,
-    queues: /espera na fila/i,
-    saved: /Salvo no dispositivo/i,
-    cancelDestroys: /são apagados do servidor/i,
-    enableThere: /Só dá para ligar lá/i,
-    namesStayLocal: /nunca os recebe/i,
   },
 };
 

@@ -53,7 +53,8 @@ describe("category root pages", () => {
   it("canonicalises and hreflangs to itself, not to the Guides hub", () => {
     const zh = byPath.get("zh/compare/index.html");
     expect(zh).toContain('<link rel="canonical" href="https://relayium.com/zh/compare/" />');
-    expect(zh).toContain('hreflang="ar" href="https://relayium.com/ar/compare/"');
+    expect(zh).toContain('hreflang="en" href="https://relayium.com/compare/"');
+    expect(zh).not.toContain('hreflang="ar"');
     expect(zh).toContain('hreflang="x-default" href="https://relayium.com/compare/"');
   });
 

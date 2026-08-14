@@ -36,13 +36,25 @@ describe("buildModePages", () => {
     expect(zh).toContain('<link rel="canonical" href="https://relayium.com/zh/cross-network/" />');
     expect(zh).toContain('hreflang="en" href="https://relayium.com/cross-network"');       // SPA route
     expect(zh).toContain('hreflang="x-default" href="https://relayium.com/cross-network"');
-    expect(zh).toContain('hreflang="ja" href="https://relayium.com/ja/cross-network/"');
+    expect(zh).not.toContain('hreflang="ja"');
+    expect(zh).not.toContain('https://relayium.com/ja/cross-network/');
     expect(zh).toContain('"@type":"FAQPage"');
     expect(zh).toContain('<html lang="zh-Hans"');
   });
 
-  it("CTA links to the SPA mode route with language preset", () => {
+  it("CTA links to the SPA mode route with language preset, on a maintained page", () => {
+    const zh = pages.find((p) => p.path === "zh/cross-network/index.html").html;
+    expect(zh).toContain('href="/cross-network?lang=zh"');
+  });
+
+  it("an archived mode page drops the preset and carries no hreflang cluster", () => {
     const de = pages.find((p) => p.path === "de/cross-network/index.html").html;
-    expect(de).toContain('href="/cross-network?lang=de"');
+    expect(de).toContain('href="/cross-network"');
+    expect(de).not.toContain("?lang=");
+    // No <link rel="alternate"> at all — see the landing test for why the
+    // archive notice's own anchors may still carry an `hreflang` attribute.
+    expect(de).not.toContain('<link rel="alternate"');
+    expect(de).toContain('<link rel="canonical" href="https://relayium.com/de/cross-network/" />');
+    expect(de, "archived pages stay indexable").toContain('content="index, follow"');
   });
 });

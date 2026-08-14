@@ -5,7 +5,7 @@
   import releases from "../../native-releases.json";
 
   type MacRelease = { available: boolean; downloadUrl: string | null };
-  type AppId = "web" | "cli" | "mac" | "ios";
+  type AppId = "web" | "cli" | "mac" | "ios" | "android" | "windows";
   type AppCard = {
     id: AppId;
     name: string;
@@ -34,20 +34,35 @@
   const platform = $derived(platformOverride ?? browserPlatform);
 
   // UA matching marks a platform; it never recommends an alternative or grants
-  // an action. In particular, unavailable macOS/iOS cards remain neutral future
-  // status even when the browser belongs to that platform.
-  const highlightId = $derived(
-    platform === "mac" ? "mac"
-    : platform === "ios" ? "ios"
-    : platform === "windows" || platform === "linux" ? "cli"
-    : "web",
+  // an action. In particular, an in-development card stays in-development even
+  // when the visitor's browser is that exact platform — being highlighted is
+  // "this row is about your machine", never "this is ready for you".
+  //
+  // A set rather than one id, because a platform can legitimately match in both
+  // groups. On Windows the CLI works today AND a native Windows app is being
+  // built; a visitor whose highlight named only one of the two would be shown
+  // either an unavailable app with no mention of what does work, or a working
+  // tool with no mention of what is coming. At most one card per group is ever
+  // marked, so the page never lights up.
+  const highlightIds = $derived<Set<AppId>>(
+    new Set<AppId>(
+      platform === "mac" ? ["mac"]
+      : platform === "ios" ? ["ios"]
+      : platform === "windows" ? ["cli", "windows"]
+      : platform === "linux" ? ["cli"]
+      : platform === "android" ? ["web", "android"]
+      : ["web"],
+    ),
   );
-  // Human OS name for the "looks like you're on X" caption; empty when unknown/android.
+  // Human OS name for the "looks like you're on X" caption; empty when unknown.
+  // Android is named now that it has a card of its own to name: before, the
+  // caption would have pointed at a highlight the reader could not see.
   const osName = $derived(
     platform === "mac" ? "macOS"
     : platform === "ios" ? "iOS"
     : platform === "windows" ? "Windows"
     : platform === "linux" ? "Linux"
+    : platform === "android" ? "Android"
     : "",
   );
 
@@ -76,6 +91,18 @@
       id: "ios", name: t.appsPage.cards.ios.name, desc: t.appsPage.cards.ios.desc,
       available: false,
     },
+    // Two independent products, not one "desktop/mobile, later" bucket, and
+    // neither carries an action: `available: false` is what keeps them out of
+    // the CTA path, and the absent `cta`/`href` is what keeps them out of it
+    // even if a future edit moved them.
+    {
+      id: "android", name: t.appsPage.cards.android.name, desc: t.appsPage.cards.android.desc,
+      available: false,
+    },
+    {
+      id: "windows", name: t.appsPage.cards.windows.name, desc: t.appsPage.cards.windows.desc,
+      available: false,
+    },
   ]);
   const availableCards = $derived(cards.filter((card) => card.available));
   const futureCards = $derived(cards.filter((card) => !card.available));
@@ -98,8 +125,8 @@
           <article
             id={`app-${card.id}`}
             class="app-card ui-card ui-stack"
-            class:is-platform={highlightId === card.id}
-            aria-describedby={highlightId === card.id && osName ? "platform-note" : undefined}
+            class:is-platform={highlightIds.has(card.id)}
+            aria-describedby={highlightIds.has(card.id) && osName ? "platform-note" : undefined}
           >
             <h3>{card.name}</h3>
             <p class="ui-card-sub card-desc">{card.desc}</p>
@@ -123,18 +150,18 @@
 
     {#if futureCards.length}
       <section aria-labelledby="future-apps-heading">
-        <h2 class="group-title" id="future-apps-heading">{t.appsPage.comingSoonBadge}</h2>
+        <h2 class="group-title" id="future-apps-heading">{t.appsPage.inDevelopmentBadge}</h2>
         <div class="grid future-grid">
           {#each futureCards as card (card.id)}
             <article
               id={`app-${card.id}`}
               class="app-card future-card ui-card ui-stack"
-              class:is-platform={highlightId === card.id}
-              aria-describedby={highlightId === card.id && osName ? "platform-note" : undefined}
+              class:is-platform={highlightIds.has(card.id)}
+              aria-describedby={highlightIds.has(card.id) && osName ? "platform-note" : undefined}
             >
               <h3>{card.name}</h3>
               <p class="ui-card-sub card-desc">{card.desc}</p>
-              <p class="future-status">{t.appsPage.comingSoonBadge}</p>
+              <p class="future-status">{t.appsPage.inDevelopmentBadge}</p>
             </article>
           {/each}
         </div>
@@ -142,7 +169,30 @@
     {/if}
   </div>
 
-  <p class="android">{t.appsPage.androidNote}</p>
+  <!-- The question the grid above raises but does not answer. It sits after the
+       cards, not before them: a reader who already knows which platform they
+       are on should reach their card first, and only the undecided one reads
+       on. The two columns are the two real choices — the CLI has its own page
+       and the in-development apps have nothing to choose yet. -->
+  <section class="chooser" aria-labelledby="chooser-heading">
+    <h2 class="group-title" id="chooser-heading">{t.appsPage.chooser.heading}</h2>
+    <p class="chooser-lead">{t.appsPage.chooser.lead}</p>
+    <div class="grid chooser-grid">
+      <article class="ui-card ui-stack choice">
+        <h3>{t.appsPage.chooser.web.title}</h3>
+        <ul>
+          {#each t.appsPage.chooser.web.points as point}<li>{point}</li>{/each}
+        </ul>
+      </article>
+      <article class="ui-card ui-stack choice">
+        <h3>{t.appsPage.chooser.mac.title}</h3>
+        <ul>
+          {#each t.appsPage.chooser.mac.points as point}<li>{point}</li>{/each}
+        </ul>
+      </article>
+    </div>
+    <p class="chooser-note">{t.appsPage.chooser.iosNote}</p>
+  </section>
 </section>
 
 <style>
@@ -156,10 +206,16 @@
     font-weight: 600;
   }
   .grid { display: grid; gap: var(--space-4); }
-  /* The current two cards stay roomy; when macOS ships, auto-fit gives all
-     three available choices an equal row instead of a half-width orphan. */
+  /* auto-fit rather than a fixed count, so the row follows the manifest: two
+     cards when macOS is unreleased, three when it is (which it is), each an
+     equal track instead of a half-width orphan. */
   .available-grid { grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); }
-  .future-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* auto-fit, not `repeat(2, …)`. With iOS, Android and Windows in development
+     a fixed two-column track left the third card alone on a half-width row —
+     which reads as an afterthought rather than a third product. Equal tracks
+     give every in-development platform the same weight, and the count can
+     change (one ships, another starts) without the layout acquiring an orphan. */
+  .future-grid { grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); }
   .app-card { min-inline-size: 0; }
   .app-card h3 { margin: 0; font-size: var(--fs-h3); color: var(--text-h); }
   .card-desc { flex: 1 1 auto; font-size: var(--fs-sm); overflow-wrap: anywhere; }
@@ -191,11 +247,37 @@
     margin: auto 0 0; font-size: var(--fs-xs); color: var(--text); font-weight: 600;
   }
 
-  .android { text-align: center; color: var(--text); font-size: var(--fs-sm); margin-top: var(--space-6); }
+  /* The decision section. Same card surface as the grid above so it reads as
+     part of one page, but two columns at most: it is a comparison, and a third
+     equal-weight column would invite a reader to look for a third answer. */
+  .chooser { margin-top: var(--space-7); }
+  .chooser-lead { margin: 0 0 var(--space-4); max-inline-size: 62ch; font-size: var(--fs-sm); }
+  /* align-items:start, unlike the card grids above. Those stretch so their CTAs
+     line up along one baseline; these two have no action and unequal bullet
+     counts, so stretching left the shorter column with a block of empty card
+     under its last line — which reads as a missing item rather than a shorter
+     list. */
+  .chooser-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+    align-items: start;
+  }
+  .choice { min-inline-size: 0; }
+  .choice h3 { margin: 0; font-size: var(--fs-h3); color: var(--text-h); }
+  .choice ul {
+    margin: 0; padding-inline-start: 1.15em; display: flex; flex-direction: column;
+    gap: var(--space-2); font-size: var(--fs-sm); color: var(--text);
+  }
+  .choice li { overflow-wrap: anywhere; }
+  .choice li::marker { color: var(--control-border); }
+  .chooser-note {
+    margin: var(--space-4) 0 0; font-size: var(--fs-xs); color: var(--text);
+    max-inline-size: 62ch;
+  }
 
   @media (max-width: 620px) {
     .grid { grid-template-columns: minmax(0, 1fr); }
     .groups { gap: var(--space-5); }
+    .chooser { margin-top: var(--space-6); }
   }
   @media (min-width: 621px) {
     /* A single remaining future product should read as one card, not stretch

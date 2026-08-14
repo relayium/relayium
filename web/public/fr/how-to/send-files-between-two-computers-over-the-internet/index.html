@@ -7,16 +7,6 @@
     <meta name="description" content="Un guide pas à pas pour transférer des fichiers de navigateur à navigateur : liaison directe sur le même LAN, ou relais TURN chiffré de bout en bout entre réseaux, sans cloud ni installation." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/fr/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-files-between-two-computers-over-the-internet/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -64,6 +54,11 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
 .cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
@@ -85,12 +80,15 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=fr">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/fr/">Relayium</a> <span aria-hidden="true">›</span> <a href="/fr/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Envoyer des fichiers entre deux ordinateurs par Internet</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>Envoyer des fichiers entre deux ordinateurs par Internet</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -101,7 +99,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">Dernière mise à jour: <bdi>2026-08-05</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-between-two-computers-over-the-internet/">English</a><a href="/zh/how-to/send-files-between-two-computers-over-the-internet/">中文</a><a href="/ja/how-to/send-files-between-two-computers-over-the-internet/">日本語</a><a href="/ko/how-to/send-files-between-two-computers-over-the-internet/">한국어</a><a href="/de/how-to/send-files-between-two-computers-over-the-internet/">Deutsch</a><a href="/fr/how-to/send-files-between-two-computers-over-the-internet/" aria-current="true">Français</a><a href="/ar/how-to/send-files-between-two-computers-over-the-internet/">العربية</a><a href="/es/how-to/send-files-between-two-computers-over-the-internet/">Español</a><a href="/pt/how-to/send-files-between-two-computers-over-the-internet/">Português</a></nav>
+      <aside class="archived" aria-label="Traduction archivée"><p class="archived-label">Traduction archivée</p><p>Cette page est une traduction française archivée. Le produit Relayium et sa documentation à jour sont maintenus en anglais et en chinois simplifié ; l&#39;application elle-même ne propose plus le français. Les écrans et les détails décrits ici peuvent donc différer du comportement actuel.</p><p class="archived-links">Version à jour : <a href="/how-to/send-files-between-two-computers-over-the-internet/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/how-to/send-files-between-two-computers-over-the-internet/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">Envoyer un fichier à un autre ordinateur signifie généralement le téléverser quelque part au préalable — un cloud, une pièce jointe d&#39;e-mail, une appli de messagerie — puis espérer que le destinataire pourra le récupérer. Relayium saute cette étape de stockage : sur le même LAN, les navigateurs se connectent directement ; entre réseaux, un relais TURN ne porte que du texte chiffré de bout en bout et ne conserve ni copie côté serveur ni historique temps réel.</p>
       <p class="lead">Ce guide couvre les deux cas — deux ordinateurs sur le même réseau, et deux ordinateurs sur des réseaux complètement différents (domiciles, bureaux, pays différents) — et montre exactement ce que chaque côté doit faire.</p>
       <h2>La méthode directe : pas de cloud au milieu</h2>
@@ -138,13 +136,13 @@ Fichier 1/1</code></pre></div>
       <p>Vous pouvez envoyer jusqu&#39;à 1 000 fichiers en un seul lot. Aucun serveur Relayium n&#39;impose de limite de taille, et les limites qui restent sont pratiques : Chrome ou Edge sur ordinateur écrit le lot en flux directement sur le disque, et ce qui le borne là, c&#39;est le navigateur, le système d&#39;exploitation, la place libre sur ce disque et la durée pendant laquelle la session en direct tient, tandis que Firefox et Safari gardent le lot en mémoire, où Relayium prévient au-delà d&#39;environ 256 Mo. Ce seuil est une estimation prudente, pas un plafond ferme ; le vrai dépend de la machine.</p>
       <div class="ctacard">
         <p>Ouvrez Relayium sur les deux ordinateurs et envoyez votre premier fichier par Internet — sans envoi vers le cloud, sans installation, et le destinataire n&#39;a jamais besoin de compte.</p>
-        <a class="cta" href="/?lang=fr">Essayer Relayium maintenant</a>
+        <a class="cta" href="/">Essayer Relayium maintenant</a>
       </div>
       <h2>À lire ensuite</h2>
       <ul class="related"><li><a href="/fr/how-to/transfer-files-by-scanning-a-qr-code/">Transférer des fichiers en scannant un code QR</a></li><li><a href="/fr/how-to/send-files-on-the-same-wifi/">Envoyer des fichiers entre appareils sur le même Wi-Fi</a></li><li><a href="/fr/guides/what-is-peer-to-peer-file-transfer/">Qu&#39;est-ce que le transfert de fichiers pair à pair ?</a></li><li><a href="/fr/how-to/send-large-files-without-cloud/">Envoyer de gros fichiers sans le cloud</a></li><li><a href="/fr/">Relayium</a></li></ul>
       </main>
       <footer>
-        <a href="/?lang=fr">← Relayium</a>
+        <a href="/">← Relayium</a>
         <a href="/fr/apps/">Applis</a>
         <a href="/fr/guides/">Guides</a>
         <a href="/fr/privacy/">Confidentialité</a>

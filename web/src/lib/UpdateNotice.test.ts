@@ -245,15 +245,19 @@ describe("UpdateNotice", () => {
     expect(text).toBe(t().appUpdate.ready.replace(/\s+/g, " ").trim());
   });
 
-  it("follows the language switch (RTL locale included)", async () => {
-    await loadLang("ar");
-    await setLang("ar");
+  it("follows the language switch", async () => {
+    // This used to switch to Arabic and additionally assert the document went
+    // RTL. Neither maintained language is RTL since the 2026-08-14 freeze, so
+    // the direction half moved to Nav.test.ts, where the dir() contract and the
+    // components' use of it are pinned without mounting an unreachable state.
+    // The bar is laid out with logical properties only, so it needs no flip.
+    await loadLang("zh");
+    await setLang("zh");
     show();
     updateLanded();
-    expect(bar()!.textContent).toContain(messages.ar.appUpdate.ready);
-    expect(live().textContent!.trim()).toBe(messages.ar.appUpdate.ready);
-    // The bar inherits the document direction and is laid out with logical
-    // properties only, so there is no LTR-shaped rule to flip.
-    expect(document.documentElement.dir).toBe("rtl");
+    expect(bar()!.textContent).toContain(messages.zh.appUpdate.ready);
+    expect(live().textContent!.trim()).toBe(messages.zh.appUpdate.ready);
+    expect(live().textContent!.trim()).not.toBe(messages.en.appUpdate.ready);
+    expect(document.documentElement.dir).toBe("ltr");
   });
 });

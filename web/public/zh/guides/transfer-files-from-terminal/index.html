@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/zh/guides/transfer-files-from-terminal/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/guides/transfer-files-from-terminal/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/transfer-files-from-terminal/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/transfer-files-from-terminal/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/transfer-files-from-terminal/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/transfer-files-from-terminal/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/transfer-files-from-terminal/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/transfer-files-from-terminal/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/transfer-files-from-terminal/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/transfer-files-from-terminal/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/transfer-files-from-terminal/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -90,7 +83,10 @@ ol.steps>li>pre{margin:8px 0 0}
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>用 Relayium CLI 从终端传输文件与文本</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -101,7 +97,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最近更新: <bdi>2026-08-07</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/transfer-files-from-terminal/">English</a><a href="/zh/guides/transfer-files-from-terminal/" aria-current="true">中文</a><a href="/ja/guides/transfer-files-from-terminal/">日本語</a><a href="/ko/guides/transfer-files-from-terminal/">한국어</a><a href="/de/guides/transfer-files-from-terminal/">Deutsch</a><a href="/fr/guides/transfer-files-from-terminal/">Français</a><a href="/ar/guides/transfer-files-from-terminal/">العربية</a><a href="/es/guides/transfer-files-from-terminal/">Español</a><a href="/pt/guides/transfer-files-from-terminal/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/transfer-files-from-terminal/">English</a><a href="/zh/guides/transfer-files-from-terminal/" aria-current="true">中文</a></nav>
       <p class="lead">Relayium CLI 是一个体积很小的单一二进制文件，用来从终端传输文件与临时文本——端到端加密、可自托管、完全免费。你可以把文件复制到服务器、在机器间推送构建产物、跨网络发送压缩包，也可以直接传 URL、命令或代码片段，无需先保存成文件。</p>
       <p class="lead">无论用哪种方式，文件字节都在两端之间直接传输，从不经过 Relayium 的服务器。本指南带你完成安装并走通第一次传输，然后指向每种模式更深入的操作指南。</p>
       <h2>一条命令完成安装</h2>

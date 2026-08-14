@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/guides/receive-files-from-the-command-line/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/guides/receive-files-from-the-command-line/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/receive-files-from-the-command-line/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/receive-files-from-the-command-line/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/receive-files-from-the-command-line/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/receive-files-from-the-command-line/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/receive-files-from-the-command-line/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/receive-files-from-the-command-line/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/receive-files-from-the-command-line/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/receive-files-from-the-command-line/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/receive-files-from-the-command-line/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -90,7 +83,10 @@ ol.steps>li>pre{margin:8px 0 0}
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>Receive files from the command line</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -101,7 +97,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">Last updated: <bdi>2026-08-06</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/receive-files-from-the-command-line/" aria-current="true">English</a><a href="/zh/guides/receive-files-from-the-command-line/">中文</a><a href="/ja/guides/receive-files-from-the-command-line/">日本語</a><a href="/ko/guides/receive-files-from-the-command-line/">한국어</a><a href="/de/guides/receive-files-from-the-command-line/">Deutsch</a><a href="/fr/guides/receive-files-from-the-command-line/">Français</a><a href="/ar/guides/receive-files-from-the-command-line/">العربية</a><a href="/es/guides/receive-files-from-the-command-line/">Español</a><a href="/pt/guides/receive-files-from-the-command-line/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/receive-files-from-the-command-line/" aria-current="true">English</a><a href="/zh/guides/receive-files-from-the-command-line/">中文</a></nav>
       <p class="lead">Sending is only half the story — sooner or later you&#39;re on the receiving end: a colleague wants to hand you a file across the internet, one of your own machines wants to hand off to another, or you want to reach out and grab something from a server you administer. The Relayium CLI covers all three with a different command for each, and none of them need an account.</p>
       <p class="lead">Pick receive when someone else is pushing to you by pairing code, serve when you want a standing inbox that trusted machines can push to any time, and pull when you&#39;re the one reaching out to a server you can already ssh into.</p>
       <h2>Three ways to receive, and when each applies</h2>

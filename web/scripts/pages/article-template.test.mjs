@@ -30,9 +30,18 @@ describe("buildArticlePages", () => {
     expect(zh).toContain('"@type":"FAQPage"');
   });
 
-  it("CTA points at the SPA with language preset", () => {
+  it("CTA points at the SPA with language preset, on a maintained page", () => {
+    const zh = pages.find((p) => p.path === "zh/compare/snapdrop/index.html").html;
+    expect(zh).toContain('href="/?lang=zh"');
+  });
+
+  it("CTA on an archived page carries no lang preset", () => {
+    // `?lang=fr` would resolve to English anyway, and would OVERRIDE the
+    // reader's own browser language to do it — so a Chinese speaker reading the
+    // archived French page would land in English instead of Chinese.
     const fr = pages.find((p) => p.path === "fr/compare/snapdrop/index.html").html;
-    expect(fr).toContain('href="/?lang=fr"');
+    expect(fr).not.toContain("?lang=");
+    expect(fr).toContain('href="/"');
   });
 
   it("articleLinksByLang exposes localized titles keyed by lang", () => {

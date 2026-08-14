@@ -1,4 +1,4 @@
-// web/src/lib/i18n-account-deletion.test.ts — the注销文案在九种语言里的安全断言。
+// web/src/lib/i18n-account-deletion.test.ts — the注销文案在每种维护中语言里的安全断言。
 //
 // 这是产品里唯一一个「文案本身就是安全机制」的破坏性操作：按钮按下去只发一封确认邮件，
 // 真正的删除全部发生在邮件里的链接被打开之后。所以一句翻译丢了，用户就会在对后果的
@@ -21,16 +21,9 @@
 import { describe, expect, it } from "vitest";
 import en from "./i18n/en";
 import zh from "./i18n/zh";
-import ja from "./i18n/ja";
-import ko from "./i18n/ko";
-import de from "./i18n/de";
-import fr from "./i18n/fr";
-import ar from "./i18n/ar";
-import es from "./i18n/es";
-import pt from "./i18n/pt";
 import type { Messages } from "./i18n/types";
 
-const locales = { en, zh, ja, ko, de, fr, ar, es, pt };
+const locales = { en, zh };
 type Code = keyof typeof locales;
 
 const ADDRESS = "ada@example.com";
@@ -78,86 +71,6 @@ const claims: Record<Code, Claims> = {
     reactivate: "重新登录",
     overclaims: ["进行中的传输", "同一封邮件"],
     doneClaim: /已发送|已删除|已排期|已完成/,
-  },
-  ja: {
-    email: "メール",
-    notYet: "そのリンクを開くまで、何も削除されません",
-    permanent: "完全に",
-    revoked: "セッションとデバイスのアクセス権",
-    erased: "サーバーに保存されたファイルとデータ",
-    graceDays: /30 日間の猶予期間/,
-    reactivate: "もう一度サインイン",
-    overclaims: ["進行中の転送", "同じメール"],
-    doneClaim: /送信しました|削除しました|削除されました|予定されました|完了/,
-  },
-  ko: {
-    email: "메일",
-    notYet: "그 링크를 열기 전에는 아무것도 삭제되지 않습니다",
-    permanent: "영구",
-    revoked: "세션과 기기 접근 권한",
-    erased: "서버에 저장된 파일과 데이터",
-    graceDays: /30일 유예 기간/,
-    reactivate: "다시 로그인",
-    overclaims: ["진행 중인 전송", "같은 메일"],
-    doneClaim: /보냈습니다|전송했습니다|삭제되었습니다|예약되었습니다|완료/,
-  },
-  de: {
-    email: "E-Mail",
-    notYet: "Bis dieser Link geöffnet wird, wird nichts entfernt",
-    permanent: "endgültige",
-    revoked: "Sitzungen und Gerätezugriffe",
-    erased: "auf dem Server gespeicherten Dateien und Daten",
-    graceDays: /30-tägigen Karenzzeit/,
-    reactivate: "erneut anmelden",
-    overclaims: ["laufende Übertragungen", "dieselbe E-Mail"],
-    doneClaim: /gesendet|gelöscht|geplant|abgeschlossen/i,
-  },
-  fr: {
-    email: "e-mail",
-    notYet: "Rien n'est supprimé tant que ce lien n'est pas ouvert",
-    permanent: "définitive",
-    revoked: "sessions Relayium et l'accès des appareils",
-    erased: "fichiers et les données stockés sur le serveur",
-    graceDays: /délai de grâce de 30 jours/,
-    reactivate: "reconnectez-vous",
-    overclaims: ["transferts en cours", "même e-mail"],
-    // 「supprimé」本身不能禁——`notYet` 里就有一个。禁的是把它说成既成事实的说法。
-    doneClaim: /envoyé|compte supprimé|suppression programmée|terminé/i,
-  },
-  ar: {
-    // 词根而非「البريد」：同一个词在这几句里带的前缀不同（بريد / البريد / بالبريد），
-    // 断言要的是「还在说邮件」，不是某一种带冠词的形态。
-    email: "بريد",
-    notYet: "لا يتم حذف أي شيء قبل فتح هذا الرابط",
-    permanent: "نهائيًا",
-    revoked: "جلسات Relayium وصلاحية وصول الأجهزة",
-    erased: "الملفات والبيانات المخزَّنة على الخادم",
-    graceDays: /مهلة سماح مدتها 30 يومًا/,
-    reactivate: "سجّل الدخول مرة أخرى",
-    overclaims: ["عمليات النقل الجارية", "الرسالة نفسها"],
-    doneClaim: /تم إرسال|أُرسلت|تم الحذف|تم الجدولة|اكتمل/,
-  },
-  es: {
-    email: "correo",
-    notYet: "No se elimina nada hasta que se abre ese enlace",
-    permanent: "definitiva",
-    revoked: "sesiones de Relayium y el acceso de los dispositivos",
-    erased: "archivos y los datos almacenados en el servidor",
-    graceDays: /periodo de gracia de 30 días/,
-    reactivate: "vuelve a iniciar sesión",
-    overclaims: ["transferencias en curso", "mismo correo"],
-    doneClaim: /enviado|cuenta eliminada|programad|completad/i,
-  },
-  pt: {
-    email: "e-mail",
-    notYet: "Nada é excluído até que esse link seja aberto",
-    permanent: "definitiva",
-    revoked: "sessões do Relayium e o acesso dos dispositivos",
-    erased: "arquivos e os dados armazenados no servidor",
-    graceDays: /período de tolerância de 30 dias/,
-    reactivate: "entre novamente",
-    overclaims: ["transferências em andamento", "mesmo e-mail"],
-    doneClaim: /enviado|conta excluída|agendad|concluíd/i,
   },
 };
 

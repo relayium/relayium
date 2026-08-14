@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/zh/compare/google-drive/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/compare/google-drive/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/google-drive/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/google-drive/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/google-drive/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/google-drive/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/google-drive/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/compare/google-drive/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/compare/google-drive/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/compare/google-drive/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/google-drive/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -73,7 +66,10 @@ footer a{color:var(--text-h);text-decoration:none}
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>Relayium 对比 Google Drive：发送文件更直接</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -84,7 +80,7 @@ footer a{color:var(--text-h);text-decoration:none}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/compare/google-drive/">English</a><a href="/zh/compare/google-drive/" aria-current="true">中文</a><a href="/ja/compare/google-drive/">日本語</a><a href="/ko/compare/google-drive/">한국어</a><a href="/de/compare/google-drive/">Deutsch</a><a href="/fr/compare/google-drive/">Français</a><a href="/ar/compare/google-drive/">العربية</a><a href="/es/compare/google-drive/">Español</a><a href="/pt/compare/google-drive/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/compare/google-drive/">English</a><a href="/zh/compare/google-drive/" aria-current="true">中文</a></nav>
       <p class="lead">Google Drive 确实是个好产品：文件集中存放、跨设备同步、自动备份，团队协作编辑也很顺手。如果你需要的是一个会反复用到的文件存放地，Drive 是合理的默认选择，本文并不打算劝你放弃它。</p>
       <p class="lead">但很多人用 Drive 做的其实是一次性的「交接」——把一段视频发给朋友、把合同发给客户、把数据集发给同事——而不是持久存储。对这类具体任务来说，把一份副本上传到 Google 的服务器、再配置谁能看到它，比任务本身需要的步骤要多。Relayium 正是为这种交接而生：实时传输不保存服务端内容副本，浏览器在局域网内直连、跨网络时经端到端加密的 TURN 中继；可选存储链接则只有接收方能解密。</p>
       <h2>Google Drive 做得好的地方</h2>

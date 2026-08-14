@@ -7,16 +7,6 @@
     <meta name="description" content="ブラウザでファイルを暗号化し、サーバーが復号できないリンクを作成。有効期限は1時間・1日・3日・7日・最長14日（プランによる）、または初回ダウンロード後に消去から選べます。準備ができたときに送れます。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/how-to/share-a-file-with-an-expiring-link/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/share-a-file-with-an-expiring-link/" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/share-a-file-with-an-expiring-link/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/share-a-file-with-an-expiring-link/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/share-a-file-with-an-expiring-link/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/share-a-file-with-an-expiring-link/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/share-a-file-with-an-expiring-link/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/how-to/share-a-file-with-an-expiring-link/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/how-to/share-a-file-with-an-expiring-link/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/how-to/share-a-file-with-an-expiring-link/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/share-a-file-with-an-expiring-link/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -64,6 +54,11 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
 .cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
@@ -85,12 +80,15 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">期限付きの安全なダウンロードリンクでファイルを共有する</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>期限付きの安全なダウンロードリンクでファイルを共有する</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -101,7 +99,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最終更新: <bdi>2026-08-05</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/how-to/share-a-file-with-an-expiring-link/">English</a><a href="/zh/how-to/share-a-file-with-an-expiring-link/">中文</a><a href="/ja/how-to/share-a-file-with-an-expiring-link/" aria-current="true">日本語</a><a href="/ko/how-to/share-a-file-with-an-expiring-link/">한국어</a><a href="/de/how-to/share-a-file-with-an-expiring-link/">Deutsch</a><a href="/fr/how-to/share-a-file-with-an-expiring-link/">Français</a><a href="/ar/how-to/share-a-file-with-an-expiring-link/">العربية</a><a href="/es/how-to/share-a-file-with-an-expiring-link/">Español</a><a href="/pt/how-to/share-a-file-with-an-expiring-link/">Português</a></nav>
+      <aside class="archived" aria-label="アーカイブされた翻訳"><p class="archived-label">アーカイブされた翻訳</p><p>このページは記録として残している日本語訳です。Relayium の製品と最新のドキュメントは英語と簡体字中国語で管理されており、アプリ自体も日本語を提供していません。ここに書かれている画面表示や細部は、現在の動作と異なる場合があります。</p><p class="archived-links">最新版：<a href="/how-to/share-a-file-with-an-expiring-link/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/how-to/share-a-file-with-an-expiring-link/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">すべての転送で、相手が今すぐ待っているとは限りません。受信者が寝ていたり、飛行機の中だったり、あるいはただリンクをメッセージに貼って自分のことに戻りたいだけかもしれません。そのために Relayium にはもう一つのモードがあります。開いている別のブラウザへファイルをその場でストリーミングする代わりに、手元でファイルを暗号化し、暗号文だけをアップロードして、いつでも送れるリンクを渡します。ダウンロードのタイミングは受信者自身のスケジュール次第です。</p>
       <p class="lead">本ガイドでは、こうしたリンクの作成方法、有効期限と「初回ダウンロード後に消去」オプション、そしてゼロ知識設計が実際に何を意味するかを説明します。正直な制約も含めています。リンクの作成には送信側のサインインが必要で、リンクはストレージ容量を消費します。</p>
       <h2>保存型リンク vs リアルタイム：どちらを使うか</h2>
@@ -135,13 +133,13 @@ https://relayium.com/d/8f3c2a1b#k=hQ2r…</code></pre></div>
       <p>初回ダウンロード後の消去は、まさに1回きりのダウンロードのために設計されています。枠はそのダウンロードが実際の暗号文を配送し始めた時点で消費されるため、それ以降にリンクを開いても機能しません——そのダウンロードが途中で切れて完了しなかった場合でも同じです。1バイトも転送されなかった試行だけが返されます。</p>
       <div class="ctacard">
         <p>ファイルの準備はできているけれど、相手がまだ待っていない？ ブラウザで期限付きリンクを作成して、準備ができたときに送りましょう。</p>
-        <a class="cta" href="/?lang=ja">Relayium を今すぐ試す</a>
+        <a class="cta" href="/">Relayium を今すぐ試す</a>
       </div>
       <h2>続けて読む</h2>
       <ul class="related"><li><a href="/ja/compare/wetransfer/">Relayium と WeTransfer の比較：暗号化リンクとリアルタイム受け渡し</a></li><li><a href="/ja/guides/how-relayium-encrypts-your-files/">Relayium がファイルをエンドツーエンドで暗号化する仕組み</a></li><li><a href="/ja/how-to/send-large-files-without-cloud/">クラウドを使わずに大きなファイルを送る方法</a></li><li><a href="/ja/guides/is-it-safe-to-send-files-over-the-internet/">インターネットでファイルを送るのは安全か</a></li><li><a href="/ja/">Relayium</a></li></ul>
       </main>
       <footer>
-        <a href="/?lang=ja">← Relayium</a>
+        <a href="/">← Relayium</a>
         <a href="/ja/apps/">アプリ</a>
         <a href="/ja/guides/">ガイド</a>
         <a href="/ja/privacy/">プライバシーポリシー</a>

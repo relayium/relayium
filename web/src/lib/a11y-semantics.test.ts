@@ -63,9 +63,9 @@ describe("navigation landmarks are distinguishable", () => {
   });
 
   it("uses a translated label, not English, in another language", async () => {
-    await setLang("ja");
+    await setLang("zh");
     const nav = render(Nav).querySelector("nav.topnav")!;
-    expect(nav.getAttribute("aria-label")).toBe(messages.ja.nav.primaryLabel);
+    expect(nav.getAttribute("aria-label")).toBe(messages.zh.nav.primaryLabel);
     expect(nav.getAttribute("aria-label")).not.toBe(messages.en.nav.primaryLabel);
     await setLang("en");
   });

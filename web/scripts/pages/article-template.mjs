@@ -1,7 +1,7 @@
 // web/scripts/pages/article-template.mjs — renders one article (one language) to a
 // self-contained static HTML string. No JS, no external CSS: styles are inlined so
 // the page is independent of the Vite asset graph and crawlable with JS disabled.
-import { LANGS, DEFAULT_LANG, LANG_LABELS, GUIDES_LABELS, APPS_LABELS, pricingLabel, PRICING_URL, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, urlPath, absUrl, esc, ctaHref, landingUrl, dirAttr, rtlHead } from "./shared.mjs";
+import { MAINTAINED_LANGS, DEFAULT_LANG, LANG_LABELS, GUIDES_LABELS, APPS_LABELS, pricingLabel, PRICING_URL, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, urlPath, absUrl, esc, ctaHref, landingUrl, dirAttr, rtlHead, isFrozen, archiveNotice, ARCHIVE_STYLE } from "./shared.mjs";
 
 // Footer link label; matches content/landing.mjs footer.privacy per language.
 const PRIVACY_LABELS = {
@@ -40,16 +40,41 @@ footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-
 footer a{color:var(--text-h);text-decoration:none}
 `;
 
+/**
+ * The language bar, on the maintained pages only.
+ *
+ * A frozen page gets `archiveNotice()` in this slot instead. That is the whole
+ * difference: a selector says "pick a language, they are all current", and for
+ * seven of them that is no longer true. The notice says what the page is and
+ * links to the same two destinations the bar would have offered.
+ */
 function langBar(slug, lang) {
-  const links = LANGS.map((l) => {
+  if (isFrozen(lang)) return archiveNotice(lang, { en: urlPath(slug, "en"), zh: urlPath(slug, "zh") });
+  const links = MAINTAINED_LANGS.map((l) => {
     const cur = l === lang ? " aria-current=\"true\"" : "";
     return `<a href="${urlPath(slug, l)}"${cur}>${esc(LANG_LABELS[l])}</a>`;
   });
   return `<nav class="langbar" aria-label="Language">${links.join("")}</nav>`;
 }
 
+/**
+ * The hreflang cluster: English, Simplified Chinese, and x-default at English.
+ *
+ * The seven archived locales are deliberately absent, and their own pages emit
+ * no cluster at all (see below). hreflang declares "these URLs are the same
+ * page in the languages this site offers" and is reciprocal by design — listing
+ * /ja/ here would claim Japanese is on offer, and listing English from /ja/
+ * without the return link is the broken-cluster shape Search Console reports.
+ * Archived pages keep a self-referential canonical, stay `index, follow` and
+ * stay in the sitemap; they are simply not alternates of the current page.
+ *
+ * Callers gate on `isFrozen` and interpolate the result with its own leading
+ * newline, so a frozen page emits no cluster and no blank line where one used
+ * to be — the generated tree is committed, and a line of trailing indentation
+ * on ~250 archived pages is what `git diff --check` exists to refuse.
+ */
 function alternates(slug) {
-  const links = LANGS.map(
+  const links = MAINTAINED_LANGS.map(
     (l) => `<link rel="alternate" hreflang="${BCP47[l]}" href="${absUrl(urlPath(slug, l))}" />`
   );
   links.push(`<link rel="alternate" hreflang="x-default" href="${absUrl(urlPath(slug, DEFAULT_LANG))}" />`);
@@ -292,6 +317,7 @@ function hasBlocks(doc) {
 }
 
 export function renderArticlePage({ slug, lang, doc, updated, published, related = [] }) {
+  const archived = isFrozen(lang);
   const dateModified = doc.updated || updated;
   const canonical = absUrl(urlPath(slug, lang));
   const ogImage = SITE.origin + "/og-image.jpg";
@@ -378,8 +404,7 @@ export function renderArticlePage({ slug, lang, doc, updated, published, related
     <title>${headTitle} · ${SITE.name}</title>
     <meta name="description" content="${headDesc}" />
     <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="${canonical}" />
-    ${alternates(slug)}
+    <link rel="canonical" href="${canonical}" />${archived ? "" : "\n    " + alternates(slug)}
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -396,7 +421,7 @@ export function renderArticlePage({ slug, lang, doc, updated, published, related
     <meta name="twitter:description" content="${headDesc}" />
     <meta name="twitter:image" content="${ogImage}" />
     <script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>
-    <style>${STYLE}</style>${hasTable(doc) ? "\n    " + TABLE_STYLE : ""}${hasBlocks(doc) ? "\n    " + BLOCK_STYLE : ""}${hasWidget(doc) ? "\n    " + BUILDER_STYLE : ""}
+    <style>${STYLE}${archived ? ARCHIVE_STYLE : ""}</style>${hasTable(doc) ? "\n    " + TABLE_STYLE : ""}${hasBlocks(doc) ? "\n    " + BLOCK_STYLE : ""}${hasWidget(doc) ? "\n    " + BUILDER_STYLE : ""}
   </head>
   <body>
     <div class="wrap">
@@ -405,7 +430,10 @@ export function renderArticlePage({ slug, lang, doc, updated, published, related
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>${esc(doc.title)}</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the

@@ -1,23 +1,21 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { LANGS, detect, pageUrl, loadLang, setLang, lang, messages as liveMessages, type Lang, type Messages } from "./i18n.svelte";
+import {
+  LANGS, FROZEN_LANGS, isMaintainedLang, isFrozenLang, resolveLang,
+  detect, pageUrl, loadLang, setLang, lang, messages as liveMessages,
+  type Lang, type Messages,
+} from "./i18n.svelte";
 // Language tables are code-split, so `messages` is empty until loaded at runtime.
-// The completeness checks want every language synchronously, so import the split
-// modules directly and reassemble the full record here.
+// The completeness checks want every maintained language synchronously, so
+// import the split modules directly and reassemble the full record here. Two
+// entries, because two is the whole maintained set — see i18n/types.ts.
 import { PICK_MODES, FLAG_ROWS, TRUST_FILES, GUIDES } from "./cli-page-data";
 import { TEXT_MAX_BYTES } from "./text-wire";
 import zh from "./i18n/zh";
 import en from "./i18n/en";
-import ja from "./i18n/ja";
-import ko from "./i18n/ko";
-import de from "./i18n/de";
-import fr from "./i18n/fr";
-import ar from "./i18n/ar";
-import es from "./i18n/es";
-import pt from "./i18n/pt";
 
-const messages: Record<Lang, Messages> = { zh, en, ja, ko, de, fr, ar, es, pt };
+const messages: Record<Lang, Messages> = { zh, en };
 
-// TEXT_MAX_BYTES as it can legitimately be rendered across the nine locales:
+// TEXT_MAX_BYTES as it can legitimately be rendered across the maintained locales:
 // 65,536 · 65.536 · 65 536 (plain, NBSP or narrow NBSP group separator).
 const GROUPED_MAX = new RegExp(
   String(TEXT_MAX_BYTES).replace(/^(\d+)(\d{3})$/, "$1[.,\\s\\u00a0\\u202f]?$2")
@@ -323,13 +321,6 @@ describe("homepage 文本定位文案", () => {
     const forbidden: Record<Lang, RegExp> = {
       en: /same (?:encrypted |peer )?connection/i,
       zh: /同一条.*连接/u,
-      ja: /同じ.*接続/u,
-      ko: /같은 P2P 연결/u,
-      de: /dieselbe.*verbindung/iu,
-      fr: /même connexion/iu,
-      ar: /(?:الاتصال|اتصال).*نفسه/u,
-      es: /misma conexión/iu,
-      pt: /mesma conexão/iu,
     };
     for (const { code } of LANGS) {
       const m = messages[code];
@@ -348,45 +339,153 @@ describe("homepage 文本定位文案", () => {
   });
 });
 
+// The maintained/frozen split, at the type level and at the value level.
+//
+// `Lang` is the maintained set, not a subset of a wider union, so a frozen code
+// is a compile error wherever a language is expected. TypeScript cannot be
+// asked to prove that at runtime, so these check the two exported sets instead:
+// they are what `LANGS`-driven selectors, the loader record and `Record<Lang,…>`
+// are all built from, and a frozen code leaking into either is the defect.
+describe("maintained and frozen locales are two disjoint sets", () => {
+  it("offers exactly English and Simplified Chinese", () => {
+    expect(LANGS.map((l) => l.code).sort()).toEqual(["en", "zh"]);
+  });
+
+  it("lists the seven frozen locales without any of them being selectable", () => {
+    expect([...FROZEN_LANGS].sort()).toEqual(["ar", "de", "es", "fr", "ja", "ko", "pt"]);
+    for (const frozen of FROZEN_LANGS) {
+      expect(LANGS.some((l) => l.code === (frozen as string)), `${frozen} is selectable`).toBe(false);
+      expect(isMaintainedLang(frozen), `${frozen} reads as maintained`).toBe(false);
+      expect(isFrozenLang(frozen)).toBe(true);
+    }
+  });
+
+  it("classifies both maintained languages as maintained and neither as frozen", () => {
+    for (const { code } of LANGS) {
+      expect(isMaintainedLang(code)).toBe(true);
+      expect(isFrozenLang(code)).toBe(false);
+    }
+  });
+
+  it("has a loadable table for every selectable language and no others", async () => {
+    // The selector is what a reader clicks; the loaders are what answers. A code
+    // in one and not the other is either a dead option or an unreachable table.
+    for (const { code } of LANGS) {
+      await loadLang(code);
+      expect(liveMessages[code]?.tagline, `${code} has no table`).toBeTruthy();
+    }
+  });
+});
+
+describe("resolveLang maps any tag onto a maintained language", () => {
+  it("resolves every zh variant to Simplified Chinese", () => {
+    for (const tag of ["zh", "ZH", "zh-CN", "zh-Hans", "zh-Hant", "zh-TW", "zh_HK"]) {
+      expect(resolveLang(tag), tag).toBe("zh");
+    }
+  });
+
+  it("resolves every frozen locale to English", () => {
+    for (const frozen of FROZEN_LANGS) {
+      expect(resolveLang(frozen), frozen).toBe("en");
+      expect(resolveLang(`${frozen}-XX`), `${frozen}-XX`).toBe("en");
+    }
+  });
+
+  it("resolves unknown, empty and prototype-chain values to English", () => {
+    for (const tag of ["", "klingon", "xx", "toString", "constructor", "__proto__", null, undefined]) {
+      expect(resolveLang(tag), String(tag)).toBe("en");
+    }
+  });
+
+  it("does not treat a tag that merely starts with the letters zh as Chinese", () => {
+    // "zhuang" is a different language; prefix matching without a separator
+    // would have claimed it.
+    expect(resolveLang("zhuang")).toBe("en");
+  });
+});
+
 describe("detect", () => {
   beforeEach(() => {
     localStorage.clear();
   });
 
-  it("returns a saved language when it is a real, own key", () => {
+  it("returns a saved maintained language", () => {
+    localStorage.setItem("relayium-lang", "zh");
+    expect(detect()).toBe("zh");
+  });
+
+  it("falls a saved frozen language back to English", () => {
+    // The migration case: a reader who chose Japanese before the freeze. The old
+    // code matched "ja" against the nine-code set and selected a table that no
+    // longer exists — a white screen, not a fallback.
+    localStorage.setItem("relayium-lang", "ja");
+    expect(detect()).toBe("en");
+  });
+
+  it("rewrites a stale saved language to what it now resolves to", () => {
     localStorage.setItem("relayium-lang", "de");
-    expect(detect()).toBe("de");
+    detect();
+    expect(localStorage.getItem("relayium-lang")).toBe("en");
+  });
+
+  it("leaves a still-valid saved language alone", () => {
+    localStorage.setItem("relayium-lang", "zh");
+    detect();
+    expect(localStorage.getItem("relayium-lang")).toBe("zh");
   });
 
   it("ignores a prototype-chain key like 'toString' instead of white-screening", () => {
     // Regression: `saved in messages` would resolve "toString" to Object.prototype's
-    // function and later crash the whole app; validating against the static code
-    // set (CODES.has) rejects it.
+    // function and later crash the whole app.
     localStorage.setItem("relayium-lang", "toString");
     const l = detect();
     expect(typeof messages[l].tagline).toBe("string");
   });
 
-  it("ignores an unknown saved language", () => {
+  it("resolves an unknown saved language to a language that has a table", () => {
     localStorage.setItem("relayium-lang", "xx");
-    expect(["zh", "ja", "ko", "de", "fr", "en"]).toContain(detect());
+    expect(detect()).toBe("en");
   });
 });
 
 describe("detect with ?lang=", () => {
-  it("prefers a valid ?lang= over saved and navigator language", () => {
-    localStorage.setItem("relayium-lang", "fr");
-    expect(detect("?lang=ja")).toBe("ja");
+  beforeEach(() => {
+    localStorage.clear();
   });
 
-  it("ignores an invalid ?lang= value", () => {
-    localStorage.setItem("relayium-lang", "fr");
-    expect(detect("?lang=klingon")).toBe("fr");
+  it("prefers a maintained ?lang= over saved and navigator language", () => {
+    localStorage.setItem("relayium-lang", "en");
+    expect(detect("?lang=zh")).toBe("zh");
+  });
+
+  it("resolves a frozen ?lang= to English", () => {
+    // Archived pages and old bookmarks still carry these. English is the answer,
+    // not a crash and not a silently ignored parameter.
+    for (const frozen of FROZEN_LANGS) {
+      expect(detect(`?lang=${frozen}`), frozen).toBe("en");
+    }
+  });
+
+  it("resolves a zh variant in the query to Simplified Chinese", () => {
+    // Previously an exact-match check: "zh-Hans" fell through to the browser,
+    // while navigator.language of "zh-Hans" matched by prefix. Same input, two
+    // answers, depending only on which door it came through.
+    expect(detect("?lang=zh-Hans")).toBe("zh");
+    expect(detect("?lang=zh-TW")).toBe("zh");
+  });
+
+  it("resolves an unknown ?lang= to English", () => {
+    expect(detect("?lang=klingon")).toBe("en");
   });
 
   it("ignores prototype-chain keys", () => {
-    localStorage.clear();
-    expect(detect("?lang=toString")).not.toBe("toString");
+    expect(detect("?lang=toString")).toBe("en");
+  });
+
+  it("falls through to the saved language when ?lang= is absent or empty", () => {
+    localStorage.setItem("relayium-lang", "zh");
+    expect(detect("")).toBe("zh");
+    expect(detect("?lang=")).toBe("zh");
   });
 });
 
@@ -419,9 +518,9 @@ describe("language code-splitting", () => {
   });
 
   it("setLang loads the target table before switching the current language", async () => {
-    await setLang("ja");
-    expect(lang()).toBe("ja");
-    expect(liveMessages.ja.tagline).toBeTruthy();
+    await setLang("zh");
+    expect(lang()).toBe("zh");
+    expect(liveMessages.zh.tagline).toBeTruthy();
   });
 });
 
@@ -481,15 +580,8 @@ describe("/cli 页的下标配对数组与代码常量等长", () => {
 const TEXT_WORD: Record<Lang, RegExp> = {
   en: /\btext\b/i,
   zh: /文本/,
-  ja: /テキスト/,
-  ko: /텍스트/,
-  de: /Text/,
-  fr: /texte/i,
-  es: /texto/i,
-  pt: /texto/i,
   // منصّة（平台）里就含有 نص 这两个连续字母，而"选择你的平台"恰恰是 appsPage.subhead
   // 的结尾——直接写 /نص/ 的话，阿拉伯语那一格永远为真，等于没测。排掉前面带 م 的写法。
-  ar: /(?<!م)نص/,
 };
 
 // 同一个偏差在 /apps 上是双份的：网页版现在也能发临时文本（“发送消息”），但整页的
@@ -531,38 +623,24 @@ describe("平台定位文案覆盖文件与临时文本", () => {
 //
 // 换成正向不变量：两张原生卡片都必须如实说出**已经实现**的文件与文本能力，同时守住
 // 两条尚未实现的边界——公开分发（App Store / Mac App Store）和 iOS 的分享扩展。
-// 用各语言自己的词，理由和 TEXT_WORD 一样：只匹配拉丁字母的话，八种译文永远为真。
+// 用各语言自己的词，理由和 TEXT_WORD 一样：只匹配拉丁字母的话，中文那一格永远为真。
 const FILE_WORD: Record<Lang, RegExp> = {
   en: /\bfiles?\b/i,
   zh: /文件/,
-  ja: /ファイル/,
-  ko: /파일/,
-  de: /Datei/i,
-  fr: /fichier/i,
-  es: /archivo/i,
-  pt: /arquivo/i,
-  ar: /ملف/,
 };
 
-// 苹果在这九种语言里都不翻译商店名，所以一条正则就够守住全部译文。两个原生 App 都
+// 苹果在维护的这两种语言里都不翻译商店名，所以一条正则就够守住全部译文。两个原生 App 都
 // 既不在 App Store 也不在 Mac App Store，"即将登陆"同样是没有依据的分发承诺：这里
 // 干脆连提都不许提，页面上"即将推出"的分组标题已经把状态说清楚了。
 const STORE_CLAIM = /app\s*store/i;
 
 // iOS 至今没有 Share Extension：apps/ios 的 Xcode 工程里只有一个
 // com.apple.product-type.application 目标，没有任何 app-extension 目标——判据是
-// 目标不存在，而不是某个 entitlement 缺失。但九种译文里都写着"通过分享菜单发送"。
+// 目标不存在，而不是某个 entitlement 缺失。但当时每种译文里都写着"通过分享菜单发送"。
 // 这条按各语言当时实际用的说法来匹配。
 const SHARE_SHEET: Record<Lang, RegExp> = {
   en: /share[\s-]?sheet|share extension/i,
   zh: /分享菜单|共享菜单|分享扩展/,
-  ja: /共有シート|共有機能拡張/,
-  ko: /공유 시트|공유 확장/,
-  de: /Teilen-Menü|Share Extension/i,
-  fr: /feuille de partage|extension de partage/i,
-  es: /hoja de compartir|extensión de compartir/i,
-  pt: /folha de compartilhamento|extensão de compartilhamento/i,
-  ar: /ورقة المشاركة|امتداد المشاركة/,
 };
 
 // macOS 卡片过去写着"已签名并通过公证，可一键安装"。被公证的是**更早一个构建**的
@@ -577,13 +655,6 @@ const SHARE_SHEET: Record<Lang, RegExp> = {
 const NOTARY_CLAIM: Record<Lang, RegExp> = {
   en: /notariz|one-click install/i,
   zh: /公证/,
-  ja: /公証/,
-  ko: /공증/,
-  de: /notarisiert/i,
-  fr: /notaris/i,
-  es: /notarizad/i,
-  pt: /notarizad/i,
-  ar: /موثّق|موثق/,
 };
 
 describe("原生 macOS / iOS 卡片如实描述已实现的能力", () => {

@@ -1,4 +1,4 @@
-// web/src/lib/i18n-pair-room-storage.test.ts — 配对房间存储那组文案在九种语言里的
+// web/src/lib/i18n-pair-room-storage.test.ts — 配对房间存储那组文案在每种维护中语言里的
 // 安全断言。
 //
 // 和注销那组同理：这里的文案本身就是安全机制。释放是**不可逆**的，而且如果对方
@@ -22,15 +22,8 @@
 import { describe, expect, it } from "vitest";
 import en from "./i18n/en";
 import zh from "./i18n/zh";
-import ja from "./i18n/ja";
-import ko from "./i18n/ko";
-import de from "./i18n/de";
-import fr from "./i18n/fr";
-import ar from "./i18n/ar";
-import es from "./i18n/es";
-import pt from "./i18n/pt";
 
-const locales = { en, zh, ja, ko, de, fr, ar, es, pt };
+const locales = { en, zh };
 type Code = keyof typeof locales;
 
 type Claims = {
@@ -64,62 +57,6 @@ const claims: Record<Code, Claims> = {
     receiverFails: "下载会直接失败",
     nothingRemoved: "什么都没有删除",
     overclaims: ["恢复", "备份", "取消传输", "中断传输"],
-  },
-  ja: {
-    encrypted: "暗号化",
-    noNames: "ファイル名はありません",
-    irreversible: "取り消せません",
-    receiverFails: "ダウンロードは失敗します",
-    nothingRemoved: "何も削除",
-    overclaims: ["復元", "バックアップ", "転送をキャンセル"],
-  },
-  ko: {
-    encrypted: "암호화",
-    noNames: "파일 이름은 없습니다",
-    irreversible: "되돌릴 수 없으며",
-    receiverFails: "다운로드는 실패합니다",
-    nothingRemoved: "아무것도 삭제",
-    overclaims: ["복원", "백업", "전송 취소"],
-  },
-  de: {
-    encrypted: "verschlüsselt",
-    noNames: "keine dateinamen",
-    irreversible: "nicht rückgängig machen",
-    receiverFails: "download fehl",
-    nothingRemoved: "es wurde nichts entfernt",
-    overclaims: ["wiederherstell", "backup", "übertragung abbrechen"],
-  },
-  fr: {
-    encrypted: "chiffré",
-    noNames: "aucun nom de fichier",
-    irreversible: "irréversible",
-    receiverFails: "téléchargement échouera",
-    nothingRemoved: "rien n'a été supprimé",
-    overclaims: ["restaur", "sauvegarde", "annuler le transfert"],
-  },
-  ar: {
-    encrypted: "مشفّر",
-    noNames: "بلا أسماء ملفات",
-    irreversible: "لا يمكن التراجع",
-    receiverFails: "فسيفشل تنزيله",
-    nothingRemoved: "لم يُحذف شيء",
-    overclaims: ["استعادة", "نسخة احتياطية", "إلغاء النقل"],
-  },
-  es: {
-    encrypted: "cifrad",
-    noNames: "sin nombres de archivo",
-    irreversible: "irreversible",
-    receiverFails: "descarga fallará",
-    nothingRemoved: "no se eliminó nada",
-    overclaims: ["restaur", "copia de seguridad", "cancelar la transferencia"],
-  },
-  pt: {
-    encrypted: "cifrad",
-    noNames: "sem nomes de arquivo",
-    irreversible: "irreversível",
-    receiverFails: "download dele vai falhar",
-    nothingRemoved: "nada foi removido",
-    overclaims: ["restaur", "backup", "cancelar a transferência"],
   },
 };
 
@@ -193,24 +130,10 @@ describe("pairStorage copy — 必须说的", () => {
     const noTimer: Record<Code, string> = {
       en: "no timer",
       zh: "没有任何倒计时",
-      ja: "時間で消えることはありません",
-      ko: "시간이 지나도 사라지지",
-      de: "keine frist",
-      fr: "aucun délai",
-      ar: "لا مؤقّت",
-      es: "ningún temporizador",
-      pt: "nenhum temporizador",
     };
     const youRelease: Record<Code, string> = {
       en: "until you release them",
       zh: "在你释放之前",
-      ja: "解放するまで",
-      ko: "해제할 때까지",
-      de: "bis du sie freigibst",
-      fr: "jusqu'à ce que vous les libériez",
-      ar: "إلى أن تحرّرها",
-      es: "hasta que las liberes",
-      pt: "até você liberá-las",
     };
     expect(intro, `${code}.intro 必须明说没有任何倒计时会清掉它们`).toContain(noTimer[code].toLowerCase());
     expect(intro, `${code}.intro 必须明说要由用户自己释放`).toContain(youRelease[code].toLowerCase());
@@ -234,13 +157,6 @@ describe("pairStorage copy — 不能说的", () => {
     const forbidden: Record<Code, string[]> = {
       en: ["expire", "automatically deleted", "after 30 days"],
       zh: ["到期", "过期", "自动删除"],
-      ja: ["期限切れ", "自動的に削除"],
-      ko: ["만료", "자동으로 삭제"],
-      de: ["läuft ab", "automatisch gelöscht"],
-      fr: ["expire", "automatiquement supprim"],
-      ar: ["تنتهي صلاحية", "تُحذف تلقائيًا"],
-      es: ["caduca", "se elimina automáticamente"],
-      pt: ["expira", "excluída automaticamente"],
     };
     const all = everything(code);
     for (const word of forbidden[code]) {

@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/zh/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -87,10 +80,14 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
   <body>
     <div class="wrap">
       <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=zh">Relayium</a></header>
-      <nav class="langbar" aria-label="Language"><a href="/">English</a><a href="/zh/" aria-current="true">中文</a><a href="/ja/">日本語</a><a href="/ko/">한국어</a><a href="/de/">Deutsch</a><a href="/fr/">Français</a><a href="/ar/">العربية</a><a href="/es/">Español</a><a href="/pt/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/">English</a><a href="/zh/" aria-current="true">中文</a></nav>
       <!-- The language bar and the footer are navigation, so the main landmark
            starts after them: a screen-reader user jumping to the main content
-           should land on this page's own words, not on a row of language links. -->
+           should land on this page's own words, not on a row of language links.
+           On an archived page this slot holds the archived-translation notice
+           instead, which is a labelled complementary landmark of its own — so it
+           is still reachable by landmark navigation, and it sits above the title
+           where a status banner belongs. -->
       <main>
       <h1>端到端加密的点对点文件与文本传输</h1>
       <p class="pitch">Relayium 是开源、无需安装的端到端加密文件与文本传输工具。文件在同一网络内直接传输；跨网络浏览器会按设计使用 TURN 中继，而中继只见端到端加密的密文。临时文本要求双方同时在线；Relayium 服务器不保存消息正文或服务端历史，但浏览器或接收端可以复制或留存文本。同一网络无需账号；创建跨网络配对码需登录，持码加入无需账号。</p>

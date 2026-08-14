@@ -7,16 +7,6 @@
     <meta name="description" content="Comment Relayium protège vos fichiers : X25519 et AES-256-GCM en direct, un code à six chiffres contre un serveur malhonnête, et des liens à divulgation nulle." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/fr/guides/how-relayium-encrypts-your-files/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/how-relayium-encrypts-your-files/" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/how-relayium-encrypts-your-files/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/how-relayium-encrypts-your-files/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/how-relayium-encrypts-your-files/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/how-relayium-encrypts-your-files/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/how-relayium-encrypts-your-files/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/how-relayium-encrypts-your-files/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/how-relayium-encrypts-your-files/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/how-relayium-encrypts-your-files/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/how-relayium-encrypts-your-files/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -64,6 +54,11 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
 .cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
@@ -85,12 +80,15 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=fr">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/fr/">Relayium</a> <span aria-hidden="true">›</span> <a href="/fr/guides/">Guides</a> <span aria-hidden="true">›</span> <span aria-current="page">Comment Relayium chiffre vos fichiers de bout en bout</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>Comment Relayium chiffre vos fichiers de bout en bout</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -101,7 +99,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">Dernière mise à jour: <bdi>2026-08-06</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/how-relayium-encrypts-your-files/">English</a><a href="/zh/guides/how-relayium-encrypts-your-files/">中文</a><a href="/ja/guides/how-relayium-encrypts-your-files/">日本語</a><a href="/ko/guides/how-relayium-encrypts-your-files/">한국어</a><a href="/de/guides/how-relayium-encrypts-your-files/">Deutsch</a><a href="/fr/guides/how-relayium-encrypts-your-files/" aria-current="true">Français</a><a href="/ar/guides/how-relayium-encrypts-your-files/">العربية</a><a href="/es/guides/how-relayium-encrypts-your-files/">Español</a><a href="/pt/guides/how-relayium-encrypts-your-files/">Português</a></nav>
+      <aside class="archived" aria-label="Traduction archivée"><p class="archived-label">Traduction archivée</p><p>Cette page est une traduction française archivée. Le produit Relayium et sa documentation à jour sont maintenus en anglais et en chinois simplifié ; l&#39;application elle-même ne propose plus le français. Les écrans et les détails décrits ici peuvent donc différer du comportement actuel.</p><p class="archived-links">Version à jour : <a href="/guides/how-relayium-encrypts-your-files/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/how-relayium-encrypts-your-files/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">« Relayium est-il sécurisé ? » est une question légitime — tout outil de transfert de fichiers prétend protéger la vie privée. Cette page explique exactement, en langage simple, comment Relayium garde vos fichiers privés, pour que vous puissiez juger l&#39;affirmation plutôt que la croire sur parole.</p>
       <p class="lead">Deux mécanismes de chiffrement différents entrent en jeu, parce qu&#39;il y a deux situations différentes : envoyer un fichier en direct à quelqu&#39;un qui est en ligne à l&#39;instant, et laisser un lien de téléchargement pour que quelqu&#39;un le récupère plus tard. Les deux empêchent le serveur d&#39;accéder à votre fichier, mais y parviennent par des chemins différents — et il vaut la peine de savoir lequel s&#39;applique quand.</p>
       <h2>Transferts en direct : deux appareils s&#39;accordent sur un secret que le serveur ne voit jamais</h2>
@@ -140,13 +138,13 @@ ol.steps>li>pre{margin:8px 0 0}
       <p>Arrêtez le transfert. Deux codes différents signifient que les deux appareils ne voient pas la même connexion — c&#39;est exactement ce que produirait une clé substituée ou un homme du milieu, et non un incident bénin. (L&#39;échec de la poignée de main « engagement puis révélation » est une autre défaillance, plus précoce : elle interrompt la connexion elle-même, avant qu&#39;un code soit affiché.) Ne poursuivez pas avant d&#39;avoir compris pourquoi.</p>
       <div class="ctacard">
         <p>Curieux de voir à quoi cela ressemble en pratique ? Activez la vérification avancée avant de lancer une nouvelle connexion : la comparaison du code et les étapes de confirmation s&#39;appliquent alors dès le début.</p>
-        <a class="cta" href="/?lang=fr">Essayer Relayium maintenant</a>
+        <a class="cta" href="/">Essayer Relayium maintenant</a>
       </div>
       <h2>À lire ensuite</h2>
       <ul class="related"><li><a href="/fr/guides/is-it-safe-to-send-files-over-the-internet/">Est-il sûr d&#39;envoyer des fichiers sur Internet ?</a></li><li><a href="/fr/guides/what-is-peer-to-peer-file-transfer/">Qu&#39;est-ce que le transfert de fichiers pair à pair ?</a></li><li><a href="/fr/how-to/share-a-file-with-an-expiring-link/">Partager un fichier avec un lien de téléchargement à expiration</a></li><li><a href="/fr/guides/self-host-relayium/">Auto-héberger Relayium : gérez votre serveur de transfert de fichiers et de texte</a></li><li><a href="/fr/">Relayium</a></li></ul>
       </main>
       <footer>
-        <a href="/?lang=fr">← Relayium</a>
+        <a href="/">← Relayium</a>
         <a href="/fr/apps/">Applis</a>
         <a href="/fr/guides/">Guides</a>
         <a href="/fr/privacy/">Confidentialité</a>

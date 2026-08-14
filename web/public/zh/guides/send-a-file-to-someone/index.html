@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/zh/guides/send-a-file-to-someone/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/guides/send-a-file-to-someone/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/send-a-file-to-someone/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/send-a-file-to-someone/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/send-a-file-to-someone/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/send-a-file-to-someone/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/send-a-file-to-someone/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/send-a-file-to-someone/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/send-a-file-to-someone/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/send-a-file-to-someone/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/send-a-file-to-someone/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -90,7 +83,10 @@ ol.steps>li>pre{margin:8px 0 0}
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>用 Relayium CLI 跨网络把文件发给对方</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -101,7 +97,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最近更新: <bdi>2026-08-07</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/send-a-file-to-someone/">English</a><a href="/zh/guides/send-a-file-to-someone/" aria-current="true">中文</a><a href="/ja/guides/send-a-file-to-someone/">日本語</a><a href="/ko/guides/send-a-file-to-someone/">한국어</a><a href="/de/guides/send-a-file-to-someone/">Deutsch</a><a href="/fr/guides/send-a-file-to-someone/">Français</a><a href="/ar/guides/send-a-file-to-someone/">العربية</a><a href="/es/guides/send-a-file-to-someone/">Español</a><a href="/pt/guides/send-a-file-to-someone/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/send-a-file-to-someone/">English</a><a href="/zh/guides/send-a-file-to-someone/" aria-current="true">中文</a></nav>
       <p class="lead">有时候对方的机器不是你的，你也没法用 SSH 登录进去——给另一个办公室的同事发个文件，给客户发个构建产物，给国外的朋友发个压缩包。relayium send 和 receive 会跨网络把文件直接送到你们两个之间，靠的只是发送时 CLI 为你生成的一个简短配对码。</p>
       <p class="lead">连接是点对点、端到端加密的。只有一次极小的会合握手会经过 Relayium 来介绍双方；文件字节从不经过。</p>
       <h2>开始之前</h2>

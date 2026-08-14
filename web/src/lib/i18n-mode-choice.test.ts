@@ -1,5 +1,5 @@
 // web/src/lib/i18n-mode-choice.test.ts — the product's answer to "which of the
-// three do I want?", pinned in all nine languages.
+// three do I want?", pinned in every maintained language.
 //
 // Relayium has three transfer modes and they are not interchangeable:
 //   LAN        account-free, device to device, and same network ONLY
@@ -23,15 +23,8 @@
 import { describe, expect, it } from "vitest";
 import en from "./i18n/en";
 import zh from "./i18n/zh";
-import ja from "./i18n/ja";
-import ko from "./i18n/ko";
-import de from "./i18n/de";
-import fr from "./i18n/fr";
-import ar from "./i18n/ar";
-import es from "./i18n/es";
-import pt from "./i18n/pt";
 
-const locales = { en, zh, ja, ko, de, fr, ar, es, pt };
+const locales = { en, zh };
 type Code = keyof typeof locales;
 
 type Tokens = {
@@ -68,72 +61,6 @@ const t: Record<Code, Tokens> = {
     stale: /实时传输大文件或文本/,
     codeFirst: /6 位数字码/,
     filesAfter: /选择要发送的文件/,
-  },
-  ja: {
-    sameNetworkOnly: /同一ネットワーク内のみ/,
-    largeFiles: /大きなファイル/,
-    smallOrText: /小さめのファイルやテキスト/,
-    linkMode: /ダウンロードリンク/,
-    stale: /大容量ファイルやテキストのライブ転送/,
-    codeFirst: /6 桁の数字コード/,
-    filesAfter: /送るファイルを選ぶ/,
-  },
-  ko: {
-    sameNetworkOnly: /같은 네트워크에서만/,
-    largeFiles: /큰 파일/,
-    smallOrText: /작은 파일과 텍스트/,
-    linkMode: /다운로드 링크/,
-    stale: /큰 파일이나 텍스트 실시간 전송/,
-    codeFirst: /6자리 숫자 코드/,
-    filesAfter: /보낼 파일을 고르/,
-  },
-  de: {
-    sameNetworkOnly: /nur dasselbe lokale Netzwerk/i,
-    largeFiles: /große Dateien/i,
-    smallOrText: /kleine Dateien und Text/i,
-    linkMode: /Download-Link/i,
-    stale: /Live-Übertragung großer Dateien/i,
-    codeFirst: /6-stelligen Zifferncode/i,
-    filesAfter: /wählst du die Dateien/i,
-  },
-  fr: {
-    sameNetworkOnly: /uniquement le même réseau local/i,
-    largeFiles: /gros fichiers/i,
-    smallOrText: /petits fichiers et textes/i,
-    linkMode: /lien de téléchargement/i,
-    stale: /gros fichiers ou texte en direct/i,
-    codeFirst: /code à 6 chiffres/i,
-    filesAfter: /choisissez les fichiers/i,
-  },
-  ar: {
-    sameNetworkOnly: /الشبكة المحلية نفسها فقط/,
-    // Arabic merges the definite article into the preposition: "الملفات الكبيرة"
-    // becomes "للملفات الكبيرة" after ل, and a bare ال pattern would miss the
-    // sentence that actually makes the recommendation.
-    largeFiles: /(?:ال|لل)ملفات الكبيرة/,
-    smallOrText: /ملفات صغيرة ونصوص/,
-    linkMode: /رابط تنزيل/,
-    stale: /ملفات كبيرة أو نص حي/,
-    codeFirst: /رمزًا من 6 أرقام/,
-    filesAfter: /اختر الملفات/,
-  },
-  es: {
-    sameNetworkOnly: /solo la misma red local/i,
-    largeFiles: /archivos grandes/i,
-    smallOrText: /archivos pequeños y texto/i,
-    linkMode: /enlace de descarga/i,
-    stale: /archivos grandes o texto en vivo/i,
-    codeFirst: /código de 6 dígitos/i,
-    filesAfter: /elige los archivos/i,
-  },
-  pt: {
-    sameNetworkOnly: /somente a mesma rede local/i,
-    largeFiles: /arquivos grandes/i,
-    smallOrText: /arquivos pequenos e texto/i,
-    linkMode: /link de download/i,
-    stale: /arquivos grandes ou texto ao vivo/i,
-    codeFirst: /código de 6 dígitos/i,
-    filesAfter: /escolha os arquivos/i,
   },
 };
 

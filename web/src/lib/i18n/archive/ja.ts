@@ -1,4 +1,4 @@
-import type { Messages } from "./types";
+import type { Messages } from "../types";
 
 const ja: Messages = {
   langLabel: "言語",

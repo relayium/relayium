@@ -7,16 +7,6 @@
     <meta name="description" content="كيف تحصل على المساعدة في Relayium: جهة الاتصال للفوترة والاشتراكات، ومشكلات النقل، والعُقد التي تشغّلها بنفسك، وبلاغات الأمان." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ar/support/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/support/" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/support/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/support/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/support/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/support/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/support/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/support/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/support/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/support/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/support/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -43,6 +33,11 @@ footer a{color:var(--text-h);text-decoration:none}
 .releases li:last-child{border-bottom:0}
 .releases a{color:var(--accent-fg);text-decoration:none;font-weight:600;min-width:72px}
 .releases .date{font-size:14px;font-variant-numeric:tabular-nums}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
   </head>
   <body>
@@ -50,7 +45,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <!-- The legal text is the main landmark. The site header and footer are
            outside it; the language bar is inside, after the h1, matching its
-           visual position — it is a labelled <nav> landmark either way. -->
+           visual position — it is a labelled <nav> landmark either way. On an
+           archived page that slot holds the archived-translation notice, a
+           labelled <aside>, which is a landmark in its own right too. -->
       <main>
       <h1>الدعم</h1>
       <!-- The date is isolated for the same reason the release rows are: an ISO
@@ -60,7 +57,7 @@ footer a{color:var(--text-h);text-decoration:none}
            a browser, not deduced. <bdi> resolves LTR (no strong character
            inside) and pins the order. -->
       <p class="updated">آخر تحديث: <bdi>2026-08-13</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/support/">English</a><a href="/zh/support/">中文</a><a href="/ja/support/">日本語</a><a href="/ko/support/">한국어</a><a href="/de/support/">Deutsch</a><a href="/fr/support/">Français</a><a href="/ar/support/" aria-current="true">العربية</a><a href="/es/support/">Español</a><a href="/pt/support/">Português</a></nav>
+      <aside class="archived" aria-label="ترجمة مؤرشفة"><p class="archived-label">ترجمة مؤرشفة</p><p>هذه الصفحة ترجمة عربية محفوظة للأرشيف. يجري صيانة منتج Relayium وتوثيقه الحالي بالإنجليزية والصينية المبسّطة، ولم يعد التطبيق نفسه يوفّر العربية. لذلك قد تختلف الشاشات والتفاصيل الموصوفة هنا عن السلوك الحالي.</p><p class="archived-links">النسخة الحالية: <a href="/support/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/support/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p>يدير Relayium فريق صغير. وكل رسالة تصل إلى شخص يعمل فعلًا على المنتج — فلا متاهة تذاكر ولا روبوت محادثة يقف بيننا وبينك.</p>
       <p>راسِلنا على support@relayium.com ونسعى للرد خلال يومَي عمل.</p>
       <h2>الفوترة والاشتراكات</h2><p>تعتمد الجهة التي تتعامل معها على مكان اشتراكك. فالاشتراك المُشترى على الويب تُفوتره Stripe ويُدار من صفحة حسابك في Relayium. أما الاشتراك المُشترى داخل تطبيق Relayium المُثبَّت من Apple App Store، بما في ذلك Mac App Store، فتُفوتره Apple ويُدار من إعدادات حساب Apple الخاص بك.</p><p>في اشتراك الويب يمكنك إدارة معظم الأمور بنفسك دون مراسلتنا. فمن صفحة حسابك يمكنك الترقية أو خفض الباقة أو الإلغاء في أي وقت؛ والإلغاء يُبقي باقتك فعّالة حتى نهاية الفترة التي دفعت ثمنها بالفعل، ثم تعود إلى الباقة المجانية. وراسِلنا على support@relayium.com لكل ما لا تستطيع صفحة الحساب فعله — طلب استرداد، أو رسم خاطئ، أو تفصيل يخصّ فاتورة أو ضريبة القيمة المضافة، أو دفعة أخفقت لسبب لا يظهر لك.</p><p>أما الاشتراك الذي تُفوتره Apple، فغيِّر الباقة أو أوقِف التجديد التلقائي من إعدادات حساب Apple الخاص بك، واطلب الاسترداد من Apple — إذ لا يمكننا إلغاء شراء App Store أو استرداد قيمته نيابةً عنك. ومع ذلك يمكننا مساعدتك على معرفة ما جرى: إذا لم تتطابق باقتك في Relayium مع ما اشتريته، أو بدا أحد الرسوم خاطئًا، راسِلنا على support@relayium.com وسنتحقق مما أبلغتنا به Apple عن اشتراكك.</p><ul><li>على الويب، تسري الترقيات فورًا وتُحتسب بالتناسب؛ أما خفض الباقة فيسري في نهاية دورة الفوترة الحالية، فتحتفظ بما دفعت مقابله.</li><li>تغييرات الباقة وعمليات الإلغاء وطلبات الاسترداد للاشتراكات التي تُفوترها Apple تتم عبر Apple لا عبرنا.</li><li>أرفِق عنوان البريد الإلكتروني المسجَّل في الحساب. ولا ترسل إلينا رقم بطاقتك أبدًا — فنحن لا نراه إطلاقًا ولن نطلبه منك أبدًا.</li></ul>

@@ -17,20 +17,16 @@
 // earned its place: the static pages and the app must show the SAME label, which
 // is what caught 价格 in the generated footers against 定价 in the app.
 import { describe, expect, it } from "vitest";
-import { LANGS, DEFAULT_LANG, PRICING_LABELS, pricingLabel } from "./shared.mjs";
+import { LANGS, MAINTAINED_LANGS, DEFAULT_LANG, PRICING_LABELS, pricingLabel } from "./shared.mjs";
 import { buildAllPages } from "../gen-pages.mjs";
 
 import en from "../../src/lib/i18n/en.ts";
 import zh from "../../src/lib/i18n/zh.ts";
-import ja from "../../src/lib/i18n/ja.ts";
-import ko from "../../src/lib/i18n/ko.ts";
-import de from "../../src/lib/i18n/de.ts";
-import fr from "../../src/lib/i18n/fr.ts";
-import ar from "../../src/lib/i18n/ar.ts";
-import es from "../../src/lib/i18n/es.ts";
-import pt from "../../src/lib/i18n/pt.ts";
 
-const APP_TABLES = { en, zh, ja, ko, de, fr, ar, es, pt };
+// Two entries: the SPA renders /pricing in the maintained languages only.
+// LANGS is still nine because ~400 generated footers link to /pricing with a
+// localized label, and those archived pages are still public.
+const APP_TABLES = { en, zh };
 
 /** The words a label would use to disclaim its own language. */
 const CLAIMS_ENGLISH = /英文|英語|영문|englisch|en anglais|بالإنجليزية|en inglés|em inglês|in English/i;
@@ -42,7 +38,7 @@ describe("the /pricing page is localized, and its labels say nothing else", () =
     // there anything for a label to warn about.
     const enFields = Object.keys(en.pricingPage).length;
     expect(enFields).toBeGreaterThan(20);
-    for (const lang of LANGS) {
+    for (const lang of MAINTAINED_LANGS) {
       const table = APP_TABLES[lang];
       expect(table.pricingPage, lang).toBeTruthy();
       expect(Object.keys(table.pricingPage).length, lang).toBe(enFields);
@@ -52,6 +48,8 @@ describe("the /pricing page is localized, and its labels say nothing else", () =
   it("never tells a reader their own translated page is in another language", () => {
     for (const lang of LANGS) {
       expect(pricingLabel(lang), `${lang} static label`).not.toMatch(CLAIMS_ENGLISH);
+    }
+    for (const lang of MAINTAINED_LANGS) {
       expect(APP_TABLES[lang].pricingPage.navLink, `${lang} app nav link`).not.toMatch(CLAIMS_ENGLISH);
     }
   });
@@ -60,7 +58,7 @@ describe("the /pricing page is localized, and its labels say nothing else", () =
     // The property worth keeping. One link, two implementations: the app called
     // it 定价 while ~400 generated footers called it 价格, and nothing noticed
     // until this assertion existed.
-    for (const lang of LANGS) {
+    for (const lang of MAINTAINED_LANGS) {
       expect(pricingLabel(lang), lang).toBe(APP_TABLES[lang].pricingPage.navLink);
     }
   });

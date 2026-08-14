@@ -37,15 +37,17 @@
     <meta name="application-name" content="Relayium" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1" />
     <link rel="canonical" href="https://relayium.com/" />
+    <!-- The maintained hreflang cluster: English and Simplified Chinese, with
+         x-default at English. The seven archived landings (/ja/, /ko/, /de/,
+         /fr/, /ar/, /es/, /pt/) are deliberately NOT here. They are still
+         public, still `index, follow` and still in the sitemap — but hreflang
+         is a reciprocal claim that these URLs are the same page in the
+         languages this site offers, and since 2026-08-14 it offers two. Listing
+         an archived landing here while its own page (correctly) declares no
+         cluster is the broken-cluster shape Search Console reports.
+         scripts/pages/shared.mjs owns the same rule for the generated tree. -->
     <link rel="alternate" hreflang="en" href="https://relayium.com/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/" />
 
     <!-- Open Graph (Facebook, WeChat, LinkedIn, Slack, Telegram, …) -->
@@ -60,14 +62,10 @@
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="Relayium — end-to-end encrypted peer-to-peer file and text transfer" />
     <meta property="og:locale" content="en_US" />
+    <!-- Same set as the hreflang cluster above, for the same reason: an unfurl
+         card advertising eight alternate locales would be advertising seven
+         languages the product does not offer. -->
     <meta property="og:locale:alternate" content="zh_CN" />
-    <meta property="og:locale:alternate" content="ja_JP" />
-    <meta property="og:locale:alternate" content="ko_KR" />
-    <meta property="og:locale:alternate" content="de_DE" />
-    <meta property="og:locale:alternate" content="fr_FR" />
-    <meta property="og:locale:alternate" content="ar_AR" />
-    <meta property="og:locale:alternate" content="es_ES" />
-    <meta property="og:locale:alternate" content="pt_BR" />
 
     <!-- Twitter / X -->
     <meta name="twitter:card" content="summary_large_image" />

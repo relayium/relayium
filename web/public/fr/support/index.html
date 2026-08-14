@@ -7,16 +7,6 @@
     <meta name="description" content="Comment obtenir de l&#39;aide sur Relayium : contact pour la facturation et les abonnements, les problèmes de transfert, les nœuds auto-hébergés et les signalements de sécurité." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/fr/support/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/support/" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/support/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/support/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/support/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/support/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/support/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/support/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/support/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/support/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/support/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -43,6 +33,11 @@ footer a{color:var(--text-h);text-decoration:none}
 .releases li:last-child{border-bottom:0}
 .releases a{color:var(--accent-fg);text-decoration:none;font-weight:600;min-width:72px}
 .releases .date{font-size:14px;font-variant-numeric:tabular-nums}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
   </head>
   <body>
@@ -50,7 +45,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <!-- The legal text is the main landmark. The site header and footer are
            outside it; the language bar is inside, after the h1, matching its
-           visual position — it is a labelled <nav> landmark either way. -->
+           visual position — it is a labelled <nav> landmark either way. On an
+           archived page that slot holds the archived-translation notice, a
+           labelled <aside>, which is a landmark in its own right too. -->
       <main>
       <h1>Assistance</h1>
       <!-- The date is isolated for the same reason the release rows are: an ISO
@@ -60,7 +57,7 @@ footer a{color:var(--text-h);text-decoration:none}
            a browser, not deduced. <bdi> resolves LTR (no strong character
            inside) and pins the order. -->
       <p class="updated">Dernière mise à jour: <bdi>2026-08-13</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/support/">English</a><a href="/zh/support/">中文</a><a href="/ja/support/">日本語</a><a href="/ko/support/">한국어</a><a href="/de/support/">Deutsch</a><a href="/fr/support/" aria-current="true">Français</a><a href="/ar/support/">العربية</a><a href="/es/support/">Español</a><a href="/pt/support/">Português</a></nav>
+      <aside class="archived" aria-label="Traduction archivée"><p class="archived-label">Traduction archivée</p><p>Cette page est une traduction française archivée. Le produit Relayium et sa documentation à jour sont maintenus en anglais et en chinois simplifié ; l&#39;application elle-même ne propose plus le français. Les écrans et les détails décrits ici peuvent donc différer du comportement actuel.</p><p class="archived-links">Version à jour : <a href="/support/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/support/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p>Relayium est géré par une petite équipe. Chaque message parvient à une personne qui travaille sur le produit — il n&#39;y a ni dédale de tickets, ni robot conversationnel en première ligne.</p>
       <p>Écrivez à support@relayium.com ; nous nous efforçons de répondre sous deux jours ouvrés.</p>
       <h2>Facturation et abonnements</h2><p>Votre interlocuteur dépend de l&#39;endroit où vous vous êtes abonné. Un abonnement souscrit sur le web est facturé par Stripe et se gère depuis votre page de compte Relayium. Un abonnement souscrit dans une application Relayium installée depuis l&#39;Apple App Store, y compris le Mac App Store, est facturé par Apple et se gère dans les paramètres de votre compte Apple.</p><p>Pour un abonnement web, vous pouvez gérer l&#39;essentiel vous-même sans nous écrire. Depuis votre page de compte, vous pouvez à tout moment passer à une offre supérieure, rétrograder ou résilier ; en cas de résiliation, votre offre reste active jusqu&#39;à la fin de la période déjà payée, puis bascule vers Gratuit. Écrivez à support@relayium.com pour tout ce que la page de compte ne permet pas — une demande de remboursement, un prélèvement erroné, une facture ou une mention de TVA, ou un paiement échoué pour une raison que vous ne pouvez pas identifier.</p><p>Pour un abonnement facturé par Apple, changez d&#39;offre ou désactivez le renouvellement automatique dans les paramètres de votre compte Apple, et demandez le remboursement à Apple — nous ne pouvons ni résilier ni rembourser un achat App Store à votre place. Nous pouvons tout de même vous aider à y voir clair : si votre offre Relayium ne correspond pas à ce que vous avez acheté, ou si un prélèvement semble erroné, écrivez à support@relayium.com et nous vérifierons ce qu&#39;Apple nous a communiqué sur votre abonnement.</p><ul><li>Sur le web, les mises à niveau prennent effet immédiatement et sont calculées au prorata ; les rétrogradations prennent effet à la fin de la période de facturation en cours, de sorte que vous conservez ce que vous avez payé.</li><li>Les changements d&#39;offre, les résiliations et les demandes de remboursement des abonnements facturés par Apple passent par Apple, et non par nous.</li><li>Indiquez l&#39;adresse e-mail associée au compte. Ne nous envoyez jamais votre numéro de carte — nous ne le voyons jamais et ne vous le demanderons jamais.</li></ul>

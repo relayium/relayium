@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/security/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/security/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/security/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/security/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/security/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/security/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/security/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/security/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/security/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/security/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/security/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -50,7 +43,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <!-- The legal text is the main landmark. The site header and footer are
            outside it; the language bar is inside, after the h1, matching its
-           visual position — it is a labelled <nav> landmark either way. -->
+           visual position — it is a labelled <nav> landmark either way. On an
+           archived page that slot holds the archived-translation notice, a
+           labelled <aside>, which is a landmark in its own right too. -->
       <main>
       <h1>Security &amp; Threat Model</h1>
       <!-- The date is isolated for the same reason the release rows are: an ISO
@@ -60,7 +55,7 @@ footer a{color:var(--text-h);text-decoration:none}
            a browser, not deduced. <bdi> resolves LTR (no strong character
            inside) and pins the order. -->
       <p class="updated">Last updated: <bdi>2026-08-02</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/security/" aria-current="true">English</a><a href="/zh/security/">中文</a><a href="/ja/security/">日本語</a><a href="/ko/security/">한국어</a><a href="/de/security/">Deutsch</a><a href="/fr/security/">Français</a><a href="/ar/security/">العربية</a><a href="/es/security/">Español</a><a href="/pt/security/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/security/" aria-current="true">English</a><a href="/zh/security/">中文</a></nav>
       <p>Relayium is built so that the people transferring files or temporary text — not the server — hold the keys. This page describes exactly what is protected, how it works, and the limits of that protection.</p>
       <p>The short version: on the same network, realtime files and messages move directly between devices; across networks, browser sessions use a relay that carries only end-to-end encrypted ciphertext and holds no content key. Fresh session keys are always used; an optional out-of-band verification code lets the two people also detect signaling interception. The detail follows.</p>
       <h2>Browser realtime file encryption (X25519 + AES-256-GCM)</h2><p>For realtime file transfers in the browser, each transfer generates a fresh, ephemeral X25519 key pair on each device. The two browsers perform a key exchange to derive a shared AES-256-GCM key. Every file chunk is encrypted under that key with a unique nonce, so the signaling server — and any relay — sees ciphertext rather than file plaintext. CLI transfers use a different direct TLS 1.3 protocol described below.</p><ul><li>Keys are ephemeral and per-transfer — nothing is reused across sessions.</li><li>The shared key is derived on the two devices; it is never sent to, or stored on, any server.</li><li>Encryption is applied at the application layer, on top of WebRTC&#39;s own transport security, so it holds even if the transport layer is compromised.</li></ul>

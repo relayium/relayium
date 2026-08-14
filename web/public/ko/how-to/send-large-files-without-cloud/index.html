@@ -7,16 +7,6 @@
     <meta name="description" content="대용량 동영상과 프로젝트 아카이브는 종단간 암호화 다운로드 링크로 만들어 나중에 받게 하세요. 양쪽이 계속 온라인일 수 있을 때만 실시간을 즉시 전송 대안으로 사용합니다." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ko/how-to/send-large-files-without-cloud/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-large-files-without-cloud/" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-large-files-without-cloud/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/send-large-files-without-cloud/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/send-large-files-without-cloud/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/send-large-files-without-cloud/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/send-large-files-without-cloud/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/how-to/send-large-files-without-cloud/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/how-to/send-large-files-without-cloud/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/how-to/send-large-files-without-cloud/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-large-files-without-cloud/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -64,6 +54,11 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
 .cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
@@ -85,12 +80,15 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ko">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">클라우드 없이 대용량 파일 보내는 방법</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>클라우드 없이 대용량 파일 보내는 방법</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -101,7 +99,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">마지막 업데이트: <bdi>2026-08-05</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/how-to/send-large-files-without-cloud/">English</a><a href="/zh/how-to/send-large-files-without-cloud/">中文</a><a href="/ja/how-to/send-large-files-without-cloud/">日本語</a><a href="/ko/how-to/send-large-files-without-cloud/" aria-current="true">한국어</a><a href="/de/how-to/send-large-files-without-cloud/">Deutsch</a><a href="/fr/how-to/send-large-files-without-cloud/">Français</a><a href="/ar/how-to/send-large-files-without-cloud/">العربية</a><a href="/es/how-to/send-large-files-without-cloud/">Español</a><a href="/pt/how-to/send-large-files-without-cloud/">Português</a></nav>
+      <aside class="archived" aria-label="보관된 번역"><p class="archived-label">보관된 번역</p><p>이 페이지는 기록으로 보관 중인 한국어 번역입니다. Relayium 제품과 최신 문서는 영어와 중국어 간체로 관리되며, 앱 자체도 더 이상 한국어를 제공하지 않습니다. 여기에 적힌 화면과 세부 사항은 현재 동작과 다를 수 있습니다.</p><p class="archived-links">최신 버전: <a href="/how-to/send-large-files-without-cloud/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/how-to/send-large-files-without-cloud/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">20 GB짜리 동영상 내보내기나 무거운 프로젝트 아카이브야말로 클라우드 스토리지가 가장 느리게 느껴지는 순간입니다. 파일 전체를 한 번 업로드하고 기다린 뒤, 상대가 다시 다운로드합니다. 두 번의 완전한 전송에 스토리지 할당량 제한까지 받습니다. 한 번뿐인 전달인데, A에서 B로 보내기만 하면 되는 바이트를 위해 이렇게 복사하고 기다려야 합니다.</p>
       <p class="lead">대용량 파일에는 Relayium의 종단간 암호화 저장형 다운로드 링크를 권장합니다. 업로드 중 수신자는 온라인일 필요가 없고 나중에 받을 수 있습니다. 보내는 쪽은 업로드 완료까지 페이지를 열어 두며, 이후 링크는 만료까지 남습니다. 양쪽이 계속 온라인일 수 있다면 실시간이 라이브 대안입니다. 같은 LAN에서는 WebRTC가 직접 연결하고 네트워크 간에는 TURN이 종단간 암호문을 운반합니다. 실시간 내용이나 서버 측 복사본을 남기지 않습니다.</p>
       <h2>대용량 파일은 저장 링크가 기본인 이유</h2>
@@ -134,13 +132,13 @@ https://relayium.com/d/8f3c2a1b#k=hQ2r…</code></pre></li><li><p>링크 전체�
       <p>실시간 전송은 X25519 키 교환과 블록별 AES-256-GCM으로 종단간 암호화되며 키는 어떤 서버에도 도달하지 않습니다. 고급 검증(기본값 꺼짐)을 켜면 두 기기가 6자리 검증 코드를 표시하며, 각 파일은 SHA-256으로 검사합니다. 같은 LAN의 WebRTC는 직접 연결하며, 네트워크를 넘는 브라우저는 설계상 TURN을 사용합니다. 릴레이는 읽거나 복호화할 수 없는 암호문만 운반합니다.</p>
       <div class="ctacard">
         <p>다음 수 기가바이트 파일을 클라우드 없이 옮기세요 — 암호화된 다운로드 링크를 남기거나, 두 기기를 연결해 지금 보내세요. 설치 불필요, 같은 네트워크에서는 계정도 필요 없습니다.</p>
-        <a class="cta" href="/?lang=ko">지금 Relayium 사용해보기</a>
+        <a class="cta" href="/">지금 Relayium 사용해보기</a>
       </div>
       <h2>계속 읽기</h2>
       <ul class="related"><li><a href="/ko/how-to/send-a-folder/">파일이 아니라 폴더째로 보내는 방법</a></li><li><a href="/ko/how-to/share-a-file-with-an-expiring-link/">만료되는 안전한 다운로드 링크로 파일 공유하기</a></li><li><a href="/ko/compare/wetransfer/">Relayium vs WeTransfer: 암호화 링크와 실시간 전달</a></li><li><a href="/ko/guides/what-is-peer-to-peer-file-transfer/">P2P(피어투피어) 파일 전송이란?</a></li><li><a href="/ko/">Relayium</a></li></ul>
       </main>
       <footer>
-        <a href="/?lang=ko">← Relayium</a>
+        <a href="/">← Relayium</a>
         <a href="/ko/apps/">앱</a>
         <a href="/ko/guides/">가이드</a>
         <a href="/ko/privacy/">개인정보 처리방침</a>

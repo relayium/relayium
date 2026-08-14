@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/how-to/transfer-files-android-to-iphone/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/transfer-files-android-to-iphone/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/transfer-files-android-to-iphone/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/transfer-files-android-to-iphone/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/transfer-files-android-to-iphone/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/transfer-files-android-to-iphone/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/transfer-files-android-to-iphone/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/how-to/transfer-files-android-to-iphone/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/how-to/transfer-files-android-to-iphone/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/how-to/transfer-files-android-to-iphone/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/transfer-files-android-to-iphone/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -90,7 +83,10 @@ ol.steps>li>pre{margin:8px 0 0}
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>How to transfer files from Android to iPhone (no cable)</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -101,7 +97,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">Last updated: <bdi>2026-08-07</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-android-to-iphone/" aria-current="true">English</a><a href="/zh/how-to/transfer-files-android-to-iphone/">中文</a><a href="/ja/how-to/transfer-files-android-to-iphone/">日本語</a><a href="/ko/how-to/transfer-files-android-to-iphone/">한국어</a><a href="/de/how-to/transfer-files-android-to-iphone/">Deutsch</a><a href="/fr/how-to/transfer-files-android-to-iphone/">Français</a><a href="/ar/how-to/transfer-files-android-to-iphone/">العربية</a><a href="/es/how-to/transfer-files-android-to-iphone/">Español</a><a href="/pt/how-to/transfer-files-android-to-iphone/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-android-to-iphone/" aria-current="true">English</a><a href="/zh/how-to/transfer-files-android-to-iphone/">中文</a></nav>
       <p class="lead">Android and iPhone do not share an AirDrop, so moving a few photos or a video between them usually means a USB cable, a chat app that compresses your images, or a round-trip through some cloud drive. All three are slower and more fiddly than they should be.</p>
       <p class="lead">Relayium skips all of that. Both phones open the same page: on the same LAN the end-to-end encrypted files travel directly, while across networks a TURN relay carries ciphertext it cannot read or decrypt and keeps no realtime content copy or history. No app is needed; the creator signs in for cross-network pairing, while the person joining never needs an account. This guide walks through it step by step.</p>
       <h2>What you need before you start</h2>

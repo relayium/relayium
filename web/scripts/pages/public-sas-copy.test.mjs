@@ -4,16 +4,9 @@ import { describe, expect, it } from "vitest";
 
 import en from "../../src/lib/i18n/en.ts";
 import zh from "../../src/lib/i18n/zh.ts";
-import ja from "../../src/lib/i18n/ja.ts";
-import ko from "../../src/lib/i18n/ko.ts";
-import de from "../../src/lib/i18n/de.ts";
-import fr from "../../src/lib/i18n/fr.ts";
-import ar from "../../src/lib/i18n/ar.ts";
-import es from "../../src/lib/i18n/es.ts";
-import pt from "../../src/lib/i18n/pt.ts";
 import { cli } from "./content/spa-pages.mjs";
 
-const locales = { en, zh, ja, ko, de, fr, ar, es, pt };
+const locales = { en, zh };
 
 const cliTokens = {
   en: [/pinned TLS certificate fingerprints/i, /rendezvous service/i, /endpoints?/i, /network hop/i],

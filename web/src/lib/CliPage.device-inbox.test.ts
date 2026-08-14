@@ -13,16 +13,9 @@ import { loadLang, type Lang } from "./i18n.svelte";
 import { PICK_MODES, FLAG_ROWS } from "./cli-page-data";
 import en from "./i18n/en";
 import zh from "./i18n/zh";
-import ja from "./i18n/ja";
-import ko from "./i18n/ko";
-import de from "./i18n/de";
-import fr from "./i18n/fr";
-import ar from "./i18n/ar";
-import es from "./i18n/es";
-import pt from "./i18n/pt";
 import type { Messages } from "./i18n/types";
 
-const locales = { en, zh, ja, ko, de, fr, ar, es, pt };
+const locales = { en, zh };
 
 let app: ReturnType<typeof mount> | null = null;
 
@@ -135,13 +128,6 @@ describe("模式选择器", () => {
     const claims: Record<keyof typeof locales, RegExp> = {
       en: /server or NAS/i,
       zh: /服务器或 NAS/,
-      ja: /サーバーや NAS/,
-      ko: /서버나 NAS/,
-      de: /Server oder ein NAS/,
-      fr: /serveur ou un NAS/,
-      ar: /خادم أو NAS/,
-      es: /servidor o NAS/,
-      pt: /servidor ou NAS/,
     };
     for (const [code, m] of Object.entries(locales) as [keyof typeof locales, Messages][]) {
       expect(m.cliPage.pickWhen, `${code}: pickWhen 与 PICK_MODES 不等长`).toHaveLength(PICK_MODES.length);
@@ -162,7 +148,7 @@ describe("模式选择器", () => {
   });
 });
 
-describe("九种语言的收件箱文案", () => {
+describe("维护中语言的收件箱文案", () => {
   const KEYS = [
     "inboxH2", "inboxTag", "inboxIntro",
     "inboxStep1Label", "inboxStep1Body", "inboxStep2Label", "inboxStep2Body",

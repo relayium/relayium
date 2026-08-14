@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/zh/guides/sync-a-large-folder-between-servers/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/guides/sync-a-large-folder-between-servers/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/sync-a-large-folder-between-servers/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/sync-a-large-folder-between-servers/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/sync-a-large-folder-between-servers/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/sync-a-large-folder-between-servers/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/sync-a-large-folder-between-servers/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/sync-a-large-folder-between-servers/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/sync-a-large-folder-between-servers/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/sync-a-large-folder-between-servers/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/sync-a-large-folder-between-servers/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -90,7 +83,10 @@ ol.steps>li>pre{margin:8px 0 0}
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>在两台服务器之间同步一个大文件夹（可续传、后台运行）</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -101,7 +97,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最近更新: <bdi>2026-08-05</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/sync-a-large-folder-between-servers/">English</a><a href="/zh/guides/sync-a-large-folder-between-servers/" aria-current="true">中文</a><a href="/ja/guides/sync-a-large-folder-between-servers/">日本語</a><a href="/ko/guides/sync-a-large-folder-between-servers/">한국어</a><a href="/de/guides/sync-a-large-folder-between-servers/">Deutsch</a><a href="/fr/guides/sync-a-large-folder-between-servers/">Français</a><a href="/ar/guides/sync-a-large-folder-between-servers/">العربية</a><a href="/es/guides/sync-a-large-folder-between-servers/">Español</a><a href="/pt/guides/sync-a-large-folder-between-servers/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/sync-a-large-folder-between-servers/">English</a><a href="/zh/guides/sync-a-large-folder-between-servers/" aria-current="true">中文</a></nav>
       <p class="lead">你在一台服务器上有一个很大的文件夹——几十 GB——想在另一台上得到一份完整副本。你没法盯着终端好几个小时，而且传到一半断掉的传输不应该从头再来。relayium sync 正是为此而生：一个单向增量镜像，跳过已经存在的文件，把传了一半的文件从中断处续传，并对它发送的每个文件做端到端校验。</p>
       <p class="lead">本指南搭建一个无人值守、自动恢复的传输：把发送方授权一次，让监听端在后台运行，并在 tmux 里用重试循环驱动 relayium sync，让它在掉线之后继续跑，直到整个文件夹全部到达。</p>
       <h2>为什么 relayium sync 适合这件事</h2>

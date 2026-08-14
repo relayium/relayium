@@ -7,16 +7,6 @@
     <meta name="description" content="写真・動画・書類を Android から iPhone へブラウザで送る手順を解説。AirDrop もケーブルもクラウドへのアップロードも不要。両方の端末で Relayium を開くだけです。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/how-to/transfer-files-android-to-iphone/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/transfer-files-android-to-iphone/" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/transfer-files-android-to-iphone/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/transfer-files-android-to-iphone/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/transfer-files-android-to-iphone/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/transfer-files-android-to-iphone/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/transfer-files-android-to-iphone/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/how-to/transfer-files-android-to-iphone/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/how-to/transfer-files-android-to-iphone/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/how-to/transfer-files-android-to-iphone/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/transfer-files-android-to-iphone/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -64,6 +54,11 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
 .cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
@@ -85,12 +80,15 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">Android から iPhone へファイルを転送する方法（ケーブル不要）</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>Android から iPhone へファイルを転送する方法（ケーブル不要）</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -101,7 +99,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最終更新: <bdi>2026-08-07</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/how-to/transfer-files-android-to-iphone/">English</a><a href="/zh/how-to/transfer-files-android-to-iphone/">中文</a><a href="/ja/how-to/transfer-files-android-to-iphone/" aria-current="true">日本語</a><a href="/ko/how-to/transfer-files-android-to-iphone/">한국어</a><a href="/de/how-to/transfer-files-android-to-iphone/">Deutsch</a><a href="/fr/how-to/transfer-files-android-to-iphone/">Français</a><a href="/ar/how-to/transfer-files-android-to-iphone/">العربية</a><a href="/es/how-to/transfer-files-android-to-iphone/">Español</a><a href="/pt/how-to/transfer-files-android-to-iphone/">Português</a></nav>
+      <aside class="archived" aria-label="アーカイブされた翻訳"><p class="archived-label">アーカイブされた翻訳</p><p>このページは記録として残している日本語訳です。Relayium の製品と最新のドキュメントは英語と簡体字中国語で管理されており、アプリ自体も日本語を提供していません。ここに書かれている画面表示や細部は、現在の動作と異なる場合があります。</p><p class="archived-links">最新版：<a href="/how-to/transfer-files-android-to-iphone/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/how-to/transfer-files-android-to-iphone/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">Android と iPhone は AirDrop を共有していないため、写真を数枚や動画を1本やり取りするだけでも、USB ケーブル、画質を圧縮するチャットアプリ、あるいはクラウドドライブへのアップロードとダウンロードの往復に頼りがちです。どれも本来より遅く、面倒です。</p>
       <p class="lead">Relayium はそれをすべて省きます。2台のスマホで同じページを開くと、同じ LAN 内ではエンドツーエンド暗号化されたファイルが直接転送され、ネットワークをまたぐ場合は TURN リレーが読取りも復号もできない暗号文だけを運び、リアルタイム内容のコピーや履歴を残しません。アプリは不要で、ネットワーク越しのペアリングでは作成者がサインインし、参加者にはアカウントが不要です。本記事で手順を順に説明します。</p>
       <h2>始める前に必要なもの</h2>
@@ -133,13 +131,13 @@ ol.steps>li>pre{margin:8px 0 0}
       <p>いいえ。元のファイルは圧縮なしでバイト単位で転送され、各ファイルは SHA-256 ハッシュでエンドツーエンドに検証されるため、iPhone に届くものは Android から送ったものとビット単位で同一です。</p>
       <div class="ctacard">
         <p>両方のスマホで Relayium を開いて、最初のファイルを送ってみましょう。インストール不要で、同じネットワークならアカウントも不要です。</p>
-        <a class="cta" href="/?lang=ja">Relayium を今すぐ試す</a>
+        <a class="cta" href="/">Relayium を今すぐ試す</a>
       </div>
       <h2>続けて読む</h2>
       <ul class="related"><li><a href="/ja/how-to/send-files-pc-to-phone-wirelessly/">PC からスマホへ無線でファイル転送：ケーブルもアプリも不要</a></li><li><a href="/ja/compare/airdrop/">Relayium と AirDrop の比較：クロスプラットフォームな代替</a></li><li><a href="/ja/how-to/transfer-files-by-scanning-a-qr-code/">QR コードをスキャンしてファイルを転送する</a></li><li><a href="/ja/how-to/send-files-on-the-same-wifi/">同じ Wi-Fi 上の端末間でファイルを送る</a></li><li><a href="/ja/">Relayium</a></li></ul>
       </main>
       <footer>
-        <a href="/?lang=ja">← Relayium</a>
+        <a href="/">← Relayium</a>
         <a href="/ja/apps/">アプリ</a>
         <a href="/ja/guides/">ガイド</a>
         <a href="/ja/privacy/">プライバシーポリシー</a>

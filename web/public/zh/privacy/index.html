@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/zh/privacy/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/privacy/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/privacy/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/privacy/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/privacy/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/privacy/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/privacy/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/privacy/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/privacy/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/privacy/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/privacy/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -50,7 +43,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <!-- The legal text is the main landmark. The site header and footer are
            outside it; the language bar is inside, after the h1, matching its
-           visual position — it is a labelled <nav> landmark either way. -->
+           visual position — it is a labelled <nav> landmark either way. On an
+           archived page that slot holds the archived-translation notice, a
+           labelled <aside>, which is a landmark in its own right too. -->
       <main>
       <h1>隐私政策</h1>
       <!-- The date is isolated for the same reason the release rows are: an ISO
@@ -60,7 +55,7 @@ footer a{color:var(--text-h);text-decoration:none}
            a browser, not deduced. <bdi> resolves LTR (no strong character
            inside) and pins the order. -->
       <p class="updated">最后更新: <bdi>2026-08-13</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/privacy/">English</a><a href="/zh/privacy/" aria-current="true">中文</a><a href="/ja/privacy/">日本語</a><a href="/ko/privacy/">한국어</a><a href="/de/privacy/">Deutsch</a><a href="/fr/privacy/">Français</a><a href="/ar/privacy/">العربية</a><a href="/es/privacy/">Español</a><a href="/pt/privacy/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/privacy/">English</a><a href="/zh/privacy/" aria-current="true">中文</a></nav>
       <p>Relayium 的设计宗旨是让你的文件与临时文本始终属于你。浏览器局域网会话直接连接；跨网络浏览器会话可能通过 TURN 传输端到端加密的密文；CLI 文本仅直连；暂存下载链接只保存零知识加密的文件密文。</p>
       <p>本页说明本服务确实会处理的少量数据，以及它刻意从不接触的数据。</p>
       <h2>局域网内容不会被存储</h2><p>在同一网络下的设备之间传输文件或交换文本时，无需账号，Relayium 也不会存储内容。为帮助设备直接连接，信令服务会临时处理 IP 地址、房间成员、设备名、在线状态、能力信息及 WebRTC 协商等连接元数据。</p>

@@ -7,16 +7,6 @@
     <meta name="description" content="كل إصدار منشور من Relayium، وتاريخ نشره، وملاحظاته الكاملة — إضافة إلى ما يغطيه رقم الإصدار، وكيف يُقتطع الإصدار، وكيف تتحقق مما نزَّلته." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ar/releases/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/releases/" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/releases/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/releases/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/releases/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/releases/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/releases/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/releases/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/releases/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/releases/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/releases/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -43,6 +33,11 @@ footer a{color:var(--text-h);text-decoration:none}
 .releases li:last-child{border-bottom:0}
 .releases a{color:var(--accent-fg);text-decoration:none;font-weight:600;min-width:72px}
 .releases .date{font-size:14px;font-variant-numeric:tabular-nums}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
   </head>
   <body>
@@ -50,7 +45,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <!-- The legal text is the main landmark. The site header and footer are
            outside it; the language bar is inside, after the h1, matching its
-           visual position — it is a labelled <nav> landmark either way. -->
+           visual position — it is a labelled <nav> landmark either way. On an
+           archived page that slot holds the archived-translation notice, a
+           labelled <aside>, which is a landmark in its own right too. -->
       <main>
       <h1>الإصدارات</h1>
       <!-- The date is isolated for the same reason the release rows are: an ISO
@@ -60,7 +57,7 @@ footer a{color:var(--text-h);text-decoration:none}
            a browser, not deduced. <bdi> resolves LTR (no strong character
            inside) and pins the order. -->
       <p class="updated">آخر تحديث: <bdi>2026-08-12</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/releases/">English</a><a href="/zh/releases/">中文</a><a href="/ja/releases/">日本語</a><a href="/ko/releases/">한국어</a><a href="/de/releases/">Deutsch</a><a href="/fr/releases/">Français</a><a href="/ar/releases/" aria-current="true">العربية</a><a href="/es/releases/">Español</a><a href="/pt/releases/">Português</a></nav>
+      <aside class="archived" aria-label="ترجمة مؤرشفة"><p class="archived-label">ترجمة مؤرشفة</p><p>هذه الصفحة ترجمة عربية محفوظة للأرشيف. يجري صيانة منتج Relayium وتوثيقه الحالي بالإنجليزية والصينية المبسّطة، ولم يعد التطبيق نفسه يوفّر العربية. لذلك قد تختلف الشاشات والتفاصيل الموصوفة هنا عن السلوك الحالي.</p><p class="archived-links">النسخة الحالية: <a href="/releases/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/releases/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p>يصدر Relayium بثلاثة إيقاعات، وهذه الصفحة تذكرها الثلاثة بصراحة: تطبيق الويب يُنشر باستمرار، وأدوات سطر الأوامر تحمل أرقامًا وعلامات إصدار، والتطبيقات الأصلية تصدر على حدة — إصدار macOS 1.2.2 متاح للتنزيل موقّعًا من GitHub، أما تطبيق iOS فما يزال نسخة تطوير لم تُنشر للعموم بعد.</p>
       <p>كل إصدار في الأسفل وُسم تلقائيًا من فرع main، وبعد اجتياز فحوص ذلك الالتزام بالتحديد فقط. أما ملاحظات الإصدار الكاملة — كل التزام يحتويه — فهي على بعد نقرة واحدة على GitHub.</p>
       <h2>كل الإصدارات المنشورة</h2><p>الأحدث أولًا. كل إصدار يقود إلى ملاحظاته الكاملة وملفات تنزيله على GitHub.</p><ul class="releases"><li><a href="https://github.com/relayium/relayium/releases/tag/v0.19.1"><bdi>v0.19.1</bdi></a><span class="date"><bdi>2026-08-12</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.19.0"><bdi>v0.19.0</bdi></a><span class="date"><bdi>2026-08-12</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.18.0"><bdi>v0.18.0</bdi></a><span class="date"><bdi>2026-08-09</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.17.0"><bdi>v0.17.0</bdi></a><span class="date"><bdi>2026-08-09</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.16.0"><bdi>v0.16.0</bdi></a><span class="date"><bdi>2026-08-09</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.15.0"><bdi>v0.15.0</bdi></a><span class="date"><bdi>2026-08-03</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.14.0"><bdi>v0.14.0</bdi></a><span class="date"><bdi>2026-08-02</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.13.0"><bdi>v0.13.0</bdi></a><span class="date"><bdi>2026-08-01</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.12.0"><bdi>v0.12.0</bdi></a><span class="date"><bdi>2026-07-30</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.11.1"><bdi>v0.11.1</bdi></a><span class="date"><bdi>2026-07-28</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.11.0"><bdi>v0.11.0</bdi></a><span class="date"><bdi>2026-07-28</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.10.2"><bdi>v0.10.2</bdi></a><span class="date"><bdi>2026-07-23</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.10.1"><bdi>v0.10.1</bdi></a><span class="date"><bdi>2026-07-23</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.10.0"><bdi>v0.10.0</bdi></a><span class="date"><bdi>2026-07-23</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.9.0"><bdi>v0.9.0</bdi></a><span class="date"><bdi>2026-07-22</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.8.1"><bdi>v0.8.1</bdi></a><span class="date"><bdi>2026-07-22</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.8.0"><bdi>v0.8.0</bdi></a><span class="date"><bdi>2026-07-22</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.7.0"><bdi>v0.7.0</bdi></a><span class="date"><bdi>2026-07-13</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.6.0"><bdi>v0.6.0</bdi></a><span class="date"><bdi>2026-07-13</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.5.0"><bdi>v0.5.0</bdi></a><span class="date"><bdi>2026-07-13</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.4.0"><bdi>v0.4.0</bdi></a><span class="date"><bdi>2026-07-13</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.3.1"><bdi>v0.3.1</bdi></a><span class="date"><bdi>2026-07-13</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.3.0"><bdi>v0.3.0</bdi></a><span class="date"><bdi>2026-07-13</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.2.0"><bdi>v0.2.0</bdi></a><span class="date"><bdi>2026-07-08</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.1.2"><bdi>v0.1.2</bdi></a><span class="date"><bdi>2026-07-08</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.1.1"><bdi>v0.1.1</bdi></a><span class="date"><bdi>2026-07-08</bdi></span></li><li><a href="https://github.com/relayium/relayium/releases/tag/v0.1.0"><bdi>v0.1.0</bdi></a><span class="date"><bdi>2026-07-08</bdi></span></li></ul>

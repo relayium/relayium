@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/compare/dropbox/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/compare/dropbox/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/dropbox/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/dropbox/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/dropbox/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/dropbox/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/dropbox/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/compare/dropbox/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/compare/dropbox/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/compare/dropbox/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/dropbox/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -73,7 +66,10 @@ footer a{color:var(--text-h);text-decoration:none}
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>Relayium vs Dropbox for sending a file</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -84,7 +80,7 @@ footer a{color:var(--text-h);text-decoration:none}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">Last updated: <bdi>2026-07-31</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/compare/dropbox/" aria-current="true">English</a><a href="/zh/compare/dropbox/">中文</a><a href="/ja/compare/dropbox/">日本語</a><a href="/ko/compare/dropbox/">한국어</a><a href="/de/compare/dropbox/">Deutsch</a><a href="/fr/compare/dropbox/">Français</a><a href="/ar/compare/dropbox/">العربية</a><a href="/es/compare/dropbox/">Español</a><a href="/pt/compare/dropbox/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/compare/dropbox/" aria-current="true">English</a><a href="/zh/compare/dropbox/">中文</a></nav>
       <p class="lead">Dropbox earns its reputation. It syncs a folder across every machine you own, keeps a version history when you overwrite something by accident, and makes it painless to hand a whole project folder to a client with a shared-link invite. If you want a working folder that just stays in sync, Dropbox does that job well and this isn&#39;t an argument against using it that way.</p>
       <p class="lead">The friction shows up on a narrower job: one file, one recipient, and no need to keep it afterward. Dropbox puts it in an account first. Relayium instead streams it live — direct over WebRTC on the same LAN or as end-to-end ciphertext over TURN across networks — or creates a link that decrypts only in the recipient&#39;s browser and disappears on your schedule.</p>
       <h2>What Dropbox is genuinely good at</h2>

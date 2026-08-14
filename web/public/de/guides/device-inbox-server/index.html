@@ -7,16 +7,6 @@
     <meta name="description" content="Device Inbox als privilegienarmen systemd-Dienst installieren und Dateien auch nach einem Neustart vom Browser auf den eigenen Server empfangen." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/de/guides/device-inbox-server/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/device-inbox-server/" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/device-inbox-server/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/device-inbox-server/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/device-inbox-server/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/device-inbox-server/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/device-inbox-server/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/device-inbox-server/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/device-inbox-server/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/device-inbox-server/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/device-inbox-server/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -64,16 +54,24 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=de">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/de/">Relayium</a> <span aria-hidden="true">›</span> <a href="/de/guides/">Anleitungen</a> <span aria-hidden="true">›</span> <span aria-current="page">Device Inbox auf einem dauerhaft laufenden Linux-Server einrichten</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>Device Inbox auf einem dauerhaft laufenden Linux-Server einrichten</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -84,7 +82,7 @@ footer a{color:var(--text-h);text-decoration:none}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">Zuletzt aktualisiert: <bdi>2026-08-09</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/device-inbox-server/">English</a><a href="/zh/guides/device-inbox-server/">中文</a><a href="/ja/guides/device-inbox-server/">日本語</a><a href="/ko/guides/device-inbox-server/">한국어</a><a href="/de/guides/device-inbox-server/" aria-current="true">Deutsch</a><a href="/fr/guides/device-inbox-server/">Français</a><a href="/ar/guides/device-inbox-server/">العربية</a><a href="/es/guides/device-inbox-server/">Español</a><a href="/pt/guides/device-inbox-server/">Português</a></nav>
+      <aside class="archived" aria-label="Archivierte Übersetzung"><p class="archived-label">Archivierte Übersetzung</p><p>Diese Seite ist eine archivierte deutsche Übersetzung. Produkt und aktuelle Dokumentation von Relayium werden auf Englisch und in vereinfachtem Chinesisch gepflegt; die App selbst bietet kein Deutsch mehr an. Beschriebene Bildschirme und Details können deshalb vom heutigen Verhalten abweichen.</p><p class="archived-links">Aktuelle Fassung: <a href="/guides/device-inbox-server/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/device-inbox-server/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">Device Inbox sendet eine Datei von der Device-Inbox-Seite im Browser an deinen eigenen Server, dein NAS oder deinen Arbeitsplatzrechner. Der Browser verschlüsselt sie; nur das Zielgerät entschlüsselt und speichert sie.</p>
       <p class="lead">Ein Server-Empfänger muss ein geschlossenes SSH-Fenster und Neustarts überstehen. Der empfohlene Installer erstellt den Ordner und einen echten systemd-Dienst. inbox run ist nur für Diagnose im Vordergrund oder Container gedacht.</p>
       <h2>Dauerhaften Empfänger installieren</h2>
@@ -128,7 +126,7 @@ sudo -u relayium relayium inbox disable --config-dir /var/lib/relayium-inbox/con
       <ul class="related"><li><a href="/de/guides/transfer-files-from-terminal/">Dateien und Text mit der Relayium CLI vom Terminal übertragen</a></li><li><a href="/de/guides/run-relayium-as-an-always-on-service/">Relayium als dauerhaft laufenden Empfangsdienst betreiben</a></li><li><a href="/de/guides/how-relayium-encrypts-your-files/">Wie Relayium deine Dateien Ende-zu-Ende verschlüsselt</a></li><li><a href="/de/how-to/automate-server-backups/">Verschlüsselte Server-Backups mit einem Cron-Job automatisieren</a></li><li><a href="/de/">Relayium</a></li></ul>
       </main>
       <footer>
-        <a href="/?lang=de">← Relayium</a>
+        <a href="/">← Relayium</a>
         <a href="/de/apps/">Apps</a>
         <a href="/de/guides/">Anleitungen</a>
         <a href="/de/privacy/">Datenschutz</a>

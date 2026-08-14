@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/zh/how-to/send-files-between-two-computers-over-the-internet/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-files-between-two-computers-over-the-internet/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/how-to/send-files-between-two-computers-over-the-internet/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/how-to/send-files-between-two-computers-over-the-internet/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-files-between-two-computers-over-the-internet/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -90,7 +83,10 @@ ol.steps>li>pre{margin:8px 0 0}
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>如何通过互联网在两台电脑之间传文件</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -101,7 +97,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最近更新: <bdi>2026-08-05</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-between-two-computers-over-the-internet/">English</a><a href="/zh/how-to/send-files-between-two-computers-over-the-internet/" aria-current="true">中文</a><a href="/ja/how-to/send-files-between-two-computers-over-the-internet/">日本語</a><a href="/ko/how-to/send-files-between-two-computers-over-the-internet/">한국어</a><a href="/de/how-to/send-files-between-two-computers-over-the-internet/">Deutsch</a><a href="/fr/how-to/send-files-between-two-computers-over-the-internet/">Français</a><a href="/ar/how-to/send-files-between-two-computers-over-the-internet/">العربية</a><a href="/es/how-to/send-files-between-two-computers-over-the-internet/">Español</a><a href="/pt/how-to/send-files-between-two-computers-over-the-internet/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/send-files-between-two-computers-over-the-internet/">English</a><a href="/zh/how-to/send-files-between-two-computers-over-the-internet/" aria-current="true">中文</a></nav>
       <p class="lead">给另一台电脑发文件，通常得先把它传到某个地方——网盘、邮件附件、聊天软件——然后指望对方能顺利取出来。Relayium 省掉了存储这一步：同一局域网内浏览器彼此直连；跨网络时则由 TURN 中继承载端到端加密密文，服务器端不保留实时内容副本或历史。</p>
       <p class="lead">本文覆盖两种情况——两台电脑在同一网络，以及两台电脑处于完全不同的网络（不同的家、不同的办公室、不同的国家）——并说明双方各自需要做什么。</p>
       <h2>直连方式：中间没有云</h2>

@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/zh/how-to/send-a-folder/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-a-folder/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-a-folder/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/send-a-folder/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/send-a-folder/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/send-a-folder/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/send-a-folder/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/how-to/send-a-folder/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/how-to/send-a-folder/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/how-to/send-a-folder/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-a-folder/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -90,7 +83,10 @@ ol.steps>li>pre{margin:8px 0 0}
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>如何直接发送整个文件夹，而不只是文件</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -101,7 +97,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最近更新: <bdi>2026-08-05</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/how-to/send-a-folder/">English</a><a href="/zh/how-to/send-a-folder/" aria-current="true">中文</a><a href="/ja/how-to/send-a-folder/">日本語</a><a href="/ko/how-to/send-a-folder/">한국어</a><a href="/de/how-to/send-a-folder/">Deutsch</a><a href="/fr/how-to/send-a-folder/">Français</a><a href="/ar/how-to/send-a-folder/">العربية</a><a href="/es/how-to/send-a-folder/">Español</a><a href="/pt/how-to/send-a-folder/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/how-to/send-a-folder/">English</a><a href="/zh/how-to/send-a-folder/" aria-current="true">中文</a></nav>
       <p class="lead">发送一个项目和发送一个文件不是一回事——你手上是一个套着子文件夹的文件夹，一个一个复制粘贴会丢掉让它有意义的结构。先打包压缩也行，但那意味着在开始传输之前要先绕道用一个压缩工具。</p>
       <p class="lead">Relayium 让你在实时传输里选中文件夹整体发送。浏览器会遍历整棵目录树、保留每个相对路径，并实时流式发出——同一局域网内 WebRTC 直连，跨网络经 TURN 承载端到端密文——且不保留服务器端实时副本或历史。留着稍后取用的存储链接是唯一不携带目录结构的那条路：请自己先打包，然后上传那一个压缩文件。</p>
       <h2>选文件夹，而不是一堆散文件</h2>

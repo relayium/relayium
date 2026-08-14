@@ -5,8 +5,7 @@ import { setLang, type Lang } from "./i18n.svelte";
 // The locale tables are code-split, so read the expected strings from the split
 // modules directly rather than restating them here (a restated literal would
 // drift from the translation the component actually renders).
-import de from "./i18n/de";
-import ar from "./i18n/ar";
+import zh from "./i18n/zh";
 import en from "./i18n/en";
 
 const TIERS = [
@@ -190,14 +189,14 @@ describe("Pricing", () => {
 
   it("names the cycle group from the locale table, not a hard-coded English string", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => TIERS })) as unknown as typeof fetch);
-    await mountPricing("de");
+    await mountPricing("zh");
 
     const group = target.querySelector('[role="group"]')!;
-    expect(group.getAttribute("aria-label")).toBe(de.billing.cycleLabel);
+    expect(group.getAttribute("aria-label")).toBe(zh.billing.cycleLabel);
     // Regression guard: this attribute used to be the literal "Billing cycle"
     // in every locale.
     expect(group.getAttribute("aria-label")).not.toBe("Billing cycle");
-    expect(de.billing.cycleLabel).not.toBe(en.billing.cycleLabel);
+    expect(zh.billing.cycleLabel).not.toBe(en.billing.cycleLabel);
   });
 
   it("exposes the selected cycle as aria-pressed on both buttons, and flips it on click", async () => {
@@ -220,9 +219,15 @@ describe("Pricing", () => {
 
   // ── Bidi isolation ─────────────────────────────────────────────────────────
 
+  // The isolate exists FOR an RTL locale, and neither maintained language is RTL
+  // since the 2026-08-14 freeze — so this now mounts a maintained locale and
+  // asserts the isolate is there regardless. That is the property worth keeping:
+  // the <bdi dir="ltr"> is what makes the amount safe the day a locale that
+  // needs it is restored, and it is exactly the kind of markup that gets
+  // "simplified" away once nothing renders right to left.
   it("isolates the USD amount in an LTR bdi so it cannot reorder in an RTL locale", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, status: 200, json: async () => TIERS })) as unknown as typeof fetch);
-    await mountPricing("ar");
+    await mountPricing("zh");
 
     const proCard = Array.from(target.querySelectorAll(".tier")).find((c) => c.textContent?.includes("Pro"))!;
     const amount = proCard.querySelector(".tier-price bdi")!;
@@ -234,10 +239,10 @@ describe("Pricing", () => {
     expect(amount.textContent).toBe("$9.00");
 
     // The per-cycle suffix is the localized string, outside the isolate.
-    expect(proCard.querySelector(".tier-suffix")?.textContent?.trim()).toBe(ar.billing.perMonth);
+    expect(proCard.querySelector(".tier-suffix")?.textContent?.trim()).toBe(zh.billing.perMonth);
     // The popular marker is still rendered in RTL (it is placed with logical
     // properties, so it moves rather than disappears).
-    expect(proCard.querySelector(".ribbon")?.textContent?.trim()).toBe(ar.billing.popular);
+    expect(proCard.querySelector(".ribbon")?.textContent?.trim()).toBe(zh.billing.popular);
   });
 
   it("free tier shows no upgrade button", async () => {

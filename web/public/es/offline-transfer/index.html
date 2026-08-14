@@ -7,16 +7,6 @@
     <meta name="description" content="Sube un archivo cifrado en tu navegador y comparte un enlace de descarga. El servidor solo almacena texto cifrado que no puede descifrar — la clave está en el enlace. Autodestrucción tras la lectura y caducidad opcionales." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/es/offline-transfer/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/offline-transfer" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/offline-transfer/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/offline-transfer/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/offline-transfer/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/offline-transfer/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/offline-transfer/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/offline-transfer/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/offline-transfer/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/offline-transfer/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/offline-transfer" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -82,15 +72,21 @@ section.reveal:nth-of-type(4){animation-delay:.25s}
 section.reveal:nth-of-type(5){animation-delay:.32s}
 @keyframes sec-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.reveal{animation:none}header .logo,.cta{transition:none}header a:hover .logo,.cta:hover{transform:none}}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=es">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <main>
       <h1>Enviar un archivo como enlace cifrado</h1>
       <p class="pitch">Cuando la otra persona no está en línea, sube ahora y comparte un enlace. Tu navegador cifra antes de subir; el servidor conserva únicamente texto cifrado que no puede leer — la clave nunca sale del enlace.</p>
-      <a class="cta" href="/offline-transfer?lang=es">Subir un archivo</a>
+      <aside class="archived" aria-label="Traducción archivada"><p class="archived-label">Traducción archivada</p><p>Esta página es una traducción al español archivada. El producto Relayium y su documentación actual se mantienen en inglés y en chino simplificado; la propia aplicación ya no ofrece español. Por eso las pantallas y los detalles descritos aquí pueden diferir del comportamiento actual.</p><p class="archived-links">Versión actual: <a href="/offline-transfer" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/offline-transfer/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
+      <a class="cta" href="/offline-transfer">Subir un archivo</a>
 
       <section class="reveal">
       <h2>Cómo se crea el enlace</h2>
@@ -137,7 +133,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
       <section class="reveal"><h2>Más información</h2>
       <ul class="learn"><li><a href="/es/guides/push-to-cloud-pull-on-another-computer/">Sube archivos a la nube y recógelos en otro ordenador</a></li></ul></section></main>
       <footer>
-        <a href="/?lang=es">← Relayium</a>
+        <a href="/">← Relayium</a>
         <a href="/es/apps/">Apps</a>
         <a href="/es/privacy/">Privacidad</a>
         <a href="/es/terms/">Términos del servicio</a>

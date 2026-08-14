@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { LANGS, LANG_LABELS, GUIDES_LABELS, APPS_LABELS, pricingLabel, PRICING_URL, RELEASES_LABELS, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, landingUrl, ctaHref, urlPath, absUrl, esc, dirAttr, rtlHead } from "./shared.mjs";
+import { MAINTAINED_LANGS, LANG_LABELS, GUIDES_LABELS, APPS_LABELS, pricingLabel, PRICING_URL, RELEASES_LABELS, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, landingUrl, ctaHref, urlPath, absUrl, esc, dirAttr, rtlHead, isFrozen, archiveNotice, ARCHIVE_STYLE } from "./shared.mjs";
 
 // Exported so mode-template.mjs (and any other landing-style page) can reuse the
 // exact same inline stylesheet + page-shell classes instead of forking them.
@@ -57,16 +57,22 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
 @media(prefers-reduced-motion:reduce){.reveal{animation:none}header .logo,.cta{transition:none}header a:hover .logo,.cta:hover{transform:none}}
 `;
 
+// Maintained pages get the two-language selector; archived ones get the notice
+// in the same slot. See article-template.mjs for why they are the same slot.
+// Here the "same page" is the home landing: "/" in English, "/zh/" in Chinese.
 function langBar(lang) {
-  const links = LANGS.map((l) => {
+  if (isFrozen(lang)) return archiveNotice(lang, { en: landingUrl("en"), zh: landingUrl("zh") });
+  const links = MAINTAINED_LANGS.map((l) => {
     const cur = l === lang ? " aria-current=\"true\"" : "";
     return `<a href="${landingUrl(l)}"${cur}>${esc(LANG_LABELS[l])}</a>`;
   });
   return `<nav class="langbar" aria-label="Language">${links.join("")}</nav>`;
 }
 
+// The maintained cluster only — en, zh, x-default at en. Archived landings emit
+// none; see article-template.mjs's alternates() for the reciprocity reasoning.
 function alternates() {
-  const links = LANGS.map(
+  const links = MAINTAINED_LANGS.map(
     (l) => `<link rel="alternate" hreflang="${BCP47[l]}" href="${absUrl(landingUrl(l))}" />`
   );
   links.push(`<link rel="alternate" hreflang="x-default" href="${absUrl(landingUrl("en"))}" />`);
@@ -110,6 +116,7 @@ function shotsHtml(lang, captions) {
 }
 
 export function renderLandingPage({ lang, doc, articleLinks = [], categories = null, guidesHeading = null }) {
+  const archived = isFrozen(lang);
   const canonical = absUrl(landingUrl(lang));
   const ogImage = SITE.origin + "/og-image.jpg";
   const ld = {
@@ -199,8 +206,7 @@ export function renderLandingPage({ lang, doc, articleLinks = [], categories = n
     <title>${headTitle}</title>
     <meta name="description" content="${headDesc}" />
     <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="${canonical}" />
-    ${alternates()}
+    <link rel="canonical" href="${canonical}" />${archived ? "" : "\n    " + alternates()}
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -217,7 +223,7 @@ export function renderLandingPage({ lang, doc, articleLinks = [], categories = n
     <meta name="twitter:description" content="${headDesc}" />
     <meta name="twitter:image" content="${ogImage}" />
     <script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>
-    <style>${STYLE}</style>
+    <style>${STYLE}${archived ? ARCHIVE_STYLE : ""}</style>
   </head>
   <body>
     <div class="wrap">
@@ -225,7 +231,11 @@ export function renderLandingPage({ lang, doc, articleLinks = [], categories = n
       ${langBar(lang)}
       <!-- The language bar and the footer are navigation, so the main landmark
            starts after them: a screen-reader user jumping to the main content
-           should land on this page's own words, not on a row of language links. -->
+           should land on this page's own words, not on a row of language links.
+           On an archived page this slot holds the archived-translation notice
+           instead, which is a labelled complementary landmark of its own — so it
+           is still reachable by landmark navigation, and it sits above the title
+           where a status banner belongs. -->
       <main>
       <h1>${esc(doc.hero.h1)}</h1>
       <p class="pitch">${esc(doc.hero.pitch)}</p>

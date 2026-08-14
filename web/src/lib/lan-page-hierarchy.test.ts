@@ -83,9 +83,9 @@ describe("the LAN page has one heading, and it names the page", () => {
   });
 
   it("translates that title rather than pinning the English one", async () => {
-    await setLang("ja");
+    await setLang("zh");
     await mountApp();
-    expect(target.querySelector("h1")!.textContent!.trim()).toBe(messages.ja.peersTitle);
+    expect(target.querySelector("h1")!.textContent!.trim()).toBe(messages.zh.peersTitle);
     expect(target.querySelector("h1")!.textContent!.trim()).not.toBe(messages.en.peersTitle);
     await setLang("en");
   });
@@ -152,9 +152,10 @@ describe("the LAN path rail states a route, not a connection", () => {
   });
 
   it("translates the route label with the page", async () => {
-    await setLang("ar");
-    const rail = render(LanPathRail, { selfName: "Mac-938", peerName: "جهاز" });
-    expect(rail.querySelector(".pr-path")!.textContent).toBe(messages.ar.pathLan);
+    await setLang("zh");
+    const rail = render(LanPathRail, { selfName: "Mac-938", peerName: "lily 的 Mac mini" });
+    expect(rail.querySelector(".pr-path")!.textContent).toBe(messages.zh.pathLan);
+    expect(rail.querySelector(".pr-path")!.textContent).not.toBe(messages.en.pathLan);
     await setLang("en");
   });
 

@@ -108,9 +108,9 @@ describe("account dialog accessible name", () => {
   });
 
   it("is localized, not a hardcoded English string", async () => {
-    await setLang("de");
+    await setLang("zh");
     const dialog = await mountAccount(USER);
-    expect(dialog.getAttribute("aria-label")).toBe(messages.de.account.panel);
+    expect(dialog.getAttribute("aria-label")).toBe(messages.zh.account.panel);
     expect(dialog.getAttribute("aria-label")).not.toBe(messages.en.account.panel);
   });
 });

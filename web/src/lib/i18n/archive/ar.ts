@@ -1,4 +1,4 @@
-import type { Messages } from "./types";
+import type { Messages } from "../types";
 
 // عدد + معدود. Arabic has no single form the way English's "file(s)" has one:
 // the counted noun changes shape with the number, so a `${n} ملف` template is

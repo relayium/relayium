@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/zh/compare/airdrop/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/compare/airdrop/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/airdrop/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/airdrop/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/airdrop/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/airdrop/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/airdrop/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/compare/airdrop/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/compare/airdrop/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/compare/airdrop/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/airdrop/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -73,7 +66,10 @@ footer a{color:var(--text-h);text-decoration:none}
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>Relayium 对比 AirDrop：跨平台的隔空投送替代方案</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -84,7 +80,7 @@ footer a{color:var(--text-h);text-decoration:none}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/compare/airdrop/">English</a><a href="/zh/compare/airdrop/" aria-current="true">中文</a><a href="/ja/compare/airdrop/">日本語</a><a href="/ko/compare/airdrop/">한국어</a><a href="/de/compare/airdrop/">Deutsch</a><a href="/fr/compare/airdrop/">Français</a><a href="/ar/compare/airdrop/">العربية</a><a href="/es/compare/airdrop/">Español</a><a href="/pt/compare/airdrop/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/compare/airdrop/">English</a><a href="/zh/compare/airdrop/" aria-current="true">中文</a></nav>
       <p class="lead">AirDrop 是有史以来最出色的文件分享体验之一。在 iPhone、iPad 与 Mac 之间，它快速、私密，又天然融入系统——Relayium 并不打算在 Apple 的主场上胜过它。</p>
       <p class="lead">问题在于边界：AirDrop 只能与其他 Apple 设备互通。本文客观对比两者，说明 AirDrop 真正更好的地方，也展示 Relayium 能帮上忙的场景——直接在浏览器里完成 iPhone 与 Windows 电脑、Android 手机与 Mac、或 Linux 笔记本与 iPad 之间的互传。</p>
       <h2>AirDrop 做得好的地方</h2>

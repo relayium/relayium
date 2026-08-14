@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/guides/back-up-a-server-over-ssh/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/guides/back-up-a-server-over-ssh/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/back-up-a-server-over-ssh/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/back-up-a-server-over-ssh/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/back-up-a-server-over-ssh/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/back-up-a-server-over-ssh/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/back-up-a-server-over-ssh/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/back-up-a-server-over-ssh/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/back-up-a-server-over-ssh/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/back-up-a-server-over-ssh/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/back-up-a-server-over-ssh/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -90,7 +83,10 @@ ol.steps>li>pre{margin:8px 0 0}
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>Back up files to your own server over SSH with the Relayium CLI</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -101,7 +97,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">Last updated: <bdi>2026-08-05</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/back-up-a-server-over-ssh/" aria-current="true">English</a><a href="/zh/guides/back-up-a-server-over-ssh/">中文</a><a href="/ja/guides/back-up-a-server-over-ssh/">日本語</a><a href="/ko/guides/back-up-a-server-over-ssh/">한국어</a><a href="/de/guides/back-up-a-server-over-ssh/">Deutsch</a><a href="/fr/guides/back-up-a-server-over-ssh/">Français</a><a href="/ar/guides/back-up-a-server-over-ssh/">العربية</a><a href="/es/guides/back-up-a-server-over-ssh/">Español</a><a href="/pt/guides/back-up-a-server-over-ssh/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/back-up-a-server-over-ssh/" aria-current="true">English</a><a href="/zh/guides/back-up-a-server-over-ssh/">中文</a></nav>
       <p class="lead">If you already have SSH access to a box — a VPS, a home server, a NAS, a workstation — you can back files up to it with the Relayium CLI without setting up a sync service or an account. The transfer runs over your existing SSH connection, so the bytes go straight to your server and never pass through Relayium.</p>
       <p class="lead">This guide covers pushing and pulling directories, what resume and integrity checking give you, and how to run it on a schedule with cron.</p>
       <h2>Before you start</h2>

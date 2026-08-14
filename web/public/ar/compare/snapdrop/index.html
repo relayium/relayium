@@ -7,16 +7,6 @@
     <meta name="description" content="نظرة صادقة إلى Relayium وSnapdrop وPairDrop. الثلاثة جميعًا تقوم بنقل من الند للند عبر المتصفح؛ والفرق الحقيقي هو التشفير من الطرف إلى الطرف على طبقة التطبيق في Relayium ووصوله عبر الشبكات." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ar/compare/snapdrop/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/compare/snapdrop/" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/snapdrop/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/snapdrop/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/snapdrop/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/snapdrop/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/snapdrop/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/compare/snapdrop/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/compare/snapdrop/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/compare/snapdrop/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/snapdrop/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -64,16 +54,24 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ar">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ar/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ar/guides/">الأدلة</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium مقابل Snapdrop وPairDrop: أي نقل ملفات P2P آمن؟</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>Relayium مقابل Snapdrop وPairDrop: أي نقل ملفات P2P آمن؟</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -84,7 +82,7 @@ footer a{color:var(--text-h);text-decoration:none}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">آخر تحديث: <bdi>2026-07-31</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/compare/snapdrop/">English</a><a href="/zh/compare/snapdrop/">中文</a><a href="/ja/compare/snapdrop/">日本語</a><a href="/ko/compare/snapdrop/">한국어</a><a href="/de/compare/snapdrop/">Deutsch</a><a href="/fr/compare/snapdrop/">Français</a><a href="/ar/compare/snapdrop/" aria-current="true">العربية</a><a href="/es/compare/snapdrop/">Español</a><a href="/pt/compare/snapdrop/">Português</a></nav>
+      <aside class="archived" aria-label="ترجمة مؤرشفة"><p class="archived-label">ترجمة مؤرشفة</p><p>هذه الصفحة ترجمة عربية محفوظة للأرشيف. يجري صيانة منتج Relayium وتوثيقه الحالي بالإنجليزية والصينية المبسّطة، ولم يعد التطبيق نفسه يوفّر العربية. لذلك قد تختلف الشاشات والتفاصيل الموصوفة هنا عن السلوك الحالي.</p><p class="archived-links">النسخة الحالية: <a href="/compare/snapdrop/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/compare/snapdrop/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">Snapdrop وفرعه المُصان بنشاط PairDrop روّاد لمشاركة الملفات القائمة على المتصفح دون تثبيت. إنها أدوات مصقولة ومألوفة وجيدة حقًا — ويبني Relayium على الفكرة نفسها بدلًا من التقليل من شأنها.</p>
       <p class="lead">تقارن هذه المقالة الثلاثة بإنصاف: ما تشترك فيه، وأين يتفوق Snapdrop وPairDrop، وأين يختلف Relayium. باختصار، تركيز Relayium ينصبّ على قوة التشفير والوصول عبر الشبكات، لا على استبدال ما يعمل جيدًا أصلًا على شبكتك المحلية.</p>
       <h2>ما تشترك فيه</h2>
@@ -111,13 +109,13 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>على شبكة LAN نفسها تستخدم الخدمات الثلاث مسار WebRTC مباشرًا، لذا يكون الأداء متقاربًا عادةً. وعبر الشبكات يستخدم Relayium مُرحِّل TURN بحكم التصميم، لذلك قد يؤثر موقع المُرحِّل وسعته في زمن الاستجابة والإنتاجية. تعمل طبقة AES-256-GCM الإضافية داخل المتصفح ولا تضيف عادةً سوى حمل قليل مقارنة بمسار الشبكة.</p>
       <div class="ctacard">
         <p>شاهد كيف يبدو التشفير على طبقة التطبيق عمليًا — بلا تثبيت، وبلا حاجة إلى حساب على نفس الشبكة.</p>
-        <a class="cta" href="/?lang=ar">جرّب Relayium الآن</a>
+        <a class="cta" href="/">جرّب Relayium الآن</a>
       </div>
       <h2>تابع القراءة</h2>
       <ul class="related"><li><a href="/ar/how-to/send-files-on-the-same-wifi/">إرسال الملفات بين الأجهزة على نفس شبكة Wi-Fi</a></li><li><a href="/ar/compare/localsend/">Relayium مقابل LocalSend: أيّ نقل ملفات محلي تستخدم</a></li><li><a href="/ar/compare/airdrop/">Relayium مقابل AirDrop: بديل AirDrop عبر المنصّات</a></li><li><a href="/ar/guides/what-is-peer-to-peer-file-transfer/">ما هو نقل الملفات من الند للند؟</a></li><li><a href="/ar/">Relayium</a></li></ul>
       </main>
       <footer>
-        <a href="/?lang=ar">← Relayium</a>
+        <a href="/">← Relayium</a>
         <a href="/ar/apps/">التطبيقات</a>
         <a href="/ar/guides/">الأدلة</a>
         <a href="/ar/privacy/">الخصوصية</a>

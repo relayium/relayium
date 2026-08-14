@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/guides/server-to-server-transfers/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/guides/server-to-server-transfers/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/server-to-server-transfers/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/server-to-server-transfers/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/server-to-server-transfers/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/server-to-server-transfers/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/server-to-server-transfers/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/server-to-server-transfers/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/server-to-server-transfers/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/server-to-server-transfers/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/server-to-server-transfers/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -90,7 +83,10 @@ ol.steps>li>pre{margin:8px 0 0}
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>Server-to-server transfers with the Relayium CLI (daemon direct)</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -101,7 +97,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">Last updated: <bdi>2026-08-05</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/server-to-server-transfers/" aria-current="true">English</a><a href="/zh/guides/server-to-server-transfers/">中文</a><a href="/ja/guides/server-to-server-transfers/">日本語</a><a href="/ko/guides/server-to-server-transfers/">한국어</a><a href="/de/guides/server-to-server-transfers/">Deutsch</a><a href="/fr/guides/server-to-server-transfers/">Français</a><a href="/ar/guides/server-to-server-transfers/">العربية</a><a href="/es/guides/server-to-server-transfers/">Español</a><a href="/pt/guides/server-to-server-transfers/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/server-to-server-transfers/" aria-current="true">English</a><a href="/zh/guides/server-to-server-transfers/">中文</a></nav>
       <p class="lead">When both machines are yours and each knows the other&#39;s address, SSH is extra friction and a rendezvous is pure overhead. Daemon direct is built for exactly this: one server listens, the other pushes straight to it over a pinned TLS 1.3 connection. No relay, no SSH, no pairing code — trust is public-key and set up once.</p>
       <p class="lead">This guide covers starting the listener, pushing to it, approving a new pusher on first contact, automating it, and running the listener as a systemd service.</p>
       <h2>Before you start</h2>

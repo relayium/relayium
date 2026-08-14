@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/zh/compare/localsend/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/compare/localsend/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/localsend/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/localsend/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/localsend/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/localsend/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/localsend/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/compare/localsend/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/compare/localsend/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/compare/localsend/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/localsend/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -73,7 +66,10 @@ footer a{color:var(--text-h);text-decoration:none}
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>Relayium 对比 LocalSend：局域网传输该选哪个</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -84,7 +80,7 @@ footer a{color:var(--text-h);text-decoration:none}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最近更新: <bdi>2026-07-31</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/compare/localsend/">English</a><a href="/zh/compare/localsend/" aria-current="true">中文</a><a href="/ja/compare/localsend/">日本語</a><a href="/ko/compare/localsend/">한국어</a><a href="/de/compare/localsend/">Deutsch</a><a href="/fr/compare/localsend/">Français</a><a href="/ar/compare/localsend/">العربية</a><a href="/es/compare/localsend/">Español</a><a href="/pt/compare/localsend/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/compare/localsend/">English</a><a href="/zh/compare/localsend/" aria-current="true">中文</a></nav>
       <p class="lead">LocalSend 是一款真正优秀、深受喜爱的应用：免费、开源、跨平台，专为在同一局域网设备间传输文件而生，始终无需服务器、无需账号。不少人把它当作 Windows、Linux、Android 上的 AirDrop 替代品来用。</p>
       <p class="lead">本文客观地把它和 Relayium 比一比。Relayium 用不同的方式解决同样的同网络传输问题——无需安装任何应用，直接在浏览器里运行——并且走得更远：能跨网络传输，还提供 LocalSend 没有的命令行工具。</p>
       <h2>LocalSend 做得好的地方</h2>

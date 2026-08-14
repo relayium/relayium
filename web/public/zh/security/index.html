@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/zh/security/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/security/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/security/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/security/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/security/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/security/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/security/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/security/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/security/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/security/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/security/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -50,7 +43,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <!-- The legal text is the main landmark. The site header and footer are
            outside it; the language bar is inside, after the h1, matching its
-           visual position — it is a labelled <nav> landmark either way. -->
+           visual position — it is a labelled <nav> landmark either way. On an
+           archived page that slot holds the archived-translation notice, a
+           labelled <aside>, which is a landmark in its own right too. -->
       <main>
       <h1>安全与威胁模型</h1>
       <!-- The date is isolated for the same reason the release rows are: an ISO
@@ -60,7 +55,7 @@ footer a{color:var(--text-h);text-decoration:none}
            a browser, not deduced. <bdi> resolves LTR (no strong character
            inside) and pins the order. -->
       <p class="updated">最后更新: <bdi>2026-08-02</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/security/">English</a><a href="/zh/security/" aria-current="true">中文</a><a href="/ja/security/">日本語</a><a href="/ko/security/">한국어</a><a href="/de/security/">Deutsch</a><a href="/fr/security/">Français</a><a href="/ar/security/">العربية</a><a href="/es/security/">Español</a><a href="/pt/security/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/security/">English</a><a href="/zh/security/" aria-current="true">中文</a></nav>
       <p>Relayium 的设计宗旨是：掌握密钥的是传输文件或临时文本的双方，而不是服务器。本页说明究竟保护了什么、如何保护，以及这份保护的边界。</p>
       <p>一句话概括：同一网络中的实时文件与消息在设备间直接传输；跨网络浏览器会话使用只承载端到端加密密文且不持有内容密钥的中继。每次会话都会使用新密钥；此外还有一个可选的校验码，双方带外核对它就能发现信令拦截。以下是细节。</p>
       <h2>浏览器实时文件加密（X25519 + AES-256-GCM）</h2><p>浏览器进行实时文件传输时，每次传输都会在各自设备上重新生成一对临时的 X25519 密钥。两个浏览器通过密钥交换协商出共享的 AES-256-GCM 密钥。每个文件数据块都用该密钥配合唯一的随机数加密，因此信令服务器和任何中继看到的都是密文，而非文件明文。CLI 传输使用下文所述的另一套 TLS 1.3 直连协议。</p><ul><li>密钥是临时的、每次传输独立——不会跨会话复用。</li><li>共享密钥在两台设备上协商得出，绝不发送到或存储于任何服务器。</li><li>加密施加在应用层，位于 WebRTC 自身传输层安全之上，因此即便传输层被攻破也依然有效。</li></ul>

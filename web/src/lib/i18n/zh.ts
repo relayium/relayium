@@ -495,21 +495,51 @@ const zh: Messages = {
     cta: "了解 CLI →",
   },
   appsPage: {
-    metaTitle: "获取 Relayium——网页版、命令行、macOS 与 iOS 应用",
+    metaTitle: "获取 Relayium——网页版、命令行与各平台原生应用",
     metaDesc:
-      "下载 Relayium：在任意浏览器中直接使用、安装命令行工具，或了解原生应用能做什么。端到端加密的文件与临时文本传输，覆盖网页版、命令行以及 macOS 与 iOS 应用。",
+      "使用 Relayium 网页版、安装命令行工具、下载 macOS 应用，或查看 iOS、Android 与 Windows 应用的开发状态。端到端加密传输文件与临时文本。",
     heading: "获取 Relayium",
     subhead: "同一套端到端加密的传输，既传文件也发临时文本，随处可用。选择你的平台。",
     availableBadge: "现已可用",
-    comingSoonBadge: "即将推出",
+    inDevelopmentBadge: "正在开发中",
     yourPlatformNote: (os) => `看起来你在使用 ${os}——下方已高亮。`,
     cliInstallLabel: "在终端中安装：",
-    androidNote: "使用安卓？直接用网页版即可——在浏览器中运行，无需安装。",
     cards: {
       web: { name: "网页版", desc: "无需安装。在任意系统的现代浏览器中打开，即可传文件，也能发临时文本。", cta: "打开网页版" },
       cli: { name: "命令行", desc: "可脚本化的文件传输、文件夹同步、服务器间备份与临时文本，支持 macOS、Linux 与 Windows。", cta: "命令行文档与安装" },
       mac: { name: "macOS 应用", desc: "真正的原生菜单栏应用（com.relayium.mac）：与附近设备或用配对码互传文件和文本、收发加密链接、管理账号与设备。", cta: "下载 macOS 版" },
       ios: { name: "iOS 应用", desc: "原生 iPhone 与 iPad 应用（com.relayium.app）：无需账号即可打开加密链接，还能与附近设备或用六位配对码互传文件和文本，并管理账号——都在应用打开时进行。" },
+      android: {
+        name: "Android 应用",
+        desc: "原生 Android 应用正在开发中。在它发布之前，网页版就是在 Android 上使用 Relayium 的方式——用浏览器打开即可，无需安装。",
+      },
+      windows: {
+        name: "Windows 应用",
+        desc: "原生 Windows 桌面应用正在开发中。命令行工具今天就已经支持 Windows，文件传输、文件夹同步和定时备份都能用。",
+      },
+    },
+    chooser: {
+      heading: "该用网页版还是原生应用？",
+      lead: "两边传的是同一份加密数据，走的也是同一条连接。区别在于应用能不能伸手到你机器的其他地方。",
+      web: {
+        title: "使用网页版",
+        points: [
+          "不用安装，也不用更新。打开页面就能传。",
+          "任意操作系统上的现代浏览器都能用——包括还没有原生应用的那些系统。",
+          "临时传一次、用别人的电脑、或者在你没有管理权限的设备上，网页版最合适。",
+        ],
+      },
+      mac: {
+        title: "装上 macOS 应用",
+        points: [
+          "常驻菜单栏，点一下就用，不必再去找某个窗口或某个标签页。",
+          "在访达、照片等应用里用「分享」菜单直接发送——文件、图片和视频都能交给 Relayium。",
+          "在访达里用「打开方式」，或者把文件和文件夹拖到程序坞图标上，就地开始传输。",
+          "relayium.com 的传输链接会直接在应用里打开，而不是回到浏览器。",
+          "用设备收件箱接收：从你自己账户发到这台 Mac 的文件，会写进你在这台机器上选定的文件夹，而且只有真正落盘之后才会报告为「已保存」。",
+        ],
+      },
+      iosNote: "iOS 应用仍在开发中，尚未公开发布。和网页版一样，它在应用打开时收发文件与文本。",
     },
   },
   deviceInboxPage: {

@@ -18,19 +18,32 @@ describe("buildLandingPages", () => {
     );
   });
 
-  it("zh page has localized h1, canonical, and full hreflang cluster", () => {
+  it("zh page has localized h1, canonical, and the maintained hreflang cluster", () => {
     const zh = pages.find((p) => p.path === "zh/index.html").html;
     expect(zh).toContain('<html lang="zh-Hans">');
     expect(zh).toContain('<link rel="canonical" href="https://relayium.com/zh/" />');
     expect(zh).toContain('hreflang="en" href="https://relayium.com/"');
-    expect(zh).toContain('hreflang="ja" href="https://relayium.com/ja/"');
+    expect(zh).toContain('hreflang="zh-Hans" href="https://relayium.com/zh/"');
+    expect(zh).not.toContain('hreflang="ja"');
     expect(zh).toContain('hreflang="x-default" href="https://relayium.com/"');
     expect(zh).toContain("<h1>");
   });
 
-  it("CTA opens the SPA with the language preset", () => {
+  it("CTA opens the SPA with the language preset, on a maintained landing", () => {
+    const zh = pages.find((p) => p.path === "zh/index.html").html;
+    expect(zh).toContain('href="/?lang=zh"');
+  });
+
+  it("an archived landing opens the SPA with no preset and no hreflang cluster", () => {
     const ja = pages.find((p) => p.path === "ja/index.html").html;
-    expect(ja).toContain('href="/?lang=ja"');
+    expect(ja).not.toContain("?lang=");
+    expect(ja).toContain('href="/"');
+    // No <link rel="alternate"> at all. (The archive notice's own two anchors
+    // do carry an `hreflang` attribute — that is a hint about where a link
+    // goes, not a claim that this URL is part of a current language cluster.)
+    expect(ja).not.toContain('<link rel="alternate"');
+    expect(ja).toContain('<link rel="canonical" href="https://relayium.com/ja/" />');
+    expect(ja, "archived landings stay indexable").toContain('content="index, follow"');
   });
 
   it("embeds WebApplication + FAQPage JSON-LD in the page language", () => {

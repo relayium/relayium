@@ -7,16 +7,6 @@
     <meta name="description" content="Elige una carpeta entera en el navegador y envíala en un solo lote — se conservan las rutas relativas, hasta 1.000 archivos, cada uno verificado con SHA-256. Sin necesidad de comprimir antes." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/es/how-to/send-a-folder/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/how-to/send-a-folder/" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/how-to/send-a-folder/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/how-to/send-a-folder/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/how-to/send-a-folder/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/how-to/send-a-folder/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/how-to/send-a-folder/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/how-to/send-a-folder/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/how-to/send-a-folder/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/how-to/send-a-folder/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/how-to/send-a-folder/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -64,6 +54,11 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
 .cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
@@ -85,12 +80,15 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=es">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/es/">Relayium</a> <span aria-hidden="true">›</span> <a href="/es/guides/">Guías</a> <span aria-hidden="true">›</span> <span aria-current="page">Cómo enviar una carpeta entera, no solo archivos</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>Cómo enviar una carpeta entera, no solo archivos</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -101,7 +99,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">Última actualización: <bdi>2026-08-05</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/how-to/send-a-folder/">English</a><a href="/zh/how-to/send-a-folder/">中文</a><a href="/ja/how-to/send-a-folder/">日本語</a><a href="/ko/how-to/send-a-folder/">한국어</a><a href="/de/how-to/send-a-folder/">Deutsch</a><a href="/fr/how-to/send-a-folder/">Français</a><a href="/ar/how-to/send-a-folder/">العربية</a><a href="/es/how-to/send-a-folder/" aria-current="true">Español</a><a href="/pt/how-to/send-a-folder/">Português</a></nav>
+      <aside class="archived" aria-label="Traducción archivada"><p class="archived-label">Traducción archivada</p><p>Esta página es una traducción al español archivada. El producto Relayium y su documentación actual se mantienen en inglés y en chino simplificado; la propia aplicación ya no ofrece español. Por eso las pantallas y los detalles descritos aquí pueden diferir del comportamiento actual.</p><p class="archived-links">Versión actual: <a href="/how-to/send-a-folder/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/how-to/send-a-folder/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">Enviar un proyecto no es lo mismo que enviar un archivo — tienes una carpeta llena de subcarpetas, y copiar y pegar cada pieza por separado pierde la estructura que la hace útil. Comprimirla primero funciona, pero implica un rodeo por una herramienta de compresión antes siquiera de poder empezar.</p>
       <p class="lead">Relayium te deja elegir una carpeta y enviarla tal cual en una transferencia en tiempo real. El navegador conserva todo el árbol y transmite en vivo — directamente por WebRTC en la misma LAN, o como texto cifrado de extremo a extremo por TURN entre redes — sin copia ni historial en tiempo real del lado del servidor. El enlace almacenado que dejas para después es la única vía que no lleva árbol: comprime tú mismo la carpeta y sube ese único archivo.</p>
       <h2>Elige una carpeta, no un montón de archivos</h2>
@@ -131,13 +129,13 @@ Archivo 300/300</code></pre></div>
       <p>No en la misma red. Enviar entre redes con un código de emparejamiento requiere que el remitente inicie sesión, pero quien recibe nunca necesita cuenta en ningún caso.</p>
       <div class="ctacard">
         <p>Elige una carpeta y envíala exactamente como está — estructura intacta, cada archivo verificado.</p>
-        <a class="cta" href="/?lang=es">Prueba Relayium ahora</a>
+        <a class="cta" href="/">Prueba Relayium ahora</a>
       </div>
       <h2>Sigue leyendo</h2>
       <ul class="related"><li><a href="/es/how-to/send-large-files-without-cloud/">Cómo enviar archivos grandes sin la nube</a></li><li><a href="/es/guides/sync-a-large-folder-between-servers/">Sincronizar una carpeta grande entre dos servidores (reanudable, en segundo plano)</a></li><li><a href="/es/how-to/send-files-between-two-computers-over-the-internet/">Enviar archivos entre dos ordenadores por Internet</a></li><li><a href="/es/guides/what-is-peer-to-peer-file-transfer/">¿Qué es la transferencia de archivos de igual a igual?</a></li><li><a href="/es/">Relayium</a></li></ul>
       </main>
       <footer>
-        <a href="/?lang=es">← Relayium</a>
+        <a href="/">← Relayium</a>
         <a href="/es/apps/">Apps</a>
         <a href="/es/guides/">Guías</a>
         <a href="/es/privacy/">Privacidad</a>

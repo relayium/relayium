@@ -1,7 +1,7 @@
 // web/scripts/pages/guides-index-template.mjs — renders the Guides hub (one language)
 // to a self-contained static HTML string. Same inlined-style, no-JS approach as
 // article-template.mjs so it is crawlable and independent of the Vite asset graph.
-import { LANGS, DEFAULT_LANG, LANG_LABELS, APPS_LABELS, pricingLabel, PRICING_URL, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, urlPath, absUrl, esc, ctaHref, dirAttr, rtlHead } from "./shared.mjs";
+import { MAINTAINED_LANGS, DEFAULT_LANG, LANG_LABELS, APPS_LABELS, pricingLabel, PRICING_URL, BCP47, OG_LOCALE, OG_IMAGE_META, SITE, urlPath, absUrl, esc, ctaHref, dirAttr, rtlHead, isFrozen, archiveNotice, ARCHIVE_STYLE } from "./shared.mjs";
 
 // Copy this verbatim from article-template.mjs:7-10 (same six labels).
 const PRIVACY_LABELS = {
@@ -30,16 +30,21 @@ footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-
 footer a{color:var(--text-h);text-decoration:none}
 `;
 
+// Maintained pages get the two-language selector; archived ones get the notice
+// in the same slot. See article-template.mjs for why they are the same slot.
 function langBar(lang, slug) {
-  const links = LANGS.map((l) => {
+  if (isFrozen(lang)) return archiveNotice(lang, { en: urlPath(slug, "en"), zh: urlPath(slug, "zh") });
+  const links = MAINTAINED_LANGS.map((l) => {
     const cur = l === lang ? " aria-current=\"true\"" : "";
     return `<a href="${urlPath(slug, l)}"${cur}>${esc(LANG_LABELS[l])}</a>`;
   });
   return `<nav class="langbar" aria-label="Language">${links.join("")}</nav>`;
 }
 
+// The maintained cluster only — en, zh, x-default at en. Archived pages emit
+// none; see article-template.mjs's alternates() for the reciprocity reasoning.
 function alternates(slug) {
-  const links = LANGS.map(
+  const links = MAINTAINED_LANGS.map(
     (l) => `<link rel="alternate" hreflang="${BCP47[l]}" href="${absUrl(urlPath(slug, l))}" />`
   );
   links.push(`<link rel="alternate" hreflang="x-default" href="${absUrl(urlPath(slug, DEFAULT_LANG))}" />`);
@@ -75,6 +80,7 @@ function groupSection(label, items, lang, href) {
  * connected to the full index instead of being a leaf with no way up.
  */
 export function renderGuidesIndexPage({ lang, doc, groups, slug = "guides", only = null, backLabel = null }) {
+  const archived = isFrozen(lang);
   const canonical = absUrl(urlPath(slug, lang));
   const ogImage = SITE.origin + "/og-image.jpg";
   const ordered = only
@@ -130,8 +136,7 @@ export function renderGuidesIndexPage({ lang, doc, groups, slug = "guides", only
     <title>${headTitle}</title>
     <meta name="description" content="${headDesc}" />
     <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="${canonical}" />
-    ${alternates(slug)}
+    <link rel="canonical" href="${canonical}" />${archived ? "" : "\n    " + alternates(slug)}
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -148,7 +153,7 @@ export function renderGuidesIndexPage({ lang, doc, groups, slug = "guides", only
     <meta name="twitter:description" content="${headDesc}" />
     <meta name="twitter:image" content="${ogImage}" />
     <script type="application/ld+json">${JSON.stringify(ld).replace(/</g, "\\u003c")}</script>
-    <style>${STYLE}</style>
+    <style>${STYLE}${archived ? ARCHIVE_STYLE : ""}</style>
   </head>
   <body>
     <div class="wrap">

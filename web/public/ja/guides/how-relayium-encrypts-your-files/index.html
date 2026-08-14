@@ -7,16 +7,6 @@
     <meta name="description" content="Relayium がファイルをどう守るかを平易に解説。リアルタイム転送は X25519 と AES-256-GCM、不正なサーバーを見破る6桁の検証コード、そしてゼロ知識の保存リンク。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/guides/how-relayium-encrypts-your-files/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/how-relayium-encrypts-your-files/" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/how-relayium-encrypts-your-files/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/how-relayium-encrypts-your-files/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/how-relayium-encrypts-your-files/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/how-relayium-encrypts-your-files/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/how-relayium-encrypts-your-files/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/how-relayium-encrypts-your-files/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/how-relayium-encrypts-your-files/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/how-relayium-encrypts-your-files/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/how-relayium-encrypts-your-files/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -64,6 +54,11 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
 .cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
@@ -85,12 +80,15 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium がファイルをエンドツーエンドで暗号化する仕組み</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>Relayium がファイルをエンドツーエンドで暗号化する仕組み</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -101,7 +99,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最終更新: <bdi>2026-08-06</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/how-relayium-encrypts-your-files/">English</a><a href="/zh/guides/how-relayium-encrypts-your-files/">中文</a><a href="/ja/guides/how-relayium-encrypts-your-files/" aria-current="true">日本語</a><a href="/ko/guides/how-relayium-encrypts-your-files/">한국어</a><a href="/de/guides/how-relayium-encrypts-your-files/">Deutsch</a><a href="/fr/guides/how-relayium-encrypts-your-files/">Français</a><a href="/ar/guides/how-relayium-encrypts-your-files/">العربية</a><a href="/es/guides/how-relayium-encrypts-your-files/">Español</a><a href="/pt/guides/how-relayium-encrypts-your-files/">Português</a></nav>
+      <aside class="archived" aria-label="アーカイブされた翻訳"><p class="archived-label">アーカイブされた翻訳</p><p>このページは記録として残している日本語訳です。Relayium の製品と最新のドキュメントは英語と簡体字中国語で管理されており、アプリ自体も日本語を提供していません。ここに書かれている画面表示や細部は、現在の動作と異なる場合があります。</p><p class="archived-links">最新版：<a href="/guides/how-relayium-encrypts-your-files/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/how-relayium-encrypts-your-files/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">「Relayium は安全なの？」というのは当然の疑問です——どのファイル転送ツールもプライバシーを守ると謳っています。このページでは、Relayium が実際にどうやってファイルを守っているのかを平易な言葉で説明します。信じるかどうかではなく、自分で判断できるように。</p>
       <p class="lead">実は2つの異なる暗号方式が使われています。理由は状況が2つあるからです。今まさにオンラインの相手にファイルをリアルタイムで送る場合と、あとで受け取ってもらうためにダウンロードリンクを残しておく場合です。どちらもサーバーをファイルから締め出しますが、そこへの至り方は異なります——どちらがどの場面に当てはまるのか、知っておく価値があります。</p>
       <h2>リアルタイム転送：2台のデバイスがサーバーには見えない秘密を共有する</h2>
@@ -140,13 +138,13 @@ ol.steps>li>pre{margin:8px 0 0}
       <p>転送を中止してください。コードが一致しないということは、2台が同じ接続を見ていないということです——鍵のすり替えや中間者がいる場合にまさに現れる結果であり、単なる不具合ではありません。（コミット後開示ハンドシェイクの失敗はこれとは別の、もっと早い段階の失敗です。接続自体が中止され、コードは表示されません。）理由が分かるまで先に進まないでください。</p>
       <div class="ctacard">
         <p>実際にどう見えるか気になりますか？新しい接続を始める前に高度な検証をオンにしておくと、コードの照合と確認のステップが最初から有効になります。</p>
-        <a class="cta" href="/?lang=ja">Relayium を今すぐ試す</a>
+        <a class="cta" href="/">Relayium を今すぐ試す</a>
       </div>
       <h2>続けて読む</h2>
       <ul class="related"><li><a href="/ja/guides/is-it-safe-to-send-files-over-the-internet/">インターネットでファイルを送るのは安全か</a></li><li><a href="/ja/guides/what-is-peer-to-peer-file-transfer/">P2P（ピアツーピア）ファイル転送とは？</a></li><li><a href="/ja/how-to/share-a-file-with-an-expiring-link/">期限付きの安全なダウンロードリンクでファイルを共有する</a></li><li><a href="/ja/guides/self-host-relayium/">Relayium をセルフホスト：自分専用のファイル・テキスト転送サーバーを運用</a></li><li><a href="/ja/">Relayium</a></li></ul>
       </main>
       <footer>
-        <a href="/?lang=ja">← Relayium</a>
+        <a href="/">← Relayium</a>
         <a href="/ja/apps/">アプリ</a>
         <a href="/ja/guides/">ガイド</a>
         <a href="/ja/privacy/">プライバシーポリシー</a>

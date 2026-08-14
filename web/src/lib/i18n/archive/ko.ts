@@ -1,4 +1,4 @@
-import type { Messages } from "./types";
+import type { Messages } from "../types";
 
 const ko: Messages = {
   langLabel: "언어",

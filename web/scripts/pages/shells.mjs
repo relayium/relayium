@@ -28,7 +28,7 @@
 // unknown extensionless URL used to answer 200 with the homepage). Adding a
 // route means adding it here — there is no second list to forget.
 import {
-  LANGS,
+  MAINTAINED_LANGS,
   LANG_LABELS,
   DEFAULT_LANG,
   BCP47,
@@ -46,8 +46,12 @@ import {
 export const HEAD_MARKERS = ["<!-- SEO-HEAD -->", "<!-- /SEO-HEAD -->"];
 export const BODY_MARKERS = ["<!-- SEO-BODY -->", "<!-- /SEO-BODY -->"];
 
+// The maintained cluster only — en, zh, x-default at en. The seven archived
+// locales are not alternates of a current page; see article-template.mjs's
+// alternates() for the reciprocity reasoning. Their /ja/apps/-shaped URLs stay
+// public, indexable and in the sitemap.
 function alternates(slug) {
-  const links = LANGS.map(
+  const links = MAINTAINED_LANGS.map(
     (l) => `<link rel="alternate" hreflang="${BCP47[l]}" href="${absUrl(urlPath(slug, l))}" />`
   );
   links.push(`<link rel="alternate" hreflang="x-default" href="${absUrl(urlPath(slug, DEFAULT_LANG))}" />`);
@@ -152,8 +156,12 @@ function proseBody(doc, { links = [], langSlug = null } = {}) {
     p.push(`<h2>${esc(doc.learnHeading)}</h2>`);
     p.push(`<ul>${links.map((l) => `<li><a href="${urlPath(l.slug, "en")}">${esc(l.title)}</a></li>`).join("")}</ul>`);
   }
+  // Ordinary navigation offers the maintained languages and nothing else. This
+  // line used to list all eight non-English twins, which is exactly the
+  // "primary navigation into a frozen locale" this batch removes: a crawler and
+  // a reader would both have read it as eight supported languages.
   if (langSlug) {
-    const other = LANGS.filter((l) => l !== DEFAULT_LANG).map(
+    const other = MAINTAINED_LANGS.filter((l) => l !== DEFAULT_LANG).map(
       (l) => `<a href="${urlPath(langSlug, l)}">${esc(LANG_LABELS[l])}</a>`
     );
     p.push(`<p>Also available in: ${other.join(" · ")}</p>`);

@@ -1,4 +1,4 @@
-import type { Messages } from "./types";
+import type { Messages } from "../types";
 
 const es: Messages = {
   langLabel: "Idioma",

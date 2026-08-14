@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/compare/snapdrop/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/compare/snapdrop/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/snapdrop/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/snapdrop/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/snapdrop/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/snapdrop/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/snapdrop/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/compare/snapdrop/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/compare/snapdrop/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/compare/snapdrop/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/snapdrop/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -73,7 +66,10 @@ footer a{color:var(--text-h);text-decoration:none}
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>Relayium vs Snapdrop &amp; PairDrop: which secure P2P file transfer?</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -84,7 +80,7 @@ footer a{color:var(--text-h);text-decoration:none}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">Last updated: <bdi>2026-07-31</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/compare/snapdrop/" aria-current="true">English</a><a href="/zh/compare/snapdrop/">中文</a><a href="/ja/compare/snapdrop/">日本語</a><a href="/ko/compare/snapdrop/">한국어</a><a href="/de/compare/snapdrop/">Deutsch</a><a href="/fr/compare/snapdrop/">Français</a><a href="/ar/compare/snapdrop/">العربية</a><a href="/es/compare/snapdrop/">Español</a><a href="/pt/compare/snapdrop/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/compare/snapdrop/" aria-current="true">English</a><a href="/zh/compare/snapdrop/">中文</a></nav>
       <p class="lead">Snapdrop and its actively maintained fork PairDrop are pioneers of browser-based, install-free file sharing. They are polished, familiar, and genuinely good tools — Relayium builds on the same idea rather than dismissing it.</p>
       <p class="lead">This article compares the three fairly: what they share, where Snapdrop and PairDrop are stronger, and where Relayium is different. The short version is that Relayium&#39;s focus is encryption strength and reaching across networks, not replacing what already works well on your LAN.</p>
       <h2>What they have in common</h2>

@@ -8,19 +8,83 @@ import type { InboxPlatformId } from "../device-inbox-platforms.js";
 // runtime state live here, so language tables and the reactive facade can both
 // import it without a cycle.
 
-export type Lang = "zh" | "en" | "ja" | "ko" | "de" | "fr" | "ar" | "es" | "pt";
+/**
+ * A language the product maintains: every string in `Messages` is written,
+ * reviewed and kept current in it, and new copy ships in both before it ships
+ * at all. English is the source and the fallback.
+ *
+ * This is the ONLY language type the running app has. It is deliberately not a
+ * subset of a wider union: making `Lang` the maintained set means a frozen code
+ * cannot be assigned to a message table, a loader key, a selector option or
+ * `setLang()` without the compiler saying so.
+ */
+export type Lang = "zh" | "en";
 
+/**
+ * A locale whose product copy is frozen (2026-08-14).
+ *
+ * Frozen does not mean deleted. Seven locales have complete static tutorials,
+ * guides, comparisons and legal documents that are still correct enough to
+ * read, still reachable by their own URLs, and still indexable — they are
+ * archived translations, and `scripts/pages/` keeps generating them. What they
+ * are not is a language the product offers: they are gone from every runtime
+ * selector, no message table for them is shipped or loaded, and no new copy is
+ * written in them.
+ *
+ * The frozen message tables live in `./archive/`, outside the type-checked
+ * program, so a new `Messages` field does not turn seven unmaintained files
+ * red on a change that governance says ships in English and Chinese only.
+ */
+export type FrozenLang = "ja" | "ko" | "de" | "fr" | "ar" | "es" | "pt";
+
+/** Every code that has ever addressed a Relayium page — maintained or archived. */
+export type AnyLang = Lang | FrozenLang;
+
+/** The selector. Two entries, and both are real: no frozen code appears here. */
 export const LANGS: { code: Lang; label: string }[] = [
   { code: "zh", label: "中文" },
   { code: "en", label: "English" },
-  { code: "ja", label: "日本語" },
-  { code: "ko", label: "한국어" },
-  { code: "de", label: "Deutsch" },
-  { code: "fr", label: "Français" },
-  { code: "ar", label: "العربية" },
-  { code: "es", label: "Español" },
-  { code: "pt", label: "Português" },
 ];
+
+/** The archived locales, in the order they were introduced. Not selectable. */
+export const FROZEN_LANGS: readonly FrozenLang[] = ["ja", "ko", "de", "fr", "ar", "es", "pt"];
+
+const MAINTAINED = new Set<string>(LANGS.map((x) => x.code));
+const FROZEN = new Set<string>(FROZEN_LANGS);
+
+/** Whether a code is a language the product currently maintains. */
+export function isMaintainedLang(code: string): code is Lang {
+  return MAINTAINED.has(code);
+}
+
+/** Whether a code is one of the archived locales. */
+export function isFrozenLang(code: string): code is FrozenLang {
+  return FROZEN.has(code);
+}
+
+/**
+ * Any language tag → the maintained language to render it in.
+ *
+ * One function for all three inputs — `?lang=`, the saved preference and
+ * `navigator.language` — because they used to disagree. The query and the saved
+ * value were matched exactly against the nine-code set, so `?lang=zh-TW` fell
+ * through to browser detection while `navigator.language` of `zh-TW` matched by
+ * prefix; and a reader who had chosen Japanese carried a saved `"ja"` that no
+ * longer names anything the app can load.
+ *
+ * The rule is now the same everywhere: a `zh`-prefixed tag is Simplified
+ * Chinese, and everything else — a frozen locale, a tag we never had, a
+ * poisoned storage value, a prototype key like `"toString"` — is English.
+ * English is not a failure result here; it is the declared fallback.
+ */
+export function resolveLang(tag: string | null | undefined): Lang {
+  const s = (tag ?? "").toLowerCase();
+  // `zh`, `zh-hans`, `zh-cn`, `zh-tw` … all resolve to the one Chinese table.
+  // Simplified is what the product maintains; a Traditional reader gets it
+  // rather than English, which is the closer of the two answers available.
+  if (s === "zh" || s.startsWith("zh-") || s.startsWith("zh_")) return "zh";
+  return "en";
+}
 
 /** One page's "how it works" walkthrough: three sequential step cards. */
 export interface HowSection {
@@ -679,15 +743,46 @@ export interface Messages {
     heading: string; // <h1>
     subhead: string; // one-line pitch under the h1
     availableBadge: string; // "Available"
-    comingSoonBadge: string; // "Coming soon"
+    // "In development", not "Coming soon". A date is a promise and none of these
+    // three has one; what is true is that they are being built. The same string
+    // is the group heading and each card's own status line, so a reader who
+    // scrolls past the heading still sees the status on the card.
+    inDevelopmentBadge: string;
     yourPlatformNote: (os: string) => string; // "We think you're on {os}." highlight caption
     cliInstallLabel: string; // label above the curl one-liner
-    androidNote: string; // "On Android? Use the web app — it runs in your browser."
     cards: {
       web: { name: string; desc: string; cta: string };
       cli: { name: string; desc: string; cta: string };
       mac: { name: string; desc: string; cta: string };
-      ios: { name: string; desc: string }; // no cta — coming soon
+      // The three in-development cards carry no `cta`: there is nothing to press
+      // yet, and a disabled button that never becomes enabled is worse than no
+      // button. Their `desc` is where the honest today-answer lives — Windows
+      // says the CLI already works, Android points at the web app — because that
+      // sentence is a statement of fact, not an action.
+      ios: { name: string; desc: string };
+      android: { name: string; desc: string };
+      windows: { name: string; desc: string };
+    };
+    // "Web or a native app?" — the section that answers the question the card
+    // grid raises. Every macOS bullet must name a capability that is actually
+    // shipped and verifiable in apps/mac: the menu-bar app, the Share extension
+    // (files/images/video only — it declares no text or URL activation rule),
+    // Finder "Open With" plus Dock drop (CFBundleDocumentTypes, LSHandlerRank
+    // Alternate), relayium.com links opening in the app (the applinks
+    // associated domain), and Device Inbox receiving into a folder the user
+    // picks on that Mac.
+    //
+    // What must NOT appear here, because none of it is true: a faster transfer
+    // (same protocol, same relay), background transfer as a general native
+    // property, anything about iOS running in the background or receiving push,
+    // and any store listing or availability claim for either native app.
+    // AppsPage.claims.test.ts enforces all five as negatives.
+    chooser: {
+      heading: string;
+      lead: string;
+      web: { title: string; points: string[] };
+      mac: { title: string; points: string[] };
+      iosNote: string; // the one truthful sentence about the iOS limitation
     };
   };
   // /device-inbox — the public, first-class entry point for Device Inbox

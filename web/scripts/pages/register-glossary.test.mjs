@@ -43,14 +43,24 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import zh from "../../src/lib/i18n/zh.ts";
-import ja from "../../src/lib/i18n/ja.ts";
-import ko from "../../src/lib/i18n/ko.ts";
-import de from "../../src/lib/i18n/de.ts";
-import es from "../../src/lib/i18n/es.ts";
-import pt from "../../src/lib/i18n/pt.ts";
-import ar from "../../src/lib/i18n/ar.ts";
 
-const APP_TABLES = { zh, ja, ko, de, es, pt, ar };
+/**
+ * The app-side corpus, for the locales the app still ships.
+ *
+ * Since the 2026-08-14 language freeze that is Chinese alone among the rule
+ * locales — English has no register rule here. The other six keep their rules,
+ * running over the PAGE corpus only: those pages are archived but still public,
+ * and an edit to one still has to obey the register decision it was written
+ * under. What is gone is the app half, because there is no ja/ko/de/es/pt/ar
+ * message table to read (see src/lib/i18n/archive/README.md).
+ *
+ * `LOCALES` below is what the completeness guard iterates, so a locale losing
+ * its app table cannot silently lose its page coverage too.
+ */
+const APP_TABLES = { zh };
+
+/** Every locale these rules cover, app table or not. */
+const LOCALES = ["zh", "ja", "ko", "de", "es", "pt", "ar"];
 
 // Same glob as content-claims.test.mjs, for the same reason: a new content file
 // is covered the day it lands, not the day someone remembers to list it.
@@ -100,7 +110,7 @@ function strings(v, path, out) {
  * that ran over legal/ would be enforcing the wrong decision there.
  */
 function corpus(locale, { legal }) {
-  const out = strings(APP_TABLES[locale], `i18n/${locale}`, []);
+  const out = APP_TABLES[locale] ? strings(APP_TABLES[locale], `i18n/${locale}`, []) : [];
   for (const [name, mod] of CONTENT) {
     if (legal === "skip" && name.startsWith("legal/")) continue;
     const root = mod.default?.langs ?? mod.default ?? {};
@@ -216,7 +226,7 @@ describe("GLOSSARY.md register decisions", () => {
   // table and checking most of one. If a future table shape makes them
   // unrenderable, the rules would quietly stop seeing that copy — so say so.
   it("renders every message function it walks", () => {
-    for (const locale of Object.keys(APP_TABLES)) corpus(locale, { legal: "keep" });
+    for (const locale of LOCALES) corpus(locale, { legal: "keep" });
     expect(renderFailures).toEqual([]);
   });
 
@@ -224,10 +234,16 @@ describe("GLOSSARY.md register decisions", () => {
   // renamed export or a glob that stops matching would turn every assertion
   // green. Pin the shape instead of trusting it.
   it("reads both corpora for every locale it claims to cover", () => {
-    for (const locale of Object.keys(APP_TABLES)) {
+    for (const locale of LOCALES) {
       const all = corpus(locale, { legal: "keep" });
       const fromContent = all.filter(([where]) => !where.startsWith("i18n/"));
-      expect(all.length, `${locale}: app table`).toBeGreaterThan(500);
+      const fromApp = all.filter(([where]) => where.startsWith("i18n/"));
+      // A maintained locale must contribute both halves; an archived one has no
+      // app table by construction, and asserting it does would be asserting the
+      // freeze never happened.
+      expect(fromApp.length, `${locale}: app table`).toBeGreaterThan(APP_TABLES[locale] ? 500 : -1);
+      expect(Boolean(APP_TABLES[locale]), `${locale}: app table presence`)
+        .toBe(locale === "zh");
       expect(fromContent.length, `${locale}: page content`).toBeGreaterThan(500);
       expect(
         fromContent.filter(([where]) => where.startsWith("legal/")).length,

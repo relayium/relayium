@@ -7,16 +7,6 @@
     <meta name="description" content="Douze comparatifs impartiaux entre Relayium et AirDrop, LocalSend, croc, rsync, Dropbox, WeTransfer et d&#39;autres façons de transférer des fichiers." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/fr/compare/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/compare/" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/compare/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/compare/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/compare/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -55,21 +45,26 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:0}
 h2 a{color:inherit;text-decoration:none}h2 a:hover{text-decoration:underline}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=fr">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <!-- Everything between the site header and the footer is this page's own
            content, so it belongs to one main landmark. -->
       <main>
       <h1>Comparatifs</h1>
       <p class="lead">Douze comparatifs avec les outils que vous utilisez déjà : AirDrop, LocalSend, Snapdrop, croc, magic-wormhole, rsync, scp, Dropbox, Nextcloud, WeTransfer, sans oublier l&#39;après-Firefox Send. Chacun dit aussi dans quels cas l&#39;autre outil est le meilleur choix.</p>
-      <nav class="langbar" aria-label="Language"><a href="/compare/">English</a><a href="/zh/compare/">中文</a><a href="/ja/compare/">日本語</a><a href="/ko/compare/">한국어</a><a href="/de/compare/">Deutsch</a><a href="/fr/compare/" aria-current="true">Français</a><a href="/ar/compare/">العربية</a><a href="/es/compare/">Español</a><a href="/pt/compare/">Português</a></nav>
+      <aside class="archived" aria-label="Traduction archivée"><p class="archived-label">Traduction archivée</p><p>Cette page est une traduction française archivée. Le produit Relayium et sa documentation à jour sont maintenus en anglais et en chinois simplifié ; l&#39;application elle-même ne propose plus le français. Les écrans et les détails décrits ici peuvent donc différer du comportement actuel.</p><p class="archived-links">Version à jour : <a href="/compare/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/compare/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <ul class="guidelist"><li><a href="/fr/compare/airdrop/">Relayium vs AirDrop : une alternative multiplateforme</a></li><li><a href="/fr/compare/snapdrop/">Relayium vs Snapdrop et PairDrop : quel transfert P2P sécurisé ?</a></li><li><a href="/fr/compare/localsend/">Relayium vs LocalSend : quel transfert local choisir</a></li><li><a href="/fr/compare/wetransfer/">Relayium vs WeTransfer : liens chiffrés et remises en direct</a></li><li><a href="/fr/compare/firefox-send/">La meilleure alternative à Firefox Send en 2026</a></li><li><a href="/fr/compare/dropbox/">Relayium vs Dropbox pour envoyer un fichier</a></li><li><a href="/fr/compare/google-drive/">Relayium vs Google Drive pour envoyer des fichiers</a></li><li><a href="/fr/compare/nextcloud/">Relayium vs Nextcloud pour l&#39;envoi de fichiers</a></li><li><a href="/fr/compare/croc/">Relayium vs croc : transfert de fichiers chiffré en terminal</a></li><li><a href="/fr/compare/magic-wormhole/">Relayium vs magic-wormhole : transfert de fichiers CLI</a></li><li><a href="/fr/compare/scp/">Relayium vs scp : transfert plus simple par SSH</a></li><li><a href="/fr/compare/rsync/">Relayium vs rsync : synchroniser des dossiers sans configurer SSH</a></li></ul>
       </main>
       <footer>
-        <a href="/?lang=fr">← Relayium</a>
+        <a href="/">← Relayium</a>
         <a href="/fr/guides/">Guides</a>
         <a href="/fr/apps/">Applis</a>
         <a href="/fr/privacy/">Confidentialité</a>

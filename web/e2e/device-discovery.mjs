@@ -5,10 +5,16 @@
  *   cd web && npm run build && npm run test:device-discovery
  *
  * 为什么必须是真浏览器：这一批修的是**发现性**，而发现性只在渲染之后才存在。jsdom
- * 能证明某个字符串在 DOM 里，证明不了它在 390px 上没有被挤出屏幕、证明不了阿拉伯语
- * 下整行没有倒过来读、也证明不了那个 CTA 真的能把人带到 Device Inbox。
+ * 能证明某个字符串在 DOM 里，证明不了它在 390px 上没有被挤出屏幕、证明不了换一种
+ * 语言之后整行还排得下、也证明不了那个 CTA 真的能把人带到 Device Inbox。
  *
- * 三种视角，同一组断言：桌面 1440×900、窄屏 390×844、阿拉伯语 RTL。
+ * 三种视角，同一组断言：桌面 1440×900、窄屏 390×844、中文 1440×900。
+ *
+ * 第三格原本是阿拉伯语 RTL。2026-08-14 语言冻结之后，应用只维护英文和简体中文，
+ * 没有任何一种可选语言是从右往左的——也就是说那一格测的是用户根本到不了的状态。
+ * 换成中文，保留它真正在测的东西：这些界面是**翻译出来的**而不是写死英文，而且
+ * shell 命令块无论页面语言如何都仍然显式声明 dir="ltr"（真正的 RTL 渲染仍由
+ * 归档的阿拉伯语静态页覆盖，见 e2e/a11y-targets.mjs 里那两格 static 阿拉伯语目标）。
  *
  * 它不碰真服务端：/api/* 走 a11y 那套 fixture 注入（GET），写操作（PATCH/DELETE）
  * 由页面内的一层 fetch 包装记录并应答。要验的是界面行为，不是后端——后端那半边由
@@ -99,9 +105,9 @@ async function stopPreview() {
 
 /** 一个视角：视口 + 语言前缀。 */
 const VIEWS = [
-  { id: "desktop", width: 1440, height: 900, prefix: "", lang: "en", rtl: false },
-  { id: "mobile-390", width: 390, height: 844, prefix: "", lang: "en", rtl: false },
-  { id: "arabic-rtl", width: 1440, height: 900, prefix: "", lang: "ar", rtl: true },
+  { id: "desktop", width: 1440, height: 900, prefix: "", lang: "en", localized: false },
+  { id: "mobile-390", width: 390, height: 844, prefix: "", lang: "en", localized: false },
+  { id: "chinese", width: 1440, height: 900, prefix: "", lang: "zh", localized: true },
 ];
 
 async function openTab(browser, base, view, path) {
@@ -146,18 +152,26 @@ async function checkCliPage(browser, base, view) {
   const ctaBad = await tab.evaluate(VISIBLE("#device-inbox .cta a"));
   if (ctaBad) throw new Error(`${view.id}: the Device Inbox CTA is ${ctaBad}`);
 
-  if (view.rtl) {
-    const dir = await tab.evaluate(`getComputedStyle(document.querySelector("#device-inbox")).direction`);
-    if (dir !== "rtl") throw new Error(`arabic: the Device Inbox section renders ${dir}, not rtl`);
-    // 命令块必须保持 LTR：一条 shell 命令被镜像过来是读不了也复制不对的。
-    // 查的是 <pre> 本身（CommandBlock 把 dir="ltr" 打在它上面），不是外面那个
-    // .term 容器——容器跟着页面 RTL 是对的，标题和边框本来就该镜像。
+  if (view.localized) {
+    // 页面语言真的跟着 localStorage 走了：<html lang> 换成了中文，而不是回落英文。
+    const htmlLang = await tab.evaluate(`document.documentElement.lang`);
+    if (htmlLang !== "zh") throw new Error(`chinese: <html lang> is ${htmlLang}, not zh`);
+    // 这一段是翻译出来的，不是写死的英文。取标题的第一行来判：整段里混着
+    // com.relayium.mac 这类不翻译的专有名词，拿整段判会被它们带偏。
+    const heading = await tab.evaluate(`document.querySelector("#device-inbox h2")?.textContent ?? ""`);
+    if (!/[\u4e00-\u9fff]/.test(heading)) {
+      throw new Error(`chinese: the Device Inbox heading is not translated — ${JSON.stringify(heading)}`);
+    }
+    // 命令块必须显式声明 LTR：一条 shell 命令被镜像过来是读不了也复制不对的。
+    // 查的是 <pre> 上的 dir **属性**（CommandBlock 打在它上面），不是计算样式——
+    // 现在没有任何一种可选语言是 RTL，计算样式必然是 ltr，那样断言等于没测。
+    // 属性还在，才意味着哪天恢复某个 RTL 语言时这层保护仍然生效。
     const cmdDirs = await tab.evaluate(
-      `[...document.querySelectorAll("#device-inbox pre")].map((e) => getComputedStyle(e).direction)`,
+      `[...document.querySelectorAll("#device-inbox pre")].map((e) => e.getAttribute("dir"))`,
     );
-    if (!cmdDirs.length) throw new Error("arabic: the Device Inbox section has no command block at all");
+    if (!cmdDirs.length) throw new Error("chinese: the Device Inbox section has no command block at all");
     if (cmdDirs.some((d) => d !== "ltr")) {
-      throw new Error(`arabic: a command block renders ${cmdDirs.join("/")}; shell commands must stay ltr`);
+      throw new Error(`chinese: a command block declares dir=${cmdDirs.join("/")}; shell commands must stay ltr`);
     }
   }
 
@@ -220,9 +234,11 @@ async function checkMyDevices(browser, base, view) {
   await tab.evaluate(`history.back()`);
   await tab.waitFor(`document.querySelectorAll(".devicelist li").length === 2`, `${view.id}: back on /me`);
 
-  if (view.rtl) {
-    const dir = await tab.evaluate(`getComputedStyle(document.querySelector(".devicelist li")).direction`);
-    if (dir !== "rtl") throw new Error(`arabic: the device row renders ${dir}, not rtl`);
+  if (view.localized) {
+    // 设备行在中文下同样是完整一行、没有横向溢出（上面的 VISIBLE 已经在查），
+    // 这里再确认这一屏确实是中文渲染的，而不是悄悄回落到了英文。
+    const htmlLang = await tab.evaluate(`document.documentElement.lang`);
+    if (htmlLang !== "zh") throw new Error(`chinese: /me renders in ${htmlLang}, not zh`);
   }
 
   // ── 改名 ────────────────────────────────────────────────────────────────
@@ -269,7 +285,7 @@ async function checkMyDevices(browser, base, view) {
   await tab.evaluate(`
     (() => {
       const buttons = [...document.querySelectorAll('[role="dialog"] button')];
-      // 肯定按钮是最后一个：取消在前。用文字匹配会在阿拉伯语下失效。
+      // 肯定按钮是最后一个：取消在前。用文字匹配会在换语言之后失效。
       buttons[buttons.length - 1].click();
     })()
   `);
@@ -293,7 +309,7 @@ await withWatchdog("device-discovery", GLOBAL_TIMEOUT_MS, async () => {
       await checkCliPage(browser, base, view);
       await checkMyDevices(browser, base, view);
     }
-    console.log("\n  device discovery, rename and revoke verified in a real browser at 1440×900, 390×844 and Arabic RTL\n");
+    console.log("\n  device discovery, rename and revoke verified in a real browser at 1440×900, 390×844 and 1440×900 in Chinese\n");
   } catch (err) {
     fail("device-discovery", err);
     process.exitCode = 1;

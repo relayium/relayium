@@ -1,6 +1,43 @@
 // web/scripts/pages/shared.mjs — constants + pure path/url/escape helpers.
+
+/**
+ * Every language a page is GENERATED in. Nine, unchanged.
+ *
+ * This is not the same question as "which languages does the product offer".
+ * Since 2026-08-14 the answer to that is `MAINTAINED_LANGS` — English and
+ * Simplified Chinese — and the other seven are `FROZEN_LANGS`: complete,
+ * already-published translations that stay public, stay directly reachable and
+ * stay in the sitemap as ARCHIVED translations. Deleting them would 404 pages
+ * that are indexed, linked and still largely correct; pretending they are
+ * current would tell a German reader the app speaks German. Neither is honest,
+ * so they are generated, labelled and kept out of the selectors.
+ */
 export const LANGS = ["en", "zh", "ja", "ko", "de", "fr", "ar", "es", "pt"];
 export const DEFAULT_LANG = "en";
+
+/**
+ * The languages the product maintains: complete, current, validated copy, and
+ * where all new copy ships. English is the source and the fallback.
+ *
+ * This is the set every language selector and every hreflang cluster is built
+ * from. Keep it in step with `LANGS` in src/lib/i18n/types.ts — the app and the
+ * generated pages must not disagree about which languages exist, and
+ * `maintained-frozen-split.test.mjs` fails when they do.
+ */
+export const MAINTAINED_LANGS = ["en", "zh"];
+
+/** The seven archived locales. Generated and indexable; never selectable. */
+export const FROZEN_LANGS = ["ja", "ko", "de", "fr", "ar", "es", "pt"];
+
+/** Whether this language's copy is currently maintained. */
+export function isMaintained(lang) {
+  return MAINTAINED_LANGS.includes(lang);
+}
+
+/** Whether this language's pages are archived translations. */
+export function isFrozen(lang) {
+  return FROZEN_LANGS.includes(lang);
+}
 
 export const LANG_LABELS = {
   en: "English", zh: "中文", ja: "日本語", ko: "한국어", de: "Deutsch", fr: "Français", ar: "العربية", es: "Español", pt: "Português",
@@ -25,24 +62,27 @@ export const PRICING_LABELS = {
 };
 /** The /pricing URL. English-only, an SPA route, so no trailing slash. */
 export const PRICING_URL = "/pricing";
-// Eight locales send readers to /pricing behind a localized label, and the page
-// they land on is English — the plan tiers come from the billing API and there
-// is no localized twin. The label alone promises otherwise, so it carries the
-// warning in the reader's own language. English gets no suffix: there is nothing
-// to warn an English reader about.
 /**
  * The label for the /pricing link.
  *
  * This used to append "(in English)" in every non-English locale, on the premise
- * that the pricing page was English-only. That premise was simply wrong: the
- * page is a client-rendered SPA route whose copy comes from i18n, and every one
- * of the nine locales carries a full pricingPage block (33 fields, same as
- * English). Fetching /pricing with curl shows English because that is the shell,
- * not because that is what a reader sees.
+ * that the pricing page was English-only. That premise was wrong at the time:
+ * the page is a client-rendered SPA route whose copy comes from i18n, and every
+ * locale then carried a full pricingPage block. Fetching /pricing with curl
+ * shows English because that is the shell, not because that is what a reader
+ * sees. So the hint told Chinese readers their own fully-translated page was in
+ * a language they might not read — a worse defect than the one it fixed.
  *
- * So the hint told Chinese readers their own fully-translated page was in a
- * language they might not read — a worse defect than the one it was added to
- * fix. It is gone; the label is just the label.
+ * It stays gone after the 2026-08-14 language freeze, and the reasoning is now
+ * split in two. For English and Chinese nothing changed: the SPA renders
+ * /pricing in both, so the label is just the label. For the seven archived
+ * locales the premise HAS become true — a reader clicking 料金 on /ja/privacy/
+ * lands on an English page — but the answer is not seven per-link suffixes.
+ * Every archived page carries one archived-translation notice (archiveNotice
+ * below) saying, in that reader's own language, that the product and its
+ * current documentation are English and Chinese. One disclosure covers every
+ * link on the page, which is what "minimal and centralized" means here; seven
+ * copies of it, one per footer entry, would be neither.
  */
 export function pricingLabel(lang) {
   return PRICING_LABELS[lang];
@@ -162,6 +202,132 @@ export function esc(s) {
     .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
+// ── The archived-translation disclosure ──
+//
+// One notice, one place, seven languages. It exists because "keep the page
+// public" and "do not imply the language is supported" are both requirements,
+// and a page that satisfies only the first is a German reader following German
+// instructions into an app that no longer speaks German.
+//
+// It is deliberately the ONLY new copy written in a frozen language. Everything
+// else on these pages is the translation that was already published and
+// reviewed; this is a status disclosure, not product copy, which is why it is
+// centralized here rather than folded into each document's own text.
+//
+// What it must convey, in the reader's own language, in one screenful:
+//
+//   1. this page is an archive, not the current documentation;
+//   2. the product is maintained in English and Simplified Chinese, and the app
+//      itself no longer offers this language — so what is described here may
+//      differ from what the reader will see;
+//   3. where the current version of THIS page is, in both maintained languages.
+//
+// Point 3 is what makes it more than a warning. A notice that says "this may be
+// out of date" and stops has told the reader their next click is a guess.
+const ARCHIVE_COPY = {
+  ja: {
+    label: "アーカイブされた翻訳",
+    body:
+      "このページは記録として残している日本語訳です。Relayium の製品と最新のドキュメントは英語と簡体字中国語で管理されており、アプリ自体も日本語を提供していません。ここに書かれている画面表示や細部は、現在の動作と異なる場合があります。",
+    lead: "最新版",
+  },
+  ko: {
+    label: "보관된 번역",
+    body:
+      "이 페이지는 기록으로 보관 중인 한국어 번역입니다. Relayium 제품과 최신 문서는 영어와 중국어 간체로 관리되며, 앱 자체도 더 이상 한국어를 제공하지 않습니다. 여기에 적힌 화면과 세부 사항은 현재 동작과 다를 수 있습니다.",
+    lead: "최신 버전",
+  },
+  de: {
+    label: "Archivierte Übersetzung",
+    body:
+      "Diese Seite ist eine archivierte deutsche Übersetzung. Produkt und aktuelle Dokumentation von Relayium werden auf Englisch und in vereinfachtem Chinesisch gepflegt; die App selbst bietet kein Deutsch mehr an. Beschriebene Bildschirme und Details können deshalb vom heutigen Verhalten abweichen.",
+    lead: "Aktuelle Fassung",
+  },
+  fr: {
+    label: "Traduction archivée",
+    body:
+      "Cette page est une traduction française archivée. Le produit Relayium et sa documentation à jour sont maintenus en anglais et en chinois simplifié ; l'application elle-même ne propose plus le français. Les écrans et les détails décrits ici peuvent donc différer du comportement actuel.",
+    lead: "Version à jour",
+  },
+  ar: {
+    label: "ترجمة مؤرشفة",
+    body:
+      "هذه الصفحة ترجمة عربية محفوظة للأرشيف. يجري صيانة منتج Relayium وتوثيقه الحالي بالإنجليزية والصينية المبسّطة، ولم يعد التطبيق نفسه يوفّر العربية. لذلك قد تختلف الشاشات والتفاصيل الموصوفة هنا عن السلوك الحالي.",
+    lead: "النسخة الحالية",
+  },
+  es: {
+    label: "Traducción archivada",
+    body:
+      "Esta página es una traducción al español archivada. El producto Relayium y su documentación actual se mantienen en inglés y en chino simplificado; la propia aplicación ya no ofrece español. Por eso las pantallas y los detalles descritos aquí pueden diferir del comportamiento actual.",
+    lead: "Versión actual",
+  },
+  pt: {
+    label: "Tradução arquivada",
+    body:
+      "Esta página é uma tradução em português arquivada. O produto Relayium e sua documentação atual são mantidos em inglês e em chinês simplificado; o próprio aplicativo não oferece mais português. Por isso as telas e os detalhes descritos aqui podem diferir do comportamento atual.",
+    lead: "Versão atual",
+  },
+};
+
+/**
+ * The separator between the "current version" lead and the two links, including
+ * whatever spacing that language's typography wants after it.
+ *
+ * The French entry — and the one before ";" in ARCHIVE_COPY.fr — is U+00A0, not
+ * a plain space: French typography requires a no-break space before ":" and
+ * ";", and a plain one lets the mark wrap alone onto the next line. GLOSSARY.md
+ * settles it; register-glossary.test.mjs enforces it on the page corpus.
+ */
+const ARCHIVE_COLON = { fr: " : ", ja: "：", ko: ": ", de: ": ", ar: ": ", es: ": ", pt: ": " };
+
+/**
+ * The archived-translation notice for a frozen page, or "" for a maintained one.
+ *
+ * `twins` is `{ en, zh }` — the URL of the SAME page in each maintained
+ * language. Passing the URLs in rather than deriving them here keeps this
+ * function ignorant of the six different URL shapes the templates own
+ * (`landingUrl`, `urlPath`, the slash-less SPA routes), which is the mistake
+ * that would produce a notice linking to a 404.
+ *
+ * The two link labels are endonyms and are NOT translated: "English" and "中文"
+ * are what a reader looking for their own language scans for. They carry `lang`
+ * and `hreflang` so a screen reader switches voice, and `<bdi>` so the Arabic
+ * page does not reorder two Latin/CJK runs around their separator.
+ */
+export function archiveNotice(lang, twins) {
+  const copy = ARCHIVE_COPY[lang];
+  if (!copy) return "";
+  if (!twins?.en || !twins?.zh) {
+    throw new Error(`archiveNotice: ${lang} needs both maintained twins, got ${JSON.stringify(twins)}`);
+  }
+  const links =
+    `<a href="${twins.en}" lang="en" hreflang="en"><bdi>English</bdi></a>` +
+    ` <span aria-hidden="true">·</span> ` +
+    `<a href="${twins.zh}" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a>`;
+  return (
+    `<aside class="archived" aria-label="${esc(copy.label)}">` +
+    `<p class="archived-label">${esc(copy.label)}</p>` +
+    `<p>${esc(copy.body)}</p>` +
+    // The separator carries its own trailing space (or, for Japanese, does not:
+    // a full-width "：" already sets its own spacing and a space after it reads
+    // as a gap).
+    `<p class="archived-links">${esc(copy.lead)}${ARCHIVE_COLON[lang]}${links}</p>` +
+    `</aside>`
+  );
+}
+
+/**
+ * Styling for the notice, appended to a template's inlined stylesheet only on
+ * the pages that render one. Uses the four tokens every template declares, so
+ * it inherits each one's light/dark scheme instead of carrying its own.
+ */
+export const ARCHIVE_STYLE = `
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
+`;
+
 // ── Landing-page helpers ──
 // The English homepage is the SPA at "/"; static landing pages exist only for
 // the other languages, at "/<lang>/".
@@ -176,9 +342,20 @@ export function landingPath(lang) {
   return `${lang}/index.html`;
 }
 
-/** Where a page's "open the app" CTA points: the SPA, pre-set to this language. */
+/**
+ * Where a page's "open the app" CTA points: the SPA, pre-set to this language.
+ *
+ * A frozen page sends the reader to the plain "/" with no `lang` parameter. The
+ * app resolves `?lang=ja` to English anyway (see resolveLang in
+ * src/lib/i18n/types.ts), so carrying it would be a parameter that promises a
+ * language and delivers another — and worse than useless: it would OVERRIDE the
+ * reader's own browser language, so a Chinese speaker reading the archived
+ * Japanese page would land in English instead of Chinese. Dropping it lets
+ * normal detection do its job.
+ */
 export function ctaHref(lang) {
-  return lang === DEFAULT_LANG ? "/" : `/?lang=${lang}`;
+  if (lang === DEFAULT_LANG || isFrozen(lang)) return "/";
+  return `/?lang=${lang}`;
 }
 
 /** Throw (fail the build) when a doc is missing any required translation. */

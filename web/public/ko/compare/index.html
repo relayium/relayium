@@ -7,16 +7,6 @@
     <meta name="description" content="AirDrop, LocalSend, croc, rsync, Dropbox, WeTransfer 등 실제로 쓰이는 도구와 Relayium을 균형 있게 비교한 12편." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ko/compare/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/compare/" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/compare/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/compare/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/compare/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -55,21 +45,26 @@ p{margin:12px 0}ul{margin:12px 0;padding-inline-start:0}
 h2 a{color:inherit;text-decoration:none}h2 a:hover{text-decoration:underline}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ko">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <!-- Everything between the site header and the footer is this page's own
            content, so it belongs to one main landmark. -->
       <main>
       <h1>비교</h1>
       <p class="lead">많이 쓰는 도구와의 비교 12편 — AirDrop, LocalSend, Snapdrop, croc, magic-wormhole, rsync, scp, Dropbox, Nextcloud, WeTransfer, 그리고 Firefox Send가 사라진 뒤의 대안까지. 상대 도구가 더 나은 상황이면 그렇다고 분명히 밝힙니다.</p>
-      <nav class="langbar" aria-label="Language"><a href="/compare/">English</a><a href="/zh/compare/">中文</a><a href="/ja/compare/">日本語</a><a href="/ko/compare/" aria-current="true">한국어</a><a href="/de/compare/">Deutsch</a><a href="/fr/compare/">Français</a><a href="/ar/compare/">العربية</a><a href="/es/compare/">Español</a><a href="/pt/compare/">Português</a></nav>
+      <aside class="archived" aria-label="보관된 번역"><p class="archived-label">보관된 번역</p><p>이 페이지는 기록으로 보관 중인 한국어 번역입니다. Relayium 제품과 최신 문서는 영어와 중국어 간체로 관리되며, 앱 자체도 더 이상 한국어를 제공하지 않습니다. 여기에 적힌 화면과 세부 사항은 현재 동작과 다를 수 있습니다.</p><p class="archived-links">최신 버전: <a href="/compare/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/compare/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <ul class="guidelist"><li><a href="/ko/compare/airdrop/">Relayium vs AirDrop: 크로스플랫폼 에어드롭 대안</a></li><li><a href="/ko/compare/snapdrop/">Relayium vs Snapdrop·PairDrop: 어떤 P2P 파일 전송이 더 안전할까?</a></li><li><a href="/ko/compare/localsend/">Relayium vs LocalSend: 로컬 파일 전송, 무엇을 쓸까</a></li><li><a href="/ko/compare/wetransfer/">Relayium vs WeTransfer: 암호화 링크와 실시간 전달</a></li><li><a href="/ko/compare/firefox-send/">2026년 최고의 Firefox Send 대안</a></li><li><a href="/ko/compare/dropbox/">Relayium vs Dropbox: 파일 하나 보내기</a></li><li><a href="/ko/compare/google-drive/">Relayium vs Google Drive: 파일을 더 직접적으로 보내기</a></li><li><a href="/ko/compare/nextcloud/">Relayium vs Nextcloud: 파일 전송에는 무엇을 써야 할까</a></li><li><a href="/ko/compare/croc/">Relayium vs croc: 터미널에서 암호화 파일 전송</a></li><li><a href="/ko/compare/magic-wormhole/">Relayium vs magic-wormhole: CLI 파일 전송</a></li><li><a href="/ko/compare/scp/">Relayium vs scp: 더 간단한 SSH 파일 전송</a></li><li><a href="/ko/compare/rsync/">Relayium vs rsync: SSH 설정 없이 폴더 동기화하기</a></li></ul>
       </main>
       <footer>
-        <a href="/?lang=ko">← Relayium</a>
+        <a href="/">← Relayium</a>
         <a href="/ko/guides/">가이드</a>
         <a href="/ko/apps/">앱</a>
         <a href="/ko/privacy/">개인정보 처리방침</a>

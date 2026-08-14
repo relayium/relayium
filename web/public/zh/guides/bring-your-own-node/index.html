@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/zh/guides/bring-your-own-node/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/guides/bring-your-own-node/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/bring-your-own-node/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/bring-your-own-node/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/bring-your-own-node/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/bring-your-own-node/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/bring-your-own-node/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/bring-your-own-node/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/bring-your-own-node/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/bring-your-own-node/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/bring-your-own-node/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -97,7 +90,10 @@ ol.steps>li>pre{margin:8px 0 0}
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>自建节点：免费使用 Relayium 的中继与存储</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -108,7 +104,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最近更新: <bdi>2026-08-06</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/bring-your-own-node/">English</a><a href="/zh/guides/bring-your-own-node/" aria-current="true">中文</a><a href="/ja/guides/bring-your-own-node/">日本語</a><a href="/ko/guides/bring-your-own-node/">한국어</a><a href="/de/guides/bring-your-own-node/">Deutsch</a><a href="/fr/guides/bring-your-own-node/">Français</a><a href="/ar/guides/bring-your-own-node/">العربية</a><a href="/es/guides/bring-your-own-node/">Español</a><a href="/pt/guides/bring-your-own-node/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/bring-your-own-node/">English</a><a href="/zh/guides/bring-your-own-node/" aria-current="true">中文</a></nav>
       <p class="lead">跨网络传输和存储型链接会消耗中继带宽和磁盘，这对我们是有成本的，所以它们按免费额度提供、超出后收费。但有个绕过办法：自己搭一个中继/存储节点，绑定到你的账号，之后你的传输就走你自己的节点而不是我们的——不计量、不收费。</p>
       <p class="lead">这跟「自托管整套 Relayium 服务端」不是一回事。你依然用你平常的 relayium.com 账号、同样的客户端；只是多接了一个你自己名下的节点来承载你的流量。本指南带你从一台全新的 Linux 服务器，到节点上线，大约五分钟。</p>
       <h2>为什么要自建节点</h2>

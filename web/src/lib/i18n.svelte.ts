@@ -8,22 +8,20 @@
 // setLang() loads a target before switching, so `messages[current]` is never
 // undefined at render time.
 import type { Lang, Messages } from "./i18n/types";
-import { LANGS } from "./i18n/types";
+import { resolveLang } from "./i18n/types";
 
-export type { Lang, Messages, StatusKey } from "./i18n/types";
-export { LANGS, legalUrl, pageUrl } from "./i18n/types";
+export type { Lang, FrozenLang, AnyLang, Messages, StatusKey } from "./i18n/types";
+export { LANGS, FROZEN_LANGS, isMaintainedLang, isFrozenLang, resolveLang, legalUrl, pageUrl } from "./i18n/types";
 
 // Dynamic imports become separate chunks — one per language.
+//
+// Two entries, not nine. The seven frozen locales are not merely unselectable:
+// there is no loader for them, so no bundle, no precache entry and no network
+// request for a language the product does not maintain. Their former tables are
+// archived under ./i18n/archive/ (see that directory's README).
 const loaders: Record<Lang, () => Promise<{ default: Messages }>> = {
   zh: () => import("./i18n/zh"),
   en: () => import("./i18n/en"),
-  ja: () => import("./i18n/ja"),
-  ko: () => import("./i18n/ko"),
-  de: () => import("./i18n/de"),
-  fr: () => import("./i18n/fr"),
-  ar: () => import("./i18n/ar"),
-  es: () => import("./i18n/es"),
-  pt: () => import("./i18n/pt"),
 };
 
 // Reactive table of the languages loaded so far. Typed as a full Record — not
@@ -43,7 +41,12 @@ export async function loadLang(l: Lang): Promise<void> {
 
 // Right-to-left languages. Kept as a plain string set (not keyed to the Lang
 // union) so document direction can be resolved independently of, and before,
-// a language is registered. Arabic is the only RTL locale today.
+// a language is registered.
+//
+// Arabic is retained here even though `ar` is no longer a runtime language:
+// dir() answers for any tag, the archived Arabic static pages still render
+// dir="rtl", and a function that started returning "ltr" for "ar" would be
+// wrong rather than simplified. It just never fires on a maintained language.
 const RTL = new Set<string>(["ar"]);
 
 /** The `dir` a language should render in. LTR for everything but Arabic. */
@@ -52,27 +55,47 @@ export function dir(l: string): "rtl" | "ltr" {
 }
 
 const STORAGE_KEY = "relayium-lang";
-// Validate detected language codes against this static set (not `messages`, which
-// is populated lazily) so a not-yet-loaded language still resolves.
-const CODES = new Set<string>(LANGS.map((x) => x.code));
 
+/**
+ * Which maintained language to start in.
+ *
+ * Precedence is unchanged — explicit `?lang=`, then the saved preference, then
+ * the browser — but each step now goes through `resolveLang()` instead of an
+ * exact match against a nine-code set. That is what carries a reader across the
+ * language freeze: `?lang=ja` and a saved `"ja"` used to select a table that no
+ * longer exists, and would now be a white screen rather than a fallback. They
+ * resolve to English, which is the declared fallback, and `zh-TW`/`zh-Hans`
+ * resolve to Chinese from all three sources rather than only from the browser.
+ *
+ * A saved frozen code is also rewritten in place. Leaving it would be harmless
+ * on every read — it resolves to English every time — but it would keep a
+ * preference the reader can no longer see or change, and it would make the
+ * next person to read this storage key believe the app still has nine tables.
+ */
 export function detect(search?: string): Lang {
   const s = search ?? (typeof location !== "undefined" ? location.search : "");
+  let q: string | null = null;
   try {
-    const q = new URLSearchParams(s).get("lang");
-    if (q && CODES.has(q)) return q as Lang;
+    q = new URLSearchParams(s).get("lang");
   } catch { /* malformed search — fall through */ }
+  if (q) return resolveLang(q);
+
+  let saved: string | null = null;
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    // A static code set (not a prototype-reachable key like "toString") — so a
-    // poisoned value can't resolve and white-screen the app.
-    if (saved && CODES.has(saved)) return saved as Lang;
+    saved = localStorage.getItem(STORAGE_KEY);
   } catch { /* storage may be unavailable */ }
-  const nav = (typeof navigator !== "undefined" ? navigator.language : "en").toLowerCase();
-  for (const code of ["zh", "ja", "ko", "de", "fr", "ar", "es", "pt"] as Lang[]) {
-    if (nav.startsWith(code)) return code;
+  if (saved) {
+    const resolved = resolveLang(saved);
+    // Migrate a pre-freeze preference (or a poisoned value) to what it now
+    // means. Best-effort: storage can be full or blocked, and a failed rewrite
+    // must not change what this function returns.
+    if (saved !== resolved) {
+      try { localStorage.setItem(STORAGE_KEY, resolved); } catch { /* ignore */ }
+    }
+    return resolved;
   }
-  return "en";
+
+  return resolveLang(typeof navigator !== "undefined" ? navigator.language : "en");
 }
 
 let current = $state<Lang>(detect());

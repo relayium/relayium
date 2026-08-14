@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { LANGS } from "./shared.mjs";
+import { LANGS, MAINTAINED_LANGS } from "./shared.mjs";
 import apps from "./content/apps.mjs";
 
 // The one canonical manifest, read once and shared by every case below.
@@ -111,8 +111,11 @@ describe("macOS release surface", () => {
     }
   });
 
+  // MAINTAINED_LANGS, not LANGS: the SPA ships two message tables now. The
+  // checks below that read apps.langs stay on all nine, because the ARCHIVED
+  // pages are still public and a release-status claim on one is still a claim.
   it("has a localized macOS download CTA in every SPA locale", async () => {
-    for (const code of LANGS) {
+    for (const code of MAINTAINED_LANGS) {
       const source = await readFile(resolve(process.cwd(), `src/lib/i18n/${code}.ts`), "utf8");
       const macCard = source.match(/mac:\s*\{[\s\S]*?\},\s*(?:\n\s*)?ios:/)?.[0] ?? "";
       expect(macCard, `${code} is missing its macOS card`).toContain("cta:");

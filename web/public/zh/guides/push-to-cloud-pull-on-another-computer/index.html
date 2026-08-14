@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/zh/guides/push-to-cloud-pull-on-another-computer/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/guides/push-to-cloud-pull-on-another-computer/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/push-to-cloud-pull-on-another-computer/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/push-to-cloud-pull-on-another-computer/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/push-to-cloud-pull-on-another-computer/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/push-to-cloud-pull-on-another-computer/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/push-to-cloud-pull-on-another-computer/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/push-to-cloud-pull-on-another-computer/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/push-to-cloud-pull-on-another-computer/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/push-to-cloud-pull-on-another-computer/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/push-to-cloud-pull-on-another-computer/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -100,7 +93,10 @@ ol.steps>li>pre{margin:8px 0 0}
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>在一台电脑上传到云端，在另一台电脑取回</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -111,7 +107,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最后更新: <bdi>2026-08-05</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/push-to-cloud-pull-on-another-computer/">English</a><a href="/zh/guides/push-to-cloud-pull-on-another-computer/" aria-current="true">中文</a><a href="/ja/guides/push-to-cloud-pull-on-another-computer/">日本語</a><a href="/ko/guides/push-to-cloud-pull-on-another-computer/">한국어</a><a href="/de/guides/push-to-cloud-pull-on-another-computer/">Deutsch</a><a href="/fr/guides/push-to-cloud-pull-on-another-computer/">Français</a><a href="/ar/guides/push-to-cloud-pull-on-another-computer/">العربية</a><a href="/es/guides/push-to-cloud-pull-on-another-computer/">Español</a><a href="/pt/guides/push-to-cloud-pull-on-another-computer/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/push-to-cloud-pull-on-another-computer/">English</a><a href="/zh/guides/push-to-cloud-pull-on-another-computer/" aria-current="true">中文</a></nav>
       <p class="lead">有时两台电脑根本不会同时开着。你想今晚从工作笔记本丢一个文件，明天再从家里台式机取，中间没人等着保持在线连接。relayium up 和 relayium down 正是干这个的：up 在本地加密后上传到你的账号，down 之后在任意机器上取回并解密——无需点对点握手，也无需一台双方都能 ssh 进去的服务器。</p>
       <p class="lead">这是 CLI 里主要会用到 Relayium 账号的部分，另一个是 send——它需要账号来生成配对码。其余功能的绑定是可选的：push/pull、daemon 直连、sync 都无需登录照常可用，receive 也一样。下载则完全不需要账号，有链接即可。</p>
       <h2>什么时候用它</h2>

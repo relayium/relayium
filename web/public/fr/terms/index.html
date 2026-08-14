@@ -7,16 +7,6 @@
     <meta name="description" content="Les conditions d&#39;utilisation de Relayium — un service open source de transfert de fichiers et de texte en temps réel entre appareils, chiffré de bout en bout. Le service de base est gratuit ; des offres payantes optionnelles sont disponibles." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/fr/terms/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/terms/" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/terms/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/terms/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/terms/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/terms/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/terms/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/terms/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/terms/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/terms/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/terms/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -43,6 +33,11 @@ footer a{color:var(--text-h);text-decoration:none}
 .releases li:last-child{border-bottom:0}
 .releases a{color:var(--accent-fg);text-decoration:none;font-weight:600;min-width:72px}
 .releases .date{font-size:14px;font-variant-numeric:tabular-nums}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
   </head>
   <body>
@@ -50,7 +45,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <!-- The legal text is the main landmark. The site header and footer are
            outside it; the language bar is inside, after the h1, matching its
-           visual position — it is a labelled <nav> landmark either way. -->
+           visual position — it is a labelled <nav> landmark either way. On an
+           archived page that slot holds the archived-translation notice, a
+           labelled <aside>, which is a landmark in its own right too. -->
       <main>
       <h1>Conditions d&#39;utilisation</h1>
       <!-- The date is isolated for the same reason the release rows are: an ISO
@@ -60,7 +57,7 @@ footer a{color:var(--text-h);text-decoration:none}
            a browser, not deduced. <bdi> resolves LTR (no strong character
            inside) and pins the order. -->
       <p class="updated">Dernière mise à jour: <bdi>2026-08-13</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/terms/">English</a><a href="/zh/terms/">中文</a><a href="/ja/terms/">日本語</a><a href="/ko/terms/">한국어</a><a href="/de/terms/">Deutsch</a><a href="/fr/terms/" aria-current="true">Français</a><a href="/ar/terms/">العربية</a><a href="/es/terms/">Español</a><a href="/pt/terms/">Português</a></nav>
+      <aside class="archived" aria-label="Traduction archivée"><p class="archived-label">Traduction archivée</p><p>Cette page est une traduction française archivée. Le produit Relayium et sa documentation à jour sont maintenus en anglais et en chinois simplifié ; l&#39;application elle-même ne propose plus le français. Les écrans et les détails décrits ici peuvent donc différer du comportement actuel.</p><p class="archived-links">Version à jour : <a href="/terms/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/terms/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p>En utilisant Relayium, vous acceptez ces conditions. Relayium est un service open source qui vous permet d&#39;envoyer des fichiers et du texte en temps réel entre appareils, chiffrés de bout en bout. Le service de base est gratuit ; certaines offres optionnelles sont payantes — voir Abonnements et facturation.</p>
       <h2>Le service</h2><p>Relayium transfère des fichiers et du texte en temps réel entre appareils, chiffrés de bout en bout. Le service de base est gratuit et son code source est open source sous licence AGPL-3.0. Les offres payantes optionnelles augmentent les limites de stockage, de transfert et de conservation — voir Abonnements et facturation.</p>
       <h2>Éligibilité</h2><p>Vous devez avoir l&#39;âge requis pour conclure un contrat contraignant et pour consentir au traitement de vos données là où vous vivez — au moins 13 ans, ou plus si votre pays l&#39;exige. Relayium ne s&#39;adresse pas aux enfants, et nous ne permettons pas sciemment aux enfants de créer des comptes.</p>

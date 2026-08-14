@@ -7,9 +7,17 @@
  * Why this has to be a real browser: what is being delivered is DISCOVERABILITY,
  * and discoverability only exists after layout. jsdom can prove a link is in the
  * DOM; it cannot prove the link resolves, that the sixth nav pill is reachable at
- * 390px, that the page reads left-to-right in Arabic while its shell commands
- * stay LTR, or that the "Sign in" button on the page opens the account dialog the
- * nav owns. Every one of those was a real defect class in this repository
+ * 390px, that the whole surface still fits once the copy is in another language,
+ * or that the "Sign in" button on the page opens the account dialog the nav owns.
+ *
+ * The third view was Arabic RTL until the 2026-08-14 language freeze. The app
+ * now maintains English and Simplified Chinese, neither of which is
+ * right-to-left, so that view exercised a state no user can reach. It is Chinese
+ * now, keeping what it was really testing — that these surfaces are translated
+ * and still fit — while the shell-command LTR guard moved from computed style to
+ * the `dir` attribute, which is what still protects a restored RTL locale. Live
+ * RTL rendering is covered by the archived Arabic static pages (the two
+ * `static/…/ar` targets in e2e/a11y-targets.mjs). Every one of those was a real defect class in this repository
  * (WORKFLOW-LEARNINGS, 2026-08-09: "A real browser is where link and layout
  * defects live", "Shipping a capability is not shipping a way to reach it").
  *
@@ -116,9 +124,9 @@ async function stopPreview() {
 }
 
 const VIEWS = [
-  { id: "desktop", width: 1440, height: 900, lang: "en", rtl: false },
-  { id: "mobile-390", width: 390, height: 844, lang: "en", rtl: false },
-  { id: "arabic-rtl", width: 1440, height: 900, lang: "ar", rtl: true },
+  { id: "desktop", width: 1440, height: 900, lang: "en", localized: false },
+  { id: "mobile-390", width: 390, height: 844, lang: "en", localized: false },
+  { id: "chinese", width: 1440, height: 900, lang: "zh", localized: true },
 ];
 
 async function openTab(browser, base, view, path, routes, extra = "") {
@@ -378,18 +386,27 @@ async function checkPage(tab, base, view) {
     throw new Error(`${view.id}: ${guideHref} still sends the reader away from Device Inbox to operate it`);
   }
 
-  if (view.rtl) {
-    const dir = await tab.evaluate(`getComputedStyle(document.querySelector(".dinbox")).direction`);
-    if (dir !== "rtl") throw new Error(`arabic: the page renders ${dir}, not rtl`);
-    const navDir = await tab.evaluate(`getComputedStyle(document.querySelector(".tabs")).direction`);
-    if (navDir !== "rtl") throw new Error(`arabic: the nav rail renders ${navDir}, not rtl`);
+  if (view.localized) {
+    const htmlLang = await tab.evaluate(`document.documentElement.lang`);
+    if (htmlLang !== "zh") throw new Error(`chinese: the page renders in ${htmlLang}, not zh`);
+    // The surface is translated, not hardcoded English. Judged on the h1, which
+    // is prose; the body mixes in untranslated proper nouns (launchd, systemd,
+    // com.relayium.mac) that would make a whole-page test pass on an English page.
+    const h1 = await tab.evaluate(`document.querySelector(".dinbox h1")?.textContent ?? ""`);
+    if (!/[\u4e00-\u9fff]/.test(h1)) {
+      throw new Error(`chinese: the Device Inbox heading is not translated — ${JSON.stringify(h1)}`);
+    }
     // A bidi-reordered shell command is one nobody can read or paste correctly.
+    // Checked as the `dir` ATTRIBUTE rather than the computed style: no
+    // maintained language is RTL, so computed style is trivially "ltr" and would
+    // assert nothing. The attribute is what keeps the command safe if an RTL
+    // locale is ever restored.
     const cmdDirs = await tab.evaluate(
-      `[...document.querySelectorAll(".dinbox pre")].map((e) => getComputedStyle(e).direction)`,
+      `[...document.querySelectorAll(".dinbox pre")].map((e) => e.getAttribute("dir"))`,
     );
-    if (!cmdDirs.length) throw new Error("arabic: the page has no command block at all");
+    if (!cmdDirs.length) throw new Error("chinese: the page has no command block at all");
     if (cmdDirs.some((d) => d !== "ltr")) {
-      throw new Error(`arabic: a command block renders ${cmdDirs.join("/")}; shell commands must stay ltr`);
+      throw new Error(`chinese: a command block declares dir=${cmdDirs.join("/")}; shell commands must stay ltr`);
     }
   }
   ok(`${view.id}: six honest platform sections, an inspectable installer and a live server guide`);
@@ -565,7 +582,7 @@ async function checkSignedIn(browser, base, view) {
   }
 
   // Every send control is actually on screen at this width — at 390px and in
-  // Arabic as much as at 1440px. A drop target that overflows the viewport is
+  // Chinese as much as at 1440px. A drop target that overflows the viewport is
   // not a drop target.
   const zoneVisible = await tab.evaluate(`(() => {
     const zones = [...document.querySelectorAll('[data-di="devices"] .sendzone')];
@@ -656,7 +673,7 @@ await withWatchdog("device-inbox-entry", GLOBAL_TIMEOUT_MS, async () => {
     }
     console.log(
       "\n  Device Inbox reached from the site's front door by keyboard, with six honest platform" +
-      "\n  sections, an executable server path and both account states, at 1440×900, 390×844 and Arabic RTL\n",
+      "\n  sections, an executable server path and both account states, at 1440×900, 390×844 and 1440×900 in Chinese\n",
     );
   } catch (err) {
     fail("device-inbox-entry", err);

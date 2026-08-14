@@ -84,11 +84,26 @@ describe("buildShells", () => {
     }
   });
 
-  it("points the mode routes' hreflang at their localized twins", () => {
+  it("points the mode routes' hreflang at their maintained twins only", () => {
     const head = byFile["cross-network.html"].head;
     expect(head).toContain('hreflang="zh-Hans" href="https://relayium.com/zh/cross-network/"');
-    expect(head).toContain('hreflang="ar" href="https://relayium.com/ar/cross-network/"');
     expect(head).toContain('hreflang="x-default" href="https://relayium.com/cross-network"');
+    // The seven archived twins are not alternates of a current page. They stay
+    // public, indexable and in the sitemap; see shared.mjs's FROZEN_LANGS.
+    for (const code of ["ja", "ko", "de", "fr", "ar", "es", "pt"]) {
+      expect(head, code).not.toContain(`hreflang="${code}"`);
+      expect(head, code).not.toContain(`https://relayium.com/${code}/cross-network/`);
+    }
+  });
+
+  it("offers only the maintained languages in the crawlable body", () => {
+    // This line used to list all eight non-English twins — primary navigation
+    // straight into seven frozen locales, read by every non-rendering crawler.
+    const body = byFile["cross-network.html"].body;
+    expect(body).toContain('Also available in: <a href="/zh/cross-network/">中文</a>');
+    for (const code of ["ja", "ko", "de", "fr", "ar", "es", "pt"]) {
+      expect(body, code).not.toContain(`/${code}/cross-network/`);
+    }
   });
 
   it("gives the English-only routes no hreflang cluster", () => {

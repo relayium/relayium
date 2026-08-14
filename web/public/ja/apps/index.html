@@ -7,16 +7,6 @@
     <meta name="description" content="Relayium をダウンロード：任意のブラウザで使う、コマンドラインツールをインストールする、ネイティブアプリでできることを見る。エンドツーエンド暗号化のファイルと一時的なテキストの転送を、ウェブ・コマンドライン・macOS・iOS で。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/apps/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/apps" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/apps/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/apps/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/apps/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/apps/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/apps/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/apps/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/apps/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/apps/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/apps" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -82,15 +72,21 @@ section.reveal:nth-of-type(4){animation-delay:.25s}
 section.reveal:nth-of-type(5){animation-delay:.32s}
 @keyframes sec-in{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.reveal{animation:none}header .logo,.cta{transition:none}header a:hover .logo,.cta:hover{transform:none}}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <main>
       <h1>Relayium を入手</h1>
       <p class="pitch">同じエンドツーエンド暗号化の転送を、ファイルにも一時的なテキストにも、あらゆる場所で。プラットフォームを選んでください。</p>
-      <a class="cta" href="/apps?lang=ja">ウェブアプリを開く</a>
+      <aside class="archived" aria-label="アーカイブされた翻訳"><p class="archived-label">アーカイブされた翻訳</p><p>このページは記録として残している日本語訳です。Relayium の製品と最新のドキュメントは英語と簡体字中国語で管理されており、アプリ自体も日本語を提供していません。ここに書かれている画面表示や細部は、現在の動作と異なる場合があります。</p><p class="archived-links">最新版：<a href="/apps" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/apps/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
+      <a class="cta" href="/apps">ウェブアプリを開く</a>
       <a class="cta" href="https://github.com/relayium/relayium/releases/download/macos-v1.2.2/Relayium.dmg">macOS 版をダウンロード</a>
 
       <section class="reveal">
@@ -127,7 +123,7 @@ section.reveal:nth-of-type(5){animation-delay:.32s}
 
       </main>
       <footer>
-        <a href="/?lang=ja">← Relayium</a>
+        <a href="/">← Relayium</a>
         <a href="/ja/apps/">アプリ</a>
         <a href="/ja/privacy/">プライバシーポリシー</a>
         <a href="/ja/terms/">利用規約</a>

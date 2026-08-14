@@ -23,6 +23,17 @@
      vitest.config.ts now points its cache elsewhere; this stays as the backstop.
 
      sw-template.js is a service-worker template with build-time __PLACEHOLDERS__,
-     never imported or bundled — it can't and shouldn't be typechecked here. */
-  "exclude": ["src/sw-template.js", "src/node_modules", "**/node_modules"]
+     never imported or bundled — it can't and shouldn't be typechecked here.
+
+     src/lib/i18n/archive holds the seven frozen locale tables. Nothing imports
+     them and they are not shipped; they are kept as an archive of the copy the
+     archived static pages were translated against. Checking them would make
+     every future `Messages` field a seven-file edit in languages the product no
+     longer maintains — see that directory's README.md. */
+  "exclude": [
+    "src/sw-template.js",
+    "src/lib/i18n/archive",
+    "src/node_modules",
+    "**/node_modules"
+  ]
 }

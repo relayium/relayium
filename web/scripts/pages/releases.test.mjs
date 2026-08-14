@@ -17,18 +17,11 @@ import { describe, expect, it } from "vitest";
 
 import releases from "./content/releases.mjs";
 import { buildReleasesPages, buildSitemap } from "./build-pages.mjs";
-import { LANGS, RELEASES_LABELS, urlPath } from "./shared.mjs";
+import { LANGS, MAINTAINED_LANGS, RELEASES_LABELS, urlPath } from "./shared.mjs";
 import en from "../../src/lib/i18n/en.ts";
 import zh from "../../src/lib/i18n/zh.ts";
-import ja from "../../src/lib/i18n/ja.ts";
-import ko from "../../src/lib/i18n/ko.ts";
-import de from "../../src/lib/i18n/de.ts";
-import fr from "../../src/lib/i18n/fr.ts";
-import ar from "../../src/lib/i18n/ar.ts";
-import es from "../../src/lib/i18n/es.ts";
-import pt from "../../src/lib/i18n/pt.ts";
 
-const APP_TABLES = { en, zh, ja, ko, de, fr, ar, es, pt };
+const APP_TABLES = { en, zh };
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const pages = buildReleasesPages(releases);
@@ -425,8 +418,15 @@ describe("the page is called the same thing everywhere", () => {
   // name and the page that calls itself another. Two comments claim these agree;
   // this is what makes the claim true.
   it("uses one label per locale across the title, the static footer and the app", () => {
+    // The static half stays on all nine — the archived /ja/releases/ page and
+    // the archived footers that link it are still public, and a footer that
+    // calls the page one name while the page calls itself another is the drift
+    // this guards. The app half is the maintained pair, because the SPA has two
+    // message tables now.
     for (const lang of LANGS) {
       expect(RELEASES_LABELS[lang], lang).toBe(releases.langs[lang].title);
+    }
+    for (const lang of MAINTAINED_LANGS) {
       expect(APP_TABLES[lang].legal.releases, lang).toBe(releases.langs[lang].title);
     }
   });

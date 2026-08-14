@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mount, unmount, flushSync } from "svelte";
 import Nav from "./Nav.svelte";
-import { loadLang, setLang, messages } from "./i18n.svelte";
+import { loadLang, setLang, messages, dir, LANGS } from "./i18n.svelte";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   navigate, syncRouteFromLocation,
   CROSS_PATH, OFFLINE_PATH, CLI_PATH, APPS_PATH, DEVICE_INBOX_PATH,
@@ -194,10 +196,10 @@ describe("Nav rail overflow controls", () => {
     expect(prevBtn()!.getAttribute("aria-label")).toBe(messages.en.nav.railPrev);
     expect(nextBtn()!.getAttribute("aria-label")).toBe(messages.en.nav.railNext);
 
-    await setLang("ja");
+    await setLang("zh");
     flushSync();
     layoutRail(0, 2);
-    expect(prevBtn()!.getAttribute("aria-label")).toBe(messages.ja.nav.railPrev);
+    expect(prevBtn()!.getAttribute("aria-label")).toBe(messages.zh.nav.railPrev);
     expect(prevBtn()!.getAttribute("aria-label")).not.toBe(messages.en.nav.railPrev);
     await setLang("en");
     flushSync();
@@ -252,17 +254,41 @@ describe("Nav rail overflow controls", () => {
   // arithmetic: "previous" means the destination earlier in the row in BOTH
   // directions, and engines disagree about the sign and origin of scrollLeft
   // under dir=rtl. Only the chevrons flip.
-  it("keeps previous/next meaning the same destinations in Arabic, and flips only the glyphs", async () => {
-    const spy = Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>;
+  // The Arabic half of this used to run here as a mounted RTL render. Since the
+  // 2026-08-14 language freeze neither maintained language is RTL, so there is
+  // no way to put this component into `dir="rtl"` through the product's own
+  // controls, and a test that did it some other way would be testing a state a
+  // user cannot reach.
+  //
+  // The RTL machinery is deliberately kept — restoring Arabic is a locale-level
+  // decision, and it should not also be a component rewrite (PROJECT-GOVERNANCE
+  // "preserve the localization architecture"). So what is pinned is the part
+  // that would silently rot: that the flip is still a function of `dir()` and
+  // not of a hardcoded direction, and that `dir()` still knows Arabic. See
+  // rtl-head-isolation.test.mjs for the archived Arabic pages, where RTL
+  // rendering is still live and still asserted end to end.
+  it("still derives the glyph flip from dir(), not from a hardcoded direction", () => {
     layoutRail(2, 4);
     expect(prevBtn()!.classList.contains("flip")).toBe(true);
     expect(nextBtn()!.classList.contains("flip")).toBe(false);
 
-    await setLang("ar");
-    flushSync();
+    const src = readFileSync(resolve(process.cwd(), "src/lib/Nav.svelte"), "utf8");
+    expect(src, "Nav must read direction from dir(lang())").toMatch(
+      /const rtl = \$derived\(dir\(lang\(\)\) === "rtl"\)/,
+    );
+    expect(src, "prev flips in LTR, next flips in RTL").toContain("class:flip={!rtl}");
+    expect(src, "prev flips in LTR, next flips in RTL").toContain("class:flip={rtl}");
+    // And the reason the mounted half is gone: no language the product offers
+    // renders right to left today, while dir() still answers for Arabic.
+    for (const { code } of LANGS) expect(dir(code), code).toBe("ltr");
+    expect(dir("ar")).toBe("rtl");
+  });
+
+  it("moves the rail by one destination in each direction", () => {
+    // The behaviour the Arabic case shared: prev/next mean the same two
+    // destinations regardless of which glyph is flipped.
+    const spy = Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>;
     layoutRail(2, 4);
-    expect(prevBtn()!.classList.contains("flip")).toBe(false);
-    expect(nextBtn()!.classList.contains("flip")).toBe(true);
 
     spy.mockClear();
     nextBtn()!.click();
@@ -273,9 +299,6 @@ describe("Nav rail overflow controls", () => {
     prevBtn()!.click();
     flushSync();
     expect(spy.mock.instances.at(-1)).toBe(tabs()[1]);
-
-    await setLang("en");
-    flushSync();
   });
 
   it("still renders all six destinations as links while the controls are up", () => {

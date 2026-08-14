@@ -6,15 +6,8 @@ import { LANGS, type Lang, type Messages } from "./i18n.svelte";
 // i18n.test.ts.
 import zh from "./i18n/zh";
 import en from "./i18n/en";
-import ja from "./i18n/ja";
-import ko from "./i18n/ko";
-import de from "./i18n/de";
-import fr from "./i18n/fr";
-import ar from "./i18n/ar";
-import es from "./i18n/es";
-import pt from "./i18n/pt";
 
-const messages: Record<Lang, Messages> = { zh, en, ja, ko, de, fr, ar, es, pt };
+const messages: Record<Lang, Messages> = { zh, en };
 
 // Two notes about staged files, on two surfaces, saying deliberately different
 // things. Getting them mixed up is the failure this file exists to catch.

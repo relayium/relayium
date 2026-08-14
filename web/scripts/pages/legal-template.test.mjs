@@ -30,9 +30,16 @@ describe("renderLegalPage", () => {
     expect(html).toContain(`hreflang="x-default" href="${absUrl(urlPath("privacy", "en"))}"`);
   });
 
-  it("emits an hreflang alternate for every language", () => {
-    for (const [lang, code] of [["zh","zh-Hans"],["ja","ja"],["ko","ko"],["de","de"],["fr","fr"]]) {
-      expect(html).toContain(`hreflang="${code}" href="${absUrl(urlPath("privacy", lang))}"`);
+  it("emits an hreflang alternate for each maintained language, and no others", () => {
+    expect(html).toContain(`hreflang="zh-Hans" href="${absUrl(urlPath("privacy", "zh"))}"`);
+    expect(html).toContain(`hreflang="en" href="${absUrl(urlPath("privacy", "en"))}"`);
+    for (const [lang, code] of [["ja","ja"],["ko","ko"],["de","de"],["fr","fr"],["ar","ar"],["es","es"],["pt","pt"]]) {
+      expect(html, `${lang} must not be in the maintained cluster`)
+        .not.toContain(`hreflang="${code}"`);
+      // …and the archived URL itself must not appear in the head at all: an
+      // alternate is a claim about the current site, and this one is archived.
+      expect(html, `${lang} URL must not be an alternate`)
+        .not.toContain(absUrl(urlPath("privacy", lang)));
     }
   });
 

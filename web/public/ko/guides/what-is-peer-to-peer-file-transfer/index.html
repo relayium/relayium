@@ -7,16 +7,6 @@
     <meta name="description" content="P2P 파일 전송을 쉽게 설명합니다. 서버 업로드 방식과 무엇이 다른지, WebRTC가 직접 연결을 찾는 방법, 왜 사적이고 빠른지까지." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ko/guides/what-is-peer-to-peer-file-transfer/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/what-is-peer-to-peer-file-transfer/" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/what-is-peer-to-peer-file-transfer/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/what-is-peer-to-peer-file-transfer/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/what-is-peer-to-peer-file-transfer/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/what-is-peer-to-peer-file-transfer/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/what-is-peer-to-peer-file-transfer/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/what-is-peer-to-peer-file-transfer/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/what-is-peer-to-peer-file-transfer/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/what-is-peer-to-peer-file-transfer/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/what-is-peer-to-peer-file-transfer/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -64,6 +54,11 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
 .cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
@@ -85,12 +80,15 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ko">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ko/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ko/guides/">가이드</a> <span aria-hidden="true">›</span> <span aria-current="page">P2P(피어투피어) 파일 전송이란?</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>P2P(피어투피어) 파일 전송이란?</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -101,7 +99,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">마지막 업데이트: <bdi>2026-08-07</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/what-is-peer-to-peer-file-transfer/">English</a><a href="/zh/guides/what-is-peer-to-peer-file-transfer/">中文</a><a href="/ja/guides/what-is-peer-to-peer-file-transfer/">日本語</a><a href="/ko/guides/what-is-peer-to-peer-file-transfer/" aria-current="true">한국어</a><a href="/de/guides/what-is-peer-to-peer-file-transfer/">Deutsch</a><a href="/fr/guides/what-is-peer-to-peer-file-transfer/">Français</a><a href="/ar/guides/what-is-peer-to-peer-file-transfer/">العربية</a><a href="/es/guides/what-is-peer-to-peer-file-transfer/">Español</a><a href="/pt/guides/what-is-peer-to-peer-file-transfer/">Português</a></nav>
+      <aside class="archived" aria-label="보관된 번역"><p class="archived-label">보관된 번역</p><p>이 페이지는 기록으로 보관 중인 한국어 번역입니다. Relayium 제품과 최신 문서는 영어와 중국어 간체로 관리되며, 앱 자체도 더 이상 한국어를 제공하지 않습니다. 여기에 적힌 화면과 세부 사항은 현재 동작과 다를 수 있습니다.</p><p class="archived-links">최신 버전: <a href="/guides/what-is-peer-to-peer-file-transfer/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/what-is-peer-to-peer-file-transfer/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">&quot;P2P&quot;라는 말은 느슨하게 쓰이곤 하지만, 파일 전송에서 실제로 의미하는 바는 이렇습니다. 파일이 어느 회사의 서버로 올라갔다가 다시 내려오는 게 아니라, 한 기기에서 다른 기기로 곧장 이동한다는 뜻입니다. 중간에 사본이 머무를 수 있는 정거장이 없습니다.</p>
       <p class="lead">단순해 보이지만 실제 경로는 서로 다릅니다. 이 페이지는 먼저 TURN이 대체 경로가 될 수 있는 일반 WebRTC/ICE 개념을 설명한 뒤 Relayium의 구현을 구분합니다. 같은 LAN 브라우저는 WebRTC 직접 연결, 네트워크 간 브라우저는 설계상 TURN, CLI는 직접 연결 전용입니다.</p>
       <h2>P2P와 일반적인 방식의 차이: 중간 정거장을 없애다</h2>
@@ -141,13 +139,13 @@ ol.steps>li>pre{margin:8px 0 0}
       <p>같은 네트워크에 있는 두 기기는 계정이 전혀 필요 없습니다. 페어링 코드로 다른 네트워크 간에 보낼 때는 발신자의 로그인이 필요하지만, 어느 경로든 수신자는 계정이 필요 없습니다.</p>
       <div class="ctacard">
         <p>직접 사용해 보세요. 두 기기에서 Relayium을 열고 암호화된 실시간 세션을 시작하세요.</p>
-        <a class="cta" href="/?lang=ko">지금 Relayium 사용해보기</a>
+        <a class="cta" href="/">지금 Relayium 사용해보기</a>
       </div>
       <h2>계속 읽기</h2>
       <ul class="related"><li><a href="/ko/guides/how-relayium-encrypts-your-files/">Relayium이 파일을 종단간 암호화하는 방식</a></li><li><a href="/ko/guides/is-it-safe-to-send-files-over-the-internet/">인터넷으로 파일을 보내도 안전할까요?</a></li><li><a href="/ko/how-to/send-files-between-two-computers-over-the-internet/">인터넷으로 컴퓨터 두 대 사이에 파일 보내는 방법</a></li><li><a href="/ko/how-to/send-files-on-the-same-wifi/">같은 Wi-Fi에 있는 기기끼리 파일 보내기</a></li><li><a href="/ko/">Relayium</a></li></ul>
       </main>
       <footer>
-        <a href="/?lang=ko">← Relayium</a>
+        <a href="/">← Relayium</a>
         <a href="/ko/apps/">앱</a>
         <a href="/ko/guides/">가이드</a>
         <a href="/ko/privacy/">개인정보 처리방침</a>

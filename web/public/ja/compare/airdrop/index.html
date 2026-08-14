@@ -7,16 +7,6 @@
     <meta name="description" content="AirDrop と Relayium を公平に見ます。AirDrop は Apple エコシステム内で優秀ですが、Relayium はどのブラウザでも動くので、Windows・Android・Linux の端末が iPhone や Mac と相互に転送できます。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/compare/airdrop/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/compare/airdrop/" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/airdrop/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/airdrop/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/airdrop/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/airdrop/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/airdrop/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/compare/airdrop/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/compare/airdrop/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/compare/airdrop/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/airdrop/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -64,16 +54,24 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=ja">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/ja/">Relayium</a> <span aria-hidden="true">›</span> <a href="/ja/guides/">ガイド</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium と AirDrop の比較：クロスプラットフォームな代替</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>Relayium と AirDrop の比較：クロスプラットフォームな代替</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -84,7 +82,7 @@ footer a{color:var(--text-h);text-decoration:none}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最終更新: <bdi>2026-07-31</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/compare/airdrop/">English</a><a href="/zh/compare/airdrop/">中文</a><a href="/ja/compare/airdrop/" aria-current="true">日本語</a><a href="/ko/compare/airdrop/">한국어</a><a href="/de/compare/airdrop/">Deutsch</a><a href="/fr/compare/airdrop/">Français</a><a href="/ar/compare/airdrop/">العربية</a><a href="/es/compare/airdrop/">Español</a><a href="/pt/compare/airdrop/">Português</a></nav>
+      <aside class="archived" aria-label="アーカイブされた翻訳"><p class="archived-label">アーカイブされた翻訳</p><p>このページは記録として残している日本語訳です。Relayium の製品と最新のドキュメントは英語と簡体字中国語で管理されており、アプリ自体も日本語を提供していません。ここに書かれている画面表示や細部は、現在の動作と異なる場合があります。</p><p class="archived-links">最新版：<a href="/compare/airdrop/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/compare/airdrop/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">AirDrop はこれまでで最も優れたファイル共有体験の一つです。iPhone・iPad・Mac の間では速く、プライベートで、システムに自然に組み込まれています。Relayium は Apple のホームグラウンドでそれに勝とうとはしません。</p>
       <p class="lead">問題は境界です。AirDrop は他の Apple 端末としか通信しません。本記事は両者を公平に比較し、AirDrop が本当に優れている点を説明し、Relayium が役立つ場面を示します。iPhone と Windows PC、Android スマホと Mac、あるいは Linux ノートと iPad の間の転送を、ブラウザから直接行えます。</p>
       <h2>AirDrop の優れている点</h2>
@@ -111,13 +109,13 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>いいえ。Relayium はウェブページです。どの OS でも、どちらの端末にもインストールするものはありません。AGPL-3.0 ライセンスの無料オープンソースで、コードは github.com/relayium/relayium に公開されており、監査も自分のインスタンス運用も可能です。</p>
       <div class="ctacard">
         <p>Apple とそれ以外のすべての間で転送。インストール不要、同じネットワークならアカウントも不要です。</p>
-        <a class="cta" href="/?lang=ja">Relayium を今すぐ試す</a>
+        <a class="cta" href="/">Relayium を今すぐ試す</a>
       </div>
       <h2>続けて読む</h2>
       <ul class="related"><li><a href="/ja/how-to/airdrop-for-windows-and-android/">Windows・Linux・Android 向け AirDrop 代替</a></li><li><a href="/ja/how-to/transfer-files-android-to-iphone/">Android から iPhone へファイルを転送する方法（ケーブル不要）</a></li><li><a href="/ja/compare/snapdrop/">Relayium と Snapdrop・PairDrop の比較：安全な P2P 転送はどれ？</a></li><li><a href="/ja/how-to/send-files-on-the-same-wifi/">同じ Wi-Fi 上の端末間でファイルを送る</a></li><li><a href="/ja/">Relayium</a></li></ul>
       </main>
       <footer>
-        <a href="/?lang=ja">← Relayium</a>
+        <a href="/">← Relayium</a>
         <a href="/ja/apps/">アプリ</a>
         <a href="/ja/guides/">ガイド</a>
         <a href="/ja/privacy/">プライバシーポリシー</a>

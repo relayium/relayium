@@ -1,5 +1,5 @@
 // web/src/lib/i18n-device-inbox-page.test.ts — the /device-inbox copy, in all
-// nine languages.
+// every maintained language.
 //
 // Four sentences on this page are product requirements rather than wording, and
 // a translation that loses one is a lie only speakers of that language ever see.
@@ -22,16 +22,9 @@
 import { describe, expect, it } from "vitest";
 import en from "./i18n/en";
 import zh from "./i18n/zh";
-import ja from "./i18n/ja";
-import ko from "./i18n/ko";
-import de from "./i18n/de";
-import fr from "./i18n/fr";
-import ar from "./i18n/ar";
-import es from "./i18n/es";
-import pt from "./i18n/pt";
 import { REQUIRED_PLATFORM_IDS } from "./device-inbox-platforms";
 
-const locales = { en, zh, ja, ko, de, fr, ar, es, pt };
+const locales = { en, zh };
 type Code = keyof typeof locales;
 const CODES = Object.keys(locales) as Code[];
 
@@ -68,55 +61,6 @@ const claims: Record<Code, Claims> = {
     enableThere: /无法从网页替它做/,
     queues: /留在队列里/,
     myDevices: /我的设备/,
-  },
-  ja: {
-    notSaved: /ディスクに書き込んだ/,
-    linkBoundary: /ディスク書き込みをさせることは決してありません/,
-    enableThere: /ウェブ側から代行することはできません/,
-    queues: /キューで待ち/,
-    myDevices: /My Devices|マイデバイス/,
-  },
-  ko: {
-    notSaved: /디스크에 파일을 쓴/,
-    linkBoundary: /디스크 기록을 시키는 일은 결코 없습니다/,
-    enableThere: /웹에서 대신해 줄 수는 없습니다/,
-    queues: /대기열에서 기다리다가/,
-    myDevices: /My Devices|내 기기/,
-  },
-  de: {
-    notSaved: /die Datei geschrieben/i,
-    linkBoundary: /niemals eines deiner Geräte dazu bringen, auf die Festplatte zu schreiben/i,
-    enableThere: /kann das Web nicht stellvertretend treffen/i,
-    queues: /wartet in der Warteschlange/i,
-    myDevices: /Meine Geräte/i,
-  },
-  fr: {
-    notSaved: /écrit le fichier sur son disque/i,
-    linkBoundary: /jamais faire écrire l'un de vos appareils sur son disque/i,
-    enableThere: /ne peut pas être fait à sa place depuis le web/i,
-    queues: /attend dans la file/i,
-    myDevices: /Mes appareils/i,
-  },
-  ar: {
-    notSaved: /كتب الجهاز الملف على القرص/,
-    linkBoundary: /أن يجعل أحد أجهزتك يكتب على القرص أبدًا/,
-    enableThere: /لا يمكن اتخاذه نيابة عنه من الويب/,
-    queues: /تنتظر المهمة المشفّرة في الطابور/,
-    myDevices: /أجهزتي/,
-  },
-  es: {
-    notSaved: /el dispositivo escribió el archivo en disco/i,
-    linkBoundary: /nunca puede hacer que uno de tus dispositivos escriba en disco/i,
-    enableThere: /no se puede tomar por él desde la web/i,
-    queues: /espera en la cola/i,
-    myDevices: /Mis dispositivos/i,
-  },
-  pt: {
-    notSaved: /o dispositivo gravou o arquivo em disco/i,
-    linkBoundary: /nunca pode fazer um dispositivo seu gravar em disco/i,
-    enableThere: /não pode ser feita pela web em nome dele/i,
-    queues: /espera na fila/i,
-    myDevices: /Meus dispositivos/i,
   },
 };
 
@@ -295,13 +239,13 @@ describe("the nine locales are nine translations, not nine copies of English", (
 // passed while a deliberately reverted German sentence still called the shipped
 // app an Entwicklungs-Build — the exact failure this file's header warns about,
 // reproduced by the test written to prevent it. Negative direction, so one
-// alternation over all nine locales is the strict reading: no locale may say it
+// alternation over every maintained locale is the strict reading: no locale may say it
 // in its own words, and none may say it in somebody else's either.
 describe("no locale calls the released macOS app a pre-release artifact", () => {
   const STALE =
     /engineering build|engineering artifact|工程构建|工程产物|エンジニアリングビルド|エンジニアリング成果物|엔지니어링 빌드|엔지니어링 산출물|Entwicklungs-Build|Entwicklungsartefakt|version d'ingénierie|artefact d'ingénierie|نسخة هندسية|أثر هندسي|compilación de ingeniería|artefacto de ingeniería|compilação de engenharia|artefato de engenharia/i;
 
-  it("keeps the macOS copy free of it in all nine", () => {
+  it("keeps the macOS copy free of it in every maintained locale", () => {
     for (const code of CODES) {
       const d = locales[code].deviceInboxPage;
       const mac = [d.platforms.macos.use, d.platforms.macos.setup, d.macNoDownload].join("\n");
@@ -310,7 +254,7 @@ describe("no locale calls the released macOS app a pre-release artifact", () => 
     }
   });
 
-  it("still names the launchd alternative in all nine", () => {
+  it("still names the launchd alternative in every maintained locale", () => {
     // The other half: the sentence has to keep saying what ELSE is on offer, so
     // the rule above cannot be satisfied by deleting the explanation.
     //
@@ -318,7 +262,7 @@ describe("no locale calls the released macOS app a pre-release artifact", () => 
     // sentence leads with the shipped Mac app and names the command-line
     // receiver as the unattended alternative, and the literal command lives in
     // the terminal block (device-inbox-platforms.ts) where it is byte-identical
-    // in all nine languages. "launchd" is a proper noun and is untranslated in
+    // in every maintained language. "launchd" is a proper noun and is untranslated in
     // every one of them, which is exactly why it is the checkable token here.
     for (const code of CODES) {
       expect(locales[code].deviceInboxPage.platforms.macos.setup, code).toContain("launchd");
@@ -327,7 +271,7 @@ describe("no locale calls the released macOS app a pre-release artifact", () => 
 
   it("tells every locale to install the app, now that there is one to install", () => {
     // The defect this closes, found on production 2026-08-11: macOS 1.1.3 was
-    // public, notarized and downloadable FROM THIS PAGE, and all nine locales
+    // public, notarized and downloadable FROM THIS PAGE, and both maintained locales
     // still described the launchd CLI as the only way to receive on a Mac.
     // "Mac" is the shared token — every locale keeps the product's own spelling
     // of the platform — and it has to appear before "launchd", because which

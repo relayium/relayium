@@ -1,4 +1,4 @@
-// web/src/lib/i18n-account-devices.test.ts — 账号设备区块的文案在九种语言里的真实性断言。
+// web/src/lib/i18n-account-devices.test.ts — 账号设备区块的文案在每种维护中语言里的真实性断言。
 //
 // 这个区块列的是「能代表账号行事的、可吊销的持令牌设备」，而它有两类：CLI
 // （relayium login）和 App（macOS/iOS 原生登录，服务端记的 Kind = "app"）。文案
@@ -14,16 +14,9 @@
 import { describe, expect, it } from "vitest";
 import en from "./i18n/en";
 import zh from "./i18n/zh";
-import ja from "./i18n/ja";
-import ko from "./i18n/ko";
-import de from "./i18n/de";
-import fr from "./i18n/fr";
-import ar from "./i18n/ar";
-import es from "./i18n/es";
-import pt from "./i18n/pt";
 import type { Messages } from "./i18n/types";
 
-const locales = { en, zh, ja, ko, de, fr, ar, es, pt };
+const locales = { en, zh };
 type Code = keyof typeof locales;
 
 // 用户起的名字，故意带上撇号和非 ASCII：它要原样穿过每一种语言的模板。
@@ -35,7 +28,7 @@ const REF = "3f21a9";
 type Claims = {
   /** 这门语言里的「App」。词形不止一种（App / 应用 / アプリ…），所以用正则。 */
   app: RegExp;
-  /** CLI 是产品术语，九种语言都原样保留。 */
+  /** CLI 是产品术语，每种语言都原样保留。 */
   cli: RegExp;
   /** 「浏览器登录不在这个列表里」——这个区块唯一的排除承诺。 */
   browsers: RegExp;
@@ -58,56 +51,6 @@ const claims: Record<Code, Claims> = {
     cli: /CLI/,
     browsers: /浏览器登录不在此列/,
     signInAgain: /需要重新登录/,
-    kindApp: "App",
-  },
-  ja: {
-    app: /アプリ|App/,
-    cli: /CLI/,
-    browsers: /ブラウザのサインインはここには表示されません/,
-    signInAgain: /再サインインが必要/,
-    kindApp: "アプリ",
-  },
-  ko: {
-    app: /앱/,
-    cli: /CLI/,
-    browsers: /브라우저 로그인은 여기에 표시되지 않습니다/,
-    signInAgain: /다시 로그인해야 합니다/,
-    kindApp: "앱",
-  },
-  de: {
-    app: /App/,
-    cli: /CLI/,
-    browsers: /Browser-Anmeldungen stehen nicht in dieser Liste/,
-    signInAgain: /muss sich neu anmelden/,
-    kindApp: "App",
-  },
-  fr: {
-    app: /[Aa]pplications?/,
-    cli: /CLI/,
-    browsers: /connexions par navigateur ne figurent pas ici/,
-    signInAgain: /devra se reconnecter/,
-    kindApp: "Application",
-  },
-  ar: {
-    // 词根而非带冠词的形态：同一个词在标题和正文里带的前缀不同（تطبيق / التطبيقات）。
-    app: /تطبيق/,
-    cli: /CLI/,
-    browsers: /تسجيل الدخول من المتصفح لا تظهر هنا/,
-    signInAgain: /تسجيل الدخول من جديد/,
-    kindApp: "تطبيق",
-  },
-  es: {
-    app: /\bapps?\b/i,
-    cli: /CLI/,
-    browsers: /inicios de sesión desde el navegador no aparecen aquí/,
-    signInAgain: /iniciar sesión otra vez/,
-    kindApp: "App",
-  },
-  pt: {
-    app: /\bapps?\b/i,
-    cli: /CLI/,
-    browsers: /pelo navegador não aparecem aqui/,
-    signInAgain: /precisará entrar novamente/,
     kindApp: "App",
   },
 };

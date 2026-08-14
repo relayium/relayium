@@ -44,25 +44,28 @@ export function pageMeta(
   return { title: m.titleDefault, description: m.descDefault ?? m.titleDefault, canonicalPath: "/" };
 }
 
-// hreflang → localized-URL prefix. English (and x-default) live at the root; each
-// other language has static pages under "/<prefix>". Order and codes mirror the
-// static <link rel=alternate> tags baked into index.html.
+// hreflang → localized-URL prefix. English (and x-default) live at the root;
+// Simplified Chinese has static pages under "/zh". Order and codes mirror the
+// static <link rel=alternate> tags baked into index.html — and they have to,
+// because this list REWRITES that one after the SPA boots. Two answers to
+// "which languages does this site offer" is the drift this pairing prevents;
+// maintained-language-surface.test.ts fails when they disagree.
+//
+// The seven archived locales (/ja/, /ko/, /de/, /fr/, /ar/, /es/, /pt/) are
+// deliberately absent since the 2026-08-14 freeze. Their pages are still public,
+// still indexable and still in the sitemap; they are simply not alternates of a
+// current page, and their own generated pages declare no cluster either. See
+// scripts/pages/shared.mjs (FROZEN_LANGS) for the same rule on the static side.
 const HREFLANG_PREFIX: [string, string][] = [
   ["en", ""],
   ["zh-Hans", "/zh"],
-  ["ja", "/ja"],
-  ["ko", "/ko"],
-  ["de", "/de"],
-  ["fr", "/fr"],
-  ["ar", "/ar"],
-  ["es", "/es"],
-  ["pt", "/pt"],
   ["x-default", ""],
 ];
 
-// Routes that actually have a localized page in every language. Only these get an
-// hreflang cluster: /pricing and /cli exist in English only, and pointing an
-// alternate at /zh/pricing — a URL that 404s — is worse than emitting none.
+// Routes that actually have a localized page in every MAINTAINED language. Only
+// these get an hreflang cluster: /pricing and /cli exist in English only, and
+// pointing an alternate at /zh/pricing — a URL that 404s — is worse than
+// emitting none.
 const CLUSTERED_PATHS = new Set(["/", CROSS_PATH, OFFLINE_PATH, APPS_PATH]);
 
 // altHreflangs maps a canonical path to its per-language alternate URLs, or to an

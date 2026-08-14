@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/zh/guides/device-inbox-server/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/guides/device-inbox-server/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/device-inbox-server/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/device-inbox-server/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/device-inbox-server/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/device-inbox-server/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/device-inbox-server/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/device-inbox-server/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/device-inbox-server/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/device-inbox-server/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/device-inbox-server/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -73,7 +66,10 @@ footer a{color:var(--text-h);text-decoration:none}
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>在常开的 Linux 服务器上设置设备收件箱</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -84,7 +80,7 @@ footer a{color:var(--text-h);text-decoration:none}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">最后更新: <bdi>2026-08-09</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/device-inbox-server/">English</a><a href="/zh/guides/device-inbox-server/" aria-current="true">中文</a><a href="/ja/guides/device-inbox-server/">日本語</a><a href="/ko/guides/device-inbox-server/">한국어</a><a href="/de/guides/device-inbox-server/">Deutsch</a><a href="/fr/guides/device-inbox-server/">Français</a><a href="/ar/guides/device-inbox-server/">العربية</a><a href="/es/guides/device-inbox-server/">Español</a><a href="/pt/guides/device-inbox-server/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/guides/device-inbox-server/">English</a><a href="/zh/guides/device-inbox-server/" aria-current="true">中文</a></nav>
       <p class="lead">设备收件箱会把你在浏览器「设备收件箱」页面发送的文件送到自己的服务器、NAS 或工作机。浏览器负责加密，只有目标机器能够解密并写入磁盘。</p>
       <p class="lead">服务器接收端必须在 SSH 窗口关闭和重启后继续工作。下面的推荐安装脚本会创建目录并安装真正的 systemd 服务；inbox run 只用于前台排错或容器入口。</p>
       <h2>安装常驻接收服务</h2>

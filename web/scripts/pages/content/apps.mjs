@@ -25,9 +25,9 @@ const MAC_AVAILABLE = RELEASES.macos.available === true;
 const MAC_DOWNLOAD_URL = MAC_AVAILABLE ? RELEASES.macos.downloadUrl : null;
 
 const en = {
-  title: "Get Relayium — apps for web, CLI, macOS & iOS",
+  title: "Get Relayium — Web, CLI, macOS, iOS, Android & Windows",
   description:
-    "Download Relayium: use it in any browser, install the command-line tool, or see what the native apps do. End-to-end encrypted file and ephemeral text transfer everywhere you work — web, command line, macOS and iOS.",
+    "Use Relayium on the Web, install the CLI, download the macOS app, or check development status for iOS, Android and Windows. End-to-end encrypted file and ephemeral text transfer.",
   hero: {
     h1: "Get Relayium",
     pitch:
@@ -43,6 +43,8 @@ const en = {
         ? "macOS app — download the signed and notarized native menu-bar app."
         : "macOS app — the native menu-bar app is an engineering build and is not publicly available yet.",
       "iOS app — a native iPhone & iPad app that moves files and text while it is open; not publicly available yet.",
+      "Android app — a native app is in development. Until it lands, the web app runs in any Android browser with nothing to install.",
+      "Windows app — a native desktop app is in development. The command line already works on Windows today.",
     ],
   },
   why: {
@@ -66,18 +68,37 @@ const en = {
         title: "iOS app",
         desc: "A native iPhone & iPad app (com.relayium.app): open an encrypted link with no account, send files and text to nearby devices or by six-digit code, and manage your account — while the app is open.",
       },
+      {
+        title: "Android app",
+        desc: "A native Android app is being built. Until it lands, the web app is the way to use Relayium on Android — it opens in your browser, with nothing to install.",
+      },
+      {
+        title: "Windows app",
+        desc: "A native Windows desktop app is being built. The command line already works on Windows today, and it covers transfers, folder sync and scheduled backups.",
+      },
     ],
   },
+  // Mirrors the SPA's appsPage.chooser (src/lib/i18n/en.ts). Every macOS line
+  // names a capability that ships in apps/mac and can be checked there: the
+  // menu-bar app, the Share extension's file/image/video activation rule, the
+  // CFBundleDocumentTypes "Open With" + Dock drop entry, the applinks
+  // associated domain, and Device Inbox's chosen-folder residency. Speed,
+  // background transfer, iOS background/push and store availability are all
+  // absent on purpose — none of them is true.
   compare: {
-    heading: "Native or browser?",
+    heading: "Web or a native app?",
     items: [
       {
         title: "Use the web app",
-        body: "Works everywhere today, nothing to install — just open your browser.",
+        body: "Nothing to install and nothing to update: open the page and transfer. It runs in any modern browser on any operating system, including the ones with no native app, which makes it the right choice for a one-off transfer, a borrowed computer, or a device you do not administer.",
       },
       {
-        title: "Get a native app",
-        body: "Deeper OS integration through the macOS client, with the iOS app in development.",
+        title: "Get the macOS app",
+        body: "It lives in the menu bar, so it is one click away with no window or tab to keep track of. You can send from the Share menu in Finder, Photos and other apps — files, images and video go straight to Relayium — or use Open With in Finder, or drop files and folders on the Dock icon, to start a transfer from where the files already are. A relayium.com transfer link opens in the app instead of the browser. And with Device Inbox, files sent to this Mac from your own account are written into the folder you chose on it, and are only reported saved once they are on disk.",
+      },
+      {
+        title: "What the iOS app does not do yet",
+        body: "The iOS app is in development and is not publicly available. It moves files and text while it is open, like the web app does.",
       },
     ],
   },
@@ -86,9 +107,9 @@ const en = {
 };
 
 const zh = {
-  title: "获取 Relayium——网页版、命令行、macOS 与 iOS 应用",
+  title: "获取 Relayium——网页版、命令行与各平台原生应用",
   description:
-    "下载 Relayium：在任意浏览器中直接使用、安装命令行工具，或了解原生应用能做什么。端到端加密的文件与临时文本传输，覆盖网页版、命令行以及 macOS 与 iOS 应用。",
+    "使用 Relayium 网页版、安装命令行工具、下载 macOS 应用，或查看 iOS、Android 与 Windows 应用的开发状态。端到端加密传输文件与临时文本。",
   hero: {
     h1: "获取 Relayium",
     pitch: "同一套端到端加密的传输，既传文件也发临时文本，随处可用。选择你的平台。",
@@ -103,6 +124,8 @@ const zh = {
         ? "macOS 应用——下载已经签名并通过公证的原生菜单栏应用。"
         : "macOS 应用——原生菜单栏应用目前是工程版本，尚未开放公开下载。",
       "iOS 应用——原生 iPhone 与 iPad 应用，在打开时互传文件与文本；尚未开放公开下载。",
+      "Android 应用——原生应用正在开发中。在它发布之前，任意 Android 浏览器打开网页版即可使用，无需安装。",
+      "Windows 应用——原生桌面应用正在开发中。命令行工具今天就已经支持 Windows。",
     ],
   },
   why: {
@@ -126,18 +149,31 @@ const zh = {
         title: "iOS 应用",
         desc: "原生 iPhone 与 iPad 应用（com.relayium.app）：无需账号即可打开加密链接，还能与附近设备或用六位配对码互传文件和文本，并管理账号——都在应用打开时进行。",
       },
+      {
+        title: "Android 应用",
+        desc: "原生 Android 应用正在开发中。在它发布之前，网页版就是在 Android 上使用 Relayium 的方式——用浏览器打开即可，无需安装。",
+      },
+      {
+        title: "Windows 应用",
+        desc: "原生 Windows 桌面应用正在开发中。命令行工具今天就已经支持 Windows，文件传输、文件夹同步和定时备份都能用。",
+      },
     ],
   },
+  // 与 SPA 的 appsPage.chooser（src/lib/i18n/zh.ts）保持一致，逐条对应。
   compare: {
-    heading: "原生还是浏览器？",
+    heading: "该用网页版还是原生应用？",
     items: [
       {
         title: "使用网页版",
-        body: "今天就能在所有平台使用，无需安装任何东西——打开浏览器即可传输。",
+        body: "不用安装，也不用更新：打开页面就能传。任意操作系统上的现代浏览器都能用，包括还没有原生应用的那些系统——临时传一次、用别人的电脑，或者在你没有管理权限的设备上，网页版最合适。",
       },
       {
-        title: "获取原生应用",
-        body: "macOS 客户端提供更深度的系统集成，iOS 应用也在开发中。",
+        title: "装上 macOS 应用",
+        body: "它常驻菜单栏，点一下就用，不必再去找某个窗口或某个标签页。你可以在访达、照片等应用里用「分享」菜单直接发送——文件、图片和视频都能交给 Relayium；也可以在访达里用「打开方式」，或者把文件和文件夹拖到程序坞图标上，就地开始传输。relayium.com 的传输链接会直接在应用里打开，而不是回到浏览器。用设备收件箱接收时，从你自己账户发到这台 Mac 的文件会写进你在这台机器上选定的文件夹，而且只有真正落盘之后才会报告为「已保存」。",
+      },
+      {
+        title: "iOS 应用目前还做不到什么",
+        body: "iOS 应用仍在开发中，尚未公开发布。和网页版一样，它在应用打开时收发文件与文本。",
       },
     ],
   },

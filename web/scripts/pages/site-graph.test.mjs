@@ -9,7 +9,7 @@
 // the checks run against the built HTML for the same reason.
 import { describe, it, expect } from "vitest";
 import { buildAllPages, buildSiteSitemap } from "../gen-pages.mjs";
-import { SPA_ONLY_EN_SLUGS } from "./shared.mjs";
+import { SPA_ONLY_EN_SLUGS, FROZEN_LANGS } from "./shared.mjs";
 import { buildShells } from "./shells.mjs";
 import crossNetwork from "./content/cross-network.mjs";
 import offlineTransfer from "./content/offline-transfer.mjs";
@@ -60,13 +60,85 @@ describe("no duplicate titles", () => {
   });
 });
 
+/** `/ja/guides/` → "ja"; `/guides/` and `/zh/guides/` → the maintained half. */
+const langOf = (url) => (FROZEN_LANGS.find((l) => url.startsWith(`/${l}/`)) ?? null);
+
 describe("no orphans", () => {
-  it("every sitemap URL is linked from at least one page", () => {
+  it("every maintained sitemap URL is linked from at least one page", () => {
     // /pricing sat in the sitemap while not one page linked to it. An orphan
     // reachable only from the sitemap is the classic "Discovered - currently
     // not indexed" candidate.
-    const orphans = sitemapPaths.filter((u) => u !== "/" && !linkTargets.has(u));
+    const orphans = sitemapPaths.filter((u) => u !== "/" && !langOf(u) && !linkTargets.has(u));
     expect(orphans).toEqual([]);
+  });
+
+  // The seven archived locales are a deliberate exception, and it is worth being
+  // exact about what changed rather than loosening the rule above and moving on.
+  //
+  // Before the 2026-08-14 freeze, a nine-way language bar on every page was
+  // doing ALL the internal linking for three page families — /<lang>/support/,
+  // /<lang>/cross-network/ and /<lang>/offline-transfer/ had no other inbound
+  // link in any language. Removing seven ninths of that bar is the whole point
+  // of this batch ("archived translations must disappear from ordinary
+  // navigation"), and it leaves those 21 archived URLs reachable from the
+  // sitemap and from search, but not from a link on the current site.
+  //
+  // That is the intended trade, not a regression: linking them from a
+  // maintained page is exactly what must not happen. What must still hold is
+  // that a reader who arrives on one — from search, a bookmark or an external
+  // link — is never stranded, and that is asserted positively below.
+  it("keeps every archived sitemap URL in the sitemap and indexable", () => {
+    const archived = sitemapPaths.filter((u) => langOf(u));
+    expect(archived.length, "the archive must not have silently emptied").toBeGreaterThan(200);
+    for (const p of pages) {
+      const lang = langOf(urlOf(p.path));
+      if (!lang) continue;
+      expect(p.html, `${p.path} must stay indexable`).toContain('content="index, follow"');
+    }
+  });
+
+  it("gives every archived page a door back to both maintained languages", () => {
+    // The archive notice is the replacement for the language bar, and it is the
+    // only thing standing between an archived page and a dead end. If a template
+    // family ever renders one without it, this fails for every page in it.
+    const missing = [];
+    for (const p of pages) {
+      const lang = langOf(urlOf(p.path));
+      if (!lang) continue;
+      const hasEnglish = /<a href="\/[^"]*" lang="en" hreflang="en">/.test(p.html);
+      const hasChinese = /<a href="\/zh\/[^"]*" lang="zh-Hans" hreflang="zh-Hans">/.test(p.html);
+      if (!hasEnglish || !hasChinese) missing.push(p.path);
+    }
+    expect(missing).toEqual([]);
+  });
+});
+
+describe("the current site never navigates into the archive", () => {
+  it("no maintained page links to a frozen locale's URL", () => {
+    // The rule this batch exists to establish. A single leftover langbar, footer
+    // entry or "also available in" line would put seven unmaintained languages
+    // back into ordinary navigation — for readers and for crawlers alike.
+    const offenders = [];
+    for (const src of [
+      ...pages.filter((p) => !langOf(urlOf(p.path))).map((p) => [urlOf(p.path), p.html]),
+      ...shells.map((s) => ["/" + s.file, s.body + s.head]),
+    ]) {
+      const [where, html] = src;
+      for (const m of html.matchAll(/href="(\/[^"]*)"/g)) {
+        if (langOf(m[1])) offenders.push(`${where} → ${m[1]}`);
+      }
+      for (const m of html.matchAll(/hreflang="([a-zA-Z-]+)"/g)) {
+        if (FROZEN_LANGS.includes(m[1])) offenders.push(`${where} declares hreflang=${m[1]}`);
+      }
+    }
+    expect(offenders.sort()).toEqual([]);
+  });
+
+  it("still has archived pages to be careful about", () => {
+    // Guards the guard: if the archive were deleted the rule above would pass
+    // vacuously, and the "keep them public" half of this decision would be gone
+    // with nothing failing.
+    expect(pages.filter((p) => langOf(urlOf(p.path))).length).toBeGreaterThan(200);
   });
 });
 

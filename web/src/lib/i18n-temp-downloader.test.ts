@@ -1,4 +1,4 @@
-// The download page's "no persistent install" copy, in all nine languages.
+// The download page's "no persistent install" copy, in every maintained language.
 //
 // This copy is the product. The command block is identical everywhere, so the
 // only thing that tells a reader what they are about to run is the surrounding
@@ -21,17 +21,10 @@ import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import en from "./i18n/en";
 import zh from "./i18n/zh";
-import ja from "./i18n/ja";
-import ko from "./i18n/ko";
-import de from "./i18n/de";
-import fr from "./i18n/fr";
-import ar from "./i18n/ar";
-import es from "./i18n/es";
-import pt from "./i18n/pt";
 import type { Messages } from "./i18n/types";
 import { WINDOWS_RELEASE } from "./temp-downloader";
 
-const locales: Record<string, Messages> = { en, zh, ja, ko, de, fr, ar, es, pt };
+const locales: Record<string, Messages> = { en, zh };
 
 /** "temporary" — the word that has to survive translation. */
 const TEMPORARY: Record<string, RegExp> = {
@@ -94,7 +87,7 @@ describe("the no-persistent-install copy, in every locale", () => {
     for (const [lang, m] of Object.entries(locales)) {
       const cli = m.download.cli;
       // These three are proper nouns of the mechanism, so they are the same
-      // token in all nine languages — which makes them checkable without a
+      // token in every maintained language — which makes them checkable without a
       // per-locale phrasebook, and makes a dropped claim impossible to miss.
       expect(cli.verified, `${lang}: names the signature algorithm`).toMatch(/ECDSA/);
       expect(cli.verified, `${lang}: names the archive hash`).toMatch(/SHA-256/);
@@ -201,7 +194,11 @@ function walk(dir: string): string[] {
 describe("nothing in the docs tells a reader to curl a download link", () => {
   it("finds no curl aimed at a /d/ capability link", () => {
     const sources = [
-      ...["en", "zh", "ja", "ko", "de", "fr", "ar", "es", "pt"].map((l) => `web/src/lib/i18n/${l}.ts`),
+      // Two shipped message tables since the 2026-08-14 freeze. The archived
+      // tables are unbundled and unreachable, so a sentence in one cannot teach
+      // a reader anything; the static page corpus below is still walked in
+      // full, because those pages ARE public in all nine languages.
+      ...["en", "zh"].map((l) => `web/src/lib/i18n/${l}.ts`),
       "web/src/lib/CliPage.svelte",
       "web/src/lib/DownloadPage.svelte",
       "web/public/llms.txt",

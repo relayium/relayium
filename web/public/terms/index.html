@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/terms/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/terms/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/terms/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/terms/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/terms/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/terms/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/terms/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/terms/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/terms/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/terms/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/terms/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -50,7 +43,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <!-- The legal text is the main landmark. The site header and footer are
            outside it; the language bar is inside, after the h1, matching its
-           visual position — it is a labelled <nav> landmark either way. -->
+           visual position — it is a labelled <nav> landmark either way. On an
+           archived page that slot holds the archived-translation notice, a
+           labelled <aside>, which is a landmark in its own right too. -->
       <main>
       <h1>Terms of Service</h1>
       <!-- The date is isolated for the same reason the release rows are: an ISO
@@ -60,7 +55,7 @@ footer a{color:var(--text-h);text-decoration:none}
            a browser, not deduced. <bdi> resolves LTR (no strong character
            inside) and pins the order. -->
       <p class="updated">Last updated: <bdi>2026-08-13</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/terms/" aria-current="true">English</a><a href="/zh/terms/">中文</a><a href="/ja/terms/">日本語</a><a href="/ko/terms/">한국어</a><a href="/de/terms/">Deutsch</a><a href="/fr/terms/">Français</a><a href="/ar/terms/">العربية</a><a href="/es/terms/">Español</a><a href="/pt/terms/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/terms/" aria-current="true">English</a><a href="/zh/terms/">中文</a></nav>
       <p>By using Relayium you agree to these terms. Relayium is an open-source service that lets you send files and real-time text between devices, end-to-end encrypted. The core service is free; some optional plans are paid — see Subscriptions and billing.</p>
       <h2>The service</h2><p>Relayium transfers end-to-end encrypted files and real-time text between devices. The core service is free and its source code is open source under the AGPL-3.0 license. Optional paid plans raise storage, transfer, and retention limits — see Subscriptions and billing.</p>
       <h2>Eligibility</h2><p>You must be old enough to form a binding agreement and to consent to the processing of your data where you live — at least 13, or older where your country requires it. Relayium is not directed to children, and we do not knowingly let children create accounts.</p>

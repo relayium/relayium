@@ -7,16 +7,6 @@
     <meta name="description" content="Uma explicação em linguagem simples da transferência de arquivos P2P: como ela difere de enviar para um servidor, como uma conexão WebRTC direta é encontrada e por que é privada e rápida." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/pt/guides/what-is-peer-to-peer-file-transfer/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/guides/what-is-peer-to-peer-file-transfer/" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/guides/what-is-peer-to-peer-file-transfer/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/guides/what-is-peer-to-peer-file-transfer/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/guides/what-is-peer-to-peer-file-transfer/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/guides/what-is-peer-to-peer-file-transfer/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/guides/what-is-peer-to-peer-file-transfer/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/guides/what-is-peer-to-peer-file-transfer/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/guides/what-is-peer-to-peer-file-transfer/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/guides/what-is-peer-to-peer-file-transfer/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/guides/what-is-peer-to-peer-file-transfer/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -64,6 +54,11 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
     <style>
 .cbox{margin:16px 0;padding:14px 18px;border:1px solid var(--border);border-inline-start:3px solid var(--accent);border-radius:12px;background:var(--card)}
@@ -85,12 +80,15 @@ ol.steps>li>pre{margin:8px 0 0}
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=pt">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/pt/">Relayium</a> <span aria-hidden="true">›</span> <a href="/pt/guides/">Guias</a> <span aria-hidden="true">›</span> <span aria-current="page">O que é transferência de arquivos ponto a ponto?</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>O que é transferência de arquivos ponto a ponto?</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -101,7 +99,7 @@ ol.steps>li>pre{margin:8px 0 0}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">Última atualização: <bdi>2026-08-07</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/guides/what-is-peer-to-peer-file-transfer/">English</a><a href="/zh/guides/what-is-peer-to-peer-file-transfer/">中文</a><a href="/ja/guides/what-is-peer-to-peer-file-transfer/">日本語</a><a href="/ko/guides/what-is-peer-to-peer-file-transfer/">한국어</a><a href="/de/guides/what-is-peer-to-peer-file-transfer/">Deutsch</a><a href="/fr/guides/what-is-peer-to-peer-file-transfer/">Français</a><a href="/ar/guides/what-is-peer-to-peer-file-transfer/">العربية</a><a href="/es/guides/what-is-peer-to-peer-file-transfer/">Español</a><a href="/pt/guides/what-is-peer-to-peer-file-transfer/" aria-current="true">Português</a></nav>
+      <aside class="archived" aria-label="Tradução arquivada"><p class="archived-label">Tradução arquivada</p><p>Esta página é uma tradução em português arquivada. O produto Relayium e sua documentação atual são mantidos em inglês e em chinês simplificado; o próprio aplicativo não oferece mais português. Por isso as telas e os detalhes descritos aqui podem diferir do comportamento atual.</p><p class="archived-links">Versão atual: <a href="/guides/what-is-peer-to-peer-file-transfer/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/guides/what-is-peer-to-peer-file-transfer/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">“Ponto a ponto” é usado de forma imprecisa, então aqui está o que realmente significa para uma transferência de arquivos: seu arquivo vai direto de um dispositivo para o outro, e não sobe para o servidor de uma empresa e desce de volta. Não há parada no meio onde uma cópia poderia ficar.</p>
       <p class="lead">Parece simples, mas os caminhos reais diferem. Esta página explica primeiro WebRTC/ICE em geral, onde o TURN pode ser uma rota de reserva, e depois separa a implementação do Relayium: o WebRTC do navegador é direto na mesma LAN, o TURN é usado por design entre redes e a CLI é direct-only.</p>
       <h2>P2P versus a forma habitual: eliminar a parada intermediária</h2>
@@ -141,13 +139,13 @@ ol.steps>li>pre{margin:8px 0 0}
       <p>Dois dispositivos na mesma rede não precisam de conta alguma. Enviar entre redes diferentes por código de emparelhamento exige que o remetente entre, mas a pessoa que recebe nunca precisa de conta, seja qual for o caminho.</p>
       <div class="ctacard">
         <p>Quer experimentar? Abra o Relayium em dois dispositivos e inicie uma sessão criptografada em tempo real.</p>
-        <a class="cta" href="/?lang=pt">Experimente o Relayium agora</a>
+        <a class="cta" href="/">Experimente o Relayium agora</a>
       </div>
       <h2>Continue lendo</h2>
       <ul class="related"><li><a href="/pt/guides/how-relayium-encrypts-your-files/">Como o Relayium criptografa seus arquivos de ponta a ponta</a></li><li><a href="/pt/guides/is-it-safe-to-send-files-over-the-internet/">É seguro enviar arquivos pela internet?</a></li><li><a href="/pt/how-to/send-files-between-two-computers-over-the-internet/">Enviar arquivos entre dois computadores pela Internet</a></li><li><a href="/pt/how-to/send-files-on-the-same-wifi/">Enviar arquivos entre dispositivos na mesma rede Wi-Fi</a></li><li><a href="/pt/">Relayium</a></li></ul>
       </main>
       <footer>
-        <a href="/?lang=pt">← Relayium</a>
+        <a href="/">← Relayium</a>
         <a href="/pt/apps/">Apps</a>
         <a href="/pt/guides/">Guias</a>
         <a href="/pt/privacy/">Privacidade</a>

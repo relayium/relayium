@@ -9,13 +9,6 @@
     <link rel="canonical" href="https://relayium.com/privacy/" />
     <link rel="alternate" hreflang="en" href="https://relayium.com/privacy/" />
     <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/privacy/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/privacy/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/privacy/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/privacy/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/privacy/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/privacy/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/privacy/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/privacy/" />
     <link rel="alternate" hreflang="x-default" href="https://relayium.com/privacy/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
@@ -50,7 +43,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <!-- The legal text is the main landmark. The site header and footer are
            outside it; the language bar is inside, after the h1, matching its
-           visual position — it is a labelled <nav> landmark either way. -->
+           visual position — it is a labelled <nav> landmark either way. On an
+           archived page that slot holds the archived-translation notice, a
+           labelled <aside>, which is a landmark in its own right too. -->
       <main>
       <h1>Privacy Policy</h1>
       <!-- The date is isolated for the same reason the release rows are: an ISO
@@ -60,7 +55,7 @@ footer a{color:var(--text-h);text-decoration:none}
            a browser, not deduced. <bdi> resolves LTR (no strong character
            inside) and pins the order. -->
       <p class="updated">Last updated: <bdi>2026-08-13</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/privacy/" aria-current="true">English</a><a href="/zh/privacy/">中文</a><a href="/ja/privacy/">日本語</a><a href="/ko/privacy/">한국어</a><a href="/de/privacy/">Deutsch</a><a href="/fr/privacy/">Français</a><a href="/ar/privacy/">العربية</a><a href="/es/privacy/">Español</a><a href="/pt/privacy/">Português</a></nav>
+      <nav class="langbar" aria-label="Language"><a href="/privacy/" aria-current="true">English</a><a href="/zh/privacy/">中文</a></nav>
       <p>Relayium is built so that your files and ephemeral text stay yours. Local browser sessions are direct; cross-network browser sessions may carry end-to-end encrypted ciphertext through TURN; CLI text is direct-only; and stored download links hold only zero-knowledge encrypted file ciphertext.</p>
       <p>This page explains the little data the service does handle, and the data it deliberately never sees.</p>
       <h2>Local-network content is not stored</h2><p>When you transfer files or exchange text between devices on the same network, no account is needed and Relayium does not store the content. The signaling service temporarily handles connection metadata such as IP addresses, room membership, device names, presence, capabilities, and WebRTC negotiation so the devices can connect directly.</p>

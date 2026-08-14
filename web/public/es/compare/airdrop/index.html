@@ -7,16 +7,6 @@
     <meta name="description" content="Una mirada honesta a AirDrop y Relayium. AirDrop es excelente dentro del ecosistema de Apple; Relayium funciona en cualquier navegador, así que un dispositivo Windows, Android o Linux puede enviar a un iPhone o un Mac, y a la inversa." />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/es/compare/airdrop/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/compare/airdrop/" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/compare/airdrop/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/compare/airdrop/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/compare/airdrop/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/compare/airdrop/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/compare/airdrop/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/compare/airdrop/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/compare/airdrop/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/compare/airdrop/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/compare/airdrop/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -64,16 +54,24 @@ pre code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
 .crumbs [aria-current]{color:var(--text)}
 footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--border);font-size:14px;display:flex;gap:16px;flex-wrap:wrap}
 footer a{color:var(--text-h);text-decoration:none}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
   </head>
   <body>
     <div class="wrap">
-      <header><span class="logo" aria-hidden="true">⇌</span><a href="/?lang=es">Relayium</a></header>
+      <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <nav class="crumbs" aria-label="Breadcrumb"><a href="/es/">Relayium</a> <span aria-hidden="true">›</span> <a href="/es/guides/">Guías</a> <span aria-hidden="true">›</span> <span aria-current="page">Relayium vs AirDrop: una alternativa a AirDrop multiplataforma</span></nav>
       <!-- The breadcrumb sits outside the main landmark; the language bar sits
            inside it, after the h1, because that is where it renders visually.
            Both are labelled <nav> landmarks in their own right, so either side of
-           the boundary satisfies the "content lives in a landmark" rule. -->
+           the boundary satisfies the "content lives in a landmark" rule.
+           On an archived page that slot holds the archived-translation notice
+           instead — a labelled <aside>, so it is a complementary landmark rather
+           than a navigation one, and the same rule is satisfied either way. -->
       <main>
       <h1>Relayium vs AirDrop: una alternativa a AirDrop multiplataforma</h1>
       <!-- Isolated: an ISO date is three digit runs joined by hyphens, and the
@@ -84,7 +82,7 @@ footer a{color:var(--text-h);text-decoration:none}
            See rtl-head-isolation.test.mjs, which pins every date on every
            generated Arabic page. -->
       <p class="updated">Última actualización: <bdi>2026-07-31</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/compare/airdrop/">English</a><a href="/zh/compare/airdrop/">中文</a><a href="/ja/compare/airdrop/">日本語</a><a href="/ko/compare/airdrop/">한국어</a><a href="/de/compare/airdrop/">Deutsch</a><a href="/fr/compare/airdrop/">Français</a><a href="/ar/compare/airdrop/">العربية</a><a href="/es/compare/airdrop/" aria-current="true">Español</a><a href="/pt/compare/airdrop/">Português</a></nav>
+      <aside class="archived" aria-label="Traducción archivada"><p class="archived-label">Traducción archivada</p><p>Esta página es una traducción al español archivada. El producto Relayium y su documentación actual se mantienen en inglés y en chino simplificado; la propia aplicación ya no ofrece español. Por eso las pantallas y los detalles descritos aquí pueden diferir del comportamiento actual.</p><p class="archived-links">Versión actual: <a href="/compare/airdrop/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/compare/airdrop/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p class="lead">AirDrop es una de las mejores experiencias de compartir archivos jamás lanzadas. Entre un iPhone, un iPad y un Mac es rápido, privado y está integrado en el sistema sin esfuerzo — Relayium no pretende superarlo en el terreno propio de Apple.</p>
       <p class="lead">El inconveniente es la frontera: AirDrop solo se comunica con otros dispositivos Apple. Este artículo compara ambos con justicia, explica dónde AirDrop es realmente mejor y muestra dónde ayuda Relayium — al enviar entre un iPhone y un PC con Windows, un teléfono Android y un Mac, o un portátil Linux y un iPad, directamente desde el navegador.</p>
       <h2>Lo que AirDrop hace bien</h2>
@@ -111,13 +109,13 @@ footer a{color:var(--text-h);text-decoration:none}
       <p>No. Relayium es una página web — no hay nada que instalar en ninguno de los dispositivos, en cualquier sistema operativo. Es gratis y de código abierto bajo la licencia AGPL-3.0 en github.com/relayium/relayium, así que puedes auditarlo o ejecutar tu propia instancia.</p>
       <div class="ctacard">
         <p>Envía entre Apple y todo lo demás — sin instalación, y sin cuenta en la misma red.</p>
-        <a class="cta" href="/?lang=es">Prueba Relayium ahora</a>
+        <a class="cta" href="/">Prueba Relayium ahora</a>
       </div>
       <h2>Sigue leyendo</h2>
       <ul class="related"><li><a href="/es/how-to/airdrop-for-windows-and-android/">AirDrop para Windows, Linux y Android</a></li><li><a href="/es/how-to/transfer-files-android-to-iphone/">Cómo transferir archivos de Android a iPhone (sin cable)</a></li><li><a href="/es/compare/snapdrop/">Relayium vs Snapdrop y PairDrop: ¿qué transferencia P2P segura?</a></li><li><a href="/es/how-to/send-files-on-the-same-wifi/">Enviar archivos entre dispositivos en la misma Wi-Fi</a></li><li><a href="/es/">Relayium</a></li></ul>
       </main>
       <footer>
-        <a href="/?lang=es">← Relayium</a>
+        <a href="/">← Relayium</a>
         <a href="/es/apps/">Apps</a>
         <a href="/es/guides/">Guías</a>
         <a href="/es/privacy/">Privacidad</a>

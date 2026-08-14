@@ -7,16 +7,6 @@
     <meta name="description" content="Relayium のサポート窓口：請求とサブスクリプション、転送のトラブル、セルフホストのノード、セキュリティ報告について。" />
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://relayium.com/ja/support/" />
-    <link rel="alternate" hreflang="en" href="https://relayium.com/support/" />
-    <link rel="alternate" hreflang="zh-Hans" href="https://relayium.com/zh/support/" />
-    <link rel="alternate" hreflang="ja" href="https://relayium.com/ja/support/" />
-    <link rel="alternate" hreflang="ko" href="https://relayium.com/ko/support/" />
-    <link rel="alternate" hreflang="de" href="https://relayium.com/de/support/" />
-    <link rel="alternate" hreflang="fr" href="https://relayium.com/fr/support/" />
-    <link rel="alternate" hreflang="ar" href="https://relayium.com/ar/support/" />
-    <link rel="alternate" hreflang="es" href="https://relayium.com/es/support/" />
-    <link rel="alternate" hreflang="pt" href="https://relayium.com/pt/support/" />
-    <link rel="alternate" hreflang="x-default" href="https://relayium.com/support/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -43,6 +33,11 @@ footer a{color:var(--text-h);text-decoration:none}
 .releases li:last-child{border-bottom:0}
 .releases a{color:var(--accent-fg);text-decoration:none;font-weight:600;min-width:72px}
 .releases .date{font-size:14px;font-variant-numeric:tabular-nums}
+
+.archived{margin:20px 0 8px;padding:14px 16px;border:1px solid var(--border);border-inline-start:3px solid var(--accent-fg);border-radius:10px;background:var(--card);font-size:14.5px}
+.archived p{margin:6px 0}.archived p:first-child{margin-top:0}.archived p:last-child{margin-bottom:0}
+.archived-label{color:var(--text-h);font-weight:600}
+.archived-links a{color:var(--accent-fg);text-decoration:underline;text-underline-offset:2px}
 </style>
   </head>
   <body>
@@ -50,7 +45,9 @@ footer a{color:var(--text-h);text-decoration:none}
       <header><span class="logo" aria-hidden="true">⇌</span><a href="/">Relayium</a></header>
       <!-- The legal text is the main landmark. The site header and footer are
            outside it; the language bar is inside, after the h1, matching its
-           visual position — it is a labelled <nav> landmark either way. -->
+           visual position — it is a labelled <nav> landmark either way. On an
+           archived page that slot holds the archived-translation notice, a
+           labelled <aside>, which is a landmark in its own right too. -->
       <main>
       <h1>サポート</h1>
       <!-- The date is isolated for the same reason the release rows are: an ISO
@@ -60,7 +57,7 @@ footer a{color:var(--text-h);text-decoration:none}
            a browser, not deduced. <bdi> resolves LTR (no strong character
            inside) and pins the order. -->
       <p class="updated">最終更新: <bdi>2026-08-13</bdi></p>
-      <nav class="langbar" aria-label="Language"><a href="/support/">English</a><a href="/zh/support/">中文</a><a href="/ja/support/" aria-current="true">日本語</a><a href="/ko/support/">한국어</a><a href="/de/support/">Deutsch</a><a href="/fr/support/">Français</a><a href="/ar/support/">العربية</a><a href="/es/support/">Español</a><a href="/pt/support/">Português</a></nav>
+      <aside class="archived" aria-label="アーカイブされた翻訳"><p class="archived-label">アーカイブされた翻訳</p><p>このページは記録として残している日本語訳です。Relayium の製品と最新のドキュメントは英語と簡体字中国語で管理されており、アプリ自体も日本語を提供していません。ここに書かれている画面表示や細部は、現在の動作と異なる場合があります。</p><p class="archived-links">最新版：<a href="/support/" lang="en" hreflang="en"><bdi>English</bdi></a> <span aria-hidden="true">·</span> <a href="/zh/support/" lang="zh-Hans" hreflang="zh-Hans"><bdi>中文</bdi></a></p></aside>
       <p>Relayium は少人数のチームで運営しています。いただいたメッセージは必ず、製品を実際に作っている人間に届きます。たらい回しのチケットシステムも、前面に立ちはだかるチャットボットもありません。</p>
       <p>support@relayium.com までメールでご連絡ください。2 営業日以内の返信を目指しています。</p>
       <h2>請求とサブスクリプション</h2><p>お問い合わせ先は、どこでサブスクリプションを購入したかによって変わります。ウェブで購入したサブスクリプションは Stripe が請求し、Relayium のアカウントページで管理します。Apple App Store（Mac App Store を含む）からインストールした Relayium アプリ内で購入したサブスクリプションは Apple が請求し、お客様の Apple アカウントの設定で管理します。</p><p>ウェブのサブスクリプションは、ほとんどのことをご自身で完結でき、こちらへご連絡いただく必要はありません。アカウントページからいつでもアップグレード・ダウングレード・解約ができます。解約しても、すでにお支払い済みの期間の終わりまではプランがそのまま有効で、その後は無料プランに戻ります。アカウントページで対応できないこと——返金のご依頼、誤った請求、請求書や税務情報、原因の分からない支払い失敗——については support@relayium.com までご連絡ください。</p><p>Apple が請求するサブスクリプションについては、プランの変更や自動更新の停止をお客様の Apple アカウントの設定で行い、返金は Apple にご請求ください——App Store での購入を当社が解約したり返金したりすることはできません。それでも状況の確認はお手伝いできます。Relayium のプランが購入内容と一致しない場合や、請求に心当たりがない場合は support@relayium.com までご連絡ください。Apple から当社に届いているサブスクリプションの情報を確認します。</p><ul><li>ウェブでは、アップグレードは即時に有効になり日割りで計算されます。ダウングレードは現在の請求期間の終了時に有効になるため、お支払い済みの分は無駄になりません。</li><li>Apple が請求するプランの変更・解約・返金のご依頼は、当社ではなく Apple を通じて行われます。</li><li>アカウントに登録されているメールアドレスを併記してください。カード番号は絶対にお送りにならないでください——当社が目にすることはなく、お尋ねすることもありません。</li></ul>

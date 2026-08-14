@@ -8,7 +8,7 @@
 // page-shell classes (.wrap/.pitch/.cta/ol.steps/.why/.compare/.learn/footer) so
 // mode pages look like the localized home landing pages, not a bare skeleton.
 import {
-  LANGS,
+  MAINTAINED_LANGS,
   DEFAULT_LANG,
   APPS_LABELS,
   pricingLabel,
@@ -23,11 +23,17 @@ import {
   ctaHref,
   dirAttr,
   rtlHead,
+  isFrozen,
+  archiveNotice,
+  ARCHIVE_STYLE,
 } from "./shared.mjs";
 import { STYLE } from "./landing-template.mjs";
 
+// The maintained cluster only — en (the SPA route), zh, x-default at en.
+// Archived mode pages emit none; see article-template.mjs's alternates() for the
+// reciprocity reasoning.
 function alternates(slug) {
-  const links = LANGS.map(
+  const links = MAINTAINED_LANGS.map(
     (l) => `<link rel="alternate" hreflang="${BCP47[l]}" href="${absUrl(urlPath(slug, l))}" />`
   );
   links.push(`<link rel="alternate" hreflang="x-default" href="${absUrl(urlPath(slug, DEFAULT_LANG))}" />`);
@@ -60,7 +66,7 @@ function jsonLd(slug, lang, doc, updated) {
   return JSON.stringify({ "@context": "https://schema.org", "@graph": graph }).replace(/</g, "\\u003c");
 }
 
-function body(slug, lang, doc, articleLinks) {
+function body(slug, lang, doc, articleLinks, notice) {
   const steps = doc.how.steps.map((s) => `<li>${esc(s)}</li>`).join("\n        ");
   const why = doc.why.items
     .map((it) => `<li><b>${esc(it.title)}</b> — ${esc(it.desc)}</li>`)
@@ -80,10 +86,19 @@ function body(slug, lang, doc, articleLinks) {
     ? `\n      <a class="cta" href="${esc(doc.nativeDownload.href)}">${esc(doc.nativeDownload.label)}</a>`
     : "";
 
+  // The archived notice sits between the pitch and the CTA, not below the fold:
+  // the button opens the app, and on an archived page the app will not be in
+  // this page's language. A disclosure that arrives after the click is not one.
+  //
+  // The CTA itself drops `?lang=` on an archived page for the reason ctaHref()
+  // records: the parameter would override the reader's own browser language to
+  // deliver English anyway.
+  const openHref = isFrozen(lang) ? `/${slug}` : `/${slug}?lang=${lang}`;
+
   return `
       <h1>${esc(doc.hero.h1)}</h1>
-      <p class="pitch">${esc(doc.hero.pitch)}</p>
-      <a class="cta" href="/${slug}?lang=${lang}">${esc(doc.hero.cta)}</a>${nativeDownload}
+      <p class="pitch">${esc(doc.hero.pitch)}</p>${notice ? "\n      " + notice : ""}
+      <a class="cta" href="${openHref}">${esc(doc.hero.cta)}</a>${nativeDownload}
 
       <section class="reveal">
       <h2>${esc(doc.how.heading)}</h2>
@@ -112,6 +127,8 @@ function body(slug, lang, doc, articleLinks) {
 }
 
 export function renderModePage({ slug, lang, doc, updated, articleLinks = [] }) {
+  const archived = isFrozen(lang);
+  const notice = archived ? archiveNotice(lang, { en: urlPath(slug, "en"), zh: urlPath(slug, "zh") }) : "";
   const canonical = absUrl(urlPath(slug, lang));
   const ogImage = SITE.origin + "/og-image.jpg";
 
@@ -129,8 +146,7 @@ export function renderModePage({ slug, lang, doc, updated, articleLinks = [] }) 
     <title>${headTitle}</title>
     <meta name="description" content="${headDesc}" />
     <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="${canonical}" />
-    ${alternates(slug)}
+    <link rel="canonical" href="${canonical}" />${archived ? "" : "\n    " + alternates(slug)}
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#16171d" media="(prefers-color-scheme: dark)" />
@@ -147,12 +163,12 @@ export function renderModePage({ slug, lang, doc, updated, articleLinks = [] }) 
     <meta name="twitter:description" content="${headDesc}" />
     <meta name="twitter:image" content="${ogImage}" />
     <script type="application/ld+json">${jsonLd(slug, lang, doc, updated)}</script>
-    <style>${STYLE}</style>
+    <style>${STYLE}${archived ? ARCHIVE_STYLE : ""}</style>
   </head>
   <body>
     <div class="wrap">
       <header><span class="logo" aria-hidden="true">⇌</span><a href="${ctaHref(lang)}">Relayium</a></header>
-      <main>${body(slug, lang, doc, articleLinks)}</main>
+      <main>${body(slug, lang, doc, articleLinks, notice)}</main>
       <footer>
         <a href="${ctaHref(lang)}">← ${esc(SITE.name)}</a>
         <a href="${urlPath("apps", lang)}">${esc(APPS_LABELS[lang])}</a>

@@ -41,7 +41,7 @@ describe("altHreflangs", () => {
     const alt = altHreflangs("/cross-network");
     expect(alt.find((a) => a.hreflang === "en")?.path).toBe("/cross-network");
     expect(alt.find((a) => a.hreflang === "zh-Hans")?.path).toBe("/zh/cross-network/");
-    expect(alt.find((a) => a.hreflang === "ja")?.path).toBe("/ja/cross-network/");
+    expect(alt.some((a) => a.hreflang === "ja"), "archived locales are not alternates").toBe(false);
     expect(alt.find((a) => a.hreflang === "x-default")?.path).toBe("/cross-network");
   });
 
@@ -51,9 +51,13 @@ describe("altHreflangs", () => {
     expect(altHreflangs(CLI_PATH)).toEqual([]);
   });
 
-  it("covers all nine languages plus x-default", () => {
+  it("covers exactly the maintained languages plus x-default", () => {
+    // This runs AFTER the SPA boots and rewrites the head, so it is the cluster
+    // a rendering crawler actually reads. It has to equal the one index.html
+    // ships, or the site answers "which languages do you have" twice, with two
+    // different answers, at the same URL.
     expect(altHreflangs("/offline-transfer").map((a) => a.hreflang)).toEqual([
-      "en", "zh-Hans", "ja", "ko", "de", "fr", "ar", "es", "pt", "x-default",
+      "en", "zh-Hans", "x-default",
     ]);
   });
 });
@@ -108,7 +112,7 @@ describe("private route metadata", () => {
     applyHeadMeta(document, pageMeta("lan", m), "https://relayium.com");
     expect(document.querySelector('link[rel="canonical"]')?.getAttribute("href")).toBe("https://relayium.com/");
     expect(document.querySelector('meta[property="og:url"]')?.getAttribute("content")).toBe("https://relayium.com/");
-    expect(document.querySelectorAll('link[rel="alternate"][hreflang]')).toHaveLength(10);
+    expect(document.querySelectorAll('link[rel="alternate"][hreflang]')).toHaveLength(3);
     expect(document.querySelector('meta[name="robots"]')?.getAttribute("content")).toContain("index, follow");
   });
 });
