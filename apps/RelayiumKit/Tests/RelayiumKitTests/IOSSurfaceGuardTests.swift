@@ -431,7 +431,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let source = try XCTUnwrap(try sources().first { $0.name == "DirectView.swift" }?.text)
         XCTAssertTrue(source.contains("showing(code: code, expiresAt: expiresAt, mode: .files,"))
         XCTAssertTrue(source.contains("showing(code: code, expiresAt: expiresAt, mode: .text,"))
-        XCTAssertTrue(source.contains("productionPairingJoinURL(code: code, mode: mode)"))
+        XCTAssertTrue(source.contains("transferPairingJoinURL(code: code, mode: mode)"))
     }
 
     func testPairingHandoffShowsTheWholeCurrentLink() throws {

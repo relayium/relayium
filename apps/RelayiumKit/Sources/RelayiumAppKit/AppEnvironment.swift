@@ -281,7 +281,7 @@ public enum AppEnvironment {
     /// own keychain identity. It exists so a Debug acceptance launch can hand in
     /// an isolated one rather than reading whatever account the machine is in.
     @MainActor
-    public static func makeSession(baseURL: URL = productionBaseURL,
+    public static func makeSession(baseURL: URL = transferBaseURL,
                                    tokenStore: TokenStore? = nil,
                                    transport: URLSession? = nil) -> AccountSession {
         AccountSession(
@@ -295,7 +295,7 @@ public enum AppEnvironment {
     /// public IP it observes. No code is minted and none is sent — the empty
     /// `code` IS the mechanism (`SignalingClient.connect` omits the query item).
     @MainActor
-    public static func makeLanDiscoveryModel(baseURL: URL = productionBaseURL) -> LanDiscoveryModel {
+    public static func makeLanDiscoveryModel(baseURL: URL = transferBaseURL) -> LanDiscoveryModel {
         LanDiscoveryModel(connect: {
             SignalingClient.connect(wsBase: RealtimeConnectionFactory.signalingBase(baseURL),
                                     code: "",
@@ -331,7 +331,7 @@ public enum AppEnvironment {
     // factories express is the absence of a FEATURE, not of a permission.
 
     @MainActor
-    public static func makeRealtimeModel(baseURL: URL = productionBaseURL,
+    public static func makeRealtimeModel(baseURL: URL = transferBaseURL,
                                          verification: VerificationPreference) -> RealtimeSessionModel {
         RealtimeSessionModel(
             pairClient: HTTPPairClient(baseURL: baseURL),
@@ -348,7 +348,7 @@ public enum AppEnvironment {
     }
 
     @MainActor
-    public static func makeRealtimeTextModel(baseURL: URL = productionBaseURL,
+    public static func makeRealtimeTextModel(baseURL: URL = transferBaseURL,
                                              verification: VerificationPreference) -> RealtimeTextSessionModel {
         RealtimeTextSessionModel(
             pairClient: HTTPPairClient(baseURL: baseURL),
@@ -362,7 +362,7 @@ public enum AppEnvironment {
     }
 
     @MainActor
-    public static func makeRealtimeModel(baseURL: URL = productionBaseURL,
+    public static func makeRealtimeModel(baseURL: URL = transferBaseURL,
                                         verification: VerificationPreference,
                                         nearby: LanDiscoveryModel,
                                         inboundRoom: InboundRoom,
@@ -412,7 +412,7 @@ public enum AppEnvironment {
     }
 
     @MainActor
-    public static func makeRealtimeTextModel(baseURL: URL = productionBaseURL,
+    public static func makeRealtimeTextModel(baseURL: URL = transferBaseURL,
                                             verification: VerificationPreference,
                                             nearby: LanDiscoveryModel,
                                             inboundRoom: InboundRoom,
@@ -463,7 +463,7 @@ public enum AppEnvironment {
     /// session model's room-connection closure retains the handle for exactly
     /// as long as the model graph lives.
     @MainActor
-    public static func makeRealtimeModel(baseURL: URL = productionBaseURL,
+    public static func makeRealtimeModel(baseURL: URL = transferBaseURL,
                                          verification: VerificationPreference,
                                          nearby: LanDiscoveryModel,
                                          inboundRoom: InboundRoom) -> RealtimeSessionModel {
@@ -473,7 +473,7 @@ public enum AppEnvironment {
     }
 
     @MainActor
-    public static func makeRealtimeTextModel(baseURL: URL = productionBaseURL,
+    public static func makeRealtimeTextModel(baseURL: URL = transferBaseURL,
                                              verification: VerificationPreference,
                                              nearby: LanDiscoveryModel,
                                              inboundRoom: InboundRoom) -> RealtimeTextSessionModel {
@@ -505,7 +505,7 @@ public enum AppEnvironment {
     /// link rather than captured, because the answer is a snapshot the
     /// application owns.
     @MainActor
-    public static func makeLinkWorkspaceModel(baseURL: URL = productionBaseURL,
+    public static func makeLinkWorkspaceModel(baseURL: URL = transferBaseURL,
                                               verification: VerificationPreference,
                                               nearby: LanDiscoveryModel,
                                               pairingRoom: LinkRoomHandle,
@@ -570,7 +570,7 @@ public enum AppEnvironment {
     /// the installed product's item. Passing nil resolves the product's own.
     @MainActor
     public static func makeBrowserLoginModel(
-        baseURL: URL = productionBaseURL,
+        baseURL: URL = transferBaseURL,
         installationStore: InstallationIdentityStoring? = nil
     ) -> BrowserLoginModel {
         let identity = InstallationIdentityProvider(
@@ -690,7 +690,7 @@ public enum AppEnvironment {
     static let inboxBootstrapDeviceID = "bootstrap"
 
     /// The device half of `inbox/1`, bound to one credential and one device row.
-    public static func makeInboxTransport(baseURL: URL = productionBaseURL,
+    public static func makeInboxTransport(baseURL: URL = transferBaseURL,
                                           deviceID: String, token: String,
                                           session: URLSession = .shared) throws
         -> InboxClient {
@@ -706,7 +706,7 @@ public enum AppEnvironment {
     /// `InboxError.noCurrentDevice` here, at generation start, instead of as a
     /// mysterious claim failure later.
     public static func makeInboxEngineFactory(
-        baseURL: URL = productionBaseURL,
+        baseURL: URL = transferBaseURL,
         keys: InboxDeviceKeyStoring,
         journalStore: @escaping @Sendable (InboxAccountID) -> InboxJournalStore?,
         folderStore: InboxFolderStoring,
@@ -752,7 +752,7 @@ public enum AppEnvironment {
     /// receiving without it would trade a visible failure for a silent one.
     @MainActor
     public static func makeInboxController(
-        baseURL: URL = productionBaseURL,
+        baseURL: URL = transferBaseURL,
         keychain: KeychainConfiguration = keychainConfiguration,
         defaults: UserDefaults = .standard,
         journalSubdirectory: String = "device-inbox",
@@ -805,7 +805,7 @@ public enum AppEnvironment {
     /// directory — which would work until one of them was pointed elsewhere, and
     /// would then leave device deliveries the recovery path cannot see.
     @MainActor
-    public static func makeInboxSendModel(baseURL: URL = productionBaseURL,
+    public static func makeInboxSendModel(baseURL: URL = transferBaseURL,
                                           pending: PendingUploadSupport,
                                           transport: URLSession? = nil) -> InboxSendModel {
         let session = transport ?? .shared
@@ -866,7 +866,7 @@ public enum AppEnvironment {
     /// `transport` exists for the same reason as `makeSession`'s: a stored send's
     /// completion surface cannot be reached without a server saying yes, and
     /// acceptance must reach it without one. A shipped launch passes nil.
-    public static func makeUploadModel(baseURL: URL = productionBaseURL,
+    public static func makeUploadModel(baseURL: URL = transferBaseURL,
                                        keyStore: StoredLinkKeyStore,
                                        pending: PendingUploadSupport? = nil,
                                        transport: URLSession? = nil) -> CloudUploadModel {
@@ -891,7 +891,7 @@ public enum AppEnvironment {
     /// matters is a response arriving after the account that asked for it is
     /// gone, and that cannot be staged against a real `URLSession`.
     @MainActor
-    public static func makeSendSelectionModel(baseURL: URL = productionBaseURL,
+    public static func makeSendSelectionModel(baseURL: URL = transferBaseURL,
                                               upload: CloudUploadModel,
                                               drafts: SharedDraftStore? = nil) -> SendSelectionModel {
         let client = CloudClient(baseURL: baseURL)
@@ -910,13 +910,13 @@ public enum AppEnvironment {
     /// cannot reach anything else the account client can do. `transport` exists
     /// for the same reason it does on every factory here: acceptance has to run
     /// without a server.
-    public static func makeAppleBillingService(baseURL: URL = productionBaseURL,
+    public static func makeAppleBillingService(baseURL: URL = transferBaseURL,
                                                transport: URLSession? = nil) -> AppleBillingService {
         AccountClient(baseURL: baseURL, session: transport ?? .shared)
     }
 
     @MainActor
-    public static func makeAccountManagementModel(baseURL: URL = productionBaseURL,
+    public static func makeAccountManagementModel(baseURL: URL = transferBaseURL,
                                                   keyStore: StoredLinkKeyStore,
                                                   transport: URLSession? = nil) -> AccountManagementModel {
         AccountManagementModel(
@@ -932,7 +932,7 @@ public enum AppEnvironment {
     /// `transport` exists for the same reason as the other factories': a stored
     /// receive cannot reach a result without a server, and acceptance must reach
     /// one without one. A shipped launch passes nil.
-    public static func makeDownloadModel(baseURL: URL = productionBaseURL,
+    public static func makeDownloadModel(baseURL: URL = transferBaseURL,
                                          transport: URLSession? = nil) -> CloudDownloadModel {
         #if os(iOS)
         // Here rather than at the iOS call site so no future iOS surface can

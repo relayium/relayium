@@ -31,6 +31,24 @@ enum UITestMode {
     // nonlocalized: a launch argument, never displayed
     static let argument = "--relayium-ui-testing"
     static let isActive = ProcessInfo.processInfo.arguments.contains(argument)
+
+    /// Whether this acceptance launch may become reachable.
+    ///
+    /// **Gated on the resolved origin, not on a flag of its own.** The reason
+    /// acceptance skips residency is that the production hub keys its code-less
+    /// room by the public address it observes, so a resident test build joins a
+    /// room with whatever strangers share that address — a privacy consequence,
+    /// which is why no `--please-be-resident` argument would be an acceptable
+    /// way to turn it back on. A loopback origin removes the consequence rather
+    /// than accepting it: the room lives on a server bound to `127.0.0.0/8`,
+    /// nothing off this machine can open a socket to it, and there is no
+    /// stranger for the roster to contain.
+    ///
+    /// So the seam and the permission are the same fact, read once. A launch
+    /// that fails to resolve a loopback origin — including every launch that
+    /// passes no origin at all — resolves production and is refused here, which
+    /// is the behaviour that shipped before this existed.
+    static let allowsResidency = isActive && AppEnvironment.isLoopbackTransferOrigin
     /// Holds the text pairing model on a deterministic terminal failure so the
     /// UI suite can verify that cleanup, not a second start path, owns the page.
     // nonlocalized: a test-only launch argument, absent from Release
@@ -318,6 +336,10 @@ enum UITestMode {
     /// In Release the answer is a constant the optimiser folds away, so the
     /// guarded work is unconditional and the argument means nothing.
     static let isActive = false
+
+    /// false, and unreachable: a shipped launch never takes the acceptance arm
+    /// of the residency gate, because `isActive` is already false beside it.
+    static let allowsResidency = false
 
     /// nil, so a shipped launch always resolves the product's own keychain
     /// identity and cannot be pointed at a test one.

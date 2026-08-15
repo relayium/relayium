@@ -647,7 +647,7 @@ struct DirectView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("pairing-code-expiry-note")
-            if let joinURL = productionPairingJoinURL(code: code, mode: mode) {
+            if let joinURL = transferPairingJoinURL(code: code, mode: mode) {
                 PairingJoinLinkView(url: joinURL)
             }
             // The picker and the chooser are both gone in this state, so the

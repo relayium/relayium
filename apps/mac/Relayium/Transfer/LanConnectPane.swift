@@ -458,8 +458,8 @@ struct LanConnectPane: View {
                            link: EmptyStateLink(
                             // A technical value, isolated so its dots and
                             // letters keep their reading order inside Arabic.
-                            title: L10n.token(AppEnvironment.productionHost),
-                            url: AppEnvironment.productionBaseURL,
+                            title: L10n.token(AppEnvironment.transferHost),
+                            url: AppEnvironment.transferBaseURL,
                             accessibilityHint: L10n.t(.nearbyEmptyRosterOpenHint),
                             identifier: "lan-empty-roster-site"))
                 .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)

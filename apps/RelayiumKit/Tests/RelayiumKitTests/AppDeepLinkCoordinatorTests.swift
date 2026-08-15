@@ -64,7 +64,7 @@ final class AppDeepLinkCoordinatorTests: XCTestCase {
     }
 
     private func typedRealtimeURL(_ code: String, mode: TransferMode) -> URL {
-        productionPairingJoinURL(code: code, mode: mode)!
+        transferPairingJoinURL(code: code, mode: mode)!
     }
 
     private var codelessRealtimeURL: URL {

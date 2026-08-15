@@ -423,7 +423,13 @@ struct RelayiumApp: App {
                     // UI acceptance must not publish a simulator into the
                     // public-address Nearby room. In Release `isActive` is a
                     // compile-time false, so shipped residency is unconditional.
-                    if !UITestMode.isActive {
+                    //
+                    // `allowsResidency` is the one exception, and it is the
+                    // exception that removes the reason rather than overriding
+                    // it: it is true only for an acceptance launch whose
+                    // resolved origin is loopback, where the room is a server on
+                    // this machine and holds nobody else. See its own comment.
+                    if !UITestMode.isActive || UITestMode.allowsResidency {
                         residency.phaseChanged(to: lifecycle(phase))
                     }
                     // The share extension's ONLY hand-off. It cannot open this
@@ -455,11 +461,16 @@ struct RelayiumApp: App {
                         // leaves behind — never resident, never paused — and
                         // the one the receiving card used to describe as a
                         // listener it could offer to pause.
-                    } else if UITestMode.isActive {
+                    } else if UITestMode.isActive, !UITestMode.allowsResidency {
                         // Keep the acceptance UI internally coherent as well
                         // as offline: the status, explanation and action all
                         // describe a deliberate pause instead of an unstarted
                         // listener with a live-looking Pause button.
+                        //
+                        // A loopback launch takes the ordinary arm below
+                        // instead, and has to: a paused listener answers no
+                        // offer, so pausing it would leave the acceptance run
+                        // proving that nothing arrives.
                         residency.pause()
                     } else {
                         residency.phaseChanged(to: .active)

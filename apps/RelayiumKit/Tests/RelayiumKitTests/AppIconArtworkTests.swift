@@ -49,11 +49,16 @@ final class AppIconArtworkTests: XCTestCase {
     }
     /// Constraint 9: the shared package must not learn about icons. The ban is
     /// on the *icon* targets by name — not on `executableTarget` as such, which
-    /// `Package.swift` already uses legitimately for the `RealtimeE2E` and
-    /// `NearbyReceiveE2E` manual harnesses. Those two must survive untouched, so
-    /// the second assertion pins the executable set to exactly them: an added
-    /// icon executable fails whatever it is called, and a *removed* harness
-    /// fails too.
+    /// `Package.swift` already uses legitimately for the `RealtimeE2E`,
+    /// `NearbyReceiveE2E` and `LocalTransferPeer` manual harnesses. Those three
+    /// must survive untouched, so the second assertion pins the executable set
+    /// to exactly them: an added icon executable fails whatever it is called,
+    /// and a *removed* harness fails too.
+    ///
+    /// `LocalTransferPeer` was added by Q0-T2a as the second endpoint a real
+    /// local transfer needs. Extending the pinned set is the only way to admit
+    /// it — the list is deliberately exhaustive so that a new executable is a
+    /// decision somebody records here, not something that appears silently.
     func testTheSharedPackageHasNoIconTargets() throws {
         let manifest = try text("apps/RelayiumKit/Package.swift")
         for banned in ["AppIconArtwork", "AppIconGen"] {
@@ -65,7 +70,8 @@ final class AppIconArtworkTests: XCTestCase {
                 guard let open = chunk.range(of: "name: \"") else { return nil }
                 return String(chunk[open.upperBound...].prefix { $0 != "\"" })
             }
-        XCTAssertEqual(executables.sorted(), ["NearbyReceiveE2E", "RealtimeE2E"],
-                       "the executable targets are exactly the two pre-existing E2E harnesses")
+        XCTAssertEqual(executables.sorted(),
+                       ["LocalTransferPeer", "NearbyReceiveE2E", "RealtimeE2E"],
+                       "the executable targets are exactly the three recorded harnesses")
     }
 }

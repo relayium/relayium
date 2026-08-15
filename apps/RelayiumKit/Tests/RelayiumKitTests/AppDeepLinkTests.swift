@@ -55,7 +55,7 @@ final class AppDeepLinkTests: XCTestCase {
     }
 
     func testProductionJoinLinkUsesTheClaimedWebRoute() throws {
-        let url = try XCTUnwrap(productionPairingJoinURL(code: "004291"))
+        let url = try XCTUnwrap(transferPairingJoinURL(code: "004291"))
         XCTAssertEqual(url.absoluteString,
                        "https://relayium.com/cross-network#c=004291")
         XCTAssertEqual(parseAppDeepLink(url), .realtime(code: "004291"))
@@ -71,7 +71,7 @@ final class AppDeepLinkTests: XCTestCase {
         XCTAssertEqual(parseAppDeepLink(file),
                        .realtimeWithMode(code: "004291", mode: .files))
 
-        let text = try XCTUnwrap(productionPairingJoinURL(code: "483920", mode: .text))
+        let text = try XCTUnwrap(transferPairingJoinURL(code: "483920", mode: .text))
         XCTAssertEqual(text.absoluteString,
                        "https://relayium.com/cross-network?mode=text#c=483920")
         XCTAssertEqual(parseAppDeepLink(text),

@@ -940,9 +940,9 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// have to keep working. That is `AppDeepLinkTests`' half.
     func testPairingHandoffCarriesTheCodeAndNoLaneHint() throws {
         let pane = try source(named: transferSession)
-        XCTAssertTrue(pane.contains("productionPairingJoinURL(code: code)"),
+        XCTAssertTrue(pane.contains("transferPairingJoinURL(code: code)"),
                       "the handoff link is built with something other than the bare code")
-        XCTAssertFalse(pane.contains("productionPairingJoinURL(code: code, mode:"),
+        XCTAssertFalse(pane.contains("transferPairingJoinURL(code: code, mode:"),
                        "the handoff link still names a lane the sender never chose")
         // No macOS surface emits one at all — the parser keeps its `mode`
         // parameter for inbound links, and this is what stops a second caller
@@ -4131,12 +4131,21 @@ final class MacSurfaceGuardTests: XCTestCase {
     ///     contextual menu that copies the address, keyboard activation, and
     ///     `openURL` deciding where it goes.
     ///  2. **The visible address and the destination come from one value.** A
-    ///     hard-coded `"relayium.com"` beside `productionBaseURL` is a screen
+    ///     hard-coded `"relayium.com"` beside the origin constant is a screen
     ///     that can print one host and open another, and neither half looks
     ///     wrong alone.
     ///  3. **The prose no longer names the address.** Rendering the shared
     ///     one-sentence form here would put the host on the card twice — once
     ///     as dead text that looks clickable, once as the control.
+    ///
+    /// The pair is `transferBaseURL`/`transferHost` rather than the pinned
+    /// production constants, and the difference is the same promise one step
+    /// further out: this card's whole message is "the other device is not in
+    /// this room yet — go to this address and join it". The address that makes
+    /// that true is the hub this build is actually in a room on. In Release the
+    /// two values are the same URL, so nothing about the shipped card moves;
+    /// what the seam removes is the Debug state where the card names the
+    /// production host while the roster below it is a local server's.
     func testTheEmptyRosterMakesTheAddressARealLinkFromOneSource() throws {
         let pane = try source(named: lanConnect)
         XCTAssertTrue(pane.contains("title: L10n.t(.nearbyEmptyRosterTitle)")
@@ -4145,10 +4154,15 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertFalse(pane.contains("L10n.t(.nearbyEmptyRoster)"),
                        "the Mac renders the sentence that names the address in prose, "
                        + "so relayium.com is on the card twice")
-        XCTAssertTrue(pane.contains("url: AppEnvironment.productionBaseURL"),
-                      "the empty roster's link points somewhere other than the product origin")
-        XCTAssertTrue(pane.contains("title: L10n.token(AppEnvironment.productionHost)"),
+        XCTAssertTrue(pane.contains("url: AppEnvironment.transferBaseURL"),
+                      "the empty roster's link points somewhere other than the origin "
+                      + "this build's roster comes from")
+        XCTAssertTrue(pane.contains("title: L10n.token(AppEnvironment.transferHost)"),
                       "the visible address is no longer derived from the destination")
+        XCTAssertFalse(pane.contains("AppEnvironment.productionBaseURL")
+                       || pane.contains("AppEnvironment.productionHost"),
+                       "the card pins one half to production, so a local build prints "
+                       + "relayium.com beside a roster it is not the room for")
         XCTAssertTrue(pane.contains("accessibilityHint: L10n.t(.nearbyEmptyRosterOpenHint)"),
                       "the link's only label is the bare address, with no hint saying what "
                       + "activating it does")

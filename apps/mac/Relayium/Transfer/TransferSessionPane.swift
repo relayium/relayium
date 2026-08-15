@@ -221,7 +221,7 @@ struct TransferSessionPane: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("pairing-code-expiry-note")
-            if let joinURL = productionPairingJoinURL(code: code) {
+            if let joinURL = transferPairingJoinURL(code: code) {
                 PairingCodeHandoffView(url: joinURL, cancel: cancel)
             }
         }

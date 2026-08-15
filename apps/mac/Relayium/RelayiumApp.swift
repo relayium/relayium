@@ -686,8 +686,25 @@ struct RelayiumApp: App {
                     // and it outlives every window (MenuBarExtra keeps the
                     // process up). A second window must not reopen the room
                     // socket, and must never override an explicit pause.
-                    guard !UITestMode.isActive else { return }
-                    notifications.start()
+                    // Notification registration reaches Apple's servers and
+                    // nothing about a local acceptance run needs it, so it stays
+                    // on the shipped-launch side of the gate unconditionally.
+                    if !UITestMode.isActive { notifications.start() }
+                    // Residency joins a room on the origin THIS launch resolved,
+                    // and that is what decides whether skipping it is a privacy
+                    // requirement or merely a habit. Against production the hub
+                    // groups the room by the public address it observes, so a
+                    // resident acceptance run puts a shared CI runner into
+                    // strangers' device lists — which is why this has always
+                    // been skipped. Against a loopback origin the room is a
+                    // server on this machine, its roster can only hold this
+                    // machine's own processes, and residency is the exact thing
+                    // a peer-to-peer acceptance run needs to have running.
+                    //
+                    // `allowsResidency` is a stored `false` in Release, where
+                    // `isActive` is a stored `false` too — so a shipped launch
+                    // takes the unconditional path either way.
+                    guard !UITestMode.isActive || UITestMode.allowsResidency else { return }
                     lanDiscovery.startResident()
                 }
                 .task {

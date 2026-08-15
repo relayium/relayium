@@ -11,6 +11,20 @@ enum UITestMode {
     static let isActive = ProcessInfo.processInfo.arguments.contains(
         "--relayium-ui-testing") // nonlocalized: test-only launch argument
 
+    /// Whether this acceptance launch may become reachable.
+    ///
+    /// The same rule the Mac's `UITestMode.allowsResidency` records, and it has
+    /// to be the same rule: the reason a simulator stays out of the room is that
+    /// the production hub keys the code-less room by observed public address, so
+    /// a resident acceptance build shares a roster with strangers behind that
+    /// address. A loopback origin removes that — the hub is a server on this
+    /// machine, bound where nothing off it can reach — rather than deciding to
+    /// tolerate it.
+    ///
+    /// Every launch that resolves no loopback origin, which is every launch that
+    /// passes none, resolves production and is refused here.
+    static let allowsResidency = isActive && AppEnvironment.isLoopbackTransferOrigin
+
     /// Whether this launch should leave one deterministic file where the system
     /// document browser can reach it.
     ///
@@ -306,6 +320,9 @@ enum UITestMode {
     }
     #else
     static let isActive = false
+    /// false, and unreachable: a shipped launch never takes the acceptance arm
+    /// of the residency gate, because `isActive` is already false beside it.
+    static let allowsResidency = false
     /// Folded to a constant, so a shipped launch always takes the residency
     /// branch and no argument can hold this device out of the room.
     static let showsOffReceiving = false

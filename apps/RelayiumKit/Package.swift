@@ -109,6 +109,38 @@ let package = Package(
             path: "Tests",
             resources: [.process("Fixtures")]
         ),
+        // The acceptance peer's shared half: the plain WebRTC peer, the app's
+        // own receive/pairing hosts, the digest ledger and the loopback control
+        // socket. Extracted from the two live harnesses below, which had grown
+        // divergent copies of the same three things.
+        //
+        // **Not a product target and not linked by either app.** It is reachable
+        // only from the three executables below, so nothing it contains — the
+        // control server above all — can end up inside a signed build.
+        .target(
+            name: "RelayiumPeerKit",
+            dependencies: [
+                "RelayiumKit",
+                "RelayiumAppKit",
+                .product(name: "WebRTC", package: "WebRTC"),
+            ],
+            path: "Sources/RelayiumPeerKit"
+        ),
+        // The acceptance peer: the SECOND endpoint every real transfer needs,
+        // because XCUITest can drive only one app. Loopback-only control API,
+        // per-run isolation, and no public STUN. Run by
+        // `scripts/local-transfer-acceptance.sh`, never by hand against
+        // production — `--origin` is validated by the product's own loopback
+        // predicate and refuses anything else.
+        .executableTarget(
+            name: "LocalTransferPeer",
+            dependencies: [
+                "RelayiumKit",
+                "RelayiumAppKit",
+                "RelayiumPeerKit",
+            ],
+            path: "Sources/LocalTransferPeer"
+        ),
         // Live realtime E2E harness (native<->native over prod /ws). Not a unit
         // test — run manually: `swift run RealtimeE2E`. Needs the network.
         .executableTarget(

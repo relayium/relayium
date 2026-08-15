@@ -47,12 +47,18 @@ public func pairingJoinURL(baseURL: URL, code: String, mode: TransferMode? = nil
     return components.url
 }
 
-/// The public Relayium join URL used by first-party native surfaces.
+/// The Relayium join URL first-party native surfaces show as a QR code and as a
+/// copyable link.
 ///
-/// Keeping the production origin out of the view layer leaves URL policy in
-/// one shared, testable place.
-public func productionPairingJoinURL(code: String, mode: TransferMode? = nil) -> URL? {
-    pairingJoinURL(baseURL: AppEnvironment.productionBaseURL, code: code, mode: mode)
+/// Keeping the origin out of the view layer leaves URL policy in one shared,
+/// testable place. It is the *transfer* origin rather than the pinned production
+/// one, and that is the whole point of the pairing link: it names the hub the
+/// other device has to reach in order to meet this one. A build talking to a
+/// local server that printed `relayium.com` here would hand the user a code
+/// minted on one hub and a link to a different one, and neither half would look
+/// wrong on its own. In Release the two values are identical.
+public func transferPairingJoinURL(code: String, mode: TransferMode? = nil) -> URL? {
+    pairingJoinURL(baseURL: AppEnvironment.transferBaseURL, code: code, mode: mode)
 }
 
 /// Parse only links that the production Associated Domains entitlement can
@@ -60,11 +66,9 @@ public func productionPairingJoinURL(code: String, mode: TransferMode? = nil) ->
 /// self-host-friendly origin policy: an OS-level app handoff is a trust boundary,
 /// and Relayium must not claim arbitrary HTTPS links.
 public func parseAppDeepLink(_ url: URL) -> AppDeepLink? {
-    guard url.scheme?.lowercased() == "https",
-          url.host?.lowercased() == "relayium.com",
-          url.user == nil,
+    guard url.user == nil,
           url.password == nil,
-          url.port == nil || url.port == 443 else {
+          isAppDeepLinkOrigin(url) else {
         return nil
     }
 
@@ -94,6 +98,71 @@ public func parseAppDeepLink(_ url: URL) -> AppDeepLink? {
         }
     }
     return .realtime(code: raw)
+}
+
+/// The origins an OS-level hand-off may arrive from.
+///
+/// **A shipped build has exactly one**, and the check is written so that stays
+/// visibly true: the `relayium.com` arm below is unconditional, and everything
+/// that could ever add a second origin is inside `#if DEBUG`.
+///
+/// The acceptance arm exists because a pairing link built against a local server
+/// carries that server's origin, so a build that could produce such a link but
+/// not parse one would fail the round trip the link exists for. It is guarded
+/// three times over, and each guard removes a different way it could go wrong:
+///
+///  1. `#if DEBUG` — a Release binary has no second arm to reach at all.
+///  2. `isLoopbackTransferOrigin` — a Debug build that was *not* pointed
+///     anywhere resolves production, and then this is `false`. Without it, a
+///     developer's ordinary Debug build would start claiming `http://127.0.0.1`
+///     links from any source the OS or a browser handed it.
+///  3. Exact origin equality — not "some loopback address", but the one this
+///     process resolved, port included. A run on `127.0.0.1:53219` must not
+///     accept a link from `127.0.0.1:53220`, because on a shared machine that
+///     is a different server belonging to somebody else's run.
+private func isAppDeepLinkOrigin(_ url: URL) -> Bool {
+    guard let scheme = url.scheme?.lowercased() else { return false }
+    // The production Associated Domains origin. Unconditional, and the only
+    // thing a shipped build can answer to.
+    if scheme == "https", url.host?.lowercased() == "relayium.com",
+       url.port == nil || url.port == 443 {
+        return true
+    }
+    #if DEBUG
+    guard AppEnvironment.isLoopbackTransferOrigin else { return false }
+    return isSameHTTPOrigin(url, as: AppEnvironment.transferBaseURL)
+    #else
+    return false
+    #endif
+}
+
+/// Scheme, host and port equality — the comparison guard 3 above is made of.
+///
+/// **Extracted so the equality can be driven against an arbitrary origin.**
+/// Inside `isAppDeepLinkOrigin` the origin is a launch-resolved global, fixed
+/// for the life of the process, so the only origin a test in this process can
+/// compare against is production — and production is the one case where the
+/// `#if DEBUG` arm is never reached at all. The property worth having a test
+/// for is precisely the one that keeps two concurrent acceptance runs on one
+/// machine apart: `:53219` must not accept a link from `:53220`. Reached only
+/// through the guarded arm above; it grants nothing on its own.
+///
+/// Compiled outside `#if DEBUG` for the reason `isLoopbackHost` is: a pure
+/// comparison selects no origin, nothing calls it in a shipped build, and
+/// keeping it compiled means `swift build -c release` type-checks it.
+func isSameHTTPOrigin(_ url: URL, as origin: URL) -> Bool {
+    // The port is compared through the same defaulting on both sides, so a
+    // resolved `http://127.0.0.1` and a link to `http://127.0.0.1:80` are the
+    // one origin they actually are — and `:8080` against `:80` still is not.
+    func port(_ url: URL, scheme: String) -> Int {
+        url.port ?? (scheme == "https" ? 443 : 80)
+    }
+    guard let scheme = url.scheme?.lowercased(),
+          let originScheme = origin.scheme?.lowercased(), scheme == originScheme,
+          let host = url.host?.lowercased(), host == origin.host()?.lowercased(),
+          port(url, scheme: scheme) == port(origin, scheme: originScheme)
+    else { return false }
+    return true
 }
 
 @MainActor
