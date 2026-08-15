@@ -120,17 +120,16 @@ final class MacSurfaceTests: XCTestCase {
             let target = AppRouting.destination(forOpenedFiles: destination)
             XCTAssertTrue(target.macSurface.isBrowseable,
                           "\(destination.rawValue) stages files on a hidden surface")
-            XCTAssertTrue(target.macSurface == .lanTransfer
-                          || target.macSurface == .crossNetworkTransfer
-                          || target.macSurface == .storedSend,
-                          "\(destination.rawValue) stages files on a surface that cannot send")
+            // Stored Send alone. The two transfer surfaces are connect-first
+            // and hold nothing before a session exists, so a batch landing on
+            // either would be staging with no control that could have caused it.
+            XCTAssertEqual(target.macSurface, .storedSend,
+                           "\(destination.rawValue) stages files on a surface that cannot hold them")
         }
-        XCTAssertEqual(AppRouting.destination(forOpenedFiles: .storedReceive), .nearby)
-        XCTAssertEqual(AppRouting.destination(forOpenedFiles: .pairingCode), .pairingCode)
-        XCTAssertEqual(AppRouting.destination(forOpenedFiles: .nearby), .nearby)
-        XCTAssertEqual(AppRouting.destination(forOpenedFiles: .storedSend), .storedSend)
-        XCTAssertEqual(AppRouting.destination(forOpenedFiles: .deviceInbox), .nearby)
-        XCTAssertEqual(AppRouting.destination(forOpenedFiles: .account), .nearby)
+        for destination in AppDestination.allCases {
+            XCTAssertEqual(AppRouting.destination(forOpenedFiles: destination), .storedSend,
+                           "\(destination.rawValue) stages files somewhere that no longer holds them")
+        }
     }
 }
 
@@ -292,43 +291,46 @@ final class TransferSurfaceOwnershipTests: XCTestCase {
 }
 
 /// The shared-layer helper used by destinations that share one staging context.
-/// The two transfer screens remain separate routes, but either may adopt an OS
-/// batch addressed to the other after the user changes connection method.
+/// **Who may take an OS-opened batch, now that only one surface can hold one.**
+///
+/// The class this replaces guarded a widened `forAnyOf:` ask: LAN Transfer and
+/// Cross-network Transfer were separate routes over one app-scoped selection, so
+/// either could adopt a batch addressed to the other. Both are connect-first —
+/// no selection, no drop zone, no adoption — so the overload is gone and the
+/// rule is the narrow one it always delegated to.
 @MainActor
 final class OpenedFileBatchTests: XCTestCase {
 
     private func coordinator() -> AppFileOpenCoordinator {
-        AppFileOpenCoordinator(navigation: AppNavigationModel(selection: .nearby))
+        AppFileOpenCoordinator(navigation: AppNavigationModel(selection: .storedSend))
     }
 
-    /// The single-route overload stays exact while the explicit transfer set can
-    /// adopt from either screen into their shared app-scoped selection.
-    func testTransferSetCanTakeEitherRouteWithoutWideningTheSingleRouteRule() {
+    /// Exact, for every destination: the addressed one takes it and nobody else
+    /// does — including, by name, the two screens that used to.
+    func testOnlyTheAddressedDestinationTakesTheBatch() {
+        let coordinator = coordinator()
+        coordinator.deliver([URL(fileURLWithPath: "/tmp/brief.txt")])
+        let batch = coordinator.batch(for: .storedSend, busy: false)
+        XCTAssertEqual(batch?.destination, .storedSend)
+        XCTAssertEqual(batch?.urls, [URL(fileURLWithPath: "/tmp/brief.txt")])
+        for refused in AppDestination.allCases where refused != .storedSend {
+            XCTAssertNil(coordinator.batch(for: refused, busy: false),
+                         "\(refused.rawValue) took a batch addressed to Stored Send")
+        }
+    }
+
+    /// Wherever the user was standing, the batch is addressed to Stored Send and
+    /// the transfer screens are refused it.
+    func testATransferScreenIsRefusedWhereverTheBatchCameFrom() {
         for route in [AppDestination.nearby, .pairingCode] {
             let navigation = AppNavigationModel(selection: route)
             let coordinator = AppFileOpenCoordinator(navigation: navigation)
             coordinator.deliver([URL(fileURLWithPath: "/tmp/brief.txt")])
-            let other: AppDestination = route == .nearby ? .pairingCode : .nearby
-            XCTAssertNil(coordinator.batch(for: other, busy: false),
-                         "\(other.rawValue) took a batch addressed to \(route.rawValue)")
-            XCTAssertEqual(
-                coordinator.batch(forAnyOf: AppDestination.macTransferRoutes, busy: false)?.destination,
-                route)
-            let batch = coordinator.batch(for: route, busy: false)
-            XCTAssertEqual(batch?.destination, route)
-            XCTAssertEqual(batch?.urls, [URL(fileURLWithPath: "/tmp/brief.txt")])
+            XCTAssertEqual(coordinator.staged?.destination, .storedSend,
+                           "an open from \(route.rawValue) was addressed to a transfer screen")
+            XCTAssertNil(coordinator.batch(for: .nearby, busy: false))
+            XCTAssertNil(coordinator.batch(for: .pairingCode, busy: false))
         }
-    }
-
-    /// It widens WHO asks, never WHAT may be taken. A stored-send batch is still
-    /// refused to a transfer route.
-    func testItDoesNotWidenWhichBatchesMayBeTaken() {
-        let navigation = AppNavigationModel(selection: .storedSend)
-        let coordinator = AppFileOpenCoordinator(navigation: navigation)
-        coordinator.deliver([URL(fileURLWithPath: "/tmp/brief.txt")])
-        XCTAssertNil(coordinator.batch(for: .nearby, busy: false))
-        XCTAssertNil(coordinator.batch(forAnyOf: [.nearby, .pairingCode], busy: false))
-        XCTAssertNotNil(coordinator.batch(for: .storedSend, busy: false))
     }
 
     /// Busy still refuses and still RETAINS, so the batch lands the moment the
@@ -336,18 +338,8 @@ final class OpenedFileBatchTests: XCTestCase {
     func testBusyRefusesWithoutDiscarding() {
         let coordinator = coordinator()
         coordinator.deliver([URL(fileURLWithPath: "/tmp/brief.txt")])
-        XCTAssertNil(coordinator.batch(for: .nearby, busy: true))
+        XCTAssertNil(coordinator.batch(for: .storedSend, busy: true))
         XCTAssertNotNil(coordinator.staged, "a refused ask discarded the user's files")
-        XCTAssertNotNil(coordinator.batch(for: .nearby, busy: false))
-    }
-
-    /// The single-destination overload is the same rule, so the two cannot
-    /// disagree about a batch either of them could be asked about.
-    func testTheSingleDestinationOverloadIsTheSameRule() {
-        let coordinator = coordinator()
-        coordinator.deliver([URL(fileURLWithPath: "/tmp/brief.txt")])
-        XCTAssertEqual(coordinator.batch(for: .nearby, busy: false),
-                       coordinator.batch(forAnyOf: [.nearby], busy: false))
-        XCTAssertNil(coordinator.batch(forAnyOf: [], busy: false))
+        XCTAssertNotNil(coordinator.batch(for: .storedSend, busy: false))
     }
 }

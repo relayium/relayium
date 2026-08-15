@@ -465,6 +465,14 @@ public final class RealtimeSessionModel: ObservableObject {
     /// Queued until the handshake completes (commit-reveal + AEAD keys); with
     /// verification ON, also until the user confirms the SAS — see `confirmSAS`,
     /// which is the only step that says anything about the peer's identity.
+    ///
+    /// **This is the PRE-connect half, and the macOS transfer surfaces no longer
+    /// reach it.** It stays, unchanged and reachable, because the
+    /// inbound-adoption path (`LinkWorkspaceModel.onLegacyFallbackBatch`) still
+    /// hands a batch back through it, because iOS still stages before
+    /// connecting, and because a future re-enable of pre-staging must not have
+    /// to rediscover the queueing rule. What a connect-first surface uses
+    /// instead is `sendNow`, below.
     public func stageSend(sources: [PlaintextSource], metas: [FileMeta]) {
         guard sources.count == metas.count, let total = try? validateRealtimeFiles(metas) else {
             pendingSend = nil
@@ -474,6 +482,139 @@ public final class RealtimeSessionModel: ObservableObject {
         }
         pendingSend = (sources, metas, total)
         totalBytes = total
+    }
+
+    /// **Whether a batch chosen right now would actually go anywhere.**
+    ///
+    /// Two independent properties, and each one is a way the send would
+    /// otherwise be swallowed rather than refused:
+    ///
+    ///  - **The session is cleared and live.** A connection exists, its
+    ///    DataChannel is open — `transmit` does not check `readyState`, so a
+    ///    manifest written before it is dropped by WebRTC with no error and the
+    ///    transfer stalls — the handshake is cleared, which with verification ON
+    ///    means the user compared the phrase, and the state says so.
+    ///  - **Nothing is already in flight in either direction.** One legacy file
+    ///    session carries one manifest per side, and a second `send` would
+    ///    interleave frames into a batch the peer is mid-way through
+    ///    reassembling. That is why `pendingReceive` is here as well as
+    ///    `pendingSend`: this side may be receiving, and a receive is exactly as
+    ///    much "in flight" as a send.
+    ///
+    /// **"Cleared and live" is spelled with three clauses that are mutually
+    /// redundant today, and that is measured rather than assumed.** They live in
+    /// `sendRefusal` below, which this property is derived from, so the gate and
+    /// the reason a caller is given cannot drift apart.
+    /// `.transferring` is reachable from `.connecting` only through
+    /// `proceedAfterVerification`, which requires `connectionOpened` and sets
+    /// `sasConfirmed`; and nothing clears `connectionOpened` without also
+    /// nulling `connection` (`releaseConnectionState`). So each of the three
+    /// implies the others on every reachable path, and reverse mutations
+    /// measured exactly that: deleting `connectionOpened` alone survives,
+    /// deleting the `.transferring` requirement alone survives, deleting both
+    /// together still survives — `sasConfirmed` alone holds the line — and only
+    /// removing all three lets a manifest out before the channel opens, which
+    /// `testSendNowIsRefusedUntilTheConnectionIsOpen` then catches.
+    ///
+    /// That is recorded rather than papered over, and it is the reason all three
+    /// stay. They are not one derived answer written three times; they are three
+    /// *named* conditions — `connectionOpened` means "the wire will carry a
+    /// write", `sasConfirmed` means "a human said this is the right peer",
+    /// `.transferring` means "this session is in the phase where bytes move".
+    /// Today one implies the next. A transport that opened later than it does
+    /// now, or a state added to the cleared set, would break that chain silently,
+    /// and the cost of keeping the redundancy is a line — while the cost of
+    /// trusting the chain is a manifest dropped by WebRTC with no error.
+    public var canSendNow: Bool { sendRefusal == nil }
+
+    /// **The same answer, with the reason kept.** `nil` means a batch handed
+    /// over right now goes out; anything else is why it would not.
+    ///
+    /// The two clauses are the two above, in the same order, and this is the one
+    /// place they are written — `canSendNow` is derived from it rather than
+    /// stated a second time, because a gate and its explanation that can
+    /// disagree is worse than no explanation. The reasons are separated because
+    /// the user-visible sentences differ: a session carrying a transfer is a
+    /// different thing from a session that is no longer cleared to carry one.
+    public var sendRefusal: SendRefusal? {
+        guard connection != nil, connectionOpened, sasConfirmed else { return .sessionNotReady }
+        guard pendingSend == nil, !pendingReceive else { return .transferInFlight }
+        if case .transferring = state { return nil }
+        return .sessionNotReady
+    }
+
+    /// Why a `sendNow` did not put anything on the wire.
+    public enum SendRefusal: Equatable, Sendable {
+        /// The connection is gone, not open, not verified, or the session has
+        /// left the phase where bytes move.
+        case sessionNotReady
+        /// A batch is already moving, in either direction, and this lane carries
+        /// one at a time.
+        case transferInFlight
+        /// The batch itself could not be read or described; the model has also
+        /// named it in `state`.
+        case invalidFileList
+    }
+
+    /// What `sendNow` did. Returned rather than published, because the caller
+    /// that raced is the one holding the files.
+    public enum SendResult: Equatable, Sendable {
+        case sent
+        case refused(SendRefusal)
+    }
+
+    /// **The connect-first half: send a batch the user chose AFTER the session
+    /// was already open.**
+    ///
+    /// The wire needs nothing new for this, and that is the point. A legacy file
+    /// session that reaches `proceedAfterVerification` with nothing staged sits
+    /// in `.transferring(done: 0, total: 0)` precisely because the peer's
+    /// manifest may not have been staged yet either — `onManifest` installs the
+    /// writer and sends ACCEPT whenever it arrives. This is the same event from
+    /// the other side: a manifest emitted late, into a connection whose peer is
+    /// already in that wait. Nothing about the shipped frame format, the
+    /// handshake or the ACCEPT/DONE/COMPLETE control flow changes.
+    ///
+    /// What it does change is which surfaces can exist. Before it, a file-lane
+    /// session was only ever useful to a side that had staged before connecting,
+    /// so removing pre-connect staging would have left a legacy peer reachable
+    /// and mute. Refused rather than queued when `canSendNow` is false: a
+    /// connect-first surface only renders the picker when this is true, and a
+    /// press that raced the answer must not become a silent no-op that the user
+    /// reads as a sent file.
+    ///
+    /// **And "refused" is returned, not merely done.** The gate is rechecked
+    /// here because it has to be: a system file picker is modal to the user, not
+    /// to the session, so the peer can start its own transfer or drop the
+    /// connection entirely between the press that opened the picker and the
+    /// batch coming back out of it. At that moment the surface has already
+    /// stopped rendering the send controls, so a `Void` refusal reaches the user
+    /// as their chosen files silently vanishing. The caller holding those files
+    /// is the only one that can say so, so it is told which of the two things
+    /// happened. Refusal never becomes a queue: this session does not gain a
+    /// second batch, and nothing is staged for a connection that does not exist.
+    ///
+    /// Deliberately **not** `@discardableResult`: dropping this value is the
+    /// original defect, and the compiler should be the one that notices.
+    public func sendNow(sources: [PlaintextSource], metas: [FileMeta]) -> SendResult {
+        if let refusal = sendRefusal { return .refused(refusal) }
+        guard sources.count == metas.count,
+              let total = try? validateRealtimeFiles(metas) else {
+            // Named, not swallowed. This is the user's own picked batch and the
+            // reason it cannot be sent is theirs to see — the same treatment
+            // `stageSend` gives an unreadable staged batch.
+            state = .failed(L10n.t(.sessionInvalidFileList))
+            return .refused(.invalidFileList)
+        }
+        // Recorded as `pendingSend` even though it is dispatched immediately:
+        // it is what `sessionFiles` renders for the rest of the session, what
+        // `retirePreviousConnection` restores on a retry, and what makes
+        // `canSendNow` false while these bytes are moving.
+        pendingSend = (sources, metas, total)
+        totalBytes = total
+        state = .transferring(done: 0, total: total)
+        connection?.send(sources: sources, metas: metas)
+        return .sent
     }
 
     // MARK: - the SAS gate

@@ -647,8 +647,13 @@
 "workspace.addFilesHint" = "Choose files or folders below, then send them to that device.";
 "workspace.sendMessageHint" = "Opens a message session with this device. Nothing needs to be selected.";
 "workspace.sendFiles" = "Send files";
+"workspace.connectToDevice" = "Connect";
+"workspace.connectToDeviceHint" = "Opens an encrypted connection to this device. Choose files, folders or a message once you are connected.";
+"workspace.sessionReadyToSend" = "Connected. Choose files or a folder to send — or wait for what the other device sends.";
+"workspace.sendRefusedBusy" = "Nothing was sent: this session was already carrying a transfer by the time you finished choosing. It carries one — leave this session and connect again to send these files.";
+"workspace.sendRefusedUnavailable" = "Nothing was sent: this session was no longer ready to send by the time you finished choosing. Leave this session and connect again to send these files.";
 "workspace.createPairingCode" = "Create a pairing code";
-"workspace.createPairingCodeHint" = "Pass the code on, and the other device connects with it. One connection carries messages and as many files or folders as you like — add them below before you create the code, or send them once you are connected.";
+"workspace.createPairingCodeHint" = "Pass the code on, and the other device connects with it. Send files, folders and messages once you are connected.";
 "workspace.connectWithCode" = "Connect";
 "workspace.oneConnectionNote" = "One connection carries messages or files, not both. Sending the other kind opens a new connection, with a new verification code.";
 "workspace.messagesOnlyNote" = "This session carries messages, not files. Sending files needs a session of its own — leave this one to start it.";

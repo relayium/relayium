@@ -317,16 +317,37 @@ public enum L10nKey: String, CaseIterable, Sendable {
 
     case workspaceSameNetworkHeading = "workspace.sameNetworkHeading"
     case workspacePairingHeading = "workspace.pairingHeading"
+    /// **The pre-connect staging section's copy, now dormant with it.**
+    ///
+    /// `TransferStagingSection` is the only thing that rendered these and it is
+    /// constructed by nobody: "Files and folders" is exactly the lane-shaped
+    /// heading a connect-first Pairing surface must not show. Retained with the
+    /// section itself, for the same reason.
     case workspaceStagingHeading = "workspace.stagingHeading"
-    /// Says the quiet part: nothing has to be chosen before connecting.
+    /// Said the quiet part: nothing has to be chosen before connecting. It is
+    /// now the structure rather than a caption.
     case workspaceStagingOptional = "workspace.stagingOptional"
     case workspaceDropHint = "workspace.dropHint"
-    /// The default intent on a chosen device — no selection required, which is
-    /// why it is the prominent one.
+    /// **The one verb on a chosen same-network device, and its hint.**
+    ///
+    /// macOS is connect-first: the screen opens the connection and what it
+    /// carries is chosen inside the session. So there is one action here where
+    /// there were two, and it names the only thing this screen does.
+    case workspaceConnectToDevice = "workspace.connectToDevice"
+    case workspaceConnectToDeviceHint = "workspace.connectToDeviceHint"
+    /// **Retired from macOS, still defined.**
+    ///
+    /// These four labelled the pre-connect pair — `Send a message` prominent,
+    /// `Send files` gated on a staged batch — and the staging hint that pointed
+    /// at the batch. macOS renders none of them since the transfer screens became
+    /// connect-first; `nearby.addFilesHint` and `nearby.selectionSendHint` are
+    /// still iOS's, which stages before connecting. Kept so a re-enable of
+    /// pre-staging restores the copy rather than reinventing it, and so eight
+    /// translations are not discarded for a decision that may be revisited.
     case workspaceSendMessage = "workspace.sendMessage"
     /// The Workspace's own version of `nearby.addFilesHint`, which says
-    /// "above" — true on the iOS layout that still renders it, and false here,
-    /// where staging sits under the two connection methods.
+    /// "above" — true on the iOS layout that still renders it, and false on the
+    /// macOS layout it was written for.
     case workspaceAddFilesHint = "workspace.addFilesHint"
     case workspaceSendMessageHint = "workspace.sendMessageHint"
     case workspaceSendFiles = "workspace.sendFiles"
@@ -336,12 +357,29 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// join messages, join files — which asked the user to answer a question a
     /// pairing code does not carry. One code is minted for both; which legacy
     /// lane an older peer ends up on is decided from evidence once that peer
-    /// exists (`LinkWorkspaceModel.legacyFallbackMode`), and on a current peer
-    /// the question never arises at all.
+    /// exists (`LegacyLane.mode`), and on a current peer the question never
+    /// arises at all.
     case workspaceCreatePairingCode = "workspace.createPairingCode"
-    /// What the code is for, and that nothing has to be picked first.
+    /// What the code is for, and where the work is chosen — after connecting,
+    /// not before it.
     case workspaceCreatePairingCodeHint = "workspace.createPairingCodeHint"
     case workspaceConnectWithCode = "workspace.connectWithCode"
+    /// **A connected file lane with nothing moving yet.**
+    ///
+    /// The legacy wire's `.transferring(0, 0)` means "cleared, and waiting to see
+    /// whose manifest arrives first", which is where a connect-first session
+    /// lands and where a receiver waits. Both halves have to be said: nothing is
+    /// in flight, and either side may be the one that starts it.
+    case workspaceSessionReadyToSend = "workspace.sessionReadyToSend"
+    /// **A batch that was chosen while the session stopped being able to carry
+    /// it.** The file picker is modal to the user, not to the connection, so the
+    /// peer can start its own transfer, or the connection can end, between the
+    /// press and the files coming back. `RealtimeSessionModel.sendNow` refuses
+    /// rather than queueing — a legacy lane carries one batch — and these two
+    /// say which of the two happened, because the alternative is the user's
+    /// chosen files disappearing with nothing on screen about it.
+    case workspaceSendRefusedBusy = "workspace.sendRefusedBusy"
+    case workspaceSendRefusedUnavailable = "workspace.sendRefusedUnavailable"
     /// The bounded limitation, stated once before anything is connected.
     case workspaceOneConnectionNote = "workspace.oneConnectionNote"
     /// The same fact from inside a live session, per lane.

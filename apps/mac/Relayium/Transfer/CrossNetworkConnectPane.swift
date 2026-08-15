@@ -2,13 +2,23 @@ import SwiftUI
 import RelayiumAppKit
 import RelayiumKit
 
-/// **Cross-network Transfer, before there is a peer**: mint a six-digit code or
-/// type in somebody else's, and have the batch ready either way.
+/// **Cross-network Transfer, before there is a peer**: mint a six-digit code, or
+/// type in somebody else's. That is the whole screen.
 ///
 /// One connection method, and the one it is: a pairing code needs no shared
 /// network, which is the whole reason this is not a card under LAN Transfer. The
 /// screen says so in its own words rather than leaving the sidebar row to carry
 /// the distinction alone.
+///
+/// ## Two choices, and nothing that could carry work
+///
+/// **Create a pairing code** and **enter one**, with a single verb behind the
+/// field. No staged batch, no drop zone, no picker, no composer, and — the part
+/// that is a rule rather than an omission — nothing on this pane that could hold
+/// a file or a message until a peer arrives. Pairing is one workspace, not a
+/// choice between a Files lane and a Text lane, and a workspace with no
+/// connection in it has nothing to offer yet. What the connection carries is
+/// chosen inside it, once the user can see who they reached.
 ///
 /// ## Account asymmetry, unchanged
 ///
@@ -33,19 +43,17 @@ import RelayiumKit
 /// person who could not see it, minutes before the peer arrived. On a `link/1`
 /// peer, which is every current client, the answer was discarded entirely.
 ///
-/// So the question is gone and the decision is not: `LinkWorkspaceModel`
-/// resolves the legacy lane from what this side actually staged and what the
-/// peer actually announced (`legacyFallbackMode`), at the one moment both are
-/// known. A peer that announces exact `link/1` is promoted to
-/// `TransferLinkPane`, where the distinction never existed.
+/// So the question is gone and the decision is not: `LinkWorkspaceModel` resolves
+/// the legacy lane through `LegacyLane.mode` from what the peer actually
+/// announced, at the one moment it is known. A peer that announces exact
+/// `link/1` is promoted to `TransferLinkPane`, where the distinction never
+/// existed.
 struct CrossNetworkConnectPane: View {
     @ObservedObject var fileModel: RealtimeSessionModel
     @ObservedObject var textModel: RealtimeTextSessionModel
     /// The unified `link/1`. A pairing room is watched for a peer that speaks it
     /// before either legacy model starts; see `watch(code:…)`.
     @ObservedObject var link: LinkWorkspaceModel
-    /// The app-scoped staged batch, shared with LAN Transfer.
-    @ObservedObject var selection: SelectionStore
     let gate: AccountGate
     /// Re-reads the parent session at activation time; `gate` belongs to the
     /// render that drew the button and can already be stale.
@@ -56,7 +64,6 @@ struct CrossNetworkConnectPane: View {
 
     @EnvironmentObject private var navigation: AppNavigationModel
     @EnvironmentObject private var presence: TransferPresence
-    @EnvironmentObject private var fileOpenRouting: AppFileOpenCoordinator
 
     @State private var actionError: String?
 
@@ -83,9 +90,10 @@ struct CrossNetworkConnectPane: View {
                     .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
             }
         }
-        .task(id: FileOpenAdoption(staged: fileOpenRouting.staged, busy: sessionLocked)) {
-            adoptOpenedFiles()
-        }
+        // **No Finder/Dock adoption here any more**, for the reason
+        // `LanConnectPane` records: this pane stages nothing before a connection
+        // exists, so a batch the OS opened has nowhere to land on it, and a pane
+        // that quietly took one would be a pre-connect staging side door.
     }
 
     // MARK: - pairing code
@@ -114,10 +122,6 @@ struct CrossNetworkConnectPane: View {
                 }
                 Divider()
                 joinControls
-                // Inside this card, and last, for the same reason it is on the
-                // LAN screen: the create hint above points at it, and what a
-                // connection carries is not a third way to connect.
-                TransferStagingSection(selection: selection, isBusy: { sessionLocked })
                 // The peer is not known yet, so neither the unified-link claim
                 // nor the legacy one-lane warning is true here. Once a peer
                 // appears, capability negotiation selects the link pane or the
@@ -133,14 +137,12 @@ struct CrossNetworkConnectPane: View {
         }
     }
 
-    /// **One action, and it needs nothing staged.**
+    /// **One action, and there is nothing it could need.**
     ///
-    /// Minting first is deliberate and is the Web's own ordering: the code is
-    /// what the other person is waiting for, and picking files before it exists
-    /// leaves the sender with nothing to do while six digits sit unclaimed. The
-    /// staging section below is where the batch is assembled, during the wait,
-    /// and everything staged there travels on the connection when the peer
-    /// arrives.
+    /// The code is what the other person is waiting for, and it is the first and
+    /// only thing this half of the screen produces. There is no batch to assemble
+    /// during the wait any more: what the connection carries is chosen once it
+    /// exists, in the workspace this code opens.
     private var createControls: some View {
         VStack(alignment: .leading, spacing: 8) {
             Button(L10n.t(.workspaceCreatePairingCode)) { createCode() }
@@ -204,16 +206,9 @@ struct CrossNetworkConnectPane: View {
 
     private func createCode() {
         guard !sessionLocked else { return }
-        // Validate and stage BEFORE the picker disappears. A batch is optional
-        // here — a code with nothing behind it is an ordinary way to start a
-        // conversation — but one the user DID pick and that cannot be read is a
-        // refusal they are owed now, rather than a code that turns out to carry
-        // nothing.
-        var staged: (sources: [PlaintextSource], metas: [FileMeta])?
-        if !selection.isEmpty {
-            guard let ready = stage() else { return }
-            staged = ready
-        }
+        // Nothing is staged and nothing can be: this pane has no picker, so a
+        // minted code carries the connection and only the connection.
+        //
         // Rendering an allowed gate and activating its button are different
         // turns. Refuse if sign-out, expiry or account replacement won between
         // them; never mint with the bearer captured by the earlier render.
@@ -227,11 +222,11 @@ struct CrossNetworkConnectPane: View {
         // **`.files` is the surface's provisional lane, not a kind of code.**
         // One of the two legacy models has to hold the minted code and its
         // expiry so `TransferSessionPane` can render them, and the file lane is
-        // the one that can carry a staged batch. If the peer turns out to be a
-        // legacy TEXT peer, `adoptLegacyRoom` moves the surface to the text lane
-        // and retires this one — see `RelayiumApp`.
+        // the one that does. If the peer turns out to be a legacy TEXT peer,
+        // `adoptLegacyRoom` moves the surface to the text lane and retires this
+        // one — see `RelayiumApp`.
         guard presence.beginSession(route, mode: .files) else { return }
-        Task { await mintAndWatch(token: access.token, staged: staged) }
+        Task { await mintAndWatch(token: access.token) }
     }
 
     private func join() {
@@ -245,31 +240,8 @@ struct CrossNetworkConnectPane: View {
         guard presence.beginSession(route, mode: .files) else { return }
         // A joiner ANSWERS on the legacy wire, so `.responder` is what the
         // fallback must use. Watched first, exactly as a minted code is.
-        //
-        // Nothing is staged, and that is a rule rather than an omission:
-        // `RealtimeSessionModel.join(role: .responder)` tears its previous state
-        // down for exactly this reason — a batch picked for one device must not
-        // be uploaded to whoever's code the user typed next. Files still travel
-        // in this direction once the connection exists, from the link pane's own
-        // Send file, where the user aims them at a peer they can see.
-        watch(code: code, legacyRole: .responder, staged: nil) {
+        watch(code: code, legacyRole: .responder) {
             await fileModel.join(code: code)
-        }
-    }
-
-    /// Expand and open the staged batch, reporting the reason it could not be.
-    private func stage() -> (sources: [PlaintextSource], metas: [FileMeta])? {
-        guard let expanded = selection.selection else {
-            actionError = selection.error ?? L10n.t(.nearbyAddFilesFirst)
-            return nil
-        }
-        do {
-            let staged = try stageRealtimeFiles(expanded.files)
-            actionError = nil
-            return staged
-        } catch {
-            actionError = ErrorCopy.message(for: error)
-            return nil
         }
     }
 
@@ -284,18 +256,22 @@ struct CrossNetworkConnectPane: View {
     /// The creator is the offerer on the legacy wire, so `.initiator` is what
     /// the fallback must use. A LINK computes its own role from the two room
     /// ids and ignores this one.
-    private func mintAndWatch(token: String,
-                              staged: (sources: [PlaintextSource], metas: [FileMeta])?) async {
+    private func mintAndWatch(token: String) async {
         await fileModel.mintCode(token: token)
         guard case let .showingCode(code, _) = fileModel.state else { return }
-        watch(code: code, legacyRole: .initiator, staged: staged) {
-            // The legacy fallback stages the batch itself — `onLegacyFallbackBatch`
-            // hands it back — so nothing is staged before the room has answered.
+        watch(code: code, legacyRole: .initiator) {
             await fileModel.join(code: code, role: .initiator)
         }
     }
 
     /// Watch a code, or fall straight back when this build cannot.
+    ///
+    /// **Nothing is armed and nothing is staged, on either branch.** That is now
+    /// a property of the surface rather than a choice made here: there is no
+    /// picker on this pane, so `watchPairingCode` is handed an empty batch and
+    /// the legacy start has nothing to queue. What the connection carries is
+    /// chosen inside it — `TransferLinkPane` for a `link/1` peer, and
+    /// `TransferSessionPane`'s own send for a legacy file lane.
     ///
     /// `legacyStart` is the path that shipped before the unified link, and it
     /// runs unchanged when the link model refuses the room — a client with no
@@ -303,33 +279,19 @@ struct CrossNetworkConnectPane: View {
     /// keeps "pairing code works" true regardless of which half answers.
     ///
     /// It is the FILE lane, and it has to be: this branch is reached before any
-    /// peer exists, so the evidence `legacyFallbackMode` weighs — a staged batch,
-    /// an announced capability — is either absent or already says files. The file
-    /// lane is also the one that carries bytes in either direction, so it is the
-    /// answer that forecloses least.
+    /// peer exists, so there is no announcement for `LegacyLane.mode` to read
+    /// yet. The file lane is the one whose `showingCode` and expiry this surface
+    /// renders, and the one a real peer's announcement can still move off —
+    /// `adoptLegacyRoom` switches the surface to text when the room resolves that
+    /// way. Nothing is foreclosed by starting here.
     private func watch(code: String,
                        legacyRole: Role,
-                       staged: (sources: [PlaintextSource], metas: [FileMeta])?,
                        legacyStart: @escaping () async -> Void) {
         let watched = link.watchPairingCode(code,
                                             legacyRole: legacyRole,
-                                            files: staged?.metas ?? [],
-                                            sources: staged?.sources ?? [])
+                                            files: [],
+                                            sources: [])
         guard !watched else { return }
-        if let staged {
-            fileModel.stageSend(sources: staged.sources, metas: staged.metas)
-        }
         Task { await legacyStart() }
-    }
-
-    /// Stage a batch the OS opened, if this surface is free to take it. Both
-    /// transfer routes share the same app-scoped selection, so switching from
-    /// LAN before adoption must not strand the user's Dock drop.
-    private func adoptOpenedFiles() {
-        guard let batch = fileOpenRouting.batch(
-            forAnyOf: AppDestination.macTransferRoutes, busy: sessionLocked)
-        else { return }
-        selection.add(batch.urls)
-        fileOpenRouting.consume(batch)
     }
 }

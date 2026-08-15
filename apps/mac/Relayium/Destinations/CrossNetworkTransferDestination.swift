@@ -20,9 +20,10 @@ import RelayiumKit
 ///
 /// ## What it shares with LAN Transfer
 ///
-/// The staged batch (app-scoped, so nobody stages twice after changing their
-/// mind about how to connect) and every session model. Which pane this screen
-/// draws, and whether it may start anything, are decided by
+/// Every session model, and nothing else — there is no staged batch on either
+/// screen any more, because neither offers anything to stage before a peer
+/// exists. Which pane this screen draws, and whether it may start anything, are
+/// decided by
 /// `TransferSurfacePresentation` from ownership rather than from model state, so
 /// a same-network session cannot appear here and cannot be started over.
 struct CrossNetworkTransferDestination: View {
@@ -33,7 +34,6 @@ struct CrossNetworkTransferDestination: View {
     /// The unified `link/1`. A pairing room makes the same capability decision a
     /// same-network room does, after its peer appears.
     @EnvironmentObject private var link: LinkWorkspaceModel
-    @EnvironmentObject private var selection: SelectionStore
     /// Held for the create half only. Joining is account-free.
     @EnvironmentObject private var session: AccountSession
 
@@ -65,13 +65,11 @@ struct CrossNetworkTransferDestination: View {
             case .legacySession:
                 TransferSessionPane(route: route,
                                     fileModel: fileModel,
-                                    textModel: textModel,
-                                    selection: selection)
+                                    textModel: textModel)
             case .connect:
                 CrossNetworkConnectPane(fileModel: fileModel,
                                         textModel: textModel,
                                         link: link,
-                                        selection: selection,
                                         gate: gate,
                                         accessNow: { accessNow },
                                         sessionLocked: sessionLocked)

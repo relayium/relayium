@@ -31,11 +31,12 @@ import RelayiumKit
 ///
 /// ## What is shared, and where it is decided
 ///
-/// The staged batch is app-scoped (`SelectionStore` in the environment), so
-/// files picked here are still picked if the user decides to use a code
-/// instead — the split must not make somebody stage twice.
+/// **Not a staged batch.** There is nothing to stage on either screen before a
+/// connection exists, so the app-scoped `SelectionStore` the two destinations
+/// used to share is gone rather than merely unused: a store no surface writes
+/// cannot be reached by a later edit either.
 ///
-/// The session is shared too, and that is the delicate half. Which pane this
+/// The session is shared, and that is the delicate half. Which pane this
 /// screen draws, and whether its connect controls may start anything, are
 /// `TransferSurfacePresentation`'s answers rather than this file's: a session
 /// belonging to the pairing-code route must not be drawn here, and must not be
@@ -49,10 +50,6 @@ struct LanTransferDestination: View {
     @EnvironmentObject private var textModel: RealtimeTextSessionModel
     /// The unified `link/1`, for peers that announced it.
     @EnvironmentObject private var link: LinkWorkspaceModel
-    /// One staged batch for both transfer destinations, app-scoped so it
-    /// survives this screen being replaced — by the session it starts, or by the
-    /// user switching to the other connection method.
-    @EnvironmentObject private var selection: SelectionStore
 
     /// **No account, anywhere in this file.** Same-network transfer in both
     /// directions needs none, so this destination holds no `AccountSession`, no
@@ -93,15 +90,13 @@ struct LanTransferDestination: View {
             case .legacySession:
                 TransferSessionPane(route: route,
                                     fileModel: fileModel,
-                                    textModel: textModel,
-                                    selection: selection)
+                                    textModel: textModel)
             case .connect:
                 LanConnectPane(discovery: discovery,
                                receive: receive,
                                fileModel: fileModel,
                                textModel: textModel,
                                link: link,
-                               selection: selection,
                                sessionLocked: sessionLocked)
                 VerificationSetting(locked: sessionLocked, preference: verification)
             }

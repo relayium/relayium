@@ -4,6 +4,24 @@ import RelayiumAppKit
 /// The files and folders a transfer is going to carry, rendered **inside** the
 /// connection method that will carry them.
 ///
+/// ## Dormant: nothing on macOS constructs this
+///
+/// The real-time transfer screens are connect-first. A session is established
+/// before any file or folder is chosen, so neither `LanConnectPane` nor
+/// `CrossNetworkConnectPane` renders this section, no app-scoped
+/// `SelectionStore` is injected for it, and there is no macOS entry point —
+/// button, drop, Finder **Open With** or Dock icon — that reaches pre-connect
+/// staging at all. `MacSurfaceGuardTests` asserts each of those absences.
+///
+/// It is kept, whole and compiling, on purpose. The owner's decision was to
+/// remove pre-staging from the product, not from the codebase: re-enabling it is
+/// a matter of constructing this again with a store, and the rules below — one
+/// drop target, the same live busy re-read the connect controls use, a heading
+/// that is a level of hierarchy rather than a card — are the ones that took
+/// several rounds to get right and must not have to be rediscovered.
+///
+/// The doc below describes the surface as it was when it last rendered.
+///
 /// ## Why it is not a card of its own
 ///
 /// It was one: a third `SectionCard` sitting beside Same network and Pairing

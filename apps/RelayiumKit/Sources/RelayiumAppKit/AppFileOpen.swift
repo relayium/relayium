@@ -119,18 +119,16 @@ public final class AppFileOpenCoordinator: ObservableObject {
         guard !urls.isEmpty else { return }
         let destination = AppRouting.destination(forOpenedFiles: navigation.selection)
         navigation.select(destination)
-        // Merged under the destination decided *now*. The two macOS transfer
-        // routes are separate connection screens but one staging context, so a
-        // second Dock drop after switching LAN ↔ pairing keeps the first batch
-        // alive. Stored Send remains a separate product and never absorbs or
-        // donates a waiting transfer batch.
-        let sharesTransferContext = staged.map {
-            AppDestination.macTransferRoutes.contains($0.destination)
-                && AppDestination.macTransferRoutes.contains(destination)
-        } ?? false
-        var merged = (staged?.destination == destination || sharesTransferContext)
-            ? staged?.urls ?? []
-            : []
+        // Merged under the destination decided *now*, and merged only with a
+        // batch already addressed to that same destination.
+        //
+        // There used to be a second arm: the two macOS transfer routes were
+        // separate screens over one staging context, so a batch waiting for LAN
+        // Transfer was inherited by the pairing screen. Both are connect-first
+        // now — neither stages anything before a session exists and neither
+        // adopts an opened batch — so there is no shared context left to
+        // inherit through, and the exception is gone rather than dormant.
+        var merged = staged?.destination == destination ? staged?.urls ?? [] : []
         var seen = Set(merged.map(\.path))
         for url in urls where seen.insert(url.path).inserted {
             merged.append(url)
@@ -140,8 +138,8 @@ public final class AppFileOpenCoordinator: ObservableObject {
 
     /// What this destination's pane should stage right now, or nil.
     ///
-    /// The whole adoption rule, in one place three panes call rather than three
-    /// panes re-deriving it — which is how the two halves below drift apart.
+    /// The whole adoption rule, in one place rather than re-derived per pane —
+    /// which is how the two halves drift apart.
     ///
     /// **Refused while that pane is busy, and retained rather than dropped.**
     /// A pane mid-transfer disables its drop zone, so staging into it from a
@@ -149,22 +147,14 @@ public final class AppFileOpenCoordinator: ObservableObject {
     /// leaves `staged` alone, and the pane's `task(id:)` asks again the moment
     /// `busy` goes false — so the files land as soon as they legitimately can
     /// instead of being silently discarded.
+    ///
+    /// **One destination, exactly.** There was a `forAnyOf:` overload for the
+    /// two macOS transfer routes, which shared one staging context; they are
+    /// connect-first now and adopt nothing, so the widened form has no caller
+    /// and is gone. A batch is taken by the pane it was addressed to or by
+    /// nobody.
     public func batch(for destination: AppDestination, busy: Bool) -> OpenedFiles? {
-        batch(forAnyOf: [destination], busy: busy)
-    }
-
-    /// The same rule for destinations that share one staging context.
-    ///
-    /// The single implementation both overloads are expressed in, so "which
-    /// pane is this batch for" is one decision rather than two reads of one
-    /// answer with a `consume` between them. The two transfer screens each ask
-    /// for the same transfer-route set because they share an app-scoped staging
-    /// context even though they render different connection methods.
-    ///
-    /// It does NOT widen who may take a batch: the addressed set is the caller's
-    /// own surface, and a batch addressed to `.storedSend` is still refused here.
-    public func batch(forAnyOf destinations: Set<AppDestination>, busy: Bool) -> OpenedFiles? {
-        guard !busy, let staged, destinations.contains(staged.destination) else { return nil }
+        guard !busy, let staged, staged.destination == destination else { return nil }
         return staged
     }
 

@@ -382,32 +382,42 @@ final class AppShellUITests: XCTestCase {
     /// A count is not the identity of a send. Drive a real file through the
     /// system picker and require the running product to show both the complete
     /// name and its formatted size before any device or Send action is chosen.
-    func testPendingSendNamesTheFileAndItsSizeBeforeTransfer() throws {
+    /// **Neither real-time screen can hold work before it holds a connection**,
+    /// observed in the built app rather than in the source.
+    ///
+    /// This test used to do the opposite: it staged a fixture on LAN Transfer
+    /// and asserted the pending-file list named it and its size. That product
+    /// is gone — a session is established before anything is chosen — so what
+    /// remains to check at runtime is that none of the machinery is on screen.
+    /// The pending-file identity rendering it used to prove is still covered,
+    /// on the surface that still stages: see
+    /// `testASignedInStoredSendNamesTheFileItWouldUpload`.
+    func testNeitherTransferScreenStagesAnythingBeforeConnecting() {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
-        let nearby = sidebarDestination("LAN Transfer", in: window)
-        XCTAssertTrue(nearby.waitForExistence(timeout: 10))
-        nearby.click()
-
-        let fixture = FileManager.default.temporaryDirectory
-            .appendingPathComponent("Relayium product brief \(UUID().uuidString).txt")
-        try Data(repeating: 0x52, count: 1_536).write(to: fixture, options: .atomic)
-        pendingFileFixture = fixture
-
-        let chooser = window.descendants(matching: .any)["Files to send"].firstMatch
-        XCTAssertTrue(chooser.waitForExistence(timeout: 10),
-                      "Nearby has no file-selection surface")
-        chooseFixture(fixture, in: window)
-
-        let identity = window.descendants(matching: .any)["pendingFile.0"].firstMatch
-        XCTAssertTrue(identity.waitForExistence(timeout: 10),
-                      "the pending send did not expose its file identity")
-        XCTAssertTrue(identity.label.contains(fixture.lastPathComponent),
-                      "the pending send shortened or omitted the file name")
-        XCTAssertTrue(identity.label.contains("1.5 KB"),
-                      "the pending send omitted the formatted file size")
-        XCTAssertTrue(window.buttons["Clear"].exists,
-                      "the identified pending send cannot be cleared")
+        for destination in ["LAN Transfer", "Cross-network Transfer"] {
+            let row = sidebarDestination(destination, in: window)
+            XCTAssertTrue(row.waitForExistence(timeout: 10))
+            row.click()
+            XCTAssertEqual(window.title, destination,
+                           "the window is not on the destination this asserts about")
+            XCTAssertFalse(window.descendants(matching: .any)["Files to send"]
+                .firstMatch.exists,
+                           "\(destination) stages files before connecting")
+            XCTAssertFalse(window.descendants(matching: .any)["transfer-choose-files"]
+                .firstMatch.exists,
+                           "\(destination) offers a pre-connect file picker")
+            XCTAssertFalse(window.descendants(matching: .any)["transfer-staging-optional"]
+                .firstMatch.exists,
+                           "\(destination) still describes optional pre-connect staging")
+            XCTAssertFalse(window.descendants(matching: .any)["pendingFile.0"]
+                .firstMatch.exists,
+                           "\(destination) shows a staged batch before connecting")
+            XCTAssertFalse(window.buttons["Send files"].exists,
+                           "\(destination) offers a pre-connect file verb")
+            XCTAssertFalse(window.buttons["Send a message"].exists,
+                           "\(destination) offers a pre-connect message verb")
+        }
     }
 
     /// Selecting each destination renders something. The regression this catches
@@ -706,15 +716,14 @@ final class AppShellUITests: XCTestCase {
         XCTAssertFalse(window.textFields["pairing.joinCode"].exists,
                        "LAN Transfer still offers pairing-code joining")
 
-        // File and folder actions sit inside this destination's own flow, and
-        // are optional.
-        XCTAssertTrue(window.descendants(matching: .any)["Files to send"].firstMatch.exists,
-                      "LAN Transfer lost its file and folder staging")
-        XCTAssertTrue(visibleElement(
-            id: "transfer-staging-optional",
-            text: "Optional. You can connect first and choose files afterwards — a message needs nothing at all.",
-            in: window).exists,
-                      "LAN Transfer no longer says staging is optional")
+        // And nothing that could hold work before there is a peer. Connect-first:
+        // the roster is the whole screen, and what a connection carries is chosen
+        // inside it.
+        XCTAssertFalse(window.descendants(matching: .any)["Files to send"].firstMatch.exists,
+                       "LAN Transfer stages files before connecting")
+        XCTAssertFalse(window.descendants(matching: .any)["transfer-staging-optional"]
+            .firstMatch.exists,
+                       "LAN Transfer still describes optional pre-connect staging")
     }
 
     func testCrossNetworkTransferOffersOnlyPairingCodeConnectingAndLeadsWithMessages() {
@@ -747,24 +756,29 @@ final class AppShellUITests: XCTestCase {
         XCTAssertFalse(window.buttons["Pause receiving"].exists,
                        "Cross-network Transfer still carries the residency control")
 
-        // Its own staging, inside its own flow.
-        XCTAssertTrue(window.descendants(matching: .any)["Files to send"].firstMatch.exists,
-                      "Cross-network Transfer lost its file and folder staging")
+        // **No staging, at all.** Pairing is ONE workspace, and a workspace with
+        // no connection in it has nothing to offer yet. A "Files and folders"
+        // group beside the two code actions is the lane question in a different
+        // costume, which is why its own heading is checked by name.
+        XCTAssertFalse(window.descendants(matching: .any)["Files to send"].firstMatch.exists,
+                       "the pairing screen stages files before connecting")
+        XCTAssertFalse(window.descendants(matching: .any)["transfer-choose-files"]
+            .firstMatch.exists,
+                       "the pairing screen offers a pre-connect file picker")
         // No peer exists yet, so the surface must not guess whether this will
         // become a unified link or a legacy one-lane session.
         XCTAssertFalse(window.descendants(matching: .any)["lan-device-connection-note"]
             .firstMatch.exists,
                        "the pairing screen claimed a legacy limit before knowing the peer")
-        // **One create action, and it needs nothing staged.** Minting first is
-        // the Web's ordering and the reason the staging box is in the waiting
-        // room: picking files before the code exists leaves the sender with
-        // nothing to do while six digits sit unclaimed.
+        // **One create action, and it needs nothing** — which is now structural
+        // rather than a property of the disabled state.
         XCTAssertTrue(window.buttons["Create a pairing code"].isEnabled,
-                      "creating a code requires a staged selection")
+                      "creating a code requires something this screen cannot offer")
         for retired in ["Create a code for messages", "Create a code for files",
-                        "Join messages", "Join files"] {
+                        "Join messages", "Join files", "Send files", "Send a message",
+                        "Choose Files or Folders…"] {
             XCTAssertFalse(window.buttons[retired].exists,
-                           "the pairing screen still offers a kind choice: \(retired)")
+                           "the pairing screen still offers a pre-connect choice: \(retired)")
         }
     }
 
@@ -848,11 +862,12 @@ final class AppShellUITests: XCTestCase {
                        "one session is rendered on both transfer destinations")
         XCTAssertFalse(window.buttons["Start receiving"].isEnabled,
                        "the other destination can start a session over a live one")
-        let transferChooser = window.descendants(matching: .any)["transfer-choose-files"].firstMatch
-        XCTAssertTrue(transferChooser.exists,
-                      "the other destination lost its shared staged selection")
-        XCTAssertFalse(transferChooser.isEnabled,
-                       "the other destination can mutate staging during a live session")
+        // The reason every control here is inert is stated, rather than left as
+        // a screen of greyed buttons. This replaces a probe on the shared staging
+        // chooser, which no longer exists to be disabled.
+        XCTAssertTrue(window.descendants(matching: .any)["transfer-busy-elsewhere"]
+            .firstMatch.exists,
+                      "the other destination disables everything without saying why")
 
         // …and the session is still there when its owner comes back.
         cross.click()
@@ -1419,25 +1434,43 @@ final class AppShellUITests: XCTestCase {
     /// property that matters now is the opposite one — the drop zone, the picker
     /// button and the message verb are on screen together, and none of them is
     /// gated on the others.
-    func testTransferStagingIsAlwaysAvailableAndNeverGatesConnecting() {
+    /// **The pairing screen's pre-connect UI is exactly two user choices**, at
+    /// runtime and counted rather than read.
+    ///
+    /// It asserted the opposite premise until the owner's correction: that a
+    /// staging surface was always available beside the two code actions, and
+    /// that connecting never depended on it. Both halves are settled a level up
+    /// now — there is nothing to stage, so nothing can gate anything — and what
+    /// is worth checking in the built app is the count: Create, a field, and one
+    /// verb behind it.
+    func testThePairingScreenOffersOnlyCreateAndEnterCode() {
         let window = mainWindow
         XCTAssertTrue(window.waitForExistence(timeout: 20))
         let cross = sidebarDestination("Cross-network Transfer", in: window)
         XCTAssertTrue(cross.waitForExistence(timeout: 10))
         cross.click()
 
-        let chooser = window.descendants(matching: .any)["Files to send"].firstMatch
-        XCTAssertTrue(chooser.waitForExistence(timeout: 15),
-                      "the destination stages nothing")
-        XCTAssertTrue(window.descendants(matching: .any)["transfer-choose-files"]
-            .firstMatch.exists,
-                      "the destination has no explicit file and folder picker")
+        let create = window.buttons["Create a pairing code"]
+        XCTAssertTrue(create.waitForExistence(timeout: 15),
+                      "the pairing screen lost Create a pairing code")
+        XCTAssertTrue(create.isEnabled,
+                      "creating a code was made to depend on something first")
+        XCTAssertTrue(window.textFields["pairing.joinCode"].exists,
+                      "the pairing screen lost the field a code is entered into")
+        XCTAssertTrue(window.buttons["Connect"].exists,
+                      "entering a code offers no action")
         XCTAssertEqual(window.radioButtons.count, 0,
-                       "a transfer-type picker can still hide the staging surface")
-        // Connecting is reachable with nothing staged: the message verbs are the
-        // ones with no precondition at all.
-        XCTAssertTrue(window.buttons["Create a pairing code"].isEnabled,
-                      "connecting was made to depend on choosing files first")
+                       "a transfer-type picker is back on the pairing screen")
+        // Nothing that could hold work: no staging group, no picker, no composer.
+        XCTAssertFalse(window.descendants(matching: .any)["Files to send"]
+            .firstMatch.exists,
+                       "the pairing screen stages files before connecting")
+        XCTAssertFalse(window.descendants(matching: .any)["transfer-choose-files"]
+            .firstMatch.exists,
+                       "the pairing screen offers a pre-connect file picker")
+        XCTAssertFalse(window.descendants(matching: .any)["link-composer"]
+            .firstMatch.exists,
+                       "the pairing screen composes a message before connecting")
     }
 
     /// An upload that fails mid-transfer keeps the user's files in front of them.
@@ -1488,7 +1521,15 @@ final class AppShellUITests: XCTestCase {
     /// to preserve, so what this proves is what is left and what actually
     /// matters: a batch staged before the code is minted does not change the
     /// action, does not change the link, and does not leave the screen.
-    func testCreatingAPairingCodeWithAStagedBatchShowsEveryHandoff() throws {
+    /// **Creating a code needs nothing first, and hands over every way to pass
+    /// it on.**
+    ///
+    /// It staged a fixture before pressing Create, to prove a staged batch did
+    /// not make the create action inert. There is nothing to stage, so what it
+    /// proves now is the simpler and stronger version: Create is live on a
+    /// screen with no preconditions on it at all. The handoff assertions —
+    /// code, join link, Copy, Share — are unchanged and are the point.
+    func testCreatingAPairingCodeShowsEveryHandoff() throws {
         app.terminate()
         app.launchArguments = offlineLaunchArguments
         app.launch()
@@ -1500,21 +1541,11 @@ final class AppShellUITests: XCTestCase {
         XCTAssertTrue(pairing.waitForExistence(timeout: 10))
         pairing.click()
 
-        let fixture = FileManager.default.temporaryDirectory
-            .appendingPathComponent("Relayium product brief \(UUID().uuidString).txt")
-        try Data(repeating: 0x52, count: 1_536).write(to: fixture, options: .atomic)
-        pendingFileFixture = fixture
-
-        let chooser = window.descendants(matching: .any)["Files to send"].firstMatch
-        XCTAssertTrue(chooser.waitForExistence(timeout: 10),
-                      "the pairing screen stages nothing")
-        chooseFixture(fixture, in: window)
-
         let create = window.buttons["Create a pairing code"]
         XCTAssertTrue(create.waitForExistence(timeout: 10),
-                      "a staged file offers no way to create a code")
+                      "the pairing screen offers no way to create a code")
         XCTAssertTrue(create.isEnabled,
-                      "a staged batch left the create action inert")
+                      "the create action is inert on a screen with no preconditions")
         create.click()
 
         XCTAssertTrue(window.descendants(matching: .any)["pairing-code-value"]

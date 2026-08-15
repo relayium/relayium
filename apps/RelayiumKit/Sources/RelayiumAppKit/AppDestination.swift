@@ -96,32 +96,44 @@ public enum AppRouting {
     /// Files the OS opened with this app — a Finder **Open With**, or a drop on
     /// the Dock icon.
     ///
-    /// Unlike the two above, this one reads where the user already is, because a
-    /// file is not itself a request to go anywhere: someone on Stored send who
-    /// drops a folder on the Dock means *that* send, and moving them would
-    /// discard the flow they had already chosen. So a send destination is kept.
+    /// It used to read where the user already is, because a file is not itself a
+    /// request to go anywhere and a send destination the user had chosen was
+    /// worth keeping. Every destination is now listed together, still with **no
+    /// `default`**, so a sixth has to state its answer rather than inherit one —
+    /// and the answer for all of them is the same, because there is exactly one
+    /// macOS surface left that can hold a batch.
     ///
-    /// The three that can are listed by name, again with **no `default`**, so a
-    /// sixth destination has to state whether it sends files rather than
-    /// inheriting an answer.
+    /// **What changed is the real-time screens, not this rule.** `.nearby` and
+    /// `.pairingCode` establish a session before anything is chosen: no drop
+    /// zone, no picker, no staged batch. A Finder **Open With** routed to either
+    /// of them would navigate the user to a screen with nowhere for the files to
+    /// go — which is worse than the sign-in wall the old comment here weighed
+    /// against, because a wall names an action and a screen that ignores you
+    /// does not. `deviceInbox` and `account` never staged anything either.
     ///
-    /// `.nearby` is the fallback for the three that cannot, and it is the only
-    /// defensible one: it is the sole send flow that needs neither an account
-    /// nor a code, so dropping files on the Dock while signed out stages them
-    /// instead of opening a sign-in wall. Routing to Stored send would make the
-    /// app's most native gesture the one place a signed-out user is refused.
-    ///
-    /// **`deviceInbox` states its answer here rather than inheriting one, and the
-    /// answer is that it does not send.** It is the direction files arrive FROM
-    /// the user's own account, and it has no selection, no drop zone and no
-    /// recipient to choose; staging a Finder **Open With** there would put the
-    /// user's files on a surface that will never send them. Someone who opens a
-    /// file while reading their inbox settings is therefore moved to Nearby, the
-    /// same as from Open a link and from Account.
+    /// So the batch goes where a batch can actually live. `LanConnectPane` and
+    /// `CrossNetworkConnectPane` no longer adopt anything, and this is the other
+    /// half of that: nothing addressed to a transfer route, rather than something
+    /// addressed to a route that will silently drop it.
     public static func destination(forOpenedFiles current: AppDestination) -> AppDestination {
+        // **Stored Send, from wherever the user was.**
+        //
+        // It used to be "stay put if you are already on a screen that stages",
+        // and the two real-time transfer screens were two of those. They are not
+        // any more: Nearby and Pairing establish a session before anything is
+        // chosen, so neither has a batch a Finder open or a Dock drop could land
+        // in, and routing one there would navigate the user to a screen that
+        // visibly does nothing with the files they just handed the app.
+        //
+        // Stored Send is the one macOS destination whose product IS "choose
+        // files, then decide where they go", so it is where they go. The cost is
+        // named rather than hidden: it is the account-gated surface, and a
+        // signed-out Dock drop now lands on a gate that says so instead of on a
+        // free screen that could stage. That is the honest trade for removing
+        // pre-connect staging, and the gate at least names an action.
         switch current {
-        case .nearby, .pairingCode, .storedSend: return current
-        case .storedReceive, .deviceInbox, .account: return .nearby
+        case .nearby, .pairingCode, .storedSend,
+             .storedReceive, .deviceInbox, .account: return .storedSend
         }
     }
 

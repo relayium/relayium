@@ -12,34 +12,41 @@ import RelayiumKit
 /// not required), and a screen showing both had to explain both before the user could
 /// pick either.
 ///
-/// ## The segmented Files/Text picker is still gone
+/// ## Connect first. Choose what to send afterwards.
 ///
-/// This screen never asks "files or text?" as a mode. Each action states its own
-/// kind, and **a message is the default one**: `Send a message` needs nothing
-/// staged and is the prominent action on a chosen device, with the file action
-/// beside it. That the kind still has to be decided at the moment of connecting
-/// is not a presentation choice on the legacy wire — a file transfer and an
-/// ephemeral text session are separate signalling generations, and a peer handed
-/// the wrong one waits for a manifest that never arrives — so the choice is
-/// attached to the verb the user presses, which is the last honest place for it.
+/// This screen has **one** verb on a chosen device — Connect — and it asks
+/// nothing else. There is no staged batch here, no drop zone, no picker and no
+/// composer, because none of them can exist before a peer does: the owner's rule
+/// for both real-time surfaces is that a session is established first and the
+/// work is chosen inside it.
 ///
-/// **For a peer that announced exact `link/1` the kind is not a choice at all.**
-/// Both verbs open the SAME connection: `Send a message` with nothing staged,
-/// `Send files` with the staged batch armed, and everything afterwards happens
-/// inside `TransferLinkPane` without another verification. The two buttons stay
-/// because they are two intents, not two transports.
+/// That removes the last question this screen used to put to the user, and it is
+/// worth naming what the question was. `Send a message` and `Send files` were
+/// never two transports; they were two intents that happened, on the legacy
+/// wire, to select two non-interoperating signalling generations. A peer handed
+/// the wrong one waits for a manifest that never arrives, so *something* has to
+/// pick — and the person pressing the button was the worst available answer,
+/// because the fact that decides it is the peer's own announcement, which they
+/// cannot see and the roster already holds.
+///
+/// So `LegacyLane.mode` picks, from `NearbyDevice.announcesLegacyText`, at the
+/// moment Connect is pressed. Neither answer is a dead end: a text lane opens
+/// with its composer, and a file lane can send through
+/// `RealtimeSessionModel.sendNow` — which is the change that made removing the
+/// pre-connect picker possible rather than merely tidier.
+///
+/// **For a peer that announced exact `link/1` there is no lane at all.** Connect
+/// opens one `link/1` and `TransferLinkPane` carries messages and as many file
+/// or folder batches as the user wants, on that one verified connection.
 struct LanConnectPane: View {
     @ObservedObject var discovery: LanDiscoveryModel
     @ObservedObject var receive: NearbyReceiveModel
     @ObservedObject var fileModel: RealtimeSessionModel
     @ObservedObject var textModel: RealtimeTextSessionModel
-    /// The unified `link/1`. Consulted per DEVICE rather than per action: a peer
-    /// that announced it takes one connection for both verbs, and one that did
-    /// not keeps the two legacy paths untouched.
+    /// The unified `link/1`. Consulted per DEVICE: a peer that announced it gets
+    /// one connection carrying everything, and one that did not gets the legacy
+    /// lane its own announcement selects.
     @ObservedObject var link: LinkWorkspaceModel
-    /// The app-scoped staged batch, shared with the Cross-network destination so
-    /// a change of mind about how to connect does not discard what to send.
-    @ObservedObject var selection: SelectionStore
     /// `TransferSurfacePresentation.acceptsNewSession` inverted, computed by the
     /// destination. It is true while ANY route owns or retains a session —
     /// including the Cross-network one — which is what stops a second session
@@ -47,7 +54,6 @@ struct LanConnectPane: View {
     let sessionLocked: Bool
 
     @EnvironmentObject private var presence: TransferPresence
-    @EnvironmentObject private var fileOpenRouting: AppFileOpenCoordinator
 
     @State private var actionError: String?
 
@@ -90,13 +96,14 @@ struct LanConnectPane: View {
                     .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
             }
         }
-        // Files opened from Finder or dropped on the Dock icon. `task(id:)` keyed
-        // on BOTH the batch and `busy`, because either can be the change that
-        // makes adoption possible: a batch that arrived mid-transfer is never
-        // republished, so keying on the batch alone would strand it.
-        .task(id: FileOpenAdoption(staged: fileOpenRouting.staged, busy: sessionLocked)) {
-            adoptOpenedFiles()
-        }
+        // **No Finder/Dock adoption here any more.** This screen stages nothing
+        // before a connection exists, so a batch the OS opened has nowhere to
+        // land on it — and a pane that quietly took one would be exactly the
+        // pre-connect staging side door this surface exists without.
+        // `AppRouting.destination(forOpenedFiles:)` sends those batches to
+        // Stored Send, which is the macOS surface whose product really is
+        // "choose files, then decide where they go".
+        //
         // Re-measured periodically while listening, and immediately on every
         // socket edge. A DHCP renewal or interface change does not have to tear
         // down an existing WebSocket, so relying on reconnect alone can leave a
@@ -196,11 +203,6 @@ struct LanConnectPane: View {
                     Divider()
                     actions(for: device)
                 }
-
-                // Inside this card: the sentences above point at it ("Choose
-                // files or folders below…"), and staging is what this connection
-                // carries rather than a third way to send anything.
-                TransferStagingSection(selection: selection, isBusy: { sessionLocked })
 
                 // How the room is formed at all. Reference rather than task, and
                 // a footnote to the whole card rather than a group of its own —
@@ -503,9 +505,19 @@ struct LanConnectPane: View {
         .accessibilityHint(L10n.t(.nearbyA11yChooseDevice))
     }
 
-    /// The message-first pair. Both verbs are on screen at once and neither is
-    /// hidden behind a mode: what differs is only their preconditions, and the
-    /// one with no precondition at all is the prominent one.
+    /// **One verb, and it has no precondition beyond a chosen device.**
+    ///
+    /// It replaces a pair — `Send a message`, prominent and always available,
+    /// and `Send files`, greyed until something was staged — which between them
+    /// asked the user two questions before there was a peer: *what am I going to
+    /// send*, and *which of two things can this connection be*. Neither has an
+    /// answer worth asking for at this moment. The second one is the peer's to
+    /// give (`LegacyLane.mode`, from what the roster already heard), and the
+    /// first belongs inside the session, where the user can see who they are
+    /// talking to.
+    ///
+    /// What is left is the only fact the screen genuinely owns: *this* is the
+    /// device, and pressing this opens an encrypted connection to it.
     @ViewBuilder
     private func actions(for device: NearbyDevice) -> some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -513,34 +525,23 @@ struct LanConnectPane: View {
             // characters by `safeDisplayName`, and isolated rather than translated.
             Text(L10n.t(.nearbySendTo, [L10n.token(device.label)]))
                 .font(.subheadline.weight(.semibold))
-            Button(L10n.t(.workspaceSendMessage)) { startMessage(with: device) }
+            Button(L10n.t(.workspaceConnectToDevice)) { connect(to: device) }
                 .buttonStyle(.borderedProminent)
                 .disabled(sessionLocked)
-                .accessibilityIdentifier("lan-send-message")
-            Text(L10n.t(.workspaceSendMessageHint))
+                .accessibilityIdentifier("lan-connect-device")
+            Text(L10n.t(.workspaceConnectToDeviceHint))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Text(selection.summary.map { L10n.t(.nearbySelectionSendHint, [$0]) }
-                 ?? L10n.t(.workspaceAddFilesHint))
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Button(L10n.t(.workspaceSendFiles)) { sendFiles(to: device) }
-                .buttonStyle(.bordered)
-                // What is missing is named by the sentence directly above, and
-                // adding it is one drop away — unlike an account, which is why
-                // the pairing-code create controls get a gate instead.
-                .disabled(selection.isEmpty || sessionLocked)
-                .accessibilityIdentifier("lan-send-files")
             // Says what actually happens on the other end rather than implying a
             // human gate that is not there.
             Text(L10n.t(.nearbyAcceptanceNote))
                 .font(.caption2).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             // What THIS device's connection will carry, attached to that device
-            // rather than to the screen. The two verbs above open one connection
-            // for a peer that announced exact `link/1` and two separate ones for
-            // a peer that did not, and only the peer decides which — so a note
-            // above the roster could only ever be right about one of them.
+            // rather than to the screen. One connection carries both lanes for a
+            // peer that announced exact `link/1` and one lane for a peer that did
+            // not, and only the peer decides which — so a note above the roster
+            // could only ever be right about one of them.
             InlineMessage(.info, L10n.t(device.supportsLink
                                         ? .linkOneConnectionNote
                                         : .workspaceOneConnectionNote))
@@ -551,20 +552,37 @@ struct LanConnectPane: View {
 
     // MARK: - actions
 
-    private func startMessage(with device: NearbyDevice) {
+    /// **The one start path on this screen**, and the only place a same-network
+    /// session is created at all.
+    ///
+    /// Three decisions, in this order, and each is made at ACTIVATION rather
+    /// than at render — an announcement can arrive, a device can leave and a
+    /// room can end between the frame that drew the button and the press:
+    ///
+    ///  1. **Is the device still there?** The roster is live, and a stale id is
+    ///     how the wrong device gets dialled.
+    ///  2. **Can this peer speak `link/1`?** `canLink` is the exact-capability
+    ///     predicate and the only thing that decides which of the two products
+    ///     this peer gets. Nothing is armed: on a connect-first surface there is
+    ///     nothing that could be.
+    ///  3. **Otherwise, which legacy generation?** `LegacyLane.mode` with no
+    ///     armed batch, so the answer is the peer's own `text/1` announcement
+    ///     and nothing else. The claim carries that mode because the pane
+    ///     renders one lane at a time and must render the one the session
+    ///     actually has.
+    private func connect(to device: NearbyDevice) {
+        // A second press while the first connect is still setting up would dial
+        // again. The button is disabled while locked; this is the guard that does
+        // not depend on a redraw.
         guard !sessionLocked else { return }
-        // Re-read rather than capturing the device at render time: the roster is
-        // live, and a device that left between the list being drawn and this
-        // button being pressed must not be dialled by a stale id.
         guard let live = discovery.selectedDevice, live.id == device.id else {
             actionError = L10n.t(.nearbyDeviceGone)
             return
         }
         actionError = nil
-        // Asked at ACTIVATION rather than at render: an announcement can arrive,
-        // or a room can end, between the frame that drew this button and the
-        // press. `canLink` is the exact-capability predicate and the only thing
-        // that decides which of the two products this peer gets.
+        // Claimed before dialling, so the session this starts is presented here.
+        // A concurrent inbound offer can win after the last frame rendered, so
+        // refusal is enforced here, not by visibility.
         guard !link.canLink(peerId: live.id) else {
             guard presence.beginSession(route, peerLabel: live.label) else { return }
             if !link.connect(peerId: live.id, peerLabel: live.label) {
@@ -572,66 +590,16 @@ struct LanConnectPane: View {
             }
             return
         }
-        guard presence.beginSession(route, mode: .text, peerLabel: live.label) else { return }
-        Task { await textModel.connectNearby(peerId: live.id, role: .initiator) }
-    }
-
-    private func sendFiles(to device: NearbyDevice) {
-        // A second press while the first send is still setting up would stage a
-        // second batch over the first and dial again. The button is disabled
-        // while locked; this is the guard that does not depend on a redraw.
-        guard !sessionLocked else { return }
-        guard let live = discovery.selectedDevice, live.id == device.id else {
-            actionError = L10n.t(.nearbyDeviceGone)
-            return
+        let mode = LegacyLane.mode(peerAnnouncesText: live.announcesLegacyText,
+                                   hasArmedBatch: false)
+        guard presence.beginSession(route, mode: mode, peerLabel: live.label) else { return }
+        switch mode {
+        case .text:
+            Task { await textModel.connectNearby(peerId: live.id, role: .initiator) }
+        case .files:
+            // No `stageSend`: this connection is opened with nothing to carry,
+            // and `TransferSessionPane` offers the picker once it is cleared.
+            Task { await fileModel.connectNearby(peerId: live.id, role: .initiator) }
         }
-        guard let staged = stage() else { return }
-        // Claimed before dialling, so the session this starts is presented here.
-        // A concurrent inbound offer can win after the last frame rendered, so
-        // refusal is enforced here, not by visibility.
-        guard !link.canLink(peerId: live.id) else {
-            guard presence.beginSession(route, peerLabel: live.label) else { return }
-            // ARMED, not sent: the batch crosses the verification boundary with
-            // everything else, and `LinkWorkspaceModel` is what releases it.
-            if !link.connect(peerId: live.id, peerLabel: live.label,
-                             files: staged.metas, sources: staged.sources) {
-                presence.release(route)
-            }
-            return
-        }
-        guard presence.beginSession(route, mode: .files, peerLabel: live.label) else { return }
-        fileModel.stageSend(sources: staged.sources, metas: staged.metas)
-        Task { await fileModel.connectNearby(peerId: live.id, role: .initiator) }
-    }
-
-    /// Expand and open the staged batch, reporting the reason it could not be.
-    private func stage() -> (sources: [PlaintextSource], metas: [FileMeta])? {
-        guard let expanded = selection.selection else {
-            actionError = selection.error ?? L10n.t(.nearbyAddFilesFirst)
-            return nil
-        }
-        do {
-            let staged = try stageRealtimeFiles(expanded.files)
-            actionError = nil
-            return staged
-        } catch {
-            actionError = ErrorCopy.message(for: error)
-            return nil
-        }
-    }
-
-    /// Stage a batch the OS opened, if this surface is free to take it.
-    ///
-    /// `add`, not `replace`: an opened file joins what the user already picked
-    /// rather than discarding it, which is the same call the drop zone makes.
-    /// Both transfer routes share the same staged selection. This also adopts a
-    /// batch originally addressed to the other transfer screen if the user
-    /// switched connection method before this free pane could take it.
-    private func adoptOpenedFiles() {
-        guard let batch = fileOpenRouting.batch(
-            forAnyOf: AppDestination.macTransferRoutes, busy: sessionLocked)
-        else { return }
-        selection.add(batch.urls)
-        fileOpenRouting.consume(batch)
     }
 }

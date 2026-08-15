@@ -36,12 +36,29 @@ public struct NearbyDevice: Identifiable, Equatable {
     /// from an announcement. Treat it as "what this peer says it can do", which
     /// is exactly what it is worth.
     public let supportsLink: Bool
+    /// Whether this peer announced exact `text/1`.
+    ///
+    /// Carried for exactly one reason, and it is a connect-first reason: the
+    /// screen no longer asks the user which legacy generation a peer that cannot
+    /// speak `link/1` should get, so the answer has to come from the peer's own
+    /// announcement at the moment Connect is pressed. `LegacyLane.mode` is what
+    /// reads it; `LinkWorkspaceModel` reads the identical fact out of a pairing
+    /// room's registry.
+    ///
+    /// The same hint caveat as `supportsLink` applies in full, and with the same
+    /// bound: a relay that strips or forges this can only push the connection
+    /// onto the other legacy lane, where a mismatch reaches a truthful terminal
+    /// state. It is never a key input and never an identity.
+    public let announcesLegacyText: Bool
 
-    public init(id: String, name: String, label: String, supportsLink: Bool = false) {
+    public init(id: String, name: String, label: String,
+                supportsLink: Bool = false,
+                announcesLegacyText: Bool = false) {
         self.id = id
         self.name = name
         self.label = label
         self.supportsLink = supportsLink
+        self.announcesLegacyText = announcesLegacyText
     }
 }
 
@@ -105,7 +122,8 @@ public extension NearbyRoomObserver {
 /// inheriting the hub's ordering, and disambiguating duplicate names.
 public func nearbyDevices(roster: [Peer],
                           selfId: String,
-                          supportsLink: (String) -> Bool = { _ in false }) -> [NearbyDevice] {
+                          supportsLink: (String) -> Bool = { _ in false },
+                          announcesLegacyText: (String) -> Bool = { _ in false }) -> [NearbyDevice] {
     // The hub broadcasts the WHOLE room to every member, us included
     // (server/internal/signal/hub.go's broadcastRoster). Before `welcome`
     // there is no way to tell which entry is ours, so nothing is offered at
@@ -140,7 +158,8 @@ public func nearbyDevices(roster: [Peer],
                 id: device.id,
                 name: device.name,
                 label: ambiguous ? "\(device.name) · \(shortPeerID(device.id))" : device.name,
-                supportsLink: supportsLink(device.id)
+                supportsLink: supportsLink(device.id),
+                announcesLegacyText: announcesLegacyText(device.id)
             )
         }
 }
@@ -523,6 +542,15 @@ public final class LanDiscoveryModel: ObservableObject {
         devices = nearbyDevices(roster: roster, selfId: selfId,
                                 supportsLink: { [capabilities] in
                                     capabilities.supports($0, LINK_CAPABILITY)
+                                },
+                                // The same registry, read for the OTHER
+                                // generation: a peer that cannot speak `link/1`
+                                // still tells the room whether it is a text
+                                // session, and that is the whole input
+                                // `LegacyLane.mode` needs to pick a lane without
+                                // asking the user anything.
+                                announcesLegacyText: { [capabilities] in
+                                    capabilities.supports($0, TEXT_CAPABILITY)
                                 })
         // Only once BOTH halves of a meaningful roster exist.
         //

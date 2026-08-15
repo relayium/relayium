@@ -635,8 +635,13 @@
 "workspace.addFilesHint" = "在下方选择文件或文件夹，然后发送到该设备。";
 "workspace.sendMessageHint" = "与这台设备开启消息会话，无需先选择任何内容。";
 "workspace.sendFiles" = "发送文件";
+"workspace.connectToDevice" = "连接";
+"workspace.connectToDeviceHint" = "与该设备建立加密连接。连上之后再选择文件、文件夹或发送消息。";
+"workspace.sessionReadyToSend" = "已连接。选择要发送的文件或文件夹，也可以等待对方发送。";
+"workspace.sendRefusedBusy" = "未发送：在你选择文件的过程中，本会话已经开始传输，而它只承载一次传输。请离开本会话并重新连接，再发送这些文件。";
+"workspace.sendRefusedUnavailable" = "未发送：在你选择文件的过程中，本会话已无法再发送。请离开本会话并重新连接，再发送这些文件。";
 "workspace.createPairingCode" = "创建配对码";
-"workspace.createPairingCodeHint" = "把配对码交给对方，对方用它连接过来。一条连接同时承载消息和任意多的文件或文件夹——可以先在下方添加，也可以连上之后再发送。";
+"workspace.createPairingCodeHint" = "把配对码交给对方，对方用它连接过来。连上之后即可发送文件、文件夹和消息。";
 "workspace.connectWithCode" = "连接";
 "workspace.oneConnectionNote" = "一条连接只承载消息或文件，不能同时承载两者。发送另一种会新建一条连接，并产生新的验证码。";
 "workspace.messagesOnlyNote" = "本会话承载消息，不承载文件。发送文件需要单独的会话——离开本会话后再开始。";

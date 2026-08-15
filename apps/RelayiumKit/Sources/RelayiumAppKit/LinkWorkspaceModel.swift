@@ -954,41 +954,17 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         onPairingLinkActivated?()
     }
 
-    /// **Which lane a legacy peer gets, decided from evidence rather than from a
-    /// question nobody could answer.**
+    /// Which lane a legacy peer gets — `LegacyLane.mode`, asked with this room's
+    /// two facts.
     ///
-    /// The shipped wire has two generations and they do not interoperate: a file
-    /// session offers with no capability at all, a text session announces
-    /// `text/1` and refuses to build until the peer announces it back
-    /// (`RealtimeConnectionFactory.connectInRoom`). So *something* has to pick,
-    /// and until this batch it was the user, before there was a peer, out of two
-    /// buttons that named a distinction the code itself does not carry.
-    ///
-    /// Two facts decide it instead, in this order:
-    ///
-    ///  1. **This side has a batch armed.** Then the answer is files whatever the
-    ///     peer said. A staged batch is the user's stated intent, it is the one
-    ///     thing a text lane cannot carry at all, and the file lane moves bytes
-    ///     in either direction.
-    ///  2. **The peer announced exact `text/1`.** On the shipped native wire that
-    ///     announcement is only ever sent BY a text session — `Mode.file` has no
-    ///     local capabilities — so it is a direct statement of what the peer is
-    ///     doing. A current Web peer never reaches here at all: it announces
-    ///     `link/1` and takes outcome 1.
-    ///
-    /// Anything else is files, and that is the honest reading rather than a
-    /// coin toss: a legacy peer that announced NOTHING is a file peer by
-    /// construction, and answering it with a text offer would guarantee the one
-    /// failure this decision exists to avoid.
-    ///
-    /// The one case it can still get wrong is a stale Web tab, which broadcasts
-    /// `text/1` at roster level whatever its user is doing. It is no worse than
-    /// the guess it replaces — the user picking "Join files" against a stranger's
-    /// message code was the same coin — and it is bounded: a mismatched lane
-    /// reaches a truthful terminal state (`.unsupported`) rather than a hang.
+    /// The rule itself lives in `LegacyLane` because the same-network surface
+    /// reaches it at a different moment (before a session exists, from the
+    /// roster's own announcement) and the two must not be able to disagree. What
+    /// belongs here is only the reading of THIS room's evidence.
     private func legacyFallbackMode(peerId: String, room: PairingRoom) -> TransferMode {
-        guard armedBatches.isEmpty else { return .files }
-        return room.capabilities.supports(peerId, TEXT_CAPABILITY) ? .text : .files
+        LegacyLane.mode(
+            peerAnnouncesText: room.capabilities.supports(peerId, TEXT_CAPABILITY),
+            hasArmedBatch: !armedBatches.isEmpty)
     }
 
     /// Hand this room to the path that ships today. Exactly once per room.

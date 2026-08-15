@@ -104,13 +104,14 @@ public enum MacSurface: String, CaseIterable, Hashable, Sendable {
 }
 
 public extension AppDestination {
-    /// The two routes that share one transfer staging context on macOS.
-    ///
-    /// They remain separate screens and connection methods. The set exists only
-    /// for OS-opened file batches: a batch dragged to the Dock must remain
-    /// available if the user changes from LAN to pairing code before adopting
-    /// it, just as the app-scoped `SelectionStore` does after adoption.
-    static let macTransferRoutes: Set<AppDestination> = [.nearby, .pairingCode]
+    // **`macTransferRoutes` is gone with the staging context it named.**
+    //
+    // It existed so an OS-opened batch addressed to LAN Transfer survived the
+    // user switching to the pairing code before adopting it — one staged
+    // selection behind two screens. Both screens are connect-first now: neither
+    // stages, neither adopts, and `AppRouting.destination(forOpenedFiles:)`
+    // never addresses either of them. A set describing a shared staging context
+    // that no longer exists is a name a later edit would reach for.
 
     /// Which macOS surface draws this destination.
     ///

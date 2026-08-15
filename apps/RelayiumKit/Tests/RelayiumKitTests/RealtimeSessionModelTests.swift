@@ -1088,4 +1088,230 @@ extension RealtimeSessionModelTests {
         await gate.open()
         _ = await joining.value
     }
+
+    // MARK: - sending after the connection exists
+
+    /// **The connect-first half.** A session opened with nothing staged sits in
+    /// `.transferring(0, 0)` waiting for a manifest that may never come — which
+    /// is exactly the state the peer's own `onManifest` is waiting in. `sendNow`
+    /// emits into it, with nothing new on the wire.
+    func testSendNowPutsABatchOnAConnectionOpenedWithNothingStaged() async {
+        let m = makeModel(verify: false)
+        await m.join(code: "483920", role: .initiator)
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        XCTAssertEqual(m.state, .transferring(done: 0, total: 0),
+                       "a session with nothing staged is not waiting to be given work")
+        XCTAssertTrue(m.canSendNow)
+
+        XCTAssertEqual(m.sendNow(sources: [DataSource(name: "a.txt", bytes: [1, 2, 3])],
+                                 metas: [FileMeta(name: "a.txt", size: 3)]),
+                       .sent, "a send that went out did not say so")
+        XCTAssertEqual(conn.sentMetas.map(\.name), ["a.txt"])
+        XCTAssertEqual(m.state, .transferring(done: 0, total: 3),
+                       "the progress bar was not given the batch's own total")
+        XCTAssertEqual(m.sessionFiles.map(\.name), ["a.txt"],
+                       "the manifest the pane keeps visible is not the one that was sent")
+    }
+
+    /// **Nothing before the handshake is cleared.** `transmit` does not check
+    /// `readyState`, so a manifest written early is dropped by WebRTC with no
+    /// error and the transfer stalls with nothing on screen to explain it.
+    func testSendNowIsRefusedUntilTheConnectionIsOpen() async {
+        let m = makeModel(verify: false)
+        XCTAssertFalse(m.canSendNow, "an idle model offered to send")
+        await m.join(code: "483920", role: .initiator)
+        XCTAssertFalse(m.canSendNow, "a connecting model offered to send")
+        conn.onSAS?("x")
+        await settle()
+        XCTAssertFalse(m.canSendNow, "a SAS without an open channel offered to send")
+
+        XCTAssertEqual(m.sendNow(sources: [DataSource(name: "a.txt", bytes: [1, 2, 3])],
+                                 metas: [FileMeta(name: "a.txt", size: 3)]),
+                       .refused(.sessionNotReady),
+                       "a send before the channel opened was not reported as refused")
+        XCTAssertTrue(conn.sentMetas.isEmpty, "a batch went out before the channel opened")
+        XCTAssertEqual(m.state, .connecting, "a refused send moved the session")
+    }
+
+    /// **And nothing while the user is still reading the phrase.** With
+    /// verification ON, `sasConfirmed` is what the whole gate is for, and a send
+    /// that slipped past it would put bytes on an unverified connection.
+    func testSendNowIsRefusedWhileTheVerificationGateIsOpen() async {
+        let m = makeModel(verify: true)
+        await m.join(code: "483920", role: .initiator)
+        conn.onSAS?("phrase")
+        conn.onOpen?()
+        await settle()
+        guard case .verifying = m.state else { return XCTFail("got \(m.state)") }
+        XCTAssertFalse(m.canSendNow, "the SAS gate does not stop a post-connect send")
+
+        XCTAssertEqual(m.sendNow(sources: [DataSource(name: "a.txt", bytes: [1, 2, 3])],
+                                 metas: [FileMeta(name: "a.txt", size: 3)]),
+                       .refused(.sessionNotReady),
+                       "a send across the verification boundary was not reported as refused")
+        XCTAssertTrue(conn.sentMetas.isEmpty, "a batch crossed the verification boundary")
+
+        m.confirmSAS()
+        XCTAssertTrue(m.canSendNow, "confirming the phrase did not open the send")
+        XCTAssertEqual(m.sendNow(sources: [DataSource(name: "a.txt", bytes: [1, 2, 3])],
+                                 metas: [FileMeta(name: "a.txt", size: 3)]),
+                       .sent)
+        XCTAssertEqual(conn.sentMetas.map(\.name), ["a.txt"])
+    }
+
+    /// One manifest per side. A second send would interleave frames into a batch
+    /// the peer is mid-way through reassembling.
+    func testSendNowRefusesASecondBatchOnTheSameSession() async {
+        let m = makeModel(verify: false)
+        await m.join(code: "483920", role: .initiator)
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        XCTAssertEqual(m.sendNow(sources: [DataSource(name: "a.txt", bytes: [1, 2, 3])],
+                                 metas: [FileMeta(name: "a.txt", size: 3)]),
+                       .sent)
+        XCTAssertFalse(m.canSendNow, "the lane offered a second batch")
+        XCTAssertEqual(m.sendNow(sources: [DataSource(name: "b.txt", bytes: [4, 5])],
+                                 metas: [FileMeta(name: "b.txt", size: 2)]),
+                       .refused(.transferInFlight),
+                       "a second batch was refused without saying a transfer was in flight")
+        XCTAssertEqual(conn.sentMetas.map(\.name), ["a.txt"],
+                       "a second batch went out over the first")
+    }
+
+    /// A receive is exactly as much "in flight" as a send. Sending into one
+    /// would clobber the inbound total the progress bar is drawn from, and would
+    /// interleave an outbound manifest into a session the peer is already
+    /// streaming through.
+    ///
+    /// `saveDirectory` is a temporary directory rather than the default, which is
+    /// the real Downloads folder: the receive below genuinely opens a writer, and
+    /// a test that let it fail there would assert nothing — a failed receive
+    /// leaves `.failed`, where `canSendNow` is false for an unrelated reason.
+    /// The `.transferring` assertion is what stops this passing vacuously.
+    func testSendNowIsRefusedWhileThisSideIsReceiving() async throws {
+        let m = makeModel(verify: false)
+        m.saveDirectory = try tempDir()
+        await m.join(code: "483920", role: .initiator)
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        conn.onManifest?([FileMeta(name: "incoming.txt", size: 9)])
+        await settle()
+        XCTAssertEqual(m.state, .transferring(done: 0, total: 9),
+                       "the receive did not start, so this proves nothing about a live one")
+        XCTAssertEqual(conn.acceptCount, 1, "the receive was never accepted")
+        XCTAssertFalse(m.canSendNow, "the lane offered to send over a live receive")
+        XCTAssertEqual(m.sendNow(sources: [DataSource(name: "a.txt", bytes: [1, 2, 3])],
+                                 metas: [FileMeta(name: "a.txt", size: 3)]),
+                       .refused(.transferInFlight),
+                       "a send over a live receive was refused silently")
+        XCTAssertTrue(conn.sentMetas.isEmpty, "a batch went out during a receive")
+        XCTAssertEqual(m.state, .transferring(done: 0, total: 9),
+                       "a refused send moved the receive's progress")
+    }
+
+    /// An unreadable batch is the user's own picked files failing, so it is
+    /// named rather than swallowed — the same treatment `stageSend` gives one.
+    func testSendNowNamesAnInvalidBatchRatherThanDroppingIt() async {
+        let m = makeModel(verify: false)
+        await m.join(code: "483920", role: .initiator)
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        XCTAssertEqual(m.sendNow(sources: [DataSource(name: "a.txt", bytes: [1, 2, 3])], metas: []),
+                       .refused(.invalidFileList),
+                       "an unreadable batch was reported as sent")
+        guard case .failed = m.state else {
+            return XCTFail("a mismatched batch was accepted silently: \(m.state)")
+        }
+        XCTAssertTrue(conn.sentMetas.isEmpty)
+    }
+
+    /// **The picker race, which is the only way this refusal is ever reached in
+    /// the product.**
+    ///
+    /// `TransferSessionPane` renders the send controls only while `canSendNow`
+    /// is true, so the raced press cannot be caught by the gate that drew the
+    /// button: `chooseForLinkSend` is a modal system panel, and the session
+    /// keeps running underneath it. This reproduces exactly that window — true
+    /// before the picker-equivalent work, the peer's manifest arriving during
+    /// it, false at the call — and asserts the caller is TOLD, because the
+    /// surface it returns to no longer has the controls that would have
+    /// explained the silence.
+    ///
+    /// The refused batch stays refused: nothing is queued behind the receive and
+    /// nothing is staged, which is what separates this from the pre-connect
+    /// `stageSend` path that the transfer screens no longer use.
+    func testAPickerThatRacedTheSessionIsRefusedWithAReasonRatherThanSilence() async throws {
+        let m = makeModel(verify: false)
+        m.saveDirectory = try tempDir()
+        await m.join(code: "483920", role: .initiator)
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        // The frame the user pressed Send file on.
+        XCTAssertTrue(m.canSendNow, "the send controls would not have been on screen")
+        XCTAssertNil(m.sendRefusal)
+
+        // The picker is open. The peer starts sending into the same session.
+        conn.onManifest?([FileMeta(name: "incoming.txt", size: 9)])
+        await settle()
+        XCTAssertEqual(m.state, .transferring(done: 0, total: 9),
+                       "the receive did not start, so this proves nothing about the race")
+        XCTAssertFalse(m.canSendNow, "the window this reproduces did not open")
+        XCTAssertEqual(m.sendRefusal, .transferInFlight)
+
+        // The picker returns with the user's files.
+        let result = m.sendNow(sources: [DataSource(name: "chosen.txt", bytes: [1, 2, 3])],
+                               metas: [FileMeta(name: "chosen.txt", size: 3)])
+        XCTAssertEqual(result, .refused(.transferInFlight),
+                       "the raced press was a silent no-op: the caller got no refusal to show")
+        XCTAssertTrue(conn.sentMetas.isEmpty, "the raced batch went out over the receive")
+        XCTAssertEqual(m.state, .transferring(done: 0, total: 9),
+                       "the refusal disturbed the receive it was refused for")
+        XCTAssertEqual(m.sessionFiles.map(\.name), ["incoming.txt"],
+                       "the refused batch was staged into the session anyway")
+    }
+
+    /// The other half of the same window: the connection ended while the picker
+    /// was open. Distinct from being busy, and it is a distinct sentence on
+    /// screen, so the model has to distinguish it rather than answer "no".
+    func testAPickerThatOutlivedTheConnectionIsRefusedAsNotReady() async {
+        let m = makeModel(verify: false)
+        await m.join(code: "483920", role: .initiator)
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        XCTAssertTrue(m.canSendNow)
+
+        // The picker is open. The peer walks away.
+        conn.onClose?()
+        await settle()
+        XCTAssertEqual(m.sendRefusal, .sessionNotReady,
+                       "a dead connection was described as busy")
+
+        XCTAssertEqual(m.sendNow(sources: [DataSource(name: "chosen.txt", bytes: [1, 2, 3])],
+                                 metas: [FileMeta(name: "chosen.txt", size: 3)]),
+                       .refused(.sessionNotReady))
+        XCTAssertTrue(conn.sentMetas.isEmpty, "a batch went out over a closed connection")
+    }
+
+    /// **`stageSend` is dormant, not deleted.** iOS still stages before
+    /// connecting and the pairing fallback hands a batch back through it, so the
+    /// pre-connect queueing rule has to keep working exactly as it did.
+    func testStageSendStillQueuesUntilTheHandshakeClears() async {
+        let m = makeModel(verify: false)
+        m.stageSend(sources: [DataSource(name: "a.txt", bytes: [1, 2, 3])],
+                    metas: [FileMeta(name: "a.txt", size: 3)])
+        XCTAssertTrue(conn.sentMetas.isEmpty, "a staged batch went out before a connection")
+        await m.join(code: "483920", role: .initiator)
+        conn.onSAS?("x")
+        conn.onOpen?()
+        await settle()
+        XCTAssertEqual(conn.sentMetas.map(\.name), ["a.txt"])
+        XCTAssertFalse(m.canSendNow, "a session that already sent its staged batch offered more")
+    }
 }

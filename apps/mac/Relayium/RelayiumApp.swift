@@ -178,15 +178,15 @@ struct RelayiumApp: App {
     // are: it follows the resident room socket, so an open link has to survive
     // the unique window being closed and rebuilt.
     @StateObject private var linkWorkspace: LinkWorkspaceModel
-    /// The one staged batch both transfer destinations share.
-    ///
-    /// App-scoped rather than owned by a destination, and that is what keeps the
-    /// two transfer screens from costing the user anything: files staged on LAN
-    /// Transfer are still staged after deciding to use a pairing code instead,
-    /// and after the session that sent them tears its own screen down. A store
-    /// per destination is how somebody picks a folder, changes their mind about
-    /// how to connect, and finds the other screen empty.
-    @StateObject private var transferSelection = SelectionStore()
+    // **There is no app-scoped transfer selection any more.**
+    //
+    // It held the one batch both real-time destinations staged before
+    // connecting. They do not: Nearby and Pairing establish the session first
+    // and the work is chosen inside it, so nothing writes such a store and
+    // nothing reads one. Deleting it rather than leaving it injected is what
+    // makes that structural — a later edit cannot reach for a shared staging
+    // context that is not in the environment. `TransferStagingSection` survives
+    // in source, dormant and constructed by nobody, for a future re-enable.
     @StateObject private var notifications: TransferNotificationCenter
     // Which destination is on screen. App-scoped rather than `@State` so the
     // selection survives the window's view tree being torn down and rebuilt: the
@@ -623,7 +623,6 @@ struct RelayiumApp: App {
                 .environmentObject(lanDiscovery)
                 .environmentObject(nearbyReceive)
                 .environmentObject(linkWorkspace)
-                .environmentObject(transferSelection)
                 // The receiver and the login-item preference reach the main
                 // window because the Device Inbox is a destination in it now,
                 // not only a settings tab. It is the SAME app-scoped controller
