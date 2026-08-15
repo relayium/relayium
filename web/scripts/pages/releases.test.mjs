@@ -17,7 +17,7 @@ import { describe, expect, it } from "vitest";
 
 import releases from "./content/releases.mjs";
 import { buildReleasesPages, buildSitemap } from "./build-pages.mjs";
-import { LANGS, MAINTAINED_LANGS, RELEASES_LABELS, urlPath } from "./shared.mjs";
+import { FROZEN_LANGS, LANGS, MAINTAINED_LANGS, RELEASES_LABELS, urlPath } from "./shared.mjs";
 import en from "../../src/lib/i18n/en.ts";
 import zh from "../../src/lib/i18n/zh.ts";
 
@@ -297,11 +297,21 @@ describe("the generated pages", () => {
   });
 });
 
-// What this page says about the two native apps, in the nine languages a reader
-// actually reads. They are in different states as of 2026-08-10 and the page has
-// to carry both: macOS is published as its own GitHub Release, iOS is not
-// published anywhere. The old copy said one true sentence about both of them,
-// and it went false the moment the first one shipped.
+// What this page says about the two native apps. They are in different states as
+// of 2026-08-10 and the page has to carry both: macOS is published as its own
+// GitHub Release, iOS is not published anywhere. The old copy said one true
+// sentence about both of them, and it went false the moment the first one
+// shipped.
+//
+// The current-release claims are pinned in the two MAINTAINED_LANGS, en and zh —
+// the locales whose copy is kept current and where new copy ships. The other
+// seven are frozen archives: they stay published and stay correct about what
+// they were written for, but their macOS version is not moved release by
+// release, so pinning them to the manifest would fail every native release
+// rather than catch drift. Only the CURRENT-release claim narrows, though: the
+// App Store denial and the iOS-unreleased sentence are facts no macOS release
+// moves, so they stay asserted in all nine — for en and zh alongside the pin,
+// for the frozen seven in their own test below.
 //
 // Per locale rather than one alternation, because the assertions are positive:
 // a union would be satisfied by any locale's sentence, so nine pages carrying
@@ -333,8 +343,8 @@ describe("what /releases says about the native apps", () => {
     pt: /app de iOS é um build de engenharia e não foi publicado/,
   };
 
-  it("names the exact macOS release tag in every locale", () => {
-    for (const lang of LANGS) {
+  it("names the exact macOS release tag in every maintained locale", () => {
+    for (const lang of MAINTAINED_LANGS) {
       const bullet = releases.langs[lang].sections[0].bullets[1];
       // The tag is the checkable part: a reader can paste it after
       // /releases/tag/ and land on the artifact this sentence describes.
@@ -346,12 +356,40 @@ describe("what /releases says about the native apps", () => {
     }
   });
 
-  it("names the current macOS version in every locale's lead", () => {
+  // The frozen seven lose the pin, not the coverage. Two things stay true of an
+  // archived translation, and after the narrowing above nothing else in this
+  // suite would notice either one disappearing:
+  //
+  //   * The version-independent claims. "Not a Mac App Store listing" and "iOS
+  //     is unreleased" are not facts about 1.2.4 — no macOS release moves them,
+  //     so an archive that stopped saying either would be wrong TODAY, not
+  //     merely old. These are the seven entries in the tables above that the
+  //     maintained loop no longer reads.
+  //   * Internal consistency. Frozen means a locale keeps the tag it was
+  //     published with; it does not mean half of it may be refreshed. The
+  //     bullet's tag and the lead's bare version are one claim written twice, so
+  //     they must agree with each other even while they disagree with the
+  //     manifest — the drift the pin used to catch and can no longer see here.
+  it("keeps the frozen locales archived rather than half-refreshed", () => {
+    for (const lang of FROZEN_LANGS) {
+      const bullet = releases.langs[lang].sections[0].bullets[1];
+      expect(bullet, `${lang} does not rule out the Mac App Store`).toMatch(NOT_APP_STORE[lang]);
+      expect(bullet, `${lang} stops saying the iOS app is unreleased`).toMatch(IOS_UNRELEASED[lang]);
+
+      const tags = macTags(bullet);
+      expect(tags.size, `${lang} names ${tags.size} macOS release tags, not one`).toBe(1);
+      const [tag] = tags;
+      expect(macVersions(releases.langs[lang].lead[0]), `${lang} lead and bullet name different macOS releases`)
+        .toEqual(new Set([`macOS ${tag.slice("macos-v".length)}`]));
+    }
+  });
+
+  it("names the current macOS version in every maintained locale's lead", () => {
     // The bullet's tag and the lead's bare version are two claims about one
     // release, written in two different places by two different sentences. Only
     // the bullet was pinned before, so the lead kept saying "macOS 1.0" while
     // the bullet had moved on — the same page contradicting itself.
-    for (const lang of LANGS) {
+    for (const lang of MAINTAINED_LANGS) {
       const lead = releases.langs[lang].lead[0];
       expect(lead, `${lang} lead does not name the current macOS version`)
         .toContain(`macOS ${MAC.version}`);
@@ -363,7 +401,7 @@ describe("what /releases says about the native apps", () => {
   it("carries that sentence into the rendered page", () => {
     // The bullet exists in the content module; this is the half that proves the
     // template renders it, in the locale's own page.
-    for (const lang of LANGS) {
+    for (const lang of MAINTAINED_LANGS) {
       expect(byLang[lang], lang).toContain(CURRENT_TAG);
       expect(macTags(byLang[lang]), `${lang} page renders a superseded tag`)
         .toEqual(new Set([CURRENT_TAG]));
@@ -377,8 +415,8 @@ describe("what /releases says about the native apps", () => {
   // can be corrected and `npm run gen:pages` forgotten, which leaves the source
   // truthful and the pages a reader actually fetches still lying — which is the
   // exact state this batch found the site in.
-  it("has regenerated every committed release page from that source", async () => {
-    for (const lang of LANGS) {
+  it("has regenerated every committed maintained release page from that source", async () => {
+    for (const lang of MAINTAINED_LANGS) {
       const path = lang === "en" ? "releases/index.html" : `${lang}/releases/index.html`;
       const html = await readFile(resolve(process.cwd(), "public", path), "utf8");
       expect(macTags(html), `public/${path} is stale`).toEqual(new Set([CURRENT_TAG]));
