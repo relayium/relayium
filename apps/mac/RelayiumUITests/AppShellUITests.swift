@@ -219,6 +219,72 @@ final class AppShellUITests: XCTestCase {
         return window.descendants(matching: .any).matching(visible).firstMatch
     }
 
+    /// Select a fixture through the real AppKit panel, after the panel is
+    /// actually present. SwiftUI's selectable empty-state text can consume a
+    /// click on the surrounding drop zone, so UI tests use the adjacent,
+    /// explicit chooser button that invokes the same product action.
+    private func chooseFixture(_ fixture: URL,
+                               in window: XCUIElement,
+                               file: StaticString = #filePath,
+                               line: UInt = #line) {
+        let identified = window.descendants(matching: .any)["transfer-choose-files"].firstMatch
+        let chooser = identified.exists
+            ? identified
+            : window.buttons["Choose Files or Folders…"]
+        guard chooser.waitForExistence(timeout: 10) else {
+            return XCTFail("the transfer surface has no explicit file chooser",
+                           file: file, line: line)
+        }
+
+        app.activate()
+        chooser.click()
+
+        let panelCandidates = [app.dialogs["open-panel"],
+                               app.windows["open-panel"],
+                               app.sheets["open-panel"]]
+        let panelDeadline = Date().addingTimeInterval(15)
+        var panel: XCUIElement?
+        repeat {
+            panel = panelCandidates.first(where: { $0.exists })
+            if panel != nil { break }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        } while Date() < panelDeadline
+        guard let panel else {
+            return XCTFail("the explicit file chooser opened no system panel",
+                           file: file, line: line)
+        }
+
+        app.activate()
+        var location: XCUIElement?
+        for _ in 0..<3 where location == nil {
+            app.typeKey("g", modifierFlags: [.command, .shift])
+            let fieldCandidates = [app.sheets["GoToWindow"].textFields["PathTextField"],
+                                   panel.sheets["GoToWindow"].textFields["PathTextField"],
+                                   app.textFields["PathTextField"]]
+            let fieldDeadline = Date().addingTimeInterval(5)
+            repeat {
+                location = fieldCandidates.first(where: { $0.exists })
+                if location != nil { break }
+                RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+            } while Date() < fieldDeadline
+            if location == nil { app.activate() }
+        }
+        guard let location else {
+            return XCTFail("the system picker did not expose Go to Folder",
+                           file: file, line: line)
+        }
+
+        location.typeText(fixture.path)
+        app.typeKey(.return, modifierFlags: [])
+
+        let choose = panel.buttons["OKButton"]
+        guard choose.waitForExistence(timeout: 15) else {
+            return XCTFail("the system picker has no confirmation action",
+                           file: file, line: line)
+        }
+        choose.click()
+    }
+
     /// The window opens at all. A `Window` scene that fails to build leaves a
     /// running process with nothing on screen, and the menu-bar extra keeps that
     /// process alive — so "it launched" is not evidence.
@@ -304,22 +370,7 @@ final class AppShellUITests: XCTestCase {
         let chooser = window.descendants(matching: .any)["Files to send"].firstMatch
         XCTAssertTrue(chooser.waitForExistence(timeout: 10),
                       "Nearby has no file-selection surface")
-        chooser.click()
-
-        app.typeKey("g", modifierFlags: [.command, .shift])
-        let location = app.textFields.firstMatch
-        XCTAssertTrue(location.waitForExistence(timeout: 10),
-                      "the system picker did not expose Go to Folder")
-        location.typeText(fixture.path)
-        app.typeKey(.return, modifierFlags: [])
-
-        // macOS 15 exposes both the panel button and its Touch Bar mirror with
-        // the title "Choose". Scope to the open panel's stable system button
-        // identity so the real confirmation is unambiguous on either OS.
-        let choose = app.dialogs["open-panel"].buttons["OKButton"]
-        XCTAssertTrue(choose.waitForExistence(timeout: 10),
-                      "the system picker has no confirmation action")
-        choose.click()
+        chooseFixture(fixture, in: window)
 
         let identity = window.descendants(matching: .any)["pendingFile.0"].firstMatch
         XCTAssertTrue(identity.waitForExistence(timeout: 10),
@@ -1166,19 +1217,7 @@ final class AppShellUITests: XCTestCase {
         let chooser = window.descendants(matching: .any)["Files to send"].firstMatch
         XCTAssertTrue(chooser.waitForExistence(timeout: 10),
                       "a signed-in stored send has no file-selection surface")
-        chooser.click()
-
-        app.typeKey("g", modifierFlags: [.command, .shift])
-        let location = app.textFields.firstMatch
-        XCTAssertTrue(location.waitForExistence(timeout: 10),
-                      "the system picker did not expose Go to Folder")
-        location.typeText(fixture.path)
-        app.typeKey(.return, modifierFlags: [])
-
-        let choose = app.dialogs["open-panel"].buttons["OKButton"]
-        XCTAssertTrue(choose.waitForExistence(timeout: 10),
-                      "the system picker has no confirmation action")
-        choose.click()
+        chooseFixture(fixture, in: window)
 
         let identity = window.descendants(matching: .any)["pendingFile.0"].firstMatch
         XCTAssertTrue(identity.waitForExistence(timeout: 10),
@@ -1215,15 +1254,7 @@ final class AppShellUITests: XCTestCase {
 
         let chooser = window.descendants(matching: .any)["Files to send"].firstMatch
         XCTAssertTrue(chooser.waitForExistence(timeout: 10))
-        chooser.click()
-        app.typeKey("g", modifierFlags: [.command, .shift])
-        let location = app.textFields.firstMatch
-        XCTAssertTrue(location.waitForExistence(timeout: 10))
-        location.typeText(fixture.path)
-        app.typeKey(.return, modifierFlags: [])
-        let choose = app.dialogs["open-panel"].buttons["OKButton"]
-        XCTAssertTrue(choose.waitForExistence(timeout: 10))
-        choose.click()
+        chooseFixture(fixture, in: window)
 
         let sendAction = window.buttons["Send"]
         XCTAssertTrue(sendAction.waitForExistence(timeout: 15),
@@ -1330,15 +1361,7 @@ final class AppShellUITests: XCTestCase {
 
         let chooser = window.descendants(matching: .any)["Files to send"].firstMatch
         XCTAssertTrue(chooser.waitForExistence(timeout: 10))
-        chooser.click()
-        app.typeKey("g", modifierFlags: [.command, .shift])
-        let location = app.textFields.firstMatch
-        XCTAssertTrue(location.waitForExistence(timeout: 10))
-        location.typeText(fixture.path)
-        app.typeKey(.return, modifierFlags: [])
-        let choose = app.dialogs["open-panel"].buttons["OKButton"]
-        XCTAssertTrue(choose.waitForExistence(timeout: 10))
-        choose.click()
+        chooseFixture(fixture, in: window)
 
         let sendAction = window.buttons["Send"]
         XCTAssertTrue(sendAction.waitForExistence(timeout: 15))
@@ -1416,15 +1439,7 @@ final class AppShellUITests: XCTestCase {
 
         let chooser = window.descendants(matching: .any)["Files to send"].firstMatch
         XCTAssertTrue(chooser.waitForExistence(timeout: 10))
-        chooser.click()
-        app.typeKey("g", modifierFlags: [.command, .shift])
-        let location = app.textFields.firstMatch
-        XCTAssertTrue(location.waitForExistence(timeout: 10))
-        location.typeText(fixture.path)
-        app.typeKey(.return, modifierFlags: [])
-        let choose = app.dialogs["open-panel"].buttons["OKButton"]
-        XCTAssertTrue(choose.waitForExistence(timeout: 10))
-        choose.click()
+        chooseFixture(fixture, in: window)
 
         let sendAction = window.buttons["Send"]
         XCTAssertTrue(sendAction.waitForExistence(timeout: 15))
@@ -1466,15 +1481,7 @@ final class AppShellUITests: XCTestCase {
         let chooser = window.descendants(matching: .any)["Files to send"].firstMatch
         XCTAssertTrue(chooser.waitForExistence(timeout: 10),
                       "the pairing screen stages nothing")
-        chooser.click()
-        app.typeKey("g", modifierFlags: [.command, .shift])
-        let location = app.textFields.firstMatch
-        XCTAssertTrue(location.waitForExistence(timeout: 10))
-        location.typeText(fixture.path)
-        app.typeKey(.return, modifierFlags: [])
-        let choose = app.dialogs["open-panel"].buttons["OKButton"]
-        XCTAssertTrue(choose.waitForExistence(timeout: 10))
-        choose.click()
+        chooseFixture(fixture, in: window)
 
         let create = window.buttons["Create a pairing code"]
         XCTAssertTrue(create.waitForExistence(timeout: 10),
