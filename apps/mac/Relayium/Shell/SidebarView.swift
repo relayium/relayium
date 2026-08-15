@@ -143,16 +143,49 @@ struct SidebarView: View {
 
     /// A `Section` promotes its visual header to `AXHeading`, but on macOS it
     /// can leave that element empty even though the glyphs are on screen. Give
-    /// the promoted element one explicit child policy, label and heading trait
-    /// so the transfer groups have names in the accessibility outline.
+    /// the header's own text an explicit label, heading trait and stable
+    /// identity, so the transfer groups have names in the accessibility outline
+    /// and a runtime check can tell the product's own element apart from
+    /// whatever `List` wraps around it.
+    ///
+    /// **Annotate the element the text already is; do not synthesize one here.**
+    /// `.accessibilityElement(children: .ignore)` sat on this header for two
+    /// rounds — first on an `HStack(spacing: 0)` holding a single `Text`, then on
+    /// the `Text` itself — and the owner's 2026-08-16 run of
+    /// `testEveryDestinationPassesTheSystemAccessibilityAudit` measured what it
+    /// cost: NO element carrying `sidebar-sectionDirect`, `…Links` or `…Device`
+    /// existed anywhere in the running tree. That modifier discards the view's
+    /// own accessibility element and puts a roleless synthesized one in its
+    /// place, and everything written after it — the label, the heading trait, the
+    /// identifier — lands on that replacement rather than on the text. Inside a
+    /// `List` section header the replacement does not survive into the tree: the
+    /// 2026-08-15 probe (`WORK-QUEUE.md` Q9), taken while the same modifier stack
+    /// sat on the `HStack`, found only the raw `Text` — `(778,362,34,14)
+    /// label=Direct`, no identity — which is the same result read twice.
+    ///
+    /// `PathRail` is the control case for the other half of that mechanism: its
+    /// stops genuinely need one element built from several views, and the same
+    /// audit reported them as `Unknown role` until a trait supplied the role the
+    /// synthesized element does not have. A heading needs neither step. A `Text`
+    /// is already one leaf element with a role, so the label, the trait and the
+    /// identity below modify it in place.
+    ///
+    /// What the audit still rejects on these rows — an unlabelled 208×19 `Group`
+    /// at `(778,360)`, `(778,456)` and `(778,520)`, byte-identical before and
+    /// after everything this function has been rewritten to do — is therefore
+    /// `List`'s own wrapper, which no product code can reach.
+    /// `AppShellUITests` excludes it by name, and only for as long as it encloses
+    /// one of these identified, labelled headings.
     private func sectionHeader(_ key: L10nKey) -> some View {
         let title = L10n.t(key)
-        return HStack(spacing: 0) {
-            Text(title)
-        }
-            .accessibilityElement(children: .ignore)
+        // The trailing component of `nav.sectionDirect`, so the runtime identity
+        // cannot drift from the key that supplies the words.
+        let id = key.rawValue.split(separator: ".").last.map(String.init) ?? key.rawValue
+        return Text(title)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityLabel(title)
             .accessibilityAddTraits(.isHeader)
+            .accessibilityIdentifier("sidebar-\(id)")
     }
 
     private func row(_ surface: MacSurface,

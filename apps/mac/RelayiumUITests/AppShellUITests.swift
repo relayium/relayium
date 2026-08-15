@@ -1932,4 +1932,455 @@ final class AppShellUITests: XCTestCase {
         app.typeKey(.escape, modifierFlags: [])
     }
 
+    // MARK: - what VoiceOver would meet
+
+    /// The identity `SidebarView` stamps on the element carrying each group
+    /// heading's words. Three, the same three `MacSurfaceGuardTests` counts in
+    /// the source, so this suite and the sidebar cannot drift into two sets.
+    private static let sectionHeaderIDs = ["sidebar-sectionDirect",
+                                           "sidebar-sectionLinks",
+                                           "sidebar-sectionDevice"]
+
+    /// What VoiceOver would meet on every destination, decided by the system's
+    /// audit of the rendered tree rather than by an assertion we wrote.
+    ///
+    /// The macOS half of iOS's
+    /// `testEveryPrimaryTaskPassesTheSystemAccessibilityAudit`, and the reason it
+    /// arrives later is worth keeping: the audit found six shell-level classes
+    /// here, and the only way to a green gate before adjudicating them was to
+    /// drop the check that found them. So each class was matched against the
+    /// running accessibility tree instead (`WORK-QUEUE.md` Q9), the product's own
+    /// defects were fixed, and only the framework's own containers are excluded —
+    /// individually, by kind, with their evidence. No audit type is subtracted
+    /// except `contrast`, for the measured reason `auditedTypes` records.
+    ///
+    /// **The five destinations, not one screen.** All five reported an identical
+    /// set, which is what identified the findings as shell-level rather than
+    /// per-surface; auditing every destination is still what would notice the
+    /// day that stops being true.
+    func testEveryDestinationPassesTheSystemAccessibilityAudit() throws {
+        guard #available(macOS 14.0, *) else {
+            throw XCTSkip("the system accessibility audit needs macOS 14")
+        }
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20))
+
+        // Where the product's own group headings are, and whether they have
+        // anything to say at all — read from the running tree BEFORE the audit,
+        // so the report below can say which findings sit on their geometry while
+        // ruling out those findings BEING them.
+        //
+        // Collected rather than asserted on the spot, deliberately: this suite
+        // stops at the first failure, and every macOS run of it costs somebody a
+        // terminal. One run should answer both halves of the question, not the
+        // first half twice.
+        //
+        // **Typed collections, and every heading asked for on its own.**
+        // `window.descendants(matching: .any)[…]` is the window-wide query that
+        // times out on macOS — batches 94, 102 and 115 each hit it, and
+        // `WORKFLOW-LEARNINGS.md` (2026-08-15) records that a macOS path written
+        // on this workstation cannot be smoke-tested before it reaches the owner,
+        // so it must be read against that limit rather than run into it.
+        //
+        // The 2026-08-16 run spent itself on the two assumptions this block no
+        // longer makes. It reported `sidebar-sectionDirect` PRESENT in
+        // `staticTexts`, and then reported all three headings — that one
+        // included — as "nowhere in it", which is only possible if the lookup
+        // that confirmed it and the lookup that read it were different lookups:
+        //
+        //  - one heading answering in a collection was taken as proof that all
+        //    three live there. `.accessibilityAddTraits(.isHeader)` can promote
+        //    one heading to `AXHeading` — a role reported as `other` — without
+        //    promoting its siblings, and a `List` can merge one into its row's
+        //    cell, so nothing entitles the three to share a type. Each is now
+        //    resolved independently, each across all four collections;
+        //  - and the confirmed query was then thrown away by appending
+        //    `.firstMatch` to it. That builds a new element which resolves
+        //    against a narrower snapshot, and it answered `false` for the exact
+        //    identifier that had just answered `true`. The element a collection
+        //    returns is now kept and read directly — frame, type and words all
+        //    come off that one element, and nothing is looked up a second time.
+        //
+        // The failure names the collection AND the type for every heading, so a
+        // run that still cannot find one says which four questions were asked
+        // rather than leaving the next run to ask them again.
+        var headers: [String: CGRect] = [:]
+        var kinds: [String: String] = [:]
+        var problems: [String] = []
+        let collections = Self.headingCollections(of: window)
+        let asked = collections.map(\.name).joined(separator: ", ")
+        // One budget for all three headings rather than one each, so a sidebar
+        // that never renders costs a bounded wait once instead of three times.
+        // Every heading is still swept across all four collections at least once
+        // even after it is spent, so "not found" can never mean "not asked".
+        let deadline = Date(timeIntervalSinceNow: Self.headingResolutionBudget)
+        for id in Self.sectionHeaderIDs {
+            guard let hit = Self.resolveHeading(id, across: collections, until: deadline) else {
+                problems.append("\(id): no element carries it in \(asked) — this heading's "
+                                + "annotations are not reaching the accessibility tree, so "
+                                + "nothing below can be attributed to the product or to the "
+                                + "framework by elimination")
+                continue
+            }
+            // The element that answered, used as it was returned.
+            let header = hit.element
+            let place = "\(hit.name)/\(Self.name(for: header.elementType))"
+            guard !Self.words(of: header).isEmpty else {
+                problems.append("\(id): a group heading is on screen as \(place) with nothing "
+                                + "to read, which is the class of defect this gate exists for")
+                continue
+            }
+            // Recorded only once it is BOTH identified and has words, because
+            // this is what licenses the wrapper exclusion below. A heading that
+            // lost its words leaves this dictionary, and the framework wrapper
+            // around it stops being excluded in the same run.
+            headers[id] = header.frame
+            kinds[id] = place
+        }
+
+        var found: [String] = []
+        for destination in Self.destinationIDs.keys.sorted() {
+            let row = sidebarDestination(destination, in: window)
+            XCTAssertTrue(row.waitForExistence(timeout: 10),
+                          "the sidebar has no row for \(destination)")
+            row.click()
+            // Wait on the rendered destination rather than on anything being
+            // audited: an audit of the previous destination is an audit that
+            // proves nothing about this one.
+            //
+            // On the window's own title, which is the cheapest signal that says
+            // it — `DestinationScaffold` sets `.navigationTitle`, so the title
+            // changes when and only when the new destination's scaffold renders,
+            // and reading a window attribute runs no descendant query at all.
+            // This is the macOS answer to the `navigationBars[title]` wait the
+            // iOS half makes, and the signal
+            // `testTheSmallestWindowStillCarriesTheWholeTask` already navigates
+            // by. The `destination-<id>` element is deliberately NOT the thing
+            // waited on: addressing it needs either the `.any` query that times
+            // out here, or a guess at which type the scaffold produced — a
+            // `ScrollView` on four destinations and the non-scrolling arm's
+            // container on Device Inbox — and a wrong guess would spend the one
+            // owner-run this gate gets on a message about the query rather than
+            // about accessibility. That identifier is asserted by
+            // `testTheSmallestWindowStillCarriesTheWholeTask`, which is not this
+            // gate's job.
+            expectation(for: NSPredicate(format: "title == %@", destination),
+                        evaluatedWith: window)
+            waitForExpectations(timeout: 15) { error in
+                guard error != nil else { return }
+                XCTFail("\(destination)'s row opened no destination to audit — the "
+                        + "window is still titled \(window.title)")
+            }
+
+            // Handled here rather than left to XCTest, so a failure names the
+            // destination, the element and whether the product authored it. The
+            // framework's own report is "Element has no description", which is
+            // true and unactionable.
+            let bounds = window.frame
+            try app.performAccessibilityAudit(for: Self.auditedTypes) { issue in
+                if Self.frameworkOwnedContainer(issue.element,
+                                                in: bounds,
+                                                around: headers) != nil { return true }
+                found.append(Self.describe(issue, on: destination, against: headers))
+                return true
+            }
+        }
+
+        let identified = headers.sorted { $0.key < $1.key }
+            .map { "\($0.key)=\($0.value)(\(kinds[$0.key] ?? "?"))" }.joined(separator: " ")
+        XCTAssertTrue(problems.isEmpty && found.isEmpty,
+                      "the system accessibility audit rejected what VoiceOver would meet:\n"
+                      + (problems + found).joined(separator: "\n")
+                      + "\nthe product's own identified group headings, as "
+                      + "id=frame(collection/type): " + identified)
+    }
+
+    /// The element carrying `id` and the name of the typed collection that
+    /// answered, or `nil` once all four have been asked and the caller's shared
+    /// budget is spent.
+    ///
+    /// **The element is returned exactly as the collection produced it.**
+    /// Appending `.firstMatch` to a subscript that has already resolved is what
+    /// the 2026-08-16 run proved costs the answer: the same identifier in the
+    /// same collection reported `exists == true` before it and `false` after,
+    /// because `.firstMatch` builds a second element that resolves against a
+    /// narrower snapshot. So the caller reads frame, type and words off this one
+    /// element rather than looking it up again.
+    ///
+    /// **Per heading, across every collection.** Which collection answered for
+    /// one heading says nothing about the others — the heading trait can promote
+    /// one of them and not its siblings — so this is called once per identifier
+    /// and each call asks all four.
+    ///
+    /// **Bounded, and never by sleeping.** `exists` resolves a fresh snapshot
+    /// each call, so the retry is real work against a settling tree rather than
+    /// a spin, and it stops at the deadline the caller shares between headings.
+    /// One complete sweep always happens first, so a heading is never reported
+    /// missing from a collection that was not actually asked.
+    private static func resolveHeading(_ id: String,
+                                       across collections: [(name: String,
+                                                             query: XCUIElementQuery)],
+                                       until deadline: Date)
+        -> (name: String, element: XCUIElement)? {
+        var swept = false
+        repeat {
+            for collection in collections {
+                let candidate = collection.query[id]
+                if candidate.exists { return (collection.name, candidate) }
+                if swept, Date() >= deadline { return nil }
+            }
+            swept = true
+        } while Date() < deadline
+        return nil
+    }
+
+    /// Fifteen seconds for all three headings together. The window itself has
+    /// already been waited on for twenty above and the sidebar renders with it,
+    /// so this is the allowance for a tree that has not settled, not for a
+    /// surface that has not appeared.
+    private static let headingResolutionBudget: TimeInterval = 15
+
+    /// What VoiceOver would actually read from an element.
+    ///
+    /// macOS puts a `Text`'s words in `value` and leaves `label` empty often
+    /// enough that this same suite reads the sidebar's own rows that way —
+    /// `testEveryShippedLanguageRendersItsOwnShell` takes
+    /// `(row.value as? String) ?? row.label`, and the 2026-08-15 probe recorded
+    /// exactly that split on five identified rows. A heading is therefore proved
+    /// to have words if either carries them; carrying neither is still a
+    /// failure, and still the one this gate exists for.
+    private static func words(of element: XCUIElement) -> String {
+        element.label.isEmpty ? (element.value as? String ?? "") : element.label
+    }
+
+    /// The typed collections a sidebar group heading can land in, in the order
+    /// the running tree justifies asking them, each named so a failure says which
+    /// one answered rather than only that none did.
+    ///
+    ///  - `staticTexts` — what the heading now is. `SidebarView` annotates the
+    ///    `Text` in place instead of synthesizing an element around it, and the
+    ///    2026-08-15 probe printed all three heading words as TEXT elements
+    ///    (`(778,362,34,14) label=Direct`);
+    ///  - `otherElements` — `.accessibilityAddTraits(.isHeader)` can promote that
+    ///    same element to `AXHeading`, a role `XCUIElement.ElementType` has no
+    ///    case for and therefore reports as `other`;
+    ///  - `groups` — where a synthesized element lands on this platform. Asked so
+    ///    that a return to `.accessibilityElement(children: .ignore)` on the
+    ///    header reports itself here instead of disappearing the way it did on
+    ///    2026-08-16;
+    ///  - `cells` — a `List` row is an AppKit cell, and a header holding a single
+    ///    element can be merged into it.
+    ///
+    /// Asked in full for EVERY heading, not once for the group: the list is the
+    /// set of roles a heading can hold, and `resolveHeading` sweeps all of it per
+    /// identifier because one heading's answer does not constrain another's.
+    ///
+    /// Identifier lookups against typed queries throughout. Never
+    /// `descendants(matching: .any)`, which is the shape that times out here.
+    private static func headingCollections(of window: XCUIElement)
+        -> [(name: String, query: XCUIElementQuery)] {
+        [("staticTexts", window.staticTexts),
+         ("otherElements", window.otherElements),
+         ("groups", window.groups),
+         ("cells", window.cells)]
+    }
+
+    /// Everything the system audits EXCEPT contrast, stated as a subtraction so
+    /// it keeps covering whatever Apple adds next — and so it states the same
+    /// rule as the iOS half rather than a second list. A literal list would have
+    /// had to fork: this platform has neither `dynamicType` nor `trait` nor
+    /// `textClipped`.
+    ///
+    /// Contrast is excluded for the measured reason recorded on the iOS half:
+    /// ten findings there split into three genuine failures, four pieces of
+    /// correct UI the checker rejects anyway, and a disabled control WCAG 1.4.3
+    /// exempts. It is recorded and measured rather than automated. Nothing else
+    /// is subtracted, on either platform.
+    @available(macOS 14.0, *)
+    private static var auditedTypes: XCUIAccessibilityAuditType {
+        XCUIAccessibilityAuditType.all.subtracting(.contrast)
+    }
+
+    /// The name of the framework-created container this issue is describing, or
+    /// `nil` when the product is answerable for it.
+    ///
+    /// **Named individually, from the running tree, never by dropping the audit
+    /// type that found them.** The 2026-08-15 probe (`WORK-QUEUE.md` Q9) matched
+    /// every unlabelled container the audit reported to a node SwiftUI or AppKit
+    /// creates, by frame:
+    ///
+    ///  - `(80,0,685,30)` — the process menu bar, drawn above the product window;
+    ///  - `(756,308,914,612)` — the detail half's wrapper, reported TWICE because
+    ///    a `Group` and a `SplitGroup` share that exact frame;
+    ///  - `(764,316,224,596)` — the same structure around the sidebar's scroll
+    ///    view.
+    ///
+    /// VoiceOver stops on none of the three; it enters the children that carry
+    /// the words. They are matched here by kind and proportion rather than by
+    /// those pixel values, so a resized window or a different display cannot turn
+    /// an exclusion into a silent pass — and so the rule cannot reach anything
+    /// the shell draws: both wrappers are taller than half the window, while
+    /// every element the product authors inside them, the 19-point group headings
+    /// included, is a fraction of that.
+    ///
+    /// The owner's 2026-08-16 run named three more, and they are the last three:
+    ///
+    ///  - the unlabelled `Group` on each of the three group-heading rows,
+    ///    `(778,360,208,19)`, `(778,456,208,19)` and `(778,520,208,19)`. Q9 froze
+    ///    the reading of this element in advance: `List`'s own header wrapper if
+    ///    the owner's runtime proved it, the product's element if not. It proved
+    ///    it twice over. The frames are byte-identical to the ones the 2026-08-15
+    ///    audit reported, across a rewrite that moved the heading's annotations
+    ///    off an `HStack`, onto a `Text` and then off a synthesized element
+    ///    altogether — no product change has ever moved them — and each one
+    ///    encloses a heading the product identifies and this test has already
+    ///    proved has words. No product code can name it;
+    ///  - the 14×14 `Group` at `(821,327)` the audit reports for a parent/child
+    ///    mismatch: the disclosure control `List` draws for a collapsible
+    ///    `Section`, and a mismatch inside the framework's own hierarchy;
+    ///  - `elementType(81)`, the Touch Bar. The product declares none, so this is
+    ///    the system's own remote representation of the app.
+    ///
+    /// The wrapper rule is the narrowest of the three and is deliberately
+    /// self-invalidating: it excludes a container only while it wraps a heading
+    /// that is BOTH identified and labelled. A heading that lost its words leaves
+    /// `headers` — see the collection loop — and the wrapper around it stops
+    /// being excluded in the very same run, so this can never become the quiet
+    /// way to pass an empty heading.
+    ///
+    /// **Enclosure is not on its own enough, and neither is an upper bound.**
+    /// Enclosing a proven heading is a property a container of ANY size has, so
+    /// a product-authored group holding a heading together with its rows would
+    /// have satisfied the wrapper rule and been swallowed — and an upper bound
+    /// alone admits everything smaller than it, so a 2×2 or a 9×9 unnamed group
+    /// would have passed as the disclosure control. Both are therefore bound to
+    /// the geometry their evidence actually measured, from both sides. That is
+    /// what Q9 froze: a framework-owned finding leaves by exact evidence, never
+    /// by a rule shaped loosely enough to also cover something unmeasured.
+    ///
+    /// The resident menu-bar extra is deliberately NOT covered: it is
+    /// `statusItem`, product code, and an unlabelled one would be a real defect.
+    @available(macOS 14.0, *)
+    private static func frameworkOwnedContainer(_ element: XCUIElement?,
+                                                in window: CGRect,
+                                                around headers: [String: CGRect]) -> String? {
+        guard let element else { return nil }
+        if element.elementType == .menuBar || element.elementType == .menuBarItem {
+            return "AppKit's own menu bar"
+        }
+        if element.elementType == .touchBar {
+            return "the system Touch Bar representation of an app that declares none"
+        }
+        if [XCUIElement.ElementType.group, .splitGroup].contains(element.elementType),
+           element.frame.height >= window.height / 2 {
+            return "a structural wrapper around a whole half of the window"
+        }
+        // Everything below is bounded to a container the product neither names
+        // nor labels, so no rule here can reach an element the shell draws.
+        guard element.elementType == .group,
+              element.identifier.isEmpty,
+              element.label.isEmpty else { return nil }
+        // Height, and deliberately not width. 19 points is what a `List` row is
+        // on this platform — the same in all three measured frames, and the same
+        // wherever the window sits — while their 208-point width is the sidebar's
+        // current width and moves the moment the split is dragged. Binding the
+        // height keeps the rule pinned to the measured shape; leaving the width
+        // free keeps it resize-independent.
+        if measures(element.frame.height, Self.headingRowHeight),
+           let wrapped = headers.first(where: { encloses(element.frame, $0.value) })?.key {
+            return "the wrapper List draws around the identified, labelled \(wrapped)"
+        }
+        // Measured at 14×14, and matched at 14×14 from both sides. A ±1 slack for
+        // a different backing scale's rounding is the whole allowance; it does
+        // not reach the 19-point heading rows above, and nothing smaller than a
+        // disclosure triangle gets in underneath it.
+        if measures(element.frame.width, Self.disclosureSide),
+           measures(element.frame.height, Self.disclosureSide) {
+            return "the disclosure control List draws for a collapsible Section"
+        }
+        return nil
+    }
+
+    /// The `List`-drawn geometry the audit runs measured, in points.
+    ///
+    /// Sizes, never positions: a stated size survives a resized window, a moved
+    /// window and a different display, which is why the excluded frames are
+    /// matched by these rather than by the `(778,360,…)` coordinates they were
+    /// read at.
+    private static let headingRowHeight: CGFloat = 19
+    private static let disclosureSide: CGFloat = 14
+
+    /// What a different backing scale's rounding may add in either direction.
+    /// One point: enough for a half-point rounding on a 2× display, far short of
+    /// the five points between the disclosure control and a heading row.
+    private static let geometrySlack: CGFloat = 1
+
+    /// Whether a measured length is the recorded one, within that slack.
+    ///
+    /// Both bounds, and that is the point of the function. An upper bound alone
+    /// admits every smaller element as well, which is how a rule written for one
+    /// measured framework container silently becomes a rule about size.
+    private static func measures(_ value: CGFloat, _ measured: CGFloat) -> Bool {
+        value >= measured - geometrySlack && value <= measured + geometrySlack
+    }
+
+    /// Whether `outer` encloses `inner`, within a point of slack for rounding.
+    /// Containment rather than an equal frame, because `List`'s wrapper is the
+    /// full 208×19 row while the heading inside it is the size of its own words.
+    private static func encloses(_ outer: CGRect, _ inner: CGRect) -> Bool {
+        outer.insetBy(dx: -1, dy: -1).contains(inner)
+    }
+
+    /// One finding, in the terms needed to dispose of it: which destination, what
+    /// the system said, and whether it lands on a row the product identifies.
+    ///
+    /// That last part is the question Q9 stopped on, and it is now answered: the
+    /// heading carries `sidebar-section…`, is proved to have a description before
+    /// the audit runs, and `frameworkOwnedContainer` retires the wrapper that
+    /// encloses it. What remains here is the report for anything that is NOT
+    /// disposed of — attribution by enclosure, so a container is described by the
+    /// identified heading it wraps rather than by matching pixels a second time.
+    @available(macOS 14.0, *)
+    private static func describe(_ issue: XCUIAccessibilityAuditIssue,
+                                 on destination: String,
+                                 against headers: [String: CGRect]) -> String {
+        let element = issue.element
+        let frame = element?.frame ?? .zero
+        let row = headers.first { encloses(frame, $0.value) }
+        let owner = row.map { "wrapped around \($0.key), which is identified and labelled, "
+                              + "so this is not it" }
+            ?? "around no heading the product identifies"
+        return "\(destination): \(issue.compactDescription) — "
+            + "type=\(Self.name(for: element?.elementType)) "
+            + "id=\(element?.identifier ?? "") "
+            + "label=\(element?.label ?? "") frame=\(frame) [\(owner)]"
+    }
+
+    /// `XCUIElement.ElementType` prints as a bare number, and a number in a
+    /// report the owner has to run for us is a round trip spent looking it up.
+    /// Name the kinds this shell can actually produce a finding on; anything
+    /// else falls back to the raw value, which is still enough to identify.
+    private static func name(for type: XCUIElement.ElementType?) -> String {
+        switch type {
+        case .none: return "none"
+        case .some(.group): return "group"
+        case .some(.splitGroup): return "splitGroup"
+        case .some(.scrollView): return "scrollView"
+        case .some(.table): return "table"
+        case .some(.outline): return "outline"
+        case .some(.outlineRow): return "outlineRow"
+        case .some(.cell): return "cell"
+        case .some(.staticText): return "staticText"
+        case .some(.image): return "image"
+        case .some(.button): return "button"
+        case .some(.menuBar): return "menuBar"
+        case .some(.menuBarItem): return "menuBarItem"
+        case .some(.statusItem): return "statusItem"
+        case .some(.touchBar): return "touchBar"
+        case .some(.window): return "window"
+        case .some(.other): return "other"
+        case .some(let other): return "elementType(\(other.rawValue))"
+        }
+    }
+
 }

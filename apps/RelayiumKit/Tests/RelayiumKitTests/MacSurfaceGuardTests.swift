@@ -1406,6 +1406,14 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the rail states a step's completion to the eye and not to VoiceOver")
         XCTAssertTrue(rail.contains(".accessibilityLabel(PathRailPresentation.routeLabel())"),
                       "the rail's stops read as loose fragments")
+        // A stop says what it IS as well as what it says. Collapsing the column
+        // into one element leaves it with words and no role — the system audit
+        // reported `Unknown role` on all three stops of every rail — so the role
+        // is stated. Descriptive text: no action, no value to change, nothing to
+        // focus.
+        XCTAssertTrue(rail.contains(".accessibilityAddTraits(.isStaticText)"),
+                      "a rail stop has words and no role, so VoiceOver reads it without "
+                      + "being able to say what it read")
 
         // Exactly four surfaces draw one, each through the seam. Keeping LAN in
         // this set makes the path signature visible on every transfer surface;
@@ -1942,6 +1950,303 @@ final class MacSurfaceGuardTests: XCTestCase {
             "the detail surface's runtime identity must name the one screen it is")
     }
 
+    /// The section heading the query guard below scopes itself by. The rest of
+    /// `AppShellUITests` still carries the legacy `.any` descendant queries this
+    /// batch did not touch, so that guard reads from this heading to the end of
+    /// the file rather than the file as a whole.
+    private static let macAuditSectionMark = "// MARK: - what VoiceOver would meet"
+
+    /// **The macOS accessibility gate audits everything, and buys its green with
+    /// evidence rather than with a smaller audit.**
+    ///
+    /// This is the guard that makes the discipline in `WORK-QUEUE.md` Q9
+    /// enforceable from a suite that runs everywhere, because the audit itself
+    /// only runs where UI automation is authorized. The failure it exists to
+    /// prevent is the cheap one: an audit type quietly subtracted, or an
+    /// exclusion widened until it covers the product's own elements, either of
+    /// which leaves a green gate that checks nothing.
+    ///
+    ///  - the audited set is `.all.subtracting(.contrast)`, the same rule the
+    ///    iOS half states, and `contrast` is the ONLY subtraction anywhere in the
+    ///    suite. Written as a subtraction rather than a list so it keeps covering
+    ///    whatever Apple adds next;
+    ///  - the exclusions name the framework containers the 2026-08-15 probe and
+    ///    the owner's 2026-08-16 audit run matched — AppKit's menu bar, the
+    ///    `Group`/`SplitGroup` wrappers around a whole window half, the wrapper
+    ///    `List` draws around a group heading, its 14×14 disclosure control, and
+    ///    the Touch Bar the product never declares — and nothing else. Each is
+    ///    bounded to the shape its evidence describes, and the wrapper rule is
+    ///    bounded to a heading this gate has already proved has words;
+    ///  - the product's own group headings are asserted to HAVE a description
+    ///    before the audit runs. That ordering is what makes the report decisive:
+    ///    a finding still landing on a heading's row afterwards cannot be the
+    ///    heading, so it is the framework's wrapper by elimination rather than by
+    ///    a second reading of the pixels.
+    ///  - and it addresses elements through typed collections. The `.any`
+    ///    window-wide descendant query is the shape that times out on macOS, and
+    ///    the audit is the one test in that suite nobody can smoke-test on this
+    ///    workstation, so the timeout would land on the owner's single run.
+    func testTheMacAccessibilityAuditDropsNoCheckToGoGreen() throws {
+        let uiURL = macRoot.deletingLastPathComponent()
+            .appendingPathComponent("RelayiumUITests/AppShellUITests.swift")
+        let ui = try String(contentsOf: uiURL, encoding: .utf8)
+
+        XCTAssertTrue(ui.contains("func testEveryDestinationPassesTheSystemAccessibilityAudit()"),
+                      "macOS has no system accessibility gate")
+        XCTAssertTrue(ui.contains("XCUIAccessibilityAuditType.all.subtracting(.contrast)"),
+                      "the macOS gate no longer audits everything except the measured "
+                      + "contrast exception")
+        XCTAssertEqual(occurrences(of: ".subtracting(", in: ui), 1,
+                       "a second audit type was subtracted; a framework-owned finding is "
+                       + "excluded by name with its evidence, never by dropping a check")
+        for dropped in [".elementDetection", ".sufficientElementDescription",
+                        ".hitRegion", ".parentChild", ".action"] {
+            XCTAssertFalse(ui.contains(dropped),
+                           "the macOS gate names \(dropped), which it only ever would to "
+                           + "narrow what it audits")
+        }
+        XCTAssertFalse(ui.contains("XCUIAccessibilityAuditType(["),
+                       "the audited set is a literal list again, which is how the two "
+                       + "platforms' rules fork and how a check goes missing without a "
+                       + "reason being written down")
+        // The exclusions, by the two kinds the probe matched and no more. A
+        // `statusItem` is product code — the resident menu-bar extra — and an
+        // unlabelled one is a real defect, so the menu-bar rule must stay on
+        // AppKit's own menu types.
+        XCTAssertTrue(ui.contains("element.elementType == .menuBar")
+                      && ui.contains("[XCUIElement.ElementType.group, .splitGroup]"),
+                      "the framework-owned exclusion no longer names the containers the "
+                      + "2026-08-15 probe actually matched")
+        XCTAssertFalse(ui.contains("== .statusItem"),
+                       "the exclusion reaches the product's own menu-bar extra")
+        XCTAssertTrue(ui.contains("element.frame.height >= window.height / 2"),
+                      "the exclusion is no longer bounded to containers that wrap a whole "
+                      + "window half, so it can swallow an element the product draws")
+        // **The three the owner's 2026-08-16 run added, each bounded to something
+        // the product does not draw.** The exclusion list is where a gate goes
+        // quietly green, so every rule in it is pinned to the shape its evidence
+        // describes rather than to its kind alone.
+        XCTAssertTrue(ui.contains("element.elementType == .touchBar"),
+                      "the Touch Bar the product never declares is no longer excluded by "
+                      + "name, or is excluded by something broader than its own type")
+        // The shape the first correction shipped, asserted GONE. `<= 16` on both
+        // sides is an upper bound with nothing underneath it, so every unnamed
+        // group smaller than a disclosure triangle left the audit with it. What
+        // replaces it is checked from both sides further down, once the section
+        // has been stripped of its comments.
+        XCTAssertFalse(ui.contains("element.frame.width <= 16"),
+                       "the disclosure control is excluded by an upper bound alone again, "
+                       + "which admits every smaller unnamed group with it")
+        XCTAssertTrue(ui.contains("element.identifier.isEmpty")
+                      && ui.contains("element.label.isEmpty"),
+                      "the last exclusions no longer require an unnamed, unlabelled "
+                      + "container, so they can dispose of an element the product annotates")
+        // **The wrapper exclusion is licensed by the headings, and that is what
+        // stops it becoming the quiet way to pass an empty one.** It may only
+        // retire a container that ENCLOSES a heading this run has already proved
+        // is identified and has words; a heading that lost its label leaves
+        // `headers`, and the wrapper around it is reported in the same run.
+        XCTAssertTrue(ui.contains("around headers: [String: CGRect]")
+                      && ui.contains("headers.first(where: { encloses(element.frame, $0.value) })"),
+                      "the List header wrapper is excluded without being tied to a heading "
+                      + "the product identifies and labels, which is an exclusion by "
+                      + "geometry alone")
+        // Read BEFORE the audit, which is what makes a later finding on that
+        // geometry attributable — and reported rather than asserted on the spot,
+        // so one run of a suite that stops at its first failure answers both
+        // halves of the question instead of the first half twice.
+        guard let labelled = ui.range(of: "guard !Self.words(of: header).isEmpty else {"),
+              let recorded = ui.range(of: "headers[id] = header.frame") else {
+            return XCTFail("the gate audits the shell without first proving the product's "
+                           + "own group headings have anything to read")
+        }
+        XCTAssertTrue(labelled.upperBound < recorded.lowerBound,
+                      "a heading enters `headers` before it is proved to have words, so an "
+                      + "empty heading would license the exclusion of the wrapper around it")
+        // And "has words" means what VoiceOver would read, not one of the two
+        // places macOS puts it. The 2026-08-15 probe found five identified
+        // sidebar rows whose words were in `value` with `label` empty; a heading
+        // read only through `label` would be reported as an empty heading on the
+        // strength of which attribute the framework chose.
+        XCTAssertTrue(ui.contains("element.label.isEmpty ? (element.value as? String ?? \"\") "
+                                  + ": element.label"),
+                      "the gate proves a heading has words through one attribute only, so the "
+                      + "half of the tree that carries its words in `value` reads as empty")
+        XCTAssertTrue(ui.contains("XCTAssertTrue(problems.isEmpty && found.isEmpty,"),
+                      "a heading with nothing to read would no longer fail the gate")
+        // **The query shape, which nothing else in this workspace can catch.**
+        //
+        // `window.descendants(matching: .any)[…]` asks for every descendant of
+        // the window and then filters; it is what times out on macOS, and
+        // batches 94, 102 and 115 each spent a round trip on it before
+        // `WORKFLOW-LEARNINGS.md` (2026-08-15) recorded the rule. The rest of
+        // this suite still carries the legacy uses, which run in the owner's own
+        // terminal and are not this batch's scope — so the guard is scoped to
+        // the audit section instead of to the file, and it is that section that
+        // may never reintroduce the shape. It matters more here than anywhere
+        // else in the file: this is the one test no one can smoke-test on this
+        // workstation, so a timeout in it costs the owner the whole run.
+        guard let mark = ui.range(of: Self.macAuditSectionMark) else {
+            return XCTFail("the macOS audit section lost the heading the query guard "
+                           + "scopes itself by, so nothing checks its queries any more")
+        }
+        // Comment lines are dropped first. That section names the forbidden
+        // shape on purpose — it is where the reason lives — and a guard that
+        // cannot tell a rule from its explanation is one people satisfy by
+        // deleting the explanation.
+        let audit = String(ui[mark.lowerBound...])
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .filter { !$0.trimmingCharacters(in: .whitespaces).hasPrefix("//") }
+            .joined(separator: "\n")
+        XCTAssertTrue(audit.contains("func testEveryDestinationPassesTheSystemAccessibilityAudit()"),
+                      "the macOS audit no longer sits under its own section heading, so the "
+                      + "guard below is reading some other code")
+        XCTAssertFalse(audit.contains("descendants(matching: .any)"),
+                       "the macOS accessibility gate addresses an element through a "
+                       + "window-wide `.any` descendant query — the shape recorded as timing "
+                       + "out on macOS, in the one test that cannot be smoke-tested here")
+        // Four typed collections, not two. The 2026-08-16 run spent itself
+        // discovering that the heading was in neither of the two the gate then
+        // asked, so the set now covers every role a heading can hold on this
+        // platform and the failure names which one answered. Each remains an
+        // identifier lookup against an already-typed query — the cost the `.any`
+        // rule above exists to avoid is the untyped scan, not the count.
+        for collection in ["window.staticTexts", "window.otherElements",
+                           "window.groups", "window.cells"] {
+            XCTAssertTrue(audit.contains(collection),
+                          "the gate no longer asks \(collection), one of the typed "
+                          + "collections a heading can land in, so a run can answer which "
+                          + "query was wrong instead of what VoiceOver would meet")
+        }
+        XCTAssertTrue(audit.contains("collections.map(\\.name).joined(separator: \", \")"),
+                      "a heading found in none of the collections no longer reports which "
+                      + "ones were asked, which is the fact the next run would need")
+        // **The two assumptions the owner's 2026-08-16 run disproved, asserted
+        // gone.** That run reported `sidebar-sectionDirect` present in
+        // `staticTexts` and then reported all three headings — that one included
+        // — as nowhere in it, and left the proven 19-point wrappers attributed to
+        // no identified heading. Both halves of that contradiction are now
+        // guarded, because both are cheap to reintroduce and each costs a whole
+        // owner-run to discover again.
+        //
+        // First: one heading's collection is not the other two's. The heading
+        // trait can promote one heading to `AXHeading` without promoting its
+        // siblings, so nothing entitles a run to resolve a collection once and
+        // then read every identifier out of it.
+        XCTAssertFalse(audit.contains("collections.first(where:")
+                       || audit.contains("Self.sectionHeaderIDs[0]"),
+                       "the gate resolves one collection from one heading and reads the rest "
+                       + "out of it again — the shared-collection assumption the 2026-08-16 "
+                       + "run disproved, which reports every heading missing the moment two "
+                       + "of them hold different roles")
+        XCTAssertTrue(audit.contains("for id in Self.sectionHeaderIDs {")
+                      && audit.contains("Self.resolveHeading(id, across: collections, "
+                                        + "until: deadline)"),
+                      "the three headings are no longer resolved independently, each across "
+                      + "every typed collection")
+        XCTAssertTrue(audit.contains("for collection in collections {"),
+                      "the per-heading resolver no longer sweeps the whole collection list, "
+                      + "so a heading can be reported missing from a query never asked")
+        // Second: a query that has already answered may not be asked again.
+        // `.firstMatch` on a resolved subscript builds a second element against a
+        // narrower snapshot, and it answered `false` for the exact identifier
+        // that had just answered `true`.
+        //
+        // The token is banned outright in this section rather than only on a
+        // resolved element: a source guard cannot tell `element.firstMatch` from
+        // the legitimate `query.firstMatch`, and this section has no use for
+        // either — every element here comes from an identifier subscript. The
+        // rest of the suite keeps its own uses; the guard is scoped to the audit.
+        XCTAssertFalse(audit.contains(".firstMatch"),
+                       "the audit re-asks an element that already resolved by appending "
+                       + "`.firstMatch` — the contradictory second lookup that lost every "
+                       + "confirmed heading on 2026-08-16")
+        XCTAssertTrue(audit.contains("let header = hit.element"),
+                      "the element the collection returned is no longer the element read, so "
+                      + "the frame, the type and the words can come from a different lookup "
+                      + "than the one that proved the heading exists")
+        // And the wait stays bounded and stays a query. A `sleep` would make the
+        // cost unconditional; an unbounded retry would spend the owner's run on
+        // the sidebar rather than on the audit.
+        XCTAssertTrue(audit.contains("private static let headingResolutionBudget: TimeInterval")
+                      && audit.contains("until deadline: Date"),
+                      "the heading resolution lost its bounded budget, so a sidebar that never "
+                      + "renders costs the owner's run instead of failing it")
+        for stall in ["Thread.sleep", "usleep(", "sleep("] {
+            XCTAssertFalse(audit.contains(stall),
+                           "the audit waits by \(stall) rather than by re-querying, which "
+                           + "spends the time whether or not the tree has settled")
+        }
+        // The report has to name where each heading was found, per heading. That
+        // is the fact the 2026-08-16 run could not produce and the reason it
+        // could not be diagnosed without a second run.
+        XCTAssertTrue(audit.contains("\\(hit.name)/\\(Self.name(for: header.elementType))"),
+                      "a resolved heading no longer reports the collection and the element "
+                      + "type it was found as, so a failure cannot say which query answered")
+        XCTAssertTrue(audit.contains("NSPredicate(format: \"title == %@\""),
+                      "the gate waits for a destination through the accessibility tree again "
+                      + "rather than on the window title its scaffold sets")
+        // **Every excluded container is matched from BOTH sides of its measured
+        // geometry.** Read from the comment-stripped section on purpose: this is
+        // the block that decides what leaves the audit, so it may not be
+        // satisfied by prose describing a bound the code no longer applies.
+        //
+        // The failure being prevented is one an upper bound cannot: a rule
+        // written for one measured framework container quietly becoming a rule
+        // about size, which covers whatever the product authors next in that
+        // range. Enclosing a proven heading is a property a container of any
+        // size has — a future product-authored group holding a heading and its
+        // rows encloses exactly the same heading — so the wrapper rule carries
+        // the 19-point row height as well, and the disclosure rule carries 14
+        // in both dimensions rather than a ceiling of 16.
+        //
+        // Sizes, not positions: nothing here reads the `(778,360,…)` origins the
+        // frames were measured at, and the wrapper's 208-point width is left
+        // free because that one is the sidebar's current width and moves when
+        // the split is dragged. Resize independence is kept where the evidence
+        // supports it and spent only where the shape is genuinely fixed.
+        XCTAssertTrue(audit.contains("private static let headingRowHeight: CGFloat = 19"),
+                      "the List header wrapper's measured 19-point row height is gone, so "
+                      + "the wrapper rule is back to matching a container of any size")
+        XCTAssertTrue(audit.contains("private static let disclosureSide: CGFloat = 14"),
+                      "the disclosure control's measured 14-point side is gone")
+        XCTAssertTrue(audit.contains("private static let geometrySlack: CGFloat = 1"),
+                      "the rounding slack is no longer one point; widen it and both "
+                      + "measured bounds stop being bounds")
+        // The lower bound and the upper bound, named separately, because each is
+        // its own reverse mutation and deleting either leaves a rule that reads
+        // as measured while matching an open range.
+        XCTAssertTrue(audit.contains("value >= measured - geometrySlack"),
+                      "the measured-geometry match lost its lower bound, so every smaller "
+                      + "unnamed container is excluded along with the one that was measured")
+        XCTAssertTrue(audit.contains("value <= measured + geometrySlack"),
+                      "the measured-geometry match lost its upper bound, so every larger "
+                      + "unnamed container is excluded along with the one that was measured")
+        // And each rule is bound to the geometry its own evidence measured.
+        XCTAssertTrue(audit.contains("measures(element.frame.height, Self.headingRowHeight)"),
+                      "the List header wrapper is excluded on enclosure alone again — a "
+                      + "property any enclosing container has, including a product-authored "
+                      + "group holding a heading and its rows")
+        XCTAssertTrue(audit.contains("measures(element.frame.width, Self.disclosureSide)")
+                      && audit.contains("measures(element.frame.height, Self.disclosureSide)"),
+                      "the disclosure control is no longer matched on both of its measured "
+                      + "sides, so the rule is about one dimension and free in the other")
+        XCTAssertFalse(audit.contains("element.frame.origin")
+                       || audit.contains("== 778") || audit.contains("== 208"),
+                       "an exclusion matches a screen coordinate or the sidebar's current "
+                       + "width, so a resized window or a different display turns it into a "
+                       + "silent pass")
+        // The suite's three ids are the three the sidebar derives from its keys.
+        let sidebar = try source(named: "Shell/SidebarView.swift")
+        XCTAssertTrue(sidebar.contains("key.rawValue.split(separator: \".\").last"),
+                      "the heading identity is no longer derived from the key that supplies "
+                      + "its words, so the two can drift")
+        for key in ["sectionDirect", "sectionLinks", "sectionDevice"] {
+            XCTAssertTrue(ui.contains("\"sidebar-\(key)\""),
+                          "the gate does not check the group heading \(key) the sidebar draws")
+        }
+    }
+
     /// Constraint 5. `WindowGroup` anywhere means a second window is reachable,
     /// and a second window renders the same live session twice.
     func testNoFileCanCreateASecondWindow() throws {
@@ -2163,11 +2468,41 @@ final class MacSurfaceGuardTests: XCTestCase {
             XCTAssertTrue(try source(named: file).contains("purpose: L10n.t(\(key))"),
                           "\(file) no longer explains itself; the sentence exists nowhere visible")
         }
-        for kept in [".accessibilityElement(children: .ignore)",
-                     ".accessibilityLabel(title)",
-                     ".accessibilityAddTraits(.isHeader)"] {
+        for kept in [".accessibilityLabel(title)",
+                     ".accessibilityAddTraits(.isHeader)",
+                     // The runtime identity, so the audit gate can tell the
+                     // product's own heading element apart from whatever `List`
+                     // wraps it in — see the Q9 note in `SidebarView`.
+                     ".accessibilityIdentifier(\"sidebar-\\(id)\")"] {
             XCTAssertTrue(sidebar.contains(kept), "the section header lost \(kept)")
         }
+        // **On the text itself, and on nothing synthesized around it.** The three
+        // modifiers above were applied first to a single-child `HStack` and then
+        // to a `Text` — both times behind
+        // `.accessibilityElement(children: .ignore)`, which replaces the view's
+        // own accessibility element with a roleless synthesized one that a `List`
+        // section header does not surface. The owner's 2026-08-16 audit run
+        // measured the result: no element carrying any of the three
+        // `sidebar-section…` identities existed in the running tree at all, so
+        // the label and the heading trait were not reaching VoiceOver either.
+        // Both shapes are asserted gone, in the header alone: `PathRail` and the
+        // sidebar rows build one element out of several views and legitimately
+        // need that modifier.
+        guard let header = sidebar.range(of: "private func sectionHeader("),
+              let next = sidebar.range(of: "private func row(", range: header.upperBound..<sidebar.endIndex) else {
+            return XCTFail("the sidebar has no section header for the accessibility guard to read")
+        }
+        let sectionHeader = String(sidebar[header.lowerBound..<next.lowerBound])
+        XCTAssertFalse(sectionHeader.contains("HStack"),
+                       "the section header wraps its text in a stack again, so the label and "
+                       + "the heading trait are back on something the text's own size")
+        XCTAssertFalse(sectionHeader.contains(".accessibilityElement("),
+                       "the section header synthesizes an accessibility element again; the "
+                       + "2026-08-16 audit run proved a List header does not surface one, so "
+                       + "the label, the trait and the identity written after it reach nothing")
+        XCTAssertTrue(sectionHeader.contains("return Text(title)")
+                      && sectionHeader.contains(".frame(maxWidth: .infinity, alignment: .leading)"),
+                      "the section header no longer fills the row it is the heading for")
         // Two transfer rows, each with its own name and its own sentence. The
         // cross-network subtitle is the one that has to carry the distinction
         // between them, because "which of these two do I want" is answered by

@@ -63,6 +63,15 @@ struct PathRail: View {
         }
         .frame(maxWidth: 168, alignment: .leading)
         .accessibilityElement(children: .ignore)
+        // **A stop says what it IS, not only what it says.** Collapsing the
+        // column into one element leaves it with words and no role: the
+        // 2026-08-15 system audit reported `Unknown role` on all three stops of
+        // every rail (`WORK-QUEUE.md` Q9, class 6), which is an element VoiceOver
+        // reads out without being able to say what kind of thing it read. A stop
+        // is descriptive text — it has no action, no value to change and nothing
+        // to focus — so that is the role it states. macOS only: the same iOS rail
+        // is not reported, and its audit is already green.
+        .accessibilityAddTraits(.isStaticText)
         .accessibilityLabel(stop.detail.map { L10n.detail([stop.title, $0]) } ?? stop.title)
         // The only state said in words, and it is an existing one. `current` and
         // `pending` are deliberately silent: the surface that owns a rail with
