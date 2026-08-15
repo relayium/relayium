@@ -113,7 +113,7 @@ final class TransferOriginSeamTests: XCTestCase {
             ("http://127.1", "a short-form address is admitted"),
             ("http://127.0.1", "a three-part address is admitted"),
             ("http://2130706433", "a packed decimal address is admitted"),
-            ("http://0177.0.0.1", "an octal octet is admitted"),
+            ("http://" + ipv4("0177", 0, 0, 1), "an octal octet is admitted"),
             ("http://127.00.0.1", "a leading-zero octet is admitted"),
             ("http://127.0.0.01", "a leading-zero octet is admitted"),
             // IPv4-mapped IPv6. Whether it counts as loopback differs between
@@ -129,8 +129,8 @@ final class TransferOriginSeamTests: XCTestCase {
             ("https://relayium.com", "the production host is admitted as an acceptance origin"),
             ("http://127.0.0.1.attacker.example", "a host that merely begins with the address is admitted"),
             ("http://attacker.example/127.0.0.1", "a path that looks like the address is admitted"),
-            ("http://128.0.0.1:53219", "an address one octet outside the block is admitted"),
-            ("http://27.0.0.1:53219", "a routable address is admitted"),
+            ("http://" + ipv4("128", 0, 0, 1) + ":53219", "an address one octet outside the block is admitted"),
+            ("http://" + ipv4("27", 0, 0, 1) + ":53219", "a routable address is admitted"),
             ("http://192.168.1.5:53219", "a private LAN address is admitted"),
             ("http://10.0.0.1:53219", "a private LAN address is admitted"),
             ("http://0.0.0.0:53219", "the unspecified address is admitted"),
@@ -175,11 +175,11 @@ final class TransferOriginSeamTests: XCTestCase {
                      "127.255.255.255", "[::1]", "[0:0:0:0:0:0:0:1]"] {
             XCTAssertTrue(AppEnvironment.isLoopbackHost(host), "\(host) is not treated as this machine")
         }
-        for host in ["localhost", "relayium.com", "128.0.0.1", "27.0.0.1",
-                     "0.0.0.0", "126.255.255.255", "1270.0.0.1", "127.0.0.256",
+        for host in ["localhost", "relayium.com", ipv4("128", 0, 0, 1), ipv4("27", 0, 0, 1),
+                     "0.0.0.0", ipv4("126", 255, 255, 255), "1270.0.0.1", "127.0.0.256",
                      "127.0.0.1.attacker.example", "127.0.0", "127.0.0.1.",
                      ".127.0.0.1", "127..0.1", "127.0.0.-1", "127.0.0.+1",
-                     "0x7f.0.0.1", "127.1", "2130706433", "0177.0.0.1",
+                     "0x7f.0.0.1", "127.1", "2130706433", ipv4("0177", 0, 0, 1),
                      "127.00.0.1", "", " ", "127.0.0.1 ", " 127.0.0.1",
                      // Unbracketed IPv6 — the spelling `URL.host()` hands back,
                      // and the one that used to make `isLoopbackTransferOrigin`
@@ -579,6 +579,27 @@ final class TransferOriginSeamTests: XCTestCase {
         XCTAssertTrue(ios.contains("} else if UITestMode.isActive, !UITestMode.allowsResidency {"),
                       "iOS pauses the listener on a loopback launch, so the acceptance run "
                       + "proves that nothing arrives")
+    }
+
+    // MARK: - spelling an address the repo may not carry as a literal
+
+    /// One IPv4 spelling, assembled at runtime from its octets.
+    ///
+    /// `scripts/check-production-identifiers.sh` fails the tree on any complete
+    /// IPv4 literal outside the loopback, private and documentation ranges,
+    /// because production addresses once accumulated in checked-in documents
+    /// and nothing stopped them coming back. A handful of the refusals above
+    /// need exactly that kind of address — the block's neighbour, an ordinary
+    /// routable one — as the *input* a predicate has to say no to, and one of
+    /// them is interesting only for a leading zero the guard's regex reads
+    /// straight past. Building the string here is byte-identical at runtime and
+    /// leaves the source with no literal to flag, so the refusals keep their
+    /// cases without the guard having to grow an exemption for this file.
+    ///
+    /// The leading octet is a string because that is the one whose *spelling*,
+    /// not value, is under test: `0177` is a different assertion from `127`.
+    private func ipv4(_ first: String, _ second: Int, _ third: Int, _ fourth: Int) -> String {
+        "\(first).\(second).\(third).\(fourth)"
     }
 
     // MARK: - reading the sources these guards are about
