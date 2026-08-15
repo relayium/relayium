@@ -1201,6 +1201,36 @@ final class IOSSurfaceGuardTests: XCTestCase {
         try sources(under: shareRoot, atLeast: 2)
     }
 
+    /// The app files the extension's Sources phase also compiles.
+    ///
+    /// Phase C gave the share sheet the same card, message and spacing roles the
+    /// five tabs use, and there are exactly two ways to do that: copy them into
+    /// this target, or compile the one definition twice. Copying is what the
+    /// component layer exists to stop — the Mac's audit found two hand-rolled
+    /// fills that were equal only by coincidence — so the project adds these
+    /// three files to the appex's own Sources phase instead.
+    ///
+    /// Three, and no more. `PathRail` and `EmptyStateView` are deliberately
+    /// absent: the rail's stops come from `PathRailPresentation`, which lives in
+    /// `RelayiumAppKit` and would drag the transport stack in behind it, and
+    /// this sheet has no empty list.
+    private let sharedComponentSources = ["Components/DesignTokens.swift",
+                                          "Components/InlineMessage.swift",
+                                          "Components/SectionCard.swift"]
+
+    /// Everything the `.appex` COMPILES: its own directory plus those three.
+    ///
+    /// The absence guards below read this rather than `shareSources()`, because
+    /// a symbol reaching the extension through a shared file is in the extension
+    /// exactly as much as one written here — and it is the easier of the two to
+    /// add without noticing, since the file it would be added to is an app file.
+    private func extensionCompiledSources() throws -> [(name: String, text: String)] {
+        let shared = try sources().filter { sharedComponentSources.contains($0.name) }
+        XCTAssertEqual(shared.map(\.name), sharedComponentSources,
+                       "a shared component the extension compiles is not where it was")
+        return try shareSources() + shared
+    }
+
     /// The extension's entitlements are exactly one, and it is the App Group.
     ///
     /// Each absence below is one this extension's whole safety argument rests
@@ -1249,7 +1279,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
             // A share extension has no business in the transport stack at all.
             "RelayiumKit", "RelayiumAppKit", "WebRTC",
         ]
-        for (name, text) in try shareSources() {
+        for (name, text) in try extensionCompiledSources() {
             for symbol in forbidden {
                 XCTAssertFalse(text.contains(symbol),
                                "\(name) reaches for \(symbol) — the extension stages files and nothing else")
@@ -1288,6 +1318,183 @@ final class IOSSurfaceGuardTests: XCTestCase {
                        "exactly one place completes the host request")
     }
 
+    /// **The appex compiles the app's three visual roles, and only those three.**
+    ///
+    /// Read out of `project.pbxproj` because target membership is not observable
+    /// from any source file: `ShareRootView` naming `SectionCard` compiles only
+    /// while this membership exists, and the failure mode if somebody removes it
+    /// is a build error — but the failure mode if somebody WIDENS it is a share
+    /// extension that quietly compiles half the app, which nothing else here
+    /// would notice.
+    ///
+    /// Both folders are synchronized groups, so there is no per-file reference
+    /// to read: the app's group carries one build-phase membership exception
+    /// naming the extension's Sources phase, and its list is the whole of what
+    /// crosses the target boundary.
+    func testTheExtensionCompilesExactlyThreeSharedComponentsFromTheApp() throws {
+        let project = try String(
+            contentsOf: appsRoot.appendingPathComponent("ios/Relayium.xcodeproj/project.pbxproj"),
+            encoding: .utf8)
+
+        let marker = "PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section"
+        guard let begin = project.range(of: "/* Begin \(marker) */"),
+              let end = project.range(of: "/* End \(marker) */") else {
+            return XCTFail("the shared components no longer reach the extension's Sources phase")
+        }
+        let block = String(project[begin.upperBound..<end.lowerBound])
+        XCTAssertEqual(
+            block.components(separatedBy: "isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet").count - 1,
+            1, "a second cross-target membership was added without being reasoned about")
+
+        // Exactly the three, and nothing else with a `.swift` suffix.
+        let listed = block.split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { $0.hasSuffix(".swift,") }
+            .map { String($0.dropLast()) }
+            .sorted()
+        XCTAssertEqual(listed, sharedComponentSources.sorted(),
+                       "the appex compiles a different set of app files: \(listed)")
+
+        // And they land in the EXTENSION's Sources phase rather than any other
+        // phase or target. `Components/PathRail.swift` added to the app's own
+        // phase would be a no-op; added here it would not compile at all,
+        // because its stops come from a module this target must never link.
+        let phase = try XCTUnwrap(block.split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .first { $0.hasPrefix("buildPhase = ") }?
+            .dropFirst("buildPhase = ".count)
+            .prefix { $0 != " " && $0 != ";" }
+            .description)
+        XCTAssertTrue(project.contains("\(phase) /* Sources */"),
+                      "the shared components are added to something that is not a Sources phase")
+        guard let target = project.range(of: "B100000000000000000000D2 /* RelayiumShare */ = {"),
+              let close = project.range(of: "productType = \"com.apple.product-type.app-extension\";",
+                                        range: target.upperBound..<project.endIndex) else {
+            return XCTFail("the extension target block could not be read")
+        }
+        XCTAssertTrue(project[target.upperBound..<close.lowerBound].contains(phase),
+                      "the shared components are compiled into a target that is not the extension")
+    }
+
+    /// **The share sheet is drawn out of the app's own roles, and states the
+    /// same things it always did.**
+    ///
+    /// This was the last first-party iOS surface still drawing its own chrome —
+    /// a `Divider`, a hand-rolled orange triangle, literal 20-point gaps and a
+    /// bare text Cancel under a prominent button — while the five tabs had moved
+    /// to `SectionCard`, `InlineMessage` and `Metrics`. What is asserted is both
+    /// halves: that the roles are used, and that the rules they came with hold
+    /// here too — a card only where there is something to group, one prominent
+    /// action per state, and no file name anywhere.
+    func testTheShareSheetUsesTheAppsCardMessageAndSpacingRoles() throws {
+        let root = try XCTUnwrap(
+            try shareSources().first { $0.name == "ShareRootView.swift" }?.text)
+
+        /// One state's rendering, between two code landmarks.
+        func arm(_ from: String, _ to: String) throws -> String {
+            let after = try XCTUnwrap(root.range(of: from), "\(from) is gone")
+            let before = try XCTUnwrap(root.range(of: to, range: after.upperBound..<root.endIndex),
+                                       "\(to) is gone")
+            return String(root[after.upperBound..<before.lowerBound])
+        }
+
+        // The chrome this surface used to draw for itself.
+        XCTAssertFalse(root.contains("Divider()"),
+                       "the sheet still separates itself with a rule rather than a card edge")
+        XCTAssertFalse(root.contains("Image(systemName: \"exclamationmark.triangle.fill\")"),
+                       "the sheet kept its own copy of the failure line")
+        XCTAssertFalse(root.contains("spacing: 20"), "the sheet still spaces itself with a literal")
+        XCTAssertFalse(root.contains("padding(20)"), "the sheet still pads itself with a literal")
+        XCTAssertFalse(root.contains("spacing: 16"), "the sheet still spaces itself with a literal")
+        XCTAssertTrue(root.contains("spacing: Metrics.section"))
+        XCTAssertTrue(root.contains("padding(Metrics.section)"))
+
+        // The count, and the combined element that speaks it with the heading.
+        // It is the only thing this sheet says about the share, so it survives
+        // every re-layout or it is not the same product.
+        XCTAssertTrue(root.contains("L10n.plural(.shareItemCount, model.itemCount)"),
+                      "the sheet no longer says how much it is about to copy")
+        XCTAssertTrue(root.contains(".accessibilityElement(children: .combine)"),
+                      "the heading and its count are read as two unrelated labels again")
+
+        // Ready and Saved group content; the wait and the two failures do not.
+        // A card around a progress label is a box around a sentence — the rule
+        // `ReceiveView` follows for exactly the same two shapes.
+        let ready = try arm("private var ready: some View {", "private func copying(")
+        let copying = try arm("private func copying(", "private var saved: some View {")
+        let saved = try arm("private var saved: some View {", "private func failure(")
+        let failure = try arm("private func failure(", "private var cancelButton:")
+        let unavailable = String(root[try XCTUnwrap(
+            root.range(of: "struct ShareUnavailableView"),
+            "the unavailable surface is gone").upperBound...])
+
+        for (state, text) in [("ready", ready), ("saved", saved)] {
+            XCTAssertTrue(text.contains("SectionCard {"),
+                          "the \(state) state lays itself out as a flat column")
+        }
+        for (state, text) in [("copying", copying), ("failed", failure),
+                              ("unavailable", unavailable)] {
+            XCTAssertFalse(text.contains("SectionCard"), "\(state) grew chrome around a sentence")
+        }
+
+        // One prominent action per state, and it is the way forward. Cancel is
+        // bordered beside it rather than a bare label, which is also what gives
+        // it the 44-point target every other control in the app has.
+        for (state, text) in [("ready", ready), ("copying", copying), ("saved", saved),
+                              ("failed", failure), ("unavailable", unavailable)] {
+            let prominent = text.components(separatedBy: "buttonStyle(.borderedProminent)").count - 1
+            XCTAssertEqual(prominent, state == "copying" ? 0 : 1,
+                           "\(state) offers \(prominent) primary actions")
+        }
+        XCTAssertTrue(root.contains(".buttonStyle(.bordered)"),
+                      "Cancel is a bare label under a prominent button again")
+        // On the LABEL. Outside the style it widens the slot and leaves the
+        // filled shape hugging its word in the middle of it, which is how this
+        // first rendered: a full-width primary above a small floating Cancel.
+        let cancel = try arm("private var cancelButton: some View {", "private func paragraph(")
+        XCTAssertTrue(cancel.contains("Text(L10n.t(.commonCancel)).frame(maxWidth: .infinity)"),
+                      "Cancel does not fill the width the primary action above it does")
+        for state in [ready, copying] {
+            XCTAssertTrue(state.contains("cancelButton"), "a state lost its way out")
+        }
+
+        // The two shared message roles, and what each is for here: the privacy
+        // promise is a standing fact the reader needs, and a failure is a
+        // failure. Both draw a symbol, so neither depends on its colour.
+        XCTAssertTrue(ready.contains("InlineMessage(.info, L10n.t(.shareStaysHere))"))
+        XCTAssertTrue(saved.contains("InlineMessage(.info, L10n.t(.shareStaysHere))"))
+        XCTAssertTrue(failure.contains("InlineMessage(.warning, text)"))
+        XCTAssertTrue(unavailable.contains("InlineMessage(.warning, message)"))
+        XCTAssertTrue(saved.contains("Image(systemName: \"checkmark.circle.fill\")"),
+                      "the terminal success state no longer reads as success")
+        XCTAssertTrue(saved.contains(".accessibilityAddTraits(.isHeader)"),
+                      "the result is not announced as the group's heading")
+
+        // Every sentence this file sets wraps. At Accessibility 5 on the
+        // smallest iPhone each of them is several lines, and the part a
+        // truncation removes is the end — which is where "nothing has been
+        // uploaded" is. The heading and the count are included: they are the
+        // two the old layout let truncate, because they were short in English.
+        let wrapping = "fixedSize(horizontal: false, vertical: true)"
+        let header = try arm("private var header: some View {", "private var content:")
+        XCTAssertEqual(header.components(separatedBy: wrapping).count - 1, 2,
+                       "the heading or its count can still be truncated")
+        for (state, text) in [("copying", copying), ("saved", saved),
+                              ("unavailable", unavailable)] {
+            XCTAssertTrue(text.contains(wrapping), "\(state) can truncate its own sentence")
+        }
+        XCTAssertTrue(try arm("private func paragraph(", "}").contains(wrapping),
+                      "the shared paragraph can be truncated")
+
+        // **No file name, in any state.** The count is measured; a name is the
+        // user's, and this sheet is presented inside another app's process.
+        for naming in ["FileIdentityPresentation", "PendingFileList", "suggestedName",
+                       "lastPathComponent", "displayName", "fileName", "draft.files"] {
+            XCTAssertFalse(root.contains(naming),
+                           "the share sheet reaches for \(naming) — it renders a count and nothing else")
+        }
+    }
+
     /// **A Share Extension may not open its containing app, and this target must
     /// not find a way around that.**
     ///
@@ -1303,7 +1510,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// An absence has no runtime to observe, which is why this is a source scan
     /// across the whole target rather than one assertion about one file.
     func testNothingInTheExtensionTriesToOpenTheContainingApp() throws {
-        for (name, text) in try shareSources() {
+        for (name, text) in try extensionCompiledSources() {
             for unsupported in [".open(", "openURL", "UIApplication", "canOpenURL",
                                 "openHostApp", "handoffURL", "responder",
                                 "URL(string:", "URLComponents", "https://",

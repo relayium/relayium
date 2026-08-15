@@ -67,8 +67,20 @@
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
+/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+		B100000000000000000000C5 /* PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
+			buildPhase = B100000000000000000000DC /* Sources */;
+			membershipExceptions = (
+				Components/DesignTokens.swift,
+				Components/InlineMessage.swift,
+				Components/SectionCard.swift,
+			);
+		};
+/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		B100000000000000000000AF /* Relayium */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (B100000000000000000000C3 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = Relayium; sourceTree = "<group>"; };
+		B100000000000000000000AF /* Relayium */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (B100000000000000000000C3 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, B100000000000000000000C5 /* PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = Relayium; sourceTree = "<group>"; };
 		B100000000000000000000D3 /* RelayiumShare */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (B100000000000000000000D4 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = RelayiumShare; sourceTree = "<group>"; };
 		B100000000000000000000F3 /* RelayiumUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = RelayiumUITests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
