@@ -8,10 +8,15 @@ private struct PairingJoinLinkView: View {
     let url: URL
     @State private var copied = false
 
+    @Environment(\.dynamicTypeSize) private var typeSize
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.t(.pairingJoinLink))
-                .font(.footnote.weight(.semibold))
+        // Level two of the card that holds the code: the same six digits, in the
+        // form a browser can open. It was a hand-rolled semibold footnote over a
+        // stack with a literal `8` — the exact thing `OpenSection` exists to be,
+        // and now it announces as a group to VoiceOver rather than as three
+        // controls loose among the code, the expiry and Cancel.
+        OpenSection(L10n.t(.pairingJoinLink)) {
             Text(url.absoluteString)
                 .font(.footnote.monospaced())
                 // The link is a handoff result, not decorative metadata. Let
@@ -20,18 +25,30 @@ private struct PairingJoinLinkView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
 
-            HStack {
-                Button {
-                    UIPasteboard.general.string = url.absoluteString
-                    copied = true
-                } label: {
-                    Label(L10n.t(.commonCopy), systemImage: "doc.on.doc")
-                }
-                ShareLink(item: url) {
-                    Label(L10n.t(.commonShare), systemImage: "square.and.arrow.up")
+            // Full width and `.large`, matching the stored link's own handoff on
+            // the Send tab. Two natural-width capsules were under the 44pt floor
+            // on the axis a thumb actually misses, and at accessibility content
+            // sizes the second one left the row entirely.
+            //
+            // **And one per row once two of them no longer fit.** Half of a 375pt
+            // iPhone's content width is about 150 points, and at Accessibility 3
+            // the word beside its symbol is wider than that: on a real SE build
+            // these read "Co / py" and "Sh / are", broken mid-word, on the two
+            // controls the entire handoff depends on. The threshold is every
+            // accessibility size rather than the one that was photographed,
+            // because Accessibility 1 and 2 sit inside the same margin. Same
+            // buttons, same order, same styles; only the axis changes, and it
+            // changes with the reader's own setting, exactly as the path rail
+            // above it turns.
+            Group {
+                if typeSize.isAccessibilitySize {
+                    VStack(spacing: Metrics.tight) { copyButton; shareButton }
+                } else {
+                    HStack(spacing: Metrics.tight) { copyButton; shareButton }
                 }
             }
             .buttonStyle(.bordered)
+            .controlSize(.large)
 
             if copied {
                 Label(L10n.t(.pairingLinkCopied), systemImage: "checkmark")
@@ -43,6 +60,25 @@ private struct PairingJoinLinkView: View {
         // code replaces the URL. Never let yesterday's Copy feedback certify
         // a link that has not been copied.
         .onChange(of: url) { _ in copied = false }
+    }
+
+    /// The one pasteboard write in this whole file, and it is inside the action
+    /// of a button the user pressed. Nothing here ever reads the pasteboard.
+    private var copyButton: some View {
+        Button {
+            UIPasteboard.general.string = url.absoluteString
+            copied = true
+        } label: {
+            Label(L10n.t(.commonCopy), systemImage: "doc.on.doc")
+                .frame(maxWidth: .infinity)
+        }
+    }
+
+    private var shareButton: some View {
+        ShareLink(item: url) {
+            Label(L10n.t(.commonShare), systemImage: "square.and.arrow.up")
+                .frame(maxWidth: .infinity)
+        }
     }
 }
 
@@ -184,7 +220,7 @@ struct DirectView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: Metrics.section) {
                     // The other direct tab is presenting the session. Say so and
                     // offer the way there rather than drawing a second copy of
                     // it — both tabs drive the same two models, so a second copy
@@ -192,10 +228,15 @@ struct DirectView: View {
                     if let owner = presence.owner, owner != .pairingCode {
                         busyElsewhere(owner)
                     } else {
-                        Text(L10n.t(.navPairingCodeSubtitle))
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
+                        // Only while there is still a choice to make. Both of
+                        // these say what a direct transfer IS, which is advice
+                        // about a decision — so once a code is being minted, is
+                        // waiting for a peer, or is carrying one, they are two
+                        // paragraphs of preamble above the thing the user is
+                        // actually watching. The large-file route directly below
+                        // has always been gated on exactly this, for exactly
+                        // this reason.
+                        if !isLocked { positioning }
 
                         if let notice = foreground.interruption { interruption(notice) }
 
@@ -244,6 +285,30 @@ struct DirectView: View {
         }
     }
 
+    // MARK: - what this screen is
+
+    /// **What a direct transfer is, stated once, above both halves that use it.**
+    ///
+    /// Deliberately outside a card and above the two task cards, because it is
+    /// the one thing on this screen that belongs to neither of them: create and
+    /// join are the two ends of the SAME route, and putting the rail inside
+    /// either card would claim it for that half.
+    ///
+    /// The rail is `iosPairingCode`, which is `iosNearby` — the same two devices
+    /// and the same encrypted middle, because it is the same route. What it must
+    /// never be is a Mac rail: `crossNetwork` says "This Mac", and this screen
+    /// is only ever drawn on a phone.
+    private var positioning: some View {
+        VStack(alignment: .leading, spacing: Metrics.inner) {
+            Text(L10n.t(.navPairingCodeSubtitle))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            PathRail(stops: PathRailPresentation.iosPairingCode())
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     // MARK: - the one choice
 
     /// Files or text, and it stops being the user's choice the moment either
@@ -255,7 +320,11 @@ struct DirectView: View {
     /// which re-reads both model states. SwiftUI still owns the binding behind a
     /// disabled control, so the mechanism cannot be the modifier.
     private var modePicker: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        // Above both cards rather than inside either, and that placement is the
+        // fact: on Nearby this question belongs to the send task alone, because
+        // an inbound session settles its own mode. Here it governs Create AND
+        // Join — a code carries no type, which is exactly what the hint says.
+        VStack(alignment: .leading, spacing: Metrics.tight) {
             Picker(L10n.t(.hubTransferType), selection: Binding(
                 get: { modes.mode },
                 set: { modes.select($0,
@@ -293,19 +362,24 @@ struct DirectView: View {
                      showsAnonymousNote: shouldExplainAnonymousJoin,
                      action: joinToReceiveFiles)
         case let .failed(message):
-            failureLine(message)
-            PendingFileList(sessionFiles: file.sessionFiles)
-            // `cancel`, not a bare reset: the failure may have left a partial
-            // write to discard, and `.failed` still holds the dead connection.
-            Button(L10n.t(.commonDone)) { file.cancel() }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
+            SectionCard {
+                failureLine(message)
+                PendingFileList(sessionFiles: file.sessionFiles)
+                // `cancel`, not a bare reset: the failure may have left a
+                // partial write to discard, and `.failed` still holds the dead
+                // connection.
+                Button(L10n.t(.commonDone)) { file.cancel() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+            }
         case .minting:
-            ProgressView { Text(L10n.t(.directCreatingCode)) }
-            PendingFileList(sessionFiles: file.sessionFiles)
-            Button(L10n.t(.commonCancel)) { file.cancel() }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
+            SectionCard(L10n.t(.directSendHeading)) {
+                ProgressView { Text(L10n.t(.directCreatingCode)) }
+                PendingFileList(sessionFiles: file.sessionFiles)
+                Button(L10n.t(.commonCancel)) { file.cancel() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+            }
         case let .showingCode(code, expiresAt):
             // `cancel` alone. The staged batch inside the model goes with it,
             // but the SELECTION stays: cancelling a code nobody answered is not
@@ -313,10 +387,9 @@ struct DirectView: View {
             // same folder again is a punishment for the peer being slow. The
             // next Create re-stages from the scope this still holds.
             //
-            // The picker is also gone here, so keep the model-owned manifest
-            // visible while the sender hands off the code. This is their last
-            // chance to verify every file and size before a peer joins.
-            PendingFileList(sessionFiles: file.sessionFiles)
+            // The manifest itself moved INSIDE the handoff card, which is where
+            // it belongs — it is what this code will send, not a separate
+            // section above the heading that names it.
             showing(code: code, expiresAt: expiresAt, mode: .files,
                     heading: L10n.t(.directGiveCode)) {
                 file.cancel()
@@ -330,38 +403,67 @@ struct DirectView: View {
 
     /// Choose what to send, then create a code. Gated, because creating one is
     /// the half that costs an account.
-    @ViewBuilder
+    ///
+    /// **A card, and that is the hierarchy repair.** Create and Join were a
+    /// headline, a stack of controls, a second headline and a second stack of
+    /// controls, twenty points apart down one flat column — so the screen's two
+    /// tasks, the large-file footnote and a settings toggle were four peers, and
+    /// nothing said where one task stopped and the next began. One card each is
+    /// what draws that boundary, and it is what lets each half have its own
+    /// single primary control instead of competing across the whole screen.
     private var createFiles: some View {
-        Text(L10n.t(.directSendHeading)).font(.headline)
-        if case .allowed = gate {
-            if let summary = selection.summary {
-                HStack(spacing: 12) {
-                    Text(summary).font(.subheadline)
-                    Spacer(minLength: 0)
-                    Button(L10n.t(.commonClear)) { selection.clear() }
+        SectionCard(L10n.t(.directSendHeading)) {
+            if case .allowed = gate {
+                if let summary = selection.summary {
+                    HStack(spacing: Metrics.inner) {
+                        // The staged batch is the answer to this card's own
+                        // question, at the weight of an answer — the same weight
+                        // Nearby and Send state theirs at. It was plain
+                        // `.subheadline` here for no reason anybody wrote down.
+                        Text(summary).font(.subheadline.weight(.semibold))
+                        Spacer(minLength: 0)
+                        Button(L10n.t(.commonClear)) { selection.clear() }
+                    }
+                    // One element, so VoiceOver reads "3 files" rather than
+                    // stopping on each fragment of the summary.
+                    .accessibilityElement(children: .combine)
                 }
-                // One element, so VoiceOver reads "3 files" rather than
-                // stopping on each fragment of the summary.
-                .accessibilityElement(children: .combine)
+                PendingFileList(files: selection.selectedFiles)
+                if let message = selection.errorMessage { failureLine(message) }
+                // **Exactly one prominent control in this card at a time.**
+                //
+                // With nothing staged, Create is disabled and the chooser IS the
+                // task — it was drawn grey under a violet button that could not
+                // be pressed, which is a first move pointing at the wrong
+                // control. Once something is staged the emphasis moves to
+                // Create, and the chooser becomes the ordinary way to change
+                // what is going. The same rule the Nearby and Send tabs hold.
+                if selection.isEmpty {
+                    Button { isChoosingFiles = true } label: {
+                        Text(L10n.t(.commonChooseFilesOrFolders)).frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                } else {
+                    Button { isChoosingFiles = true } label: {
+                        Text(L10n.t(.commonChooseFilesOrFolders)).frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+                }
+                Button { createAndSend() } label: {
+                    Text(L10n.t(.directCreateCode)).frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                // What is missing is named by the line above, and adding it is
+                // one tap away — unlike an account, which is why that gets a
+                // gate.
+                .disabled(selection.isEmpty)
+                .accessibilityHidden(selection.isEmpty)
+            } else {
+                capabilityGate
             }
-            PendingFileList(files: selection.selectedFiles)
-            if let message = selection.errorMessage { failureLine(message) }
-            Button { isChoosingFiles = true } label: {
-                Text(L10n.t(.commonChooseFilesOrFolders)).frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            Button { createAndSend() } label: {
-                Text(L10n.t(.directCreateCode)).frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-            // What is missing is named by the line above, and adding it is one
-            // tap away — unlike an account, which is why that gets a gate.
-            .disabled(selection.isEmpty)
-            .accessibilityHidden(selection.isEmpty)
-        } else {
-            capabilityGate
         }
     }
 
@@ -387,10 +489,12 @@ struct DirectView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.large)
         case .minting:
-            ProgressView { Text(L10n.t(.textCreatingCode)) }
-            Button(L10n.t(.commonCancel)) { text.reset() }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
+            SectionCard(L10n.t(.textStartHeading)) {
+                ProgressView { Text(L10n.t(.textCreatingCode)) }
+                Button(L10n.t(.commonCancel)) { text.reset() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.large)
+            }
         case let .showingCode(code, expiresAt):
             showing(code: code, expiresAt: expiresAt, mode: .text,
                     heading: L10n.t(.textGiveCode)) {
@@ -401,21 +505,24 @@ struct DirectView: View {
         }
     }
 
-    @ViewBuilder
+    /// The text half's create task, in the same card role its files twin uses,
+    /// so switching modes changes what the card contains and not what the screen
+    /// is made of.
     private var createText: some View {
-        Text(L10n.t(.textStartHeading)).font(.headline)
-        if case .allowed = gate {
-            Text(L10n.t(.textStartBody))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Button { createTextSession() } label: {
-                Text(L10n.t(.textCreateCode)).frame(maxWidth: .infinity)
+        SectionCard(L10n.t(.textStartHeading)) {
+            if case .allowed = gate {
+                Text(L10n.t(.textStartBody))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button { createTextSession() } label: {
+                    Text(L10n.t(.textCreateCode)).frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            } else {
+                capabilityGate
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
-        } else {
-            capabilityGate
         }
     }
 
@@ -431,7 +538,7 @@ struct DirectView: View {
     /// wrong diagnosis and the wrong next action.
     @ViewBuilder
     private var capabilityGate: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: Metrics.inner) {
             switch gate {
             case .allowed:
                 EmptyView()
@@ -479,8 +586,7 @@ struct DirectView: View {
     /// Never a second copy of the session with its own Cancel — see the call
     /// site. `NearbyView` renders the same card from the other side.
     private func busyElsewhere(_ owner: AppDestination) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(L10n.t(.presenceBusyTitle)).font(.headline)
+        SectionCard(L10n.t(.presenceBusyTitle)) {
             Text(L10n.t(.presenceBusyBody))
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -513,15 +619,23 @@ struct DirectView: View {
         }
     }
 
-    /// The code to read onto the other device, and the wait.
+    /// **The code to read onto the other device, and the wait.**
+    ///
+    /// The one screen this whole destination exists to produce, and it was eight
+    /// flat peers: a headline, the code, a link block, two footnotes, a spinner,
+    /// a third footnote and Cancel, all twelve points apart. So the six digits a
+    /// person is squinting at across a room ranked the same as the sentence
+    /// under them.
+    ///
+    /// It is one card now, and the order is the handoff: the code, when it dies,
+    /// the same code as a link, what it will carry, the wait, and the way out.
+    /// The heading is the card's title rather than a `Text` inside it, so
+    /// VoiceOver announces "Give this code to the other device" once on entering
+    /// the group and then reads the digits.
     private func showing(code: String, expiresAt: Int64, mode: TransferMode, heading: String,
                          cancel: @escaping () -> Void) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(heading).font(.headline)
+        SectionCard(heading) {
             PairingCodeText(code: code, style: .pairing)
-            if let joinURL = productionPairingJoinURL(code: code, mode: mode) {
-                PairingJoinLinkView(url: joinURL)
-            }
             Text(L10n.t(.commonExpires, [
                 L10n.date(Date(timeIntervalSince1970: TimeInterval(expiresAt)),
                           dateStyle: .none, timeStyle: .short),
@@ -533,6 +647,14 @@ struct DirectView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityIdentifier("pairing-code-expiry-note")
+            if let joinURL = productionPairingJoinURL(code: code, mode: mode) {
+                PairingJoinLinkView(url: joinURL)
+            }
+            // The picker and the chooser are both gone in this state, so the
+            // model-owned manifest is the sender's last chance to verify every
+            // file and size before a peer joins. Only the files half has one —
+            // a text session's content does not exist yet.
+            if mode == .files { PendingFileList(sessionFiles: file.sessionFiles) }
             ProgressView { Text(L10n.t(.directWaitingForDevice)) }
             Text(L10n.t(.directKeepBothOpen))
                 .font(.footnote)
@@ -542,13 +664,12 @@ struct DirectView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.large)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// What the app could not carry into the background, said after the fact
     /// because that is the only moment it can be read.
     private func interruption(_ notice: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: Metrics.tight) {
             failureLine(notice)
             Button(L10n.t(.commonDismiss)) { foreground.dismissInterruption() }
         }
@@ -560,8 +681,11 @@ struct DirectView: View {
     /// about a decision already made, next to a button that would take the user
     /// off the screen showing their own transfer.
     private var largeFileRoute: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(L10n.t(.directLargeFilesTitle)).font(.subheadline.weight(.semibold))
+        // A card, and a `.bordered` button inside it. It is a real offer with a
+        // real destination, so it gets the same boundary the two tasks above it
+        // have — but it is the answer to a question the user may not be asking,
+        // so it never takes the accent away from the task they came for.
+        SectionCard(L10n.t(.directLargeFilesTitle)) {
             Text(L10n.t(.directLargeFilesBody))
                 .font(.callout)
                 .foregroundStyle(.secondary)
@@ -585,7 +709,12 @@ struct DirectView: View {
     /// because the models read the preference when the SAS arrives and flipping
     /// it mid-handshake would make the gate depend on timing.
     private var verificationSetting: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        // In a card, untitled — the toggle's own label is the title, and the two
+        // paragraphs under it are what it does and what it does NOT change. The
+        // identical treatment the Nearby tab gives the identical control: left
+        // loose at the bottom of the screen it was a wall of grey with no
+        // boundary, which is how a setting starts reading as a footer.
+        SectionCard {
             Toggle(L10n.t(.verifyToggle), isOn: Binding(
                 get: { verification.requiresSASConfirmation },
                 set: { if !isLocked { verification.requiresSASConfirmation = $0 } }
@@ -605,13 +734,7 @@ struct DirectView: View {
     /// A failure line. The icon carries the label rather than sitting beside an
     /// unlabelled image, so VoiceOver reads the sentence and not "image".
     private func failureLine(_ message: String) -> some View {
-        Label {
-            Text(message)
-        } icon: {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-        }
-        .font(.callout)
-        .fixedSize(horizontal: false, vertical: true)
+        InlineMessage(.warning, message)
     }
 
     // MARK: - join (needs nothing)
@@ -637,8 +760,12 @@ struct DirectView: View {
             get: { code.wrappedValue },
             set: { normalize($0) }
         )
-        return VStack(alignment: .leading, spacing: 12) {
-            Text(L10n.t(.directReceiveHeading)).font(.headline)
+        // Its own card, beside the create card and never inside it. The two are
+        // gated differently and that asymmetry is the destination's whole point,
+        // so they must not read as two halves of one gated task — a signed-out
+        // user sees an account card above a Receive card that works, rather than
+        // one screen that appears to need signing in.
+        return SectionCard(L10n.t(.directReceiveHeading)) {
             PairingCodeInput(text: normalizedCode, label: L10n.t(.commonCode))
             Button(action: action) {
                 Text(L10n.t(.commonJoin)).frame(maxWidth: .infinity)

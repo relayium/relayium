@@ -188,6 +188,25 @@ public enum PathRailPresentation {
         ]
     }
 
+    /// A pairing-code transfer's standing route — which is the SAME route the
+    /// nearby rail states, deliberately drawn from the same function.
+    ///
+    /// The two direct destinations differ only in how the two devices find each
+    /// other: six digits read onto the other device, or a rendezvous room
+    /// grouped by the public address the server observes. Neither of those is a
+    /// stop. Both ends are still devices, the middle is still an encrypted
+    /// connection whose shape the client cannot prove, and both surfaces drive
+    /// the same two models — so a second copy of these three stops would be free
+    /// to drift from the one the user reaches in two taps.
+    ///
+    /// Every `progress` is nil for the reason every standing route's is, and
+    /// here the temptation is sharper than anywhere else: a code that has been
+    /// created is not a device that has answered it, and a rail that advanced on
+    /// `.showingCode` would draw the far end of a transfer nobody has joined.
+    public static func iosPairingCode(language: AppLanguage? = nil) -> [PathStop] {
+        iosNearby(language: language)
+    }
+
     // MARK: - Device Inbox
 
     /// **A standing route, with no progress at all — and no second copy of a

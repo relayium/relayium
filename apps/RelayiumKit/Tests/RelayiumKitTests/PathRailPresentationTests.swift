@@ -141,7 +141,8 @@ final class PathRailPresentationTests: XCTestCase {
         for language in AppLanguage.allCases {
             let rails = [PathRailPresentation.iosStoredSend(.idle, language: language),
                          PathRailPresentation.iosDeviceSend(language: language),
-                         PathRailPresentation.iosNearby(language: language)]
+                         PathRailPresentation.iosNearby(language: language),
+                         PathRailPresentation.iosPairingCode(language: language)]
             for stops in rails {
                 XCTAssertEqual(stops.first?.title, L10n.t(.pathThisDevice, language: language),
                                "an iOS rail does not start at this device")
@@ -189,6 +190,29 @@ final class PathRailPresentationTests: XCTestCase {
                        L10n.t(.pathEncryptedOnRelayium, language: .en))
     }
 
+    /// **The pairing-code rail is the nearby rail, and that is the claim.**
+    ///
+    /// The two direct destinations differ only in how the devices find each
+    /// other — six digits, or a rendezvous room grouped by public address — and
+    /// neither of those is a stop on the path the bytes take. Both drive the
+    /// same two models, so two hand-written copies of these three stops would be
+    /// two rails the user can reach in two taps and that are free to disagree.
+    /// Equality here is what makes that impossible rather than merely unlikely.
+    func testThePairingCodeRailIsTheSameRouteAsTheNearbyOne() {
+        for language in AppLanguage.allCases {
+            XCTAssertEqual(PathRailPresentation.iosPairingCode(language: language),
+                           PathRailPresentation.iosNearby(language: language),
+                           "\(language.rawValue) draws two different direct routes")
+        }
+        // And the part that would be a lie if it advanced: a code that has been
+        // created is not a device that has answered it.
+        XCTAssertTrue(PathRailPresentation.iosPairingCode(language: .en)
+            .allSatisfy { $0.progress == nil },
+            "the pairing rail claims a position before a peer exists")
+        XCTAssertEqual(PathRailPresentation.iosPairingCode(language: .en)[1].title,
+                       L10n.t(.pathEncryptedConnection, language: .en))
+    }
+
     /// The sender's rail is not the receiver's turned around.
     func testTheDeviceSendRailIsNotTheInboxRailBackwards() {
         let sending = PathRailPresentation.iosDeviceSend(language: .en)
@@ -211,6 +235,7 @@ final class PathRailPresentationTests: XCTestCase {
                 + PathRailPresentation.iosStoredSend(.idle, language: language)
                 + PathRailPresentation.iosDeviceSend(language: language)
                 + PathRailPresentation.iosNearby(language: language)
+                + PathRailPresentation.iosPairingCode(language: language)
             for stop in all {
                 XCTAssertFalse(stop.title.isEmpty,
                                "\(language.rawValue) has an empty rail label")

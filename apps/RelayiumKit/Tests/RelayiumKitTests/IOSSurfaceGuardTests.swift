@@ -233,14 +233,26 @@ final class IOSSurfaceGuardTests: XCTestCase {
         let fileMinting = try XCTUnwrap(direct.components(
             separatedBy: "case .minting:").dropFirst().first?
             .components(separatedBy: "case let .showingCode").first)
+        XCTAssertTrue(fileMinting.contains(
+            "PendingFileList(sessionFiles: file.sessionFiles)"),
+            "code creation hides the files it is waiting to send")
+
+        // The handoff renders the manifest itself, inside the card that names
+        // the code — it is what that code will send, not a separate section
+        // above the heading. So the assertion follows it there: the files half
+        // reaches the handoff, and the handoff draws the manifest for that half
+        // and only that half. A text session's content does not exist yet.
         let fileShowing = try XCTUnwrap(direct.components(
             separatedBy: "case let .showingCode(code, expiresAt):").dropFirst().first?
             .components(separatedBy: "case .joining, .connecting").first)
-        for phase in [fileMinting, fileShowing] {
-            XCTAssertTrue(phase.contains(
-                "PendingFileList(sessionFiles: file.sessionFiles)"),
-                "code creation hides the files it is waiting to send")
-        }
+        XCTAssertTrue(fileShowing.contains("mode: .files"),
+                      "the file half no longer reaches the shared handoff card")
+        let handoff = try XCTUnwrap(direct.components(
+            separatedBy: "private func showing(code:").dropFirst().first?
+            .components(separatedBy: "private func interruption").first)
+        XCTAssertTrue(handoff.contains(
+            "if mode == .files { PendingFileList(sessionFiles: file.sessionFiles) }"),
+            "the code handoff hides the files it is waiting to send")
 
         let fileFailure = try XCTUnwrap(direct.components(
             separatedBy: "case let .failed(message):").dropFirst().first?
@@ -3587,7 +3599,10 @@ final class IOSSurfaceGuardTests: XCTestCase {
     func testTheGeneratedTextCodeKeepsItsVisibleHandoff() throws {
         let view = try XCTUnwrap(
             try sources().first { $0.name == "DirectView.swift" }?.text)
-        for required in ["Text(L10n.t(.pairingJoinLink))", "Text(url.absoluteString)",
+        // `OpenSection`, not a hand-rolled semibold footnote: the label is the
+        // same word and the same rendered static text the runtime path below
+        // looks for, now announced to VoiceOver as the group's heading.
+        for required in ["OpenSection(L10n.t(.pairingJoinLink))", "Text(url.absoluteString)",
                          "UIPasteboard.general.string = url.absoluteString",
                          "ShareLink(item: url)"] {
             XCTAssertTrue(view.contains(required),
@@ -3602,7 +3617,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
 
     // MARK: - Phase C: the shared visual layer
 
-    /// The five files the two refreshed surfaces are built out of.
+    /// The five files every refreshed surface is built out of.
     ///
     /// Asserted by NAME rather than by what they contain, because the failure
     /// this catches is the next screen quietly not using them: a component layer
@@ -3624,9 +3639,10 @@ final class IOSSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(tokens.contains("static var action: Color { .accentColor }"),
                       "the brand colour is not the asset")
 
-        // Every ad-hoc container fill is gone from the two refreshed surfaces,
-        // and both now spend the tokens instead of literals.
-        for name in ["NearbyView.swift", "SendView.swift", "DeviceSendView.swift"] {
+        // Every ad-hoc container fill is gone from the refreshed surfaces, and
+        // each now spends the tokens instead of literals.
+        for name in ["NearbyView.swift", "SendView.swift", "DeviceSendView.swift",
+                     "DirectView.swift"] {
             let view = try XCTUnwrap(all.first { $0.name == name }?.text)
             XCTAssertFalse(view.contains(".quaternary.opacity("),
                            "\(name) still hand-rolls a container fill")
@@ -3635,9 +3651,10 @@ final class IOSSurfaceGuardTests: XCTestCase {
                            "\(name) still spaces itself with a literal")
         }
 
-        // One failure presentation, four call sites. The helpers keep their
+        // One failure presentation, every call site. The helpers keep their
         // names — the panes' own ordering guards address them — and delegate.
-        for name in ["NearbyView.swift", "SendView.swift", "DeviceSendView.swift"] {
+        for name in ["NearbyView.swift", "SendView.swift", "DeviceSendView.swift",
+                     "DirectView.swift"] {
             let view = try XCTUnwrap(all.first { $0.name == name }?.text)
             XCTAssertTrue(view.contains("InlineMessage(.warning,"),
                           "\(name) states a failure without the shared role")
@@ -3766,6 +3783,7 @@ final class IOSSurfaceGuardTests: XCTestCase {
     func testTheChooserCarriesTheEmphasisOnlyUntilThereIsSomethingToSend() throws {
         let all = try sources()
         for (name, emptiness) in [("NearbyView.swift", "if selection.isEmpty {"),
+                                  ("DirectView.swift", "if selection.isEmpty {"),
                                   ("SendView.swift", "if selection.selectedFiles.isEmpty {")] {
             let view = try XCTUnwrap(all.first { $0.name == name }?.text)
             let choose = try XCTUnwrap(view.components(separatedBy: emptiness)
@@ -3779,6 +3797,124 @@ final class IOSSurfaceGuardTests: XCTestCase {
             XCTAssertTrue(staged.contains(".buttonStyle(.bordered)"),
                           "\(name) keeps two prominent controls once something is staged")
         }
+    }
+
+    /// **The Direct tab's two tasks are two cards, and the route belongs to
+    /// neither of them.**
+    ///
+    /// It was one flat column: a paragraph, a picker, a headline, four controls,
+    /// a second headline, three more controls, a footnote block and a toggle,
+    /// each twenty points below the last. So the screen's two actual tasks —
+    /// create a code, join one — ranked exactly as high as the sentence about
+    /// large files underneath them, and neither of them had a boundary.
+    ///
+    /// Asserted as containment rather than as order, because unlike Nearby the
+    /// order here was never wrong; what was missing was the chrome that says
+    /// where one task stops. The one thing that IS an order is the route: it
+    /// belongs to both halves, so it may not be drawn inside either card.
+    func testTheDirectTabDrawsItsTwoTasksAsTwoCardsAroundOneSharedRoute() throws {
+        let view = try direct()
+        for card in ["SectionCard(L10n.t(.directSendHeading))",
+                     "SectionCard(L10n.t(.textStartHeading))",
+                     "SectionCard(L10n.t(.directReceiveHeading))",
+                     "SectionCard(L10n.t(.directLargeFilesTitle))",
+                     "SectionCard(L10n.t(.presenceBusyTitle))"] {
+            XCTAssertTrue(view.text.contains(card), "the Direct tab lost \(card)")
+        }
+        // The generated code is a card whose TITLE is the instruction, so
+        // VoiceOver says "Give this code to the other device" once on entering
+        // the group and then reads the digits — rather than reading a heading,
+        // the digits, a link, two footnotes and a spinner as seven peers.
+        let handoff = try XCTUnwrap(view.text.components(
+            separatedBy: "private func showing(code:").dropFirst().first?
+            .components(separatedBy: "private func interruption").first)
+        XCTAssertTrue(handoff.contains("SectionCard(heading)"),
+                      "the code handoff is a flat column again")
+        XCTAssertFalse(handoff.contains("Text(heading)"),
+                       "the handoff heading is a label inside the group it names")
+
+        // The route is stated once, above both cards, and outside both.
+        let positioning = try XCTUnwrap(view.text.components(
+            separatedBy: "private var positioning:").dropFirst().first?
+            .components(separatedBy: "private var modePicker:").first)
+        XCTAssertTrue(positioning.contains("L10n.t(.navPairingCodeSubtitle)"))
+        XCTAssertTrue(positioning.contains("PathRail("))
+        XCTAssertFalse(positioning.contains("SectionCard"),
+                       "the shared route was claimed by one of the two halves")
+        for half in ["private var createFiles:", "private var createText:",
+                     "private func joinCard("] {
+            let card = try XCTUnwrap(view.text.components(separatedBy: half)
+                .dropFirst().first?.components(separatedBy: "\n    }\n").first)
+            XCTAssertFalse(card.contains("PathRail("),
+                           "\(half) draws the route as if it owned it")
+        }
+
+        // The advanced-verification control is the same untitled card the Nearby
+        // tab gives the same control, rather than a fifth wall of loose grey.
+        let setting = try XCTUnwrap(view.text.components(
+            separatedBy: "private var verificationSetting:").dropFirst().first?
+            .components(separatedBy: "private func failureLine").first)
+        XCTAssertTrue(setting.contains("SectionCard {"))
+        for stated in ["L10n.t(.verifyToggle)", "L10n.t(.verifyExplainWhat)",
+                       "L10n.t(.verifyExplainEncryption)"] {
+            XCTAssertTrue(setting.contains(stated), "the toggle lost \(stated)")
+        }
+    }
+
+    /// **The two handoff controls turn, for the same reason the rail turns.**
+    ///
+    /// Found on a real iPhone SE build at Accessibility 3, not in a preview:
+    /// half of a 375pt content width is about 150 points, and Copy and Share
+    /// beside their symbols are wider than that, so the two controls the whole
+    /// pairing handoff depends on rendered as "Co / py" and "Sh / are". Above
+    /// the accessibility sizes they stack — the same two controls, in the same
+    /// order, declared once each so the two axes cannot drift apart.
+    func testTheJoinLinkControlsStackRatherThanBreakTheirOwnLabels() throws {
+        let view = try direct()
+        let link = try XCTUnwrap(view.text.components(
+            separatedBy: "private struct PairingJoinLinkView:").dropFirst().first?
+            .components(separatedBy: "private struct PairingCodeInput:").first)
+        XCTAssertTrue(link.contains("@Environment(\\.dynamicTypeSize)"),
+                      "the handoff controls cannot see the reader's own setting")
+        XCTAssertTrue(link.contains("if typeSize.isAccessibilitySize {"))
+        XCTAssertTrue(link.contains("VStack(spacing: Metrics.tight) { copyButton; shareButton }"))
+        XCTAssertTrue(link.contains("HStack(spacing: Metrics.tight) { copyButton; shareButton }"))
+        for once in ["private var copyButton", "private var shareButton"] {
+            XCTAssertEqual(link.components(separatedBy: once).count - 1, 1,
+                           "\(once) is declared twice, so the two axes can drift")
+        }
+        // Full width inside whichever axis holds them, and a large control, so
+        // each is over the 44pt floor on both axes rather than only across.
+        XCTAssertEqual(link.components(separatedBy: ".frame(maxWidth: .infinity)").count - 1, 2)
+        XCTAssertTrue(link.contains(".controlSize(.large)"))
+    }
+
+    /// **What a direct transfer is, is advice — so it goes when the advice is
+    /// spent.**
+    ///
+    /// The positioning paragraph and the route rail answer "should I use this?",
+    /// and the large-file route has always been drawn only while that question
+    /// is still open, for exactly that reason. Above a code that is minting,
+    /// waiting for a peer or already carrying one, they are preamble stacked on
+    /// top of the thing the user is watching — on the smallest supported iPhone,
+    /// enough of it to push the code itself off the first screen.
+    func testTheDirectPositioningIsDrawnOnlyWhileTheDecisionIsStillOpen() throws {
+        let view = try direct()
+        // Anchored on the presence branch rather than on `var body`, which the
+        // file has two of — the join-link subview declares one too, and
+        // splitting on it would isolate that view instead of this one.
+        let body = try XCTUnwrap(view.text.components(
+            separatedBy: "if let owner = presence.owner, owner != .pairingCode {")
+            .dropFirst().first?.components(separatedBy: ".navigationTitle").first)
+        XCTAssertTrue(body.contains("if !isLocked { positioning }"),
+                      "the screen explains itself over a transfer in progress")
+        XCTAssertTrue(body.contains("if !isLocked { largeFileRoute }"),
+                      "the large-file route lost its own gate")
+        // And the gate is the shared derivation, not a second answer to the same
+        // question: `isLocked` reads BOTH models and the presence claim, so a
+        // session claimed before either model publishes is covered too.
+        XCTAssertTrue(view.text.contains("DirectModeSelection.isLocked(file: file.state,"),
+                      "the lock is computed somewhere other than the tested seam")
     }
 
     /// **The rail may state a route and may not animate one.**
@@ -3819,11 +3955,19 @@ final class IOSSurfaceGuardTests: XCTestCase {
             "PathRail(stops: PathRailPresentation.iosStoredSend(upload.state))"),
             "the one rail with real progress is not reading the model that has it")
         XCTAssertTrue(send.contains("PathRail(stops: PathRailPresentation.iosDeviceSend())"))
-        for view in [nearby, send] {
-            XCTAssertFalse(view.contains("PathRailPresentation.storedSend("),
-                           "an iOS surface draws the Mac's rail, which says This Mac")
-            XCTAssertFalse(view.contains("PathRailPresentation.lan("),
-                           "an iOS surface draws the Mac's rail, which says This Mac")
+        // Direct's rail is the pairing-code one, which IS the nearby one — the
+        // same two devices and the same encrypted middle, because it is the same
+        // route. What it may never be is `crossNetwork`, the Mac rail for this
+        // very product surface, which opens with "This Mac".
+        let direct = try direct().text
+        XCTAssertTrue(direct.contains("PathRail(stops: PathRailPresentation.iosPairingCode())"),
+                      "the Direct tab states no route at all")
+        for view in [nearby, send, direct] {
+            for macRail in ["PathRailPresentation.storedSend(", "PathRailPresentation.lan(",
+                            "PathRailPresentation.crossNetwork("] {
+                XCTAssertFalse(view.contains(macRail),
+                               "an iOS surface draws the Mac's rail, which says This Mac")
+            }
         }
     }
 
@@ -3900,13 +4044,14 @@ final class IOSSurfaceGuardTests: XCTestCase {
             }
         }
         XCTAssertGreaterThan(used.count, 10, "the symbol scan found almost nothing")
-        // The three rails drawn on iOS, plus the checkmark `PathRail`
-        // substitutes for a reached stop's own symbol.
+        // Every rail drawn on iOS, plus the checkmark `PathRail` substitutes for
+        // a reached stop's own symbol.
         let done = UploadState.done(link: "x", expiresAt: 0, keyWarning: nil)
         for stop in PathRailPresentation.iosStoredSend(.idle)
             + PathRailPresentation.iosStoredSend(done)
             + PathRailPresentation.iosDeviceSend()
-            + PathRailPresentation.iosNearby() {
+            + PathRailPresentation.iosNearby()
+            + PathRailPresentation.iosPairingCode() {
             used.insert(stop.symbol)
         }
         used.insert("checkmark")
