@@ -53,6 +53,19 @@
   // answer per engine under RTL.
   let hiddenBefore = $state(false);
   let hiddenAfter = $state(false);
+  // Whether a destination is actually clipped at the PHYSICAL left / right edge,
+  // which is the only question the mask can answer: a CSS gradient runs in
+  // physical coordinates, so `hiddenBefore` (reading order) is the wrong input
+  // for it — in Arabic "before" is the right-hand edge. Both flags come from the
+  // same rect comparison as everything else here, so RTL still needs no branch:
+  // getBoundingClientRect is already physical in both directions.
+  //
+  // They exist because a fade is a promise that there is more this way. At either
+  // end of the row that promise is false, and the flush first/last chip was being
+  // dimmed to make it — at 320px `/apps` ended 5.4px inside a 16px fade with the
+  // rail already at its maximum scroll, so no gesture could ever undim it.
+  let clippedLeft = $state(false);
+  let clippedRight = $state(false);
 
   const rtl = $derived(dir(lang()) === "rtl");
 
@@ -60,15 +73,23 @@
     return rail ? [...rail.querySelectorAll<HTMLAnchorElement>("a.tab")] : [];
   }
 
+  /** The rail's box and every destination's, measured in ONE pass.
+   *
+   *  Every positional question below is answered from a single call: reading a
+   *  rect flushes layout, and this runs on each scroll event, so asking twice
+   *  per frame is two synchronous layouts where one will do. */
+  type RailBoxes = { box: DOMRect; boxes: DOMRect[] };
+  function railBoxes(): RailBoxes | null {
+    if (!rail) return null;
+    return { box: rail.getBoundingClientRect(), boxes: tabLinks().map((a) => a.getBoundingClientRect()) };
+  }
+
   /** Indices of the links fully inside the rail's own box, as a [first, last]
    *  pair (`[-1, -1]` when none is). Deliberately geometric rather than
    *  arithmetic on scrollLeft: an intersection test means the same thing in
    *  both directions, and DOM order is the reading order in both. */
-  function visibleRun(): [number, number] {
-    const links = tabLinks();
-    if (!rail || links.length === 0) return [-1, -1];
-    const box = rail.getBoundingClientRect();
-    const boxes = links.map((a) => a.getBoundingClientRect());
+  function visibleRun({ box, boxes }: RailBoxes): [number, number] {
+    if (boxes.length === 0) return [-1, -1];
     const inside = boxes.map((r) => r.left >= box.left - 1 && r.right <= box.right + 1);
     const first = inside.indexOf(true);
     if (first >= 0) return [first, inside.lastIndexOf(true)];
@@ -85,30 +106,40 @@
     if (!railOverflows) {
       hiddenBefore = false;
       hiddenAfter = false;
+      clippedLeft = false;
+      clippedRight = false;
       return;
     }
-    const [first, last] = visibleRun();
-    const links = tabLinks();
+    const m = railBoxes();
+    if (!m) return;
+    const [first, last] = visibleRun(m);
     hiddenBefore = first > 0;
-    hiddenAfter = last >= 0 && last < links.length - 1;
+    hiddenAfter = last >= 0 && last < m.boxes.length - 1;
+    clippedLeft = m.boxes.some((r) => r.left < m.box.left - 1);
+    clippedRight = m.boxes.some((r) => r.right > m.box.right + 1);
   }
 
   /** Bring the first destination hidden on the given side into view. Same
    *  `scrollIntoView` the route reveal uses, and for the same reason: it is the
    *  one scroll API that needs no direction handling.
    *
-   *  `inline: "center"`, NOT the reveal's `"nearest"`. The rail snaps, and its
-   *  chips snap on their CENTRES (`scroll-snap-align: center`). A minimal
-   *  "nearest" scroll lands between two snap points, proximity snapping pulls
-   *  it back to the chip it started on, and the control then pages exactly once
-   *  and freezes — measured in Chrome at 320px, where every click after the
-   *  first returned the rail to scrollLeft 87. Asking for the same alignment
-   *  the snap engine is going to impose anyway makes the step land where it was
-   *  aimed. The route reveal keeps "nearest" on purpose: it must move the page
-   *  as little as possible, and it is not competing with a repeat press. */
+   *  `inline: "center"`, never `"nearest"`. The rail snaps, and its chips snap
+   *  on their CENTRES (`scroll-snap-align: center`). A minimal "nearest" scroll
+   *  lands between two snap points, proximity snapping pulls it back to the chip
+   *  it started on, and the control then pages exactly once and freezes —
+   *  measured in Chrome at 320px, where every click after the first returned the
+   *  rail to scrollLeft 87. Asking for the same alignment the snap engine is
+   *  going to impose anyway makes the step land where it was aimed.
+   *
+   *  The route reveal used to be the exception here, on "it should move the page
+   *  as little as possible". It is not an exception any more: the same snapping
+   *  was silently undoing the reveal too, just without a repeat press to make it
+   *  obvious. Both operations now name the alignment they actually want. */
   function stepRail(back: boolean) {
     const links = tabLinks();
-    const [first, last] = visibleRun();
+    const m = railBoxes();
+    if (!m) return;
+    const [first, last] = visibleRun(m);
     const target = back
       ? links[(first < 0 ? links.length : first) - 1]
       : links[(last < 0 ? -1 : last) + 1];
@@ -131,17 +162,36 @@
     return () => ro.disconnect();
   });
 
-  // Reveal the current destination after a route change. scrollIntoView is used
-  // rather than hand-computed offsets because browsers disagree about the sign
-  // and origin of scrollLeft in RTL documents; `nearest` on both axes keeps the
-  // movement minimal (and is a no-op when the link is already visible).
+  // Reveal the current destination — on the first mount as much as on a later
+  // route change, because a direct load of /cli is exactly the case that arrives
+  // with the rail at scroll 0 and the active chip off the end of it.
+  //
+  // scrollIntoView rather than hand-computed offsets because browsers disagree
+  // about the sign and origin of scrollLeft in RTL documents.
+  //
+  // `inline: "center"`, NOT "nearest". This used to ask for the minimal scroll,
+  // on the reasoning that a route change should move the rail as little as
+  // possible. That reasoning is wrong here, and the browser is what says so: the
+  // chips snap on their CENTRES, so a minimal scroll lands between two snap
+  // points and proximity snapping then pulls the rail onto whichever chip is
+  // nearest the middle — which is not the one being revealed. Measured in Chrome
+  // on a direct load, that left the active chip at 390px/CLI 20px PAST the rail's
+  // end edge and at 320px/Device Inbox 2px past it, with an unrelated
+  // destination sitting perfectly centred in both. Asking for the alignment the
+  // snap engine is going to impose anyway is what makes the reveal land where it
+  // was aimed; it is the same correction the paging control already carries.
+  //
+  // `block: "nearest"` is load-bearing and stays: the inline axis is the only one
+  // this is allowed to touch, and "nearest" is a no-op vertically while the
+  // header is on screen. Anything else would scroll the document out from under
+  // the reader on every route change.
   $effect(() => {
     void currentRoute();
     if (!rail || rail.scrollWidth - rail.clientWidth <= 1) return;
     const active = rail?.querySelector<HTMLAnchorElement>("a.tab.active");
-    active?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
-    // The reveal moves the rail, so the two controls' boundary state is stale
-    // the instant it lands.
+    active?.scrollIntoView?.({ block: "nearest", inline: "center" });
+    // The reveal moves the rail, so the controls' boundary state and both fade
+    // flags are stale the instant it lands.
     measureRail();
   });
 </script>
@@ -154,7 +204,14 @@
   <!-- These switch pages, not tab panels, so they're navigation links with
        aria-current — not role="tab" (which would promise a tabpanel that
        doesn't exist). Real hrefs keep right-click/open-in-new-tab working. -->
-  <div class="tabs" class:overflowing={railOverflows} bind:this={rail} onscroll={measureRail}>
+  <div
+    class="tabs"
+    class:overflowing={railOverflows}
+    class:fade-left={clippedLeft}
+    class:fade-right={clippedRight}
+    bind:this={rail}
+    onscroll={measureRail}
+  >
     {#each tabs as tab (tab.id)}
       <a
         href={tab.href}
@@ -336,11 +393,22 @@
       -ms-overflow-style: none;
     }
     .tabs::-webkit-scrollbar { display: none; }
-    /* Symmetric, so it needs no direction handling in RTL. */
+    /* One gradient, two switches. Each end stop is opaque by default, so the
+       edge is only faded when the component has measured a chip actually clipped
+       there — a fade means "there is more this way", and at either end of the
+       row there is not. Without this the last destination is dimmed at the
+       rail's maximum scroll, where no gesture can reveal anything further and
+       the fade is simply untrue.
+       The two classes are PHYSICAL (left/right) because a gradient is, and they
+       are set from physical rects, so RTL still needs no second rule here. */
     .tabs.overflowing {
-      -webkit-mask-image: linear-gradient(to right, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%);
-      mask-image: linear-gradient(to right, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%);
+      --edge-l: #000;
+      --edge-r: #000;
+      -webkit-mask-image: linear-gradient(to right, var(--edge-l) 0, #000 16px, #000 calc(100% - 16px), var(--edge-r) 100%);
+      mask-image: linear-gradient(to right, var(--edge-l) 0, #000 16px, #000 calc(100% - 16px), var(--edge-r) 100%);
     }
+    .tabs.overflowing.fade-left { --edge-l: transparent; }
+    .tabs.overflowing.fade-right { --edge-r: transparent; }
     /* Natural width — never truncate one of six primary destinations. */
     .tab { flex: none; padding-inline: var(--space-3); scroll-snap-align: center; }
     /* Its own line under the rail, one control at each end of the row it pages.

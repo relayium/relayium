@@ -428,7 +428,11 @@
       <details class="plat" id={`platform-${p.id}`} data-platform={p.id} data-status={statusOf(p)}>
         <summary>
           <h3>
-            <span class="g" aria-hidden="true">{p.glyph}</span>
+            <!-- Decorative, exactly like the hero mark above: the localized
+                 name in the very next span is this row's meaning, and the
+                 <summary> takes its accessible name from the same h3. An icon
+                 with a label here would announce every platform twice. -->
+            <span class="g" aria-hidden="true"><Icon name={p.icon} /></span>
             <span class="pname">{copy(p).name}</span>
             <span class="badge" data-badge={statusOf(p)}>
               <span class="vh">{t.deviceInboxPage.statusLabel(statusText(statusOf(p)))}</span>
@@ -783,8 +787,19 @@
     flex: 1 1 auto;
     min-width: 0;
   }
+  /* The row's mark. `font-size` used to size an emoji here; an SVG takes its
+     size from the box instead, and `flex: none` keeps it from being squeezed
+     when a long localized name wraps the h3.
+     Colour comes from the same text-contrast accent as the hero badge, so the
+     six marks read as one family with it rather than as six pictures. */
   .plat h3 .g {
-    font-size: 22px;
+    display: inline-flex;
+    flex: none;
+    color: var(--accent-fg);
+  }
+  .plat h3 .g :global(svg) {
+    width: 21px;
+    height: 21px;
   }
   .badge {
     font-size: var(--fs-xs);

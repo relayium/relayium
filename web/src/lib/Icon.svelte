@@ -1,18 +1,27 @@
 <script lang="ts" module>
-  export type IconName =
-    | "bolt" | "file" | "folder" | "message"
-    | "link" | "pairing-code" | "lock" | "download" | "package"
-    | "globe" | "clock" | "devices" | "network"
-    | "nearby" | "shield" | "file-download" | "close" | "inbox";
+  // The union itself lives in a plain module so non-component code can name it
+  // in BOTH TypeScript projects — see icon-name.ts. Re-exported here so
+  // `import { type IconName } from "./Icon.svelte"` keeps working.
+  export type { IconName } from "./icon-name.js";
 </script>
 
 <script lang="ts">
+  import type { IconName } from "./icon-name.js";
+
   let { name, size = 16 }: { name: IconName; size?: number } = $props();
 </script>
 
 <!-- These icons are deliberately decorative. Their callers always provide a
      localized visible label, so a title/label API would create duplicate or
-     untranslated accessible names. -->
+     untranslated accessible names.
+
+     The six platform marks at the end of the chain (server…robot) are drawn to
+     a common optical weight rather than a common bounding box: each is centred
+     on x=12 and fills roughly the same area, which is what makes six different
+     silhouettes read as one column in the Device Inbox list. Their literal
+     widths differ on purpose — a phone that is as wide as a rack is not a phone.
+     They also use the `h.01` dot idiom, which paints a 1.8px round cap and so
+     needs no second fill colour to stay in step with the strokes. -->
 <svg
   width={size}
   height={size}
@@ -78,6 +87,41 @@
          Symmetric about x=12, so it needs no mirroring in RTL. -->
     <path d="M3 12.2 6.3 5.4a1.6 1.6 0 0 1 1.45-.9h8.5a1.6 1.6 0 0 1 1.45.9L21 12.2v6.1a1.4 1.4 0 0 1-1.4 1.4H4.4A1.4 1.4 0 0 1 3 18.3z" />
     <path d="M3 12.2h5l1.4 2.6h5.2l1.4-2.6h5" />
+  {:else if name === "server"}
+    <!-- Two rack units. The status lamps are what separate this from the
+         `desktop` workstation: a machine that is watched, not used. -->
+    <path d="M4 4.5h16v6H4z" />
+    <path d="M4 13.5h16v6H4z" />
+    <path d="M7 7.5h.01M7 16.5h.01" />
+  {:else if name === "desktop"}
+    <!-- Workstation: screen on a stem and a foot. Narrow base, so its
+         silhouette cannot be confused with `laptop`'s wide deck. -->
+    <path d="M3.5 4.5h17v11H3.5z" />
+    <path d="M12 15.5v3.5M8.5 19h7" />
+  {:else if name === "laptop"}
+    <path d="M5 5h14v10.5H5z" />
+    <path d="M2.5 18.5h19" />
+  {:else if name === "window"}
+    <!-- Four panes on the true centre lines: symmetric about both axes, so it
+         needs no mirroring in any direction. -->
+    <path d="M4 4.5h16v15H4z" />
+    <path d="M12 4.5v15M4 12h16" />
+  {:else if name === "phone"}
+    <!-- Held to the family's optical height rather than a real handset's
+         proportions: drawn true to life it was the one mark that reached both
+         the top and the bottom of the box and read a size larger than the five
+         beside it. -->
+    <path d="M7.6 4.2h8.8a1.6 1.6 0 0 1 1.6 1.6v12.4a1.6 1.6 0 0 1-1.6 1.6H7.6a1.6 1.6 0 0 1-1.6-1.6V5.8a1.6 1.6 0 0 1 1.6-1.6z" />
+    <path d="M10.5 7h3" />
+  {:else if name === "robot"}
+    <!-- Dome, two antennae, two eyes — mirrored about x=12 to the decimal, and
+         sized so the mass straddles the centre line. The first cut sat entirely
+         in the upper half of the box, which at 21px read as a smaller icon than
+         its five neighbours rather than as a different shape. -->
+    <path d="M4.5 16.5a7.5 7.5 0 0 1 15 0" />
+    <path d="M4.5 16.5h15" />
+    <path d="M8.4 9.9 6.6 7.2M15.6 9.9l1.8-2.7" />
+    <path d="M9.7 13h.01M14.3 13h.01" />
   {/if}
 </svg>
 

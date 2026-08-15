@@ -68,6 +68,52 @@ describe("content icon ownership", () => {
     expect(page).toMatch(/<div class="logo" aria-hidden="true">[\s\S]*?<h1>\{t\.deviceInboxPage\.heading\}/);
   });
 
+  it("draws the six Device Inbox platform rows from the shared icon set too", () => {
+    const data = source("device-inbox-platforms.ts");
+    const page = source("DeviceInboxPage.svelte");
+    const icon = source("Icon.svelte");
+    const names = source("icon-name.ts");
+
+    // The exact six that replaced 🖥️ 🐧 💻 🪟 📱 🤖, in the page's own order.
+    // Form factors rather than OS logos: a rack, a workstation, a laptop, a
+    // window, a phone and a robot stay legible as 21px strokes, and the
+    // localized name beside each one is what actually identifies the platform.
+    expect(data.match(/\n\s+icon: "(\w[\w-]*)",/g)?.map((m) => m.trim())).toEqual([
+      'icon: "server",',
+      'icon: "desktop",',
+      'icon: "laptop",',
+      'icon: "window",',
+      'icon: "phone",',
+      'icon: "robot",',
+    ]);
+
+    // Every name the data declares must be one Icon.svelte can actually draw.
+    // Both halves are asserted: the exported union (so `check` fails on a typo)
+    // and the render branch (so a name in the union with no geometry — a silent
+    // empty <svg> — fails too).
+    for (const name of [...data.matchAll(/\n\s+icon: "([\w-]+)",/g)].map((m) => m[1])) {
+      expect(names, `IconName is missing "${name}"`).toContain(`| "${name}"`);
+      expect(icon, `Icon.svelte draws nothing for "${name}"`).toContain(`name === "${name}"`);
+    }
+
+    // …and the row renders it decoratively, beside the name rather than as one.
+    expect(page).toContain('<span class="g" aria-hidden="true"><Icon name={p.icon} /></span>');
+
+    // Direction-neutral by construction rather than by a mirrored stylesheet:
+    // the component takes no direction input and mirrors nothing, so the same
+    // six marks are correct in an RTL document without a second rule anywhere.
+    expect(icon).not.toMatch(/transform|scaleX|\bdir\b/);
+    expect(page).not.toMatch(/\.g\s*\{[^}]*\b(?:left|right)\s*:/);
+
+    // No emoji may come back into either file. A picture that changes per OS and
+    // font, cannot take a design token, and has no stroke weight is what this
+    // pair of files exists to keep out.
+    for (const [where, src] of [["data", data], ["page", page]] as const) {
+      expect(src.match(/\p{Extended_Pictographic}/gu) ?? [], `${where} regained an emoji`).toEqual([]);
+    }
+    expect(data).not.toContain("glyph");
+  });
+
   it("keeps the stored-mode heading glyph in code rather than translations", () => {
     const offline = source("OfflinePage.svelte");
     expect(offline).toContain('<Icon name="package" size={18} />');

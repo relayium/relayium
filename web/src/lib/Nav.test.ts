@@ -139,7 +139,8 @@ describe("Nav destinations", () => {
 
   // The mobile rail scrolls, so the current destination can start offscreen.
   // scrollIntoView (rather than scrollLeft arithmetic) is what makes this work
-  // in an RTL document, and `nearest` keeps the movement minimal.
+  // in an RTL document, and the centre alignment is what makes it land — see
+  // the direct-load test below for what a minimal scroll did instead.
   it("reveals the current link after a route change", () => {
     const spy = Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>;
     const rail = target.querySelector(".tabs")!;
@@ -150,7 +151,38 @@ describe("Nav destinations", () => {
     flushSync();
     expect(spy).toHaveBeenCalled();
     expect(spy.mock.instances.at(-1)).toBe(tabs()[5]);
-    expect(spy.mock.calls.at(-1)![0]).toEqual({ block: "nearest", inline: "nearest" });
+    expect(spy.mock.calls.at(-1)![0]).toEqual({ block: "nearest", inline: "center" });
+  });
+
+  // The case the route-change test cannot see: a reader who opens /cli directly
+  // arrives with the rail at scroll 0 and the active chip off the end of it, and
+  // there is no navigation afterwards to put it right. This is where the defect
+  // was actually reported — at 390px the CLI chip sat 20px PAST the rail's end
+  // edge on first paint.
+  it("reveals the active destination on a direct load, not only after a route change", () => {
+    if (app) unmount(app);
+    app = null;
+    history.pushState({}, "", CLI_PATH);
+    syncRouteFromLocation();
+
+    // The rail has to report overflow at the very first effect run, before any
+    // element exists to attach per-element geometry to — hence the prototype.
+    const sw = Object.getOwnPropertyDescriptor(Element.prototype, "scrollWidth")!;
+    const cw = Object.getOwnPropertyDescriptor(Element.prototype, "clientWidth")!;
+    Object.defineProperty(Element.prototype, "scrollWidth", { configurable: true, get: () => 600 });
+    Object.defineProperty(Element.prototype, "clientWidth", { configurable: true, get: () => 280 });
+    const spy = Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>;
+    spy.mockClear();
+    try {
+      app = mount(Nav, { target });
+      flushSync();
+      expect(spy, "a direct load must reveal the active destination").toHaveBeenCalled();
+      expect(spy.mock.instances.at(-1)).toBe(tabs()[4]);
+      expect(spy.mock.calls.at(-1)![0]).toEqual({ block: "nearest", inline: "center" });
+    } finally {
+      Object.defineProperty(Element.prototype, "scrollWidth", sw);
+      Object.defineProperty(Element.prototype, "clientWidth", cw);
+    }
   });
 
   it("does not reveal a link when the rail has no overflow", () => {
@@ -238,16 +270,85 @@ describe("Nav rail overflow controls", () => {
     expect(spy.mock.instances.at(-1)).toBe(tabs()[1]);
   });
 
-  // The route reveal is a different job with a different rule: move the page as
-  // little as possible. Collapsing the two would make every route change
-  // recentre the rail under the reader.
-  it("leaves the route reveal on its minimal-movement alignment", () => {
+  // The route reveal used to ask for the MINIMAL scroll here, on the reasoning
+  // that a route change should move the rail as little as possible. The browser
+  // disagreed: the chips snap on their centres, so a minimal scroll lands
+  // between two snap points and proximity snapping then pulls the rail onto
+  // whichever chip is nearest the middle — never the one being revealed. On a
+  // direct load that left the active chip 20px past the rail's end edge at
+  // 390px/CLI and 2px past it at 320px/Device Inbox, with an unrelated
+  // destination perfectly centred in both. Both operations now ask for the
+  // alignment the snap engine imposes anyway, which is the only way either of
+  // them lands where it was aimed.
+  it("reveals a route with the same snap-compatible alignment the controls use", () => {
     const spy = Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>;
     layoutRail(0, 2);
     spy.mockClear();
     navigate("apps");
     flushSync();
-    expect(spy.mock.calls.at(-1)![0]).toEqual({ block: "nearest", inline: "nearest" });
+    expect(spy.mock.calls.at(-1)![0]).toEqual({ block: "nearest", inline: "center" });
+
+    spy.mockClear();
+    nextBtn()!.click();
+    flushSync();
+    expect(spy.mock.calls.at(-1)![0]).toEqual({ block: "nearest", inline: "center" });
+  });
+
+  // A fade is a promise that there is more this way, so it may only be painted
+  // on an edge that is actually hiding something. Both flags are PHYSICAL,
+  // because a CSS gradient is — `hiddenBefore`/`hiddenAfter` are reading order
+  // and would fade the wrong edge in Arabic.
+  it("fades only the edges that are actually hiding a destination", () => {
+    const railEl = () => target.querySelector(".tabs")!;
+
+    // Scrolled to the start: nothing before, three destinations after.
+    layoutRail(0, 2);
+    expect(railEl().classList.contains("fade-left")).toBe(false);
+    expect(railEl().classList.contains("fade-right")).toBe(true);
+
+    // Mid-row: hiding destinations on both sides.
+    layoutRail(2, 4);
+    expect(railEl().classList.contains("fade-left")).toBe(true);
+    expect(railEl().classList.contains("fade-right")).toBe(true);
+
+    // Scrolled to the end: nothing after it to promise.
+    layoutRail(3, 5);
+    expect(railEl().classList.contains("fade-left")).toBe(true);
+    expect(railEl().classList.contains("fade-right")).toBe(false);
+  });
+
+  // The regression this pair of flags exists for: at the row's maximum scroll
+  // the last chip is flush with the edge, so an unconditional fade dimmed a
+  // destination that no gesture could ever undim. Measured in Chrome, `/apps`
+  // ended 5.4px inside a 16px fade at both 320 and 390px, and `/` (LAN) sat 5px
+  // inside the start fade at every width.
+  it("leaves a rail with nothing hidden on either side completely unfaded", () => {
+    layoutRail(0, 5, false);
+    const rail = target.querySelector(".tabs")!;
+    expect(rail.classList.contains("overflowing")).toBe(false);
+    expect(rail.classList.contains("fade-left")).toBe(false);
+    expect(rail.classList.contains("fade-right")).toBe(false);
+  });
+
+  // The mask is one gradient with a switchable stop at each end, so the two
+  // classes cannot fade the wrong edge or drop the 16px ramp.
+  it("drives both fades from one gradient rather than a direction branch", () => {
+    const src = readFileSync(resolve(process.cwd(), "src/lib/Nav.svelte"), "utf8");
+    expect(src).toContain("--edge-l: #000;");
+    expect(src).toContain("--edge-r: #000;");
+    expect(src).toContain(".tabs.overflowing.fade-left { --edge-l: transparent; }");
+    expect(src).toContain(".tabs.overflowing.fade-right { --edge-r: transparent; }");
+    // Still one mask declaration per prefix, still the same 16px ramp.
+    expect(src.match(/mask-image: linear-gradient\(to right, var\(--edge-l\)/g)).toHaveLength(2);
+  });
+
+  // Everything positional in this component is a rect comparison. scrollLeft is
+  // the one measurement whose sign and origin engines disagree about under
+  // dir=rtl, so reading it is how this file would silently stop working in
+  // Arabic — the mention in a comment is the incident it must not repeat.
+  it("never does scrollLeft arithmetic", () => {
+    const src = readFileSync(resolve(process.cwd(), "src/lib/Nav.svelte"), "utf8");
+    expect(src).not.toMatch(/\.scrollLeft/);
   });
 
   // The whole point of doing this geometrically instead of with scrollLeft

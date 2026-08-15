@@ -23,7 +23,7 @@ import { loadLang, messages } from "./i18n.svelte";
 import { refreshSession } from "./auth.svelte";
 import { loginOpen, loginIntent, setLoginOpen } from "./login.svelte";
 import { CAP_RECEIVE_V1, DEVICE_REFRESH_MS, INBOX_KEY_ALGORITHM } from "./device-inbox";
-import { REQUIRED_PLATFORM_IDS } from "./device-inbox-platforms";
+import { INBOX_PLATFORMS, REQUIRED_PLATFORM_IDS } from "./device-inbox-platforms";
 
 // The network half of a send is mocked: this suite is about what the PAGE hands
 // to the card. device-send.test.ts owns the wire format and the crypto, and
@@ -162,6 +162,55 @@ describe("the six platform sections", () => {
     const ids = [...root.querySelectorAll("[data-platform]")].map((e) => e.getAttribute("data-platform"));
     expect(new Set(ids)).toEqual(new Set(REQUIRED_PLATFORM_IDS));
     expect(ids.length).toBe(REQUIRED_PLATFORM_IDS.length);
+  });
+
+  // The six rows used to be decorated with platform emoji, which rendered as
+  // vendor artwork on one OS, a flat outline on the next and a tofu box where
+  // the font had neither — beside a page whose every other mark is a stroked
+  // icon on an accent token. The hero above them had already moved to `Icon`.
+  //
+  // The path assertion is the one that matters most: `Icon` renders a bare
+  // <svg> with no geometry for a name it does not know, so a typo in an
+  // `icon:` field would otherwise ship an invisible, entirely silent blank.
+  it("marks each platform row with a real shared icon, not an emoji", () => {
+    const root = render();
+    for (const p of INBOX_PLATFORMS) {
+      const sec = root.querySelector(`[data-platform="${p.id}"]`)!;
+      const g = sec.querySelector("summary h3 .g")!;
+      expect(g, p.id).not.toBeNull();
+      const svgs = g.querySelectorAll("svg");
+      expect(svgs.length, `${p.id} should carry exactly one mark`).toBe(1);
+      expect(
+        svgs[0].querySelectorAll("path").length,
+        `${p.id} declares icon "${p.icon}", which Icon.svelte does not draw`,
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  // Decorative, and it has to stay that way: the localized name sits in the very
+  // next element and the <summary> takes its accessible name from this same h3,
+  // so anything nameable inside the mark would announce the platform twice —
+  // the second time in English on a Chinese page.
+  it("keeps the platform mark decorative and the row named exactly once", () => {
+    const root = render();
+    for (const p of INBOX_PLATFORMS) {
+      const sec = root.querySelector(`[data-platform="${p.id}"]`)!;
+      const g = sec.querySelector("summary h3 .g")!;
+      expect(g.getAttribute("aria-hidden"), p.id).toBe("true");
+      const svg = g.querySelector("svg")!;
+      expect(svg.getAttribute("aria-hidden"), p.id).toBe("true");
+      expect(svg.getAttribute("aria-label"), p.id).toBeNull();
+      expect(svg.querySelector("title"), p.id).toBeNull();
+      // No text of any kind, which is also what keeps an emoji from returning.
+      expect(g.textContent!.trim(), p.id).toBe("");
+
+      const name = en().platforms[p.id].name;
+      expect(sec.querySelector("summary .pname")!.textContent!.trim(), p.id).toBe(name);
+      // The summary still reads as name + status, and nothing else.
+      const summary = sec.querySelector("summary")!.textContent!;
+      expect(summary, p.id).toContain(name);
+      expect(summary.match(new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"))!.length, p.id).toBe(1);
+    }
   });
 
   it("gives each one an honest status badge and the seven product facts", () => {

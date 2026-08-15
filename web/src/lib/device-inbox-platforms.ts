@@ -17,6 +17,8 @@
 // unattended alternative BESIDE its published app, and Windows shows only the
 // verified foreground CLI.
 
+import type { IconName } from "./icon-name.js";
+
 /** Honest release status of a platform's Device Inbox *receiver*.
  *
  *  - `available` — you can install it today and it survives what its section
@@ -54,8 +56,18 @@ export type InboxPlatformId = "server" | "macos" | "iphone" | "windows" | "andro
 export interface InboxPlatform {
   id: InboxPlatformId;
   status: PlatformStatus;
-  /** Decorative only (aria-hidden at the call site). */
-  glyph: string;
+  /** Which shared `Icon` decorates the row.
+   *
+   *  It used to be an emoji string. Six of them, and every one was a different
+   *  picture per platform and font — the Android robot and the Windows pane are
+   *  vendor artwork on one OS and a flat outline or a tofu box on the next, and
+   *  none of them could be reached by a design token, so they sat at their own
+   *  weight and colour beside a page of stroked marks. The hero above them had
+   *  already been moved to `Icon` for exactly that reason.
+   *
+   *  Still decorative, and still `aria-hidden` at the call site: the localized
+   *  platform name next to it is what names the row. */
+  icon: IconName;
   /** The literal setup commands, or `null` when this platform has no receiver a
    *  reader could run today. A non-available native app may only have commands
    *  when they belong to a separately shipped CLI alternative whose limitation
@@ -173,7 +185,7 @@ export const INBOX_PLATFORMS: readonly InboxPlatform[] = [
   {
     id: "server",
     status: "available",
-    glyph: "🖥️",
+    icon: "server",
     setup: SERVER_SETUP,
     setupTitle: "linux server · install the always-on receiver",
     control: SERVER_CONTROL,
@@ -182,7 +194,7 @@ export const INBOX_PLATFORMS: readonly InboxPlatform[] = [
   {
     id: "linux",
     status: "available",
-    glyph: "🐧",
+    icon: "desktop",
     setup: LINUX_SETUP,
     setupTitle: "linux desktop · systemd --user",
     control: LINUX_CONTROL,
@@ -191,7 +203,7 @@ export const INBOX_PLATFORMS: readonly InboxPlatform[] = [
   {
     id: "macos",
     status: "testing",
-    glyph: "💻",
+    icon: "laptop",
     setup: MACOS_SETUP,
     setupTitle: "macOS · CLI receiver under launchd",
     control: MACOS_CONTROL,
@@ -200,7 +212,7 @@ export const INBOX_PLATFORMS: readonly InboxPlatform[] = [
   {
     id: "windows",
     status: "planned",
-    glyph: "🪟",
+    icon: "window",
     // Windows has no resident receiver, but it DOES have a verified foreground
     // one. It is shown with its limit stated in the same breath; that is why
     // this planned platform is the one exception with a non-null `setup`.
@@ -212,7 +224,7 @@ export const INBOX_PLATFORMS: readonly InboxPlatform[] = [
   {
     id: "iphone",
     status: "planned",
-    glyph: "📱",
+    icon: "phone",
     setup: null,
     setupTitle: null,
     control: null,
@@ -221,7 +233,7 @@ export const INBOX_PLATFORMS: readonly InboxPlatform[] = [
   {
     id: "android",
     status: "planned",
-    glyph: "🤖",
+    icon: "robot",
     setup: null,
     setupTitle: null,
     control: null,
