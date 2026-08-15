@@ -87,16 +87,28 @@ final class IOSSurfaceGuardTests: XCTestCase {
                       "the pending-file fixture argument is not in the Debug half")
         XCTAssertTrue(debugHalf.contains("--relayium-ui-testing-valid-download-link"),
                       "the deterministic stored-link fixture is not in the Debug half")
+        XCTAssertTrue(debugHalf.contains("--relayium-ui-testing-fresh-received-folder"),
+                      "the empty-receive-folder argument is not in the Debug half")
         XCTAssertFalse(releaseHalf.contains("--relayium-ui-testing"),
                        "a shipped build can be steered by a launch argument")
         XCTAssertFalse(releaseHalf.contains("Data(repeating:"),
                        "a shipped build writes the acceptance fixture into its container")
+        // The strongest of these, and the newest risk class in this file: one of
+        // the acceptance seams DELETES. Writing a fixture into the container is
+        // recoverable; removing the folder a person's received files live in is
+        // not, so the Release half must not contain the call at all — not a
+        // guarded call, not a call behind a flag folded to false.
+        XCTAssertFalse(releaseHalf.contains("removeItem"),
+                       "a shipped build can delete what a user has received")
         XCTAssertFalse(releaseHalf.contains("documentDirectory"),
                        "a shipped build reaches the directory the fixture path uses")
         XCTAssertTrue(app.contains("UITestMode.stagePendingFixture()"),
                       "nothing stages the fixture the document-picker path needs")
         XCTAssertTrue(app.contains("UITestMode.prefillValidDownloadLink(in: downloads)"),
                       "the encrypted-link acceptance fixture never reaches the receive model")
+        XCTAssertTrue(app.contains("UITestMode.resetReceivedFolder()"),
+                      "nothing empties the receive folder, so the completion path "
+                      + "passes once per simulator and then fails on its own leftovers")
 
         let uiURL = appsRoot.appendingPathComponent(
             "ios/RelayiumUITests/AppShellUITests.swift")

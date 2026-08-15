@@ -262,7 +262,13 @@ struct ReceiveView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
+                .accessibilityIdentifier("received.share")
             }
+            // Addressed, because "Done" is the most reused word in the app and
+            // this one ends a task with bytes on disk behind it: the acceptance
+            // path that proves it returns to the empty entry — and that it does
+            // NOT delete what was saved — has to name this button rather than
+            // whichever Done a query happened to find.
             Button {
                 destinationError = nil
                 model.dismissResult()
@@ -271,6 +277,7 @@ struct ReceiveView: View {
             }
             .buttonStyle(.bordered)
             .controlSize(.large)
+            .accessibilityIdentifier("receive.done")
         }
     }
 

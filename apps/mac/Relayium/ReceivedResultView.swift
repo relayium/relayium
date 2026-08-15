@@ -18,7 +18,13 @@ struct ReceivedResultView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            ForEach(payload.dragURLs, id: \.self) { url in
+            // Enumerated for the row's stable address, still keyed by the URL:
+            // the identity a person reads is the name, and two received items
+            // never share a full URL, so `\.self` remains the correct id. The
+            // index only names the row for acceptance — a window-wide predicate
+            // over the visible name times out here, the limit batches 94, 102
+            // and 115 all hit.
+            ForEach(Array(payload.dragURLs.enumerated()), id: \.element) { index, url in
                 HStack(spacing: 6) {
                     Image(systemName: isDirectory(url) ? "folder" : "doc")
                         .foregroundStyle(.secondary)
@@ -29,16 +35,25 @@ struct ReceivedResultView: View {
                 }
                 .contentShape(Rectangle())
                 .onDrag { NSItemProvider(contentsOf: url) ?? NSItemProvider() }
+                // Stated, not inherited. Without it the row is two elements —
+                // the symbol and the name — and the label below is applied to
+                // each of them, so VoiceOver reads the file name twice and the
+                // identifier addresses two elements instead of the row. The same
+                // correction batches 94 and 96 made to the pending-send rows.
+                .accessibilityElement(children: .combine)
                 .accessibilityLabel(url.lastPathComponent)
                 .accessibilityHint(L10n.t(.receivedA11yDragHint))
+                .accessibilityIdentifier("received.file.\(index)")
             }
             HStack {
                 Button(L10n.t(.receivedRevealInFinder)) {
                     NSWorkspace.shared.activateFileViewerSelecting(payload.revealURLs)
                 }
+                .accessibilityIdentifier("received.reveal")
                 ShareLink(items: payload.dragURLs) {
                     Label(L10n.t(.commonShare), systemImage: "square.and.arrow.up")
                 }
+                .accessibilityIdentifier("received.share")
             }
             .buttonStyle(.bordered)
             Text(L10n.t(.receivedDragHint))

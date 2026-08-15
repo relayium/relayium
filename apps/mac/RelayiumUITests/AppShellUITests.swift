@@ -21,6 +21,10 @@ import Carbon.HIToolbox
 final class AppShellUITests: XCTestCase {
     private var app: XCUIApplication!
     private var pendingFileFixture: URL?
+    /// A directory this test owns, so a download can be saved somewhere with a
+    /// name nothing else on the machine has. Removed in `tearDown` — the point
+    /// of the path that uses it is that the product does NOT remove it.
+    private var receivedFolderFixture: URL?
 
     /// Sparkle and AppKit may create auxiliary windows before the shell on a
     /// hosted runner. `windows.firstMatch` therefore is not a product window:
@@ -78,6 +82,9 @@ final class AppShellUITests: XCTestCase {
         restoreInputSource()
         if let pendingFileFixture {
             try? FileManager.default.removeItem(at: pendingFileFixture)
+        }
+        if let receivedFolderFixture {
+            try? FileManager.default.removeItem(at: receivedFolderFixture)
         }
     }
 
@@ -219,41 +226,34 @@ final class AppShellUITests: XCTestCase {
         return window.descendants(matching: .any).matching(visible).firstMatch
     }
 
-    /// Select a fixture through the real AppKit panel, after the panel is
-    /// actually present. SwiftUI's selectable empty-state text can consume a
-    /// click on the surrounding drop zone, so UI tests use the adjacent,
-    /// explicit chooser button that invokes the same product action.
-    private func chooseFixture(_ fixture: URL,
-                               in window: XCUIElement,
-                               file: StaticString = #filePath,
-                               line: UInt = #line) {
-        let identified = window.descendants(matching: .any)["transfer-choose-files"].firstMatch
-        let chooser = identified.exists
-            ? identified
-            : window.buttons["Choose Files or Folders…"]
-        guard chooser.waitForExistence(timeout: 10) else {
-            return XCTFail("the transfer surface has no explicit file chooser",
-                           file: file, line: line)
-        }
-
-        app.activate()
-        chooser.click()
-
-        let panelCandidates = [app.dialogs["open-panel"],
-                               app.windows["open-panel"],
-                               app.sheets["open-panel"]]
-        let panelDeadline = Date().addingTimeInterval(15)
-        var panel: XCUIElement?
+    /// The system file panel the app has just opened, whichever container
+    /// AppKit chose to present it in.
+    ///
+    /// Three candidates rather than one, because the same `NSOpenPanel` is a
+    /// dialog, a window or a sheet depending on how it was presented and on the
+    /// macOS version; polling rather than `waitForExistence`, because the wait
+    /// has to be for whichever of the three appears.
+    private func systemFilePanel(timeout: TimeInterval = 15) -> XCUIElement? {
+        let candidates = [app.dialogs["open-panel"],
+                          app.windows["open-panel"],
+                          app.sheets["open-panel"]]
+        let deadline = Date().addingTimeInterval(timeout)
         repeat {
-            panel = panelCandidates.first(where: { $0.exists })
-            if panel != nil { break }
+            if let panel = candidates.first(where: { $0.exists }) { return panel }
             RunLoop.current.run(until: Date().addingTimeInterval(0.1))
-        } while Date() < panelDeadline
-        guard let panel else {
-            return XCTFail("the explicit file chooser opened no system panel",
-                           file: file, line: line)
-        }
+        } while Date() < deadline
+        return nil
+    }
 
+    /// Point an open system panel at an exact path and confirm it.
+    ///
+    /// Go to Folder rather than clicking through the sidebar: the destination is
+    /// a path this test owns, and typing it is the only way to reach a directory
+    /// that did not exist when the panel was configured. `useASCIIKeyboard`
+    /// is what makes the typing land in the panel instead of an input method —
+    /// see its own note, and batch T1c.
+    private func confirm(_ panel: XCUIElement, at path: String,
+                         file: StaticString = #filePath, line: UInt = #line) {
         app.activate()
         var location: XCUIElement?
         for _ in 0..<3 where location == nil {
@@ -274,7 +274,7 @@ final class AppShellUITests: XCTestCase {
                            file: file, line: line)
         }
 
-        location.typeText(fixture.path)
+        location.typeText(path)
         app.typeKey(.return, modifierFlags: [])
 
         let choose = panel.buttons["OKButton"]
@@ -283,6 +283,33 @@ final class AppShellUITests: XCTestCase {
                            file: file, line: line)
         }
         choose.click()
+    }
+
+    /// Select a fixture through the real AppKit panel, after the panel is
+    /// actually present. SwiftUI's selectable empty-state text can consume a
+    /// click on the surrounding drop zone, so UI tests use the adjacent,
+    /// explicit chooser button that invokes the same product action.
+    private func chooseFixture(_ fixture: URL,
+                               in window: XCUIElement,
+                               file: StaticString = #filePath,
+                               line: UInt = #line) {
+        let identified = window.descendants(matching: .any)["transfer-choose-files"].firstMatch
+        let chooser = identified.exists
+            ? identified
+            : window.buttons["Choose Files or Folders…"]
+        guard chooser.waitForExistence(timeout: 10) else {
+            return XCTFail("the transfer surface has no explicit file chooser",
+                           file: file, line: line)
+        }
+
+        app.activate()
+        chooser.click()
+
+        guard let panel = systemFilePanel() else {
+            return XCTFail("the explicit file chooser opened no system panel",
+                           file: file, line: line)
+        }
+        confirm(panel, at: fixture.path, file: file, line: line)
     }
 
     /// The window opens at all. A `Window` scene that fails to build leaves a
@@ -1538,6 +1565,129 @@ final class AppShellUITests: XCTestCase {
                       "a completed download did not name what it received")
         XCTAssertTrue(identity.label.contains("brief.txt"),
                       "the received result is not the file the manifest named")
+    }
+
+    /// A finished download is a result somebody can hand on, and Done ends the
+    /// task without ending the file.
+    ///
+    /// These are the last two cells of Open a link — "what happens next" and
+    /// "how do I hand this on" — and they were unwritten because no runtime path
+    /// had ever reached `.done` holding a payload. The path above stops at the
+    /// first named row.
+    ///
+    /// **Saved into a directory this test creates.** That is what makes Reveal
+    /// assertable at all: a Finder window titled `Downloads` proves nothing on a
+    /// machine that probably has one open already, while a window named
+    /// `relayium-received-<uuid>` can only have been opened by the button under
+    /// test.
+    func testACompletedDownloadHandsOverItsResultAndDoneKeepsTheFile() throws {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("relayium-received-\(UUID().uuidString.prefix(8))",
+                                    isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        receivedFolderFixture = folder
+
+        let window = openStoredLink(Self.resolvableStoredLink,
+                                    extraArguments: ["--relayium-ui-testing-sign-in"])
+        let save = window.buttons["Save…"]
+        XCTAssertTrue(save.waitForExistence(timeout: 30),
+                      "a resolved link offers no way to save what it points at")
+        save.click()
+        guard let panel = systemFilePanel() else {
+            return XCTFail("Save opened no destination panel")
+        }
+        confirm(panel, at: folder.path)
+
+        // **Typed queries only, from here to the end of this path.**
+        //
+        // `window.descendants(matching: .any)[…]` asks the accessibility tree
+        // for every descendant of the window and then filters — the shape that
+        // times out on macOS, which batches 94, 102 and 115 each hit and which
+        // this path hit again while the download was still running. A typed
+        // collection is a different query, and it is the one that survives here.
+        //
+        // Completion is signalled by the Done button rather than by the result
+        // row: it is the cheapest element unique to `.done`, so the long wait
+        // for the transfer never runs an expensive query.
+        let done = window.buttons["download.done"]
+        XCTAssertTrue(done.waitForExistence(timeout: 60),
+                      "the download never reached a completed state")
+
+        // The result by its own address, not the pending row above it: this is
+        // the list a person drags out of, and the one Reveal and Share act on.
+        // Combining a row's children yields a group on macOS and a static text
+        // on some versions, so both typed collections are asked — never `.any`.
+        let group = window.otherElements["received.file.0"]
+        let result = group.exists ? group : window.staticTexts["received.file.0"]
+        XCTAssertTrue(result.exists,
+                      "a completed download rendered no result to hand on")
+
+        // Label OR value: macOS puts a combined row's text in `value` about as
+        // often as in `label`, which is why `visibleElement(id:text:)` above
+        // matches either. The diagnostic prints both, because an empty string
+        // says nothing about which of the two ways this can be wrong happened.
+        let named = result.label.isEmpty ? (result.value as? String ?? "") : result.label
+        XCTAssertEqual(named, "brief.txt",
+                       "the result does not name the file the manifest carried — "
+                       + "label=\"\(result.label)\" "
+                       + "value=\(String(describing: result.value))")
+
+        // Share OPENED, not merely present. A `ShareLink` over an empty item
+        // array renders exactly this button and does nothing when pressed, which
+        // is why the system-share gate is written this way everywhere in this
+        // suite rather than as "the control exists".
+        let share = window.buttons["received.share"]
+        XCTAssertTrue(share.waitForExistence(timeout: 10),
+                      "a completed download offers no system share")
+        share.click()
+        XCTAssertTrue(app.menus.firstMatch.waitForExistence(timeout: 20),
+                      "Share did not open the system sharing picker")
+        app.typeKey(.escape, modifierFlags: [])
+
+        // Reveal, in the Finder it names. `activateFileViewerSelecting` over an
+        // empty array is silent, and the button that calls it looks identical.
+        let reveal = window.buttons["received.reveal"]
+        XCTAssertTrue(reveal.waitForExistence(timeout: 10),
+                      "a completed download offers no way to find what it saved")
+        reveal.click()
+        let finder = XCUIApplication(bundleIdentifier: "com.apple.finder")
+        let revealed = finder.windows[folder.lastPathComponent]
+        XCTAssertTrue(revealed.waitForExistence(timeout: 20),
+                      "Reveal opened no Finder window on the folder that was saved into")
+        revealed.buttons[XCUIIdentifierCloseWindow].click()
+
+        // From the app again: revealing handed Finder the focus, which is what
+        // revealing is for.
+        app.activate()
+        XCTAssertTrue(done.waitForExistence(timeout: 10),
+                      "a completed download cannot be ended")
+        done.click()
+
+        // Back to the entry this destination starts from: the field returns,
+        // empty of the link just spent, above the designed idle state rather
+        // than the blank rectangle this pane used to render.
+        let link = window.textFields["receive.link"]
+        XCTAssertTrue(link.waitForExistence(timeout: 15),
+                      "Done did not return the link field")
+        XCTAssertFalse((link.value as? String ?? "").contains("obj_uitest"),
+                       "Done left the finished task's link in the field")
+        // Scoped to `staticTexts`, not to every descendant: the same query-shape
+        // limit as above, and the idle hint is a static text either way.
+        let idle = NSPredicate(format: "label CONTAINS %@ OR value CONTAINS %@",
+                               "The key stays in the link", "The key stays in the link")
+        XCTAssertTrue(window.staticTexts.matching(idle)
+            .firstMatch.waitForExistence(timeout: 15),
+                      "Done returned to a blank pane rather than to the idle state")
+        XCTAssertFalse(window.otherElements["received.file.0"].exists
+                       || window.staticTexts["received.file.0"].exists,
+                       "Done kept the finished result on screen")
+
+        // And the bytes are still where the user put them. This is the half that
+        // matters and the half a screen cannot show: a Done that tidied the file
+        // away would look exactly like this one.
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: folder.appendingPathComponent("brief.txt").path),
+                      "Done deleted what the download had already saved")
     }
 
     /// Every shipped language renders, in the running app.

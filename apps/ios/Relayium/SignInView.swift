@@ -171,8 +171,18 @@ struct SignInView: View {
 
             appleSection
 
+            // The way to the other half of this task, and the one control on
+            // the screen a finger could miss: a plain button is text at its own
+            // intrinsic height, which the system audit measured at 19 points
+            // against the 44 `Metrics.hitTarget` already wrote down for exactly
+            // this case — "a future compact control has a floor to fail
+            // against". It keeps its appearance; only the target grows, and
+            // `contentShape` is what makes the grown area actually take the
+            // tap rather than leave a button that merely looks bigger.
             Button(L10n.t(mode.switchTitleKey)) { switchMode() }
                 .font(.callout)
+                .frame(minHeight: Metrics.hitTarget)
+                .contentShape(Rectangle())
                 .disabled(form.isBusy)
         }
     }

@@ -445,6 +445,11 @@ struct RelayiumApp: App {
                 .task {
                     // Before anything can be chosen, and a no-op in Release.
                     UITestMode.stagePendingFixture()
+                    // Before anything can be received, and likewise a no-op in
+                    // Release: the acceptance path that completes a download
+                    // needs the empty folder a fresh install has, not whatever
+                    // an earlier run of the same path left in the container.
+                    UITestMode.resetReceivedFolder()
                     if UITestMode.showsOffReceiving {
                         // Neither. This is the off state a destination failure
                         // leaves behind — never resident, never paused — and

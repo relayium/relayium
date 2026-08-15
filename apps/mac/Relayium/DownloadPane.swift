@@ -93,8 +93,14 @@ struct DownloadPane: View {
                     ReceivedResultView(payload: payload)
                 }
                 PendingFileList(sessionFiles: model.sessionFiles)
+                // Addressed, because "Done" is the most reused word in the app
+                // and this one ends a task that has bytes on disk behind it: the
+                // acceptance path that proves it returns to the empty entry —
+                // and proves it does NOT delete what was saved — must be able to
+                // name this button rather than whichever Done a query found.
                 Button(L10n.t(.commonDone)) { model.dismissResult() }
                     .buttonStyle(.bordered)
+                    .accessibilityIdentifier("download.done")
             case .failed(let message):
                 InlineMessage(.failure, message)
                 PendingFileList(sessionFiles: model.sessionFiles)

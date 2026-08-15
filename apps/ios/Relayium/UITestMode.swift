@@ -275,6 +275,35 @@ enum UITestMode {
         try? Data(repeating: 0x52, count: pendingFixtureByteCount).write(
             to: documents.appendingPathComponent(pendingFixtureName), options: .atomic)
     }
+
+    /// Whether this launch should start with an empty `Received` folder.
+    ///
+    /// **Why an acceptance launch needs this, and why it is not a weakening of
+    /// the product rule.** iOS has no folder picker for a download: the
+    /// destination is FIXED inside the container, and the product's answer to a
+    /// name already taken is to REFUSE rather than overwrite. That is the right
+    /// answer for a person, and it makes the completion path run exactly once
+    /// per simulator: the second attempt legitimately fails on a file the first
+    /// attempt legitimately kept. Clearing the folder before the app resolves it
+    /// puts the launch back in the state a fresh install is in — it does not
+    /// change what happens when the name IS taken, which
+    /// `ReceiveDestinationTests` covers and this argument never reaches.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let freshReceivedFolderArgument = "--relayium-ui-testing-fresh-received-folder"
+    static let startsWithAnEmptyReceivedFolder = ProcessInfo.processInfo.arguments
+        .contains(freshReceivedFolderArgument)
+
+    /// Removes only this app's own `Received` folder, and only inside a Debug
+    /// launch that asked for it. Nothing outside the container is reachable
+    /// from here: the path is resolved by `ReceiveDestination` from
+    /// `FileManager`, never assembled.
+    static func resetReceivedFolder() {
+        guard startsWithAnEmptyReceivedFolder,
+              let documents = try? ReceiveDestination.documentsDirectory() else { return }
+        try? FileManager.default.removeItem(
+            at: documents.appendingPathComponent(ReceiveDestination.folderName,
+                                                 isDirectory: true))
+    }
     #else
     static let isActive = false
     /// Folded to a constant, so a shipped launch always takes the residency
@@ -284,6 +313,10 @@ enum UITestMode {
     /// In Release the whole idea is absent: the optimiser folds this to an
     /// empty call, and no argument can reach the container.
     static func stagePendingFixture() {}
+
+    /// Likewise absent. A shipped launch has no argument that deletes anything
+    /// a user has received, and this folds to an empty call.
+    static func resetReceivedFolder() {}
 
     /// nil, so a shipped launch always resolves the product's own keychain
     /// identity and cannot be pointed at a test one.
