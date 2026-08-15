@@ -213,6 +213,25 @@ final class MacSurfaceGuardTests: XCTestCase {
         try String(contentsOf: repoRoot.appendingPathComponent(path), encoding: .utf8)
     }
 
+    /// The macOS marketing version, read from the project rather than written
+    /// down again — the same source of truth
+    /// `testTheDocsNameTheMacOSReleaseAReaderCanActuallyFetch` resolves the
+    /// release tag from. A guard that hard-codes the version outlives the
+    /// release it was written for and then pins the document to a stale one,
+    /// which is the failure this whole section exists to catch.
+    private func macMarketingVersion() throws -> String {
+        let project = try claimSurfaceText("apps/mac/Relayium.xcodeproj/project.pbxproj")
+        let regex = try NSRegularExpression(pattern: #"MARKETING_VERSION = ([0-9]+(?:\.[0-9]+){1,2});"#)
+        let range = NSRange(project.startIndex..., in: project)
+        let versions = Set(regex.matches(in: project, range: range).compactMap { match -> String? in
+            guard let captured = Range(match.range(at: 1), in: project) else { return nil }
+            return String(project[captured])
+        })
+        let version = try XCTUnwrap(versions.first)
+        XCTAssertEqual(versions, [version], "the macOS project carries more than one marketing version")
+        return version
+    }
+
     func testNearbyProgressNamesRealReconnectWorkAndNeverDecoratesLookAgain() throws {
         let pane = try source(named: lanConnect)
         XCTAssertFalse(pane.contains("ProgressView()"),
@@ -4552,8 +4571,16 @@ final class MacSurfaceGuardTests: XCTestCase {
         // the same state. So the requirement moves rather than disappearing —
         // macOS says what it published, iOS says it published nothing, and
         // neither sentence is allowed to speak for the other.
+        //
+        // The version is DERIVED, not written down here. This assertion pinned
+        // the literal `1.0` and stayed green through 1.1 to 1.2.3 while the
+        // sentence it guards described a release five versions old — the exact
+        // staleness the surrounding tests exist to prevent, reproduced by the
+        // guard itself. Reading `MARKETING_VERSION` means the status sentence
+        // has to move with the product or fail here.
         let apps = flattened(try claimSurfaceText("apps/README.md"))
-        XCTAssertTrue(apps.contains("**Status: released as 1.0.**"),
+        let version = try macMarketingVersion()
+        XCTAssertTrue(apps.contains("**Status: released as \(version).**"),
                       "apps/README.md must state the macOS status precisely")
         XCTAssertTrue(apps.contains("The iOS app and its share extension are engineering builds and are published nowhere."),
                       "apps/README.md must scope that status to macOS and say what iOS is")

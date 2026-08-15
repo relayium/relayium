@@ -84,7 +84,7 @@ is **how seriously we take end-to-end encryption**:
 - 📦 **Multi-file batches** (up to 1,000) — streamed straight to disk where supported; other browsers may buffer in memory.
 - ✅ **Per-file SHA-256 integrity check** on the receiving end.
 - 💬 **Ephemeral encrypted text** — send a link, a command, or a block of multiline code to a device that's online right now, over a connection of its own that is end-to-end encrypted, with the same optional SAS comparison as a transfer. Relayium never stores message bodies or server-side history; either endpoint can retain received text. At most 65,536 UTF-8 bytes per message, delivered exactly as typed; anything larger is a file.
-- 🌐 **9 languages** — English, 中文, 日本語, 한국어, Deutsch, Français, العربية, Español, Português — auto-detected, switchable.
+- 🌐 **English and 简体中文** — the two maintained product languages, auto-detected and switchable; any other language resolves to English. Seven earlier locales (日本語, 한국어, Deutsch, Français, العربية, Español, Português) stay reachable as archived tutorial pages rather than as product languages.
 - ⚡ **Browser-first** — just open a URL; installing the CLI is optional. Realtime files and text on the same LAN need **no account**; creating a cross-network file or text pairing code requires sign-in, while anyone joining with that code needs no account. Creating stored download links also requires sign-in.
 - 🪶 **Self-hostable footprint** — one static SPA + a single Go server binary, with optional CLI and node binaries.
 
@@ -237,8 +237,10 @@ pairing code requires sign-in; joining with that code does not.
 ## Delivery status
 
 - **Web — live:** LAN and cross-network realtime file/text transfer, encrypted
-  stored download links, accounts and usage controls, and nine languages are
-  deployed at [relayium.com](https://relayium.com/).
+  stored download links, accounts and usage controls, and the two maintained
+  languages — English and Simplified Chinese — are deployed at
+  [relayium.com](https://relayium.com/); the seven earlier locales remain as
+  archived tutorial pages rather than product languages.
 - **CLI and nodes — live:** published binaries provide pairing-code file/text
   transfer, encrypted upload/download links, SSH and daemon-direct transfer,
   folder sync, self-hosting, and managed relay/storage nodes.
@@ -246,9 +248,10 @@ pairing code requires sign-in; joining with that code does not.
   registration and sign-in with device and stored-file management, six-digit
   pairing-code transfer of files and text, folder transfer, nearby sending and
   passive receiving, encrypted stored links to send and open, notifications and
-  deep links, the same nine languages as the web client (Arabic included, laid
-  out right to left), and a signed Sparkle update foundation. Signing in still
-  goes out to the browser for device approval — that is not a native Sign in
+  deep links, English and Simplified Chinese as its maintained languages —
+  beside the seven frozen catalogs it still bundles, Arabic among them and still
+  laid out right to left — and a signed Sparkle update foundation. Signing in
+  still goes out to the browser for device approval — that is not a native Sign in
   with Apple, which only the iOS app has. Its single window is a desktop shell
   whose sidebar names five destinations at once — LAN Transfer, Cross-network
   Transfer, Send a link, Device Inbox, Account — so the capabilities that need no
@@ -272,8 +275,12 @@ pairing code requires sign-in; joining with that code does not.
   GitHub Release with its SHA-256 published beside it; in-app updates come from
   the signed Sparkle appcast at `https://relayium.com/apps/macos/appcast.xml`.
   A Developer ID download **is** the distribution channel here — there is no Mac
-  App Store listing. Whether relayium.com's own **/apps** page offers that
-  download is a separate switch, driven by `web/native-releases.json`, which the
+  App Store listing. The App Store build of the same source is not hypothetical:
+  an exact-SHA, universal, sandboxed, App Store-signed 1.2.3 (10) package has
+  been built and verified locally. It has not been uploaded, so App Store Connect
+  and TestFlight hold nothing for this version. Whether relayium.com's own
+  **/apps** page offers that download is a separate switch, driven by
+  `web/native-releases.json`, which the
   release workflow delivers to `main` together with the appcast.
 - **iOS — in development, not public:** a native SwiftUI app now exists at
   [`apps/ios`](apps/ios) and builds against the same shared Swift package. Five
@@ -291,7 +298,9 @@ pairing code requires sign-in; joining with that code does not.
   unsolicited session at a time; seeing a device there proves neither the same
   Wi-Fi nor its identity, and the app says so. *Account* registers, signs in
   with an email and password or natively with Apple, and shows plan and usage
-  alongside device and stored-file management. It ships the same nine languages.
+  alongside device and stored-file management. It ships the same maintained
+  English and Simplified Chinese as the Mac app, beside the same seven frozen
+  catalogs.
   Nothing runs while the app is in the background: it has no background
   execution, so suspending or closing it stops whatever was in flight. A stored
   upload survives that much, because *Send* copies the selected bytes into
@@ -315,10 +324,14 @@ pairing code requires sign-in; joining with that code does not.
   app is still the only thing that encrypts, uploads or produces a link. A
   waiting share is shown even when nobody is signed in, stays on the device until
   it is sent or discarded, and is never expired or sent on its own. The App Group
-  and distribution profiles are now registered and a signed App Store archive
-  embeds the extension, but none of that has been verified against a real share
-  sheet yet: the extension has never run on a device, and what real providers
-  hand over for a shared folder is untested. StoreKit subscriptions now render
+  and distribution profiles are registered, a signed App Store archive embeds the
+  extension, and the extension has run on a physical device: a signed build was
+  installed on an iPad, a real item was shared into Relayium through the system
+  share sheet, and reopening the app by hand showed it waiting on *Send*. That
+  proves the mechanism rather than its breadth — the newer draft-adoption path
+  has not been exercised against real iPhone Photos, Files and third-party
+  providers, and what a real provider hands over for a shared folder is still
+  untested. StoreKit subscriptions now render
   in Account with purchase, restore and Apple-management paths, but the iOS
   products and server verifier are not activated and no TestFlight build has
   been uploaded. There is still no notification or push and no public App Store
@@ -336,21 +349,24 @@ pairing code requires sign-in; joining with that code does not.
   notifications and push. Universal-link routing is
   wired and covered by tests, but its association is only verified on a real
   install, so it stays on the real-device list below rather than the built list
-  above. The share extension is in the same position and needs more: only a
-  signed install can show what the real share
-  sheet offers, what providers vend for a shared folder, and whether returning to
-  the app puts the waiting share in front of the user as intended. It then needs
-  hands-on real-device QA and an explicit native-versus-web workflow audit, and
-  it has had neither yet. The immediate distribution work is to configure the
+  above. The share extension has already had that signed install: the real share
+  sheet offered Relayium, and returning to the app put the waiting share in front
+  of the user as intended. What it still needs is breadth — what real iPhone
+  Photos, Files and third-party providers vend, and what any of them hands over
+  for a shared folder. Those paths still need hands-on real-device QA, and the
+  product still needs an explicit native-versus-web workflow audit; neither is
+  complete yet. The immediate distribution work is to configure the
   iOS subscription group and products, activate the bundle-scoped server
   catalog/verifier, upload the signed archive to TestFlight, and perform the
   real-device Sandbox purchase/restore and native-versus-web audit. Background
   execution, notification and push remain later product work. Universal-link
   routing is wired but still needs a real install, and the share extension still
-  needs real-device provider coverage. macOS now has a separate App Store record
-  and a processed TestFlight candidate, while the existing Developer ID channel
-  remains public. Persistent device identity, broader protocol documentation,
-  and additional distribution formats remain future work.
+  needs real-device provider coverage. macOS has its own App Store Connect record
+  and an earlier processed TestFlight candidate; its current 1.2.3 App Store
+  package is signed and verified locally but has not been uploaded, while the
+  Developer ID channel remains the public one. Persistent device identity,
+  broader protocol documentation, and additional distribution formats remain
+  future work.
 
 **Self-hosting:** a root [`Dockerfile`](Dockerfile) + [`docker-compose.yml`](docker-compose.yml) build a
 single self-contained image (`docker compose up -d --build`). See [`docs/self-hosting.md`](docs/self-hosting.md).
@@ -368,7 +384,7 @@ relayium/
 │   ├── src/lib/signaling.ts    #   WebSocket signaling client
 │   ├── src/lib/transfer.ts     #   batch framing, chunking, integrity
 │   ├── src/lib/filesink.ts     #   stream-to-disk / directory / Blob fallback
-│   └── src/lib/i18n.svelte.ts  #   runes-driven i18n (9 languages)
+│   └── src/lib/i18n.svelte.ts  #   runes-driven i18n (en + zh, archive alongside)
 ├── server/                    # Go signaling server
 │   ├── main.go                 #   HTTP + WebSocket + static file serving
 │   ├── account/, ext/, httpx/, authx/, selfupdate/  #   importable outside internal/, see note below
