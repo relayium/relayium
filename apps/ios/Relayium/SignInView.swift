@@ -66,19 +66,33 @@ struct SignInView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            HStack(alignment: .top, spacing: 12) {
+        // **The shared card, not this view's own.** It carried a hand-rolled
+        // `Color.secondary.opacity(0.07)` fill at radius 20 with a
+        // `Color.secondary.opacity(0.14)` stroke over it — two literals nothing
+        // else in the app used, on the one screen a person meets before they
+        // have seen any other. It is the same container as every other task in
+        // the product now, and it answers Increase Contrast and dark mode
+        // through the system fill rather than through two chosen opacities.
+        SectionCard {
+            HStack(alignment: .top, spacing: Metrics.inner) {
                 Image(systemName: mode == .signIn
                       ? "person.crop.circle"
                       : "person.crop.circle.badge.plus")
                     .font(.title2)
-                    .foregroundStyle(.tint)
-                    .frame(width: 44, height: 44)
-                    .background(Color.accentColor.opacity(0.12), in: Circle())
+                    .foregroundStyle(Palette.action)
+                    .frame(width: Metrics.hitTarget, height: Metrics.hitTarget)
+                    .background(Palette.actionSurface, in: Circle())
+                    // Capped, for the same reason the inline message's symbol
+                    // is: it is a landmark, and left to scale it takes a third
+                    // of the width from the sentence beside it at the
+                    // accessibility sizes.
+                    .dynamicTypeSize(...DynamicTypeSize.xLarge)
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: Metrics.hairline) {
                     Text(L10n.t(mode.titleKey))
                         .font(.title2.weight(.semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityAddTraits(.isHeader)
                     Text(L10n.t(mode.bodyKey))
                         .font(.callout)
                         .foregroundStyle(.secondary)
@@ -86,7 +100,7 @@ struct SignInView: View {
                 }
             }
 
-            VStack(spacing: 12) {
+            VStack(spacing: Metrics.inner) {
                 if mode == .register {
                     TextField(L10n.t(.loginDisplayName), text: $draft.displayName)
                         .accessibilityLabel(L10n.t(.loginDisplayName))
@@ -127,12 +141,12 @@ struct SignInView: View {
             .disabled(form.isBusy)
 
             if let errorMessage {
-                // Ordinary text in reading order ABOVE the button, not a
-                // decoration after it: it is what the user has to act on.
-                Text(errorMessage)
-                    .font(.callout)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
+                // In reading order ABOVE the button, not a decoration after it:
+                // it is what the user has to act on. The shared warning role
+                // rather than a red sentence, which is what the Mac's form
+                // already does and what makes the refusal legible under a
+                // colour filter and in Increase Contrast.
+                InlineMessage(.warning, errorMessage)
             }
 
             // Same slot either way, so the form does not jump while it submits.
@@ -161,12 +175,6 @@ struct SignInView: View {
                 .font(.callout)
                 .disabled(form.isBusy)
         }
-        .padding(20)
-        .background(Color.secondary.opacity(0.07), in: RoundedRectangle(cornerRadius: 20))
-        .overlay {
-            RoundedRectangle(cornerRadius: 20)
-                .stroke(Color.secondary.opacity(0.14), lineWidth: 1)
-        }
     }
 
     /// Sign in with Apple, below the password controls and visibly separated
@@ -187,8 +195,8 @@ struct SignInView: View {
     /// opacity alone would leave an action that cannot be taken in the
     /// accessibility tree.
     private var appleSection: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 12) {
+        VStack(spacing: Metrics.inner) {
+            HStack(spacing: Metrics.inner) {
                 line
                 Text(L10n.t(.loginAppleDivider))
                     .font(.footnote)
@@ -222,9 +230,9 @@ struct SignInView: View {
             // Apple's own two styles, picked by scheme so the control keeps the
             // contrast Apple designed it for in both.
             .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
-            // Apple's minimum height, and the same visual weight as the primary
-            // button above it.
-            .frame(minHeight: 44)
+            // Apple's minimum height, which is also this app's own hit-target
+            // floor, and the same visual weight as the primary button above it.
+            .frame(minHeight: Metrics.hitTarget)
             .frame(maxWidth: .infinity)
             .disabled(form.isBusy)
             .opacity(form.isBusy ? 0.4 : 1)
@@ -232,9 +240,12 @@ struct SignInView: View {
         }
     }
 
+    /// The rule either side of "or". The system's own separator colour rather
+    /// than a chosen opacity, so it tracks Increase Contrast like every other
+    /// line in the app.
     private var line: some View {
         Rectangle()
-            .fill(Color.secondary.opacity(0.25))
+            .fill(Palette.hairline)
             .frame(height: 1)
     }
 

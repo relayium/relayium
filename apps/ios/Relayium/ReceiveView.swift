@@ -18,6 +18,17 @@ import RelayiumKit
 /// * the share affordance is built from `model.received`, which is non-nil only
 ///   in `.done`, which the model reaches only after `ManifestWriter.finish()`
 ///   returned. Nothing here can offer a half-written file.
+///
+/// **Phase C: one card per step of the one task.** It was a flat column — a
+/// field, a button, then whichever state the model was in, each twelve points
+/// below the last with nothing to say where one thing stopped and the next
+/// began. The manifest a person is deciding on had the same visual weight as
+/// the sentence about what a Relayium link is. Now the link input is a card,
+/// and each state that has content of its own is a card titled with the one
+/// fact that state is about: what the link holds before saving, and what was
+/// saved after. The two states that are only a wait — resolving and
+/// downloading — stay uncarded, because a card around a progress bar is a box
+/// around a sentence.
 struct ReceiveView: View {
     @ObservedObject var model: CloudDownloadModel
 
@@ -29,7 +40,7 @@ struct ReceiveView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: Metrics.section) {
                     if !model.isComplete {
                         linkField
                     }
@@ -50,8 +61,12 @@ struct ReceiveView: View {
 
     // MARK: - input
 
+    /// Untitled, and deliberately: the only honest title it could carry is
+    /// "Receive files", which the navigation bar directly above it already
+    /// says. That is the repetition the Mac's second audit removed, and the
+    /// rule `SectionCard` is documented with.
     private var linkField: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        SectionCard {
             // An ordinary text field, with the system's own paste affordance.
             // The app never reads `UIPasteboard` itself: a receive app that
             // silently inspects the clipboard at launch is doing exactly what
@@ -97,27 +112,19 @@ struct ReceiveView: View {
     private var stateSection: some View {
         switch model.state {
         case .idle:
-            VStack(alignment: .leading, spacing: 12) {
-                Label {
-                    Text(L10n.t(.downloadIdleHint))
-                } icon: {
-                    Image(systemName: "link")
-                }
-                .font(.callout)
-                .fixedSize(horizontal: false, vertical: true)
-
-                Label {
-                    Text(L10n.t(.downloadNoAccountNeeded))
-                } icon: {
-                    Image(systemName: "person.crop.circle.badge.checkmark")
-                }
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            }
+            // The shared empty-state role, and the same one the Mac's idle
+            // download pane draws: a landmark, the fact that decides whether
+            // this destination is the right one, and — as the detail line — the
+            // reason it needs nothing else. It is the first thing anybody sees
+            // in this app, so it is a designed state rather than two loose
+            // labels under an empty field.
+            // nonlocalized: SF Symbol name
+            EmptyStateView(symbol: "link",
+                           message: L10n.t(.downloadIdleHint),
+                           detail: L10n.t(.downloadNoAccountNeeded))
 
         case .resolving:
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: Metrics.inner) {
                 // Labelled rather than a bare spinner: on a screen with nothing
                 // else on it a spinner says nothing, and VoiceOver reads
                 // nothing at all.
@@ -129,7 +136,7 @@ struct ReceiveView: View {
             ready(manifest, expiresAt: expiresAt, burnAfterRead: burn)
 
         case .downloading(let received, let total):
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: Metrics.inner) {
                 ProgressView(value: Double(received), total: Double(max(total, 1))) {
                     Text(L10n.t(.downloadInProgress))
                 } currentValueLabel: {
@@ -145,7 +152,7 @@ struct ReceiveView: View {
             done(fileCount: urls.count)
 
         case .failed(let message):
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: Metrics.inner) {
                 failure(message)
                 PendingFileList(sessionFiles: model.sessionFiles)
                 // The same conditional the macOS pane renders, from the same
@@ -168,20 +175,24 @@ struct ReceiveView: View {
     }
 
     /// What the link holds, decided on before anything is spent.
+    ///
+    /// The card's TITLE is the summary — "3 files · 12.4 MB" — which is the one
+    /// question this state answers, and the same hierarchy move the nearby
+    /// tab's receiving card made: VoiceOver announces it once on entering the
+    /// group and then reads the manifest, instead of reading a headline, five
+    /// rows, a caution, an expiry and a button as nine peers.
     private func ready(_ manifest: StoredManifest, expiresAt: Int64,
                        burnAfterRead: Bool) -> some View {
         let total = manifest.files.reduce(0) { $0 + $1.size }
-        return VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(DownloadPresentation.manifestSummary(fileCount: manifest.files.count,
-                                                          totalBytes: Int64(total)))
-                    .font(.headline)
+        return SectionCard(DownloadPresentation.manifestSummary(
+            fileCount: manifest.files.count, totalBytes: Int64(total))) {
+            VStack(alignment: .leading, spacing: Metrics.tight) {
                 // By index, not by name: a folder upload keeps its hierarchy in
                 // `name`, so two entries can share a leaf and duplicate ids
                 // would silently drop a row from the list the user is deciding
                 // on.
                 ForEach(Array(manifest.files.enumerated()), id: \.offset) { _, file in
-                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    HStack(alignment: .firstTextBaseline, spacing: Metrics.inner) {
                         Text(FileIdentityPresentation.name(for: file))
                             .frame(maxWidth: .infinity, alignment: .leading)
                             // This is the pre-save consent surface. Preserve the
@@ -195,14 +206,12 @@ struct ReceiveView: View {
                 }
             }
             if burnAfterRead {
-                // Stated before it costs something, not as a footnote after.
-                Label {
-                    Text(L10n.t(.downloadBurnNotice))
-                } icon: {
-                    Image(systemName: "flame.fill").foregroundStyle(.orange)
-                }
-                .font(.callout)
-                .fixedSize(horizontal: false, vertical: true)
+                // Stated before it costs something, not as a footnote after,
+                // and in the shared warning role rather than this screen's own
+                // flame: it is the same kind of statement the rest of the app
+                // marks that way, and the symbol beside it carries the meaning
+                // for a reader the orange does not reach.
+                InlineMessage(.warning, L10n.t(.downloadBurnNotice))
             }
             Text(L10n.t(.commonExpires, [
                 L10n.date(Date(timeIntervalSince1970: TimeInterval(expiresAt)),
@@ -219,14 +228,21 @@ struct ReceiveView: View {
     }
 
     /// Finished, on disk, and shareable — in that order.
+    ///
+    /// The card is untitled and the summary is its first line, which is the one
+    /// place this flow deviates from "the state's fact is the card's title":
+    /// the green check has to sit beside the sentence, and a `SectionCard`
+    /// title is a `String`. So the Label carries the header trait instead, and
+    /// VoiceOver still meets "Saved 3 files" on entering the group.
     private func done(fileCount: Int) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        SectionCard {
             Label {
                 Text(DownloadPresentation.savedSummary(fileCount: fileCount))
             } icon: {
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
             }
             .font(.headline)
+            .accessibilityAddTraits(.isHeader)
             PendingFileList(sessionFiles: model.sessionFiles)
             // Through `ReceiveDestinationCopy`, not `L10n` directly: the route
             // it names is the one the failures name, derived from the same two
@@ -258,14 +274,12 @@ struct ReceiveView: View {
         }
     }
 
+    /// Every failure this screen can state — a refused link, a transfer that
+    /// stopped, a receive folder that could not be resolved — said the same way
+    /// as every failure in the rest of the app. It was this file's own copy of
+    /// the same six lines.
     private func failure(_ message: String) -> some View {
-        Label {
-            Text(message)
-        } icon: {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-        }
-        .font(.callout)
-        .fixedSize(horizontal: false, vertical: true)
+        InlineMessage(.warning, message)
     }
 
     private var cancelButton: some View {

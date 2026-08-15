@@ -2372,20 +2372,29 @@ final class IOSSurfaceGuardTests: XCTestCase {
         for state in [".accountNoDevices", ".accountNoFiles"] {
             XCTAssertTrue(summary.text.contains(state), "the empty state \(state) is not rendered")
         }
-        // Red is named ONCE in the file, and the one place that names it draws a
-        // symbol in the same expression. Counting symbols against reds would
-        // pass on a file with four symbols somewhere and a bare red line
-        // somewhere else; this cannot, because there is nowhere else to put one.
-        let reds = summary.text.components(separatedBy: "foregroundStyle(.red)").count - 1
-        XCTAssertEqual(reds, 1, "every failure on this screen goes through one helper")
+        // **Phase C moved this claim up rather than dropping it.** It used to
+        // read: red is named exactly once, and the one expression that names it
+        // draws a symbol too. The file now names no colour at all — every
+        // failure, caveat and key-state notice goes through `InlineMessage`,
+        // whose own guard (`testTheIOSAppHasOneTokenAndComponentLayerRatherThanFortyLiterals`
+        // and the component itself) is what carries "a symbol beside every
+        // kind". So the assertion here is the stronger one: this screen states
+        // nothing in colour of its own, and its one failure helper is the
+        // shared role rather than a fourth private copy of it.
+        XCTAssertFalse(summary.text.contains("foregroundStyle(.red)"),
+                       "a failure on this screen is stated in colour")
+        XCTAssertFalse(summary.text.contains("foregroundStyle(.orange)"),
+                       "a caveat on this screen is stated in colour")
         let helper = try XCTUnwrap(
             summary.text.range(of: "private func failureLine(_ text: String) -> some View {"))
-        let redUse = try XCTUnwrap(summary.text.range(of: "foregroundStyle(.red)"))
-        XCTAssertTrue(helper.upperBound < redUse.lowerBound,
-                      "the one red is not the helper's")
-        XCTAssertTrue(summary.text[helper.upperBound..<redUse.lowerBound]
-            .contains("systemImage: \"exclamationmark.triangle\""),
-                      "the helper states a failure in colour with no symbol beside it")
+        XCTAssertTrue(summary.text[helper.upperBound...]
+            .hasPrefix("\n        InlineMessage(.warning, text)"),
+                      "the one failure helper no longer delegates to the shared role")
+        // Both key-state arms of a stored row are inline messages too, and they
+        // are DIFFERENT kinds: a key that was never here is a fact, and a
+        // keychain that could not be read may be one unlock away.
+        XCTAssertTrue(summary.text.contains("InlineMessage(.info, explanation)"))
+        XCTAssertTrue(summary.text.contains("InlineMessage(.warning, explanation)"))
         // The row actions are named for the row they belong to, which is the
         // only thing telling repeated action groups apart without sight.
         for label in ["AccountPresentation.revokeActionLabel(for: device)",
@@ -3640,12 +3649,18 @@ final class IOSSurfaceGuardTests: XCTestCase {
                       "the brand colour is not the asset")
 
         // Every ad-hoc container fill is gone from the refreshed surfaces, and
-        // each now spends the tokens instead of literals.
+        // each now spends the tokens instead of literals. `ReceiveView`,
+        // `AccountSummaryView` and `SignInView` join the list in the Receive/
+        // Account batch — a component layer whose call sites stop at four
+        // screens is four screens' worth of literals with extra steps.
         for name in ["NearbyView.swift", "SendView.swift", "DeviceSendView.swift",
-                     "DirectView.swift"] {
+                     "DirectView.swift", "ReceiveView.swift", "AccountSummaryView.swift",
+                     "SignInView.swift"] {
             let view = try XCTUnwrap(all.first { $0.name == name }?.text)
             XCTAssertFalse(view.contains(".quaternary.opacity("),
                            "\(name) still hand-rolls a container fill")
+            XCTAssertFalse(view.contains("Color.secondary.opacity("),
+                           "\(name) still hand-rolls a container fill or a rule")
             XCTAssertTrue(view.contains("Metrics."), "\(name) does not use the token layer")
             XCTAssertFalse(view.contains("spacing: 1"),
                            "\(name) still spaces itself with a literal")
@@ -3653,13 +3668,30 @@ final class IOSSurfaceGuardTests: XCTestCase {
 
         // One failure presentation, every call site. The helpers keep their
         // names — the panes' own ordering guards address them — and delegate.
+        // `AccountTab` has no helper of its own and states its failures
+        // directly, so it is in this half of the check and not the one above.
         for name in ["NearbyView.swift", "SendView.swift", "DeviceSendView.swift",
-                     "DirectView.swift"] {
+                     "DirectView.swift", "ReceiveView.swift", "AccountSummaryView.swift",
+                     "SignInView.swift", "AccountTab.swift"] {
             let view = try XCTUnwrap(all.first { $0.name == name }?.text)
             XCTAssertTrue(view.contains("InlineMessage(.warning,"),
                           "\(name) states a failure without the shared role")
             XCTAssertFalse(view.contains("Image(systemName: \"exclamationmark.triangle.fill\")"),
                            "\(name) kept its own copy of the failure line")
+            XCTAssertFalse(view.contains("foregroundStyle(.red)"),
+                           "\(name) states a failure in colour")
+        }
+
+        // And every one of the five destinations plus the two account-state
+        // views is built out of the shared container. Asserted by call site
+        // rather than by absence, because the failure this catches is the next
+        // screen quietly laying itself out as a flat column again.
+        for name in ["NearbyView.swift", "SendView.swift", "DeviceSendView.swift",
+                     "DirectView.swift", "ReceiveView.swift", "AccountSummaryView.swift",
+                     "SignInView.swift", "AccountTab.swift"] {
+            let view = try XCTUnwrap(all.first { $0.name == name }?.text)
+            XCTAssertTrue(view.contains("SectionCard"),
+                          "\(name) draws its content without the shared container")
         }
     }
 
@@ -4089,6 +4121,223 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // look like the primary one.
         let empty = try XCTUnwrap(all.first { $0.name == "Components/EmptyStateView.swift" }?.text)
         XCTAssertFalse(empty.contains("Button"), "the empty state grew a competing action")
+    }
+
+    // MARK: - Phase C: Receive and Account
+
+    /// **Receive is a card per step, and the pre-save card is titled with what
+    /// the link holds.**
+    ///
+    /// It was a field, a button and then whichever state the model was in, all
+    /// twelve points apart: the manifest a person is consenting to had exactly
+    /// the visual weight of the sentence explaining what a Relayium link is.
+    /// The title is the summary rather than a fixed word, for the same reason
+    /// the nearby receiving card's title is its status — it is the question the
+    /// state answers, and VoiceOver reads it once on entering the group.
+    ///
+    /// The input card carries NO title on purpose: the only honest one is
+    /// "Receive files", which the navigation bar above it already says.
+    func testTheReceiveTaskIsCardedAndTitledWithWhatTheLinkHolds() throws {
+        let receive = try XCTUnwrap(try sources().first { $0.name == "ReceiveView.swift" }?.text)
+        let input = try XCTUnwrap(receive.components(separatedBy: "private var linkField:")
+            .dropFirst().first?.components(separatedBy: "private var stateSection:").first)
+        XCTAssertTrue(input.contains("SectionCard {"),
+                      "the link input is a loose field and button again")
+        XCTAssertFalse(input.contains("SectionCard(L10n.t(.downloadHeading))"),
+                       "the input card repeats the navigation title")
+
+        let ready = try XCTUnwrap(receive.components(separatedBy: "private func ready(")
+            .dropFirst().first?.components(separatedBy: "private func done").first)
+        XCTAssertTrue(ready.contains("SectionCard(DownloadPresentation.manifestSummary("),
+                      "the consent card no longer leads with what the link holds")
+        // And the burn notice is still ABOVE the action that spends the link,
+        // in the shared warning role rather than this screen's own flame.
+        XCTAssertTrue(ready.contains("InlineMessage(.warning, L10n.t(.downloadBurnNotice))"),
+                      "the burn notice lost the shared warning role")
+        guard let burn = ready.range(of: "L10n.t(.downloadBurnNotice)"),
+              let action = ready.range(of: "L10n.t(.downloadReceive)") else {
+            return XCTFail("the pre-save card lost its notice or its action")
+        }
+        XCTAssertTrue(burn.upperBound < action.lowerBound,
+                      "the burn notice explains afterwards what was already spent")
+
+        let done = try XCTUnwrap(receive.components(separatedBy: "private func done(")
+            .dropFirst().first?.components(separatedBy: "private func failure").first)
+        XCTAssertTrue(done.contains("SectionCard {"),
+                      "the saved result is a flat column again")
+
+        // The two states that are only a wait stay uncarded: a box drawn around
+        // a progress bar is a box drawn around a sentence.
+        for wait in ["case .resolving:", "case .downloading(let received, let total):"] {
+            let arm = try XCTUnwrap(receive.components(separatedBy: wait)
+                .dropFirst().first?.components(separatedBy: "case ").first)
+            XCTAssertFalse(arm.contains("SectionCard"), "\(wait) grew chrome around a wait")
+        }
+    }
+
+    /// The first screen in the app is a designed state, not a blank remainder.
+    ///
+    /// `testIdleReceiveExplainsTheLinkPrivacyAndAnonymousEntryPoint` already
+    /// requires both sentences to be in the idle arm. This adds the shape: they
+    /// are the shared empty-state role — landmark, fact, detail — which is what
+    /// the Mac's idle download pane has drawn since its own refresh.
+    func testIdleReceiveIsTheSharedEmptyStateRatherThanTwoLooseLabels() throws {
+        let receive = try XCTUnwrap(try sources().first { $0.name == "ReceiveView.swift" }?.text)
+        let idle = try XCTUnwrap(receive.components(separatedBy: "case .idle:")
+            .dropFirst().first?.components(separatedBy: "case .resolving:").first)
+        // nonlocalized: SF Symbol name, checked for availability elsewhere
+        XCTAssertTrue(idle.contains("EmptyStateView(symbol: \"link\","))
+        XCTAssertTrue(idle.contains("message: L10n.t(.downloadIdleHint)"))
+        XCTAssertTrue(idle.contains("detail: L10n.t(.downloadNoAccountNeeded)"),
+                      "the anonymous-receive fact is no longer the empty state's detail")
+    }
+
+    /// **The account screen is five cards in the order its questions are asked,
+    /// and the one that ends the account is last and alone.**
+    ///
+    /// Asserted as an order rather than as presence: a card added below
+    /// deletion would pass a containment check while leaving the screen exactly
+    /// as it was — a forty-control column where Refresh and "Delete account"
+    /// ranked the same.
+    func testTheAccountSurfaceIsCardedWithItsDestructiveActLastAndAlone() throws {
+        let summary = try XCTUnwrap(
+            try sources().first { $0.name == "AccountSummaryView.swift" }?.text)
+        let body = try XCTUnwrap(summary.components(separatedBy: "var body: some View {")
+            .dropFirst().first?.components(separatedBy: ".task(id: scope)").first)
+        var previous = body.startIndex
+        for section in ["profileSection", "devicesSection", "filesSection",
+                        "sessionActions", "deleteAccountSection"] {
+            guard let found = body.range(of: section, range: previous..<body.endIndex) else {
+                return XCTFail("the account column lost \(section), or reordered it")
+            }
+            previous = found.upperBound
+        }
+        // Identity, devices, stored files and deletion are titled with the fact
+        // each card is about; the two untitled ones would only repeat a heading
+        // that is already inside them or the navigation bar.
+        XCTAssertTrue(summary.contains("SectionCard(profileTitle)"),
+                      "the identity card is not titled with whose account this is")
+        for titled in ["SectionCard(L10n.t(.accountDevicesHeading))",
+                       "SectionCard(L10n.t(.accountFilesHeading))",
+                       "SectionCard(L10n.t(.accountDeleteAccountHeading))"] {
+            XCTAssertTrue(summary.contains(titled), "the account surface lost \(titled)")
+        }
+        // The purchase surface draws its own heading, so its card carries none —
+        // and it is its OWN card rather than a tail on the identity one, which
+        // is what stops two product rows, three notices and two legal links
+        // burying the meters.
+        let profile = try XCTUnwrap(summary.components(separatedBy: "private var profileSection:")
+            .dropFirst().first?.components(separatedBy: "private var devicesSection:").first)
+        guard let meters = profile.range(of: "meter(L10n.t(.accountStorage)"),
+              let purchase = profile.range(of: "AppleSubscriptionCard(") else {
+            return XCTFail("the identity card lost its meters or the purchase surface")
+        }
+        XCTAssertTrue(meters.upperBound < purchase.lowerBound,
+                      "the purchase surface is drawn above what the current plan allows")
+        XCTAssertTrue(profile.contains("IOSAppleSubscriptions.channel.offersInAppPurchase"),
+                      "the purchase surface bypasses its distribution policy")
+
+        // The delete control is the only one in its card, which is what a
+        // boundary rather than distance buys.
+        let deletion = try XCTUnwrap(summary.components(
+            separatedBy: "private var deleteAccountSection:").dropFirst().first?
+            .components(separatedBy: "private var isRequestingAccountDeletion").first)
+        XCTAssertEqual(deletion.components(separatedBy: "Button(").count - 1, 1,
+                       "another control shares the card with account deletion")
+        XCTAssertTrue(deletion.contains(".controlSize(.large)"),
+                      "the destructive control is under this app's own hit-target floor")
+    }
+
+    /// Both of the account's lists are designed empty states now, like the two
+    /// device lists before them. No action of their own: Refresh is already on
+    /// the screen, in the card below.
+    func testBothAccountListsAreDesignedEmptyStates() throws {
+        let summary = try XCTUnwrap(
+            try sources().first { $0.name == "AccountSummaryView.swift" }?.text)
+        // nonlocalized: SF Symbol names, checked for availability elsewhere
+        XCTAssertTrue(summary.contains("EmptyStateView(symbol: \"iphone\","))
+        XCTAssertTrue(summary.contains("message: L10n.t(.accountNoDevices)"))
+        XCTAssertTrue(summary.contains("EmptyStateView(symbol: \"externaldrive\","))
+        XCTAssertTrue(summary.contains("message: L10n.t(.accountNoFiles)"))
+    }
+
+    /// **A stored row's two handoff controls turn, for the same reason the
+    /// pairing handoff's do.**
+    ///
+    /// Half of a 375pt content width is about 150 points, and at the
+    /// accessibility content sizes "Copy link" beside its symbol is wider than
+    /// that — the failure a real SE build produced on the Direct tab, on the
+    /// controls a `#k=` handoff depends on. Declared once each, so the two axes
+    /// cannot drift apart.
+    func testTheStoredFileHandoffControlsStackRatherThanBreakTheirOwnLabels() throws {
+        let summary = try XCTUnwrap(
+            try sources().first { $0.name == "AccountSummaryView.swift" }?.text)
+        XCTAssertTrue(summary.contains("@Environment(\\.dynamicTypeSize)"),
+                      "the handoff controls cannot see the reader's own setting")
+        XCTAssertTrue(summary.contains("if typeSize.isAccessibilitySize {"))
+        for once in ["private func copyButton(link: String, row: StoredFileRow)",
+                     "private func shareButton(link: String, row: StoredFileRow)"] {
+            XCTAssertEqual(summary.components(separatedBy: once).count - 1, 1,
+                           "\(once) is declared twice, so the two axes can drift")
+        }
+        // Full width inside whichever axis holds them, and large, so each is
+        // over the 44pt floor on both axes rather than only across. Open and
+        // Delete are the row's other two, and they clear it the same way.
+        XCTAssertEqual(summary.components(separatedBy: ".frame(maxWidth: .infinity)").count - 1, 5,
+                       "a row control is natural-width inside a turning stack")
+        let row = try XCTUnwrap(summary.components(separatedBy: "private func fileRow(")
+            .dropFirst().first?.components(separatedBy: "private func copyButton(").first)
+        XCTAssertEqual(row.components(separatedBy: ".controlSize(.large)").count - 1, 3,
+                       "a stored row's Open, handoff pair or Delete is under the hit floor")
+    }
+
+    /// The sign-in form is in the app's own container rather than in two
+    /// opacities of its own.
+    ///
+    /// It is the first screen a person meets, and it was the one surface still
+    /// drawing a `Color.secondary.opacity(0.07)` fill at radius 20 under a
+    /// `0.14` stroke — numbers nothing else used, answering neither Increase
+    /// Contrast nor dark mode the way the system fill does.
+    func testTheSignInFormUsesTheSharedContainerAndTheSharedRefusalRole() throws {
+        let form = try XCTUnwrap(try sources().first { $0.name == "SignInView.swift" }?.text)
+        XCTAssertTrue(form.contains("SectionCard {"),
+                      "the form draws its own container again")
+        XCTAssertFalse(form.contains("RoundedRectangle(cornerRadius: 20)"),
+                       "the form kept its own corner and stroke")
+        XCTAssertTrue(form.contains("InlineMessage(.warning, errorMessage)"),
+                      "the refusal is stated in colour rather than in the shared role")
+        // The refusal stays ABOVE the control it explains, in reading order.
+        guard let refusal = form.range(of: "InlineMessage(.warning, errorMessage)"),
+              let submit = form.range(of: "Button(action: submit)") else {
+            return XCTFail("the form lost its refusal or its submit control")
+        }
+        XCTAssertTrue(refusal.upperBound < submit.lowerBound,
+                      "the refusal is a decoration after the button rather than before it")
+        // The Apple control keeps Apple's own minimum height, which is this
+        // app's floor as well — through the token, not a repeated literal.
+        XCTAssertTrue(form.contains(".frame(minHeight: Metrics.hitTarget)"))
+    }
+
+    /// Every state the account ROUTER draws is one card with one message role.
+    ///
+    /// Each of these is the whole screen when it is on screen, and each was a
+    /// bare column on an otherwise empty page — which reads as something that
+    /// failed to load rather than as the answer.
+    func testEveryAccountRouterStateIsACardWithTheSharedMessageRoles() throws {
+        let tab = try XCTUnwrap(try sources().first { $0.name == "AccountTab.swift" }?.text)
+        for card in ["SectionCard(L10n.t(.contentCheckEmailTitle))",
+                     "SectionCard(L10n.t(.contentAccountLoadFailed))",
+                     "SectionCard(title)"] {
+            XCTAssertTrue(tab.contains(card), "the account router lost \(card)")
+        }
+        // A request that succeeded and a request that failed land in the SAME
+        // slot, so they must not be dressed the same way.
+        XCTAssertTrue(tab.contains("InlineMessage(.info, L10n.t(.contentResendVerificationSent))"))
+        XCTAssertTrue(tab.contains("InlineMessage(.warning, message)"))
+        // The restore spinner is deliberately uncarded, and still labelled.
+        XCTAssertTrue(tab.contains("ProgressView { Text(L10n.t(.accountRestoring)) }"))
+        XCTAssertFalse(tab.contains("ProgressView()\n"),
+                       "an unlabelled spinner reads as nothing")
     }
 
 }

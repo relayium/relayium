@@ -23,6 +23,22 @@ import RelayiumAppKit
 /// three writes live here rather than in the tab: the tab is a router over
 /// session states, and this is the one state that has an account whose devices,
 /// files and existence there is anything to do about.
+///
+/// **Phase C: five cards, in the order the questions are asked.** This was the
+/// longest flat column in the app — a name, an address, a plan, a purchase
+/// surface, two meters, a reset date, a device heading, a caption, N device
+/// rows each with a destructive button, a file heading, a caption, N file rows
+/// each with four actions, two notices, Refresh, Sign out and account deletion,
+/// all peers down one column at twenty-four points. Nothing said where the
+/// account's identity stopped and its devices began, and the one control that
+/// ends the account ranked exactly as high as Refresh.
+///
+/// Now: whose account this is and what it is using; which devices hold a
+/// credential; what ciphertext is stored; the two session actions; and, last
+/// and in its own card, deletion. Each is a `SectionCard`, so VoiceOver
+/// announces the group once and navigates into it rather than reading forty
+/// controls as peers — and the destructive act is separated by a boundary
+/// rather than by distance.
 struct AccountSummaryView: View {
     let user: NativeUser
     let usage: UsageResponse
@@ -37,6 +53,9 @@ struct AccountSummaryView: View {
     @EnvironmentObject private var signOut: AccountSignOutCoordinator
     @Environment(\.appleSubscription) private var appleSubscription
     @Environment(\.openURL) private var openURL
+    /// The reader's own text size, read for one decision: whether a stored
+    /// row's two handoff controls still fit side by side. See `fileRow`.
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     /// The row a confirmation is currently asking about. Held here rather than
     /// in the model: nothing has been asked of the server until the user
@@ -66,7 +85,7 @@ struct AccountSummaryView: View {
         // it: both row selections, all three confirmations and both `.task(id:)`s
         // live on this view, and splitting it would restart the load and drop a
         // dialog mid-question.
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: Metrics.section) {
             profileSection
             devicesSection
             filesSection
@@ -82,22 +101,14 @@ struct AccountSummaryView: View {
             // gone, and there is no operation left to retry — but the app must
             // not imply it cleaned up something it did not.
             if let cleanupWarning = management.keyCleanupWarning {
-                VStack(alignment: .leading, spacing: 8) {
-                    Label(cleanupWarning, systemImage: "exclamationmark.triangle")
-                        .font(.callout).foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: Metrics.tight) {
+                    InlineMessage(.warning, cleanupWarning)
                     Button(L10n.t(.commonDismiss)) { management.dismissKeyCleanupWarning() }
                         .font(.callout)
                 }
             }
 
-            Button(L10n.t(.commonRefresh)) { refresh() }
-            // Handed to the coordinator rather than performed here. Doing it
-            // here would be a second logout path racing the self-revoke one, and
-            // the "Signing out" state would die with this view.
-            Button(L10n.t(.commonSignOut), role: .destructive) {
-                signOut.signOut(scope: scope)
-            }
+            sessionActions
 
             deleteAccountSection
         }
@@ -226,37 +237,75 @@ struct AccountSummaryView: View {
 
     // MARK: - profile, plan and usage
 
+    /// Whoever this account belongs to. It is the card's title for the same
+    /// reason it is the Mac's: "whose account am I looking at" is the question
+    /// a shared device makes worth answering before any figure below it, and a
+    /// card titled "Account" would repeat the navigation bar.
+    private var profileTitle: String {
+        user.displayName.isEmpty ? user.email : user.displayName
+    }
+
     @ViewBuilder
     private var profileSection: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(user.displayName.isEmpty ? user.email : user.displayName)
-                    .font(.title3.weight(.semibold))
-                Text(user.email).foregroundStyle(.secondary)
+        SectionCard(profileTitle) {
+            // Only when it adds something: with no display name the card is
+            // already titled with the address.
+            if !user.displayName.isEmpty {
+                Text(user.email)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text(usage.plan.name).font(.headline)
-                    // Both the "should this show at all" predicate and the
-                    // wording live in UsagePresentation, where they are tested.
-                    // A raw Stripe status must never reach this capsule.
-                    if let badge = UsagePresentation.subscriptionBadge(
-                        for: usage.plan.subscriptionStatus) {
-                        Text(badge)
-                            .font(.caption)
-                            .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(.quaternary, in: Capsule())
-                    }
+            HStack(spacing: Metrics.tight) {
+                Text(usage.plan.name).font(.subheadline.weight(.semibold))
+                // Both the "should this show at all" predicate and the
+                // wording live in UsagePresentation, where they are tested.
+                // A raw Stripe status must never reach this capsule.
+                if let badge = UsagePresentation.subscriptionBadge(
+                    for: usage.plan.subscriptionStatus) {
+                    Text(badge)
+                        .font(.caption)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(.quaternary, in: Capsule())
                 }
             }
+            // One spoken phrase: the tier and the state it is in belong
+            // together, and a badge read as its own element says "Past due"
+            // with nothing to attach it to.
+            .accessibilityElement(children: .combine)
 
             if IOSAppleSubscriptions.channel.showsWebPlanHandoff {
                 Button(L10n.t(.accountManagePlan)) { openURL(AppEnvironment.plansWebURL) }
+                    .font(.callout)
             }
 
-            if IOSAppleSubscriptions.channel.offersInAppPurchase,
-               let appleSubscription {
+            meter(L10n.t(.accountTraffic), UsagePresentation.display(usage.traffic))
+            meter(L10n.t(.accountStorage), UsagePresentation.display(usage.storage))
+
+            Text(UsagePresentation.resetText(resetsAt: usage.resetsAt, now: Date()))
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            // The figures above are the last ones that arrived, not the current
+            // ones. That is a caveat on the meters, so it stays inside their
+            // card — and it is the shared inline role, which is what makes it
+            // legible as a caveat rather than as a third meter.
+            if session.isStale {
+                InlineMessage(.warning, L10n.t(.accountStaleFigures))
+            }
+        }
+
+        // **Its own card, and deliberately not inside the one above.**
+        //
+        // A purchase is a different act from reading what the plan currently
+        // allows, and it brings its own heading, its own product rows, its own
+        // notices and two legal links — enough to bury the meters it was
+        // sitting under. It draws its own `.headline` first, so the card it
+        // sits in carries no title: a second one would be the same word twice.
+        if IOSAppleSubscriptions.channel.offersInAppPurchase,
+           let appleSubscription {
+            SectionCard {
                 AppleSubscriptionCard(
                     model: appleSubscription,
                     accountID: user.id,
@@ -266,18 +315,6 @@ struct AccountSummaryView: View {
                     currentCycle: usage.plan.billingCycle,
                     entitlementProvider: user.entitlementProvider ?? "")
             }
-
-            meter(L10n.t(.accountTraffic), UsagePresentation.display(usage.traffic))
-            meter(L10n.t(.accountStorage), UsagePresentation.display(usage.storage))
-
-            Text(UsagePresentation.resetText(resetsAt: usage.resetsAt, now: Date()))
-                .font(.caption).foregroundStyle(.secondary)
-
-            if session.isStale {
-                Label(L10n.t(.accountStaleFigures), systemImage: "exclamationmark.triangle")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
         }
     }
 
@@ -285,8 +322,7 @@ struct AccountSummaryView: View {
 
     @ViewBuilder
     private var devicesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(L10n.t(.accountDevicesHeading)).font(.headline)
+        SectionCard(L10n.t(.accountDevicesHeading)) {
             // Browsers are left out on purpose — see AccountDevice.holdsRevocableToken.
             Text(L10n.t(.accountDevicesBody))
                 .font(.caption).foregroundStyle(.secondary)
@@ -299,9 +335,13 @@ struct AccountSummaryView: View {
             if management.isLoading && management.devices.isEmpty {
                 ProgressView { Text(L10n.t(.accountLoadingDevices)) }
             } else if management.devices.isEmpty {
-                Text(L10n.t(.accountNoDevices))
-                    .font(.callout).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                // The shared empty-state role, so an account with no signed-in
+                // device meets the same designed state as an empty nearby
+                // roster: a landmark and the fact, with the remedy — Refresh —
+                // already on the screen below.
+                // nonlocalized: SF Symbol name
+                EmptyStateView(symbol: "iphone",
+                               message: L10n.t(.accountNoDevices))
             } else {
                 ForEach(management.devices) { device in
                     deviceRow(device)
@@ -312,7 +352,7 @@ struct AccountSummaryView: View {
 
     @ViewBuilder
     private func deviceRow(_ device: AccountDevice) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Metrics.hairline) {
             // Name, badge and detail each on their own line. Side by side they
             // would compete for one row's width, and at the largest Dynamic Type
             // sizes the name — the only thing identifying the row — is what
@@ -334,8 +374,16 @@ struct AccountSummaryView: View {
 
             // Only the row being changed is disabled: a slow revoke on one
             // device must not freeze the rest of the list.
+            //
+            // `.large`, like every other control in this app: the default
+            // bordered height is under the 44pt floor `Metrics.hitTarget`
+            // writes down, and this is a destructive control on a row a thumb
+            // has to hit deliberately. Natural width rather than full: it
+            // belongs to this row, and a full-width destructive button on every
+            // device would read as the screen's primary action repeated.
             Button(L10n.t(.commonRevoke), role: .destructive) { deviceToRevoke = device }
                 .buttonStyle(.bordered)
+                .controlSize(.large)
                 .disabled(management.isBusy(row: device.id))
                 // The visible label is one word on every row, which is right to
                 // look at and useless to hear: two devices of the same model
@@ -346,15 +394,18 @@ struct AccountSummaryView: View {
                 failureLine(error)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, Metrics.hairline)
+        // One group per device, so VoiceOver moves device by device instead of
+        // reading a name, a badge, a detail and a Revoke button as four peers
+        // of the next row's four.
+        .accessibilityElement(children: .contain)
     }
 
     // MARK: - stored files
 
     @ViewBuilder
     private var filesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(L10n.t(.accountFilesHeading)).font(.headline)
+        SectionCard(L10n.t(.accountFilesHeading)) {
             Text(L10n.t(.accountFilesBody))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -362,9 +413,9 @@ struct AccountSummaryView: View {
             if management.isLoading && management.files.isEmpty {
                 ProgressView { Text(L10n.t(.accountLoadingFiles)) }
             } else if management.files.isEmpty {
-                Text(L10n.t(.accountNoFiles))
-                    .font(.callout).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                // nonlocalized: SF Symbol name
+                EmptyStateView(symbol: "externaldrive",
+                               message: L10n.t(.accountNoFiles))
             } else {
                 ForEach(management.files) { row in
                     fileRow(row)
@@ -375,7 +426,7 @@ struct AccountSummaryView: View {
 
     @ViewBuilder
     private func fileRow(_ row: StoredFileRow) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: Metrics.tight) {
             // The id is what the server knows this object by and the only thing
             // that identifies the row, so it is selectable and monospaced rather
             // than decorative.
@@ -392,45 +443,51 @@ struct AccountSummaryView: View {
             // holding it — reaches Open and Share in exactly one of them.
             switch AccountPresentation.link(for: row.link) {
             case .shareable(let link):
-                Button(L10n.t(.downloadOpen)) { onOpenStoredLink(link) }
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityLabel(
-                        AccountPresentation.openActionLabel(fileId: row.file.id))
-                Button {
-                    UIPasteboard.general.string = link
-                    copiedStoredFileID = row.id
-                } label: {
-                    Label(L10n.t(copiedStoredFileID == row.id
-                                 ? .commonCopied : .accountCopyLink),
-                          systemImage: copiedStoredFileID == row.id
-                              ? "checkmark" : "doc.on.doc")
+                Button { onOpenStoredLink(link) } label: {
+                    Text(L10n.t(.downloadOpen)).frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .accessibilityLabel(
+                    AccountPresentation.openActionLabel(fileId: row.file.id))
+                // **The same two controls, on the same axis rule, as the
+                // pairing handoff.** Half of a 375pt content width is about 150
+                // points, and at the accessibility content sizes "Copy link"
+                // beside its symbol is wider than that — the SE build that
+                // produced "Co / py" on the Direct tab would produce it here.
+                // Same buttons, same order, declared once each; only the axis
+                // changes, and it changes with the reader's own setting.
+                Group {
+                    if typeSize.isAccessibilitySize {
+                        VStack(spacing: Metrics.tight) {
+                            copyButton(link: link, row: row)
+                            shareButton(link: link, row: row)
+                        }
+                    } else {
+                        HStack(spacing: Metrics.tight) {
+                            copyButton(link: link, row: row)
+                            shareButton(link: link, row: row)
+                        }
+                    }
                 }
                 .buttonStyle(.bordered)
-                .accessibilityLabel(AccountPresentation.copyActionLabel(
-                    fileId: row.file.id, copied: copiedStoredFileID == row.id))
-                ShareLink(item: link) { Text(L10n.t(.commonShare)) }
-                    .buttonStyle(.bordered)
-                    .accessibilityLabel(
-                        AccountPresentation.shareActionLabel(fileId: row.file.id))
+                .controlSize(.large)
             case .unavailable(let explanation):
                 // The honest version of a disabled button: the key was only ever
                 // in the link and this device does not have it. Informational
                 // rather than a warning — nothing went wrong, and nothing here
                 // can be retried into working.
-                Label(explanation, systemImage: "info.circle")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                InlineMessage(.info, explanation)
             case .lookupFailed(let explanation):
                 // Not the same statement as "you don't have the key": this one
                 // may be one keychain unlock away, which is why it warns rather
                 // than merely informs.
-                Label(explanation, systemImage: "exclamationmark.triangle")
-                    .font(.caption).foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
+                InlineMessage(.warning, explanation)
             }
 
             Button(L10n.t(.commonDelete), role: .destructive) { fileToDelete = row.file }
                 .buttonStyle(.bordered)
+                .controlSize(.large)
                 .disabled(management.isBusy(row: row.id))
                 .accessibilityLabel(AccountPresentation.deleteActionLabel(fileId: row.file.id))
 
@@ -438,7 +495,64 @@ struct AccountSummaryView: View {
                 failureLine(error)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, Metrics.hairline)
+        // One group per stored object, for the same reason as a device row:
+        // these are repeated action sets, and only the id tells them apart.
+        .accessibilityElement(children: .contain)
+    }
+
+    /// The one pasteboard write on this screen, inside the action of a button
+    /// the user pressed, keyed to the row it belongs to. The `#k=` capability
+    /// itself stays in the model and never becomes SwiftUI state.
+    private func copyButton(link: String, row: StoredFileRow) -> some View {
+        Button {
+            UIPasteboard.general.string = link
+            copiedStoredFileID = row.id
+        } label: {
+            Label(L10n.t(copiedStoredFileID == row.id
+                         ? .commonCopied : .accountCopyLink),
+                  systemImage: copiedStoredFileID == row.id
+                      ? "checkmark" : "doc.on.doc")
+                .frame(maxWidth: .infinity)
+        }
+        .accessibilityLabel(AccountPresentation.copyActionLabel(
+            fileId: row.file.id, copied: copiedStoredFileID == row.id))
+    }
+
+    private func shareButton(link: String, row: StoredFileRow) -> some View {
+        ShareLink(item: link) {
+            Label(L10n.t(.commonShare), systemImage: "square.and.arrow.up")
+                .frame(maxWidth: .infinity)
+        }
+        .accessibilityLabel(AccountPresentation.shareActionLabel(fileId: row.file.id))
+    }
+
+    // MARK: - leaving, and reloading
+
+    /// The two things you can do to the SESSION rather than to the account.
+    ///
+    /// Untitled, because the only title it could carry would name the two
+    /// buttons inside it. It is a card so that Sign out — which ends what every
+    /// card above it is showing — stops being the eleventh loose control in a
+    /// column and gets a boundary of its own, and so that the account-deletion
+    /// card below is separated from it by more than twenty points.
+    @ViewBuilder
+    private var sessionActions: some View {
+        SectionCard {
+            Button { refresh() } label: {
+                Text(L10n.t(.commonRefresh)).frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            // Handed to the coordinator rather than performed here. Doing it
+            // here would be a second logout path racing the self-revoke one, and
+            // the "Signing out" state would die with this view.
+            Button(role: .destructive) { signOut.signOut(scope: scope) } label: {
+                Text(L10n.t(.commonSignOut)).frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+        }
     }
 
     // MARK: - deleting the account itself
@@ -454,8 +568,7 @@ struct AccountSummaryView: View {
     /// back to somebody who changes their mind in between.
     @ViewBuilder
     private var deleteAccountSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.t(.accountDeleteAccountHeading)).font(.headline)
+        SectionCard(L10n.t(.accountDeleteAccountHeading)) {
             // The address is the user's own: isolated, never translated.
             Text(L10n.t(.accountDeleteAccountBody, [L10n.token(user.email)]))
                 .font(.callout).foregroundStyle(.secondary)
@@ -465,12 +578,11 @@ struct AccountSummaryView: View {
             case .requested:
                 // Not "sent": the endpoint answers the same way whether it
                 // mailed anything or throttled the request, and nothing has
-                // been deleted either way. A symbol as well as the words, so
-                // the notice does not depend on where it sits on screen.
-                Label(L10n.t(.accountDeleteAccountRequested, [L10n.token(user.email)]),
-                      systemImage: "envelope")
-                    .font(.callout).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                // been deleted either way. `.info`, and a symbol as well as the
+                // words: a request that worked must not be dressed as the
+                // failure directly below it in this same slot.
+                InlineMessage(.info, L10n.t(.accountDeleteAccountRequested,
+                                            [L10n.token(user.email)]))
             case let .failed(message):
                 failureLine(message)
             case .idle, .requesting:
@@ -486,9 +598,16 @@ struct AccountSummaryView: View {
             } else {
                 // Retrying is this same button: a failure left the account
                 // exactly as it was, so there is one action, not two.
+                //
+                // `.large` like every other control in this app, and natural
+                // width rather than full: it is the only control in this card
+                // and the last thing on the screen, so it is findable without
+                // being the widest target on it.
                 Button(L10n.t(.accountDeleteAccount), role: .destructive) {
                     confirmingAccountDeletion = true
                 }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
             }
         }
     }
@@ -500,20 +619,20 @@ struct AccountSummaryView: View {
 
     // MARK: - shared bits
 
-    /// Every failure on this screen, said the same way. Colour is never the only
-    /// carrier: the symbol says "problem" to a reader who cannot distinguish the
-    /// red, and the text wraps rather than truncating.
+    /// Every failure on this screen, said the same way — and now the same way
+    /// as every failure in the other four tabs, rather than this file's own
+    /// red-and-triangle copy of the same six lines. Colour is never the only
+    /// carrier: `InlineMessage` draws a symbol beside every kind, and its text
+    /// wraps rather than truncating.
     private func failureLine(_ text: String) -> some View {
-        Label(text, systemImage: "exclamationmark.triangle")
-            .font(.callout).foregroundStyle(.red)
-            .fixedSize(horizontal: false, vertical: true)
+        InlineMessage(.warning, text)
     }
 
     /// Label above value rather than beside it: at the largest Dynamic Type
     /// sizes a row truncates one of the two, and the figure is the point.
     @ViewBuilder
     private func meter(_ title: String, _ display: MeterDisplay) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: Metrics.hairline) {
             Text(title).font(.subheadline)
             Text(L10n.t(.accountMeterOf, [display.usedText, display.capText]))
                 .font(.subheadline).foregroundStyle(.secondary)

@@ -36,7 +36,29 @@ final class AppShellUITests: XCTestCase {
         for _ in 0..<maxSwipes where !element.isHittable {
             app.swipeUp()
         }
+        // **Then close the last gap in thirds, both ways.**
+        //
+        // A full-screen `swipeUp` moves a control from below the fold to above
+        // it in one step, so a coarse loop can pass a control that is perfectly
+        // reachable and then keep scrolling away from it — and on the smallest
+        // iPhone the floating tab bar takes another slice off the bottom, so a
+        // control resting under it is on screen and still not hittable. Both
+        // got easier to hit on the Phase-C account screen, which is a card per
+        // question and therefore taller than the flat column it replaced.
+        // Nothing here weakens the claim: the control must still become
+        // genuinely hittable, and the assertion below is unchanged.
+        for _ in 0..<4 where !element.isHittable { drag(fraction: 0.22) }
+        for _ in 0..<6 where !element.isHittable { drag(fraction: -0.22) }
         XCTAssertTrue(element.isHittable, "\(element) never became reachable")
+    }
+
+    /// Scroll by a fraction of the screen. Positive moves the content up — the
+    /// direction a `swipeUp` goes — and negative moves it back down.
+    private func drag(fraction: CGFloat) {
+        let middle = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let target = app.coordinate(
+            withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5 - fraction))
+        middle.press(forDuration: 0.05, thenDragTo: target)
     }
 
     @discardableResult
@@ -276,7 +298,14 @@ final class AppShellUITests: XCTestCase {
         XCTAssertFalse(app.buttons["Manage plan"].exists,
                        "the App Store build offers a competing web checkout")
 
-        for _ in 0..<6 where !monthly.isHittable { app.swipeDown() }
+        // Back to the purchase controls, without assuming which way they are.
+        // The subscription surface is its own card since the Phase-C account
+        // refresh, and on the smallest iPhone it is taller than one screen, so
+        // a fixed number of swipes in one direction can overshoot to the top
+        // and leave the control below the fold. Return toward the top first,
+        // then scroll down until it is actually hittable.
+        for _ in 0..<8 where !monthly.isHittable { app.swipeDown() }
+        scrollUntilHittable(monthly)
         XCTAssertTrue(monthly.isHittable)
         monthly.tap()
         let notice = app.descendants(matching: .any)["subscription-notice"]
