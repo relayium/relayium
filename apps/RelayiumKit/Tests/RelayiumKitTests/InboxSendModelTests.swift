@@ -360,7 +360,17 @@ final class InboxSendModelTests: XCTestCase {
                        "adoption alone must never remove the user's only copy")
 
         model.send(files: selectionModel.selectedFiles, sourceDraftId: plan.id, token: "bearer")
-        await waitUntil("the durable job") { !self.store.deviceSendPlans(for: "acct-1").isEmpty }
+        // Preparing the plan is the durable-ownership boundary, but the model
+        // publishes it and invokes the selection callback immediately after the
+        // write. Waiting for the write alone races those two synchronous steps
+        // under a loaded runner and then tests an intermediate state the API
+        // never promises to expose as completion.
+        await waitUntil("the durable ownership handoff") {
+            !self.store.deviceSendPlans(for: "acct-1").isEmpty
+                && self.drafts.drafts().isEmpty
+                && selectionModel.adoptedDraft == nil
+                && upload.state == .idle
+        }
 
         let minted = try XCTUnwrap(store.deviceSendPlans(for: "acct-1").first)
         XCTAssertEqual(minted.sourceDraftId, plan.id,
@@ -495,10 +505,17 @@ final class InboxSendModelTests: XCTestCase {
 
     /// A sign-out is the same rule, and the outstanding list empties with it.
     func testASignOutStopsDescribingTheAccountsDeliveries() async throws {
-        let (model, session) = await signedIn("acct-1")
+        // Hold the coordinator on the protected-store read. This is the exact
+        // suspension at which the hosted runner exposed the race: sign-out
+        // cancels the owner, then the read returns and the old task must not use
+        // its old bearer for even one device or create request.
+        let pendingKeys = SuspendingReadKeyStore()
+        let (model, session) = await signedIn("acct-1", pendingKeys: pendingKeys)
         model.selectTarget(deviceID)
         model.send(files: try selection(), sourceDraftId: nil, token: "bearer-1")
-        await waitUntil("a durable plan") { model.items.first?.isRecoverable == true }
+        await waitUntil("the suspended protected-store read") {
+            model.items.first?.isRecoverable == true && pendingKeys.readStarted
+        }
 
         session.send(.loggedOut)
         XCTAssertEqual(model.items, [])
@@ -506,8 +523,15 @@ final class InboxSendModelTests: XCTestCase {
         XCTAssertEqual(store.deviceSendPlans(for: "acct-1").count, 1,
                        "signing out is not a reason to delete the user's staged files")
 
+        let afterSignOut = sender.calls.count
+        pendingKeys.releaseRead()
+        await waitUntil("the cancelled read returning") { pendingKeys.readReturned }
+        // Let the cancelled continuation reach the coordinator and the model's
+        // cancellation handler. No network fake has a suspension of its own, so
+        // any stale request would be recorded before this yield completes.
+        await Task.yield()
+
         // Signing back in OFFERS the plan again, from disk, with no network.
-        let before = sender.calls.count
         session.send(ready("acct-1"))
         await waitUntil("the recovered offer") { !model.items.isEmpty }
         XCTAssertEqual(model.items.count, 1)
@@ -520,8 +544,8 @@ final class InboxSendModelTests: XCTestCase {
                        "a recovered delivery must name what it holds before offering Send")
         XCTAssertNil(model.items.first?.targetName,
                      "a recovered plan records the device id, and a name is central's to change")
-        XCTAssertEqual(sender.calls.count, before,
-                       "recovery is an offer read from disk and touches no network")
+        XCTAssertEqual(sender.calls.count, afterSignOut,
+                       "a cancelled old-account task or recovery touched the network")
     }
 
     // MARK: - adversarial: relaunch, ambiguity, staleness, cancellation
@@ -825,5 +849,59 @@ final class InboxSendModelTests: XCTestCase {
         func save(id: String, keyB64url: String) async throws { throw KeychainError.status(-25308) }
         func key(for id: String) async throws -> String? { nil }
         func remove(id: String) async throws {}
+    }
+
+    /// Saves normally, then suspends the first read until the test releases it.
+    /// It deliberately ignores task cancellation while suspended: the system
+    /// keychain API may return after its caller was cancelled, so the
+    /// coordinator — not a friendly test double — owns the post-await check.
+    private final class SuspendingReadKeyStore: StoredLinkKeyStore, @unchecked Sendable {
+        private let lock = NSLock()
+        private var values: [String: String] = [:]
+        private var waiter: CheckedContinuation<Void, Never>?
+        private var released = false
+        private var _readStarted = false
+        private var _readReturned = false
+
+        var readStarted: Bool { sync { _readStarted } }
+        var readReturned: Bool { sync { _readReturned } }
+
+        func save(id: String, keyB64url: String) async throws {
+            sync { values[id] = keyB64url }
+        }
+
+        func key(for id: String) async throws -> String? {
+            let value = sync { () -> String? in
+                _readStarted = true
+                return values[id]
+            }
+            await withCheckedContinuation { continuation in
+                let resumeNow = sync { () -> Bool in
+                    if released { return true }
+                    waiter = continuation
+                    return false
+                }
+                if resumeNow { continuation.resume() }
+            }
+            sync { _readReturned = true }
+            return value
+        }
+
+        func remove(id: String) async throws { sync { values.removeValue(forKey: id) } }
+
+        func releaseRead() {
+            let continuation = sync { () -> CheckedContinuation<Void, Never>? in
+                released = true
+                defer { waiter = nil }
+                return waiter
+            }
+            continuation?.resume()
+        }
+
+        @discardableResult
+        private func sync<T>(_ body: () -> T) -> T {
+            lock.lock(); defer { lock.unlock() }
+            return body()
+        }
     }
 }

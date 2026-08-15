@@ -75,6 +75,7 @@ public final class InboxSendCoordinator: @unchecked Sendable {
     public func deliver(_ plan: PendingUploadPlan, token: String,
                         onProgress: (@Sendable (_ sent: Int, _ total: Int) -> Void)? = nil)
         async throws -> InboxSendResult {
+        try Task.checkCancellation()
         guard plan.effectivePurpose == .deviceTask, let target = plan.target else {
             throw InboxSendFailure.notADelivery
         }
@@ -90,19 +91,26 @@ public final class InboxSendCoordinator: @unchecked Sendable {
 
         var contentKey = try await contentKey(for: plan, token: token)
         defer { InboxKeyMaterial.zero(&contentKey) }
+        // A sign-out or account switch may have cancelled the owner while the
+        // protected store was answering. Never let that old credential cross
+        // the first network boundary after the suspension returns.
+        try Task.checkCancellation()
 
         var current = plan
         if current.finalizedStoredId == nil {
             // The fail-fast guard. Its only job is to not spend the user's
             // bandwidth on a target that is going to refuse.
             _ = try await eligibleTarget(target.deviceId, plan: current, token: token)
+            try Task.checkCancellation()
             current = try await upload(current, key: contentKey, token: token,
                                        onProgress: onProgress)
+            try Task.checkCancellation()
         }
 
         // Re-read AFTER the upload: this is the key the seal must use, and an
         // upload can take long enough for the one it started with to be stale.
         var sealTarget = try await eligibleTarget(target.deviceId, plan: current, token: token)
+        try Task.checkCancellation()
         var resealed = false
         var wrapped: String
         if sealTarget.keyID != current.targetKeyId
@@ -137,6 +145,7 @@ public final class InboxSendCoordinator: @unchecked Sendable {
 
         var ambiguousAttempts = 0
         while ambiguousAttempts < Self.ambiguousCreateAttempts {
+            try Task.checkCancellation()
             let request: InboxSendRequest
             do {
                 request = try InboxSendRequest(
@@ -156,6 +165,11 @@ public final class InboxSendCoordinator: @unchecked Sendable {
                 creation = try await sender.createTask(targetDeviceID: target.deviceId,
                                                        request)
             } catch {
+                // Cancellation is not a refusal and is never authority to
+                // release staged bytes or an uploaded object. The account that
+                // supplied this credential has gone; preserve the durable plan
+                // for an explicit retry after a future sign-in.
+                try Task.checkCancellation()
                 switch classify(error) {
                 case .ambiguous:
                     ambiguousAttempts += 1
@@ -225,9 +239,11 @@ public final class InboxSendCoordinator: @unchecked Sendable {
                           resealed: Bool, token: String) async throws -> InboxSendResult {
         let existing: [InboxTask]
         do {
+            try Task.checkCancellation()
             existing = try await sender.tasks(targetDeviceID: target.deviceId,
                                               limit: Self.convergenceLookupLimit)
         } catch {
+            try Task.checkCancellation()
             // Still unknown. Keep everything: a delivery that may be live must
             // never be destroyed to tidy up a failed request.
             throw InboxSendFailure.unknownOutcome
@@ -352,8 +368,10 @@ public final class InboxSendCoordinator: @unchecked Sendable {
                                 token: String) async throws -> InboxSendTarget {
         let rows: [InboxDeviceRow]
         do {
+            try Task.checkCancellation()
             rows = try await sender.devices()
         } catch {
+            try Task.checkCancellation()
             // Neither branch releases anything: not knowing which devices exist
             // is not an answer about this delivery, and a rejected credential is
             // a local problem the user fixes by signing in again.
@@ -399,6 +417,7 @@ public final class InboxSendCoordinator: @unchecked Sendable {
                 .first(where: { $0.jobId == plan.jobId }) ?? plan
             return try store.markFinalized(latest, storedId: outcome.id)
         } catch {
+            try Task.checkCancellation()
             // An interrupted upload is resumable by construction: the plan, its
             // session and its staged bytes all survive.
             throw InboxSendFailure.uploadFailed
