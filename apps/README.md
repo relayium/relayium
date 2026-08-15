@@ -1033,15 +1033,18 @@ over providers, and one shared folder is one provider and may be a thousand
 files. The copying label counts staged files, which is measured and legitimately
 climbs past the item count.
 
-**Unverified, and not claimed away.** The App Group is not registered on the
-Apple Developer portal and is carried by no provisioning profile, so a signed
-build has never run. Nothing here has been seen in a real share sheet: what
-providers actually vend for a shared *folder* is untested, and so is whether the
-activation rule offers Relayium where it is expected to. No VoiceOver, Dynamic
-Type or RTL pass has been made on the sheet itself. The Universal Link
-association is fetched and verified by the OS at install time and so proves
-nothing in a simulator. Coverage is at the model boundary —
-`SharedDraftStoreTests`, `SharedDraftPreparationTests`,
+**One real share, and nothing claimed beyond it.** The App Group is registered
+on the Apple Developer portal and carried by the distribution profiles, and a
+signed build has run: installed on a physical iPad, a real item was shared into
+Relayium through the system share sheet, and reopening the app by hand showed it
+waiting on *Send*. That is the mechanism end to end — the activation rule offers
+Relayium, the copy lands in the App Group, and the containing app finds it —
+and one mechanism is not breadth. Still unobserved: what real iPhone Photos,
+Files and third-party providers vend, and what any of them hands over for a
+shared *folder*; and no VoiceOver, Dynamic Type or RTL pass has been made on
+the sheet itself. The Universal Link association is fetched and verified by the
+OS at install time and so proves nothing in a simulator. Coverage below that is
+at the model boundary — `SharedDraftStoreTests`, `SharedDraftPreparationTests`,
 `SharedDraftAdoptionTests` — plus the source, plist, entitlement,
 version-parity and `project.pbxproj` guards in `IOSSurfaceGuardTests`.
 

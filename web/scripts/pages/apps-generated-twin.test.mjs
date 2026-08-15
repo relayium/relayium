@@ -15,7 +15,11 @@ import apps from "./content/apps.mjs";
 import { MAINTAINED_LANGS, FROZEN_LANGS } from "./shared.mjs";
 import en from "../../src/lib/i18n/en.ts";
 import zh from "../../src/lib/i18n/zh.ts";
-import { FORBIDDEN_APP_CLAIMS } from "../../src/lib/apps-claim-rules.ts";
+import {
+  FORBIDDEN_APP_CLAIMS,
+  FORBIDDEN_IOS_SHARE_CLAIMS,
+  IOS_SHARE_EXTENSION_FACTS,
+} from "../../src/lib/apps-claim-rules.ts";
 
 const APP = { en, zh };
 
@@ -113,11 +117,38 @@ describe("the maintained twin carries the same product facts as the SPA", () => 
     }
   });
 
-  it("keeps the iOS limitation on both, and promises nothing else about it", () => {
+  it("keeps the iOS while-open limitation on both", () => {
     const OPEN = { en: /while it is open/i, zh: /应用打开时/ };
     for (const lang of MAINTAINED_LANGS) {
       expect(strings(apps.langs[lang]).join("\n"), `${lang} static`).toMatch(OPEN[lang]);
       expect(strings(APP[lang].appsPage).join("\n"), `${lang} SPA`).toMatch(OPEN[lang]);
+    }
+  });
+
+  it("carries the whole Share Extension boundary on both, not half of it on one", () => {
+    // The failure this exists for is asymmetric drift: the SPA gaining the
+    // capability sentence while the prerendered page — what a crawler, an answer
+    // engine and a no-JS reader get at the same URL — keeps saying iOS only
+    // moves things while it is open. Either surface stating the feature without
+    // its limits, or the limits without the feature, is the same defect.
+    for (const lang of MAINTAINED_LANGS) {
+      const prose = strings(apps.langs[lang]).join("\n");
+      const spa = strings(APP[lang].appsPage).join("\n");
+      for (const f of IOS_SHARE_EXTENSION_FACTS) {
+        expect(prose, `${lang} static /apps does not state: ${f.fact}`).toMatch(f[lang]);
+        expect(spa, `${lang} SPA /apps does not state: ${f.fact}`).toMatch(f[lang]);
+      }
+    }
+  });
+
+  it("lets neither surface overstate what the extension does", () => {
+    for (const lang of MAINTAINED_LANGS) {
+      const prose = strings(apps.langs[lang]).join("\n");
+      const spa = strings(APP[lang].appsPage).join("\n");
+      for (const { why, re } of FORBIDDEN_IOS_SHARE_CLAIMS) {
+        expect(prose, `${lang} static /apps: ${why}`).not.toMatch(re);
+        expect(spa, `${lang} SPA /apps: ${why}`).not.toMatch(re);
+      }
     }
   });
 });

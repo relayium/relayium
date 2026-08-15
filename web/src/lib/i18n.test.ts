@@ -308,7 +308,7 @@ describe("homepage 文本定位文案", () => {
 
   it("每种语言的 FAQ 都回答了「能不能只发文本」，并给出真实上限", () => {
     // 上限是硬事实：FAQ 是纯字符串（faq.items 没有函数形参），所以这里代替类型系统，
-    // 保证改了 TEXT_MAX_BYTES 就会有测试红掉，而不是让九种译文里的旧数字继续骗人。
+    // 保证改了 TEXT_MAX_BYTES 就会有测试红掉，而不是让维护中的两种译文里的旧数字继续骗人。
     for (const { code } of LANGS) {
       const answers = messages[code].faq.items.map((q) => q.a).join("\n");
       expect(answers, `${code}.faq.items 没有提到每条消息的字节上限`).toMatch(GROUPED_MAX);
@@ -575,13 +575,12 @@ describe("/cli 页的下标配对数组与代码常量等长", () => {
 // 和搜索结果里读到"只能传文件"，而没有任何测试会因此变红。
 //
 // 所以这里把"这几个键必须提到文本"钉住。用每种语言各自的词（而不是统一匹配 Latin
-// 的 "text"）：命令名 text 在九种语言里都是原样出现的，若拿它当判据，一句纯粹讲
-// send/receive 的话也能蒙混过关。
+// 的 "text"）：命令名 text 在每种语言里都是原样出现的，若拿它当判据，一句纯粹讲
+// send/receive 的话也能蒙混过关。运行时如今只有维护中的英文与简体中文两种，冻结的
+// 七种归档语言由 scripts/pages/cli-text-positioning.test.mjs 按静态页守。
 const TEXT_WORD: Record<Lang, RegExp> = {
   en: /\btext\b/i,
   zh: /文本/,
-  // منصّة（平台）里就含有 نص 这两个连续字母，而"选择你的平台"恰恰是 appsPage.subhead
-  // 的结尾——直接写 /نص/ 的话，阿拉伯语那一格永远为真，等于没测。排掉前面带 م 的写法。
 };
 
 // 同一个偏差在 /apps 上是双份的：网页版现在也能发临时文本（“发送消息”），但整页的
@@ -634,19 +633,20 @@ const FILE_WORD: Record<Lang, RegExp> = {
 // 干脆连提都不许提，页面上"即将推出"的分组标题已经把状态说清楚了。
 const STORE_CLAIM = /app\s*store/i;
 
-// iOS 至今没有 Share Extension：apps/ios 的 Xcode 工程里只有一个
-// com.apple.product-type.application 目标，没有任何 app-extension 目标——判据是
-// 目标不存在，而不是某个 entitlement 缺失。但当时每种译文里都写着"通过分享菜单发送"。
-// 这条按各语言当时实际用的说法来匹配。
+// iOS 的 Share Extension 现在是**存在**的：apps/ios/RelayiumShare 是一个
+// com.apple.share-services 扩展目标，随 app 一起嵌进 PlugIns/RelayiumShare.appex。
+// 这条原来是负向断言（"不许提分享扩展"），当时对、现在反了——它守着的是一句已经
+// 落后于代码的文案。改成正向判据：iOS 卡片必须说出这条系统分享入口。
 const SHARE_SHEET: Record<Lang, RegExp> = {
   en: /share[\s-]?sheet|share extension/i,
-  zh: /分享菜单|共享菜单|分享扩展/,
+  zh: /系统分享面板|分享面板|分享菜单|共享菜单|分享扩展/,
 };
 
 // macOS 卡片过去写着"已签名并通过公证，可一键安装"。被公证的是**更早一个构建**的
-// DMG，而 native-releases.json 至今是 available:false——页面上既没有下载，也没有当前
-// 构建的公证结论。在没有下载的卡片上写"公证过、一键装"，读起来就是"现在就能装"。
-// 分发状态由"即将推出"分组和清单驱动的 CTA 表达，卡片只讲能力。
+// DMG，而当时的 native-releases.json 是 available:false——页面上既没有下载，也没有
+// 当前构建的公证结论。在没有下载的卡片上写"公证过、一键装"，读起来就是"现在就能装"。
+// 清单如今是 available:true（macOS 1.2.3 已公开），但这条守卫仍然成立：SPA 卡片只有
+// 一份不分支的文案，分发状态由"现已可用"分组和清单驱动的 CTA 表达，卡片只讲能力。
 //
 // 静态孪生页（scripts/pages/content/apps.mjs）由 macos-release-surface.test.mjs
 // 管：那里同样禁止 MAC_AVAILABLE=false 分支使用签名/公证措辞，同时要求
@@ -683,10 +683,14 @@ describe("原生 macOS / iOS 卡片如实描述已实现的能力", () => {
     }
   });
 
-  it("iOS 卡片不宣称分享扩展", () => {
+  it("iOS 卡片说出已经落地的系统分享入口", () => {
+    // 反过来了：这条以前禁止提分享扩展，因为 apps/ios 里没有扩展目标；现在
+    // apps/ios/RelayiumShare 就是那个目标，卡片再不提就是把已交付的能力藏起来。
+    // 完整的边界（只暂存、不上传、不自动打开、要手动发送）由 AppsPage.claims.test.ts
+    // 按渲染结果守，规则表在 apps-claim-rules.ts，只有一份。
     for (const { code } of LANGS) {
-      expect(messages[code].appsPage.cards.ios.desc, `${code} 的 iOS 卡片宣称了未实现的分享扩展`)
-        .not.toMatch(SHARE_SHEET[code]);
+      expect(messages[code].appsPage.cards.ios.desc, `${code} 的 iOS 卡片漏掉了已经落地的系统分享入口`)
+        .toMatch(SHARE_SHEET[code]);
     }
   });
 

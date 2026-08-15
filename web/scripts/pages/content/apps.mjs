@@ -42,7 +42,7 @@ const en = {
       MAC_AVAILABLE
         ? "macOS app — download the signed and notarized native menu-bar app."
         : "macOS app — the native menu-bar app is an engineering build and is not publicly available yet.",
-      "iOS app — a native iPhone & iPad app that moves files and text while it is open; not publicly available yet.",
+      "iOS app — a native iPhone & iPad app that moves files and text while it is open, and takes files, folders, photos or videos from the system share sheet to wait on Send; not publicly available yet.",
       "Android app — a native app is in development. Until it lands, the web app runs in any Android browser with nothing to install.",
       "Windows app — a native desktop app is in development. The command line already works on Windows today.",
     ],
@@ -66,7 +66,7 @@ const en = {
       },
       {
         title: "iOS app",
-        desc: "A native iPhone & iPad app (com.relayium.app): open an encrypted link with no account, send files and text to nearby devices or by six-digit code, and manage your account — while the app is open.",
+        desc: "A native iPhone & iPad app (com.relayium.app): open an encrypted link with no account, send files and text to nearby devices or by six-digit code, and manage your account — while the app is open. Files, folders, photos or videos shared to it from the system share sheet are copied onto the device and wait on Send until you open the app and send them.",
       },
       {
         title: "Android app",
@@ -85,6 +85,13 @@ const en = {
   // associated domain, and Device Inbox's chosen-folder residency. Speed,
   // background transfer, iOS background/push and store availability are all
   // absent on purpose — none of them is true.
+  //
+  // The iOS paragraph is bounded the same way, against apps/ios/RelayiumShare:
+  // the activation rule accepts files/images/movies (never text or a web page),
+  // the target's only entitlement is the App Group, and Apple gives
+  // NSExtensionContext.open to no share extension. So the staging, the absence
+  // of upload/encryption/link, and the manual reopen-and-Send step are each a
+  // fact in that directory rather than a promise made here.
   compare: {
     heading: "Web or a native app?",
     items: [
@@ -97,8 +104,8 @@ const en = {
         body: "It lives in the menu bar, so it is one click away with no window or tab to keep track of. You can send from the Share menu in Finder, Photos and other apps — files, images and video go straight to Relayium — or use Open With in Finder, or drop files and folders on the Dock icon, to start a transfer from where the files already are. A relayium.com transfer link opens in the app instead of the browser. And with Device Inbox, files sent to this Mac from your own account are written into the folder you chose on it, and are only reported saved once they are on disk.",
       },
       {
-        title: "What the iOS app does not do yet",
-        body: "The iOS app is in development and is not publicly available. It moves files and text while it is open, like the web app does.",
+        title: "What the iOS app does — and does not do yet",
+        body: "The iOS app is in development and is not publicly available. It moves files and text while it is open, like the web app does. What it adds is the system share sheet: sharing files, folders, photos or videos to Relayium copies them into storage only the app can read, and stops there — nothing is encrypted, uploaded or turned into a link, and iOS does not let a share extension open its own app. You open Relayium yourself, and they wait on Send until you choose them and press Send.",
       },
     ],
   },
@@ -123,7 +130,7 @@ const zh = {
       MAC_AVAILABLE
         ? "macOS 应用——下载已经签名并通过公证的原生菜单栏应用。"
         : "macOS 应用——原生菜单栏应用目前是工程版本，尚未开放公开下载。",
-      "iOS 应用——原生 iPhone 与 iPad 应用，在打开时互传文件与文本；尚未开放公开下载。",
+      "iOS 应用——原生 iPhone 与 iPad 应用，在打开时互传文件与文本，也能接收从系统分享面板分享过来的文件、文件夹、照片或视频，等你在「发送」里发出；尚未开放公开下载。",
       "Android 应用——原生应用正在开发中。在它发布之前，任意 Android 浏览器打开网页版即可使用，无需安装。",
       "Windows 应用——原生桌面应用正在开发中。命令行工具今天就已经支持 Windows。",
     ],
@@ -147,7 +154,7 @@ const zh = {
       },
       {
         title: "iOS 应用",
-        desc: "原生 iPhone 与 iPad 应用（com.relayium.app）：无需账号即可打开加密链接，还能与附近设备或用六位配对码互传文件和文本，并管理账号——都在应用打开时进行。",
+        desc: "原生 iPhone 与 iPad 应用（com.relayium.app）：无需账号即可打开加密链接，还能与附近设备或用六位配对码互传文件和文本，并管理账号——都在应用打开时进行。从系统分享面板分享给它的文件、文件夹、照片或视频会复制到本机，在「发送」里等着，直到你打开应用把它们发出去。",
       },
       {
         title: "Android 应用",
@@ -172,8 +179,8 @@ const zh = {
         body: "它常驻菜单栏，点一下就用，不必再去找某个窗口或某个标签页。你可以在访达、照片等应用里用「分享」菜单直接发送——文件、图片和视频都能交给 Relayium；也可以在访达里用「打开方式」，或者把文件和文件夹拖到程序坞图标上，就地开始传输。relayium.com 的传输链接会直接在应用里打开，而不是回到浏览器。用设备收件箱接收时，从你自己账户发到这台 Mac 的文件会写进你在这台机器上选定的文件夹，而且只有真正落盘之后才会报告为「已保存」。",
       },
       {
-        title: "iOS 应用目前还做不到什么",
-        body: "iOS 应用仍在开发中，尚未公开发布。和网页版一样，它在应用打开时收发文件与文本。",
+        title: "iOS 应用能做什么、还做不到什么",
+        body: "iOS 应用仍在开发中，尚未公开发布。和网页版一样，它在应用打开时收发文件与文本。它多出来的一步是系统分享面板：把文件、文件夹、照片或视频分享给 Relayium，只会把它们复制进只有这个应用能读的存储，到此为止——不加密、不上传，也不会生成链接，而 iOS 不允许分享扩展打开自己的应用。你自己打开 Relayium，它们就在「发送」里等着，直到你选中并按下发送。",
       },
     ],
   },

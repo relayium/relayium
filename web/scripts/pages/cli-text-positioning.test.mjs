@@ -11,8 +11,12 @@
 // to the SPA's meta, and the i18n guard cannot see .mjs content modules at all.
 //
 // The macOS and iOS cards carry files AND text too, since R3-D/E/F: the second
-// describe below asserts that positively, and guards the claims that are still
-// untrue there (store distribution, an iOS Share Extension).
+// describe below asserts that positively, and guards the claim that is still
+// untrue there — store distribution. The iOS Share Extension used to be on that
+// list; it has shipped in `apps/ios/RelayiumShare`, so the guard is now split by
+// language set: the two maintained locales must NAME it, and the seven archived
+// ones must not have gained it, because they were preserved rather than
+// retranslated.
 //
 // The word tables are per-locale on purpose. Matching the Latin command name
 // "text" would pass on a sentence that only ever talks about send/receive,
@@ -20,7 +24,7 @@
 import { describe, it, expect } from "vitest";
 import apps from "./content/apps.mjs";
 import { cli } from "./content/spa-pages.mjs";
-import { LANGS } from "./shared.mjs";
+import { LANGS, MAINTAINED_LANGS, FROZEN_LANGS } from "./shared.mjs";
 
 const TEXT_WORD = {
   en: /\btext\b/i,
@@ -73,7 +77,7 @@ describe("/apps web and CLI copy covers files and ephemeral text", () => {
 // iOS cards must NOT mention text, because neither client had a text session.
 // Both do now — macOS by pairing code and nearby, iOS since R3-D/E/F — so the
 // old guard was keeping a stale sentence green. What is still untrue is the
-// distribution: neither app is on any store, and iOS has no Share Extension.
+// store distribution: neither app is on any store.
 const FILE_WORD = {
   en: /\bfiles?\b/i,
   zh: /文件/,
@@ -91,9 +95,13 @@ const FILE_WORD = {
 // nothing behind it; the page's own "coming soon" grouping states the status.
 const STORE_CLAIM = /app\s*store/i;
 
+// Per-locale, and used in BOTH directions now: required of the two maintained
+// docs, forbidden of the seven archived ones. Matching only Latin spellings
+// would make every non-English cell of the archive check vacuously true, which
+// is the same reason TEXT_WORD above is per-locale.
 const SHARE_SHEET = {
   en: /share[\s-]?sheet|share extension/i,
-  zh: /分享菜单|共享菜单|分享扩展/,
+  zh: /系统分享面板|分享面板|分享菜单|共享菜单|分享扩展/,
   ja: /共有シート|共有機能拡張/,
   ko: /공유 시트|공유 확장/,
   de: /Teilen-Menü|Share Extension/i,
@@ -127,11 +135,28 @@ describe("/apps native copy matches what the native apps actually do", () => {
     }
   });
 
-  it("claims no iOS Share Extension in the bullet or the card", () => {
-    for (const lang of LANGS) {
+  it("names the shipped iOS Share Extension in the maintained bullet and card", () => {
+    // `apps/ios/RelayiumShare` is a real `com.apple.share-services` target
+    // embedded at `PlugIns/RelayiumShare.appex`. This assertion is the inverse
+    // of the one it replaces: while the target did not exist, the page naming a
+    // share sheet was the lie; now the page omitting it is.
+    for (const lang of MAINTAINED_LANGS) {
       const doc = apps.langs[lang];
-      expect(doc.how.steps[IOS_CARD], `${lang} iOS bullet claims a Share Extension`).not.toMatch(SHARE_SHEET[lang]);
-      expect(doc.why.items[IOS_CARD].desc, `${lang} iOS card claims a Share Extension`).not.toMatch(SHARE_SHEET[lang]);
+      expect(doc.how.steps[IOS_CARD], `${lang} iOS bullet hides the shipped Share Extension`).toMatch(SHARE_SHEET[lang]);
+      expect(doc.why.items[IOS_CARD].desc, `${lang} iOS card hides the shipped Share Extension`).toMatch(SHARE_SHEET[lang]);
+    }
+  });
+
+  it("leaves the archived locales the copy they were published with", () => {
+    // The seven are preserved, not retranslated: back-filling one sentence into
+    // a page whose surrounding paragraphs are frozen produces a page that is
+    // current in one place and stale everywhere else, which reads as current
+    // throughout. The archived-translation notice the template renders is the
+    // only thing these pages gain.
+    for (const lang of FROZEN_LANGS) {
+      const doc = apps.langs[lang];
+      expect(doc.how.steps[IOS_CARD], `${lang} archive was given the new iOS bullet`).not.toMatch(SHARE_SHEET[lang]);
+      expect(doc.why.items[IOS_CARD].desc, `${lang} archive was given the new iOS card`).not.toMatch(SHARE_SHEET[lang]);
     }
   });
 

@@ -523,7 +523,7 @@ const en: Messages = {
       },
       ios: {
         name: "iOS app",
-        desc: "A native iPhone & iPad app (com.relayium.app): open an encrypted link with no account, send files and text to nearby devices or by six-digit code, and manage your account — while the app is open.",
+        desc: "A native iPhone & iPad app (com.relayium.app): open an encrypted link with no account, send files and text to nearby devices or by six-digit code, and manage your account — while the app is open. Files, folders, photos or videos shared to it from the system share sheet are copied onto the device and wait on Send until you open the app and send them.",
       },
       android: {
         name: "Android app",
@@ -556,7 +556,7 @@ const en: Messages = {
         ],
       },
       iosNote:
-        "The iOS app is in development and is not publicly available. It moves files and text while it is open, like the web app does.",
+        "The iOS app is in development and is not publicly available. It moves files and text while it is open, like the web app does. What it adds is the system share sheet: sharing files, folders, photos or videos to Relayium copies them into storage only the app can read, and stops there — nothing is encrypted, uploaded or turned into a link, and iOS does not let a share extension open its own app. You open Relayium yourself, and they wait on Send until you choose them and press Send.",
     },
   },
   deviceInboxPage: {

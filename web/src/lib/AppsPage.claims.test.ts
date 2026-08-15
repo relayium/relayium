@@ -15,7 +15,11 @@ import { flushSync, mount, unmount } from "svelte";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import AppsPage from "./AppsPage.svelte";
-import { FORBIDDEN_APP_CLAIMS } from "./apps-claim-rules";
+import {
+  FORBIDDEN_APP_CLAIMS,
+  FORBIDDEN_IOS_SHARE_CLAIMS,
+  IOS_SHARE_EXTENSION_FACTS,
+} from "./apps-claim-rules";
 import { LANGS, messages, setLang, loadLang, type Lang } from "./i18n.svelte";
 import type { Platform } from "./platform";
 
@@ -174,6 +178,112 @@ describe("the macOS advantages are ones this repository actually ships", () => {
       expect(inbox, `${code} inbox point`).toBeTruthy();
       expect(inbox, `${code} does not name the destination`).toMatch(/folder you chose|选定的文件夹/);
       expect(inbox, `${code} does not say what saved means`).toMatch(/on disk|落盘/);
+    }
+  });
+});
+
+describe("the iOS Share Extension the page describes is the one apps/ios ships", () => {
+  // Same discipline as the macOS block above: the page may say this because
+  // apps/ios/RelayiumShare says it, and each assertion names the file that would
+  // put the claim back in question. The extension is presentation-free here —
+  // what is being checked is its BOUNDARY, which is a set of absences, and an
+  // absence has no runtime a browser test could observe.
+  const repoFile = (p: string) => readFileSync(resolve(process.cwd(), "..", p), "utf8");
+
+  /** Swift source with its comments removed.
+   *
+   * `ShareViewController.swift` documents the boundary by NAMING the symbols it
+   * refuses to contain — `URLSession`, `NSExtensionContext.open`, the responder
+   * walk. A raw scan therefore matches the explanation of the rule and calls it
+   * a violation. There are no block comments in this target; `//` and `///` are
+   * the whole of it. */
+  const swiftSource = (p: string) =>
+    repoFile(p).split("\n").filter((line) => !/^\s*\/\//.test(line)).join("\n");
+
+  /** A plist's declarations, without its XML comments.
+   *
+   * The same trap one level over: both plists in this target explain the keys
+   * they deliberately DO NOT carry — `keychain-access-groups`,
+   * `associated-domains`, `SupportsText` — so a scan of the raw file finds every
+   * absence present and every one of these assertions inverts. */
+  const plistBody = (p: string) => repoFile(p).replace(/<!--[\s\S]*?-->/g, "");
+
+  const IOS_SHARE = "apps/ios/RelayiumShare";
+
+  it("is a share-sheet extension that takes files, images and movies — not text or a link", () => {
+    const plist = plistBody(`${IOS_SHARE}/Info.plist`);
+    expect(plist, "the iOS target is no longer a share extension")
+      .toMatch(/com\.apple\.share-services/);
+    for (const kind of ["File", "Image", "Movie", "Attachments"]) {
+      expect(plist, `the activation rule dropped ${kind}`)
+        .toMatch(new RegExp(`NSExtensionActivationSupports${kind}WithMaxCount`));
+    }
+    // The page says "files, folders, photos or videos" and stops there because
+    // the sheet stops there. Text and web pages are deliberately unsupported.
+    for (const absent of ["SupportsText", "SupportsWebURL", "SupportsWebPage"]) {
+      expect(plist, `the rule now activates for ${absent}, which the page does not promise`)
+        .not.toMatch(new RegExp(`NSExtensionActivation${absent}`));
+    }
+  });
+
+  it("holds one entitlement, so 'nothing is uploaded' is structural", () => {
+    const ents = plistBody(`${IOS_SHARE}/RelayiumShare.entitlements`);
+    expect(ents, "the App Group is what makes the local hand-off possible")
+      .toMatch(/com\.apple\.security\.application-groups/);
+    // The three that would make the copy a lie: a credential to upload with, a
+    // domain to be launched for, and a network client to upload through.
+    expect(ents, "a keychain group would put a bearer inside the extension")
+      .not.toMatch(/keychain-access-groups/);
+    expect(ents, "an associated domain would give the extension a link to route")
+      .not.toMatch(/associated-domains/);
+    for (const file of ["ShareViewController.swift", "ShareRootView.swift"]) {
+      const swift = swiftSource(`${IOS_SHARE}/${file}`);
+      for (const symbol of ["URLSession", "URLRequest", "CloudUploader", "AccountSession"]) {
+        expect(swift, `${file} gained ${symbol}; the page still says nothing is uploaded`)
+          .not.toMatch(new RegExp(symbol));
+      }
+    }
+  });
+
+  it("never opens its containing app, which is why the page asks the reader to", () => {
+    const controller = swiftSource(`${IOS_SHARE}/ShareViewController.swift`);
+    // Apple gives `open(_:completionHandler:)` to the Today and iMessage points,
+    // not to a share extension — plus the three ways of half-doing it anyway.
+    expect(controller, "the extension now opens the app; the manual step is no longer true")
+      .not.toMatch(/\.open\(/);
+    expect(controller).not.toMatch(/UIApplication/);
+    expect(controller).not.toMatch(/UIPasteboard/);
+    // What it does instead: hand the request back with nothing returned.
+    expect(controller, "the extension no longer finishes by completing the request")
+      .toMatch(/completeRequest\(returningItems: \[\]/);
+  });
+
+  it("states the whole boundary in English and in Chinese, on the rendered page", async () => {
+    await mountPage("en");
+    for (const f of IOS_SHARE_EXTENSION_FACTS) {
+      expect(text(), `English /apps does not state: ${f.fact}`).toMatch(f.en);
+    }
+    await setLang("zh");
+    flushSync();
+    for (const f of IOS_SHARE_EXTENSION_FACTS) {
+      expect(text(), `Chinese /apps does not state: ${f.fact}`).toMatch(f.zh);
+    }
+  });
+
+  it("proves every forbidden share claim can catch its English and Chinese form", () => {
+    // Guards the guards, exactly as the five-claim rule table above is guarded:
+    // a negative that has never matched anything is not a negative.
+    for (const { why, re, probes } of FORBIDDEN_IOS_SHARE_CLAIMS) {
+      for (const probe of probes) {
+        expect(probe, `${why}: rule does not match ${probe}`).toMatch(re);
+      }
+    }
+  });
+
+  it.each(LANGS.map((l) => l.code))("%s claims no upload, no auto-open and no automatic send", async (code) => {
+    await mountPage(code);
+    for (const { why, re } of FORBIDDEN_IOS_SHARE_CLAIMS) {
+      expect(text(), `${code}: ${why} — matched ${re}`).not.toMatch(re);
     }
   });
 });
