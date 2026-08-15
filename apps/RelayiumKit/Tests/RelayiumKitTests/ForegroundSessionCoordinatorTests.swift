@@ -109,7 +109,7 @@ final class ForegroundSessionCoordinatorTests: XCTestCase {
     func testInactiveDoesNotTouchALiveFileSession() async throws {
         let dir = try tempDir()
         let file = await liveReceive(into: dir)
-        let coordinator = ForegroundSessionCoordinator(file: file, text: makeTextModel())
+        let coordinator = ForegroundSessionCoordinator(file: file, text: makeTextModel(), link: nil)
 
         coordinator.phaseChanged(to: .inactive)
         await settle()
@@ -129,7 +129,7 @@ final class ForegroundSessionCoordinatorTests: XCTestCase {
         await settle()
         guard case .open = text.state else { return XCTFail("got \(text.state)") }
 
-        let coordinator = ForegroundSessionCoordinator(file: makeFileModel(), text: text)
+        let coordinator = ForegroundSessionCoordinator(file: makeFileModel(), text: text, link: nil)
         coordinator.phaseChanged(to: .inactive)
         await settle()
 
@@ -147,7 +147,7 @@ final class ForegroundSessionCoordinatorTests: XCTestCase {
     func testBackgroundCancelsALiveFileSessionAndRemovesThePartialWrite() async throws {
         let dir = try tempDir()
         let file = await liveReceive(into: dir)
-        let coordinator = ForegroundSessionCoordinator(file: file, text: makeTextModel())
+        let coordinator = ForegroundSessionCoordinator(file: file, text: makeTextModel(), link: nil)
 
         coordinator.phaseChanged(to: .background)
         await settle()
@@ -174,7 +174,7 @@ final class ForegroundSessionCoordinatorTests: XCTestCase {
         await settle()
         XCTAssertEqual(text.history.count, 1)
 
-        let coordinator = ForegroundSessionCoordinator(file: makeFileModel(), text: text)
+        let coordinator = ForegroundSessionCoordinator(file: makeFileModel(), text: text, link: nil)
         coordinator.phaseChanged(to: .background)
         await settle()
 
@@ -188,7 +188,7 @@ final class ForegroundSessionCoordinatorTests: XCTestCase {
     /// one that matters.
     func testBackgroundWithNothingRunningSaysNothing() async {
         let coordinator = ForegroundSessionCoordinator(file: makeFileModel(),
-                                                       text: makeTextModel())
+                                                       text: makeTextModel(), link: nil)
         coordinator.phaseChanged(to: .background)
         await settle()
         XCTAssertNil(coordinator.interruption)
@@ -212,7 +212,7 @@ final class ForegroundSessionCoordinatorTests: XCTestCase {
         await settle()
         guard case .completed = file.state else { return XCTFail("got \(file.state)") }
 
-        let coordinator = ForegroundSessionCoordinator(file: file, text: makeTextModel())
+        let coordinator = ForegroundSessionCoordinator(file: file, text: makeTextModel(), link: nil)
         coordinator.phaseChanged(to: .background)
         await settle()
 
@@ -237,7 +237,7 @@ final class ForegroundSessionCoordinatorTests: XCTestCase {
         await settle()
         text.end()
 
-        let coordinator = ForegroundSessionCoordinator(file: makeFileModel(), text: text)
+        let coordinator = ForegroundSessionCoordinator(file: makeFileModel(), text: text, link: nil)
         coordinator.phaseChanged(to: .background)
         await settle()
 
@@ -252,7 +252,7 @@ final class ForegroundSessionCoordinatorTests: XCTestCase {
     func testTheNoticeSurvivesTheReturnToForegroundAndIsDismissible() async throws {
         let dir = try tempDir()
         let file = await liveReceive(into: dir)
-        let coordinator = ForegroundSessionCoordinator(file: file, text: makeTextModel())
+        let coordinator = ForegroundSessionCoordinator(file: file, text: makeTextModel(), link: nil)
 
         coordinator.phaseChanged(to: .background)
         coordinator.phaseChanged(to: .inactive)
@@ -270,7 +270,7 @@ final class ForegroundSessionCoordinatorTests: XCTestCase {
     func testStartingAnotherSessionClearsTheNotice() async throws {
         let dir = try tempDir()
         let file = await liveReceive(into: dir)
-        let coordinator = ForegroundSessionCoordinator(file: file, text: makeTextModel())
+        let coordinator = ForegroundSessionCoordinator(file: file, text: makeTextModel(), link: nil)
         coordinator.phaseChanged(to: .background)
         await settle()
         XCTAssertNotNil(coordinator.interruption)
@@ -284,7 +284,7 @@ final class ForegroundSessionCoordinatorTests: XCTestCase {
     func testTheNoticeIsLocalisedCopyAndNotALifecycleString() async throws {
         let dir = try tempDir()
         let file = await liveReceive(into: dir)
-        let coordinator = ForegroundSessionCoordinator(file: file, text: makeTextModel())
+        let coordinator = ForegroundSessionCoordinator(file: file, text: makeTextModel(), link: nil)
         coordinator.phaseChanged(to: .background)
         await settle()
         XCTAssertEqual(coordinator.interruption, L10n.t(.directInterrupted))

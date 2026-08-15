@@ -42,6 +42,37 @@ public enum AppLifecyclePhase: Equatable, Sendable {
 /// files plus the share sheet built on them, and a transcript that exists in no
 /// other copy. Cancelling a completed receive would run `writer.discard()` over
 /// files the user has already been shown.
+///
+/// ## And it is the SINGLE owner of ending an open `link/1`
+///
+/// The unified link is subject to exactly the same physics as the two legacy
+/// models — its lanes are an SCTP association on a `RTCPeerConnection` that goes
+/// with the process's foreground time, and this app declares no
+/// `UIBackgroundModes` — so it cannot survive backgrounding either. What is
+/// different is how many places could plausibly end it, and that is why the
+/// ownership is stated here rather than left to emerge:
+///
+///  - `NearbyResidencyCoordinator` stops the room on `.background`, and stopping
+///    the room does **not** end an open link (`LinkWorkspaceModel` invariant 2 —
+///    a healthy data channel survives signalling loss, and the model publishes
+///    `signalingLost` instead of tearing down). So residency must not be the
+///    thing that ends it either, and it is not: it hands `.background` on to
+///    this object, after leaving the room, exactly as it already did for the two
+///    legacy models.
+///  - No view ends it on disappearance. `NearbyLinkWorkspaceView` is inside a
+///    `TabView` that SwiftUI may tear down for a tab switch, and a link ended by
+///    that would be a link ended by the user checking their plan.
+///
+/// One owner, one transition, one sentence. A second one would end the link
+/// twice — harmless, `leave()` is idempotent — and, much worse, would report it
+/// twice or report it from a place that could not say what happened.
+///
+/// **`.inactive` still does nothing here, and for the link it matters more, not
+/// less.** The link's own file verbs open a document picker mid-session, which
+/// is precisely `.inactive`. An implementation that ended the link there would
+/// kill the connection at the moment the user is choosing what to send on it —
+/// the exact defect this type was created for, on the one surface where choosing
+/// happens *after* connecting.
 @MainActor
 public final class ForegroundSessionCoordinator: ObservableObject {
 
@@ -55,10 +86,22 @@ public final class ForegroundSessionCoordinator: ObservableObject {
 
     private let file: RealtimeSessionModel
     private let text: RealtimeTextSessionModel
+    /// The unified link, or nil where there is none to own.
+    ///
+    /// Deliberately **not defaulted**. A default would let a future composition
+    /// build a link and forget to hand it over, and the failure would be silent:
+    /// the app backgrounds, the room is left, the link keeps a connection that
+    /// died with the foreground, and the user returns to a workspace that looks
+    /// open. Writing `link: nil` is a decision; omitting the argument is an
+    /// oversight, and the two must not look the same at the call site.
+    private let link: LinkWorkspaceModel?
 
-    public init(file: RealtimeSessionModel, text: RealtimeTextSessionModel) {
+    public init(file: RealtimeSessionModel,
+                text: RealtimeTextSessionModel,
+                link: LinkWorkspaceModel?) {
         self.file = file
         self.text = text
+        self.link = link
     }
 
     public func phaseChanged(to phase: AppLifecyclePhase) {
@@ -79,7 +122,46 @@ public final class ForegroundSessionCoordinator: ObservableObject {
             text.end()
             ended = true
         }
-        if ended { interruption = L10n.t(.directInterrupted) }
+        let endedALink = endLinkIfLive()
+        if endedALink { ended = true }
+        // The link's own sentence only when THIS transition took a link away.
+        // Read from what was ended rather than from the link's current state: a
+        // link that had already finished before the app was backgrounded leaves
+        // `connection` at `.ended` too, and a legacy session interrupted on the
+        // same launch would then be described as a lost conversation.
+        if ended { interruption = L10n.t(endedALink ? .linkInterrupted : .directInterrupted) }
+    }
+
+    /// End an open or establishing link, and answer whether anything was ended.
+    ///
+    /// **`connection.isActive`, not `isOpen`.** An attempt that is `requesting`
+    /// or `establishing` is a handshake with deadlines running against a peer
+    /// that is answering, and leaving it to be resumed later would leave the peer
+    /// waiting on an establishment this process cannot finish. `watching` is
+    /// included by the same predicate and is unreachable on this platform — iOS
+    /// composes no pairing-code link — which is why this asks the model's own
+    /// question rather than enumerating states here.
+    ///
+    /// **A terminal link is deliberately left alone**, exactly as a `.completed`
+    /// receive is: `isActive` is false for `.ended`, and that state is holding a
+    /// transcript, a committed batch's saved paths and the reason it finished.
+    /// `dismiss()` is the user's to press.
+    ///
+    /// `leave()` is idempotent, so the guard is about the interruption NOTICE
+    /// rather than about safety: reporting an interruption for a link that had
+    /// already ended would be the app claiming to have taken something away that
+    /// the user had already been told about.
+    /// The sentence it produces is `.linkInterrupted` rather than the shipped
+    /// `.directInterrupted`, because the two describe different losses. The
+    /// shipped one names a *direct session* and a partly received file that was
+    /// removed. A link that ends takes the conversation with it as well, and this
+    /// app keeps no copy of that anywhere — no server-side history by design — so
+    /// "the direct session ended" would be accurate about the mechanism and
+    /// misleading about what is gone.
+    private func endLinkIfLive() -> Bool {
+        guard let link, link.connection.isActive else { return false }
+        link.leave()
+        return true
     }
 
     public func dismissInterruption() { interruption = nil }

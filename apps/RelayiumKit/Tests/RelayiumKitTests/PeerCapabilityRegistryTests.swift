@@ -125,32 +125,41 @@ final class PeerCapabilityRegistryTests: XCTestCase {
     // MARK: - the gate on this incomplete foundation
 
     /// THE regression gate for the delivered scope, stated as one executable
-    /// claim: on macOS this build implements `link/1` and announces and routes
-    /// it in EVERY room; on any other platform it does neither, anywhere.
+    /// claim: **both** apps implement `link/1`; macOS announces and routes it in
+    /// every room, and iOS in the code-less room ONLY.
     ///
-    /// Both halves matter and both used to be wrong in the other direction. The
-    /// room half was code-less-only while a pairing code had no room object
-    /// above `RealtimeConnectionFactory`; `LinkPairingRoom` gave it one, with the
-    /// socket shared by the link and by the legacy fallback, and `RelayDeadline`
-    /// bounded the credential a relayed link runs on. The platform half is the
-    /// one that must never be widened by accident: `RelayiumKit` is linked by
-    /// both apps and `LanDiscoveryModel` announces on both, so a cross-platform
-    /// `true` would have an iPhone inviting peers into a link it cannot answer.
-    func testThisBuildAdvertisesLinkOnEveryRoomOnMacOSAndNowhereElse() {
-        #if os(macOS)
+    /// Both halves matter and both have been wrong in the other direction. The
+    /// room half was code-less-only on macOS while a pairing code had no room
+    /// object above `RealtimeConnectionFactory`; `LinkPairingRoom` gave it one,
+    /// with the socket shared by the link and by the legacy fallback, and
+    /// `RelayDeadline` bounded the credential a relayed link runs on. The
+    /// platform half used to be the whole boundary — iOS composed nothing — and
+    /// is now one room narrower rather than absent: `AppEnvironment`'s iOS link
+    /// factory takes no room handle, so nothing on that platform can join a code
+    /// room as a link, and announcing there would be exactly the promise-it-
+    /// cannot-keep this gate has always existed to prevent.
+    func testThisBuildAdvertisesLinkInEveryRoomOnMacOSAndTheCodelessRoomOnIOS() {
         XCTAssertTrue(LINK_BUILD_SUPPORT,
-                      "macOS composes link/1 through LinkWorkspaceModel")
+                      "both apps compose link/1 through LinkWorkspaceModel")
+        #if os(macOS)
+        XCTAssertTrue(LINK_PAIRING_ROOM_SUPPORT,
+                      "macOS watches a pairing code through LinkWorkspaceModel")
         #else
-        XCTAssertFalse(LINK_BUILD_SUPPORT,
-                       "no other platform composes link/1, so none may announce it")
+        XCTAssertFalse(LINK_PAIRING_ROOM_SUPPORT,
+                       "iOS composes no pairing-code link, so it must announce none")
         #endif
 
-        // Every room, on this platform's answer — the parameter is where a
-        // future room kind states its own, not a scope this batch still applies.
+        // The code-less room: every platform that implements the protocol
+        // announces and routes there.
+        XCTAssertTrue(linkRoomActive(isCodelessRoom: true),
+                      "the code-less room is where both platforms link")
+        // The pairing room: this platform's own answer, and it is the ONE thing
+        // the parameter now decides.
+        XCTAssertEqual(linkRoomActive(isCodelessRoom: false), LINK_PAIRING_ROOM_SUPPORT,
+                       "a pairing room links only where a pairing link is composed")
+
         for isCodelessRoom in [true, false] {
             let active = linkRoomActive(isCodelessRoom: isCodelessRoom)
-            XCTAssertEqual(active, LINK_BUILD_SUPPORT,
-                           "the room rule is the build rule, room: \(isCodelessRoom)")
             XCTAssertEqual(advertisedLinkCapabilities(linkRoomActive: active),
                            active ? [TEXT_CAPABILITY, LINK_CAPABILITY] : [TEXT_CAPABILITY])
             XCTAssertEqual(peerCaps(from: linkCapsHello(linkRoomActive: active)),
@@ -160,7 +169,8 @@ final class PeerCapabilityRegistryTests: XCTestCase {
                 linkRoomActive: { linkRoomActive(isCodelessRoom: isCodelessRoom) })
             XCTAssertTrue(registry.record(peerId: "p1",
                                           signal: capsSignalValue([TEXT_CAPABILITY, LINK_CAPABILITY])))
-            XCTAssertEqual(registry.supports("p1", LINK_CAPABILITY), active)
+            XCTAssertEqual(registry.supports("p1", LINK_CAPABILITY), active,
+                           "announcement and routing must agree, room: \(isCodelessRoom)")
             XCTAssertTrue(registry.supports("p1", TEXT_CAPABILITY),
                           "text/1 is unaffected by the link scope")
         }
@@ -177,20 +187,25 @@ final class PeerCapabilityRegistryTests: XCTestCase {
                        "link/2 is a different wire and must never be read as this one")
     }
 
-    /// The platform gate, pinned as SOURCE as well as value.
+    /// The build gate, pinned as SOURCE: `true` on the two Apple app platforms
+    /// and `false` everywhere else.
     ///
-    /// The test above can only ever run on macOS, so on its own it proves
-    /// nothing about the iOS build. This reads the constant's own definition and
-    /// requires the conditional to be there — which is the only thing that stops
-    /// a later edit from collapsing it to one cross-platform `true` and shipping
-    /// an announcement iOS cannot honour.
-    func testTheBuildFlagIsCompiledPerPlatform() throws {
+    /// The value assertion above runs only on the platform executing it, and
+    /// `RelayiumKit` is NOT limited to the two app binaries — a Linux or tool
+    /// build of the package compiles this constant too. Collapsing the directive
+    /// to an unconditional `true` would make such a process announce `link/1`
+    /// with no link surface behind it and then fail the establishment it had
+    /// itself invited, which is exactly the promise-it-cannot-keep failure the
+    /// original macOS/iOS split existed to prevent. Widening the condition was
+    /// the delivered change; removing it is a regression, and this is the
+    /// assertion that catches it on this machine.
+    func testTheBuildFlagIsCompiledForAppleAppPlatformsOnly() throws {
         let source = try registrySource()
-        // The exact three lines, in order, with nothing between them: the
+        // The exact five lines, in order, with nothing between them: the
         // conditional IS the guarantee, so a partial match would let an edit
         // leave the directive standing while both branches said true.
         let expected = """
-        #if os(macOS)
+        #if os(macOS) || os(iOS)
         public let LINK_BUILD_SUPPORT = true
         #else
         public let LINK_BUILD_SUPPORT = false
@@ -198,11 +213,74 @@ final class PeerCapabilityRegistryTests: XCTestCase {
         """.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
         let lines = source.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
         guard let start = lines.firstIndex(of: expected[0]) else {
-            return XCTFail("LINK_BUILD_SUPPORT must be compiled per platform")
+            return XCTFail("LINK_BUILD_SUPPORT must be compiled for macOS and iOS only")
         }
         XCTAssertEqual(Array(lines[start..<min(start + expected.count, lines.count)]),
                        expected,
-                       "LINK_BUILD_SUPPORT must be true on macOS and false everywhere else")
+                       "link/1 is composed by the macOS and iOS apps, and the source must say so")
+        // And exactly one of each branch in the whole file, so a second,
+        // unconditional definition cannot be added below while the block above
+        // still matches.
+        XCTAssertEqual(lines.filter { $0 == "public let LINK_BUILD_SUPPORT = true" }.count, 1)
+        XCTAssertEqual(lines.filter { $0 == "public let LINK_BUILD_SUPPORT = false" }.count, 1)
+    }
+
+    /// The pairing-room gate, pinned as SOURCE as well as value.
+    ///
+    /// The value assertion above can only ever run on the platform executing it,
+    /// so on its own it proves nothing about the other build. `swift test` runs
+    /// on macOS here, which means the iOS half of this boundary has exactly one
+    /// piece of executable evidence on this machine: this test, reading the
+    /// constant's own definition and requiring the conditional to be there.
+    ///
+    /// It is the same shape the test it replaces had for `LINK_BUILD_SUPPORT`,
+    /// moved to the constant that now carries the platform split. Collapsing
+    /// this one to a cross-platform `true` would ship an iPhone announcing
+    /// `link/1` in every pairing room while having nothing that could join one.
+    func testThePairingRoomFlagIsCompiledPerPlatform() throws {
+        let source = try registrySource()
+        // The exact five lines, in order, with nothing between them: the
+        // conditional IS the guarantee, so a partial match would let an edit
+        // leave the directive standing while both branches said true.
+        let expected = """
+        #if os(macOS)
+        public let LINK_PAIRING_ROOM_SUPPORT = true
+        #else
+        public let LINK_PAIRING_ROOM_SUPPORT = false
+        #endif
+        """.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+        let lines = source.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+        guard let start = lines.firstIndex(of: expected[0]) else {
+            return XCTFail("LINK_PAIRING_ROOM_SUPPORT must be compiled per platform")
+        }
+        XCTAssertEqual(Array(lines[start..<min(start + expected.count, lines.count)]),
+                       expected,
+                       "a pairing-code link is macOS-only, and the source must say so")
+    }
+
+    /// **The room rule reads BOTH constants, and iOS's pairing answer is false
+    /// for a reason a reader can see.**
+    ///
+    /// The value test above cannot fail on this machine for the iOS case — it
+    /// runs on macOS, where both constants are true — so the composition is
+    /// pinned at the source too. Without this, `linkRoomActive` could be edited
+    /// back to `return LINK_BUILD_SUPPORT` and every executable assertion in this
+    /// file would still pass, while the iOS build silently announced `link/1` in
+    /// pairing rooms it cannot join. That is precisely the failure
+    /// `WORKFLOW-LEARNINGS` records for 2026-08-10: green tests protecting a
+    /// different property than their names claim.
+    func testTheRoomRuleIsComposedFromBothFlags() throws {
+        let source = try registrySource()
+        let body = """
+        guard LINK_BUILD_SUPPORT else { return false }
+        return isCodelessRoom || LINK_PAIRING_ROOM_SUPPORT
+        """.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+        let lines = source.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+        guard let start = lines.firstIndex(of: body[0]) else {
+            return XCTFail("linkRoomActive must gate on LINK_BUILD_SUPPORT first")
+        }
+        XCTAssertEqual(Array(lines[start..<min(start + body.count, lines.count)]), body,
+                       "the room rule must be the two flags and the room kind, and nothing else")
     }
 
     /// The constant's own file, read raw: this assertion is ABOUT the

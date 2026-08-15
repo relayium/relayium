@@ -96,11 +96,12 @@ public final class TransferPresence: ObservableObject {
             }
     }
 
-    // The unified link is macOS-only — see `LinkWorkspaceModel.swift` — so the
-    // overload that knows about it is too. iOS keeps the two-model observation
-    // above, unchanged, and cannot accidentally acquire a third liveness source
-    // for a product it does not build.
-    #if os(macOS)
+    // The link-aware overload used to be `#if os(macOS)`, because iOS composed
+    // no link and a third liveness source for a product it did not build would
+    // have been a claim it could not honour. iOS composes one now, so the
+    // overload is shared — and it MUST be, for the reason the body records: a
+    // link uses neither legacy model, so an iOS link observed by the two-model
+    // overload would have its surface released the instant it started.
 
     /// The same observation with the unified link included.
     ///
@@ -127,8 +128,6 @@ public final class TransferPresence: ObservableObject {
             }
             .eraseToAnyPublisher())
     }
-
-    #endif
 
     /// Take, or keep, the right to present the session.
     ///

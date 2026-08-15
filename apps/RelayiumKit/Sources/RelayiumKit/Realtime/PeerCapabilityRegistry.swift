@@ -8,24 +8,56 @@ import Foundation
 /// to set. It is not a switch. There is no setter, no launch argument and no
 /// stored setting, so a deep link, a relay or a user cannot reach it.
 ///
-/// **It is per PLATFORM, and that is not a nicety.** `RelayiumKit` is linked by
-/// the macOS app AND the iOS app, and `LanDiscoveryModel` — which owns the
-/// roster-level announcement — ships on both. A single cross-platform `true`
-/// would therefore make an iOS build announce `link/1` in every same-network
-/// room while having nothing that can answer one: a macOS or Web peer would
-/// offer it a two-lane link, and the iPhone would fail the establishment it had
-/// itself invited. An announcement is a promise about what this process can do,
-/// so it is compiled per process.
+/// **It answers what the PROCESS can compose, and both APPLE apps now can.**
 ///
-/// macOS composes the protocol in `LinkWorkspaceModel`, which is itself
-/// `#if os(macOS)`. iOS composes nothing, announces nothing and routes nothing;
-/// its same-network and pairing-code paths are exactly the ones it shipped with.
-/// Turning iOS on is its own batch with its own surface, and it means editing
-/// this constant.
-#if os(macOS)
+/// It used to be `true` on macOS and `false` on iOS, and the reason was exact:
+/// `RelayiumKit` is linked by both apps and `LanDiscoveryModel` — which owns the
+/// roster-level announcement — ships on both, so a cross-platform `true` while
+/// iOS composed nothing would have made an iPhone announce `link/1` in every
+/// same-network room and then fail the establishment it had itself invited. An
+/// announcement is a promise about what this process can answer.
+///
+/// iOS now composes `LinkWorkspaceModel` and renders a connected unified
+/// workspace, so the promise is one it can keep, and the constant is true on
+/// macOS AND iOS. It is still compiled per platform, and the `#else` is not a
+/// formality: this module is not limited to the two app binaries, and any other
+/// build of it — a Linux or tool build, a future non-Apple target — composes no
+/// link surface at all. An unconditional `true` would make such a process
+/// announce `link/1` and then fail the establishment it invited, which is the
+/// exact failure the original split existed to prevent, so the directive stays
+/// and only its condition widened.
+///
+/// What did NOT become cross-platform is the ROOM rule below: iOS answers
+/// `link/1` in the code-less room only, because it composes no pairing-code link
+/// surface at all. That distinction lives in `linkRoomActive`, in one function,
+/// rather than being spread back into this constant.
+#if os(macOS) || os(iOS)
 public let LINK_BUILD_SUPPORT = true
 #else
 public let LINK_BUILD_SUPPORT = false
+#endif
+
+/// Whether this build composes a `link/1` in a PAIRING-CODE room.
+///
+/// macOS does: `LinkWorkspaceModel.watchPairingCode` opens one socket per code,
+/// shared by the link attempt and by the legacy fallback built on it, and
+/// `RelayDeadline` bounds the relayed credential it is issued.
+///
+/// iOS does not, and this is the constant that says so rather than a comment.
+/// The iOS app is handed a `LinkWorkspaceModel` with **no** `connectPairingSocket`
+/// (`AppEnvironment.makeLinkWorkspaceModel`'s iOS overload takes no room handle
+/// and passes none), so there is nothing on that platform that could join a code
+/// room as a link. Announcing `link/1` there would be the same broken promise
+/// the platform split above existed to prevent — one room narrower.
+///
+/// Its own constant, and not an inline `#if` inside `linkRoomActive`, for the
+/// reason `LINK_BUILD_SUPPORT` is one: it is a property of the source, it is
+/// asserted directly by `PeerCapabilityRegistryTests`, and turning it on means
+/// editing it alongside the surface that would make it true.
+#if os(macOS)
+public let LINK_PAIRING_ROOM_SUPPORT = true
+#else
+public let LINK_PAIRING_ROOM_SUPPORT = false
 #endif
 
 /// Whether the room this client is currently in may use `link/1`.
@@ -56,11 +88,18 @@ public let LINK_BUILD_SUPPORT = false
 /// in ONE function is what stops the announcement and the routing rule from
 /// consulting different halves.
 ///
+/// **And on iOS the parameter is now load-bearing.** That build composes a link
+/// for the code-less room and nothing for a pairing code — see
+/// `LINK_PAIRING_ROOM_SUPPORT` — so a pairing room there answers false. Because
+/// this one function feeds the roster hello, the SDP confirmation and the
+/// routing predicate alike, an iOS pairing room cannot announce a capability its
+/// routing would then refuse, and cannot route one it never announced.
+///
 /// See DECISION-LOG "Promote the unified Web workspace to pairing rooms with a
 /// bounded relay lifecycle" (2026-08-10) for the Web's equivalent step.
 public func linkRoomActive(isCodelessRoom: Bool) -> Bool {
-    _ = isCodelessRoom
-    return LINK_BUILD_SUPPORT
+    guard LINK_BUILD_SUPPORT else { return false }
+    return isCodelessRoom || LINK_PAIRING_ROOM_SUPPORT
 }
 
 /// What this build announces, at the roster level and — through the same

@@ -81,6 +81,11 @@ struct RootView: View {
     @ObservedObject var discovery: LanDiscoveryModel
     @ObservedObject var nearbyReceive: NearbyReceiveModel
     @ObservedObject var residency: NearbyResidencyCoordinator
+    /// The unified `link/1` and its own post-connect file selection. Both go to
+    /// the Nearby tab alone: `link/1` is code-less-room only on this platform,
+    /// so the Direct tab has nothing to do with either.
+    @ObservedObject var link: LinkWorkspaceModel
+    @ObservedObject var linkSelection: DirectSendSelection
     @ObservedObject var navigation: AppNavigationModel
     @ObservedObject var presence: TransferPresence
     // Routing only. This file renders neither: it observes the one place a
@@ -119,6 +124,7 @@ struct RootView: View {
                        foreground: foreground, presence: presence,
                        discovery: discovery, receive: nearbyReceive,
                        residency: residency,
+                       link: link, linkSelection: linkSelection,
                        onShowSession: { navigation.select($0) })
                 .tabItem { Label(L10n.t(.navNearby), systemImage: "dot.radiowaves.left.and.right") }
                 .tag(AppDestination.nearby)

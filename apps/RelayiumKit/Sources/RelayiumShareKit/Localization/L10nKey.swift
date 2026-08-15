@@ -439,12 +439,21 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case linkRequesting = "link.requesting"
     case linkOpenWith = "link.openWith"
     /// The room socket is gone but the link is not. Truthful about both halves.
+    ///
+    /// Two keys for one fact, because the shipped English names the machine —
+    /// "This Mac left the discovery room" — and that sentence is simply false on
+    /// an iPhone. Same split, same reason, as `nearby.savedToDownloads` versus
+    /// `nearby.savedToAppFolder`. `LinkEndingCopy.signalingLost` picks.
     case linkSignalingLost = "link.signalingLost"
+    case linkSignalingLostIOS = "link.signalingLostIOS"
 
     /// Terminal reasons. One per observed transition, never a guess.
     case linkEndedRefused = "link.endedRefused"
     case linkEndedTimedOut = "link.endedTimedOut"
+    /// This device is already busy with another session — and it names the
+    /// device, so it splits per platform for the reason above.
     case linkEndedUnavailable = "link.endedUnavailable"
+    case linkEndedUnavailableIOS = "link.endedUnavailableIOS"
     case linkEndedFailed = "link.endedFailed"
     case linkEndedClosed = "link.endedClosed"
     case linkEndedVerificationRejected = "link.endedVerificationRejected"
@@ -470,6 +479,45 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case linkDeclineFiles = "link.declineFiles"
     /// The whole conversation is local to this window and goes when it does.
     case linkHistoryIsLocal = "link.historyIsLocal"
+
+    // MARK: - the iOS unified workspace
+    //
+    // The keys the iOS surface needs and macOS does not. Everything the two
+    // screens genuinely share — the composer, the verify strip, the nine
+    // endings, the six batch states — is reused from above rather than
+    // duplicated with an `IOS` suffix.
+
+    /// What backgrounding took away, when what it took was a link.
+    ///
+    /// Separate from `direct.interrupted`, which names a *direct session* and a
+    /// partly received file. A link that ends takes the conversation too, and
+    /// this app keeps no copy of that anywhere, so the shipped sentence would be
+    /// right about the mechanism and wrong about the loss.
+    case linkInterrupted = "link.interrupted"
+    /// The one verb on a chosen device that announced exact `link/1`.
+    case linkConnectToDevice = "link.connectToDevice"
+    /// What that one verb will produce, said before it is pressed.
+    case linkConnectToDeviceHint = "link.connectToDeviceHint"
+    /// The staged batch travels with the connection rather than after it.
+    case linkConnectCarriesStagedFiles = "link.connectCarriesStagedFiles"
+    /// The heading over the conversation on a screen that also lists transfers.
+    case linkConversationHeading = "link.conversationHeading"
+    /// Nothing has been said yet. An empty transcript with no explanation reads
+    /// as a conversation that failed to load.
+    case linkConversationEmpty = "link.conversationEmpty"
+    /// Where an inbound link batch lands on this platform. iOS has no folder
+    /// picker for a download, so the destination is fixed and named.
+    case linkSavedToAppFolder = "link.savedToAppFolder"
+    /// The iOS file verb. One picker, both kinds, because iOS's document browser
+    /// already offers folders inside the same sheet — macOS's two verbs exist
+    /// because `NSOpenPanel` has to be told which it is opening.
+    case linkSendFilesOrFolders = "link.sendFilesOrFolders"
+    /// Leaving is what ends the connection, and it says what goes with it.
+    case linkLeaveConnection = "link.leaveConnection"
+    /// VoiceOver's name for the transfer list, which is a container of rows.
+    case linkA11yTransfers = "link.a11yTransfers"
+    /// VoiceOver's name for the conversation.
+    case linkA11yConversation = "link.a11yConversation"
 
     // MARK: - Capability gates
     //

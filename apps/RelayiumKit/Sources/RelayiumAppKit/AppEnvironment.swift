@@ -483,11 +483,13 @@ public enum AppEnvironment {
     }
     #endif
 
-    // MARK: - the unified link (macOS only)
+    // MARK: - the unified link
     //
-    // Compiled out on iOS for the reason `LinkWorkspaceModel.swift` records: an
-    // announcement is a promise about what this process can answer, and iOS
-    // composes nothing that can.
+    // Both platforms compose one now. What differs is the ROOM: macOS's owner can
+    // watch a pairing code, and iOS's cannot — see the iOS overload at the end of
+    // this section, which takes no room handle and can therefore pass no
+    // `connectPairingSocket`. That is the structural half of the boundary
+    // `LINK_PAIRING_ROOM_SUPPORT` states at the wire.
     #if os(macOS)
 
     /// The transfer surfaces' `link/1` owner, wired to the SAME room socket and the
@@ -543,6 +545,57 @@ public enum AppEnvironment {
     public static func defaultLinkReceiveDirectory() -> URL {
         FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
             ?? FileManager.default.temporaryDirectory
+    }
+
+    #else
+
+    /// The iOS Nearby tab's `link/1` owner: the code-less room, and no other.
+    ///
+    /// ## The two things this signature does, rather than documents
+    ///
+    /// **1. There is no `pairingRoom` parameter, so iOS cannot watch a code.**
+    /// `LinkWorkspaceModel.watchPairingCode` needs a `connectPairingSocket` to
+    /// have anything to open, and this overload passes none — so the call has
+    /// no socket, `pairingRoomHandle` defaults to a private one nothing else
+    /// reads, and the iOS app never has to name `LinkRoomHandle` at all.
+    /// `IOSSurfaceGuardTests` still refuses that symbol, and this is what lets
+    /// it: the boundary is a signature the app cannot route around rather than a
+    /// rule somebody has to remember. `LINK_PAIRING_ROOM_SUPPORT` is the other
+    /// half — an iOS pairing room announces no `link/1` in the first place, so
+    /// neither a stray call nor a forged announcement can reach a link there.
+    ///
+    /// **2. `receiveDirectory` is REQUIRED, and there is no iOS default.**
+    /// macOS defaults to Downloads, which is where its legacy nearby receive
+    /// already writes. iOS has no Downloads, and — much more to the point — its
+    /// receive destination is not a constant at all: `NearbyResidencyCoordinator`
+    /// resolves `Documents/Received`, installs it on `RealtimeSessionModel`, and
+    /// refuses to join the room when it cannot, which is the ONE fact that makes
+    /// "this device is reachable" and "this device can write" the same answer. A
+    /// defaulted parameter here would let the link re-resolve that directory
+    /// independently — two answers to one question, free to disagree the moment
+    /// something in the user's own Files app occupies the name. So the caller has
+    /// to hand over the residency-owned one, and `IOSSurfaceGuardTests` pins that
+    /// the app reads the model's `saveDirectory` rather than calling
+    /// `ReceiveDestination` a second time.
+    @MainActor
+    public static func makeLinkWorkspaceModel(baseURL: URL = transferBaseURL,
+                                              verification: VerificationPreference,
+                                              nearby: LanDiscoveryModel,
+                                              receiveDirectory: @escaping () -> URL)
+        -> LinkWorkspaceModel {
+        let model = LinkWorkspaceModel(
+            capabilities: nearby.capabilities,
+            receiveDirectory: receiveDirectory,
+            // Read per link rather than captured, exactly as macOS does:
+            // flipping the preference applies to the next connection, not the
+            // next launch.
+            requiresVerification: { verification.requiresSASConfirmation },
+            iceClient: HTTPICEClient(baseURL: baseURL))
+        nearby.addRoomObserver(model)
+        model.resolvePeerLabel { [weak nearby] peerId in
+            nearby?.label(forPeerID: peerId) ?? peerId
+        }
+        return model
     }
 
     #endif

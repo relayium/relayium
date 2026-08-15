@@ -164,7 +164,7 @@ final class NearbyResidencyCoordinatorTests: XCTestCase {
         let discovery = makeDiscovery()
         let file = makeFileModel()
         let text = makeTextModel()
-        let foreground = ForegroundSessionCoordinator(file: file, text: text)
+        let foreground = ForegroundSessionCoordinator(file: file, text: text, link: nil)
         let coordinator = NearbyResidencyCoordinator(discovery: discovery,
                                                      fileModel: file,
                                                      foreground: foreground,
@@ -195,7 +195,7 @@ final class NearbyResidencyCoordinatorTests: XCTestCase {
             channel.fireOpen()
             return client
         })
-        let foreground = ForegroundSessionCoordinator(file: file, text: makeTextModel())
+        let foreground = ForegroundSessionCoordinator(file: file, text: makeTextModel(), link: nil)
         let coordinator = NearbyResidencyCoordinator(discovery: discovery,
                                                      fileModel: file,
                                                      foreground: foreground,

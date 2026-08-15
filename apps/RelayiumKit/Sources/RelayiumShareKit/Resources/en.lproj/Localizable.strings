@@ -702,6 +702,19 @@
 "link.acceptFiles" = "Accept files";
 "link.declineFiles" = "Decline";
 "link.historyIsLocal" = "This conversation is only on these two devices and is discarded when the connection ends.";
+"link.signalingLostIOS" = "This iPhone left the discovery room, but this connection is still working. If it drops, it cannot be restored — start again from the device list.";
+"link.endedUnavailableIOS" = "This iPhone is already busy with another session.";
+"link.interrupted" = "Relayium left the screen, so the connection ended. It runs only while the app is open on both devices. The conversation is gone — it was never stored anywhere — and anything partly received was removed.";
+"link.connectToDevice" = "Connect";
+"link.connectToDeviceHint" = "Opens one encrypted connection. Messages and as many files or folders as you like, without connecting again.";
+"link.connectCarriesStagedFiles" = "The files you chose will be sent on this connection once you have compared the code.";
+"link.conversationHeading" = "Conversation";
+"link.conversationEmpty" = "Nothing said yet. Write a message below.";
+"link.savedToAppFolder" = "Files you accept are saved to Relayium's folder in the Files app.";
+"link.sendFilesOrFolders" = "Send files or folders";
+"link.leaveConnection" = "End connection";
+"link.a11yTransfers" = "Files on this connection";
+"link.a11yConversation" = "Conversation";
 
 /* MARK: 1.1.2 — numbered help steps */
 "format.helpStep" = "%1$@. %2$@";

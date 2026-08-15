@@ -688,6 +688,19 @@
 "link.acceptFiles" = "接受文件";
 "link.declineFiles" = "拒绝";
 "link.historyIsLocal" = "这段对话只存在于这两台设备上，连接结束后即丢弃。";
+"link.signalingLostIOS" = "这台 iPhone 已离开发现房间，但当前连接仍然可用。一旦断开将无法恢复，需要回到设备列表重新连接。";
+"link.endedUnavailableIOS" = "这台 iPhone 正在进行另一个会话。";
+"link.interrupted" = "Relayium 离开了屏幕，连接已结束。它只能在两台设备都打开应用时运行。对话已丢失（从未被保存到任何地方），未接收完的内容也已删除。";
+"link.connectToDevice" = "连接";
+"link.connectToDeviceHint" = "建立一条加密连接。可以发送消息，也可以发送任意多个文件或文件夹，无需重新连接。";
+"link.connectCarriesStagedFiles" = "你选择的文件会在核对验证码之后通过这条连接发送。";
+"link.conversationHeading" = "对话";
+"link.conversationEmpty" = "还没有消息。在下方输入即可。";
+"link.savedToAppFolder" = "你接受的文件会保存到「文件」App 中 Relayium 的文件夹。";
+"link.sendFilesOrFolders" = "发送文件或文件夹";
+"link.leaveConnection" = "结束连接";
+"link.a11yTransfers" = "此连接上的文件";
+"link.a11yConversation" = "对话";
 
 /* MARK: 1.1.2 — numbered help steps */
 "format.helpStep" = "%1$@. %2$@";

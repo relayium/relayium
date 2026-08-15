@@ -3,20 +3,24 @@ import Foundation
 import RelayiumKit
 import WebRTC
 
-// Everything in this file is macOS-only, and that is the same decision
-// `LINK_BUILD_SUPPORT` records one module down rather than a second one.
+// This file used to be entirely `#if os(macOS)`, and the reason was exact: a
+// composition iOS merely happened not to call would still be one `import` away
+// from being called, and the failure would not be a compile error but an iPhone
+// announcing `link/1`, inviting a peer into a two-lane link, and being unable to
+// answer the offer it had asked for.
 //
-// `RelayiumAppKit` is linked by BOTH apps. A composition that merely happened
-// not to be called on iOS would still be one `import` away from being called,
-// and the failure it would produce is not a compile error — it is an iPhone
-// that announces `link/1`, invites a peer into a two-lane link, and cannot
-// answer the offer it asked for. Compiling it out is what makes "only macOS
-// composes production link/1" a property of the binary instead of a convention.
+// iOS now has the other half — a surface (`NearbyLinkWorkspaceView`), a receive
+// destination (the residency-owned `Received` folder, never re-resolved here)
+// and its own acceptance evidence — so the directive is gone and the constant
+// `LINK_BUILD_SUPPORT` is true on both platforms.
 //
-// Turning iOS on means giving it a surface, a receive destination and its own
-// acceptance evidence, and it means editing both this directive and the
-// constant. It is not this batch.
-#if os(macOS)
+// **What did not become cross-platform is the pairing-code room.** This object
+// can watch a code, and iOS must never do it: the iOS factory takes no room
+// handle and passes no `connectPairingSocket`, so `watchPairingCode` there has
+// nothing to open, and `LINK_PAIRING_ROOM_SUPPORT` makes an iOS pairing room
+// announce no `link/1` in the first place. Two independent halves, for the same
+// reason the platform split had two: neither a forged announcement nor a stray
+// call can produce a promise that build cannot keep.
 
 /// Where the Workspace's ONE `link/1` attempt is, as a screen states it.
 ///
@@ -1746,5 +1750,3 @@ final class LinkSocketBox: @unchecked Sendable {
 
     var selfId: String { client?.selfId ?? "" }
 }
-
-#endif

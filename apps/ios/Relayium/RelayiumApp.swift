@@ -131,7 +131,41 @@ struct RelayiumApp: App {
     @StateObject private var directSelection: DirectSendSelection
     /// Files or text. App-scoped so the answer survives the tab being rebuilt
     /// mid-session, which is exactly when it matters.
+    ///
+    /// It is now consulted for LEGACY peers only. A peer that announced exact
+    /// `link/1` has one connection carrying both, so the Nearby tab hides the
+    /// picker for it entirely — `NearbyConnectPresentation` owns that decision,
+    /// and this object is left holding the answer to a question that is still
+    /// asked on the Direct tab and for every legacy device.
     @StateObject private var directModes: DirectModeSelection
+    /// The unified `link/1`, for same-network peers that announced it.
+    ///
+    /// App-scoped for the sharpest version of the reason the two legacy models
+    /// are, and then one more: a link outlives the tab in all the same ways, and
+    /// it is ALSO the object an unsolicited inbound link is admitted into from
+    /// the socket's delivery queue. A view-scoped owner would be absent exactly
+    /// when a peer dials this device while the user is on Account.
+    ///
+    /// The pairing-code half is deliberately absent. `AppEnvironment`'s iOS
+    /// overload takes no room handle, so this model has no `connectPairingSocket`
+    /// and nothing here can watch a code — the structural half of the boundary
+    /// `LINK_PAIRING_ROOM_SUPPORT` states at the wire.
+    @StateObject private var link: LinkWorkspaceModel
+    /// The link's own post-connect file picker, and a SECOND selection owner on
+    /// purpose.
+    ///
+    /// `directSelection` holds what the user staged before connecting, and that
+    /// batch belongs to them until it is sent or cleared. A send made INSIDE the
+    /// workspace is a different act — already committed, already addressed to a
+    /// peer on screen — so writing it into the shared store would silently
+    /// replace a selection they may still want for a different device. Same
+    /// reason the macOS pane uses a private `SelectionStore` for its own sends.
+    ///
+    /// App-scoped rather than view-scoped for the reason `DirectSendSelection`
+    /// records about itself: `fileImporter` hands back security-scoped URLs whose
+    /// start/stop must balance exactly once, and a `TabView` decides when a view
+    /// dies.
+    @StateObject private var linkSelection: DirectSendSelection
     /// Foreground-only, enforced. This app claims no background mode, so a
     /// direct session cannot survive being backgrounded; this ends it and says
     /// so, instead of leaving a progress bar that will never move again.
@@ -319,11 +353,64 @@ struct RelayiumApp: App {
         let modes = DirectModeSelection()
         _directSelection = StateObject(wrappedValue: selecting)
         _directModes = StateObject(wrappedValue: modes)
+        _linkSelection = StateObject(wrappedValue: DirectSendSelection())
+
+        // **The unified link, and the one thing about its construction that is a
+        // correctness decision rather than an ordering one.**
+        //
+        // `receiveDirectory` reads `files.saveDirectory` at call time. That
+        // property is not a convenience copy of `ReceiveDestination.directory()`
+        // — it is the value `NearbyResidencyCoordinator.installDestination`
+        // resolved and installed, and residency refuses to join the room at all
+        // when it cannot. So this closure is not "resolve the receive folder"; it
+        // is "read the folder this device was made reachable on the strength of".
+        //
+        // Calling `ReceiveDestination.directory()` here instead would compile,
+        // return the same URL almost always, and be wrong in exactly the case
+        // that matters: something in the user's own Files app occupying the name
+        // `Received`. Residency reports that, stays out of the room and offers a
+        // retry; an independently re-resolving link would either throw where it
+        // cannot report, or — worse — succeed against a directory residency had
+        // already decided this device could not use, and write a peer's files
+        // into a destination the receiving surface is telling the user is broken.
+        // One resolver, one owner, read rather than repeated.
+        let unified = AppEnvironment.makeLinkWorkspaceModel(
+            verification: verifying, nearby: nearby,
+            receiveDirectory: { files.saveDirectory })
+        _link = StateObject(wrappedValue: unified)
+
         let presenting = TransferPresence()
-        presenting.observeSessions(fileModel: files, textModel: texts)
+        // The link is the THIRD liveness source, and it is not optional: a link
+        // uses NEITHER legacy model, so both of them read `.idle` for its entire
+        // life. Observed by the two-model overload, an iOS link would have its
+        // surface claim released the instant it started, and the tab would go
+        // back to the roster with a live connection running behind it.
+        presenting.observeSessions(fileModel: files, textModel: texts, link: unified)
         let routing = AppNavigationModel(selection: .storedReceive)
         _presence = StateObject(wrappedValue: presenting)
         _navigation = StateObject(wrappedValue: routing)
+
+        // The authoritative gate for an UNSOLICITED link, on the main actor, and
+        // through the SAME `TransferPresence` the legacy admission below uses —
+        // which is what makes "a link session and a legacy session cannot
+        // coexist" structural rather than intended. No `DirectModeSelection.adopt`
+        // here, unlike `AppRouting.claimIncoming`: a link has no lane to adopt,
+        // and writing one would leave the picker's answer describing a session
+        // that has no halves.
+        unified.shouldAcceptLink = { peerID in
+            guard presenting.beginSession(.nearby,
+                                          peerLabel: nearby.label(forPeerID: peerID))
+            else { return false }
+            routing.select(.nearby)
+            return true
+        }
+        // The advisory mirror the socket's delivery queue reads, written from the
+        // one authoritative fact — whether anything owns the surface — so it
+        // cannot drift from the gate above by more than the hop it is documented
+        // to lag by. Subscribed here, at app scope, because the subscription must
+        // outlive any tab exactly as the link does.
+        unified.observeAvailability(
+            presenting.$owner.map { $0 == nil }.eraseToAnyPublisher())
         #if DEBUG
         if UITestMode.showsTerminalNearby {
             presenting.claim(.nearby, mode: .files,
@@ -350,7 +437,13 @@ struct RelayiumApp: App {
         // Built here, before any view exists, for the same reason the sign-out
         // coordinator is: it acts on a signal that arrives when the surface that
         // would have observed it may already be gone.
-        let ending = ForegroundSessionCoordinator(file: files, text: texts)
+        //
+        // The link goes in as the THIRD thing that cannot survive backgrounding,
+        // and this object is its single owner: residency stops the room first —
+        // which by design does NOT end an open link, only marks it
+        // `signalingLost` — and then hands `.background` here. No view ends it on
+        // disappearance, because a `TabView` teardown is not the user leaving.
+        let ending = ForegroundSessionCoordinator(file: files, text: texts, link: unified)
         _foreground = StateObject(wrappedValue: ending)
         // The lifecycle now goes through residency, which owns the ORDER: on
         // `.background` the room is left BEFORE R3-E's session cleanup runs, or
@@ -395,6 +488,7 @@ struct RelayiumApp: App {
                      foreground: foreground,
                      discovery: discovery, nearbyReceive: nearbyReceive,
                      residency: residency,
+                     link: link, linkSelection: linkSelection,
                      navigation: navigation, presence: presence,
                      deepLinks: deepLinks, deepLinkRouting: deepLinkRouting)
                 .environmentObject(session)

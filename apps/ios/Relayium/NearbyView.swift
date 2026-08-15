@@ -37,6 +37,27 @@ import RelayiumKit
 /// service, no multicast entitlement, no background mode and no notification: an
 /// inbound session brings this tab forward in app, because the app is in the
 /// foreground or the session does not exist.
+///
+/// ## Two products behind one roster, chosen by the peer
+///
+/// A device that announced exact `link/1` gets the unified workspace: one
+/// connection, verified once, carrying messages and repeated file/folder batches
+/// in both directions. Everything else gets the legacy wire exactly as it
+/// shipped. Which one is not a question put to the user — it is
+/// `NearbyDevice.supportsLink`, the roster's record of what that peer said, and
+/// `NearbyConnectPresentation` is the one place the screen reads it.
+///
+/// So the Files/Text picker is **hidden for a link peer**, because that
+/// connection has no halves to pick between, and the two verbs collapse into one
+/// Connect. It is untouched for a legacy peer, whose two generations genuinely
+/// do not interoperate.
+///
+/// **Staging before connecting is kept**, on both. That is where this platform
+/// still differs from macOS, deliberately: macOS removed pre-connect staging
+/// because opening a picker inside a live Mac session costs nothing, while on
+/// iOS the picker is a full-screen document browser. A batch staged before
+/// Connect is ARMED on the link and released once the digits are answered —
+/// never sent early, and never lost.
 struct NearbyView: View {
     @ObservedObject var file: RealtimeSessionModel
     @ObservedObject var text: RealtimeTextSessionModel
@@ -52,6 +73,14 @@ struct NearbyView: View {
     /// an ordering: the receive folder is resolved and installed before this
     /// device is advertised as reachable.
     @ObservedObject var residency: NearbyResidencyCoordinator
+    /// The unified `link/1`, consulted per DEVICE rather than per screen: two
+    /// devices in one room can legitimately differ, and a note above the roster
+    /// could only ever be right about one of them.
+    @ObservedObject var link: LinkWorkspaceModel
+    /// The workspace's own post-connect picker. Separate from `selection` so a
+    /// send made inside the session cannot replace the batch the user staged for
+    /// a different device — see `RelayiumApp`.
+    @ObservedObject var linkSelection: DirectSendSelection
     /// Navigating to whichever tab owns the session. A destination selection
     /// handed down, the same shape the Direct tab uses for Send and Account —
     /// which is what lets the shell stay ignorant of both.
@@ -78,7 +107,13 @@ struct NearbyView: View {
     @State private var actionError: String?
     @State private var confirmingLocalTextLeave = false
 
-    private var busy: Bool { file.isBusy || text.isBusy }
+    /// Anything running that a new action must not start over the top of.
+    ///
+    /// The link is the THIRD source and it has to be here: it uses neither
+    /// legacy model, so both of them read `.idle` for a link's entire life, and
+    /// without this the roster's rows and the Pause control would be live
+    /// underneath a running connection.
+    private var busy: Bool { file.isBusy || text.isBusy || link.connection.isActive }
     /// Ownership is published before an async start, so it cannot by itself
     /// mean there is already a task the user may leave. Terminal states remain
     /// non-idle and keep the exit visible after active work stops.
@@ -88,10 +123,22 @@ struct NearbyView: View {
 
     /// Derived on every render from the two live models rather than cached: a
     /// stored flag would be a second answer to a question they already answer.
+    ///
+    /// A link locks it through `sessionClaimed`: the link claims the surface
+    /// through the same `TransferPresence`, so the preference toggle and the
+    /// picker are locked for it without this needing a fourth argument.
     private var isLocked: Bool {
         DirectModeSelection.isLocked(file: file.state,
                                      text: text.state,
                                      sessionClaimed: presence.owner != nil)
+    }
+
+    /// Which of the three panes this tab draws, from the shared rule both
+    /// platforms follow rather than from a second copy of it here.
+    private var pane: TransferSurfacePane {
+        TransferSurfacePresentation.pane(route: .nearby,
+                                         owner: presence.owner,
+                                         linkHasSession: link.hasSession)
     }
 
     var body: some View {
@@ -104,10 +151,20 @@ struct NearbyView: View {
                 VStack(alignment: .leading, spacing: Metrics.section) {
                     if let owner = presence.owner, owner != .nearby {
                         busyElsewhere(owner)
-                    } else if presence.rendersSession(.nearby) {
-                        session
                     } else {
-                        discoverySection
+                        switch pane {
+                        case .link:
+                            // The interruption notice belongs above every pane:
+                            // the app can be backgrounded out of a link exactly
+                            // as it can out of a legacy session, and the notice
+                            // is readable only after it is back on screen.
+                            if let notice = foreground.interruption { interruption(notice) }
+                            NearbyLinkWorkspaceView(link: link, selection: linkSelection)
+                        case .legacySession:
+                            session
+                        case .connect:
+                            discoverySection
+                        }
                     }
                 }
                 .padding()
@@ -202,8 +259,20 @@ struct NearbyView: View {
             PathRail(stops: PathRailPresentation.iosNearby())
 
             OpenSection(L10n.t(.nearbyWhatToSend)) {
-                modePicker
-                if modes.mode == .files { filesToSend }
+                // **The picker is not always the right question.** For a peer
+                // that announced exact `link/1` the connection carries messages
+                // and files at once, so "files or text?" has no answer that
+                // means anything — and whichever half the user picked, the
+                // workspace would then ignore it. Hidden for that peer, kept for
+                // every legacy one, and the rule lives in
+                // `NearbyConnectPresentation` so `swift test` drives it.
+                if NearbyConnectPresentation.showsModePicker(for: discovery.selectedDevice) {
+                    modePicker
+                }
+                if NearbyConnectPresentation.showsStaging(for: discovery.selectedDevice,
+                                                          mode: modes.mode) {
+                    filesToSend
+                }
             }
 
             OpenSection(L10n.t(.nearbyWhoToSend)) {
@@ -495,12 +564,67 @@ struct NearbyView: View {
         .accessibilityHint(L10n.t(.nearbyA11yChooseDevice))
     }
 
+    /// **One verb for a link peer, the two shipped verbs for a legacy one.**
+    ///
+    /// The link connection has nothing to choose between before it exists: it
+    /// carries a conversation and as many batches as the user wants. So Connect
+    /// is the only action, and what it does with a batch the user already staged
+    /// is stated under it rather than left to be discovered — the files travel
+    /// with the connection and are released once the digits are compared.
+    ///
+    /// A legacy peer keeps `Send` and `Start a message session` exactly as they
+    /// shipped, because behind it there really are two non-interoperating
+    /// generations and iOS really does stage first.
     @ViewBuilder
     private func actions(for device: NearbyDevice) -> some View {
         VStack(alignment: .leading, spacing: Metrics.inner) {
             Text(L10n.t(.nearbySendTo, [L10n.token(device.label)]))
                 .font(.subheadline.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)
+            switch NearbyConnectPresentation.sendChoice(for: device) {
+            case .unifiedLink:
+                linkActions(for: device)
+            case .legacyLanes:
+                legacyActions(for: device)
+            }
+            // Says what actually happens on the other end rather than implying
+            // a human gate that is not there.
+            Text(L10n.t(.nearbyAcceptanceNote))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func linkActions(for device: NearbyDevice) -> some View {
+        Text(L10n.t(.linkConnectToDeviceHint))
+            .font(.footnote)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        Button { connectLink(to: device) } label: {
+            Text(L10n.t(.linkConnectToDevice)).frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.large)
+        .disabled(busy)
+        if !selection.isEmpty {
+            // The one thing a staged batch needs said before Connect: it is not
+            // being sent now, and it is not being dropped either.
+            Text(L10n.t(.linkConnectCarriesStagedFiles))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        // `actionError` is NOT rendered here: `sendTask` already draws it once,
+        // below this whole group, and a second copy would put the same sentence
+        // on screen twice for a link peer and once for a legacy one.
+    }
+
+    @ViewBuilder
+    private func legacyActions(for device: NearbyDevice) -> some View {
+        VStack(alignment: .leading, spacing: Metrics.inner) {
             switch modes.mode {
             case .files:
                 Text(selection.summary.map { L10n.t(.nearbySelectionSendHint, [$0]) }
@@ -526,12 +650,6 @@ struct NearbyView: View {
                 .controlSize(.large)
                 .disabled(busy)
             }
-            // Says what actually happens on the other end rather than implying
-            // a human gate that is not there.
-            Text(L10n.t(.nearbyAcceptanceNote))
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -627,6 +745,74 @@ struct NearbyView: View {
     }
 
     // MARK: - actions
+
+    /// **The one action a `link/1` peer has**, and the only place this platform
+    /// opens a unified connection.
+    ///
+    /// Four decisions, in this order, each made at ACTIVATION rather than at
+    /// render — an announcement can arrive, a device can leave and a room can end
+    /// between the frame that drew the button and the tap:
+    ///
+    ///  1. **Nothing is already running.** The button is disabled while busy;
+    ///     this is the guard that does not depend on a redraw.
+    ///  2. **The device is still there.** The roster is live, and a stale id is
+    ///     how the wrong device gets dialled — by then it may belong to another.
+    ///  3. **This peer can still speak `link/1`.** Asked of the model, not of the
+    ///     `NearbyDevice` value this closure captured: `canLink` reads the room's
+    ///     own registry, and an announcement can be revoked by a peer that
+    ///     reloaded into a pairing room. A peer that cannot is NOT silently
+    ///     handed the legacy path here — the button it was drawn for no longer
+    ///     describes what would happen, so it refuses and says the device is
+    ///     gone, and the next render draws that device's legacy verbs instead.
+    ///  4. **The surface is claimed before dialling**, so the session this starts
+    ///     is presented here and a concurrent inbound offer that wins loses the
+    ///     claim rather than the render.
+    ///
+    /// The staged batch travels as an ARMED batch on the link. It is not sent
+    /// here and it is not sent when the link opens either: `LinkWorkspaceModel`
+    /// holds it behind the verification boundary and releases it once the digits
+    /// are answered. `stageForSend` is what pins the descriptors, inside the live
+    /// security scope, exactly as the legacy send does.
+    private func connectLink(to device: NearbyDevice) {
+        guard !busy else { return }
+        guard let live = discovery.selectedDevice, live.id == device.id,
+              link.canLink(peerId: live.id) else {
+            actionError = L10n.t(.nearbyDeviceGone)
+            return
+        }
+        // Staged only if the user chose something. An empty selection is the
+        // ordinary case on a connect-first surface and must not be an error:
+        // `stageForSend` writes `directChooseFilesFirst` for an empty store, and
+        // reporting that here would refuse a connection nobody asked to carry
+        // anything.
+        var metas: [FileMeta] = []
+        var sources: [PlaintextSource] = []
+        if !selection.isEmpty {
+            guard let staged = selection.stageForSend() else {
+                actionError = selection.errorMessage ?? L10n.t(.nearbyAddFilesFirst)
+                return
+            }
+            metas = staged.metas
+            sources = staged.sources
+        }
+        actionError = nil
+        guard presence.beginSession(.nearby, peerLabel: live.label) else { return }
+        foreground.sessionStarting()
+        guard !link.connect(peerId: live.id, peerLabel: live.label,
+                            files: metas, sources: sources) else { return }
+        // A refusal, and the two kinds are not the same thing to the user.
+        //
+        // `connect` refuses having ALREADY published a terminal reason when the
+        // room went away — `.ended(.roomLost)` — and having published nothing at
+        // all when the peer turned out not to be link-capable. Releasing the
+        // surface in the first case would throw away the one sentence explaining
+        // why, and drop the user back on a roster with no account of what
+        // happened. So the surface is kept whenever the model is holding
+        // something to show, and given back only when it is not.
+        if link.hasSession { return }
+        presence.release(.nearby)
+        actionError = L10n.t(.linkNotReady)
+    }
 
     private func sendFiles() {
         // A second press while the first send is still setting up would stage a

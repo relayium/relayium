@@ -564,6 +564,25 @@ final class IOSSurfaceGuardTests: XCTestCase {
         }
     }
 
+    /// One file's code, with its comment lines removed.
+    ///
+    /// The same stripping `sources(under:atLeast:)` does, for the guards that
+    /// address a named file rather than sweeping a tree. It exists because the
+    /// alternative bit twice in this very batch: a guard that reads raw text
+    /// fails on the doc comment EXPLAINING the rule, which trains the next
+    /// writer either to delete the explanation or to weaken the assertion.
+    /// `WORKFLOW-LEARNINGS` records the same requirement for the macOS suite.
+    private func code(at url: URL) throws -> String {
+        try String(contentsOf: url, encoding: .utf8)
+            .components(separatedBy: "\n")
+            .filter { line in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                return !trimmed.hasPrefix("//") && !trimmed.hasPrefix("*")
+                    && !trimmed.hasPrefix("/*")
+            }
+            .joined(separator: "\n")
+    }
+
     /// Both roots, because the credential passes through both: the app renders
     /// the session, and `AccountSession`/`ErrorCopy` hold and format it.
     func testNothingInTheAppOrViewModelLayerLogs() throws {
@@ -577,50 +596,197 @@ final class IOSSurfaceGuardTests: XCTestCase {
         }
     }
 
-    /// **iOS composes no `link/1`, and cannot.**
+    /// **iOS composes a `link/1` for the code-less room, and NOTHING for a
+    /// pairing code.**
     ///
-    /// `RelayiumKit` and `RelayiumAppKit` are linked by both apps, and
-    /// `LanDiscoveryModel` — which sends the roster-level announcement — ships
-    /// on both. So "iOS does not use it" has to be a property of the binary
-    /// rather than of what anybody remembered not to call: an iOS build that
-    /// announced `link/1` would invite a macOS or Web peer into a two-lane link
-    /// and then fail the establishment it had asked for.
+    /// This test used to ban every link symbol outright, because iOS composed
+    /// none of the protocol at all. That is no longer the boundary: the Nearby
+    /// tab now owns a `LinkWorkspaceModel` and renders a unified workspace on
+    /// it, so `LinkWorkspaceModel` has left this list — exactly as
+    /// `CloudUploadModel` and the two realtime models left `testNoDeferredFeature
+    /// IsReferenced` in the slices that shipped them.
     ///
-    /// Two halves, and both are needed. `LINK_BUILD_SUPPORT` is compiled per
-    /// platform — `PeerCapabilityRegistryTests` pins that against the constant's
-    /// own source — and every object that COMPOSES the protocol is compiled out
-    /// of the iOS build, which is what this checks.
-    func testTheiOSTargetNamesNothingThatComposesALink() throws {
+    /// What replaces the ban is not nothing, and it is the harder claim: the
+    /// pairing-code half of that model must still be unreachable from this
+    /// platform. Every symbol below is part of composing or routing a link
+    /// ROOM — the factory, the router, the session, the attempt, the runtime,
+    /// and above all `LinkRoomHandle`/`watchPairingCode`, which are how a code
+    /// room is opened. iOS reaches its link through
+    /// `AppEnvironment.makeLinkWorkspaceModel`'s iOS overload, whose signature
+    /// takes no room handle at all, so none of these can appear here without
+    /// somebody having deliberately routed around that factory.
+    ///
+    /// `LINK_PAIRING_ROOM_SUPPORT` is the other half, at the wire, and
+    /// `PeerCapabilityRegistryTests` pins it against the constant's own source.
+    func testTheiOSTargetNamesNothingThatComposesALinkRoom() throws {
         for (name, text) in try sources(under: iosRoot, atLeast: 12) {
-            for symbol in ["LinkWorkspaceModel", "LinkSessionFactory", "LinkRoomRouter",
+            for symbol in ["LinkSessionFactory", "LinkRoomRouter",
                            "LinkRoomSession", "LinkSessionAttempt", "LinkSessionRuntime",
                            "LinkPairingRoom", "LinkRoomHandle", "watchPairingCode"] {
                 XCTAssertFalse(text.contains(symbol),
-                               "\(name) names \(symbol): iOS must compose no link/1")
+                               "\(name) names \(symbol): iOS must compose no link ROOM")
             }
         }
     }
 
-    /// And the composition itself is behind `#if os(macOS)`, so an iOS build
-    /// could not name it even if a source tried.
-    func testTheLinkCompositionIsCompiledOutOfNonMacOSBuilds() throws {
-        for name in ["LinkWorkspaceModel.swift"] {
-            let raw = try String(contentsOf: appKitRoot.appendingPathComponent(name),
-                                 encoding: .utf8)
-            XCTAssertTrue(raw.contains("#if os(macOS)"),
-                          "\(name) must be compiled out of every non-macOS build")
-            XCTAssertTrue(raw.hasSuffix("#endif\n"),
-                          "\(name)'s platform guard must cover the whole file")
-        }
-        // The two shared files that reach it do the same, locally.
-        let environment = try String(contentsOf: appKitRoot.appendingPathComponent("AppEnvironment.swift"),
-                                     encoding: .utf8)
+    /// The composition is no longer compiled out, and the file says why rather
+    /// than merely no longer saying the old thing.
+    ///
+    /// This is the exact failure `WORKFLOW-LEARNINGS` records for 2026-08-10:
+    /// when a dormant stack becomes reachable, the source comments and test
+    /// names claiming it is unreachable survive the transition and give a
+    /// stronger conclusion than the executable evidence. So the assertion is
+    /// inverted rather than deleted — a re-added `#if os(macOS)` around either
+    /// file would now fail here, which is what stops the iOS half being switched
+    /// off by a merge that looks like a revert.
+    func testTheLinkCompositionIsBuiltOnBothPlatforms() throws {
+        let workspace = try code(at: appKitRoot.appendingPathComponent("LinkWorkspaceModel.swift"))
+        XCTAssertFalse(workspace.contains("#if os(macOS)"),
+                       "LinkWorkspaceModel is iOS's workspace too and must not be compiled out")
+
+        // The link-aware liveness overload MUST be shared: a link uses neither
+        // legacy model, so an iOS link observed by the two-model overload would
+        // have its surface released the instant it started.
+        let presence = try code(at: appKitRoot.appendingPathComponent("TransferPresence.swift"))
+        XCTAssertFalse(presence.contains("#if os(macOS)"),
+                       "the link-aware liveness overload must exist in the iOS build")
+
+        // `AppEnvironment` keeps a platform split, and it is the RIGHT one: the
+        // macOS factory takes a pairing-room handle and the iOS one does not.
+        let environment = try code(at: appKitRoot.appendingPathComponent("AppEnvironment.swift"))
         XCTAssertTrue(environment.contains("#if os(macOS)"),
-                      "the link factory must not exist in an iOS build")
-        let presence = try String(contentsOf: appKitRoot.appendingPathComponent("TransferPresence.swift"),
-                                  encoding: .utf8)
-        XCTAssertTrue(presence.contains("#if os(macOS)"),
-                      "the link-aware liveness overload must not exist in an iOS build")
+                      "the pairing-room link factory must not exist in an iOS build")
+        XCTAssertTrue(environment.contains("connectPairingSocket:"),
+                      "the macOS factory must still open the code room it owns")
+    }
+
+    /// **The iOS app composes the link exactly once, and hands it to everything
+    /// that must know about it.**
+    ///
+    /// Four wirings, and each has a silent failure mode that no test elsewhere
+    /// would catch, because each produces a build that runs:
+    ///
+    ///  - **the factory** — a second `LinkWorkspaceModel` would be a second
+    ///    room observer, and this device would answer one offer twice;
+    ///  - **`observeSessions(fileModel:textModel:link:)`** — the two-model
+    ///    overload compiles here, and a link observed by it is released the
+    ///    instant it starts, because both legacy models read `.idle` for a
+    ///    link's whole life;
+    ///  - **`shouldAcceptLink`** — without it an unsolicited link is admitted
+    ///    with no main-actor arbitration, so a link and a legacy session can own
+    ///    the surface at once;
+    ///  - **`ForegroundSessionCoordinator(... link:)`** — without it the app
+    ///    backgrounds, the room is left, and the user returns to a workspace
+    ///    that looks open on a connection that died with the foreground.
+    func testTheiOSAppComposesTheLinkOnceAndWiresIt() throws {
+        let app = try code(at: iosRoot.appendingPathComponent("RelayiumApp.swift"))
+        XCTAssertEqual(app.components(separatedBy: "AppEnvironment.makeLinkWorkspaceModel").count - 1, 1,
+                       "the link must be composed exactly once")
+        XCTAssertTrue(app.contains("observeSessions(fileModel: files, textModel: texts, link: unified)"),
+                      "the link must be the third liveness source, or its surface is released at once")
+        XCTAssertTrue(app.contains("unified.shouldAcceptLink"),
+                      "an unsolicited link must be arbitrated on the main actor")
+        XCTAssertTrue(app.contains("ForegroundSessionCoordinator(file: files, text: texts, link: unified)"),
+                      "the foreground coordinator must own ending the link")
+    }
+
+    /// **The link's receive directory is the residency-owned one, read rather
+    /// than resolved again.**
+    ///
+    /// `NearbyResidencyCoordinator` resolves `Documents/Received`, installs it
+    /// on `RealtimeSessionModel.saveDirectory`, and refuses to join the room at
+    /// all when it cannot — which is what makes "this device is reachable" and
+    /// "this device can write" one answer rather than two.
+    ///
+    /// A link that called `ReceiveDestination` again would compile and would
+    /// return the same URL almost always. It would be wrong in exactly the case
+    /// the residency check exists for — something in the user's own Files app
+    /// occupying the name — where it would write a peer's files into a
+    /// destination the receiving card is simultaneously telling the user is
+    /// broken. So the app must read the model's property, and must not name the
+    /// resolver.
+    func testTheLinkReceivesIntoTheResidencyOwnedDirectory() throws {
+        let app = try code(at: iosRoot.appendingPathComponent("RelayiumApp.swift"))
+        XCTAssertTrue(app.contains("receiveDirectory: { files.saveDirectory }"),
+                      "the link must read the directory residency installed")
+        // Not `ReceiveDestination` anywhere in the app file: residency is the
+        // one caller, and it lives in RelayiumAppKit.
+        XCTAssertFalse(app.contains("ReceiveDestination"),
+                       "the app re-resolved the receive destination instead of reading it")
+    }
+
+    /// **The Direct tab is not part of this feature, and cannot become part of
+    /// it by accident.**
+    ///
+    /// `link/1` on iOS is the code-less room and nothing else, and the wire says
+    /// so through `LINK_PAIRING_ROOM_SUPPORT`. This is the surface half of the
+    /// same boundary: the pairing-code screen is handed no link at all, so there
+    /// is no object there to connect, to render, or to observe. Without it the
+    /// model could be added to that view and would compile, announce nothing,
+    /// and quietly give the Direct tab a second session owner that
+    /// `TransferPresence` arbitrates but no test describes.
+    ///
+    /// Pinned as the ROUTING too — `RootView` hands the link to exactly one tab
+    /// — because a second `link:` argument is how the first version of this
+    /// mistake would actually be written.
+    func testThePairingCodeSurfaceIsHandedNoLink() throws {
+        for name in ["DirectView.swift", "DirectTextSessionView.swift",
+                     "DirectFileSessionView.swift"] {
+            let url = iosRoot.appendingPathComponent(name)
+            guard FileManager.default.fileExists(atPath: url.path) else { continue }
+            let view = try code(at: url)
+            for symbol in ["LinkWorkspaceModel", "NearbyLinkWorkspaceView",
+                           "NearbyConnectPresentation"] {
+                XCTAssertFalse(view.contains(symbol),
+                               "\(name) names \(symbol): the Direct tab composes no link/1")
+            }
+        }
+        let root = try code(at: iosRoot.appendingPathComponent("RootView.swift"))
+        XCTAssertEqual(root.components(separatedBy: "link: link,").count - 1, 1,
+                       "the link is handed to more than one tab")
+    }
+
+    /// **One Connect for a link peer, and no Files/Text picker.**
+    ///
+    /// The picker is meaningless on a connection that carries both at once, and
+    /// the decision is a pure function so `swift test` can drive it —
+    /// `NearbyConnectPresentationTests` does. What THIS checks is that the view
+    /// actually asks it, rather than reimplementing the rule inline where the
+    /// two could drift.
+    func testTheNearbyTabAsksOneRuleAboutTheModePicker() throws {
+        let view = try code(at: iosRoot.appendingPathComponent("NearbyView.swift"))
+        XCTAssertTrue(view.contains("NearbyConnectPresentation.showsModePicker"),
+                      "the picker's visibility must come from the shared rule")
+        XCTAssertTrue(view.contains("NearbyConnectPresentation.sendChoice"),
+                      "the two action sets must be chosen by the shared rule")
+        XCTAssertTrue(view.contains("TransferSurfacePresentation.pane"),
+                      "which pane is drawn must come from the rule both platforms follow")
+    }
+
+    /// **iOS did not copy the macOS workspace.**
+    ///
+    /// `NSOpenPanel` is unavailable on iOS so a copy would not compile, but the
+    /// rest of `TransferLinkPane` would: a `TextEditor` bounded for a 560pt
+    /// window, ⌘Return, and two separate file verbs because a panel has to be
+    /// told which it opens. Every one of those is the wrong answer on a phone,
+    /// and each would compile silently.
+    func testTheiOSWorkspaceUsesPlatformControlsRatherThanTheMacOnes() throws {
+        let view = try code(at: iosRoot.appendingPathComponent("NearbyLinkWorkspaceView.swift"))
+        for macOnly in ["NSOpenPanel", "TextEditor", "keyboardShortcut",
+                        "chooseForLinkSend", "Metrics.readingMeasure"] {
+            XCTAssertFalse(view.contains(macOnly),
+                           "the iOS workspace carries \(macOnly), which is a macOS answer")
+        }
+        XCTAssertTrue(view.contains("fileImporter"),
+                      "iOS chooses files through the document browser")
+        XCTAssertTrue(view.contains("axis: .vertical"),
+                      "the composer must be the same growing field the Direct tab uses")
+        // And it renders the SHARED words rather than a second switch over the
+        // same exhaustive enums.
+        XCTAssertTrue(view.contains("LinkEndingCopy.text(for:"),
+                      "the ending sentence must be the shared one")
+        XCTAssertTrue(view.contains("LinkBatchCopy.text(for:"),
+                      "the batch state words must be the shared ones")
     }
 
     func testNoDeferredFeatureIsReferenced() throws {
@@ -2813,13 +2979,34 @@ final class IOSSurfaceGuardTests: XCTestCase {
             $0.text.components(separatedBy: "UITestMode.makeRealtimeTextModel(").count - 1
         }.reduce(0, +), 1, "the acceptance substitution happens more than once")
         for once in ["makeRealtimeModel(", "VerificationPreference(",
-                     "DirectSendSelection(", "DirectModeSelection(",
+                     "DirectModeSelection(",
                      "ForegroundSessionCoordinator(",
                      "makeLanDiscoveryModel(", "InboundRoom(", "makeNearbyReceiveModel(",
+                     "makeLinkWorkspaceModel(",
                      "NearbyResidencyCoordinator(", "TransferPresence(", "AppNavigationModel("] {
             XCTAssertEqual(all.map { $0.text.components(separatedBy: once).count - 1 }.reduce(0, +), 1,
                            "\(once) is constructed more than once — a second owner")
         }
+        // **`DirectSendSelection` is the one deliberate exception, and it is
+        // exactly two.**
+        //
+        // Everything above is a single owner because a second one would be a
+        // second answer to one question. This is not that: the two hold
+        // DIFFERENT selections. `directSelection` is what the user staged before
+        // connecting and is theirs until it is sent or cleared; `linkSelection`
+        // is a send made INSIDE an open workspace, already committed and already
+        // addressed to a peer on screen. One store for both would let a
+        // post-connect send silently replace a batch the user still wanted for a
+        // different device — the same reason the macOS link pane uses a private
+        // `SelectionStore` rather than its destination's shared one.
+        //
+        // Pinned at exactly two rather than removed from the list, because a
+        // THIRD would be an owner nobody decided on, and the security scopes
+        // `SecurityScopedAccess` balances are per instance.
+        XCTAssertEqual(all.map {
+            $0.text.components(separatedBy: "DirectSendSelection(").count - 1
+        }.reduce(0, +), 2,
+                       "the pre-connect and in-workspace selections are two owners, and only two")
         // ONE preference object, shared by both models and by the control that
         // flips it. Two would be a toggle that moves a setting neither session
         // reads.
@@ -3506,9 +3693,22 @@ final class IOSSurfaceGuardTests: XCTestCase {
         // session must be drawn on OWNERSHIP rather than on activity — the
         // difference is a claimed-but-not-yet-connected session, which is
         // exactly the window an inbound offer lives in.
+        //
+        // It used to check for `presence.rendersSession(.nearby)` inline. That
+        // moved to `TransferSurfacePresentation.pane`, which is the SAME rule —
+        // it returns `.connect` for any route that is not the owner, whatever
+        // the link holds — now shared with macOS instead of written twice. What
+        // this pins is that the tab asks it and switches on all three answers,
+        // so a later edit cannot quietly reintroduce an activity-based branch.
         let nearbyView = try nearby()
-        XCTAssertTrue(nearbyView.text.contains("} else if presence.rendersSession(.nearby) {"),
+        XCTAssertTrue(nearbyView.text.contains("TransferSurfacePresentation.pane(route: .nearby,"),
                       "the nearby session is drawn from something other than ownership")
+        for arm in ["case .link:", "case .legacySession:", "case .connect:"] {
+            XCTAssertTrue(nearbyView.text.contains(arm),
+                          "the nearby tab does not decide \(arm) — a pane would render nothing")
+        }
+        XCTAssertFalse(nearbyView.text.contains("default:"),
+                       "a defaulted pane arm would silently absorb a fourth surface")
     }
 
     /// **Ownership is released only at idle**, from one place.
@@ -3523,9 +3723,14 @@ final class IOSSurfaceGuardTests: XCTestCase {
     func testOwnershipIsReleasedOnlyWhenBothModelsAreIdle() throws {
         let app = try XCTUnwrap(try sources().first { $0.name == "RelayiumApp.swift" })
         let root = try XCTUnwrap(try sources().first { $0.name == "RootView.swift" })
+        // The LINK-aware overload, and it must be that one. A link uses neither
+        // legacy model, so both of them read `.idle` for its whole life — the
+        // two-model overload would release the surface the instant a link
+        // started, and the tab would return to the roster with a live connection
+        // running behind it. Same single subscription, three liveness sources.
         XCTAssertTrue(app.text.contains(
-            "presenting.observeSessions(fileModel: files, textModel: texts)"),
-                      "session cleanup must survive tab/root teardown")
+            "presenting.observeSessions(fileModel: files, textModel: texts, link: unified)"),
+                      "session cleanup must survive tab/root teardown, and must include the link")
         XCTAssertFalse(root.text.contains("presence.releaseAll()"),
                        "an initial idle render can erase a claim before model start")
         for name in ["NearbyView.swift", "DirectView.swift", "RootView.swift"] {
