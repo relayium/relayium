@@ -132,8 +132,8 @@ describe("App.svelte asks this seam rather than restating the rule", () => {
       app.indexOf("{/snippet}", app.indexOf("{#snippet transferSurface()}")),
     );
     expect(surface).toContain("showsPeerRoster(currentRoute(), visiblePeers.length)");
-    // `emptyPeers` names the same network in all nine languages. It may exist
-    // exactly once in the snippet — inside the LAN-only chooser branch.
+    // `emptyPeers` names the same network in both maintained languages. It may
+    // exist exactly once in the snippet — inside the LAN-only chooser branch.
     const empties = surface.split("t.emptyPeers").length - 1;
     expect(empties, "the same-network prompt has a second render site").toBe(1);
     const lanOnly = surface.slice(

@@ -29,8 +29,8 @@
   // off. This file owns the data and the five states, nothing else.
   //
   // The locale-invariant half — statuses, commands, paths — is in
-  // device-inbox-platforms.ts; every sentence around it is in the nine locale
-  // tables. Nothing here composes English at runtime.
+  // device-inbox-platforms.ts; every sentence around it is in the maintained
+  // locale tables. Nothing here composes English at runtime.
   import { onMount } from "svelte";
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { navigate, ME_PATH, CLI_PATH } from "./router.svelte";

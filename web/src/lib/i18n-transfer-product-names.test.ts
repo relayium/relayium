@@ -1,5 +1,5 @@
 // web/src/lib/i18n-transfer-product-names.test.ts — the two direct transfer
-// destinations have one name each, in all nine languages.
+// destinations have one name each, in both maintained languages.
 //
 // Relayium has two sibling direct-transfer products, and the name is the first
 // thing that tells a person which one they are on:

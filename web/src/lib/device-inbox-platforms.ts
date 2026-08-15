@@ -3,11 +3,11 @@
 //
 // It lives outside the component (and outside the i18n tables) for the same
 // reason cli-page-data.ts does: a shell command is not prose. It must be byte
-// identical in all nine languages, and a status badge must come from one place
-// rather than from nine translations that can drift apart. Only the surrounding
-// explanation is translated — see `deviceInboxPage.platforms` in i18n/types.ts,
-// which is keyed by the ids below, so a new platform is a compile error in every
-// locale until it is written.
+// identical in both maintained languages, and a status badge must come from one
+// place rather than from separate translations that can drift apart. Only the
+// surrounding explanation is translated — see `deviceInboxPage.platforms` in
+// i18n/types.ts, which is keyed by the ids below, so a new platform is a compile
+// error in every locale until it is written.
 //
 // **The rule this file exists to enforce (PRD §12 "一级产品入口"): a platform whose
 // native receiver does not exist gets no native command or button.** A separately

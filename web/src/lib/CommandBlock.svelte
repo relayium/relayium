@@ -3,7 +3,7 @@
   //
   // The labels are props with the previous hard-coded English as defaults: the
   // CLI page renders inside an English-only layout, but the download page shows
-  // this to whoever the sender sent the link to, in any of the nine languages.
+  // this to whoever the sender sent the link to, in either maintained language.
   // Passing them in beats a second component, and beats making every existing
   // call site pass strings it has no reason to have.
   let {

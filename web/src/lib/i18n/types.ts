@@ -718,8 +718,8 @@ export interface Messages {
     /** Sixth primary destination: /device-inbox. It is a product entry point of
      *  the same rank as the other five (PRD §12), not a page reachable only from
      *  a device card, so it gets a nav label rather than a link buried in prose.
-     *  Keep it SHORT — six labels share one row, and nine languages have to fit
-     *  a 320px rail without any of them being truncated. */
+     *  Keep it SHORT — six labels share one row, and both maintained languages
+     *  have to fit a 320px rail without any of them being truncated. */
     deviceInboxTab: string;
     /** Accessible names for the two rail controls that appear only while the
      *  mobile destination row actually overflows. They carry no visible copy —
@@ -868,8 +868,8 @@ export interface Messages {
     labelRecovery: string;
     labelStop: string;
     /** Keyed by InboxPlatformId, so adding a platform to
-     *  device-inbox-platforms.ts is a compile error in all nine locales until
-     *  each one has written the section. */
+     *  device-inbox-platforms.ts is a compile error in both maintained locales
+     *  until each one has written the section. */
     platforms: Record<
       InboxPlatformId,
       {
@@ -1306,7 +1306,7 @@ export interface Messages {
   // never stored) and the `limit` line, which is the only place the homepage
   // states the per-message ceiling and the "send it as a file" escape hatch.
   // `limit` takes TEXT_MAX_BYTES so the number tracks text-wire.ts rather than
-  // being frozen into nine translations.
+  // being frozen into each translation.
   homeText: {
     title: string;
     sub: string;

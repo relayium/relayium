@@ -288,7 +288,7 @@
   @media (max-width: 1099px) {
     /* Row 1: brand on the left, the utility group (lang · theme · account)
        pushed to the right. Row 2: the mode tabs, full width. No lonely rows.
-       Six destinations, two selects and nine languages do not honestly fit one
+       Six destinations, two selects and two languages do not honestly fit one
        320px row — the defect was equal-width compression, not the second row. */
     .topnav { flex-wrap: wrap; gap: 8px; row-gap: 10px; }
     /* Hidden from sight, NOT from the accessibility tree. `display: none` took
