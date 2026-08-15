@@ -10,7 +10,7 @@
   (`SharedLocalizationExport.swift`), so `import RelayiumAppKit` still sees
   `L10n` and nothing at any call site changed.
 - `mac/` — macOS SwiftUI app (`com.relayium.mac`), depends on the local RelayiumKit
-  package. Released publicly as **1.2.2** (GitHub Release `macos-v1.2.2`).
+  package. Released publicly as **1.2.3** (GitHub Release `macos-v1.2.3`).
 - `mac/RelayiumShare/` — the macOS Share Extension (`com.relayium.mac.Share`),
   embedded in the app at `Contents/PlugIns/RelayiumShare.appex`. Links
   `RelayiumShareKit` only, exactly as the iOS one does, and shares its model —
@@ -42,7 +42,7 @@ package. Views live in the app target; all logic worth testing lives in the
 **Status: released as 1.0.** The owner reviewed and installed the notarized
 package and recorded the decision in `apps/mac/release-readiness.json`
 (`"approved": true`), and the build was published as GitHub Release
-[`macos-v1.2.2`](https://github.com/relayium/relayium/releases/tag/macos-v1.2.2):
+[`macos-v1.2.3`](https://github.com/relayium/relayium/releases/tag/macos-v1.2.3):
 a universal, Developer ID-signed, Apple-notarized and stapled `Relayium.dmg`
 with its SHA-256 alongside. Distribution is that direct download and Sparkle
 updates from it: there is no Mac App Store listing today. See

@@ -736,6 +736,170 @@ final class LinkPairingRoomTests: XCTestCase {
         XCTAssertEqual(rig.adopted.count, 1, "one fallback, whatever the roster repeated")
     }
 
+    // MARK: - 5. the same-network room has no say over a code room
+    //
+    // `LinkWorkspaceModel` is registered as a `NearbyRoomObserver` on
+    // `LanDiscoveryModel` for the whole life of the process, and that model
+    // announces its roster to every observer without knowing which room the
+    // workspace is actually routing. Once a code owns the router, those
+    // announcements name ids from the OTHER room — and
+    // `LinkRoomRouter.rosterChanged` cancels a request whose target is absent
+    // from the roster it is handed. A same-network roster never contains a
+    // pairing peer, so before this was isolated one ordinary LAN refresh
+    // cancelled a macOS-to-Web pairing request that was still waiting for its
+    // offer. Every test here is that, and its mirror: the code room's OWN
+    // callbacks must keep working.
+
+    /// Drive a code room to `requesting`, which is the state the cancellation
+    /// destroyed.
+    ///
+    /// The self id is the LARGER of the two, so this side may not offer: it asks
+    /// and waits for the peer's offer inside the router's bound. That wait is the
+    /// whole window, and it is the one a roster frame can close.
+    private func requestingPairedLink(_ rig: Rig,
+                                      code: String = "AB12CD",
+                                      peer: String = "aaa-web") async {
+        XCTAssertTrue(rig.model.watchPairingCode(code, legacyRole: .responder))
+        await settle()
+        rig.welcome("zzz-mac")
+        rig.announce(peer, [TEXT_CAPABILITY, LINK_CAPABILITY])
+        rig.roster([peer])
+        await settle()
+        XCTAssertEqual(rig.model.connection, .requesting,
+                       "the larger id must be asking, not offering")
+    }
+
+    /// **The reproduced defect.** Same-network roster churn while a code room is
+    /// asking for its link.
+    ///
+    /// The three frames are exactly what `LanDiscoveryModel.refresh` announces:
+    /// a room with another device in it, the empty list a reconnecting or
+    /// just-joined room publishes, and a room that gained one. None of them says
+    /// anything about the peer behind the code.
+    func testLanRosterChurnCannotCancelAPairingRequest() async {
+        let rig = rig(config: stunOnlyConfig())
+        await requestingPairedLink(rig)
+
+        for _ in 0..<3 {
+            rig.model.roomRosterChanged(peerIds: ["lan-phone"])
+            rig.model.roomRosterChanged(peerIds: [])
+            rig.model.roomRosterChanged(peerIds: ["lan-phone", "lan-ipad"])
+            await settle()
+        }
+
+        XCTAssertEqual(rig.model.connection, .requesting,
+                       "a same-network roster cancelled a request it names nobody in")
+        XCTAssertTrue(rig.transports.isEmpty, "nothing was established either way")
+        XCTAssertTrue(rig.adopted.isEmpty, "and the room was not handed to the legacy path")
+    }
+
+    /// The same isolation for the frame that IS authority — in the room it came
+    /// from. A departure announced by the same-network room says nothing about a
+    /// peer in a code room, and the ids are not even comparable across the two:
+    /// this test uses the SAME string in both rooms, which is the worst case.
+    func testALanDepartureCannotEndAPairingRequestButTheCodeRoomsOwnDoes() async {
+        let rig = rig(config: stunOnlyConfig())
+        await requestingPairedLink(rig)
+
+        rig.model.roomPeerLeft("aaa-web")
+        rig.model.roomPeerLeft("lan-phone")
+        await settle()
+        XCTAssertEqual(rig.model.connection, .requesting,
+                       "a departure from the same-network room ended a pairing request")
+
+        // …and the code room's own socket still has exactly that authority. This
+        // is the private `onPeerLeft` installed by `openPairingRoom`, driven as
+        // the hub drives it.
+        rig.channels[0].fireText(#"{"type":"left","peer":"aaa-web"}"#)
+        await settle()
+        XCTAssertEqual(rig.model.connection, .ended(.closed),
+                       "the code room's own departure frame must still end its request")
+    }
+
+    /// After the link is OPEN, which is the other half of the churn window: the
+    /// LAN room keeps refreshing for as long as the app is resident, and a
+    /// departure frame there would relinquish the establishment bound to that id.
+    func testLanRosterChurnCannotDisturbAnOpenPairedLink() async throws {
+        let rig = rig(config: stunOnlyConfig())
+        let opened = await openPairedLink(rig)
+        let transport = try XCTUnwrap(opened)
+        XCTAssertTrue(rig.model.connection.isOpen)
+
+        rig.model.roomRosterChanged(peerIds: [])
+        rig.model.roomRosterChanged(peerIds: ["lan-phone"])
+        rig.model.roomPeerLeft("zzz-web")
+        await settle()
+
+        XCTAssertTrue(rig.model.connection.isOpen,
+                      "same-network churn tore down a link established over a code")
+        XCTAssertFalse(transport.isClosed)
+        XCTAssertTrue(rig.model.acceptsWork)
+
+        // Still a working link, not merely an undisturbed label.
+        rig.model.send(message: "still here")
+        await settle()
+        XCTAssertEqual(transport.sent[.text]?.first, [LINK_TEXT_REQUEST])
+    }
+
+    /// The other direction: the code room's own roster frames still decide its
+    /// peers. What is dropped is the announcement from a room that has no say —
+    /// never the one from the room being routed.
+    func testThePairingRoomsOwnRosterStillDecidesItsPeers() async {
+        let rig = rig(config: stunOnlyConfig())
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("aaa-mac")
+
+        // Same-network churn interleaved with the code room's own frames.
+        rig.model.roomRosterChanged(peerIds: ["lan-phone"])
+        rig.roster(["zzz-web"])          // present, and silent: the private path
+        rig.model.roomRosterChanged(peerIds: [])
+        await settle()
+
+        rig.scheduler.advance(to: LinkWorkspaceModel.pairingCapabilityWait)
+        await settle()
+
+        XCTAssertEqual(rig.adopted.map(\.peerId), ["zzz-web"],
+                       "the code room's own roster no longer arms its capability window")
+    }
+
+    /// **The production path, end to end.** The three tests above call the
+    /// observer methods directly; this one drives a real `LanDiscoveryModel`
+    /// through a real socket, exactly as the app wires it — LAN residency first,
+    /// then a code — so the isolation is proved against the announcement the
+    /// product actually produces rather than against a hand-made call.
+    func testARealLanRoomRefreshingUnderneathCannotCancelAPairingRequest() async {
+        let rig = rig(config: stunOnlyConfig())
+        let lan = FakeWebSocketChannel()
+        let discovery = LanDiscoveryModel(connect: {
+            let client = SignalingClient(channel: lan, name: "Mac")
+            lan.fireOpen()
+            return client
+        })
+        discovery.addRoomObserver(rig.model)
+        discovery.start()
+        lan.fireText(#"{"type":"welcome","name":"lan-self","ip":"1.2.3.4"}"#)
+        lan.fireText(#"{"type":"peers","peers":[{"id":"lan-self","name":"Mac"},{"id":"lan-phone","name":"Phone"}]}"#)
+        await settle()
+        XCTAssertEqual(discovery.devices.map(\.id), ["lan-phone"],
+                       "the same-network room must really be live and observed")
+
+        await requestingPairedLink(rig)
+
+        // A device joins, a device leaves, and the room empties — every one of
+        // which calls `refresh()` and announces a roster to every observer.
+        lan.fireText(#"{"type":"peers","peers":[{"id":"lan-self","name":"Mac"},{"id":"lan-phone","name":"Phone"},{"id":"lan-ipad","name":"iPad"}]}"#)
+        lan.fireText(#"{"type":"peers","peers":[{"id":"lan-self","name":"Mac"}]}"#)
+        lan.fireText(#"{"type":"left","peer":"lan-phone"}"#)
+        lan.fireText(#"{"type":"peers","peers":[{"id":"lan-self","name":"Mac"},{"id":"lan-phone","name":"Phone"}]}"#)
+        await settle()
+
+        XCTAssertEqual(rig.model.connection, .requesting,
+                       "the resident same-network room cancelled the code room's request")
+        XCTAssertTrue(rig.transports.isEmpty)
+        discovery.stop()
+    }
+
     /// Leaving a watched code closes its socket. A room left open keeps this
     /// device in a pairing room nobody is looking at, with a credential still
     /// counting down against nothing.

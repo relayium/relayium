@@ -663,16 +663,47 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// Whether an authenticated link has published and has not ended.
     private var holdsLiveLink: Bool { session.isPublished }
 
+    /// Whether the SAME-NETWORK room's observer callbacks own the router.
+    ///
+    /// Both callbacks below arrive from `LanDiscoveryModel`, which announces its
+    /// roster to every registered observer and knows nothing about which room
+    /// this object is actually routing. While a pairing code owns the router,
+    /// the ids in those announcements belong to the OTHER room — and a peer id
+    /// means nothing outside the room that issued it, which is the same rule
+    /// `PairingRoom` is built on.
+    ///
+    /// Acting on them anyway is not inert: `LinkRoomRouter.rosterChanged`
+    /// cancels a pending request whose target is absent from the roster it is
+    /// given, and a same-network roster never contains a pairing peer. So one
+    /// ordinary LAN refresh — a device appearing, a device leaving, or the empty
+    /// list a reconnecting room publishes — cancelled the request a code room
+    /// had in flight, which is exactly the macOS-to-Web pairing attempt that
+    /// oscillated until the app was restarted.
+    ///
+    /// The pairing room is not left without either signal: its own socket feeds
+    /// `pairingRosterChanged` and `router.peerLeft` directly — see
+    /// `openPairingRoom` — so what this drops is the announcement from a room
+    /// that has no say, never the one from the room being routed.
+    ///
+    /// Same guard, and the same reason, as `roomDidConnect`/`roomDidDisconnect`.
+    private var lanObserverOwnsRouter: Bool { pairing == nil }
+
     /// The roster changed. Forwarded so the router can withdraw an ask to a
     /// device that vanished. Never a teardown: representative presence is not
     /// physical-link authority.
     public func roomRosterChanged(peerIds: Set<String>) {
+        guard lanObserverOwnsRouter else { return }
         router?.rosterChanged(peerIds: peerIds)
     }
 
     /// A server `left(peer)` frame: physical departure authority, and the one
     /// signal that may end the exact lifecycle bound to that id.
+    ///
+    /// Authority over the room it came FROM. A same-network departure is not
+    /// authority over a link established in a pairing room, and the ids are not
+    /// even comparable across the two.
     public func roomPeerLeft(_ peerId: String) {
+        guard lanObserverOwnsRouter else { return }
         router?.peerLeft(peerId)
     }
 

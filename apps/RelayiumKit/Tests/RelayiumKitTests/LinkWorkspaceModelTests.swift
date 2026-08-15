@@ -985,6 +985,46 @@ final class LinkWorkspaceModelTests: XCTestCase {
         }
     }
 
+    // MARK: - 10. the same-network room's own authority
+    //
+    // The observer callbacks below are ignored while a pairing code owns the
+    // router — see `LinkPairingRoomTests`. These two are the other side of that
+    // rule, and they are what stops the isolation from becoming a blanket
+    // disable: when the same-network room IS the room being routed, its roster
+    // and its departure frames keep exactly the authority they always had.
+
+    /// A device that vanished from the roster this request was made against
+    /// withdraws the ask, rather than leaving it running for the router's full
+    /// bound against something that is no longer there.
+    func testTheSameNetworkRosterStillWithdrawsItsOwnRequest() async {
+        // The larger id, so this side asks and waits instead of offering.
+        let rig = rig(selfId: "zzz")
+        announceLink(rig, "aaa")
+        XCTAssertTrue(rig.model.connect(peerId: "aaa", peerLabel: "Phone"))
+        await settle()
+        XCTAssertEqual(rig.model.connection, .requesting)
+
+        rig.model.roomRosterChanged(peerIds: ["other"])
+        await settle()
+
+        XCTAssertEqual(rig.model.connection, .ended(.closed))
+        XCTAssertTrue(rig.transports.isEmpty)
+    }
+
+    /// And the hub's `left` frame still ends the exact link bound to that id.
+    func testTheSameNetworkDepartureStillEndsItsOwnLink() async {
+        let rig = rig()
+        let transport = await openLink(rig)
+        XCTAssertTrue(rig.model.connection.isOpen)
+
+        rig.model.roomPeerLeft("zzz")
+        await settle()
+
+        XCTAssertFalse(rig.model.connection.isOpen,
+                       "a physical departure in the routed room must still end its link")
+        XCTAssertTrue(transport.isClosed)
+    }
+
     /// The default receive directory is the one the legacy nearby receive
     /// already writes into, so a user does not have to learn a second place.
     func testTheDefaultReceiveDirectoryMatchesTheLegacyNearbyReceive() {
