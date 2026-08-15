@@ -231,6 +231,7 @@ jobs:
       # produces a different app that cannot load UI automation. The Debug-only
       # launch argument keeps the hosted runner off the public Nearby rendezvous.
       - name: Run macOS product-flow UI smoke
+        id: ui_smoke
         # The suite now includes the eight signed Device Inbox lifecycle flows.
         # macos-15 runners reached the old 15-minute ceiling twice while the
         # same exact-source suite passed locally; keep a finite bound without
@@ -241,6 +242,32 @@ jobs:
             -destination 'platform=macOS' \
             -derivedDataPath "$RUNNER_TEMP/dd-mac-ui" \
             -only-testing:RelayiumUITests test
+      # A hosted UI failure is only diagnosable from the run that produced it:
+      # the xcresult bundle holds the failure screenshots, accessibility
+      # snapshots and per-test logs, and the runner is wiped when the job ends.
+      # Without this, classifying a UI failure as a real regression or a flake
+      # costs another full signed CI cycle.
+      #
+      # Deliberately narrow: it is keyed to this step's own outcome, so a later
+      # signing, packaging or notarization failure does not upload stale UI
+      # results, and it never runs on the success path. `if-no-files-found:
+      # warn` and `continue-on-error` keep the reported cause of the job the
+      # original test failure — a missing or oversized bundle must not
+      # substitute an upload error for the failure being investigated.
+      #
+      # The run attempt is part of the name because the standard next move
+      # after this artifact exists is an unchanged same-SHA rerun to test for
+      # flake; reusing one name would make that rerun's upload a 409 conflict
+      # and lose the second attempt's evidence.
+      - name: Upload macOS UI smoke failure evidence
+        if: failure() && steps.ui_smoke.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-macos-ui-smoke-xcresult-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/dd-mac-ui/Logs/Test/*.xcresult
+          if-no-files-found: warn
+          retention-days: 7
       # The Mac App Store product, built unsigned.
       #
       # UNSIGNED deliberately, and it is the only build here that is: this
