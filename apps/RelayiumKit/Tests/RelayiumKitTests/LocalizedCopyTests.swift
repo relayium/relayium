@@ -1486,6 +1486,98 @@ final class LocalizedCopyTests: XCTestCase {
         }
     }
 
+    /// **The empty roster says the same two things on both platforms, and the
+    /// Mac's version says them without printing the address.**
+    ///
+    /// macOS draws `relayium.com` as a real link under this copy, so the copy
+    /// itself must not name it — a host that appears in the sentence AND as the
+    /// control beside it is the same four words twice on one small card, one
+    /// set of them dead. iOS has no such control and keeps the single sentence
+    /// that names the address in prose, which is why both forms exist.
+    ///
+    /// What may not differ is the substance. Whichever form a reader gets, it
+    /// has to tell them where to go — the OTHER device — and the part everyone
+    /// gets wrong, which is that closing the page leaves the room.
+    func testBothEmptyRosterFormsKeepTheirTwoFactsAndOnlyOneNamesTheAddress() throws {
+        let otherDevice: [AppLanguage: String] = [.en: "other device", .zh: "对方设备"]
+        let keepOpen: [AppLanguage: String] = [.en: "leave the page open", .zh: "页面保持打开"]
+
+        for language in [AppLanguage.en, .zh] {
+            // The shared sentence is unchanged and still carries the address:
+            // it is the whole of what iOS renders, and losing the host there
+            // would leave that platform with no way to reach the site at all.
+            let shared = L10n.t(.nearbyEmptyRoster, language: language)
+            XCTAssertTrue(shared.contains(AppEnvironment.productionHost),
+                          "nearby.emptyRoster [\(language.rawValue)] stopped naming the "
+                          + "address iOS can only render as prose: \(shared)")
+
+            let title = L10n.t(.nearbyEmptyRosterTitle, language: language)
+            let open = L10n.t(.nearbyEmptyRosterOpen, language: language)
+            let hint = L10n.t(.nearbyEmptyRosterOpenHint, language: language)
+            for (key, text) in [("nearby.emptyRosterTitle", title),
+                                ("nearby.emptyRosterOpen", open),
+                                ("nearby.emptyRosterOpenHint", hint)] {
+                XCTAssertFalse(text.contains(AppEnvironment.productionHost),
+                               "\(key) [\(language.rawValue)] prints the address the link "
+                               + "beside it already is: \(text)")
+                for platform in ["Mac", "macOS", "iPhone", "iPad", "iOS"] {
+                    XCTAssertFalse(text.contains(platform),
+                                   "\(key) [\(language.rawValue)] names \(platform): \(text)")
+                }
+            }
+            // The instruction is on the sentence that points at the link, and
+            // the title stays a title: a heading carrying half the instruction
+            // is how the split loses the other half.
+            XCTAssertTrue(open.contains(try XCTUnwrap(otherDevice[language])),
+                          "nearby.emptyRosterOpen [\(language.rawValue)] no longer says WHICH "
+                          + "device to open it on: \(open)")
+            XCTAssertTrue(open.contains(try XCTUnwrap(keepOpen[language])),
+                          "nearby.emptyRosterOpen [\(language.rawValue)] dropped the part that "
+                          + "keeps the room alive: \(open)")
+            XCTAssertFalse(title.contains(try XCTUnwrap(keepOpen[language])),
+                           "nearby.emptyRosterTitle [\(language.rawValue)] is a second copy of "
+                           + "the instruction rather than a heading: \(title)")
+            XCTAssertFalse(hint.isEmpty)
+        }
+    }
+
+    /// The three keys the Mac's empty roster adds are English-and-Chinese only,
+    /// and the seven frozen locales render the English rather than a raw key.
+    ///
+    /// This is the maintained-language policy applied to the one place it is
+    /// most tempting to break: the copy is three short strings, and adding them
+    /// to nine catalogs "while we are here" is how a frozen locale quietly
+    /// becomes a maintained one that nobody is actually maintaining.
+    func testTheMacEmptyRosterCopyIsMaintainedInExactlyTheTwoLanguages() throws {
+        let added: [L10nKey] = [.nearbyEmptyRosterTitle, .nearbyEmptyRosterOpen,
+                                .nearbyEmptyRosterOpenHint]
+        let english = try XCTUnwrap(StringsCatalog.load(.en))
+        for key in added {
+            for language in AppLanguage.allCases {
+                let catalog = try XCTUnwrap(StringsCatalog.load(language))
+                let text = L10n.t(key, language: language)
+                XCTAssertFalse(text.isEmpty)
+                XCTAssertNotEqual(text, key.rawValue,
+                                  "\(key.rawValue) [\(language.rawValue)] rendered a raw key")
+                switch language {
+                case .en, .zh:
+                    XCTAssertNotNil(catalog[key.rawValue],
+                                    "\(key.rawValue) is missing from a MAINTAINED language")
+                default:
+                    XCTAssertNil(catalog[key.rawValue],
+                                 "\(key.rawValue) was translated into the frozen "
+                                 + "\(language.rawValue)")
+                    XCTAssertEqual(text, english[key.rawValue],
+                                   "\(key.rawValue) [\(language.rawValue)] did not fall back "
+                                   + "to English")
+                }
+            }
+        }
+        XCTAssertNotEqual(L10n.t(.nearbyEmptyRosterTitle, language: .zh),
+                          L10n.t(.nearbyEmptyRosterTitle, language: .en),
+                          "the Chinese title is the English one")
+    }
+
     /// The nearby explanation is the one sentence standing between the roster
     /// and "these are the devices on my Wi-Fi". It has to keep all three of its
     /// claims in every language: the grouping is a shared public address, that

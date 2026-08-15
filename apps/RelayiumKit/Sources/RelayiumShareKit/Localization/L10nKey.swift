@@ -903,7 +903,25 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case nearbyAddressesNotGroupingNote = "nearby.addressesNotGroupingNote"
     case nearbyA11yThisMac = "nearby.a11yThisMac"
 
+    /// The whole state in one sentence, address included — what iOS renders,
+    /// where the address can only be prose.
     case nearbyEmptyRoster = "nearby.emptyRoster"
+    /// **The same state split in two, for the platform that can make the
+    /// address a control.** macOS draws `relayium.com` as a real `Link` under
+    /// these two lines, so neither of them may name it: the address would
+    /// otherwise appear twice on one small card — once as text that looks
+    /// clickable and is not, and once as the thing that is. Nothing renders
+    /// both halves and the sentence above; iOS keeps the sentence.
+    case nearbyEmptyRosterTitle = "nearby.emptyRosterTitle"
+    /// Points at the link below it. "This address" rather than the address, for
+    /// the reason above, and it keeps the part the sentence exists for: the
+    /// page has to stay open, because closing it leaves the room.
+    case nearbyEmptyRosterOpen = "nearby.emptyRosterOpen"
+    /// The hint on that link. Its visible label is the address itself, which is
+    /// an honest name and says nothing about what activating it does — and
+    /// "opens" is the whole of what this one does: it hands the address to the
+    /// system, which is the browser's job from there.
+    case nearbyEmptyRosterOpenHint = "nearby.emptyRosterOpenHint"
     case nearbyNamesDisclaimer = "nearby.namesDisclaimer"
     case nearbyA11yDevices = "nearby.a11yDevices"
     case nearbyA11yChooseDevice = "nearby.a11yChooseDevice"

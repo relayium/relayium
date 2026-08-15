@@ -10,6 +10,20 @@ final class AppEnvironmentTests: XCTestCase {
     func testProductionBaseURLIsTheServiceOrigin() {
         XCTAssertEqual(AppEnvironment.productionBaseURL.absoluteString, "https://relayium.com")
     }
+
+    /// The address a person is shown, for the screens that ask them to open it
+    /// on another device.
+    ///
+    /// Asserted against the URL rather than only against the literal: the point
+    /// of deriving it is that a build pointed elsewhere cannot print one host
+    /// and open another, and a test comparing both to the same hard-coded
+    /// string would pass while that promise was broken.
+    func testTheShownHostIsTheHostOfTheURLItOpens() {
+        XCTAssertEqual(AppEnvironment.productionHost, "relayium.com")
+        XCTAssertEqual(AppEnvironment.productionHost, AppEnvironment.productionBaseURL.host())
+        XCTAssertFalse(AppEnvironment.productionHost.contains("/"),
+                       "the shown address carries a path, so it is not an address to type")
+    }
     // Never empty: it becomes the device name in the user's device list on the web.
     func testDeviceNameIsNeverEmpty() {
         XCTAssertFalse(AppEnvironment.deviceName().isEmpty)

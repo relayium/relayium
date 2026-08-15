@@ -323,6 +323,9 @@
 "nearby.savedToAppFolder" = "Incoming files are saved in Relayium's own folder, which you can open in the Files app.";
 "nearby.a11yReceiving" = "Nearby receiving";
 "nearby.emptyRoster" = "No other devices yet. Open relayium.com on the other device and leave the page open.";
+"nearby.emptyRosterTitle" = "No other devices yet.";
+"nearby.emptyRosterOpen" = "Open this address on the other device and leave the page open:";
+"nearby.emptyRosterOpenHint" = "Opens this address in your browser.";
 "nearby.namesDisclaimer" = "Names come from the other device and are not proof of who it is. Compare verification codes below if that matters.";
 "nearby.a11yDevices" = "Nearby devices";
 "nearby.a11yChooseDevice" = "Choose this device to send to.";

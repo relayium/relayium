@@ -4096,6 +4096,69 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the primary exit is drawn as an ordinary bordered button")
     }
 
+    /// **The empty roster's address is a link, and the address is not typed
+    /// anywhere it could disagree with the destination.**
+    ///
+    /// The state a first-time user sees most says "open relayium.com on the
+    /// other device". It shipped as four words inside a grey sentence: nothing
+    /// to click, nothing for the eye to stop on, and no way to act on it except
+    /// to retype it by hand onto the device that is missing from the roster.
+    ///
+    /// Three separate things are guarded here, because each fails silently on
+    /// its own:
+    ///
+    ///  1. **It is a `Link`.** Not a `Button` in accent colour, which looks
+    ///     identical and has none of the behaviour a link is chosen for — the
+    ///     contextual menu that copies the address, keyboard activation, and
+    ///     `openURL` deciding where it goes.
+    ///  2. **The visible address and the destination come from one value.** A
+    ///     hard-coded `"relayium.com"` beside `productionBaseURL` is a screen
+    ///     that can print one host and open another, and neither half looks
+    ///     wrong alone.
+    ///  3. **The prose no longer names the address.** Rendering the shared
+    ///     one-sentence form here would put the host on the card twice — once
+    ///     as dead text that looks clickable, once as the control.
+    func testTheEmptyRosterMakesTheAddressARealLinkFromOneSource() throws {
+        let pane = try source(named: lanConnect)
+        XCTAssertTrue(pane.contains("title: L10n.t(.nearbyEmptyRosterTitle)")
+                      && pane.contains("body: L10n.t(.nearbyEmptyRosterOpen)"),
+                      "the empty roster stopped rendering the split copy the link belongs to")
+        XCTAssertFalse(pane.contains("L10n.t(.nearbyEmptyRoster)"),
+                       "the Mac renders the sentence that names the address in prose, "
+                       + "so relayium.com is on the card twice")
+        XCTAssertTrue(pane.contains("url: AppEnvironment.productionBaseURL"),
+                      "the empty roster's link points somewhere other than the product origin")
+        XCTAssertTrue(pane.contains("title: L10n.token(AppEnvironment.productionHost)"),
+                      "the visible address is no longer derived from the destination")
+        XCTAssertTrue(pane.contains("accessibilityHint: L10n.t(.nearbyEmptyRosterOpenHint)"),
+                      "the link's only label is the bare address, with no hint saying what "
+                      + "activating it does")
+        XCTAssertTrue(pane.contains("identifier: \"lan-empty-roster-site\""),
+                      "the link is unaddressable from a UI test")
+
+        let empty = try source(named: "Components/EmptyStateView.swift")
+        XCTAssertTrue(empty.contains("Link(link.title, destination: link.url)"),
+                      "the empty state's address is not a native link any more")
+        XCTAssertFalse(empty.contains("Button(link.title"),
+                       "the address is a button dressed as a link: no copy menu, "
+                       + "no link semantics")
+        XCTAssertTrue(empty.contains(".accessibilityHint(link.accessibilityHint)")
+                      && empty.contains(".accessibilityIdentifier(link.identifier)"),
+                      "the link lost its hint or its identifier")
+        // Exactly the two prose lines. A third would mean the link became
+        // selectable too, which takes the drag its own activation and copy menu
+        // need; zero means the sentences went back to being unselectable.
+        XCTAssertEqual(occurrences(of: ".textSelection(.enabled)", in: empty), 2,
+                       "the empty state's sentences are not exactly the selectable part")
+
+        // And nowhere in the app is the host written as a string. This is the
+        // guard that keeps 2. true for every future surface, not only this one.
+        for (name, text) in try sources(under: macRoot, atLeast: 30) {
+            XCTAssertFalse(text.contains("\"relayium.com\""),
+                           "\(name) hard-codes the product host beside a URL that owns it")
+        }
+    }
+
     /// macOS cannot resume a stored upload after the app closes, so its running
     /// surface must not reuse iOS's durable-resume explanation.
     func testMacUploadShowsItsOwnForegroundOnlyWarning() throws {

@@ -437,8 +437,32 @@ struct LanConnectPane: View {
     @ViewBuilder
     private var roster: some View {
         if discovery.devices.isEmpty {
+            // **The address is the instruction on this screen, so it is drawn
+            // as one.** It used to be four words inside a sentence — "Open
+            // relayium.com on the other device" — set in the same weight and
+            // colour as the rest of it, on the state a first-time user is most
+            // likely to be looking at. There was nothing to click, nothing the
+            // eye stopped on, and the only way to act on it was to retype it
+            // into the other device by hand.
+            //
+            // Now the sentence points at a real `Link` carrying the same origin
+            // every other web hand-off in the app uses, so it can be opened
+            // here, copied from its own contextual menu, or simply read across
+            // a desk. The two lines above it are selectable for the same
+            // reason. See `EmptyStateView` for why the link is not also
+            // selection-enabled, and `L10nKey.nearbyEmptyRosterTitle` for why
+            // this platform does not render the one-sentence iOS form.
             EmptyStateView(symbol: "dot.radiowaves.left.and.right",
-                           title: L10n.t(.nearbyEmptyRoster))
+                           title: L10n.t(.nearbyEmptyRosterTitle),
+                           body: L10n.t(.nearbyEmptyRosterOpen),
+                           link: EmptyStateLink(
+                            // A technical value, isolated so its dots and
+                            // letters keep their reading order inside Arabic.
+                            title: L10n.token(AppEnvironment.productionHost),
+                            url: AppEnvironment.productionBaseURL,
+                            accessibilityHint: L10n.t(.nearbyEmptyRosterOpenHint),
+                            identifier: "lan-empty-roster-site"))
+                .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
         } else {
             VStack(alignment: .leading, spacing: 6) {
                 // Keyed by peer id, never by position: the hub's roster order is

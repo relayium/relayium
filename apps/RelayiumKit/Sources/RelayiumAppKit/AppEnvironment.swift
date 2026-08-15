@@ -110,6 +110,19 @@ public enum AppEnvironment {
     // construction — the reactivate token in particular — is unit-testable.
     // Paths mirror `web/src/lib/router.svelte.ts`.
 
+    /// The origin as a person reads it, for the one place the address is the
+    /// message rather than the destination: "open this on the other device".
+    ///
+    /// Derived from `productionBaseURL` rather than written a second time. A
+    /// build pointed somewhere else must not be able to print one address and
+    /// open another — that is a screen telling the user to visit a host the
+    /// button beside it does not go to, and neither half would look wrong on
+    /// its own. The fallback cannot be reached by an absolute `https` URL and
+    /// exists only because `host()` is optional.
+    public static var productionHost: String {
+        productionBaseURL.host() ?? productionBaseURL.absoluteString
+    }
+
     /// Personal center: plan, devices, stored files. `ME_PATH` on the web.
     public static var accountWebURL: URL { productionBaseURL.appendingPathComponent("me") }
 
