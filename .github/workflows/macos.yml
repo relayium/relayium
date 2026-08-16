@@ -641,6 +641,24 @@ jobs:
           [ "$(jq -r '.macos.latestVersion' "$staged/native-client-policy.json")" \
             = "$RELEASE_VERSION" ] || {
             echo "::error::the staged client policy does not name this release"; exit 1; }
+          # The replay barrier moved exactly as much as the document did. Every
+          # client remembers the highest revision it has accepted and refuses a
+          # different document under a revision it already holds, so a release
+          # that changed `latestVersion` without advancing the revision would
+          # publish a policy the installed fleet declines — and a release that
+          # advanced it without changing anything would make each rerun of the
+          # recovery path a fresh diff against main.
+          previous_revision="$(jq -r '.macos.policyRevision' web/native-client-policy.json)"
+          previous_latest="$(jq -r '.macos.latestVersion' web/native-client-policy.json)"
+          staged_revision="$(jq -r '.macos.policyRevision' "$staged/native-client-policy.json")"
+          if [ "$previous_latest" = "$RELEASE_VERSION" ]; then
+            expected_revision="$previous_revision"
+          else
+            expected_revision="$((previous_revision + 1))"
+          fi
+          [ "$staged_revision" = "$expected_revision" ] || {
+            echo "::error::staged policyRevision is $staged_revision, expected $expected_revision"
+            exit 1; }
           cmp "$staged/native-client-policy.json" "$staged/public/apps/macos/client-policy.json"
       # Without the manual notarize input this remains a CI acceptance artifact,
       # not a public release. Public publication and the /apps page flip are
@@ -715,6 +733,14 @@ jobs:
           critical="$(jq -r '.macos.minimumSupportedBuild' release-web/native-client-policy.json)"
           grep -Fq "<sparkle:criticalUpdate sparkle:version=\"$critical\">" \
             release-web/public/apps/macos/appcast.xml
+          # The revision the fleet will remember. Outside this range no client
+          # acts on the document at all, and a revision that is not below main's
+          # is what keeps the published policy ahead of the one already served.
+          revision="$(jq -r '.macos.policyRevision' release-web/native-client-policy.json)"
+          [ "$revision" -ge 1 ]
+          [ "$revision" -le 1000000000 ]
+          [ "$revision" -ge "$(jq -r '.macos.policyRevision' \
+            "$GITHUB_WORKSPACE/web/native-client-policy.json")" ]
           cmp release-web/native-client-policy.json \
             release-web/public/apps/macos/client-policy.json
       # Everything from here to the release creation builds the COMPLETE

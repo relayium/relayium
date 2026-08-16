@@ -67,11 +67,18 @@ final class SupportedVersionTests: XCTestCase {
         XCTAssertEqual(floor.minimumSupportedBuild, 11)
         XCTAssertTrue(floor.minimumSupported <= floor.recommended)
         XCTAssertTrue(floor.recommended <= floor.latest)
+        // The floor's revision is the replay barrier a device with no cache
+        // starts from, so it has to be a revision the product actually
+        // published — `SupportedVersionSurfaceTests` holds it to the canonical
+        // document, and here it is simply within the bound it will be compared
+        // against.
+        XCTAssertTrue((1...SupportedVersionPolicy.maxPolicyRevision).contains(floor.revision))
     }
 
     // MARK: - decoding
 
     private func document(schema: Any = 1,
+                          revision: Any = 1,
                           minimum: Any = "1.2.4",
                           build: Any = 11,
                           recommended: Any = "1.2.5",
@@ -79,6 +86,7 @@ final class SupportedVersionTests: XCTestCase {
                           extraMac: [String: Any] = [:],
                           extraRoot: [String: Any] = [:]) -> Data {
         var mac: [String: Any] = [
+            "policyRevision": revision,
             "minimumSupportedVersion": minimum,
             "minimumSupportedBuild": build,
             "recommendedVersion": recommended,
@@ -92,6 +100,7 @@ final class SupportedVersionTests: XCTestCase {
 
     func testReadsTheShippedDocument() throws {
         let policy = try SupportedVersionPolicy.decode(document())
+        XCTAssertEqual(policy.revision, 1)
         XCTAssertEqual(policy.minimumSupported, AppVersion("1.2.4")!)
         XCTAssertEqual(policy.recommended, AppVersion("1.2.5")!)
         XCTAssertEqual(policy.latest, AppVersion("1.2.7")!)
@@ -121,8 +130,9 @@ final class SupportedVersionTests: XCTestCase {
         // that carried an address would have to be added here first, which is
         // the point at which somebody has to argue for it.
         XCTAssertEqual(String(describing: Mirror(reflecting: policy).children.map(\.label)),
-                       #"[Optional("minimumSupported"), Optional("recommended"), "#
-                       + #"Optional("latest"), Optional("minimumSupportedBuild")]"#)
+                       #"[Optional("revision"), Optional("minimumSupported"), "#
+                       + #"Optional("recommended"), Optional("latest"), "#
+                       + #"Optional("minimumSupportedBuild")]"#)
     }
 
     func testRefusesMalformedDocuments() {
@@ -137,6 +147,27 @@ final class SupportedVersionTests: XCTestCase {
             ("a missing field", try! JSONSerialization.data(withJSONObject: [
                 "schema": 1, "macos": ["minimumSupportedVersion": "1.2.4"],
             ])),
+            // The revision is REQUIRED, and its absence is malformed rather
+            // than a default. A revision that could be omitted is a revision an
+            // attacker strips, and whatever value stood in for it would reset
+            // the replay barrier on every client that read the stripped copy.
+            ("no revision", try! JSONSerialization.data(withJSONObject: [
+                "schema": 1,
+                "macos": ["minimumSupportedVersion": "1.2.4", "minimumSupportedBuild": 11,
+                          "recommendedVersion": "1.2.5", "latestVersion": "1.2.7"],
+            ])),
+            ("a string revision", document(revision: "1")),
+            ("a boolean revision", document(revision: true)),
+            ("a fractional revision", document(revision: 1.5)),
+            // Beyond `Int`. `JSONSerialization` hands this back as a `Double`,
+            // and the value-preserving bridge refuses it — which matters,
+            // because a revision that got through as a rounded `Int` would be
+            // remembered as one.
+            ("a revision beyond Int", Data("""
+                {"schema":1,"macos":{"policyRevision":1e40,\
+                "minimumSupportedVersion":"1.2.4","minimumSupportedBuild":11,\
+                "recommendedVersion":"1.2.5","latestVersion":"1.2.7"}}
+                """.utf8)),
         ] {
             XCTAssertThrowsError(try SupportedVersionPolicy.decode(data), label) { error in
                 XCTAssertEqual(error as? SupportedVersionPolicyError, .malformed, label)
@@ -203,6 +234,29 @@ final class SupportedVersionTests: XCTestCase {
         XCTAssertEqual(policy.latest, AppVersion("1.2.5")!)
     }
 
+    /// **A revision outside the bound is refused before it can be remembered.**
+    ///
+    /// Zero and negatives are not revisions. The ceiling is the interesting one:
+    /// the revision is the value a device REMEMBERS, so a single document
+    /// carrying `Int.max` would, once accepted, sit above everything the product
+    /// can ever publish — and that install would refuse every genuine policy for
+    /// the rest of its life, the emergency one included. The bound is checked at
+    /// decode, which is before anything is stored.
+    func testRefusesARevisionOutsideTheBoundItWillRemember() {
+        let ceiling = SupportedVersionPolicy.maxPolicyRevision
+        for value in [0, -1, -2_000_000_000, ceiling + 1, Int.max] {
+            XCTAssertThrowsError(try SupportedVersionPolicy.decode(document(revision: value)),
+                                 "accepted revision \(value)") {
+                XCTAssertEqual($0 as? SupportedVersionPolicyError, .invalidRevision(value))
+            }
+        }
+        // And the boundary itself is readable, so the ceiling is a bound rather
+        // than an off-by-one nobody would notice until a release hit it.
+        XCTAssertEqual(try SupportedVersionPolicy.decode(document(revision: ceiling)).revision,
+                       ceiling)
+        XCTAssertEqual(try SupportedVersionPolicy.decode(document(revision: 1)).revision, 1)
+    }
+
     func testRefusesADocumentLargerThanItWillRead() {
         let padding = String(repeating: "x", count: SupportedVersionPolicy.maxDocumentBytes)
         XCTAssertThrowsError(try SupportedVersionPolicy.decode(
@@ -211,9 +265,100 @@ final class SupportedVersionTests: XCTestCase {
         }
     }
 
+    // MARK: - the replay barrier
+
+    private func policyAt(revision: Int,
+                        minimum: String = "1.2.4",
+                        recommended: String = "1.2.5",
+                        latest: String = "1.2.7",
+                        build: Int = 11) -> SupportedVersionPolicy {
+        SupportedVersionPolicy(revision: revision,
+                               minimumSupported: AppVersion(minimum)!,
+                               recommended: AppVersion(recommended)!,
+                               latest: AppVersion(latest)!,
+                               minimumSupportedBuild: build)
+    }
+
+    /// **The hole the floor alone cannot close.**
+    ///
+    /// The rollback gate above compares a served document to a CONSTANT, so it
+    /// can only say "not weaker than what this binary shipped". A client that
+    /// was later told 1.3.0 is required has moved past that constant, and a
+    /// replayed copy of the original 1.2.4 policy — genuine, correctly served,
+    /// comfortably above the floor — clears every rule in `decode`. This is the
+    /// rule that refuses it: the device remembers the revision, and older is
+    /// older whatever the document says.
+    func testALowerRevisionIsRefusedHoweverValidTheDocumentIs() {
+        let known = policyAt(revision: 7, minimum: "1.3.0", recommended: "1.3.0", build: 20)
+        let replayed = policyAt(revision: 6)
+        XCTAssertThrowsError(try SupportedVersionPolicy.admit(replayed, over: known)) {
+            XCTAssertEqual($0 as? SupportedVersionPolicyError,
+                           .replayedRevision(served: 6, known: 7))
+        }
+    }
+
+    /// One revision names one document. Different content under a revision this
+    /// device already holds is an origin equivocating between clients — or an
+    /// edit that changed a requirement and forgot to advance the number, which
+    /// is the same thing seen from the inside. Refused in BOTH directions: a
+    /// same-revision "refinement" that only tightens is still a second meaning.
+    func testTheSameRevisionMustCarryTheSameDocument() {
+        let known = policyAt(revision: 4)
+        for different in [policyAt(revision: 4, minimum: "1.2.6", recommended: "1.2.6", build: 12),
+                          policyAt(revision: 4, latest: "1.2.8"),
+                          policyAt(revision: 4, build: 12)] {
+            XCTAssertThrowsError(try SupportedVersionPolicy.admit(different, over: known),
+                                 "accepted a second document under revision 4") {
+                XCTAssertEqual($0 as? SupportedVersionPolicyError, .equivocatingRevision(4))
+            }
+        }
+        // The identical document is admitted, which is what lets an unchanged
+        // policy refresh a cache entry's timestamp rather than stranding it.
+        XCTAssertNoThrow(try SupportedVersionPolicy.admit(policyAt(revision: 4), over: known))
+    }
+
+    /// **The emergency rollback, and the reason the barrier is a revision rather
+    /// than a requirement.** A minimum published in error is undone by publishing
+    /// a HIGHER revision that relaxes it — no new binary, no waiting. The floor
+    /// still holds underneath, so the relaxation cannot go below what the binary
+    /// itself guarantees.
+    func testAHigherRevisionMayDeliberatelyRelaxTheRequirement() throws {
+        let strict = policyAt(revision: 9, minimum: "1.3.0", recommended: "1.3.0", build: 20)
+        let relaxed = policyAt(revision: 10)
+        XCTAssertNoThrow(try SupportedVersionPolicy.admit(relaxed, over: strict))
+        // And it is `decode` that keeps the relaxation above the floor: the same
+        // higher revision cannot take the requirement below the embedded one.
+        XCTAssertThrowsError(try SupportedVersionPolicy.decode(
+            document(revision: 10, minimum: "1.2.3", build: 10, recommended: "1.2.3"))) {
+            XCTAssertEqual($0 as? SupportedVersionPolicyError, .weakerThanFloor)
+        }
+        // A higher revision may also tighten, which is the ordinary direction.
+        XCTAssertNoThrow(try SupportedVersionPolicy.admit(
+            policyAt(revision: 11, minimum: "1.4.0", recommended: "1.4.0", build: 30),
+            over: relaxed))
+    }
+
+    /// With no memory of its own, a device starts from the binary's. A document
+    /// older than the revision this build was cut against is a replay on first
+    /// launch too.
+    func testADeviceWithNoCacheStartsFromTheEmbeddedFloorSRevision() {
+        let floor = SupportedVersionPolicy.embeddedFloor
+        XCTAssertNoThrow(try SupportedVersionPolicy.admit(policyAt(revision: floor.revision),
+                                                          over: nil))
+        XCTAssertNoThrow(try SupportedVersionPolicy.admit(policyAt(revision: floor.revision + 5),
+                                                          over: nil))
+        let stale = policyAt(revision: floor.revision, minimum: "1.2.4")
+        XCTAssertThrowsError(try SupportedVersionPolicy.admit(
+            stale, over: nil, floor: policyAt(revision: floor.revision + 1))) {
+            XCTAssertEqual($0 as? SupportedVersionPolicyError,
+                           .replayedRevision(served: floor.revision, known: floor.revision + 1))
+        }
+    }
+
     // MARK: - the three states
 
     private let policy = SupportedVersionPolicy(
+        revision: 1,
         minimumSupported: AppVersion("1.2.4")!,
         recommended: AppVersion("1.2.5")!,
         latest: AppVersion("1.2.7")!,

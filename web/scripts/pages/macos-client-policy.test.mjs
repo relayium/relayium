@@ -54,6 +54,7 @@ describe("the macOS client version policy", () => {
     expect(canonicalText).toBe(`${JSON.stringify({
       schema: 1,
       macos: {
+        policyRevision: policy.macos.policyRevision,
         minimumSupportedVersion: policy.macos.minimumSupportedVersion,
         minimumSupportedBuild: policy.macos.minimumSupportedBuild,
         recommendedVersion: policy.macos.recommendedVersion,
@@ -72,8 +73,47 @@ describe("the macOS client version policy", () => {
       "latestVersion",
       "minimumSupportedBuild",
       "minimumSupportedVersion",
+      "policyRevision",
       "recommendedVersion",
     ]);
+  });
+
+  /// **The requirement and the revision that names it, pinned together.**
+  ///
+  /// This is the one assertion in the suite that a change is SUPPOSED to break.
+  /// A client remembers the highest revision it has accepted and refuses a
+  /// different document under a revision it already holds — so an edit that
+  /// raises the minimum without advancing `policyRevision` is not merely
+  /// undocumented, it is declined by exactly the clients that already fetched
+  /// the previous copy, silently and with nothing failing anywhere.
+  ///
+  /// **So: change any line below and advance `policyRevision` in the same edit,
+  /// then update this expectation to match.** Only `latestVersion` is exempt —
+  /// `stage-macos-release.mjs` owns that field and advances the revision itself
+  /// when a release moves it. `SupportedVersionModelTests` proves the client
+  /// behaviour this rule follows from.
+  it("declares its requirement and its revision in one edit", () => {
+    expect({
+      policyRevision: policy.macos.policyRevision,
+      minimumSupportedVersion: policy.macos.minimumSupportedVersion,
+      minimumSupportedBuild: policy.macos.minimumSupportedBuild,
+      recommendedVersion: policy.macos.recommendedVersion,
+    }).toEqual({
+      policyRevision: 1,
+      minimumSupportedVersion: "1.2.4",
+      minimumSupportedBuild: 11,
+      recommendedVersion: "1.2.5",
+    });
+  });
+
+  it("carries a revision inside the range every client will read", () => {
+    // The floor is what makes it a revision; the ceiling is what stops one
+    // corrupt document from pinning a client's high-water mark above anything
+    // the product can ever publish again. `SupportedVersionSurfaceTests` holds
+    // this ceiling to the client's own `maxPolicyRevision`.
+    expect(Number.isInteger(policy.macos.policyRevision)).toBe(true);
+    expect(policy.macos.policyRevision).toBeGreaterThanOrEqual(1);
+    expect(policy.macos.policyRevision).toBeLessThanOrEqual(1000000000);
   });
 
   it("orders its three versions the way the client reads them", () => {

@@ -25,15 +25,24 @@ final class SupportedVersionModelTests: XCTestCase {
 
     private struct Outage: Error {}
 
-    private func document(minimum: String = "1.2.4",
+    private func document(revision: Int = 1,
+                          minimum: String = "1.2.4",
                           build: Int = 11,
                           recommended: String = "1.2.5",
                           latest: String = "1.2.7") -> Data {
         Data("""
-            {"schema":1,"macos":{"minimumSupportedVersion":"\(minimum)",
+            {"schema":1,"macos":{"policyRevision":\(revision),
+            "minimumSupportedVersion":"\(minimum)",
             "minimumSupportedBuild":\(build),"recommendedVersion":"\(recommended)",
             "latestVersion":"\(latest)"}}
             """.utf8)
+    }
+
+    /// A store already holding one accepted document, at a given age.
+    private func store(_ document: Data, age: TimeInterval = 0) -> InMemorySupportedVersionPolicyStore {
+        InMemorySupportedVersionPolicyStore(
+            entry: SupportedVersionCacheEntry(document: document,
+                                              fetchedAt: epoch.addingTimeInterval(-age)))
     }
 
     private let epoch = Date(timeIntervalSince1970: 1_800_000_000)
@@ -204,6 +213,181 @@ final class SupportedVersionModelTests: XCTestCase {
         await subject.refresh()
         XCTAssertFalse(subject.isBlocked)
         XCTAssertEqual(subject.state, .supported)
+    }
+
+    // MARK: - the replay barrier
+
+    /// The strict policy a device has already been told, and the older one an
+    /// attacker would serve back to it. Both are valid, both clear the embedded
+    /// floor, and `decode` has no reason to prefer either — the revision is the
+    /// only thing that distinguishes them.
+    private func strict(revision: Int) -> Data {
+        document(revision: revision, minimum: "1.3.0", build: 20,
+                 recommended: "1.3.0", latest: "1.3.0")
+    }
+
+    /// **The defect this barrier exists for.**
+    ///
+    /// A client cached a policy requiring 1.3.0 and is blocked. Somebody replays
+    /// the older document — the real one, served from the real origin, above the
+    /// embedded 1.2.4 floor in every field — and without a revision the client
+    /// reads it as the policy in force and unblocks itself. Comparing to the
+    /// floor cannot catch this: the floor is a constant, and the client has
+    /// moved past it.
+    ///
+    /// The refusal has to be total. Not merely "does not unblock": a replay that
+    /// reached the cache would overwrite the very memory that identified it, and
+    /// the next launch would have nothing left to compare against.
+    func testALowerRevisionCannotUnblockAClientThatHasSeenAStricterPolicy() async {
+        let cache = store(strict(revision: 5))
+        let subject = model(version: "1.2.7", store: cache, result: .success(document(revision: 4)))
+        XCTAssertTrue(subject.isBlocked, "the strict cached policy did not block 1.2.7")
+
+        await subject.refresh()
+
+        XCTAssertTrue(subject.isBlocked, "a replayed older policy unblocked the client")
+        XCTAssertEqual(subject.state.policy?.minimumSupported, AppVersion("1.3.0")!)
+        XCTAssertTrue(subject.lastRefreshFailed)
+        // Nothing about the cache moved: not the document, not the timestamp.
+        XCTAssertEqual(cache.load()?.document, strict(revision: 5))
+        XCTAssertEqual(cache.load()?.fetchedAt, epoch)
+    }
+
+    /// One revision, one document. A second document under a revision this
+    /// device already holds is refused whichever direction it differs in — an
+    /// origin telling two clients two things, and a hand edit that changed a
+    /// requirement without advancing the number, are the same event from here.
+    ///
+    /// **This is what makes "a manual requirement change must bump
+    /// `policyRevision`" a rule rather than a note.** An un-bumped edit is not
+    /// merely undocumented: it is silently declined by exactly the clients that
+    /// already fetched the previous copy.
+    func testTheSameRevisionCarryingDifferentContentIsRefused() async {
+        for (label, served) in [
+            ("a stricter requirement", document(revision: 5, minimum: "1.2.6",
+                                                build: 12, recommended: "1.2.6")),
+            ("a relaxed requirement", document(revision: 5)),
+            ("a different published version", document(revision: 5, minimum: "1.3.0",
+                                                       build: 20, recommended: "1.3.0",
+                                                       latest: "1.4.0")),
+        ] {
+            let cache = store(strict(revision: 5))
+            let subject = model(version: "1.2.7", store: cache, result: .success(served))
+            await subject.refresh()
+
+            XCTAssertTrue(subject.isBlocked, label)
+            XCTAssertEqual(subject.state.policy?.minimumSupported, AppVersion("1.3.0")!, label)
+            XCTAssertTrue(subject.lastRefreshFailed, label)
+            XCTAssertEqual(cache.load()?.document, strict(revision: 5), label)
+        }
+    }
+
+    /// **The emergency rollback, end to end.** A minimum published in error is
+    /// undone by publishing a HIGHER revision that relaxes it: no new binary, no
+    /// waiting for an update the blocked client cannot install. Every blocked
+    /// client takes it on its next refresh.
+    func testAHigherRevisionMayRelaxTheRequirementAndUnblockTheClient() async {
+        let cache = store(strict(revision: 5))
+        let subject = model(version: "1.2.7", store: cache, result: .success(document(revision: 6)))
+        XCTAssertTrue(subject.isBlocked)
+
+        await subject.refresh()
+
+        XCTAssertFalse(subject.isBlocked, "the emergency relaxation did not reach the client")
+        XCTAssertEqual(subject.state, .supported)
+        XCTAssertFalse(subject.lastRefreshFailed)
+        XCTAssertEqual(cache.load()?.document, document(revision: 6))
+        // And the relaxation still cannot go below the binary's own floor: the
+        // same higher revision carrying a weaker requirement is refused.
+        let below = store(strict(revision: 5))
+        let refused = model(version: "1.2.7", store: below,
+                            result: .success(document(revision: 7, minimum: "1.0",
+                                                      build: 1, recommended: "1.0")))
+        await refused.refresh()
+        XCTAssertTrue(refused.isBlocked)
+        XCTAssertEqual(below.load()?.document, strict(revision: 5))
+    }
+
+    /// **The memory outlives the enforcement window, and it has to.**
+    ///
+    /// Past seven days the cached policy stops deciding whether the app runs —
+    /// that is the fail-open bound, and the app becomes usable again under the
+    /// embedded floor. What must NOT expire is the device's knowledge that it
+    /// once accepted revision 5: an expiring high-water mark would hand the
+    /// replay back to anyone who can keep a client offline for a week, which is
+    /// not an obstacle but the ordinary state of a laptop nobody opened.
+    func testAnExpiredCacheStopsEnforcingAndKeepsRefusingAReplay() async {
+        let cache = store(strict(revision: 5),
+                          age: SupportedVersionModel.maxCacheAge + 60 * 60 * 24 * 30)
+        let subject = model(version: "1.2.7", store: cache, result: .success(document(revision: 4)))
+        // Expired, so the floor decides and 1.2.7 is usable again.
+        XCTAssertFalse(subject.isBlocked)
+
+        await subject.refresh()
+
+        // And the replay is still a replay a month after the entry lapsed.
+        XCTAssertTrue(subject.lastRefreshFailed, "an expired cache admitted an older revision")
+        XCTAssertEqual(cache.load()?.document, strict(revision: 5))
+        XCTAssertEqual(cache.load()?.fetchedAt,
+                       epoch.addingTimeInterval(-(SupportedVersionModel.maxCacheAge
+                                                  + 60 * 60 * 24 * 30)))
+        // A higher revision is still admitted, so an expired barrier refuses
+        // replays without freezing the device out of legitimate policy.
+        let moved = model(version: "1.2.7", store: cache, result: .success(document(revision: 6)))
+        await moved.refresh()
+        XCTAssertFalse(moved.lastRefreshFailed)
+        XCTAssertEqual(cache.load()?.document, document(revision: 6))
+    }
+
+    /// The same revision, the same policy — admitted, and the timestamp moves.
+    /// This is the ordinary case for a client that refreshes daily against an
+    /// unchanged policy, and it is the reason "equal" is not simply refused: an
+    /// expired entry would otherwise never come back into enforcement while the
+    /// product had nothing new to say.
+    func testAnIdenticalDocumentAtTheSameRevisionRefreshesTheTimestamp() async {
+        let cache = store(strict(revision: 5), age: SupportedVersionModel.maxCacheAge + 1)
+        let subject = model(version: "1.2.7", store: cache, result: .success(strict(revision: 5)))
+        XCTAssertFalse(subject.isBlocked, "the expired entry was still enforcing")
+
+        await subject.refresh()
+
+        XCTAssertFalse(subject.lastRefreshFailed)
+        XCTAssertEqual(cache.load()?.fetchedAt, epoch)
+        XCTAssertTrue(subject.isBlocked, "the re-confirmed policy did not take effect")
+        // Identity is the DECODED policy, not the bytes: a re-serialization that
+        // says the same thing is the same policy, and an unknown field is still
+        // ignored. Nothing here can change what the document requires — that
+        // would be a different policy and would need a revision.
+        let respelled = Data("""
+            {"macos":{"latestVersion":"1.3.0","recommendedVersion":"1.3.0",
+            "minimumSupportedBuild":20,"minimumSupportedVersion":"1.3.0",
+            "policyRevision":5,"note":"re-published"},"schema":1}
+            """.utf8)
+        let again = model(version: "1.2.7", store: cache, result: .success(respelled))
+        await again.refresh()
+        XCTAssertFalse(again.lastRefreshFailed, "a re-spelled identical policy was refused")
+        XCTAssertTrue(again.isBlocked)
+    }
+
+    /// A revision the client will not read leaves everything where it was. The
+    /// ceiling matters most: one document carrying `Int.max`, if it were stored,
+    /// would sit above every revision the product can ever publish and this
+    /// install would refuse legitimate policy forever — including the emergency
+    /// one. It is refused at decode, before it can be remembered.
+    func testARevisionOutsideTheBoundIsNeverRemembered() async {
+        for (label, revision) in [("zero", 0),
+                                  ("negative", -1),
+                                  ("above the ceiling",
+                                   SupportedVersionPolicy.maxPolicyRevision + 1),
+                                  ("Int.max", Int.max)] {
+            let cache = store(strict(revision: 5))
+            let subject = model(version: "1.2.7", store: cache,
+                                result: .success(document(revision: revision)))
+            await subject.refresh()
+            XCTAssertTrue(subject.lastRefreshFailed, label)
+            XCTAssertTrue(subject.isBlocked, label)
+            XCTAssertEqual(cache.load()?.document, strict(revision: 5), label)
+        }
     }
 
     // MARK: - the recommendation

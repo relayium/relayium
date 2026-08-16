@@ -99,6 +99,26 @@ function childText(element, tag) {
 export const CLIENT_POLICY_FILE = "native-client-policy.json";
 export const PUBLISHED_CLIENT_POLICY_PATH = "public/apps/macos/client-policy.json";
 
+/// **The revision, and the rule a person editing this file has to follow.**
+///
+/// `policyRevision` is what makes the document un-replayable: a client remembers
+/// the highest revision it ever accepted and refuses anything below it, so a
+/// perfectly valid copy of last quarter's policy cannot be served back to a
+/// client that has since been told something stricter.
+///
+/// **Any hand edit that changes a requirement must advance `policyRevision` in
+/// the same edit.** A client that already holds revision N refuses a DIFFERENT
+/// document that still calls itself N — so an un-bumped change does not merely
+/// fail to apply, it fails to apply exactly on the clients that already fetched
+/// the previous copy, which are the ones the change was for. This script bumps
+/// the revision only for the one field a RELEASE owns (`latestVersion`); every
+/// other change is the editor's to declare.
+///
+/// The ceiling is the client's `SupportedVersionPolicy.maxPolicyRevision`, held
+/// to this literal by `SupportedVersionSurfaceTests`. It is written without
+/// numeric separators so that pin can compare the two spellings directly.
+export const MAX_POLICY_REVISION = 1000000000;
+
 /// The document, validated. A release must not proceed on a policy this script
 /// cannot read: the alternative is publishing a feed whose critical threshold
 /// was guessed.
@@ -122,6 +142,17 @@ async function readClientPolicy(root) {
   }
   if (!Number.isInteger(mac.minimumSupportedBuild) || mac.minimumSupportedBuild < 1) {
     throw new Error("client policy minimumSupportedBuild must be a positive integer");
+  }
+  // Bounded on both sides, and refused here rather than clamped. The client
+  // refuses the same range, so a document outside it is one no client would act
+  // on — publishing it would take the whole fleet back to the embedded floor
+  // silently, which is the failure this validation exists to make loud.
+  if (!Number.isInteger(mac.policyRevision)
+      || mac.policyRevision < 1
+      || mac.policyRevision > MAX_POLICY_REVISION) {
+    throw new Error(
+      `client policy policyRevision must be an integer in 1…${MAX_POLICY_REVISION}, `
+      + `found ${JSON.stringify(mac.policyRevision)}`);
   }
   if (compareVersions(mac.minimumSupportedVersion, mac.recommendedVersion) > 0) {
     throw new Error("client policy minimum is above its own recommended version");
@@ -151,6 +182,7 @@ function serializeClientPolicy(policy) {
   return `${JSON.stringify({
     schema: 1,
     macos: {
+      policyRevision: policy.macos.policyRevision,
       minimumSupportedVersion: policy.macos.minimumSupportedVersion,
       minimumSupportedBuild: policy.macos.minimumSupportedBuild,
       recommendedVersion: policy.macos.recommendedVersion,
@@ -307,9 +339,25 @@ export async function stageMacOSRelease({
   // product decision and are carried through untouched — staging must never
   // raise or lower what users are required to run — but `latestVersion` is a
   // statement about what has been published, and this is the moment it changes.
+  //
+  // **The revision advances exactly when the document does, and by exactly one.**
+  // A changed policy that kept its revision would be a second document under one
+  // number, which every client that already fetched the first one refuses. An
+  // UNCHANGED policy that advanced anyway would break the recovery path: the
+  // publish job reruns staging after a delivery that failed downstream, and it
+  // requires re-deriving to reproduce `main` byte for byte — a revision that
+  // climbed on every attempt would turn each retry into a diff, and there is no
+  // clock or counter here to make it idempotent for us. So the test is the
+  // document itself: same `latestVersion` spelling, same revision, same bytes.
+  const changesTheDocument = policy.macos.latestVersion !== version;
+  const policyRevision = policy.macos.policyRevision + (changesTheDocument ? 1 : 0);
+  if (policyRevision > MAX_POLICY_REVISION) {
+    throw new Error(
+      `client policy policyRevision ${policyRevision} would exceed ${MAX_POLICY_REVISION}`);
+  }
   const stagedPolicy = serializeClientPolicy({
     ...policy,
-    macos: { ...policy.macos, latestVersion: version },
+    macos: { ...policy.macos, policyRevision, latestVersion: version },
   });
   const publishedPolicyPath = resolve(root, PUBLISHED_CLIENT_POLICY_PATH);
   await mkdir(dirname(destination), { recursive: true });
@@ -339,6 +387,7 @@ export async function stageMacOSRelease({
     manifestPath,
     appcastPath: destination,
     criticalUpdateBuild: policy.macos.minimumSupportedBuild,
+    policyRevision,
     clientPolicyPath: policyPath,
     publishedClientPolicyPath: publishedPolicyPath,
   };

@@ -251,6 +251,7 @@ final class SupportedVersionSurfaceTests: XCTestCase {
         let recommended = try XCTUnwrap(AppVersion(try XCTUnwrap(mac["recommendedVersion"] as? String)))
         let latest = try XCTUnwrap(AppVersion(try XCTUnwrap(mac["latestVersion"] as? String)))
         let minimumBuild = try XCTUnwrap(mac["minimumSupportedBuild"] as? Int)
+        let revision = try XCTUnwrap(mac["policyRevision"] as? Int)
 
         // The candidate this round prepares.
         let marketing = try XCTUnwrap(setting("MARKETING_VERSION").first)
@@ -277,6 +278,17 @@ final class SupportedVersionSurfaceTests: XCTestCase {
         XCTAssertTrue(floor.minimumSupported <= current,
                       "the floor compiled into this build would block it with no network")
 
+        // **The replay barrier, held to the document it starts from.** The
+        // floor's revision is what a device with no cache refuses below, so a
+        // binary claiming a revision the product has not published would reject
+        // the published policy as a replay — and, having rejected it, would
+        // never hear another one. Below-or-equal in the same direction as every
+        // requirement comparison above.
+        XCTAssertTrue((1...SupportedVersionPolicy.maxPolicyRevision).contains(revision),
+                      "the published policyRevision is outside the range clients read")
+        XCTAssertTrue(floor.revision <= revision,
+                      "this binary would refuse the published policy as a replay")
+
         // And the served document decodes through the shipped decoder, floor and
         // all — the file this repository publishes is one this binary accepts.
         let published = try Data(contentsOf: repoRoot.appendingPathComponent(
@@ -284,6 +296,23 @@ final class SupportedVersionSurfaceTests: XCTestCase {
         let decoded = try SupportedVersionPolicy.decode(published)
         XCTAssertEqual(decoded.minimumSupported, minimum)
         XCTAssertEqual(decoded.minimumSupportedBuild, minimumBuild)
+        XCTAssertEqual(decoded.revision, revision)
+        // A fresh install accepts it: `decode` alone is not the whole gate.
+        XCTAssertNoThrow(try SupportedVersionPolicy.admit(decoded, over: nil))
+    }
+
+    /// **One ceiling, written in two languages.**
+    ///
+    /// The client refuses a revision above `maxPolicyRevision` and the release
+    /// path refuses to publish one. If the two numbers drifted apart, the release
+    /// path would stage a policy every client silently declines — and a declined
+    /// policy is not a failure anybody sees, it is a fleet quietly falling back
+    /// to the embedded floor.
+    func testTheReleasePathAndTheClientBoundTheRevisionAtTheSameNumber() throws {
+        let script = try text("web/scripts/stage-macos-release.mjs")
+        XCTAssertTrue(
+            script.contains("MAX_POLICY_REVISION = \(SupportedVersionPolicy.maxPolicyRevision);"),
+            "the staging script's revision ceiling is not the client's")
     }
 
     /// **The two vocabularies, held to each other.**

@@ -90,6 +90,28 @@ public struct AppVersion: Comparable, Hashable, Sendable, CustomStringConvertibl
 /// `stage-macos-release.mjs` derives the appcast's threshold from this file so
 /// they cannot drift.
 public struct SupportedVersionPolicy: Equatable, Sendable {
+    /// **Which edition of the policy this is, and the only defence against a
+    /// replay.**
+    ///
+    /// The requirement fields alone cannot answer "is this document older than
+    /// one I already accepted". Comparing them to the embedded floor only
+    /// establishes that a document is not weaker than what the BINARY shipped —
+    /// so a client that had already been told 1.3.0 would accept a replayed,
+    /// perfectly valid, correctly served copy of the 1.2.4-floor policy and
+    /// unblock itself. That is what this number closes: the device remembers the
+    /// highest revision it ever accepted, and refuses anything below it.
+    ///
+    /// Monotonic and per-document, never per-field. **A requirement changed by
+    /// hand in `web/native-client-policy.json` must advance this number in the
+    /// same edit** — a client that already holds revision N rejects a DIFFERENT
+    /// document that still calls itself N, so an un-bumped edit does not reach
+    /// the clients that most need it, silently. `stage-macos-release.mjs`
+    /// advances it for the one field a release owns; everything else is the
+    /// editor's responsibility, and `SupportedVersionModelTests` is where that
+    /// rule is proved rather than asserted.
+    ///
+    /// Bounded (see `maxPolicyRevision`) rather than merely positive.
+    public let revision: Int
     /// Below this, the app must not run its product surfaces.
     public let minimumSupported: AppVersion
     /// Below this, the app says so and carries on.
@@ -99,10 +121,12 @@ public struct SupportedVersionPolicy: Equatable, Sendable {
     /// `minimumSupported` as a `CFBundleVersion`, for the Sparkle appcast.
     public let minimumSupportedBuild: Int
 
-    public init(minimumSupported: AppVersion,
+    public init(revision: Int,
+                minimumSupported: AppVersion,
                 recommended: AppVersion,
                 latest: AppVersion,
                 minimumSupportedBuild: Int) {
+        self.revision = revision
         self.minimumSupported = minimumSupported
         self.recommended = recommended
         self.latest = latest
@@ -120,6 +144,21 @@ public struct SupportedVersionPolicy: Equatable, Sendable {
     /// misconfigured origin cannot hand a client an unbounded body to buffer.
     public static let maxDocumentBytes = 8 * 1024
 
+    /// The highest revision this build will read.
+    ///
+    /// A ceiling rather than `Int.max`, because the revision is REMEMBERED. One
+    /// corrupt or hostile document carrying `9223372036854775807` would, once
+    /// accepted, sit above every revision the product can ever publish — and the
+    /// device would then refuse every genuine policy for the life of the install,
+    /// including the emergency one. A bounded revision keeps the ceiling
+    /// somewhere ordinary staging can still reach, and the bound is checked
+    /// before the value is ever stored.
+    ///
+    /// The release path holds the same number: `MAX_POLICY_REVISION` in
+    /// `web/scripts/stage-macos-release.mjs`, pinned to this one by
+    /// `SupportedVersionSurfaceTests`.
+    public static let maxPolicyRevision = 1_000_000_000
+
     /// **The floor compiled into this build, and the reason a network outage
     /// cannot brick it.**
     ///
@@ -132,13 +171,26 @@ public struct SupportedVersionPolicy: Equatable, Sendable {
     ///     it. That is what "fail open" means here, concretely.
     ///  2. It is the level below which a remote document may not take the policy.
     ///     A served document may make the requirement STRICTER and never weaker,
-    ///     so a replayed or rolled-back copy of an older policy cannot unblock a
-    ///     client that this build already knows must stop.
+    ///     so a rolled-back copy of an older policy cannot unblock a client that
+    ///     this build already knows must stop.
+    ///  3. Its `revision` is the replay barrier a fresh install starts from. A
+    ///     device with no cache has no memory of its own, so the binary's is
+    ///     used: a document older than the one this build was cut against is a
+    ///     replay even on first launch.
     ///
     /// It is per build, so lowering the requirement for real is a thing a future
     /// release does by shipping a lower floor — not something an old binary can
-    /// be talked into over the network.
+    /// be talked into over the network. A HIGHER revision may relax the
+    /// requirement deliberately (that is the emergency rollback lever, and it is
+    /// how a mistaken minimum is undone without waiting for a new binary), but
+    /// never below this floor.
+    ///
+    /// `revision` tracks `policyRevision` in `web/native-client-policy.json` and
+    /// may never exceed it — a binary claiming a revision the product has not
+    /// published would reject the published document as a replay and then never
+    /// hear another policy. `SupportedVersionSurfaceTests` holds it there.
     public static let embeddedFloor = SupportedVersionPolicy(
+        revision: 1,
         minimumSupported: AppVersion("1.2.4")!,
         recommended: AppVersion("1.2.5")!,
         latest: AppVersion("1.2.7")!,
@@ -162,6 +214,19 @@ public enum SupportedVersionPolicyError: Error, Equatable, Sendable {
     /// The document would take the requirement BELOW this build's embedded
     /// floor: a rollback, whether hostile or an operator mistake.
     case weakerThanFloor
+    /// `policyRevision` is absent-as-a-number, not positive, or above
+    /// `maxPolicyRevision`. Separate from `inconsistent` because this is the one
+    /// field whose value the device REMEMBERS, and a bad one has to be refused
+    /// before it can be remembered.
+    case invalidRevision(Int)
+    /// A revision below one this device has already accepted: the served
+    /// document is an older policy, however valid and however correctly served.
+    case replayedRevision(served: Int, known: Int)
+    /// The revision this device already accepted, carrying different content —
+    /// two policies published under one number. Refused in both directions: it
+    /// is equally an origin equivocating between clients and an edit that
+    /// changed a requirement without advancing the revision.
+    case equivocatingRevision(Int)
 }
 
 extension SupportedVersionPolicy {
@@ -205,6 +270,16 @@ extension SupportedVersionPolicy {
         guard let build = integer(mac["minimumSupportedBuild"]) else {
             throw SupportedVersionPolicyError.malformed
         }
+        // Required, not optional-with-a-default. A revision that could be
+        // omitted would be a revision an attacker can strip, and whatever the
+        // default was would then reset the replay barrier for every client that
+        // read the stripped copy.
+        guard let revision = integer(mac["policyRevision"]) else {
+            throw SupportedVersionPolicyError.malformed
+        }
+        guard revision >= 1, revision <= maxPolicyRevision else {
+            throw SupportedVersionPolicyError.invalidRevision(revision)
+        }
         guard build > 0, minimum <= recommended, recommended <= latest else {
             throw SupportedVersionPolicyError.inconsistent
         }
@@ -217,10 +292,56 @@ extension SupportedVersionPolicy {
               build >= floor.minimumSupportedBuild else {
             throw SupportedVersionPolicyError.weakerThanFloor
         }
-        return SupportedVersionPolicy(minimumSupported: minimum,
+        return SupportedVersionPolicy(revision: revision,
+                                      minimumSupported: minimum,
                                       recommended: recommended,
                                       latest: latest,
                                       minimumSupportedBuild: build)
+    }
+
+    /// **May this document replace the one this device has already accepted?**
+    ///
+    /// `decode` answers "is this a policy this build may act on at all", against
+    /// a floor that is a constant. This answers the question a constant cannot:
+    /// "is this policy OLDER than one I have already been told". Both have to be
+    /// asked, and only the second one stops a replay — a copy of a genuine,
+    /// correctly served, floor-clearing policy from before the requirement was
+    /// raised is refused by nothing in `decode`.
+    ///
+    /// Three rules, one per direction the revision can move:
+    ///
+    ///  - **Lower is refused.** Whatever else it says. The caller must not cache
+    ///    it, act on it, or let it move the enforcement state — a rejected
+    ///    document leaves the device exactly where it was.
+    ///  - **Equal is refused unless it is the SAME policy.** One revision names
+    ///    one document. Different content under a revision this device already
+    ///    holds is an origin telling two clients two things, or an edit that
+    ///    forgot to advance the number; both are refused, and the direction of
+    ///    the difference is deliberately not considered — a "refinement" that
+    ///    only tightens is still a second meaning for one revision. An identical
+    ///    policy is admitted, which is what lets an unchanged document refresh
+    ///    the cache's timestamp.
+    ///  - **Higher is admitted**, and may tighten OR relax, because `decode` has
+    ///    already held it above the embedded floor. That is the emergency
+    ///    rollback: publish revision N+1 with a lower minimum and every client
+    ///    takes it, without a new binary and without ever going below the floor
+    ///    the binary itself guarantees.
+    ///
+    /// - Parameter known: the highest-revision policy this device has accepted,
+    ///   or nil if it has none.
+    /// - Parameter floor: the embedded floor, whose own revision is the barrier
+    ///   a device with no memory starts from.
+    public static func admit(_ served: SupportedVersionPolicy,
+                             over known: SupportedVersionPolicy?,
+                             floor: SupportedVersionPolicy = .embeddedFloor) throws {
+        let barrier = max(known?.revision ?? 0, floor.revision)
+        guard served.revision >= barrier else {
+            throw SupportedVersionPolicyError.replayedRevision(served: served.revision,
+                                                               known: barrier)
+        }
+        if let known, served.revision == known.revision, served != known {
+            throw SupportedVersionPolicyError.equivocatingRevision(served.revision)
+        }
     }
 
     /// A JSON integer, and nothing that merely looks like one.

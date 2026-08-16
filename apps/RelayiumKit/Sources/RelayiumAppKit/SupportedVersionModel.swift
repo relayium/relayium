@@ -53,6 +53,12 @@ public struct HTTPSupportedVersionPolicySource: SupportedVersionPolicySource {
 /// deliberate: a cached entry is re-decoded against the CURRENT build's floor
 /// every time it is read, so a document that was acceptable to an older build
 /// cannot survive into one that refuses it.
+///
+/// It is also the device's memory of the highest policy revision it has ever
+/// accepted — the entry is only ever replaced by a document that `admit` let
+/// through — and that memory is deliberately not bounded by the entry's age. The
+/// timestamp bounds ENFORCEMENT; the document bounds REPLAY. See
+/// `SupportedVersionModel.acceptedPolicy`.
 public struct SupportedVersionCacheEntry: Equatable, Sendable {
     public let document: Data
     public let fetchedAt: Date
@@ -135,6 +141,11 @@ public final class InMemorySupportedVersionPolicyStore: SupportedVersionPolicySt
 ///  - **A cache entry is bounded and re-validated.** Older than `maxCacheAge`,
 ///    or stamped in the future by a clock that moved, and it is not used — the
 ///    policy falls back to the embedded floor, which cannot block this build.
+///  - **A policy older than one already accepted is refused, forever.** The
+///    cached document is the device's high-water mark and it does not expire
+///    with the enforcement window: an outdated policy is a replay whether it
+///    arrives an hour or a year after the one it would undo. Only a higher
+///    revision may move the requirement, in either direction.
 ///  - **The blocking state is derived, never set.** There is no `block()` and no
 ///    setter: the only inputs are the bundle's version, the embedded floor, and
 ///    a document that has already been through `SupportedVersionPolicy.decode`.
@@ -202,11 +213,23 @@ public final class SupportedVersionModel: ObservableObject {
         hasDismissedRecommendation = true
     }
 
-    /// Fetch, validate, cache, re-evaluate. Every failure is absorbed.
+    /// Fetch, validate, admit, cache, re-evaluate. Every failure is absorbed.
+    ///
+    /// **`admit` sits between validating and caching, and that placement is the
+    /// point.** A replayed document must not reach the store either: caching it
+    /// would overwrite the very memory that identified it as a replay, and the
+    /// next launch would then read it as the policy in force. So a refusal here
+    /// is total — no cache write, no state change, no timestamp — and it is
+    /// reported exactly like an outage, because from the product's side it is
+    /// one: the origin did not say anything this device can act on.
     public func refresh() async {
         do {
             let document = try await source.fetch()
             let policy = try SupportedVersionPolicy.decode(document, floor: floor)
+            try SupportedVersionPolicy.admit(
+                policy,
+                over: Self.acceptedPolicy(store: store, floor: floor),
+                floor: floor)
             store.save(SupportedVersionCacheEntry(document: document, fetchedAt: now()))
             lastRefreshFailed = false
             apply(policy)
@@ -239,6 +262,33 @@ public final class SupportedVersionModel: ObservableObject {
         // entry written by a device whose time was wrong, and trusting it would
         // make the seven-day bound unenforceable.
         guard age >= 0, age <= maxCacheAge else { return nil }
+        return try? SupportedVersionPolicy.decode(entry.document, floor: floor)
+    }
+
+    /// **The highest-revision policy this device has ever accepted, at any age.**
+    ///
+    /// Deliberately NOT bounded by `maxCacheAge`, while `cachedPolicy` above is,
+    /// and the difference is the whole reason both exist. They answer different
+    /// questions:
+    ///
+    ///  - *May this document still decide whether the app runs?* A freshness
+    ///    question. It expires in seven days, and it expires in the fail-open
+    ///    direction — past the bound the embedded floor takes over.
+    ///  - *Has this device already been told something newer?* A memory
+    ///    question, and it must not expire at all. A high-water mark that
+    ///    lapsed after seven days would hand the replay back to anyone who can
+    ///    keep a client offline for a week — which is not an obstacle, it is the
+    ///    ordinary state of a laptop somebody has stopped using — and the
+    ///    replayed document would then re-enter as fresh.
+    ///
+    /// So an expired entry stops enforcing and keeps refusing. A stored document
+    /// the CURRENT build can no longer decode contributes nothing, and the
+    /// barrier falls back to the embedded floor's revision: whatever replaces it
+    /// still has to clear that floor's requirements, so the failure direction is
+    /// the same one a fresh install already lives in.
+    private static func acceptedPolicy(store: SupportedVersionPolicyStore,
+                                       floor: SupportedVersionPolicy) -> SupportedVersionPolicy? {
+        guard let entry = store.load() else { return nil }
         return try? SupportedVersionPolicy.decode(entry.document, floor: floor)
     }
 }

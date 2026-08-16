@@ -11,6 +11,7 @@ const work = [];
 /// beyond the release under test. Cases that care about the requirement pass
 /// their own `macos` fields.
 const BASE_POLICY = {
+  policyRevision: 1,
   minimumSupportedVersion: "1.0",
   minimumSupportedBuild: 1,
   recommendedVersion: "1.0",
@@ -237,6 +238,7 @@ describe("the critical-update threshold the release derives", () => {
   /// and the one field it does own is the one that says what was published.
   it("carries the requirement through untouched and moves only the published version", async () => {
     const { webRoot, appcastPath } = await fixture({}, {
+      policyRevision: 4,
       minimumSupportedVersion: "1.0",
       minimumSupportedBuild: 1,
       recommendedVersion: "1.0",
@@ -247,6 +249,8 @@ describe("the critical-update threshold the release derives", () => {
     const expected = {
       schema: 1,
       macos: {
+        // The document changed, so the revision advanced — by one, and once.
+        policyRevision: 5,
         minimumSupportedVersion: "1.0",
         minimumSupportedBuild: 1,
         recommendedVersion: "1.0",
@@ -260,6 +264,94 @@ describe("the critical-update threshold the release derives", () => {
     // two files and a person edits the other, and a difference in spelling is a
     // difference nobody would look for.
     expect(published).toBe(canonical);
+  });
+});
+
+/// **The number that makes the served policy un-replayable.**
+///
+/// A client remembers the highest `policyRevision` it has accepted and refuses
+/// anything below it — that is what stops a valid, correctly served copy of an
+/// older policy from unblocking a client that has since been told something
+/// stricter. Two properties have to hold at once, and they pull in opposite
+/// directions: a changed document must carry a NEW revision, or the fleet
+/// declines it; an unchanged document must carry the SAME one, or the publish
+/// job's recovery rerun — which requires re-deriving to reproduce `main` byte
+/// for byte — turns into a fresh diff on every attempt.
+describe("the policy revision a release advances", () => {
+  const revisionOf = async (webRoot) =>
+    JSON.parse(await readFile(join(webRoot, "native-client-policy.json"), "utf8"))
+      .macos.policyRevision;
+
+  it("advances the revision exactly once when it moves the published version", async () => {
+    const { webRoot, appcastPath } = await fixture({}, { policyRevision: 7, latestVersion: "0.9" });
+    const result = await stageMacOSRelease({ version: "1.0", appcastPath, webRoot });
+
+    expect(result.policyRevision).toBe(8);
+    expect(await revisionOf(webRoot)).toBe(8);
+    // Both copies, from the same bytes — the client fetches the published one.
+    expect(await readFile(join(webRoot, "public/apps/macos/client-policy.json"), "utf8"))
+      .toBe(await readFile(join(webRoot, "native-client-policy.json"), "utf8"));
+  });
+
+  /// The recovery path. A release that failed downstream is re-staged from the
+  /// same inputs, and the metadata candidate it re-derives must come out EMPTY
+  /// against a tree that already documents this version. A revision that climbed
+  /// on every attempt would turn each retry into a diff, and there is no clock
+  /// or counter here to make it idempotent for us — so the test is the document:
+  /// same `latestVersion`, same revision, same bytes.
+  it("preserves the revision when the policy already names this release", async () => {
+    const { webRoot, appcastPath } = await fixture({}, { policyRevision: 7, latestVersion: "1.0" });
+    const before = await readFile(join(webRoot, "native-client-policy.json"), "utf8");
+
+    const result = await stageMacOSRelease({ version: "1.0", appcastPath, webRoot });
+
+    expect(result.policyRevision).toBe(7);
+    // Byte for byte, which is the property the rerun actually depends on.
+    expect(await readFile(join(webRoot, "native-client-policy.json"), "utf8")).toBe(before);
+  });
+
+  /// Derived from the inputs alone. A rerun happens in a fresh checkout, so
+  /// "does not advance" has to hold across runs that share no state — which it
+  /// only can if nothing here reads a clock, a counter or the previous run.
+  it("derives the same revision from the same inputs in an unrelated run", async () => {
+    const staged = [];
+    for (const _attempt of [1, 2]) {
+      const { webRoot, appcastPath } = await fixture({}, { policyRevision: 7, latestVersion: "0.9" });
+      await stageMacOSRelease({ version: "1.0", appcastPath, webRoot });
+      staged.push(await readFile(join(webRoot, "native-client-policy.json"), "utf8"));
+    }
+    expect(staged[1]).toBe(staged[0]);
+    expect(JSON.parse(staged[0]).macos.policyRevision).toBe(8);
+  });
+
+  it.each([
+    ["absent", undefined],
+    ["zero", 0],
+    ["negative", -1],
+    ["fractional", 1.5],
+    ["a string", "1"],
+    ["above the ceiling clients read", 1000000001],
+    ["beyond a safe integer", Number.MAX_SAFE_INTEGER + 2],
+  ])("stops the release on a %s revision rather than publishing one", async (_label, revision) => {
+    const { webRoot, appcastPath } = await fixture();
+    const path = join(webRoot, "native-client-policy.json");
+    const macos = { ...BASE_POLICY, policyRevision: revision };
+    if (revision === undefined) delete macos.policyRevision;
+    await writeFile(path, `${JSON.stringify({ schema: 1, macos })}\n`);
+
+    await expect(stageMacOSRelease({ version: "1.0", appcastPath, webRoot }))
+      .rejects.toThrow(/policyRevision/);
+    // Nothing was published: the manifest is the release's own switch, and a
+    // policy the fleet would decline must not take the release with it.
+    expect(JSON.parse(await readFile(join(webRoot, "native-releases.json"), "utf8")).macos.available)
+      .toBe(false);
+  });
+
+  it("refuses to advance past the ceiling clients will read", async () => {
+    const { webRoot, appcastPath } = await fixture(
+      {}, { policyRevision: 1000000000, latestVersion: "0.9" });
+    await expect(stageMacOSRelease({ version: "1.0", appcastPath, webRoot }))
+      .rejects.toThrow(/would exceed 1000000000/);
   });
 });
 
