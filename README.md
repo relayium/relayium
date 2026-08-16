@@ -47,10 +47,11 @@ or server-side history, though either endpoint can retain received text — one 
 and anything larger is a file.
 
 The production web app and CLI are live, and the CLI and node binaries are still
-in **pre-1.0 versioning** (`v0.x`). The macOS app is on its own track and is at
-**1.2.4**: a universal, Developer ID-signed, Apple-notarized and stapled
-build, published as a direct download from its own GitHub Release,
-[`macos-v1.2.4`](https://github.com/relayium/relayium/releases/tag/macos-v1.2.4).
+in **pre-1.0 versioning** (`v0.x`). The macOS app is on its own track and its
+current release is **1.2.5**: a universal, Developer ID-signed, Apple-notarized
+and stapled build that the release workflow publishes as a direct download from
+its own GitHub Release,
+[`macos-v1.2.5`](https://github.com/relayium/relayium/releases/tag/macos-v1.2.5).
 There is no Mac App Store listing; a Developer ID download is the channel.
 The iOS app runs its transfer, nearby and account workflows in the
 foreground and is **not public**: there is no App Store listing and nothing to
@@ -244,7 +245,7 @@ pairing code requires sign-in; joining with that code does not.
 - **CLI and nodes — live:** published binaries provide pairing-code file/text
   transfer, encrypted upload/download links, SSH and daemon-direct transfer,
   folder sync, self-hosting, and managed relay/storage nodes.
-- **macOS — 1.2.4, published as a direct download:** the universal app supports account
+- **macOS — 1.2.5, a direct download rather than a Mac App Store listing:** the universal app supports account
   registration and sign-in with device and stored-file management, six-digit
   pairing-code transfer of files and text, folder transfer, nearby sending and
   passive receiving, encrypted stored links to send and open, notifications and
@@ -269,17 +270,20 @@ pairing code requires sign-in; joining with that code does not.
   window with automatic update checks, the last check and the running version,
   and an *Open at login* switch that reports what macOS actually did with it —
   including the "registered, waiting for your approval" state a checkbox cannot
-  express. The 1.2.4 DMG is universal, Developer ID-signed, accepted by Apple
-  notarization, stapled and Gatekeeper-validated, and is attached to the
-  [`macos-v1.2.4`](https://github.com/relayium/relayium/releases/tag/macos-v1.2.4)
+  express. Each release DMG is universal and Developer ID-signed, and the release
+  workflow has it accepted by Apple notarization, stapled and Gatekeeper-validated
+  before attaching the 1.2.5 build to the
+  [`macos-v1.2.5`](https://github.com/relayium/relayium/releases/tag/macos-v1.2.5)
   GitHub Release with its SHA-256 published beside it; in-app updates come from
   the signed Sparkle appcast at `https://relayium.com/apps/macos/appcast.xml`.
   A Developer ID download **is** the distribution channel here — there is no Mac
   App Store listing. The App Store build of the same source is not hypothetical:
   an exact-SHA, universal, sandboxed, App Store-signed 1.2.4 (11) package was
-  built, verified locally, and uploaded to App Store Connect on 2026-08-15, where
-  it is processing for internal TestFlight. It has not been submitted for App
-  Review, and there is still no public Mac App Store listing. Whether relayium.com's own
+  built, verified locally, and uploaded to App Store Connect on 2026-08-15 for
+  internal TestFlight; 1.2.5 (12) is the planned next candidate to succeed it,
+  again for internal TestFlight only, and has not been archived or uploaded yet.
+  Nothing has been submitted for App Review,
+  and there is still no public Mac App Store listing. Whether relayium.com's own
   **/apps** page offers that download is a separate switch, driven by
   `web/native-releases.json`, which the
   release workflow delivers to `main` together with the appcast.
@@ -363,10 +367,12 @@ pairing code requires sign-in; joining with that code does not.
   execution, notification and push remain later product work. Universal-link
   routing is wired but still needs a real install, and the share extension still
   needs real-device provider coverage. macOS has its own App Store Connect record
-  and an earlier processed TestFlight candidate; its current 1.2.4 (11) App Store
-  package was uploaded on 2026-08-15 and is processing in App Store Connect for
-  internal TestFlight, with no App Review submission and no public Mac App Store
-  listing, while the Developer ID channel remains the public one. Persistent device identity,
+  and an earlier processed TestFlight candidate; its 1.2.4 (11) App Store package
+  was uploaded on 2026-08-15 for internal TestFlight, and 1.2.5 (12) is the
+  planned next internal TestFlight candidate to succeed it — not yet archived or
+  uploaded — with no App Review
+  submission and no public Mac App Store listing, while the Developer ID channel
+  remains the public one. Persistent device identity,
   broader protocol documentation, and additional distribution formats remain
   future work.
 

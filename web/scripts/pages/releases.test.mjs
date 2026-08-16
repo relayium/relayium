@@ -361,7 +361,7 @@ describe("what /releases says about the native apps", () => {
   // suite would notice either one disappearing:
   //
   //   * The version-independent claims. "Not a Mac App Store listing" and "iOS
-  //     is unreleased" are not facts about 1.2.4 — no macOS release moves them,
+  //     is unreleased" are not facts about 1.2.5 — no macOS release moves them,
   //     so an archive that stopped saying either would be wrong TODAY, not
   //     merely old. These are the seven entries in the tables above that the
   //     maintained loop no longer reads.
