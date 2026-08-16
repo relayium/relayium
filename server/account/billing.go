@@ -245,23 +245,103 @@ func cycleOfPrice(p Plan, priceID string) string {
 	}
 }
 
-// resolveChange decides whether moving the subscription from cur to target at
-// wantCycle is a downgrade (defer to period end) or an upgrade (apply now).
-// Tier direction outranks cycle: a lower-priced tier is always a downgrade even
-// when the new cycle costs more up front. On the same tier only the cycle moved,
-// and shortening the commitment (yearly->monthly) is the downgrade. Two distinct
-// tiers that happen to share a monthly price fall through as "not a downgrade"
-// (apply now) — the same choice the inline logic made. Kept in step with the
-// front-end's plan-relation.ts.
-func resolveChange(cur, target Plan, wantCycle string) (downgrade bool) {
-	switch {
-	case target.PriceMonthly != cur.PriceMonthly:
-		return target.PriceMonthly < cur.PriceMonthly
-	case target.ID == cur.ID:
-		return wantCycle == "monthly"
+// priceIDForCycle returns the Stripe Price id a plan bills on for one cycle, or
+// "" when that cycle is not purchasable (no id configured) or the cycle string
+// is not one we recognise. The inverse of cycleOfPrice.
+func priceIDForCycle(p Plan, cycle string) string {
+	switch cycle {
+	case "yearly":
+		return p.StripePriceYearlyID
+	case "monthly":
+		return p.StripePriceMonthlyID
 	default:
-		return false
+		return ""
 	}
+}
+
+// planChangeEffect is when a requested plan change takes effect. It doubles as
+// the `effective` field both billing endpoints return.
+type planChangeEffect string
+
+const (
+	// effectNow applies the whole change immediately, prorated.
+	effectNow planChangeEffect = "now"
+	// effectPeriodEnd applies nothing now and switches at the period boundary.
+	effectPeriodEnd planChangeEffect = "period_end"
+	// effectComposite does both: an immediate stage now AND a second stage at
+	// the period end that follows it. See resolvePlanChange.
+	effectComposite planChangeEffect = "now_then_period_end"
+)
+
+// planChangeDecision is the resolved plan of action for one change request: what
+// to bill now, and what to leave pending. Empty ImmediateCycle means "nothing is
+// applied now"; an empty ScheduledPlanID means "nothing stays pending", which is
+// also the value that CLEARS a previously recorded pending change.
+type planChangeDecision struct {
+	Effect planChangeEffect
+	// ImmediateCycle is the cycle whose price the subscription moves to right
+	// now. It is NOT always the cycle the user asked for — see the composite
+	// case in resolvePlanChange.
+	ImmediateCycle string
+	// ScheduledPlanID / ScheduledCycle are the tier and cycle a pending
+	// period-end stage will land on, persisted as the users.scheduled_* hint.
+	ScheduledPlanID string
+	ScheduledCycle  string
+}
+
+// resolvePlanChange decides how moving the subscription from cur (billed at
+// curCycle) to target at wantCycle should be applied.
+//
+// Tier direction and cycle direction are two independent axes, and conflating
+// them is what this function exists to prevent:
+//
+//   - Tier direction outranks cycle. A lower-priced tier is always a downgrade
+//     (defer to period end) even when the new cycle costs more up front, and a
+//     higher-priced tier is always an upgrade. Two distinct tiers that happen to
+//     share a monthly price are neither, and apply now.
+//   - On the SAME tier only the cycle moved. Lengthening the commitment
+//     (monthly→yearly) is the upgrade and applies now; shortening it
+//     (yearly→monthly) is the downgrade and waits for the period end, so the
+//     year already paid for is not refunded or credited away.
+//   - The combined case is the one that has no single-stage answer: a customer
+//     on a YEARLY lower tier asking for a MONTHLY higher tier is upgrading the
+//     tier (which must happen now) while shortening the cycle (which must not).
+//     Collapsing that into one immediate yearly→monthly switch would credit away
+//     the unused year and re-bill it as a month, so instead it becomes two
+//     stages — immediately move to the target tier's YEARLY price, then schedule
+//     the target's MONTHLY price at the period end that results. The customer
+//     gets the tier they paid for now and the cycle they asked for at the only
+//     boundary where switching to it costs them nothing.
+//
+// A composite needs the target's yearly price to exist; without it there is no
+// immediate stage to bill, so the change degrades to a plain immediate one at
+// the requested cycle rather than being refused. curCycle == "" is a row that
+// predates the billing_cycle column: unknown, never composite.
+//
+// Kept in step with the front-end's plan-relation.ts.
+func resolvePlanChange(cur Plan, curCycle string, target Plan, wantCycle string) planChangeDecision {
+	immediate := planChangeDecision{Effect: effectNow, ImmediateCycle: wantCycle}
+	deferred := planChangeDecision{Effect: effectPeriodEnd, ScheduledPlanID: target.ID, ScheduledCycle: wantCycle}
+
+	if target.PriceMonthly != cur.PriceMonthly {
+		if target.PriceMonthly < cur.PriceMonthly {
+			return deferred // tier downgrade, whatever the cycle does
+		}
+		// Tier upgrade. Only a yearly→monthly request splits into two stages.
+		if curCycle == "yearly" && wantCycle == "monthly" && target.StripePriceYearlyID != "" {
+			return planChangeDecision{
+				Effect:          effectComposite,
+				ImmediateCycle:  "yearly",
+				ScheduledPlanID: target.ID,
+				ScheduledCycle:  "monthly",
+			}
+		}
+		return immediate
+	}
+	if target.ID == cur.ID && wantCycle == "monthly" {
+		return deferred // same tier, cycle shortened
+	}
+	return immediate
 }
 
 // handleBillingChangePlan switches an already-subscribed user's Stripe
@@ -336,14 +416,21 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 		httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok", "effective": "period_end"})
 		return
 	}
-	var priceID string
-	switch in.Cycle {
-	case "yearly":
-		priceID = plan.StripePriceYearlyID
-	default:
-		priceID = plan.StripePriceMonthlyID
+	// Resolve the plan of action BEFORE the price id, because the composite
+	// upgrade bills the target's YEARLY price now even though the request asked
+	// for monthly. If the current plan can't be resolved, apply now.
+	decision := planChangeDecision{Effect: effectNow, ImmediateCycle: wantCycle}
+	if cur, ok, err := s.Store().GetPlan(r.Context(), u.PlanID); err == nil && ok {
+		decision = resolvePlanChange(cur, u.BillingCycle, plan, wantCycle)
 	}
-	if priceID == "" {
+	immediatePriceID := priceIDForCycle(plan, decision.ImmediateCycle)
+	scheduledPriceID := priceIDForCycle(plan, decision.ScheduledCycle)
+	// Every stage this change needs must be purchasable before we touch Stripe —
+	// checking only the requested cycle would let a composite reach Stripe, apply
+	// its immediate stage, and only then discover it has no second stage to
+	// schedule.
+	if (decision.Effect != effectPeriodEnd && immediatePriceID == "") ||
+		(decision.Effect != effectNow && scheduledPriceID == "") {
 		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "plan not purchasable"})
 		return
 	}
@@ -365,33 +452,54 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 		_ = s.Store().SetScheduledPlan(r.Context(), u.ID, "", "")
 	}
 
-	// Upgrade vs downgrade decides timing; see resolveChange for the rule.
-	// If the current plan can't be resolved, treat it as an upgrade (apply now).
-	downgrade := false
-	if cur, ok, err := s.Store().GetPlan(r.Context(), u.PlanID); err == nil && ok {
-		downgrade = resolveChange(cur, plan, wantCycle)
+	// Apply the stages the decision calls for. Stripe has no primitive that makes
+	// the composite's two stages atomic, so the order is chosen to be safely
+	// retryable instead: the immediate stage first (idempotent in the client, and
+	// a no-op once the subscription already sits on the target yearly price), then
+	// the schedule. A retry after a half-applied composite therefore re-runs the
+	// immediate stage for free and finishes the scheduling.
+	switch decision.Effect {
+	case effectPeriodEnd:
+		if err := s.biller.ScheduleDowngrade(r.Context(), u.StripeCustomerID, scheduledPriceID); err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+	case effectComposite:
+		if err := s.biller.ChangeSubscriptionPlan(r.Context(), u.StripeCustomerID, immediatePriceID); err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		if err := s.biller.ScheduleDowngrade(r.Context(), u.StripeCustomerID, scheduledPriceID); err != nil {
+			// The immediate stage APPLIED and the second one did not. Report the
+			// failure rather than a 200 that claims a cycle change which will never
+			// fire, and leave the scheduled marker cleared so the DB does not
+			// advertise a pending change Stripe knows nothing about. The user is on
+			// the target tier billed yearly, which a retry converges from without
+			// charging again.
+			log.Printf("billing: composite change for user %s (customer %s): immediate %s applied but scheduling %s failed: %v",
+				u.ID, u.StripeCustomerID, immediatePriceID, scheduledPriceID, err)
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+	default:
+		if err := s.biller.ChangeSubscriptionPlan(r.Context(), u.StripeCustomerID, immediatePriceID); err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
 	}
-
-	var opErr error
-	effective := "now"
-	scheduledPlan := ""  // pending-downgrade tier the pricing UI should show
-	scheduledCycle := "" // and its cycle, so the webhook can detect it landing
-	if downgrade {
-		opErr = s.biller.ScheduleDowngrade(r.Context(), u.StripeCustomerID, priceID)
-		effective = "period_end"
-		scheduledPlan = plan.ID
-		scheduledCycle = wantCycle
-	} else {
-		opErr = s.biller.ChangeSubscriptionPlan(r.Context(), u.StripeCustomerID, priceID)
-	}
-	if opErr != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return
-	}
-	// Record (or clear) the pending-downgrade hint. Best-effort: the Stripe op
+	// Record (or clear) the pending-change hint. Best-effort: the Stripe op
 	// already succeeded, so don't fail the request if this write hiccups.
-	_ = s.Store().SetScheduledPlan(r.Context(), u.ID, scheduledPlan, scheduledCycle)
-	httpx.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok", "effective": effective})
+	_ = s.Store().SetScheduledPlan(r.Context(), u.ID, decision.ScheduledPlanID, decision.ScheduledCycle)
+	out := map[string]string{"status": "ok", "effective": string(decision.Effect)}
+	if decision.Effect == effectComposite {
+		// Name both stages: the client cannot infer from "the user asked for pro
+		// monthly" that they are on pro YEARLY until the period end.
+		out["immediatePlanId"] = plan.ID
+		out["immediateCycle"] = decision.ImmediateCycle
+		out["scheduledPlanId"] = decision.ScheduledPlanID
+		out["scheduledCycle"] = decision.ScheduledCycle
+	}
+	httpx.WriteJSON(w, http.StatusOK, out)
 }
 
 // handleBillingPreview reports what changing to {planId,cycle} would do
@@ -440,45 +548,75 @@ func (s *Service) handleBillingPreview(w http.ResponseWriter, r *http.Request, u
 	if in.Cycle == "yearly" {
 		wantCycle = "yearly"
 	}
-	priceID := plan.StripePriceMonthlyID
 	nextAmount := plan.PriceMonthly
 	if wantCycle == "yearly" {
-		priceID = plan.StripePriceYearlyID
 		nextAmount = plan.PriceYearly
 	}
-	if priceID == "" {
+	if priceIDForCycle(plan, wantCycle) == "" {
 		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "plan not purchasable"})
 		return
 	}
-	// Upgrade vs downgrade decides both timing and whether we bother asking
-	// Stripe for a proration preview; see resolveChange for the rule. If the
-	// current plan can't be resolved, treat it as an upgrade (matches
-	// handleBillingChangePlan's fallback).
-	downgrade := false
+	// The same decision the real change would make, so the preview describes the
+	// operation the user is actually about to authorize; it also decides whether
+	// we bother asking Stripe for a proration preview at all. If the current plan
+	// can't be resolved, apply now (matches handleBillingChangePlan's fallback).
+	decision := planChangeDecision{Effect: effectNow, ImmediateCycle: wantCycle}
 	if cur, ok, err := s.Store().GetPlan(r.Context(), u.PlanID); err == nil && ok {
-		downgrade = resolveChange(cur, plan, wantCycle)
+		decision = resolvePlanChange(cur, u.BillingCycle, plan, wantCycle)
 	}
 	resp := map[string]any{
-		"effective":            "now",
+		"effective":            string(decision.Effect),
 		"immediateChargeCents": int64(0),
-		"nextAmountCents":      nextAmount,
-		"nextCycle":            wantCycle,
-		"effectiveDate":        u.SubscriptionEnd,
+		// immediateAdjustmentCents is the SIGNED proration: negative is a credit
+		// the customer is owed. immediateChargeCents floors at zero (Stripe never
+		// charges a negative invoice), so reporting only that renders a real credit
+		// as "$0.00 due now" — true about the card, misleading about the money.
+		"immediateAdjustmentCents": int64(0),
+		"nextAmountCents":          nextAmount,
+		"nextCycle":                wantCycle,
+		"effectiveDate":            u.SubscriptionEnd,
 	}
-	if downgrade {
-		resp["effective"] = "period_end"
+	if decision.Effect == effectPeriodEnd {
+		// Nothing is applied now, so the current period end IS the effective date
+		// and there is no proration to preview.
 		httpx.WriteJSON(w, http.StatusOK, resp)
 		return
 	}
-	cents, err := s.biller.PreviewChange(r.Context(), u.StripeCustomerID, priceID)
+	// A composite previews its IMMEDIATE stage — the target tier's yearly price —
+	// because that is what gets charged today. resolvePlanChange only returns a
+	// composite when that price exists, and for every other effect the immediate
+	// cycle is the requested one, whose id priceID already proved non-empty.
+	previewPriceID := priceIDForCycle(plan, decision.ImmediateCycle)
+	pv, err := s.biller.PreviewChange(r.Context(), u.StripeCustomerID, previewPriceID)
 	if err != nil {
 		// Log the underlying Stripe error — the handler otherwise collapses it to a
 		// bare 500 ("Couldn't load the change preview"), leaving no diagnostic trail.
-		log.Printf("billing: preview change for user %s (customer %s, price %s): %v", u.ID, u.StripeCustomerID, priceID, err)
+		log.Printf("billing: preview change for user %s (customer %s, price %s): %v", u.ID, u.StripeCustomerID, previewPriceID, err)
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	resp["immediateChargeCents"] = cents
+	resp["immediateChargeCents"] = pv.AmountDueCents
+	resp["immediateAdjustmentCents"] = pv.TotalCents
+	// Stripe's projection beats users.subscription_end, which is the CURRENT
+	// anchor and goes stale the moment a change crosses billing intervals: a
+	// monthly→yearly switch renews a year out, not at the old monthly boundary.
+	// A 0 means Stripe gave us no usable period — keep the stored date rather
+	// than showing the epoch.
+	if pv.PeriodEnd > 0 {
+		resp["effectiveDate"] = pv.PeriodEnd
+	}
+	if decision.Effect == effectComposite {
+		// Both stages, named. effectiveDate above is the yearly renewal the
+		// immediate stage creates, which is exactly when the monthly stage lands —
+		// so nextAmountCents/nextCycle (the requested monthly plan) already
+		// describe what bills on that date.
+		resp["immediatePlanId"] = plan.ID
+		resp["immediateCycle"] = decision.ImmediateCycle
+		resp["immediateAmountCents"] = plan.PriceYearly
+		resp["scheduledPlanId"] = decision.ScheduledPlanID
+		resp["scheduledCycle"] = decision.ScheduledCycle
+		resp["scheduledAmountCents"] = plan.PriceMonthly
+	}
 	httpx.WriteJSON(w, http.StatusOK, resp)
 }
 

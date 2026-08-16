@@ -48,12 +48,42 @@ type Biller interface {
 	// No-op when the subscription has no schedule. Used to cancel a pending
 	// downgrade and to clear the way before another in-app plan change.
 	ReleaseSchedule(ctx context.Context, customerID string) error
-	// PreviewChange returns the amount (cents) that switching the customer's live
-	// subscription to newPriceID would charge immediately, via a Stripe upcoming-
-	// invoice preview with the same always_invoice proration the real change uses.
-	// Used by the confirmation modal so the operator sees the real number first.
-	PreviewChange(ctx context.Context, customerID, newPriceID string) (immediateChargeCents int64, err error)
+	// PreviewChange projects what switching the customer's live subscription to
+	// newPriceID would do right now, via a Stripe upcoming-invoice preview with
+	// the same always_invoice proration the real change uses. Used by the
+	// confirmation modal so the operator sees the real numbers AND the real
+	// post-change renewal date before committing.
+	PreviewChange(ctx context.Context, customerID, newPriceID string) (ChangePreview, error)
 	VerifyWebhook(payload []byte, sigHeader string, now int64) (WebhookEvent, error)
+}
+
+// ChangePreview is Stripe's projection of an immediate plan change, as read from
+// the proration preview invoice.
+//
+// AmountDueCents and TotalCents are deliberately BOTH here, because they answer
+// different questions and only one of them can be negative. Stripe floors
+// amount_due at zero: when a change nets out in the customer's favour the
+// invoice total goes negative and the difference lands on their customer balance
+// instead of being charged. Reporting amount_due alone therefore renders a real
+// credit as "$0.00 due now", which reads as "this change costs nothing" when the
+// truth is "you are owed money". Callers must render the signed total, not just
+// the charge.
+type ChangePreview struct {
+	// AmountDueCents is invoice.amount_due — what the card is actually charged
+	// now. Never negative.
+	AmountDueCents int64
+	// TotalCents is invoice.total, the SIGNED proration adjustment: positive is a
+	// charge, negative is a credit applied to the customer's Stripe balance.
+	TotalCents int64
+	// PeriodEnd is the post-change renewal date (unix secs) projected from the
+	// preview invoice's line periods — the date the subscription next bills once
+	// this change is applied. This is NOT necessarily the current
+	// users.subscription_end: switching to a price with a different interval
+	// resets the billing anchor, so an upgrade from monthly to yearly renews a
+	// year out, not at the old monthly boundary. 0 when Stripe's preview carries
+	// no usable period, which the caller must treat as "unknown" rather than as
+	// an epoch date.
+	PeriodEnd int64
 }
 
 // CheckoutInput describes a subscription-mode Checkout Session to create.
@@ -110,6 +140,10 @@ type stripeClient struct {
 	// VerifyWebhook rejects any event whose livemode differs, so a stray test-mode
 	// event can't be processed by a live deployment (or vice versa).
 	wantLive bool
+	// idemRetryDelay is the base backoff before re-issuing a request whose
+	// Idempotency-Key Stripe reports as still in flight (see requestIdempotent).
+	// A field rather than a constant only so tests don't have to sleep.
+	idemRetryDelay time.Duration
 }
 
 // NewStripeClient builds the real Biller. secretKey/webhookSecret/portalConfig
@@ -123,8 +157,9 @@ func NewStripeClient(secretKey, webhookSecret, portalConfig string) *stripeClien
 		wantLive:      strings.HasPrefix(secretKey, "sk_live_"),
 		// These are quick, non-streaming REST calls (unlike blob transfers
 		// elsewhere in this package), so a total timeout is safe and desirable.
-		http: &http.Client{Timeout: 20 * time.Second},
-		base: "https://api.stripe.com",
+		http:           &http.Client{Timeout: 20 * time.Second},
+		base:           "https://api.stripe.com",
+		idemRetryDelay: 250 * time.Millisecond,
 	}
 }
 
@@ -491,12 +526,25 @@ func (c *stripeClient) CreatePortalSession(ctx context.Context, customerID, retu
 	return c.postForSessionURL(ctx, "/v1/billing_portal/sessions", form)
 }
 
-// liveSubscription finds the customer's live subscription (the first one
-// whose status passes liveSubStatus, scanning newest-first) and returns its
-// id, the id of its single item, and that item's current price id. Shared by
+// liveSub is the customer's live subscription as the change/preview paths need
+// it: which subscription and item to act on, what price it is on now, and the
+// generation token below.
+type liveSub struct {
+	ID, ItemID, PriceID string
+	// LatestInvoiceID is the subscription's latest_invoice. It is not used to
+	// bill anything — it is the state generation the idempotency key needs.
+	// Every always_invoice plan change writes a new invoice, so this value
+	// changes exactly when a change is APPLIED, which is what lets one key
+	// collapse concurrent duplicates of one intent while still letting a later,
+	// genuine change through. Empty is tolerated (see planChangeIdemKey).
+	LatestInvoiceID string
+}
+
+// liveSubscription finds the customer's live subscription (the first one whose
+// status passes liveSubStatus, scanning newest-first). Shared by
 // ChangeSubscriptionPlan and PreviewChange so there is one copy of the
 // status=all + liveSubStatus scan.
-func (c *stripeClient) liveSubscription(ctx context.Context, customerID string) (subID, itemID, currentPriceID string, err error) {
+func (c *stripeClient) liveSubscription(ctx context.Context, customerID string) (liveSub, error) {
 	q := url.Values{}
 	q.Set("customer", customerID)
 	q.Set("status", "all")
@@ -509,13 +557,14 @@ func (c *stripeClient) liveSubscription(ctx context.Context, customerID string) 
 	q.Set("limit", "100")
 	body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions?"+q.Encode(), nil)
 	if err != nil {
-		return "", "", "", err
+		return liveSub{}, err
 	}
 	var list struct {
 		Data []struct {
-			ID     string `json:"id"`
-			Status string `json:"status"`
-			Items  struct {
+			ID            string `json:"id"`
+			Status        string `json:"status"`
+			LatestInvoice string `json:"latest_invoice"`
+			Items         struct {
 				Data []struct {
 					ID    string `json:"id"`
 					Price struct {
@@ -526,14 +575,45 @@ func (c *stripeClient) liveSubscription(ctx context.Context, customerID string) 
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(body, &list); err != nil {
-		return "", "", "", fmt.Errorf("stripe: list subscriptions: parse response: %w", err)
+		return liveSub{}, fmt.Errorf("stripe: list subscriptions: parse response: %w", err)
 	}
 	for _, sub := range list.Data {
 		if liveSubStatus(sub.Status) && len(sub.Items.Data) > 0 {
-			return sub.ID, sub.Items.Data[0].ID, sub.Items.Data[0].Price.ID, nil
+			return liveSub{
+				ID:              sub.ID,
+				ItemID:          sub.Items.Data[0].ID,
+				PriceID:         sub.Items.Data[0].Price.ID,
+				LatestInvoiceID: sub.LatestInvoice,
+			}, nil
 		}
 	}
-	return "", "", "", fmt.Errorf("stripe: no live subscription for customer %s", customerID)
+	return liveSub{}, fmt.Errorf("stripe: no live subscription for customer %s", customerID)
+}
+
+// planChangeIdemKey is the deterministic Idempotency-Key for one in-place plan
+// change. Two requests share a key exactly when they are the same change, from
+// the same starting state, on the same subscription — which is what makes a
+// retried or concurrently-submitted change-plan collapse into ONE charge.
+//
+// The generation token (the subscription's latest_invoice at read time) is what
+// keeps the scope tight enough. Without it the key would be a pure function of
+// (subscription, from-price, to-price), so a user who moved pro-monthly →
+// pro-yearly, back to monthly, then to yearly again within Stripe's 24h key
+// window would replay the FIRST response: Stripe would return the original
+// subscription object and apply nothing, silently swallowing a legitimate paid
+// change. always_invoice writes a new invoice on every applied change, so the
+// token advances exactly once per applied change and the third request gets its
+// own key.
+//
+// An empty latest_invoice (a subscription that has not invoiced yet) degrades
+// this to the from-price/to-price scope, which is still correct for the case
+// that matters — concurrent duplicates of one intent — because a subscription
+// with no invoice has no earlier change to replay.
+func planChangeIdemKey(sub liveSub, newPriceID string) string {
+	sum := sha256.Sum256([]byte(strings.Join([]string{
+		"relayium:planchange:v1", sub.ID, sub.ItemID, sub.PriceID, newPriceID, sub.LatestInvoiceID,
+	}, "\x00")))
+	return "planchange_" + hex.EncodeToString(sum[:])
 }
 
 // ChangeSubscriptionPlan switches the customer's active subscription to
@@ -545,51 +625,55 @@ func (c *stripeClient) liveSubscription(ctx context.Context, customerID string) 
 // which previews this same charge before the operator confirms. Stripe emits
 // customer.subscription.updated, which the webhook turns into the plan
 // reassignment — so this method never touches the DB.
+// The update carries a deterministic Idempotency-Key (see planChangeIdemKey) so
+// a retried or concurrently-submitted copy of the SAME change collapses into one
+// charge instead of prorating twice.
 func (c *stripeClient) ChangeSubscriptionPlan(ctx context.Context, customerID, newPriceID string) error {
-	subID, itemID, currentPriceID, err := c.liveSubscription(ctx, customerID)
+	sub, err := c.liveSubscription(ctx, customerID)
 	if err != nil {
 		return err
 	}
-	if currentPriceID == newPriceID {
+	if sub.PriceID == newPriceID {
 		return nil // already on this price — nothing to do (idempotent)
 	}
 
 	// Point the item at the new price, invoicing the proration now.
 	form := url.Values{}
-	form.Set("items[0][id]", itemID)
+	form.Set("items[0][id]", sub.ItemID)
 	form.Set("items[0][price]", newPriceID)
 	form.Set("proration_behavior", "always_invoice")
-	if _, err := c.request(ctx, http.MethodPost, "/v1/subscriptions/"+subID, form); err != nil {
+	if _, err := c.requestIdempotent(ctx, http.MethodPost, "/v1/subscriptions/"+sub.ID, form,
+		planChangeIdemKey(sub, newPriceID)); err != nil {
 		return err
 	}
 	return nil
 }
 
 // PreviewChange previews an upcoming invoice for switching the customer's live
-// subscription to newPriceID with always_invoice proration — the same
-// proration ChangeSubscriptionPlan actually charges — and returns amount_due
-// in cents, so a confirmation UI can show the operator the real charge before
-// they commit to it.
-func (c *stripeClient) PreviewChange(ctx context.Context, customerID, newPriceID string) (int64, error) {
-	subID, itemID, _, err := c.liveSubscription(ctx, customerID)
+// subscription to newPriceID with always_invoice proration — the same proration
+// ChangeSubscriptionPlan actually charges — and projects it into a ChangePreview
+// (signed adjustment, charge, post-change renewal date) so a confirmation UI can
+// show the operator the real numbers before they commit to them.
+func (c *stripeClient) PreviewChange(ctx context.Context, customerID, newPriceID string) (ChangePreview, error) {
+	sub, err := c.liveSubscription(ctx, customerID)
 	if err != nil {
-		return 0, err
+		return ChangePreview{}, err
 	}
 	// Stripe's Basil API versions (2025+) removed GET /v1/invoices/upcoming in
 	// favour of POST /v1/invoices/create_preview. We pin no API version, so the
 	// account's default decides which one exists — try the current endpoint first,
 	// then fall back to the legacy one, so the preview works on either version.
-	if cents, cpErr := c.previewCreatePreview(ctx, subID, itemID, newPriceID); cpErr == nil {
-		return cents, nil
-	} else if cents, upErr := c.previewUpcoming(ctx, customerID, subID, itemID, newPriceID); upErr == nil {
-		return cents, nil
+	if pv, cpErr := c.previewCreatePreview(ctx, sub.ID, sub.ItemID, newPriceID); cpErr == nil {
+		return pv, nil
+	} else if pv, upErr := c.previewUpcoming(ctx, customerID, sub.ID, sub.ItemID, newPriceID); upErr == nil {
+		return pv, nil
 	} else {
-		return 0, fmt.Errorf("stripe: preview change: create_preview failed (%v) and upcoming fallback failed (%v)", cpErr, upErr)
+		return ChangePreview{}, fmt.Errorf("stripe: preview change: create_preview failed (%v) and upcoming fallback failed (%v)", cpErr, upErr)
 	}
 }
 
 // previewCreatePreview uses the current POST /v1/invoices/create_preview endpoint.
-func (c *stripeClient) previewCreatePreview(ctx context.Context, subID, itemID, newPriceID string) (int64, error) {
+func (c *stripeClient) previewCreatePreview(ctx context.Context, subID, itemID, newPriceID string) (ChangePreview, error) {
 	form := url.Values{}
 	form.Set("subscription", subID)
 	form.Set("subscription_details[items][0][id]", itemID)
@@ -597,14 +681,14 @@ func (c *stripeClient) previewCreatePreview(ctx context.Context, subID, itemID, 
 	form.Set("subscription_details[proration_behavior]", "always_invoice")
 	body, err := c.request(ctx, http.MethodPost, "/v1/invoices/create_preview", form)
 	if err != nil {
-		return 0, err
+		return ChangePreview{}, err
 	}
-	return parseInvoiceAmountDue(body)
+	return parseChangePreview(body)
 }
 
 // previewUpcoming uses the legacy GET /v1/invoices/upcoming endpoint (older API
 // versions where create_preview does not yet exist).
-func (c *stripeClient) previewUpcoming(ctx context.Context, customerID, subID, itemID, newPriceID string) (int64, error) {
+func (c *stripeClient) previewUpcoming(ctx context.Context, customerID, subID, itemID, newPriceID string) (ChangePreview, error) {
 	q := url.Values{}
 	q.Set("customer", customerID)
 	q.Set("subscription", subID)
@@ -613,19 +697,47 @@ func (c *stripeClient) previewUpcoming(ctx context.Context, customerID, subID, i
 	q.Set("subscription_proration_behavior", "always_invoice")
 	body, err := c.request(ctx, http.MethodGet, "/v1/invoices/upcoming?"+q.Encode(), nil)
 	if err != nil {
-		return 0, err
+		return ChangePreview{}, err
 	}
-	return parseInvoiceAmountDue(body)
+	return parseChangePreview(body)
 }
 
-func parseInvoiceAmountDue(body []byte) (int64, error) {
+// parseChangePreview projects a Stripe preview invoice into a ChangePreview.
+//
+// PeriodEnd comes from the LATEST line period rather than the invoice's own
+// period_end, because that is the only place the post-change anchor shows up: an
+// always_invoice proration invoice carries a credit line spanning the OLD period
+// and a charge line spanning the NEW one, so on a monthly→yearly switch the two
+// lines end a month and a year out respectively, and only the later one is the
+// date the subscription actually renews on. Falling back to the top-level
+// period_end covers previews with no usable lines; both being absent leaves 0,
+// which the caller must read as "unknown" and not as an epoch date.
+func parseChangePreview(body []byte) (ChangePreview, error) {
 	var inv struct {
 		AmountDue int64 `json:"amount_due"`
+		Total     int64 `json:"total"`
+		PeriodEnd int64 `json:"period_end"`
+		Lines     struct {
+			Data []struct {
+				Period struct {
+					End int64 `json:"end"`
+				} `json:"period"`
+			} `json:"data"`
+		} `json:"lines"`
 	}
 	if err := json.Unmarshal(body, &inv); err != nil {
-		return 0, fmt.Errorf("stripe: preview invoice: parse response: %w", err)
+		return ChangePreview{}, fmt.Errorf("stripe: preview invoice: parse response: %w", err)
 	}
-	return inv.AmountDue, nil
+	pv := ChangePreview{AmountDueCents: inv.AmountDue, TotalCents: inv.Total}
+	for _, line := range inv.Lines.Data {
+		if line.Period.End > pv.PeriodEnd {
+			pv.PeriodEnd = line.Period.End
+		}
+	}
+	if pv.PeriodEnd == 0 {
+		pv.PeriodEnd = inv.PeriodEnd
+	}
+	return pv, nil
 }
 
 // ScheduleDowngrade defers a plan change to the end of the current billing
@@ -798,9 +910,75 @@ func (c *stripeClient) requestKeyed(ctx context.Context, method, path string, fo
 		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("stripe: %s %s: status %d: %s", method, path, resp.StatusCode, string(body))
+		return nil, &stripeAPIError{Method: method, Path: path, Status: resp.StatusCode, Body: string(body)}
 	}
 	return body, nil
+}
+
+// stripeAPIError is a non-2xx Stripe response, carrying the status and raw body
+// so a caller can branch on a SPECIFIC failure instead of string-matching a
+// formatted message. Error() reproduces the exact text this used to format, so
+// the existing substring checks (CancelSubscription's "No such subscription")
+// keep working unchanged.
+type stripeAPIError struct {
+	Method, Path string
+	Status       int
+	Body         string
+}
+
+func (e *stripeAPIError) Error() string {
+	return fmt.Sprintf("stripe: %s %s: status %d: %s", e.Method, e.Path, e.Status, e.Body)
+}
+
+// idempotencyKeyInFlight reports whether err is Stripe's refusal of a request
+// whose Idempotency-Key is currently being processed by ANOTHER request (409).
+// That is the expected outcome when two change-plan requests for the same intent
+// race, and it is the one Stripe failure worth retrying: the winner is applying
+// exactly the change we want, and re-issuing the same key once it lands returns
+// that same result rather than performing a second one.
+func idempotencyKeyInFlight(err error) bool {
+	var apiErr *stripeAPIError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	return apiErr.Status == http.StatusConflict &&
+		strings.Contains(strings.ToLower(apiErr.Body), "idempotency")
+}
+
+// idemRetryAttempts is the total number of times requestIdempotent issues a
+// keyed request, counting the first. Two retries is enough to outlast the
+// in-flight window of a racing duplicate without holding the HTTP handler open.
+const idemRetryAttempts = 3
+
+// requestIdempotent is requestKeyed plus the one retry that idempotency makes
+// safe: when Stripe reports the key as still in flight, wait and re-issue THE
+// SAME key. Re-issuing is not a second operation — Stripe replays the original
+// response — so the losing request of a race reports the truth (the change
+// applied) instead of a 500 over a change that actually succeeded.
+//
+// Any other error is returned immediately: a retry loop over unclassified
+// failures is how a transient network blip turns into repeated charges.
+func (c *stripeClient) requestIdempotent(ctx context.Context, method, path string, form url.Values, idemKey string) ([]byte, error) {
+	var err error
+	for attempt := 0; attempt < idemRetryAttempts; attempt++ {
+		if attempt > 0 {
+			delay := c.idemRetryDelay * time.Duration(1<<(attempt-1))
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(delay):
+			}
+		}
+		var body []byte
+		body, err = c.requestKeyed(ctx, method, path, form, idemKey)
+		if err == nil {
+			return body, nil
+		}
+		if !idempotencyKeyInFlight(err) {
+			return nil, err
+		}
+	}
+	return nil, err
 }
 
 // postForSessionURL performs the shared form-POST + {"url":"..."} decode used

@@ -34,7 +34,9 @@ type fakeBiller struct {
 
 	releaseCalls int
 
-	previewCents     int64
+	previewCents     int64 // ChangePreview.AmountDueCents
+	previewTotal     int64 // ChangePreview.TotalCents (signed; 0 ⇒ mirror previewCents)
+	previewPeriodEnd int64 // ChangePreview.PeriodEnd (0 ⇒ Stripe gave no usable period)
 	previewErr       error
 	lastPreviewPrice string
 	previewCalls     int
@@ -110,10 +112,19 @@ func (f *fakeBiller) ReleaseSchedule(ctx context.Context, customerID string) err
 	return nil
 }
 
-func (f *fakeBiller) PreviewChange(ctx context.Context, customerID, newPriceID string) (int64, error) {
+func (f *fakeBiller) PreviewChange(ctx context.Context, customerID, newPriceID string) (ChangePreview, error) {
 	f.previewCalls++
 	f.lastPreviewPrice = newPriceID
-	return f.previewCents, f.previewErr
+	if f.previewErr != nil {
+		return ChangePreview{}, f.previewErr
+	}
+	// A test that only sets previewCents means "an ordinary charge", where the
+	// signed total equals the amount due.
+	total := f.previewTotal
+	if total == 0 {
+		total = f.previewCents
+	}
+	return ChangePreview{AmountDueCents: f.previewCents, TotalCents: total, PeriodEnd: f.previewPeriodEnd}, nil
 }
 
 func (f *fakeBiller) VerifyWebhook(payload []byte, sigHeader string, now int64) (WebhookEvent, error) {
@@ -468,26 +479,10 @@ func TestBillingChangePlanDowngradeIsScheduled(t *testing.T) {
 	}
 }
 
-func TestResolveChangeDirection(t *testing.T) {
-	plus := Plan{ID: "plus", PriceMonthly: 199}
-	pro := Plan{ID: "pro", PriceMonthly: 999}
-	// higher tier -> upgrade
-	if resolveChange(plus, pro, "monthly") {
-		t.Fatal("plus->pro should be an upgrade")
-	}
-	// lower tier -> downgrade
-	if !resolveChange(pro, plus, "yearly") {
-		t.Fatal("pro->plus should be a downgrade even billed yearly")
-	}
-	// same tier, monthly->yearly -> upgrade
-	if resolveChange(plus, plus, "yearly") {
-		t.Fatal("plus/mo->plus/yr should be an upgrade")
-	}
-	// same tier, yearly->monthly -> downgrade
-	if !resolveChange(plus, plus, "monthly") {
-		t.Fatal("plus/yr->plus/mo should be a downgrade")
-	}
-}
+// The four directions this test used to pin (tier up/down, same-tier cycle
+// up/down) are now part of the full tier×cycle matrix in
+// billing_tier_cycle_test.go, which also covers the composite case the
+// two-valued resolveChange could not express.
 
 func cancelScheduled(t *testing.T, ts *httptest.Server, cookie *http.Cookie) *http.Response {
 	t.Helper()

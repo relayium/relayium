@@ -399,6 +399,17 @@ func TestChangeSubscriptionPlanRequestShape(t *testing.T) {
 			if got := r.Form.Get("proration_behavior"); got != "always_invoice" {
 				t.Errorf("proration_behavior = %q, want always_invoice", got)
 			}
+			// always_invoice makes this request charge money, so the header is
+			// part of its shape: without a deterministic Idempotency-Key a
+			// double-submit prorates twice. Pinned to planChangeIdemKey's value
+			// for the state the list call above reported, so dropping or
+			// re-scoping the key fails here and not only in the dedicated
+			// idempotency tests. That fixture carries no latest_invoice, which
+			// also pins the degraded (no generation token) scope.
+			wantKey := planChangeIdemKey(liveSub{ID: "sub_1", ItemID: "si_1", PriceID: "price_old"}, "price_new")
+			if got := r.Header.Get("Idempotency-Key"); got != wantKey {
+				t.Errorf("Idempotency-Key = %q, want %q", got, wantKey)
+			}
 			w.Header().Set("Content-Type", "application/json")
 			fmt.Fprint(w, `{"id":"sub_1"}`)
 		default:
@@ -704,12 +715,12 @@ func TestPreviewChangeReturnsImmediateCharge(t *testing.T) {
 	defer srv.Close()
 	c := NewStripeClient("sk_test", "whsec", "")
 	c.base = srv.URL
-	cents, err := c.PreviewChange(context.Background(), "cus_1", "price_new")
+	pv, err := c.PreviewChange(context.Background(), "cus_1", "price_new")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cents != 734 {
-		t.Fatalf("want 734, got %d", cents)
+	if pv.AmountDueCents != 734 {
+		t.Fatalf("want 734, got %d", pv.AmountDueCents)
 	}
 }
 
@@ -736,11 +747,11 @@ func TestPreviewChangeFallsBackToUpcoming(t *testing.T) {
 	defer srv.Close()
 	c := NewStripeClient("sk_test", "whsec", "")
 	c.base = srv.URL
-	cents, err := c.PreviewChange(context.Background(), "cus_1", "price_new")
+	pv, err := c.PreviewChange(context.Background(), "cus_1", "price_new")
 	if err != nil {
 		t.Fatalf("fallback should succeed: %v", err)
 	}
-	if cents != 521 {
-		t.Fatalf("want 521 from upcoming fallback, got %d", cents)
+	if pv.AmountDueCents != 521 {
+		t.Fatalf("want 521 from upcoming fallback, got %d", pv.AmountDueCents)
 	}
 }
