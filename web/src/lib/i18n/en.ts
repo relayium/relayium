@@ -156,6 +156,12 @@ const en: Messages = {
     previewLoading: "Calculating…",
     upgradeSummary: (charge, next, cycle, date) =>
       `You'll be charged ${charge} now, then ${next}/${cycle} starting ${date}.`,
+    upgradeCreditSummary: (credit, next, cycle, date) =>
+      `Nothing is due now — you'll get a ${credit} credit toward your next invoice, then ${next}/${cycle} starting ${date}.`,
+    upgradeNoChargeSummary: (next, cycle, date) =>
+      `Your plan changes right away at no extra cost today, then ${next}/${cycle} starting ${date}.`,
+    twoStageSummary: (charge, immediateAmount, immediateCycle, scheduledAmount, scheduledCycle, date) =>
+      `This change happens in two steps. You move to the ${immediateCycle} price now — ${charge} today, covering ${immediateAmount}/${immediateCycle}. Then on ${date} you switch to ${scheduledAmount}/${scheduledCycle}.`,
     downgradeSummary: (date) => `Takes effect ${date} at period end. You keep your current plan until then — no refund.`,
     confirmChange: "Confirm change",
     cancel: "Cancel",

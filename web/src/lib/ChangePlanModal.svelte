@@ -8,11 +8,21 @@
   } = $props();
 
   interface Preview {
-    effective: "now" | "period_end";
+    effective: "now" | "period_end" | "composite";
+    // What the card is actually charged today; Stripe floors it at zero.
     immediateChargeCents: number;
+    // The SIGNED proration. Negative is a credit the customer is owed, which the
+    // floored charge above would otherwise render as a misleading "$0.00 due now".
+    immediateAdjustmentCents: number;
     nextAmountCents: number;
     nextCycle: string;
     effectiveDate: number;
+    // Composite only: the immediate stage applies the target tier's yearly price,
+    // and the requested monthly plan lands at the renewal that stage creates.
+    immediateCycle?: string;
+    immediateAmountCents?: number;
+    scheduledCycle?: string;
+    scheduledAmountCents?: number;
   }
 
   let preview = $state<Preview | null>(null);
@@ -27,10 +37,30 @@
   const summary = $derived(() => {
     if (!preview) return "";
     if (preview.effective === "period_end") return t.billing.downgradeSummary(date(preview.effectiveDate));
-    return t.billing.upgradeSummary(
-      money(preview.immediateChargeCents), money(preview.nextAmountCents),
-      cycleWord(preview.nextCycle), date(preview.effectiveDate),
-    );
+    // effectiveDate is Stripe's projected post-change renewal, not the stale
+    // current-period anchor, so both immediate branches date themselves correctly.
+    const when = date(preview.effectiveDate);
+    // Both stage amounts are required to describe a composite truthfully; without
+    // them, fall through to the single-stage summary rather than quoting a $0.00
+    // stage the server never sent.
+    if (preview.effective === "composite"
+      && preview.immediateAmountCents !== undefined && preview.scheduledAmountCents !== undefined) {
+      // A composite is always an upward tier move onto a yearly price, so its
+      // proration is a charge; only the cycle switch is deferred.
+      return t.billing.twoStageSummary(
+        money(preview.immediateChargeCents),
+        money(preview.immediateAmountCents), cycleWord(preview.immediateCycle ?? "yearly"),
+        money(preview.scheduledAmountCents), cycleWord(preview.scheduledCycle ?? preview.nextCycle), when,
+      );
+    }
+    const next = money(preview.nextAmountCents);
+    const nextCycle = cycleWord(preview.nextCycle);
+    // Fall back to the charge when the signed proration is absent, so an older
+    // response can never turn a real charge into a "no extra cost" claim.
+    const adjustment = preview.immediateAdjustmentCents ?? preview.immediateChargeCents;
+    if (adjustment < 0) return t.billing.upgradeCreditSummary(money(-adjustment), next, nextCycle, when);
+    if (adjustment === 0) return t.billing.upgradeNoChargeSummary(next, nextCycle, when);
+    return t.billing.upgradeSummary(money(preview.immediateChargeCents), next, nextCycle, when);
   });
 
   $effect(() => {

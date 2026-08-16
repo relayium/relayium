@@ -156,6 +156,12 @@ const zh: Messages = {
     previewLoading: "正在计算…",
     upgradeSummary: (charge, next, cycle, date) =>
       `现在扣款 ${charge}，之后自 ${date} 起 ${next}/${cycle}。`,
+    upgradeCreditSummary: (credit, next, cycle, date) =>
+      `现在无需付款，并将获得 ${credit} 抵扣额度用于下一期账单；之后自 ${date} 起 ${next}/${cycle}。`,
+    upgradeNoChargeSummary: (next, cycle, date) =>
+      `套餐立即生效，今天无需额外付款；之后自 ${date} 起 ${next}/${cycle}。`,
+    twoStageSummary: (charge, immediateAmount, immediateCycle, scheduledAmount, scheduledCycle, date) =>
+      `本次变更分两步完成：现在先切换到${immediateCycle}价格，今天扣款 ${charge}，对应 ${immediateAmount}/${immediateCycle}；随后自 ${date} 起转为 ${scheduledAmount}/${scheduledCycle}。`,
     downgradeSummary: (date) => `将于 ${date} 期末生效。在那之前保持当前套餐，不退款。`,
     confirmChange: "确认变更",
     cancel: "取消",

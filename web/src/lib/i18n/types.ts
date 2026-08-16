@@ -286,7 +286,19 @@ export interface Messages {
     changeSuccess: string; // toast after a successful (immediate) upgrade
     downgradeScheduled: string; // toast after a downgrade is scheduled for period end
     previewLoading: string; // 弹窗加载预览时
-    upgradeSummary: (charge: string, next: string, cycle: string, date: string) => string;
+    // The immediate-change summaries are chosen by the SIGN of the previewed
+    // proration, because Stripe floors an invoice at zero: a real credit and a
+    // genuinely free change both arrive as "$0.00 due now" and must not read alike.
+    upgradeSummary: (charge: string, next: string, cycle: string, date: string) => string; // proration > 0
+    upgradeCreditSummary: (credit: string, next: string, cycle: string, date: string) => string; // proration < 0
+    upgradeNoChargeSummary: (next: string, cycle: string, date: string) => string; // proration == 0
+    // A yearly lower tier moving to a monthly higher tier applies now at the
+    // target's YEARLY price and only becomes monthly at that renewal, so both
+    // stages — today's charge and the later cycle switch — must be named.
+    twoStageSummary: (
+      charge: string, immediateAmount: string, immediateCycle: string,
+      scheduledAmount: string, scheduledCycle: string, date: string,
+    ) => string;
     downgradeSummary: (date: string) => string;
     confirmChange: string; // 弹窗确认按钮
     cancel: string; // 弹窗取消按钮
