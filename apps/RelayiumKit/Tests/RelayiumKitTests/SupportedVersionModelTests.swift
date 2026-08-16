@@ -164,10 +164,13 @@ final class SupportedVersionModelTests: XCTestCase {
     // MARK: - refreshing
 
     func testASuccessfulRefreshCachesTheDocumentItActedOn() async {
+        // Revision 2, not 1: a requirement the embedded floor does not already
+        // say is a new policy, and a new policy is a new revision. Served under
+        // the floor's own revision it would be two documents under one number,
+        // which `admit` refuses — see `SupportedVersionTests`.
+        let raised = document(revision: 2, minimum: "1.2.6", build: 12, recommended: "1.2.6")
         let store = InMemorySupportedVersionPolicyStore()
-        let subject = model(version: "1.2.5",
-                            store: store,
-                            result: .success(document(minimum: "1.2.6", build: 12, recommended: "1.2.6")))
+        let subject = model(version: "1.2.5", store: store, result: .success(raised))
         await subject.refresh()
 
         XCTAssertTrue(subject.isBlocked)
@@ -175,7 +178,7 @@ final class SupportedVersionModelTests: XCTestCase {
         XCTAssertEqual(store.load()?.fetchedAt, epoch)
         // The RAW document, so the next launch re-validates it rather than
         // trusting a decode this build performed.
-        XCTAssertEqual(store.load()?.document, document(minimum: "1.2.6", build: 12, recommended: "1.2.6"))
+        XCTAssertEqual(store.load()?.document, raised)
     }
 
     /// Every refusal, and the same answer to all of them: the state does not
@@ -390,6 +393,39 @@ final class SupportedVersionModelTests: XCTestCase {
         }
     }
 
+    /// **A device with no cache is not a device with no memory.** The binary
+    /// carries the floor's revision AND what that revision says, so a document
+    /// re-using it with different content is refused on first launch exactly as
+    /// it is on a device that cached the original — and it is refused totally:
+    /// nothing enters the cache, so the next launch cannot read it as the policy
+    /// in force. Without this, an attacker who can serve one document would pick
+    /// off precisely the fresh installs.
+    func testAFreshInstallRefusesAnotherDocumentUnderTheFloorSRevision() async {
+        let floor = SupportedVersionPolicy.embeddedFloor
+        for (label, served) in [
+            ("stricter", document(revision: floor.revision, minimum: "1.2.6",
+                                  build: 12, recommended: "1.2.6")),
+            ("a different published version",
+             document(revision: floor.revision, latest: "1.2.8")),
+        ] {
+            let store = InMemorySupportedVersionPolicyStore()
+            let subject = model(version: "1.2.5", store: store, result: .success(served))
+            await subject.refresh()
+            XCTAssertTrue(subject.lastRefreshFailed, label)
+            XCTAssertNil(store.load(), "\(label) was written to the cache")
+            XCTAssertEqual(subject.state, .supported,
+                           "\(label) moved the enforcement state of a fresh install")
+        }
+        // The published document itself, at the floor's revision, is admitted —
+        // so the rule above refuses a second meaning, not first launch.
+        let store = InMemorySupportedVersionPolicyStore()
+        let subject = model(version: "1.2.5", store: store,
+                            result: .success(document(revision: floor.revision)))
+        await subject.refresh()
+        XCTAssertFalse(subject.lastRefreshFailed)
+        XCTAssertEqual(store.load()?.document, document(revision: floor.revision))
+    }
+
     // MARK: - the recommendation
 
     func testDismissingTheRecommendationHidesItWithoutChangingTheState() async {
@@ -417,7 +453,11 @@ final class SupportedVersionModelTests: XCTestCase {
         let raised = SupportedVersionModel(
             currentVersion: AppVersion("1.2.4"),
             store: InMemorySupportedVersionPolicyStore(),
-            source: StubSource(result: .success(document(recommended: "1.2.6", latest: "1.2.7"))),
+            // A raised recommendation is a changed policy, so it arrives under a
+            // revision of its own rather than re-spelling the floor's.
+            source: StubSource(result: .success(document(revision: 2,
+                                                         recommended: "1.2.6",
+                                                         latest: "1.2.7"))),
             now: { self.epoch })
         await raised.refresh()
         XCTAssertTrue(raised.showsRecommendation)
@@ -429,11 +469,15 @@ final class SupportedVersionModelTests: XCTestCase {
     /// stop the model working either.
     func testABundleWithNoReadableVersionIsNeverBlocked() async {
         let store = InMemorySupportedVersionPolicyStore()
-        let subject = model(version: nil, store: store, result: .success(document(minimum: "1.9",
+        let subject = model(version: nil, store: store, result: .success(document(revision: 2,
+                                                                                 minimum: "1.9",
                                                                                  build: 99,
                                                                                  recommended: "1.9",
                                                                                  latest: "1.9")))
         await subject.refresh()
+        // The policy was admitted and acted on — the bundle's unreadable version
+        // is what leaves it supported, not a refresh that quietly failed.
+        XCTAssertFalse(subject.lastRefreshFailed)
         XCTAssertEqual(subject.state, .supported)
         XCTAssertFalse(subject.isBlocked)
     }

@@ -355,6 +355,110 @@ final class SupportedVersionTests: XCTestCase {
         }
     }
 
+    /// **The split brain a revision NUMBER cannot close, and the reason the floor
+    /// is compared as a whole policy.**
+    ///
+    /// A device with no cache has no document to compare a served one against —
+    /// so a barrier that took only the floor's NUMBER would let a fresh install
+    /// accept content the floor never said, under a revision the floor already
+    /// spent. The install that cached the original revision 1 refuses exactly
+    /// that document. Two installs, one revision, opposite enforcement, decided
+    /// by nothing but which of them had run before. Refused in both directions,
+    /// because a stricter document under a spent revision is as much a second
+    /// meaning as a weaker one — and the stricter direction is the one an
+    /// attacker who can serve a document would actually reach for, since
+    /// `decode` refuses to go below the floor but is happy to go above it.
+    func testAFreshInstallRefusesTheFloorSRevisionCarryingDifferentContent() {
+        let floor = SupportedVersionPolicy.embeddedFloor
+        for (label, different) in [
+            ("stricter", policyAt(revision: floor.revision, minimum: "1.2.6",
+                                  recommended: "1.2.6", build: 12)),
+            ("a different published version", policyAt(revision: floor.revision, latest: "1.2.8")),
+            ("a build that does not match the version",
+             policyAt(revision: floor.revision, build: 12)),
+        ] {
+            XCTAssertThrowsError(
+                try SupportedVersionPolicy.admit(different, over: nil, floor: floor),
+                "a fresh install accepted \(label) under the floor's own revision") {
+                XCTAssertEqual($0 as? SupportedVersionPolicyError,
+                               .equivocatingRevision(floor.revision))
+            }
+            // And the device that HAS the floor's document cached refuses it
+            // too, which is the point: both installs answer the same way.
+            XCTAssertThrowsError(
+                try SupportedVersionPolicy.admit(different, over: floor, floor: floor), label)
+        }
+        // The floor's own document, served back at its own revision, is the
+        // ordinary first-launch case and is admitted.
+        XCTAssertNoThrow(try SupportedVersionPolicy.admit(
+            policyAt(revision: floor.revision), over: nil, floor: floor))
+        XCTAssertEqual(policyAt(revision: floor.revision), floor,
+                       "the published document and the embedded floor must be one policy")
+    }
+
+    /// A cache above the floor is the authority, and the floor does not dilute
+    /// it: the higher revision wins whole, so its content — not the floor's — is
+    /// what the served document must match at that revision.
+    func testACachedRevisionAboveTheFloorStaysAuthoritative() {
+        let floor = policyAt(revision: 2)
+        let known = policyAt(revision: 6, minimum: "1.3.0", recommended: "1.3.0", build: 20)
+        XCTAssertThrowsError(
+            try SupportedVersionPolicy.admit(policyAt(revision: 6), over: known, floor: floor)) {
+            XCTAssertEqual($0 as? SupportedVersionPolicyError, .equivocatingRevision(6))
+        }
+        XCTAssertNoThrow(try SupportedVersionPolicy.admit(known, over: known, floor: floor))
+        XCTAssertThrowsError(
+            try SupportedVersionPolicy.admit(policyAt(revision: 5), over: known, floor: floor)) {
+            XCTAssertEqual($0 as? SupportedVersionPolicyError,
+                           .replayedRevision(served: 5, known: 6))
+        }
+        // A cache BELOW the floor's revision is spent memory: the binary knows
+        // something newer, so the floor decides both the barrier and the content.
+        let stale = policyAt(revision: 1, minimum: "1.3.0", recommended: "1.3.0", build: 20)
+        XCTAssertThrowsError(
+            try SupportedVersionPolicy.admit(stale, over: stale, floor: floor)) {
+            XCTAssertEqual($0 as? SupportedVersionPolicyError,
+                           .replayedRevision(served: 1, known: 2))
+        }
+        XCTAssertNoThrow(try SupportedVersionPolicy.admit(floor, over: stale, floor: floor))
+        XCTAssertThrowsError(
+            try SupportedVersionPolicy.admit(policyAt(revision: 2, latest: "1.2.8"),
+                                             over: stale, floor: floor)) {
+            XCTAssertEqual($0 as? SupportedVersionPolicyError, .equivocatingRevision(2))
+        }
+    }
+
+    /// **A corrupt or legacy cache cannot establish a split brain, and cannot
+    /// brick the policy either.**
+    ///
+    /// One revision already naming two documents — one cached, one compiled in —
+    /// is a state the fixed admitting path never creates; it is reachable from a
+    /// cache written by a build whose floor said something else, or from a
+    /// tampered one. Neither side can be preferred, so that revision carries no
+    /// content: nothing at it is admitted, in EITHER direction, so whichever
+    /// document an attacker holds does not become this device's policy. A
+    /// strictly higher revision still is admitted, so the product can publish
+    /// its way out rather than the device being stranded on a bad cache forever.
+    func testAContestedRevisionAdmitsNothingAtItAndStillTakesAHigherOne() {
+        let floor = policyAt(revision: 4)
+        let corrupt = policyAt(revision: 4, minimum: "1.3.0", recommended: "1.3.0", build: 20)
+        for (label, served) in [("the cached side", corrupt), ("the floor's side", floor)] {
+            XCTAssertThrowsError(
+                try SupportedVersionPolicy.admit(served, over: corrupt, floor: floor),
+                "a contested revision admitted \(label)") {
+                XCTAssertEqual($0 as? SupportedVersionPolicyError, .equivocatingRevision(4))
+            }
+        }
+        XCTAssertThrowsError(
+            try SupportedVersionPolicy.admit(policyAt(revision: 3), over: corrupt, floor: floor)) {
+            XCTAssertEqual($0 as? SupportedVersionPolicyError,
+                           .replayedRevision(served: 3, known: 4))
+        }
+        XCTAssertNoThrow(try SupportedVersionPolicy.admit(policyAt(revision: 5),
+                                                         over: corrupt, floor: floor),
+                         "a corrupt cache stranded this device on its revision")
+    }
+
     // MARK: - the three states
 
     private let policy = SupportedVersionPolicy(

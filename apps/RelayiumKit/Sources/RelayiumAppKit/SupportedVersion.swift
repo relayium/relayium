@@ -222,10 +222,13 @@ public enum SupportedVersionPolicyError: Error, Equatable, Sendable {
     /// A revision below one this device has already accepted: the served
     /// document is an older policy, however valid and however correctly served.
     case replayedRevision(served: Int, known: Int)
-    /// The revision this device already accepted, carrying different content —
-    /// two policies published under one number. Refused in both directions: it
-    /// is equally an origin equivocating between clients and an edit that
-    /// changed a requirement without advancing the revision.
+    /// The revision this device already holds — remembered from a cache or
+    /// compiled in as the floor — carrying different content: two policies
+    /// published under one number. Refused in both directions: it is equally an
+    /// origin equivocating between clients and an edit that changed a
+    /// requirement without advancing the revision. Also raised when the cache
+    /// and the floor already disagree at one revision, where that revision
+    /// names nothing this build can act on.
     case equivocatingRevision(Int)
 }
 
@@ -308,6 +311,18 @@ extension SupportedVersionPolicy {
     /// correctly served, floor-clearing policy from before the requirement was
     /// raised is refused by nothing in `decode`.
     ///
+    /// Both questions are asked against ONE policy — `effectivePolicy` below —
+    /// and never against a revision NUMBER on its own. **A number is not a
+    /// barrier.** Taking the highest revision from the cache and the floor while
+    /// comparing content only to the cache is what lets two installs disagree
+    /// under one revision: a fresh device, whose barrier is the floor's revision
+    /// but which has no cached document to compare against, would admit a served
+    /// revision 1 carrying content the floor never said, while a device holding
+    /// the original revision 1 refuses that same document. One revision, two
+    /// enforcement states, decided by cache age — which is the split brain the
+    /// revision exists to prevent. The floor is a complete policy, so it answers
+    /// both halves; it is used as both.
+    ///
     /// Three rules, one per direction the revision can move:
     ///
     ///  - **Lower is refused.** Whatever else it says. The caller must not cache
@@ -315,12 +330,12 @@ extension SupportedVersionPolicy {
     ///    document leaves the device exactly where it was.
     ///  - **Equal is refused unless it is the SAME policy.** One revision names
     ///    one document. Different content under a revision this device already
-    ///    holds is an origin telling two clients two things, or an edit that
-    ///    forgot to advance the number; both are refused, and the direction of
-    ///    the difference is deliberately not considered — a "refinement" that
-    ///    only tightens is still a second meaning for one revision. An identical
-    ///    policy is admitted, which is what lets an unchanged document refresh
-    ///    the cache's timestamp.
+    ///    holds — remembered or compiled in — is an origin telling two clients
+    ///    two things, or an edit that forgot to advance the number; both are
+    ///    refused, and the direction of the difference is deliberately not
+    ///    considered: a "refinement" that only tightens is still a second meaning
+    ///    for one revision. An identical policy is admitted, which is what lets
+    ///    an unchanged document refresh the cache's timestamp.
     ///  - **Higher is admitted**, and may tighten OR relax, because `decode` has
     ///    already held it above the embedded floor. That is the emergency
     ///    rollback: publish revision N+1 with a lower minimum and every client
@@ -329,19 +344,50 @@ extension SupportedVersionPolicy {
     ///
     /// - Parameter known: the highest-revision policy this device has accepted,
     ///   or nil if it has none.
-    /// - Parameter floor: the embedded floor, whose own revision is the barrier
-    ///   a device with no memory starts from.
+    /// - Parameter floor: the embedded floor, which is both the revision a device
+    ///   with no memory starts from and the content that revision means.
     public static func admit(_ served: SupportedVersionPolicy,
                              over known: SupportedVersionPolicy?,
                              floor: SupportedVersionPolicy = .embeddedFloor) throws {
-        let barrier = max(known?.revision ?? 0, floor.revision)
-        guard served.revision >= barrier else {
+        let (effective, contested) = effectivePolicy(known: known, floor: floor)
+        guard served.revision >= effective.revision else {
             throw SupportedVersionPolicyError.replayedRevision(served: served.revision,
-                                                               known: barrier)
+                                                               known: effective.revision)
         }
-        if let known, served.revision == known.revision, served != known {
-            throw SupportedVersionPolicyError.equivocatingRevision(served.revision)
+        if served.revision == effective.revision {
+            guard !contested, served == effective else {
+                throw SupportedVersionPolicyError.equivocatingRevision(served.revision)
+            }
         }
+    }
+
+    /// **The one policy this device is holding: the cache's and the binary's,
+    /// resolved.**
+    ///
+    /// The higher revision wins, and it wins WHOLE — its content is what that
+    /// revision means. A cached policy below the floor's revision contributes
+    /// nothing: the binary already knows something newer, and a device that
+    /// updated past a remembered policy is in the same position as a fresh
+    /// install of that binary.
+    ///
+    /// The tie is the case with no good answer. Equal revisions with different
+    /// content means one number already names two documents before anything is
+    /// served — only reachable from a cache written by a build whose floor said
+    /// something else, or from a tampered one, and never from the admitting path
+    /// here, which is precisely what refuses to create it. Neither side can be
+    /// preferred (the floor is authentic but may be the older statement; the
+    /// cache may be authentic too, or forged), so the revision is reported as
+    /// `contested` and carries NO content: nothing at that revision is admitted,
+    /// in either direction. Refusing that revision rather than the whole barrier
+    /// is deliberate — a strictly higher revision is still admitted, so the
+    /// product can always publish its way out of a corrupt cache, and the
+    /// emergency lever keeps working.
+    private static func effectivePolicy(known: SupportedVersionPolicy?,
+                                        floor: SupportedVersionPolicy)
+        -> (policy: SupportedVersionPolicy, contested: Bool) {
+        guard let known, known.revision >= floor.revision else { return (floor, false) }
+        guard known.revision > floor.revision else { return (floor, known != floor) }
+        return (known, false)
     }
 
     /// A JSON integer, and nothing that merely looks like one.
