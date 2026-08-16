@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import RelayiumAppKit
 import RelayiumKit
@@ -36,8 +37,10 @@ import RelayiumKit
 /// 3. **Send file and Send folder, directly beneath it.** Two verbs rather than
 ///    one picker, because "a folder" is a different intent from "some files" and
 ///    the old combined picker made the user discover that a folder was allowed.
-/// 4. **The transfers**, in the order they became known, inbound and outbound in
-///    one list because the lane numbers them in one space.
+/// 4. **The transfers**, newest first, inbound and outbound in one list because
+///    the lane numbers them in one space. The transcript above it reads the same
+///    way, for the same reason: both only grow, and the entry the user is
+///    waiting on must not be the one furthest down.
 /// 5. **The exit**, which is the only thing that ends the link.
 struct TransferLinkPane: View {
     @ObservedObject var link: LinkWorkspaceModel
@@ -270,16 +273,39 @@ struct TransferLinkPane: View {
         }
     }
 
+    /// **Mounted whenever the conversation EXISTS, never gated on what is in
+    /// it.**
+    ///
+    /// This pane observes `LinkWorkspaceModel`. It does not observe
+    /// `LinkSessionPresentationModel`, and a nested `ObservableObject` changing
+    /// does not invalidate the view that merely holds a reference to it. So a
+    /// condition here that read `text.textMessages` was evaluated once, when
+    /// something about the LINK last changed, and never again: on a stable link
+    /// the peer's messages landed in a model whose only observer —
+    /// `LinkTranscriptView` — had never been put on screen, and the transcript
+    /// stayed blank until an unrelated link change (a relay warning, a lost
+    /// socket, the link failing) happened to rebuild this body. Then every
+    /// message appeared at once, which is how the fault was found.
+    ///
+    /// The repair is the mount, not the condition: the child is the thing that
+    /// observes, so the child decides what an empty list looks like. Here that
+    /// is an empty `ForEach`, which draws nothing.
     @ViewBuilder
     private var transcript: some View {
-        if let text = link.textModel, !text.textMessages.isEmpty {
+        if let text = link.textModel {
             LinkTranscriptView(model: text)
         }
     }
 
+    /// The same rule, for the same reason — see `transcript`.
+    ///
+    /// `armedFiles` belongs to the observed `link` rather than to the nested
+    /// model, so it was never the broken half; it moves down with the batches
+    /// anyway, because the two halves of one suppression decision must not live
+    /// on opposite sides of an observation boundary.
     @ViewBuilder
     private var transfers: some View {
-        if let files = link.fileModel, !files.batches.isEmpty || !link.armedFiles.isEmpty {
+        if let files = link.fileModel {
             LinkTransferListView(model: files, link: link)
         }
     }
@@ -404,40 +430,127 @@ enum LinkEndingCopy {
     }
 }
 
-/// The conversation, oldest first.
+/// The conversation, **newest first**, with an explicit Copy on every row.
+///
+/// Two decisions, and the same reason under both: this list only grows.
+///
+///  - **Newest first.** The message somebody is waiting for was arriving at the
+///    bottom of a list that pushes the composer, the transfers and the exit down
+///    every time another one lands. The model's array stays chronological — see
+///    `LinkSessionPresentationModel.textMessagesNewestFirst`.
+///  - **A Copy action, not just selectable text.** Selection is a drag through
+///    wrapped monospaced text with no keyboard equivalent that is discoverable
+///    here; the legacy text row has had an explicit Copy with a "Copied"
+///    acknowledgement for exactly that reason, and the two surfaces must not
+///    disagree about how a message is taken out of an ephemeral session. The
+///    verbatim, selectable body stays exactly as it was.
 struct LinkTranscriptView: View {
     @ObservedObject var model: LinkSessionPresentationModel
+    /// Presentation state only, and an id rather than a body: acknowledging the
+    /// copy must not put a second copy of ephemeral plaintext in view state.
+    /// Same rule, same shape, as `RealtimeTextSessionView.copiedMessageID`.
+    @State private var copiedMessageID: Int?
 
+    /// An empty conversation is an empty `ForEach`, and the container stays
+    /// mounted around it on purpose.
+    ///
+    /// It draws nothing either way, so there is no empty state to suppress — and
+    /// keeping it means `onChange` below is live for the whole time this view is
+    /// on screen. Suppressing the container instead would take the
+    /// acknowledgement's own cleanup off screen with it, which is how a "Copied"
+    /// belonging to a retired row survives into a conversation that reuses its
+    /// id.
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            ForEach(model.textMessages) { message in
-                HStack(alignment: .top, spacing: 6) {
-                    Image(systemName: message.direction == .outgoing
-                          ? "arrow.up.right" : "arrow.down.left")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    // Verbatim, and never parsed: the body is peer-supplied text
-                    // and `Text(verbatim:)` is what stops it being read as
-                    // markup.
-                    Text(verbatim: message.body)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 0)
-                }
+            ForEach(model.textMessagesNewestFirst) { message in
+                row(message)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // A conversation can be cleared and reopened on the same link, and the
+        // ids are the model's. An acknowledgement whose row is gone is an
+        // acknowledgement about nothing.
+        .onChange(of: model.textMessages) { messages in
+            guard let copiedMessageID,
+                  !messages.contains(where: { $0.id == copiedMessageID }) else { return }
+            self.copiedMessageID = nil
+        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("link-transcript")
     }
+
+    private func row(_ message: LinkTextMessage) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: message.direction == .outgoing
+                  ? "arrow.up.right" : "arrow.down.left")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            // Verbatim, and never parsed: the body is peer-supplied text
+            // and `Text(verbatim:)` is what stops it being read as
+            // markup.
+            Text(verbatim: message.body)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Button {
+                copyLinkMessage(message.body)
+                copiedMessageID = message.id
+            } label: {
+                Label(L10n.t(copiedMessageID == message.id ? .commonCopied : .commonCopy),
+                      systemImage: copiedMessageID == message.id ? "checkmark" : "doc.on.doc")
+            }
+            .buttonStyle(.link)
+            // The visible control is compact and its label changes to "Copied",
+            // so the accessible name is what keeps the sent/received context.
+            .accessibilityLabel(TextMessagePresentation.copyActionLabel(
+                outgoing: message.direction == .outgoing,
+                copied: copiedMessageID == message.id))
+        }
+    }
 }
 
-/// Every batch this link knows about, in the order it became known.
+/// One clipboard write, shared by the unified transcript's rows.
+///
+/// A free function beside the view for the reason the legacy pane keeps its own
+/// private one: it is two AppKit calls, and a shared helper in `RelayiumAppKit`
+/// would put `NSPasteboard` in a module that renders nothing.
+@MainActor
+private func copyLinkMessage(_ text: String) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(text, forType: .string)
+}
+
+/// Every batch this link knows about, **newest first**.
+///
+/// The same rule as the transcript above and for the same reason: this list only
+/// grows, so the batch the user just started belongs at the top rather than
+/// under every batch they have finished with. The model's array stays in the
+/// order the batches became known — see
+/// `LinkFilePresentationModel.batchesNewestFirst`.
 struct LinkTransferListView: View {
     @ObservedObject var model: LinkFilePresentationModel
     @ObservedObject var link: LinkWorkspaceModel
 
+    /// **The empty state is suppressed HERE, not by the parent.**
+    ///
+    /// Unlike the transcript this list has a visible heading, so "no batches"
+    /// genuinely has to draw nothing rather than draw an empty container. That
+    /// decision belongs to this view because this view is the one that observes
+    /// `model`: the same test asked from `TransferLinkPane` is answered once and
+    /// then never re-asked, and the first batch of a stable link goes unrendered.
+    /// See `TransferLinkPane.transcript` for the whole shape of that fault.
+    ///
+    /// Both halves are the same condition the parent used to hold, with the same
+    /// meaning: a batch the lane knows about, or one the user armed and the
+    /// verification has not released yet.
+    @ViewBuilder
     var body: some View {
+        if !model.batches.isEmpty || !link.armedFiles.isEmpty {
+            list
+        }
+    }
+
+    private var list: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(L10n.t(.linkTransfersHeading)).font(.subheadline.weight(.semibold))
             if !link.armedFiles.isEmpty {
@@ -447,7 +560,7 @@ struct LinkTransferListView: View {
                     .font(.caption).foregroundStyle(.secondary)
                     .accessibilityIdentifier("link-batch-armed")
             }
-            ForEach(model.batches) { batch in
+            ForEach(model.batchesNewestFirst) { batch in
                 row(batch)
             }
         }

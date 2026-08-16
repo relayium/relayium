@@ -140,7 +140,24 @@ public final class LinkSessionPresentationModel: ObservableObject {
     /// The transcript, oldest first. Append-only for the life of the attempt:
     /// an ordinary conversation `ended` or `refused` closes a conversation, not
     /// the history of one, and the same link can open another.
+    ///
+    /// **Storage order, not reading order.** Chronological is what `append`,
+    /// `.last`-based notification and every wire-order assertion depend on, so
+    /// it is what this holds; a surface that reads newest first asks
+    /// `textMessagesNewestFirst` below rather than reversing this in place.
     @Published public private(set) var textMessages: [LinkTextMessage] = []
+
+    /// The transcript as a surface reads it: **newest first.**
+    ///
+    /// A growing record whose newest entry is at the bottom makes the one line
+    /// somebody is waiting for the one line they have to scroll to, and it moves
+    /// every time another arrives. Reversing here rather than in the view keeps
+    /// the rule in one testable place and keeps the stored array chronological
+    /// for everything that is not a screen.
+    ///
+    /// Identity is unchanged: `LinkTextMessage.id` is model-local and monotonic,
+    /// so reversing reorders the rows without renaming any of them.
+    public var textMessagesNewestFirst: [LinkTextMessage] { textMessages.reversed() }
 
     /// Why the lane failed, as the typed value the driver reported and no more.
     /// Turning it into words is a later slice's job — a message baked in here

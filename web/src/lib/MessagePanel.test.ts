@@ -110,12 +110,19 @@ describe("MessagePanel", () => {
 
   it("shows which direction each message went, and marks a failed send", () => {
     open();
-    const items = [...target.querySelectorAll(".msg")];
-    expect(items.length).toBe(3);
-    expect(items[0].classList.contains("out")).toBe(false);
-    expect(items[1].classList.contains("out")).toBe(true);
-    expect(items[2].classList.contains("failed")).toBe(true);
-    expect(items[2].textContent).toContain(messages.en.status.sendFail);
+    // Addressed by BODY rather than by index: the list is rendered newest first,
+    // and an index here would only restate the ordering test below while quietly
+    // breaking whenever it changed.
+    const rowFor = (body: string) =>
+      [...target.querySelectorAll(".msg")].find(
+        (n) => n.querySelector(".msg-body")!.textContent === body,
+      )!;
+    expect(target.querySelectorAll(".msg").length).toBe(3);
+    expect(rowFor(GNARLY).classList.contains("out")).toBe(false);
+    expect(rowFor(INJECTION).classList.contains("out")).toBe(true);
+    expect(rowFor(RTL).classList.contains("failed")).toBe(true);
+    expect(rowFor(RTL).textContent).toContain(messages.en.status.sendFail);
+    expect(rowFor(GNARLY).classList.contains("failed")).toBe(false);
   });
 
   // ── composer ───────────────────────────────────────────────────────────────
@@ -327,6 +334,69 @@ describe("MessagePanel", () => {
     (row.querySelector("button.copy") as HTMLButtonElement).click();
     await Promise.resolve();
     expect(writeText).toHaveBeenCalledWith(GNARLY);
+    vi.unstubAllGlobals();
+  });
+
+  // ── reading order ──────────────────────────────────────────────────────────
+  //
+  // The transcript only grows. Rendering it oldest-first put the message someone
+  // is waiting for at the bottom, below the composer's own scroll position, and
+  // moved it further down every time another arrived.
+  it("renders the newest message first without touching the array it was given", () => {
+    const given: TextMessage[] = [
+      { id: 1, dir: "in", body: "oldest", at: 0, failed: false },
+      { id: 2, dir: "out", body: "middle", at: 0, failed: false },
+      { id: 3, dir: "in", body: "newest", at: 0, failed: false },
+    ];
+    const snapshot = [...given];
+    open({ history: given });
+
+    expect(bodies().map((n) => n.textContent)).toEqual(["newest", "middle", "oldest"]);
+    // The prop array is the session's storage: protocol order, `.at` ordering
+    // and the retention rules all read it. Reversing in place would corrupt it
+    // for every other consumer.
+    expect(given).toEqual(snapshot);
+    // Reverse mutation: the rendered order really is the other one. A panel that
+    // rendered the array unchanged would pass the first assertion only if the
+    // fixture happened to be reversed already.
+    expect(bodies().map((n) => n.textContent)).not.toEqual(given.map((m) => m.body));
+  });
+
+  it("keeps each row's own identity, direction and failed state after reordering", () => {
+    open();
+    const rows = [...target.querySelectorAll(".msg")] as HTMLElement[];
+    // HISTORY is [in GNARLY, out INJECTION, out RTL failed].
+    expect(rows.map((r) => r.querySelector(".msg-body")!.textContent))
+      .toEqual([RTL, INJECTION, GNARLY]);
+    expect(rows[0].classList.contains("out")).toBe(true);
+    expect(rows[0].classList.contains("failed")).toBe(true);
+    expect(rows[2].classList.contains("out")).toBe(false);
+    expect(rows[2].classList.contains("failed")).toBe(false);
+  });
+
+  it("puts a later arrival at the top rather than the bottom", () => {
+    const first: TextMessage[] = [{ id: 1, dir: "in", body: "one", at: 0, failed: false }];
+    open({ history: first });
+    expect(bodies().map((n) => n.textContent)).toEqual(["one"]);
+    reset();
+    open({ history: [...first, { id: 2, dir: "in", body: "two", at: 0, failed: false }] });
+    expect(bodies().map((n) => n.textContent)).toEqual(["two", "one"]);
+  });
+
+  it("copies the row the user pressed, not the one at the same index in storage", () => {
+    // The defect a reordered list invites: the button reads a position rather
+    // than its own row's body.
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    open({
+      history: [
+        { id: 1, dir: "in", body: "oldest", at: 0, failed: false },
+        { id: 2, dir: "in", body: "newest", at: 0, failed: false },
+      ] as TextMessage[],
+    });
+    const rows = [...target.querySelectorAll(".msg")] as HTMLElement[];
+    (rows[0].querySelector("button.copy") as HTMLButtonElement).click();
+    expect(writeText).toHaveBeenCalledWith("newest");
     vi.unstubAllGlobals();
   });
 

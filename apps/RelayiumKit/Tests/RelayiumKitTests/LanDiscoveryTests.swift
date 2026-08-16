@@ -337,6 +337,118 @@ final class LanDiscoveryTests: XCTestCase {
         XCTAssertFalse(model.capabilities.supports("other-3", TEXT_CAPABILITY))
     }
 
+    // MARK: - a hello is not a roster frame
+    //
+    // The macOS-1.2.4 defect, in one sequence: a peer reconnects, the hub issues
+    // it a NEW id, and it announces the instant it sees the room — before the
+    // hub's next `peers` broadcast has landed. The old code answered that hello
+    // by running the whole roster path against the roster it still held, which
+    // deleted the announcement one line after recording it AND republished a
+    // membership set the replacement peer was not in. The symptom was a codeless
+    // LAN link that flashed and then stuck until the app was restarted.
+
+    /// The registry half. A hello from a peer no roster frame has delivered yet
+    /// must survive until a roster frame actually says the peer is gone.
+    func testAHelloFromAPeerNotYetInTheRosterIsNotPrunedAgainstIt() async {
+        let model = makeModel()
+        model.start()
+        welcome("self-1")
+        roster([("self-1", "Mac"), ("old-2", "Phone")])
+        await settle()
+
+        capsHello(from: "new-3", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        await settle()
+
+        XCTAssertTrue(model.capabilities.supports("new-3", LINK_CAPABILITY),
+                      "the replacement peer's announcement was pruned against the roster it predates")
+        XCTAssertEqual(model.devices.map(\.id), ["old-2"],
+                       "a peer no roster frame has delivered is not listed either")
+
+        // The replacement roster finally lands. The announcement recorded before
+        // it is what makes this peer immediately usable as a link.
+        roster([("self-1", "Mac"), ("new-3", "Phone")])
+        await settle()
+        XCTAssertEqual(model.devices.map(\.id), ["new-3"])
+        XCTAssertEqual(model.devices.first?.supportsLink, true)
+        XCTAssertFalse(model.capabilities.supports("old-2", LINK_CAPABILITY),
+                       "a roster frame is still the thing that prunes a departed peer")
+    }
+
+    /// The observer half. A hello must not announce a roster at all — the set it
+    /// would announce is the stale one, and `LinkRoomRouter.rosterChanged`
+    /// cancels a pending request whose target is absent from the set it is given.
+    func testAHelloAnnouncesNoRosterWhileARosterFrameStillDoes() async {
+        let model = makeModel()
+        let observer = RosterLog()
+        model.addRoomObserver(observer)
+        model.start()
+        welcome("self-1")
+        roster([("self-1", "Mac"), ("old-2", "Phone")])
+        await settle()
+        XCTAssertEqual(observer.rosters, [["old-2"]])
+
+        capsHello(from: "new-3", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        await settle()
+        XCTAssertEqual(observer.rosters, [["old-2"]],
+                       "hearing from a peer republished a roster it is not in")
+
+        // Reverse mutation: the roster frame itself must still announce, or this
+        // test would pass on a model that announces nothing at all.
+        roster([("self-1", "Mac"), ("new-3", "Phone")])
+        await settle()
+        XCTAssertEqual(observer.rosters, [["old-2"], ["new-3"]])
+    }
+
+    /// The consequence, against the real router: the in-flight request to the
+    /// replacement peer must survive hearing from it.
+    func testAHelloFromTheRequestedPeerDoesNotCancelTheRequest() async {
+        let model = makeModel()
+        model.start()
+        welcome("self-1")
+        roster([("self-1", "Mac"), ("old-2", "Phone")])
+        await settle()
+        let socket = try! XCTUnwrap(model.client)
+
+        let admission = LinkAdmission(selfId: { "self-1" }, supportsLink: { _ in true })
+        let session = LinkRoomSession(admission: admission) { _, _, _ in
+            preconditionFailure("no establishment is reached in this test")
+        }
+        let router = LinkRoomRouter(admission: admission,
+                                    capabilities: model.capabilities,
+                                    session: session,
+                                    scheduler: InertScheduler())
+        router.attach(to: socket)
+        // Held for the test's whole body: the model's observer registry is weak,
+        // and an observer that has gone hears no roster at all — which would make
+        // every "the request survived" assertion below pass for the wrong reason.
+        let forwarder = RouterObserver(router: router)
+        model.addRoomObserver(forwarder)
+
+        let operation = router.ensure(peerId: "new-3")
+        XCTAssertNil(operation.settledOutcome, "the request is in flight")
+
+        capsHello(from: "new-3", [TEXT_CAPABILITY, LINK_CAPABILITY])
+        await settle()
+        XCTAssertNil(operation.settledOutcome,
+                     "hearing from the requested peer withdrew the ask being made to it")
+
+        // The replacement roster contains it, so nothing changes.
+        roster([("self-1", "Mac"), ("new-3", "Phone")])
+        await settle()
+        XCTAssertNil(operation.settledOutcome)
+
+        // Reverse mutation: a roster frame that genuinely DROPS the target is
+        // still authority to withdraw the ask. Without this the assertions above
+        // would hold on a model that never announced a roster to anybody.
+        roster([("self-1", "Mac"), ("old-2", "Phone")])
+        await settle()
+        XCTAssertEqual(operation.settledOutcome, .cancelled)
+
+        withExtendedLifetime(forwarder) {}
+        router.detach()
+        model.stop()
+    }
+
     // MARK: - the name this Mac is announced under
 
     /// The roster shows names and this Mac's own name was nowhere on the
@@ -584,6 +696,39 @@ final class LanResidencyTests: XCTestCase {
         XCTAssertEqual(log.channels.count, 1)
     }
 
+}
+
+/// Every roster the model announced, in order and as sorted arrays so an
+/// assertion reads as the room rather than as a `Set`'s description.
+@MainActor
+private final class RosterLog: NearbyRoomObserver {
+    private(set) var rosters: [[String]] = []
+    func roomDidConnect(_ signaling: SignalingClient) {}
+    func roomDidDisconnect() {}
+    func roomRosterChanged(peerIds: Set<String>) { rosters.append(peerIds.sorted()) }
+}
+
+/// The exact forwarding `LinkWorkspaceModel` does for the same-network room:
+/// representative presence withdraws an ask, physical departure ends a
+/// lifecycle. Reproduced here rather than composing the whole workspace, so the
+/// test names one seam.
+@MainActor
+private final class RouterObserver: NearbyRoomObserver {
+    private let router: LinkRoomRouter
+    init(router: LinkRoomRouter) { self.router = router }
+    func roomDidConnect(_ signaling: SignalingClient) {}
+    func roomDidDisconnect() {}
+    func roomRosterChanged(peerIds: Set<String>) { router.rosterChanged(peerIds: peerIds) }
+    func roomPeerLeft(_ peerId: String) { router.peerLeft(peerId) }
+}
+
+/// Records nothing and fires nothing: these tests are about what a roster frame
+/// does to a request, never about its retry cadence or its timeout.
+private final class InertScheduler: LinkRecoveryScheduler, @unchecked Sendable {
+    private final class Handle: LinkRecoveryTimer { func cancel() {} }
+    func schedule(after delay: TimeInterval, _ body: @escaping () -> Void) -> LinkRecoveryTimer {
+        Handle()
+    }
 }
 
 /// One-shot rendezvous, for holding an injected sleep open across a lifecycle

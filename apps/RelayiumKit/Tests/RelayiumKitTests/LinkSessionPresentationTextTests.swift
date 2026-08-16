@@ -473,6 +473,71 @@ final class LinkSessionPresentationTextTests: XCTestCase {
     /// `LinkSessionPresentationModelTests.testTheModelStaysUnreachableFromProduction`;
     /// running it a second time here would double a whole-tree walk to restate
     /// the same fact.
+    // MARK: - 12. reading order
+    //
+    // The transcript only grows, so the line somebody is waiting for was
+    // arriving at the bottom and moving the whole surface down with it. What is
+    // reversed is the READING, never the storage: the stored array is what
+    // `append` and every wire-order assertion in this suite depend on.
+
+    func testTheTranscriptIsReadNewestFirstWhileStorageStaysChronological() async {
+        let (bridge, model) = rig()
+        await open(bridge, model)
+
+        let log = PublicationLog(model.$textMessages)
+        // Stepwise, because `recordOutgoing` is a synchronous main-actor call
+        // from the attempt while `received` travels the bridge: interleaving them
+        // without waiting would make the stored order the test's timing rather
+        // than the lane's.
+        let inbound = log.expect(2, "the first inbound entry", in: self)
+        bridge.publish(.text(.status(.open)))
+        bridge.publish(.text(.received("first")))
+        await fulfillment(of: [inbound], timeout: 5)
+
+        model.recordOutgoing("second")
+
+        let third = log.expect(4, "the third entry", in: self)
+        bridge.publish(.text(.received("third")))
+        await fulfillment(of: [third], timeout: 5)
+
+        XCTAssertEqual(model.textMessages.map(\.body), ["first", "second", "third"],
+                       "storage stays in the order the lane delivered them")
+        XCTAssertEqual(model.textMessagesNewestFirst.map(\.body), ["third", "second", "first"])
+        // Reverse mutation: the two answers must differ. An accessor that simply
+        // handed back `textMessages` would pass the assertion above on any list
+        // whose reversal it never performed.
+        XCTAssertNotEqual(model.textMessagesNewestFirst.map(\.body),
+                          model.textMessages.map(\.body))
+        // Direction travels with the row, so an outgoing entry does not become
+        // an incoming one by being read from the other end.
+        XCTAssertEqual(model.textMessagesNewestFirst.map(\.direction),
+                       [.incoming, .outgoing, .incoming])
+        // Ids are the model's and are not renumbered by the reordering, which is
+        // what a row-scoped Copy acknowledgement binds to.
+        XCTAssertEqual(model.textMessagesNewestFirst.map(\.id),
+                       model.textMessages.map(\.id).reversed())
+
+        // A later arrival goes to the FRONT of the reading order and the BACK of
+        // storage. A one-shot reversal computed at open would not do this.
+        let four = log.expect(5, "a fourth entry", in: self)
+        bridge.publish(.text(.received("fourth")))
+        await fulfillment(of: [four], timeout: 5)
+        XCTAssertEqual(model.textMessagesNewestFirst.first?.body, "fourth")
+        XCTAssertEqual(model.textMessages.last?.body, "fourth")
+        log.detach()
+    }
+
+    /// The degenerate cases, so a reversal that dropped to an empty list could
+    /// not hide behind an inequality assertion elsewhere.
+    func testAnEmptyOrSingleEntryTranscriptReadsIdenticallyInBothOrders() {
+        let (_, model) = rig()
+        XCTAssertTrue(model.textMessagesNewestFirst.isEmpty)
+
+        model.recordOutgoing("only")
+        XCTAssertEqual(model.textMessagesNewestFirst.map(\.body), ["only"])
+        XCTAssertEqual(model.textMessagesNewestFirst.map(\.id), model.textMessages.map(\.id))
+    }
+
     func testTheTextProjectionShipsBehindTheSameClosedFlags() {
         // `LINK_BUILD_SUPPORT` is deliberately NOT asserted here. This suite's
         // subject is not the flag, and its value is per platform: a claim about

@@ -5415,4 +5415,163 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "no runtime path drives a signed-in macOS launch")
     }
 
+    // MARK: - growing records are read newest first
+    //
+    // Four macOS lists only ever grow — the unified transcript, the unified
+    // transfer list, and the legacy text history in both its live and its
+    // retained form. Each of them put the entry the user is waiting for at the
+    // BOTTOM, under everything already dealt with, and moved the controls below
+    // it down every time another arrived.
+    //
+    // The reversal is a MODEL accessor in every case, never a view-local
+    // `.reversed()`: `TransferNotifications` notifies on `history.last`, the
+    // retention cap truncates from the front, and `LinkFilePresentationModel`
+    // resolves batch ids by index — so the stored arrays must not move, and a
+    // second surface reversing for itself is how two views come to disagree.
+    // `RealtimeTextSessionModelTests`, `LinkSessionPresentationTextTests` and
+    // `LinkSessionPresentationFileTests` hold the accessors themselves.
+
+    func testEveryGrowingMacOSRecordIsRenderedNewestFirstThroughItsModel() throws {
+        let link = try source(named: "Transfer/TransferLinkPane.swift")
+        let legacy = try source(named: "RealtimeTextSessionView.swift")
+
+        // The unified transcript and the unified transfer list.
+        XCTAssertTrue(link.contains("ForEach(model.textMessagesNewestFirst)"),
+                      "the unified transcript renders oldest first again")
+        XCTAssertTrue(link.contains("ForEach(model.batchesNewestFirst)"),
+                      "the unified transfer list renders oldest first again")
+        XCTAssertFalse(link.contains("ForEach(model.textMessages)")
+                       || link.contains("ForEach(model.batches)"),
+                       "a unified list reads the stored order directly")
+
+        // The legacy text history, in BOTH of its two renderings. Counting is
+        // what makes this a rule rather than an intention: the live list and the
+        // retained one are separate `ForEach`es and fixing one is the shape this
+        // guard exists to catch.
+        XCTAssertEqual(occurrences(of: "ForEach(model.historyNewestFirst)", in: legacy), 2,
+                       "the live and retained histories do not both read newest first")
+        XCTAssertFalse(legacy.contains("ForEach(model.history)"),
+                       "a legacy history list reads the stored order directly")
+
+        // Nothing reverses for itself. A view-local reversal is a second answer
+        // to a question the model already answers.
+        for (name, text) in [("TransferLinkPane", link), ("RealtimeTextSessionView", legacy)] {
+            XCTAssertFalse(text.contains(".reversed()"),
+                           "\(name) reverses a list in the view layer")
+        }
+
+        // …and the comments that said otherwise are gone, checked against the
+        // sources WITH their comments intact.
+        let rawLink = try rawSource(named: "Transfer/TransferLinkPane.swift")
+        XCTAssertFalse(rawLink.contains("The conversation, oldest first."),
+                       "the unified transcript still documents the old order")
+        XCTAssertFalse(rawLink.contains("Every batch this link knows about, in the order it became known."),
+                       "the unified transfer list still documents the old order")
+    }
+
+    /// **A message you cannot get out of an ephemeral session is a message you
+    /// have to retype.**
+    ///
+    /// The unified transcript offered selectable text and nothing else, while
+    /// the legacy row beside it has had an explicit Copy with a "Copied"
+    /// acknowledgement since the ephemeral-text batch. Four properties carry the
+    /// repair, and each of them has a way of looking done and not being:
+    ///
+    ///  1. The verbatim, selectable body stays. Copy is an addition, not a
+    ///     replacement — peer-supplied text must still never be parsed.
+    ///  2. The acknowledgement is bound to a row ID, never to a body. Holding
+    ///     the plaintext in view state is a second copy of an ephemeral message.
+    ///  3. It is dropped when its row goes, because the same link can clear and
+    ///     reopen a conversation.
+    ///  4. The accessible name keeps the direction after the visible label has
+    ///     changed to "Copied", through the SAME presentation function the
+    ///     legacy row uses.
+    func testTheUnifiedTranscriptRowHasAnExplicitCopyWithRowScopedFeedback() throws {
+        let link = try source(named: "Transfer/TransferLinkPane.swift")
+
+        // 1. Selection and verbatim rendering are untouched.
+        XCTAssertTrue(link.contains("Text(verbatim: message.body)"),
+                      "the unified transcript renders peer text as markup")
+        XCTAssertTrue(link.contains(".textSelection(.enabled)"),
+                      "the explicit Copy replaced selectable text instead of joining it")
+
+        // 2 & 3. Row-scoped, id-keyed, and retired with its row.
+        XCTAssertTrue(link.contains("@State private var copiedMessageID: Int?"))
+        XCTAssertTrue(link.contains("copiedMessageID = message.id"))
+        XCTAssertTrue(link.contains("copiedMessageID == message.id ? .commonCopied : .commonCopy"))
+        XCTAssertTrue(link.contains("!messages.contains(where: { $0.id == copiedMessageID })"),
+                      "an acknowledgement outlives the row it belongs to")
+        XCTAssertFalse(link.contains("@State private var copiedMessage:"),
+                       "the view retains a second copy of ephemeral plaintext")
+
+        // 4. The direction survives the label change, through the shared copy.
+        XCTAssertTrue(link.contains("TextMessagePresentation.copyActionLabel("),
+                      "the unified Copy has no direction-aware accessible name")
+        XCTAssertTrue(link.contains("outgoing: message.direction == .outgoing"))
+
+        // The clipboard write is the view layer's. `RelayiumAppKit` renders
+        // nothing and must not acquire an AppKit pasteboard.
+        XCTAssertTrue(link.contains("NSPasteboard.general.clearContents()")
+                      && link.contains("NSPasteboard.general.setString(text, forType: .string)"),
+                      "the unified Copy does not actually write the clipboard")
+        for module in ["RelayiumAppKit", "RelayiumKit"] {
+            let root = appsRoot.appendingPathComponent("RelayiumKit/Sources/\(module)")
+            for file in try sources(under: root, atLeast: 5) {
+                XCTAssertFalse(file.text.contains("NSPasteboard"),
+                               "\(module)/\(file.name) reaches the pasteboard")
+            }
+        }
+    }
+
+    /// **The pane that does not observe a model must not decide when that
+    /// model's list is empty.**
+    ///
+    /// `TransferLinkPane` observes `LinkWorkspaceModel` only. A nested
+    /// `ObservableObject` publishing does not invalidate a view that merely
+    /// holds a reference to it, so a mount condition here reading
+    /// `text.textMessages` or `files.batches` was evaluated when the LINK last
+    /// changed and never again: on a stable link the peer's messages and
+    /// batches landed in models whose only observers — `LinkTranscriptView` and
+    /// `LinkTransferListView` — had never been mounted, and the surfaces stayed
+    /// blank until some unrelated link change rebuilt this body and everything
+    /// appeared at once.
+    ///
+    /// So the mount is unconditional on content: the child observes, therefore
+    /// the child decides what empty looks like. The transcript's answer is an
+    /// empty `ForEach`; the transfer list has a visible heading and so keeps a
+    /// real suppression — but inside the observing view, with BOTH halves of
+    /// that one decision on the same side of the observation boundary.
+    func testTheLinkPaneMountsItsNestedListsWithoutReadingTheirContents() throws {
+        let link = try source(named: "Transfer/TransferLinkPane.swift")
+        let transcriptView = try XCTUnwrap(link.range(of: "struct LinkTranscriptView"),
+                                           "the transcript view moved out of the pane's file")
+        let listView = try XCTUnwrap(link.range(of: "struct LinkTransferListView"),
+                                     "the transfer list view moved out of the pane's file")
+        let parent = String(link[..<transcriptView.lowerBound])
+        let list = String(link[listView.lowerBound...])
+
+        // The parent mounts on existence alone…
+        XCTAssertTrue(parent.contains("if let text = link.textModel {")
+                      && parent.contains("LinkTranscriptView(model: text)"),
+                      "the transcript is no longer mounted whenever the conversation exists")
+        XCTAssertTrue(parent.contains("if let files = link.fileModel {")
+                      && parent.contains("LinkTransferListView(model: files, link: link)"),
+                      "the transfer list is no longer mounted whenever the file model exists")
+
+        // …and never reads what it does not observe. Naming the members at all
+        // is the regression, not just `.isEmpty`: any read from here is a value
+        // captured once and never refreshed.
+        XCTAssertFalse(parent.contains("textMessages"),
+                       "the pane reads a message list it does not observe")
+        XCTAssertFalse(parent.contains("batches"),
+                       "the pane reads a batch list it does not observe")
+
+        // The one surviving suppression lives with its observer, and only there.
+        XCTAssertTrue(list.contains("if !model.batches.isEmpty || !link.armedFiles.isEmpty"),
+                      "the transfer list lost the empty suppression that belongs to it")
+        XCTAssertEqual(occurrences(of: "if !model.batches.isEmpty || !link.armedFiles.isEmpty",
+                                   in: link), 1,
+                       "the batch suppression is decided in more than one place")
+    }
+
 }

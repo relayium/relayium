@@ -147,7 +147,11 @@ struct RealtimeTextSessionView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    ForEach(model.history) { message in
+                    // Newest first: the message somebody is waiting for is the
+                    // first row rather than the one this box has to be scrolled
+                    // to. `model.history` itself stays in wire order — see
+                    // `RealtimeTextSessionModel.historyNewestFirst`.
+                    ForEach(model.historyNewestFirst) { message in
                         messageRow(message)
                     }
                 }
@@ -269,7 +273,11 @@ struct RealtimeTextSessionView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 8) {
-                        ForEach(model.history) { message in
+                        // The terminal view reads the same way the live one
+                        // does. A retained history that ordered itself the other
+                        // way round would make the last thing that happened
+                        // change position the moment the session ended.
+                        ForEach(model.historyNewestFirst) { message in
                             messageRow(message)
                         }
                     }

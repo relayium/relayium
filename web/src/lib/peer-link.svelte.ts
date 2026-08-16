@@ -1050,6 +1050,25 @@ export function createPeerLinkManager(deps: PeerLinkDeps) {
 
     replaceTransport,
 
+    /** Answer a terminal `failed` status, and nothing else.
+     *
+     *  `failed` is the only status this manager can be left sitting in with
+     *  nothing under it, and the workspace holds the screen on it so the failure
+     *  can be read. Reading it is what this call ends. It closes no transport,
+     *  aborts no attempt and touches no lane — the alternative, routing the
+     *  dismissal through `close`, would also drop file intent the user still
+     *  expects to be owed.
+     *
+     *  Refuses while ANY phase is live, so a dismissal can never hide a real
+     *  state: a status of `failed` alongside a live `opening` or `recovering` is
+     *  a transient this must not paper over. */
+    clearFailed() {
+      if (status !== "failed") return false;
+      if (current || opening || replacing || requested || recovering) return false;
+      status = "idle";
+      return true;
+    },
+
     /** `announce` sends the authenticated leave signal first. Explicit user
      *  disconnect only — see closeManager. */
     close(options?: { announce?: boolean }) { closeManager(options?.announce === true); },

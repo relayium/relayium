@@ -208,6 +208,54 @@ describe("WorkspaceHeader lifecycle states", () => {
     expect(onRestart).toHaveBeenCalledOnce();
   });
 
+  it("treats a plain failure as terminal, with no reason string to lean on", () => {
+    // The ending that carries no name: the peer refused, the transport never
+    // opened, the request ran out. It is every bit as over as the two above, and
+    // it used to render as a live link — path badge, code, Disconnect and all.
+    const onRestart = vi.fn();
+    const onDisconnect = vi.fn();
+    const section = open({
+      status: "failed" as LinkStatus, endReason: "", onRestart, onDisconnect,
+      path: "lan", sasCode: "384719", relayExpiring: true, recoveryAvailable: false,
+    });
+
+    // The sentence is the status, because `stateFailed` is the most this side
+    // knows — there is no reason string to replace it with.
+    expect(section.textContent).toContain(t().stateFailed);
+    expect(section.textContent).not.toContain(t().endedRelay);
+    expect(section.textContent).not.toContain(t().endedSignaling);
+    // Nothing that describes a live link survives it.
+    expect(target.querySelectorAll(".path")).toHaveLength(0);
+    expect(target.querySelectorAll(".sas")).toHaveLength(0);
+    expect(target.querySelectorAll(".wh-warn")).toHaveLength(0);
+
+    // One action, and it answers the card rather than ending a connection that
+    // has already ended.
+    const restart = target.querySelector(".wh-restart") as HTMLButtonElement;
+    expect(restart).not.toBe(null);
+    expect(restart.textContent?.trim()).toBe(t().restart);
+    expect(target.querySelector(".wh-disconnect")).toBe(null);
+    restart.click();
+    flushSync();
+    expect(onRestart).toHaveBeenCalledOnce();
+    expect(onDisconnect).not.toHaveBeenCalled();
+  });
+
+  it("still shows the live chrome and Disconnect on every non-terminal state", () => {
+    // Reverse mutation for the assertions above: a header that treated every
+    // state as terminal would satisfy them and break the live link entirely.
+    for (const status of ["requesting", "connecting", "open", "interrupted"] as LinkStatus[]) {
+      open({ status, path: "lan", sasCode: "384719", onRestart: vi.fn() });
+      expect(target.querySelectorAll(".path"), status).toHaveLength(1);
+      expect(target.querySelectorAll(".sas"), status).toHaveLength(1);
+      expect(target.querySelector(".wh-disconnect"), status).not.toBe(null);
+      expect(target.querySelector(".wh-restart"), status).toBe(null);
+      unmount(app!);
+      app = undefined;
+      target.innerHTML = "";
+    }
+  });
+
   it("drops the live warnings once the link has actually ended", () => {
     // By then the state line says more than either of them, and a "close to its
     // time limit" note under "the time limit was reached" is simply wrong.

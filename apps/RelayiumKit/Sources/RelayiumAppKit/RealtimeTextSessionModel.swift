@@ -40,7 +40,26 @@ public enum RealtimeTextState: Equatable {
 @MainActor
 public final class RealtimeTextSessionModel: ObservableObject {
     @Published public private(set) var state: RealtimeTextState = .idle
+    /// The conversation, oldest first.
+    ///
+    /// **Storage order, not reading order.** `TransferNotifications` reads
+    /// `history.last` to notify about the message that just arrived, and the
+    /// retention rules append and truncate against this order, so it stays
+    /// chronological; a surface that reads newest first asks
+    /// `historyNewestFirst` below.
     @Published public private(set) var history: [RealtimeTextMessage] = []
+
+    /// The conversation as a surface reads it: **newest first.**
+    ///
+    /// Both macOS text histories — the live session's and the retained one a
+    /// terminal state keeps — render this, so the message somebody is waiting
+    /// for is the first row rather than the one below the fold. Reversing here
+    /// rather than in either view keeps the two from disagreeing and keeps
+    /// `history` itself in wire order.
+    ///
+    /// `RealtimeTextMessage.id` is assigned by this model and never reused, so
+    /// row identity survives the reordering.
+    public var historyNewestFirst: [RealtimeTextMessage] { history.reversed() }
     @Published public var joinCode = ""
     @Published public var draft = ""
     @Published public private(set) var errorMessage: String?

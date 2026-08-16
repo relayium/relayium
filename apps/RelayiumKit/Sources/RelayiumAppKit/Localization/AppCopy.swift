@@ -43,15 +43,31 @@ public enum TextMessagePresentation {
     public static func copyActionLabel(direction: RealtimeTextMessage.Direction,
                                        copied: Bool,
                                        language: AppLanguage? = nil) -> String {
+        copyActionLabel(outgoing: direction == .outgoing, copied: copied, language: language)
+    }
+
+    /// The same label, for a row whose direction is not the legacy lane's type.
+    ///
+    /// The unified `link/1` transcript has its own `LinkTextMessage.Direction`,
+    /// because the two lanes really are separate models — a link message carries
+    /// no send status and no timestamp — and folding them into one enum would tie
+    /// the legacy wire's vocabulary to the link's. What must NOT be separate is
+    /// the sentence a user hears, so both surfaces reduce to this.
+    ///
+    /// A distinct argument label rather than an overload of `direction:`, and
+    /// that is not cosmetic: two `direction:` overloads over two enums make a
+    /// bare `.outgoing` at any call site ambiguous, and the first thing that
+    /// breaks is the localized assertions that pass one.
+    public static func copyActionLabel(outgoing: Bool,
+                                       copied: Bool,
+                                       language: AppLanguage? = nil) -> String {
         if !copied {
-            return L10n.t(direction == .outgoing
-                          ? .textCopySentMessage : .textCopyReceivedMessage,
+            return L10n.t(outgoing ? .textCopySentMessage : .textCopyReceivedMessage,
                           language: language)
         }
         return L10n.detail([
             L10n.t(.commonCopied, language: language),
-            L10n.t(direction == .outgoing ? .textSent : .textReceived,
-                   language: language),
+            L10n.t(outgoing ? .textSent : .textReceived, language: language),
         ], language: language)
     }
 

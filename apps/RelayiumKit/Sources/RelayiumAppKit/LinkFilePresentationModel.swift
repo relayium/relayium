@@ -210,7 +210,20 @@ public final class LinkFilePresentationModel: ObservableObject {
     ///
     /// One list rather than two, because the id space is one and a view that
     /// wants them apart has `inbound` and `outbound` below.
+    ///
+    /// **Storage order, not reading order.** Everything that indexes, updates or
+    /// reasons about a batch works from this; a surface that reads newest first
+    /// asks `batchesNewestFirst` below rather than reversing this in place.
     @Published public private(set) var batches: [LinkFileBatch] = []
+
+    /// The batch list as a surface reads it: **newest first.**
+    ///
+    /// The same rule the transcript follows, for the same reason: a link that
+    /// has carried a dozen batches puts the one the user just started at the
+    /// bottom of a growing list, under the eleven they have finished with.
+    /// Reversing here keeps that decision testable and keeps `batches` itself
+    /// chronological for `batch(_:)`, `firstIndex(where:)` and every update path.
+    public var batchesNewestFirst: [LinkFileBatch] { batches.reversed() }
 
     /// Why the file lane failed, as the typed value the driver reported and no
     /// more. Turning it into words is a later slice's job — a message baked in

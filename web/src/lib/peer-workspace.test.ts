@@ -762,6 +762,113 @@ describe("peer workspace after a link ends terminally", () => {
   });
 });
 
+// A link that simply FAILED, with no reason string attached.
+//
+// `endReason` is only set by the two endings that need naming — an expired relay
+// credential and a lost signalling socket — so a link that never came up, or one
+// that died with nothing in flight, left every `usingMixed` clause false. The
+// workspace and its header unmounted one frame after they appeared: the user saw
+// a flash, got the device chooser back, and the failure was reported nowhere.
+describe("peer workspace after a plain failed link", () => {
+  async function failed() {
+    const h = setup();
+    // An OPEN link with no lane work at all. An idle drop is deliberately not
+    // held for recovery (holding one would keep a verification decision alive
+    // across a connection nobody saw re-established), so this is the ordinary
+    // shape of a plain failure.
+    await h.workspace.mixed.ensure("z");
+    h.connect.mock.calls[0][0].onStateChange?.("failed");
+    return h;
+  }
+
+  it("is a terminal state with no reason string, which is the whole defect", async () => {
+    const h = await failed();
+    expect(h.workspace.linkStatus).toBe("failed");
+    expect(h.workspace.hasLink).toBe(false);
+    // The precondition the fix exists for. If this ever became non-empty the
+    // `endReason` clause would be carrying the case and the test below would
+    // pass without proving anything.
+    expect(h.workspace.linkEndReason).toBe("");
+    expect(h.workspace.mixed.file.active()).toBe(false);
+    expect(h.workspace.mixed.text.active()).toBe(false);
+    h.workspace.stop();
+  });
+
+  it("keeps the workspace on screen so the failure can be read", async () => {
+    const h = await failed();
+    expect(h.workspace.usingMixed).toBe(true);
+    h.workspace.stop();
+  });
+
+  it("holds the screen without holding the peer", async () => {
+    const h = await failed();
+    // Same rule as a named terminal reason: starting again is the way out, so it
+    // must not be what blocks starting again.
+    expect(h.workspace.blocksLegacyInbound).toBe(false);
+    expect(h.workspace.blocksNewIntent("z")).toBe(false);
+    expect(h.workspace.blocksNewIntent("old")).toBe(false);
+    expect(h.workspace.warnsOnLeave).toBe(false);
+    h.workspace.stop();
+  });
+
+  it("does not offer a release with no link behind it", async () => {
+    const h = await failed();
+    // `canReleaseConfirmedSend` reads a LIVE link, never `linkPeerId` alone, so
+    // holding the screen on a dead link cannot arm a Send.
+    expect(canReleaseConfirmedSend({
+      confirmed: true,
+      unified: h.workspace.routes("z"),
+      targetPeerId: "z",
+      linkPeerId: h.workspace.hasLink ? h.workspace.linkPeerId : "",
+      shownSas: "",
+    })).toBe(false);
+    h.workspace.stop();
+  });
+
+  it("is answered by the terminal card's own action, which returns the chooser", async () => {
+    const h = await failed();
+    // The header renders Restart on a terminal card, and Restart is
+    // `dismissLinkEnd`. Clearing the (empty) reason alone would leave the card
+    // pinned on a `failed` status and make the one control on it look inert.
+    h.workspace.dismissLinkEnd();
+    expect(h.workspace.linkStatus).toBe("idle");
+    expect(h.workspace.usingMixed).toBe(false);
+    h.workspace.stop();
+  });
+
+  it("is also released by an explicit disconnect", async () => {
+    const h = await failed();
+    h.workspace.disconnect();
+    expect(h.workspace.linkStatus).toBe("idle");
+    expect(h.workspace.usingMixed).toBe(false);
+    h.workspace.stop();
+  });
+
+  it("is not dismissed by roster churn, which answers nothing", async () => {
+    const h = await failed();
+    h.workspace.syncPeers();
+    expect(h.workspace.usingMixed).toBe(true);
+    expect(h.workspace.linkStatus).toBe("failed");
+    h.workspace.stop();
+  });
+
+  it("is replaced, not stacked, when the user starts again", async () => {
+    const h = await failed();
+    await h.workspace.mixed.ensure("z");
+    expect(h.workspace.linkStatus).toBe("open");
+    expect(h.workspace.usingMixed).toBe(true);
+    expect(h.workspace.hasLink).toBe(true);
+    h.workspace.stop();
+  });
+
+  it("goes back to the chooser on a room switch, whose peers are all different", async () => {
+    const h = await failed();
+    h.workspace.resetRoom();
+    expect(h.workspace.usingMixed).toBe(false);
+    h.workspace.stop();
+  });
+});
+
 // ── the release scope of link/1 ────────────────────────────────────────────────
 //
 // A default build implements the unified link and now advertises and routes it

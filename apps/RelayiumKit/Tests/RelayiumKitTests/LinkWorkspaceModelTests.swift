@@ -1033,4 +1033,70 @@ final class LinkWorkspaceModelTests: XCTestCase {
             ?? FileManager.default.temporaryDirectory
         XCTAssertEqual(AppEnvironment.defaultLinkReceiveDirectory(), expected)
     }
+
+    // MARK: - 9. what the peer's arrival does and does not repaint
+    //
+    // The observation boundary, stated as a test rather than as a comment in a
+    // view file.
+    //
+    // Runtime proof: on a stable mixed LAN link the Web peer sent two messages
+    // and the Mac transcript stayed blank. When the link later FAILED, both
+    // appeared at once, newest-first, each with its Copy — nothing had been
+    // lost, and nothing had been observing. The pane observes
+    // `LinkWorkspaceModel`; the messages had landed in
+    // `LinkSessionPresentationModel`, whose only observer was a child view the
+    // pane's own mount condition had never put on screen.
+    //
+    // So this is the property that makes "mount the child whenever the model
+    // exists" load-bearing rather than stylistic: an inbound message or an
+    // inbound batch repaints the NESTED model and nothing else. If either of
+    // these assertions has to be relaxed, `TransferLinkPane` is free to gate on
+    // contents again — and until then it is not.
+
+    func testAPeersMessageAndBatchRepaintOnlyTheNestedModelsThatHoldThem() async throws {
+        let rig = rig()
+        await openLink(rig)
+        let text = try XCTUnwrap(rig.model.textModel)
+        let files = try XCTUnwrap(rig.model.fileModel)
+
+        // Attached after the link is fully open, so nothing here is counting the
+        // establishment the pane already rebuilt for.
+        var parentPublications = 0
+        var textPublications = 0
+        var filePublications = 0
+        rig.model.objectWillChange.sink { _ in parentPublications += 1 }.store(in: &observers)
+        text.objectWillChange.sink { _ in textPublications += 1 }.store(in: &observers)
+        files.objectWillChange.sink { _ in filePublications += 1 }.store(in: &observers)
+
+        // 1. The peer's message. Exactly the event `LinkSessionAttempt` delivers
+        //    when a `received` crosses the text lane.
+        text.apply(.text(.received("ORDER-OLD")))
+        text.apply(.text(.received("ORDER-NEW")))
+        await settle()
+
+        XCTAssertEqual(text.textMessages.map(\.body), ["ORDER-OLD", "ORDER-NEW"],
+                       "the transcript did not take the peer's messages")
+        XCTAssertEqual(text.textMessagesNewestFirst.map(\.body), ["ORDER-NEW", "ORDER-OLD"],
+                       "the transcript a view reads is no longer newest first")
+        XCTAssertGreaterThanOrEqual(textPublications, 2,
+                                    "a view observing the conversation is not told a message arrived")
+        XCTAssertEqual(parentPublications, 0,
+                       "the pane's own model repainted for a nested change — if this is now "
+                       + "intended, say so here rather than gating a mount on nested contents")
+
+        // 2. The peer's batch, on the same still-silent link.
+        files.apply(.file(.inboundOffer(batch: 7, files: [meta("a.bin", 8)])))
+        await settle()
+
+        XCTAssertEqual(files.batches.map(\.id), [7], "the transfer list did not take the offer")
+        XCTAssertGreaterThanOrEqual(filePublications, 1,
+                                    "a view observing the transfers is not told a batch arrived")
+        XCTAssertEqual(parentPublications, 0,
+                       "the pane's own model repainted for a nested batch")
+
+        // 3. And the link itself is untouched by either. This is what made the
+        //    fault invisible for as long as it was: the pane had no reason to
+        //    rebuild until something ENDED the link.
+        XCTAssertTrue(rig.model.connection.isOpen)
+    }
 }

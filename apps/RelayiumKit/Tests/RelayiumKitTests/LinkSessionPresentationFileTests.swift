@@ -710,4 +710,46 @@ final class LinkSessionPresentationFileTests: XCTestCase {
                            "the file projection must not name \(forbidden)")
         }
     }
+
+    // MARK: - reading order
+
+    /// The transfer list only grows, so the batch the user just started belongs
+    /// at the top. The stored array must not move: every update path indexes it,
+    /// and `batch(_:)` resolves an id against it.
+    func testBatchesAreReadNewestFirstWhileStorageStaysChronological() {
+        let model = rig()
+        enqueued(model, batch: 1, files: [meta("first.txt", 1)])
+        offered(model, batch: 2, files: [meta("second.txt", 2)])
+        enqueued(model, batch: 3, files: [meta("third.txt", 3)])
+
+        XCTAssertEqual(model.batches.map(\.id), [1, 2, 3],
+                       "storage stays in the order the batches became known")
+        XCTAssertEqual(model.batchesNewestFirst.map(\.id), [3, 2, 1])
+        // Reverse mutation: the two answers must not be the same list. A model
+        // that returned `batches` unchanged would satisfy the assertion above
+        // only because three ids happen to be there.
+        XCTAssertNotEqual(model.batchesNewestFirst.map(\.id), model.batches.map(\.id))
+        // …and the reading order carries the WHOLE row, not just an id order.
+        XCTAssertEqual(model.batchesNewestFirst.first?.files.map(\.name), ["third.txt"])
+        XCTAssertEqual(model.batches.last?.files.map(\.name), ["third.txt"])
+
+        // A later arrival goes to the FRONT of the reading order and the BACK of
+        // storage, which is the property a one-shot list could fake.
+        offered(model, batch: 4, files: [meta("fourth.txt", 4)])
+        XCTAssertEqual(model.batchesNewestFirst.map(\.id), [4, 3, 2, 1])
+        XCTAssertEqual(model.batches.map(\.id), [1, 2, 3, 4])
+        XCTAssertEqual(model.batch(4)?.files.map(\.name), ["fourth.txt"],
+                       "id lookup still resolves against the stored order")
+    }
+
+    /// One entry reads the same in both directions. Without this a reversal that
+    /// silently dropped to an empty list would still pass a "not equal" check
+    /// somewhere else.
+    func testASingleBatchReadsIdenticallyInBothOrders() {
+        let model = rig()
+        enqueued(model, batch: 9, files: [meta("only.txt", 1)])
+        XCTAssertEqual(model.batchesNewestFirst.map(\.id), [9])
+        XCTAssertEqual(model.batchesNewestFirst.map(\.id), model.batches.map(\.id))
+        XCTAssertTrue(LinkFilePresentationModel().batchesNewestFirst.isEmpty)
+    }
 }

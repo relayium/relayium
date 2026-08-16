@@ -537,8 +537,18 @@ export function createMixedSession(deps: MixedSessionDeps): MixedSession {
      *  of an expired credential there is nothing left to disconnect, and the
      *  paths that DO call disconnect on a dead link (a peer leaving the roster,
      *  a room switch racing the same instant) would then erase the explanation
-     *  before it was read. Clearing it is a decision, so it has its own call. */
-    dismissEnded() { endReason = ""; },
+     *  before it was read. Clearing it is a decision, so it has its own call.
+     *
+     *  It answers BOTH terminal presentations. A plain failure carries no reason
+     *  string at all — `endReason` names only the two endings that need naming —
+     *  and the workspace now holds the screen on that too, so a dismissal that
+     *  cleared the string alone would leave the card pinned and make the control
+     *  look inert. `clearFailed` touches no transport and no lane, so a queued
+     *  batch the user is still owed stays exactly where it was. */
+    dismissEnded() {
+      endReason = "";
+      manager.clearFailed();
+    },
     stop() {
       listening = false;
       clearIdle();

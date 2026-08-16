@@ -467,6 +467,67 @@ describe("mixed peer link ownership", () => {
     manager.stop();
   });
 
+  // `failed` is the one status this manager can be left sitting in with nothing
+  // under it, and the workspace now holds the screen on it so the failure can be
+  // read. `clearFailed` is what ANSWERS that card — and only that card.
+  it("clears a settled failed status without closing anything", async () => {
+    const sig = signalingHarness();
+    const transport = transportHarness();
+    const manager = createPeerLinkManager({
+      selfId: () => "z", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true,
+      connect: transport.connect,
+    });
+    manager.listen();
+    const first = manager.ensure("a");
+    sig.inject("a", { link: true, busy: true });
+    await expect(first).rejects.toBeInstanceOf(LinkBusyError);
+    expect(manager.status).toBe("failed");
+
+    expect(manager.clearFailed()).toBe(true);
+    expect(manager.status).toBe("idle");
+    expect(manager.current).toBeNull();
+    // Nothing was torn down: no transport was ever built here, and asking again
+    // still asks.
+    expect(transport.connect).not.toHaveBeenCalled();
+    void manager.ensure("a").catch(() => {});
+    expect(sig.sent.filter((s) => s.to === "a" && s.data.linkRequest)).toHaveLength(2);
+    manager.stop();
+  });
+
+  it("refuses to clear a status that is not a settled failure", async () => {
+    // Reverse mutation for the call above: an unconditional `status = "idle"`
+    // would satisfy it and would silently hide a live establishment behind an
+    // idle screen.
+    const sig = signalingHarness();
+    const transport = transportHarness();
+    const manager = createPeerLinkManager({
+      selfId: () => "z", signaling: () => sig.signaling,
+      rtcConfig: () => ({ iceServers: [] }), supportsLink: () => true,
+      connect: transport.connect,
+    });
+    manager.listen();
+
+    // Idle: nothing to answer.
+    expect(manager.clearFailed()).toBe(false);
+    expect(manager.status).toBe("idle");
+
+    // A request in flight.
+    const waiting = manager.ensure("a");
+    expect(manager.status).toBe("requesting");
+    expect(manager.clearFailed()).toBe(false);
+    expect(manager.status).toBe("requesting");
+
+    // An open link.
+    sig.inject("a", { link: true, sdp: { type: "offer", sdp: "v=0" } });
+    await expect(waiting).resolves.toMatchObject({ peerId: "a" });
+    expect(manager.status).toBe("open");
+    expect(manager.clearFailed()).toBe(false);
+    expect(manager.status).toBe("open");
+    expect(manager.current).not.toBeNull();
+    manager.stop();
+  });
+
   it("does not let a third-party busy response cancel another peer's request", async () => {
     const sig = signalingHarness();
     const transport = transportHarness();

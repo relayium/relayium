@@ -45,8 +45,9 @@
      *  that stopped mid-flight. */
     endReason?: EndReason;
     onDisconnect: () => void;
-    /** Answers the terminal explanation. Required whenever `endReason` can be
-     *  non-empty; without it the card would state a problem and offer no way out. */
+    /** Answers the terminal card. Required whenever this link can reach a
+     *  terminal state at all — a named `endReason` OR a plain `failed` status —
+     *  because without it the card would state a problem and offer no way out. */
     onRestart?: () => void;
     /** The pinned box itself, handed back so a caller that must clear it can
      *  measure it at the moment it scrolls. Deliberately the element and not a
@@ -76,6 +77,21 @@
   function endText(m: Messages, r: Exclude<EndReason, "">): string {
     return r === "relayExpired" ? m.workspace.endedRelay : m.workspace.endedSignaling;
   }
+
+  /** This link is over, whether or not the ending had a name.
+   *
+   *  `endReason` is set only by the two endings that need naming — an expired
+   *  relay credential, a lost signalling socket. A link that simply failed is
+   *  every bit as terminal and used to render as a live one: the path badge, the
+   *  code and the live warnings all still described a connection that no longer
+   *  existed, and the action offered was Disconnect from something already
+   *  disconnected.
+   *
+   *  What stays state-specific is the SENTENCE. A named reason replaces the
+   *  status line because "Not connected" is true and useless next to a transfer
+   *  that stopped mid-flight; a plain failure keeps `stateFailed`, which is the
+   *  most this side actually knows. */
+  const terminal = $derived(endReason !== "" || status === "failed");
 </script>
 
 <!-- Sticky so a long activity column can never scroll the SAS — when advanced
@@ -98,10 +114,14 @@
          "idle" or "failed" depending on which teardown path got there first,
          and neither of those tells anyone what to do next. -->
     <span class="wh-state">{endReason ? endText(t, endReason) : stateText(t, status)}</span>
-    {#if path && !endReason}
+    {#if path && !terminal}
       <span class="path path-{path}"><i class="dot" aria-hidden="true"></i>{pathLabel(t, path)}</span>
     {/if}
-    {#if endReason}
+    <!-- One action per side of the boundary. A terminal card's job is to be
+         answered, and answering it is what returns the chooser — offering
+         Disconnect from something already disconnected asks the user to end a
+         connection the sentence beside it has just told them is over. -->
+    {#if terminal}
       <button type="button" class="btn btn-primary btn-sm wh-restart" onclick={() => onRestart?.()}>
         {t.workspace.restart}
       </button>
@@ -111,16 +131,16 @@
       </button>
     {/if}
   </div>
-  {#if sasCode && !endReason}
+  {#if sasCode && !terminal}
     <div class="sas">{t.codeLabel} <code>{sasCode}</code> — {t.codeCompare}</div>
   {/if}
   <!-- Live warnings. Both describe a link that is working right now, so they sit
        under the trust row rather than replacing it, and neither is shown once
        the link has actually ended — by then the state line above says more. -->
-  {#if !endReason && relayExpiring}
+  {#if !terminal && relayExpiring}
     <p class="wh-warn wh-warn-relay">{t.workspace.relayExpiring}</p>
   {/if}
-  {#if !endReason && !recoveryAvailable}
+  {#if !terminal && !recoveryAvailable}
     <p class="wh-warn">{t.workspace.recoveryUnavailable}</p>
   {/if}
 </section>

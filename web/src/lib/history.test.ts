@@ -19,6 +19,12 @@ describe("history", () => {
     expect(h[0].name).toBe("b.txt"); // newest first
     expect(h[0].id).toBeTruthy();
     expect(h[0].at).toBeGreaterThan(0);
+    // Pinned as a whole order, not just a head. The recent-transfers panel
+    // renders this list in storage order, so this IS its reading order — and it
+    // is the order every other growing record in the product now matches.
+    expect(h.map((e) => e.name)).toEqual(["b.txt", "a.txt"]);
+    recordTransfer({ name: "c.txt", size: 30, direction: "send", peer: "Al" });
+    expect(loadHistory().map((e) => e.name)).toEqual(["c.txt", "b.txt", "a.txt"]);
   });
   it("caps at HISTORY_MAX, dropping oldest", () => {
     for (let i = 0; i < HISTORY_MAX + 5; i++) recordTransfer({ name: `f${i}`, size: 1, direction: "send", peer: "p" });

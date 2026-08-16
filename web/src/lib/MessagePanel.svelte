@@ -112,6 +112,11 @@
   );
   const showFolderPick = $derived(folderPickSupported && !!onPickFolder);
 
+  // 新的在最上面。`history` 本身仍然是时间顺序（协议、通知、保留逻辑都靠它），这里
+  // 只反转**渲染**：这是一个只增不减的列表，把刚到的那条放在底部就等于每来一条都要
+  // 再滚一次，而正在等的那条恰恰是最难够到的那条。终局态和进行中一视同仁。
+  const shown = $derived(history.slice().reverse());
+
   function stateText(m: Messages, s: TextStatus): string {
     switch (s) {
       case "connecting": return m.text.connecting;
@@ -217,7 +222,7 @@
          from a wrapper — a live region announces changes anywhere in its subtree. -->
     <div class="msglog" role="log" aria-live="polite">
       <ol class="msglist">
-        {#each history as m (m.id)}
+        {#each shown as m (m.id)}
           <li class="msg" class:out={m.dir === "out"} class:failed={m.failed}>
             <span class="who">
               {m.dir === "out" ? t.text.you : t.text.peer(peerName)}

@@ -459,7 +459,10 @@ public final class LanDiscoveryModel: ObservableObject {
                 // Only ever RETIRES retries. Answering a hello with a hello is
                 // how two devices talk past each other forever.
                 self.announcer.didHearFrom(peerId: from)
-                self.refresh()
+                // Republishes what the hello can change and NOTHING else — see
+                // `republishDevices`. A hello is not a roster frame and must
+                // never be read as one.
+                self.republishDevices()
             }
         }
         client = socket
@@ -529,7 +532,30 @@ public final class LanDiscoveryModel: ObservableObject {
 
     public func clearSelection() { selectedId = nil }
 
-    private func refresh() {
+    /// Recompute the published list from the roster we have and the
+    /// announcements we have heard. **Prunes nothing and announces nothing.**
+    ///
+    /// The split exists because a capability hello and a roster frame are not
+    /// the same authority, and treating them as one is what made a codeless LAN
+    /// link flash and stick until the app was restarted:
+    ///
+    /// A hello arrives from a peer whose roster frame has not landed yet — the
+    /// ordinary case for a device that reconnected and was issued a NEW id,
+    /// because it announces the instant it sees the room while the hub's next
+    /// `peers` broadcast is still in flight. The old code answered that hello by
+    /// running the full roster path against the roster it still held, which
+    /// (a) retained the registry against a list the new peer is not in, deleting
+    /// the announcement one line after recording it, and (b) republished that
+    /// stale membership to every room observer — and `LinkRoomRouter.rosterChanged`
+    /// cancels a pending request whose target is absent from the roster it is
+    /// given. So hearing from the replacement peer cancelled the very request
+    /// being made to it.
+    ///
+    /// Roster frames therefore remain the only thing that prunes or announces
+    /// membership. A hello may change what a listed device is shown as able to
+    /// do, so this recomputes; it may also name a peer no roster frame has
+    /// delivered, and such a peer is simply not listed until one does.
+    private func republishDevices() {
         // `welcome` can land before this model's `onSelfId` is installed — the
         // socket stores the id for exactly that reason (see
         // `SignalingClient.selfId`). Without this fallback that race shows up
@@ -552,6 +578,12 @@ public final class LanDiscoveryModel: ObservableObject {
                                 announcesLegacyText: { [capabilities] in
                                     capabilities.supports($0, TEXT_CAPABILITY)
                                 })
+    }
+
+    /// A roster frame landed, or a `welcome` finally made one meaningful. This
+    /// is the ONLY path that prunes the registry and announces membership.
+    private func refresh() {
+        republishDevices()
         // Only once BOTH halves of a meaningful roster exist.
         //
         // `devices` is empty by construction until `welcome` gives us an id to

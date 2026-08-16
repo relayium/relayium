@@ -130,6 +130,41 @@ final class LocalizedCopyTests: XCTestCase {
         }
     }
 
+    /// The unified `link/1` transcript's rows keep the same sentence. Its
+    /// direction is a different enum, so this is the assertion that the two
+    /// surfaces cannot drift into two wordings for one action.
+    func testTheUnifiedTranscriptCopyLabelMatchesTheLegacyOneInEveryLanguage() {
+        for language in AppLanguage.allCases {
+            for (direction, outgoing) in [(RealtimeTextMessage.Direction.outgoing, true),
+                                          (RealtimeTextMessage.Direction.incoming, false)] {
+                for copied in [false, true] {
+                    let legacy = TextMessagePresentation.copyActionLabel(
+                        direction: direction, copied: copied, language: language)
+                    let link = TextMessagePresentation.copyActionLabel(
+                        outgoing: outgoing, copied: copied, language: language)
+                    XCTAssertFalse(link.isEmpty, language.rawValue)
+                    XCTAssertEqual(link, legacy,
+                                   "\(language.rawValue) outgoing=\(outgoing) copied=\(copied)")
+                }
+            }
+            // Reverse mutation: the label really does depend on both inputs, so
+            // an implementation that ignored one would not pass the equality
+            // above for the wrong reason.
+            XCTAssertNotEqual(
+                TextMessagePresentation.copyActionLabel(outgoing: true, copied: false,
+                                                        language: language),
+                TextMessagePresentation.copyActionLabel(outgoing: false, copied: false,
+                                                        language: language),
+                language.rawValue)
+            XCTAssertNotEqual(
+                TextMessagePresentation.copyActionLabel(outgoing: true, copied: false,
+                                                        language: language),
+                TextMessagePresentation.copyActionLabel(outgoing: true, copied: true,
+                                                        language: language),
+                language.rawValue)
+        }
+    }
+
     func testFileCompletionNamesTheResultDirectionInEveryLanguage() {
         for language in AppLanguage.allCases {
             let sent = FileTransferCompletionPresentation.title(

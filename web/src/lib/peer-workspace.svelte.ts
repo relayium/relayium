@@ -239,7 +239,25 @@ export function createPeerWorkspace(deps: PeerWorkspaceDeps): PeerWorkspace {
       // `blocksLegacyInbound`/`blocksNewIntent` below: it holds the screen, it
       // does not hold the peer — starting a new link is exactly the way out, and
       // doing so clears it.
-      || mixed.endReason !== "";
+      || mixed.endReason !== ""
+      // …and a plain FAILED establishment is the same product rule with no
+      // reason string attached. `endReason` is only set by the two ends that
+      // need naming — an expired relay credential, a lost signalling socket — so
+      // a link that simply never came up (the peer refused, the transport never
+      // opened, the request timed out) left every clause above false and
+      // unmounted the whole workspace, header included, one frame after it
+      // appeared. The user saw a flash and got the device chooser back, with the
+      // failure reported nowhere.
+      //
+      // `WorkspaceHeader` already renders this state truthfully — `stateFailed`,
+      // no SAS, no path badge — and the terminal card offers Restart rather than
+      // Disconnect, because there is no connection left to end. Restart runs
+      // `dismissLinkEnd`, which clears `endReason` and calls the manager's
+      // `clearFailed` to put it back to `idle`, returning this getter to false.
+      // So the terminal state is readable AND has a way out. Kept out of
+      // `blocksLegacyInbound`/`blocksNewIntent` for the same reason `endReason`
+      // is: it holds the screen, not the peer.
+      || mixed.status === "failed";
   }
 
   function blocksLegacyInbound(): boolean {

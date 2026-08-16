@@ -732,4 +732,59 @@ final class RealtimeTextSessionModelTests: XCTestCase {
         await settle()
         XCTAssertTrue(model.hasLocalContent)
     }
+
+    // MARK: - reading order
+
+    /// Both macOS text views — the live session's list and the retained history a
+    /// terminal state keeps — read newest first, so the message somebody is
+    /// waiting for is the first row rather than the one below the fold.
+    ///
+    /// `history` itself must not move. `TransferNotifications` notifies on
+    /// `history.last`, and the burst guard and the `TEXT_HISTORY_MAX` cap both
+    /// truncate from the front.
+    func testHistoryIsReadNewestFirstWhileStorageStaysChronological() async {
+        let model = makeModel()
+        await openInitiator(model)
+        model.draft = "mine"
+        model.sendDraft()
+        await settle()
+        connection.onText?("theirs", 27)
+        await settle()
+        connection.onText?("theirs again", 33)
+        await settle()
+
+        XCTAssertEqual(model.history.map(\.body), ["mine", "theirs", "theirs again"],
+                       "storage stays in wire order")
+        XCTAssertEqual(model.historyNewestFirst.map(\.body),
+                       ["theirs again", "theirs", "mine"])
+        // Reverse mutation: an accessor that handed back `history` unchanged
+        // would satisfy the assertion above for the wrong reason.
+        XCTAssertNotEqual(model.historyNewestFirst.map(\.body), model.history.map(\.body))
+        XCTAssertEqual(model.historyNewestFirst.map(\.direction),
+                       [.incoming, .incoming, .outgoing])
+        XCTAssertEqual(model.historyNewestFirst.map(\.id), model.history.map(\.id).reversed())
+
+        // The notification path reads the OTHER end and must keep naming the
+        // message that just arrived.
+        XCTAssertEqual(model.history.last?.body, "theirs again")
+        XCTAssertEqual(model.historyNewestFirst.first?.body, model.history.last?.body)
+
+        // A later arrival enters at the front of the reading order.
+        connection.onText?("newest", 27)
+        await settle()
+        XCTAssertEqual(model.historyNewestFirst.first?.body, "newest")
+        XCTAssertEqual(model.history.last?.body, "newest")
+    }
+
+    func testAnEmptyOrSingleEntryHistoryReadsIdenticallyInBothOrders() async {
+        let model = makeModel()
+        XCTAssertTrue(model.historyNewestFirst.isEmpty)
+
+        await openInitiator(model)
+        model.draft = "only"
+        model.sendDraft()
+        await settle()
+        XCTAssertEqual(model.historyNewestFirst.map(\.body), ["only"])
+        XCTAssertEqual(model.historyNewestFirst.map(\.id), model.history.map(\.id))
+    }
 }
