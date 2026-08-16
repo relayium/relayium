@@ -213,22 +213,68 @@ final class MacSurfaceGuardTests: XCTestCase {
         try String(contentsOf: repoRoot.appendingPathComponent(path), encoding: .utf8)
     }
 
-    /// The macOS marketing version, read from the project rather than written
-    /// down again — the same source of truth
-    /// `testTheDocsNameTheMacOSReleaseAReaderCanActuallyFetch` resolves the
-    /// release tag from. A guard that hard-codes the version outlives the
+    /// The shape `web/native-releases.json` is required to have. Decoded with
+    /// `JSONDecoder` rather than read as untyped Foundation objects, because
+    /// only strong decoding makes `publishedMacVersion()`'s validation true: a
+    /// `build` of `1.5` bridges to an `NSNumber` and truncates to a perfectly
+    /// plausible `1`, and a `build` of `true` bridges to an `NSNumber` worth
+    /// `1` as well — both would pass a positive-integer check while the
+    /// manifest holds no build at all. `JSONDecoder` rejects a fractional or
+    /// boolean `build` outright, and rejects a non-boolean `available`, so a
+    /// malformed manifest fails there instead of quietly certifying a release.
+    private struct ReleaseManifest: Decodable {
+        var macos: MacRelease?
+    }
+
+    private struct MacRelease: Decodable {
+        var available: Bool
+        var version: String?
+        var build: Int?
+        var downloadUrl: String?
+    }
+
+    /// The macOS version that is actually published, read from
+    /// `web/native-releases.json` rather than written down again — the one
+    /// source of truth both
+    /// `testTheDocsNameTheMacOSReleaseAReaderCanActuallyFetch` and
+    /// `testNoClaimSurfaceOverstatesWhatIsDistributed` resolve the documented
+    /// tag and status from. A guard that hard-codes the version outlives the
     /// release it was written for and then pins the document to a stale one,
     /// which is the failure this whole section exists to catch.
-    private func macMarketingVersion() throws -> String {
-        let project = try claimSurfaceText("apps/mac/Relayium.xcodeproj/project.pbxproj")
-        let regex = try NSRegularExpression(pattern: #"MARKETING_VERSION = ([0-9]+(?:\.[0-9]+){1,2});"#)
-        let range = NSRange(project.startIndex..., in: project)
-        let versions = Set(regex.matches(in: project, range: range).compactMap { match -> String? in
-            guard let captured = Range(match.range(at: 1), in: project) else { return nil }
-            return String(project[captured])
-        })
-        let version = try XCTUnwrap(versions.first)
-        XCTAssertEqual(versions, [version], "the macOS project carries more than one marketing version")
+    ///
+    /// Deliberately NOT the project's `MARKETING_VERSION`. A release moves in
+    /// two stages: Xcode's version and build advance first, on a release
+    /// branch, and the manifest, the appcast and the documents follow only once
+    /// the DMG is notarized and published. In between, the Xcode version names
+    /// a release that exists nowhere — so deriving a documented tag from it
+    /// would demand the READMEs advertise a download no reader can fetch, which
+    /// is the precise thing these tests were written to prevent. The project's
+    /// own version is guarded by `BundleVersionTests`, which is where it
+    /// belongs.
+    ///
+    /// Validated, not merely read. A manifest that is unavailable, carries no
+    /// version, carries a build that is not a positive integer, or points at an
+    /// asset other than the immutable `macos-v<version>/Relayium.dmg` is not a
+    /// record of a published release, and a tag derived from it would put a
+    /// broken link in the README with every assertion below still green. The
+    /// type-level half of that validation lives in `ReleaseManifest`.
+    private func publishedMacVersion() throws -> String {
+        let manifest = try Data(contentsOf: repoRoot.appendingPathComponent("web/native-releases.json"))
+        let root = try JSONDecoder().decode(ReleaseManifest.self, from: manifest)
+        let macos = try XCTUnwrap(root.macos,
+                                  "web/native-releases.json names no macOS release")
+        XCTAssertTrue(macos.available,
+                      "the macOS manifest does not offer a published download")
+        let version = try XCTUnwrap(macos.version,
+                                    "the macOS manifest carries no version")
+        XCTAssertFalse(version.isEmpty, "the macOS manifest carries an empty version")
+        let build = try XCTUnwrap(macos.build,
+                                  "the macOS manifest carries no build")
+        XCTAssertGreaterThan(build, 0, "the macOS manifest carries a non-positive build")
+        XCTAssertEqual(macos.downloadUrl,
+                       "https://github.com/relayium/relayium/releases/download/"
+                       + "macos-v\(version)/Relayium.dmg",
+                       "the macOS manifest does not point at the immutable DMG for its own version")
         return version
     }
 
@@ -5073,28 +5119,25 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// without the documents quietly going vague instead.
     ///
     /// A reader has to be able to check this. So the claim surfaces must name
-    /// the exact immutable tag for the source marketing version, which resolves
-    /// to one GitHub Release and one DMG, rather than say "released" and leave the reader to
-    /// find out where. They must also say what the artifact IS (Developer
-    /// ID-signed and Apple-notarized), because "there is a download" and "the
-    /// download is one Gatekeeper will run" are different promises.
+    /// the exact immutable tag for the PUBLISHED version, which resolves to one
+    /// GitHub Release and one DMG, rather than say "released" and leave the
+    /// reader to find out where. They must also say what the artifact IS
+    /// (Developer ID-signed and Apple-notarized), because "there is a download"
+    /// and "the download is one Gatekeeper will run" are different promises.
     ///
-    /// Deliberately not asserted here: anything about relayium.com. Whether the
-    /// `/apps` page offers the download is a different fact, owned by
-    /// `web/native-releases.json` and its own dual-state tests, and a Swift
-    /// guard that conflated the two would go red every time the site and the
-    /// release moved in separate commits — which is exactly how they move.
+    /// The version comes from `web/native-releases.json`, which is the record
+    /// of what is published, and not from the project's `MARKETING_VERSION`,
+    /// which advances a commit or more before publication — see
+    /// `publishedMacVersion()`. A tag derived from Xcode would be a tag that
+    /// 404s for the whole window between preparing a release and shipping it,
+    /// and this test would be demanding the READMEs print it.
+    ///
+    /// Still deliberately not asserted here: anything about relayium.com. The
+    /// manifest is read for the one fact it owns — which version is published —
+    /// and nothing is claimed about whether the `/apps` page renders it, which
+    /// is a separate fact with its own dual-state tests.
     func testTheDocsNameTheMacOSReleaseAReaderCanActuallyFetch() throws {
-        let project = try claimSurfaceText("apps/mac/Relayium.xcodeproj/project.pbxproj")
-        let pattern = #"MARKETING_VERSION = ([0-9]+(?:\.[0-9]+){1,2});"#
-        let regex = try NSRegularExpression(pattern: pattern)
-        let range = NSRange(project.startIndex..., in: project)
-        let versions = Set(regex.matches(in: project, range: range).compactMap { match -> String? in
-            guard let captured = Range(match.range(at: 1), in: project) else { return nil }
-            return String(project[captured])
-        })
-        let version = try XCTUnwrap(versions.first)
-        XCTAssertEqual(versions, [version], "the macOS project carries more than one marketing version")
+        let version = try publishedMacVersion()
         let tag = "macos-v\(version)"
         for path in ["README.md", "apps/README.md"] {
             let text = try claimSurfaceText(path)
@@ -5265,10 +5308,17 @@ final class MacSurfaceGuardTests: XCTestCase {
         // the literal `1.0` and stayed green through 1.1 to 1.2.3 while the
         // sentence it guards described a release five versions old — the exact
         // staleness the surrounding tests exist to prevent, reproduced by the
-        // guard itself. Reading `MARKETING_VERSION` means the status sentence
-        // has to move with the product or fail here.
+        // guard itself. Reading the published manifest means the status
+        // sentence has to move with the product or fail here.
+        //
+        // From `web/native-releases.json` rather than `MARKETING_VERSION`,
+        // because the sentence says "released as", and Xcode's version says
+        // what is being BUILT. On a release branch those differ by design, and
+        // this test is the one that would otherwise force `apps/README.md` to
+        // claim a release as distributed before it was notarized and published
+        // — precisely the overstatement the rest of the test forbids.
         let apps = flattened(try claimSurfaceText("apps/README.md"))
-        let version = try macMarketingVersion()
+        let version = try publishedMacVersion()
         XCTAssertTrue(apps.contains("**Status: released as \(version).**"),
                       "apps/README.md must state the macOS status precisely")
         XCTAssertTrue(apps.contains("The iOS app and its share extension are engineering builds and are published nowhere."),
