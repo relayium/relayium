@@ -637,6 +637,16 @@ jobs:
       # and recovery took a separate hand-assembled commit. The 1.2.4 release
       # failed the same way. `scripts/test/macos-publish-order-test.mjs` is what
       # keeps this order from being undone by a later edit.
+      #
+      # The job is split into two phases with one hard boundary. This step is the
+      # WRITE phase: every command that can rewrite a tracked file — the document
+      # bump, `gen:pages`, `npm run check`, `npm run build` and the archived-locale
+      # restore — runs here and only here. The step after it is the JUDGE phase:
+      # it stages the result and then does nothing but read. That boundary is the
+      # point. Tests that ran before a later generation step judged a tree that no
+      # longer exists, and "generation is deterministic" is an assumption, not a
+      # check — so the suite is made to run last, against the exact staged bytes,
+      # and an index/worktree guard proves those bytes reached the commit.
       - name: Assemble the complete metadata candidate
         id: assemble
         env:
@@ -673,44 +683,78 @@ jobs:
           cd web
           npm ci
           npm run gen:pages
+          # `npm run check` is svelte-check plus two `noEmit` tsc projects whose
+          # build info lives under node_modules, so today it writes nothing
+          # tracked. It still runs inside the write phase rather than beside the
+          # suite: if a tsconfig ever starts emitting, the emission lands here,
+          # before the candidate is staged, instead of silently editing a tree
+          # the suite had already judged.
+          npm run check
+          npm run build
           cd ..
           # gen-pages rewrites all nine /apps pages from the manifest, including
           # the seven archived locales, which are byte-for-byte frozen. Restoring
           # them from the index is what keeps a release commit from quietly
           # refreshing a translation the product no longer maintains; the scope
           # check below is what proves the restore happened.
+          #
+          # `npm run build` runs gen-pages again on its way to vite, so this is
+          # placed after the build rather than after gen:pages — and it is the
+          # last tracked-file write in the whole job.
           git checkout -- \
             web/public/ar web/public/de web/public/es web/public/fr \
             web/public/ja web/public/ko web/public/pt
-      - name: Validate the complete metadata candidate
+      # The JUDGE phase. Nothing below rewrites a tracked file: the candidate is
+      # staged first, and every verdict — the scope check and the owning web
+      # suite — is rendered against exactly those staged bytes. This is the
+      # ordering invariant that the previous revision of this job broke by
+      # running `npm run build` and the locale restore after `npm test`: the
+      # bytes the suite approved were then regenerated before being committed,
+      # so what shipped was only *expected* to equal what passed.
+      - name: Validate the staged candidate
+        id: validate
         env:
           ALREADY_DELIVERED: ${{ steps.assemble.outputs.already-delivered }}
         run: |
           set -euo pipefail
-          cd web
-          npm run check
-          npm test -- --run
-          npm run build
-          cd ..
-          # `npm run build` regenerates the pages again on its way to vite, so
-          # the archived locales need restoring a second time.
-          git checkout -- \
-            web/public/ar web/public/de web/public/es web/public/fr \
-            web/public/ja web/public/ko web/public/pt
-          git diff --check
           git add -A
+          git diff --cached --check
+          candidate_tree="$(git write-tree)"
           git diff --cached --name-only \
             | node web/scripts/macos-release-candidate.mjs check-scope \
                 --already-delivered "$ALREADY_DELIVERED"
+          cd web
+          npm test -- --run
+          cd ..
+          # The suite is the last word on this release, so it has to have been
+          # the last word on these exact bytes. An unstaged tracked change or a
+          # different index tree means something moved between generation and
+          # judgment, and the tree that passed is not the tree about to be
+          # committed. That is a hard stop, not a warning: the next step creates
+          # something permanent.
+          git diff --quiet || {
+            echo "::error::tracked files changed during validation; the tested bytes are not the candidate"
+            exit 1
+          }
+          [ "$(git write-tree)" = "$candidate_tree" ] || {
+            echo "::error::the staged candidate tree changed during validation"; exit 1; }
+          echo "tree=$candidate_tree" >> "$GITHUB_OUTPUT"
       # The candidate becomes one commit BEFORE the release exists, so what is
       # pushed afterwards is exactly the tree the suites above judged — no
-      # regeneration, no second test run, nothing that can newly fail.
+      # regeneration, no second test run, nothing that can newly fail. The tree
+      # hash is carried across the step boundary and rechecked here, so a step
+      # inserted between validation and this commit cannot smuggle a byte in.
       - name: Freeze the validated candidate
         id: freeze
         env:
           RELEASE_VERSION: ${{ inputs.release_version }}
+          CANDIDATE_TREE: ${{ steps.validate.outputs.tree }}
         run: |
           set -euo pipefail
+          git diff --quiet || {
+            echo "::error::tracked files changed after validation"; exit 1; }
+          [ "$(git write-tree)" = "$CANDIDATE_TREE" ] || {
+            echo "::error::the index no longer holds the validated candidate"; exit 1; }
           if git diff --cached --quiet; then
             echo "Release metadata is already present on main."
             echo "candidate=" >> "$GITHUB_OUTPUT"
@@ -719,6 +763,8 @@ jobs:
           git config user.name "relayium-release[bot]"
           git config user.email "github@relayium.com"
           git commit -m "release(mac): publish ${RELEASE_VERSION}"
+          [ "$(git rev-parse 'HEAD^{tree}')" = "$CANDIDATE_TREE" ] || {
+            echo "::error::the release commit does not carry the validated tree"; exit 1; }
           echo "candidate=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Publish immutable GitHub Release
         env:
