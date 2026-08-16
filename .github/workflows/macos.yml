@@ -80,8 +80,19 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      # The acceptance step below builds the throwaway local server from
+      # `server/` with `go build`, and the macOS runner image ships no Go on
+      # PATH. Pinned and version-file-driven like every other Go job here, so
+      # the acceptance server is compiled by the same toolchain the server
+      # module declares.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
       - name: Toolchain versions
-        run: xcodebuild -version
+        run: |
+          xcodebuild -version
+          go version
       # `generic/platform=iOS Simulator` builds for the simulator SDK without
       # booting a device or needing a runtime download.
       - name: Build (unsigned, iOS Simulator)
