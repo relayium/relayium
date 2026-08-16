@@ -69,7 +69,16 @@ public struct SupportedVersionCacheEntry: Equatable, Sendable {
     }
 }
 
-public protocol SupportedVersionPolicyStore: Sendable {
+/// Deliberately NOT `Sendable`, unlike the source above.
+///
+/// A store is only ever touched by `SupportedVersionModel`, which is
+/// `@MainActor`, and both of these calls are synchronous — the value never
+/// crosses an isolation boundary, so requiring `Sendable` would buy nothing and
+/// cost something real: the shipped implementation wraps `UserDefaults`, which
+/// is not `Sendable`, so the requirement could only be met by asserting
+/// `@unchecked` safety that no caller actually needs. The source is the opposite
+/// case and keeps its conformance: `fetch()` is `async`.
+public protocol SupportedVersionPolicyStore {
     func load() -> SupportedVersionCacheEntry?
     func save(_ entry: SupportedVersionCacheEntry)
 }
@@ -188,7 +197,12 @@ public final class SupportedVersionModel: ObservableObject {
                 floor: SupportedVersionPolicy = .embeddedFloor,
                 store: SupportedVersionPolicyStore,
                 source: SupportedVersionPolicySource,
-                now: @escaping @Sendable () -> Date = Date.init) {
+                // `{ Date() }` rather than `Date.init`: the initializer's own
+                // function value is not `@Sendable`, and converting it to one
+                // is a warning today and an error in the Swift 6 language mode.
+                // A closure literal is inferred `@Sendable` in place, so the
+                // seam — a clock a test can freeze — is unchanged.
+                now: @escaping @Sendable () -> Date = { Date() }) {
         self.currentVersion = currentVersion
         self.floor = floor
         self.store = store
