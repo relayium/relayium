@@ -32,8 +32,14 @@ public enum PairingCodeExpiry {
 
     /// Everything the pairing-code surface may say about the deadline.
     public struct Presentation: Equatable, Sendable {
-        /// Whole seconds left, floored, and never negative. Zero exactly when
-        /// the code has expired.
+        /// Whole seconds left, rounded UP while any time remains, and never
+        /// negative. Zero exactly when the code has expired.
+        ///
+        /// Ceiling rather than flooring because usability is decided on the
+        /// exact interval, not on this number: with a tenth of a second left the
+        /// code still works, and flooring would render `0:00` — a dead reading
+        /// beside a live code. Rounding up means every usable code reads at
+        /// least `0:01`, and the reading only reaches zero once it is expired.
         public let remaining: Int
         /// Whether the code can still be used by anybody.
         ///
@@ -51,9 +57,13 @@ public enum PairingCodeExpiry {
 
     /// - Parameters:
     ///   - expiresAt: the seconds-since-epoch the MINT returned. Never a
-    ///     locally-invented deadline: the server owns when a code dies, and a
-    ///     client that counted down its own guess would be confidently wrong on
-    ///     any machine whose clock has drifted.
+    ///     locally-invented deadline: the server owns when a code dies, so a
+    ///     client that started its own timer from a locally-guessed lifetime
+    ///     would disagree with the server about which code is still alive. This
+    ///     does not make the reading clock-independent — the comparison below
+    ///     still uses this machine's `now`, so a drifted clock still shows a
+    ///     drifted countdown; it only ensures both sides are talking about the
+    ///     same instant.
     ///   - now: injected so the boundary is testable. The surface passes the
     ///     tick it is redrawing for.
     public static func presentation(expiresAt: Int64,
@@ -66,12 +76,20 @@ public enum PairingCodeExpiry {
         guard expiresAt > 0 else {
             return Presentation(remaining: 0, isUsable: true, countdown: nil)
         }
-        let left = Int((TimeInterval(expiresAt) - now.timeIntervalSince1970).rounded(.down))
+        // Usability is decided on the exact interval, because that is what the
+        // server decides on: it refuses the code from `expiresAt` onward, and
+        // not one fractional second earlier. Deciding on a rounded-down whole
+        // second would kill the code up to a second early on this screen while
+        // the server still accepted it.
+        let left = TimeInterval(expiresAt) - now.timeIntervalSince1970
         guard left > 0 else {
             return Presentation(remaining: 0, isUsable: false, countdown: nil)
         }
-        return Presentation(remaining: left, isUsable: true,
-                            countdown: clock(left, language: language))
+        // Positive, so rounding up cannot reach zero: a usable code always reads
+        // at least `0:01`.
+        let seconds = Int(left.rounded(.up))
+        return Presentation(remaining: seconds, isUsable: true,
+                            countdown: clock(seconds, language: language))
     }
 
     /// `m:ss`, or `h:mm:ss` for the codes long enough to need it.

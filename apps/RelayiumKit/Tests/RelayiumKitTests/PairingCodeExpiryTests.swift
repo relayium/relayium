@@ -77,11 +77,29 @@ final class PairingCodeExpiryTests: XCTestCase {
         XCTAssertEqual(countdown(3_725), "1:02:05")
     }
 
-    /// A partial second is floored, so the number never rounds UP to a second
-    /// the code does not have.
-    func testAPartialSecondIsFlooredRatherThanRounded() {
+    /// A partial second is rounded UP, so a code that still has time on it
+    /// never reads `0:00` while it is being dictated.
+    func testAPartialSecondIsRoundedUpWhileTimeRemains() {
         let shown = PairingCodeExpiry.presentation(expiresAt: mintedAt + 300,
                                                    now: at(298.4), language: .en)
+        XCTAssertEqual(shown.remaining, 2)
+        XCTAssertEqual(shown.countdown, "0:02")
+    }
+
+    /// **A tenth of a second before expiry the code is still usable.**
+    ///
+    /// The server refuses the code only from `expiresAt` onward, so in this
+    /// instant it still accepts it. Deciding usability on a rounded-down whole
+    /// second used to answer zero here and draw the code as dead — hiding a
+    /// working handoff from the person reading the digits out, for reasons
+    /// nothing on screen could explain.
+    func testATenthOfASecondBeforeExpiryIsStillUsable() {
+        let shown = PairingCodeExpiry.presentation(expiresAt: mintedAt + 300,
+                                                   now: at(299.9), language: .en)
+        XCTAssertTrue(shown.isUsable, "the code was refused while the server still accepted it")
+        XCTAssertFalse(shown.isExpired)
+        // Rounded up, so the last fraction of a second reads as a second rather
+        // than as `0:00` beside a live join control.
         XCTAssertEqual(shown.remaining, 1)
         XCTAssertEqual(shown.countdown, "0:01")
     }
