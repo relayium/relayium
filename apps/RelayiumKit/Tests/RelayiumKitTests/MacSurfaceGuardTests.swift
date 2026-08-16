@@ -1973,7 +1973,7 @@ final class MacSurfaceGuardTests: XCTestCase {
     ///  - the exclusions name the framework containers the 2026-08-15 probe and
     ///    the owner's 2026-08-16 audit run matched — AppKit's menu bar, the
     ///    `Group`/`SplitGroup` wrappers around a whole window half, the wrapper
-    ///    `List` draws around a group heading, its 14×14 disclosure control, and
+    ///    `List` draws around a group heading, its 14-wide disclosure control, and
     ///    the Touch Bar the product never declares — and nothing else. Each is
     ///    bounded to the shape its evidence describes, and the wrapper rule is
     ///    bounded to a heading this gate has already proved has words;
@@ -2197,8 +2197,18 @@ final class MacSurfaceGuardTests: XCTestCase {
         // range. Enclosing a proven heading is a property a container of any
         // size has — a future product-authored group holding a heading and its
         // rows encloses exactly the same heading — so the wrapper rule carries
-        // the 19-point row height as well, and the disclosure rule carries 14
-        // in both dimensions rather than a ceiling of 16.
+        // the 19-point row height as well, and the disclosure rule carries a
+        // bounded width and a bounded height rather than a bare ceiling.
+        //
+        // The disclosure height is the one length two supported runtimes read
+        // differently: 14 on the owner's Xcode 17 / macOS 26, 16 on GitHub's
+        // Xcode 16.4 / macOS 15.5, both at the same 14-point width and both
+        // reported on all five destinations. So the height is pinned as a span
+        // whose two endpoints are those two observations and the width stays a
+        // single measurement. Every one of those four numbers is asserted
+        // literally below, which is what makes both directions of mutation red:
+        // widening an endpoint, and dropping one so the span collapses back to
+        // a value one of the two runtimes contradicts.
         //
         // Sizes, not positions: nothing here reads the `(778,360,…)` origins the
         // frames were measured at, and the wrapper's 208-point width is left
@@ -2208,8 +2218,20 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(audit.contains("private static let headingRowHeight: CGFloat = 19"),
                       "the List header wrapper's measured 19-point row height is gone, so "
                       + "the wrapper rule is back to matching a container of any size")
-        XCTAssertTrue(audit.contains("private static let disclosureSide: CGFloat = 14"),
-                      "the disclosure control's measured 14-point side is gone")
+        XCTAssertTrue(audit.contains("private static let disclosureWidth: CGFloat = 14"),
+                      "the disclosure control's measured 14-point width is gone, or is no "
+                      + "longer a single measurement — both runtimes read this one the same, "
+                      + "so nothing entitles it to a span")
+        XCTAssertTrue(audit.contains("private static let disclosureHeightLow: CGFloat = 14"),
+                      "the disclosure height's lower endpoint is not the 14 points the "
+                      + "owner's Xcode 17 / macOS 26 run measured; lower it and unnamed "
+                      + "groups smaller than a disclosure triangle leave the audit with it, "
+                      + "raise it and that run's own reading stops being accepted")
+        XCTAssertTrue(audit.contains("private static let disclosureHeightHigh: CGFloat = 16"),
+                      "the disclosure height's upper endpoint is not the 16 points GitHub's "
+                      + "Xcode 16.4 / macOS 15.5 run measured; raise it and the span covers "
+                      + "heights nothing has ever observed, lower it and CI's own reading "
+                      + "stops being accepted")
         XCTAssertTrue(audit.contains("private static let geometrySlack: CGFloat = 1"),
                       "the rounding slack is no longer one point; widen it and both "
                       + "measured bounds stop being bounds")
@@ -2222,15 +2244,41 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(audit.contains("value <= measured + geometrySlack"),
                       "the measured-geometry match lost its upper bound, so every larger "
                       + "unnamed container is excluded along with the one that was measured")
+        // The two-reading span carries the identical pair. A span is the shape
+        // that most easily decays into an open range, so it gets the same two
+        // assertions rather than being trusted because it has a name.
+        XCTAssertTrue(audit.contains("value >= low - geometrySlack"),
+                      "the two-reading span lost its lower bound, so every unnamed container "
+                      + "shorter than the smaller of the two observations leaves the audit "
+                      + "with the disclosure control")
+        XCTAssertTrue(audit.contains("value <= high + geometrySlack"),
+                      "the two-reading span lost its upper bound, so it reaches the 19-point "
+                      + "heading rows and every unnamed container above them")
         // And each rule is bound to the geometry its own evidence measured.
         XCTAssertTrue(audit.contains("measures(element.frame.height, Self.headingRowHeight)"),
                       "the List header wrapper is excluded on enclosure alone again — a "
                       + "property any enclosing container has, including a product-authored "
                       + "group holding a heading and its rows")
-        XCTAssertTrue(audit.contains("measures(element.frame.width, Self.disclosureSide)")
-                      && audit.contains("measures(element.frame.height, Self.disclosureSide)"),
-                      "the disclosure control is no longer matched on both of its measured "
-                      + "sides, so the rule is about one dimension and free in the other")
+        XCTAssertTrue(audit.contains("measures(element.frame.width, Self.disclosureWidth)"),
+                      "the disclosure control's width is no longer matched against the single "
+                      + "measurement both runtimes agreed on, so the rule is free in the one "
+                      + "dimension that never varied")
+        XCTAssertTrue(audit.contains("measures(element.frame.height,")
+                      && audit.contains("from: Self.disclosureHeightLow,")
+                      && audit.contains("through: Self.disclosureHeightHigh)"),
+                      "the disclosure control's height is no longer matched against both "
+                      + "endpoints of the two runtime readings, so the rule is about one "
+                      + "runtime's shape and either rejects the other or is free in that "
+                      + "dimension")
+        // And the span stays where its evidence is. A second call site would be
+        // a single measurement quietly turned into a band by reusing the name.
+        XCTAssertEqual(occurrences(of: "through: Self.", in: audit), 1,
+                       "a second geometry is matched as a span; only the disclosure height "
+                       + "has two runtime readings behind it, and every other length in this "
+                       + "section was measured once")
+        XCTAssertFalse(audit.contains("Self.disclosureSide"),
+                       "the single-side disclosure constant is back, which is the shape that "
+                       + "rejected CI's own 14x16 reading of the same framework control")
         XCTAssertFalse(audit.contains("element.frame.origin")
                        || audit.contains("== 778") || audit.contains("== 208"),
                        "an exclusion matches a screen coordinate or the sidebar's current "

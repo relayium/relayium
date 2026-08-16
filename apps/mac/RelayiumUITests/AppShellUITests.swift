@@ -2235,9 +2235,17 @@ final class AppShellUITests: XCTestCase {
     ///    altogether — no product change has ever moved them — and each one
     ///    encloses a heading the product identifies and this test has already
     ///    proved has words. No product code can name it;
-    ///  - the 14×14 `Group` at `(821,327)` the audit reports for a parent/child
-    ///    mismatch: the disclosure control `List` draws for a collapsible
-    ///    `Section`, and a mismatch inside the framework's own hierarchy;
+    ///  - the 14-point-wide `Group` at `(821,327)` the audit reports for a
+    ///    parent/child mismatch: the disclosure control `List` draws for a
+    ///    collapsible `Section`, and a mismatch inside the framework's own
+    ///    hierarchy. **Two runtimes have now measured it, and both are
+    ///    authoritative.** The owner's Xcode 17 / macOS 26 run read it 14×14;
+    ///    GitHub's Xcode 16.4 / macOS 15.5 read it 14×16 — the same width, on
+    ///    all five destinations, with the same empty identifier, empty label and
+    ///    parent/child finding. The width is stable across both and stays a
+    ///    single measurement; only the height varies, so only the height is
+    ///    written as a range, and it spans nothing but the two values actually
+    ///    observed;
     ///  - `elementType(81)`, the Touch Bar. The product declares none, so this is
     ///    the system's own remote representation of the app.
     ///
@@ -2257,6 +2265,14 @@ final class AppShellUITests: XCTestCase {
     /// the geometry their evidence actually measured, from both sides. That is
     /// what Q9 froze: a framework-owned finding leaves by exact evidence, never
     /// by a rule shaped loosely enough to also cover something unmeasured.
+    ///
+    /// A range is held to the same standard. The disclosure height spans two
+    /// measurements because two supported runtimes each produced one, and its
+    /// endpoints are those two readings — not a band chosen to be safe. The
+    /// lower endpoint is still a lower bound, so nothing smaller than a
+    /// disclosure triangle gets in underneath it, and the upper endpoint stays
+    /// clear of the 19-point heading rows above. Widening either endpoint needs
+    /// a third runtime that actually measured it.
     ///
     /// The resident menu-bar extra is deliberately NOT covered: it is
     /// `statusItem`, product code, and an unlabelled one would be a real defect.
@@ -2290,12 +2306,16 @@ final class AppShellUITests: XCTestCase {
            let wrapped = headers.first(where: { encloses(element.frame, $0.value) })?.key {
             return "the wrapper List draws around the identified, labelled \(wrapped)"
         }
-        // Measured at 14×14, and matched at 14×14 from both sides. A ±1 slack for
-        // a different backing scale's rounding is the whole allowance; it does
-        // not reach the 19-point heading rows above, and nothing smaller than a
-        // disclosure triangle gets in underneath it.
-        if measures(element.frame.width, Self.disclosureSide),
-           measures(element.frame.height, Self.disclosureSide) {
+        // Width is one measurement, matched from both sides; height is the two
+        // the supported runtimes measured, matched from both ends of that span.
+        // A ±1 slack for a different backing scale's rounding is the whole
+        // further allowance; even at the top it does not reach the 19-point
+        // heading rows above, and the bottom end keeps everything smaller than a
+        // disclosure triangle out from underneath it.
+        if measures(element.frame.width, Self.disclosureWidth),
+           measures(element.frame.height,
+                    from: Self.disclosureHeightLow,
+                    through: Self.disclosureHeightHigh) {
             return "the disclosure control List draws for a collapsible Section"
         }
         return nil
@@ -2308,11 +2328,27 @@ final class AppShellUITests: XCTestCase {
     /// matched by these rather than by the `(778,360,…)` coordinates they were
     /// read at.
     private static let headingRowHeight: CGFloat = 19
-    private static let disclosureSide: CGFloat = 14
+
+    /// The disclosure control's width, the one dimension both runtimes agreed on.
+    private static let disclosureWidth: CGFloat = 14
+
+    /// Its height, which they did not. These two numbers are readings, not a
+    /// tolerance: 14 from the owner's Xcode 17 / macOS 26 run, 16 from GitHub's
+    /// Xcode 16.4 / macOS 15.5 run. Neither endpoint was chosen, only measured.
+    ///
+    /// The span does admit a 15 no run has reported, which is the honest cost of
+    /// accepting both readings at once: the alternative is a rule that rejects
+    /// one of the two runtimes the product is actually tested on. It is bounded
+    /// on both sides by observations rather than open in either direction, and
+    /// the one unobserved height it lets through is bracketed by two that were
+    /// measured — not a range extended until the failure stopped.
+    private static let disclosureHeightLow: CGFloat = 14
+    private static let disclosureHeightHigh: CGFloat = 16
 
     /// What a different backing scale's rounding may add in either direction.
-    /// One point: enough for a half-point rounding on a 2× display, far short of
-    /// the five points between the disclosure control and a heading row.
+    /// One point: enough for a half-point rounding on a 2× display, and still
+    /// two points short of the 19-point heading rows even from the taller
+    /// disclosure reading.
     private static let geometrySlack: CGFloat = 1
 
     /// Whether a measured length is the recorded one, within that slack.
@@ -2322,6 +2358,21 @@ final class AppShellUITests: XCTestCase {
     /// measured framework container silently becomes a rule about size.
     private static func measures(_ value: CGFloat, _ measured: CGFloat) -> Bool {
         value >= measured - geometrySlack && value <= measured + geometrySlack
+    }
+
+    /// Whether a measured length falls between two recorded readings, within
+    /// that same slack at each end.
+    ///
+    /// Both ends, for exactly the reason above, and it is deliberately a
+    /// separate function rather than a widened `measures`: the moment one call
+    /// can pass a low and a high, every other call site can too, and the single
+    /// measurements stop being single. This one exists only where two supported
+    /// runtimes measured the same framework-drawn control differently. Its
+    /// arguments are those two readings; it is not a place to put a guess.
+    private static func measures(_ value: CGFloat,
+                                 from low: CGFloat,
+                                 through high: CGFloat) -> Bool {
+        value >= low - geometrySlack && value <= high + geometrySlack
     }
 
     /// Whether `outer` encloses `inner`, within a point of slack for rounding.
