@@ -10,6 +10,8 @@
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.app.json && tsc -p tsconfig.node.json",
     "gen:pages": "node scripts/gen-pages.mjs",
+    "gen:vectors": "node scripts/check-wire-vectors.mjs --write",
+    "test:vectors": "node scripts/check-wire-vectors.mjs",
     "test": "vitest",
     "test:e2e": "node e2e/lan-transfer.mjs",
     "test:e2e:mixed": "node e2e/mixed-link.mjs",

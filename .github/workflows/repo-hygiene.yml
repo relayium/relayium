@@ -65,6 +65,31 @@ jobs:
       - name: macos publish job orders validation before the immutable release
         run: node scripts/test/macos-publish-order-test.mjs
 
+  native-web-pairing-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+      # Two delivery gates that nothing else in this repository can see.
+      #
+      # `native-web-pairing.yml` runs the ONLY test that can catch two capable
+      # peers disagreeing about each other — a real macOS client and a real
+      # browser, no doubles on either side — and `web/scripts/check-wire-vectors.mjs`
+      # is the ONLY thing that notices when the generated Swift wire vectors stop
+      # matching the Web implementation they were transcribed from.
+      #
+      # Both are invisible to every other check: the YAML stays valid with the
+      # acceptance step deleted, with `web/**` dropped from its path filter, with
+      # `continue-on-error: true` added, or with the two steps swapped. The next
+      # signal after any of those would be another cross-client regression
+      # reaching a user. So it is asserted here, where there is no path filter
+      # and every push runs it — the same reason macos-publish-order lives here.
+      # No dependencies, so there is nothing to install.
+      - name: native/web pairing acceptance and wire-vector gates are wired
+        run: node scripts/test/native-web-pairing-gate-test.mjs
+
   server-tag:
     runs-on: ubuntu-latest
     steps:

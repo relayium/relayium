@@ -1,0 +1,155 @@
+name: native-web-pairing
+# The ONE hosted job where the macOS native client and a real browser have to
+# agree with each other.
+#
+# ## Why this is its own workflow rather than a job in macos.yml
+#
+# `scripts/native-web-pairing-acceptance.sh` needs all four of a macOS runner
+# (the Swift `LocalTransferPeer` is the app's own `LinkWorkspaceModel` assembled
+# by `AppEnvironment`), a Go toolchain (a real `./server` on an ephemeral
+# loopback port), Node plus the built Web bundle, and a real headless Chrome.
+# Only a macOS runner can host it.
+#
+# It cannot live in `macos.yml`, because path filters in GitHub Actions are
+# per-WORKFLOW and not per-job. This run's inputs include `web/**` and
+# `server/**`; adding those to `macos.yml` would also start `signed-build` —
+# which imports the Developer ID certificate, builds and signs the app and can
+# be dispatched into notarization and an immutable release — on every web copy
+# change. `macos.yml`'s own header states the opposite intent ("the path filter
+# keeps a web or server commit from starting a macOS runner"), and widening it
+# is exactly the expensive duplicate run that must not happen here.
+#
+# So the acceptance has one home, and this file is it. Nothing else in the
+# repository invokes that script; `scripts/test/native-web-pairing-gate-test.mjs`
+# runs on every push (via `repo-hygiene.yml`) and fails if that stops being true,
+# if this file's path filter stops covering an owning tree, or if the vector gate
+# stops running before the acceptance.
+#
+# ## Why the path filter is this broad
+#
+# Every one of these trees is a real INPUT to the run, not a neighbour of it:
+#
+#   apps/**    the native half — RelayiumKit, the link workspace, the peer binary
+#   web/**     the bundle the browser half loads, the e2e harness and driver,
+#              and the wire-vector generators the first step re-runs
+#   server/**  the real hub: /api/pair, the pairing room, the ws join budget
+#   scripts/** the acceptance itself and the shared isolation library
+#
+# The 1.2.5 regression this exists to catch — two capable peers reaching
+# different conclusions about what the other could speak — was authored on one
+# side of that list and observed on the other. A filter that named only the
+# native tree would have let its own fix's counterpart land unwatched.
+on:
+  push:
+    paths: &paths
+      - 'apps/**'
+      - 'web/**'
+      - 'server/**'
+      - 'scripts/**'
+      - '.github/workflows/native-web-pairing.yml'
+  pull_request:
+    paths: *paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # No secrets are read here, so this runs on fork pull requests like any other
+  # check. Deliberately no `if:` and no `continue-on-error`: a cross-client
+  # acceptance that is allowed to skip or to be advisory is not a gate, and the
+  # guard test asserts their absence.
+  pairing:
+    runs-on: macos-15
+    # Worst case is eight rounds, each preceded by a 65s wait for the server's
+    # own per-IP WebSocket join budget (5/min, production behaviour that must not
+    # be relaxed for a test), on top of the Swift, Go and Vite builds. The bound
+    # is generous on purpose: a run that is merely slow must not read as the
+    # regression.
+    timeout-minutes: 45
+    steps:
+      # Third-party actions are pinned to a full commit SHA (with the
+      # human-readable version in a trailing comment) so a compromised or
+      # retagged upstream release can't silently change what runs here.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+      # Recorded in the log so a future failure can be compared against the
+      # toolchain that produced the last green run.
+      - name: Toolchain versions
+        run: |
+          xcodebuild -version
+          swift --version
+          go version
+          node --version
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+      # The macOS runner image ships no browser. `e2e/harness.mjs` resolves
+      # Chrome or THROWS — it never degrades to a skip — so a missing browser is
+      # a red build here; installing it explicitly is what keeps that red from
+      # being the normal outcome.
+      - name: Install Google Chrome
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+          HOMEBREW_NO_INSTALL_CLEANUP: '1'
+        run: |
+          set -euo pipefail
+          chrome='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+          if [ ! -x "$chrome" ]; then
+            brew install --cask google-chrome
+          fi
+          [ -x "$chrome" ] || { echo "::error::Google Chrome did not install"; exit 1; }
+          "$chrome" --version
+      # FIRST, and before the acceptance, because it is seconds long and because
+      # it judges the same cross-language contract from the other direction. The
+      # acceptance proves two live implementations agree over a real transport;
+      # this proves the frozen bytes the Swift suites assert against are still
+      # what the Web implementation produces. A drifted fixture makes every Swift
+      # vector suite a test of the OLD wire, and no amount of live agreement
+      # would say so.
+      #
+      # `npm run test:vectors` is the verifying form and is observably read-only:
+      # it regenerates, compares, and restores what it found. `npm run
+      # gen:vectors` is the writing form and must never appear in CI.
+      - name: Regenerate the cross-language wire vectors and require zero diff
+        working-directory: web
+        run: npm run test:vectors
+      # The cell nothing else in this repository can fill: no fake WebSocket, no
+      # BroadcastChannel room, no Swift-authored "peer". A real server, a real
+      # pairing code minted through /api/pair, the macOS app's own link workspace
+      # in one process, a real headless Chrome on the real built bundle in
+      # another, and real WebRTC between them — in BOTH role assignments, with
+      # the SAS digits and the transferred bytes compared across the two
+      # implementations.
+      #
+      # `TMPDIR` is pinned to the runner's own temp so the per-run root a FAILED
+      # run keeps is somewhere the upload step below can find it. The launcher
+      # creates it under `${TMPDIR:-/tmp}`, which on a macOS runner is neither
+      # `/tmp` nor `RUNNER_TEMP` by default.
+      - name: macOS native to browser pairing acceptance
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: scripts/native-web-pairing-acceptance.sh
+      # A failed run keeps its per-run root for diagnosis, and the browser log,
+      # the peer log and the two observation files inside it are the only record
+      # of which side stopped agreeing. Failure-only and short-lived: nothing in
+      # that root is signing or notarization material, but this is a public
+      # repository and an artifact is not a place to leave anything by default.
+      - name: Retain pairing diagnosis
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: native-web-pairing-diagnosis
+          path: |
+            ${{ runner.temp }}/relayium-acceptance-*/**/*.log
+            ${{ runner.temp }}/relayium-acceptance-*/**/*.json
+          retention-days: 7
+          if-no-files-found: ignore

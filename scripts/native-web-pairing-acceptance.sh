@@ -51,6 +51,20 @@
 # can: that two DIFFERENT implementations agree — one workspace, one SAS, and the
 # same bytes — over a real hub and real WebRTC, in both role assignments.
 #
+# ## Where this runs
+#
+# `.github/workflows/native-web-pairing.yml`, job `pairing`, on `macos-15` — the
+# only hosted job with all four of a macOS runner, a Go toolchain, the Web
+# bundle's dependencies and a real Chrome. That workflow triggers on `apps/**`,
+# `web/**`, `server/**` and `scripts/**`, because every one of those is an input
+# to this run. It cannot live in `macos.yml`: path filters are per-workflow, and
+# naming `web/**` there would start the signing job on every web change.
+#
+# `scripts/test/native-web-pairing-gate-test.mjs` (run by `repo-hygiene.yml` on
+# every push) asserts all of that, plus that this script still contains the
+# assertions below. For its first months this file existed and nothing ran it,
+# which is the state that lets the regression it describes recur.
+#
 # ## Isolation
 #
 # `scripts/lib/local-acceptance.sh` owns every rule: ephemeral ports, one per-run
