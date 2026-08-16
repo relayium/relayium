@@ -419,6 +419,35 @@ final class LocalSessionUITests: XCTestCase {
         ])
     }
 
+    /// **The ended session's exit is still there, and now reads `Done`.**
+    ///
+    /// An earlier spelling of this check asserted that `link-leave-session` was
+    /// GONE, and that was simply not true of the product: an ended `link/1` keeps
+    /// its retained terminal pane, and `TransferLinkPane.leaveTitle` swaps the
+    /// button's title from Leave session to `L10n.t(.commonDone)` rather than
+    /// removing the button. The absence assertion could therefore only have gone
+    /// green against a pane that had thrown the user's result away — which is the
+    /// opposite of the behaviour the comment beside it was defending. The title
+    /// is the honest evidence: it changes exactly when the connection ends.
+    ///
+    /// The literal rather than `L10n.t(.commonDone)`: this bundle links the app
+    /// under test and no Swift package, so `RelayiumShareKit`'s key is not in
+    /// scope here. Pinning the English string is safe because `launchArguments`
+    /// fixes this launch at `en`, and English is the source language.
+    private func assertTerminalExitReadsDone(_ what: String,
+                                             file: StaticString = #filePath,
+                                             line: UInt = #line) {
+        let terminalExit = element("link-leave-session")
+        XCTAssertTrue(terminalExit.waitForExistence(timeout: 30),
+                      "the ended \(what) session dropped its terminal action entirely",
+                      file: file, line: line)
+        XCTAssertEqual(terminalExit.label, "Done",
+                       "the ended \(what) session's exit still reads "
+                       + "“\(terminalExit.label)”, so it is offering to leave a link "
+                       + "that should already be over",
+                       file: file, line: line)
+    }
+
     // MARK: - the requirement
 
     /// **Two real connections at once, navigation in both directions, and Cancel
@@ -473,6 +502,18 @@ final class LocalSessionUITests: XCTestCase {
         showDirect()
         cancelTheSessionOnScreen("pairing")
         assertDirectScreenReleased()
+        // **The CANCELLED module's counterpart, not only the surviving one.**
+        // Without this half, a Cancel that repainted its own screen and left the
+        // link open on the wire would pass every assertion in this test: the pair
+        // below is about the module that was NOT cancelled, and the screen checks
+        // are about what the app believes. Only the far end can say the link is
+        // actually closed.
+        //
+        // Polled rather than read once, because the counterpart learns the link
+        // is over when the close reaches it and not when the button is clicked.
+        waitFor("the pairing counterpart to close its link") {
+            !pairingCounterpartHoldsAnOpenLink(pairPort)
+        }
 
         showNearby()
         XCTAssertTrue(element("link-session-peer").waitForExistence(timeout: 30),
@@ -484,18 +525,20 @@ final class LocalSessionUITests: XCTestCase {
         // …and then its own, whose exit leaves the Direct screen where it was.
         cancelTheSessionOnScreen("same-network")
         assertNearbyScreenReleased()
+        waitFor("the same-network counterpart to close its link") {
+            !nearbyCounterpartHoldsAnOpenLink(harness.nearbyPort)
+        }
         showDirect()
         assertDirectScreenReleased()
-        // **Deliberately NOT "the peer heading is gone".** An ended link is a
-        // retained terminal state: the pane keeps the peer, the transfer result
-        // and the reason until the user dismisses it, exactly as a completed
-        // receive keeps its Reveal in Finder. What must be true is that the
-        // connection is over and cannot still be taking bytes, which is the
-        // ended notice — asserting the heading's absence would be asserting that
-        // the product throws away a result the user has not read.
-        XCTAssertFalse(element("link-leave-session").exists,
-                       "the cancelled pairing session still offers a way to leave it, "
-                       + "so it did not actually end")
+        // **Deliberately NOT "the peer heading is gone", and not "the exit is
+        // gone" either.** An ended link is a retained terminal state: the pane
+        // keeps the peer, the transfer result and the reason until the user
+        // dismisses it, exactly as a completed receive keeps its Reveal in
+        // Finder — and it keeps its button too, retitled `Done`. What must be
+        // true is that the connection is over and cannot still be taking bytes;
+        // asserting either element's absence would be asserting that the product
+        // throws away a result the user has not read.
+        assertTerminalExitReadsDone("pairing")
     }
 
     /// **The other order**: the same two real connections, and Cancel on Nearby
@@ -520,6 +563,12 @@ final class LocalSessionUITests: XCTestCase {
         showNearby()
         cancelTheSessionOnScreen("same-network")
         assertNearbyScreenReleased()
+        // The cancelled module really let go, proved from the far end — the same
+        // half the other order checks, and the reason a Cancel that only
+        // repainted its screen cannot pass either order.
+        waitFor("the same-network counterpart to close its link") {
+            !nearbyCounterpartHoldsAnOpenLink(harness.nearbyPort)
+        }
 
         // The pairing connection is untouched — on screen…
         showDirect()
@@ -533,5 +582,9 @@ final class LocalSessionUITests: XCTestCase {
         // And it can still be ended by its own screen afterwards.
         cancelTheSessionOnScreen("pairing")
         assertDirectScreenReleased()
+        waitFor("the pairing counterpart to close its link") {
+            !pairingCounterpartHoldsAnOpenLink(pairPort)
+        }
+        assertTerminalExitReadsDone("pairing")
     }
 }
