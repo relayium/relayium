@@ -276,7 +276,14 @@ public final class LinkAdmission: @unchecked Sendable {
             // is currently doing is the obvious implementation — and `NSLock` is
             // not recursive, so calling it while held is a self-deadlock on the
             // signalling delivery queue.
-            guard canAcceptLink(from) else { return .busy }
+            //
+            // ASKED here, but not ACTED ON until the phase is known. The call
+            // stays because an owner that reads this admission back, or that
+            // gives up on its own ask while answering, must still be able to —
+            // and the re-read below is what makes that safe. What its answer may
+            // refuse is decided in the critical section under it; see the
+            // `.requesting` case.
+            let surfaceIsFree = canAcceptLink(from)
             lock.lock(); defer { lock.unlock() }
             // The predicate above is arbitrary owner code running with nothing
             // held, so the world it returns into is not the world it was called
@@ -297,8 +304,54 @@ public final class LinkAdmission: @unchecked Sendable {
             case let .requesting(peerId):
                 // Our request crossed the peer's offer: adopt the offer. That is
                 // the convergence the whole request mechanism exists to produce.
+                //
+                // **`surfaceIsFree` is deliberately not consulted on this line,
+                // and that is a shipped defect this fixes.** The predicate
+                // answers "may an UNSOLICITED link take the surface", and the app
+                // writes it false the instant the surface is claimed — which
+                // `NearbyView.connectLink` does one line BEFORE it dials, so the
+                // session it is starting is presented where the user is looking.
+                // Applied here it refused the very offer this side had just asked
+                // for. That is not a corner: `linkRole` gives the SMALLER id the
+                // offer, so a device the hub hands the larger id can only ask,
+                // and every answering offer was met with `busy` — which the
+                // peer's `LinkSignalPolicy` turns into an immediate `.peerBusy`
+                // failure. The user saw one request, nine retries and a
+                // thirty-second timeout; the peer's log showed ten
+                // establishments dying in the same second each. Which id is
+                // smaller is decided per socket, so the same build connected on
+                // one launch and could not connect at all on the next.
+                //
+                // A remote peer cannot manufacture this: `.requesting` is entered
+                // only by this side's own `admitRequest`/`didBeginRequesting`, so
+                // what is exempted is exactly a link this device chose to ask
+                // for. An owner that really has changed its mind withdraws the
+                // ask — `endRequest`/`didRequestTimeOut` — and the phase read
+                // above is then no longer `.requesting`, so the refusal applies
+                // again. The authoritative main-actor gate is untouched:
+                // `LinkWorkspaceModel.buildAssembly` consults `shouldAcceptLink`
+                // only for an attempt this side does not already have.
+                //
+                // **The Web client reached the same rule at a different layer,
+                // and that is why this is here rather than in the app.** Its
+                // `peer-link.svelte.ts` DOES ask the predicate first — so this
+                // function is deliberately no longer a line-for-line pin on
+                // `listen()`, and restoring that parity would restore the bug —
+                // but `peer-workspace.svelte.ts` answers it with "deliberately do
+                // not inspect mixed.manager here. A larger-ID peer waiting for
+                // the deterministic offerer already has status=requesting;
+                // treating that as busy would reject the very offer it
+                // requested." Composed, the two clients agree; nothing on the
+                // wire changes either way. The native apps made exactly the
+                // mistake that comment warns against — iOS and macOS both feed
+                // `observeAvailability` from surface ownership — so the rule is
+                // kept in the one object that knows both the phase and the peer,
+                // where a third owner cannot forget it.
                 return peerId == from ? .establish(role: .responder) : .busy
             case .idle, .failed:
+                // Nothing was asked for, so this offer is unsolicited and the
+                // surface's answer is the whole decision.
+                guard surfaceIsFree else { return .busy }
                 return .establish(role: .responder)
             }
         }

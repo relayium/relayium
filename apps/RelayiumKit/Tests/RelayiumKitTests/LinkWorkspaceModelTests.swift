@@ -924,6 +924,61 @@ final class LinkWorkspaceModelTests: XCTestCase {
         XCTAssertTrue(rig.model.connection.isOpen)
     }
 
+    /// Connect from the side that can only ASK, with the surface already claimed
+    /// — and the offer that comes back becomes the link.
+    ///
+    /// This is the shipped defect the T2b built-App runs exposed, driven through
+    /// the whole composition. `linkRole` gives the SMALLER id the offer, so this
+    /// side ("zzz") cannot offer to "aaa": tapping Connect sends a request and
+    /// waits for the peer to offer. `NearbyView.connectLink` claims the
+    /// presentation surface one line BEFORE it dials, and `observeAvailability`
+    /// mirrors that claim into the room's `canAcceptLink` as false — so the
+    /// answering offer used to be routed `busy`, which `LinkSignalPolicy` turns
+    /// into an immediate `.peerBusy` failure at the peer. The user saw Connect do
+    /// nothing for thirty seconds; the counterpart's log showed ten
+    /// establishments dying in the same second each, one per request retry.
+    ///
+    /// Which of the two ids is smaller is decided per socket, which is why the
+    /// same build connected on one launch and could not connect at all on the
+    /// next — and why this has to be a deterministic test rather than a rerun.
+    func testConnectFromTheAskingSideSucceedsWithTheSurfaceAlreadyClaimed() async {
+        let rig = rig(requiresVerification: true, selfId: "zzz")
+        announceLink(rig, "aaa")
+        // Exactly what the app writes when it claims the surface for the session
+        // it is about to start. `shouldAcceptLink` is set to refuse as well: the
+        // authoritative main-actor gate is for links this side did NOT ask for,
+        // and a solicited one must never reach it.
+        rig.model.setAvailableForInboundLink(false)
+        rig.model.shouldAcceptLink = { _ in false }
+
+        XCTAssertTrue(rig.model.connect(peerId: "aaa", peerLabel: "Studio Mac",
+                                        files: [meta("brief.txt", 1536)],
+                                        sources: [source("brief.txt", 1536)]))
+        XCTAssertEqual(rig.model.connection, .requesting)
+
+        // The peer answers the ask.
+        let offer = linkSDPSignal(kind: "offer", sdp: "v=0", commit: nil,
+                                  caps: [TEXT_CAPABILITY, LINK_CAPABILITY])
+        rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa", data: offer))
+        await settle()
+
+        XCTAssertEqual(rig.transports.count, 1, """
+            the answer to this side's own request was refused, so Connect built \
+            nothing and the peer was told `busy`
+            """)
+        XCTAssertEqual(rig.model.connection, .establishing(sas: nil))
+        XCTAssertEqual(rig.model.peerLabel, "Studio Mac",
+                       "the label the user tapped survives the adoption")
+        XCTAssertEqual(rig.model.armedFiles.map(\.name), ["brief.txt"],
+                       "and so does the batch they staged before connecting")
+
+        rig.transports[0].publish(identity(peerId: "aaa", role: .responder))
+        await settle()
+        XCTAssertTrue(rig.model.connection.isOpen)
+        XCTAssertTrue(rig.model.isVerificationPending,
+                      "the SAS boundary is still the one gate on the staged batch")
+    }
+
     /// An offer attributed to a peer that never announced `link/1` is not routed
     /// at all — the capability predicate is the first thing the router asks, so a
     /// relay cannot manufacture a link out of a legacy peer's id.

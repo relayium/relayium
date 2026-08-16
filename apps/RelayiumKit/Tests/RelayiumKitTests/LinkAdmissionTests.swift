@@ -8,6 +8,15 @@ import XCTest
 /// lanes, or answer a peer that has no business being answered. Pinned against
 /// `web/src/lib/peer-link.svelte.ts`'s `listen()` and `ensure()`.
 ///
+/// One clause is deliberately NOT a line-for-line pin, and it is named here so
+/// nobody restores the parity: `route`'s offer branch does not let
+/// `canAcceptLink` refuse the answer to this side's own request, where
+/// `peer-link.svelte.ts` asks the predicate first. The Web client reaches the
+/// same rule one layer up — `peer-workspace.svelte.ts` refuses to inspect its
+/// own session manager for exactly this reason — so the two clients agree once
+/// composed, and nothing on the wire differs. See
+/// `testTheAnswerToThisSidesOwnRequestIsNotRefusedByAClosedSurfaceGate`.
+///
 /// The security claim being tested is deliberately narrow, and it is the honest
 /// one: a forged capability or a forged link signal must at worst DENY SERVICE.
 /// It must never activate a different room or generation, and it can never
@@ -165,6 +174,142 @@ final class LinkAdmissionTests: XCTestCase {
         // Our request crosses the peer's offer: adopt the offer.
         XCTAssertEqual(b.route(from: smaller, signal: linkOffer()),
                        .establish(role: .responder))
+    }
+
+    // MARK: - the answer to this side's own request
+
+    /// The offer a peer sends BECAUSE this side asked for it is not an
+    /// unsolicited link, and the surface gate is not a question about it.
+    ///
+    /// This is the shipped defect the T2b acceptance runs exposed, and it is not
+    /// a corner. `linkRole` gives the SMALLER id the offer, so a device handed
+    /// the larger id by the hub can only ask — and `NearbyView.connectLink`
+    /// claims the presentation surface one line BEFORE it dials, which is what
+    /// `observeAvailability` mirrors into `canAcceptLink`. So Connect closed the
+    /// gate and then met its own answer with `busy`, which the peer's
+    /// `LinkSignalPolicy` turns into an immediate `.peerBusy` failure. The user
+    /// saw one request, nine retries and a thirty-second timeout; the peer's log
+    /// showed ten establishments dying in the same second each. Which id is
+    /// smaller is decided per socket, so the same build connected on one launch
+    /// and could not connect at all on the next.
+    func testTheAnswerToThisSidesOwnRequestIsNotRefusedByAClosedSurfaceGate() {
+        let b = admission(selfId: larger, canAccept: { _ in false })
+        XCTAssertEqual(b.ensure(peerId: smaller), .request)
+        XCTAssertTrue(b.admitRequest(peerId: smaller))
+
+        XCTAssertEqual(b.route(from: smaller, signal: linkOffer()),
+                       .establish(role: .responder))
+    }
+
+    /// The same through the lifecycle announcement rather than the claim, so the
+    /// property belongs to the PHASE and not to one of its two entry points.
+    func testAnAnnouncedRequestAlsoSurvivesAClosedSurfaceGate() {
+        let b = admission(selfId: larger, canAccept: { _ in false })
+        b.didBeginRequesting(peerId: smaller)
+
+        XCTAssertEqual(b.route(from: smaller, signal: linkOffer()),
+                       .establish(role: .responder))
+    }
+
+    /// The control, and the half that must NOT move: an offer nobody asked for
+    /// is still refused while the surface is owned. Without this the fix above
+    /// would read as "the gate stopped working".
+    func testAClosedSurfaceGateStillRefusesAnOfferNobodyAskedFor() {
+        let b = admission(selfId: larger, canAccept: { _ in false })
+        XCTAssertEqual(b.route(from: smaller, signal: linkOffer()), .busy)
+    }
+
+    /// The predicate is still ASKED for a solicited offer — only its answer is
+    /// not allowed to refuse one.
+    ///
+    /// Both halves matter. Silencing the call would take away the one thing that
+    /// makes withdrawal work: an owner that really has changed its mind ends its
+    /// own ask from inside the predicate, and the phase re-read afterwards is
+    /// what turns that into a refusal — the property
+    /// `testAnOfferRacingItsOwnRequestTimeoutIsRefusedAndConsumesTheMark` pins.
+    /// Acting on the answer is what produced the defect. So the call count is
+    /// asserted alongside the decision, and a fix that removed the call rather
+    /// than moving its effect fails here.
+    func testTheSurfaceGateIsStillAskedButCannotRefuseOurOwnRequest() {
+        let asked = Counter()
+        let b = admission(selfId: larger, canAccept: { _ in asked.bump(); return false })
+        XCTAssertTrue(b.admitRequest(peerId: smaller))
+
+        XCTAssertEqual(b.route(from: smaller, signal: linkOffer()),
+                       .establish(role: .responder))
+        XCTAssertEqual(asked.value, 1, """
+            the predicate must still run: an owner withdrawing its own ask from \
+            inside it is the supported way to refuse a link this side asked for
+            """)
+    }
+
+    /// The inverse mutation, stated as behaviour rather than as a call count:
+    /// restore `guard canAcceptLink(from) else { return .busy }` ahead of the
+    /// phase switch and this fails, because a claimed surface once again refuses
+    /// the answer to its own request. It is deliberately driven through
+    /// `ensure` → `admitRequest` → `route`, which is the exact sequence
+    /// `LinkRoomRouter.beginRequest` performs for a tapped Connect.
+    func testAClaimedSurfaceStillCompletesTheConnectItStarted() {
+        let surfaceOwned = Flag()
+        let b = admission(selfId: larger,
+                          canAccept: { _ in !surfaceOwned.value })
+
+        // What `NearbyView.connectLink` does, in its order: claim the surface,
+        // then dial.
+        surfaceOwned.value = true
+        XCTAssertEqual(b.ensure(peerId: smaller), .request)
+        XCTAssertTrue(b.admitRequest(peerId: smaller))
+
+        // The peer answers the ask. This must become a link.
+        XCTAssertEqual(b.route(from: smaller, signal: linkOffer()),
+                       .establish(role: .responder))
+        XCTAssertTrue(b.admitEstablishment(peerId: smaller, role: .responder))
+        XCTAssertEqual(b.phase, .connecting(peerId: smaller))
+    }
+
+    /// The same class of bug one phase later: a duplicate offer for the
+    /// establishment this side is ALREADY building must be dropped, not refused.
+    ///
+    /// By then the surface is certainly claimed — it is claimed for this very
+    /// link — so the old ordering answered `busy`, and a peer that merely resent
+    /// its offer was told to abandon a link that was working. `alreadyInFlight`
+    /// is what drops it whole.
+    func testADuplicateOfferForTheLinkBeingBuiltIsDroppedNotRefused() {
+        let b = admission(selfId: larger, canAccept: { _ in false })
+        XCTAssertTrue(b.admitEstablishment(peerId: smaller, role: .responder))
+        XCTAssertEqual(b.phase, .connecting(peerId: smaller))
+
+        XCTAssertEqual(b.route(from: smaller, signal: linkOffer()), .alreadyInFlight)
+        XCTAssertEqual(b.phase, .connecting(peerId: smaller))
+    }
+
+    /// Peer-exact. Asking ONE device does not open the surface to another, which
+    /// is the one-link rule the gate skip must not weaken.
+    func testAskingOnePeerDoesNotAdmitADifferentPeersOffer() {
+        // Self is "bbb" and both "aaa" and "AAA" are smaller, so either could
+        // legitimately offer — the refusal below is about the ask, not the role.
+        let b = admission(selfId: larger, canAccept: { _ in false })
+        XCTAssertTrue(b.admitRequest(peerId: smaller))
+
+        XCTAssertEqual(b.route(from: "AAA", signal: linkOffer()), .busy)
+        XCTAssertEqual(b.phase, .requesting(peerId: smaller),
+                       "and the ask this side really made is untouched")
+    }
+
+    /// A peer whose ask this side gave up on is still answered `busy`, and the
+    /// gate skip cannot be reached through a stale mark: `endRequest(.timedOut)`
+    /// leaves `.failed`, never `.requesting`.
+    func testATimedOutPeersLateOfferIsStillRefused() {
+        let b = admission(selfId: larger, canAccept: { _ in true })
+        XCTAssertTrue(b.admitRequest(peerId: smaller))
+        XCTAssertTrue(b.endRequest(peerId: smaller, as: .timedOut))
+        XCTAssertEqual(b.phase, .failed)
+
+        XCTAssertEqual(b.route(from: smaller, signal: linkOffer()), .busy,
+                       "the one late offer a timed-out ask is owed")
+        XCTAssertEqual(b.route(from: smaller, signal: linkOffer()),
+                       .establish(role: .responder),
+                       "and the mark is one-shot, so the next genuine offer is admitted")
     }
 
     // MARK: - request lifecycle
@@ -859,6 +1004,27 @@ final class LinkAdmissionTests: XCTestCase {
     private func linkOffer() -> JSONValue {
         linkSDPSignal(kind: "offer", sdp: "v=0", commit: "Yw==",
                       caps: [TEXT_CAPABILITY, LINK_CAPABILITY])
+    }
+
+    /// How many times an owner predicate was consulted. `route` is documented to
+    /// call it with nothing of the admission's held, so this is read from the
+    /// test thread only after the routed call has returned.
+    private final class Counter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var count = 0
+        func bump() { lock.lock(); count += 1; lock.unlock() }
+        var value: Int { lock.lock(); defer { lock.unlock() }; return count }
+    }
+
+    /// Whether the app's presentation surface is owned, as `observeAvailability`
+    /// mirrors it into `canAcceptLink`.
+    private final class Flag: @unchecked Sendable {
+        private let lock = NSLock()
+        private var _value = false
+        var value: Bool {
+            get { lock.lock(); defer { lock.unlock() }; return _value }
+            set { lock.lock(); _value = newValue; lock.unlock() }
+        }
     }
 
     private func resumeOffer() -> JSONValue {

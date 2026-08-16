@@ -566,6 +566,51 @@ final class LinkRoomRouterTests: XCTestCase {
         XCTAssertEqual(r.peers, ["peer-1"])
     }
 
+    /// The same convergence with the surface ALREADY CLAIMED, which is the state
+    /// a tapped Connect is really in.
+    ///
+    /// `NearbyView.connectLink` claims the presentation surface one line before
+    /// it dials, and `observeAvailability` mirrors that into `canAcceptLink` as
+    /// false. This side is the larger id, so it can only ask — and the offer that
+    /// comes back is the answer to its own ask. Routed through the whole
+    /// composition here rather than against `LinkAdmission` alone, because the
+    /// defect was only ever visible as "Connect does nothing": the request has to
+    /// settle, the claim has to be made, the handoff has to reach an assembly,
+    /// and NO `busy` may go out on the wire — a single one is what
+    /// `LinkSignalPolicy` turns into an immediate `.peerBusy` failure at the peer.
+    func testAClaimedSurfaceStillAdoptsTheOfferItAskedFor() async {
+        let scheduler = RouterScheduler()
+        let r = rig(canAcceptLink: { _ in false }, scheduler: scheduler)
+        let operation = r.router.ensure(peerId: "peer-1")
+        XCTAssertEqual(r.socket.requested, ["peer-1"], "the ask really went out")
+
+        r.socket.deliver(from: "peer-1", offer())
+
+        XCTAssertEqual(operation.settledOutcome, .establishing)
+        XCTAssertEqual(r.admission.phase, .connecting(peerId: "peer-1"))
+        XCTAssertTrue(r.socket.busied.isEmpty, """
+            this side refused the offer it had just asked for; the peer reads that \
+            as `.peerBusy` and fails its establishment in the same instant
+            """)
+        await settle()
+        XCTAssertEqual(r.peers, ["peer-1"], "and the establishment was assembled")
+        XCTAssertEqual(r.roles, [.responder])
+        XCTAssertEqual(r.session.peerId, "peer-1")
+    }
+
+    /// The other half, unmoved: with no ask outstanding, a claimed surface still
+    /// refuses an unsolicited offer and tells that peer so exactly once.
+    func testAClaimedSurfaceStillRefusesAnOfferItDidNotAskFor() async {
+        let r = rig(canAcceptLink: { _ in false })
+
+        r.socket.deliver(from: "peer-1", offer())
+        await settle()
+
+        XCTAssertEqual(r.socket.busied, ["peer-1"])
+        XCTAssertEqual(r.admission.phase, .idle)
+        XCTAssertTrue(r.peers.isEmpty, "nothing may be assembled for a refused offer")
+    }
+
     func testPeerBusySettlesRequestAsRefusedAndRetiresTimers() {
         let scheduler = RouterScheduler()
         let r = rig(scheduler: scheduler)
