@@ -346,7 +346,11 @@ public final class LanDiscoveryModel: ObservableObject {
 
     /// Spacing between the bounded capability-hello retries. Short, because the
     /// whole point is to cover a hello lost to a socket that was still opening.
-    static let capsRetryInterval: TimeInterval = 1.5
+    ///
+    /// The wire's constant, not this model's: a pairing room now runs the same
+    /// retries from `LinkWorkspaceModel`, and two independently written cadences
+    /// is how one room ends up covering a dropped hello while the other does not.
+    static let capsRetryInterval: TimeInterval = LINK_CAPS_RETRY_INTERVAL
 
     public init(connect: @escaping () -> SignalingClient,
                 // Optional rather than a defaulted closure literal — see
@@ -452,13 +456,27 @@ public final class LanDiscoveryModel: ObservableObject {
         // Registered before the observer's own subscription, and deliberately as
         // a listener rather than an interceptor: a capability hello is not this
         // model's to claim, it is only this model's to notice.
+        //
+        // **Recorded synchronously, on the delivery queue.** The hop below is
+        // for this model's own published state; the ANNOUNCEMENT has to be
+        // written before the frame behind it reaches `LinkRoomRouter.intercept`,
+        // which gates inline on the same queue. See
+        // `PeerCapabilityRegistry.recordProvenLink` for the full account — the
+        // room shapes differ but the queue ordering is identical, and a rule
+        // that held in one room and not the other is the drift the shared
+        // announcer exists to prevent.
+        let registry = capabilities
         capsSubscription = socket.addSignalListener { [weak self] from, data in
+            let announced = registry.record(peerId: from, signal: data)
+            let proven = announced ? false : registry.recordProvenLink(peerId: from, signal: data)
+            guard announced || proven else { return }
             Task { @MainActor in
                 guard let self, g == self.generation else { return }
-                guard self.capabilities.record(peerId: from, signal: data) else { return }
-                // Only ever RETIRES retries. Answering a hello with a hello is
-                // how two devices talk past each other forever.
-                self.announcer.didHearFrom(peerId: from)
+                // Only ever RETIRES retries, and only for a real hello: proof
+                // read off an establishment frame says what the peer speaks, not
+                // that it has heard us. Answering a hello with a hello is how
+                // two devices talk past each other forever.
+                if announced { self.announcer.didHearFrom(peerId: from) }
                 // Republishes what the hello can change and NOTHING else — see
                 // `republishDevices`. A hello is not a roster frame and must
                 // never be read as one.

@@ -195,6 +195,65 @@ public final class PeerCapabilityRegistry: @unchecked Sendable {
         return announced[peerId]?.contains(capability) == true
     }
 
+    /// Everything this peer announced, sorted so two readings of one state are
+    /// one value.
+    ///
+    /// Deliberately NOT room-scoped the way `supports` is: this is the raw
+    /// evidence, for a caller that has to hand it somewhere the room rule has
+    /// already been applied — `LinkRoomHandle.peerAnnouncedCaps` and the legacy
+    /// connection built from it, which is by definition no longer in link mode.
+    /// Every routing question still goes through `supports`.
+    public func announcements(for peerId: String) -> [String] {
+        lock.lock(); defer { lock.unlock() }
+        return (announced[peerId] ?? []).sorted()
+    }
+
+    /// Record what a frame PROVES about its sender, for a frame that is not a
+    /// hello at all.
+    ///
+    /// ## Why a second recorder exists
+    ///
+    /// The hello and the establishment it enables travel on one socket, and a
+    /// peer that speaks this protocol sends them in that order — but only the
+    /// SENDER's order is guaranteed. Everything after them is a race this side
+    /// loses silently: the roster hello is noticed by a listener that hops to
+    /// the main actor, while `LinkRoomRouter.intercept` gates every frame
+    /// inline on the delivery queue, so a hello and the offer behind it in the
+    /// same burst reach the gate with the announcement still in flight. The
+    /// offer is then passed to a legacy handler that is not installed, and it is
+    /// dropped with no reply — not even `busy`. The peer, which did everything
+    /// right, sees nothing come back.
+    ///
+    /// Recording synchronously (see `LinkWorkspaceModel.openPairingRoom`) closes
+    /// that race for a hello that ARRIVED. This closes the other half: a hello
+    /// that was never delivered at all. A `link`-generation frame is itself the
+    /// announcement — nothing but a `link/1` peer composes one — so the evidence
+    /// is strictly stronger than the roster claim it stands in for.
+    ///
+    /// ## Why it may not overrule an announcement
+    ///
+    /// Only a peer that has said NOTHING is read this way. A peer that announced
+    /// and left `link/1` out has stated its wire, and a later frame claiming
+    /// otherwise is either a relay's forgery or a client contradicting itself;
+    /// in both cases the announcement is the safer answer, and the room has
+    /// usually already resolved on it. This is therefore a repair for silence,
+    /// never an upgrade path — which is what keeps it from becoming a way to
+    /// route link mode at a peer that told us it could not answer one.
+    ///
+    /// Room scope still applies: `supports` re-reads `linkRoomActive` on every
+    /// question, so nothing recorded here can activate link mode in a room that
+    /// does not allow it.
+    ///
+    /// Returns true when this frame taught us something new.
+    @discardableResult
+    public func recordProvenLink(peerId: String, signal: JSONValue) -> Bool {
+        guard signalGeneration(signal) == .link else { return false }
+        lock.lock(); defer { lock.unlock() }
+        guard announced[peerId] == nil else { return false }
+        announced[peerId] = [LINK_CAPABILITY]
+        return true
+    }
+
     /// Drop announcements for peers no longer in the roster. A reconnecting peer
     /// is issued a fresh id by the hub, so nothing stale can be inherited by the
     /// new connection — but a departed peer's entry would otherwise leak for the

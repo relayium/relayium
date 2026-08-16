@@ -646,6 +646,8 @@
 "workspace.oneConnectionNote" = "一条连接只承载消息或文件，不能同时承载两者。发送另一种会新建一条连接，并产生新的验证码。";
 "workspace.messagesOnlyNote" = "本会话承载消息，不承载文件。发送文件需要单独的会话——离开本会话后再开始。";
 "workspace.filesOnlyNote" = "本会话承载文件，不承载消息。发送消息需要单独的会话——离开本会话后再开始。";
+"workspace.startMessageSession" = "开始消息会话";
+"workspace.startMessageSessionHint" = "结束当前文件会话，并用同一个配对码重新连接以发送消息。请对方也用同一个配对码开始消息会话。";
 "workspace.leaveSession" = "离开本会话";
 "workspace.sessionWithCode" = "已通过配对码连接";
 /* MARK: - 统一连接 (link/1) */

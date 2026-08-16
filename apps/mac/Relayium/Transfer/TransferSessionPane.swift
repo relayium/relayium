@@ -376,13 +376,92 @@ struct TransferSessionPane: View {
     /// One sentence, present once a legacy peer is known, naming the lane this
     /// connection does NOT have. It is the bounded honesty of this batch: the
     /// surface is unified, the legacy wire underneath still is not.
+    ///
+    /// **And, on a pairing code, the route the sentence describes.** The note
+    /// tells a file-lane user that a message needs a session of its own and that
+    /// leaving this one is how to start it. Once the transfer screens became
+    /// connect-first that instruction could not be followed on this platform:
+    /// the code was consumed by the file lane, macOS has no other code-minting
+    /// call site, and re-pairing reproduced the same file lane every time. So
+    /// the action lives HERE, attached to the sentence that promises it, where a
+    /// copy change and a surface change cannot drift apart.
+    ///
+    /// It appears only where the promise can actually be kept — a legacy
+    /// fallback that still holds its rendezvous, which is
+    /// `LinkWorkspaceModel.handedOverPairing`. A same-network legacy session has
+    /// no code to re-enter and is offered nothing rather than a button that
+    /// would fail.
+    @ViewBuilder
     private var laneNote: some View {
-        Text(L10n.t(mode == .text ? .workspaceMessagesOnlyNote : .workspaceFilesOnlyNote))
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
-            .accessibilityIdentifier("transfer-lane-note")
+        VStack(alignment: .leading, spacing: 6) {
+            Text(L10n.t(mode == .text ? .workspaceMessagesOnlyNote : .workspaceFilesOnlyNote))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityIdentifier("transfer-lane-note")
+            if mode == .files, let handed = link.handedOverPairing {
+                Button(L10n.t(.workspaceStartMessageSession)) {
+                    startMessageSession(handed)
+                }
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("transfer-start-message-session")
+                Text(L10n.t(.workspaceStartMessageSessionHint))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
+    }
+
+    /// Re-enter the SAME rendezvous as a message session.
+    ///
+    /// **The order is the correctness, and there are two constraints pulling
+    /// against each other.**
+    ///
+    /// *The surface must never read idle.* `TransferPresence` gives it up the
+    /// moment every model does, and `observeSurfaceIdle` turns that release into
+    /// closing the handed-over room and clearing this very offer. So the claim is
+    /// moved to the message lane FIRST — one owner throughout, never unowned —
+    /// and only then is the file lane cleared behind it.
+    ///
+    /// *The old room must be closed BEFORE the new one is joined.* The first
+    /// version of this joined while the handed-over socket was still open, which
+    /// put two sockets from this process into one code room. That is not
+    /// untidiness: a pairing room holds two peers, so the third socket is either
+    /// refused as full or leaves the real peer looking at a roster with two of
+    /// us in it, and each extra `/ws?code=` also spends this address's
+    /// `wsJoinPerIPPerMinute` budget. `releaseHandedOverPairingRoom` is a no-op
+    /// unless the workspace has genuinely let the room go, which after a legacy
+    /// fallback it has — and the code was read out of `handed` before it ran, so
+    /// clearing the offer takes nothing this call still needs.
+    ///
+    /// The ROLE is the fallback's own: creating a code offers and joining one
+    /// answers, and both ends answering is a session neither dials. It is read
+    /// from the model rather than re-derived here, because this surface no
+    /// longer knows which verb opened the room.
+    private func startMessageSession(_ handed: LinkWorkspaceModel.HandedOverPairing) {
+        // Idempotent for the owner, and this route IS the owner: it is drawing
+        // the session. It moves the lane the pane renders without ever passing
+        // through unowned.
+        guard presence.claim(route, mode: .text) else { return }
+        sendError = nil
+        // The file session and the room it was built on, in that order: the
+        // connection first, then the socket underneath it.
+        fileModel.cancel()
+        link.releaseHandedOverPairingRoom()
+        Task {
+            await textModel.join(code: handed.code, role: handed.role)
+            // The user may have left while the join was in flight. Reclaiming
+            // from here would take back a surface they have already given up.
+            guard presence.owner == route else { return }
+            // Refused before a session existed — an expired or already spent
+            // code. There is nothing to put back: the file lane is over, and the
+            // truthful place to be is the connect phase, where Create and
+            // Connect are on screen. A message lane holding nothing would say
+            // this worked.
+            if textModel.state == .idle { releaseOwner() }
+        }
     }
 
     // MARK: - the exit
@@ -464,6 +543,12 @@ struct TransferSessionPane: View {
     /// ownership. A failed file task keeps its own manifest — that is
     /// `RealtimeSessionModel`'s `pendingSend`, retained through the terminal
     /// state — so leaving does not have to preserve anything here.
+    ///
+    /// Still exactly the lane this pane is drawing, and `startMessageSession` is
+    /// why that is worth restating: it moves the pane between the two lanes, and
+    /// it clears the one it is leaving SYNCHRONOUSLY, before the join it starts
+    /// can be awaited. So there is no interval in which a lane runs that `mode`
+    /// does not name, and no second lane for a Leave to strand.
     private func leaveSession() {
         switch mode {
         case .files: fileModel.cancel()

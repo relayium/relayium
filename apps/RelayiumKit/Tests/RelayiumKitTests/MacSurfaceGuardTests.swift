@@ -4382,6 +4382,71 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "the post-connect send gate is asked in more than one place")
     }
 
+    /// **The one route out of a file-only legacy lane, and the order it has to
+    /// take.**
+    ///
+    /// `workspace.filesOnlyNote` tells the user a message needs a session of its
+    /// own and that leaving this one is how to start it. On a connect-first
+    /// pairing surface that instruction could not be followed: the code was
+    /// consumed by the file lane and macOS mints one nowhere else, so re-pairing
+    /// reproduced the same file lane every time. The route lives beside the
+    /// sentence that promises it, and only where the promise can be kept — a
+    /// legacy fallback that still holds its rendezvous.
+    ///
+    /// Four properties, and every one of them has a way to be wrong that looks
+    /// fine on screen:
+    ///
+    ///  1. It is offered ONLY on the file lane of a handed-over pairing room. A
+    ///     same-network legacy session has no code to re-enter, and a button
+    ///     there would be one that always fails.
+    ///  2. The surface is CLAIMED before either lane moves. `TransferPresence`
+    ///     gives the surface up the moment every model reads idle, and
+    ///     `observeSurfaceIdle` turns that into closing the very room this route
+    ///     is about to re-enter.
+    ///  3. The old room is RELEASED before the new one is joined. Joining first
+    ///     puts two sockets from this process into one two-peer code room and
+    ///     spends the address's join budget twice.
+    ///  4. It does not restore a pre-pair mode question. The route is reached
+    ///     from inside a connected session, never before one.
+    func testTheFileOnlyLegacyLaneOffersAMessageSessionOverTheSameCode() throws {
+        let session = try source(named: transferSession)
+
+        XCTAssertTrue(session.contains("if mode == .files, let handed = link.handedOverPairing {"),
+                      "the message route is offered where its rendezvous may not exist")
+        XCTAssertTrue(session.contains(".accessibilityIdentifier(\"transfer-start-message-session\")"),
+                      "the message route lost its control")
+        XCTAssertTrue(session.contains("L10n.t(.workspaceStartMessageSession)")
+                      && session.contains("L10n.t(.workspaceStartMessageSessionHint)"),
+                      "the message route lost its label or the sentence that makes it followable")
+
+        let body = session
+            .components(separatedBy: "private func startMessageSession(")
+            .dropFirst().first ?? ""
+        XCTAssertFalse(body.isEmpty, "startMessageSession is gone")
+        let claim = body.range(of: "presence.claim(route, mode: .text)")
+        let cancel = body.range(of: "fileModel.cancel()")
+        let release = body.range(of: "link.releaseHandedOverPairingRoom()")
+        let join = body.range(of: "await textModel.join(code: handed.code, role: handed.role)")
+        XCTAssertNotNil(claim); XCTAssertNotNil(cancel)
+        XCTAssertNotNil(release); XCTAssertNotNil(join)
+        if let claim, let cancel, let release, let join {
+            XCTAssertLessThan(claim.lowerBound, cancel.lowerBound,
+                              "the surface is released mid-route, which closes the room it needs")
+            XCTAssertLessThan(cancel.lowerBound, release.lowerBound,
+                              "the room is closed under a connection still built on it")
+            XCTAssertLessThan(release.lowerBound, join.lowerBound,
+                              "two sockets from this process would sit in one code room")
+        }
+
+        // The role is the fallback's, not a fresh guess: both ends answering is
+        // a session neither dials.
+        XCTAssertTrue(body.contains("role: handed.role"),
+                      "the message session re-derives a role the room already decided")
+        // And nothing here reintroduces a question before there is a peer.
+        XCTAssertFalse(session.contains("DirectModeSelection"),
+                       "the pre-pair mode picker came back to the session pane")
+    }
+
     /// **A send that lost the race to the picker has to be said out loud.**
     ///
     /// `chooseForLinkSend` is a modal system panel and the session runs

@@ -385,6 +385,16 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// The same fact from inside a live session, per lane.
     case workspaceMessagesOnlyNote = "workspace.messagesOnlyNote"
     case workspaceFilesOnlyNote = "workspace.filesOnlyNote"
+    /// **The action that makes the file-only note followable.**
+    ///
+    /// The note says a message needs a session of its own and that leaving this
+    /// one is how you start it. On a connect-first pairing surface there was no
+    /// way to do that: the code had been consumed by the file lane and nothing
+    /// on the platform could start a message session over it. These two are that
+    /// route, offered where the note is and only where the same rendezvous can
+    /// actually be re-entered.
+    case workspaceStartMessageSession = "workspace.startMessageSession"
+    case workspaceStartMessageSessionHint = "workspace.startMessageSessionHint"
     /// The one exit from a live or terminal session, whichever route opened it.
     case workspaceLeaveSession = "workspace.leaveSession"
     /// A pairing-code session has no roster label to snapshot, so it says how

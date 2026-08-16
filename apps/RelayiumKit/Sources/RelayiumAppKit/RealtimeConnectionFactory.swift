@@ -27,12 +27,33 @@ extension RealtimeConnection: RealtimePeerConnection {}
 @MainActor
 public final class LinkRoomHandle {
     public internal(set) var signaling: SignalingClient?
+
+    /// **What the handed-over room already heard each peer announce.**
+    ///
+    /// Handed over WITH the socket, because it is the same fact about the same
+    /// room and losing it silently broke the very case the fallback exists for.
+    /// `LinkWorkspaceModel.fallBackToLegacy` retires its room, which resets its
+    /// registry, and `connectInRoom` then builds a fresh, empty
+    /// `PeerCapabilities` and waits five seconds for a `text/1` that has already
+    /// been said. Nothing re-says it: a roster hello is sent on a roster EDGE
+    /// and this room's roster has not changed, and neither client answers a
+    /// hello with a hello — that rule is what keeps two devices from greeting
+    /// each other forever. So a peer that correctly announced `text/1` and
+    /// nothing else — an older client, or a Web tab in a build without `link/1`
+    /// — reached `unsupportedPeer` *because* this side had understood it.
+    ///
+    /// Scoped exactly like the socket beside it: written when a room is handed
+    /// over, cleared when the handle is released, and keyed by a peer id that
+    /// means nothing outside the room that issued it.
+    public internal(set) var peerAnnouncedCaps: [String: [String]] = [:]
+
     public init() {}
 
     /// Close and forget the room, if there is one. Idempotent.
     public func release() {
         signaling?.close()
         signaling = nil
+        peerAnnouncedCaps = [:]
     }
 }
 
@@ -481,16 +502,22 @@ public enum RealtimeConnectionFactory {
     /// across the construction window, the tokenised slot claim that gives back
     /// only this attempt's handler, the bounded one-way capability retries in
     /// text mode, and the refusal to close a socket this call does not own.
+    /// - Parameter knownPeerCaps: what the room this call inherits already heard
+    ///   this peer announce. See `LinkRoomHandle.peerAnnouncedCaps`: without it
+    ///   a legacy fallback re-asks a question that has been answered and that
+    ///   nothing will answer twice.
     public static func connectInRoom(signaling: SignalingClient,
                                      peerId: String,
                                      role: Role,
                                      config: ICEConfig,
                                      mode: Mode = .file,
-                                     capabilityTimeout: TimeInterval = 5)
+                                     capabilityTimeout: TimeInterval = 5,
+                                     knownPeerCaps: [String] = [])
         async throws -> RealtimePeerConnection {
         try await connectInRoom(signaling: signaling, peerId: peerId, role: role,
                                 config: config, mode: mode,
                                 capabilityTimeout: capabilityTimeout,
+                                knownPeerCaps: knownPeerCaps,
                                 build: liveConnection)
     }
 
@@ -501,11 +528,21 @@ public enum RealtimeConnectionFactory {
                               config: ICEConfig,
                               mode: Mode,
                               capabilityTimeout: TimeInterval,
+                              knownPeerCaps: [String] = [],
                               build: ConnectionBuilder) async throws -> RealtimePeerConnection {
         guard !peerId.isEmpty else { throw FactoryError.noPeerAppeared }
 
         let pending = PendingSignals()
         let capabilities = PeerCapabilities()
+        // Seeded BEFORE the handler is installed, so the wait below can be
+        // satisfied by evidence this process already has rather than only by a
+        // frame that may never be sent again. It is recorded through the same
+        // `record` every live hello takes, so a seed cannot mean anything a
+        // hello could not have meant — and a later real hello still replaces it,
+        // because an announcement is a snapshot rather than an additive grant.
+        if !knownPeerCaps.isEmpty {
+            capabilities.record(peerId: peerId, signal: capsField(knownPeerCaps))
+        }
         let temporarySlot = signaling.installSignalHandler { from, data in
             capabilities.record(peerId: from, signal: data)
             pending.append((from, data))

@@ -750,6 +750,14 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         /// bound belongs to the room's credential and outlives every decision
         /// made in it.
         var timers: [LinkRecoveryTimer] = []
+        /// The bounded capability-hello retries this room owes its peers.
+        ///
+        /// Their OWN array, beside the capability windows rather than inside
+        /// them, because the two are cancelled by different facts: a window ends
+        /// when one peer is decided, and these end when the room does. Folding
+        /// them together would have the first peer's decision silence the hellos
+        /// still owed to a second peer in the same room.
+        var capsTimers: [LinkRecoveryTimer] = []
         /// The relayed link's warning and deadline. Cancelled only when the room
         /// itself ends.
         var relayTimers: [LinkRecoveryTimer] = []
@@ -774,6 +782,8 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         func retire() {
             timers.forEach { $0.cancel() }
             timers.removeAll()
+            capsTimers.forEach { $0.cancel() }
+            capsTimers.removeAll()
             relayTimers.forEach { $0.cancel() }
             relayTimers.removeAll()
             capsSubscription?.cancel()
@@ -834,6 +844,10 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         guard !connection.isActive, pairing == nil else { return false }
         guard let iceClient, let connect = connectPairingSocket else { return false }
 
+        // A new rendezvous replaces the old one's answer. Left standing, the
+        // previous room's code would still be offered as "the same code" beside
+        // a session that has nothing to do with it.
+        handedOverPairing = nil
         beginAttempt(peerLabel: code)
         if !files.isEmpty { armBatch(files: files, sources: sources) }
         connection = .watching(code: code)
@@ -875,11 +889,39 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         // A listener, never an interceptor: a hello must keep travelling to
         // whatever else is on this socket, and it must not compete with the link
         // router for a frame.
-        room.capsSubscription = socket.addSignalListener { [weak self] from, data in
+        //
+        // **The recording is SYNCHRONOUS, and that is the whole fix.** This
+        // listener is registered before `attach` installs the router, and
+        // interceptors run in registration order on the delivery queue — so
+        // whatever is written here is already visible to
+        // `LinkRoomRouter.intercept`'s `supports(from, LINK_CAPABILITY)` gate,
+        // for this frame and for every frame behind it in the same burst. The
+        // previous shape recorded inside the main-actor hop below, which made
+        // that ordering guarantee worthless: a peer that broadcast its caps and
+        // established on the same roster event — the ordinary case whenever the
+        // browser is the initiator, which the id comparison makes it about half
+        // the time — had its offer gated on state that had not been written yet.
+        // The router passed it, no legacy handler existed to catch it, and it
+        // was dropped with no reply at all.
+        //
+        // The registry is lock-guarded and `@unchecked Sendable` precisely so it
+        // can be written from this queue and read from the main actor; the room
+        // object and every decision made from it stay on the main actor below.
+        room.capsSubscription = socket.addSignalListener { [weak self, weak capabilities] from, data in
+            guard let capabilities else { return }
+            let announced = capabilities.record(peerId: from, signal: data)
+            // Not a hello, but possibly proof of the same thing — see
+            // `recordProvenLink`. A `link`-generation frame from a peer that has
+            // said nothing means its hello never arrived, and dropping the frame
+            // would strand a peer that did everything right.
+            let proven = announced ? false : capabilities.recordProvenLink(peerId: from, signal: data)
+            guard announced || proven else { return }
             Task { @MainActor in
                 guard let self, self.generation == mine, let room = self.pairing else { return }
-                guard room.capabilities.record(peerId: from, signal: data) else { return }
-                room.announcer?.didHearFrom(peerId: from)
+                // Only a real hello retires the retries this side owes: proof
+                // read off an establishment frame says what the peer speaks, not
+                // that it has heard us.
+                if announced { room.announcer?.didHearFrom(peerId: from) }
                 self.pairingPeerAnnounced(from, generation: mine)
             }
         }
@@ -914,13 +956,55 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         room.capabilities.retain(others)
         room.announcer?.rosterChanged(peerIds: others)
         router?.rosterChanged(peerIds: Set(others))
-        for peerId in others where !room.decided.contains(peerId) {
+        let arriving = others.filter { !room.decided.contains($0) }
+        for peerId in arriving {
             room.decided.insert(peerId)
             armCapabilityWindow(peerId, generation: mine)
             // A peer that announced before its roster frame arrived is already
             // decidable, and waiting five seconds to notice would be five
             // seconds of nothing on screen.
             pairingPeerAnnounced(peerId, generation: mine)
+        }
+        // Armed from the ROSTER, and that is the whole correctness of it.
+        //
+        // The same-network model arms its retries when the socket connects,
+        // which works there because that room's roster is already populated. A
+        // pairing code is the opposite shape by construction: one side creates a
+        // code and waits, and the peer arrives whenever the other person gets
+        // round to typing it. Retries armed at room-open would all have fired
+        // minutes before that roster frame, leaving the one announcement
+        // `rosterChanged` sends as the only one — a single unacknowledged frame,
+        // on a relayed socket, deciding whether two capable peers get a unified
+        // workspace or a file-only legacy session with no error anywhere.
+        //
+        // After the loop, so a peer whose hello beat its roster frame has already
+        // resolved the room and no retry is armed into it.
+        if !arriving.isEmpty { scheduleCapsRetries(generation: mine) }
+    }
+
+    /// The bounded retry round `LINK_CAPS_ANNOUNCE_ATTEMPTS` promises, for a
+    /// pairing room.
+    ///
+    /// `LinkCapabilityAnnouncer` counts down per peer and stops on its own, so
+    /// these are wake-ups rather than a send loop: the last one finds the peer
+    /// already exhausted or already answered and does nothing. What matters is
+    /// that they all land inside `pairingCapabilityWait` — three attempts at
+    /// `LINK_CAPS_RETRY_INTERVAL` reach 4.5s of a 5s window — because a hello
+    /// arriving after the peer has decided this side is legacy is a frame that
+    /// changes nothing. `LinkPairingRoomTests` pins that relationship rather
+    /// than leaving it to arithmetic nobody re-checks.
+    private func scheduleCapsRetries(generation mine: Int) {
+        guard let room = pairing, !room.resolved else { return }
+        for attempt in 1...LINK_CAPS_ANNOUNCE_ATTEMPTS {
+            let timer = scheduler.schedule(after: LINK_CAPS_RETRY_INTERVAL * Double(attempt)) {
+                [weak self] in
+                Task { @MainActor in
+                    guard let self, self.generation == mine,
+                          let room = self.pairing, !room.resolved else { return }
+                    room.announcer?.retryTick()
+                }
+            }
+            room.capsTimers.append(timer)
         }
     }
 
@@ -971,6 +1055,51 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
             hasArmedBatch: !armedBatches.isEmpty)
     }
 
+    /// **Tell the peer this side has stopped being a `link/1` peer, and what it
+    /// became instead.**
+    ///
+    /// ## The defect this closes
+    ///
+    /// Giving up was one-sided. This client latches — `room.resolved` is set
+    /// once and there is no re-promotion path — while the Web never latches at
+    /// all: it re-derives from `announced` on every change and re-sends its link
+    /// request every `LINK_REQUEST_RETRY_MS` for `LINK_REQUEST_TIMEOUT_MS`, six
+    /// times longer than `pairingCapabilityWait`. So the shape of a lost hello
+    /// was not a clean error on either side. It was split-brain: this Mac
+    /// running a legacy file lane, the browser still asking a peer that had
+    /// stopped listening for a workspace it was never going to get, and neither
+    /// user shown anything that said so.
+    ///
+    /// One frame ends it. The peer already knows how to read this — it is the
+    /// same roster hello it was greeted with, and both clients treat an
+    /// announcement as a SNAPSHOT that replaces the last one rather than as an
+    /// additive grant, expressly so a later, smaller hello revokes. Nothing on
+    /// the wire is new.
+    ///
+    /// ## Why it names the LANE and not merely "not link"
+    ///
+    /// The honest content of the frame is what the session this side is about to
+    /// build can actually carry, and `LegacyLane.mode` has just decided that:
+    ///
+    ///  - `.text` → `text/1`, which is exactly what `connectInRoom`'s text branch
+    ///    is about to announce per connection anyway;
+    ///  - `.files` → nothing at all, because the legacy file wire announces no
+    ///    capability and claiming `text/1` beside a file lane would invite the
+    ///    peer to open a conversation this session has no composer for.
+    ///
+    /// An empty `caps` array is a hello, deliberately: `record` here and
+    /// `recordPeerCaps` on the Web both treat one as "this peer speaks none of
+    /// these", which is the statement being made. A frame with no `caps` field
+    /// would instead be no hello at all and would leave the stale `link/1`
+    /// standing — the exact thing this is sent to withdraw.
+    ///
+    /// Best-effort by construction, like every other signalling frame: if it is
+    /// lost, the outcome is the behaviour that shipped, not a worse one.
+    private func announceDowngrade(to peerId: String, lane: TransferMode, room: PairingRoom) {
+        let caps = lane == .text ? [TEXT_CAPABILITY] : []
+        room.signaling.sendSignal(to: peerId, data: capsField(caps))
+    }
+
     /// Hand this room to the path that ships today. Exactly once per room.
     private func fallBackToLegacy(peerId: String, generation mine: Int) {
         guard generation == mine, let room = pairing, !room.resolved else { return }
@@ -980,6 +1109,7 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         let mode = legacyFallbackMode(peerId: peerId, room: room)
         room.timers.forEach { $0.cancel() }
         room.timers.removeAll()
+        announceDowngrade(to: peerId, lane: mode, room: room)
 
         // The router stops routing, but the SOCKET stays open and stays this
         // object's: `adoptLegacyRoom` builds its connection on it. Closing it
@@ -994,6 +1124,13 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         // holds it, and the legacy connection is built on it. `pairing` is
         // cleared without `endPairingRoom`, whose job is to close a socket
         // nobody took.
+        //
+        // The peer's announcement goes over with the socket, and it has to be
+        // read BEFORE `retire()` resets the registry that holds it. What is
+        // handed over is what this room actually heard, not the lane decision
+        // made from it: the legacy connection asks its own question of it.
+        pairingRoomHandle.peerAnnouncedCaps =
+            [peerId: room.capabilities.announcements(for: peerId)]
         room.retire()
         pairing = nil
         pairingTask?.cancel()
@@ -1004,6 +1141,11 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
         relayExpiringSoon = false
         let armed = armedBatches
         armedBatches = []
+        // Recorded BEFORE the legacy session starts, so the pane that draws that
+        // session can already answer "which code is this, and which side am I".
+        // See `handedOverPairing`: it is what makes the file lane's own note
+        // about starting a message session a followable instruction.
+        handedOverPairing = HandedOverPairing(code: room.code, role: room.legacyRole)
         // Handed back to the caller, which staged it: the legacy models have
         // their own staging and this object must not enqueue into one.
         onLegacyFallbackBatch?(armed.flatMap(\.files), armed.flatMap(\.sources))
@@ -1013,6 +1155,35 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     /// A batch the user armed before the room resolved, handed back when the
     /// room turns out to be legacy. Nothing is lost and nothing is sent twice.
     public var onLegacyFallbackBatch: (([FileMeta], [PlaintextSource]) -> Void)?
+
+    /// **The code a legacy fallback landed on, and the verb that reached it.**
+    ///
+    /// Published for exactly one reader: the legacy pane's own offer to start a
+    /// MESSAGE session over the same rendezvous. That pane says, in
+    /// `workspace.filesOnlyNote`, that a message needs a session of its own and
+    /// that leaving this one is how you start it — and on a connect-first
+    /// surface that instruction could not be followed, because the code was
+    /// consumed by the file lane and nothing on the platform held it any more.
+    /// This is the code, kept so the sentence is true.
+    ///
+    /// It is a fact about the ROOM, not about the link, so it deliberately
+    /// outlives `connection` returning to `.idle` in `fallBackToLegacy`. It is
+    /// cleared when a new code is watched and when the room the fallback was
+    /// built on is finally released — never by the legacy session ending, which
+    /// is the exact moment the user is being offered it.
+    ///
+    /// `role` is the fallback's own `legacyRole`: creating a code offers and
+    /// joining one answers, and a message session over the same digits has to
+    /// take the same side or both ends answer and neither dials.
+    public struct HandedOverPairing: Equatable, Sendable {
+        public let code: String
+        public let role: Role
+        public init(code: String, role: Role) {
+            self.code = code
+            self.role = role
+        }
+    }
+    @Published public private(set) var handedOverPairing: HandedOverPairing?
 
     /// The watched pairing room resolved to `link/1`, after `hasSession` became
     /// true. macOS uses this to retire the legacy model that rendered the code;
@@ -1028,6 +1199,11 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     public func releaseHandedOverPairingRoom() {
         guard pairing == nil, !connection.isActive else { return }
         pairingRoomHandle.release()
+        // The rendezvous is over, so the offer built on it goes with it. This is
+        // the surface returning to its connect phase — where the ordinary Create
+        // and Connect controls are already on screen — and not the legacy
+        // session ending, which is the moment the offer exists FOR.
+        handedOverPairing = nil
     }
 
     private func pairingRoomClosed(generation mine: Int) {

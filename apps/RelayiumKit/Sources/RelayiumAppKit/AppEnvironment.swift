@@ -402,7 +402,13 @@ public enum AppEnvironment {
                 guard let signaling = pairingRoom.signaling else { throw NearbyError.notScanning }
                 return try await RealtimeConnectionFactory.connectInRoom(
                     signaling: signaling, peerId: peerId, role: role,
-                    config: config, mode: .file)
+                    config: config, mode: .file,
+                    // Carried over with the socket — see
+                    // `LinkRoomHandle.peerAnnouncedCaps`. The file lane waits on
+                    // no capability today, so this changes nothing here; it is
+                    // passed anyway because the two branches must not be able to
+                    // disagree about what the handed-over room knew.
+                    knownPeerCaps: pairingRoom.peerAnnouncedCaps[peerId] ?? [])
             },
             makeConnection: { code, role, servers in
                 try await RealtimeConnectionFactory.make(
@@ -441,7 +447,16 @@ public enum AppEnvironment {
                 guard let signaling = pairingRoom.signaling else { throw NearbyError.notScanning }
                 return try await RealtimeConnectionFactory.connectInRoom(
                     signaling: signaling, peerId: peerId, role: role,
-                    config: config, mode: .text)
+                    config: config, mode: .text,
+                    // **Load-bearing on this branch.** The text lane refuses to
+                    // offer until the peer announces exact `text/1`, and this
+                    // fallback is reached BECAUSE the room heard exactly that.
+                    // The room's registry is reset when it is retired, and
+                    // nothing re-announces into an unchanged roster, so without
+                    // the carried evidence this waits five seconds and then
+                    // reports `unsupportedPeer` about a peer it had already
+                    // understood. See `LinkRoomHandle.peerAnnouncedCaps`.
+                    knownPeerCaps: pairingRoom.peerAnnouncedCaps[peerId] ?? [])
             },
             makeConnection: { code, role, servers in
                 try await RealtimeConnectionFactory.make(

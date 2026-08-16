@@ -44,12 +44,37 @@ final class LinkWebWorkspaceInteropTests: XCTestCase {
 
     // MARK: - the exact frames a browser sends
 
-    /// `capsSignal()` in `web/src/lib/peer-caps.svelte.ts`, verbatim, for a build
-    /// with `LINK_BUILD_SUPPORT = true` in a room `linkRoomActive()` allows.
-    private let webLinkHello = #"{"caps":["text/1","link/1"]}"#
+    /// `capsSignal()` in `web/src/lib/peer-caps.svelte.ts` — READ from the
+    /// generated vector, not transcribed into this file.
+    ///
+    /// It used to be the literal `{"caps":["text/1","link/1"]}`, described here
+    /// as that function "verbatim". It had not been verbatim since
+    /// `preupload/1` shipped: the browser announces THREE capabilities and
+    /// `peer-caps.test.ts` pinned three, while this file pinned two — and both
+    /// suites stayed green, because the workflows are path-filtered
+    /// (`macos.yml` on `apps/**`, `web.yml` on `web/**`) so no commit can run
+    /// both. A hand-copied literal is not a cross-language assertion; it is one
+    /// language asserting its own memory of the other, and this is what that
+    /// costs.
+    private func webLinkHello() throws -> JSONValue {
+        capsField(try webCaps("web"))
+    }
+
     /// The same function on an older Web build, and on the CLI and every native
     /// client still on the shipped wire.
-    private let webLegacyHello = #"{"caps":["text/1"]}"#
+    private func webLegacyHello() throws -> JSONValue {
+        capsField(try webCaps("linkRoomInactive"))
+    }
+
+    private func webCaps(_ name: String) throws -> [String] {
+        let v = try Vectors.load("realtime-wire-vectors")
+        let block = try XCTUnwrap(v.json["capability"] as? [String: Any],
+                                  "realtime-wire-vectors.json has no capability block; "
+                                  + "run `node scripts/gen-realtime-wire-vectors.mjs` from web/")
+        let hello = try XCTUnwrap(block["hello"] as? [String: Any])
+        let entry = try XCTUnwrap(hello[name] as? [String: Any])
+        return try XCTUnwrap((entry["caps"] as? [Any])?.compactMap { $0 as? String })
+    }
 
     private func json(_ text: String) throws -> JSONValue {
         try JSONDecoder().decode(JSONValue.self, from: Data(text.utf8))
@@ -75,25 +100,43 @@ final class LinkWebWorkspaceInteropTests: XCTestCase {
     func testABrowsersCapsHelloIsUnderstoodExactly() throws {
         let registry = PeerCapabilityRegistry(linkRoomActive: { true })
 
-        XCTAssertTrue(registry.record(peerId: "web", signal: try json(webLinkHello)),
+        XCTAssertTrue(registry.record(peerId: "web", signal: try webLinkHello()),
                       "the browser's hello must be recognised as a hello")
         XCTAssertTrue(registry.supports("web", LINK_CAPABILITY))
         XCTAssertTrue(registry.supports("web", TEXT_CAPABILITY))
 
-        XCTAssertTrue(registry.record(peerId: "old", signal: try json(webLegacyHello)))
+        XCTAssertTrue(registry.record(peerId: "old", signal: try webLegacyHello()))
         XCTAssertFalse(registry.supports("old", LINK_CAPABILITY),
                        "an older Web build is legacy and must never be offered a link")
         XCTAssertTrue(registry.supports("old", TEXT_CAPABILITY))
     }
 
-    /// And what THIS build says back is the same list the browser reads, in the
-    /// same shape, so neither side has to special-case the other.
+    /// And what THIS build says back is a list the browser reads with the same
+    /// rule, in the same shape, so neither side has to special-case the other.
+    ///
+    /// **Not byte-equal, and the previous version of this test claimed it was.**
+    /// The browser announces `preupload/1` as well — a Web lane these clients do
+    /// not implement — so equality here is false and asserting it either fails
+    /// on a truthful vector or, as it did, passes against a stale copy. What is
+    /// actually required is weaker and checkable: the same envelope, a subset
+    /// the browser recognises, and the two capabilities that decide routing.
     func testThisBuildAnswersWithTheSameHelloShape() throws {
         let hello = linkCapsHello(linkRoomActive: true)
         let encoded = try JSONEncoder().encode(hello)
         let decoded = try JSONDecoder().decode(JSONValue.self, from: encoded)
-        XCTAssertEqual(decoded, try json(webLinkHello),
-                       "the native hello must be byte-equivalent to the browser's")
+        XCTAssertEqual(decoded, capsField(try webCaps("native")),
+                       "the native hello drifted from the generated statement of it")
+
+        let web = Set(try webCaps("web"))
+        XCTAssertTrue(Set(peerCaps(from: decoded)).isSubset(of: web),
+                      "this build announces something no browser has heard of")
+
+        // Read back through the browser's own rule, which is exact match on
+        // these two strings and nothing else.
+        let asBrowserReadsIt = PeerCapabilityRegistry(linkRoomActive: { true })
+        XCTAssertTrue(asBrowserReadsIt.record(peerId: "mac", signal: decoded))
+        XCTAssertTrue(asBrowserReadsIt.supports("mac", LINK_CAPABILITY))
+        XCTAssertTrue(asBrowserReadsIt.supports("mac", TEXT_CAPABILITY))
     }
 
     /// A browser's link-generation offer is classified as one, and nothing else
@@ -210,8 +253,8 @@ final class LinkWebWorkspaceInteropTests: XCTestCase {
         // "aaa-web" is the smaller id, so the browser offers and the Mac answers
         // — the deterministic role rule both clients compute identically.
         rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa-web",
-                                  data: try json(webLinkHello)))
-        rig.capabilities.record(peerId: "aaa-web", signal: try json(webLinkHello))
+                                  data: try webLinkHello()))
+        rig.capabilities.record(peerId: "aaa-web", signal: try webLinkHello())
         rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa-web",
                                   data: webLinkOffer()))
         await settle()
@@ -228,7 +271,7 @@ final class LinkWebWorkspaceInteropTests: XCTestCase {
     /// Workspace's legacy text/file paths own that peer.
     func testAnOlderBrowserIsLeftOnTheLegacyPaths() async throws {
         let rig = interopRig()
-        rig.capabilities.record(peerId: "aaa-web", signal: try json(webLegacyHello))
+        rig.capabilities.record(peerId: "aaa-web", signal: try webLegacyHello())
         rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa-web",
                                   data: webLinkOffer()))
         await settle()
@@ -259,7 +302,7 @@ final class LinkWebWorkspaceInteropTests: XCTestCase {
     /// through without the link noticing.
     func testOneLinkCarriesOneSasThenTextAndSeveralBatchesAcrossSignalingLoss() async throws {
         let rig = interopRig(requiresVerification: true)
-        rig.capabilities.record(peerId: "aaa-web", signal: try json(webLinkHello))
+        rig.capabilities.record(peerId: "aaa-web", signal: try webLinkHello())
         rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa-web",
                                   data: webLinkOffer()))
         await settle()
@@ -319,7 +362,7 @@ final class LinkWebWorkspaceInteropTests: XCTestCase {
     /// would have to special-case.
     func testTheOutboundManifestIsALinkFileFrameTheBrowserWouldRoute() async throws {
         let rig = interopRig()
-        rig.capabilities.record(peerId: "aaa-web", signal: try json(webLinkHello))
+        rig.capabilities.record(peerId: "aaa-web", signal: try webLinkHello())
         rig.channel.fire(Envelope(type: SignalType.signal, from: "aaa-web",
                                   data: webLinkOffer()))
         await settle()

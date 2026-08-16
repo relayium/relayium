@@ -202,3 +202,150 @@ export function retainPeers(ids: string[]): void {
 export function resetPeerCaps(): void {
   announced = {};
 }
+
+/**
+ * How many times one peer is told what this build speaks.
+ *
+ * The hello is an unacknowledged signalling frame, so it repeats — a single send
+ * lost, or sent into a socket a peer had not finished joining, would leave that
+ * peer permanently invisible to link mode with nothing anywhere reporting it.
+ * It repeats a BOUNDED number of times because the alternative is a client that
+ * keeps talking to a peer that may never answer, for the life of the room.
+ *
+ * The same two constants the native clients use (`LinkCapabilityAnnouncer`), and
+ * pinned across the two languages by the shared wire vectors rather than by two
+ * numbers somebody has to keep equal. A cadence that differs per client is a
+ * capability discovered by one side and missed by the other, which is exactly
+ * the downgrade the retries exist to prevent: three attempts at 1.5s land at 0,
+ * 1.5 and 3.0 seconds, all inside the five-second window the native pairing room
+ * waits before it decides this peer is legacy.
+ */
+export const LINK_CAPS_ANNOUNCE_ATTEMPTS = 3;
+export const LINK_CAPS_RETRY_INTERVAL_MS = 1_500;
+
+/** The timer pair, injected so a test drives the cadence instead of waiting it out. */
+export interface CapsAnnouncerTimers {
+  setTimer: (fn: () => void, ms: number) => unknown;
+  clearTimer: (handle: unknown) => void;
+}
+
+/**
+ * Tells each peer in the room what this build can speak, and keeps saying it
+ * until that peer has answered or the budget is spent.
+ *
+ * ## Why this exists as a type
+ *
+ * The announcement used to be one call in one handler — `broadcastCaps()` from
+ * `signaling.onPeers`, once per roster event, with no retry and no
+ * acknowledgement. Against another browser that is survivable, because both
+ * sides are reactive and neither ever concludes anything from silence. Against a
+ * native pairing room it is not: that client waits a bounded window and then
+ * commits, permanently, to a legacy lane with no composer in it. A single lost
+ * frame was therefore the difference between one unified workspace and a
+ * file-only session, with no error on either screen.
+ *
+ * ## One-way, by construction
+ *
+ * Announcing is driven ONLY by the roster gaining a peer this page has not
+ * greeted, and by the bounded retry tick. Hearing from a peer never produces an
+ * announcement — `didHearFrom` only RETIRES what is owed. That is what keeps two
+ * clients from answering each other's hellos forever, and it is structural
+ * rather than a rule somebody has to remember.
+ *
+ * ## Retirement
+ *
+ * Everything owed ends: a peer that answers is dropped, a peer that leaves the
+ * roster is dropped, a room change forgets every id (they mean nothing outside
+ * the room that issued them), and the timer stops the moment nothing is owed —
+ * so an idle tab with a settled roster runs no periodic work at all.
+ */
+export class CapsAnnouncer {
+  #send: (peerId: string, signal: { caps: string[] }) => void;
+  #timers: CapsAnnouncerTimers;
+  #pending = new Map<string, number>();
+  #greeted = new Set<string>();
+  #handle: unknown = undefined;
+  #stopped = false;
+
+  constructor(
+    send: (peerId: string, signal: { caps: string[] }) => void,
+    timers: CapsAnnouncerTimers = {
+      setTimer: (fn, ms) => setTimeout(fn, ms),
+      clearTimer: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+    },
+  ) {
+    this.#send = send;
+    this.#timers = timers;
+  }
+
+  /** The roster changed: greet whoever is new, forget whoever left. */
+  rosterChanged(peerIds: readonly string[]): void {
+    if (this.#stopped) return;
+    const present = new Set(peerIds);
+    for (const id of [...this.#pending.keys()]) if (!present.has(id)) this.#pending.delete(id);
+    for (const id of [...this.#greeted]) if (!present.has(id)) this.#greeted.delete(id);
+    if (!linkRoomActive()) return;
+    for (const id of peerIds) {
+      if (this.#greeted.has(id)) continue;
+      this.#greeted.add(id);
+      this.#pending.set(id, LINK_CAPS_ANNOUNCE_ATTEMPTS);
+      this.#announce(id);
+    }
+    this.#arm();
+  }
+
+  /** This peer has told us what it speaks. It does not need telling again. */
+  didHearFrom(peerId: string): void {
+    this.#pending.delete(peerId);
+    if (this.#pending.size === 0) this.#disarm();
+  }
+
+  /** A new socket: new peer ids, and a roster nobody has been greeted in. */
+  roomChanged(): void {
+    this.#pending.clear();
+    this.#greeted.clear();
+    this.#stopped = false;
+    this.#disarm();
+  }
+
+  /** Terminal, for a page that is going away. */
+  stop(): void {
+    this.#stopped = true;
+    this.#pending.clear();
+    this.#greeted.clear();
+    this.#disarm();
+  }
+
+  /** Test seam: how many announcements each peer is still owed. */
+  owed(peerId: string): number {
+    return this.#pending.get(peerId) ?? 0;
+  }
+
+  #announce(peerId: string): void {
+    const remaining = this.#pending.get(peerId) ?? 0;
+    if (remaining <= 0) {
+      this.#pending.delete(peerId);
+      return;
+    }
+    if (remaining > 1) this.#pending.set(peerId, remaining - 1);
+    else this.#pending.delete(peerId);
+    this.#send(peerId, capsSignal());
+  }
+
+  #arm(): void {
+    if (this.#handle !== undefined || this.#pending.size === 0) return;
+    this.#handle = this.#timers.setTimer(() => {
+      this.#handle = undefined;
+      if (this.#stopped || !linkRoomActive()) return;
+      // Sorted, so a run's frame order is the same one a vector can pin.
+      for (const id of [...this.#pending.keys()].sort()) this.#announce(id);
+      this.#arm();
+    }, LINK_CAPS_RETRY_INTERVAL_MS);
+  }
+
+  #disarm(): void {
+    if (this.#handle === undefined) return;
+    this.#timers.clearTimer(this.#handle);
+    this.#handle = undefined;
+  }
+}

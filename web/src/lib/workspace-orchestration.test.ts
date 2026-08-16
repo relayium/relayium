@@ -618,7 +618,20 @@ describe("pre-upload: the batch is split between two transports", () => {
     // as an answer spends the handoff one round trip too early.
     const all = code(app);
     expect(all).toContain("noteRosterPeers(p.map((x) => x.id));");
-    expect(all).toContain("if (recordPeerCaps(from, data)) { notePeerCaps(from); return; }");
+    // The hello branch, whatever else it has grown to do. Matched as a BLOCK
+    // rather than as one line because it also retires the bounded capability
+    // re-announcement now — but the property being pinned is unchanged and is
+    // still exact: the pre-upload lane is settled inside the branch that decided
+    // the frame was a hello, and that branch still returns rather than falling
+    // through to the relay-RTT and rename readers below it.
+    const helloBranch = all.slice(
+      all.indexOf("if (recordPeerCaps(from, data)) {"),
+      all.indexOf("const d = data as {"),
+    );
+    expect(helloBranch, "the caps-hello branch moved out of onPeerRelayRtt").not.toBe("");
+    expect(helloBranch).toContain("notePeerCaps(from);");
+    expect(helloBranch).toContain("capsAnnouncer.didHearFrom(from);");
+    expect(helloBranch).toContain("return;");
     // Each sits in the SAME handler as the peer-caps call it shadows, so a roster
     // or a hello can never update one and not the other.
     expect(all.indexOf("retainPeers(p.map((x) => x.id));"))

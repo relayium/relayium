@@ -430,6 +430,99 @@ const multiFileResume = {
   cases: mfCases,
 };
 
+// --- capability negotiation: the one thing both clients must agree on before
+// --- anybody dials, and the only part of `link/1` nothing pinned across the two
+// --- languages until now.
+//
+// It is here rather than in a Swift or TS literal because the drift this catches
+// had already happened: `LinkWebWorkspaceInteropTests` hard-coded the browser's
+// hello as two capabilities and called it "capsSignal() verbatim", while
+// `peer-caps.test.ts` pinned the browser to three. Both tests passed. Nothing in
+// the repository could see that they disagreed, because the path filters mean no
+// commit ever runs both suites (macos.yml triggers on apps/**, web.yml on web/**).
+const CAP_TEXT = "text/1";
+const CAP_LINK = "link/1";
+const CAP_PREUPLOAD = "preupload/1";
+
+// `LinkCapabilityAnnouncer` (Swift) and `CapsAnnouncer` (TS). Both rooms, both
+// languages, one cadence: three attempts at 1.5s land at 0, 1.5 and 3.0 seconds,
+// every one inside `settleSeconds` below. A client whose last attempt landed
+// after that window would be announcing to a peer that had already committed to
+// a legacy lane it cannot come back from.
+const capsRetry = { attempts: 3, intervalMs: 1_500 };
+// `LinkWorkspaceModel.pairingCapabilityWait`.
+const capsSettleSeconds = 5;
+
+const capability = {
+  // The roster-level hello each client sends, byte-exact. They are NOT equal,
+  // and that is the point of writing both down: the browser announces the
+  // pre-upload handoff the native clients do not implement, so a test that
+  // asserts one client's frame as if it were the other's is asserting a fiction.
+  hello: {
+    web: { caps: [CAP_TEXT, CAP_LINK, CAP_PREUPLOAD] },
+    native: { caps: [CAP_TEXT, CAP_LINK] },
+    // What either client announces in a room where link mode is not allowed —
+    // an iOS pairing room today, and any future narrowed scope.
+    linkRoomInactive: { caps: [CAP_TEXT] },
+  },
+  retry: capsRetry,
+  settleSeconds: capsSettleSeconds,
+  // Every attempt must land strictly inside the peer's window, with the last one
+  // leaving room to be acted on. Asserted in both suites so neither constant can
+  // be raised alone.
+  lastAttemptSeconds: ((capsRetry.attempts - 1) * capsRetry.intervalMs) / 1000,
+  // Exact match, deliberately: `link/2` is a different wire and `LINK/1` is not
+  // this one. `resolvesImmediately` is the second half of the rule and is what a
+  // window-length change must not quietly alter — a peer that has SAID something
+  // is decided on the spot, and only silence is worth waiting out.
+  promotion: [
+    { caps: [CAP_TEXT, CAP_LINK, CAP_PREUPLOAD], link: true, resolvesImmediately: true },
+    { caps: [CAP_TEXT, CAP_LINK], link: true, resolvesImmediately: true },
+    { caps: [CAP_LINK], link: true, resolvesImmediately: true },
+    { caps: [CAP_TEXT], link: false, resolvesImmediately: true, legacyLane: "text" },
+    { caps: [], link: false, resolvesImmediately: false, legacyLane: "files" },
+    { caps: ["link/2"], link: false, resolvesImmediately: false, legacyLane: "files" },
+    { caps: ["LINK/1"], link: false, resolvesImmediately: false, legacyLane: "files" },
+    { caps: ["text/2"], link: false, resolvesImmediately: false, legacyLane: "files" },
+  ],
+  // `LegacyLane.mode`. A staged batch outranks anything the peer said, because a
+  // text lane cannot carry it at all.
+  legacyLane: [
+    { peerAnnouncesText: true, hasArmedBatch: false, lane: "text" },
+    { peerAnnouncesText: false, hasArmedBatch: false, lane: "files" },
+    { peerAnnouncesText: true, hasArmedBatch: true, lane: "files" },
+    { peerAnnouncesText: false, hasArmedBatch: true, lane: "files" },
+  ],
+  // What a client that has just given up on `link/1` announces, so the downgrade
+  // is agreed rather than one-sided. It names the lane the legacy session can
+  // actually carry: an empty array is a hello that revokes, and a frame with no
+  // `caps` field would not be a hello at all and would leave the stale `link/1`
+  // standing.
+  downgrade: { text: { caps: [CAP_TEXT] }, files: { caps: [] } },
+  // A hello is a SNAPSHOT, not an additive grant, in both languages.
+  revocation: { first: { caps: [CAP_TEXT, CAP_LINK] }, then: { caps: [] }, link: false, text: false },
+  // Not a hello at all: no `caps` field means "a frame we do not understand",
+  // which must leave an earlier announcement standing rather than clear it.
+  notAHello: [{ relayRtt: { a: 1 } }, { caps: "text/1" }, { caps: 3 }, { rename: "x" }],
+  // `linkRole` / `peer-link.svelte.ts`: the smaller id offers. Both orders, so a
+  // client cannot be correct in only the half of pairings it happens to test.
+  role: [
+    { self: "aaaaaaaa", peer: "bbbbbbbb", role: "initiator" },
+    { self: "bbbbbbbb", peer: "aaaaaaaa", role: "responder" },
+    { self: "0a1b2c3d", peer: "0a1b2c3e", role: "initiator" },
+    { self: "0a1b2c3e", peer: "0a1b2c3d", role: "responder" },
+  ],
+  // A `link`-generation frame is itself the announcement — nothing else composes
+  // one. It stands in for a hello that never arrived, and only for a peer that
+  // has said nothing; see `PeerCapabilityRegistry.recordProvenLink`.
+  provenLink: {
+    signal: { link: true, sdp: { type: "offer", sdp: "v=0\r\n" } },
+    caps: [CAP_LINK],
+    // The same frame must NOT overrule a peer that already stated its wire.
+    doesNotOverrule: { caps: [CAP_TEXT] },
+  },
+};
+
 const out = {
   sessionKeyHex: hex(keyRaw),
   manifest: manifestObj,
@@ -460,6 +553,7 @@ const out = {
   fragmentation,
   durableResume,
   multiFileResume,
+  capability,
 };
 
 writeFileSync("../apps/RelayiumKit/Tests/Fixtures/realtime-wire-vectors.json", JSON.stringify(out, null, 2) + "\n");

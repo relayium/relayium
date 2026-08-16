@@ -55,6 +55,11 @@ enum Role: String {
     case nearbySender = "nearby-sender"
     case pairSender = "pair-sender"
     case pairReceiver = "pair-receiver"
+    /// The `link/1` pairing surface, which is a different wire from the two
+    /// above: `AppPairHost` drives the LEGACY code room, and nothing here could
+    /// stand a real macOS link pairing room up against a second endpoint until
+    /// this role existed. See `AppPairLinkHost`.
+    case pairLink = "pair-link"
 }
 
 /// The launch configuration, resolved once.
@@ -67,7 +72,7 @@ enum Config {
     static let role: Role = {
         guard let role = Role(rawValue: require("--role")) else {
             fail("--role must be one of nearby-receiver, nearby-sender, "
-                 + "pair-sender, pair-receiver")
+                 + "pair-sender, pair-receiver, pair-link")
         }
         return role
     }()
@@ -473,6 +478,57 @@ final class NearbySenderRun: @unchecked Sendable {
     func teardown() { host.teardown() }
 }
 
+/// Pairing over `link/1`: the app's own unified workspace on a real code.
+///
+/// **Driven rather than scripted.** The other pair roles run to a fixed batch
+/// and a terminal `done`; this one is polled and told what to do, because the
+/// counterpart is a browser whose own timing the launcher owns. What it must
+/// never do is answer for the app, so every value `/observed` reports is read
+/// off the production models — see `AppPairLinkHost.observed`.
+@MainActor final class PairLinkRun {
+    let host: AppPairLinkHost
+
+    init(receiveRoot: URL) throws {
+        host = try AppPairLinkHost(options: .init(
+            baseURL: Config.origin, receiveRoot: receiveRoot,
+            defaultsSuite: "com.relayium.acceptance.\(Config.runTag)"))
+        host.logEvent = { log($0) }
+    }
+
+    /// `create` mints a real code on the local server; `join` takes one the
+    /// launcher read off the other endpoint.
+    func start(action: String, code: String) {
+        host.start()
+        Task { @MainActor in
+            switch action {
+            case "create":
+                let bearer = ProcessInfo.processInfo
+                    .environment["RELAYIUM_ACCEPTANCE_ACCOUNT_TOKEN"] ?? ""
+                guard !bearer.isEmpty else {
+                    return state.failed("RELAYIUM_ACCEPTANCE_ACCOUNT_TOKEN is required to mint a code")
+                }
+                state.set(phase: "minting")
+                guard let minted = await host.createCode(token: bearer) else {
+                    return state.failed("mint did not produce a code: \(host.fileModel.state)")
+                }
+                state.set("code", minted)
+                state.set(phase: "watching")
+            case "join":
+                guard isCompletePairingCode(code) else {
+                    return state.failed("not a pairing code: \(code)")
+                }
+                state.set("code", code)
+                host.joinCode(code)
+                state.set(phase: "watching")
+            default:
+                state.failed("--- unknown action \(action); expected create or join")
+            }
+        }
+    }
+
+    func teardown() { host.teardown() }
+}
+
 // MARK: - assembly
 
 /// **No default.** `AppEnvironment.defaultLinkReceiveDirectory()` is the user's
@@ -508,7 +564,15 @@ final class RunBox {
     /// of an empty one that reads like a link that produced nothing.
     private var observeRun: (() -> [String: Any])?
 
+    /// The roles a launcher can also SEND through. Nil for every role that runs
+    /// to a fixed script, which is all of them but `pair-link`.
+    private var driveRun: ((String, [String: Any]) -> [String: Any])?
+
     func observed() -> [String: Any]? { observeRun?() }
+
+    func drive(_ command: String, _ body: [String: Any]) -> [String: Any]? {
+        driveRun?(command, body)
+    }
 
     /// Builds the role's run object and starts it. Any failure becomes a
     /// reported phase rather than an exit, so the launcher reads a `failed`
@@ -531,6 +595,14 @@ final class RunBox {
                 let run = try PairSenderRun(receiveRoot: requireReceiveRoot())
                 teardownRun = { run.teardown() }
                 run.start()
+            case .pairLink:
+                let run = try PairLinkRun(receiveRoot: requireReceiveRoot())
+                teardownRun = { run.teardown() }
+                observeRun = { run.host.observed() }
+                driveRun = { command, body in run.host.drive(command, body) }
+                let parsed = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
+                run.start(action: (parsed?["action"] as? String) ?? "join",
+                          code: (parsed?["code"] as? String) ?? "")
             case .pairReceiver:
                 let run = try PairReceiverRun(receiveRoot: requireReceiveRoot())
                 teardownRun = { run.teardown() }
@@ -547,6 +619,7 @@ final class RunBox {
         teardownRun?()
         teardownRun = nil
         observeRun = nil
+        driveRun = nil
     }
 }
 
@@ -571,6 +644,30 @@ func mainActorObservation(timeout: TimeInterval = 5) -> [String: Any]? {
     }
     guard ready.wait(timeout: .now() + timeout) == .success else { return nil }
     return box.value
+}
+
+/// The same bounded hop, for a command rather than a read. See
+/// `mainActorObservation` for why it is bounded.
+func mainActorDrive(_ command: String, _ body: [String: Any],
+                    timeout: TimeInterval = 10) -> [String: Any]? {
+    let ready = DispatchSemaphore(value: 0)
+    let box = ObservationBox()
+    let payload = SendableBox(body)
+    Task { @MainActor in
+        box.value = RunBox.shared.drive(command, payload.value)
+        ready.signal()
+    }
+    guard ready.wait(timeout: .now() + timeout) == .success else { return nil }
+    return box.value
+}
+
+/// Carries a decoded JSON body across the hop above. `[String: Any]` is not
+/// `Sendable`, and it is genuinely immutable here — decoded once by the route
+/// handler and read once on the main actor — so the box states that rather than
+/// leaving the compiler to assume otherwise.
+final class SendableBox: @unchecked Sendable {
+    let value: [String: Any]
+    init(_ value: [String: Any]) { self.value = value }
 }
 
 /// A one-shot handoff across the queue boundary. Written on the main actor
@@ -604,6 +701,19 @@ do {
                                  "role": Config.role.rawValue], status: 409)
                 }
                 return json(facts)
+            },
+            // The launcher's own hand on the production send paths, for a role
+            // whose counterpart is a browser the launcher is also driving. Only
+            // `pair-link` answers; every other role runs to a fixed script and
+            // says so rather than silently accepting a command it ignores.
+            .init(method: "POST", path: "/drive") { body in
+                let parsed = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
+                let command = (parsed?["command"] as? String) ?? ""
+                guard let answer = mainActorDrive(command, parsed ?? [:]) else {
+                    return json(["error": "this role cannot be driven",
+                                 "role": Config.role.rawValue], status: 409)
+                }
+                return json(answer, status: answer["error"] == nil ? 200 : 400)
             },
             .init(method: "GET", path: "/result") { _ in json(state.result()) },
             .init(method: "POST", path: "/shutdown") { _ in

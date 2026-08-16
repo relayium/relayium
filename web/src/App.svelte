@@ -11,7 +11,7 @@
   import { roomCode as roomCodeStore, initRoomFromLocation } from "./lib/room.svelte";
   import type { Conn, ConnPath, RtcConfig } from "./lib/webrtc";
   import { applyRename } from "./lib/apply-rename";
-  import { capsSignal, recordPeerCaps, retainPeers, resetPeerCaps, peerSupportsText } from "./lib/peer-caps.svelte";
+  import { CapsAnnouncer, recordPeerCaps, retainPeers, resetPeerCaps, peerSupportsText } from "./lib/peer-caps.svelte";
   import { createTextSession } from "./lib/text-session.svelte";
   import { createTextLink } from "./lib/text-link";
   import { pastedText } from "./lib/paste-text";
@@ -395,9 +395,18 @@
   // connection. Same envelope as the relay-RTT broadcast above; peers that do not
   // understand it ignore it, and a peer that never announces is treated as not
   // supporting messages rather than probed for it.
+  //
+  // **Bounded and retiring, not one shot.** This used to be a loop that ran once
+  // per roster event. A frame lost there is invisible here — this page stays
+  // reactive and simply never learns what the peer speaks — but it is terminal
+  // on a native pairing room, which waits a bounded window and then commits to a
+  // legacy, composer-less lane it can never come back from. `CapsAnnouncer` owns
+  // the repeat, the retirement on an answer, and the timer that stops when
+  // nothing is owed.
+  const capsAnnouncer = new CapsAnnouncer((peerId, signal) => signaling?.sendSignal(peerId, signal));
   function broadcastCaps() {
     if (!signaling) return;
-    for (const p of peers) if (p.id !== selfId) signaling.sendSignal(p.id, capsSignal());
+    capsAnnouncer.rosterChanged(peers.filter((p) => p.id !== selfId).map((p) => p.id));
   }
   async function startRelayMeasurement() {
     if (relayPool.length === 0) return;
@@ -419,7 +428,13 @@
     // rather than read later because the roster prunes announcements: a peer
     // whose socket drops while its DataChannel keeps working must not read back
     // as "never announced" and lose its handoff.
-    if (recordPeerCaps(from, data)) { notePeerCaps(from); return; }
+    if (recordPeerCaps(from, data)) {
+      notePeerCaps(from);
+      // Only ever RETIRES what is owed. Answering a hello with a hello is how
+      // two clients talk past each other for the life of the room.
+      capsAnnouncer.didHearFrom(from);
+      return;
+    }
     const d = data as { relayRtt?: Record<string, number>; rename?: string };
     const m = d.relayRtt;
     if (m && from !== selfId) {
@@ -1251,6 +1266,7 @@
     connState = "connecting";
     resetRelaySelection(); // the new room has its own relay pool + measurements
     resetPeerCaps(); // the new room has its own peers; nothing carries over
+    capsAnnouncer.roomChanged(); // …including who we still owe an announcement
     resetHandoffLanes(); // …including which of them had settled a pre-upload lane
     revokeHandoff(); // …and any Send confirmed against the room being left
     textSession.end(); // 换房间就是换对端，消息会话跟着结束（历史留在页面上）

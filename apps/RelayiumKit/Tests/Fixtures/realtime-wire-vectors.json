@@ -534,5 +534,197 @@
         "resumeReqHex": "05000000007b22696e646578223a322c226f6666736574223a3139363630387d"
       }
     ]
+  },
+  "capability": {
+    "hello": {
+      "web": {
+        "caps": [
+          "text/1",
+          "link/1",
+          "preupload/1"
+        ]
+      },
+      "native": {
+        "caps": [
+          "text/1",
+          "link/1"
+        ]
+      },
+      "linkRoomInactive": {
+        "caps": [
+          "text/1"
+        ]
+      }
+    },
+    "retry": {
+      "attempts": 3,
+      "intervalMs": 1500
+    },
+    "settleSeconds": 5,
+    "lastAttemptSeconds": 3,
+    "promotion": [
+      {
+        "caps": [
+          "text/1",
+          "link/1",
+          "preupload/1"
+        ],
+        "link": true,
+        "resolvesImmediately": true
+      },
+      {
+        "caps": [
+          "text/1",
+          "link/1"
+        ],
+        "link": true,
+        "resolvesImmediately": true
+      },
+      {
+        "caps": [
+          "link/1"
+        ],
+        "link": true,
+        "resolvesImmediately": true
+      },
+      {
+        "caps": [
+          "text/1"
+        ],
+        "link": false,
+        "resolvesImmediately": true,
+        "legacyLane": "text"
+      },
+      {
+        "caps": [],
+        "link": false,
+        "resolvesImmediately": false,
+        "legacyLane": "files"
+      },
+      {
+        "caps": [
+          "link/2"
+        ],
+        "link": false,
+        "resolvesImmediately": false,
+        "legacyLane": "files"
+      },
+      {
+        "caps": [
+          "LINK/1"
+        ],
+        "link": false,
+        "resolvesImmediately": false,
+        "legacyLane": "files"
+      },
+      {
+        "caps": [
+          "text/2"
+        ],
+        "link": false,
+        "resolvesImmediately": false,
+        "legacyLane": "files"
+      }
+    ],
+    "legacyLane": [
+      {
+        "peerAnnouncesText": true,
+        "hasArmedBatch": false,
+        "lane": "text"
+      },
+      {
+        "peerAnnouncesText": false,
+        "hasArmedBatch": false,
+        "lane": "files"
+      },
+      {
+        "peerAnnouncesText": true,
+        "hasArmedBatch": true,
+        "lane": "files"
+      },
+      {
+        "peerAnnouncesText": false,
+        "hasArmedBatch": true,
+        "lane": "files"
+      }
+    ],
+    "downgrade": {
+      "text": {
+        "caps": [
+          "text/1"
+        ]
+      },
+      "files": {
+        "caps": []
+      }
+    },
+    "revocation": {
+      "first": {
+        "caps": [
+          "text/1",
+          "link/1"
+        ]
+      },
+      "then": {
+        "caps": []
+      },
+      "link": false,
+      "text": false
+    },
+    "notAHello": [
+      {
+        "relayRtt": {
+          "a": 1
+        }
+      },
+      {
+        "caps": "text/1"
+      },
+      {
+        "caps": 3
+      },
+      {
+        "rename": "x"
+      }
+    ],
+    "role": [
+      {
+        "self": "aaaaaaaa",
+        "peer": "bbbbbbbb",
+        "role": "initiator"
+      },
+      {
+        "self": "bbbbbbbb",
+        "peer": "aaaaaaaa",
+        "role": "responder"
+      },
+      {
+        "self": "0a1b2c3d",
+        "peer": "0a1b2c3e",
+        "role": "initiator"
+      },
+      {
+        "self": "0a1b2c3e",
+        "peer": "0a1b2c3d",
+        "role": "responder"
+      }
+    ],
+    "provenLink": {
+      "signal": {
+        "link": true,
+        "sdp": {
+          "type": "offer",
+          "sdp": "v=0\r\n"
+        }
+      },
+      "caps": [
+        "link/1"
+      ],
+      "doesNotOverrule": {
+        "caps": [
+          "text/1"
+        ]
+      }
+    }
   }
 }

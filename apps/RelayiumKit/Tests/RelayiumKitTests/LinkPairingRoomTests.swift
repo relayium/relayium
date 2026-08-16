@@ -186,6 +186,23 @@ final class LinkPairingRoomTests: XCTestCase {
             channels[0].fire(Envelope(type: SignalType.signal, from: peerId,
                                       data: .object(["caps": .array(caps.map(JSONValue.string))])))
         }
+
+        /// The ask the LARGER id sends. It carries no `caps` field at all, which
+        /// is what makes it the frame a lost hello is unrecoverable from.
+        func request(from peerId: String) {
+            channels[0].fire(Envelope(type: SignalType.signal, from: peerId,
+                                      data: linkRequestSignal()))
+        }
+
+        /// A `link`-generation SDP offer, exactly as `webrtc.ts` frames one:
+        /// the SDP, the generation tag, the handshake commit and the
+        /// per-connection capability confirmation in a single frame.
+        func offer(from peerId: String, commit: String = String(repeating: "a", count: 44)) {
+            channels[0].fire(Envelope(type: SignalType.signal, from: peerId,
+                                      data: linkSDPSignal(kind: "offer", sdp: "v=0\r\n",
+                                                          commit: commit,
+                                                          caps: [TEXT_CAPABILITY, LINK_CAPABILITY])))
+        }
     }
 
     private func rig(config: ICEConfig,
@@ -898,6 +915,302 @@ final class LinkPairingRoomTests: XCTestCase {
                        "the resident same-network room cancelled the code room's request")
         XCTAssertTrue(rig.transports.isEmpty)
         discovery.stop()
+    }
+
+    // MARK: - 12. the capability handshake this room actually runs
+
+    /// Every `data` payload this room put on its socket, in order.
+    ///
+    /// Reading the outbound frames is the half `LinkPairingRoomTests` never had:
+    /// the Mac's own hello in a code room was untested, which is precisely why
+    /// "it announces once and never again" survived to ship.
+    private func sentSignals(_ rig: Rig) -> [(to: String, data: JSONValue)] {
+        rig.channels[0].sent.compactMap { text in
+            guard let envelope = try? JSONDecoder().decode(Envelope.self, from: Data(text.utf8)),
+                  envelope.type == SignalType.signal,
+                  let to = envelope.to, let data = envelope.data else { return nil }
+            return (to, data)
+        }
+    }
+
+    private func sentHellos(_ rig: Rig, to peer: String) -> [[String]] {
+        sentSignals(rig).filter { $0.to == peer }.compactMap { entry in
+            guard case let .object(fields) = entry.data, case .array = fields["caps"] else { return nil }
+            return peerCaps(from: entry.data)
+        }
+    }
+
+    /// **The defect the retries were written for, and never ran against.**
+    ///
+    /// `LINK_CAPS_ANNOUNCE_ATTEMPTS` promised three attempts. In a pairing room
+    /// its only consumer — `retryTick()` — had no caller at all: the 1.5s tick
+    /// belonged to `LanDiscoveryModel`, so a code room announced exactly once per
+    /// peer, forever, and two undelivered attempts sat in `pending` for the life
+    /// of the room. One unacknowledged frame on a relayed socket was the whole
+    /// difference between a unified workspace and a composer-less legacy lane.
+    func testAPairingRoomRunsItsBoundedCapabilityHelloRetries() async {
+        let rig = rig(config: stunOnlyConfig())
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("zzz-mac")
+        rig.roster(["aaa-web"])          // present, and saying nothing back
+        await settle()
+
+        XCTAssertEqual(sentHellos(rig, to: "aaa-web").count, 1,
+                       "the roster announcement itself")
+
+        // Every retry the constant promises, at the shared cadence, all of them
+        // inside the window the peer is waiting out.
+        for attempt in 1...LINK_CAPS_ANNOUNCE_ATTEMPTS {
+            rig.scheduler.advance(to: LINK_CAPS_RETRY_INTERVAL * Double(attempt))
+            await settle()
+        }
+        let hellos = sentHellos(rig, to: "aaa-web")
+        XCTAssertEqual(hellos.count, LINK_CAPS_ANNOUNCE_ATTEMPTS,
+                       "bounded: the promised attempts and not one more")
+        for hello in hellos {
+            XCTAssertEqual(hello, advertisedLinkCapabilities(linkRoomActive: true))
+        }
+        XCTAssertLessThan(Double(LINK_CAPS_ANNOUNCE_ATTEMPTS - 1) * LINK_CAPS_RETRY_INTERVAL,
+                          LinkWorkspaceModel.pairingCapabilityWait,
+                          "an attempt that lands after the window is a frame that changes nothing")
+    }
+
+    /// They RETIRE on an answer. A client that keeps greeting a peer which has
+    /// already spoken is two devices talking past each other.
+    func testCapabilityRetriesRetireWhenThePeerAnswers() async {
+        let rig = rig(config: stunOnlyConfig())
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("zzz-mac")
+        rig.roster(["aaa-web"])
+        await settle()
+        rig.announce("aaa-web", [TEXT_CAPABILITY])   // legacy, so the room resolves without a link
+        await settle()
+
+        let afterAnswer = sentHellos(rig, to: "aaa-web").count
+        for attempt in 1...LINK_CAPS_ANNOUNCE_ATTEMPTS {
+            rig.scheduler.advance(to: LINK_CAPS_RETRY_INTERVAL * Double(attempt))
+            await settle()
+        }
+        XCTAssertEqual(sentHellos(rig, to: "aaa-web").count, afterAnswer,
+                       "a peer that has spoken does not need telling again")
+    }
+
+    /// And they retire with the ROOM. A timer that outlived its room would be
+    /// announcing this build's capabilities into a code somebody else is in.
+    func testCapabilityRetriesRetireWithTheRoom() async {
+        let rig = rig(config: stunOnlyConfig())
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("zzz-mac")
+        rig.roster(["aaa-web"])
+        await settle()
+        let armed = sentHellos(rig, to: "aaa-web").count
+
+        rig.model.leave()
+        await settle()
+        for attempt in 1...LINK_CAPS_ANNOUNCE_ATTEMPTS {
+            rig.scheduler.advance(to: LINK_CAPS_RETRY_INTERVAL * Double(attempt))
+            await settle()
+        }
+        XCTAssertEqual(sentHellos(rig, to: "aaa-web").count, armed,
+                       "a retired room kept announcing")
+    }
+
+    /// **A hello that arrives late — but inside the window — still promotes.**
+    ///
+    /// This is the shape a throttled mobile tab produces: the peer is capable,
+    /// its frame is simply slower than the first retry tick. Nothing may have
+    /// latched by then.
+    func testALateHelloInsideTheWindowStillPromotes() async {
+        let rig = rig(config: stunOnlyConfig())
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("aaa-mac")
+        rig.roster(["zzz-web"])
+        await settle()
+
+        rig.scheduler.advance(to: LINK_CAPS_RETRY_INTERVAL * 2)
+        await settle()
+        XCTAssertTrue(rig.adopted.isEmpty, "the room decided before its window elapsed")
+
+        rig.announce("zzz-web", [TEXT_CAPABILITY, LINK_CAPABILITY, "preupload/1"])
+        await settle()
+        XCTAssertEqual(rig.transports.count, 1, "a late but in-window hello did not promote")
+        XCTAssertTrue(rig.adopted.isEmpty, "and nothing fell back")
+
+        // The window that would have fired is gone with the decision.
+        rig.scheduler.advance(to: LinkWorkspaceModel.pairingCapabilityWait)
+        await settle()
+        XCTAssertTrue(rig.adopted.isEmpty)
+    }
+
+    /// **Same burst: the caps hello and the link offer, back to back.**
+    ///
+    /// The ordinary case whenever the browser is the initiator — it broadcasts
+    /// its capabilities and establishes on the same roster event — which the id
+    /// comparison makes it in about half of all pairings. The hello used to be
+    /// recorded inside a hop to the main actor while `LinkRoomRouter.intercept`
+    /// gates inline on the delivery queue, so the offer behind it reached that
+    /// gate with the announcement still in flight, was passed to a legacy
+    /// handler that does not exist in a watched room, and was dropped with no
+    /// reply at all — not even `busy`.
+    ///
+    /// Delivered with no `await` between the two frames, which is the whole
+    /// point: an `await` here would let the hop run and the test would pass
+    /// against the defect.
+    func testAHelloAndAnOfferInOneBurstAreBothHonoured() async {
+        let rig = rig(config: stunOnlyConfig())
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("zzz-mac")           // larger id: this side RESPONDS to the offer
+        rig.roster(["aaa-web"])
+        await settle()
+
+        rig.announce("aaa-web", [TEXT_CAPABILITY, LINK_CAPABILITY, "preupload/1"])
+        rig.offer(from: "aaa-web")
+        await settle()
+
+        XCTAssertEqual(rig.transports.count, 1,
+                       "the offer was dropped before the announcement became visible")
+        XCTAssertTrue(rig.adopted.isEmpty)
+        XCTAssertFalse(sentSignals(rig).contains { isLinkBusy($0.data) },
+                       "an offer this side asked for must never be refused")
+    }
+
+    /// **The other half: a hello that never arrived at all.**
+    ///
+    /// The larger-id peer does not offer — it ASKS, with `linkRequestSignal()`,
+    /// and that frame carries no `caps` field of any kind. An SDP offer happens
+    /// to repeat the announcement in its own envelope, so a lost hello is
+    /// survivable there; a request has nothing to fall back on. Without the
+    /// repair the ask is dropped in silence, the browser re-asks every three
+    /// seconds for thirty, and this side spends its five-second window deciding
+    /// the peer is legacy — from a peer that has been talking the whole time.
+    ///
+    /// A `link`-generation frame is itself the announcement, so it stands in for
+    /// the hello. Only a peer that has said NOTHING is read this way; see
+    /// `PeerCapabilityRegistry.recordProvenLink`.
+    func testARequestFromAPeerWhoseHelloWasLostIsStillAnswered() async {
+        let rig = rig(config: stunOnlyConfig())
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("aaa-mac")           // smaller id: this side is asked to offer
+        rig.roster(["zzz-web"])
+        await settle()
+
+        rig.request(from: "zzz-web")     // no hello, ever, and no caps in the frame
+        await settle()
+
+        XCTAssertEqual(rig.transports.count, 1, "the peer was black-holed")
+        XCTAssertTrue(rig.adopted.isEmpty)
+
+        // The window that would have called it legacy is gone with the decision.
+        rig.scheduler.advance(to: LinkWorkspaceModel.pairingCapabilityWait)
+        await settle()
+        XCTAssertTrue(rig.adopted.isEmpty)
+    }
+
+    /// Both assignments reach a link, driven from the same room object.
+    ///
+    /// The ids decide which side offers, and a client can be entirely correct in
+    /// the half its own id happens to produce. The smaller-id case assembles the
+    /// moment the peer announces; the larger-id case asks and then answers the
+    /// offer that comes back.
+    func testBothRoleAssignmentsReachALink() async {
+        let offering = rig(config: stunOnlyConfig())
+        XCTAssertTrue(offering.model.watchPairingCode("AB12CD", legacyRole: .initiator))
+        await settle()
+        offering.welcome("aaa-mac")
+        offering.announce("zzz-web", [TEXT_CAPABILITY, LINK_CAPABILITY, "preupload/1"])
+        offering.roster(["zzz-web"])
+        await settle()
+        XCTAssertEqual(linkRole(selfId: "aaa-mac", peerId: "zzz-web"), .initiator)
+        XCTAssertEqual(offering.transports.count, 1, "the smaller id must assemble and offer")
+
+        let answering = rig(config: stunOnlyConfig())
+        XCTAssertTrue(answering.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        answering.welcome("zzz-mac")
+        answering.announce("aaa-web", [TEXT_CAPABILITY, LINK_CAPABILITY, "preupload/1"])
+        answering.roster(["aaa-web"])
+        await settle()
+        XCTAssertEqual(linkRole(selfId: "zzz-mac", peerId: "aaa-web"), .responder)
+        XCTAssertEqual(answering.model.connection, .requesting,
+                       "the larger id asks rather than offering")
+        answering.offer(from: "aaa-web")
+        await settle()
+        XCTAssertEqual(answering.transports.count, 1, "the answer to its own ask was refused")
+    }
+
+    // MARK: - 13. giving up is SAID, and what was heard is carried over
+
+    /// **The downgrade is announced, so it is no longer one-sided.**
+    ///
+    /// This client latches — `resolved` is set once and there is no re-promotion
+    /// path — while a browser never does: it re-derives from its capability
+    /// roster and re-asks every three seconds for thirty. So a lost hello was
+    /// not a clean failure on either side; it was split-brain, with this Mac on
+    /// a legacy file lane and the browser still asking a peer that had stopped
+    /// listening. One ordinary hello ends it, and it names the lane this side
+    /// actually landed on.
+    func testGivingUpAnnouncesTheLaneItLandedOn() async {
+        let silent = rig(config: stunOnlyConfig())
+        XCTAssertTrue(silent.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        silent.welcome("aaa-mac")
+        silent.roster(["zzz-web"])
+        await settle()
+        silent.scheduler.advance(to: LinkWorkspaceModel.pairingCapabilityWait)
+        await settle()
+
+        XCTAssertEqual(silent.adopted.map(\.mode), [.files])
+        XCTAssertEqual(sentHellos(silent, to: "zzz-web").last, [],
+                       "a file lane must withdraw link/1 and claim nothing in its place")
+
+        // A peer that announced text/1 gets a text lane, and is told exactly
+        // that — the one capability the session it is about to build can carry.
+        let talking = rig(config: stunOnlyConfig())
+        XCTAssertTrue(talking.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        talking.welcome("aaa-mac")
+        talking.roster(["zzz-web"])
+        await settle()
+        talking.announce("zzz-web", [TEXT_CAPABILITY])
+        await settle()
+
+        XCTAssertEqual(talking.adopted.map(\.mode), [.text])
+        XCTAssertEqual(sentHellos(talking, to: "zzz-web").last, [TEXT_CAPABILITY])
+    }
+
+    /// **What the room heard goes over with the socket.**
+    ///
+    /// `retire()` resets the room's registry and `connectInRoom` then builds a
+    /// fresh, empty one and waits five seconds for a `text/1` that has already
+    /// been said. Nothing re-says it — a hello is sent on a roster EDGE, this
+    /// roster has not changed, and neither client answers a hello with a hello —
+    /// so a peer that correctly announced `text/1` reached `unsupportedPeer`
+    /// *because* this side had understood it.
+    func testTheLegacyHandoverCarriesWhatTheRoomHeard() async {
+        let rig = rig(config: stunOnlyConfig())
+        XCTAssertTrue(rig.model.watchPairingCode("AB12CD", legacyRole: .responder))
+        await settle()
+        rig.welcome("aaa-mac")
+        rig.roster(["zzz-web"])
+        await settle()
+        rig.announce("zzz-web", [TEXT_CAPABILITY])
+        await settle()
+
+        XCTAssertEqual(rig.adopted.map(\.mode), [.text])
+        XCTAssertEqual(rig.handle.peerAnnouncedCaps["zzz-web"], [TEXT_CAPABILITY],
+                       "the legacy connection has to re-ask a question nothing will answer twice")
+        XCTAssertNotNil(rig.handle.signaling, "and it is handed over WITH the socket")
+
+        // Released with the room. A peer id means nothing outside the room that
+        // issued it, so the evidence must not outlive it either.
+        rig.model.releaseHandedOverPairingRoom()
+        XCTAssertTrue(rig.handle.peerAnnouncedCaps.isEmpty)
     }
 
     /// Leaving a watched code closes its socket. A room left open keeps this

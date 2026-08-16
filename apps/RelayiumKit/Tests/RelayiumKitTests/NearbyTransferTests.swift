@@ -340,6 +340,69 @@ final class NearbyConnectionFactoryTests: XCTestCase {
         XCTAssertEqual(record.generation, .file)
         XCTAssertFalse(ch.closed, "the room owns this socket")
     }
+
+    /// **A text lane the room already earned must not re-earn it.**
+    ///
+    /// `connectInRoom`'s text branch refuses to offer until the peer announces
+    /// exact `text/1`, and a pairing-code fallback reaches that branch BECAUSE
+    /// the room heard exactly that. But `LinkWorkspaceModel.fallBackToLegacy`
+    /// retires its room — which resets the registry holding the announcement —
+    /// and this call then built a fresh, empty one. Nothing re-announces into it:
+    /// a hello is sent on a roster EDGE, the roster has not changed, and neither
+    /// client answers a hello with a hello. So the peer that did the one thing
+    /// this side asked of it timed out as `unsupportedPeer`, and the user was
+    /// shown a message session that could not be built with a peer that could
+    /// build it.
+    ///
+    /// The evidence now travels with the socket — see
+    /// `LinkRoomHandle.peerAnnouncedCaps`.
+    func testConnectInRoomAcceptsTheAnnouncementTheRoomAlreadyHeard() async throws {
+        let (ch, sig) = openSocket()
+        let record = NearbyBuildRecord()
+
+        let connection = try await RealtimeConnectionFactory.connectInRoom(
+            signaling: sig, peerId: "text-peer", role: .initiator,
+            config: ICEConfig(iceServers: [ICEServerConfig(urls: ["stun:stun.example:3478"])]),
+            mode: .text, capabilityTimeout: 30,
+            knownPeerCaps: [TEXT_CAPABILITY],
+            build: { signaling, peerId, _, servers, relayOnly, generation, caps in
+                record.note(peerId: peerId, servers: servers, relayOnly: relayOnly,
+                            generation: generation, capabilities: caps)
+                return ReplayRecorder(signaling: signaling)
+            })
+        _ = connection
+
+        XCTAssertEqual(record.generation, .text,
+                       "the text lane was refused for a peer that had already announced it")
+        XCTAssertFalse(ch.closed)
+
+        // The seed is a HELLO, not a bypass: a later real announcement still
+        // replaces it, because an announcement is a snapshot rather than a grant.
+        // Nothing here may reach the wire that a live hello could not.
+        let announcements = ch.sent
+            .compactMap { try? JSONDecoder().decode(Envelope.self, from: Data($0.utf8)) }
+            .compactMap { $0.data.map(peerCaps(from:)) }
+            .filter { !$0.isEmpty }
+        XCTAssertTrue(announcements.allSatisfy { $0 == [TEXT_CAPABILITY] })
+    }
+
+    /// The inverse, so the seed cannot be mistaken for "text mode always builds":
+    /// a peer that has announced nothing, and whose room heard nothing, is still
+    /// refused rather than probed with an offer it would read as a file transfer.
+    func testConnectInRoomStillRefusesAPeerNobodyHasHeardFrom() async {
+        let (_, sig) = openSocket()
+        do {
+            _ = try await RealtimeConnectionFactory.connectInRoom(
+                signaling: sig, peerId: "silent-peer", role: .initiator,
+                config: ICEConfig(iceServers: [ICEServerConfig(urls: ["stun:stun.example:3478"])]),
+                mode: .text, capabilityTimeout: 0.05,
+                knownPeerCaps: [],
+                build: { signaling, _, _, _, _, _, _ in ReplayRecorder(signaling: signaling) })
+            XCTFail("a silent peer must not be offered a text session")
+        } catch {
+            XCTAssertEqual(error as? RealtimeConnectionFactory.FactoryError, .unsupportedPeer)
+        }
+    }
 }
 
 // MARK: - the session models' nearby path

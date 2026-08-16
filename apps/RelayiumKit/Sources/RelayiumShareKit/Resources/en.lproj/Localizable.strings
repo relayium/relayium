@@ -658,6 +658,8 @@
 "workspace.oneConnectionNote" = "One connection carries messages or files, not both. Sending the other kind opens a new connection, with a new verification code.";
 "workspace.messagesOnlyNote" = "This session carries messages, not files. Sending files needs a session of its own — leave this one to start it.";
 "workspace.filesOnlyNote" = "This session carries files, not messages. Sending a message needs a session of its own — leave this one to start it.";
+"workspace.startMessageSession" = "Start a message session";
+"workspace.startMessageSessionHint" = "Ends this file session and reconnects with the same pairing code, for messages. The other device starts a message session with the same code.";
 "workspace.leaveSession" = "Leave this session";
 "workspace.sessionWithCode" = "Connected with a pairing code";
 /* MARK: - The unified link (link/1)

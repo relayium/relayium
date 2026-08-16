@@ -326,11 +326,19 @@ acceptance_start_server() {
   mkdir -p "$run_root/blobs"
 
   say "== starting a throwaway server on $origin =="
+  # The built Web bundle, for a run whose second endpoint is a real browser.
+  # Default empty rather than the binary's own `../web/dist`: a run that did not
+  # ask for the site must not end up serving whatever happens to be in the
+  # developer's checkout, and one that DID must fail loudly if it is missing
+  # rather than 404 halfway through.
+  local static_dir="${acceptance_server_static:-$run_root/no-static}"
+  mkdir -p "$run_root/no-static"
   RELAYIUM_RELEASE_CHECK=false \
     "$run_root/relayium-server" \
     -addr "127.0.0.1:$server_port" \
     -db "$run_root/relayium.db" \
     -blob-dir "$run_root/blobs" \
+    -static "$static_dir" \
     -stun-urls "$loopback_stun" \
     >"$run_root/server.log" 2>&1 &
   server_pid=$!

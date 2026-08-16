@@ -9,6 +9,24 @@ import Foundation
 /// never answer, forever, for the life of the room.
 public let LINK_CAPS_ANNOUNCE_ATTEMPTS = 3
 
+/// How long between one peer's announcements.
+///
+/// One constant for BOTH rooms, and that is the point of hoisting it here. The
+/// same-network room drove its retries from `LanDiscoveryModel`'s own private
+/// copy while a pairing room drove none at all, so `LINK_CAPS_ANNOUNCE_ATTEMPTS`
+/// silently meant three attempts on one room and one on the other. A retry
+/// cadence that differs by room is a capability that is discovered on one and
+/// missed on the other, which is exactly the downgrade the retries exist to
+/// prevent.
+///
+/// The value is bounded by the window the listener waits: three attempts at
+/// 1.5s land at 1.5, 3.0 and 4.5 seconds, all inside
+/// `LinkWorkspaceModel.pairingCapabilityWait` and inside
+/// `RealtimeConnectionFactory`'s equal five-second `text/1` wait. Raising either
+/// the count or the interval past that window would make the last attempt
+/// arrive after the peer has already decided this side is legacy.
+public let LINK_CAPS_RETRY_INTERVAL: TimeInterval = 1.5
+
 /// Tells each peer in the room what this build can speak, at the roster level.
 ///
 /// ## Why the roster and not the SDP
