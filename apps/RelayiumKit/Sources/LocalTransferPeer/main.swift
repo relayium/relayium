@@ -202,36 +202,140 @@ func json(_ value: [String: Any], status: Int = 200) -> (status: Int, body: Data
 
 /// Nearby, receiving: the app's own machinery, resident, answering an offer
 /// nobody there accepted.
+///
+/// **Two wires, one host.** A counterpart that never announced `link/1` reaches
+/// the legacy nearby machinery; one that did reaches the link workspace. Which
+/// arrives is decided by the peer before anybody dials, so this waits on both
+/// and finishes on whichever produced a committed result. T2a's `PlainPeer`
+/// drives the first; a built App drives the second.
 @MainActor final class NearbyReceiverRun {
     let host: AppReceiverHost
+
+    /// How long a run may wait with NOTHING having arrived.
+    ///
+    /// Deliberately measured from the last observed progress rather than from
+    /// `start`, because the two callers have very different clocks: T2a dials
+    /// within a second of `/start`, while a UI acceptance run has to boot a
+    /// simulator, launch an app and drive a roster first. Extending a fixed
+    /// ceiling to cover the slower caller would have weakened the faster one's
+    /// stall detection; resetting it on real progress covers both without
+    /// either waiting on the other's worst case.
+    static let idleCeiling: TimeInterval = 240
+
     init(receiveRoot: URL, name: String) throws {
         host = try AppReceiverHost(options: .init(
             baseURL: Config.origin, name: name, receiveRoot: receiveRoot,
             defaultsSuite: "com.relayium.acceptance.\(Config.runTag)"))
+        // Every link transition this side sees, in this peer's own log — which
+        // a failed run retains and prints. A UI run's app is gone by the time
+        // anybody reads the failure, so this is the only surviving account of
+        // what the second endpoint actually did.
+        host.linkCounterpart.logEvent = { log($0) }
     }
 
     func start() {
         host.start()
         state.set(phase: "resident")
         Task { @MainActor in
-            // A generous ceiling, not a schedule: every state below is polled,
-            // so a fast run finishes fast and only a genuinely stuck one waits.
-            let deadline = Date().addingTimeInterval(120)
-            while Date() < deadline {
+            var lastProgress = Date()
+            var seen = ""
+            while Date().timeIntervalSince(lastProgress) < Self.idleCeiling {
                 if case .completed = host.fileModel.state {
                     state.finish(receipts: host.receipts())
                     return
                 }
                 if case let .failed(message) = host.fileModel.state {
-                    return state.failed("receive failed: \(message)")
+                    return state.failed("legacy receive failed: \(message)")
+                }
+                // The link's own committed state. `received` is the only inbound
+                // state that means bytes are on disk — `finished` is a report
+                // this projection has seen no proof of, and its own doc says so.
+                if let files = host.link.fileModel?.batches,
+                   files.contains(where: { batch in
+                       guard batch.direction == .inbound else { return false }
+                       if case .received = batch.state { return true }
+                       return false
+                   }) {
+                    state.finish(receipts: host.receipts())
+                    return
+                }
+                // Any observable movement resets the stall clock — a link that is
+                // establishing, digits that arrived, a message, a batch in
+                // flight. An ORDERED fingerprint, not the fact dictionary's
+                // `description`: a `[String: Any]` has no stable ordering, so
+                // comparing two descriptions of identical state would report
+                // progress at random and this ceiling would never fire.
+                let progress = linkProgressFingerprint(host: host)
+                if progress != seen {
+                    seen = progress
+                    lastProgress = Date()
                 }
                 try? await Task.sleep(nanoseconds: 200_000_000)
             }
-            state.failed("timed out waiting for an unsolicited offer")
+            state.failed("nothing arrived for \(Int(Self.idleCeiling))s: "
+                         + linkProgressFingerprint(host: host))
         }
     }
 
     func teardown() { host.teardown() }
+}
+
+/// An ordered, stable rendering of everything about this link that can move.
+///
+/// Its only job is "did anything change since the last look", so it is built
+/// from a fixed sequence of fields rather than from a dictionary. It is also
+/// what a stalled run prints, which is why it names the phase and the batch
+/// states rather than reducing them to a count.
+@MainActor
+func linkProgressFingerprint(host: AppReceiverHost) -> String {
+    let batches = (host.link.fileModel?.batches ?? [])
+        .map { "\($0.direction):\($0.state):\($0.transferredBytes)" }
+        .joined(separator: ",")
+    return "phase=\(host.link.connection)"
+        + " epoch=\(host.linkEpoch())"
+        + " sas=\(host.linkSAS() ?? "-")"
+        + " messages=\(host.receivedMessages().count)"
+        + " batches=[\(batches)]"
+}
+
+/// The live link view a UI acceptance run polls.
+///
+/// Separate from `/status` and `/result` on purpose: those two carry T2a's
+/// contract, which is a fixed batch and a terminal `done`, and a UI run has
+/// neither — it decides for itself when the file and the message it drove have
+/// both arrived. Nothing here is derived: every value is read off the model the
+/// production writer filled in.
+@MainActor
+func liveLinkFacts(host: AppReceiverHost) -> [String: Any] {
+    func entries(_ receipts: [FileReceipt]) -> [[String: Any]] {
+        receipts.map { receipt in
+            var entry: [String: Any] = ["name": receipt.name, "size": receipt.size,
+                                        "sha256": receipt.sha256]
+            if let path = receipt.path { entry["path"] = path }
+            return entry
+        }
+    }
+    var out: [String: Any] = [
+        "linkPhase": String(describing: host.link.connection),
+        // **Which link these facts belong to.** A caller polling "has a SAS
+        // arrived" has to be able to tell this link's digits from the previous
+        // link's, because a resident counterpart serves several in one run and
+        // the first version of this view could not — it answered a later poll
+        // with an earlier link's residue and passed a test that had established
+        // nothing.
+        "epoch": host.linkEpoch(),
+        "messages": host.receivedMessages(),
+        "files": entries(host.receipts()),
+        // Cumulative, across every link this process served. What a launcher
+        // reads after the app has gone and the live link has been dismissed.
+        "allMessages": host.allMessages(),
+        "allFiles": entries(host.allReceipts()),
+    ]
+    if let sas = host.linkSAS() { out["sas"] = sas }
+    if let batches = host.link.fileModel?.batches {
+        out["batchStates"] = batches.map { "\($0.direction):\($0.state)" }
+    }
+    return out
 }
 
 /// Nearby, sending: a plain peer that dials the resident receiver by name.
@@ -397,6 +501,15 @@ final class RunBox {
 
     private var teardownRun: (() -> Void)?
 
+    /// The live view `/observed` answers, installed by the roles that have one.
+    ///
+    /// A closure rather than a stored host, so a role with no link surface —
+    /// every role but `nearby-receiver` today — answers "no live view" instead
+    /// of an empty one that reads like a link that produced nothing.
+    private var observeRun: (() -> [String: Any])?
+
+    func observed() -> [String: Any]? { observeRun?() }
+
     /// Builds the role's run object and starts it. Any failure becomes a
     /// reported phase rather than an exit, so the launcher reads a `failed`
     /// status with a reason instead of losing the process.
@@ -407,6 +520,7 @@ final class RunBox {
                 let run = try NearbyReceiverRun(receiveRoot: requireReceiveRoot(),
                                                 name: require("--name"))
                 teardownRun = { run.teardown() }
+                observeRun = { liveLinkFacts(host: run.host) }
                 run.start()
             case .nearbySender:
                 let run = NearbySenderRun(name: require("--name"),
@@ -432,7 +546,38 @@ final class RunBox {
     func teardown() {
         teardownRun?()
         teardownRun = nil
+        observeRun = nil
     }
+}
+
+/// Read the live view from the control queue, without hanging on the main one.
+///
+/// Every model this reports is `@MainActor`, and the control API's handlers run
+/// on the listener's own queue — so the hop is unavoidable. It is BOUNDED, and
+/// that is the part worth stating: a main actor stuck inside a link is exactly
+/// the situation a caller is polling to diagnose, and an unbounded
+/// `DispatchQueue.main.sync` would answer that by hanging the one API that could
+/// have reported it. A timeout instead surfaces as a 409 the caller can print.
+///
+/// Returns nil for "no live view" — either the role has none, or the main actor
+/// did not answer in time; the route distinguishes neither because the caller's
+/// next move is the same in both cases: poll again, then print and fail.
+func mainActorObservation(timeout: TimeInterval = 5) -> [String: Any]? {
+    let ready = DispatchSemaphore(value: 0)
+    let box = ObservationBox()
+    Task { @MainActor in
+        box.value = RunBox.shared.observed()
+        ready.signal()
+    }
+    guard ready.wait(timeout: .now() + timeout) == .success else { return nil }
+    return box.value
+}
+
+/// A one-shot handoff across the queue boundary. Written on the main actor
+/// before the semaphore is signalled and read only after that signal, so the
+/// ordering the semaphore establishes is the whole synchronisation.
+final class ObservationBox: @unchecked Sendable {
+    var value: [String: Any]?
 }
 
 let control: LoopbackControlServer
@@ -449,6 +594,17 @@ do {
                 return json(["ok": true])
             },
             .init(method: "GET", path: "/status") { _ in json(state.snapshot()) },
+            // The live link view, for a caller that decides for itself when
+            // enough has arrived. `/status` and `/result` are untouched: they
+            // carry T2a's contract — a fixed batch and a terminal `done` — and a
+            // UI acceptance run has neither.
+            .init(method: "GET", path: "/observed") { _ in
+                guard let facts = mainActorObservation() else {
+                    return json(["error": "no live view for this role",
+                                 "role": Config.role.rawValue], status: 409)
+                }
+                return json(facts)
+            },
             .init(method: "GET", path: "/result") { _ in json(state.result()) },
             .init(method: "POST", path: "/shutdown") { _ in
                 Task { @MainActor in RunBox.shared.teardown() }

@@ -6,10 +6,15 @@ on:
   push:
     paths:
       - 'apps/**'
+      # The local acceptance launcher and the shared isolation library. Without
+      # this a change to either would not run the acceptance it IS, which is the
+      # exact way a fixture rots unnoticed.
+      - 'scripts/**'
       - '.github/workflows/macos.yml'
   pull_request:
     paths:
       - 'apps/**'
+      - 'scripts/**'
       - '.github/workflows/macos.yml'
   workflow_dispatch:
     inputs:
@@ -115,6 +120,51 @@ jobs:
             -destination "platform=iOS Simulator,id=$device_id" \
             -derivedDataPath "$RUNNER_TEMP/dd-ios" \
             -only-testing:RelayiumUITests test
+      # The step above is deliberately offline: with no origin passed, the app
+      # resolves production, `UITestMode.allowsResidency` is false, and every
+      # `LocalSessionUITests` path SKIPS. That is why they can share the target
+      # without slowing the smoke down — and why they need this step, which
+      # starts a throwaway server and a real counterpart process first so the
+      # skips become real transfers.
+      #
+      # Both local acceptance runs are here rather than in `test`, together,
+      # because they share one launcher (`scripts/lib/local-acceptance.sh`) and
+      # one pair of built binaries. T2a proves the transport between two host
+      # processes; T2b drives the built App's own UI over it and is what the Q0
+      # iOS matrix cells rest on. The cleanup test proves neither strands a
+      # child process when it fails.
+      #
+      # `RELAYIUM_ACCEPTANCE_DERIVED_DATA` reuses the app this job already
+      # built; without it the acceptance run would compile the whole app a
+      # second time.
+      #
+      # `TMPDIR` is pinned to the runner's own temp so the per-run root a FAILED
+      # run keeps is somewhere the upload step below can find it. The launcher
+      # creates it under `${TMPDIR:-/tmp}`, which on a macOS runner is neither
+      # `/tmp` nor `RUNNER_TEMP` by default.
+      - name: Run local transfer and built-App session acceptance
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          scripts/local-transfer-acceptance.sh
+          scripts/local-transfer-cleanup-test.sh
+          RELAYIUM_ACCEPTANCE_DERIVED_DATA="$RUNNER_TEMP/dd-ios" \
+            scripts/ios-ui-session-acceptance.sh
+      # A failed acceptance run keeps its per-run root for diagnosis, and the
+      # xcodebuild log inside it is the only record of which UI step stopped.
+      # Failure-only and short-lived, exactly as the UI-smoke `.xcresult` upload
+      # is: nothing in that root is signing or notarization material, but it is
+      # a public repository and an artifact is not a place to leave anything by
+      # default.
+      - name: Retain acceptance diagnosis
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ios-session-acceptance-diagnosis
+          path: ${{ runner.temp }}/relayium-acceptance-*/**/*.log
+          retention-days: 7
+          if-no-files-found: ignore
 
   # Needs the signing certificate, so it cannot run where secrets are
   # unavailable. This repository is public: a fork's pull request cannot read

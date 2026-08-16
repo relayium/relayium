@@ -58,6 +58,20 @@ public final class AppReceiverHost {
     public let textModel: RealtimeTextSessionModel
     public let receive: NearbyReceiveModel
 
+    /// The `link/1` half, composed for the same reason `RelayiumApp` composes
+    /// one: `LanDiscoveryModel` ANNOUNCES the capability in this room already —
+    /// `LINK_BUILD_SUPPORT` is true for `os(macOS)`, which this binary is — and a
+    /// process that announces a wire it cannot answer fails the establishment it
+    /// invited. See `LinkCounterpart` for the full account; the short version is
+    /// that a built App is the first client to take the announcement seriously,
+    /// so T2b is the first run that could ever have observed the gap.
+    ///
+    /// Both halves on one room socket, exactly as the shipped apps have them: a
+    /// legacy peer still reaches the legacy machinery above, because a peer that
+    /// never announced `link/1` is never routed here.
+    public let link: LinkWorkspaceModel
+    public let linkCounterpart: LinkCounterpart
+
     private let defaults: UserDefaults
 
     public init(options: Options) throws {
@@ -93,6 +107,22 @@ public final class AppReceiverHost {
         receive = AppEnvironment.makeNearbyReceiveModel(
             fileModel: fileModel, textModel: textModel,
             discovery: discovery, inboundRoom: inboundRoom)
+
+        // `receiveDirectory` is passed EXPLICITLY and is never allowed to
+        // default. `AppEnvironment.makeLinkWorkspaceModel`'s macOS overload
+        // defaults it to `defaultLinkReceiveDirectory()`, which is the user's
+        // Downloads folder — the exact outcome `Options.receiveRoot` exists to
+        // prevent, and one that would have been reintroduced silently here by
+        // omitting one argument.
+        let receiveRoot = options.receiveRoot
+        link = AppEnvironment.makeLinkWorkspaceModel(
+            baseURL: baseURL, verification: verification, nearby: discovery,
+            // This host never watches a pairing code, so the handle stays empty
+            // and `watchPairingCode` is never called — the same shape the nearby
+            // legacy models above are given.
+            pairingRoom: LinkRoomHandle(),
+            receiveDirectory: { receiveRoot })
+        linkCounterpart = LinkCounterpart(link: link)
     }
 
     public enum HostError: Error, Equatable {
@@ -100,15 +130,35 @@ public final class AppReceiverHost {
     }
 
     /// The one call `RelayiumApp` makes at launch.
+    ///
+    /// The link's headless answers are attached BEFORE the room is joined: a
+    /// peer can be dialling the instant the socket opens, and an admission gate
+    /// installed afterwards would race the first offer it exists to answer.
     public func start() {
+        linkCounterpart.start()
         discovery.startResident()
     }
 
     public func teardown() {
+        link.leave()
         discovery.stop()
         defaults.removePersistentDomain(forName: options.defaultsSuite)
         try? FileManager.default.removeItem(at: options.receiveRoot)
     }
+
+    /// Everything this host has taken over EVERY link it served, plus the legacy
+    /// wire's own result.
+    ///
+    /// What a launcher checks once the app has gone: by then the live link has
+    /// ended and been dismissed, so the current link alone would report nothing
+    /// about the run it just served.
+    public func allReceipts() -> [FileReceipt] {
+        fileReceipts(model: fileModel, root: options.receiveRoot)
+            + linkCounterpart.allReceipts()
+    }
+
+    /// Every message received over every link this host served.
+    public func allMessages() -> [String] { linkCounterpart.allMessages() }
 
     /// What the app's own writer put on disk, read back off disk.
     ///
@@ -122,8 +172,30 @@ public final class AppReceiverHost {
     /// a folder shows up as a differing receipt rather than as a path that
     /// happens to end in the right name.
     public func receipts() -> [FileReceipt] {
-        fileReceipts(model: fileModel, root: options.receiveRoot)
+        let legacy = fileReceipts(model: fileModel, root: options.receiveRoot)
+        // One host, two wires, and never both in one run: a peer is legacy or it
+        // is `link/1`, decided by an announcement made before anybody dialled.
+        // Concatenated rather than chosen between, so a run that somehow drove
+        // both reports both and the launcher's comparison fails loudly on the
+        // extra files instead of quietly reporting one wire's half.
+        return legacy + linkCounterpart.receipts()
     }
+
+    /// The message bodies the CURRENT link received, in arrival order.
+    ///
+    /// Empty for the legacy wire, which carries its text through
+    /// `RealtimeTextSessionModel` and is not what any T2b path drives.
+    public func receivedMessages() -> [String] { linkCounterpart.current.messages }
+
+    /// The digits the CURRENT link derived, or nil before it produced any.
+    ///
+    /// Scoped to the current link deliberately. A process-wide "the last SAS we
+    /// ever saw" once satisfied a poll for a link that had never been
+    /// established — see `LinkRecord`.
+    public func linkSAS() -> String? { linkCounterpart.current.sas }
+
+    /// Which link is being served, counting from 1; 0 before the first.
+    public func linkEpoch() -> Int { linkCounterpart.current.epoch }
 }
 
 /// What a completed `RealtimeSessionModel` actually left on disk.
