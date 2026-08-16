@@ -62,6 +62,11 @@
 # ── usage ────────────────────────────────────────────────────────────────────
 #
 #   scripts/macos-ui-session-acceptance.sh [-only-testing:...]
+#
+# With no arguments the two `LocalSessionUITests` methods run as TWO sequential
+# `xcodebuild` processes against one server and one set of counterparts; see the
+# block above the launches for why. Arguments are passed through to a single
+# invocation unchanged.
 
 set -euo pipefail
 
@@ -139,28 +144,84 @@ export TEST_RUNNER_RELAYIUM_ACCEPTANCE_PAIR_PORTS="$pair_ports"
 
 derived_data="${RELAYIUM_ACCEPTANCE_DERIVED_DATA:-$run_root/dd-mac}"
 
-say "== driving RelayiumUITests/LocalSessionUITests against the built macOS app =="
+# One `xcodebuild test` process, owned by this run.
+#
 # Backgrounded and waited on, never foregrounded: bash does not service a
 # trapped INT/TERM while waiting on a FOREGROUND child, and `xcodebuild test` is
 # minutes long — so a foreground call would leave the server and both peers
 # running for the whole of that window after a caller had asked the run to stop.
 # The PID is REGISTERED first, so cleanup terminates it by exact PID like every
 # other child.
-xcodebuild -project "$project" -scheme Relayium \
-  -destination 'platform=macOS' \
-  -derivedDataPath "$derived_data" \
-  "${@:--only-testing:RelayiumUITests/LocalSessionUITests}" \
-  test >"$run_root/xcodebuild.log" 2>&1 &
-xcodebuild_pid=$!
-register_child xcodebuild "$xcodebuild_pid"
+#
+# Called from the TOP-LEVEL shell and never in a command substitution, for the
+# same reason `start_peer` is: a subshell would append the PID to a copy of the
+# registry that dies with it, and cleanup would have nothing to kill.
+#
+# A failure is terminal and reported at the point it happens — the log named,
+# its tail printed, and no further invocation started — so a second process
+# never runs against the wreckage of the first, and the run cannot report which
+# test failed by process of elimination.
+run_xcodebuild() {
+  local label="$1"
+  shift
+  local log="$run_root/$label.log" status=0 pid
 
-xcodebuild_status=0
-wait "$xcodebuild_pid" || xcodebuild_status=$?
+  xcodebuild -project "$project" -scheme Relayium \
+    -destination 'platform=macOS' \
+    -derivedDataPath "$derived_data" \
+    "$@" \
+    test >"$log" 2>&1 &
+  pid=$!
+  register_child "$label" "$pid"
 
-if [ "$xcodebuild_status" -ne 0 ]; then
-  say "-- xcodebuild failed ($xcodebuild_status); its last 80 lines follow"
-  sed 's/^/   /' <(tail -80 "$run_root/xcodebuild.log") >&2 || true
-  fail "the built-App session paths did not pass"
+  wait "$pid" || status=$?
+  if [ "$status" -ne 0 ]; then
+    say "-- $label failed ($status); its last 80 lines follow — full log: $log"
+    sed 's/^/   /' <(tail -80 "$log") >&2 || true
+    fail "the built-App session paths did not pass ($label)"
+  fi
+  say "-- $label passed"
+}
+
+# ── one xcodebuild process per test ──────────────────────────────────────────
+#
+# The default path runs the two `LocalSessionUITests` methods as TWO SEQUENTIAL
+# xcodebuild invocations rather than one. Measured with both in a single
+# invocation: the first test passes, and then `RelayiumUITest-Runner` fails
+# during the SECOND app lifecycle with `RBSAssertionErrorDomain` — an
+# invalidation time in the past — and the invocation bails out before the second
+# test's assertions run. Each test on its own establishes both sessions and
+# passes, so this is the runner's process-assertion lifecycle being reused
+# within one invocation, not a product fault; a fresh process per app lifecycle
+# removes the overlap.
+#
+# Both invocations share the derived data, the server, the account and all three
+# counterpart processes: the resident same-network peer stays in the room across
+# the pair, which is what makes the second test's first roster read the same
+# already-true state the first test's was. `RELAYIUM_ACCEPTANCE_PAIR_PORTS`
+# stays the FULL list for both, because the tests index it — `pairPorts[0]` and
+# `pairPorts[1]` — to reach the counterpart that is theirs. Trimming it per
+# invocation would silently point the second test at the peer the first test has
+# already used, which `watchPairingCode` would refuse a second room for.
+#
+# The order below is the order XCTest itself would run them in, so the indices
+# keep matching the peers started for them.
+#
+# A caller that supplied its own selectors gets exactly ONE invocation with
+# exactly those arguments, unchanged.
+if [ "$#" -gt 0 ]; then
+  say "== driving the caller's selectors against the built macOS app =="
+  run_xcodebuild xcodebuild "$@"
+else
+  round=0
+  for test_method in \
+    testBothModulesHoldRealConnectionsAcrossNavigationAndCancelDirectOnly \
+    testCancellingTheNearbyModuleFirstLeavesTheDirectSessionConnected; do
+    round=$((round + 1))
+    say "== driving LocalSessionUITests/$test_method (process $round of 2) =="
+    run_xcodebuild "xcodebuild-$round" \
+      "-only-testing:RelayiumUITests/LocalSessionUITests/$test_method"
+  done
 fi
 
 # The test asserted the connections itself, from inside the app. This is the
