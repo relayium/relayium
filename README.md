@@ -276,11 +276,16 @@ pairing code requires sign-in; joining with that code does not.
   the signed Sparkle appcast at `https://relayium.com/apps/macos/appcast.xml`.
   A Developer ID download **is** the distribution channel here — there is no Mac
   App Store listing. The App Store build of the same source is not hypothetical:
-  an exact-SHA, universal, sandboxed, App Store-signed 1.2.4 (11) package was
-  built, verified locally, and uploaded to App Store Connect on 2026-08-15 for
-  internal TestFlight. The matching 1.2.5 (12) App Store package has not been
-  archived or uploaded, so no TestFlight build corresponds to this release.
-  Nothing has been submitted for App
+  the matching 1.2.5 (12) package was archived from this release's exact source
+  graph — universal, sandboxed, App Store-signed, both privacy manifests, no
+  Sparkle — verified locally, and uploaded to App Store Connect on 2026-08-16,
+  where Xcode reported the upload accepted and package processing started; its
+  predecessor 1.2.4 (11) went the same way on 2026-08-15. Upload acceptance is
+  where the observed evidence stops. A fresh Organizer readback shows 1.2.5 (12)
+  as *Uploaded to Apple*; nothing has been observed about Apple finishing
+  processing, about the build reaching TestFlight or any tester group, or about
+  its export-compliance answer, so no TestFlight build is claimed for this
+  release. Nothing has been submitted for App
   Review, and there is still no public Mac App Store listing. Whether relayium.com's own
   **/apps** page offers that download is a separate switch, driven by
   `web/native-releases.json`, which the
@@ -366,9 +371,11 @@ pairing code requires sign-in; joining with that code does not.
   routing is wired but still needs a real install, and the share extension still
   needs real-device provider coverage. macOS has its own App Store Connect record
   and an earlier processed TestFlight candidate; its 1.2.4 (11) App Store
-  package was uploaded on 2026-08-15 for internal TestFlight, and the 1.2.5 (12)
-  package that would succeed it has not been archived or uploaded — with no App
-  Review submission and no public Mac App Store
+  package was uploaded on 2026-08-15, and the succeeding 1.2.5 (12) package was
+  archived and uploaded on 2026-08-16 with the upload accepted and processing
+  started. That is not a TestFlight-ready build: no readback has confirmed
+  processing completion, group assignment or export compliance for it, and there
+  is no App Review submission and no public Mac App Store
   listing, while the Developer ID channel remains the public one. Persistent device identity,
   broader protocol documentation, and additional distribution formats remain
   future work.

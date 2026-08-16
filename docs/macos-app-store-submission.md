@@ -48,6 +48,13 @@ Every replacement upload after this one must use a strictly higher build number
 again; an upload consumes its number even if it is only used in TestFlight or is
 later rejected.
 
+That rule has since consumed two more numbers. Build `11` was uploaded at public
+version `1.2.4` on 2026-08-15, and build `12` at public version `1.2.5` on
+2026-08-16. Both are **consumed** and must not be rebuilt or re-uploaded, so the
+next archive of any version needs a build number strictly above `12`. Consuming
+a number is a fact about the upload alone — see "TestFlight state" below for
+what has and has not been observed downstream of it.
+
 Nothing here changes an already-published artifact. `web/native-releases.json`,
 `web/public/apps/macos/appcast.xml`, the `macos-v1.1.3` tag and the GitHub
 Release stay exactly as they are; they describe bytes that shipped, and they move
@@ -124,6 +131,46 @@ not imply that the relay can read user content, that every transfer is peer to
 peer, or that a web/Stripe subscription is managed by Apple.
 
 ## TestFlight state and information draft
+
+This section separates two states that are easy to conflate. **Upload
+acceptance** is App Store Connect taking the package and starting to process it;
+it is observable from the uploading machine. **TestFlight readiness** — Apple
+finishing processing, the build becoming installable, its group assignment, its
+export-compliance answer — is a later Apple-side state that only an
+authenticated readback can establish. An accepted upload is never evidence of
+any of them.
+
+### Build `1.2.5 (12)` — uploaded and accepted; nothing downstream observed
+
+A retained `RelayiumAppStore` archive of `1.2.5 (12)` was created from the
+released source graph under project team `7PVYUG4YQS`, and inspected locally
+before it was sent: bundle id `com.relayium.mac`, universal `x86_64 arm64`, both
+privacy manifests present, no Sparkle. `xcodebuild` export and upload returned
+**Upload succeeded** and package processing at **2026-08-16 11:22 Asia/Dubai**.
+A third-party binary dSYM warning was accepted and did not block the upload.
+
+A fresh Xcode Organizer readback at **12:55** the same day shows `1.2.5 (12)`
+with a green check, status **Uploaded to Apple**, Uploaded Today at 11:22, Build
+Number 12.
+
+The following are **not observed** for build `12` and must not be assumed or
+reported as done:
+
+- processing completion;
+- TestFlight readiness, or installability by any tester;
+- assignment to **Relayium Internal**, **Relayium External Beta**, or any group;
+- an export-compliance answer;
+- any Beta App Review or App Review submission;
+- any public Mac App Store release.
+
+An `altool` status readback would settle several of these, but it requires
+separate JWT or app-specific credentials that this run did not use. Until such a
+readback is performed and recorded here, the state above is the whole of what is
+known. The separately public, notarized GitHub direct release `1.2.5` is a
+different distribution channel and says nothing about this build's Apple-side
+state.
+
+### Build `1.2.0 (7)` — earlier candidate, retained as history
 
 **Build `1.2.0 (7)` — processed, compliance-answered, and installed
 internally.** Xcode successfully uploaded build `7` to App Store Connect at

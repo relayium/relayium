@@ -49,11 +49,23 @@ build as GitHub Release
 a universal, Developer ID-signed, Apple-notarized and stapled `Relayium.dmg`
 with its SHA-256 alongside. Distribution is that direct download and Sparkle
 updates from it: there is no Mac App Store listing today. The App Store build of
-the same source has been taken further than that sentence suggests — an
-exact-SHA, universal, sandboxed, App Store-signed 1.2.4 (11) package was built,
-verified locally, and uploaded to App Store Connect on 2026-08-15 for internal
-TestFlight. The matching 1.2.5 (12) App Store package has not been archived or
-uploaded, so no TestFlight build corresponds to this release. Nothing has been
+the same source has been taken further than that sentence suggests. A retained
+`RelayiumAppStore` archive of 1.2.5 (12) was created from this release's exact
+source graph under team `7PVYUG4YQS`, and inspected locally before it was sent:
+bundle id `com.relayium.mac`, universal `x86_64 arm64`, both privacy manifests
+present, no Sparkle. `xcodebuild` export and upload returned *Upload succeeded*
+and package processing at 2026-08-16 11:22 Asia/Dubai; a third-party binary
+dSYM warning was accepted and did not block the upload. Its predecessor
+1.2.4 (11) was uploaded the same way on 2026-08-15.
+
+**Upload acceptance is not TestFlight availability, and only the first is
+observed.** A fresh Xcode Organizer readback at 12:55 the same day shows
+1.2.5 (12) with a green check, status *Uploaded to Apple*, uploaded today at
+11:22, build number 12. That is the whole of it: an `altool` status readback
+needs separate JWT or app-specific credentials that this run did not use, so
+Apple finishing processing, the build becoming TestFlight-ready, any group
+assignment, and its export-compliance answer are all **unobserved** and must
+not be assumed. Nothing has been
 submitted for App Review, and
 there is still no public Mac App Store listing. See
 "Delivery status" in the root [`README.md`](../README.md) for what this release
