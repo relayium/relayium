@@ -54,6 +54,17 @@ struct DeviceInboxSurface: View {
     let onAccount: (AuthMode) -> Void
 
     @EnvironmentObject private var inbox: InboxController
+    /// The SEND half of the same capability.
+    ///
+    /// This surface shipped with only the receive half, and the consequence was
+    /// not cosmetic: the only thing in the product that could start a device
+    /// delivery was the Web app and the iOS Send tab, so a Mac could receive
+    /// from a browser and could not send to another Mac at all. It is rendered
+    /// here rather than under Send a link because the two are different products
+    /// — a link anybody holding it can open, versus files sealed to one device
+    /// with no link at all — and on macOS that choice is made by which
+    /// destination you are on. See `DeviceSendSection`.
+    @EnvironmentObject private var deliveries: InboxSendModel
     @EnvironmentObject private var loginItem: LoginItemPreference
     /// Read for exactly one thing: whether there is an account to sign in to, and
     /// what is standing in the way if there is not. The controller's own
@@ -80,6 +91,13 @@ struct DeviceInboxSurface: View {
                 folderSection
                 policySection
                 resultsSection
+                // Sending, in the one branch where the account is usable for it.
+                // Deliberately NOT in `.statusOnly`: that branch exists because
+                // the receiver refused this account's identifier, and the send
+                // half stages a durable plan under the same identifier — so it
+                // would offer a Send whose only outcome is a staging failure.
+                DeviceSendSection(deliveries: deliveries,
+                                  onAccount: { onAccount(.signIn) })
                 residencySection
             case .statusOnly:
                 statusSection(offersControls: false)
@@ -500,6 +518,27 @@ struct DeviceInboxSurface: View {
 
     // MARK: - what actually arrived
 
+    /// **What arrived, named — and one way to go and look at it.**
+    ///
+    /// ## Why the rows changed
+    ///
+    /// Each row rendered a count: "1 file saved · 12 KB · 9 Aug 2026 at 14:05".
+    /// Three deliveries therefore produced three rows a reader could not tell
+    /// apart, and the only way to learn what any of them was was to leave the
+    /// app. The reasoning behind the count was a real one — a file name is the
+    /// user's own content — but it is the rule for a NOTIFICATION, which macOS
+    /// draws on a locked screen unasked. This is a list somebody opened on their
+    /// own Mac to find out what they received. `InboxReceiptPresentation` now
+    /// names the files here and still names nothing in the banner.
+    ///
+    /// ## Why there is one Finder button and not one per row
+    ///
+    /// Every row also carried its own *Show in Finder*, so the section was a
+    /// column of identical controls next to a column of identical text. They all
+    /// open the same place — deliveries land in the one folder the user granted —
+    /// so the action belongs to the section, and it is rendered in the header
+    /// where a section-wide action is looked for. `InboxSurfaceGuardTests` counts
+    /// it, because "one" is the requirement rather than "at least one".
     private var resultsSection: some View {
         Section {
             if inbox.results.isEmpty {
@@ -508,30 +547,32 @@ struct DeviceInboxSurface: View {
                     .accessibilityIdentifier("inbox-results-empty")
             } else {
                 ForEach(inbox.results) { receipt in
-                    HStack {
-                        // The identifiers go on the two LEAVES, never on the row
-                        // that contains them: an identifier on the `HStack`
-                        // propagates down and renames the button inside it, which
-                        // is how the first version of this list left the Reveal
-                        // control unreachable to the acceptance suite while
-                        // looking correct on screen.
-                        Text(InboxReceiptPresentation.summary(receipt))
-                            .fixedSize(horizontal: false, vertical: true)
-                            .accessibilityIdentifier("inbox-result")
-                        Spacer()
-                        // Explicit, per row, and the only path in the product
-                        // that puts a received path in front of the OS. The
-                        // controller refuses anything not in this list.
-                        Button(L10n.t(.inboxReveal)) { inbox.reveal(receipt) }
-                            .buttonStyle(.bordered)
-                            .accessibilityLabel(
-                                InboxReceiptPresentation.revealActionLabel(receipt))
-                            .accessibilityIdentifier("inbox-reveal")
-                    }
+                    // A leaf, and the whole row. There is no control inside it
+                    // any more, so there is nothing left for an identifier on a
+                    // container to rename — the propagation defect this pane has
+                    // lost two controls to is gone by construction here rather
+                    // than avoided by arrangement.
+                    Text(InboxReceiptPresentation.summary(receipt))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("inbox-result")
                 }
             }
         } header: {
-            Text(L10n.t(.inboxResultsHeading))
+            HStack {
+                Text(L10n.t(.inboxResultsHeading))
+                Spacer()
+                // Rendered only where it can work. Without a folder grant there
+                // is nowhere to open, and `revealReceiveFolder` correctly does
+                // nothing — which is the button whose action is a `break` that
+                // this app has already shipped once and does not render again.
+                if inbox.folder.isChosen {
+                    Button(L10n.t(.inboxRevealFolder)) { inbox.revealReceiveFolder() }
+                        .buttonStyle(.bordered)
+                        .accessibilityLabel(
+                            InboxReceiptPresentation.revealFolderLabel(inbox.folder))
+                        .accessibilityIdentifier("inbox-reveal-folder")
+                }
+            }
         }
     }
 

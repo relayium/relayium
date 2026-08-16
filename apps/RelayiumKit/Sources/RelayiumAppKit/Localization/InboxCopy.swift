@@ -169,28 +169,91 @@ public enum InboxPolicyPresentation {
     }
 }
 
-/// A completed delivery, described without naming anything in it.
+/// A completed delivery, described by what actually arrived.
+///
+/// ## What changed, and why the old rule was the wrong rule
+///
+/// This used to render a COUNT — "1 file saved · 12 KB · 9 Aug 2026 at 14:05" —
+/// on the reasoning that a file name is the user's own content and the window
+/// might be on a shared screen. That reasoning is correct about a NOTIFICATION,
+/// which macOS draws on a locked screen without being asked, and
+/// `inbox.savedFiles` still serves exactly that and still names nothing.
+///
+/// It was the wrong rule for this list. Recently received is a list a person
+/// opened, on their own Mac, to answer one question: *what arrived?* Answered
+/// with a count it cannot distinguish two deliveries from each other, so three
+/// rows reading "1 file saved" beside three identical buttons was a list with no
+/// information in it — the user had to open Finder to learn what the list was
+/// for. The name is theirs, they are looking at it deliberately, and withholding
+/// it protected nothing that the folder one click away did not already reveal.
 public enum InboxReceiptPresentation {
-    /// “3 files · 1.2 MB · 9 Aug 2026 at 14:05”.
+    /// How many names a row prints before it stops.
     ///
-    /// A count, a size and a time. Not a file name: this row sits in a window a
-    /// user may well have open while screen-sharing, and the name is one click
-    /// away behind Show in Finder, which is an explicit act.
+    /// Three, because the row is one line in a grouped `Form` beside a size and
+    /// a date, and a delivery of forty files would otherwise set a paragraph.
+    /// The remainder is counted rather than dropped: a row that silently
+    /// truncated would be a list that under-reports what landed on the disk.
+    static let namedFileLimit = 3
+
+    /// “brief.txt · notes.md · 1.2 MB · 9 Aug 2026 at 14:05”.
+    ///
+    /// The names, then the size, then the time — what arrived, how much of it,
+    /// and when, in the order a person asks.
     public static func summary(_ receipt: InboxReceipt,
                                language: AppLanguage? = nil) -> String {
-        L10n.detail([
-            L10n.plural(.inboxSavedFiles, receipt.fileCount, language: language),
+        L10n.detail(names(receipt, language: language) + [
             L10n.bytes(receipt.byteCount, language: language),
             L10n.date(receipt.savedAt, dateStyle: .medium, timeStyle: .short,
                       language: language),
         ], language: language)
     }
 
-    /// The accessible name of one result's Show in Finder control.
+    /// The file names this row prints, with the overflow counted.
     ///
-    /// Every row's visible button reads "Show in Finder", which is right to look
-    /// at and useless to hear — the same finding `AccountPresentation` fixed for
-    /// device rows. The spoken name carries the row's own summary.
+    /// Each name is a `L10n.token`, which is not decoration: a file name dropped
+    /// into an Arabic row is laid out against the surrounding right-to-left text
+    /// by the bidi algorithm, which can move a leading `../` or an extension to
+    /// the far end of the name. The isolate makes the run resolve on its own.
+    ///
+    /// A receipt with no committed paths cannot exist — `InboxReceipt.make`
+    /// fails closed on an empty committed list — but the count is still the
+    /// honest fallback rather than an empty row if one ever did.
+    static func names(_ receipt: InboxReceipt,
+                      language: AppLanguage? = nil) -> [String] {
+        let all = receipt.urls.map(\.lastPathComponent)
+        guard !all.isEmpty else {
+            return [L10n.plural(.inboxSavedFiles, receipt.fileCount, language: language)]
+        }
+        let shown = all.prefix(namedFileLimit).map { L10n.token($0, language: language) }
+        guard all.count > namedFileLimit else { return shown }
+        return shown + [L10n.t(.inboxMoreFiles,
+                               [L10n.number(all.count - namedFileLimit, language: language)],
+                               language: language)]
+    }
+
+    /// The accessible name of the section's ONE Show in Finder control.
+    ///
+    /// Visible, every Finder button in this app reads "Show in Finder", which is
+    /// right to look at and useless to hear — the finding `AccountPresentation`
+    /// fixed for device rows. This one is spoken with the folder it opens,
+    /// because that is the fact that distinguishes it from every other Finder
+    /// action in the window.
+    public static func revealFolderLabel(_ folder: InboxFolderSummary,
+                                         language: AppLanguage? = nil) -> String {
+        L10n.t(.inboxRevealFolderAction,
+               [InboxFolderPresentation.description(folder, language: language)],
+               language: language)
+    }
+
+    /// The accessible name of the MENU BAR's single Reveal item.
+    ///
+    /// **The one place a per-receipt Finder action survives, and it is not an
+    /// oversight.** The Recently received list dropped its per-row buttons
+    /// because every one of them opened the same folder beside rows that named
+    /// nothing. The menu bar is the opposite situation: it offers exactly one
+    /// item, for the newest delivery only (`InboxController.latestResult`), and
+    /// it is read out of a menu with no surrounding list to give it context. So
+    /// it keeps naming the delivery it acts on.
     public static func revealActionLabel(_ receipt: InboxReceipt,
                                          language: AppLanguage? = nil) -> String {
         L10n.detail([L10n.t(.inboxReveal, language: language),

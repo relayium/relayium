@@ -647,6 +647,18 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case pairingJoinLink = "pairing.joinLink"
     case pairingLinkCopied = "pairing.linkCopied"
     case pairingCodeExpiryNote = "pairing.codeExpiryNote"
+    /// %@ — the live countdown, `4:32`.
+    ///
+    /// It replaces a static clock time as the code's own deadline line. The
+    /// static one was true and unusable for what a person does with a pairing
+    /// code — read it out to somebody on the phone — because it never said
+    /// whether the digits still being dictated were worth anything.
+    case pairingCodeExpiresIn = "pairing.codeExpiresIn"
+    /// Said the moment the deadline passes, in place of the countdown.
+    case pairingCodeExpired = "pairing.codeExpired"
+    /// The one action an expired code offers, and it mints rather than merely
+    /// returning to the screen that mints.
+    case pairingNewCode = "pairing.newCode"
     case directScanOnPhone = "direct.scanOnPhone"
     case directWaitingForDevice = "direct.waitingForDevice"
     case directChooseFilesFirst = "direct.chooseFilesFirst"
@@ -1614,6 +1626,29 @@ public enum L10nKey: String, CaseIterable, Sendable {
 
     case inboxResultsHeading = "inbox.resultsHeading"
     case inboxResultsEmpty = "inbox.resultsEmpty"
+    /// The Recently received section's ONE Finder action, on the section itself.
+    ///
+    /// Every row used to carry its own, which put a column of identical **Show
+    /// in Finder** buttons beside a column of identical "1 file saved" summaries
+    /// — a list where nothing distinguished a row and every control did the same
+    /// visible thing. The rows now name their files and carry no button at all,
+    /// and the one action opens the folder they ALL landed in, which is what a
+    /// person means by "show me what arrived".
+    case inboxRevealFolder = "inbox.revealFolder"
+    /// %@ — the spoken name of that action, naming the folder it opens.
+    case inboxRevealFolderAction = "inbox.revealFolderAction"
+    /// %@ — how many files a receipt's row did NOT have room to name.
+    ///
+    /// **Deliberately not a `PluralKey`.** "+4 more" is a tail marker, not a
+    /// sentence with a noun in it, so no language in the maintained set inflects
+    /// it — and a plural key must define every category in every one of the nine
+    /// catalogs, which would mean editing seven frozen locales to add a string
+    /// whose grammar does not vary.
+    ///
+    /// It is also deliberately a different key from `inbox.savedFiles`: that one
+    /// is the NOTIFICATION's count, it must never grow a file name, and reusing
+    /// it here is exactly how the two would drift into each other.
+    case inboxMoreFiles = "inbox.moreFiles"
 
     // Refusals of one user action, distinct from what the inbox IS.
     case inboxErrorNotWritable = "inbox.errorNotWritable"

@@ -69,6 +69,14 @@ struct DestinationScaffold<Content: View>: View {
     let scrolls: Bool
     @ViewBuilder let content: () -> Content
 
+    /// How tall the header actually came out, for the non-scrolling arm only.
+    ///
+    /// Measured rather than assumed: the header is one or two lines depending on
+    /// the destination, the rendered language and the user's text size, and a
+    /// constant that was right in English would clip the bottom of the page in a
+    /// longer locale by exactly the difference. See the arm that reads it.
+    @State private var headerHeight: CGFloat = 0
+
     init(title: String,
          surface: MacSurface,
          purpose: String? = nil,
@@ -143,9 +151,44 @@ struct DestinationScaffold<Content: View>: View {
                 // intrinsic height: its first sections and even the sidebar can
                 // disappear. A safe-area inset reserves header space inside the
                 // same exact frame without changing the child's proposed size.
+                //
+                // **The frame is exact AND the header's height is subtracted from
+                // it, and the second half is the fix for the owner's report.**
+                //
+                // `safeAreaInset` does not draw over the modified view: it
+                // reports a size that INCLUDES the inset content. So a Form
+                // framed at the full `proxy.size.height` with a header inset on
+                // top produced a composite `proxy.height + header` tall, which
+                // the `GeometryReader` pinned to the top — leaving the bottom of
+                // the Form's own viewport hanging that many points BELOW the
+                // window. The Form scrolled perfectly well; its last section
+                // could be scrolled to and never finished, because the final
+                // lines were drawn underneath the window's edge. That is the
+                // complete Device Inbox Help being unreadable under the longest
+                // content, and it is invisible on any short page.
+                //
+                // Simply moving the frame outside the inset does NOT fix it: the
+                // Form then stops being given an exact height, takes its
+                // intrinsic one (measured at 2290pt in a 612pt window) and does
+                // not scroll at all — the original defect, worse. The height has
+                // to stay exact, so the header is MEASURED and subtracted:
+                // `(proxy.height - header)` for the Form, plus `header` for the
+                // inset, is exactly the space available.
+                //
+                // A preference rather than a guessed constant, because the header
+                // is one or two lines depending on the destination, the language
+                // and the user's text size — and a constant that was right in
+                // English would clip the bottom of a longer locale by the
+                // difference. First layout pass reports zero, which is safe: the
+                // page is momentarily the height it had before this fix and is
+                // corrected on the pass the measurement triggers.
+                //
+                // `DeviceInboxUITests.testTheFullHelpSectionIsReadableUnderTheLongestContent`
+                // is the runtime guard for all of it.
                 GeometryReader { proxy in
                     measuredContent
-                        .frame(width: proxy.size.width, height: proxy.size.height,
+                        .frame(width: proxy.size.width,
+                               height: max(proxy.size.height - headerHeight, 0),
                                alignment: .topLeading)
                         .safeAreaInset(edge: .top, spacing: 0) {
                             detailHeader
@@ -160,6 +203,24 @@ struct DestinationScaffold<Content: View>: View {
                                        alignment: .leading)
                                 .frame(maxWidth: .infinity, alignment: .center)
                                 .background(Color(nsColor: .windowBackgroundColor))
+                                // Reported straight out of the inset rather than
+                                // through a `PreferenceKey`, and that is not a
+                                // style choice: a preference set inside
+                                // `safeAreaInset`'s content does NOT reach an
+                                // `onPreferenceChange` attached outside it —
+                                // measured, with the reader firing never and the
+                                // scroll view staying exactly one header too
+                                // tall. `onAppear`/`onChange` run after layout,
+                                // so this writes state between passes rather
+                                // than during one.
+                                .background(
+                                    GeometryReader { header in
+                                        Color.clear
+                                            .onAppear { headerHeight = header.size.height }
+                                            .onChange(of: header.size.height) { measured in
+                                                headerHeight = measured
+                                            }
+                                    })
                         }
                 }
             }

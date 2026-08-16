@@ -52,20 +52,41 @@ import RelayiumKit
 /// note, a failed batch keeps the file identities that failed, and leaving a
 /// conversation with local content asks first.
 struct TransferSessionPane: View {
+    /// The module this pane is drawing — its models, its `link/1` and its
+    /// ownership, and no access at all to the other module's.
+    ///
+    /// **That is what makes this pane's exit scoped.** Every Cancel, Done and
+    /// Leave below reaches `module.files` / `module.text` / `module.link`, so
+    /// the one thing this screen can end is the connection this screen is
+    /// showing. When both destinations drew one shared set of models, "Cancel"
+    /// on either of them ended whichever session existed.
+    @ObservedObject var module: TransferModule
+
+    /// Mint a REPLACEMENT for a code whose deadline has passed, or nil where
+    /// there is no minting to offer.
+    ///
+    /// Supplied by `CrossNetworkTransferDestination` and by nothing else, which
+    /// is the honest shape rather than a defaulted closure: minting reserves
+    /// relay capacity billed to an account, so the decision belongs to the
+    /// surface that holds the account gate. LAN Transfer draws this pane too and
+    /// passes nothing, because there is no such thing as a same-network code to
+    /// regenerate.
+    var regenerate: (() -> Void)?
+
+    private var fileModel: RealtimeSessionModel { module.files }
+    private var textModel: RealtimeTextSessionModel { module.text }
+    private var presence: TransferPresence { module.presence }
+    private var link: LinkWorkspaceModel { module.link }
+
     /// The route of the destination drawing this pane — `.nearby` for LAN
     /// Transfer, `.pairingCode` for Cross-network Transfer.
     ///
-    /// Passed in rather than derived from `presence.owner`, because it is what
-    /// the release below must be checked AGAINST. Reading the owner and then
-    /// releasing it would let this pane give up a session belonging to the other
-    /// destination — the exact stale-view bug `TransferPresence.release` refuses
-    /// per destination in order to prevent.
-    let route: AppDestination
-    @ObservedObject var fileModel: RealtimeSessionModel
-    @ObservedObject var textModel: RealtimeTextSessionModel
-
-    @EnvironmentObject private var presence: TransferPresence
-    @EnvironmentObject private var link: LinkWorkspaceModel
+    /// Taken from the module rather than derived from `presence.owner`, because
+    /// it is what the release below must be checked AGAINST. Reading the owner
+    /// and then releasing it would let a stale view give up a session that is
+    /// not the one it is drawing — the exact bug `TransferPresence.release`
+    /// refuses per destination in order to prevent.
+    private var route: AppDestination { module.route }
 
     @State private var confirmingLocalTextLeave = false
     @State private var sendError: String?
@@ -296,6 +317,30 @@ struct TransferSessionPane: View {
     ///
     /// `parseAppDeepLink` still READS a mode, because links already passed on
     /// have to keep working.
+    ///
+    /// ## The deadline is a countdown, and at zero the code stops being offered
+    ///
+    /// It used to be one static line — "Expires 14:05" — which is true and is not
+    /// the fact a person needs while they are reading six digits down a phone.
+    /// There was nothing on screen to distinguish a code that still worked from
+    /// one the server had already begun refusing, and the failure is silent on
+    /// both ends: this Mac goes on drawing the digits, the other device is told
+    /// the code is invalid, and the visible symptom is somebody retyping a
+    /// correct code twice.
+    ///
+    /// `TimelineView(.periodic)` rather than a `Timer` and a `@State`: the view
+    /// is a function of the current second, so there is no stored clock to fall
+    /// out of step with the deadline, nothing to invalidate when this pane is
+    /// torn down, and — the part that matters — the expiry branch is chosen by
+    /// the same `PairingCodeExpiry` answer that hides the handoff, so the
+    /// countdown and the controls cannot disagree about whether the code is
+    /// alive. `PairingCodeExpiryTests` pins that answer on both sides of the
+    /// second it changes.
+    ///
+    /// Everything below the digits is inside the timeline, and the digits are
+    /// deliberately outside it: an expired code stays legible, because the person
+    /// looking at it is trying to work out whether the number they just read out
+    /// was the right one.
     private func codeHandoff(title: String,
                              code: String,
                              expiresAt: Int64,
@@ -303,18 +348,70 @@ struct TransferSessionPane: View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title).font(.subheadline.weight(.semibold))
             SecurityCodeText(code: code, style: .pairing)
-            Text(L10n.t(.commonExpires, [
-                L10n.date(Date(timeIntervalSince1970: TimeInterval(expiresAt)),
-                          dateStyle: .none, timeStyle: .short),
-            ]))
-                .font(.caption).foregroundStyle(.secondary)
-            Text(L10n.t(.pairingCodeExpiryNote))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("pairing-code-expiry-note")
-            if let joinURL = transferPairingJoinURL(code: code) {
-                PairingCodeHandoffView(url: joinURL, cancel: cancel)
+            TimelineView(.periodic(from: .now, by: 1)) { tick in
+                let deadline = PairingCodeExpiry.presentation(expiresAt: expiresAt,
+                                                              now: tick.date)
+                VStack(alignment: .leading, spacing: 12) {
+                    if let countdown = deadline.countdown {
+                        Text(L10n.t(.pairingCodeExpiresIn, [countdown]))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            // The digits do not reflow as they tick, which is
+                            // the one thing a proportional face gets wrong here.
+                            .monospacedDigit()
+                            // LAST, so the identifier lands on the text element
+                            // itself. Placed before `.monospacedDigit()` it went
+                            // onto the wrapper that modifier introduces, and the
+                            // suite matched an element with an empty label —
+                            // present, named, and carrying nothing to read.
+                            .accessibilityIdentifier("pairing-code-countdown")
+                    }
+                    Text(L10n.t(.pairingCodeExpiryNote))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("pairing-code-expiry-note")
+                    if deadline.isUsable {
+                        if let joinURL = transferPairingJoinURL(code: code) {
+                            PairingCodeHandoffView(url: joinURL, cancel: cancel)
+                        }
+                    } else {
+                        expiredCode(cancel: cancel)
+                    }
+                }
+            }
+        }
+    }
+
+    /// **What an expired code offers instead of a link nobody can open.**
+    ///
+    /// The join URL, the QR and the "waiting for the other device" progress all
+    /// go, because every one of them is an invitation to use a code the server
+    /// refuses — the QR especially, since scanning it produces an error on a
+    /// phone with no explanation anywhere near this screen.
+    ///
+    /// What replaces them is one press that mints a fresh code, not a route back
+    /// to the screen that mints. Sending the user to the connect pane to press
+    /// Create would be two steps to recover from a deadline the product chose.
+    @ViewBuilder
+    private func expiredCode(cancel: @escaping () -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            InlineMessage(.warning, L10n.t(.pairingCodeExpired))
+                .accessibilityIdentifier("pairing-code-expired")
+            HStack(spacing: 8) {
+                // Offered only where it can work. Joining is account-free but
+                // MINTING is not — the code's owner is billed for the relay
+                // capacity it reserves — so a build with no way to mint renders
+                // Cancel alone rather than a button whose only outcome is a
+                // trip to the account screen.
+                if let regenerate {
+                    Button(L10n.t(.pairingNewCode)) { regenerate() }
+                        .buttonStyle(.borderedProminent)
+                        .accessibilityIdentifier("pairing-code-regenerate")
+                }
+                Button(L10n.t(.commonCancel), action: cancel)
+                    .buttonStyle(.bordered)
+                    .accessibilityIdentifier("pairing-code-expired-cancel")
             }
         }
     }

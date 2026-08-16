@@ -59,17 +59,14 @@ import RelayiumAppKit
 /// somebody already has one.
 struct SidebarView: View {
     @EnvironmentObject private var navigation: AppNavigationModel
-    /// Which destination is presenting the live session — the same object the
-    /// two direct destinations ask before deciding which of them draws it, so
-    /// the sidebar marks the row the session is actually on rather than a row
-    /// that merely might be.
-    @EnvironmentObject private var presence: TransferPresence
-    /// The two app-scoped session models, read for one fact each: whether a
-    /// transfer is actually running. `TransferPresence` answers which row is
-    /// drawing the session, and deliberately does not cache this — see
-    /// `announcesRunningTransfer`.
-    @EnvironmentObject private var fileModel: RealtimeSessionModel
-    @EnvironmentObject private var textModel: RealtimeTextSessionModel
+    /// Both transfer modules, each asked about its OWN row.
+    ///
+    /// It used to be one `TransferPresence` plus one pair of session models,
+    /// which could only ever mark one row: with the modules independent, a
+    /// same-network transfer and a pairing transfer can be running at the same
+    /// time, and the sidebar has to be able to say so about both rows rather
+    /// than picking whichever the shared presence happened to own.
+    @EnvironmentObject private var modules: TransferModules
 
     /// The marker is a symbol first. `nav.a11yLiveSession` gives it the words,
     /// and the tint is the third carrier rather than the only one — a row that
@@ -243,8 +240,18 @@ struct SidebarView: View {
     /// two transfer destinations separated, the marked row is the one the
     /// session is actually on, so following it lands the user on the transfer
     /// rather than on a screen that has to explain where it went.
+    ///
+    /// **Both facts come from the row's OWN module.** A row with no module —
+    /// Send a link, Device Inbox, Account — is never marked, which is a `nil`
+    /// rather than a `false` written here so a new transfer surface has to
+    /// supply a module rather than silently inherit "not running".
+    ///
+    /// Two rows can be marked at once now, and that is the honest answer: the
+    /// modules are independent, so a same-network transfer and a pairing
+    /// transfer really can both be running.
     private func hasLiveSession(_ surface: MacSurface) -> Bool {
-        let busy = fileModel.isBusy || textModel.isBusy
-        return presence.announcesRunningTransfer(surface.route, sessionIsBusy: busy)
+        guard let module = modules.module(for: surface.route) else { return false }
+        return module.presence.announcesRunningTransfer(surface.route,
+                                                        sessionIsBusy: module.isBusy)
     }
 }

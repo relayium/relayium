@@ -49,21 +49,26 @@ import RelayiumKit
 /// `link/1` is promoted to `TransferLinkPane`, where the distinction never
 /// existed.
 struct CrossNetworkConnectPane: View {
-    @ObservedObject var fileModel: RealtimeSessionModel
-    @ObservedObject var textModel: RealtimeTextSessionModel
-    /// The unified `link/1`. A pairing room is watched for a peer that speaks it
-    /// before either legacy model starts; see `watch(code:…)`.
-    @ObservedObject var link: LinkWorkspaceModel
+    /// This screen's module, and the only one it can reach.
+    @ObservedObject var module: TransferModule
     let gate: AccountGate
     /// Re-reads the parent session at activation time; `gate` belongs to the
     /// render that drew the button and can already be stale.
     let accessNow: () -> AccountAccess?
-    /// `TransferSurfacePresentation.acceptsNewSession` inverted — true while any
-    /// route, including LAN Transfer, owns or retains a session.
+    /// `TransferModule.acceptsNewSession` inverted — true while THIS module owns
+    /// or retains a session, and never because LAN Transfer does. A user with a
+    /// same-network connection open can mint a code here; that was the whole
+    /// point of splitting the modules.
     let sessionLocked: Bool
 
+    private var fileModel: RealtimeSessionModel { module.files }
+    private var textModel: RealtimeTextSessionModel { module.text }
+    /// The unified `link/1`. A pairing room is watched for a peer that speaks it
+    /// before either legacy model starts; see `watch(code:…)`.
+    private var link: LinkWorkspaceModel { module.link }
+    private var presence: TransferPresence { module.presence }
+
     @EnvironmentObject private var navigation: AppNavigationModel
-    @EnvironmentObject private var presence: TransferPresence
 
     @State private var actionError: String?
 
@@ -72,7 +77,9 @@ struct CrossNetworkConnectPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             // The same statement the LAN screen makes, and for the same reason:
-            // a disabled control has to say why it is disabled.
+            // a disabled control has to say why it is disabled. It describes
+            // this module's own retained session — the other destination cannot
+            // put this screen into that state any more.
             if sessionLocked {
                 InlineMessage(.info, L10n.t(.transferBusyElsewhere))
                     .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
@@ -240,58 +247,28 @@ struct CrossNetworkConnectPane: View {
         guard presence.beginSession(route, mode: .files) else { return }
         // A joiner ANSWERS on the legacy wire, so `.responder` is what the
         // fallback must use. Watched first, exactly as a minted code is.
-        watch(code: code, legacyRole: .responder) {
-            await fileModel.join(code: code)
-        }
+        PairingCodeStart(module: module).joinAndWatch(code: code)
     }
 
     /// Mint the code, then WATCH the room it names for a peer that speaks
     /// `link/1` — and let the legacy path take the room if none does.
     ///
-    /// Minting stays where it was, on the model whose state the code, the QR and
-    /// the expiry are rendered from: `LinkWorkspaceModel` never mints, and while
-    /// it is only watching, `hasSession` is false so that surface stays on
-    /// screen unchanged.
+    /// Minting stays on the model whose state the code, the QR and the expiry
+    /// are rendered from: `LinkWorkspaceModel` never mints, and while it is only
+    /// watching, `hasSession` is false so that surface stays on screen unchanged.
     ///
-    /// The creator is the offerer on the legacy wire, so `.initiator` is what
-    /// the fallback must use. A LINK computes its own role from the two room
-    /// ids and ignores this one.
-    private func mintAndWatch(token: String) async {
-        await fileModel.mintCode(token: token)
-        guard case let .showingCode(code, _) = fileModel.state else { return }
-        watch(code: code, legacyRole: .initiator) {
-            await fileModel.join(code: code, role: .initiator)
-        }
-    }
-
-    /// Watch a code, or fall straight back when this build cannot.
+    /// The three steps themselves live in `PairingCodeStart`, because the
+    /// expired-code surface mints a REPLACEMENT and must not grow a second copy
+    /// of them — the copy is how the two would come to disagree about the legacy
+    /// role or about whether the room is watched at all.
     ///
-    /// **Nothing is armed and nothing is staged, on either branch.** That is now
-    /// a property of the surface rather than a choice made here: there is no
-    /// picker on this pane, so `watchPairingCode` is handed an empty batch and
-    /// the legacy start has nothing to queue. What the connection carries is
-    /// chosen inside it — `TransferLinkPane` for a `link/1` peer, and
-    /// `TransferSessionPane`'s own send for a legacy file lane.
-    ///
-    /// `legacyStart` is the path that shipped before the unified link, and it
-    /// runs unchanged when the link model refuses the room — a client with no
-    /// pairing socket factory, or one already holding a session. That is what
-    /// keeps "pairing code works" true regardless of which half answers.
-    ///
-    /// It is the FILE lane, and it has to be: this branch is reached before any
-    /// peer exists, so there is no announcement for `LegacyLane.mode` to read
-    /// yet. The file lane is the one whose `showingCode` and expiry this surface
-    /// renders, and the one a real peer's announcement can still move off —
+    /// It starts in the FILE lane, and it has to: this runs before any peer
+    /// exists, so there is no announcement for `LegacyLane.mode` to read yet. The
+    /// file lane is the one whose `showingCode` and expiry this surface renders,
+    /// and the one a real peer's announcement can still move off —
     /// `adoptLegacyRoom` switches the surface to text when the room resolves that
     /// way. Nothing is foreclosed by starting here.
-    private func watch(code: String,
-                       legacyRole: Role,
-                       legacyStart: @escaping () async -> Void) {
-        let watched = link.watchPairingCode(code,
-                                            legacyRole: legacyRole,
-                                            files: [],
-                                            sources: [])
-        guard !watched else { return }
-        Task { await legacyStart() }
+    private func mintAndWatch(token: String) async {
+        await PairingCodeStart(module: module).createAndWatch(token: token)
     }
 }

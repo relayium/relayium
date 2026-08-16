@@ -645,9 +645,33 @@ final class LinkRoomRouter: @unchecked Sendable {
         // may be: it takes no callback and calls nothing out.
         guard admission.admitEstablishment(peerId: peerId, role: role) else {
             lock.unlock()
-            // The room went to somebody else between the answer and the claim,
-            // which is exactly when this peer is owed a truthful refusal.
-            answerBusy(to: peerId, epoch: epoch)
+            // **Whose claim took the room decides what this peer is owed.**
+            //
+            // The room going to SOMEBODY ELSE is a refusal, and that is what
+            // this branch was written for. The room being already bound to THIS
+            // peer is not: it means both halves of one pairing raced to claim
+            // the same link — the owner's caps listener calling
+            // `beginLinkAttempt` on the main actor, and this peer's request
+            // arriving on the signalling queue — and the loser answered `busy`
+            // to the peer it was at that moment offering to.
+            //
+            // Measured, in a built-App pairing run: the app claimed as
+            // initiator, answered the counterpart's concurrent request `busy`,
+            // and then sent its offer into a peer that had already settled the
+            // link as `refused` and stopped listening. Both ends then waited —
+            // the app drawing an establishing session, the counterpart idle —
+            // and nothing timed out for two minutes. It reproduces on whichever
+            // role assignment makes this side the offerer, so it is a pairing
+            // that fails about half the time on a race neither user can see.
+            //
+            // A peer that is already ours is told `alreadyInFlight` instead,
+            // which is the same answer `LinkAdmission.route` gives when the
+            // phase is read cleanly — this closes the window between reading it
+            // and claiming it, rather than inventing a new rule.
+            guard admission.boundPeerId == peerId else {
+                answerBusy(to: peerId, epoch: epoch)
+                return .disposition(.consume)
+            }
             return .disposition(.consume)
         }
 

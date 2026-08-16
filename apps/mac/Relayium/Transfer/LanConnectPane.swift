@@ -39,21 +39,26 @@ import RelayiumKit
 /// opens one `link/1` and `TransferLinkPane` carries messages and as many file
 /// or folder batches as the user wants, on that one verified connection.
 struct LanConnectPane: View {
+    /// This screen's module, and the only one it can reach.
+    @ObservedObject var module: TransferModule
     @ObservedObject var discovery: LanDiscoveryModel
     @ObservedObject var receive: NearbyReceiveModel
-    @ObservedObject var fileModel: RealtimeSessionModel
-    @ObservedObject var textModel: RealtimeTextSessionModel
+    /// `TransferModule.acceptsNewSession` inverted, computed by the destination.
+    ///
+    /// **It is this module's answer and nobody else's.** It used to be true
+    /// while ANY route — including the Cross-network one — owned or retained a
+    /// session, so a user holding a pairing code found every control on this
+    /// screen dead. It is now true only while this module's own session is live
+    /// or retained, which is the second-start refusal it was always meant to be.
+    let sessionLocked: Bool
+
+    private var fileModel: RealtimeSessionModel { module.files }
+    private var textModel: RealtimeTextSessionModel { module.text }
     /// The unified `link/1`. Consulted per DEVICE: a peer that announced it gets
     /// one connection carrying everything, and one that did not gets the legacy
     /// lane its own announcement selects.
-    @ObservedObject var link: LinkWorkspaceModel
-    /// `TransferSurfacePresentation.acceptsNewSession` inverted, computed by the
-    /// destination. It is true while ANY route owns or retains a session —
-    /// including the Cross-network one — which is what stops a second session
-    /// being started from the screen the first one is not on.
-    let sessionLocked: Bool
-
-    @EnvironmentObject private var presence: TransferPresence
+    private var link: LinkWorkspaceModel { module.link }
+    private var presence: TransferPresence { module.presence }
 
     @State private var actionError: String?
 
@@ -73,11 +78,14 @@ struct LanConnectPane: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // Why every control below is inert. One session is arbitrated
-            // between the two transfer destinations, so the screen that does not
-            // own it disables everything — and a greyed control with no stated
-            // reason is the dead end this app's design rules forbid. The sidebar
-            // marks the row the session is actually on.
+            // Why every control below is inert. This module has one session, so
+            // its connect controls refuse while its own is live or retained —
+            // and a greyed control with no stated reason is the dead end this
+            // app's design rules forbid. The sentence is about a transfer that
+            // is open in Relayium and has to be finished or left, which is
+            // exactly what a retained session on this very screen is; it is no
+            // longer rendered because the OTHER destination is busy, because
+            // that is no longer a thing that can lock this one.
             if sessionLocked {
                 InlineMessage(.info, L10n.t(.transferBusyElsewhere))
                     .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)

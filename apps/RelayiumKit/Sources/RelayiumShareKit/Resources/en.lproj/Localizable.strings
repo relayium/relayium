@@ -168,6 +168,9 @@
 "pairing.joinLink" = "Join link";
 "pairing.linkCopied" = "Link copied";
 "pairing.codeExpiryNote" = "Only this pairing code expires. A transfer that has already started can continue.";
+"pairing.codeExpiresIn" = "Expires in %@";
+"pairing.codeExpired" = "This code has expired and can no longer be used.";
+"pairing.newCode" = "Create a new code";
 "direct.scanOnPhone" = "Or scan this on a phone.";
 "direct.waitingForDevice" = "Waiting for the other device…";
 "direct.chooseFilesFirst" = "Choose files or folders to send first.";
@@ -609,6 +612,9 @@
 "inbox.askDecline" = "Decline";
 "inbox.resultsHeading" = "Recently received";
 "inbox.resultsEmpty" = "Nothing has been received on this Mac yet.";
+"inbox.revealFolder" = "Show in Finder";
+"inbox.revealFolderAction" = "Show the receive folder %@ in Finder";
+"inbox.moreFiles" = "+%@ more";
 "inbox.errorNotWritable" = "That folder can't be written to, so it wasn't used. Choose one you can save into.";
 "inbox.errorBookmark" = "macOS wouldn't give Relayium lasting permission for that folder. Try another one.";
 "inbox.errorNoFolder" = "Choose a receive folder first — there is nowhere to save to yet.";

@@ -112,6 +112,84 @@ final class InboxSurfaceGuardTests: XCTestCase {
                            "\(name) starts a second session observer")
             XCTAssertFalse(text.contains("AppEnvironment.makeInboxController("),
                            "\(name) builds a second receiver")
+            // The send half is app-scoped for the same reasons and gets the same
+            // rule: a second sender would be a second durable-plan owner over one
+            // staging root, and a second session observation would leave one of
+            // them describing an account that has left.
+            XCTAssertFalse(text.contains("AppEnvironment.makeInboxSendModel("),
+                           "\(name) builds a second Device Inbox sender")
+        }
+    }
+
+    /// **The Device Inbox sends as well as receives, and the sender is the same
+    /// one iOS drives.**
+    ///
+    /// macOS shipped this capability with only its receiving half. Every gate was
+    /// green about a feature that was, in practice, one-directional: nothing in
+    /// the macOS product could START a device delivery, so a Mac could receive
+    /// from a browser and could not send to another Mac at all. These assertions
+    /// are what stop that asymmetry returning by omission — a receiver with no
+    /// sender looks complete from every angle except the user's.
+    func testTheDeviceInboxCanSendFromThisMacAndNotOnlyReceiveIntoIt() throws {
+        let app = try macSource("RelayiumApp.swift")
+        XCTAssertTrue(app.contains("AppEnvironment.makeInboxSendModel("),
+                      "macOS composes no Device Inbox sender, so it can only receive")
+        // App-scoped and observing the session before any view exists: a
+        // delivery outlives the screen that started it, and an account leaving
+        // has to cancel work no view is watching.
+        XCTAssertTrue(app.contains("@StateObject private var inboxSend: InboxSendModel"),
+                      "the sender is view-scoped, so a delivery dies with its screen")
+        XCTAssertTrue(app.contains("delivering.observe(account.$state)"),
+                      "a sign-out cannot cancel an account-owned delivery")
+        // **No draft store.** That store is the authority to delete another
+        // process's only copy of a file, and a macOS device send is chosen with
+        // this app's own picker — so no delivery here can have come from one.
+        XCTAssertTrue(app.contains("drafts: nil, root: UITestMode.pendingUploadRoot()"),
+                      "the macOS sender can retire a shared draft it never received")
+        XCTAssertFalse(try macSource("DeviceInbox/DeviceSendSection.swift")
+            .contains("sourceDraftId: selection"),
+                       "a macOS device send claims a draft it did not come from")
+        XCTAssertTrue(try macSource("DeviceInbox/DeviceSendSection.swift")
+            .contains("sourceDraftId: nil"),
+                      "a macOS device send must report the draft it came from: none")
+        // Rendered by the Device Inbox surface, in the one branch where the
+        // account is usable — `.statusOnly` exists because the identifier was
+        // refused, and staging a plan under it would fail.
+        let surface = try macSource("DeviceInbox/DeviceInboxSurface.swift")
+        XCTAssertEqual(occurrences(of: "DeviceSendSection(", in: surface), 1,
+                       "the send half is rendered zero or twice")
+        let surfaceBranch = try XCTUnwrap(
+            surface.components(separatedBy: "case .surface:").dropFirst().first)
+        let branch = try XCTUnwrap(surfaceBranch.components(separatedBy: "case .statusOnly:").first)
+        XCTAssertTrue(branch.contains("DeviceSendSection("),
+                      "the send half is rendered outside the usable-account branch")
+        // Every decision belongs to the model, so `swift test` can drive it.
+        // A view that re-derived any of these is a view no test reaches.
+        let send = try macSource("DeviceInbox/DeviceSendSection.swift")
+        for owned in ["deliveries.candidates", "deliveries.selectTarget(",
+                      "deliveries.refreshTargets(", "deliveries.send(", "deliveries.act(",
+                      "InboxSendActions.offered(for: item)",
+                      "InboxSendActions.warnsDeliveryMayStillArrive("] {
+            XCTAssertTrue(send.contains(owned),
+                          "the send pane re-derives what InboxSendModel owns: \(owned)")
+        }
+        // Sealed to a device the USER chose. There is no fallback target,
+        // because a delivery produces no link and has nobody to fall back to.
+        XCTAssertTrue(send.contains(
+            "!selection.files.isEmpty && deliveries.selectedTargetID != nil"),
+                      "Send can fire without a chosen device")
+        // The credential is read at the moment of use and stored nowhere: two
+        // reads, both inside the two functions that spend it.
+        XCTAssertEqual(occurrences(of: "session.bearerToken", in: send), 2,
+                       "the send pane names the credential outside its two spend sites")
+        XCTAssertFalse(send.contains("@State private var token"),
+                       "the send pane stores a credential")
+        // And it obeys the receive surface's own bans: no received identity, no
+        // launching, no unpacking.
+        for banned in ["receipt.urls", "url.path", "lastPathComponent", "receipt.taskID",
+                       "NSWorkspace.shared.open(", "Process(", "activateFileViewerSelecting"] {
+            XCTAssertFalse(send.contains(banned),
+                           "the Device Inbox send pane can reach \(banned)")
         }
     }
 
@@ -372,12 +450,59 @@ final class InboxSurfaceGuardTests: XCTestCase {
         let sites = all.filter { $0.text.contains("activateFileViewerSelecting") }.map(\.name)
         XCTAssertEqual(sites, ["ReceivedResultView.swift", "RelayiumApp.swift"],
                        "a received path reaches the Finder from somewhere other than the two seams")
-        XCTAssertTrue(try macSource("DeviceInbox/DeviceInboxSurface.swift")
-            .contains("inbox.reveal(receipt)"))
         XCTAssertTrue(try macSource("MenuBarView.swift").contains("inbox.reveal(latest)"))
         let controller = try packageSource("DeviceInbox/InboxController.swift")
         XCTAssertTrue(controller.contains("guard let known = results.first(where:"),
                       "Reveal no longer checks the path against this generation's own results")
+
+        // **The Recently received list has ONE Finder action and it is the
+        // section's, not a row's.**
+        //
+        // Every row used to carry an identical *Show in Finder* that opened the
+        // same folder, beside rows that named nothing — a column of identical
+        // controls answering a question the rows should have answered
+        // themselves. The rows name their files now and hold no control at all.
+        let surface = try macSource("DeviceInbox/DeviceInboxSurface.swift")
+        XCTAssertFalse(surface.contains("inbox.reveal(receipt)"),
+                       "the results list grew a per-row Finder button again")
+        XCTAssertFalse(surface.contains("\"inbox-reveal\""),
+                       "a per-row Finder control is back in the results list")
+        XCTAssertEqual(occurrences(of: "inbox.revealReceiveFolder()", in: surface), 1,
+                       "the Recently received section has zero or several Finder actions")
+        XCTAssertEqual(occurrences(of: "\"inbox-reveal-folder\"", in: surface), 1,
+                       "the section-level Finder action is unnamed or named twice")
+        // It reveals the FOLDER, through the same audited seam, and the folder
+        // is the user's own grant rather than anything derived from a delivery —
+        // which is why it needs no results-list membership check and must not
+        // grow one that would reach a received path.
+        XCTAssertTrue(controller.contains("public func revealReceiveFolder()")
+                      && controller.contains("guard let url = folder.url else { return }")
+                      && controller.contains("runtime.reveal([url])"),
+                      "the section Finder action does not go through the controller's seam")
+    }
+
+    /// **A receipt row names what actually arrived.**
+    ///
+    /// It rendered a count — three deliveries produced three rows reading
+    /// "1 file saved", which is a list carrying no information about itself and
+    /// left Finder as the only way to learn what had been received. The count
+    /// rule is the NOTIFICATION's, where macOS draws the text on a locked screen
+    /// unasked, and that one is unchanged and separately asserted below.
+    func testAReceiptRowNamesItsFilesAndTheNotificationStillDoesNot() throws {
+        let copy = try packageSource("Localization/InboxCopy.swift")
+        XCTAssertTrue(copy.contains("let all = receipt.urls.map(\\.lastPathComponent)"),
+                      "the receipt summary stopped naming the files that arrived")
+        // The overflow is COUNTED rather than dropped: a row that silently
+        // truncated would under-report what landed on the disk.
+        XCTAssertTrue(copy.contains("L10n.t(.inboxMoreFiles,"),
+                      "a long delivery's unnamed files are dropped rather than counted")
+        // And the banner is still a count with no name anywhere near it. This is
+        // the assertion that stops the two drifting into one another.
+        let notifier = try macSource("InboxNotifier.swift")
+        for banned in ["lastPathComponent", "receipt.urls", "InboxReceiptPresentation.summary"] {
+            XCTAssertFalse(notifier.contains(banned),
+                           "the Device Inbox notification can name a received file via \(banned)")
+        }
     }
 
     /// PRD §9: receiving ends at a quarantined file on disk. It never hands that
@@ -559,7 +684,13 @@ final class InboxSurfaceGuardTests: XCTestCase {
                      "testAFolderAttentionStateAsksForTheFolderRatherThanARetry",
                      "testMultipleAskDeliveriesAreVisiblyDistinct",
                      "testAWorkingInboxSaysSoWithoutNamingTheDelivery",
-                     "testACompletedDeliveryOffersRevealInFinderWithoutNamingTheFile",
+                     // Renamed with the surface it drives: the rows name their
+                     // files now and the Finder action belongs to the section.
+                     "testACompletedDeliveryNamesItsFilesAndOffersOneFinderAction",
+                     // The owner's report, as a runtime property: the complete
+                     // Help section is readable with every section above it
+                     // present, which is where the scaffold clipped it.
+                     "testTheFullHelpSectionIsReadableUnderTheLongestContent",
                      "testClosingTheWindowLeavesTheInboxRunningAndReopeningMakesNoSecondWindow",
                      "testTheMenuBarOffersNoFolderGrantAndNoPolicyChange",
                      "testBlockedBannersSayReceivingStillWorksAndOfferSystemSettings",

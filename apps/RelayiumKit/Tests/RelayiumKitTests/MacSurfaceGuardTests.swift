@@ -200,6 +200,36 @@ final class MacSurfaceGuardTests: XCTestCase {
 
     private var macRoot: URL { appsRoot.appendingPathComponent("mac/Relayium") }
 
+    /// The shared app layer. macOS's two transfer modules are composed from
+    /// types that live here, so a guard about the module boundary has to be able
+    /// to read them.
+    private var appKitRoot: URL {
+        appsRoot.appendingPathComponent("RelayiumKit/Sources/RelayiumAppKit")
+    }
+
+    private func appKitSource(named name: String) throws -> String {
+        try String(contentsOf: appKitRoot.appendingPathComponent(name), encoding: .utf8)
+    }
+
+    /// One declaration, bounded by the start of the next one.
+    ///
+    /// A fixed prefix length is what made the first version of the module-split
+    /// guard read the NEXT factory's closures and report a refusal that was
+    /// there — so the bound is the next `@MainActor` or `static func` at the
+    /// same indentation, which is where a declaration in these files actually
+    /// ends.
+    private func declaration(of name: String, in source: String) throws -> String {
+        let after = try XCTUnwrap(source.components(separatedBy: "func \(name)").dropFirst().first,
+                                  "\(name) is not declared in this source")
+        for boundary in ["\n    @MainActor", "\n    public static func", "\n    static func",
+                         "\n    public func", "\n    /// "] {
+            if let end = after.range(of: boundary) {
+                return String(after[..<end.lowerBound])
+            }
+        }
+        return after
+    }
+
     /// The repository's own root, one level above `apps`.
     private var repoRoot: URL { appsRoot.deletingLastPathComponent() }
 
@@ -559,12 +589,21 @@ final class MacSurfaceGuardTests: XCTestCase {
         // the session. What must stay true is that the create path never reads a
         // selection: a `stage()` here would be pre-connect staging restored.
         let connect = try source(named: crossConnect)
+        // The mint moved into `PairingCodeStart`, which is what stops the
+        // expired-code surface growing a second copy of it — but the create
+        // action must still reach one, and the mint must still be the file
+        // model's, because that is the model whose `showingCode` and expiry the
+        // surface renders.
         guard let create = connect.range(of: "private func createCode() {"),
-              let mint = connect.range(of: "await fileModel.mintCode(token: token)",
-                                       range: create.lowerBound..<connect.endIndex) else {
+              connect.range(of: "await mintAndWatch(token: access.token)",
+                            range: create.lowerBound..<connect.endIndex) != nil,
+              connect.contains("PairingCodeStart(module: module).createAndWatch(token: token)")
+        else {
             return XCTFail("the create action lost its mint")
         }
-        _ = mint
+        let starter = try source(named: "Transfer/PairingCodeStart.swift")
+        XCTAssertTrue(starter.contains("await fileModel.mintCode(token: token)"),
+                      "the shared pairing start no longer mints on the file model")
         XCTAssertFalse(connect.contains("selection"),
                        "the pairing create path reads a staged selection again")
         XCTAssertFalse(connect.contains("stageRealtimeFiles("),
@@ -632,12 +671,24 @@ final class MacSurfaceGuardTests: XCTestCase {
                           && destination.contains("case .legacySession:")
                           && destination.contains("case .link:"),
                           "\(name) no longer chooses exactly one pane")
-            XCTAssertTrue(destination.contains("TransferSessionPane(route: route,")
-                          && destination.contains(connectPane),
+            // The Cross-network one additionally hands in the regeneration
+            // action, because it is the surface that holds the account gate a
+            // replacement code has to be minted against.
+            XCTAssertTrue(destination.contains("TransferSessionPane(module: module)")
+                          || destination.contains(
+                            "TransferSessionPane(module: module, regenerate: regeneratePairingCode)"),
+                          "\(name) draws a session pane it did not hand its own module")
+            XCTAssertTrue(destination.contains(connectPane),
                           "\(name) must render both phases of the one task")
-            XCTAssertTrue(destination.contains("TransferSurfacePresentation.pane(route: route,"),
-                          "\(name) decides which pane to draw without asking ownership")
+            XCTAssertTrue(destination.contains("private var pane: TransferSurfacePane { module.pane }"),
+                          "\(name) decides which pane to draw without asking its module")
         }
+        // And the module still keys the answer on OWNERSHIP rather than on model
+        // state, which is what stops a session appearing on a route that does
+        // not own it.
+        XCTAssertTrue(try appKitSource(named: "TransferModule.swift")
+            .contains("TransferSurfacePresentation.pane(route: route,"),
+                      "the module chose a pane without asking ownership")
 
         let fileSession = try source(named: "RealtimeFileSessionView.swift")
         let completed = try XCTUnwrap(fileSession.components(
@@ -766,7 +817,11 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "a macOS surface writes the transfer mode outside a session claim")
         let app = try source(named: "RelayiumApp.swift")
         XCTAssertEqual(occurrences(of: "selectMode(", in: app), 1)
-        XCTAssertTrue(app.contains("selectRealtimeMode: { mode in presenting.selectMode(mode) }"),
+        // The DIRECT module's presence, because `AppRouting` sends a realtime
+        // link to `.pairingCode`. Handed the Nearby module's, the coordinator
+        // would apply a pairing link's mode to a same-network session.
+        XCTAssertTrue(app.contains(
+            "selectRealtimeMode: { mode in directModule.presence.selectMode(mode) }"),
                       "the one surviving mode write is no longer the shared deep-link seam")
     }
 
@@ -774,16 +829,32 @@ final class MacSurfaceGuardTests: XCTestCase {
     /// claim time rather than at busy time: the models read it when the SAS
     /// arrives, and ownership is taken synchronously before either model can
     /// publish a non-idle state.
+    ///
+    /// The lock is computed from the destination's OWN module now. That is the
+    /// second half of the same requirement: it must still close the
+    /// claim-before-busy window, and it must no longer be closed by the other
+    /// module's session — a user holding a same-network connection could not
+    /// change the verification default before a pairing code they had not
+    /// started.
     func testDirectChoicesLockAtClaimBeforeTheModelsBecomeBusy() throws {
         for name in [lanDestination, crossDestination] {
             let destination = try source(named: name)
             XCTAssertTrue(destination.contains(
-                "TransferSurfacePresentation.acceptsNewSession(\n            owner: presence.owner, sessionIsLiveOrRetained: sessionIsLiveOrRetained)"),
+                "private var sessionLocked: Bool { !module.acceptsNewSession }"),
                 "\(name)'s lock reads busy flags that lag the synchronous claim")
+            XCTAssertFalse(destination.contains("TransferSurfacePresentation.acceptsNewSession("),
+                           "\(name) re-derives the lock instead of asking its own module")
             XCTAssertTrue(destination.contains(
                 "VerificationSetting(locked: sessionLocked, preference: verification)"),
                 "\(name) does not lock the verification default with the session")
         }
+        // And the module's own answer is still the claim-aware one: ownership
+        // AND the models' retained state, exactly as the two destinations
+        // computed it before they shared it.
+        let module = try appKitSource(named: "TransferModule.swift")
+        XCTAssertTrue(module.contains(
+            "TransferSurfacePresentation.acceptsNewSession(\n            owner: presence.owner, sessionIsLiveOrRetained: sessionIsLiveOrRetained)"),
+            "the module's lock dropped the synchronous claim it exists to cover")
         // The setting's own file re-checks the lock in the setter as well as
         // disabling the control: a click delivered from the previous render can
         // land after a claim, and `.disabled` alone would not stop it.
@@ -795,32 +866,161 @@ final class MacSurfaceGuardTests: XCTestCase {
     }
 
     func testSessionOwnershipCleanupIsAppScopedAndNeverRunsFromInitialViewIdle() throws {
-        let app = try source(named: "RelayiumApp.swift")
-        // The link is the THIRD liveness source, in the SAME subscription. A
-        // separate observer would release the surface the instant a link
-        // started: a link uses neither legacy model, so both read idle for its
-        // whole life.
-        XCTAssertTrue(app.contains(
-            "presenting.observeSessions(fileModel: files, textModel: text, link: unified)"))
-        XCTAssertFalse(app.contains(
-            "presenting.observeSessions(fileModel: files, textModel: text)\n"),
+        // The liveness subscription moved into `TransferModule`, which is where
+        // it belongs now that each module has its own presence — one place, one
+        // copy, applied identically to both. The link is still the THIRD source
+        // in the SAME subscription: a separate observer would release the
+        // surface the instant a link started, because a link uses neither legacy
+        // model and both read idle for its whole life.
+        let module = try appKitSource(named: "TransferModule.swift")
+        XCTAssertTrue(module.contains(
+            "presence.observeSessions(fileModel: files, textModel: text, link: link)"))
+        XCTAssertFalse(module.contains(
+            "presence.observeSessions(fileModel: files, textModel: text)\n"),
             "a second liveness subscription would race the first")
+        // And the scene no longer wires one itself, which is what stops a third
+        // app-scoped presence appearing beside the two modules'.
+        let app = try source(named: "RelayiumApp.swift")
+        XCTAssertFalse(app.contains(".observeSessions("),
+                       "the scene wires a liveness subscription the modules already own")
+        XCTAssertEqual(occurrences(of: "TransferModule(route:", in: app), 2,
+                       "macOS composes exactly two independent transfer modules")
         for name in [lanDestination, crossDestination, lanConnect, crossConnect,
                      transferSession] {
             let destination = try source(named: name)
             XCTAssertFalse(destination.contains("presence.releaseAll()"),
                            "\(name) can erase a fresh claim from its initial idle task")
+            XCTAssertFalse(destination.contains("cancelEverything()"),
+                           "\(name) can end the other module's session as well as its own")
         }
-        // Only the owner may let go, and with two destinations over one set of
-        // models the pane must name ITS OWN route rather than release whatever
-        // the presence object currently holds — a stale view rebuilt on the
-        // other transfer screen would otherwise blank a live session.
+        // Only the owner may let go, and the pane must name ITS OWN route rather
+        // than release whatever the presence object currently holds — a stale
+        // view rebuilt on the other transfer screen would otherwise blank a live
+        // session. The route is the module's, which is the same guarantee with
+        // one fewer thing for a caller to get wrong.
         let session = try source(named: transferSession)
-        XCTAssertTrue(session.contains("let route: AppDestination")
+        XCTAssertTrue(session.contains("private var route: AppDestination { module.route }")
                       && session.contains("presence.release(route)"),
                       "the session pane releases a route it may not own")
         XCTAssertFalse(session.contains("presence.release(owner)"),
                        "the session pane releases whichever route happens to own the session")
+    }
+
+    /// **The two modules share no session object at all**, which is what makes
+    /// "a connection survives navigating to the other screen" a property of the
+    /// composition rather than a behaviour somebody has to preserve.
+    ///
+    /// Three separate claims, and each one has a failure it prevents:
+    ///
+    ///  * each module is built with its OWN presence, so neither can lock,
+    ///    release or refuse the other's session;
+    ///  * the Nearby module's models carry no code path and the Direct module's
+    ///    carry no roster path, so neither screen can start the other's kind of
+    ///    session even if a later edit asked it to;
+    ///  * only the Direct link watches a pairing code, and only the Nearby link
+    ///    observes the room — one model registered for both is what let the LAN
+    ///    roster's churn cancel a pairing request in flight.
+    func testTheTwoTransferModulesShareNoSessionState() throws {
+        let app = try source(named: "RelayiumApp.swift")
+        // Composed from the module-specific factories, never the general ones.
+        for factory in ["makeNearbyRealtimeModel(", "makeNearbyRealtimeTextModel(",
+                        "makeNearbyLinkWorkspaceModel(", "makeDirectRealtimeModel(",
+                        "makeDirectRealtimeTextModel(", "makeDirectLinkWorkspaceModel("] {
+            XCTAssertTrue(app.contains(factory),
+                          "the scene stopped composing modules through \(factory)")
+        }
+        for shared in ["AppEnvironment.makeRealtimeModel(", "AppEnvironment.makeRealtimeTextModel(",
+                       "AppEnvironment.makeLinkWorkspaceModel("] {
+            XCTAssertFalse(app.contains(shared),
+                           "the scene rebuilt a model both modules would share: \(shared)")
+        }
+        // No app-scoped presence, and no app-scoped session model, beside them.
+        XCTAssertFalse(app.contains("@StateObject private var presence: TransferPresence"),
+                       "a shared presence would arbitrate the two modules again")
+        // **And neither module is HANDED one.** `TransferModule`'s `presence`
+        // parameter exists so a test can pre-claim a surface; passing the same
+        // instance to both here is the one edit that restores the shipped defect
+        // while leaving every other assertion in this file green. It was checked
+        // by mutation: with one shared presence, the two built-App paths in
+        // `AppShellUITests` fail on "a same-network session disabled the Direct
+        // screen's Create", and nothing in this file did.
+        for construction in app.components(separatedBy: "TransferModule(route:").dropFirst() {
+            XCTAssertFalse(String(construction.prefix(240)).contains("presence:"),
+                           "a module is built with a presence somebody else may also hold")
+        }
+        for retired in ["@StateObject private var realtimeModel",
+                        "@StateObject private var realtimeTextModel",
+                        "@StateObject private var linkWorkspace"] {
+            XCTAssertFalse(app.contains(retired),
+                           "a shared session model survived the module split: \(retired)")
+        }
+        // The environment carries the container, so a destination is HANDED one
+        // module rather than reaching for whichever is in scope.
+        XCTAssertTrue(app.contains(".environmentObject(transferModules)"))
+        let shell = try source(named: "Shell/AppShellView.swift")
+        XCTAssertTrue(shell.contains("LanTransferDestination(module: modules.nearby)")
+                      && shell.contains(
+                        "CrossNetworkTransferDestination(module: modules.direct)"),
+                      "the shell no longer hands each destination exactly one module")
+        // The Nearby module's own factories refuse the code path, and the
+        // Direct module's refuse the roster path. Read from the factory file,
+        // because that is where the refusal actually is.
+        let environment = try appKitSource(named: "AppEnvironment.swift")
+        for nearbyFactory in ["makeNearbyRealtimeModel", "makeNearbyRealtimeTextModel"] {
+            let body = try declaration(of: nearbyFactory, in: environment)
+            XCTAssertTrue(body.contains("makeConnection: { _, _, _ in throw NearbyError.notScanning }"),
+                          "\(nearbyFactory) can join or mint a pairing code")
+            XCTAssertFalse(body.contains("makeRoomConnection:"),
+                           "\(nearbyFactory) can adopt a pairing room")
+        }
+        for directFactory in ["makeDirectRealtimeModel", "makeDirectRealtimeTextModel"] {
+            let body = try declaration(of: directFactory, in: environment)
+            XCTAssertFalse(body.contains("makeNearbyConnection:"),
+                           "\(directFactory) can dial a same-network roster peer")
+            XCTAssertFalse(body.contains("makeInboundConnection:"),
+                           "\(directFactory) can answer an unsolicited same-network offer")
+        }
+        // One room each. The direct link is not a room observer; the nearby link
+        // has no pairing socket to open.
+        XCTAssertFalse(try declaration(of: "makeDirectLinkWorkspaceModel", in: environment)
+            .contains("addRoomObserver"),
+                       "the pairing module observes the same-network roster again")
+        XCTAssertFalse(try declaration(of: "makeNearbyLinkWorkspaceModel", in: environment)
+            .contains("connectPairingSocket"),
+                       "the same-network module can open a pairing code's socket")
+        // Only the DIRECT module is wired to the pairing fallback and the code
+        // handoff; only the NEARBY module answers an unsolicited link.
+        XCTAssertTrue(app.contains("directLink.adoptLegacyRoom =")
+                      && app.contains("directLink.onLegacyFallbackBatch =")
+                      && app.contains("directLink.onPairingLinkActivated ="),
+                      "the pairing fallback reaches a module other than Direct")
+        XCTAssertTrue(app.contains("nearbyLink.shouldAcceptLink ="),
+                      "an unsolicited same-network link is admitted by the wrong module")
+        XCTAssertTrue(app.contains("presence: nearbyModule.presence, navigation: routing)"),
+                      "an inbound same-network offer is admitted against the wrong presence")
+    }
+
+    /// Quit is the ONE action that means every module, and the only caller of
+    /// `TransferModules.cancelEverything`.
+    ///
+    /// The distinction is the owner's requirement: a Cancel on one screen must
+    /// end that screen's connection and nothing else, while ⌘Q must warn about —
+    /// and then end — whatever either module holds. Two verbs, and the wide one
+    /// is reachable from exactly one place.
+    func testOnlyTheQuitGuardCanEndBothModulesAtOnce() throws {
+        let app = try source(named: "RelayiumApp.swift")
+        XCTAssertEqual(occurrences(of: "transferModules.cancelEverything()", in: app), 1,
+                       "the app-wide teardown gained a second caller")
+        XCTAssertTrue(app.contains("quitGuard.cancelTransfers = {")
+                      && app.contains("quitGuard.isTransferRunning = {")
+                      && app.contains("|| transferModules.isBusy")
+                      && app.contains("quitGuard.hasLocalText = { transferModules.hasLocalText }"),
+                      "the quit guard asks or ends only one of the two modules")
+        for (name, text) in try sources(under: macRoot, atLeast: 20)
+        where name != "RelayiumApp.swift" {
+            XCTAssertFalse(text.contains("cancelEverything()"),
+                           "\(name) can end both modules at once")
+        }
     }
 
     func testInboundNearbyOfferPassesOwnershipAdmissionBeforeBuildingResponder() throws {
@@ -974,7 +1174,21 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "the expiry scope is ambiguous")
         XCTAssertTrue(handoff.contains(
             ".accessibilityIdentifier(\"pairing-code-expiry-note\")"))
-        XCTAssertTrue(handoff.contains("L10n.t(.commonExpires,"))
+        // **A live countdown, not a static clock time.** `common.expires` printed
+        // the deadline once — true, and useless to somebody reading six digits
+        // down a phone, because nothing on screen said whether the code they were
+        // still dictating was worth anything.
+        XCTAssertTrue(handoff.contains("L10n.t(.pairingCodeExpiresIn,"),
+                      "the pairing code lost its countdown")
+        XCTAssertFalse(handoff.contains("L10n.t(.commonExpires,"),
+                       "the pairing code is back to a static deadline")
+        // And the countdown, the withdrawal of the handoff and the expired
+        // notice are all ONE answer, so they cannot disagree about the instant
+        // the code dies.
+        XCTAssertTrue(handoff.contains("PairingCodeExpiry.presentation(expiresAt: expiresAt,"),
+                      "the surface decides expiry itself instead of asking the one rule")
+        XCTAssertTrue(handoff.contains("if deadline.isUsable {"),
+                      "the join handoff is offered without asking whether the code works")
     }
 
     /// **The join link is the code and nothing else.**
@@ -1911,13 +2125,76 @@ final class MacSurfaceGuardTests: XCTestCase {
                        "a caller wrapper split the verification identifier from its label")
     }
 
+    /// The acceptance substitution mirrors the product's TWO link owners.
+    ///
+    /// A single acceptance model registered for both rooms would quietly restore
+    /// the shared graph the product no longer has — and it would do it only in
+    /// the build the suite runs against, which is the worst place for a
+    /// composition difference to live.
     func testUITestPairingRoomsUseTheOfflineLinkFixture() throws {
         let mode = try source(named: "UITestMode.swift")
-        XCTAssertTrue(mode.contains("static func makeLinkWorkspaceModel"))
-        XCTAssertTrue(mode.contains("iceClient: UITestWaitingICEClient()"))
+        XCTAssertTrue(mode.contains("static func makeNearbyLinkWorkspaceModel")
+                      && mode.contains("static func makeDirectLinkWorkspaceModel"),
+                      "acceptance composes one link owner for two rooms")
+        XCTAssertFalse(mode.contains("static func makeLinkWorkspaceModel("),
+                       "the shared acceptance link fixture survived the module split")
+        for fixture in ["makeNearbyLinkWorkspaceModel", "makeDirectLinkWorkspaceModel"] {
+            XCTAssertTrue(try declaration(of: fixture, in: mode)
+                .contains("iceClient: UITestWaitingICEClient()"),
+                          "\(fixture) still reaches the production ICE client")
+        }
         let app = try source(named: "RelayiumApp.swift")
-        XCTAssertTrue(app.contains("UITestMode.makeLinkWorkspaceModel("),
+        XCTAssertTrue(app.contains("UITestMode.makeNearbyLinkWorkspaceModel(")
+                      && app.contains("UITestMode.makeDirectLinkWorkspaceModel("),
                       "UI acceptance still reaches the production pairing ICE client")
+    }
+
+    /// **The offline fixtures apply to the OFFLINE launch, and to no other.**
+    ///
+    /// This is the guard for a defect that cost a whole acceptance round. The
+    /// three transfer substitutions were selected on `UITestMode.isActive`, which
+    /// is true for the loopback built-App run as well — so that run was handed a
+    /// pairing socket factory that is a `preconditionFailure` and an ICE client
+    /// that sleeps for five minutes. `LinkWorkspaceModel.watchPairingCode` reads
+    /// ICE before it opens the room, so the app published `.watching` and never
+    /// opened a socket at all. Two native ends then waited for each other for the
+    /// full budget, and the measurement — "neither side promotes" — was written up
+    /// as a defect in the pairing wire rather than in the harness.
+    ///
+    /// So the predicate is asserted here by name. `usesOfflineTransfer` is the
+    /// exact complement of `allowsResidency`: an acceptance launch that resolved a
+    /// loopback origin composes `AppEnvironment`'s real models, and every launch
+    /// that did not keeps the fixtures it always had.
+    func testTheOfflineTransferFixturesNeverReachALoopbackAcceptanceLaunch() throws {
+        let mode = try source(named: "UITestMode.swift")
+        XCTAssertTrue(mode.contains("static let usesOfflineTransfer = isActive && !allowsResidency"),
+                      "the offline fixtures are not scoped to the offline launch")
+        let app = try source(named: "RelayiumApp.swift")
+        // Every substitution that would otherwise silently replace the real
+        // transfer graph in a built-App run.
+        for substitution in ["let nearbyText = UITestMode.usesOfflineTransfer",
+                             "let directText = UITestMode.usesOfflineTransfer",
+                             "let nearbyLink = UITestMode.usesOfflineTransfer",
+                             "let directLink = UITestMode.usesOfflineTransfer"] {
+            XCTAssertTrue(app.contains(substitution),
+                          "a transfer model is substituted for every acceptance launch, "
+                          + "including the loopback one: \(substitution)")
+        }
+        // And none of them is selected on `isActive` any more, which is the exact
+        // edit that reintroduces the defect.
+        for restored in ["let nearbyText = UITestMode.isActive",
+                         "let directText = UITestMode.isActive",
+                         "let nearbyLink = UITestMode.isActive",
+                         "let directLink = UITestMode.isActive"] {
+            XCTAssertFalse(app.contains(restored),
+                           "a transfer model went back to substituting on isActive: \(restored)")
+        }
+        // The per-fixture flags keep their OWN guards — they are only ever passed
+        // by the offline suite, and folding them into the predicate above would
+        // make a loopback launch unable to drive a deterministic terminal state.
+        XCTAssertTrue(mode.contains("guard showsGeneratedFileCode else { return nil }")
+                      && mode.contains("guard showsTerminalNearby else { return nil }"),
+                      "a per-fixture launch flag lost its own guard")
     }
 
     /// One destination file per `MacSurface` — six, because the hidden one still
@@ -3107,17 +3384,28 @@ final class MacSurfaceGuardTests: XCTestCase {
         // coordinator watching a private copy of `CloudDownloadModel` — which
         // would never see the download the user is actually running — is a
         // failure rather than something a reviewer has to notice.
+        //
+        // And it is the DIRECT module's realtime models and presence, because
+        // `AppRouting.destination(for:)` sends a realtime link to
+        // `.pairingCode`. Given the Nearby module's, the coordinator would
+        // refuse to apply a pairing link because a same-network transfer was
+        // running — cross-module interference in the one place a link arrives.
         for wiring in ["navigation: routing, download: downloads,",
-                       "realtime: files, realtimeText: text, presence: presenting,",
-                       "selectRealtimeMode: { mode in presenting.selectMode(mode) }",
-                       "_presence = StateObject(wrappedValue: presenting)",
+                       "realtime: directFiles, realtimeText: directText,",
+                       "presence: directModule.presence,",
+                       "selectRealtimeMode: { mode in directModule.presence.selectMode(mode) }",
+                       "_transferModules = StateObject(wrappedValue: modules)",
                        "_navigation = StateObject(wrappedValue: routing)",
-                       "_downloadModel = StateObject(wrappedValue: downloads)",
-                       "_realtimeModel = StateObject(wrappedValue: files)",
-                       "_realtimeTextModel = StateObject(wrappedValue: text)"] {
+                       "_downloadModel = StateObject(wrappedValue: downloads)"] {
             XCTAssertTrue(app.contains(wiring),
                           "the coordinator must share the app's models: \(wiring)")
         }
+        // The models it was handed are the very ones the Direct module was built
+        // from — not a private pair that would never see the session the user is
+        // actually in.
+        XCTAssertTrue(app.contains(
+            "let directModule = TransferModule(route: .pairingCode, files: directFiles,"),
+                      "the coordinator watches models the Direct module does not own")
         // One injection, and it is the unique window's. The MenuBarExtra root
         // deliberately does not get it: nothing there subscribes, and a second
         // injection point is how a second subscriber starts.
@@ -3276,7 +3564,15 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(app.contains("final class AppQuitGuard"))
         XCTAssertTrue(app.contains("var hasLocalText: (() -> Bool)?"))
         XCTAssertTrue(app.contains("quitGuard.hasLocalText = {"))
-        XCTAssertTrue(app.contains("realtimeTextModel.hasLocalContent"))
+        // BOTH modules. Either one can be holding the only copy of typed text,
+        // and a guard that asked one of them would let ⌘Q discard the other's
+        // without ever mentioning it.
+        XCTAssertTrue(app.contains("quitGuard.hasLocalText = { transferModules.hasLocalText }"))
+        XCTAssertTrue(try appKitSource(named: "TransferModule.swift")
+            .contains("public var hasLocalText: Bool { text.hasLocalContent }"))
+        XCTAssertTrue(try appKitSource(named: "TransferModule.swift")
+            .contains("public var hasLocalText: Bool { all.contains { $0.hasLocalText } }"),
+                      "the app-wide answer ignores one of the two modules")
         XCTAssertTrue(app.contains("QuitPresentation.risk("))
         XCTAssertTrue(app.contains("QuitPresentation.prompt(for: risk)"))
         XCTAssertFalse(app.contains("L10n.t(.quitCancelAndQuit)"))
@@ -3390,22 +3686,33 @@ final class MacSurfaceGuardTests: XCTestCase {
     func testRealtimeOpenedFilesWaitForClaimedSessionOwnershipToClear() throws {
         for name in [lanDestination, crossDestination] {
             let destination = try source(named: name)
-            XCTAssertTrue(destination.contains("owner: presence.owner,"),
+            XCTAssertTrue(destination.contains("!module.acceptsNewSession"),
                           "\(name)'s lock ignores ownership and reads busy flags alone")
             XCTAssertFalse(destination.contains("presence.rendersSession("),
                            "adoption must stop for every claim, not only this one's")
         }
+        // The module's own answer is the ownership-aware one, and it is asked
+        // about THIS module: `owner` here can only ever be this module's route
+        // or nobody, so a session on the other destination cannot lock a screen
+        // it is not on.
+        XCTAssertTrue(try appKitSource(named: "TransferModule.swift")
+            .contains("owner: presence.owner, sessionIsLiveOrRetained: sessionIsLiveOrRetained"),
+                      "the module's lock ignores ownership and reads busy flags alone")
         for name in [lanConnect, crossConnect] {
             let connect = try source(named: name)
             XCTAssertTrue(connect.contains("let sessionLocked: Bool"),
                           "\(name) re-derives the lock instead of taking the tested answer")
-            // A screen whose every control is disabled has to say why. The
-            // session it is waiting on is on the other transfer destination,
-            // which the user cannot see from here — a greyed control with no
-            // stated reason is the dead end this app's rules forbid.
+            // A screen whose every control is disabled has to say why. What it
+            // is waiting on is this screen's own retained session — a transfer
+            // that is open in Relayium and has to be finished or left — and a
+            // greyed control with no stated reason is the dead end this app's
+            // rules forbid.
             XCTAssertTrue(connect.contains("if sessionLocked {")
                           && connect.contains("InlineMessage(.info, L10n.t(.transferBusyElsewhere))"),
                           "\(name) disables every control without saying why")
+            // And it can no longer reach the other module to ask about it.
+            XCTAssertFalse(connect.contains("modules."),
+                           "\(name) reads the other transfer module")
             // What this pair used to also assert — that adoption is re-armed on
             // `sessionLocked` — is gone with adoption itself. The lock is now
             // load-bearing only for the connect controls, which is the one thing
@@ -3540,8 +3847,15 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(source.contains("let code = fileModel.joinCode"))
         XCTAssertTrue(source.contains("guard fileModel.canJoin else { return }"))
         // The join itself runs inside `watch`'s fallback closure — the room is
-        // watched for a `link/1` peer first.
-        XCTAssertTrue(source.contains("await fileModel.join(code: code)"))
+        // watched for a `link/1` peer first. That closure lives in
+        // `PairingCodeStart` now, shared with the expired-code surface's mint,
+        // so the snapshot is read HERE and spent THERE.
+        XCTAssertTrue(source.contains("PairingCodeStart(module: module).joinAndWatch(code: code)"),
+                      "the join no longer goes through the one watched-room path")
+        // `self.source`, because the local binding above shadows the method.
+        XCTAssertTrue(try self.source(named: "Transfer/PairingCodeStart.swift")
+            .contains("await fileModel.join(code: code)"),
+                      "the legacy fallback lost its join")
         for model in ["fileModel", "textModel"] {
             XCTAssertFalse(source.contains("\(model).join(code: \(model).joinCode)"),
                            "the join reads mutable input after taking ownership")
@@ -4020,14 +4334,20 @@ final class MacSurfaceGuardTests: XCTestCase {
         let sidebar = try source(named: "Shell/SidebarView.swift")
         XCTAssertTrue(sidebar.contains("presence.announcesRunningTransfer("),
                       "the live marker must be derived through TransferPresence")
-        XCTAssertTrue(sidebar.contains("fileModel.isBusy || textModel.isBusy"),
+        XCTAssertTrue(sidebar.contains("sessionIsBusy: module.isBusy"),
                       "activity must come from the session models, not from a cached flag")
-        // One route per row again, and the marker follows the owner — so the
-        // marked row is the one the session is actually on and following it
-        // lands the user on the transfer rather than on a screen that has to
-        // explain where it went.
+        XCTAssertTrue(try appKitSource(named: "TransferModule.swift")
+            .contains("public var isBusy: Bool { files.isBusy || text.isBusy }"),
+                      "the module caches activity instead of asking its models")
+        // One route per row again, and BOTH facts come from that row's own
+        // module — so the marked row is the one the session is actually on, and
+        // two rows can be marked at once because two modules really can be
+        // running at once.
         XCTAssertTrue(sidebar.contains(
-            "presence.announcesRunningTransfer(surface.route, sessionIsBusy: busy)"),
+            "guard let module = modules.module(for: surface.route) else { return false }"),
+            "the live marker is no longer derived from the row's own module")
+        XCTAssertTrue(sidebar.contains(
+            "module.presence.announcesRunningTransfer(surface.route,"),
             "the live marker is no longer derived from the row's own route")
         XCTAssertFalse(sidebar.contains("macWorkspaceRoutes"),
                        "a row still asks about a route it does not render")
@@ -4241,12 +4561,22 @@ final class MacSurfaceGuardTests: XCTestCase {
 
         // The model takes no kind either. `watchPairingCode` lost its `mode:`
         // parameter, which is what makes "the screen cannot ask" structural
-        // rather than a convention this file describes.
-        XCTAssertFalse(cross.contains("mode: .text"),
-                       "the pairing screen still names a lane at connect time")
-        XCTAssertTrue(cross.contains("link.watchPairingCode(code,"))
-        XCTAssertFalse(cross.contains("watchPairingCode(code, legacyRole: legacyRole, mode:"),
-                       "the room is still watched for one kind")
+        // rather than a convention this file describes. The call itself lives in
+        // `PairingCodeStart` — one implementation for the connect surface's mint
+        // and join AND for the expired surface's replacement mint, because three
+        // copies is how they would come to disagree about the legacy role.
+        let starter = try source(named: "Transfer/PairingCodeStart.swift")
+        for pairing in [cross, starter] {
+            XCTAssertFalse(pairing.contains("mode: .text"),
+                           "the pairing path still names a lane at connect time")
+            XCTAssertFalse(pairing.contains("watchPairingCode(code, legacyRole: legacyRole, mode:"),
+                           "the room is still watched for one kind")
+        }
+        XCTAssertTrue(starter.contains("link.watchPairingCode(code,"))
+        XCTAssertEqual(occurrences(of: "watchPairingCode(", in: starter), 1,
+                       "the shared pairing start watches a room from two places")
+        XCTAssertFalse(cross.contains("watchPairingCode("),
+                       "the connect surface kept its own copy of the watch")
 
         // **And nothing that could hold work before there is a peer.**
         //
@@ -4264,9 +4594,16 @@ final class MacSurfaceGuardTests: XCTestCase {
         // The room is watched with an EMPTY batch, by construction rather than
         // by a nil that a caller chose to pass — there is no other batch it
         // could be handed.
-        XCTAssertTrue(cross.components(separatedBy: .whitespacesAndNewlines).joined()
+        XCTAssertTrue(starter.components(separatedBy: .whitespacesAndNewlines).joined()
             .contains("link.watchPairingCode(code,legacyRole:legacyRole,files:[],sources:[])"),
             "the pairing screen arms a batch before the room has a peer")
+        // …and the shared starter stages nothing either, which is the same ban
+        // one file further along the path it now owns.
+        for staging in ["FileDropZone(", "PendingFileList(", "SelectionStore",
+                        "selection", "stageRealtimeFiles(", "stageSend("] {
+            XCTAssertFalse(starter.contains(staging),
+                           "the shared pairing start stages before connecting: \(staging)")
+        }
     }
 
     // MARK: - connect-first

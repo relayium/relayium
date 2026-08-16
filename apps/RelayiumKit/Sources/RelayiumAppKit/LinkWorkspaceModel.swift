@@ -74,6 +74,18 @@ public enum LinkWorkspaceConnection: Equatable {
         return code
     }
 
+    /// Whether this object is sitting in a pairing room it deliberately opened,
+    /// waiting for the peer that code names.
+    ///
+    /// **Read by the inbound-availability gate, and that is not cosmetic.** The
+    /// surface-ownership signal the app feeds that gate means "nothing is using
+    /// this module", and a watched pairing room makes it false — the code's own
+    /// screen has claimed the surface. But a link request arriving in a room
+    /// this side opened with a code is not an intrusion into somebody else's
+    /// session: it is the exact peer the room exists for. Answering it `busy`
+    /// refuses the connection this module is actively waiting to make.
+    public var isWatchingPairingRoom: Bool { pairingCode != nil }
+
     public var isOpen: Bool {
         guard case .open = self else { return false }
         return true
@@ -308,6 +320,14 @@ public final class LinkWorkspaceModel: ObservableObject, NearbyRoomObserver {
     public func setAvailableForInboundLink(_ value: Bool) {
         gate.setAvailable(value)
     }
+
+    /// What the advisory gate is answering right now.
+    ///
+    /// Internal, and read by tests only: the gate is consulted on the signalling
+    /// delivery queue inside `LinkAdmission`, so "does this module admit an
+    /// inbound link" is otherwise only observable by running a whole pairing
+    /// room. `TransferModuleTests` drives the transitions that move it.
+    var acceptsInboundLinkNow: Bool { gate.isAvailable }
 
     /// Keep the advisory mirror in step with the app's own ownership fact.
     ///

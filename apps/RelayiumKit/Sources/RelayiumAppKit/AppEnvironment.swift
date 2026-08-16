@@ -562,6 +562,201 @@ public enum AppEnvironment {
             ?? FileManager.default.temporaryDirectory
     }
 
+    // MARK: - the two macOS transfer modules
+    //
+    // Six factories rather than the four general ones above, and the difference
+    // is a REFUSAL rather than a convenience.
+    //
+    // macOS composes two independent `TransferModule`s. Built from the general
+    // factories, each module's models would carry every closure the other's
+    // needs: the nearby module's file model would be able to join a pairing
+    // code, and the direct module's would be able to dial a roster peer. Neither
+    // is reachable from either screen today — and "not reachable from the UI" is
+    // exactly the guarantee that a later edit removes without noticing.
+    //
+    // So each pair below is built with only the closures its own module has a
+    // surface for, and every other entry point keeps the initializers' own
+    // `NearbyError.notScanning` default. A nearby model asked for a code refuses;
+    // a direct model asked for a roster peer refuses. `TransferModuleTests`
+    // drives both refusals, which is what makes this a boundary rather than a
+    // comment.
+
+    /// The Nearby module's file lane: the same-network room, and nothing else.
+    ///
+    /// `makeConnection` is the code path — mint or join — and it throws here
+    /// deliberately. Nearby has no code and never asks for one; a working
+    /// closure would be a second way into the pairing product from the screen
+    /// whose whole premise is that no code is involved.
+    @MainActor
+    public static func makeNearbyRealtimeModel(baseURL: URL = transferBaseURL,
+                                               verification: VerificationPreference,
+                                               nearby: LanDiscoveryModel,
+                                               inboundRoom: InboundRoom) -> RealtimeSessionModel {
+        RealtimeSessionModel(
+            pairClient: HTTPPairClient(baseURL: baseURL),
+            iceClient: HTTPICEClient(baseURL: baseURL),
+            requiresVerification: { verification.requiresSASConfirmation },
+            makeNearbyConnection: { peerId, role, servers in
+                guard let signaling = nearby.client else { throw NearbyError.notScanning }
+                return try await RealtimeConnectionFactory.connectNearby(
+                    signaling: signaling, peerId: peerId, role: role, config: servers)
+            },
+            makeInboundConnection: { peerId, servers in
+                guard let signaling = inboundRoom.signaling else { throw NearbyError.notScanning }
+                return try RealtimeConnectionFactory.acceptNearby(
+                    signaling: signaling, peerId: peerId, config: servers)
+            },
+            makeConnection: { _, _, _ in throw NearbyError.notScanning })
+    }
+
+    /// The Nearby module's text lane, on the same two same-network paths.
+    @MainActor
+    public static func makeNearbyRealtimeTextModel(baseURL: URL = transferBaseURL,
+                                                   verification: VerificationPreference,
+                                                   nearby: LanDiscoveryModel,
+                                                   inboundRoom: InboundRoom)
+        -> RealtimeTextSessionModel {
+        RealtimeTextSessionModel(
+            pairClient: HTTPPairClient(baseURL: baseURL),
+            iceClient: HTTPICEClient(baseURL: baseURL),
+            requiresVerification: { verification.requiresSASConfirmation },
+            makeNearbyConnection: { peerId, role, servers in
+                guard let signaling = nearby.client else { throw NearbyError.notScanning }
+                return try await RealtimeConnectionFactory.connectNearby(
+                    signaling: signaling, peerId: peerId, role: role, config: servers,
+                    mode: .text)
+            },
+            makeInboundConnection: { peerId, servers in
+                guard let signaling = inboundRoom.signaling else { throw NearbyError.notScanning }
+                return try RealtimeConnectionFactory.acceptNearby(
+                    signaling: signaling, peerId: peerId, config: servers, mode: .text)
+            },
+            makeConnection: { _, _, _ in throw NearbyError.notScanning })
+    }
+
+    /// The Direct module's file lane: a pairing code, and the room that code
+    /// names.
+    ///
+    /// No `makeNearbyConnection` and no `makeInboundConnection`. This module has
+    /// no roster and answers no unsolicited same-network offer — the Nearby
+    /// module's own models do both, and a direct model that could would be a
+    /// second admission path into a room it does not present.
+    @MainActor
+    public static func makeDirectRealtimeModel(baseURL: URL = transferBaseURL,
+                                               verification: VerificationPreference,
+                                               pairingRoom: LinkRoomHandle) -> RealtimeSessionModel {
+        RealtimeSessionModel(
+            pairClient: HTTPPairClient(baseURL: baseURL),
+            iceClient: HTTPICEClient(baseURL: baseURL),
+            requiresVerification: { verification.requiresSASConfirmation },
+            makeRoomConnection: { peerId, role, config in
+                guard let signaling = pairingRoom.signaling else { throw NearbyError.notScanning }
+                return try await RealtimeConnectionFactory.connectInRoom(
+                    signaling: signaling, peerId: peerId, role: role,
+                    config: config, mode: .file,
+                    knownPeerCaps: pairingRoom.peerAnnouncedCaps[peerId] ?? [])
+            },
+            makeConnection: { code, role, servers in
+                try await RealtimeConnectionFactory.make(
+                    code: code, role: role, config: servers,
+                    baseURL: baseURL, deviceName: deviceName())
+            })
+    }
+
+    /// The Direct module's text lane, on the same code and the same room.
+    @MainActor
+    public static func makeDirectRealtimeTextModel(baseURL: URL = transferBaseURL,
+                                                   verification: VerificationPreference,
+                                                   pairingRoom: LinkRoomHandle)
+        -> RealtimeTextSessionModel {
+        RealtimeTextSessionModel(
+            pairClient: HTTPPairClient(baseURL: baseURL),
+            iceClient: HTTPICEClient(baseURL: baseURL),
+            requiresVerification: { verification.requiresSASConfirmation },
+            makeRoomConnection: { peerId, role, config in
+                guard let signaling = pairingRoom.signaling else { throw NearbyError.notScanning }
+                return try await RealtimeConnectionFactory.connectInRoom(
+                    signaling: signaling, peerId: peerId, role: role,
+                    config: config, mode: .text,
+                    // Load-bearing on this branch: the text lane refuses to offer
+                    // until the peer announces exact `text/1`, and this fallback
+                    // is reached BECAUSE the room heard exactly that.
+                    knownPeerCaps: pairingRoom.peerAnnouncedCaps[peerId] ?? [])
+            },
+            makeConnection: { code, role, servers in
+                try await RealtimeConnectionFactory.make(
+                    code: code, role: role, config: servers,
+                    baseURL: baseURL, deviceName: deviceName(), mode: .text)
+            })
+    }
+
+    /// The Nearby module's `link/1` owner: the code-less room, and no other.
+    ///
+    /// It is registered as a ROOM OBSERVER on the discovery model, which is what
+    /// makes it the half that answers an unsolicited inbound link, and it is
+    /// handed **no** `connectPairingSocket` — so `watchPairingCode` on this
+    /// object has nothing to open and returns false. The direct module's is the
+    /// one that watches codes.
+    ///
+    /// The same shape the iOS overload has, and for the same reason: a boundary
+    /// expressed as a signature the app cannot route around beats a rule
+    /// somebody has to remember.
+    @MainActor
+    public static func makeNearbyLinkWorkspaceModel(baseURL: URL = transferBaseURL,
+                                                    verification: VerificationPreference,
+                                                    nearby: LanDiscoveryModel,
+                                                    receiveDirectory: (() -> URL)? = nil)
+        -> LinkWorkspaceModel {
+        let model = LinkWorkspaceModel(
+            capabilities: nearby.capabilities,
+            receiveDirectory: receiveDirectory ?? defaultLinkReceiveDirectory,
+            requiresVerification: { verification.requiresSASConfirmation },
+            iceClient: HTTPICEClient(baseURL: baseURL))
+        nearby.addRoomObserver(model)
+        model.resolvePeerLabel { [weak nearby] peerId in
+            nearby?.label(forPeerID: peerId) ?? peerId
+        }
+        return model
+    }
+
+    /// The Direct module's `link/1` owner: whichever room a pairing code names.
+    ///
+    /// **It is not a room observer of the discovery model, and that is the fix
+    /// this factory exists for.** One model registered for both rooms received
+    /// the same-network roster's ordinary churn while routing a code room, and
+    /// `LinkRoomRouter.rosterChanged` cancels a pending request whose target is
+    /// absent from the roster it is given — so a device appearing or leaving on
+    /// the LAN cancelled a pairing request in flight. `lanObserverOwnsRouter`
+    /// suppresses that from inside; not registering suppresses it by never
+    /// producing the announcement in the first place.
+    ///
+    /// Its capability registry is its OWN, built with the pairing room's rule
+    /// rather than the code-less room's, so this module cannot read what the LAN
+    /// roster announced. A peer id means nothing outside the room that issued
+    /// it, and neither does a capability recorded against one.
+    @MainActor
+    public static func makeDirectLinkWorkspaceModel(baseURL: URL = transferBaseURL,
+                                                    verification: VerificationPreference,
+                                                    pairingRoom: LinkRoomHandle,
+                                                    receiveDirectory: (() -> URL)? = nil)
+        -> LinkWorkspaceModel {
+        LinkWorkspaceModel(
+            capabilities: PeerCapabilityRegistry(
+                linkRoomActive: { linkRoomActive(isCodelessRoom: false) }),
+            receiveDirectory: receiveDirectory ?? defaultLinkReceiveDirectory,
+            requiresVerification: { verification.requiresSASConfirmation },
+            iceClient: HTTPICEClient(baseURL: baseURL),
+            connectPairingSocket: { code in
+                SignalingClient.connect(wsBase: RealtimeConnectionFactory.signalingBase(baseURL),
+                                        code: code,
+                                        name: deviceName())
+            },
+            // The SAME handle the direct module's legacy models read their
+            // fallback socket from. Two would be two rooms, and the fallback
+            // would build on the one nobody joined.
+            pairingRoomHandle: pairingRoom)
+    }
+
     #else
 
     /// The iOS Nearby tab's `link/1` owner: the code-less room, and no other.

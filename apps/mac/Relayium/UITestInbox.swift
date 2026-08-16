@@ -286,7 +286,17 @@ private final class UITestInboxTransport: InboxTransport, @unchecked Sendable {
     // nonlocalized: acceptance fixture identifiers, never displayed
     private static let deviceID = "dev_this"
     private static let taskID = "task_uitest"
-    private static let fileName = "brief.txt"
+    /// **Three distinctly named files, and not one.**
+    ///
+    /// The result surface used to describe a delivery as a count, so one file
+    /// was enough to drive it. It names what arrived now, and the property worth
+    /// checking is that two rows of a list can be told apart — which a fixture
+    /// delivering one file called `brief.txt` cannot show. These go through the
+    /// production manifest, encryptor, decryptor and commit exactly as one file
+    /// did, so the names on screen are names that were genuinely written to
+    /// disk.
+    // nonlocalized: acceptance fixture file names
+    private static let fileNames = ["brief.txt", "notes.md", "diagram.svg"]
 
     @discardableResult
     private func sync<T>(_ body: () -> T) -> T {
@@ -360,14 +370,19 @@ private final class UITestInboxTransport: InboxTransport, @unchecked Sendable {
         // decryptor's own arithmetic, so a drift in the frame format, the
         // manifest serialization or the sealed box fails the fixture loudly
         // instead of quietly agreeing with itself.
-        let bytes = [UInt8](repeating: 0x52, count: 2_048)
+        // Different sizes as well as different names, so a row that rendered the
+        // right name beside the wrong size would still fail.
+        let files = Self.fileNames.enumerated().map { index, _ in
+            [UInt8](repeating: 0x52, count: 2_048 * (index + 1))
+        }
         let contentKey = generateStoreKey()
-        let manifest = StoredManifest(files: [ManifestFile(name: Self.fileName,
-                                                           size: bytes.count)])
+        let manifest = StoredManifest(files: zip(Self.fileNames, files).map {
+            ManifestFile(name: $0, size: $1.count)
+        })
         guard let encManifest = try? encryptManifest(key: contentKey, manifest),
               let sealed = sodium.box.seal(message: contentKey, recipientPublicKey: recipient)
         else { return (deliveries: [], leaseSeconds: 300) }
-        let body = Data(encryptChunks(key: contentKey, files: [bytes]))
+        let body = Data(encryptChunks(key: contentKey, files: files))
         sync { ciphertext = body }
 
         let task = InboxTask(id: Self.taskID, storedFileID: "obj_uitest",  // nonlocalized: fixture id

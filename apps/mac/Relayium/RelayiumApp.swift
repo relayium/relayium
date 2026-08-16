@@ -167,17 +167,27 @@ struct RelayiumApp: App {
     // without a relaunch.
     @StateObject private var verification: VerificationPreference
     // One discovery model for the whole app: it owns a single room socket, and
-    // both realtime models build their nearby connections on that same socket.
+    // the NEARBY module's realtime models build their connections on that same
+    // socket. The Direct module never touches it.
     @StateObject private var lanDiscovery: LanDiscoveryModel
-    @StateObject private var realtimeModel: RealtimeSessionModel
-    @StateObject private var realtimeTextModel: RealtimeTextSessionModel
+    /// **The two independent transfer modules**, and the reason there are two.
+    ///
+    /// LAN Transfer and Cross-network Transfer used to be two screens over one
+    /// set of models — one `RealtimeSessionModel`, one text model, one
+    /// `LinkWorkspaceModel`, one `TransferPresence`. That made a session on
+    /// either screen lock the other one entirely, made one `link/1` owner route
+    /// two different rooms (so the LAN roster's churn cancelled pairing requests
+    /// in flight), and made "cancel this screen" impossible to express. Each
+    /// module now owns its own everything; see `TransferModule`.
+    ///
+    /// App-scoped, like every model it replaces, and that is what makes the
+    /// owner's requirement true: navigating between the two destinations does
+    /// not touch either module, so a live connection on one survives a visit to
+    /// the other and is still connected on return.
+    @StateObject private var transferModules: TransferModules
     // Background receive and the notifications it needs are app-scoped for the
     // same reason the transfer models are: both have to outlive the window.
     @StateObject private var nearbyReceive: NearbyReceiveModel
-    // The unified `link/1`. App-scoped for the same reason the transport models
-    // are: it follows the resident room socket, so an open link has to survive
-    // the unique window being closed and rebuilt.
-    @StateObject private var linkWorkspace: LinkWorkspaceModel
     // **There is no app-scoped transfer selection any more.**
     //
     // It held the one batch both real-time destinations staged before
@@ -195,13 +205,6 @@ struct RelayiumApp: App {
     // session — last was. Built in `init` rather than defaulted inline because
     // the deep-link coordinator is constructed from this exact instance.
     @StateObject private var navigation: AppNavigationModel
-    // Which destination presents the live session. App-scoped for the same
-    // reason the models are: Nearby and Pairing code drive the SAME realtime
-    // models, and the answer to "which of them is showing it" has to survive the
-    // window's view tree being torn down and rebuilt. It is not — and cannot be
-    // — a defence against a second window; the scene being a unique `Window` is
-    // what makes that impossible.
-    @StateObject private var presence: TransferPresence
     /// Whether this Mac starts Relayium at login. App-scoped because it is the
     /// settings scene's, and that scene is opened and closed independently of
     /// the main window — a view-scoped object would re-read the system on every
@@ -217,6 +220,17 @@ struct RelayiumApp: App {
     /// scheduler would stop the moment the window closed, which is precisely the
     /// case the whole capability exists for.
     @StateObject private var inbox: InboxController
+    /// The Device Inbox's SEND half: this account's own devices as delivery
+    /// targets.
+    ///
+    /// App-scoped for the sharpest version of the reason the receiver is. A
+    /// device send outlives the screen that started it in three separate ways:
+    /// SwiftUI tears an off-screen destination down mid-upload, a durable plan
+    /// survives the process itself, and an account leaving has to cancel work no
+    /// view is watching. Its session observation is installed in `init` for the
+    /// last of those — a sign-out can land while the window is closed, which on
+    /// this app is an ordinary running state.
+    @StateObject private var inboxSend: InboxSendModel
     /// Who the inbox is receiving for. Subscribed in `init` and never from a
     /// view, because a sign-out, an account switch or a session going
     /// `unavailable` must cancel the loop even while no window exists — the same
@@ -268,64 +282,118 @@ struct RelayiumApp: App {
         let prefs = VerificationPreference()
         let nearby = AppEnvironment.makeLanDiscoveryModel()
         // Holds the exact socket an inbound attempt is being built on, so the
-        // two models' inbound builders cannot reach for a room the offer never
+        // NEARBY model's inbound builder cannot reach for a room the offer never
         // came from. Owned by the receive model; the session models only read it.
         let inboundRoom = InboundRoom()
-        // The pairing code's ONE socket. `LinkWorkspaceModel` opens it, watches
-        // it for a `link/1` peer, and — when the peer speaks the older wire —
-        // leaves it here for the legacy connection to be built on rather than
-        // closing it and making the peer's already-sent offer land on nobody.
+        // The pairing code's ONE socket, and the DIRECT module's alone. The
+        // direct `LinkWorkspaceModel` opens it, watches it for a `link/1` peer,
+        // and — when the peer speaks the older wire — leaves it here for that
+        // module's legacy connection to be built on rather than closing it and
+        // making the peer's already-sent offer land on nobody.
         let pairingRoom = LinkRoomHandle()
+
+        // ── the Nearby module ────────────────────────────────────────────────
+        //
+        // Same-network only, in every direction. Its models are built with no
+        // code path at all, so this module cannot mint, join or watch a pairing
+        // code even if a later edit asked it to.
         #if DEBUG
-        let files = UITestMode.makeTerminalNearbyFileModel(verification: prefs)
-            ?? UITestMode.makeWaitingFileModel(verification: prefs)
-            ?? AppEnvironment.makeRealtimeModel(
-                verification: prefs, nearby: nearby, inboundRoom: inboundRoom,
-                pairingRoom: pairingRoom)
-        let text = UITestMode.isActive
+        let nearbyFiles = UITestMode.makeTerminalNearbyFileModel(verification: prefs)
+            ?? AppEnvironment.makeNearbyRealtimeModel(
+                verification: prefs, nearby: nearby, inboundRoom: inboundRoom)
+        // `usesOfflineTransfer`, never `isActive`. A LOOPBACK acceptance launch
+        // is pointed at a real server on this machine and has to exercise the
+        // real transfer graph; substituting here made every built-App run
+        // evidence about the fixtures instead. See `UITestMode.usesOfflineTransfer`.
+        let nearbyText = UITestMode.usesOfflineTransfer
             ? UITestMode.makeRealtimeTextModel(verification: prefs)
-            : AppEnvironment.makeRealtimeTextModel(
-                verification: prefs, nearby: nearby, inboundRoom: inboundRoom,
-                pairingRoom: pairingRoom)
+            : AppEnvironment.makeNearbyRealtimeTextModel(
+                verification: prefs, nearby: nearby, inboundRoom: inboundRoom)
         #else
-        let files = AppEnvironment.makeRealtimeModel(
-            verification: prefs, nearby: nearby, inboundRoom: inboundRoom,
-            pairingRoom: pairingRoom)
-        let text = AppEnvironment.makeRealtimeTextModel(
-            verification: prefs, nearby: nearby, inboundRoom: inboundRoom,
-            pairingRoom: pairingRoom)
+        let nearbyFiles = AppEnvironment.makeNearbyRealtimeModel(
+            verification: prefs, nearby: nearby, inboundRoom: inboundRoom)
+        let nearbyText = AppEnvironment.makeNearbyRealtimeTextModel(
+            verification: prefs, nearby: nearby, inboundRoom: inboundRoom)
         #endif
         let receive = AppEnvironment.makeNearbyReceiveModel(
-            fileModel: files, textModel: text, discovery: nearby, inboundRoom: inboundRoom)
+            fileModel: nearbyFiles, textModel: nearbyText,
+            discovery: nearby, inboundRoom: inboundRoom)
         // Registered on the SAME discovery model, after background receive, so
         // the shipped interceptor keeps its position in the socket's routing
         // order. Built here rather than in a view because an open link outlives
         // the window.
         #if DEBUG
-        let unified = UITestMode.isActive
-            ? UITestMode.makeLinkWorkspaceModel(
-                verification: prefs, nearby: nearby, pairingRoom: pairingRoom)
-            : AppEnvironment.makeLinkWorkspaceModel(
-                verification: prefs, nearby: nearby, pairingRoom: pairingRoom)
+        let nearbyLink = UITestMode.usesOfflineTransfer
+            ? UITestMode.makeNearbyLinkWorkspaceModel(verification: prefs, nearby: nearby)
+            : AppEnvironment.makeNearbyLinkWorkspaceModel(verification: prefs, nearby: nearby)
         #else
-        let unified = AppEnvironment.makeLinkWorkspaceModel(
-            verification: prefs, nearby: nearby, pairingRoom: pairingRoom)
+        let nearbyLink = AppEnvironment.makeNearbyLinkWorkspaceModel(
+            verification: prefs, nearby: nearby)
         #endif
+
+        // ── the Direct module ────────────────────────────────────────────────
+        //
+        // A pairing code and the room it names, and no roster anywhere. It is
+        // NOT a room observer of the discovery model, which is what stops the
+        // same-network roster's churn from cancelling a pairing request in
+        // flight — see `AppEnvironment.makeDirectLinkWorkspaceModel`.
+        #if DEBUG
+        let directFiles = UITestMode.makeWaitingFileModel(verification: prefs)
+            ?? AppEnvironment.makeDirectRealtimeModel(
+                verification: prefs, pairingRoom: pairingRoom)
+        let directText = UITestMode.usesOfflineTransfer
+            ? UITestMode.makeRealtimeTextModel(verification: prefs)
+            : AppEnvironment.makeDirectRealtimeTextModel(
+                verification: prefs, pairingRoom: pairingRoom)
+        // **The one substitution that made a real Direct session impossible.**
+        // The offline fixture's `connectPairingSocket` is a
+        // `preconditionFailure` and its ICE client sleeps for five minutes, and
+        // `watchPairingCode` reads ICE first — so an acceptance launch given
+        // this model joins a code, publishes `.watching`, and never opens the
+        // room's socket at all. Both native ends then wait for each other
+        // forever, which is precisely the "neither side promotes" measurement
+        // that was written up as a pairing-wire defect.
+        let directLink = UITestMode.usesOfflineTransfer
+            ? UITestMode.makeDirectLinkWorkspaceModel(
+                verification: prefs, pairingRoom: pairingRoom)
+            : AppEnvironment.makeDirectLinkWorkspaceModel(
+                verification: prefs, pairingRoom: pairingRoom)
+        #else
+        let directFiles = AppEnvironment.makeDirectRealtimeModel(
+            verification: prefs, pairingRoom: pairingRoom)
+        let directText = AppEnvironment.makeDirectRealtimeTextModel(
+            verification: prefs, pairingRoom: pairingRoom)
+        let directLink = AppEnvironment.makeDirectLinkWorkspaceModel(
+            verification: prefs, pairingRoom: pairingRoom)
+        #endif
+
+        // Each module wires its own liveness, availability and surface-idle
+        // observation from its OWN presence — see `TransferModule.init`. Two
+        // presences is the whole point: neither module can be locked, released
+        // or refused by the other one's session.
+        let nearbyModule = TransferModule(route: .nearby, files: nearbyFiles,
+                                          text: nearbyText, link: nearbyLink)
+        let directModule = TransferModule(route: .pairingCode, files: directFiles,
+                                          text: directText, link: directLink)
+        let modules = TransferModules(nearby: nearbyModule, direct: directModule)
+        _transferModules = StateObject(wrappedValue: modules)
+
         // The one place a watched code becomes an ordinary legacy session. The
         // socket is already open and already the room's; this only chooses which
         // model runs on it from the staged batch and peer capabilities.
-        // Installed below, once `presenting` exists: the fallback has to move
-        // the surface's mode as well as start the session, and that object is
-        // built a few lines further down.
-        let adoptLegacy: (String, Role, ICEConfig, TransferMode,
-                          TransferPresence) -> Void = { peerID, role, config, mode, presence in
+        //
+        // It reaches the DIRECT module and nothing else: a pairing room's
+        // fallback is a pairing session, and the Nearby module has no code path
+        // for one to land in.
+        let adoptLegacy: (String, Role, ICEConfig, TransferMode) -> Void = {
+            peerID, role, config, mode in
             // The lane the LINK MODEL decided on — from what was staged and what
             // the peer announced, never from a verb the user pressed — and the
             // surface has to follow it: the pane renders one lane at a time.
-            presence.claim(AppDestination.pairingCode, mode: mode)
+            directModule.presence.claim(.pairingCode, mode: mode)
             switch mode {
             case .files:
-                Task { await files.adoptRoom(peerId: peerID, role: role, config: config) }
+                Task { await directFiles.adoptRoom(peerId: peerID, role: role, config: config) }
             case .text:
                 // **The minted code has to be retired, and only after the text
                 // lane is live.**
@@ -335,9 +403,10 @@ struct RelayiumApp: App {
                 // surface renders, and the only one that can hold a staged
                 // batch. A room that resolves to a legacy TEXT peer therefore
                 // leaves that model parked in `.showingCode` — never idle — so
-                // `sessionIsLiveOrRetained` would hold both transfer
-                // destinations locked for the rest of the launch and the
-                // surface would never return to its connect phase.
+                // this module's `sessionIsLiveOrRetained` would hold the Direct
+                // destination locked for the rest of the launch and its surface
+                // would never return to the connect phase. (It no longer locks
+                // the Nearby screen as well; that is what modules changed.)
                 //
                 // The ORDER is the load-bearing half. `TransferPresence` gives
                 // the surface up the moment every model and the link all read
@@ -350,24 +419,24 @@ struct RelayiumApp: App {
                 // Safe on the batch: `legacyFallbackMode` answers `.files` for
                 // anything staged, so a text room is one with nothing to send.
                 Task {
-                    await text.adoptRoom(peerId: peerID, role: role, config: config)
-                    files.cancel()
+                    await directText.adoptRoom(peerId: peerID, role: role, config: config)
+                    directFiles.cancel()
                 }
             }
         }
         // A batch armed while the room was still being watched. The legacy file
         // model stages its own, so it is handed over rather than enqueued twice.
-        unified.onLegacyFallbackBatch = { metas, sources in
+        directLink.onLegacyFallbackBatch = { metas, sources in
             guard !metas.isEmpty else { return }
-            files.stageSend(sources: sources, metas: metas)
+            directFiles.stageSend(sources: sources, metas: metas)
         }
         // Pairing codes are rendered by the legacy file model until a peer is
         // known. Once the room resolves to `link/1`, the link has already
         // published `.requesting`, so clearing that stale code cannot create an
         // all-idle ownership gap. Without this handoff the old code would
-        // reappear after the unified link ended and keep both transfer routes
+        // reappear after the unified link ended and keep the Direct route
         // locked.
-        unified.onPairingLinkActivated = { files.cancel() }
+        directLink.onPairingLinkActivated = { directFiles.cancel() }
         // One key store for the whole app: the upload model writes a key here,
         // the account model reads it back and removes it with the object. Two
         // instances would still work — they address the same keychain items —
@@ -383,10 +452,7 @@ struct RelayiumApp: App {
             keyStore: storedKeys, transport: UITestMode.makeAccountTransport())
         _verification = StateObject(wrappedValue: prefs)
         _lanDiscovery = StateObject(wrappedValue: nearby)
-        _realtimeModel = StateObject(wrappedValue: files)
-        _realtimeTextModel = StateObject(wrappedValue: text)
         _nearbyReceive = StateObject(wrappedValue: receive)
-        _linkWorkspace = StateObject(wrappedValue: unified)
         _uploadModel = StateObject(wrappedValue: uploads)
         _downloadModel = StateObject(wrappedValue: downloads)
         _accountManagement = StateObject(wrappedValue: management)
@@ -429,15 +495,8 @@ struct RelayiumApp: App {
         _notifications = StateObject(wrappedValue: TransferNotificationCenter(
             uploadModel: uploads,
             downloadModel: downloads,
-            fileModel: files,
-            textModel: text,
+            modules: modules,
             receiveModel: receive))
-        let presenting = TransferPresence()
-        // The link is the THIRD liveness source. Without it, a link session
-        // would be released the instant it started: it uses neither legacy
-        // model, so both of them read idle for its whole life.
-        presenting.observeSessions(fileModel: files, textModel: text, link: unified)
-        _presence = StateObject(wrappedValue: presenting)
         let routing = AppNavigationModel()
         _navigation = StateObject(wrappedValue: routing)
         // Admission happens before NearbyReceive builds or publishes an
@@ -445,55 +504,62 @@ struct RelayiumApp: App {
         // interval after an outbound action has claimed its surface, so waiting
         // for AppShell's activeKind task would reject navigation only after the
         // inbound attempt had already reached the shared model.
+        //
+        // The NEARBY module's presence, and only that one. An inbound
+        // same-network offer is refused when this module is already busy; a
+        // pairing code being minted on the other screen is no longer a reason to
+        // refuse it, which is the defect the modules split repairs — a peer
+        // dialling this Mac used to be turned away because its owner was
+        // creating a code somewhere else in the app.
         receive.shouldAcceptSession = { kind, peerID in
             AppRouting.claimIncoming(kind,
                                      peerLabel: nearby.label(forPeerID: peerID),
-                                     presence: presenting, navigation: routing)
+                                     presence: nearbyModule.presence, navigation: routing)
         }
         // The authoritative gate for an UNSOLICITED link, on the main actor.
-        // Same arbitration as the legacy one above, through the same
-        // `TransferPresence`, which is what makes "a link session and a legacy
-        // session cannot coexist" true rather than merely intended. Navigation
-        // follows, so a link that arrives while the user is on another
-        // destination is not invisible.
-        unified.shouldAcceptLink = { peerID in
-            guard presenting.beginSession(.nearby,
-                                          peerLabel: nearby.label(forPeerID: peerID))
+        // Same arbitration as the legacy one above, through the same NEARBY
+        // presence, which is what makes "a link session and a legacy session
+        // cannot coexist *in this module*" true rather than merely intended.
+        // Navigation follows, so a link that arrives while the user is on
+        // another destination is not invisible.
+        nearbyLink.shouldAcceptLink = { peerID in
+            guard nearbyModule.presence.beginSession(
+                .nearby, peerLabel: nearby.label(forPeerID: peerID))
             else { return false }
             routing.select(.nearby)
             return true
         }
-        // The advisory mirror the socket's delivery queue reads. Written from
-        // the one authoritative fact — whether anything owns the surface — so it
-        // cannot drift from the gate above by more than the hop it is
-        // documented to lag by.
-        unified.adoptLegacyRoom = { [weak presenting] peerID, role, config, mode in
-            guard let presenting else { return }
-            adoptLegacy(peerID, role, config, mode, presenting)
+        // The advisory mirror the pairing socket's delivery queue reads. Written
+        // from the one authoritative fact — whether the DIRECT module owns its
+        // surface — so it cannot drift from the gate above by more than the hop
+        // it is documented to lag by.
+        directLink.adoptLegacyRoom = { peerID, role, config, mode in
+            adoptLegacy(peerID, role, config, mode)
         }
-        unified.observeAvailability(
-            presenting.$owner.map { $0 == nil }.eraseToAnyPublisher())
-        // The same ownership fact closes a room that was handed to the legacy
-        // path: nothing owns the surface means that session is over, and the
-        // code's socket has nobody left to serve.
-        unified.observeSurfaceIdle(
-            presenting.$owner.map { $0 == nil }.eraseToAnyPublisher())
         #if DEBUG
         if UITestMode.showsTerminalNearby {
-            presenting.claim(.nearby, mode: .files,
-                             peerLabel: "Studio Mac · 19af02") // nonlocalized: deterministic UI-test fixture
+            nearbyModule.presence.claim(.nearby, mode: .files,
+                                        peerLabel: "Studio Mac · 19af02") // nonlocalized: deterministic UI-test fixture
             routing.select(.nearby)
-            Task { await files.connectNearby(peerId: "ui-nearby-peer", role: .initiator) }
+            Task { await nearbyFiles.connectNearby(peerId: "ui-nearby-peer", role: .initiator) }
         }
         #endif
         // Last, because it is built from four objects above and owns none of
         // them. It navigates exactly once per link, and it is the ONE place that
         // decides whether a link may write into a model that is mid-transfer —
         // which is why no view on this platform repeats that decision.
+        //
+        // **The DIRECT module's models, and only those.** `AppRouting` sends a
+        // `realtime` link to `.pairingCode`, so the model it may write a code
+        // into is that module's — and the busy rule it applies is that module's
+        // too. Handed the Nearby module's, it would refuse to apply a pairing
+        // link because a same-network transfer was running, which is precisely
+        // the cross-module interference this split removes.
         _deepLinkRouting = StateObject(wrappedValue: AppDeepLinkCoordinator(
             navigation: routing, download: downloads,
-            realtime: files, realtimeText: text, presence: presenting,
-            selectRealtimeMode: { mode in presenting.selectMode(mode) }))
+            realtime: directFiles, realtimeText: directText,
+            presence: directModule.presence,
+            selectRealtimeMode: { mode in directModule.presence.selectMode(mode) }))
         // Built from the SAME navigation model, so an opened file and a tapped
         // link cannot disagree about where the user is. It takes nothing else:
         // staging a selection touches no transfer model, which is why this one
@@ -520,6 +586,28 @@ struct RelayiumApp: App {
         let bridge = InboxSessionBridge(controller: receiving)
         bridge.observe(account.$state, bearer: { account.bearerToken })
         inboxSession = bridge
+
+        // The SEND half of the Device Inbox, built from the same factory iOS
+        // uses and observing the same session.
+        //
+        // **`drafts: nil`, and that is a refusal rather than an omission.** A
+        // draft store is the authority to RETIRE a draft — to delete the only
+        // copy of files another process handed this app — and macOS device sends
+        // are chosen with this app's own file picker, so no delivery here can
+        // ever have come from one. Passing the store would hand that authority
+        // to a path that has no legitimate use for it.
+        //
+        // The observation is installed HERE, before any view exists, for the
+        // reason `InboxSessionBridge` is: a sign-out or an account switch has to
+        // cancel an account-owned delivery — and stop describing it — while the
+        // unique window may be closed, which on this app is an ordinary running
+        // state rather than a shutdown.
+        let delivering = AppEnvironment.makeInboxSendModel(
+            pending: AppEnvironment.makePendingUploadSupport(
+                drafts: nil, root: UITestMode.pendingUploadRoot()),
+            transport: UITestMode.makeAccountTransport())
+        delivering.observe(account.$state)
+        _inboxSend = StateObject(wrappedValue: delivering)
     }
 
     /// The shipped Device Inbox: the real stores, the real transport, and the
@@ -607,7 +695,14 @@ struct RelayiumApp: App {
             AppShellView()
                 .environment(\.layoutDirection, appLayoutDirection)
                 .environmentObject(navigation)
-                .environmentObject(presence)
+                // BOTH modules, as one container. SwiftUI's environment is keyed
+                // by type, so two `TransferModule`s could not both live in it —
+                // and two wrapper types differing only by name would be a
+                // distinction nothing enforces. The shell reads `modules.nearby`
+                // and `modules.direct` by name and hands each destination
+                // exactly one, which is what keeps a screen unable to reach the
+                // other module's session at all.
+                .environmentObject(transferModules)
                 .environmentObject(session)
                 .environmentObject(deepLinks)
                 .environmentObject(deepLinkRouting)
@@ -617,12 +712,9 @@ struct RelayiumApp: App {
                 .environmentObject(downloadModel)
                 .environmentObject(accountManagement)
                 .environmentObject(signOut)
-                .environmentObject(realtimeModel)
-                .environmentObject(realtimeTextModel)
                 .environmentObject(verification)
                 .environmentObject(lanDiscovery)
                 .environmentObject(nearbyReceive)
-                .environmentObject(linkWorkspace)
                 // The receiver and the login-item preference reach the main
                 // window because the Device Inbox is a destination in it now,
                 // not only a settings tab. It is the SAME app-scoped controller
@@ -631,6 +723,10 @@ struct RelayiumApp: App {
                 // `InboxSurfaceGuardTests` counts these injections for exactly
                 // that reason.
                 .environmentObject(inbox)
+                // The send half, into the one window that renders it. The menu
+                // bar deliberately does not get it: nothing there sends, and a
+                // second injection point is how a second reader starts.
+                .environmentObject(inboxSend)
                 .environmentObject(loginItem)
                 // An environment VALUE, because the honest type is optional: the
                 // direct build has no purchase model, and `@EnvironmentObject`
@@ -709,23 +805,22 @@ struct RelayiumApp: App {
                 .task {
                     // Wired here rather than at init: the delegate is created by
                     // the adaptor before the StateObjects exist.
+                    // BOTH modules, on all three. Quit is the one action in the
+                    // app that genuinely means every module: a guard that asked
+                    // only one of them would let ⌘Q kill a live transfer on the
+                    // other without ever mentioning it, and that is the exact
+                    // silent loss this guard exists to prevent. It is also the
+                    // ONLY path allowed to reach `TransferModules.cancelEverything`
+                    // — a per-module Cancel must never come through here.
                     quitGuard.isTransferRunning = {
                         uploadModel.isBusy || downloadModel.isBusy
-                            || realtimeModel.isBusy || realtimeTextModel.isBusy
+                            || transferModules.isBusy
                     }
-                    quitGuard.hasLocalText = {
-                        realtimeTextModel.hasLocalContent
-                    }
+                    quitGuard.hasLocalText = { transferModules.hasLocalText }
                     quitGuard.cancelTransfers = {
                         uploadModel.cancel()
                         downloadModel.cancel()
-                        realtimeModel.cancel()
-                        realtimeTextModel.end()
-                        // Every session at once, from a path with no
-                        // destination to ask — the one case `releaseAll` exists
-                        // for. Nothing is left owning a transfer that no longer
-                        // runs.
-                        presence.releaseAll()
+                        transferModules.cancelEverything()
                     }
                     // The fallback path, for the day AppKit stops emptying
                     // `application(_:open:)`. Wired here for the same reason as

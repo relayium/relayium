@@ -141,9 +141,59 @@ final class DeviceInboxUITests: XCTestCase {
                           timeout: TimeInterval = 5) -> XCUIElement {
         let found = element(identifier, in: window)
         if found.waitForExistence(timeout: timeout) { return found }
-        window.swipeUp()
+        scrollDown(window)
         _ = found.waitForExistence(timeout: timeout)
         return found
+    }
+
+    /// Scroll the destination's own scroll view down by a third of a window.
+    ///
+    /// **Two things here were measured rather than assumed, and both had to
+    /// change.**
+    ///
+    /// `swipeUp()` is a touch gesture and does not move an `NSScrollView`: on
+    /// macOS 26.6 this page reported the Help control at a constant 1678pt
+    /// through twelve consecutive swipes in a 612pt window. It had never failed
+    /// anything, because every control reached that way was already on screen —
+    /// the shape of a helper that quietly cannot fail.
+    ///
+    /// `window.scroll(byDeltaX:deltaY:)` does not work either, and that is the
+    /// trap: it is the right API on the wrong element, so it compiles, runs and
+    /// reports nothing. The scroll has to be sent to the scroll view the
+    /// destination actually owns — `sv.scroll(byDeltaX: 0, deltaY: -300)` moved
+    /// the same control by exactly 300pt.
+    private func scrollDown(_ window: XCUIElement) {
+        destinationScrollView(in: window).scroll(byDeltaX: 0, deltaY: -220)
+    }
+
+    /// The detail column's scroller, never the sidebar's.
+    ///
+    /// Named by the destination identifier the shell already puts on it. The
+    /// fallback is the widest scroll view, because the sidebar's is the narrow
+    /// one and picking `firstMatch` would scroll that instead — silently, and
+    /// with the same "nothing moved" symptom.
+    private func destinationScrollView(in window: XCUIElement) -> XCUIElement {
+        let named = window.scrollViews.allElementsBoundByIndex
+            .first { $0.identifier.hasPrefix("destination-") }
+        return named ?? window.scrollViews.allElementsBoundByIndex
+            .max { $0.frame.width < $1.frame.width } ?? window
+    }
+
+    /// Scroll until an element is fully usable, or give up after a bounded walk.
+    ///
+    /// Bounded rather than "until it stops moving": a page that genuinely cannot
+    /// reach the element has to fail the assertion that follows, not spin.
+    @discardableResult
+    private func scrollToReveal(_ element: XCUIElement, in window: XCUIElement,
+                                steps: Int = 25) -> Bool {
+        for _ in 0..<steps {
+            if element.exists, element.isHittable, window.frame.contains(element.frame) {
+                return true
+            }
+            scrollDown(window)
+        }
+        return element.exists && element.isHittable
+            && window.frame.contains(element.frame)
     }
 
     /// A control the user is meant to act on, checked the way a person meets it:
@@ -583,26 +633,111 @@ final class DeviceInboxUITests: XCTestCase {
     /// A real delivery, decrypted and committed during this launch, appears as a
     /// result that can be revealed — and is described by count, size and time
     /// rather than by name.
-    func testACompletedDeliveryOffersRevealInFinderWithoutNamingTheFile() {
+    /// **A completed delivery names the files it actually wrote, and the section
+    /// offers ONE Finder action.**
+    ///
+    /// Inverted from the assertion it replaces, deliberately. That one required
+    /// the row to say "1 file saved" and to contain no file name — the
+    /// NOTIFICATION's rule, which is still correct for a banner macOS draws on a
+    /// locked screen and is still asserted in `InboxSurfaceGuardTests`. Applied
+    /// here it produced a list whose rows were identical to each other, beside a
+    /// column of identical Finder buttons that all opened the same folder.
+    ///
+    /// What is still refused has not moved, and is checked below: the containing
+    /// PATH never appears.
+    func testACompletedDeliveryNamesItsFilesAndOffersOneFinderAction() {
         launch(["--relayium-ui-testing-signed-in", "--relayium-ui-testing-inbox-result"])
         let window = openDeviceInboxDestination()
 
-        // The result list is the last section but one, so it may be below the
-        // fold as well as not yet written — `revealed` distinguishes the two.
-        let reveal = revealed("inbox-reveal", in: window, timeout: 60)
-        XCTAssertTrue(reveal.exists,
-                      "a completed delivery cannot be revealed in Finder")
-        let row = text(of: element("inbox-result", in: window))
-        XCTAssertTrue(row.contains("1 file saved"), "the result does not say what arrived")
+        // The result list is near the bottom, so it may be below the fold as
+        // well as not yet written — `revealed` distinguishes the two.
+        let first = revealed("inbox-result", in: window, timeout: 60)
+        XCTAssertTrue(first.exists, "no completed delivery was rendered")
+        let row = text(of: first)
+        // The fixture delivers three distinctly named files through the real
+        // manifest, encryptor and commit, so these are names that were genuinely
+        // written to this machine's disk during the test.
+        for name in ["brief.txt", "notes.md", "diagram.svg"] {
+            XCTAssertTrue(row.contains(name),
+                          "the result does not name \(name), which it saved")
+        }
+        // The row says how much and when as well as what.
+        XCTAssertTrue(row.contains("KB") || row.contains("MB"),
+                      "the result does not say how much arrived")
         // Scoped to the ROW, not to the window: the folder line legitimately
         // names the chosen folder, and asserting over the whole surface would
         // make this test pass or fail on that instead.
-        XCTAssertFalse(row.contains("brief.txt"),
-                       "the result rendered the received file's name")
         XCTAssertFalse(row.contains("/"), "the result rendered a path")
-        // The spoken name carries the row, so two results do not sound alike.
-        XCTAssertTrue(reveal.label.contains("Show in Finder"))
-        XCTAssertTrue(reveal.label.contains("1 file saved"))
+
+        // **One Finder action, and it is the section's.** A per-row control is
+        // the exact thing that was removed, so its absence is asserted rather
+        // than merely not looked for.
+        XCTAssertEqual(window.descendants(matching: .any)
+            .matching(identifier: "inbox-reveal").count, 0,
+                       "the results list still carries a Finder button per row")
+        let reveal = revealed("inbox-reveal-folder", in: window, timeout: 20)
+        scrollToReveal(reveal, in: window)
+        assertOnScreen(reveal, "the section's Show in Finder", in: window)
+        XCTAssertEqual(window.descendants(matching: .any)
+            .matching(identifier: "inbox-reveal-folder").count, 1,
+                       "the Recently received section offers more than one Finder action")
+        // Spoken, it says which folder it opens — the fact that distinguishes it
+        // from every other Finder action in the window.
+        XCTAssertTrue(reveal.label.contains("Show the receive folder"),
+                      "the section action does not say what it opens: \(reveal.label)")
+    }
+
+    /// **The whole Help section is readable with every preceding section
+    /// present.**
+    ///
+    /// The owner's report, as a runtime property. `DestinationScaffold` gives the
+    /// grouped `Form` an exact height inside a `GeometryReader`, and the header
+    /// is a `safeAreaInset` — which does not draw OVER the modified view, it
+    /// reports a size that includes itself. Applied to the already-framed Form
+    /// the composite came out taller than the window by the header's height, so
+    /// the bottom of the Form's own viewport hung below the window's edge: the
+    /// last section could be scrolled to and never finished.
+    ///
+    /// This is driven in the state with the MOST content above Help — signed in,
+    /// a completed delivery, and blocked banners adding their own section — which
+    /// is the configuration the report came from and the one where an
+    /// off-by-a-header-height clip is largest.
+    func testTheFullHelpSectionIsReadableUnderTheLongestContent() {
+        launch(["--relayium-ui-testing-signed-in", "--relayium-ui-testing-inbox-result",
+                "--relayium-ui-testing-inbox-notifications-denied"])
+        let window = openDeviceInboxDestination()
+
+        // Wait for the longest state to actually BE the longest: a delivery that
+        // has not committed yet is a shorter page, and scrolling to the bottom of
+        // it would prove nothing about the one the owner saw.
+        XCTAssertTrue(revealed("inbox-result", in: window, timeout: 60).exists,
+                      "the completed delivery never appeared, so this is not the long page")
+        XCTAssertTrue(element("inbox-banners-blocked", in: window).exists
+                      || revealed("inbox-banners-blocked", in: window).exists,
+                      "the banner section is absent, so this is not the long page")
+
+        // Scroll to the very bottom. The page is several windows tall in this
+        // state, so this walks rather than taking `revealed`'s single step.
+        let help = element("destination-help", in: window)
+        scrollToReveal(help, in: window)
+        assertOnScreen(help, "the Help control", in: window)
+
+        // Open it, and read the WHOLE thing. The heading being reachable was
+        // never the failure — the body running off the bottom edge was.
+        help.click()
+        scrollToReveal(element("destination-help-guide", in: window), in: window)
+        // The guide link is the LAST element inside the expanded help, so it
+        // standing fully inside the window is the property "the complete section
+        // is readable" reduces to. `assertOnScreen` reports which edge and by how
+        // many points, so a regression here reads as a layout measurement rather
+        // than as `Not hittable`.
+        let guide = element("destination-help-guide", in: window)
+        XCTAssertTrue(guide.exists,
+                      "the expanded Help has no guide link, so its end cannot be located")
+        assertOnScreen(guide, "the end of the Help body", in: window)
+        // And the control that opened it is still inside the window too, so the
+        // section is not merely reachable one edge at a time.
+        XCTAssertTrue(help.exists, "the Help heading disappeared once expanded")
     }
 
     // MARK: - residency

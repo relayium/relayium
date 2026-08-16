@@ -29,7 +29,10 @@ struct AppShellView: View {
     /// decides nothing itself.
     @EnvironmentObject private var fileOpens: AppFileOpenRouter
     @EnvironmentObject private var fileOpenRouting: AppFileOpenCoordinator
-    @EnvironmentObject private var presence: TransferPresence
+    /// The two independent transfer modules. Held here because this is the one
+    /// place that decides WHICH destination draws, and therefore the one place
+    /// that hands each of them its own module. It renders neither itself.
+    @EnvironmentObject private var modules: TransferModules
     @EnvironmentObject private var nearbyReceive: NearbyReceiveModel
     /// The ONE account-adjacent fact this file learns, and it is deliberately
     /// not who is signed in: whether a sign-out's network revocation is running
@@ -62,8 +65,12 @@ struct AppShellView: View {
                 // destination is a compile error in `AppDestination.macSurface`
                 // rather than a screen that never opens.
                 switch navigation.selection.macSurface {
-                case .lanTransfer:          LanTransferDestination()
-                case .crossNetworkTransfer: CrossNetworkTransferDestination()
+                // Each transfer destination is handed ONE module, by name, and
+                // holds no way to reach the other. That is what makes "cancel
+                // here cancels only this" a property of the composition rather
+                // than a rule the views have to keep.
+                case .lanTransfer:          LanTransferDestination(module: modules.nearby)
+                case .crossNetworkTransfer: CrossNetworkTransferDestination(module: modules.direct)
                 case .storedSend:           StoredSendDestination()
                 // Reachable, never browseable. A `relayium.com` download link
                 // the OS handed this app selects `.storedReceive`, and this is
@@ -146,11 +153,17 @@ struct AppShellView: View {
         // tree never saw, `task(id:)` fires on the value it comes back to.
         .task(id: nearbyReceive.activeKind) {
             guard let kind = nearbyReceive.activeKind else { return }
-            // Claim BEFORE navigating. Pairing-code and Nearby use the same
-            // models, so a mistaken/stale publication must not move the user
-            // away from a pairing session that already owns its surface.
+            // Claim BEFORE navigating, on the NEARBY module's presence — an
+            // inbound same-network session belongs to that module and to no
+            // other. The claim still comes first, because a mistaken or stale
+            // publication must not move the user away from a same-network
+            // session that module already owns.
+            //
+            // It no longer defers to a pairing code: a Direct session running on
+            // the other screen is a different module now, so reconciling this
+            // one cannot disturb it and is not disturbed by it.
             AppRouting.reconcileIncoming(kind,
-                                         presence: presence,
+                                         presence: modules.nearby.presence,
                                          navigation: navigation)
         }
     }

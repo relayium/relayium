@@ -426,7 +426,24 @@ PY
 # inserted a row directly would prove nothing about the endpoints the app calls.
 # The password never reaches argv — it is written into a request body file inside
 # the per-run root and removed as soon as it is spent.
+#
+# **Set `acceptance_extra_devices` before calling to get extra device rows.**
+# A Device Inbox run needs several device ROWS on one account — a delivery is
+# sealed to one device's key and a sender is removed from its own target list —
+# and a row is what `native/login` mints per `deviceName`. They are logged in
+# HERE rather than by the caller for one reason: the password stays `local` to
+# this function. A caller that could log in for itself would need the password
+# to outlive the request bodies below, which is the one secret in a run root
+# that must not.
+#
+# A pre-set array rather than positional arguments, so the three existing
+# callers keep calling this with no arguments and stay free of ShellCheck's
+# SC2119 — a signature change that made every current call site warn would be a
+# cost paid by scripts that do not use the feature.
+#
+# Sets `account_device_tokens` and `account_device_names`, index-aligned.
 acceptance_create_account() {
+  local -a extra_devices=(${acceptance_extra_devices+"${acceptance_extra_devices[@]}"})
   account_email="acceptance-${run_tag}@example.invalid"
   local account_password
   account_password="$(od -An -tx1 -N24 /dev/urandom | tr -d ' \n')"
@@ -473,6 +490,30 @@ acceptance_create_account() {
 import json, sys
 print(json.load(open(sys.argv[1])).get("token", ""))' "$run_root/session.json")"
   [ -n "$account_token" ] || fail "the login answered no bearer token"
+
+  # One more login per requested device name, each of which mints its OWN device
+  # row. Same endpoint, same body shape, same immediate removal of the file that
+  # carried the password.
+  account_device_names=()
+  account_device_tokens=()
+  local device body token
+  for device in ${extra_devices+"${extra_devices[@]}"}; do
+    body="$run_root/login-device.json"
+    printf '{"email":"%s","password":"%s","deviceName":"%s"}' \
+      "$account_email" "$account_password" "$device" >"$body"
+    curl -sf --max-time 20 -X POST "$origin/api/auth/native/login" \
+      -H 'Content-Type: application/json' \
+      --data-binary "@$body" -o "$run_root/device-session.json" \
+      || fail "could not sign in the acceptance device $device"
+    rm -f "$body"
+    token="$(python3 -c '
+import json, sys
+print(json.load(open(sys.argv[1])).get("token", ""))' "$run_root/device-session.json")"
+    rm -f "$run_root/device-session.json"
+    [ -n "$token" ] || fail "the login for $device answered no bearer token"
+    account_device_names+=("$device")
+    account_device_tokens+=("$token")
+  done
   # Four bodies carried a password or a bearer token. They are removed as soon as
   # they are spent rather than lingering for the length of the run —
   # `session.json` included, because the run root is deliberately KEPT on failure

@@ -49,6 +49,32 @@ enum UITestMode {
     /// passes no origin at all — resolves production and is refused here, which
     /// is the behaviour that shipped before this existed.
     static let allowsResidency = isActive && AppEnvironment.isLoopbackTransferOrigin
+    /// Whether this launch substitutes the OFFLINE transfer models.
+    ///
+    /// **The exact complement of `allowsResidency`, and it has to be.** The
+    /// substitutions below — a pair client that mints `483920`, an ICE client
+    /// that sleeps for five minutes, a pairing socket factory that is a
+    /// `preconditionFailure` — exist so the offline suite can hold a handoff
+    /// screen without contacting production. They were applied on `isActive`
+    /// alone, which quietly made them apply to the LOOPBACK acceptance launch as
+    /// well, and that is not a slower version of the product: it is a different
+    /// one. `LinkWorkspaceModel.watchPairingCode` awaits its ICE read BEFORE it
+    /// opens the room, so a fixture ICE client leaves the app in `.watching`
+    /// for the whole run and no pairing socket is ever opened. Measured exactly
+    /// that way: two native ends both waiting, neither asking, and the cause
+    /// written up as a product defect in the pairing wire.
+    ///
+    /// So the rule is the one iOS already applies — its fixtures answer `nil`
+    /// unless their own flag is passed, and a plain acceptance launch there gets
+    /// the real models. A loopback origin is a real server on this machine, and
+    /// a launch pointed at one must exercise the real transfer graph or it is
+    /// evidence about the fixtures.
+    ///
+    /// The per-fixture flags (`--relayium-ui-testing-file-code`,
+    /// `--relayium-ui-testing-terminal-nearby`, `--relayium-ui-testing-text-code`)
+    /// keep their own guards and are unaffected: they are only ever passed by
+    /// the offline suite, which resolves production and is refused residency.
+    static let usesOfflineTransfer = isActive && !allowsResidency
     /// Holds the text pairing model on a deterministic terminal failure so the
     /// UI suite can verify that cleanup, not a second start path, owns the page.
     // nonlocalized: a test-only launch argument, absent from Release
@@ -220,6 +246,17 @@ enum UITestMode {
     static let showsGeneratedFileCode = ProcessInfo.processInfo.arguments.contains(
         fileCodeArgument)
 
+    /// A generated code whose deadline is seconds away, so the countdown, the
+    /// expiry and the regeneration path can all be driven in one launch.
+    ///
+    /// Additive to `--relayium-ui-testing-file-code` rather than a mode of its
+    /// own: what is being checked is the ordinary minted-code surface reaching
+    /// its own deadline, not a separate screen.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let expiringCodeArgument = "--relayium-ui-testing-expiring-code"
+    static let showsExpiringCode = ProcessInfo.processInfo.arguments
+        .contains(expiringCodeArgument)
+
     /// A `relayium.com` link this launch should be handed at startup.
     ///
     /// **The only way the suite can reach Open a link, and deliberately so.**
@@ -314,12 +351,32 @@ enum UITestMode {
     /// owns a separate ICE read before it opens the room. Leaving that client
     /// live makes an offline acceptance launch replace a valid generated code
     /// with `roomUnavailable` according to runner network timing.
+    ///
+    /// **Two factories, because the product has two modules.** They mirror
+    /// `AppEnvironment.makeNearbyLinkWorkspaceModel` and
+    /// `makeDirectLinkWorkspaceModel` exactly: the nearby one observes the room
+    /// and can open no code, the direct one watches a code and observes no
+    /// roster. A single acceptance model registered for both would be the shared
+    /// graph the product no longer has, which is the one thing an acceptance
+    /// substitution must never quietly restore.
     @MainActor
-    static func makeLinkWorkspaceModel(verification: VerificationPreference,
-                                       nearby: LanDiscoveryModel,
-                                       pairingRoom: LinkRoomHandle) -> LinkWorkspaceModel {
+    static func makeNearbyLinkWorkspaceModel(verification: VerificationPreference,
+                                             nearby: LanDiscoveryModel) -> LinkWorkspaceModel {
         let model = LinkWorkspaceModel(
             capabilities: nearby.capabilities,
+            receiveDirectory: { FileManager.default.temporaryDirectory },
+            requiresVerification: { verification.requiresSASConfirmation },
+            iceClient: UITestWaitingICEClient())
+        nearby.addRoomObserver(model)
+        return model
+    }
+
+    @MainActor
+    static func makeDirectLinkWorkspaceModel(verification: VerificationPreference,
+                                             pairingRoom: LinkRoomHandle) -> LinkWorkspaceModel {
+        LinkWorkspaceModel(
+            capabilities: PeerCapabilityRegistry(
+                linkRoomActive: { linkRoomActive(isCodelessRoom: false) }),
             receiveDirectory: { FileManager.default.temporaryDirectory },
             requiresVerification: { verification.requiresSASConfirmation },
             iceClient: UITestWaitingICEClient(),
@@ -328,8 +385,6 @@ enum UITestMode {
                 preconditionFailure("the waiting UI-test ICE client cannot open a socket")
             },
             pairingRoomHandle: pairingRoom)
-        nearby.addRoomObserver(model)
-        return model
     }
 
     #else
@@ -409,10 +464,45 @@ enum UITestMode {
 }
 
 #if DEBUG
-private struct UITestPairClient: PairCodeClient {
+/// Mints deterministically, and — for the expiry launch — mints a code that
+/// really does run out while the suite is watching.
+///
+/// **The deadline is a real one, not a rendered string.** The countdown, the
+/// moment the handoff is withdrawn and the moment the code becomes unusable are
+/// all `PairingCodeExpiry`'s answer about `MintedCode.expiresAt`, so a fixture
+/// that faked the expired STATE would prove the branch renders and nothing about
+/// whether the product can reach it. This one hands over a genuine
+/// seconds-from-now deadline and lets the real code path arrive there.
+///
+/// The replacement is long-lived and carries DIFFERENT digits, which is what
+/// makes "regeneration produced a fresh code and a fresh deadline" an assertion
+/// rather than a hope: a second mint that answered the same six digits would be
+/// indistinguishable from no mint at all.
+private final class UITestPairClient: PairCodeClient, @unchecked Sendable {
+    private let lock = NSLock()
+    private var minted = 0
+
+    /// How long the FIRST code of an expiry launch lives.
+    ///
+    /// Long enough for the suite to read a counting-down clock and short enough
+    /// that waiting it out is not what makes the run slow. It is also the only
+    /// number here a person has to reason about, so it is named rather than
+    /// spelled inline in an arithmetic expression.
+    static let expiringCodeLifetime: TimeInterval = 12
+
     func mint(token: String) async throws -> MintedCode {
         if UITestMode.showsTerminalText { throw AccountError.network }
-        return MintedCode(code: "483920", expiresAt: 4_102_444_800)
+        lock.lock()
+        minted += 1
+        let attempt = minted
+        lock.unlock()
+        // nonlocalized: deterministic UI-test fixtures, never real codes
+        let code = attempt == 1 ? "483920" : "517341"
+        guard UITestMode.showsExpiringCode, attempt == 1 else {
+            return MintedCode(code: code, expiresAt: 4_102_444_800)
+        }
+        let deadline = Date().addingTimeInterval(Self.expiringCodeLifetime)
+        return MintedCode(code: code, expiresAt: Int64(deadline.timeIntervalSince1970))
     }
 }
 

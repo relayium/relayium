@@ -18,41 +18,45 @@ import RelayiumKit
 /// join field and its two verbs are rendered and enabled identically signed out,
 /// and `MacSurfaceGuardTests` checks that as a source property.
 ///
-/// ## What it shares with LAN Transfer
+/// ## What it shares with LAN Transfer: nothing
 ///
-/// Every session model, and nothing else — there is no staged batch on either
-/// screen any more, because neither offers anything to stage before a peer
-/// exists. Which pane this screen draws, and whether it may start anything, are
-/// decided by
-/// `TransferSurfacePresentation` from ownership rather than from model state, so
-/// a same-network session cannot appear here and cannot be started over.
+/// It used to share every session model. It shares none of them now: this
+/// destination draws its own `TransferModule` — its own legacy pair, its own
+/// `link/1` owner bound to the pairing room and no other, and its own
+/// `TransferPresence`. A same-network session no longer disables a single
+/// control here, and a code minted here no longer disables a single control
+/// there. See `TransferModule` for why that sharing had to end rather than be
+/// arbitrated more carefully.
+///
+/// Which pane this screen draws, and whether it may start anything, are still
+/// `TransferSurfacePresentation`'s answers from THIS module's ownership: a
+/// module has one session and its second start still has to be refused.
 struct CrossNetworkTransferDestination: View {
-    @EnvironmentObject private var presence: TransferPresence
+    /// This screen's module. There is deliberately no way from here to the
+    /// Nearby one, and observing it redraws this screen for its own events only.
+    @ObservedObject var module: TransferModule
+
     @EnvironmentObject private var verification: VerificationPreference
-    @EnvironmentObject private var fileModel: RealtimeSessionModel
-    @EnvironmentObject private var textModel: RealtimeTextSessionModel
-    /// The unified `link/1`. A pairing room makes the same capability decision a
-    /// same-network room does, after its peer appears.
-    @EnvironmentObject private var link: LinkWorkspaceModel
     /// Held for the create half only. Joining is account-free.
     @EnvironmentObject private var session: AccountSession
+    /// Read for ONE thing: where a regeneration goes when the credential it was
+    /// about to spend has gone away. The same route `CrossNetworkConnectPane`
+    /// takes for the same reason, and nothing on this screen navigates for any
+    /// other purpose.
+    @EnvironmentObject private var navigation: AppNavigationModel
 
     private let route = AppDestination.pairingCode
 
-    private var sessionIsLiveOrRetained: Bool {
-        fileModel.state != .idle || textModel.state != .idle || link.hasSession
-    }
+    private var presence: TransferPresence { module.presence }
+    private var fileModel: RealtimeSessionModel { module.files }
+    private var textModel: RealtimeTextSessionModel { module.text }
+    /// The unified `link/1`. A pairing room makes the same capability decision a
+    /// same-network room does, after its peer appears.
+    private var link: LinkWorkspaceModel { module.link }
 
-    private var pane: TransferSurfacePane {
-        TransferSurfacePresentation.pane(route: route,
-                                         owner: presence.owner,
-                                         linkHasSession: link.hasSession)
-    }
+    private var pane: TransferSurfacePane { module.pane }
 
-    private var sessionLocked: Bool {
-        !TransferSurfacePresentation.acceptsNewSession(
-            owner: presence.owner, sessionIsLiveOrRetained: sessionIsLiveOrRetained)
-    }
+    private var sessionLocked: Bool { !module.acceptsNewSession }
 
     var body: some View {
         DestinationScaffold(title: L10n.t(.navCrossNetwork),
@@ -63,13 +67,12 @@ struct CrossNetworkTransferDestination: View {
             case .link:
                 TransferLinkPane(link: link)
             case .legacySession:
-                TransferSessionPane(route: route,
-                                    fileModel: fileModel,
-                                    textModel: textModel)
+                // The one surface that can mint a replacement code, because it
+                // is the one that holds the account gate. See
+                // `TransferSessionPane.regenerate`.
+                TransferSessionPane(module: module, regenerate: regeneratePairingCode)
             case .connect:
-                CrossNetworkConnectPane(fileModel: fileModel,
-                                        textModel: textModel,
-                                        link: link,
+                CrossNetworkConnectPane(module: module,
                                         gate: gate,
                                         accessNow: { accessNow },
                                         sessionLocked: sessionLocked)
@@ -82,10 +85,38 @@ struct CrossNetworkTransferDestination: View {
         }
     }
 
+    /// **Mint a fresh code in place of an expired one**, without letting go of
+    /// this module's surface on the way.
+    ///
+    /// The account is re-read at activation time for the reason `createCode`
+    /// does it: rendering an expired code and pressing the button under it are
+    /// different turns, and a sign-out can land between them. A user whose
+    /// credential went away is taken to the one screen that explains why rather
+    /// than watching a button do nothing.
+    ///
+    /// **It cannot disturb the Nearby module**, and that is a property of the
+    /// composition rather than of this function: everything it touches is
+    /// reached through `module`, the two modules share no presence, no room, no
+    /// socket and no session model, and there is no reference to the other one
+    /// anywhere in this file.
+    private func regeneratePairingCode() {
+        guard let access = accessNow else {
+            navigation.selectAccount(intent: .signIn)
+            return
+        }
+        Task { await PairingCodeStart(module: module).regenerate(token: access.token) }
+    }
+
     /// The gate controls what is rendered.
+    ///
+    /// **Scoped to the OFFLINE acceptance launch.** A loopback built-App run now
+    /// composes the real transfer models against a real server, so handing it a
+    /// fabricated bearer would render an allowed Create whose only outcome is an
+    /// authentication failure — a fixture contradicting the run it is in. See
+    /// `UITestMode.usesOfflineTransfer`.
     private var gate: AccountGate {
         #if DEBUG
-        if UITestMode.isActive {
+        if UITestMode.usesOfflineTransfer {
             return .allowed(AccountAccess(token: "ui-test", retentionSecs: 86_400))
         }
         #endif
@@ -97,7 +128,7 @@ struct CrossNetworkTransferDestination: View {
     /// live session again instead of spending the access a Button captured.
     private var accessNow: AccountAccess? {
         #if DEBUG
-        if UITestMode.isActive {
+        if UITestMode.usesOfflineTransfer {
             return AccountAccess(token: "ui-test", retentionSecs: 86_400) // nonlocalized: fixture
         }
         #endif

@@ -830,6 +830,60 @@ final class LinkRoomRouterTests: XCTestCase {
         XCTAssertEqual(r.session.peerId, r.peers[0])
     }
 
+    /// **A peer we are already claiming must never be answered `busy`, even when
+    /// its request loses the race to our own claim.**
+    ///
+    /// The owner's caps listener runs on the main actor and calls
+    /// `beginLinkAttempt`, which claims admission as initiator; the peer's
+    /// request arrives on the signalling queue. When the claim lands first, the
+    /// request's route had already read an idle phase and `admitEstablishment`
+    /// then fails — and that branch used to answer `busy` to the peer this side
+    /// was at that very moment offering to.
+    ///
+    /// Measured in a built-App pairing run: the app claimed, refused the
+    /// counterpart, and then sent its offer to a peer that had already settled
+    /// the link as `refused` and stopped listening. Both ends waited. It happens
+    /// only on the role assignment that makes this side the offerer, so the
+    /// shipped symptom is a pairing that fails about half the time.
+    ///
+    /// `z-peer` is deliberately larger than `self-room`, which is what makes
+    /// THIS side the initiator and the peer the one that has to ask.
+    func testARequestFromThePeerWeAreAlreadyClaimingIsNeverAnsweredBusy() async {
+        let r = rig(peers: ["z-peer"])
+
+        // Our own claim first — the main-actor half of the race.
+        _ = r.router.ensure(peerId: "z-peer")
+        XCTAssertEqual(r.admission.boundPeerId, "z-peer",
+                       "this side did not claim the peer it must offer to")
+
+        // …and now the peer's request, which lost.
+        r.socket.deliver(from: "z-peer", linkRequestSignal())
+        await settle()
+
+        XCTAssertTrue(r.socket.busied.isEmpty,
+                      "the peer this side is establishing with was told the room is "
+                      + "busy, so it settles the link as refused and stops listening "
+                      + "for the offer already on its way")
+        XCTAssertEqual(r.admission.boundPeerId, "z-peer",
+                       "the losing request disturbed the claim it raced")
+    }
+
+    /// And the refusal that branch exists for is UNCHANGED: a request from a
+    /// peer that is not the one we hold is still told the room is taken.
+    func testARequestFromADifferentPeerIsStillAnsweredBusy() async {
+        let r = rig(peers: ["peer-1", "z-peer"])
+
+        r.socket.deliver(from: "peer-1", offer())
+        await settle()
+        XCTAssertEqual(r.admission.boundPeerId, "peer-1")
+
+        r.socket.deliver(from: "z-peer", linkRequestSignal())
+        await settle()
+
+        XCTAssertEqual(r.socket.busied, ["z-peer"],
+                       "a second peer was not told the room is taken")
+    }
+
     /// Two offers from the SAME peer in one burst are one establishment and no
     /// busy: `admitEstablishment` is idempotent for the peer it already admitted,
     /// and telling that peer it is busy would refuse the link this side is

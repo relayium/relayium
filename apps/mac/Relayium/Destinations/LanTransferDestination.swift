@@ -29,27 +29,36 @@ import RelayiumKit
 /// a merged screen had to state both, so it stated neither first. Splitting the
 /// surface is what lets each screen show only its own method.
 ///
-/// ## What is shared, and where it is decided
+/// ## What it shares with Cross-network Transfer: nothing
 ///
 /// **Not a staged batch.** There is nothing to stage on either screen before a
 /// connection exists, so the app-scoped `SelectionStore` the two destinations
 /// used to share is gone rather than merely unused: a store no surface writes
 /// cannot be reached by a later edit either.
 ///
-/// The session is shared, and that is the delicate half. Which pane this
-/// screen draws, and whether its connect controls may start anything, are
-/// `TransferSurfacePresentation`'s answers rather than this file's: a session
-/// belonging to the pairing-code route must not be drawn here, and must not be
-/// startable over.
+/// **And not the session, any more.** For several rounds the two screens drove
+/// one `RealtimeSessionModel`, one `RealtimeTextSessionModel`, one
+/// `LinkWorkspaceModel` and one `TransferPresence`, and that sharing had three
+/// consequences the owner asked to have removed: a same-network session
+/// disabled every control on the Cross-network screen, one `link/1` owner routed
+/// two rooms so the LAN roster's churn cancelled pairing requests in flight, and
+/// "Cancel" could not mean *this* screen because there was only one session to
+/// cancel. Each destination now draws its own `TransferModule`; see that type
+/// for the whole argument.
+///
+/// What survives is the arbitration *inside* one module. Which pane this screen
+/// draws, and whether its connect controls may start anything, are still
+/// `TransferSurfacePresentation`'s answers rather than this file's — the module
+/// has one session, and its second start still has to be refused.
 struct LanTransferDestination: View {
-    @EnvironmentObject private var presence: TransferPresence
+    /// This screen's module: its own session models, its own `link/1`, its own
+    /// ownership. There is deliberately no way from here to the other one, and
+    /// observing it redraws this screen for its own events only.
+    @ObservedObject var module: TransferModule
+
     @EnvironmentObject private var verification: VerificationPreference
     @EnvironmentObject private var discovery: LanDiscoveryModel
     @EnvironmentObject private var receive: NearbyReceiveModel
-    @EnvironmentObject private var fileModel: RealtimeSessionModel
-    @EnvironmentObject private var textModel: RealtimeTextSessionModel
-    /// The unified `link/1`, for peers that announced it.
-    @EnvironmentObject private var link: LinkWorkspaceModel
 
     /// **No account, anywhere in this file.** Same-network transfer in both
     /// directions needs none, so this destination holds no `AccountSession`, no
@@ -60,24 +69,19 @@ struct LanTransferDestination: View {
     /// Cross-network destination.
     private let route = AppDestination.nearby
 
-    private var sessionIsLiveOrRetained: Bool {
-        fileModel.state != .idle || textModel.state != .idle || link.hasSession
-    }
+    private var presence: TransferPresence { module.presence }
+    private var fileModel: RealtimeSessionModel { module.files }
+    private var textModel: RealtimeTextSessionModel { module.text }
+    /// The unified `link/1`, for peers that announced it.
+    private var link: LinkWorkspaceModel { module.link }
 
-    private var pane: TransferSurfacePane {
-        TransferSurfacePresentation.pane(route: route,
-                                         owner: presence.owner,
-                                         linkHasSession: link.hasSession)
-    }
+    private var pane: TransferSurfacePane { module.pane }
 
-    /// Locked the moment anything is claimed, live or retained — including on
-    /// the other transfer destination. The models read the verification
-    /// preference when the SAS arrives, so flipping it mid-handshake would make
-    /// the gate depend on timing.
-    private var sessionLocked: Bool {
-        !TransferSurfacePresentation.acceptsNewSession(
-            owner: presence.owner, sessionIsLiveOrRetained: sessionIsLiveOrRetained)
-    }
+    /// Locked the moment anything is claimed, live or retained **in this
+    /// module** — and by nothing on the other destination. The models read the
+    /// verification preference when the SAS arrives, so flipping it
+    /// mid-handshake would make the gate depend on timing.
+    private var sessionLocked: Bool { !module.acceptsNewSession }
 
     var body: some View {
         DestinationScaffold(title: L10n.t(.navLanTransfer),
@@ -88,15 +92,11 @@ struct LanTransferDestination: View {
             case .link:
                 TransferLinkPane(link: link)
             case .legacySession:
-                TransferSessionPane(route: route,
-                                    fileModel: fileModel,
-                                    textModel: textModel)
+                TransferSessionPane(module: module)
             case .connect:
-                LanConnectPane(discovery: discovery,
+                LanConnectPane(module: module,
+                               discovery: discovery,
                                receive: receive,
-                               fileModel: fileModel,
-                               textModel: textModel,
-                               link: link,
                                sessionLocked: sessionLocked)
                 VerificationSetting(locked: sessionLocked, preference: verification)
             }

@@ -60,6 +60,13 @@ enum Role: String {
     /// stand a real macOS link pairing room up against a second endpoint until
     /// this role existed. See `AppPairLinkHost`.
     case pairLink = "pair-link"
+    /// The two halves of a **Device Inbox** delivery, which is not a peer-to-peer
+    /// wire at all: the sender seals the content key to the target device's
+    /// current public key, uploads the ciphertext, and central holds the task
+    /// until the target claims it. Two roles rather than one driven role,
+    /// because the whole point is that two SEPARATE macOS processes complete it.
+    case inboxSender = "inbox-sender"
+    case inboxReceiver = "inbox-receiver"
 }
 
 /// The launch configuration, resolved once.
@@ -72,7 +79,7 @@ enum Config {
     static let role: Role = {
         guard let role = Role(rawValue: require("--role")) else {
             fail("--role must be one of nearby-receiver, nearby-sender, "
-                 + "pair-sender, pair-receiver, pair-link")
+                 + "pair-sender, pair-receiver, pair-link, inbox-sender, inbox-receiver")
         }
         return role
     }()
@@ -529,6 +536,128 @@ final class NearbySenderRun: @unchecked Sendable {
     func teardown() { host.teardown() }
 }
 
+// MARK: - Device Inbox, between two macOS processes
+
+/// The receiving Mac: resident, unattended, writing into the run's own folder.
+///
+/// It reports what is ON DISK rather than what it recorded, which is the
+/// difference between proving a delivery landed and proving a receiver kept a
+/// tidy list about one that did not.
+@MainActor final class InboxReceiverRun {
+    let host: AppInboxReceiverHost
+
+    init(receiveRoot: URL) throws {
+        let bearer = ProcessInfo.processInfo
+            .environment["RELAYIUM_ACCEPTANCE_ACCOUNT_TOKEN"] ?? ""
+        guard !bearer.isEmpty else {
+            fail("RELAYIUM_ACCEPTANCE_ACCOUNT_TOKEN is required for inbox-receiver")
+        }
+        host = try AppInboxReceiverHost(
+            origin: Config.origin, bearer: bearer, receiveRoot: receiveRoot,
+            journalRoot: receiveRoot.deletingLastPathComponent()
+                .appendingPathComponent("inbox-journal-\(Config.runTag)", isDirectory: true))
+    }
+
+    func start() {
+        Task { @MainActor in
+            state.set(phase: "adopting")
+            if let problem = await host.start() {
+                return state.failed(problem)
+            }
+            state.set(phase: "receiving")
+        }
+    }
+
+    /// The live view: what this Mac has actually written so far, and the runtime
+    /// state it would render. Polled by the launcher, which decides for itself
+    /// when enough has arrived — this role has no terminal `done` of its own,
+    /// because a resident receiver never finishes.
+    func observed() -> [String: Any] {
+        let receipts = host.receipts()
+        return [
+            "state": String(describing: host.state),
+            "signedIn": host.isSignedIn,
+            "folderChosen": host.folderIsUsable,
+            "policy": String(describing: host.policy),
+            "settingsError": host.settingsError as Any,
+            "files": receipts.map {
+                ["name": $0.name, "path": $0.path as Any,
+                 "size": $0.size, "sha256": $0.sha256]
+            },
+        ]
+    }
+
+    func teardown() { host.teardown() }
+}
+
+/// The sending Mac: the same `InboxSendModel` the macOS surface drives.
+@MainActor final class InboxSenderRun {
+    let host: AppInboxSenderHost
+    private let targetName: String
+
+    init(stagingRoot: URL, targetName: String) throws {
+        let bearer = ProcessInfo.processInfo
+            .environment["RELAYIUM_ACCEPTANCE_ACCOUNT_TOKEN"] ?? ""
+        guard !bearer.isEmpty else {
+            fail("RELAYIUM_ACCEPTANCE_ACCOUNT_TOKEN is required for inbox-sender")
+        }
+        self.targetName = targetName
+        host = try AppInboxSenderHost(origin: Config.origin, bearer: bearer,
+                                      stagingRoot: stagingRoot)
+    }
+
+    func start() {
+        Task { @MainActor in
+            state.set(phase: "reading-devices")
+            await host.start()
+            // The target has to APPEAR: the receiver enrols asynchronously, and
+            // a device that has not published a key yet is correctly reported as
+            // unable to receive rather than offered.
+            let listed = Date().addingTimeInterval(120)
+            while Date() < listed {
+                if host.selectTarget(named: targetName) { break }
+                if case .unavailable(let failure) = host.directory {
+                    return state.failed("the device list could not be read: \(failure)")
+                }
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                host.refreshTargets()
+            }
+            guard host.selectTarget(named: targetName) else {
+                return state.failed(
+                    "\(targetName) never became a sendable target; offered: "
+                    + host.targetNames.joined(separator: ", "))
+            }
+            state.set("target", targetName)
+            state.set(phase: "sending")
+            do {
+                try host.send(batch: Config.batch)
+            } catch {
+                return state.failed("could not stage the batch: \(error)")
+            }
+            let deadline = Date().addingTimeInterval(180)
+            while Date() < deadline {
+                if host.isSaved {
+                    // What a SENDER can state is what it handed over. The
+                    // receiver's own receipts are read off its disk.
+                    state.finish(receipts: Config.sentReceipts)
+                    return
+                }
+                if let failure = host.terminalFailure {
+                    return state.failed("device delivery failed: \(failure)")
+                }
+                if let refusal = host.refusal {
+                    return state.failed("device delivery refused: \(refusal)")
+                }
+                state.set("activity", String(describing: host.activity ?? .staged))
+                try? await Task.sleep(nanoseconds: 500_000_000)
+            }
+            state.failed("timed out waiting for the other device to save the delivery")
+        }
+    }
+
+    func teardown() { host.teardown() }
+}
+
 // MARK: - assembly
 
 /// **No default.** `AppEnvironment.defaultLinkReceiveDirectory()` is the user's
@@ -603,6 +732,16 @@ final class RunBox {
                 let parsed = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any]
                 run.start(action: (parsed?["action"] as? String) ?? "join",
                           code: (parsed?["code"] as? String) ?? "")
+            case .inboxReceiver:
+                let run = try InboxReceiverRun(receiveRoot: requireReceiveRoot())
+                teardownRun = { run.teardown() }
+                observeRun = { run.observed() }
+                run.start()
+            case .inboxSender:
+                let run = try InboxSenderRun(stagingRoot: requireReceiveRoot(),
+                                             targetName: require("--counterpart"))
+                teardownRun = { run.teardown() }
+                run.start()
             case .pairReceiver:
                 let run = try PairReceiverRun(receiveRoot: requireReceiveRoot())
                 teardownRun = { run.teardown() }

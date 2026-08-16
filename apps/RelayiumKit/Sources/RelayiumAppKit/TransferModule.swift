@@ -1,0 +1,311 @@
+import Combine
+import Foundation
+import RelayiumKit
+
+/// One direct-transfer **module**: everything a single connection method owns,
+/// and nothing another one shares.
+///
+/// ## Why this type exists
+///
+/// macOS ships two direct-transfer destinations — LAN Transfer (the code-less
+/// same-network room) and Cross-network Transfer (a six-digit pairing code) —
+/// and for several rounds they were two screens over **one** set of models: one
+/// `RealtimeSessionModel`, one `RealtimeTextSessionModel`, one
+/// `LinkWorkspaceModel`, arbitrated by one `TransferPresence`. That sharing was
+/// never a product decision. It was an implementation detail, and it produced
+/// three separate failures that all read to a user as "the app disconnected me":
+///
+///  1. **A session on one screen locked the other screen entirely.** Every
+///     connect control on the destination that did not own the session was
+///     disabled, so a user holding an open same-network connection could not
+///     mint a pairing code at all — and the only way to get one was to end the
+///     connection they were using.
+///  2. **One `LinkWorkspaceModel` routed two different rooms.** A peer id means
+///     nothing outside the room that issued it, so the same-network roster's
+///     ordinary churn reached a pairing room's router: one device appearing or
+///     leaving cancelled the request a code room had in flight. That is the
+///     macOS-to-Web pairing oscillation `LinkWorkspaceModel.lanObserverOwnsRouter`
+///     had to be introduced to suppress, and suppressing a cross-talk is not the
+///     same thing as not having one.
+///  3. **One Cancel could only ever mean one session.** With a single set of
+///     models there is no such thing as "cancel this module": the exit ends
+///     whatever the shared models hold.
+///
+/// A module is the repair for all three at once. Each one owns its own legacy
+/// pair, its own `link/1` and its own `TransferPresence`, so the two are
+/// independent by construction rather than by arbitration — navigating between
+/// them is navigation and nothing else, and each screen's Cancel reaches exactly
+/// the connection that screen is drawing.
+///
+/// ## App-scoped, never view-scoped
+///
+/// Everything here outlives the window. macOS keeps running with its unique
+/// window closed (`applicationShouldTerminateAfterLastWindowClosed` is false and
+/// the `MenuBarExtra` holds the process up), so a module whose lifetime was a
+/// view's would end a live transfer the moment somebody pressed the close
+/// button. That is the property the owner's requirement turns on: a session
+/// survives navigation because nothing about navigation touches this object.
+///
+/// ## What it publishes
+///
+/// It holds no state of its own and declares no `@Published` property. What it
+/// does is **relay** its four objects' `objectWillChange`, so a view can observe
+/// one module and redraw for anything inside it. That is deliberately per
+/// module: an event in the Nearby module redraws the Nearby destination and the
+/// Nearby sidebar row, and nothing on the other screen — which is the same
+/// granularity the four separate `@ObservedObject`s gave before, expressed once
+/// instead of at every call site.
+@MainActor
+public final class TransferModule: ObservableObject {
+    /// Which destination draws this module. `.nearby` or `.pairingCode`.
+    ///
+    /// Stored rather than inferred, because every ownership claim, release and
+    /// refusal below is checked against it: a module that read "whoever owns the
+    /// presence" could give up a surface that is not its own.
+    public let route: AppDestination
+    public let files: RealtimeSessionModel
+    public let text: RealtimeTextSessionModel
+    /// This module's unified `link/1` owner — **one room, for the life of the
+    /// module.** The nearby module's follows the discovery model's code-less
+    /// room socket; the direct module's opens and owns the socket a pairing code
+    /// names. Neither can see the other's peer ids, which is the structural half
+    /// of failure 2 above.
+    public let link: LinkWorkspaceModel
+    /// Which surface inside THIS module presents its session.
+    ///
+    /// Still a `TransferPresence` rather than a bare flag, and still arbitrating:
+    /// a module has one session, and `beginSession` is what refuses the second
+    /// activation SwiftUI can deliver before an asynchronous start publishes any
+    /// state. What changed is only its scope — the owner is this module's route
+    /// or nobody, never the other module's.
+    public let presence: TransferPresence
+
+    /// - Parameters:
+    ///   - route: the destination that draws this module.
+    ///   - presence: injectable so a test can hand in a pre-claimed one. Nil —
+    ///     every shipped launch — builds this module its own, and two modules
+    ///     must never be given the same instance: that would restore the shared
+    ///     arbitration this type exists to remove, and `TransferModuleTests`
+    ///     checks it. It is an optional rather than a defaulted
+    ///     `TransferPresence()` because a default argument is evaluated outside
+    ///     this initializer's actor isolation and would not compile.
+    public init(route: AppDestination,
+                files: RealtimeSessionModel,
+                text: RealtimeTextSessionModel,
+                link: LinkWorkspaceModel,
+                presence: TransferPresence? = nil) {
+        let presence = presence ?? TransferPresence()
+        self.route = route
+        self.files = files
+        self.text = text
+        self.link = link
+        self.presence = presence
+        // The THREE liveness sources this module has, as one subscription. The
+        // link is not optional here: it uses neither legacy model, so a link
+        // observed by the two-model overload would have its surface released the
+        // instant it started.
+        presence.observeSessions(fileModel: files, textModel: text, link: link)
+        // Both derived from this module's OWN ownership. Before modules existed
+        // these read one app-wide presence, so an unsolicited link arriving on
+        // the same-network room was refused because a pairing code was being
+        // minted on another screen — a refusal the peer experienced as this Mac
+        // being unreachable.
+        let idle = presence.$owner.map { $0 == nil }.eraseToAnyPublisher()
+        // **Availability is NOT the same question as surface-idle, and treating
+        // them as one publisher was a shipped defect that refused about half of
+        // all pairing attempts.**
+        //
+        // `LinkAdmission.route` answers an inbound link REQUEST with `.busy`
+        // whenever `canAcceptLink` is false, and that predicate is fed from
+        // here. Minting or joining a code claims this module's surface before
+        // the room is watched — `CrossNetworkConnectPane` calls
+        // `presence.beginSession` and then `watchPairingCode` — so from the
+        // moment a code exists, `owner != nil` and the gate said "busy" to
+        // everyone. Whether that mattered depended on `linkRole`: the smaller
+        // hub id must offer, so only when THIS side was the offerer did the peer
+        // send a request, and only then was the request refused. The hub assigns
+        // ids at random, so the shipped symptom is a cross-network pairing that
+        // fails about half the time with no error on either screen — this side
+        // still drawing its code, the other side told the room is taken.
+        //
+        // Nothing in the repository could see it. The only macOS pairing
+        // endpoint any acceptance drives is `AppPairLinkHost`, which is headless,
+        // has no `TransferPresence` and therefore never installs this observer;
+        // `native-web-pairing-acceptance.sh` proves both role assignments
+        // against that host and passes. It took the built app joining a real
+        // code to produce it.
+        //
+        // So the two questions are separated. A room this module opened with a
+        // code is available for the peer that code names, because that peer is
+        // the entire reason the room is open. Everything else is unchanged: a
+        // request still has to come from a peer that announced `link/1` in this
+        // room, `linkRole` still decides which side may offer, admission still
+        // refuses a second peer while one is held, and the SAS is still compared.
+        let available = presence.$owner
+            .combineLatest(link.$connection)
+            .map(Self.acceptsInboundLink)
+            .eraseToAnyPublisher()
+        link.observeAvailability(available)
+        // Surface-idle keeps the STRICTER question, and has to. It closes a room
+        // that was handed to the legacy path once nothing owns the surface, and
+        // a watched pairing room is precisely a surface somebody owns.
+        link.observeSurfaceIdle(idle)
+        // The relay. `objectWillChange` fires before the value is written, which
+        // is the contract SwiftUI already relies on for a directly observed
+        // object, so forwarding it keeps a module-observing view redrawing on
+        // exactly the same edges a four-object-observing one did.
+        for child in [presence.objectWillChange.eraseToAnyPublisher(),
+                      files.objectWillChange.eraseToAnyPublisher(),
+                      text.objectWillChange.eraseToAnyPublisher(),
+                      link.objectWillChange.eraseToAnyPublisher()] {
+            child.sink { [weak self] _ in self?.objectWillChange.send() }
+                .store(in: &relays)
+        }
+    }
+
+    /// Held for the module's life. It is the whole process's life in the app,
+    /// and a test's for as long as the module is referenced.
+    private var relays: Set<AnyCancellable> = []
+
+    /// **Whether this module may admit an inbound `link/1` right now.**
+    ///
+    /// A free function of two facts rather than an expression buried in a
+    /// `map`, because it is a correctness rule with a defect behind it and a
+    /// rule nothing can call is a rule nothing can check.
+    ///
+    /// The first clause is the original one: nothing owns the surface, so an
+    /// unsolicited link may take it. The second is the repair. Minting or
+    /// joining a code claims this module's surface BEFORE the room is watched,
+    /// so from the moment a code exists the first clause is false and
+    /// `LinkAdmission.route` answered every inbound request with `.busy`.
+    /// `linkRole` decides which side asks, so the visible symptom was a
+    /// cross-network pairing that failed roughly half the time — the half where
+    /// this side was the offerer — with no error on either screen.
+    ///
+    /// A room this module opened with a code is available for the peer that code
+    /// names, because that peer is the entire reason the room is open. It is
+    /// deliberately `isWatchingPairingRoom` and not "the link is doing
+    /// something": `.requesting`, `.establishing` and `.open` all mean a peer has
+    /// already been admitted, and answering `available` then would invite a
+    /// SECOND one into a module that holds one session.
+    static func acceptsInboundLink(owner: AppDestination?,
+                                   connection: LinkWorkspaceConnection) -> Bool {
+        owner == nil || connection.isWatchingPairingRoom
+    }
+
+    /// Anything live or retained in this module, and nothing about the other.
+    ///
+    /// "Retained" is load-bearing: a `.completed` receive keeps its result view,
+    /// its Reveal in Finder and its drag-out promise, so the connect controls
+    /// must stay refused until the user has actually left it.
+    public var sessionIsLiveOrRetained: Bool {
+        files.state != .idle || text.state != .idle || link.hasSession
+    }
+
+    /// Whether bytes are moving in this module. Asked by the sidebar marker and
+    /// by the quit guard, and deliberately separate from ownership — a finished
+    /// transfer still owns its surface while nothing is running.
+    public var isBusy: Bool { files.isBusy || text.isBusy }
+
+    /// The only copy of text the user has typed in this module, if any. The quit
+    /// guard asks both modules, because quitting discards whichever module holds
+    /// one.
+    public var hasLocalText: Bool { text.hasLocalContent }
+
+    /// What this module's screen draws right now.
+    public var pane: TransferSurfacePane {
+        TransferSurfacePresentation.pane(route: route,
+                                         owner: presence.owner,
+                                         linkHasSession: link.hasSession)
+    }
+
+    /// Whether this module's connect controls may start something.
+    ///
+    /// Asked of THIS module only. A session on the other module is not a reason
+    /// to refuse one here — that refusal was the shared-model era's, and it is
+    /// exactly what the owner asked to have removed.
+    public var acceptsNewSession: Bool {
+        TransferSurfacePresentation.acceptsNewSession(
+            owner: presence.owner, sessionIsLiveOrRetained: sessionIsLiveOrRetained)
+    }
+
+    /// End everything this module holds, and touch nothing outside it.
+    ///
+    /// The one path with no destination to ask — the quit guard's confirmed
+    /// Quit, and a sign-out's teardown. It is deliberately the module's own
+    /// `releaseAll`, not an app-wide one: an app-wide release would be a
+    /// cross-module reach from the object whose whole purpose is not having one.
+    ///
+    /// Order matters. The link leaves before it is dismissed, because `dismiss`
+    /// only clears a connection that has already ended; and ownership is given up
+    /// last, so nothing observing this module sees an unowned surface while a
+    /// model is still winding down.
+    ///
+    /// **`reset()` on the text lane rather than `end()`**, and that is a real
+    /// difference. `end()` publishes `.ended` — a *retained terminal* state — so
+    /// a module torn down that way still reports `sessionIsLiveOrRetained` and
+    /// its connect controls stay refused for the rest of the process. That was
+    /// invisible while the only caller was a quit that terminates immediately
+    /// afterwards; it is not invisible for any other caller, and a teardown that
+    /// leaves a module permanently unable to start a session is not a teardown.
+    /// Discarding the text history with it is authorized: the only path here is
+    /// a Quit the user confirmed against a prompt that names exactly that loss
+    /// (`QuitPresentation.risk`).
+    public func cancelEverything() {
+        files.cancel()
+        text.reset()
+        link.leave()
+        link.dismiss()
+        presence.releaseAll()
+    }
+}
+
+/// The two modules macOS composes, injected once so a view can name the one it
+/// draws.
+///
+/// A container rather than two `@EnvironmentObject`s, because SwiftUI's
+/// environment is keyed by TYPE: two `TransferModule`s cannot both be in it, and
+/// two wrapper types whose only difference is their name would be a distinction
+/// nothing enforces. This way the shell reads `modules.nearby` and
+/// `modules.direct` by name and hands each destination exactly one.
+///
+/// **macOS only.** iOS composes one shared set of models across its Nearby and
+/// Direct tabs and one `TransferPresence` to arbitrate them; that is a
+/// deliberately different product with a different surface budget, and giving it
+/// a second full model graph is not this change's business.
+@MainActor
+public final class TransferModules: ObservableObject {
+    public let nearby: TransferModule
+    public let direct: TransferModule
+
+    public init(nearby: TransferModule, direct: TransferModule) {
+        self.nearby = nearby
+        self.direct = direct
+    }
+
+    /// The module that draws `route`, or nil for a destination that draws none.
+    ///
+    /// No `default:` — a seventh destination has to state whether it is a
+    /// transfer module rather than silently inherit "no".
+    public func module(for route: AppDestination) -> TransferModule? {
+        switch route {
+        case .nearby:       return nearby
+        case .pairingCode:  return direct
+        case .storedSend, .storedReceive, .deviceInbox, .account: return nil
+        }
+    }
+
+    /// Every module, for the paths that genuinely mean all of them: the quit
+    /// guard's risk question and its confirmed teardown.
+    public var all: [TransferModule] { [nearby, direct] }
+
+    /// Whether ANY module has bytes moving.
+    public var isBusy: Bool { all.contains { $0.isBusy } }
+
+    /// Whether ANY module holds the only copy of typed text.
+    public var hasLocalText: Bool { all.contains { $0.hasLocalText } }
+
+    /// End every module. Used by the quit guard once the user has confirmed, and
+    /// by nothing else — a per-module Cancel must never reach this.
+    public func cancelEverything() { all.forEach { $0.cancelEverything() } }
+}

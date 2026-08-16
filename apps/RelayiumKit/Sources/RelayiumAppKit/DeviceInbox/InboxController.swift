@@ -856,6 +856,29 @@ public final class InboxController: ObservableObject {
         runtime.reveal(known.urls)
     }
 
+    /// Show the folder every delivery lands in.
+    ///
+    /// **The section's one Finder action, replacing a button per row.** Recently
+    /// received used to carry an identical *Show in Finder* on every row, each
+    /// selecting the files of that one delivery — a column of identical controls
+    /// beside a column of identical "1 file saved" summaries. The rows name their
+    /// own files now, and the single question they leave is "where did all this
+    /// land", which is one place and not one place per row.
+    ///
+    /// It goes through the SAME `runtime.reveal` seam as `reveal(_:)`, so this
+    /// adds no second path from the app to the Finder. What it hands over is the
+    /// user's own chosen folder — not a received path, and nothing derived from a
+    /// delivery — so there is no list membership to check: the guard `reveal(_:)`
+    /// needs exists because a receipt's URLs come from a journal, and this URL
+    /// comes from the folder grant the user gave in a system panel.
+    ///
+    /// Nothing happens without a folder, which is the honest answer rather than a
+    /// Finder window on somebody's home directory.
+    public func revealReceiveFolder() {
+        guard let url = folder.url else { return }
+        runtime.reveal([url])
+    }
+
     /// The newest completed delivery, for the menu bar's single Reveal item.
     public var latestResult: InboxReceipt? { results.first }
 

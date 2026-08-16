@@ -91,22 +91,63 @@ final class InboxReceiptTests: XCTestCase {
 
     // MARK: - how it is described
 
-    /// The summary is a count, a size and a time — never a name.
-    func testTheSummaryNamesNothingInTheDelivery() {
+    /// **The summary names the file, and still never renders a path or a task
+    /// id.**
+    ///
+    /// This assertion is inverted from the one it replaces, and the inversion is
+    /// the product decision rather than a relaxation. The old rule — a count,
+    /// never a name — is the NOTIFICATION's rule, because macOS draws that text
+    /// on a locked screen without being asked, and `InboxNotifier` still obeys it
+    /// (asserted in `InboxSurfaceGuardTests`). Recently received is a list the
+    /// user opened on their own Mac to find out what arrived, and answered with
+    /// a count it could not tell two deliveries apart.
+    ///
+    /// What is still refused has not moved: the CONTAINING PATH, which carries
+    /// the user's short name and possibly other people's, and the task id, which
+    /// is de-duplication bookkeeping and means nothing to anybody.
+    func testTheSummaryNamesTheFileButNeverThePathOrTheTaskID() {
         let receipt = InboxReceipt(taskID: "task_secret",
                                    urls: [URL(fileURLWithPath: "/Users/lily/Inbox/salary.pdf")],
                                    byteCount: 2_048, savedAt: epoch, isReplay: false)
         for language in AppLanguage.allCases {
             let summary = InboxReceiptPresentation.summary(receipt, language: language)
-            XCTAssertFalse(summary.contains("salary"), "\(language) rendered a file name")
+            XCTAssertTrue(summary.contains("salary.pdf"),
+                          "\(language) did not name the file that arrived")
             XCTAssertFalse(summary.contains("/Users"), "\(language) rendered a path")
+            XCTAssertFalse(summary.contains("Inbox/"), "\(language) rendered a directory")
             XCTAssertFalse(summary.contains("task_secret"), "\(language) rendered a task id")
-            XCTAssertFalse(summary.isEmpty)
         }
     }
 
-    /// Every row's visible button reads the same three words, which is right to
-    /// look at and useless to hear. The spoken name carries the row.
+    /// Two deliveries read differently, which is the whole reason the rows name
+    /// anything: three rows of "1 file saved" is a list with no information in it.
+    func testTwoDeliveriesAreDistinguishableFromTheirRowsAlone() {
+        let first = InboxReceipt(taskID: "t1", urls: [URL(fileURLWithPath: "/tmp/brief.txt")],
+                                 byteCount: 1_024, savedAt: epoch, isReplay: false)
+        let second = InboxReceipt(taskID: "t2", urls: [URL(fileURLWithPath: "/tmp/notes.md")],
+                                  byteCount: 1_024, savedAt: epoch, isReplay: false)
+        XCTAssertNotEqual(InboxReceiptPresentation.summary(first, language: .en),
+                          InboxReceiptPresentation.summary(second, language: .en),
+                          "two deliveries of one file each are indistinguishable")
+    }
+
+    /// A long delivery names what it can and COUNTS the rest. Dropping the tail
+    /// silently would under-report what landed on the disk.
+    func testALongDeliveryNamesThreeFilesAndCountsTheRemainder() {
+        let names = ["a.txt", "b.txt", "c.txt", "d.txt", "e.txt"]
+        let receipt = InboxReceipt(taskID: "t1",
+                                   urls: names.map { URL(fileURLWithPath: "/tmp/\($0)") },
+                                   byteCount: 5_120, savedAt: epoch, isReplay: false)
+        let summary = InboxReceiptPresentation.summary(receipt, language: .en)
+        for named in names.prefix(3) {
+            XCTAssertTrue(summary.contains(named), "the row stopped naming \(named)")
+        }
+        XCTAssertFalse(summary.contains("d.txt"), "the row named more files than it bounds")
+        XCTAssertTrue(summary.contains("2"), "the two unnamed files are not counted")
+    }
+
+    /// The menu bar keeps a per-receipt spoken name, because it offers ONE item
+    /// with no surrounding list to give it context.
     func testTheRevealActionLabelDistinguishesItsRow() {
         let first = InboxReceipt(taskID: "t1", urls: [URL(fileURLWithPath: "/tmp/a")],
                                  byteCount: 1_024, savedAt: epoch, isReplay: false)
@@ -118,5 +159,17 @@ final class InboxReceiptTests: XCTestCase {
         let b = InboxReceiptPresentation.revealActionLabel(second, language: .en)
         XCTAssertNotEqual(a, b, "two result rows sound identical to a screen reader")
         XCTAssertTrue(a.contains(L10n.t(.inboxReveal, language: .en)))
+    }
+
+    /// The section's one Finder action says WHICH folder it opens, because that
+    /// is what distinguishes it from every other Finder action in the window.
+    func testTheFolderRevealLabelNamesTheFolderItOpens() {
+        let chosen = InboxFolderSummary(url: URL(fileURLWithPath: "/tmp/Relayium"),
+                                        isChosen: true, problem: nil)
+        let label = InboxReceiptPresentation.revealFolderLabel(chosen, language: .en)
+        XCTAssertTrue(label.contains("Relayium"), "the action does not name its folder")
+        // The folder's own presentation rule is unchanged and still applies: the
+        // last component only, never the containing path.
+        XCTAssertFalse(label.contains("/tmp"), "the action rendered a containing path")
     }
 }

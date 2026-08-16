@@ -167,6 +167,9 @@
 "pairing.joinLink" = "加入链接";
 "pairing.linkCopied" = "链接已复制";
 "pairing.codeExpiryNote" = "只有这个配对码会过期。已经开始的传输可以继续。";
+"pairing.codeExpiresIn" = "%@ 后过期";
+"pairing.codeExpired" = "此配对码已过期，无法再使用。";
+"pairing.newCode" = "创建新的配对码";
 "direct.scanOnPhone" = "也可以用手机扫描。";
 "direct.waitingForDevice" = "正在等待对方设备…";
 "direct.chooseFilesFirst" = "请先选择要发送的文件或文件夹。";
@@ -599,6 +602,9 @@
 "inbox.askDecline" = "拒绝";
 "inbox.resultsHeading" = "最近接收";
 "inbox.resultsEmpty" = "这台 Mac 还没有接收过任何文件。";
+"inbox.revealFolder" = "在访达中显示";
+"inbox.revealFolderAction" = "在访达中显示接收文件夹 %@";
+"inbox.moreFiles" = "另有 %@ 个";
 "inbox.errorNotWritable" = "该文件夹无法写入，因此没有采用。请选择一个你可以保存进去的文件夹。";
 "inbox.errorBookmark" = "macOS 没有为该文件夹授予 Relayium 长期权限。请换一个文件夹。";
 "inbox.errorNoFolder" = "请先选择接收文件夹 — 目前还没有保存位置。";
