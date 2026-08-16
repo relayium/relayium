@@ -1,8 +1,9 @@
 // web/scripts/gen-pages.mjs — writes all static pages (legal, landing, articles) + sitemap into public/.
 // Run via `npm run gen:pages`; also runs automatically before dev/build.
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { CLIENT_POLICY_FILE } from "./stage-macos-release.mjs";
 import privacy from "./pages/content/legal/privacy.mjs";
 import terms from "./pages/content/legal/terms.mjs";
 import security from "./pages/content/legal/security.mjs";
@@ -169,7 +170,19 @@ async function main() {
     await writeFile(abs, page.html, "utf8");
   }
   await writeFile(join(publicDir, "sitemap.xml"), buildSiteSitemap(), "utf8");
-  console.log(`gen-pages: wrote ${pages.length} pages + sitemap.xml to public/`);
+  // The native client policy, published verbatim.
+  //
+  // `native-client-policy.json` is the canonical document — the one a person
+  // edits to raise the minimum supported macOS version, and the one
+  // `stage-macos-release.mjs` derives the Sparkle critical-update threshold
+  // from. The copy under `public/` is what the macOS client actually fetches,
+  // and it exists because nothing else in the build serves a JSON file from the
+  // web root. Copied rather than re-serialized, so raising a requirement is one
+  // edit in one file and the two cannot say different things.
+  const policy = join(publicDir, "apps", "macos", "client-policy.json");
+  await mkdir(dirname(policy), { recursive: true });
+  await writeFile(policy, await readFile(resolve(here, "..", CLIENT_POLICY_FILE), "utf8"), "utf8");
+  console.log(`gen-pages: wrote ${pages.length} pages + sitemap.xml + client-policy.json to public/`);
 }
 
 // Only run as a script, not when the test imports the builders.

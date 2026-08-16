@@ -28,6 +28,9 @@ const appcast = await readFile(
 const manifest = JSON.parse(
   await readFile(resolve(process.cwd(), "native-releases.json"), "utf8"),
 );
+const policy = JSON.parse(
+  await readFile(resolve(process.cwd(), "native-client-policy.json"), "utf8"),
+);
 const MAC_AVAILABLE = manifest.macos.available === true;
 
 const SPARKLE_NS = "http://www.andymatuschak.org/xml-namespaces/sparkle";
@@ -115,6 +118,33 @@ describe("macOS Sparkle appcast", () => {
     // Sparkle refuses an update whose EdDSA signature does not verify, so an
     // empty or malformed one is a feed that can never install anything.
     expect(attribute(asset, "sparkle:edSignature")).toMatch(/^[A-Za-z0-9+/]{40,}={0,2}$/);
+  });
+
+  /// **The published feed and the published policy are one decision.**
+  ///
+  /// Sparkle's `sparkle:criticalUpdate sparkle:version="N"` marks an update
+  /// non-skippable for anyone running a build BELOW `N`, and the `N` it compares
+  /// is `CFBundleVersion` — not the marketing string. The client compares
+  /// marketing versions, because that is what its sentences say. So the same
+  /// decision is written twice, in two vocabularies, and this is where they are
+  /// held to each other.
+  ///
+  /// It matters for the releases that already exist. A build below the minimum
+  /// predates every line of the client-side policy code and will never run any
+  /// of it — the feed is the only thing that reaches it, and a critical update
+  /// is the only lever there is.
+  it("marks the published release critical for builds below the supported minimum", () => {
+    if (!MAC_AVAILABLE) return;
+    const critical = items[0].match(/<sparkle:criticalUpdate\b[^>]*?sparkle:version="([^"]*)"/);
+    expect(critical, "the release item carries no critical-update threshold").not.toBeNull();
+    expect(critical[1]).toBe(String(policy.macos.minimumSupportedBuild));
+    // Exactly one. Two elements in one item is a document whose meaning depends
+    // on which one Sparkle reads first.
+    expect(items[0].match(/<sparkle:criticalUpdate\b/g)).toHaveLength(1);
+    // And it is a threshold this release satisfies. Above its own build, the
+    // feed would tell the people who just installed it that they are already
+    // unsupported — and point them at the update they are running.
+    expect(policy.macos.minimumSupportedBuild).toBeLessThanOrEqual(manifest.macos.build);
   });
 
   it("keeps the versions where Sparkle actually writes them", () => {

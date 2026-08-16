@@ -162,6 +162,19 @@ struct RelayiumApp: App {
     // or after the window has been closed, which on this app does not end the
     // process. So the observer is app-scoped and subscribes in `init`, below.
     @StateObject private var signOut: AccountSignOutCoordinator
+    /// **Whether this build is still one the product answers for.**
+    ///
+    /// App-scoped, and evaluated in `init` from the cached policy rather than
+    /// from a request, so the very first frame is already correct: a model that
+    /// started supported and turned blocking when a response came back would show
+    /// a below-minimum build its whole product surface for the length of a
+    /// network round trip — which is exactly the interval that matters.
+    ///
+    /// It reaches the network once per launch and can only ever be made stricter
+    /// by what it finds there. Every failure — offline, a 500, a body that is not
+    /// this schema, a document that would take the requirement below the floor
+    /// compiled into this binary — leaves the state exactly as it was.
+    @StateObject private var versionSupport: SupportedVersionModel
     // One preference object shared by both realtime models and the UI that
     // toggles it, so a change applies to the next session of either kind
     // without a relaunch.
@@ -476,6 +489,19 @@ struct RelayiumApp: App {
                                                 logOut: { await account.logOut() })
         leaving.observe(management.$needsSignOut)
         _signOut = StateObject(wrappedValue: leaving)
+        // The version policy. Its cache is the app's own defaults in a shipped
+        // launch and an in-memory one under acceptance, for the same reason the
+        // keychain and the staging root are isolated there: a UI-test launch must
+        // not write a policy into the installed product's defaults, and must not
+        // inherit one either. The source is the production document; the refresh
+        // that would reach it is skipped for acceptance at the scene root, so the
+        // suite runs against the embedded floor and nothing leaves the machine.
+        _versionSupport = StateObject(wrappedValue: SupportedVersionModel(
+            currentVersion: SupportedVersionModel.bundleVersion(),
+            store: UITestMode.isActive
+                ? InMemorySupportedVersionPolicyStore()
+                : UserDefaultsSupportedVersionPolicyStore(),
+            source: HTTPSupportedVersionPolicySource()))
         // The purchase model, built from the session and from nothing else this
         // scene owns. Both closures read through to the session at the moment of
         // use rather than capturing its state, which is what keeps this object
@@ -693,7 +719,6 @@ struct RelayiumApp: App {
         // also contributes no File ▸ New Window item and no ⌘N.
         Window("Relayium", id: "main") {
             AppShellView()
-                .environment(\.layoutDirection, appLayoutDirection)
                 .environmentObject(navigation)
                 // BOTH modules, as one container. SwiftUI's environment is keyed
                 // by type, so two `TransferModule`s could not both live in it —
@@ -848,6 +873,42 @@ struct RelayiumApp: App {
                     guard !deepLinks.open(url) else { return }
                     fileOpens.open([url])
                 }
+                // **Outside everything above, and that is the point.** Below the
+                // minimum supported version the shell is not in the tree at all,
+                // so none of the tasks attached to it run: no residency, no
+                // notification registration, no shared-draft collection. A build
+                // the product refuses to answer for does not quietly go on being
+                // reachable behind an update button.
+                //
+                // Neither action is decided here. `startUpdate` is the seam's —
+                // Sparkle in this build, the App Store in the other — so no
+                // policy document can name where an update comes from.
+                .appVersionGate(versionSupport,
+                                update: updates.startUpdate,
+                                quit: { NSApplication.shared.terminate(nil) })
+                // This scene root's ONE derived direction, and it moved out here
+                // rather than being duplicated: the gate draws the blocking
+                // screen INSTEAD of the shell, so a direction applied inside
+                // would leave that screen — the only thing on the window — laid
+                // out left to right in Arabic. Applied outermost, it reaches
+                // both arms, and the count `MacSurfaceGuardTests` holds every
+                // scene root to is unchanged.
+                .environment(\.layoutDirection, appLayoutDirection)
+                .task {
+                    // Once per presentation of this window — a cold launch, and
+                    // again when the window is reopened from the menu bar, which
+                    // on this app is an ordinary thing to do after days of
+                    // running. Re-reading then is the point rather than a cost:
+                    // it is the only moment a long-lived process notices a
+                    // requirement that moved.
+                    //
+                    // Skipped for acceptance for the same reason residency is:
+                    // it reaches production, and nothing about a UI-test run
+                    // needs it. A skipped refresh leaves the embedded floor in
+                    // force, which cannot block this build.
+                    guard !UITestMode.isActive else { return }
+                    await versionSupport.refresh()
+                }
         }
         .defaultSize(width: 1040, height: 700)
         .commands {
@@ -885,16 +946,29 @@ struct RelayiumApp: App {
         // whether this Mac is actually able to receive, and the only way back to
         // the app.
         MenuBarExtra("Relayium", systemImage: "paperplane") {
-            MenuBarView()
-                .environment(\.layoutDirection, appLayoutDirection)
-                .environmentObject(session)
-                .environmentObject(nearbyReceive)
-                .environmentObject(lanDiscovery)
-                .environmentObject(inbox)
-                // The Device Inbox item opens the main window on its
-                // destination, so the menu bar has to be able to select one. It
-                // renders none of them.
-                .environmentObject(navigation)
+            // The menu bar is a live control surface, not a status readout: it
+            // can resume nearby receiving and the Device Inbox, both of which
+            // make this Mac reachable. A blocked build that kept it would be one
+            // the product refuses to run and a user could put back into service
+            // from a menu — so it offers the same two actions the window does.
+            // Grouped so this scene root keeps ONE derived direction across both
+            // arms, for the reason on the window above.
+            Group {
+                if versionSupport.isBlocked {
+                    MenuBarVersionBlock(update: updates.startUpdate)
+                } else {
+                    MenuBarView()
+                        .environmentObject(session)
+                        .environmentObject(nearbyReceive)
+                        .environmentObject(lanDiscovery)
+                        .environmentObject(inbox)
+                        // The Device Inbox item opens the main window on its
+                        // destination, so the menu bar has to be able to select
+                        // one. It renders none of them.
+                        .environmentObject(navigation)
+                }
+            }
+            .environment(\.layoutDirection, appLayoutDirection)
         }
     }
 }

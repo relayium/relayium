@@ -99,6 +99,30 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case settingsNeverChecked = "settings.neverChecked"
     case settingsCheckNow = "settings.checkNow"
 
+    // MARK: - Supported version
+    //
+    // The sentences a remotely configured version policy renders. Two surfaces
+    // and one vocabulary: below the minimum the product does not run and this
+    // copy is the whole window; below the recommendation it is one dismissible
+    // line above a product that works normally.
+    //
+    // The update ACTION has two labels because it has two mechanisms — Sparkle
+    // in the direct build, the App Store in the other — and a button that said
+    // "Update Now" and opened the App Store would be describing an install this
+    // app cannot perform.
+
+    case updateRequiredTitle = "update.requiredTitle"
+    /// %1$@ the running version, %2$@ the minimum required, %3$@ the newest
+    /// published. All three are digits, never translated.
+    case updateRequiredBody = "update.requiredBody"
+    case updateRecommendedTitle = "update.recommendedTitle"
+    /// %1$@ the running version, %2$@ the newest published.
+    case updateRecommendedBody = "update.recommendedBody"
+    case updateActionUpdate = "update.actionUpdate"
+    case updateActionOpenAppStore = "update.actionOpenAppStore"
+    case updateActionQuit = "update.actionQuit"
+    case updateActionDismiss = "update.actionDismiss"
+
     /// The Share extension is registered by installing the app but is OFF until
     /// the user enables it — macOS ships every third-party sharing extension
     /// disabled. Without saying so, the feature is invisible and looks broken.

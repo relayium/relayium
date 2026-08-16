@@ -46,6 +46,14 @@
 "settings.neverChecked" = "Not checked yet";
 "settings.checkNow" = "Check Now";
 "settings.version" = "Version %1$@ (%2$@)";
+"update.requiredTitle" = "Relayium needs an update to keep working";
+"update.requiredBody" = "This Mac is running %1$@, and Relayium no longer supports it. Version %2$@ or newer is required; %3$@ is the current release.";
+"update.recommendedTitle" = "A newer Relayium is available";
+"update.recommendedBody" = "This Mac is running %1$@. The current release is %2$@.";
+"update.actionUpdate" = "Update Now";
+"update.actionOpenAppStore" = "Open the App Store";
+"update.actionQuit" = "Quit Relayium";
+"update.actionDismiss" = "Not Now";
 "settings.shareExtension" = "Send from Finder's Share menu";
 "settings.shareExtensionBody" = "Installing Relayium adds it to the Share menu, but macOS keeps every new sharing extension switched off until you allow it. If Relayium is not in the menu, turn it on under Extensions ▸ Sharing.";
 "settings.openExtensionSettings" = "Open Extensions settings";

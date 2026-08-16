@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "macos": {
+    "minimumSupportedVersion": "1.2.4",
+    "minimumSupportedBuild": 11,
+    "recommendedVersion": "1.2.5",
+    "latestVersion": "1.2.7"
+  }
+}

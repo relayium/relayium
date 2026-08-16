@@ -6,9 +6,9 @@ import SwiftUI
 /// **The Mac App Store build's half of the distribution seam.**
 ///
 /// A member of the `RelayiumAppStore` target and of nothing else. It declares
-/// the same four names as `DirectDistribution.swift` — which is a member of
-/// `Relayium` and of nothing else — so the shared scene, settings window and
-/// account screen compile into either product unchanged.
+/// the same names as `DirectDistribution.swift` — which is a member of
+/// `Relayium` and of nothing else — so the shared scene, settings window,
+/// account screen and version gate compile into either product unchanged.
 ///
 /// **This file is the only place `RelayiumStoreKit` is imported by an app, and
 /// the only place a purchase model is assembled.** Both facts are structural:
@@ -72,7 +72,23 @@ enum AppDistribution {
 /// value of this name and hands it to the settings window. Nothing is started,
 /// nothing is observed, and no update-related code runs in this product.
 @MainActor
-final class AppUpdates {}
+final class AppUpdates {
+    /// Where the version policy's Update button goes in this build.
+    ///
+    /// **A fixed literal, and it has to be.** The direct build hands this action
+    /// to Sparkle; this one has no updater and cannot install anything, so the
+    /// most it can honestly do is open the App Store's own Updates page — which
+    /// is why the button beside it reads "Open the App Store" rather than
+    /// "Update Now". The address is compiled in and comes from nowhere else: the
+    /// policy document carries no URL of any kind, and this is the seam where an
+    /// attacker-supplied one would otherwise be spent.
+    // nonlocalized: the App Store's own URL scheme, never displayed
+    static let updatesPage = URL(string: "macappstore://showUpdatesPage")!
+
+    func startUpdate() {
+        NSWorkspace.shared.open(Self.updatesPage)
+    }
+}
 
 /// No "Check for Updates…" item in the app menu.
 ///

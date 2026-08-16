@@ -45,6 +45,14 @@
 "settings.neverChecked" = "尚未检查";
 "settings.checkNow" = "立即检查";
 "settings.version" = "版本 %1$@（%2$@）";
+"update.requiredTitle" = "Relayium 需要更新才能继续使用";
+"update.requiredBody" = "这台 Mac 运行的是 %1$@，Relayium 已不再支持该版本。需要 %2$@ 或更高版本；当前发布版本是 %3$@。";
+"update.recommendedTitle" = "有新版 Relayium 可用";
+"update.recommendedBody" = "这台 Mac 运行的是 %1$@，当前发布版本是 %2$@。";
+"update.actionUpdate" = "立即更新";
+"update.actionOpenAppStore" = "打开 App Store";
+"update.actionQuit" = "退出 Relayium";
+"update.actionDismiss" = "以后再说";
 "settings.shareExtension" = "从访达的「共享」菜单发送";
 "settings.shareExtensionBody" = "安装 Relayium 就会把它加进「共享」菜单，但 macOS 会让每个新的共享扩展保持关闭，直到你允许它。如果菜单里没有 Relayium，请在「扩展 ▸ 共享」中打开。";
 "settings.openExtensionSettings" = "打开「扩展」设置";

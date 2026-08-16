@@ -6,10 +6,11 @@ import SwiftUI
 ///
 /// This file is a member of the `Relayium` target and of nothing else. Its twin,
 /// `AppStoreDistribution.swift`, is a member of `RelayiumAppStore` and of
-/// nothing else, and the two declare the SAME four names. That is what lets
-/// `RelayiumApp.swift`, `SettingsView.swift` and `AccountView.swift` — one copy
-/// of each, shared by both targets through the same synchronized folder —
-/// compile into either product without a single `#if` in them.
+/// nothing else, and the two declare the SAME names. That is what lets
+/// `RelayiumApp.swift`, `SettingsView.swift`, `AccountView.swift` and
+/// `AppVersionGate.swift` — one copy of each, shared by both targets through the
+/// same synchronized folder — compile into either product without a single `#if`
+/// in them.
 ///
 /// Why membership rather than a compilation condition: `import Sparkle` is the
 /// thing that has to differ, and an `#if` around an import leaves the framework
@@ -25,6 +26,7 @@ import SwiftUI
 /// | `AppDistribution.channel` | `.directDownload` | `.macAppStore` |
 /// | `AppDistribution.makeSubscriptionModel` | `nil` — billing is on the web | a StoreKit-backed model |
 /// | `AppUpdates` | Sparkle's updater | an empty object |
+/// | `AppUpdates.startUpdate()` | Sparkle's own check | opens the App Store |
 /// | `AppUpdatesMenuItem` / `AppUpdatesSettingsTab` | the update UI | nothing |
 enum AppDistribution {
     /// Developer ID, notarized, downloaded from relayium.com, updated by
@@ -60,6 +62,19 @@ final class AppUpdates {
     )
 
     var updater: SPUUpdater { controller.updater }
+
+    /// **The one update action a policy-driven surface may perform.**
+    ///
+    /// It is Sparkle's ordinary check — the same one the menu item and the
+    /// settings pane run — and that is the whole point: the version policy
+    /// decides WHETHER the app asks for an update, never where the update comes
+    /// from. Sparkle resolves the signed appcast this build was compiled with
+    /// and verifies an EdDSA signature before anything is installed, so a
+    /// tampered or replayed policy document cannot reach the install path at
+    /// all. `SupportedVersionSurfaceTests` refuses any other call here.
+    func startUpdate() {
+        updater.checkForUpdates()
+    }
 }
 
 /// Keeps the SwiftUI command enabled state in sync with Sparkle's updater.

@@ -59,6 +59,14 @@ export const RELEASE_DOCS = [
 export const RELEASE_ARTIFACT_FILES = [
   "web/native-releases.json",
   "web/public/apps/macos/appcast.xml",
+  // The native client policy, both copies. `stage-macos-release.mjs` moves its
+  // `latestVersion` to the release being published and carries the requirement
+  // fields through untouched — so this is artifact-derived like the two above,
+  // and it is REQUIRED for the same reason they are: a release that left it
+  // behind would leave every installed client recommending an update to a
+  // version that is no longer the latest, with nothing failing.
+  "web/native-client-policy.json",
+  "web/public/apps/macos/client-policy.json",
 ];
 
 /**

@@ -182,6 +182,19 @@ describe("judging an assembled release candidate by what it changes", () => {
     expect(result.problems.join("\n")).toMatch(/incomplete/);
   });
 
+  it("rejects a candidate that left the native client policy behind", () => {
+    // The policy's `latestVersion` moves with the release. A candidate without
+    // it publishes a version that every installed client still believes is not
+    // the latest — the same shape of failure as a stale README, and with the
+    // same absence of anything that would notice.
+    for (const path of ["web/native-client-policy.json",
+                        "web/public/apps/macos/client-policy.json"]) {
+      const result = checkCandidateScope(complete().filter((candidate) => candidate !== path));
+      expect(result.ok, `${path} may be omitted`).toBe(false);
+      expect(result.missing).toEqual([path]);
+    }
+  });
+
   it("rejects a candidate whose maintained pages were never regenerated", () => {
     // `content/releases.mjs` corrected and `npm run gen:pages` forgotten leaves
     // the source truthful and the bytes a reader fetches still lying.

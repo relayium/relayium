@@ -75,6 +75,115 @@ function childText(element, tag) {
   return match?.[1]?.trim() || null;
 }
 
+/// **The one canonical statement of which builds Relayium still answers for.**
+///
+/// `web/native-client-policy.json` is edited by hand when the product decides to
+/// raise a requirement, and everything else about that decision is derived from
+/// it: the macOS client fetches the published copy, and the Sparkle feed's
+/// critical-update threshold is written from `minimumSupportedBuild` on every
+/// staging run.
+///
+/// Derived rather than preserved, and that distinction is the whole reason this
+/// exists. `generate_appcast` writes a fresh feed from the DMG directory and
+/// knows nothing about a policy, so a `<sparkle:criticalUpdate>` added to the
+/// published feed by hand disappears at the next release — silently, and in the
+/// direction that matters: every user below the minimum would stop being told
+/// their update is not optional, and nothing would fail.
+///
+/// Two vocabularies, one decision. Sparkle compares `CFBundleVersion`
+/// (`sparkle:version`), so the threshold here is a BUILD number; the client
+/// compares the marketing version, because that is what its sentences and the
+/// policy document speak in. `minimumSupportedVersion` and
+/// `minimumSupportedBuild` are the same release said both ways, and
+/// `SupportedVersionSurfaceTests` holds them to each other.
+export const CLIENT_POLICY_FILE = "native-client-policy.json";
+export const PUBLISHED_CLIENT_POLICY_PATH = "public/apps/macos/client-policy.json";
+
+/// The document, validated. A release must not proceed on a policy this script
+/// cannot read: the alternative is publishing a feed whose critical threshold
+/// was guessed.
+async function readClientPolicy(root) {
+  const path = resolve(root, CLIENT_POLICY_FILE);
+  let parsed;
+  try {
+    parsed = JSON.parse(await readFile(path, "utf8"));
+  } catch (error) {
+    throw new Error(`client policy is missing or not JSON: ${path} (${error.message})`);
+  }
+  if (parsed?.schema !== 1) {
+    throw new Error(`client policy schema must be 1, found ${JSON.stringify(parsed?.schema)}`);
+  }
+  const mac = parsed.macos;
+  if (!mac || typeof mac !== "object") throw new Error("client policy has no macos section");
+  for (const key of ["minimumSupportedVersion", "recommendedVersion", "latestVersion"]) {
+    if (typeof mac[key] !== "string" || !/^[0-9]+(?:\.[0-9]+){0,3}$/.test(mac[key])) {
+      throw new Error(`client policy ${key} is not an app version: ${JSON.stringify(mac[key])}`);
+    }
+  }
+  if (!Number.isInteger(mac.minimumSupportedBuild) || mac.minimumSupportedBuild < 1) {
+    throw new Error("client policy minimumSupportedBuild must be a positive integer");
+  }
+  if (compareVersions(mac.minimumSupportedVersion, mac.recommendedVersion) > 0) {
+    throw new Error("client policy minimum is above its own recommended version");
+  }
+  return { path, policy: parsed };
+}
+
+/// Numeric, component by component. `1.2.10` is above `1.2.9`, which is the one
+/// thing a string comparison gets wrong and the only comparison that matters here.
+function compareVersions(left, right) {
+  const a = left.split(".").map(Number);
+  const b = right.split(".").map(Number);
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    const diff = (a[i] ?? 0) - (b[i] ?? 0);
+    if (diff !== 0) return diff < 0 ? -1 : 1;
+  }
+  return 0;
+}
+
+/// The exact bytes both copies of the policy carry.
+///
+/// Key order is written here rather than inherited from the parsed object, so
+/// the file staging produces and the file a person edits converge on one
+/// spelling — which is what lets a test assert the published copy is
+/// byte-for-byte the canonical one.
+function serializeClientPolicy(policy) {
+  return `${JSON.stringify({
+    schema: 1,
+    macos: {
+      minimumSupportedVersion: policy.macos.minimumSupportedVersion,
+      minimumSupportedBuild: policy.macos.minimumSupportedBuild,
+      recommendedVersion: policy.macos.recommendedVersion,
+      latestVersion: policy.macos.latestVersion,
+    },
+  }, null, 2)}\n`;
+}
+
+/// Write the threshold into every `<item>`, replacing whatever was there.
+///
+/// Replacing rather than appending: `generate_appcast` may be run against a
+/// directory that already holds a staged feed, and two `<sparkle:criticalUpdate>`
+/// elements in one item is a document whose meaning depends on which one Sparkle
+/// reads first.
+///
+/// The element goes immediately before the enclosure, at the enclosure's own
+/// indentation, so the staged feed is a document a person can read and diff
+/// rather than one line of XML.
+function applyCriticalUpdate(appcast, build) {
+  const marker =
+    `<sparkle:criticalUpdate sparkle:version="${build}"></sparkle:criticalUpdate>`;
+  return appcast.replace(/<item>[\s\S]*?<\/item>/g, (item) => {
+    const cleaned = item
+      .replace(/[ \t]*<sparkle:criticalUpdate\b[^>]*?\/>\n?/g, "")
+      .replace(/[ \t]*<sparkle:criticalUpdate\b[^>]*?>[\s\S]*?<\/sparkle:criticalUpdate>\n?/g, "");
+    const at = cleaned.indexOf("<enclosure");
+    if (at < 0) throw new Error("appcast item has no enclosure");
+    const lineStart = cleaned.lastIndexOf("\n", at) + 1;
+    const indent = cleaned.slice(lineStart, at);
+    return `${cleaned.slice(0, lineStart)}${indent}${marker}\n${cleaned.slice(lineStart)}`;
+  });
+}
+
 function canonicalizeChannel(appcast) {
   const itemAt = appcast.indexOf("<item");
   if (itemAt < 0) throw new Error("appcast has no release item");
@@ -114,8 +223,12 @@ export async function stageMacOSRelease({
 
   const source = resolve(appcastPath);
   const root = resolve(webRoot);
+  const { path: policyPath, policy } = await readClientPolicy(root);
   const generatedAppcast = await readFile(source, "utf8");
-  const appcast = canonicalizeChannel(generatedAppcast);
+  const appcast = applyCriticalUpdate(
+    canonicalizeChannel(generatedAppcast),
+    policy.macos.minimumSupportedBuild,
+  );
   // Two elements, not one. The enclosure carries the asset; the item carries
   // the version. The single misnamed `item = enclosure(...)` this replaced is
   // what made every version read return null.
@@ -140,6 +253,22 @@ export async function stageMacOSRelease({
   const length = attribute(asset, "length");
   if (!length || !/^[1-9][0-9]*$/.test(length)) {
     throw new Error("appcast enclosure length must be a positive integer");
+  }
+  // A release that is critical against ITSELF. Sparkle marks an update critical
+  // when the running build is BELOW the threshold, so a threshold ABOVE this
+  // release's own build tells the people who just installed it that what they
+  // are running is already unsupported — and the update it directs them to is
+  // this one. Equality is fine and is the strongest coherent policy: everything
+  // before this release, and nothing after it.
+  if (BigInt(policy.macos.minimumSupportedBuild) > BigInt(build)) {
+    throw new Error(
+      `client policy minimumSupportedBuild ${policy.macos.minimumSupportedBuild} is above `
+      + `the released build ${build}`);
+  }
+  if (compareVersions(policy.macos.recommendedVersion, version) > 0) {
+    throw new Error(
+      `client policy recommends ${policy.macos.recommendedVersion}, which is above the released `
+      + `version ${version}`);
   }
 
   const manifestPath = resolve(root, "native-releases.json");
@@ -174,16 +303,45 @@ export async function stageMacOSRelease({
       downloadUrl: expectedUrl,
     },
   };
+  // The one field of the policy a release owns. The requirement fields are a
+  // product decision and are carried through untouched — staging must never
+  // raise or lower what users are required to run — but `latestVersion` is a
+  // statement about what has been published, and this is the moment it changes.
+  const stagedPolicy = serializeClientPolicy({
+    ...policy,
+    macos: { ...policy.macos, latestVersion: version },
+  });
+  const publishedPolicyPath = resolve(root, PUBLISHED_CLIENT_POLICY_PATH);
   await mkdir(dirname(destination), { recursive: true });
+  await mkdir(dirname(publishedPolicyPath), { recursive: true });
 
   const manifestTemp = `${manifestPath}.tmp`;
   const appcastTemp = `${destination}.tmp`;
+  const policyTemp = `${policyPath}.tmp`;
+  const publishedPolicyTemp = `${publishedPolicyPath}.tmp`;
   await writeFile(manifestTemp, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   await writeFile(appcastTemp, appcast, "utf8");
+  await writeFile(policyTemp, stagedPolicy, "utf8");
+  await writeFile(publishedPolicyTemp, stagedPolicy, "utf8");
   await rename(manifestTemp, manifestPath);
   await rename(appcastTemp, destination);
+  // Both copies, from the same bytes. The canonical file is what a person edits
+  // and what `gen-pages.mjs` publishes; the published one is what the macOS
+  // client actually fetches, and a release that updated only one of them would
+  // leave the served policy naming a release that is no longer the latest.
+  await rename(policyTemp, policyPath);
+  await rename(publishedPolicyTemp, publishedPolicyPath);
 
-  return { version, build, downloadUrl: expectedUrl, manifestPath, appcastPath: destination };
+  return {
+    version,
+    build,
+    downloadUrl: expectedUrl,
+    manifestPath,
+    appcastPath: destination,
+    criticalUpdateBuild: policy.macos.minimumSupportedBuild,
+    clientPolicyPath: policyPath,
+    publishedClientPolicyPath: publishedPolicyPath,
+  };
 }
 
 async function main() {

@@ -7,15 +7,38 @@ import { stageMacOSRelease } from "./stage-macos-release.mjs";
 
 const work = [];
 
-async function fixture(overrides = {}) {
-  const root = await mkdtemp(join(tmpdir(), "relayium-stage-macos-"));
-  work.push(root);
-  const webRoot = join(root, "web");
+/// The policy every fixture starts from: nothing required, nothing recommended
+/// beyond the release under test. Cases that care about the requirement pass
+/// their own `macos` fields.
+const BASE_POLICY = {
+  minimumSupportedVersion: "1.0",
+  minimumSupportedBuild: 1,
+  recommendedVersion: "1.0",
+  latestVersion: "1.0",
+};
+
+/// An empty web tree: no release published, and the canonical client policy in
+/// place. The policy is not optional — `stageMacOSRelease` refuses to derive a
+/// critical-update threshold it cannot read, which is the behaviour a release
+/// wants: a feed staged from a guess is worse than a release that stops.
+async function writeWebRoot(webRoot, policy = {}) {
   await mkdir(join(webRoot, "public/apps/macos"), { recursive: true });
   await writeFile(
     join(webRoot, "native-releases.json"),
     '{"macos":{"available":false,"version":null,"build":null,"downloadUrl":null}}\n',
   );
+  if (policy === null) return;
+  await writeFile(
+    join(webRoot, "native-client-policy.json"),
+    `${JSON.stringify({ schema: 1, macos: { ...BASE_POLICY, ...policy } }, null, 2)}\n`,
+  );
+}
+
+async function fixture(overrides = {}, policy = {}) {
+  const root = await mkdtemp(join(tmpdir(), "relayium-stage-macos-"));
+  work.push(root);
+  const webRoot = join(root, "web");
+  await writeWebRoot(webRoot, policy);
   // **The shape Sparkle actually writes**, transcribed from a real
   // `generate_appcast` run rather than assumed. The versions are CHILD ELEMENTS
   // of `<item>`; only the asset's own facts are enclosure attributes.
@@ -111,6 +134,135 @@ describe("stageMacOSRelease", () => {
   });
 });
 
+/// **The half a hand edit cannot hold.**
+///
+/// `generate_appcast` writes a fresh feed from the DMG directory and knows
+/// nothing about which builds the product still supports, so a
+/// `<sparkle:criticalUpdate>` added to the published feed by hand is gone at the
+/// next release — with nothing failing and every below-minimum user quietly
+/// stopping being told their update is not optional. These cases exist because
+/// that regression is invisible: the feed still validates, still installs, and
+/// still updates everyone who asks.
+describe("the critical-update threshold the release derives", () => {
+  const criticalOf = (xml) =>
+    xml.match(/<sparkle:criticalUpdate\b[^>]*?sparkle:version="([^"]*)"/)?.[1] ?? null;
+
+  it("writes the canonical policy's build into the staged feed", async () => {
+    const { webRoot, appcastPath } = await fixture(
+      { "sparkle:version": "13" },
+      { minimumSupportedBuild: 11 },
+    );
+    const result = await stageMacOSRelease({ version: "1.0", appcastPath, webRoot });
+
+    expect(result.criticalUpdateBuild).toBe(11);
+    const staged = await readFile(join(webRoot, "public/apps/macos/appcast.xml"), "utf8");
+    expect(criticalOf(staged)).toBe("11");
+    // The threshold is added, and the asset it is added beside is untouched:
+    // the enclosure's URL, length and signature are bound to a DMG that has
+    // already been notarized and published, and re-signing is not something a
+    // staging edit may imply.
+    expect(staged).toContain('sparkle:edSignature="signed-value"');
+    expect(staged).toContain('length="42"');
+    expect(staged).toContain(
+      'url="https://github.com/relayium/relayium/releases/download/macos-v1.0/Relayium.dmg"');
+  });
+
+  it("replaces a threshold the generator already carried instead of adding a second", async () => {
+    const { root, webRoot } = await fixture({}, { minimumSupportedBuild: 1 });
+    // A feed generated over a directory that already held a staged one. Two
+    // `<sparkle:criticalUpdate>` elements in an item is a document whose meaning
+    // depends on which one Sparkle reads first.
+    const appcastPath = join(root, "regenerated.xml");
+    await writeFile(
+      appcastPath,
+      `<?xml version="1.0" standalone="yes"?>\n`
+        + `<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">\n`
+        + `    <channel>\n        <title>Relayium</title>\n        <item>\n`
+        + `            <sparkle:version>1</sparkle:version>\n`
+        + `            <sparkle:shortVersionString>1.0</sparkle:shortVersionString>\n`
+        + `            <sparkle:criticalUpdate sparkle:version="99"/>\n`
+        + `            <enclosure url="https://github.com/relayium/relayium/releases/download/macos-v1.0/Relayium.dmg"`
+        + ` length="42" type="application/octet-stream" sparkle:edSignature="signed-value"/>\n`
+        + `        </item>\n    </channel>\n</rss>\n`,
+    );
+
+    await stageMacOSRelease({ version: "1.0", appcastPath, webRoot });
+    const staged = await readFile(join(webRoot, "public/apps/macos/appcast.xml"), "utf8");
+    expect(staged.match(/<sparkle:criticalUpdate\b/g)).toHaveLength(1);
+    expect(criticalOf(staged)).toBe("1");
+  });
+
+  it("refuses a threshold above the release, which would be critical against itself", async () => {
+    const { webRoot, appcastPath } = await fixture(
+      { "sparkle:version": "13" },
+      { minimumSupportedBuild: 14 },
+    );
+    await expect(stageMacOSRelease({ version: "1.0", appcastPath, webRoot }))
+      .rejects.toThrow(/above the released build/);
+    expect(JSON.parse(await readFile(join(webRoot, "native-releases.json"), "utf8")).macos.available)
+      .toBe(false);
+  });
+
+  it("refuses a recommendation above the release", async () => {
+    const { webRoot, appcastPath } = await fixture({}, { recommendedVersion: "1.1" });
+    await expect(stageMacOSRelease({ version: "1.0", appcastPath, webRoot }))
+      .rejects.toThrow(/above the released/);
+  });
+
+  it.each([
+    ["no policy at all", null],
+    ["a policy with no macos section", { schema: 1 }],
+    ["a future schema", { schema: 2, macos: BASE_POLICY }],
+    ["a non-integer build", { schema: 1, macos: { ...BASE_POLICY, minimumSupportedBuild: "11" } }],
+    ["a build below one", { schema: 1, macos: { ...BASE_POLICY, minimumSupportedBuild: 0 } }],
+    ["an unreadable version", {
+      schema: 1, macos: { ...BASE_POLICY, minimumSupportedVersion: "1.2.4-beta" },
+    }],
+    ["a minimum above its own recommendation", {
+      schema: 1, macos: { ...BASE_POLICY, minimumSupportedVersion: "2.0" },
+    }],
+  ])("stops the release on %s rather than guessing one", async (_label, document) => {
+    const { webRoot, appcastPath } = await fixture();
+    const path = join(webRoot, "native-client-policy.json");
+    if (document === null) await rm(path);
+    else await writeFile(path, `${JSON.stringify(document)}\n`);
+
+    await expect(stageMacOSRelease({ version: "1.0", appcastPath, webRoot })).rejects.toThrow();
+    expect(JSON.parse(await readFile(join(webRoot, "native-releases.json"), "utf8")).macos.available)
+      .toBe(false);
+  });
+
+  /// The requirement fields are a product decision. A release publishes an
+  /// artifact; it does not get to raise or lower what users are required to run,
+  /// and the one field it does own is the one that says what was published.
+  it("carries the requirement through untouched and moves only the published version", async () => {
+    const { webRoot, appcastPath } = await fixture({}, {
+      minimumSupportedVersion: "1.0",
+      minimumSupportedBuild: 1,
+      recommendedVersion: "1.0",
+      latestVersion: "0.9",
+    });
+    await stageMacOSRelease({ version: "1.0", appcastPath, webRoot });
+
+    const expected = {
+      schema: 1,
+      macos: {
+        minimumSupportedVersion: "1.0",
+        minimumSupportedBuild: 1,
+        recommendedVersion: "1.0",
+        latestVersion: "1.0",
+      },
+    };
+    const canonical = await readFile(join(webRoot, "native-client-policy.json"), "utf8");
+    const published = await readFile(join(webRoot, "public/apps/macos/client-policy.json"), "utf8");
+    expect(JSON.parse(canonical)).toEqual(expected);
+    // Byte-for-byte, not merely equal as JSON: the client fetches one of these
+    // two files and a person edits the other, and a difference in spelling is a
+    // difference nobody would look for.
+    expect(published).toBe(canonical);
+  });
+});
+
 describe("the appcast shape this parser assumes", () => {
   /// Verbatim output from a real `generate_appcast` run (Sparkle 2, the version
   /// pinned by `Package.resolved`) against a real Relayium.dmg, captured
@@ -141,11 +293,7 @@ describe("the appcast shape this parser assumes", () => {
     const root = await mkdtemp(join(tmpdir(), "relayium-stage-real-"));
     work.push(root);
     const webRoot = join(root, "web");
-    await mkdir(join(webRoot, "public/apps/macos"), { recursive: true });
-    await writeFile(
-      join(webRoot, "native-releases.json"),
-      '{"macos":{"available":false,"version":null,"build":null,"downloadUrl":null}}\n',
-    );
+    await writeWebRoot(webRoot);
     const appcastPath = join(root, "generated.xml");
     await writeFile(appcastPath, REAL_SPARKLE_OUTPUT);
 
@@ -166,11 +314,7 @@ describe("the appcast shape this parser assumes", () => {
     const root = await mkdtemp(join(tmpdir(), "relayium-stage-attrs-"));
     work.push(root);
     const webRoot = join(root, "web");
-    await mkdir(join(webRoot, "public/apps/macos"), { recursive: true });
-    await writeFile(
-      join(webRoot, "native-releases.json"),
-      '{"macos":{"available":false,"version":null,"build":null,"downloadUrl":null}}\n',
-    );
+    await writeWebRoot(webRoot);
     const appcastPath = join(root, "generated.xml");
     await writeFile(
       appcastPath,
