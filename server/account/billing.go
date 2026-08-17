@@ -76,6 +76,26 @@ func (s *Service) handleBillingCheckout(w http.ResponseWriter, r *http.Request, 
 		httpx.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "plan not purchasable"})
 		return
 	}
+	authorities, ok := s.Store().(interface {
+		AcquireBillingAuthority(context.Context, BillingAuthorityRequest) (BillingAuthority, error)
+		DispatchBillingPurchase(context.Context, BillingAuthority, string, int64) (BillingPurchaseAttempt, bool, error)
+		SetBillingPurchaseProviderRef(context.Context, string, string, string) error
+	})
+	if !ok {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	authority, err := authorities.AcquireBillingAuthority(r.Context(), BillingAuthorityRequest{
+		UserID: u.ID, Provider: ProviderStripe, Now: s.Now().Unix(),
+	})
+	if errors.Is(err, ErrBillingAuthorityConflict) {
+		writeAlreadySubscribed(w, "billing_authority")
+		return
+	}
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
 	// Bind a SINGLE Stripe customer to the user before checkout, then always pass
 	// it explicitly. Otherwise subscription-mode Checkout mints a fresh customer
 	// per session, so two concurrent first-time checkouts (double tab / retry
@@ -95,6 +115,19 @@ func (s *Service) handleBillingCheckout(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 	}
+	attempt, created, err := authorities.DispatchBillingPurchase(r.Context(), authority, priceID, s.Now().Unix())
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if attempt.ProductID != priceID {
+		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "billing_reconciliation_required"})
+		return
+	}
+	if !created && attempt.ProviderRef != "" {
+		httpx.WriteJSON(w, http.StatusOK, map[string]string{"url": attempt.ProviderRef})
+		return
+	}
 	url, err := s.biller.CreateCheckoutSession(r.Context(), CheckoutInput{
 		PriceID:         priceID,
 		CustomerID:      customerID,
@@ -102,8 +135,13 @@ func (s *Service) handleBillingCheckout(w http.ResponseWriter, r *http.Request, 
 		ClientRefUserID: u.ID,
 		SuccessURL:      s.Cfg().BaseURL + "/me?billing=success",
 		CancelURL:       s.Cfg().BaseURL + "/me?billing=cancel",
+		IdempotencyKey:  "checkout:" + attempt.ID,
 	})
 	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if err := authorities.SetBillingPurchaseProviderRef(r.Context(), u.ID, attempt.ID, url); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}

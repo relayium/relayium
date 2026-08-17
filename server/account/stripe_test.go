@@ -176,6 +176,9 @@ func TestCreateCheckoutSessionRequestShape(t *testing.T) {
 		if got := r.Header.Get("Content-Type"); got != "application/x-www-form-urlencoded" {
 			t.Errorf("Content-Type = %q, want application/x-www-form-urlencoded", got)
 		}
+		if got := r.Header.Get("Idempotency-Key"); got != "checkout:attempt_42" {
+			t.Errorf("Idempotency-Key = %q, want checkout:attempt_42", got)
+		}
 		if err := r.ParseForm(); err != nil {
 			t.Fatalf("ParseForm: %v", err)
 		}
@@ -228,6 +231,7 @@ func TestCreateCheckoutSessionRequestShape(t *testing.T) {
 		ClientRefUserID: "user_42",
 		SuccessURL:      "https://relayium.test/success",
 		CancelURL:       "https://relayium.test/cancel",
+		IdempotencyKey:  "checkout:attempt_42",
 	})
 	if err != nil {
 		t.Fatalf("CreateCheckoutSession: %v", err)

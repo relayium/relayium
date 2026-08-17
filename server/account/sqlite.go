@@ -1031,6 +1031,7 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
  external_scope TEXT NOT NULL DEFAULT '',
  product_id TEXT NOT NULL,
  state TEXT NOT NULL CHECK(state IN ('prepared','dispatched','resolved')),
+ provider_ref TEXT NOT NULL DEFAULT '',
  epoch INTEGER NOT NULL,
  created_at INTEGER NOT NULL)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_billing_purchase_attempt_unresolved

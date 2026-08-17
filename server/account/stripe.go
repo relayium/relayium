@@ -91,7 +91,7 @@ type ChangePreview struct {
 // an existing Stripe customer, CustomerEmail lets Stripe create one (and the
 // webhook binds it back via ClientRefUserID).
 type CheckoutInput struct {
-	PriceID, CustomerID, CustomerEmail, ClientRefUserID, SuccessURL, CancelURL string
+	PriceID, CustomerID, CustomerEmail, ClientRefUserID, SuccessURL, CancelURL, IdempotencyKey string
 }
 
 // WebhookEvent is the minimal projection of a verified Stripe event that
@@ -416,7 +416,7 @@ func (c *stripeClient) CreateCheckoutSession(ctx context.Context, in CheckoutInp
 		// would 400 every first-time subscriber's checkout.
 		form.Set("customer_email", in.CustomerEmail)
 	}
-	return c.postForSessionURL(ctx, "/v1/checkout/sessions", form)
+	return c.postForSessionURLKeyed(ctx, "/v1/checkout/sessions", form, in.IdempotencyKey)
 }
 
 // SubscriptionInfo is a live subscription's identity for the webhook dedup:
@@ -1165,10 +1165,14 @@ func (c *stripeClient) requestIdempotent(ctx context.Context, method, path strin
 // postForSessionURL performs the shared form-POST + {"url":"..."} decode used
 // by both Checkout and Billing Portal session creation.
 func (c *stripeClient) postForSessionURL(ctx context.Context, path string, form url.Values) (string, error) {
+	return c.postForSessionURLKeyed(ctx, path, form, "")
+}
+
+func (c *stripeClient) postForSessionURLKeyed(ctx context.Context, path string, form url.Values, idemKey string) (string, error) {
 	if path == "/v1/billing_portal/sessions" && c.portalConfig == "" {
 		return "", errors.New("stripe: explicit Billing Portal configuration is required")
 	}
-	body, err := c.request(ctx, http.MethodPost, path, form)
+	body, err := c.requestKeyed(ctx, http.MethodPost, path, form, idemKey)
 	if err != nil {
 		return "", err
 	}

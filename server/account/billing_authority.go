@@ -94,8 +94,59 @@ func (s *SQLiteStore) BillingAuthority(ctx context.Context, userID string) (Bill
 }
 
 type BillingPurchaseAttempt struct {
-	ID, UserID, Provider, ExternalScope, ProductID, State string
-	Epoch, CreatedAt                                      int64
+	ID, UserID, Provider, ExternalScope, ProductID, State, ProviderRef string
+	Epoch, CreatedAt                                                   int64
+}
+
+// DispatchBillingPurchase atomically grants the one external dispatch allowed
+// for an authority generation. A retry receives the existing attempt with
+// created=false and must reconcile it instead of calling the provider again.
+func (s *SQLiteStore) DispatchBillingPurchase(ctx context.Context, authority BillingAuthority, productID string, now int64) (BillingPurchaseAttempt, bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return BillingPurchaseAttempt{}, false, err
+	}
+	defer tx.Rollback()
+	var current BillingAuthority
+	if err := tx.QueryRowContext(ctx, `SELECT user_id,provider,external_scope,apple_environment,apple_account_token,epoch,intent_id,created_at,updated_at FROM billing_authorities WHERE user_id=?`, authority.UserID).
+		Scan(&current.UserID, &current.Provider, &current.ExternalScope, &current.AppleEnvironment, &current.AppleAccountToken, &current.Epoch, &current.IntentID, &current.CreatedAt, &current.UpdatedAt); err != nil {
+		return BillingPurchaseAttempt{}, false, err
+	}
+	if current != authority {
+		return BillingPurchaseAttempt{}, false, ErrBillingAuthorityConflict
+	}
+	var out BillingPurchaseAttempt
+	err = tx.QueryRowContext(ctx, `SELECT id,user_id,provider,external_scope,product_id,state,provider_ref,epoch,created_at FROM billing_purchase_attempts WHERE user_id=? AND epoch=? AND state IN ('prepared','dispatched')`, authority.UserID, authority.Epoch).
+		Scan(&out.ID, &out.UserID, &out.Provider, &out.ExternalScope, &out.ProductID, &out.State, &out.ProviderRef, &out.Epoch, &out.CreatedAt)
+	if err == nil {
+		return out, false, nil
+	}
+	if err != sql.ErrNoRows {
+		return BillingPurchaseAttempt{}, false, err
+	}
+	out = BillingPurchaseAttempt{ID: authx.NewID(), UserID: authority.UserID, Provider: authority.Provider, ExternalScope: authority.ExternalScope, ProductID: productID, State: "dispatched", Epoch: authority.Epoch, CreatedAt: now}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO billing_purchase_attempts(id,user_id,provider,external_scope,product_id,state,provider_ref,epoch,created_at) VALUES(?,?,?,?,?,'dispatched','',?,?)`, out.ID, out.UserID, out.Provider, out.ExternalScope, out.ProductID, out.Epoch, out.CreatedAt); err != nil {
+		return BillingPurchaseAttempt{}, false, err
+	}
+	return out, true, tx.Commit()
+}
+
+func (s *SQLiteStore) SetBillingPurchaseProviderRef(ctx context.Context, userID, attemptID, ref string) error {
+	if ref == "" {
+		return errors.New("account: empty billing provider reference")
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE billing_purchase_attempts SET provider_ref=? WHERE id=? AND user_id=? AND state='dispatched' AND (provider_ref='' OR provider_ref=?)`, ref, attemptID, userID, ref)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return ErrBillingAuthorityConflict
+	}
+	return nil
 }
 
 // PrepareBillingPurchase creates at most one unresolved provider dispatch for
@@ -116,8 +167,8 @@ func (s *SQLiteStore) PrepareBillingPurchase(ctx context.Context, authority Bill
 		return BillingPurchaseAttempt{}, false, ErrBillingAuthorityConflict
 	}
 	var out BillingPurchaseAttempt
-	err = tx.QueryRowContext(ctx, `SELECT id,user_id,provider,external_scope,product_id,state,epoch,created_at FROM billing_purchase_attempts WHERE user_id=? AND epoch=? AND state IN ('prepared','dispatched')`, authority.UserID, authority.Epoch).
-		Scan(&out.ID, &out.UserID, &out.Provider, &out.ExternalScope, &out.ProductID, &out.State, &out.Epoch, &out.CreatedAt)
+	err = tx.QueryRowContext(ctx, `SELECT id,user_id,provider,external_scope,product_id,state,provider_ref,epoch,created_at FROM billing_purchase_attempts WHERE user_id=? AND epoch=? AND state IN ('prepared','dispatched')`, authority.UserID, authority.Epoch).
+		Scan(&out.ID, &out.UserID, &out.Provider, &out.ExternalScope, &out.ProductID, &out.State, &out.ProviderRef, &out.Epoch, &out.CreatedAt)
 	if err == nil {
 		return out, false, nil
 	}
@@ -125,7 +176,7 @@ func (s *SQLiteStore) PrepareBillingPurchase(ctx context.Context, authority Bill
 		return BillingPurchaseAttempt{}, false, err
 	}
 	out = BillingPurchaseAttempt{ID: authx.NewID(), UserID: authority.UserID, Provider: authority.Provider, ExternalScope: authority.ExternalScope, ProductID: productID, State: "prepared", Epoch: authority.Epoch, CreatedAt: now}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO billing_purchase_attempts(id,user_id,provider,external_scope,product_id,state,epoch,created_at) VALUES(?,?,?,?,?,'prepared',?,?)`, out.ID, out.UserID, out.Provider, out.ExternalScope, out.ProductID, out.Epoch, out.CreatedAt); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO billing_purchase_attempts(id,user_id,provider,external_scope,product_id,state,provider_ref,epoch,created_at) VALUES(?,?,?,?,?,'prepared','',?,?)`, out.ID, out.UserID, out.Provider, out.ExternalScope, out.ProductID, out.Epoch, out.CreatedAt); err != nil {
 		return BillingPurchaseAttempt{}, false, err
 	}
 	return out, true, tx.Commit()

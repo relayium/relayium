@@ -254,6 +254,9 @@ func TestBillingCheckoutHappyPath(t *testing.T) {
 	if fb.lastCheckout.ClientRefUserID == "" {
 		t.Fatal("want non-empty ClientRefUserID")
 	}
+	if !strings.HasPrefix(fb.lastCheckout.IdempotencyKey, "checkout:") {
+		t.Fatalf("checkout carries no durable attempt idempotency key: %q", fb.lastCheckout.IdempotencyKey)
+	}
 	if fb.lastCheckout.SuccessURL != "http://example.test/me?billing=success" {
 		t.Fatalf("unexpected success url %q", fb.lastCheckout.SuccessURL)
 	}
