@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS apple_renewal_states (
   event_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
   ,expiration_intent INTEGER NOT NULL DEFAULT 0
-  ,price_increase_status INTEGER NOT NULL DEFAULT 0
+  ,price_increase_status INTEGER NOT NULL DEFAULT -1
 );
 CREATE TABLE IF NOT EXISTS sessions (
   id         TEXT PRIMARY KEY,
@@ -1013,7 +1013,7 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		`ALTER TABLE users ADD COLUMN apple_account_token TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE apple_renewal_states ADD COLUMN auto_renew_enabled INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE apple_renewal_states ADD COLUMN expiration_intent INTEGER NOT NULL DEFAULT 0`,
-		`ALTER TABLE apple_renewal_states ADD COLUMN price_increase_status INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE apple_renewal_states ADD COLUMN price_increase_status INTEGER NOT NULL DEFAULT -1`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_apple_account_token
 		   ON users(apple_account_token) WHERE apple_account_token <> ''`,
 		// Which App Store product grants which tier. Keyed by BUNDLE identity as

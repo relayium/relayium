@@ -39,6 +39,9 @@ public struct AppleRenewalInfo: Codable, Equatable, Sendable {
     public var inBillingRetry: Bool?
     public var inGracePeriod: Bool?
     public var graceUntil: Int64?
+    public var autoRenewEnabled: Bool?
+    public var expirationIntent: Int64?
+    public var priceIncreaseStatus: Int64?
 }
 
 public struct MeResponse: Codable, Equatable { public let user: NativeUser }

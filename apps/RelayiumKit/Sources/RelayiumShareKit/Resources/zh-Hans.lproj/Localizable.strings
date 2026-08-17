@@ -834,6 +834,11 @@
 "subscription.effect.renewal" = "将在下次续订时生效；在此之前继续使用当前订阅。";
 "subscription.renewal.pending" = "Apple 将在下次续订时把此订阅切换为 %@ %@。";
 "subscription.grace" = "Apple 正在重试扣款。在 Apple 的账单宽限期内，你可以继续使用。";
+"subscription.billing.retry" = "Apple 正在重试付款。当前没有账单宽限期，使用权限可能会中断。";
+"subscription.auto_renew.off" = "自动续订已关闭。使用权限将在当前已付费期限结束时终止。";
+"subscription.price.consent" = "Apple 正在等待你确认订阅价格变更。请前往 App Store 订阅中查看。";
+"subscription.expired.attention" = "Apple 显示此订阅已到期。请前往 App Store 订阅中查看状态。";
+"subscription.error.reconciliation" = "Apple 暂时无法确认这笔购买。交易仍处于待处理状态，系统会自动重试。";
 "subscription.completed" = "订阅已生效，上方的套餐已更新。";
 "subscription.manage" = "在 App Store 中管理";
 "subscription.managedByApple" = "此订阅由 Apple 计费。请在 App Store 中更改或取消。";

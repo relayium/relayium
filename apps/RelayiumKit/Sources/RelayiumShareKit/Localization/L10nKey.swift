@@ -1175,6 +1175,11 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case subscriptionEffectRenewal = "subscription.effect.renewal"
     case subscriptionRenewalPending = "subscription.renewal.pending"
     case subscriptionGrace = "subscription.grace"
+    case subscriptionBillingRetry = "subscription.billing.retry"
+    case subscriptionAutoRenewOff = "subscription.auto_renew.off"
+    case subscriptionPriceConsent = "subscription.price.consent"
+    case subscriptionExpiredAttention = "subscription.expired.attention"
+    case subscriptionErrorReconciliation = "subscription.error.reconciliation"
     case subscriptionCompleted = "subscription.completed"
     /// Opens the App Store's own subscription management — the only place an
     /// App Store subscription can be changed or cancelled.

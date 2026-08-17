@@ -268,6 +268,9 @@ public enum AppleBillingError: Error, Equatable {
     /// 503 `verifier_unavailable` — this deployment holds no Apple trust roots
     /// and can verify nothing. The shipping default today.
     case verifierUnavailable
+    /// Canonical App Store status could not be obtained yet. The transaction is
+    /// deliberately unfinished and StoreKit will redeliver it for recovery.
+    case reconciliationUnavailable
     /// 400 `unknown_bundle` — this server is not configured for the bundle
     /// identity this build ships as. Kept apart from `invalidTransaction`
     /// because it is not a statement about a purchase at all: it is the wrong
@@ -440,6 +443,8 @@ extension AccountClient: AppleBillingService {
                 throw AppleBillingError.server(status: 400)
             }
             throw AppleBillingError.invalidTransaction
+	case 503 where appleErrorCode(in: data) == "reconciliation_unavailable":
+		throw AppleBillingError.reconciliationUnavailable
         case 401: throw AppleBillingError.notSignedIn
         case 403:
             guard appleErrorCode(in: data) == "token_mismatch" else {

@@ -103,7 +103,7 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 	// bytes checked are not the bytes submitted; the compact serialization has
 	// no whitespace in it, so a request carrying some is malformed, not untidy.
 	signed := in.SignedTransactionInfo
-	if signed == "" || strings.TrimSpace(signed) != signed || in.SignedRenewalInfo == "" || strings.TrimSpace(in.SignedRenewalInfo) != in.SignedRenewalInfo {
+	if signed == "" || strings.TrimSpace(signed) != signed || strings.TrimSpace(in.SignedRenewalInfo) != in.SignedRenewalInfo {
 		writeAppleTransactionError(w, http.StatusBadRequest, "invalid_request")
 		return
 	}
@@ -117,9 +117,20 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 		writeAppleTransactionError(w, http.StatusBadRequest, "invalid_transaction")
 		return
 	}
-	if _, err := verifier.VerifyRenewalInfo(in.SignedRenewalInfo, tx, now); err != nil {
-		log.Printf("billing: apple renewal info refused for user %s (%s)", u.ID, appleRejectionCode(err))
-		writeAppleTransactionError(w, http.StatusBadRequest, "invalid_transaction")
+	if in.SignedRenewalInfo != "" {
+		if _, err := verifier.VerifyRenewalInfo(in.SignedRenewalInfo, tx, now); err != nil {
+			log.Printf("billing: apple renewal info refused for user %s (%s)", u.ID, appleRejectionCode(err))
+			writeAppleTransactionError(w, http.StatusBadRequest, "invalid_transaction")
+			return
+		}
+	}
+	preOwner, ok, err := s.Store().UserByAppleAccountToken(r.Context(), tx.AppAccountToken)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if !ok || preOwner.ID != u.ID {
+		writeAppleTransactionError(w, http.StatusForbidden, "token_mismatch")
 		return
 	}
 	if s.appleSubscriptions == nil {
@@ -129,6 +140,11 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 	canonical, err := s.appleSubscriptions.CanonicalSubscription(r.Context(), tx, now)
 	if err != nil {
 		log.Printf("billing: canonical apple subscription refresh for user %s failed: %v", u.ID, err)
+		writeAppleTransactionError(w, http.StatusServiceUnavailable, "reconciliation_unavailable")
+		return
+	}
+	if canonical.Renewal.OriginalTransactionID == "" || canonical.Transaction.OriginalTransactionID != tx.OriginalTransactionID ||
+		canonical.Transaction.Environment != tx.Environment || canonical.Transaction.BundleID != tx.BundleID || canonical.Transaction.AppAccountToken != tx.AppAccountToken {
 		writeAppleTransactionError(w, http.StatusServiceUnavailable, "reconciliation_unavailable")
 		return
 	}

@@ -848,6 +848,11 @@
 "subscription.effect.renewal" = "Takes effect at your next renewal; your current subscription continues until then.";
 "subscription.renewal.pending" = "At the next renewal, Apple will switch this subscription to %@ %@.";
 "subscription.grace" = "Apple is retrying this payment. Your access continues during Apple's billing grace period.";
+"subscription.billing.retry" = "Apple is retrying your payment. No billing grace period is active, so access may be interrupted.";
+"subscription.auto_renew.off" = "Automatic renewal is off. Access ends at the current paid-through date.";
+"subscription.price.consent" = "Apple is waiting for your response to a subscription price change. Review it in your App Store subscriptions.";
+"subscription.expired.attention" = "Apple reports that this subscription expired. Review its status in your App Store subscriptions.";
+"subscription.error.reconciliation" = "Apple could not confirm this purchase yet. It remains pending and will be retried automatically.";
 "subscription.completed" = "Your subscription is active. The plan above has been updated.";
 "subscription.manage" = "Manage in the App Store";
 "subscription.managedByApple" = "This subscription is billed by Apple. Change or cancel it in the App Store.";

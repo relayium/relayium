@@ -670,6 +670,8 @@ func appleRenewalWire(r AppleRenewalState, ok bool, now time.Time) map[string]an
 	grace := r.IsInBillingRetry && r.GraceUntil > now.Unix()
 	return map[string]any{"available": true, "currentProductId": r.CurrentProductID,
 		"renewalProductId": r.AutoRenewProductID, "renewalAt": r.RenewalAt,
+		"autoRenewEnabled": r.AutoRenewEnabled, "expirationIntent": r.ExpirationIntent,
+		"priceIncreaseStatus": r.PriceIncreaseStatus,
 		"inBillingRetry": r.IsInBillingRetry, "inGracePeriod": grace, "graceUntil": r.GraceUntil}
 }
 

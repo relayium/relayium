@@ -122,15 +122,11 @@ struct AppleSubscriptionCard: View {
 
     private var rows: [AppleSubscriptionOfferRow] {
         AppleSubscriptionPresentation.offerRows(model.offers, currentPlanID: currentPlanID,
-                                                currentCycle: currentCycle)
+                                                currentCycle: currentCycle, entitlementProvider: entitlementProvider)
     }
 
     private var renewalNotice: String? {
-        guard let state = appleRenewal, state.available else { return nil }
-        if state.inGracePeriod == true { return L10n.t(.subscriptionGrace) }
-        guard let target = state.renewalProductId, target != state.currentProductId,
-              let row = rows.first(where: { $0.productID == target }) else { return nil }
-        return L10n.t(.subscriptionRenewalPending, [row.title, row.cycleLabel])
+        AppleSubscriptionPresentation.renewalNotice(appleRenewal, rows: rows)
     }
 
     @ViewBuilder

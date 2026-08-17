@@ -39,6 +39,36 @@ final class AppleSubscriptionPresentationTests: XCTestCase {
                        [.nextRenewal, .current, .nextRenewal, .immediateUpgrade])
     }
 
+    func testNonAppleEntitlementNeverShowsAppleChangeEffects() {
+        let offers = [offer("plus.m", plan: "plus", name: "Plus", cycle: "monthly", sortOrder: 10),
+                      offer("max.m", plan: "max", name: "Max", cycle: "monthly", sortOrder: 30)]
+        for provider in ["stripe", "admin", "multiple"] {
+            let rows = AppleSubscriptionPresentation.offerRows(offers, currentPlanID: "plus",
+                currentCycle: "monthly", entitlementProvider: provider, language: .en)
+            XCTAssertEqual(rows.map(\.changeEffect), [.current, .newSubscription])
+            XCTAssertEqual(AppleSubscriptionPresentation.effectText(rows[1].changeEffect, language: .en), "")
+        }
+    }
+
+    func testRenewalAttentionStatesAreTruthfulAndDistinct() {
+        func state(retry: Bool = false, grace: Bool = false, auto: Bool = true,
+                   expiration: Int64 = 0, price: Int64 = -1) -> AppleRenewalInfo {
+            AppleRenewalInfo(available: true, currentProductId: "plus.m", renewalProductId: "plus.m",
+                             renewalAt: 100, inBillingRetry: retry, inGracePeriod: grace, graceUntil: 100,
+                             autoRenewEnabled: auto, expirationIntent: expiration, priceIncreaseStatus: price)
+        }
+        XCTAssertEqual(AppleSubscriptionPresentation.renewalNotice(state(retry: true), rows: [], language: .en), L10n.t(.subscriptionBillingRetry, language: .en))
+        XCTAssertEqual(AppleSubscriptionPresentation.renewalNotice(state(auto: false), rows: [], language: .en), L10n.t(.subscriptionAutoRenewOff, language: .en))
+        XCTAssertEqual(AppleSubscriptionPresentation.renewalNotice(state(expiration: 2), rows: [], language: .en), L10n.t(.subscriptionExpiredAttention, language: .en))
+        XCTAssertEqual(AppleSubscriptionPresentation.renewalNotice(state(price: 0), rows: [], language: .en), L10n.t(.subscriptionPriceConsent, language: .en))
+        XCTAssertEqual(AppleSubscriptionPresentation.renewalNotice(state(retry: true, grace: true, auto: false), rows: [], language: .en), L10n.t(.subscriptionGrace, language: .en))
+    }
+
+    func testCanonicalReconciliationFailureIsRecoverableCopy() {
+        XCTAssertEqual(AppleSubscriptionPresentation.notice(for: .failed(.billing(.reconciliationUnavailable)), language: .en),
+                       .failure(L10n.t(.subscriptionErrorReconciliation, language: .en)))
+    }
+
     func testCompletedDeferredChangeUsesCanonicalRenewalFact() {
         let result = AppleTransactionResult(applied: true, planId: "plus", status: "active",
                                             expiresAt: 100, provider: "apple",

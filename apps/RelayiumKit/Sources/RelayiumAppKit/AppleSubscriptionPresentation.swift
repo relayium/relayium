@@ -135,6 +135,7 @@ public enum AppleSubscriptionPresentation {
     public static func offerRows(_ offers: [AppleSubscriptionOffer],
                                  currentPlanID: String,
                                  currentCycle: String,
+                                 entitlementProvider: String = "",
                                  language: AppLanguage? = nil) -> [AppleSubscriptionOfferRow] {
         let currentRank = offers.first { $0.product.planId == currentPlanID }?.product.sortOrder
         return offers.map { offer in
@@ -154,6 +155,7 @@ public enum AppleSubscriptionPresentation {
                 && offer.product.cycle == currentCycle
             let effect: AppleSubscriptionChangeEffect
             if isCurrent { effect = .current }
+            else if !entitlementProvider.isEmpty && entitlementProvider != "apple" { effect = .newSubscription }
             else if currentPlanID.isEmpty || currentRank == nil { effect = .newSubscription }
             else if offer.product.planId == currentPlanID { effect = .nextRenewal }
             else if offer.product.sortOrder > currentRank! { effect = .immediateUpgrade }
@@ -185,6 +187,18 @@ public enum AppleSubscriptionPresentation {
         case .immediateUpgrade: return L10n.t(.subscriptionEffectImmediate, language: language)
         case .nextRenewal: return L10n.t(.subscriptionEffectRenewal, language: language)
         }
+    }
+
+    public static func renewalNotice(_ state: AppleRenewalInfo?, rows: [AppleSubscriptionOfferRow], language: AppLanguage? = nil) -> String? {
+        guard let state, state.available else { return nil }
+        if state.inGracePeriod == true { return L10n.t(.subscriptionGrace, language: language) }
+        if state.inBillingRetry == true { return L10n.t(.subscriptionBillingRetry, language: language) }
+        if state.priceIncreaseStatus == 0 { return L10n.t(.subscriptionPriceConsent, language: language) }
+        if (state.expirationIntent ?? 0) > 0 { return L10n.t(.subscriptionExpiredAttention, language: language) }
+        if state.autoRenewEnabled == false { return L10n.t(.subscriptionAutoRenewOff, language: language) }
+        guard let target = state.renewalProductId, target != state.currentProductId,
+              let row = rows.first(where: { $0.productID == target }) else { return nil }
+        return L10n.t(.subscriptionRenewalPending, [row.title, row.cycleLabel], language: language)
     }
 
     /// The billing period as a label of its own.
@@ -355,6 +369,8 @@ public enum AppleSubscriptionPresentation {
                 return L10n.t(.subscriptionErrorAppleConflict, language: language)
             case .verifierUnavailable:
                 return L10n.t(.subscriptionErrorNotReady, language: language)
+            case .reconciliationUnavailable:
+                return L10n.t(.subscriptionErrorReconciliation, language: language)
             case .unknownBundle:
                 return L10n.t(.subscriptionErrorWrongBuild, language: language)
             case .server(let status):

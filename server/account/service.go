@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/mail"
 	"net/url"
@@ -493,24 +494,33 @@ func (s *Service) ReconcileAppleSubscriptions(ctx context.Context) {
 	}
 	sources, err := lister.ListAppleSubscriptionSources(ctx)
 	if err != nil {
+		log.Printf("apple subscription sweep: list failed")
 		return
 	}
 	now := s.now()
+	var refreshed, failed int
 	for _, src := range sources {
 		identity, ok := appleIdentityFromSource(src)
 		if !ok {
+			failed++
 			continue
 		}
 		fact, err := canonical.CanonicalSubscriptionByIdentity(ctx, identity, now)
 		if err != nil {
+			failed++
 			continue
 		}
 		owner, owned, err := s.Store().UserByAppleAccountToken(ctx, fact.Transaction.AppAccountToken)
 		if err != nil || !owned || owner.ID != src.UserID {
+			failed++
 			continue
 		}
-		product, ok, err := s.Store().AppleProductPlan(ctx, fact.Transaction.BundleID, fact.Transaction.ProductID)
-		if err != nil || !ok {
+		var product AppleProduct
+		if !appleTransactionIsTerminal(fact.Transaction) {
+			product, ok, err = s.Store().AppleProductPlan(ctx, fact.Transaction.BundleID, fact.Transaction.ProductID)
+		}
+		if err != nil || (!ok && !appleTransactionIsTerminal(fact.Transaction)) {
+			failed++
 			continue
 		}
 		ren := appleRenewalState(src.UserID, fact.Transaction, fact.Renewal, now)
@@ -520,7 +530,14 @@ func (s *Service) ReconcileAppleSubscriptions(ctx context.Context) {
 		if !ok {
 			return
 		}
-		_, _ = atomic.ApplyAppleLifecycle(ctx, appleSourceEventWithRenewal(src.UserID, fact.Transaction, product, ren, now), ren)
+		if _, err = atomic.ApplyAppleLifecycle(ctx, appleSourceEventWithRenewal(src.UserID, fact.Transaction, product, ren, now), ren); err != nil {
+			failed++
+			continue
+		}
+		refreshed++
+	}
+	if failed > 0 {
+		log.Printf("apple subscription sweep: refreshed=%d failed=%d", refreshed, failed)
 	}
 }
 

@@ -262,6 +262,14 @@ final class AppleBillingClientTests: XCTestCase {
         }
     }
 
+    func testCanonicalReconciliationUnavailableIsRecoverable() async {
+        StubURLProtocol.stub = .init(status: 503, body: Data(#"{"error":"reconciliation_unavailable"}"#.utf8))
+        await XCTAssertThrowsErrorAsync(
+            try await self.client().submitAppleTransaction(signedTransactionInfo: Self.jws, token: "t")) {
+            XCTAssertEqual($0 as? AppleBillingError, .reconciliationUnavailable)
+        }
+    }
+
     /// A transport failure is this endpoint pair's own `.network`, not
     /// `AccountError.network`. The caller decides whether to finish a paid-for
     /// transaction on what it caught, and a value from the other enum is one it

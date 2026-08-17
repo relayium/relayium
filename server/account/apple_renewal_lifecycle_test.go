@@ -7,10 +7,14 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 type appleSweepFact struct{ value AppleSubscriptionCanonical }
@@ -73,7 +77,7 @@ func TestAppleGraceRejectsUnboundedAndNonRetryRenewal(t *testing.T) {
 	}
 }
 
-func TestAppleAutoRenewOffIsValidIntentButNeverGrace(t *testing.T) {
+func TestAppleAutoRenewOffDoesNotCancelASignedBillingGracePeriod(t *testing.T) {
 	chain := newAppleTestChain(t)
 	v := testVerifier(t, chain)
 	now := time.Now().UTC()
@@ -87,7 +91,7 @@ func TestAppleAutoRenewOffIsValidIntentButNeverGrace(t *testing.T) {
 		t.Fatal(err)
 	}
 	state := appleRenewalState("u", tx, r, now)
-	if r.AutoRenewEnabled || r.AutoRenewProductID != "" || state.graceActive(now) {
+	if r.AutoRenewEnabled || r.AutoRenewProductID != "" || !state.graceActive(now) {
 		t.Fatalf("auto-renew-off misprojected: %+v", r)
 	}
 }
@@ -143,6 +147,17 @@ func TestApplePurchaseFailsClosedWithoutCanonicalReconciler(t *testing.T) {
 	f.mustReject(t, f.chain.sign(t, f.payload()), 503, "reconciliation_unavailable")
 	if _, ok := f.appleSource(t); ok {
 		t.Fatal("entitlement granted without canonical App Store status")
+	}
+}
+
+func TestApplePurchaseAllowsMissingSubmittedRenewalWhenCanonicalExists(t *testing.T) {
+	f := newAppleTxFixture(t)
+	jws := f.chain.sign(t, f.payload())
+	resp := f.post(t, f.cookie, string(mustJSON(t, map[string]string{"signedTransactionInfo": jws, "signedRenewalInfo": ""})))
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status=%d body=%s", resp.StatusCode, body)
 	}
 }
 
@@ -225,6 +240,7 @@ func TestAppleServerAPISelectsOnlyCanonicalMatchingSubscription(t *testing.T) {
 		p["appAccountToken"] = "73f2ef7a-7203-4ccb-9cb4-fbfbf4561925"
 		p["signedDate"] = now.UnixMilli()
 	}))
+	mismatchedJWS := chain.sign(t, applePayload(func(p map[string]any) { p["originalTransactionId"] = "other-subscription" }))
 	renewalJWS := chain.sign(t, map[string]any{
 		"originalTransactionId": submitted.OriginalTransactionID,
 		"autoRenewProductId":    submitted.ProductID,
@@ -232,11 +248,24 @@ func TestAppleServerAPISelectsOnlyCanonicalMatchingSubscription(t *testing.T) {
 		"signedDate":            now.UnixMilli(),
 	})
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") == "" {
+		auth := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if auth == "" {
 			t.Error("missing App Store API bearer")
 		}
+		if r.URL.Path != "/inApps/v1/subscriptions/"+submitted.OriginalTransactionID {
+			t.Errorf("path=%s", r.URL.Path)
+		}
+		parsed, _, err := new(jwt.Parser).ParseUnverified(auth, jwt.MapClaims{})
+		if err != nil {
+			t.Error(err)
+		} else {
+			claims := parsed.Claims.(jwt.MapClaims)
+			if claims["bid"] != submitted.BundleID || claims["aud"] != "appstoreconnect-v1" {
+				t.Errorf("claims=%v", claims)
+			}
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{map[string]any{
-			"lastTransactions": []any{map[string]any{
+			"lastTransactions": []any{map[string]any{"signedTransactionInfo": mismatchedJWS, "signedRenewalInfo": renewalJWS}, map[string]any{
 				"signedTransactionInfo": canonicalJWS, "signedRenewalInfo": renewalJWS,
 			}},
 		}}})
@@ -259,6 +288,35 @@ func TestAppleServerAPISelectsOnlyCanonicalMatchingSubscription(t *testing.T) {
 	}
 	if got.Transaction.SignedDateMS != now.UnixMilli() || got.Renewal.OriginalTransactionID != submitted.OriginalTransactionID {
 		t.Fatalf("noncanonical result: %+v", got)
+	}
+}
+
+func TestAppleServerAPIFailsClosedOnNon200AndUsesSandboxRoute(t *testing.T) {
+	chain := newAppleTestChain(t)
+	verifier := testVerifier(t, chain)
+	now := time.Now().UTC()
+	tx, err := verifier.Verify(chain.sign(t, applePayload(func(p map[string]any) { p["environment"] = appleEnvSandbox })), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prodHits, sandboxHits := 0, 0
+	prod := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { prodHits++ }))
+	defer prod.Close()
+	sandbox := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sandboxHits++
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+	}))
+	defer sandbox.Close()
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	client, err := NewAppleServerAPIClient(AppleServerAPIConfig{IssuerID: "issuer", KeyID: "key", PrivateKey: key, HTTP: sandbox.Client(), ProductionURL: prod.URL, SandboxURL: sandbox.URL}, verifier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = client.CanonicalSubscription(context.Background(), tx, now); err == nil {
+		t.Fatal("non-200 canonical response accepted")
+	}
+	if prodHits != 0 || sandboxHits != 1 {
+		t.Fatalf("routes production=%d sandbox=%d", prodHits, sandboxHits)
 	}
 }
 
@@ -299,5 +357,16 @@ func TestAppleSweepRevokesExpiredCanonicalFactAndRestoresRenewal(t *testing.T) {
 	got, _ = store.GetUserByID(ctx, u.ID)
 	if got.PlanID != "pro" {
 		t.Fatalf("sweep missed renewal: %+v", got)
+	}
+	if err := store.UpsertAppleProduct(ctx, AppleProduct{BundleID: testBundleIOS, ProductID: testAppleProduct, PlanID: "pro", Cycle: "monthly", Active: false, UpdatedAt: 2}); err != nil {
+		t.Fatal(err)
+	}
+	facts.value.Transaction.RevocationDateMS = now.Add(2 * time.Minute).UnixMilli()
+	facts.value.Transaction.SignedDateMS = facts.value.Transaction.RevocationDateMS
+	facts.value.Renewal.SignedDateMS = facts.value.Transaction.SignedDateMS
+	svc.ReconcileAppleSubscriptions(ctx)
+	got, _ = store.GetUserByID(ctx, u.ID)
+	if got.PlanID != "free" {
+		t.Fatalf("unmapped refund still grants: %+v", got)
 	}
 }

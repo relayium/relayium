@@ -83,7 +83,10 @@ func (v *AppleTransactionVerifier) VerifyRenewalInfo(jws string, tx VerifiedAppl
 	if err != nil {
 		return VerifiedAppleRenewalInfo{}, err
 	}
-	price, err := appleOptionalMillis(p.PriceIncreaseStatus, "price_increase_status")
+	price := int64(-1)
+	if p.PriceIncreaseStatus.String() != "" {
+		price, err = appleOptionalMillis(p.PriceIncreaseStatus, "price_increase_status")
+	}
 	if err != nil {
 		return VerifiedAppleRenewalInfo{}, err
 	}
@@ -123,7 +126,7 @@ type AppleRenewalState struct {
 }
 
 func (r AppleRenewalState) graceActive(now time.Time) bool {
-	return r.AutoRenewEnabled && r.IsInBillingRetry && r.GraceUntil > now.Unix()
+	return r.IsInBillingRetry && r.GraceUntil > now.Unix()
 }
 
 func appleRenewalState(userID string, tx VerifiedAppleTransaction, r VerifiedAppleRenewalInfo, now time.Time) AppleRenewalState {
