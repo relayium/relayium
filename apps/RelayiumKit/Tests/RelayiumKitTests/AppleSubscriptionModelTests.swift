@@ -171,12 +171,6 @@ private final class FakeBilling: AppleBillingService, @unchecked Sendable {
         return try sync { _catalog }.get()
     }
 
-    func appleAccountToken(token: String) async throws -> UUID {
-        journal.record("accountToken")
-        sync { _accountTokenBearers.append(token) }
-        return try sync { _accountToken }.get()
-    }
-
     func dispatchApplePurchase(bundleID: String, productID: String,
                                token: String) async throws -> ApplePurchaseDispatch {
         journal.record("accountToken")

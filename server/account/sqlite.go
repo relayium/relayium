@@ -1052,6 +1052,14 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
  created_at INTEGER NOT NULL,
  deleted_at INTEGER NOT NULL DEFAULT 0)`,
 		`CREATE INDEX IF NOT EXISTS idx_apple_billing_subject_user ON apple_billing_subjects(user_id,deleted_at)`,
+		`CREATE TABLE IF NOT EXISTS apple_billing_external_subjects (
+ environment TEXT NOT NULL,
+ external_id TEXT NOT NULL,
+ user_id TEXT NOT NULL,
+ bundle_id TEXT NOT NULL,
+ deleted_at INTEGER NOT NULL DEFAULT 0,
+ PRIMARY KEY(environment,external_id))`,
+		`CREATE INDEX IF NOT EXISTS idx_apple_billing_external_subject_user ON apple_billing_external_subjects(user_id,deleted_at)`,
 		`CREATE TABLE IF NOT EXISTS stripe_webhook_events (
 		 event_id TEXT PRIMARY KEY,
 		 event_type TEXT NOT NULL,
@@ -1181,6 +1189,14 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		return nil, err
 	}
 	if err := backfillLegacyAppleBillingSubjects(context.Background(), db, time.Now().Unix()); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := backfillAppleBillingExternalSubjects(context.Background(), db); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := validateBillingPurchaseAttempts(context.Background(), db); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -2431,6 +2447,7 @@ func (s *SQLiteStore) ArchiveAndPurgeUser(ctx context.Context, userID string, no
 		// instead of being attributed to a new account or reopening another
 		// provider's purchase path.
 		{`UPDATE apple_billing_subjects SET deleted_at=? WHERE user_id=? AND deleted_at=0`, []any{now, userID}},
+		{`UPDATE apple_billing_external_subjects SET deleted_at=? WHERE user_id=? AND deleted_at=0`, []any{now, userID}},
 		// Per-provider subscription state. It carries user_id and a real
 		// REFERENCES users(id), so it must go before the users row — and it must
 		// go at all: leaving it would retain a purged account's billing history

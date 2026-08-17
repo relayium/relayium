@@ -460,7 +460,7 @@ func TestAppleDualEnvironmentSeparatesIdenticalTransactionIDs(t *testing.T) {
 	// A second account with its own attribution token, purchasing in Sandbox.
 	sandboxCookie := loginCookie(t, f.ts, f.mail, "apple-sandbox@example.com")
 	sandboxID := mustUserID(t, f.store, "apple-sandbox@example.com")
-	sandboxToken := postAppleToken(t, f.ts, sandboxCookie)
+	sandboxToken := seedLegacyAppleToken(t, f.store, sandboxID)
 
 	// The paying customer, in Production.
 	f.mustAccept(t, f.chain.sign(t, f.payloadIn(appleEnvProduction)))
@@ -509,7 +509,7 @@ func TestAppleDualEnvironmentSandboxRevokeLeavesProductionAlone(t *testing.T) {
 	f := newAppleDualFixture(t)
 	sandboxCookie := loginCookie(t, f.ts, f.mail, "apple-sandbox-revoke@example.com")
 	sandboxID := mustUserID(t, f.store, "apple-sandbox-revoke@example.com")
-	sandboxToken := postAppleToken(t, f.ts, sandboxCookie)
+	sandboxToken := seedLegacyAppleToken(t, f.store, sandboxID)
 
 	f.mustAccept(t, f.chain.sign(t, f.payloadIn(appleEnvProduction)))
 	sandboxPayload := func(mut ...func(map[string]any)) map[string]any {
@@ -661,7 +661,8 @@ func TestAppleDualEnvironmentPendingDrainIsolation(t *testing.T) {
 	// Using the Production owner's account here would be accepted as the deliberate
 	// Sandbox-vs-Production no-op and would no longer exercise drain isolation.
 	sandboxCookie := loginCookie(t, f.ts, f.mail, "apple-pending-sandbox@example.com")
-	sandboxToken := postAppleToken(t, f.ts, sandboxCookie)
+	sandboxID := mustUserID(t, f.store, "apple-pending-sandbox@example.com")
+	sandboxToken := seedLegacyAppleToken(t, f.store, sandboxID)
 	resp := f.submitAs(t, sandboxCookie, f.chain.sign(t, f.payloadIn(appleEnvSandbox, func(p map[string]any) {
 		p["appAccountToken"] = sandboxToken
 	})))

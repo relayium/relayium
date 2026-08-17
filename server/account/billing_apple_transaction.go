@@ -133,6 +133,8 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 		writeAppleTransactionError(w, http.StatusForbidden, "token_mismatch")
 		return
 	}
+	dispatchPurchase := tx.TransactionReason == "PURCHASE"
+	dispatchProductID := tx.ProductID
 	if s.appleSubscriptions == nil {
 		writeAppleTransactionError(w, http.StatusServiceUnavailable, "reconciliation_unavailable")
 		return
@@ -197,7 +199,10 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	res, err := atomic.ApplyAuthorizedAppleLifecycle(r.Context(), appleSourceEventWithRenewal(u.ID, tx, product, renewalState, now), renewalState, tx.AppAccountToken, tx.Environment)
+	event := appleSourceEventWithRenewal(u.ID, tx, product, renewalState, now)
+	event.AppleDispatchPurchase = dispatchPurchase
+	event.AppleDispatchProductID = dispatchProductID
+	res, err := atomic.ApplyAuthorizedAppleLifecycle(r.Context(), event, renewalState, tx.AppAccountToken, tx.Environment)
 	switch {
 	case errors.Is(err, ErrBillingAuthorityConflict), errors.Is(err, ErrBillingPurchaseAmbiguous):
 		writeAppleTransactionError(w, http.StatusConflict, "billing_authority_conflict")

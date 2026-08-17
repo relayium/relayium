@@ -471,8 +471,6 @@ final class UITestAccountTransport: URLProtocol {
             "purchase":{"allowed":true,"blockedBy":""},
             "purchases":{"enabled":true,"reason":""}}
             """, as: AppleProductCatalog.self)
-        out["/api/billing/apple/account-token"] =
-            Data(#"{"appAccountToken":"3f2504e0-4f89-41d3-9a0c-0305e82c3302"}"#.utf8)
         offer("/api/billing/apple/transaction", """
             {"applied":true,"planId":"pro","status":"active",
             "expiresAt":4102444800,"provider":"apple"}

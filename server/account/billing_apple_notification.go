@@ -394,6 +394,22 @@ func (s *Service) resolveAppleNotificationOwner(ctx context.Context, tx Verified
 	if err != nil {
 		return "", false, err
 	}
+	if !bound {
+		if subjects, ok := s.Store().(interface {
+			AppleBillingExternalSubjectByIdentity(context.Context, string, string) (AppleBillingExternalSubject, bool, error)
+		}); ok {
+			subject, found, subjectErr := subjects.AppleBillingExternalSubjectByIdentity(ctx, tx.Environment, externalID)
+			if subjectErr != nil {
+				return "", false, subjectErr
+			}
+			if found {
+				if subject.BundleID != tx.BundleID || subject.DeletedAt != 0 {
+					return "", false, ErrAppleBillingSubjectDeleted
+				}
+				boundOwner, bound = subject.UserID, true
+			}
+		}
+	}
 	tokenOwner := ""
 	if tx.AppAccountToken != "" {
 		// A well-formed token nobody holds resolves to nothing. Possession

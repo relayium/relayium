@@ -232,6 +232,65 @@ func TestAppleNotificationForDeletedBillingSubjectIsQuarantined(t *testing.T) {
 	}
 }
 
+func TestTokenlessLateAppleEventUsesExternalDeletionTombstone(t *testing.T) {
+	f := newAppleTxFixture(t)
+	result, _ := f.mustAccept(t, f.chain.sign(t, f.payload()))
+	if !result.Applied {
+		t.Fatalf("fixture purchase was not applied: %+v", result)
+	}
+	ctx := context.Background()
+	src, ok, err := f.store.GetSubscriptionSource(ctx, f.userID, ProviderApple)
+	if err != nil || !ok {
+		t.Fatalf("source=%+v ok=%v err=%v", src, ok, err)
+	}
+	if err := f.store.SetAccountDeletion(ctx, f.userID, 1, 100); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.store.ArchiveAndPurgeUser(ctx, f.userID, 200); err != nil {
+		t.Fatal(err)
+	}
+	var tombEnvironment, tombExternal string
+	var deleted int64
+	if err := f.store.db.QueryRowContext(ctx, `SELECT environment,external_id,deleted_at FROM apple_billing_external_subjects WHERE user_id=?`, f.userID).Scan(&tombEnvironment, &tombExternal, &deleted); err != nil || deleted != 200 {
+		t.Fatalf("external tombstone environment=%q external=%q deleted_at=%d err=%v source=%+v", tombEnvironment, tombExternal, deleted, err, src)
+	}
+	originalID := tombExternal
+	if tombEnvironment == appleEnvSandbox {
+		originalID = strings.TrimPrefix(tombExternal, appleSandboxExternalPrefix)
+	}
+	tx := VerifiedAppleTransaction{BundleID: testBundleIOS, ProductID: testAppleProduct, OriginalTransactionID: originalID, Environment: tombEnvironment, PurchaseDateMS: 300000, ExpiresDateMS: 400000, TransactionReason: "RENEWAL"}
+	if key, valid := appleSubscriptionKeyOf(tx).externalID(); !valid || key != tombExternal {
+		t.Fatalf("invalid tombstone identity environment=%q external=%q rendered=%q valid=%v", tombEnvironment, tombExternal, key, valid)
+	}
+	if subject, found, err := f.store.AppleBillingExternalSubjectByIdentity(ctx, tombEnvironment, tombExternal); err != nil || !found || subject.DeletedAt != 200 {
+		t.Fatalf("external subject=%+v found=%v err=%v", subject, found, err)
+	}
+	if _, _, err := f.svc.resolveAppleNotificationOwner(ctx, tx); !errors.Is(err, ErrAppleBillingSubjectDeleted) {
+		t.Fatalf("external tombstone did not quarantine owner lookup: %v", err)
+	}
+	uuid := appleNotifyUUID(46)
+	status, state, _ := f.svc.applyAppleNotification(ctx, VerifiedAppleNotification{UUID: uuid, Type: "DID_RENEW", Supported: true, HasTransaction: true, Transaction: tx}, time.Unix(300, 0))
+	if status != http.StatusOK || state != appleNotificationQuarantined {
+		t.Fatalf("late tokenless notification status=%d state=%q", status, state)
+	}
+	recreated, err := f.store.UpsertUserByEmail(ctx, "apple-tx@example.com", "")
+	if err != nil || recreated.ID == f.userID {
+		t.Fatalf("recreated=%+v err=%v", recreated, err)
+	}
+	token := "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+	authority, err := f.store.AcquireBillingAuthority(ctx, BillingAuthorityRequest{UserID: recreated.ID, Provider: ProviderApple, ExternalScope: testBundleIOS, AppleAccountToken: token, Now: 301})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := f.store.DispatchAppleBillingPurchase(ctx, authority, testAppleProduct, token, 302); err != nil {
+		t.Fatal(err)
+	}
+	ev := appleSourceEvent(recreated.ID, tx, AppleProduct{PlanID: "pro", Cycle: "monthly"}, time.Unix(303, 0))
+	if _, err := f.store.ApplyAuthorizedAppleSource(ctx, ev, token, tombEnvironment, testAppleProduct); !errors.Is(err, ErrExternalSubscriptionOwned) {
+		t.Fatalf("deleted external identity rebound: %v", err)
+	}
+}
+
 // ── Idempotency, and the record-before-apply window ──────────────────────────
 
 // A redelivery of finished work is a no-op 200. Apple redelivers on its own

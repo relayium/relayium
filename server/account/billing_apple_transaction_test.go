@@ -56,7 +56,7 @@ func newAppleTxFixture(t *testing.T) *appleTxFixture {
 		ts: ts, svc: svc, store: store, mail: mail, chain: chain, verifier: verifier,
 		cookie: cookie, userID: mustUserID(t, store, email),
 	}
-	f.token = postAppleToken(t, ts, cookie)
+	f.token = seedLegacyAppleToken(t, store, f.userID)
 	return f
 }
 
@@ -243,6 +243,53 @@ func TestAppleTransactionGrantsOnlyTheAuthenticatedUser(t *testing.T) {
 	}
 }
 
+func TestSubmittedPurchaseProofResolvesAttemptWhenCanonicalLatestIsRenewal(t *testing.T) {
+	f := newAppleTxFixture(t)
+	dispatchToken := "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+	authority, err := f.store.AcquireBillingAuthority(context.Background(), BillingAuthorityRequest{UserID: f.userID, Provider: ProviderApple, ExternalScope: testBundleIOS, AppleAccountToken: dispatchToken, Now: time.Now().Unix()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempt, created, err := f.store.DispatchAppleBillingPurchase(context.Background(), authority, testAppleProduct, dispatchToken, time.Now().Unix())
+	if err != nil || !created {
+		t.Fatalf("dispatch=%+v created=%v err=%v", attempt, created, err)
+	}
+	f.svc.SetAppleSubscriptionReconciler(appleReconcilerFunc(func(_ context.Context, submitted VerifiedAppleTransaction, now time.Time) (AppleSubscriptionCanonical, error) {
+		canonical := submitted
+		canonical.TransactionReason = "RENEWAL"
+		return AppleSubscriptionCanonical{Transaction: canonical, Renewal: VerifiedAppleRenewalInfo{OriginalTransactionID: canonical.OriginalTransactionID, AutoRenewProductID: canonical.ProductID, AppAccountToken: canonical.AppAccountToken, Environment: canonical.Environment, AutoRenewEnabled: true, RenewalDateMS: canonical.ExpiresDateMS, SignedDateMS: now.UnixMilli()}}, nil
+	}))
+	result, _ := f.mustAccept(t, f.chain.sign(t, f.payload(func(p map[string]any) {
+		p["appAccountToken"] = dispatchToken
+		p["transactionReason"] = "PURCHASE"
+	})))
+	if !result.Applied {
+		t.Fatalf("canonical renewal did not apply: %+v", result)
+	}
+	var state string
+	if err := f.store.db.QueryRowContext(context.Background(), `SELECT state FROM billing_purchase_attempts WHERE id=?`, attempt.ID).Scan(&state); err != nil || state != "resolved" {
+		t.Fatalf("submitted purchase proof did not resolve attempt: state=%q err=%v", state, err)
+	}
+}
+
+func TestRetiredTokenEndpointPreservesExistingLegacyTransactionRecovery(t *testing.T) {
+	f := newAppleTxFixture(t)
+	req, _ := http.NewRequest(http.MethodPost, f.ts.URL+"/api/billing/apple/account-token", nil)
+	req.AddCookie(f.cookie)
+	resp, err := f.ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusGone {
+		t.Fatalf("legacy token endpoint status=%d", resp.StatusCode)
+	}
+	result, _ := f.mustAccept(t, f.chain.sign(t, f.payload()))
+	if !result.Applied || result.Provider != ProviderApple {
+		t.Fatalf("existing signed legacy transaction did not reconcile: %+v", result)
+	}
+}
+
 // The plan and cycle come from the server's mapping, not from anything the
 // payload says about price, tier or period.
 func TestAppleTransactionTakesPlanAndCycleFromTheServerMapping(t *testing.T) {
@@ -426,9 +473,9 @@ func TestAppleTransactionRejectsUnmappedOrRetiredProducts(t *testing.T) {
 // ever claim the token their own account holds.
 func TestAppleTransactionRejectsAnotherAccountsToken(t *testing.T) {
 	f := newAppleTxFixture(t)
-	victimCookie := loginCookie(t, f.ts, f.mail, "apple-tx-victim@example.com")
+	_ = loginCookie(t, f.ts, f.mail, "apple-tx-victim@example.com")
 	victimID := mustUserID(t, f.store, "apple-tx-victim@example.com")
-	victimToken := postAppleToken(t, f.ts, victimCookie)
+	victimToken := seedLegacyAppleToken(t, f.store, victimID)
 
 	// f's session submitting a transaction carrying the victim's token.
 	f.mustReject(t, f.chain.sign(t, f.payload(func(p map[string]any) {
@@ -461,7 +508,7 @@ func TestAppleTransactionRejectsCrossAccountOriginalTransactionID(t *testing.T) 
 	// A second account with its own token, presenting the SAME subscription.
 	secondCookie := loginCookie(t, f.ts, f.mail, "apple-tx-second@example.com")
 	secondID := mustUserID(t, f.store, "apple-tx-second@example.com")
-	secondToken := postAppleToken(t, f.ts, secondCookie)
+	secondToken := seedLegacyAppleToken(t, f.store, secondID)
 
 	resp := f.submitAs(t, secondCookie, f.chain.sign(t, applePayload(func(p map[string]any) {
 		p["appAccountToken"] = secondToken
@@ -919,7 +966,7 @@ func TestAppleTransactionCannotCrossALiveStripeAuthority(t *testing.T) {
 	if err := f.store.SetUserStripeCustomer(ctx, f.userID, "cus_apple_side"); err != nil {
 		t.Fatal(err)
 	}
-	if err := f.store.SetUserSubscription(ctx, f.userID, "plus", "active", 1_900_000_000, ProviderStripe, "monthly", time.Now().Unix(), 100); err != nil {
+	if _, err := f.store.ApplySubscriptionSource(ctx, SourceEvent{UserID: f.userID, Provider: ProviderStripe, PlanID: "plus", Status: "active", Cycle: "monthly", PeriodEnd: 1_900_000_000, ExternalID: "sub_apple_side", EventAt: 100, Now: time.Now().Unix()}); err != nil {
 		t.Fatal(err)
 	}
 

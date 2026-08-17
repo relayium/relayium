@@ -2,43 +2,35 @@ package account
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 )
 
-// POST /api/billing/apple/account-token is the whole server contract the next
-// (StoreKit) batch needs: it hands the app the stable, opaque UUID it must set
-// as `appAccountToken` on a purchase so the eventual App Store notification can
-// be attributed to this Relayium account.
-//
-// It is state-changing (it may mint the token) and native-capable (the app
-// authenticates with a bearer token, not a cookie), which is why it is a POST
-// behind RequireAuth rather than a GET behind RequireSession.
-
-func TestAppleAccountTokenEndpointMintsStableToken(t *testing.T) {
+func TestLegacyAppleAccountTokenEndpointIsRetiredWithoutMinting(t *testing.T) {
 	ts, _, store, mail := newBillingServer(t)
 	email := "apple-token-endpoint@example.com"
 	cookie := loginCookie(t, ts, mail, email)
-
-	first := postAppleToken(t, ts, cookie)
-	if !validAppAccountToken(first) {
-		t.Fatalf("not an RFC 4122 v4 UUID: %q", first)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/billing/apple/account-token", nil)
+	req.AddCookie(cookie)
+	resp, err := ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if second := postAppleToken(t, ts, cookie); second != first {
-		t.Fatalf("token is not stable across calls: %q then %q", first, second)
+	raw, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusGone || !strings.Contains(string(raw), `"error":"upgrade_required"`) {
+		t.Fatalf("retired endpoint status=%d body=%s", resp.StatusCode, raw)
 	}
-
-	owner, ok, err := store.UserByAppleAccountToken(context.Background(), first)
-	if err != nil || !ok {
-		t.Fatalf("minted token does not resolve: ok=%v err=%v", ok, err)
+	uid := mustUserID(t, store, email)
+	var token string
+	if err := store.db.QueryRowContext(context.Background(), `SELECT apple_account_token FROM users WHERE id=?`, uid).Scan(&token); err != nil || token != "" {
+		t.Fatalf("retired endpoint minted token=%q err=%v", token, err)
 	}
-	if owner.ID != mustUserID(t, store, email) {
-		t.Fatalf("token bound to the wrong account")
+	var subjects int
+	if err := store.db.QueryRowContext(context.Background(), `SELECT count(*) FROM apple_billing_subjects WHERE user_id=?`, uid).Scan(&subjects); err != nil || subjects != 0 {
+		t.Fatalf("retired endpoint created billing subject count=%d err=%v", subjects, err)
 	}
 }
 
@@ -51,7 +43,8 @@ func TestAppleAccountTokenIsNotExposedByAccountEndpoints(t *testing.T) {
 	seedTiers(t, store)
 	email := "apple-token-hidden@example.com"
 	cookie := loginCookie(t, ts, mail, email)
-	token := postAppleToken(t, ts, cookie)
+	uid := mustUserID(t, store, email)
+	token := seedLegacyAppleToken(t, store, uid)
 
 	for _, path := range []string{"/api/me", "/api/me/usage"} {
 		req, _ := http.NewRequest(http.MethodGet, ts.URL+path, nil)
@@ -95,53 +88,14 @@ func TestAppleAccountTokenEndpointRequiresAuthAndPost(t *testing.T) {
 	}
 }
 
-// Two concurrent first-time requests (two devices, or a retry) converge on one
-// token rather than racing two into the account.
-//
-// The spawned goroutines only COLLECT: every assertion happens on the parent.
-// t.Fatal is documented as callable only from the goroutine running the test —
-// elsewhere it exits that ONE goroutine and the test carries on with whatever
-// partial data it has. The failure that produces is not the failure that
-// happened: with n empty strings left behind, `got != out[0]` compares "" to ""
-// and holds, so the only thing standing between a broken endpoint and a green
-// convergence test is the incidental `got == ""` clause. Collecting instead
-// makes the status and the error the things asserted on.
-func TestAppleAccountTokenEndpointConcurrentRequestsConverge(t *testing.T) {
-	ts, _, _, mail := newBillingServer(t)
-	cookie := loginCookie(t, ts, mail, "apple-token-race@example.com")
-
-	const n = 6
-	out := make([]appleTokenResult, n)
-	var wg sync.WaitGroup
-	for i := 0; i < n; i++ {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			out[i] = requestAppleToken(ts, cookie)
-		}(i)
-	}
-	wg.Wait()
-	for i, got := range out {
-		if got.err != nil {
-			t.Fatalf("concurrent mint %d: %v", i, got.err)
-		}
-		if got.status != http.StatusOK {
-			t.Fatalf("concurrent mint %d: status %d", i, got.status)
-		}
-		if got.token == "" || got.token != out[0].token {
-			t.Fatalf("concurrent mints diverged: [%d]=%q want %q", i, got.token, out[0].token)
-		}
-	}
-}
-
 // The user lookup disappears at hard purge, while the opaque billing subject
 // remains as a non-rebindable tombstone for late Ask-to-Buy facts.
 func TestAppleAccountTokenDisappearsWithTheAccount(t *testing.T) {
 	ts, _, store, mail := newBillingServer(t)
 	email := "apple-token-purge@example.com"
-	cookie := loginCookie(t, ts, mail, email)
-	token := postAppleToken(t, ts, cookie)
+	_ = loginCookie(t, ts, mail, email)
 	uid := mustUserID(t, store, email)
+	token := seedLegacyAppleToken(t, store, uid)
 
 	ctx := context.Background()
 	if err := store.SetAccountDeletion(ctx, uid, 1, 100); err != nil {
@@ -161,9 +115,9 @@ func TestAppleAccountTokenDisappearsWithTheAccount(t *testing.T) {
 func TestAppleNotificationProjectionDisappearsWithTheAccount(t *testing.T) {
 	ts, _, store, mail := newBillingServer(t)
 	email := "apple-notification-purge@example.com"
-	cookie := loginCookie(t, ts, mail, email)
-	token := postAppleToken(t, ts, cookie)
+	_ = loginCookie(t, ts, mail, email)
 	uid := mustUserID(t, store, email)
+	token := seedLegacyAppleToken(t, store, uid)
 	ctx := context.Background()
 
 	rec := AppleNotificationRecord{
@@ -304,54 +258,14 @@ func TestDeletedAppleBillingSubjectTokenCannotBeRebound(t *testing.T) {
 	}
 }
 
-// appleTokenResult carries one call's outcome back to whoever asked for it.
-type appleTokenResult struct {
-	token  string
-	status int
-	err    error
-}
-
-// requestAppleToken performs the call and REPORTS; it touches no *testing.T, so
-// it is safe to run from a spawned goroutine (see the concurrency test above).
-func requestAppleToken(ts *httptest.Server, cookie *http.Cookie) appleTokenResult {
-	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/billing/apple/account-token", nil)
-	if err != nil {
-		return appleTokenResult{err: err}
-	}
-	req.AddCookie(cookie)
-	resp, err := ts.Client().Do(req)
-	if err != nil {
-		return appleTokenResult{err: err}
-	}
-	defer resp.Body.Close()
-	res := appleTokenResult{status: resp.StatusCode}
-	if resp.StatusCode != http.StatusOK {
-		return res
-	}
-	var out struct {
-		AppAccountToken string `json:"appAccountToken"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		res.err = err
-		return res
-	}
-	res.token = out.AppAccountToken
-	return res
-}
-
-// postAppleToken is the sequential form: it asserts, so it must only be called
-// from the test goroutine.
-func postAppleToken(t *testing.T, ts *httptest.Server, cookie *http.Cookie) string {
+// seedLegacyAppleToken creates historical state below the retired HTTP route.
+// It exists only in tests that prove old signed transactions remain recoverable.
+func seedLegacyAppleToken(t *testing.T, store *SQLiteStore, userID string) string {
 	t.Helper()
-	res := requestAppleToken(ts, cookie)
-	if res.err != nil {
-		t.Fatal(res.err)
+	token := mustNewAppAccountToken(t)
+	got, err := store.EnsureAppleAccountToken(context.Background(), userID, token)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if res.status != http.StatusOK {
-		t.Fatalf("want 200, got %d", res.status)
-	}
-	if res.token == "" {
-		t.Fatal("empty appAccountToken")
-	}
-	return res.token
+	return got
 }

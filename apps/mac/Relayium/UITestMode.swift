@@ -724,10 +724,8 @@ final class UITestAccountTransport: URLProtocol {
             "blockedBy":"\(UITestMode.blocksSubscription ? "stripe" : "")"},
             "purchases":{"enabled":true,"reason":""}}
             """, as: AppleProductCatalog.self)
-        // The attribution token and the transaction intake, so a purchase can be
-        // completed end to end against the real orchestration.
-        out["/api/billing/apple/account-token"] =
-            Data(#"{"appAccountToken":"3f2504e0-4f89-41d3-9a0c-0305e82c3301"}"#.utf8)
+        // The transaction intake completes a purchase dispatched by the
+        // server-authorized orchestration above.
         offer("/api/billing/apple/transaction", """
             {"applied":true,"planId":"pro","status":"active",
             "expiresAt":4102444800,"provider":"apple"}

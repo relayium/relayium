@@ -155,6 +155,26 @@ func backfillLegacyAppleBillingSubjects(ctx context.Context, db *sql.DB, now int
 	return err
 }
 
+func validateBillingPurchaseAttempts(ctx context.Context, db *sql.DB) error {
+	var unsafe int
+	if err := db.QueryRowContext(ctx, `SELECT count(*) FROM billing_purchase_attempts
+ WHERE provider='apple' AND state IN ('prepared','dispatched') AND apple_account_token=''`).Scan(&unsafe); err != nil {
+		return err
+	}
+	if unsafe != 0 {
+		return fmt.Errorf("account: %d unresolved Apple purchase attempts lack dispatch identity; manual isolation required", unsafe)
+	}
+	return nil
+}
+
+func backfillAppleBillingExternalSubjects(ctx context.Context, db *sql.DB) error {
+	_, err := db.ExecContext(ctx, `INSERT INTO apple_billing_external_subjects(environment,external_id,user_id,bundle_id)
+ SELECT CASE WHEN external_id LIKE ? THEN ? ELSE ? END,external_id,user_id,external_scope
+ FROM subscription_sources WHERE provider='apple' AND external_id<>'' AND external_scope<>''
+ ON CONFLICT(environment,external_id) DO NOTHING`, appleSandboxExternalPrefix+"%", appleEnvSandbox, appleEnvProduction)
+	return err
+}
+
 func acquireStoreBillingAuthority(ctx context.Context, store Store, in BillingAuthorityRequest) (BillingAuthority, error) {
 	authorities, ok := store.(interface {
 		AcquireBillingAuthority(context.Context, BillingAuthorityRequest) (BillingAuthority, error)
@@ -339,6 +359,11 @@ type AppleBillingSubject struct {
 	AuthorityEpoch, CreatedAt, DeletedAt                      int64
 }
 
+type AppleBillingExternalSubject struct {
+	ExternalID, Environment, UserID, BundleID string
+	DeletedAt                                 int64
+}
+
 // DispatchBillingPurchase atomically grants the one external dispatch allowed
 // for an authority generation. A retry receives the existing attempt with
 // created=false and must reconcile it instead of calling the provider again.
@@ -428,6 +453,19 @@ func (s *SQLiteStore) AppleBillingSubjectByToken(ctx context.Context, token stri
 	err := s.reader().QueryRowContext(ctx, `SELECT app_account_token,user_id,attempt_id,bundle_id,authority_epoch,environment,created_at,deleted_at FROM apple_billing_subjects WHERE app_account_token=?`, strings.ToLower(token)).Scan(&out.AppAccountToken, &out.UserID, &out.AttemptID, &out.BundleID, &out.AuthorityEpoch, &out.Environment, &out.CreatedAt, &out.DeletedAt)
 	if err == sql.ErrNoRows {
 		return AppleBillingSubject{}, false, nil
+	}
+	return out, err == nil, err
+}
+
+func (s *SQLiteStore) AppleBillingExternalSubjectByIdentity(ctx context.Context, environment, externalID string) (AppleBillingExternalSubject, bool, error) {
+	if !appleSupportedEnvironment(environment) || externalID == "" {
+		return AppleBillingExternalSubject{}, false, nil
+	}
+	var out AppleBillingExternalSubject
+	err := s.reader().QueryRowContext(ctx, `SELECT external_id,environment,user_id,bundle_id,deleted_at FROM apple_billing_external_subjects WHERE environment=? AND external_id=?`, environment, externalID).
+		Scan(&out.ExternalID, &out.Environment, &out.UserID, &out.BundleID, &out.DeletedAt)
+	if err == sql.ErrNoRows {
+		return AppleBillingExternalSubject{}, false, nil
 	}
 	return out, err == nil, err
 }

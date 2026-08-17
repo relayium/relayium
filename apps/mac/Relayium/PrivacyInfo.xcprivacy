@@ -94,11 +94,11 @@
 				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
 			</array>
 		</dict>
-		<!-- The `appAccountToken`: a server-minted per-account UUID the app
-		     fetches (`AccountClient.appleAccountToken`) and sends OFF DEVICE to
+		<!-- The `appAccountToken`: a server-minted per-dispatch UUID returned only
+		     with purchase authority and sent OFF DEVICE to
 		     Apple as `Product.PurchaseOption.appAccountToken`
 		     (`StoreKitSubscriptionStore.swift`). Apple keeps it in the
-		     transaction record and Relayium keeps it in `users.apple_account_token`.
+		     transaction record and Relayium keeps it in its billing subject ledger.
 		     An assigned user-level id, retained by two parties — Apple's User ID
 		     in the plainest form, and the thing that makes the purchase history
 		     above "linked". -->

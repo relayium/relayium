@@ -1622,9 +1622,8 @@ type Store interface {
 	// UserByExternalSubscription resolves the owner of an external subscription
 	// id. An empty id returns not-found.
 	UserByExternalSubscription(ctx context.Context, provider, externalID string) (string, bool, error)
-	// EnsureAppleAccountToken binds candidate as the user's stable App Store
-	// appAccountToken if they have none, returning whichever value is in force.
-	// It is an attribution key, never an authorization one.
+	// EnsureAppleAccountToken imports legacy stable App Store attribution for
+	// recovery. New purchases use DispatchAppleBillingPurchase instead.
 	EnsureAppleAccountToken(ctx context.Context, userID, candidate string) (string, error)
 	// UserByAppleAccountToken resolves the account a token belongs to. An empty
 	// or malformed token returns not-found rather than scanning.

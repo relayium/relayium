@@ -10,11 +10,9 @@ import Foundation
 /// alone. `AccountClient` conforms, so there is still one implementation of the
 /// wire format.
 ///
-/// Neither method takes or returns anything the caller may act on unilaterally.
-/// The account token is minted by the SERVER (a client that chose its own could
-/// point a purchase at somebody else's account), and the transaction result is
-/// the server's own reading of a signature it verified — nothing here derives an
-/// entitlement from anything the device knows.
+/// No method returns a token independently of a durable purchase dispatch. The
+/// transaction result is the server's own reading of a signature it verified —
+/// nothing here derives an entitlement from anything the device knows.
 public protocol AppleBillingService {
     /// What this build may sell, for the bundle identity it actually ships as.
     ///
@@ -25,8 +23,6 @@ public protocol AppleBillingService {
     func appleCatalog(bundleID: String, token: String) async throws -> AppleProductCatalog
     func dispatchApplePurchase(bundleID: String, productID: String,
                                token: String) async throws -> ApplePurchaseDispatch
-    /// This account's stable App Store `appAccountToken`, minted on first ask.
-    func appleAccountToken(token: String) async throws -> UUID
     /// Submit one signed App Store transaction, exactly as the store handed it
     /// over, and report what the server made of it.
     func submitAppleTransaction(signedTransactionInfo: String,
@@ -295,7 +291,7 @@ public enum AppleBillingError: Error, Equatable {
     /// the documented code. "Unmapped" is not "harmless": an unrecognised
     /// refusal is the case where the least is known.
     case server(status: Int)
-    /// A 200 whose body did not decode, or an account-token response that was
+    /// A 200 whose body did not decode, or a purchase-dispatch response that was
     /// not a UUID. The request may well have succeeded — that is exactly why
     /// this is a failure and not a success.
     case decoding
@@ -391,40 +387,6 @@ extension AccountClient: AppleBillingService {
                 throw AppleBillingError.server(status: 503)
             }
             throw AppleBillingError.verifierUnavailable
-        default:  throw AppleBillingError.server(status: resp.statusCode)
-        }
-    }
-
-    /// `POST /api/billing/apple/account-token`.
-    ///
-    /// POST rather than GET because the first call MINTS the token, and because
-    /// a GET would additionally be cacheable — the wrong property for a value
-    /// that names exactly one account. The bearer decides which account; there
-    /// is no parameter, and there must never be one.
-    ///
-    /// The response is parsed into a `UUID` rather than passed on as a string,
-    /// and the parse is a REQUIREMENT rather than a convenience: the only thing
-    /// this value is ever used for is `Product.PurchaseOption.appAccountToken`,
-    /// which takes a `UUID`. Doing it here means a server that ever answered
-    /// something else fails at the boundary, with nothing purchased, instead of
-    /// at the point of sale.
-    ///
-    /// Nothing here logs. The token maps to exactly one account, which is
-    /// precisely what does not belong in a line that outlives the request.
-    public func appleAccountToken(token: String) async throws -> UUID {
-        var req = URLRequest(url: baseURL.appendingPathComponent("api/billing/apple/account-token"))
-        req.httpMethod = "POST"
-        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        let (data, resp) = try await appleSend(req)
-        switch resp.statusCode {
-        case 200:
-            guard let body = try? JSONDecoder().decode(AppleAccountTokenBody.self, from: data),
-                  let uuid = UUID(uuidString: body.appAccountToken) else {
-                throw AppleBillingError.decoding
-            }
-            return uuid
-        case 401: throw AppleBillingError.notSignedIn
-        case 429: throw AppleBillingError.rateLimited
         default:  throw AppleBillingError.server(status: resp.statusCode)
         }
     }
@@ -528,8 +490,6 @@ extension AccountClient: AppleBillingService {
     }
 }
 
-/// The 200 body of the account-token endpoint: `{"appAccountToken": "<uuid>"}`.
-private struct AppleAccountTokenBody: Decodable { let appAccountToken: String }
 private struct ApplePurchaseDispatchRequest: Encodable { let bundleId: String; let productId: String }
 private struct ApplePurchaseDispatchBody: Decodable { let appAccountToken: String; let attemptId: String }
 

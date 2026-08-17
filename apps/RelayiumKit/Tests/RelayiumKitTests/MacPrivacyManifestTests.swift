@@ -218,7 +218,7 @@ final class MacPrivacyManifestTests: XCTestCase {
 
         // User ID — the appAccountToken, minted per account, sent off device to
         // Apple with the purchase and kept on the users row.
-        XCTAssertTrue(billing.contains("api/billing/apple/account-token"))
+        XCTAssertTrue(billing.contains("api/billing/apple/purchase-dispatch"))
         XCTAssertTrue(storeKit.contains(".appAccountToken(appAccountToken)"))
         XCTAssertTrue(schema.contains("ADD COLUMN apple_account_token"))
 

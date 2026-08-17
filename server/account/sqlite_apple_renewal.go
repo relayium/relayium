@@ -90,7 +90,14 @@ func (s *SQLiteStore) applyAuthorizedAppleLifecycle(ctx context.Context, ev Sour
 		subject.BundleID = ev.ExternalScope
 	}
 	if appleAccountToken == "" {
-		if err := tx.QueryRowContext(ctx, `SELECT apple_account_token FROM users WHERE id=?`, ev.UserID).Scan(&appleAccountToken); err != nil || appleAccountToken == "" {
+		var boundUser string
+		if err := tx.QueryRowContext(ctx, `SELECT user_id FROM subscription_sources WHERE provider=? AND external_id=? AND external_scope=?`, ProviderApple, ev.ExternalID, ev.ExternalScope).Scan(&boundUser); err != nil || boundUser != ev.UserID {
+			if err != nil {
+				return SubscriptionApply{}, err
+			}
+			return SubscriptionApply{}, ErrBillingAuthorityConflict
+		}
+		if err := tx.QueryRowContext(ctx, `SELECT apple_account_token FROM billing_authorities WHERE user_id=? AND provider=?`, ev.UserID, ProviderApple).Scan(&appleAccountToken); err != nil || appleAccountToken == "" {
 			if err != nil {
 				return SubscriptionApply{}, err
 			}
@@ -149,22 +156,37 @@ func (s *SQLiteStore) applyAuthorizedAppleLifecycle(ctx context.Context, ev Sour
 	} else if authority.AppleEnvironment != environment {
 		return SubscriptionApply{}, ErrBillingAuthorityConflict
 	}
+	var externalOwner, externalBundle string
+	var externalDeleted int64
+	externalErr := tx.QueryRowContext(ctx, `SELECT user_id,bundle_id,deleted_at FROM apple_billing_external_subjects WHERE environment=? AND external_id=?`, environment, ev.ExternalID).Scan(&externalOwner, &externalBundle, &externalDeleted)
+	if externalErr != nil && !errors.Is(externalErr, sql.ErrNoRows) {
+		return SubscriptionApply{}, externalErr
+	}
+	if externalErr == nil && (externalOwner != ev.UserID || externalBundle != ev.ExternalScope || externalDeleted != 0) {
+		return SubscriptionApply{}, ErrExternalSubscriptionOwned
+	}
 
 	var attemptID, attemptProduct string
-	var attemptCreated int64
-	err = tx.QueryRowContext(ctx, `SELECT id,product_id,created_at FROM billing_purchase_attempts WHERE user_id=? AND epoch=? AND provider=? AND state IN ('prepared','dispatched')`, ev.UserID, authority.Epoch, ProviderApple).Scan(&attemptID, &attemptProduct, &attemptCreated)
+	err = tx.QueryRowContext(ctx, `SELECT id,product_id FROM billing_purchase_attempts WHERE user_id=? AND epoch=? AND provider=? AND state IN ('prepared','dispatched')`, ev.UserID, authority.Epoch, ProviderApple).Scan(&attemptID, &attemptProduct)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return SubscriptionApply{}, err
 	}
 	resolveAttempt := err == nil && hasSubject && subject.AttemptID == attemptID &&
-		attemptProduct == ev.BillingProductID && ev.AppleTransactionReason == "PURCHASE" &&
-		ev.ApplePurchaseDateMS >= attemptCreated*1000
+		attemptProduct == ev.AppleDispatchProductID && ev.AppleDispatchPurchase
 
 	result, err := applySourceTx(ctx, tx, ev)
 	if err != nil {
 		return SubscriptionApply{}, err
 	}
 	if result.Applied {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO apple_billing_external_subjects(environment,external_id,user_id,bundle_id)
+ VALUES(?,?,?,?) ON CONFLICT(environment,external_id) DO UPDATE SET
+ user_id=excluded.user_id,bundle_id=excluded.bundle_id
+ WHERE apple_billing_external_subjects.user_id=excluded.user_id
+   AND apple_billing_external_subjects.bundle_id=excluded.bundle_id
+   AND apple_billing_external_subjects.deleted_at=0`, environment, ev.ExternalID, ev.UserID, ev.ExternalScope); err != nil {
+			return SubscriptionApply{}, err
+		}
 		if renewal != nil {
 			if _, err = applyAppleRenewalStateTx(ctx, tx, *renewal); err != nil {
 				return SubscriptionApply{}, err

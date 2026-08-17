@@ -593,14 +593,11 @@ func (s *SQLiteStore) LastSourceEventAt(ctx context.Context, userID, provider st
 
 // ---- Apple app account token -------------------------------------------------
 
-// EnsureAppleAccountToken binds candidate as this user's stable App Store
-// `appAccountToken` if they have none, and returns whichever value is now in
-// force. First write wins: two concurrent requests (two devices, or a retry)
-// converge on one token rather than racing two into the account.
+// EnsureAppleAccountToken preserves and imports pre-dispatch App Store
+// `appAccountToken` state. No production HTTP path calls it to authorize a new
+// purchase; purchase-dispatch mints a unique token with its attempt instead.
 //
-// The token is deliberately NOT part of the User struct — nothing that renders
-// or logs a user can pick it up by accident, and the one endpoint that returns
-// it asks for it by name.
+// The token remains outside User so ordinary account surfaces cannot expose it.
 func (s *SQLiteStore) EnsureAppleAccountToken(ctx context.Context, userID, candidate string) (string, error) {
 	if !validAppAccountToken(candidate) {
 		return "", errors.New("account: app account token must be an RFC 4122 v4 UUID")

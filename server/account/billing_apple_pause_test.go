@@ -264,13 +264,19 @@ func TestAppleGatePausedStillAppliesAValidTransaction(t *testing.T) {
 	}
 }
 
-// The account-token endpoint is on the same paid path — a purchase already in
-// flight fetches it — and is likewise not gated.
-func TestAppleGatePausedStillMintsTheAccountToken(t *testing.T) {
+// The legacy token endpoint stays retired regardless of the purchase gate.
+func TestAppleGateCannotReenableTheRetiredAccountTokenEndpoint(t *testing.T) {
 	f := newAppleTxFixture(t)
 	pauseApplePurchases(t, f.store, false)
-	if got := postAppleToken(t, f.ts, f.cookie); got != f.token {
-		t.Fatalf("account token changed while paused: %q vs %q", got, f.token)
+	req, _ := http.NewRequest(http.MethodPost, f.ts.URL+"/api/billing/apple/account-token", nil)
+	req.AddCookie(f.cookie)
+	resp, err := f.ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusGone {
+		t.Fatalf("retired token endpoint status=%d", resp.StatusCode)
 	}
 }
 
