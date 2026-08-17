@@ -1139,6 +1139,10 @@ final class InboxSurfaceGuardTests: XCTestCase {
             XCTAssertTrue(fixture.contains(isolated),
                           "the acceptance fixture shares \(isolated) with the installed product")
         }
+        XCTAssertTrue(fixture.contains("receiveCapability: InboxCapability.receiveV2"),
+                      "the acceptance server no longer negotiates the required v2 receiver")
+        XCTAssertFalse(fixture.contains("receiveCapability: InboxCapability.receiveV1"),
+                       "the v2 acceptance client is being forced onto the retired v1 protocol")
         XCTAssertFalse(fixture.contains("temporaryDirectory"),
                        "a delivery or its journal may not land somewhere the system can purge")
         XCTAssertFalse(fixture.contains("cachesDirectory"))

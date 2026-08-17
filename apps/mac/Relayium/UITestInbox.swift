@@ -324,7 +324,7 @@ private final class UITestInboxTransport: InboxTransport, @unchecked Sendable {
                                           receiveDirReady: request.receiveDirReady,
                                           canReceive: true, key: registeredKey()),
                          protocolVersion: InboxProtocol.versions[0],
-                         receiveCapability: InboxCapability.receiveV1,
+                         receiveCapability: InboxCapability.receiveV2,
                          keyAlgorithm: InboxProtocol.keyAlgorithm)
     }
 
