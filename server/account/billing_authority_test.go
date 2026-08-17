@@ -122,6 +122,98 @@ func TestAdminGrantCannotRacePersistentBillingAuthority(t *testing.T) {
 	}
 }
 
+func TestAcquireBillingAuthorityBackfillsHazardousStripeHistory(t *testing.T) {
+	for _, status := range []string{"incomplete", "unpaid", "paused", "past_due", "canceled"} {
+		t.Run(status, func(t *testing.T) {
+			store := newTestStore(t)
+			ctx := context.Background()
+			u, _ := store.UpsertUserByEmail(ctx, "legacy-stripe-"+status+"@example.test", "")
+			if _, err := store.ApplySubscriptionSource(ctx, SourceEvent{
+				UserID: u.ID, Provider: ProviderStripe, PlanID: freePlanID, Status: status,
+				ExternalID: "sub_legacy_" + status, EventAt: 10, Now: 10,
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := store.AcquireBillingAuthority(ctx, BillingAuthorityRequest{
+				UserID: u.ID, Provider: ProviderApple, ExternalScope: testBundleIOS,
+				AppleAccountToken: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", Now: 20,
+			}); !errors.Is(err, ErrBillingAuthorityConflict) {
+				t.Fatalf("Apple crossed legacy Stripe status %q: %v", status, err)
+			}
+			authority, err := store.AcquireBillingAuthority(ctx, BillingAuthorityRequest{UserID: u.ID, Provider: ProviderStripe, Now: 21})
+			if err != nil || authority.Provider != ProviderStripe {
+				t.Fatalf("Stripe history did not backfill authority: %+v err=%v", authority, err)
+			}
+		})
+	}
+}
+
+func TestAcquireBillingAuthorityBackfillsTerminalAppleHistory(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	u, _ := store.UpsertUserByEmail(ctx, "legacy-apple-terminal@example.test", "")
+	if _, err := store.ApplySubscriptionSource(ctx, SourceEvent{
+		UserID: u.ID, Provider: ProviderApple, PlanID: freePlanID, Status: "canceled",
+		ExternalID: "production:legacy", ExternalScope: testBundleIOS, EventAt: 10, Now: 10,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.AcquireBillingAuthority(ctx, BillingAuthorityRequest{UserID: u.ID, Provider: ProviderStripe, Now: 20}); !errors.Is(err, ErrBillingAuthorityConflict) {
+		t.Fatalf("Stripe crossed terminal Apple history: %v", err)
+	}
+}
+
+func TestAdminGrantCannotCrossLegacyProviderHistory(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	u, _ := store.UpsertUserByEmail(ctx, "legacy-provider-admin@example.test", "")
+	if _, err := store.ApplySubscriptionSource(ctx, SourceEvent{
+		UserID: u.ID, Provider: ProviderStripe, PlanID: freePlanID, Status: "unpaid",
+		ExternalID: "sub_admin_hazard", EventAt: 10, Now: 10,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetUserPlanAdmin(ctx, u.ID, "pro", 20); !errors.Is(err, ErrBillingAuthorityConflict) {
+		t.Fatalf("admin crossed legacy provider history: %v", err)
+	}
+}
+
+func TestBillingAuthorityMigrationBackfillsAtomicallyAndIsIdempotent(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	stripeUser, _ := store.UpsertUserByEmail(ctx, "migration-stripe@example.test", "")
+	if _, err := store.ApplySubscriptionSource(ctx, SourceEvent{
+		UserID: stripeUser.ID, Provider: ProviderStripe, PlanID: freePlanID,
+		Status: "incomplete", ExternalID: "sub_migration", EventAt: 1, Now: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := backfillBillingAuthorities(ctx, store.db, 10); err != nil {
+		t.Fatal(err)
+	}
+	if err := backfillBillingAuthorities(ctx, store.db, 11); err != nil {
+		t.Fatalf("idempotent backfill: %v", err)
+	}
+	authority, ok, err := store.BillingAuthority(ctx, stripeUser.ID)
+	if err != nil || !ok || authority.Provider != ProviderStripe {
+		t.Fatalf("backfilled authority=%+v ok=%v err=%v", authority, ok, err)
+	}
+
+	ambiguous, _ := store.UpsertUserByEmail(ctx, "migration-ambiguous@example.test", "")
+	if _, err := store.ApplySubscriptionSource(ctx, SourceEvent{UserID: ambiguous.ID, Provider: ProviderStripe, PlanID: freePlanID, Status: "unpaid", ExternalID: "sub_ambiguous", EventAt: 1, Now: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.ApplySubscriptionSource(ctx, SourceEvent{UserID: ambiguous.ID, Provider: ProviderApple, PlanID: freePlanID, Status: "canceled", ExternalID: "production:ambiguous", ExternalScope: testBundleIOS, EventAt: 1, Now: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if err := backfillBillingAuthorities(ctx, store.db, 12); !errors.Is(err, ErrBillingAuthorityConflict) {
+		t.Fatalf("ambiguous historical providers did not fail closed: %v", err)
+	}
+	if _, ok, err := store.BillingAuthority(ctx, ambiguous.ID); err != nil || ok {
+		t.Fatalf("ambiguous backfill partially wrote authority: ok=%v err=%v", ok, err)
+	}
+}
+
 func TestAuthorizedAppleLifecycleAtomicallyBindsAndResolvesDispatch(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()

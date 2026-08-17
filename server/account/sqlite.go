@@ -1160,6 +1160,10 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 			return nil, err
 		}
 	}
+	if err := backfillBillingAuthorities(context.Background(), db, time.Now().Unix()); err != nil {
+		db.Close()
+		return nil, err
+	}
 	// The per-session metered ledger, and a ONE-TIME backfill of the rows that
 	// predate it.
 	//
@@ -1902,7 +1906,11 @@ func (s *SQLiteStore) SetUserPlanAdmin(ctx context.Context, userID, planID strin
 	}
 	defer tx.Rollback()
 	var hasAuthority int
-	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM billing_authorities WHERE user_id=?)`, userID).Scan(&hasAuthority); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(
+		SELECT 1 FROM billing_authorities WHERE user_id=?
+		UNION ALL SELECT 1 FROM subscription_sources WHERE user_id=?
+		UNION ALL SELECT 1 FROM users WHERE id=? AND (stripe_customer_id<>'' OR stripe_subscription_id<>'' OR plan_source IN ('stripe','apple'))
+	)`, userID, userID, userID).Scan(&hasAuthority); err != nil {
 		return err
 	}
 	if hasAuthority != 0 {

@@ -199,6 +199,33 @@ func TestPortalRefusedForAppleEntitlementWithHistoricalStripeCustomer(t *testing
 	}
 }
 
+func TestPortalRefusedForLapsedStickyAppleAuthority(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	fb := &fakeBiller{portalURL: "https://portal"}
+	svc.biller = fb
+	email := "apple-sticky-portal@example.com"
+	cookie := loginCookie(t, ts, mail, email)
+	uid := mustUserID(t, store, email)
+	if _, err := store.AcquireBillingAuthority(context.Background(), BillingAuthorityRequest{
+		UserID: uid, Provider: ProviderApple, ExternalScope: testBundleIOS,
+		AppleAccountToken: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", Now: 100,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetUserStripeCustomer(context.Background(), uid, "cus_old_portal"); err != nil {
+		t.Fatal(err)
+	}
+	resp := postBilling(t, ts, cookie, "/api/billing/portal", ``)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("want 409, got %d", resp.StatusCode)
+	}
+	body := decodeErrBody(t, resp)
+	if body["provider"] != ProviderApple || fb.portalCalls != 0 {
+		t.Fatalf("sticky Apple authority leaked Stripe portal: body=%+v calls=%d", body, fb.portalCalls)
+	}
+}
+
 // A dual subscriber has a live Stripe subscription AND a live Apple one. The
 // portal is real for the Stripe half, but opening it presents a cancel button
 // that would leave the Apple subscription — and the charges — untouched while

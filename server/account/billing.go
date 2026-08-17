@@ -205,6 +205,13 @@ func blockingProvider(u User, live []string, fallback string) string {
 // Stripe change they are asking for would not move their effective plan, and
 // silently performing it would be a charge with no effect.
 func (s *Service) providerManagedElsewhere(ctx context.Context, u User) (string, bool, error) {
+	authority, exists, err := s.Store().BillingAuthority(ctx, u.ID)
+	if err != nil {
+		return "", false, err
+	}
+	if exists && authority.Provider != ProviderStripe {
+		return authority.Provider, true, nil
+	}
 	live, err := s.Store().LiveEntitlementProviders(ctx, u.ID)
 	if err != nil {
 		return "", false, err

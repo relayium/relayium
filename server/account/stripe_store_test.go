@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
 
@@ -226,10 +227,9 @@ func TestSetUserPlanAdminSetsSource(t *testing.T) {
 	}
 }
 
-// TestSetUserPlanAdminClearsStaleSubscription verifies that assigning a plan
-// via the admin console clears any subscription_status/subscription_end left
-// over from a prior Stripe subscription, since the manual comp supersedes it.
-func TestSetUserPlanAdminClearsStaleSubscription(t *testing.T) {
+// TestSetUserPlanAdminRefusesProviderAuthority verifies that an admin comp is
+// not a silent migration away from a provider that may still charge later.
+func TestSetUserPlanAdminRefusesProviderAuthority(t *testing.T) {
 	s := newTestStore(t)
 	ctx := context.Background()
 
@@ -240,24 +240,24 @@ func TestSetUserPlanAdminClearsStaleSubscription(t *testing.T) {
 	if err := s.SetUserSubscription(ctx, u.ID, "pro", "active", 9999999999, "stripe", "", 1, 0); err != nil {
 		t.Fatalf("SetUserSubscription: %v", err)
 	}
-	if err := s.SetUserPlanAdmin(ctx, u.ID, "plus", 2); err != nil {
-		t.Fatalf("SetUserPlanAdmin: %v", err)
+	if err := s.SetUserPlanAdmin(ctx, u.ID, "plus", 2); !errors.Is(err, ErrBillingAuthorityConflict) {
+		t.Fatalf("SetUserPlanAdmin: got %v, want authority conflict", err)
 	}
 
 	got, err := s.GetUserByID(ctx, u.ID)
 	if err != nil {
 		t.Fatalf("GetUserByID: %v", err)
 	}
-	if got.PlanID != "plus" {
-		t.Fatalf("PlanID = %q, want plus", got.PlanID)
+	if got.PlanID != "pro" {
+		t.Fatalf("PlanID = %q, want pro preserved", got.PlanID)
 	}
-	if got.PlanSource != "admin" {
-		t.Fatalf("PlanSource = %q, want admin", got.PlanSource)
+	if got.PlanSource != ProviderStripe {
+		t.Fatalf("PlanSource = %q, want Stripe", got.PlanSource)
 	}
-	if got.SubscriptionStatus != "" {
-		t.Fatalf("SubscriptionStatus = %q, want cleared to empty", got.SubscriptionStatus)
+	if got.SubscriptionStatus != "active" {
+		t.Fatalf("SubscriptionStatus = %q, want active preserved", got.SubscriptionStatus)
 	}
-	if got.SubscriptionEnd != 0 {
-		t.Fatalf("SubscriptionEnd = %d, want cleared to 0", got.SubscriptionEnd)
+	if got.SubscriptionEnd != 9999999999 {
+		t.Fatalf("SubscriptionEnd = %d, want preserved", got.SubscriptionEnd)
 	}
 }

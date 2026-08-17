@@ -25,6 +25,110 @@ type BillingAuthority struct {
 	Epoch, CreatedAt, UpdatedAt                                                    int64
 }
 
+type billingHistory struct {
+	Provider, ExternalScope, AppleAccountToken string
+}
+
+func billingHistoryTx(ctx context.Context, tx *sql.Tx, userID string) (billingHistory, error) {
+	var planSource, stripeCustomerID, stripeSubscriptionID, appleAccountToken string
+	if err := tx.QueryRowContext(ctx, `SELECT plan_source,stripe_customer_id,stripe_subscription_id,apple_account_token FROM users WHERE id=?`, userID).
+		Scan(&planSource, &stripeCustomerID, &stripeSubscriptionID, &appleAccountToken); err != nil {
+		return billingHistory{}, err
+	}
+	out := billingHistory{AppleAccountToken: appleAccountToken}
+	rows, err := tx.QueryContext(ctx, `SELECT provider,external_scope FROM subscription_sources WHERE user_id=?`, userID)
+	if err != nil {
+		return billingHistory{}, err
+	}
+	for rows.Next() {
+		var provider, scope string
+		if err := rows.Scan(&provider, &scope); err != nil {
+			rows.Close()
+			return billingHistory{}, err
+		}
+		if !knownProvider(provider) || (out.Provider != "" && out.Provider != provider) {
+			rows.Close()
+			return billingHistory{}, ErrBillingAuthorityConflict
+		}
+		out.Provider = provider
+		if provider == ProviderApple && scope != "" {
+			if out.ExternalScope != "" && out.ExternalScope != scope {
+				rows.Close()
+				return billingHistory{}, ErrBillingAuthorityConflict
+			}
+			out.ExternalScope = scope
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return billingHistory{}, err
+	}
+	if err := rows.Close(); err != nil {
+		return billingHistory{}, err
+	}
+	if stripeCustomerID != "" || stripeSubscriptionID != "" || planSource == ProviderStripe {
+		if out.Provider != "" && out.Provider != ProviderStripe {
+			return billingHistory{}, ErrBillingAuthorityConflict
+		}
+		out.Provider = ProviderStripe
+	}
+	if planSource == ProviderApple {
+		if out.Provider != "" && out.Provider != ProviderApple {
+			return billingHistory{}, ErrBillingAuthorityConflict
+		}
+		out.Provider = ProviderApple
+	}
+	if out.Provider == ProviderApple && (out.ExternalScope == "" || out.AppleAccountToken == "") {
+		return billingHistory{}, ErrBillingAuthorityConflict
+	}
+	return out, nil
+}
+
+func backfillBillingAuthorities(ctx context.Context, db *sql.DB, now int64) error {
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	rows, err := tx.QueryContext(ctx, `SELECT id FROM users
+ WHERE NOT EXISTS(SELECT 1 FROM billing_authorities WHERE user_id=users.id)
+   AND (stripe_customer_id<>'' OR stripe_subscription_id<>'' OR plan_source IN ('stripe','apple')
+        OR EXISTS(SELECT 1 FROM subscription_sources WHERE user_id=users.id))`)
+	if err != nil {
+		return err
+	}
+	var userIDs []string
+	for rows.Next() {
+		var userID string
+		if err := rows.Scan(&userID); err != nil {
+			rows.Close()
+			return err
+		}
+		userIDs = append(userIDs, userID)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, userID := range userIDs {
+		history, err := billingHistoryTx(ctx, tx, userID)
+		if err != nil {
+			return fmt.Errorf("account: backfill billing authority for %s: %w", userID, err)
+		}
+		if history.Provider == "" {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO billing_authorities(user_id,provider,external_scope,apple_environment,apple_account_token,epoch,intent_id,created_at,updated_at) VALUES(?,?,?,?,?,1,?,?,?)`,
+			userID, history.Provider, history.ExternalScope, "", history.AppleAccountToken, authx.NewID(), now, now); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
 func acquireStoreBillingAuthority(ctx context.Context, store Store, in BillingAuthorityRequest) (BillingAuthority, error) {
 	authorities, ok := store.(interface {
 		AcquireBillingAuthority(context.Context, BillingAuthorityRequest) (BillingAuthority, error)
@@ -68,33 +172,22 @@ func acquireBillingAuthorityTx(ctx context.Context, tx *sql.Tx, in BillingAuthor
 	}
 
 	var planID, planSource string
-	if err := tx.QueryRowContext(ctx, `SELECT plan_id, plan_source FROM users WHERE id=?`, in.UserID).Scan(&planID, &planSource); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT plan_id,plan_source FROM users WHERE id=?`, in.UserID).Scan(&planID, &planSource); err != nil {
 		return BillingAuthority{}, err
 	}
 	if planSource == SourceAdmin && planID != "" && planID != freePlanID {
 		return BillingAuthority{}, ErrBillingAuthorityConflict
 	}
-	rows, err := tx.QueryContext(ctx, `SELECT provider, plan_id, status, period_end, external_scope FROM subscription_sources WHERE user_id=?`, in.UserID)
+	history, err := billingHistoryTx(ctx, tx, in.UserID)
 	if err != nil {
 		return BillingAuthority{}, err
 	}
-	for rows.Next() {
-		var provider, sourcePlan, status, scope string
-		var end int64
-		if err := rows.Scan(&provider, &sourcePlan, &status, &end, &scope); err != nil {
-			return BillingAuthority{}, err
-		}
-		live := sourcePlan != "" && sourcePlan != freePlanID && liveSubStatus(status) && (end == 0 || in.Now <= 0 || end > in.Now)
-		if live && (provider != in.Provider || (provider == ProviderApple && scope != "" && scope != in.ExternalScope)) {
+	if history.Provider != "" {
+		if history.Provider != in.Provider ||
+			(history.Provider == ProviderApple && history.ExternalScope != in.ExternalScope) ||
+			(history.Provider == ProviderApple && history.AppleAccountToken != in.AppleAccountToken) {
 			return BillingAuthority{}, ErrBillingAuthorityConflict
 		}
-	}
-	if err := rows.Err(); err != nil {
-		rows.Close()
-		return BillingAuthority{}, err
-	}
-	if err := rows.Close(); err != nil {
-		return BillingAuthority{}, err
 	}
 	intentID := authx.NewID()
 	if _, err := tx.ExecContext(ctx, `INSERT INTO billing_authorities(user_id,provider,external_scope,apple_environment,apple_account_token,epoch,intent_id,created_at,updated_at) VALUES(?,?,?,?,?,1,?,?,?)`, in.UserID, in.Provider, in.ExternalScope, "", in.AppleAccountToken, intentID, in.Now, in.Now); err != nil {
