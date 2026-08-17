@@ -394,3 +394,48 @@ func TestAuthorizedStripeLifecycleResolvesOnlyMatchingPersistedCheckout(t *testi
 		t.Fatalf("matching canonical fact did not resolve: state=%q subscription=%q", state, subscriptionID)
 	}
 }
+
+func TestAuthorizedStripeLifecycleKeepsChargeCapableAttemptOpen(t *testing.T) {
+	for _, status := range []string{"incomplete", "unpaid", "paused"} {
+		t.Run(status, func(t *testing.T) {
+			store := newTestStore(t)
+			ctx := context.Background()
+			u, _ := store.UpsertUserByEmail(ctx, "stripe-open-"+status+"@example.test", "")
+			authority, _ := store.AcquireBillingAuthority(ctx, BillingAuthorityRequest{UserID: u.ID, Provider: ProviderStripe, Now: 100})
+			attempt, _, _ := store.DispatchBillingPurchase(ctx, authority, "price_pro_monthly", 101)
+			if err := store.SetBillingPurchaseProviderSession(ctx, u.ID, attempt.ID, "cs_"+status, "https://checkout.stripe.test/"+status); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := store.ApplyAuthorizedStripeLifecycle(ctx, SourceEvent{
+				UserID: u.ID, Provider: ProviderStripe, PlanID: freePlanID, Status: status,
+				ExternalID: "sub_" + status, EventAt: 200, Now: 102,
+				BillingAttemptID: attempt.ID, BillingProductID: "price_pro_monthly",
+			}); err != nil {
+				t.Fatal(err)
+			}
+			var state string
+			if err := store.db.QueryRowContext(ctx, `SELECT state FROM billing_purchase_attempts WHERE id=?`, attempt.ID).Scan(&state); err != nil || state != "dispatched" {
+				t.Fatalf("charge-capable status %q released attempt: state=%q err=%v", status, state, err)
+			}
+		})
+	}
+}
+
+func TestBillingAuthorityBackfillTreatsLegacyAppleTokenAsStickyHistory(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	u, _ := store.UpsertUserByEmail(ctx, "legacy-token-only@example.test", "")
+	if _, err := store.EnsureAppleAccountToken(ctx, u.ID, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"); err != nil {
+		t.Fatal(err)
+	}
+	if err := backfillBillingAuthorities(ctx, store.db, 10); err != nil {
+		t.Fatal(err)
+	}
+	authority, ok, err := store.BillingAuthority(ctx, u.ID)
+	if err != nil || !ok || authority.Provider != ProviderApple || authority.ExternalScope == "" {
+		t.Fatalf("legacy token was not quarantined under Apple authority: %+v ok=%v err=%v", authority, ok, err)
+	}
+	if _, err := store.AcquireBillingAuthority(ctx, BillingAuthorityRequest{UserID: u.ID, Provider: ProviderStripe, Now: 11}); !errors.Is(err, ErrBillingAuthorityConflict) {
+		t.Fatalf("Stripe crossed token-only Apple history: %v", err)
+	}
+}

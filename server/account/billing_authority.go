@@ -29,6 +29,8 @@ type billingHistory struct {
 	Provider, ExternalScope, AppleAccountToken string
 }
 
+const billingUnknownAppleScope = "legacy-unknown"
+
 func billingHistoryTx(ctx context.Context, tx *sql.Tx, userID string) (billingHistory, error) {
 	var planSource, stripeCustomerID, stripeSubscriptionID, appleAccountToken string
 	if err := tx.QueryRowContext(ctx, `SELECT plan_source,stripe_customer_id,stripe_subscription_id,apple_account_token FROM users WHERE id=?`, userID).
@@ -78,7 +80,13 @@ func billingHistoryTx(ctx context.Context, tx *sql.Tx, userID string) (billingHi
 		}
 		out.Provider = ProviderApple
 	}
-	if out.Provider == ProviderApple && (out.ExternalScope == "" || out.AppleAccountToken == "") {
+	if appleAccountToken != "" && out.Provider == "" {
+		out.Provider = ProviderApple
+	}
+	if out.Provider == ProviderApple && out.ExternalScope == "" {
+		out.ExternalScope = billingUnknownAppleScope
+	}
+	if out.Provider == ProviderApple && out.AppleAccountToken == "" {
 		return billingHistory{}, ErrBillingAuthorityConflict
 	}
 	return out, nil
@@ -92,7 +100,7 @@ func backfillBillingAuthorities(ctx context.Context, db *sql.DB, now int64) erro
 	defer tx.Rollback()
 	rows, err := tx.QueryContext(ctx, `SELECT id FROM users
  WHERE NOT EXISTS(SELECT 1 FROM billing_authorities WHERE user_id=users.id)
-   AND (stripe_customer_id<>'' OR stripe_subscription_id<>'' OR plan_source IN ('stripe','apple')
+	   AND (stripe_customer_id<>'' OR stripe_subscription_id<>'' OR apple_account_token<>'' OR plan_source IN ('stripe','apple')
         OR EXISTS(SELECT 1 FROM subscription_sources WHERE user_id=users.id))`)
 	if err != nil {
 		return err
@@ -248,7 +256,7 @@ func (s *SQLiteStore) ApplyAuthorizedStripeLifecycle(ctx context.Context, ev Sou
 	if err != nil {
 		return SubscriptionApply{}, err
 	}
-	if result.Applied && ev.BillingAttemptID != "" && ev.ExternalID != "" {
+	if result.Applied && stripeAttemptMayConverge(ev.Status) && ev.BillingAttemptID != "" && ev.ExternalID != "" {
 		res, err := tx.ExecContext(ctx, `UPDATE billing_purchase_attempts
  SET state='resolved', provider_subscription_id=CASE WHEN provider_subscription_id='' THEN ? ELSE provider_subscription_id END
  WHERE id=? AND user_id=? AND epoch=? AND provider=? AND state='dispatched'
@@ -261,6 +269,15 @@ func (s *SQLiteStore) ApplyAuthorizedStripeLifecycle(ctx context.Context, ev Sou
 		_, _ = res.RowsAffected()
 	}
 	return result, tx.Commit()
+}
+
+func stripeAttemptMayConverge(status string) bool {
+	switch status {
+	case "active", "trialing", "past_due", "incomplete_expired", "canceled":
+		return true
+	default:
+		return false
+	}
 }
 
 type BillingPurchaseAttempt struct {
