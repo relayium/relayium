@@ -81,9 +81,9 @@ export const FREE_USER_ROUTES = {
 const DEVICE_KEY = { ID: "k1", Algorithm: "x25519-sealedbox-v1", PublicKey: "A".repeat(43), Generation: 1, CreatedAt: 1754000000, SupersededAt: 0, RevokedAt: 0 };
 const inbox = (over) => ({
   Presence: "online", LastHeartbeatAt: 1754600000, PresenceExpiresAt: 1754600090,
-  HeartbeatIntervalSeconds: 30, ProtocolVersion: 1,
-  Capabilities: ["inbox.receive.v1", "inbox.autoaccept.v1"], ReceiveCapability: "inbox.receive.v1",
-  AutoAccept: "auto", ReceiveDirReady: true, Platform: "linux", AppVersion: "0.15.0",
+  HeartbeatIntervalSeconds: 30, ProtocolVersion: 2,
+  Capabilities: ["inbox.receive.v2", "inbox.autoaccept.v1", "inbox.text.v1"], ReceiveCapability: "inbox.receive.v2",
+  AutoAccept: "auto", ReceiveDirReady: true, Platform: "linux", AppVersion: "0.21.0",
   Revoked: false, CanReceive: true, RegisteredAt: 1754000000, Key: DEVICE_KEY, ...over,
 });
 
