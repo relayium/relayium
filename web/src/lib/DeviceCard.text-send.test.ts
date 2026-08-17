@@ -194,6 +194,8 @@ describe("who is offered a message", () => {
     expect(btn).not.toBeNull();
     expect(btn.disabled).toBe(false);
     expect(btn.getAttribute("aria-label"), "the control did not name its target").toContain("work-laptop");
+    expect(btn.getAttribute("aria-label"), "the accessible name did not contain the visible label")
+      .toContain(btn.textContent?.trim());
     expect(q(".inboxtextoff"), "an available message surface was explained away").toBeNull();
   });
 
