@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -19,6 +20,8 @@ import (
 	"github.com/relayium/relayium/internal/cloud"
 	"github.com/relayium/relayium/internal/inbox"
 	"github.com/relayium/relayium/internal/inboxclient"
+	"github.com/relayium/relayium/internal/inboxmanifest"
+	"github.com/relayium/relayium/internal/storecrypto"
 )
 
 // End-to-end Device Inbox, against the REAL account.Service.
@@ -111,9 +114,17 @@ func (e *inboxEnv) deviceInbox() (id string, in *inboxclient.InboxView) {
 	return "", nil
 }
 
-// sendFile does exactly what a SENDER does: encrypt and upload a Stored Object
-// with the existing client-side crypto, seal that object's content key to the
+// sendFile does exactly what a v2 SENDER does: upload a Stored Object whose
+// frame 0 is a DEVICE INBOX v2 manifest, seal that object's content key to the
 // target device's published public key, and queue a task.
+//
+// The upload is built here rather than through `cloud.Upload`, and the
+// difference is the whole point of v2: `cloud.Upload` seals the shared
+// Stored-Wire manifest, which describes a public share object and cannot say
+// whether a delivery is files or a message. A Device Inbox delivery seals the
+// dedicated v2 document into the same seq-0 unit instead. The rest of the wire —
+// the `uint32BE(len) || encManifest || frames` upload body, the framing, the
+// chunking and the AEAD — is byte-identical and deliberately unchanged.
 func (e *inboxEnv) sendFile(name string, data []byte) (taskID string) {
 	e.t.Helper()
 	deviceID, in := e.deviceInbox()
@@ -121,27 +132,65 @@ func (e *inboxEnv) sendFile(name string, data []byte) (taskID string) {
 		e.t.Fatal("the device has no published public key; enable the inbox first")
 	}
 
-	src := filepath.Join(e.t.TempDir(), name)
-	if err := os.MkdirAll(filepath.Dir(src), 0o700); err != nil {
-		e.t.Fatalf("mkdir: %v", err)
+	contentKey, err := storecrypto.GenerateKey()
+	if err != nil {
+		e.t.Fatalf("content key: %v", err)
 	}
-	if err := os.WriteFile(src, data, 0o600); err != nil {
-		e.t.Fatalf("write source: %v", err)
+	manifest, err := inboxmanifest.NewFiles([]inboxmanifest.Item{
+		{Kind: inboxmanifest.KindFile, Name: name, Size: int64(len(data))},
+	})
+	if err != nil {
+		e.t.Fatalf("build manifest: %v", err)
 	}
-	c := cloud.NewClient(e.ts.URL)
-	c.Token = e.token
+	manifestBytes, err := inboxmanifest.Encode(manifest)
+	if err != nil {
+		e.t.Fatalf("encode manifest: %v", err)
+	}
+	encManifest, err := storecrypto.SealManifest(contentKey, manifestBytes)
+	if err != nil {
+		e.t.Fatalf("seal manifest: %v", err)
+	}
+	var body bytes.Buffer
+	var hdr [4]byte
+	binary.BigEndian.PutUint32(hdr[:], uint32(len(encManifest)))
+	body.Write(hdr[:])
+	body.Write(encManifest)
+	// Chunked at the protocol's frame size, with the payload seq starting at 1:
+	// seq 0 is the manifest. A single oversized frame would be refused by the
+	// decryptor's own frame-length bound, which is exactly what it is for.
+	for off, seq := 0, uint64(1); off < len(data); seq++ {
+		end := min(off+storecrypto.ChunkSize, len(data))
+		frame, err := storecrypto.FrameChunk(contentKey, seq, data[off:end])
+		if err != nil {
+			e.t.Fatalf("frame: %v", err)
+		}
+		body.Write(frame)
+		off = end
+	}
+
 	// A plain upload is unlimited-until-TTL, which is what a task may reference:
 	// a limited/burn object could have its last slot spent by an unrelated public
 	// reader, stranding a delivery that was promised to be reliable.
-	id, keyB64, _, err := c.Upload(context.Background(), []string{src}, cloud.UploadOpts{})
+	upReq, _ := http.NewRequest(http.MethodPost, e.ts.URL+"/api/files", bytes.NewReader(body.Bytes()))
+	upReq.Header.Set("Authorization", "Bearer "+e.token)
+	upReq.Header.Set("Content-Type", "application/octet-stream")
+	upResp, err := e.ts.Client().Do(upReq)
 	if err != nil {
 		e.t.Fatalf("upload: %v", err)
 	}
-
-	contentKey, err := base64.RawURLEncoding.DecodeString(keyB64)
-	if err != nil {
-		e.t.Fatalf("decode content key: %v", err)
+	defer upResp.Body.Close()
+	if upResp.StatusCode < 200 || upResp.StatusCode >= 300 {
+		b, _ := io_ReadAll(upResp)
+		e.t.Fatalf("upload: status %d: %s", upResp.StatusCode, b)
 	}
+	var uploaded struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(upResp.Body).Decode(&uploaded); err != nil {
+		e.t.Fatalf("decode upload: %v", err)
+	}
+	id := uploaded.ID
+
 	pubRaw, err := base64.RawURLEncoding.Strict().DecodeString(in.Key.PublicKey)
 	if err != nil {
 		e.t.Fatalf("decode device public key: %v", err)
@@ -153,7 +202,7 @@ func (e *inboxEnv) sendFile(name string, data []byte) (taskID string) {
 		e.t.Fatalf("seal: %v", err)
 	}
 
-	body, _ := json.Marshal(map[string]any{
+	create, _ := json.Marshal(map[string]any{
 		"idempotencyKey":      "e2e-" + id,
 		"storedFileId":        id,
 		"protocolVersion":     inbox.ProtocolV2,
@@ -162,7 +211,7 @@ func (e *inboxEnv) sendFile(name string, data []byte) (taskID string) {
 		"targetKeyId":         in.Key.ID,
 		"targetKeyGeneration": in.Key.Generation,
 	})
-	req, _ := http.NewRequest(http.MethodPost, e.ts.URL+"/api/devices/"+deviceID+"/inbox/tasks", bytes.NewReader(body))
+	req, _ := http.NewRequest(http.MethodPost, e.ts.URL+"/api/devices/"+deviceID+"/inbox/tasks", bytes.NewReader(create))
 	req.Header.Set("Authorization", "Bearer "+e.token)
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := e.ts.Client().Do(req)

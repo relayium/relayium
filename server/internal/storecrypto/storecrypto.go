@@ -85,12 +85,36 @@ func EncryptManifest(key []byte, m Manifest) ([]byte, error) {
 	return a.Seal(nil, nonce(0), pt, nil), nil
 }
 
-func DecryptManifest(key, ct []byte) (Manifest, error) {
+// SealManifest seals arbitrary manifest plaintext into the seq-0 unit. The
+// inverse of OpenManifest, and there for the same reason: the AEAD stays in one
+// place while the document inside it is the caller's to choose.
+func SealManifest(key, plaintext []byte) ([]byte, error) {
 	a, err := gcm(key)
 	if err != nil {
-		return Manifest{}, err
+		return nil, err
 	}
-	pt, err := a.Open(nil, nonce(0), ct, nil)
+	return a.Seal(nil, nonce(0), plaintext, nil), nil
+}
+
+// OpenManifest opens the seq-0 manifest unit and returns its PLAINTEXT BYTES
+// without interpreting them.
+//
+// The wire is unchanged — this is the same AEAD unit at the same sequence
+// number that EncryptManifest seals. What it exists for is Device Inbox v2,
+// which seals its own dedicated document (`internal/inboxmanifest`) there
+// rather than the shared Stored-Wire manifest. Its receiver needs the bytes;
+// parsing them here would reintroduce exactly the coupling to the shared
+// manifest that a separate codec exists to avoid.
+func OpenManifest(key, ct []byte) ([]byte, error) {
+	a, err := gcm(key)
+	if err != nil {
+		return nil, err
+	}
+	return a.Open(nil, nonce(0), ct, nil)
+}
+
+func DecryptManifest(key, ct []byte) (Manifest, error) {
+	pt, err := OpenManifest(key, ct)
 	if err != nil {
 		return Manifest{}, err
 	}

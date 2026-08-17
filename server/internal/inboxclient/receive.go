@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/relayium/relayium/internal/inbox"
+	"github.com/relayium/relayium/internal/inboxmanifest"
 	"github.com/relayium/relayium/internal/storecrypto"
 )
 
@@ -247,21 +248,34 @@ func zero(b []byte) {
 }
 
 // openManifest decrypts and validates the copied encrypted manifest.
-func (r *Receiver) openManifest(d Delivery, key []byte) (storecrypto.Manifest, int64, error) {
+//
+// The document inside the seal is the DEDICATED Device Inbox v2 manifest
+// (`internal/inboxmanifest`), never the shared Stored-Wire one. The AEAD unit is
+// the same — seq 0, opened with the unsealed content key — and only the
+// plaintext it carries differs, which is why the bytes are opened here and
+// handed to the v2 codec rather than parsed by `storecrypto`.
+func (r *Receiver) openManifest(d Delivery, key []byte) (inboxmanifest.Manifest, int64, error) {
 	enc, err := DecodeEncManifest(d.EncManifest)
 	if err != nil {
-		return storecrypto.Manifest{}, 0, terminal(inbox.TaskErrVerifyFailed, err)
+		return inboxmanifest.Manifest{}, 0, terminal(inbox.TaskErrVerifyFailed, err)
 	}
-	m, err := storecrypto.DecryptManifest(key, enc)
+	raw, err := storecrypto.OpenManifest(key, enc)
 	if err != nil {
 		// A manifest that does not authenticate under the unsealed key means the
 		// manifest and the ciphertext disagree, or one of them was tampered
 		// with. Neither improves on retry.
-		return storecrypto.Manifest{}, 0, classifyCrypto(fmt.Errorf("%w: manifest: %v", ErrDecryptFailed, err))
+		return inboxmanifest.Manifest{}, 0, classifyCrypto(fmt.Errorf("%w: manifest: %v", ErrDecryptFailed, err))
+	}
+	m, err := inboxmanifest.Decode(raw)
+	if err != nil {
+		// The seal opened, so these are the sender's own bytes and every later
+		// attempt reads the same ones. Unknown version, unknown kind, a
+		// non-canonical spelling and a hostile name are all the same verdict.
+		return inboxmanifest.Manifest{}, 0, classifyCrypto(fmt.Errorf("%w: %v", ErrManifestInvalid, err))
 	}
 	total, err := checkManifest(m, d.CiphertextBytes)
 	if err != nil {
-		return storecrypto.Manifest{}, 0, classifyCrypto(err)
+		return inboxmanifest.Manifest{}, 0, classifyCrypto(err)
 	}
 	return m, total, nil
 }
@@ -270,7 +284,7 @@ func (r *Receiver) openManifest(d Delivery, key []byte) (storecrypto.Manifest, i
 // destination can exist. A resumed task keeps its original plan: recomputing it
 // against a directory that now contains this task's own earlier output would
 // walk the collision suffix forward and deliver the same file twice.
-func (r *Receiver) planAndJournal(d Delivery, m storecrypto.Manifest, journals *JournalStore) (Journal, error) {
+func (r *Receiver) planAndJournal(d Delivery, m inboxmanifest.Manifest, journals *JournalStore) (Journal, error) {
 	existing, found, err := journals.Load(d.ID)
 	if err != nil {
 		return Journal{}, retryable(inbox.TaskErrInternal, err)
@@ -285,7 +299,7 @@ func (r *Receiver) planAndJournal(d Delivery, m storecrypto.Manifest, journals *
 		}
 		return existing, nil
 	}
-	plan, err := PlanDestinations(r.Root, m.Files, PathExists)
+	plan, err := PlanDestinations(r.Root, m.Items, PathExists)
 	if err != nil {
 		return Journal{}, classifyFS(err)
 	}

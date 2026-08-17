@@ -7,13 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/relayium/relayium/internal/storecrypto"
+	"github.com/relayium/relayium/internal/inboxmanifest"
 )
 
-func entries(names ...string) []storecrypto.FileEntry {
-	out := make([]storecrypto.FileEntry, len(names))
+func entries(names ...string) []inboxmanifest.Item {
+	out := make([]inboxmanifest.Item, len(names))
 	for i, n := range names {
-		out[i] = storecrypto.FileEntry{Name: n, Size: 1}
+		out[i] = inboxmanifest.Item{Kind: inboxmanifest.KindFile, Name: n, Size: 1}
 	}
 	return out
 }
@@ -46,7 +46,7 @@ func TestPlanRejectsHostileNames(t *testing.T) {
 		{"COM1.log", "windows reserved device name, numbered"},
 		{"", "empty name"},
 		{strings.Repeat("a/", 40) + "deep.txt", "excessive nesting"},
-		{strings.Repeat("x", storecrypto.MaxFileNameBytes+1), "over-long name"},
+		{strings.Repeat("x", inboxmanifest.MaxNameBytes+1), "over-long name"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.why, func(t *testing.T) {

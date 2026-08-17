@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/relayium/relayium/internal/inbox"
-	"github.com/relayium/relayium/internal/storecrypto"
+	"github.com/relayium/relayium/internal/inboxmanifest"
 )
 
 // testClock advances only when the code under test sleeps, so schedules are
@@ -801,7 +801,10 @@ func TestDuplicateNotificationsDoNotDoubleSave(t *testing.T) {
 // ciphertext it sits behind is impossible (every frame adds a length prefix and
 // a tag), so it is a lie central's own byte count catches.
 func TestManifestSizeCrossCheck(t *testing.T) {
-	m := storecrypto.Manifest{Files: []storecrypto.FileEntry{{Name: "a", Size: 1000}}}
+	m := inboxmanifest.Manifest{
+		V:     inboxmanifest.Version,
+		Items: []inboxmanifest.Item{{Kind: inboxmanifest.KindFile, Name: "a", Size: 1000}},
+	}
 	if _, err := checkManifest(m, 100); !errors.Is(err, ErrManifestInvalid) {
 		t.Fatalf("checkManifest = %v, want ErrManifestInvalid", err)
 	}

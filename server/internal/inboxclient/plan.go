@@ -10,7 +10,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/relayium/relayium/internal/storecrypto"
+	"github.com/relayium/relayium/internal/inboxmanifest"
 )
 
 // Destination planning: turning a decrypted, sender-controlled manifest into the
@@ -27,8 +27,9 @@ import (
 // first one exists, so recovery never has to re-derive it from a directory that
 // has since changed.
 
-// Destination-planning bounds. The manifest's own count/size bounds are enforced
-// by storecrypto.ValidateManifest; these are the filesystem-shaped ones.
+// Destination-planning bounds. The manifest's own count/size/name bounds are
+// enforced by inboxmanifest.Validate; these are the filesystem-shaped ones,
+// applied AFTER it and never instead of it.
 const (
 	// maxPathDepth bounds directory nesting created for one task. Deep trees are
 	// legitimate but unbounded depth is a cheap way to exhaust path limits or
@@ -101,7 +102,7 @@ type PlanEntry struct {
 //     manifest is accepted or refused identically everywhere; a name that only
 //     some of a user's devices can receive is worse than one none of them can.
 func sanitizeName(name string) (string, error) {
-	if name == "" || len(name) > storecrypto.MaxFileNameBytes {
+	if name == "" || len(name) > inboxmanifest.MaxNameBytes {
 		return "", fmt.Errorf("%w: bad length", ErrUnsafeName)
 	}
 	if !utf8.ValidString(name) {
@@ -212,7 +213,7 @@ func collisionName(base string, n int) string {
 // the same manifest against the same directory always produces the same plan.
 // That determinism is what lets a resumed task compare its journalled plan
 // against reality instead of guessing.
-func PlanDestinations(root string, files []storecrypto.FileEntry, exists func(string) bool) ([]PlanEntry, error) {
+func PlanDestinations(root string, files []inboxmanifest.Item, exists func(string) bool) ([]PlanEntry, error) {
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
@@ -232,6 +233,12 @@ func PlanDestinations(root string, files []storecrypto.FileEntry, exists func(st
 	occupied := func(p string) bool { return taken[p] || exists(p) }
 
 	for i, f := range files {
+		// The kind is re-checked per item rather than trusted from the header.
+		// A planner that assumed "the caller already refused text" would create a
+		// destination for a nameless item the moment a caller forgot to.
+		if f.Kind != inboxmanifest.KindFile {
+			return nil, fmt.Errorf("entry %d: %w: not a file entry", i, ErrUnsafeName)
+		}
 		rel, err := sanitizeName(f.Name)
 		if err != nil {
 			return nil, fmt.Errorf("entry %d: %w", i, err)

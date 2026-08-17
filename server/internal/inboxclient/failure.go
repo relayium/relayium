@@ -8,7 +8,7 @@ import (
 	"os"
 
 	"github.com/relayium/relayium/internal/inbox"
-	"github.com/relayium/relayium/internal/storecrypto"
+	"github.com/relayium/relayium/internal/inboxmanifest"
 )
 
 // Mapping local reality onto the closed set of things a device may tell central.
@@ -111,6 +111,11 @@ func classifyCrypto(err error) *Failure {
 		return terminal(inbox.TaskErrDecryptFailed, err)
 	case errors.Is(err, ErrTruncatedStream):
 		return retryable(inbox.TaskErrVerifyFailed, err)
+	case errors.Is(err, ErrUnsupportedKind):
+		// Terminal and its OWN code: `unsupported` says "this device does not do
+		// that", which is a truthful answer a sender can act on, while
+		// `verify_failed` would blame bytes that are entirely well formed.
+		return terminal(inbox.TaskErrUnsupported, err)
 	case errors.Is(err, ErrManifestInvalid):
 		return terminal(inbox.TaskErrVerifyFailed, err)
 	case errors.Is(err, ErrDecryptFailed):
@@ -151,6 +156,11 @@ var (
 	// ErrManifestInvalid is a manifest that decrypted but describes something
 	// this device refuses to act on.
 	ErrManifestInvalid = errors.New("relayium inbox: manifest failed validation")
+	// ErrUnsupportedKind is a delivery whose content kind this build does not
+	// receive — today, a text delivery. Kept apart from ErrManifestInvalid
+	// because the manifest is perfectly valid: the mismatch is with this
+	// receiver, and the sender should never have been offered it as a target.
+	ErrUnsupportedKind = errors.New("relayium inbox: this build receives file deliveries only")
 	// ErrInsufficientSpace is the preflight refusal, raised before a byte is
 	// downloaded so a doomed transfer does not fill the disk on its way to
 	// failing.
@@ -165,8 +175,12 @@ var (
 	ErrAbandon = errors.New("relayium inbox: this worker no longer holds the task")
 )
 
-// checkManifest re-validates a decrypted manifest against both storecrypto's
-// structural bounds and this task's own ciphertext size.
+// checkManifest re-validates a decoded v2 manifest against its own bounds, this
+// build's content-kind support, and this task's ciphertext size.
+//
+// The bounds are re-applied even though Decode already applied them: a manifest
+// reaching here through any other path must not be trusted more than one that
+// came off the wire, and the cost is a walk over at most a thousand entries.
 //
 // The size cross-check is the one that matters: a manifest is sender-controlled,
 // and AEAD only proves who wrote it. Declared plaintext can never exceed the
@@ -174,14 +188,18 @@ var (
 // prefix and a Poly1305 tag), so a manifest claiming terabytes behind a 4 KiB
 // object is a lie central can be used to catch — before any space is reserved
 // for it.
-func checkManifest(m storecrypto.Manifest, ciphertextBytes int64) (int64, error) {
-	if err := storecrypto.ValidateManifest(m); err != nil {
+func checkManifest(m inboxmanifest.Manifest, ciphertextBytes int64) (int64, error) {
+	if err := inboxmanifest.Validate(m); err != nil {
 		return 0, fmt.Errorf("%w: %v", ErrManifestInvalid, err)
 	}
-	var total int64
-	for _, f := range m.Files {
-		total += f.Size
+	// The kind gate, and it is deliberately a REFUSAL rather than a fallback.
+	// This build has no message store, announces no inbox.text.v1, and writing a
+	// message into the receive directory as a `.txt` file would deliver a
+	// different thing from the one that was sent.
+	if kind := m.Kind(); kind != inboxmanifest.KindFile {
+		return 0, fmt.Errorf("%w: %q", ErrUnsupportedKind, kind)
 	}
+	total := m.TotalSize()
 	if ciphertextBytes > 0 && total > ciphertextBytes {
 		return 0, fmt.Errorf("%w: declares %d plaintext bytes behind %d ciphertext bytes",
 			ErrManifestInvalid, total, ciphertextBytes)

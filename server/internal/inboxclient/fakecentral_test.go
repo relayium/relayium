@@ -17,8 +17,37 @@ import (
 	"golang.org/x/crypto/nacl/box"
 
 	"github.com/relayium/relayium/internal/inbox"
+	"github.com/relayium/relayium/internal/inboxmanifest"
 	"github.com/relayium/relayium/internal/storecrypto"
 )
+
+// inboxManifestJSON writes a Device Inbox v2 manifest's canonical bytes.
+//
+// Written HERE, by hand, and deliberately NOT through `inboxmanifest.Encode`.
+// That encoder validates, so a fixture built on it could only ever pose as a
+// WELL-BEHAVED sender — and the traversal, reserved-name and unsupported-kind
+// tests all need the opposite: a manifest that authenticates perfectly under the
+// real content key and says something this receiver must refuse. A fixture that
+// cannot lie cannot test a refusal.
+//
+// The escaping is `%q`, which agrees with the canonical form for the ASCII names
+// these fixtures use and is not a second implementation of the codec's rules.
+func inboxManifestJSON(m inboxmanifest.Manifest) []byte {
+	var b strings.Builder
+	fmt.Fprintf(&b, `{"v":%d,"items":[`, m.V)
+	for i, it := range m.Items {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		fmt.Fprintf(&b, `{"kind":%q`, string(it.Kind))
+		if it.Kind == inboxmanifest.KindFile {
+			fmt.Fprintf(&b, `,"name":%q`, it.Name)
+		}
+		fmt.Fprintf(&b, `,"size":%d}`, it.Size)
+	}
+	b.WriteString(`]}`)
+	return []byte(b.String())
+}
 
 // A controllable stand-in for central's Device Inbox endpoints.
 //
@@ -563,6 +592,24 @@ type srcFile struct {
 // bytes a real sender would have produced.
 func (fc *fakeCentral) enqueue(t *testing.T, files ...srcFile) string {
 	t.Helper()
+	items := make([]inboxmanifest.Item, 0, len(files))
+	payload := make([][]byte, 0, len(files))
+	for _, f := range files {
+		items = append(items, inboxmanifest.Item{
+			Kind: inboxmanifest.KindFile, Name: f.Name, Size: int64(len(f.Data)),
+		})
+		payload = append(payload, f.Data)
+	}
+	return fc.enqueueSealed(t, inboxManifestJSON(inboxmanifest.Manifest{
+		V: inboxmanifest.Version, Items: items,
+	}), payload)
+}
+
+// enqueueSealed is the same real delivery with the manifest BYTES chosen by the
+// caller, so a test can pose as a sender this receiver must refuse: a v1-shaped
+// document, a text delivery, a traversal name, a non-canonical spelling.
+func (fc *fakeCentral) enqueueSealed(t *testing.T, manifest []byte, payload [][]byte) string {
+	t.Helper()
 	fc.mu.Lock()
 	active := fc.activeKeyLocked()
 	fc.mu.Unlock()
@@ -580,20 +627,16 @@ func (fc *fakeCentral) enqueue(t *testing.T, files ...srcFile) string {
 	if err != nil {
 		t.Fatalf("content key: %v", err)
 	}
-	m := storecrypto.Manifest{}
-	for _, f := range files {
-		m.Files = append(m.Files, storecrypto.FileEntry{Name: f.Name, Size: int64(len(f.Data))})
-	}
-	encManifest, err := storecrypto.EncryptManifest(key, m)
+	encManifest, err := storecrypto.SealManifest(key, manifest)
 	if err != nil {
 		t.Fatalf("encrypt manifest: %v", err)
 	}
 	var blob []byte
 	seq := uint64(1)
-	for _, f := range files {
-		for off := 0; off < len(f.Data); off += storecrypto.ChunkSize {
-			end := min(off+storecrypto.ChunkSize, len(f.Data))
-			frame, err := storecrypto.FrameChunk(key, seq, f.Data[off:end])
+	for _, data := range payload {
+		for off := 0; off < len(data); off += storecrypto.ChunkSize {
+			end := min(off+storecrypto.ChunkSize, len(data))
+			frame, err := storecrypto.FrameChunk(key, seq, data[off:end])
 			if err != nil {
 				t.Fatalf("frame: %v", err)
 			}
@@ -638,9 +681,10 @@ func (fc *fakeCentral) enqueueOversized(t *testing.T, declared int64) string {
 	var pub [32]byte
 	copy(pub[:], pubRaw)
 	key, _ := storecrypto.GenerateKey()
-	encManifest, err := storecrypto.EncryptManifest(key, storecrypto.Manifest{
-		Files: []storecrypto.FileEntry{{Name: "huge.bin", Size: declared}},
-	})
+	encManifest, err := storecrypto.SealManifest(key, inboxManifestJSON(inboxmanifest.Manifest{
+		V:     inboxmanifest.Version,
+		Items: []inboxmanifest.Item{{Kind: inboxmanifest.KindFile, Name: "huge.bin", Size: declared}},
+	}))
 	if err != nil {
 		t.Fatalf("encrypt manifest: %v", err)
 	}
