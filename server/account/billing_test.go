@@ -16,6 +16,7 @@ import (
 // input and CreatePortalSession customer id, and returns canned URLs so
 // handlers can be exercised without touching the network.
 type fakeBiller struct {
+	checkoutID  string
 	checkoutURL string
 	portalURL   string
 
@@ -84,10 +85,14 @@ func (f *fakeBiller) CancelSubscription(ctx context.Context, subID string, refun
 	return nil
 }
 
-func (f *fakeBiller) CreateCheckoutSession(ctx context.Context, in CheckoutInput) (string, error) {
+func (f *fakeBiller) CreateCheckoutSession(ctx context.Context, in CheckoutInput) (CheckoutSession, error) {
 	f.checkoutCalls++
 	f.lastCheckout = in
-	return f.checkoutURL, nil
+	id := f.checkoutID
+	if id == "" {
+		id = "cs_test_relayium"
+	}
+	return CheckoutSession{ID: id, URL: f.checkoutURL}, nil
 }
 
 type checkoutProviderRefFailStore struct{ Store }
@@ -106,7 +111,7 @@ func (s checkoutProviderRefFailStore) DispatchBillingPurchase(ctx context.Contex
 	return store.DispatchBillingPurchase(ctx, authority, productID, now)
 }
 
-func (s checkoutProviderRefFailStore) SetBillingPurchaseProviderRef(context.Context, string, string, string) error {
+func (s checkoutProviderRefFailStore) SetBillingPurchaseProviderSession(context.Context, string, string, string, string) error {
 	return errors.New("injected provider ref persistence failure")
 }
 

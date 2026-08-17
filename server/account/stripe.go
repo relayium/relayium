@@ -30,7 +30,7 @@ type Biller interface {
 	// CancelSubscription cancels a subscription immediately; refund=true also fully
 	// refunds its latest invoice. Used to reap a duplicate subscription.
 	CancelSubscription(ctx context.Context, subID string, refund bool) error
-	CreateCheckoutSession(ctx context.Context, in CheckoutInput) (url string, err error)
+	CreateCheckoutSession(ctx context.Context, in CheckoutInput) (CheckoutSession, error)
 	CreatePortalSession(ctx context.Context, customerID, returnURL string) (url string, err error)
 	// ChangeSubscriptionPlan switches the customer's existing active subscription
 	// to newPriceID in place, immediately and prorated — used for UPGRADES, where
@@ -91,7 +91,12 @@ type ChangePreview struct {
 // an existing Stripe customer, CustomerEmail lets Stripe create one (and the
 // webhook binds it back via ClientRefUserID).
 type CheckoutInput struct {
-	PriceID, CustomerID, CustomerEmail, ClientRefUserID, SuccessURL, CancelURL, IdempotencyKey string
+	PriceID, CustomerID, CustomerEmail, ClientRefUserID, BillingAttemptID, SuccessURL, CancelURL, IdempotencyKey string
+}
+
+type CheckoutSession struct {
+	ID  string
+	URL string
 }
 
 // WebhookEvent is the minimal projection of a verified Stripe event that
@@ -111,8 +116,9 @@ type WebhookEvent struct {
 	// before (or without) the checkout.session.completed event that normally
 	// does the binding — Stripe does not guarantee delivery order. Empty when
 	// metadata is absent (e.g. checkout.session.completed itself).
-	MetadataUserID   string
-	CurrentPeriodEnd int64
+	MetadataUserID, MetadataBillingAttemptID string
+	CheckoutSessionID                        string
+	CurrentPeriodEnd                         int64
 	// Created is the Stripe event's top-level `created` (unix secs) — the event
 	// emission time, used by the webhook's ordering guard to drop a stale
 	// (re)delivered event that would otherwise revert newer subscription state.
@@ -294,7 +300,8 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 				Status            string `json:"status"`
 				CurrentPeriodEnd  int64  `json:"current_period_end"`
 				Metadata          *struct {
-					UserID string `json:"user_id"`
+					UserID           string `json:"user_id"`
+					BillingAttemptID string `json:"billing_attempt_id"`
 				} `json:"metadata"`
 				Items *struct {
 					Data []struct {
@@ -344,6 +351,10 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 	}
 	if md := envelope.Data.Object.Metadata; md != nil {
 		ev.MetadataUserID = md.UserID
+		ev.MetadataBillingAttemptID = md.BillingAttemptID
+	}
+	if envelope.Data.Object.Object == "checkout.session" {
+		ev.CheckoutSessionID = envelope.Data.Object.ID
 	}
 	if items := envelope.Data.Object.Items; items != nil && len(items.Data) > 0 {
 		if items.Data[0].Price != nil {
@@ -372,7 +383,11 @@ func (c *stripeClient) canonicalSubscription(ctx context.Context, subID string) 
 		ID               string `json:"id"`
 		Status           string `json:"status"`
 		CurrentPeriodEnd int64  `json:"current_period_end"`
-		Items            struct {
+		Metadata         struct {
+			BillingAttemptID string `json:"billing_attempt_id"`
+			UserID           string `json:"user_id"`
+		} `json:"metadata"`
+		Items struct {
 			Data []struct {
 				Price struct {
 					ID string `json:"id"`
@@ -384,7 +399,7 @@ func (c *stripeClient) canonicalSubscription(ctx context.Context, subID string) 
 	if err := json.Unmarshal(body, &sub); err != nil {
 		return SubscriptionInfo{}, false, err
 	}
-	info := SubscriptionInfo{ID: sub.ID, Status: sub.Status, CurrentPeriodEnd: sub.CurrentPeriodEnd}
+	info := SubscriptionInfo{ID: sub.ID, Status: sub.Status, CurrentPeriodEnd: sub.CurrentPeriodEnd, BillingAttemptID: sub.Metadata.BillingAttemptID, MetadataUserID: sub.Metadata.UserID}
 	if len(sub.Items.Data) > 0 {
 		info.PriceID = sub.Items.Data[0].Price.ID
 		if info.CurrentPeriodEnd == 0 {
@@ -398,7 +413,10 @@ var ErrPaymentPending = errors.New("stripe: payment incomplete; subscription cha
 
 // CreateCheckoutSession creates a subscription-mode Stripe Checkout Session
 // and returns its hosted URL for the browser to redirect to.
-func (c *stripeClient) CreateCheckoutSession(ctx context.Context, in CheckoutInput) (string, error) {
+func (c *stripeClient) CreateCheckoutSession(ctx context.Context, in CheckoutInput) (CheckoutSession, error) {
+	if in.BillingAttemptID == "" {
+		return CheckoutSession{}, errors.New("stripe: billing attempt id is required")
+	}
 	form := url.Values{}
 	form.Set("mode", "subscription")
 	form.Set("line_items[0][price]", in.PriceID)
@@ -406,7 +424,9 @@ func (c *stripeClient) CreateCheckoutSession(ctx context.Context, in CheckoutInp
 	form.Set("success_url", in.SuccessURL)
 	form.Set("cancel_url", in.CancelURL)
 	form.Set("client_reference_id", in.ClientRefUserID)
+	form.Set("metadata[billing_attempt_id]", in.BillingAttemptID)
 	form.Set("subscription_data[metadata][user_id]", in.ClientRefUserID)
+	form.Set("subscription_data[metadata][billing_attempt_id]", in.BillingAttemptID)
 	if in.CustomerID != "" {
 		form.Set("customer", in.CustomerID)
 	} else {
@@ -416,7 +436,18 @@ func (c *stripeClient) CreateCheckoutSession(ctx context.Context, in CheckoutInp
 		// would 400 every first-time subscriber's checkout.
 		form.Set("customer_email", in.CustomerEmail)
 	}
-	return c.postForSessionURLKeyed(ctx, "/v1/checkout/sessions", form, in.IdempotencyKey)
+	body, err := c.requestKeyed(ctx, http.MethodPost, "/v1/checkout/sessions", form, in.IdempotencyKey)
+	if err != nil {
+		return CheckoutSession{}, err
+	}
+	var out CheckoutSession
+	if err := json.Unmarshal(body, &out); err != nil {
+		return CheckoutSession{}, fmt.Errorf("stripe: create checkout session: parse response: %w", err)
+	}
+	if !strings.HasPrefix(out.ID, "cs_") || out.URL == "" {
+		return CheckoutSession{}, errors.New("stripe: checkout session response is incomplete")
+	}
+	return out, nil
 }
 
 // SubscriptionInfo is a live subscription's identity for the webhook dedup:
@@ -428,6 +459,8 @@ type SubscriptionInfo struct {
 	PriceID          string
 	Status           string
 	CurrentPeriodEnd int64
+	BillingAttemptID string
+	MetadataUserID   string
 }
 
 // ListActiveSubscriptions returns the customer's active/trialing subscriptions

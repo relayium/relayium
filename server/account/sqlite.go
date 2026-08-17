@@ -1032,10 +1032,14 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
  product_id TEXT NOT NULL,
  state TEXT NOT NULL CHECK(state IN ('prepared','dispatched','resolved')),
  provider_ref TEXT NOT NULL DEFAULT '',
+ provider_session_id TEXT NOT NULL DEFAULT '',
+ provider_subscription_id TEXT NOT NULL DEFAULT '',
  epoch INTEGER NOT NULL,
  created_at INTEGER NOT NULL)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_billing_purchase_attempt_unresolved
  ON billing_purchase_attempts(user_id,epoch) WHERE state IN ('prepared','dispatched')`,
+		`ALTER TABLE billing_purchase_attempts ADD COLUMN provider_session_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE billing_purchase_attempts ADD COLUMN provider_subscription_id TEXT NOT NULL DEFAULT ''`,
 		`CREATE TABLE IF NOT EXISTS stripe_webhook_events (
 		 event_id TEXT PRIMARY KEY,
 		 event_type TEXT NOT NULL,

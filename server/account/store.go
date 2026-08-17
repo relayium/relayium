@@ -1602,6 +1602,7 @@ type Store interface {
 	// user's effective entitlement projection, in one transaction. A stale
 	// event for its provider changes nothing and reports Applied=false.
 	ApplySubscriptionSource(ctx context.Context, ev SourceEvent) (SubscriptionApply, error)
+	ApplyAuthorizedStripeLifecycle(ctx context.Context, ev SourceEvent) (SubscriptionApply, error)
 	// GetSubscriptionSource returns one provider's recorded state for a user.
 	GetSubscriptionSource(ctx context.Context, userID, provider string) (SubscriptionSource, bool, error)
 	// ListSubscriptionSources returns every provider row a user holds.

@@ -52,12 +52,12 @@ func TestVerifyWebhookMultipleV1OneValid(t *testing.T) {
 
 func TestVerifyWebhookParsesEventProjection(t *testing.T) {
 	c := NewStripeClient("sk_test", "whsec_abc", "")
-	body := `{"type":"checkout.session.completed","data":{"object":{"customer":"cus_1","subscription":"sub_1","client_reference_id":"user_42"}}}`
+	body := `{"type":"checkout.session.completed","data":{"object":{"id":"cs_1","object":"checkout.session","customer":"cus_1","subscription":"sub_1","client_reference_id":"user_42","metadata":{"billing_attempt_id":"attempt_42"}}}}`
 	ev, err := c.VerifyWebhook([]byte(body), signStripe("whsec_abc", body, 3000), 3000)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ev.Type != "checkout.session.completed" || ev.CustomerID != "cus_1" || ev.ClientRefUserID != "user_42" {
+	if ev.Type != "checkout.session.completed" || ev.CustomerID != "cus_1" || ev.ClientRefUserID != "user_42" || ev.CheckoutSessionID != "cs_1" || ev.MetadataBillingAttemptID != "attempt_42" {
 		t.Fatalf("bad projection: %+v", ev)
 	}
 }
@@ -203,6 +203,12 @@ func TestCreateCheckoutSessionRequestShape(t *testing.T) {
 		if got := r.Form.Get("subscription_data[metadata][user_id]"); got != "user_42" {
 			t.Errorf("subscription_data[metadata][user_id] = %q, want user_42", got)
 		}
+		if got := r.Form.Get("metadata[billing_attempt_id]"); got != "attempt_42" {
+			t.Errorf("metadata[billing_attempt_id] = %q, want attempt_42", got)
+		}
+		if got := r.Form.Get("subscription_data[metadata][billing_attempt_id]"); got != "attempt_42" {
+			t.Errorf("subscription_data metadata attempt = %q, want attempt_42", got)
+		}
 		// CustomerID left empty in this test, so the client must fall back to
 		// the customer_email branch rather than sending an empty "customer".
 		if got := r.Form.Get("customer_email"); got != "user@example.com" {
@@ -218,7 +224,7 @@ func TestCreateCheckoutSessionRequestShape(t *testing.T) {
 			t.Errorf("customer = %q, want empty (CustomerID unset)", got)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"url":%q}`, cannedURL)
+		fmt.Fprintf(w, `{"id":"cs_test_abc","url":%q}`, cannedURL)
 	}))
 	defer srv.Close()
 
@@ -226,18 +232,19 @@ func TestCreateCheckoutSessionRequestShape(t *testing.T) {
 	c.base = srv.URL
 
 	got, err := c.CreateCheckoutSession(context.Background(), CheckoutInput{
-		PriceID:         "price_pro_monthly",
-		CustomerEmail:   "user@example.com",
-		ClientRefUserID: "user_42",
-		SuccessURL:      "https://relayium.test/success",
-		CancelURL:       "https://relayium.test/cancel",
-		IdempotencyKey:  "checkout:attempt_42",
+		PriceID:          "price_pro_monthly",
+		CustomerEmail:    "user@example.com",
+		ClientRefUserID:  "user_42",
+		BillingAttemptID: "attempt_42",
+		SuccessURL:       "https://relayium.test/success",
+		CancelURL:        "https://relayium.test/cancel",
+		IdempotencyKey:   "checkout:attempt_42",
 	})
 	if err != nil {
 		t.Fatalf("CreateCheckoutSession: %v", err)
 	}
-	if got != cannedURL {
-		t.Fatalf("url = %q, want %q", got, cannedURL)
+	if got.ID != "cs_test_abc" || got.URL != cannedURL {
+		t.Fatalf("session = %+v", got)
 	}
 }
 
@@ -259,7 +266,7 @@ func TestCreateCheckoutSessionWithCustomerID(t *testing.T) {
 			t.Errorf("customer_creation = %q, want empty (CustomerID set)", got)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"url":%q}`, cannedURL)
+		fmt.Fprintf(w, `{"id":"cs_test_xyz","url":%q}`, cannedURL)
 	}))
 	defer srv.Close()
 
@@ -267,17 +274,18 @@ func TestCreateCheckoutSessionWithCustomerID(t *testing.T) {
 	c.base = srv.URL
 
 	got, err := c.CreateCheckoutSession(context.Background(), CheckoutInput{
-		PriceID:         "price_pro_monthly",
-		CustomerID:      "cus_existing",
-		ClientRefUserID: "user_42",
-		SuccessURL:      "https://relayium.test/success",
-		CancelURL:       "https://relayium.test/cancel",
+		PriceID:          "price_pro_monthly",
+		CustomerID:       "cus_existing",
+		ClientRefUserID:  "user_42",
+		BillingAttemptID: "attempt_existing",
+		SuccessURL:       "https://relayium.test/success",
+		CancelURL:        "https://relayium.test/cancel",
 	})
 	if err != nil {
 		t.Fatalf("CreateCheckoutSession: %v", err)
 	}
-	if got != cannedURL {
-		t.Fatalf("url = %q, want %q", got, cannedURL)
+	if got.ID != "cs_test_xyz" || got.URL != cannedURL {
+		t.Fatalf("session = %+v", got)
 	}
 }
 
@@ -360,17 +368,18 @@ func TestCreateCheckoutSessionNon2xxError(t *testing.T) {
 	c.base = srv.URL
 
 	got, err := c.CreateCheckoutSession(context.Background(), CheckoutInput{
-		PriceID:         "price_pro_monthly",
-		CustomerEmail:   "user@example.com",
-		ClientRefUserID: "user_42",
-		SuccessURL:      "https://relayium.test/success",
-		CancelURL:       "https://relayium.test/cancel",
+		PriceID:          "price_pro_monthly",
+		CustomerEmail:    "user@example.com",
+		ClientRefUserID:  "user_42",
+		BillingAttemptID: "attempt_error",
+		SuccessURL:       "https://relayium.test/success",
+		CancelURL:        "https://relayium.test/cancel",
 	})
 	if err == nil {
 		t.Fatal("expected error on non-2xx response, got nil")
 	}
-	if got != "" {
-		t.Fatalf("url = %q, want empty on error (no silent success)", got)
+	if got != (CheckoutSession{}) {
+		t.Fatalf("session = %+v, want empty on error (no silent success)", got)
 	}
 }
 

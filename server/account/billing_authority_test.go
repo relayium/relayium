@@ -221,7 +221,7 @@ func TestAuthorizedAppleLifecycleRejectsEnvironmentDrift(t *testing.T) {
 	}
 }
 
-func TestAuthorizedStripeLifecycleResolvesAttemptAndBlocksApple(t *testing.T) {
+func TestAuthorizedStripeLifecycleWithoutAttemptIdentityLeavesAttemptOpenAndBlocksApple(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 	u, _ := store.UpsertUserByEmail(ctx, "authority-stripe-apply@example.test", "")
@@ -238,10 +238,67 @@ func TestAuthorizedStripeLifecycleResolvesAttemptAndBlocksApple(t *testing.T) {
 		t.Fatalf("stripe apply=%+v err=%v", result, err)
 	}
 	var state string
-	if err := store.db.QueryRowContext(ctx, `SELECT state FROM billing_purchase_attempts WHERE id=?`, attempt.ID).Scan(&state); err != nil || state != "resolved" {
+	if err := store.db.QueryRowContext(ctx, `SELECT state FROM billing_purchase_attempts WHERE id=?`, attempt.ID).Scan(&state); err != nil || state != "dispatched" {
 		t.Fatalf("attempt state=%q err=%v", state, err)
+	}
+	retry, created, err := store.DispatchBillingPurchase(ctx, authority, "pro:monthly", 103)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created || retry.ID != attempt.ID {
+		t.Fatalf("unrelated lifecycle released attempt A: retry=%+v created=%v", retry, created)
 	}
 	if _, err := store.AcquireBillingAuthority(ctx, BillingAuthorityRequest{UserID: u.ID, Provider: ProviderApple, ExternalScope: testBundleIOS, AppleAccountToken: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", Now: 103}); !errors.Is(err, ErrBillingAuthorityConflict) {
 		t.Fatalf("Apple crossed Stripe authority: %v", err)
+	}
+}
+
+func TestAuthorizedStripeLifecycleResolvesOnlyMatchingPersistedCheckout(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	u, _ := store.UpsertUserByEmail(ctx, "authority-stripe-match@example.test", "")
+	authority, err := store.AcquireBillingAuthority(ctx, BillingAuthorityRequest{UserID: u.ID, Provider: ProviderStripe, Now: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempt, _, err := store.DispatchBillingPurchase(ctx, authority, "price_pro_monthly", 101)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetBillingPurchaseProviderSession(ctx, u.ID, attempt.ID, "cs_match", "https://checkout.stripe.test/match"); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, attemptID := range map[string]string{"missing": "", "wrong": "attempt_other"} {
+		t.Run(name, func(t *testing.T) {
+			result, err := store.ApplyAuthorizedStripeLifecycle(ctx, SourceEvent{
+				UserID: u.ID, Provider: ProviderStripe, PlanID: "pro", Status: "active", Cycle: "monthly",
+				PeriodEnd: 1000, ExternalID: "sub_match", EventAt: 200, Now: 102,
+				BillingAttemptID: attemptID, BillingProductID: "price_pro_monthly",
+			})
+			if err != nil || !result.Applied {
+				t.Fatalf("apply=%+v err=%v", result, err)
+			}
+			var state string
+			if err := store.db.QueryRowContext(ctx, `SELECT state FROM billing_purchase_attempts WHERE id=?`, attempt.ID).Scan(&state); err != nil || state != "dispatched" {
+				t.Fatalf("attempt state=%q err=%v", state, err)
+			}
+		})
+	}
+
+	result, err := store.ApplyAuthorizedStripeLifecycle(ctx, SourceEvent{
+		UserID: u.ID, Provider: ProviderStripe, PlanID: "pro", Status: "active", Cycle: "monthly",
+		PeriodEnd: 1000, ExternalID: "sub_match", EventAt: 201, Now: 103,
+		BillingAttemptID: attempt.ID, BillingProductID: "price_pro_monthly",
+	})
+	if err != nil || !result.Applied {
+		t.Fatalf("matching apply=%+v err=%v", result, err)
+	}
+	var state, subscriptionID string
+	if err := store.db.QueryRowContext(ctx, `SELECT state,provider_subscription_id FROM billing_purchase_attempts WHERE id=?`, attempt.ID).Scan(&state, &subscriptionID); err != nil {
+		t.Fatal(err)
+	}
+	if state != "resolved" || subscriptionID != "sub_match" {
+		t.Fatalf("matching canonical fact did not resolve: state=%q subscription=%q", state, subscriptionID)
 	}
 }

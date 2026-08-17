@@ -79,7 +79,7 @@ func (s *Service) handleBillingCheckout(w http.ResponseWriter, r *http.Request, 
 	authorities, ok := s.Store().(interface {
 		AcquireBillingAuthority(context.Context, BillingAuthorityRequest) (BillingAuthority, error)
 		DispatchBillingPurchase(context.Context, BillingAuthority, string, int64) (BillingPurchaseAttempt, bool, error)
-		SetBillingPurchaseProviderRef(context.Context, string, string, string) error
+		SetBillingPurchaseProviderSession(context.Context, string, string, string, string) error
 	})
 	if !ok {
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -125,8 +125,8 @@ func (s *Service) handleBillingCheckout(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 	if !created {
-		if attempt.ProviderRef != "" {
-			httpx.WriteJSON(w, http.StatusOK, map[string]string{"url": attempt.ProviderRef})
+		if attempt.ProviderSessionID != "" && attempt.ProviderURL != "" {
+			httpx.WriteJSON(w, http.StatusOK, map[string]string{"url": attempt.ProviderURL})
 			return
 		}
 		// The provider call may already have succeeded while its response or our
@@ -135,24 +135,25 @@ func (s *Service) handleBillingCheckout(w http.ResponseWriter, r *http.Request, 
 		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "billing_reconciliation_required"})
 		return
 	}
-	url, err := s.biller.CreateCheckoutSession(r.Context(), CheckoutInput{
-		PriceID:         priceID,
-		CustomerID:      customerID,
-		CustomerEmail:   u.Email,
-		ClientRefUserID: u.ID,
-		SuccessURL:      s.Cfg().BaseURL + "/me?billing=success",
-		CancelURL:       s.Cfg().BaseURL + "/me?billing=cancel",
-		IdempotencyKey:  "checkout:" + attempt.ID,
+	session, err := s.biller.CreateCheckoutSession(r.Context(), CheckoutInput{
+		PriceID:          priceID,
+		CustomerID:       customerID,
+		CustomerEmail:    u.Email,
+		ClientRefUserID:  u.ID,
+		BillingAttemptID: attempt.ID,
+		SuccessURL:       s.Cfg().BaseURL + "/me?billing=success",
+		CancelURL:        s.Cfg().BaseURL + "/me?billing=cancel",
+		IdempotencyKey:   "checkout:" + attempt.ID,
 	})
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	if err := authorities.SetBillingPurchaseProviderRef(r.Context(), u.ID, attempt.ID, url); err != nil {
+	if err := authorities.SetBillingPurchaseProviderSession(r.Context(), u.ID, attempt.ID, session.ID, session.URL); err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]string{"url": url})
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"url": session.URL})
 }
 
 // writeAlreadySubscribed is the one double-purchase refusal. The `provider`
@@ -1032,6 +1033,8 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 			}
 			if info.ID != "" {
 				ev.SubscriptionID, ev.PriceID, ev.Status, ev.CurrentPeriodEnd = info.ID, info.PriceID, info.Status, info.CurrentPeriodEnd
+				ev.MetadataBillingAttemptID = info.BillingAttemptID
+				ev.MetadataUserID = info.MetadataUserID
 			}
 		}
 		ev.Type = "customer.subscription.updated"
@@ -1053,6 +1056,15 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 			if _, err := s.Store().SetUserStripeCustomerIfEmpty(ctx, ev.ClientRefUserID, ev.CustomerID); err != nil {
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
+			}
+			if ev.MetadataBillingAttemptID != "" {
+				binder, ok := s.Store().(interface {
+					BindStripePurchaseSubscription(context.Context, string, string, string, string) error
+				})
+				if !ok || binder.BindStripePurchaseSubscription(ctx, ev.ClientRefUserID, ev.MetadataBillingAttemptID, ev.CheckoutSessionID, ev.SubscriptionID) != nil {
+					http.Error(w, "server error", http.StatusInternalServerError)
+					return
+				}
 			}
 		}
 		w.WriteHeader(http.StatusOK)
@@ -1129,7 +1141,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 			// The dedup/reconcile path below is skipped for the same reason it
 			// always was: reconcileSubscriptions cancels and refunds real
 			// subscriptions, and a comped account is not its responsibility.
-			if err := s.Store().SetUserSubscription(ctx, u.ID, planID, ev.Status, ev.CurrentPeriodEnd, "stripe", cycle, s.Now().Unix(), ev.Created); err != nil {
+			if err := s.applyStripeLifecycle(ctx, u.ID, planID, cycle, ev); err != nil {
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			}
@@ -1173,7 +1185,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		if err := s.Store().SetUserSubscription(ctx, u.ID, planID, ev.Status, ev.CurrentPeriodEnd, "stripe", cycle, s.Now().Unix(), ev.Created); err != nil {
+		if err := s.applyStripeLifecycle(ctx, u.ID, planID, cycle, ev); err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
@@ -1208,7 +1220,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 			// Admin comp wins: the projection records the cancellation for
 			// visibility and keeps the comped plan, while Stripe's own row goes to
 			// free/canceled so a later fallback is truthful.
-			if err := s.Store().SetUserSubscription(ctx, u.ID, "free", "canceled", ev.CurrentPeriodEnd, "stripe", "", s.Now().Unix(), ev.Created); err != nil {
+			if err := s.applyStripeLifecycle(ctx, u.ID, "free", "", ev); err != nil {
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			}
@@ -1223,7 +1235,7 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		}
 		// The canonical (or an unknown) subscription was canceled → free + clear it.
 		s.clearCanonicalSubscription(ctx, u.ID)
-		if err := s.Store().SetUserSubscription(ctx, u.ID, "free", "canceled", ev.CurrentPeriodEnd, "stripe", "", s.Now().Unix(), ev.Created); err != nil {
+		if err := s.applyStripeLifecycle(ctx, u.ID, "free", "", ev); err != nil {
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
@@ -1239,6 +1251,16 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		// Unrecognized event type: acknowledge so Stripe doesn't retry.
 		w.WriteHeader(http.StatusOK)
 	}
+}
+
+func (s *Service) applyStripeLifecycle(ctx context.Context, userID, planID, cycle string, ev WebhookEvent) error {
+	_, err := s.Store().ApplyAuthorizedStripeLifecycle(ctx, SourceEvent{
+		UserID: userID, Provider: ProviderStripe, PlanID: planID, Status: ev.Status,
+		Cycle: cycle, PeriodEnd: ev.CurrentPeriodEnd, ExternalID: ev.SubscriptionID,
+		EventAt: ev.Created, Now: s.Now().Unix(), BillingAttemptID: ev.MetadataBillingAttemptID,
+		BillingProductID: ev.PriceID,
+	})
+	return err
 }
 
 type stripeWebhookWriter struct {

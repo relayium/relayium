@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/relayium/relayium/authx"
 )
@@ -154,17 +155,24 @@ func (s *SQLiteStore) ApplyAuthorizedStripeLifecycle(ctx context.Context, ev Sou
 	if err != nil {
 		return SubscriptionApply{}, err
 	}
-	if result.Applied {
-		if _, err := tx.ExecContext(ctx, `UPDATE billing_purchase_attempts SET state='resolved' WHERE user_id=? AND epoch=? AND provider=? AND state IN ('prepared','dispatched')`, ev.UserID, authority.Epoch, ProviderStripe); err != nil {
+	if result.Applied && ev.BillingAttemptID != "" && ev.ExternalID != "" {
+		res, err := tx.ExecContext(ctx, `UPDATE billing_purchase_attempts
+ SET state='resolved', provider_subscription_id=CASE WHEN provider_subscription_id='' THEN ? ELSE provider_subscription_id END
+ WHERE id=? AND user_id=? AND epoch=? AND provider=? AND state='dispatched'
+   AND provider_session_id<>''
+   AND (provider_subscription_id='' OR provider_subscription_id=?)
+   AND (?='' OR product_id=?)`, ev.ExternalID, ev.BillingAttemptID, ev.UserID, authority.Epoch, ProviderStripe, ev.ExternalID, ev.BillingProductID, ev.BillingProductID)
+		if err != nil {
 			return SubscriptionApply{}, err
 		}
+		_, _ = res.RowsAffected()
 	}
 	return result, tx.Commit()
 }
 
 type BillingPurchaseAttempt struct {
-	ID, UserID, Provider, ExternalScope, ProductID, State, ProviderRef string
-	Epoch, CreatedAt                                                   int64
+	ID, UserID, Provider, ExternalScope, ProductID, State, ProviderURL, ProviderSessionID, ProviderSubscriptionID string
+	Epoch, CreatedAt                                                                                              int64
 }
 
 // DispatchBillingPurchase atomically grants the one external dispatch allowed
@@ -185,8 +193,8 @@ func (s *SQLiteStore) DispatchBillingPurchase(ctx context.Context, authority Bil
 		return BillingPurchaseAttempt{}, false, ErrBillingAuthorityConflict
 	}
 	var out BillingPurchaseAttempt
-	err = tx.QueryRowContext(ctx, `SELECT id,user_id,provider,external_scope,product_id,state,provider_ref,epoch,created_at FROM billing_purchase_attempts WHERE user_id=? AND epoch=? AND state IN ('prepared','dispatched')`, authority.UserID, authority.Epoch).
-		Scan(&out.ID, &out.UserID, &out.Provider, &out.ExternalScope, &out.ProductID, &out.State, &out.ProviderRef, &out.Epoch, &out.CreatedAt)
+	err = tx.QueryRowContext(ctx, `SELECT id,user_id,provider,external_scope,product_id,state,provider_ref,provider_session_id,provider_subscription_id,epoch,created_at FROM billing_purchase_attempts WHERE user_id=? AND epoch=? AND state IN ('prepared','dispatched')`, authority.UserID, authority.Epoch).
+		Scan(&out.ID, &out.UserID, &out.Provider, &out.ExternalScope, &out.ProductID, &out.State, &out.ProviderURL, &out.ProviderSessionID, &out.ProviderSubscriptionID, &out.Epoch, &out.CreatedAt)
 	if err == nil {
 		return out, false, nil
 	}
@@ -200,11 +208,11 @@ func (s *SQLiteStore) DispatchBillingPurchase(ctx context.Context, authority Bil
 	return out, true, tx.Commit()
 }
 
-func (s *SQLiteStore) SetBillingPurchaseProviderRef(ctx context.Context, userID, attemptID, ref string) error {
-	if ref == "" {
-		return errors.New("account: empty billing provider reference")
+func (s *SQLiteStore) SetBillingPurchaseProviderSession(ctx context.Context, userID, attemptID, sessionID, checkoutURL string) error {
+	if !strings.HasPrefix(sessionID, "cs_") || checkoutURL == "" {
+		return errors.New("account: invalid billing provider session")
 	}
-	res, err := s.db.ExecContext(ctx, `UPDATE billing_purchase_attempts SET provider_ref=? WHERE id=? AND user_id=? AND state='dispatched' AND (provider_ref='' OR provider_ref=?)`, ref, attemptID, userID, ref)
+	res, err := s.db.ExecContext(ctx, `UPDATE billing_purchase_attempts SET provider_session_id=?,provider_ref=? WHERE id=? AND user_id=? AND state='dispatched' AND (provider_session_id='' OR provider_session_id=?) AND (provider_ref='' OR provider_ref=?)`, sessionID, checkoutURL, attemptID, userID, sessionID, checkoutURL)
 	if err != nil {
 		return err
 	}
@@ -214,6 +222,24 @@ func (s *SQLiteStore) SetBillingPurchaseProviderRef(ctx context.Context, userID,
 	}
 	if n != 1 {
 		return ErrBillingAuthorityConflict
+	}
+	return nil
+}
+
+func (s *SQLiteStore) BindStripePurchaseSubscription(ctx context.Context, userID, attemptID, sessionID, subscriptionID string) error {
+	if attemptID == "" || !strings.HasPrefix(sessionID, "cs_") || !strings.HasPrefix(subscriptionID, "sub_") {
+		return ErrBillingPurchaseAmbiguous
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE billing_purchase_attempts SET provider_subscription_id=? WHERE id=? AND user_id=? AND provider='stripe' AND state='dispatched' AND provider_session_id=? AND (provider_subscription_id='' OR provider_subscription_id=?)`, subscriptionID, attemptID, userID, sessionID, subscriptionID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return ErrBillingPurchaseAmbiguous
 	}
 	return nil
 }
@@ -236,8 +262,8 @@ func (s *SQLiteStore) PrepareBillingPurchase(ctx context.Context, authority Bill
 		return BillingPurchaseAttempt{}, false, ErrBillingAuthorityConflict
 	}
 	var out BillingPurchaseAttempt
-	err = tx.QueryRowContext(ctx, `SELECT id,user_id,provider,external_scope,product_id,state,provider_ref,epoch,created_at FROM billing_purchase_attempts WHERE user_id=? AND epoch=? AND state IN ('prepared','dispatched')`, authority.UserID, authority.Epoch).
-		Scan(&out.ID, &out.UserID, &out.Provider, &out.ExternalScope, &out.ProductID, &out.State, &out.ProviderRef, &out.Epoch, &out.CreatedAt)
+	err = tx.QueryRowContext(ctx, `SELECT id,user_id,provider,external_scope,product_id,state,provider_ref,provider_session_id,provider_subscription_id,epoch,created_at FROM billing_purchase_attempts WHERE user_id=? AND epoch=? AND state IN ('prepared','dispatched')`, authority.UserID, authority.Epoch).
+		Scan(&out.ID, &out.UserID, &out.Provider, &out.ExternalScope, &out.ProductID, &out.State, &out.ProviderURL, &out.ProviderSessionID, &out.ProviderSubscriptionID, &out.Epoch, &out.CreatedAt)
 	if err == nil {
 		return out, false, nil
 	}
