@@ -470,6 +470,12 @@ final class MacSurfaceGuardTests: XCTestCase {
         let downloadedTool = try XCTUnwrap(workflow.range(
             of: "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
             range: notarizeJob.lowerBound..<publishJob.lowerBound))
+        let checksumAtArtifactRoot = try XCTUnwrap(workflow.range(
+            of: "(cd \"$RUNNER_TEMP\" && shasum -a 256 -c Relayium.dmg.sha256)",
+            range: notarizeJob.lowerBound..<publishJob.lowerBound))
+        let mountedArtifact = try XCTUnwrap(workflow.range(
+            of: "hdiutil attach \"$RUNNER_TEMP/Relayium.dmg\"",
+            range: notarizeJob.lowerBound..<publishJob.lowerBound))
         let restoredTool = try XCTUnwrap(workflow.range(
             of: "chmod 0755 \"$RUNNER_TEMP/release-tools/generate_appcast\"",
             range: notarizeJob.lowerBound..<publishJob.lowerBound))
@@ -478,7 +484,9 @@ final class MacSurfaceGuardTests: XCTestCase {
             range: notarizeJob.lowerBound..<publishJob.lowerBound))
         let firstToolInvocation = try XCTUnwrap(workflow.range(
             of: "| \"$tools/generate_appcast\"",
-            range: notarizeJob.lowerBound..<publishJob.lowerBound))
+                range: notarizeJob.lowerBound..<publishJob.lowerBound))
+        XCTAssertLessThan(downloadedTool.lowerBound, checksumAtArtifactRoot.lowerBound)
+        XCTAssertLessThan(checksumAtArtifactRoot.lowerBound, mountedArtifact.lowerBound)
         XCTAssertLessThan(downloadedTool.lowerBound, restoredTool.lowerBound)
         XCTAssertLessThan(restoredTool.lowerBound, executableGuard.lowerBound)
         XCTAssertLessThan(executableGuard.lowerBound, firstToolInvocation.lowerBound)

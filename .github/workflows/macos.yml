@@ -610,7 +610,7 @@ jobs:
           [ "$(jq -r .sha "$RUNNER_TEMP/provenance.json")" = "$GITHUB_SHA" ]
           [ "$(jq -r .runAttempt "$RUNNER_TEMP/provenance.json")" -ge 1 ]
           [ -z "$RELEASE_VERSION" ] || [ "$(jq -r .version "$RUNNER_TEMP/provenance.json")" = "$RELEASE_VERSION" ]
-          shasum -a 256 -c "$RUNNER_TEMP/Relayium.dmg.sha256"
+          (cd "$RUNNER_TEMP" && shasum -a 256 -c Relayium.dmg.sha256)
           [ "$(jq -r .dmgSha256 "$RUNNER_TEMP/provenance.json")" = "$(shasum -a 256 "$RUNNER_TEMP/Relayium.dmg" | awk '{print $1}')" ]
           mount="$RUNNER_TEMP/verify-mount"; mkdir "$mount"
           hdiutil attach "$RUNNER_TEMP/Relayium.dmg" -mountpoint "$mount" -nobrowse -readonly
