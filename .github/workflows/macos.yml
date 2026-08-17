@@ -49,7 +49,10 @@ on:
 # complete signed UI suites consuming runners for the same immutable source.
 concurrency:
   group: macos-${{ github.sha }}
-  cancel-in-progress: true
+  # A release dispatch may supersede the automatic push check for the same
+  # immutable source. The reverse is forbidden: a delayed push event must never
+  # cancel signing, notarization, or publication already in progress.
+  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' }}
 
 jobs:
   # No secrets, so this runs on pull requests from forks like any other check.
@@ -188,8 +191,81 @@ jobs:
   # unavailable. This repository is public: a fork's pull request cannot read
   # repository secrets, and a job that tried would fail confusingly rather than
   # skip cleanly.
-  signed-build:
+  # The complete product-flow suite is split only at XCTest class boundaries.
+  # Both shards are mandatory; neither changes, skips, or weakens a test.
+  ui-smoke:
     needs: test
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: app-shell
+            tests: RelayiumUITests/AppShellUITests
+            timeout: 30
+          - shard: device-inbox
+            tests: RelayiumUITests/DeviceInboxUITests,RelayiumUITests/SubscriptionUITests,RelayiumUITests/LocalSessionUITests
+            timeout: 35
+    runs-on: macos-15
+    timeout-minutes: ${{ matrix.timeout }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Import UI signing certificate
+        env:
+          CERT_P12_BASE64: ${{ secrets.MACOS_SIGNING_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.MACOS_SIGNING_CERT_PASSWORD }}
+        run: |
+          set -euo pipefail
+          [ -n "$CERT_P12_BASE64" ] && [ -n "$CERT_PASSWORD" ] || exit 1
+          keychain="$RUNNER_TEMP/ui-signing.keychain-db"
+          password="$(openssl rand -base64 24)"
+          cert="$RUNNER_TEMP/ui-cert.p12"
+          ( umask 077; printf '%s' "$CERT_P12_BASE64" | base64 --decode > "$cert" )
+          security create-keychain -p "$password" "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$cert" -k "$keychain" -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain"
+          rm -P "$cert"
+      - name: Install UI provisioning profiles
+        env:
+          PROFILE_BASE64: ${{ secrets.MACOS_PROVISIONING_PROFILE_BASE64 }}
+          SHARE_PROFILE_BASE64: ${{ secrets.MACOS_SHARE_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+          [ -n "$PROFILE_BASE64" ] && [ -n "$SHARE_PROFILE_BASE64" ] || exit 1
+          dir="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$dir"
+          ( umask 077; printf '%s' "$PROFILE_BASE64" | base64 --decode > "$dir/relayium.provisionprofile" )
+          ( umask 077; printf '%s' "$SHARE_PROFILE_BASE64" | base64 --decode > "$dir/relayium-share.provisionprofile" )
+      - name: Run macOS product-flow UI smoke (${{ matrix.shard }})
+        id: ui_smoke
+        env:
+          TEST_CLASSES: ${{ matrix.tests }}
+        run: |
+          set -euo pipefail
+          only=()
+          IFS=',' read -ra classes <<< "$TEST_CLASSES"
+          for class in "${classes[@]}"; do only+=("-only-testing:$class"); done
+          xcodebuild -project apps/mac/Relayium.xcodeproj -scheme Relayium \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/dd-mac-ui-${{ matrix.shard }}" \
+            "${only[@]}" test
+      - name: Upload macOS UI smoke failure evidence
+        if: failure() && steps.ui_smoke.outcome == 'failure'
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-macos-ui-${{ matrix.shard }}-${{ github.sha }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/dd-mac-ui-${{ matrix.shard }}/Logs/Test/*.xcresult
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Remove UI signing keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/ui-signing.keychain-db" || true
+
+  signed-build:
+    needs: [test, ui-smoke]
     runs-on: macos-15
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
@@ -299,44 +375,6 @@ jobs:
       # require the profiles installed above; stripping them for ad-hoc signing
       # produces a different app that cannot load UI automation. The Debug-only
       # launch argument keeps the hosted runner off the public Nearby rendezvous.
-      - name: Run macOS product-flow UI smoke
-        id: ui_smoke
-        # The suite now includes the eight signed Device Inbox lifecycle flows.
-        # macos-15 runners reached the old 15-minute ceiling twice while the
-        # same exact-source suite passed locally; keep a finite bound without
-        # terminating a healthy full product gate before it can report results.
-        timeout-minutes: 50
-        run: |
-          xcodebuild -project apps/mac/Relayium.xcodeproj -scheme Relayium \
-            -destination 'platform=macOS' \
-            -derivedDataPath "$RUNNER_TEMP/dd-mac-ui" \
-            -only-testing:RelayiumUITests test
-      # A hosted UI failure is only diagnosable from the run that produced it:
-      # the xcresult bundle holds the failure screenshots, accessibility
-      # snapshots and per-test logs, and the runner is wiped when the job ends.
-      # Without this, classifying a UI failure as a real regression or a flake
-      # costs another full signed CI cycle.
-      #
-      # Deliberately narrow: it is keyed to this step's own outcome, so a later
-      # signing, packaging or notarization failure does not upload stale UI
-      # results, and it never runs on the success path. `if-no-files-found:
-      # warn` and `continue-on-error` keep the reported cause of the job the
-      # original test failure — a missing or oversized bundle must not
-      # substitute an upload error for the failure being investigated.
-      #
-      # The run attempt is part of the name because the standard next move
-      # after this artifact exists is an unchanged same-SHA rerun to test for
-      # flake; reusing one name would make that rerun's upload a 409 conflict
-      # and lose the second attempt's evidence.
-      - name: Upload macOS UI smoke failure evidence
-        if: failure() && steps.ui_smoke.outcome == 'failure'
-        continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: relayium-macos-ui-smoke-xcresult-${{ github.sha }}-attempt-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/dd-mac-ui/Logs/Test/*.xcresult
-          if-no-files-found: warn
-          retention-days: 7
       # The Mac App Store product, built unsigned.
       #
       # UNSIGNED deliberately, and it is the only build here that is: this
