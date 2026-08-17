@@ -106,3 +106,20 @@ jobs:
       # be released.
       - name: server-tag.sh selection, version arithmetic and release gate
         run: sh scripts/test/server-tag-test.sh
+
+  macos-ui-selection:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      # scripts/macos-ui-session-acceptance.sh starts one pairing counterpart
+      # per LocalSessionUITests method and then independently asks each one
+      # whether it really served a link/1 session. It used to ask ALL of them
+      # regardless of which tests the caller had selected, so a single-method
+      # run passed xcodebuild and then failed against the peer nothing had
+      # contacted. scripts/lib/macos-ui-test-selection.sh is the mapping from
+      # selectors to required counterparts, and getting it wrong in the other
+      # direction — verifying nothing while still printing the full PASS — is
+      # the more expensive mistake. Pure sh over an argument list: the macOS
+      # run itself needs a signed build and three peers and cannot run here.
+      - name: macOS UI acceptance selector mapping
+        run: sh scripts/test/macos-ui-selection-test.sh
