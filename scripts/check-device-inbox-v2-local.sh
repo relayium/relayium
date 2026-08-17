@@ -23,10 +23,10 @@ node - "$tmp/me.json" "$tmp/devices.json" <<'NODE'
 const fs = require('fs');
 const me = JSON.parse(fs.readFileSync(process.argv[2]));
 const devices = JSON.parse(fs.readFileSync(process.argv[3]));
-if (me.email !== 'engineering@relayium.local') throw new Error('browser account mismatch');
+if (me.user?.email !== 'engineering@relayium.local') throw new Error('browser account mismatch');
 const list = Array.isArray(devices) ? devices : devices.devices;
 for (const name of ['Engineering Mac', 'Engineering Browser Device']) {
   if (!list.some(device => device.name === name)) throw new Error(`missing device: ${name}`);
 }
-console.log(`local auth ready: ${me.email}; ${list.length} registered devices`);
+console.log(`local auth ready: ${me.user.email}; ${list.length} registered devices`);
 NODE
