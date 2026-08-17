@@ -123,6 +123,7 @@ func main() {
 	appleServerKeyID := flag.String("apple-server-api-key-id", envStr("RELAYIUM_APPLE_SERVER_API_KEY_ID", ""), "App Store Server API key id; required with App Store billing")
 	appleServerKeyFile := flag.String("apple-server-api-private-key-file", envStr("RELAYIUM_APPLE_SERVER_API_PRIVATE_KEY_FILE", ""), "App Store Server API ES256 .p8 key; required with App Store billing")
 	appleServerAPIProbe := flag.Bool("apple-server-api-probe", false, "probe App Store Server API credentials and TEST delivery for every configured app/environment, then exit")
+	appleServerAPIProbeEnvironment := flag.String("apple-server-api-probe-environment", "all", "probe target: all, Production, or Sandbox (used only with -apple-server-api-probe)")
 	enableMagic := flag.Bool("enable-magic", envBool("RELAYIUM_ENABLE_MAGIC", false), "enable email magic-link login (disabled by default)")
 	adminUser := flag.String("admin-user", envStr("RELAYIUM_ADMIN_USER", "admin"), "admin dashboard username at /admin (defaults to 'admin')")
 	adminPass := flag.String("admin-pass", envStr("RELAYIUM_ADMIN_PASS", ""), "admin dashboard password at /admin (empty disables the dashboard)")
@@ -281,9 +282,13 @@ func main() {
 		if appleSubscriptionAPI == nil || len(appleStore.probeApps) == 0 {
 			log.Fatal("apple probe: App Store verifier, API credentials, and at least one app are required")
 		}
+		selected, selectErr := account.ParseAppleProbeEnvironment(*appleServerAPIProbeEnvironment)
+		if selectErr != nil {
+			log.Fatalf("apple probe: %v", selectErr)
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(len(appleStore.probeApps)*len(appleStore.verifier.Environments()))*2*time.Minute)
 		defer cancel()
-		if err := appleSubscriptionAPI.ProbeTestNotifications(ctx, appleStore.probeApps, os.Stdout); err != nil {
+		if err := appleSubscriptionAPI.ProbeTestNotificationsFor(ctx, appleStore.probeApps, selected, os.Stdout); err != nil {
 			log.Fatalf("apple probe: %v", err)
 		}
 		return

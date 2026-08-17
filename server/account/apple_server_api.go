@@ -152,33 +152,61 @@ type appleTestNotificationStatus struct {
 // ProbeTestNotifications verifies credentials and TEST delivery without opening
 // Relayium storage. Apple's remote delivery still reaches the configured normal
 // notification URL and may create its ordinary TEST ledger row there.
+type AppleProbeEnvironment string
+
+const (
+	AppleProbeAll        AppleProbeEnvironment = "all"
+	AppleProbeProduction AppleProbeEnvironment = appleEnvProduction
+	AppleProbeSandbox    AppleProbeEnvironment = appleEnvSandbox
+)
+
+func ParseAppleProbeEnvironment(raw string) (AppleProbeEnvironment, error) {
+	switch AppleProbeEnvironment(raw) {
+	case AppleProbeAll, AppleProbeProduction, AppleProbeSandbox:
+		return AppleProbeEnvironment(raw), nil
+	default:
+		return "", errors.New("probe environment must be all, Production, or Sandbox")
+	}
+}
+
 func (c *AppleServerAPIClient) ProbeTestNotifications(ctx context.Context, apps []AppleAppConfig, out io.Writer) error {
+	return c.ProbeTestNotificationsFor(ctx, apps, AppleProbeAll, out)
+}
+
+func (c *AppleServerAPIClient) ProbeTestNotificationsFor(ctx context.Context, apps []AppleAppConfig, selected AppleProbeEnvironment, out io.Writer) error {
 	if len(apps) == 0 {
 		return errors.New("stage A: no configured apps")
 	}
-	targets, err := c.probeTargets()
+	targets, err := c.probeTargets(selected)
 	if err != nil {
 		return err
 	}
+	var failures []error
 	for _, app := range apps {
 		for _, target := range targets {
 			if err := c.probeTestNotification(ctx, target.name, target.base, app, out); err != nil {
-				return err
+				failures = append(failures, err)
 			}
 		}
 	}
-	return nil
+	return errors.Join(failures...)
 }
 
 type appleProbeTarget struct{ name, base string }
 
-func (c *AppleServerAPIClient) probeTargets() ([]appleProbeTarget, error) {
+func (c *AppleServerAPIClient) probeTargets(selected AppleProbeEnvironment) ([]appleProbeTarget, error) {
+	if _, err := ParseAppleProbeEnvironment(string(selected)); err != nil {
+		return nil, err
+	}
 	environments := c.verifier.Environments()
 	if len(environments) == 0 {
 		return nil, errors.New("stage A: no configured environments")
 	}
 	targets := make([]appleProbeTarget, 0, len(environments))
 	for _, environment := range environments {
+		if selected != AppleProbeAll && string(selected) != environment {
+			continue
+		}
 		switch environment {
 		case appleEnvProduction:
 			targets = append(targets, appleProbeTarget{environment, c.cfg.ProductionURL})
@@ -187,6 +215,9 @@ func (c *AppleServerAPIClient) probeTargets() ([]appleProbeTarget, error) {
 		default:
 			return nil, fmt.Errorf("stage A: unsupported configured environment %q", environment)
 		}
+	}
+	if len(targets) == 0 {
+		return nil, fmt.Errorf("stage A: selected %s environment is not configured", selected)
 	}
 	return targets, nil
 }

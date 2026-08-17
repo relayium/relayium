@@ -274,7 +274,7 @@ func TestAppleServerAPIProbeUsesOnlyVerifiedEnvironments(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			targets, err := client.probeTargets()
+			targets, err := client.probeTargets(AppleProbeAll)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -302,11 +302,58 @@ func TestAppleServerAPIProbeRequiresEveryAppAndEnvironment(t *testing.T) {
 	})
 	client, app, _ := testProbeClient(t, h, 20*time.Millisecond)
 	err := client.ProbeTestNotifications(context.Background(), []AppleAppConfig{app, {BundleID: testBundleMac, AppAppleID: 6801142976}}, &bytes.Buffer{})
-	if err == nil || posts != 1 {
-		t.Fatalf("partial success accepted or enumeration continued unsafely: posts=%d err=%v", posts, err)
+	if err == nil || posts != 4 {
+		t.Fatalf("partial failure was accepted or skipped targets: posts=%d err=%v", posts, err)
 	}
 	if err := client.ProbeTestNotifications(context.Background(), nil, &bytes.Buffer{}); err == nil {
 		t.Fatal("zero apps accepted")
+	}
+}
+
+func TestAppleServerAPIProbeSelectionIsClosedAndExact(t *testing.T) {
+	for _, raw := range []string{"", "production", "sandbox", "Both", "Xcode"} {
+		if _, err := ParseAppleProbeEnvironment(raw); err == nil {
+			t.Fatalf("selection %q accepted", raw)
+		}
+	}
+	chain := newAppleTestChain(t)
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	app := AppleAppConfig{BundleID: testBundleIOS, AppAppleID: 6791918822}
+	verifier, err := NewAppleTransactionVerifier(AppleStoreConfig{Environments: []string{appleEnvProduction, appleEnvSandbox}, Apps: []AppleAppConfig{app}, RootCertsPEM: chain.rootPEM})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := NewAppleServerAPIClient(AppleServerAPIConfig{IssuerID: "issuer", KeyID: "key", PrivateKey: key}, verifier)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for selected, want := range map[AppleProbeEnvironment]string{
+		AppleProbeProduction: appleEnvProduction,
+		AppleProbeSandbox:    appleEnvSandbox,
+	} {
+		targets, err := client.probeTargets(selected)
+		if err != nil || len(targets) != 1 || targets[0].name != want {
+			t.Fatalf("selection %s targets=%v err=%v", selected, targets, err)
+		}
+	}
+}
+
+func TestAppleServerAPIProbeAggregatesFailuresAcrossSelectedTargets(t *testing.T) {
+	var mu sync.Mutex
+	seen := map[string]int{}
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		parts := strings.Split(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "), ".")
+		parsed, _, _ := new(jwt.Parser).ParseUnverified(strings.Join(parts, "."), jwt.MapClaims{})
+		bundle, _ := parsed.Claims.(jwt.MapClaims)["bid"].(string)
+		mu.Lock()
+		seen[bundle]++
+		mu.Unlock()
+		http.Error(w, "not exposed", http.StatusUnauthorized)
+	})
+	client, app, _ := testProbeClient(t, h, 20*time.Millisecond)
+	err := client.ProbeTestNotificationsFor(context.Background(), []AppleAppConfig{app, {BundleID: testBundleMac, AppAppleID: 6801142976}}, AppleProbeSandbox, &bytes.Buffer{})
+	if err == nil || len(seen) != 2 || seen[testBundleIOS] != 1 || seen[testBundleMac] != 1 || strings.Contains(err.Error(), "not exposed") {
+		t.Fatalf("aggregate err=%v seen=%v", err, seen)
 	}
 }
 
