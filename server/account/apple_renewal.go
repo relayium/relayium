@@ -71,8 +71,11 @@ func (v *AppleTransactionVerifier) VerifyRenewalInfo(jws string, tx VerifiedAppl
 	if err != nil || signed < tx.PurchaseDateMS {
 		return VerifiedAppleRenewalInfo{}, rejectApple("signed_date")
 	}
-	if p.OriginalTransactionID != tx.OriginalTransactionID || p.Environment != tx.Environment || !v.acceptsEnvironment(p.Environment) ||
-		(p.AppAccountToken != "" && p.AppAccountToken != tx.AppAccountToken) {
+	normalizedRenewalToken := strings.ToLower(p.AppAccountToken)
+	if p.AppAccountToken != "" && (!validAppAccountToken(normalizedRenewalToken) || normalizedRenewalToken != tx.AppAccountToken) {
+		return VerifiedAppleRenewalInfo{}, rejectApple("renewal_mismatch")
+	}
+	if p.OriginalTransactionID != tx.OriginalTransactionID || p.Environment != tx.Environment || !v.acceptsEnvironment(p.Environment) {
 		return VerifiedAppleRenewalInfo{}, rejectApple("renewal_mismatch")
 	}
 	autoRenew, err := appleOptionalAutoRenew(p.AutoRenewStatus)
@@ -94,7 +97,7 @@ func (v *AppleTransactionVerifier) VerifyRenewalInfo(jws string, tx VerifiedAppl
 		grace = 0
 	}
 	return VerifiedAppleRenewalInfo{OriginalTransactionID: p.OriginalTransactionID, AutoRenewProductID: p.AutoRenewProductID,
-		AppAccountToken: p.AppAccountToken, Environment: p.Environment, AutoRenewEnabled: autoRenew,
+		AppAccountToken: normalizedRenewalToken, Environment: p.Environment, AutoRenewEnabled: autoRenew,
 		IsInBillingRetry: retry, GracePeriodExpiresMS: grace, RenewalDateMS: renewal, SignedDateMS: signed,
 		ExpirationIntent: expiration, PriceIncreaseStatus: price}, nil
 }

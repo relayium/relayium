@@ -84,6 +84,18 @@ func (s *SQLiteStore) GetAppleRenewalState(ctx context.Context, userID string) (
 // LapseAppleSubscription makes a missed terminal notification harmless using
 // only durable local paid-through/grace facts. It never calls Apple.
 func (s *SQLiteStore) LapseAppleSubscription(ctx context.Context, userID string, now int64) error {
+	// The overwhelmingly common path is read-only. Recheck under the writer
+	// transaction before changing anything so a renewal racing this pre-read wins.
+	pre, err := scanSubscriptionSource(s.reader().QueryRowContext(ctx, `SELECT `+subscriptionSourceCols+` FROM subscription_sources WHERE user_id=? AND provider=?`, userID, ProviderApple))
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !pre.grantsAccess() || pre.PeriodEnd == 0 || pre.PeriodEnd > now {
+		return nil
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -99,7 +111,10 @@ func (s *SQLiteStore) LapseAppleSubscription(ctx context.Context, userID string,
 	if !src.grantsAccess() || src.PeriodEnd == 0 || src.PeriodEnd > now {
 		return nil
 	}
-	_, err = applySourceTx(ctx, tx, SourceEvent{UserID: userID, Provider: ProviderApple, PlanID: freePlanID, Status: "canceled", PeriodEnd: src.PeriodEnd, ExternalID: src.ExternalID, ExternalScope: src.ExternalScope, EventAt: src.EventAt + 1, Now: now})
+	// This is a derived clock observation, not a new Apple event. Preserve the
+	// provider clock so a same-generation canonical grace fact (2P) can restore,
+	// while a refund terminal fact (2P+1) still permanently outranks the live JWS.
+	_, err = applySourceTx(ctx, tx, SourceEvent{UserID: userID, Provider: ProviderApple, PlanID: freePlanID, Status: "canceled", PeriodEnd: src.PeriodEnd, ExternalID: src.ExternalID, ExternalScope: src.ExternalScope, EventAt: src.EventAt, Now: now})
 	if err != nil {
 		return err
 	}
