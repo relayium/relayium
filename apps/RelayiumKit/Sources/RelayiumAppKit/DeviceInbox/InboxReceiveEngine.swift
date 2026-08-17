@@ -50,7 +50,7 @@ public struct InboxReceiveEngine: Sendable {
     /// A DURABLE commit, and the only event in the product from which a "saved"
     /// claim may be built. Emitted after `InboxReceiver.deliver` has returned and
     /// the journal says completed — never from a claim, a byte count or a report.
-    public var onReceipt: (@Sendable (InboxReceipt) -> Void)?
+    public var onReceipt: (@Sendable (InboxReceipt) throws -> Void)?
 
     public init(transport: InboxTransport, keys: InboxDeviceKeyStoring,
                 journals: InboxJournalStore, messages: InboxMessageStore,
@@ -239,13 +239,9 @@ public struct InboxReceiveEngine: Sendable {
 
         do {
             let outcome = try await receiver.deliver(delivery)
-            // BEFORE the report, and deliberately: the files are already durably
-            // on disk at this point, and a report that fails to reach central
-            // must not be able to withhold the user's own evidence that their
-            // delivery landed. The report is retried later from the journal.
-            emitReceipt(taskID: delivery.task.id,
-                        senderDeviceID: delivery.task.sourceDeviceID,
-                        isReplay: outcome == .alreadyCommitted)
+            try receiver.bindAuthenticatedSender(delivery.task)
+            try emitReceipt(taskID: delivery.task.id,
+                            isReplay: outcome == .alreadyCommitted)
             await reportSaved(delivery, receiver: receiver)
         } catch is CancellationError {
             // A policy change, sign-out or account switch owns
@@ -268,13 +264,19 @@ public struct InboxReceiveEngine: Sendable {
     /// commit itself wrote, entry by entry, so a partially committed task cannot
     /// produce a receipt naming files that were never created — and a receipt and
     /// a crash recovery can never disagree about what is on disk.
-    private func emitReceipt(taskID: String, senderDeviceID: String, isReplay: Bool) {
-        guard let onReceipt else { return }
-        guard let receipt = InboxReceipt.make(taskID: taskID,
-                                              senderDeviceID: senderDeviceID,
-                                              journal: try? journals.load(taskID),
-                                              isReplay: isReplay) else { return }
-        onReceipt(receipt)
+    private func emitReceipt(taskID: String, isReplay: Bool) throws {
+        guard let onReceipt else { throw InboxFailure.retryable(.internal, .unexpected) }
+        let journal: InboxJournal
+        do {
+            guard let loaded = try journals.load(taskID) else { throw InboxJournalError.unreadable }
+            journal = loaded
+        } catch { throw InboxClassify.filesystem(error) }
+        guard let receipt = InboxReceipt.make(taskID: taskID, journal: journal,
+                                              isReplay: isReplay),
+              receipt.senderDeviceID != InboxConversationStore.legacySenderID else {
+            throw InboxFailure.retryable(.internal, .unexpected)
+        }
+        try onReceipt(receipt)
     }
 
     /// Assert the commit, then record that central acknowledged it.

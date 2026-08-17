@@ -80,11 +80,10 @@ public struct InboxReceipt: Equatable, Sendable, Identifiable {
     /// The last is the sharp one — a journal can exist with a plan and no commits
     /// at all (planned, then interrupted), and a receipt derived from `plan`
     /// rather than `committed` would name files that were never created.
-    public static func make(taskID: String,
-                            senderDeviceID: String = InboxConversationStore.legacySenderID,
-                            journal: InboxJournal?,
+    public static func make(taskID: String, journal: InboxJournal?,
                             isReplay: Bool) -> InboxReceipt? {
         guard let journal, journal.isCompleted, !journal.committed.isEmpty else { return nil }
+        let senderDeviceID = journal.senderDeviceID ?? InboxConversationStore.legacySenderID
         if journal.contentKind == .text {
             // A message has no committed path and no plan, so the file arm below
             // would produce nothing at all. The byte count comes from the

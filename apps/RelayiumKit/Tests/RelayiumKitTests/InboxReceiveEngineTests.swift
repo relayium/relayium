@@ -63,13 +63,17 @@ final class InboxReceiveEngineTests: XCTestCase {
     }
 
     private func engine(_ h: Harness, log: InboxLog? = nil,
-                        freeBytes: (@Sendable (URL) -> Int64?)? = nil) -> InboxReceiveEngine {
+                        freeBytes: (@Sendable (URL) -> Int64?)? = nil,
+                        onReceipt: @escaping @Sendable (InboxReceipt) throws -> Void = { _ in })
+        -> InboxReceiveEngine {
         let epoch = self.epoch
-        return InboxReceiveEngine(transport: h.transport, keys: h.keys, journals: h.journals,
+        var engine = InboxReceiveEngine(transport: h.transport, keys: h.keys, journals: h.journals,
                                   messages: h.messages, folder: h.folder,
                                   account: account, now: { epoch }, log: log,
                                   renewInterval: 3600, streamAttempts: 3,
                                   freeBytes: freeBytes ?? InboxSpace.freeBytes)
+        engine.onReceipt = onReceipt
+        return engine
     }
 
     private func claim(_ h: Harness, files: [(String, [UInt8])] = [("a.txt", [1, 2, 3])])
@@ -445,6 +449,29 @@ final class InboxReceiveEngineTests: XCTestCase {
                        after)
         XCTAssertEqual(reports(h).filter { $0.0 == .saved }.count, 2,
                        "the second pass did not re-assert the commit")
+    }
+
+    func testConversationCommitFailureCannotReportSavedAndReplayConverges() async throws {
+        let h = try await harness()
+        _ = try claim(h)
+
+        _ = try await engine(h, onReceipt: { _ in
+            throw InboxConversationStoreError.unreadable
+        }).pass()
+
+        let committed = try XCTUnwrap(try h.journals.load("task1"))
+        XCTAssertTrue(committed.isCompleted)
+        XCTAssertEqual(committed.senderDeviceID, "sender-device")
+        XCTAssertFalse(reports(h).contains { $0.0 == .saved })
+        XCTAssertEqual(reports(h).last?.0, .failedRetryable)
+        let afterCommit = try FileManager.default.contentsOfDirectory(atPath: h.root.path).sorted()
+
+        _ = try await engine(h).pass()
+        let recoveredJournal = try XCTUnwrap(try h.journals.load("task1"))
+        XCTAssertEqual(recoveredJournal.senderDeviceID, "sender-device")
+        XCTAssertTrue(reports(h).contains { $0.0 == .saved })
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: h.root.path).sorted(),
+                       afterCommit)
     }
 
     // MARK: - recovery

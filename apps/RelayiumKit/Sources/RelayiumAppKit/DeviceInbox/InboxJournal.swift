@@ -36,6 +36,7 @@ public struct InboxJournal: Codable, Equatable, Sendable {
     public var taskID: String
     public var storedFileID: String
     public var targetKeyID: String
+    public var senderDeviceID: String?
     /// What this delivery turned out to be, once the manifest was decoded.
     ///
     /// OPTIONAL, and absent means `.file`. Journals written before v2 wiring
@@ -76,6 +77,7 @@ public struct InboxJournal: Codable, Equatable, Sendable {
     public var contentKind: InboxManifestKind { kind ?? .file }
 
     public init(taskID: String, storedFileID: String, targetKeyID: String,
+                senderDeviceID: String? = nil,
                 root: String, staging: String = "", plan: [InboxPlanEntry],
                 plannedAt: Int64, committed: [String] = [], isCompleted: Bool = false,
                 isSavedReported: Bool = false, completedAt: Int64 = 0, updatedAt: Int64 = 0,
@@ -84,6 +86,7 @@ public struct InboxJournal: Codable, Equatable, Sendable {
         self.taskID = taskID
         self.storedFileID = storedFileID
         self.targetKeyID = targetKeyID
+        self.senderDeviceID = senderDeviceID
         self.kind = kind
         self.messageBytes = messageBytes
         self.root = root

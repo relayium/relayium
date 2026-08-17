@@ -303,7 +303,7 @@ public final class InboxController: ObservableObject {
     @Published public private(set) var messages: [InboxMessage] = []
     @Published public private(set) var conversations: [InboxConversation] = []
     @Published public private(set) var conversationStoreIssue = false
-    @Published public private(set) var legacyConversationHistoryLimited = false
+    @Published public private(set) var activeAccountID: String?
     /// Tasks central is holding for an answer under `ask`. No names: the manifest
     /// is not decrypted until a task is claimed. Bounded ciphertext size and
     /// expiry remain available so two questions do not render as identical rows.
@@ -417,6 +417,7 @@ public final class InboxController: ObservableObject {
         let generation = InboxGeneration(account: account, credential: credential,
                                          sequence: sequence)
         self.generation = generation
+        activeAccountID = account.value
         // A new identity gets a new engine; a restart under the same identity
         // reuses the one already built.
         let engineKey = account.value + ":" + credential
@@ -453,7 +454,7 @@ public final class InboxController: ObservableObject {
         messages = []
         conversations = []
         conversationStoreIssue = false
-        legacyConversationHistoryLimited = false
+        activeAccountID = nil
         deviceNames = [:]
         currentDeviceIDs = []
         deviceDirectoryLoaded = false
@@ -583,7 +584,15 @@ public final class InboxController: ObservableObject {
         let token = passToken
         let record = InboxPassRecord()
         var live = engine
-        live.onReceipt = { [record] receipt in record.add(receipt) }
+        guard let conversationStore = runtime.conversationStore(generation.account) else {
+            throw InboxConversationStoreError.unreadable
+        }
+        let names = deviceNames
+        live.onReceipt = { [record] receipt in
+            try Self.persistConversation(receipt, store: conversationStore,
+                                         senderName: names[receipt.senderDeviceID] ?? "")
+            record.add(receipt)
+        }
         live.onPending = { [record] tasks in record.observe(pending: tasks) }
         live.log = { [weak self, record] event in
             switch event {
@@ -754,8 +763,8 @@ public final class InboxController: ObservableObject {
                                           ? .savedMessage
                                           : .saved(files: receipt.fileCount))
             }
-            persistConversation(receipt, generation: generation)
         }
+        if !receipts.isEmpty { refreshConversations() }
         if results.count > runtime.resultLimit {
             results = Array(results.prefix(runtime.resultLimit))
         }
@@ -787,10 +796,6 @@ public final class InboxController: ObservableObject {
             if importLegacy, let legacy = runtime.messageStore(generation.account)?.all() {
                 try store.importLegacy(messages: legacy)
                 try store.importLegacy(receipts: runtime.legacyReceipts(generation.account))
-                // File journals are deliberately retained for a bounded period.
-                // Older files remain on disk, but no trustworthy sender/task
-                // metadata remains from which to reconstruct their history.
-                legacyConversationHistoryLimited = true
             }
             conversations = try store.conversations()
             conversationStoreIssue = false
@@ -840,20 +845,18 @@ public final class InboxController: ObservableObject {
             ? base + " · " + String(conversation.senderDeviceID.suffix(6)) : base
     }
 
-    private func persistConversation(_ receipt: InboxReceipt, generation: InboxGeneration) {
-        guard let store = runtime.conversationStore(generation.account) else { return }
+    nonisolated private static func persistConversation(_ receipt: InboxReceipt,
+                                            store: InboxConversationStore,
+                                            senderName: String) throws {
         let record = InboxDeliveryRecord(taskID: receipt.taskID,
             senderDeviceID: receipt.senderDeviceID,
-            senderNameSnapshot: deviceNames[receipt.senderDeviceID] ?? "",
+            senderNameSnapshot: senderName,
             kind: receipt.kind == .message ? .message : .files,
             receivedAt: receipt.savedAt,
             messageID: receipt.kind == .message ? receipt.taskID : nil,
             files: receipt.urls.map(InboxDeliveryRecord.FileReference.init),
             byteCount: receipt.byteCount)
-        do {
-            _ = try store.record(record)
-            refreshConversations()
-        } catch { conversationStoreIssue = true }
+        _ = try store.record(record)
     }
 
     private func refreshDeviceDirectory(bearer: String, generation: InboxGeneration) async {

@@ -606,10 +606,11 @@
 "inbox.openDeviceInbox" = "打开";
 "inbox.conversationsHeading" = "会话";
 "inbox.conversationLegacy" = "旧版 Relayium";
-"inbox.conversationLegacyLimited" = "早于恢复记录保留期限的文件无法补入这里；这些文件仍保留在接收文件夹中。";
+"inbox.conversationMessageMissing" = "无法从受保护的存储中读取这条消息记录。";
 "inbox.conversationRemoved" = "已移除的设备";
 "inbox.conversationStoreIssue" = "部分旧版设备收件箱历史无法载入。已接收的文件和消息没有被删除。";
 "inbox.conversationUnread" = "%@ 条未读";
+"inbox.sendContent" = "发送内容";
 "inbox.askHeading" = "正在等待你的答复";
 "inbox.askExplain" = "在你同意之前，不会下载也不会写入任何内容。拒绝会告知发送方文件未被接收。";
 "inbox.askAccept" = "接收";

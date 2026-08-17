@@ -167,6 +167,10 @@ struct DeviceInboxSurface: View {
             for: NSApplication.didBecomeActiveNotification)) { _ in
             inbox.refreshNotificationPermission()
         }
+        .onChange(of: inbox.activeAccountID) { _ in
+            selectedConversationID = nil
+            copiedMessageID = nil
+        }
     }
 
     // MARK: - conversations
@@ -176,10 +180,6 @@ struct DeviceInboxSurface: View {
             if inbox.conversationStoreIssue {
                 InlineMessage(.failure, L10n.t(.inboxConversationStoreIssue))
                     .accessibilityIdentifier("inbox-conversation-store-issue")
-            }
-            if inbox.legacyConversationHistoryLimited {
-                InlineMessage(.info, L10n.t(.inboxConversationLegacyLimited))
-                    .accessibilityIdentifier("inbox-conversation-legacy-limited")
             }
             ForEach(inbox.conversations) { conversation in
                 HStack(alignment: .center) {
@@ -228,12 +228,15 @@ struct DeviceInboxSurface: View {
 
     private func conversationSummary(_ conversation: InboxConversation) -> String {
         var parts: [String] = []
-        if conversation.messageCount > 0 {
+        let unread = conversation.deliveries.filter { $0.readAt == nil }
+        let unreadMessages = unread.filter { $0.kind == .message }.count
+        let unreadFiles = unread.reduce(0) { $0 + $1.files.count }
+        if unreadMessages > 0 {
             parts.append(L10n.detail([
-                L10n.number(conversation.messageCount), L10n.t(.inboxSavedMessage)]))
+                L10n.number(unreadMessages), L10n.t(.inboxSavedMessage)]))
         }
-        if conversation.fileCount > 0 {
-            parts.append(L10n.plural(.inboxSavedFiles, conversation.fileCount))
+        if unreadFiles > 0 {
+            parts.append(L10n.plural(.inboxSavedFiles, unreadFiles))
         }
         parts.append(L10n.date(conversation.lastActivity, dateStyle: .medium,
                                timeStyle: .short))
@@ -250,7 +253,7 @@ struct DeviceInboxSurface: View {
                 if let candidate = deliveries.candidates.first(where: {
                     $0.id == conversation.senderDeviceID && $0.isSendable
                 }) {
-                    Button(L10n.t(.inboxOpenDeviceInbox)) {
+                    Button(L10n.t(.inboxSendContent)) {
                         deliveries.selectTarget(candidate.id)
                     }
                     .buttonStyle(.borderedProminent)
@@ -273,9 +276,12 @@ struct DeviceInboxSurface: View {
                             .buttonStyle(.bordered)
                             .accessibilityLabel(InboxMessagePresentation.copyActionLabel(
                                 copied: copiedMessageID == message.id))
-                        } else {
+                        } else if delivery.kind == .files {
                             Text(delivery.files.map(\.displayName).joined(separator: " · "))
                                 .textSelection(.enabled)
+                        } else {
+                            InlineMessage(.failure, L10n.t(.inboxConversationMessageMissing))
+                                .accessibilityIdentifier("inbox-conversation-message-missing")
                         }
                         Text(L10n.date(delivery.receivedAt, dateStyle: .medium,
                                        timeStyle: .short))

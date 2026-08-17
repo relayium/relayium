@@ -507,7 +507,7 @@ final class InboxControllerTests: XCTestCase {
         XCTAssertEqual(conversation.senderDeviceID, "sender-device")
         XCTAssertEqual(harness.controller.displayName(for: conversation), "Sender Mac")
         XCTAssertEqual(conversation.unreadCount, 1)
-        XCTAssertTrue(harness.controller.legacyConversationHistoryLimited)
+        XCTAssertEqual(harness.controller.activeAccountID, accountA.value)
 
         harness.controller.refreshConversations()
         XCTAssertEqual(harness.controller.conversations.first?.deliveries.count, 1)
@@ -516,6 +516,7 @@ final class InboxControllerTests: XCTestCase {
         XCTAssertEqual(harness.controller.conversations.first?.unreadCount, 0)
         harness.controller.signedOut()
         XCTAssertTrue(harness.controller.conversations.isEmpty)
+        XCTAssertNil(harness.controller.activeAccountID)
     }
 
     /// A MESSAGE reaches the model layer as a message: its own state, its own

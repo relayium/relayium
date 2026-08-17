@@ -781,6 +781,21 @@ final class InboxSurfaceGuardTests: XCTestCase {
                        "a message row renders the delivery identifier")
     }
 
+    func testConversationNavigationIsAccountScopedAndHistoryFailuresStayVisible() throws {
+        let surface = try macSource("DeviceInbox/DeviceInboxSurface.swift")
+        XCTAssertTrue(surface.contains(".onChange(of: inbox.activeAccountID)"))
+        XCTAssertTrue(surface.contains("selectedConversationID = nil"))
+        XCTAssertTrue(surface.contains("copiedMessageID = nil"))
+        XCTAssertTrue(surface.contains("conversation.deliveries.filter { $0.readAt == nil }"),
+                      "the home summary counts all history instead of unread history")
+        XCTAssertTrue(surface.contains("else if delivery.kind == .files"),
+                      "a missing message reference can fall through as an empty file row")
+        XCTAssertTrue(surface.contains(".inboxConversationMessageMissing"),
+                      "a missing protected message reference is silent")
+        XCTAssertTrue(surface.contains("Button(L10n.t(.inboxSendContent))"),
+                      "the conversation send action still says Open")
+    }
+
     /// **`inbox.text.v1` is announced by the target that ships the screen, and
     /// by nothing else.**
     ///

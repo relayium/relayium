@@ -325,6 +325,7 @@ public struct InboxReceiver: Sendable {
         }
         var journal = InboxJournal(taskID: task.id, storedFileID: task.storedFileID,
                                    targetKeyID: task.targetKeyID,
+                                   senderDeviceID: task.sourceDeviceID,
                                    root: messages.directory.standardizedFileURL.path,
                                    plan: [],
                                    plannedAt: Int64(now().timeIntervalSince1970),
@@ -427,6 +428,7 @@ public struct InboxReceiver: Sendable {
 
         var journal = InboxJournal(taskID: task.id, storedFileID: task.storedFileID,
                                    targetKeyID: task.targetKeyID,
+                                   senderDeviceID: task.sourceDeviceID,
                                    root: root.standardizedFileURL.path,
                                    plan: plan,
                                    plannedAt: Int64(now().timeIntervalSince1970),
@@ -448,6 +450,7 @@ public struct InboxReceiver: Sendable {
         guard journal.taskID == task.id,
               journal.storedFileID == task.storedFileID,
               journal.targetKeyID == task.targetKeyID,
+              journal.senderDeviceID == nil || journal.senderDeviceID == task.sourceDeviceID,
               // The kind is part of the identity too. A journal that describes
               // files cannot be resumed as a message or the other way round:
               // they commit to different places, so continuing under the wrong
@@ -467,6 +470,27 @@ public struct InboxReceiver: Sendable {
             // is the same one. Reusing absolute destinations from the old grant
             // could land the same delivery in two places.
             throw InboxFailure.attention(.directoryUnavailable, .receiveFolderChanged)
+        }
+    }
+
+    public func bindAuthenticatedSender(_ task: InboxTask) throws {
+        guard !task.sourceDeviceID.isEmpty else {
+            throw InboxFailure.retryable(.internal, .unexpected)
+        }
+        var journal: InboxJournal
+        do {
+            guard let loaded = try journals.load(task.id), loaded.isCompleted else {
+                throw InboxJournalError.unreadable
+            }
+            journal = loaded
+        } catch { throw InboxClassify.filesystem(error) }
+        guard journal.senderDeviceID == nil || journal.senderDeviceID == task.sourceDeviceID else {
+            throw InboxFailure.retryable(.internal, .unexpected)
+        }
+        if journal.senderDeviceID == nil {
+            journal.senderDeviceID = task.sourceDeviceID
+            do { try journals.save(&journal, now: now()) }
+            catch { throw InboxClassify.filesystem(error) }
         }
     }
 

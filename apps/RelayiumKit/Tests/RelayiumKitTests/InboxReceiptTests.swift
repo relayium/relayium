@@ -58,10 +58,11 @@ final class InboxReceiptTests: XCTestCase {
     }
 
     func testV3AuthenticatedSenderReachesTheReceipt() throws {
-        let done = journal(plan: [("/tmp/root/a.txt", 3)], committed: ["/tmp/root/a.txt"],
+        var done = journal(plan: [("/tmp/root/a.txt", 3)], committed: ["/tmp/root/a.txt"],
                            completed: true)
+        done.senderDeviceID = "sender-device"
         let receipt = try XCTUnwrap(InboxReceipt.make(taskID: "t1",
-            senderDeviceID: "sender-device", journal: done, isReplay: false))
+            journal: done, isReplay: false))
         XCTAssertEqual(receipt.senderDeviceID, "sender-device")
     }
 

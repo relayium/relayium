@@ -1726,10 +1726,11 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case inboxMessagesHeading = "inbox.messagesHeading"
     case inboxConversationsHeading = "inbox.conversationsHeading"
     case inboxConversationLegacy = "inbox.conversationLegacy"
-    case inboxConversationLegacyLimited = "inbox.conversationLegacyLimited"
+    case inboxConversationMessageMissing = "inbox.conversationMessageMissing"
     case inboxConversationRemoved = "inbox.conversationRemoved"
     case inboxConversationStoreIssue = "inbox.conversationStoreIssue"
     case inboxConversationUnread = "inbox.conversationUnread"
+    case inboxSendContent = "inbox.sendContent"
 
     /// Where those messages live, said once, under the section.
     ///
