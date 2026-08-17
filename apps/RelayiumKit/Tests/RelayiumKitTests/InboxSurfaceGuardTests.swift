@@ -1141,10 +1141,23 @@ final class InboxSurfaceGuardTests: XCTestCase {
         }
         XCTAssertTrue(fixture.contains("receiveCapability: InboxCapability.receiveV2"),
                       "the acceptance server no longer negotiates the required v2 receiver")
+        XCTAssertTrue(fixture.contains("InboxManifest.files("))
+        XCTAssertTrue(fixture.contains("InboxManifest.encode(manifest)"))
+        XCTAssertTrue(fixture.contains("seal(key: contentKey, seq: 0"))
+        XCTAssertFalse(fixture.contains("encryptManifest(key: contentKey"),
+                       "the v2 fixture still seals a retired StoredManifest frame")
         XCTAssertFalse(fixture.contains("receiveCapability: InboxCapability.receiveV1"),
                        "the v2 acceptance client is being forced onto the retired v1 protocol")
         XCTAssertFalse(fixture.contains("temporaryDirectory"),
                        "a delivery or its journal may not land somewhere the system can purge")
         XCTAssertFalse(fixture.contains("cachesDirectory"))
+
+        let pane = try macSource("Transfer/TransferSessionPane.swift")
+        let body = try XCTUnwrap(pane.range(of: "sessionPeer"))
+        let exit = try XCTUnwrap(pane.range(of: "            exit", range: body.upperBound..<pane.endIndex))
+        let lane = try XCTUnwrap(pane.range(of: "            if waitingOnJoinedCode",
+                                            range: body.upperBound..<pane.endIndex))
+        XCTAssertLessThan(exit.lowerBound, lane.lowerBound,
+                          "long terminal content hides the session owner's only exit")
     }
 }

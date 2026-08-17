@@ -413,12 +413,13 @@ private final class UITestInboxTransport: InboxTransport, @unchecked Sendable {
             [UInt8](repeating: 0x52, count: 2_048 * (index + 1))
         }
         let contentKey = generateStoreKey()
-        let manifest = StoredManifest(files: zip(Self.fileNames, files).map {
-            ManifestFile(name: $0, size: $1.count)
-        })
-        guard let encManifest = try? encryptManifest(key: contentKey, manifest),
+        guard let manifest = try? InboxManifest.files(zip(Self.fileNames, files).map {
+            (name: $0, size: $1.count)
+        }),
+              let encodedManifest = try? InboxManifest.encode(manifest),
               let sealed = sodium.box.seal(message: contentKey, recipientPublicKey: recipient)
         else { return (deliveries: [], leaseSeconds: 300) }
+        let encManifest = seal(key: contentKey, seq: 0, plaintext: encodedManifest)
         let body = Data(encryptChunks(key: contentKey, files: files))
         sync { ciphertext = body }
 

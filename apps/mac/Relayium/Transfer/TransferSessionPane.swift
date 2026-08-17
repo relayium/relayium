@@ -102,6 +102,11 @@ struct TransferSessionPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             sessionPeer
+            // A retained terminal session's only way out stays above the
+            // potentially long error/result content. On the minimum window an
+            // exit below that content exists in the lazy scroll tree but is not
+            // visible, leaving the session owner with no apparent release.
+            exit
             if waitingOnJoinedCode {
                 waitingForPairingPeer
             } else {
@@ -111,7 +116,6 @@ struct TransferSessionPane: View {
                 }
             }
             if peerCapabilityIsKnown { laneNote }
-            exit
         }
         .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
         // A session that ends by any route — Cancel, Done, a failure the user
