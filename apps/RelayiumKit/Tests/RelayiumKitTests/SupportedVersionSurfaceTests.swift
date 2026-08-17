@@ -278,12 +278,13 @@ final class SupportedVersionSurfaceTests: XCTestCase {
     /// and for the same reason.
     func testAnAcceptanceLaunchNeitherFetchesNorWritesAPolicy() throws {
         let app = try macSource("RelayiumApp.swift")
-        XCTAssertTrue(app.contains("guard !UITestMode.isActive else { return }\n"
+        XCTAssertTrue(app.contains("guard !UITestMode.isActive,\n"
+                                   + "                          !AppEnvironment.isEngineeringCandidate else { return }\n"
                                    + "                    await versionSupport.refresh()"),
                       "an acceptance launch fetches the production policy")
         XCTAssertTrue(app.contains("store: UITestMode.isActive\n"
                                    + "                ? InMemorySupportedVersionPolicyStore()\n"
-                                   + "                : UserDefaultsSupportedVersionPolicyStore()"),
+                                   + "                : UserDefaultsSupportedVersionPolicyStore(defaults: AppEnvironment.persistentDefaults)"),
                       "an acceptance launch writes a policy into the product's defaults")
     }
 
@@ -340,10 +341,14 @@ final class SupportedVersionSurfaceTests: XCTestCase {
 
         let direct = try macSource("Distribution/DirectDistribution.swift")
         let action = try declaration(of: "func startUpdate()", in: direct)
-        XCTAssertTrue(action.contains("{\n        updater.checkForUpdates()\n        #if DEBUG"),
-                      "Sparkle's own check is no longer this function's unconditional "
-                      + "first statement")
+        XCTAssertTrue(action.contains("{\n        guard !AppEnvironment.isEngineeringCandidate else { return }\n"
+                                      + "        updater.checkForUpdates()\n        #if DEBUG"),
+                      "the engineering build can reach Sparkle, or the production check "
+                      + "is no longer the first action after that fixed-identity guard")
         let releaseAction = code(releaseCode(action))
+        XCTAssertTrue(releaseAction.contains("guard !AppEnvironment.isEngineeringCandidate else { return }\n"
+                                             + "        updater.checkForUpdates()"),
+                      "the engineering no-update guard no longer directly protects Sparkle")
         XCTAssertTrue(releaseAction.contains("updater.checkForUpdates()"),
                       "the production update call is inside the acceptance gate")
         XCTAssertFalse(releaseAction.contains("UITestUpdateActionWitness"))

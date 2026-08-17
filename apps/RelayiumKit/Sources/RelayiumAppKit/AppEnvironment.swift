@@ -28,7 +28,7 @@ public enum AppEnvironment {
     public static var persistentDefaults: UserDefaults {
         guard isEngineeringCandidate else { return .standard }
         guard let defaults = UserDefaults(suiteName: "com.relayium.mac.engineering") else {
-            preconditionFailure("engineering defaults domain is unavailable")
+            preconditionFailure("engineering defaults domain is unavailable") // nonlocalized: engineering-only invariant
         }
         return defaults
     }
@@ -45,7 +45,10 @@ public enum AppEnvironment {
             for: .applicationSupportDirectory, in: .userDomainMask,
             appropriateFor: nil, create: create) else { return nil }
         guard isEngineeringCandidate else { return support }
-        let isolated = support.appendingPathComponent("Relayium Engineering", isDirectory: true)
+        let isolated = support.appendingPathComponent(
+            "Relayium Engineering", // nonlocalized: engineering-only storage directory
+            isDirectory: true
+        )
         if create {
             do { try fileManager.createDirectory(at: isolated, withIntermediateDirectories: true) }
             catch { return nil }

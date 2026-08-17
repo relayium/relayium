@@ -466,9 +466,16 @@ final class TransferOriginSeamTests: XCTestCase {
     /// and only the policy is missing, and this is what keeps it the former.
     func testNothingOutsideTheDebugGuardCanSelectAnOrigin() throws {
         let source = try seamSource("TransferOrigin.swift")
-        let halves = source.components(separatedBy: "\n    #else")
-        XCTAssertEqual(halves.count, 2, "TransferOrigin lost its Debug/Release split")
-        let release = try XCTUnwrap(halves.last)
+        let engineeringAndRest = source.components(separatedBy: "\n    #elseif DEBUG")
+        XCTAssertEqual(engineeringAndRest.count, 2,
+                       "TransferOrigin lost its Engineering/Debug split")
+        let debugAndRelease = try XCTUnwrap(engineeringAndRest.last)
+            .components(separatedBy: "\n    #else")
+        XCTAssertEqual(debugAndRelease.count, 2,
+                       "TransferOrigin lost its Debug/production split")
+        let engineering = try XCTUnwrap(engineeringAndRest.first)
+        let debug = try XCTUnwrap(debugAndRelease.first)
+        let release = try XCTUnwrap(debugAndRelease.last)
         for selecting in ["transferBaseURLArgument", "--relayium-transfer-origin",
                           "ProcessInfo", "arguments", "transferBaseURL(from:",
                           "loopbackTransferOrigin("] {
@@ -477,8 +484,14 @@ final class TransferOriginSeamTests: XCTestCase {
         }
         XCTAssertTrue(release.contains("resolvedTransferBaseURL = productionBaseURL"),
                       "the Release origin is no longer a stored production constant")
-        // And the Debug half is where all of it lives.
-        let debug = try XCTUnwrap(halves.first)
+        XCTAssertTrue(engineering.contains(
+            #"resolvedTransferBaseURL = URL(string: "http://127.0.0.1:18080")!"#),
+            "the engineering build no longer has one compile-time-fixed loopback origin")
+        for selecting in ["--relayium-transfer-origin", "ProcessInfo", "arguments"] {
+            XCTAssertFalse(engineering.contains(selecting),
+                           "the engineering Release build reaches runtime selector \(selecting)")
+        }
+        // The Debug branch alone carries the runtime acceptance seam.
         for selecting in ["--relayium-transfer-origin", "ProcessInfo.processInfo.arguments"] {
             XCTAssertTrue(debug.contains(selecting), "\(selecting) is gone — this guard is stale")
         }

@@ -63,6 +63,7 @@
  * 2026-08-03 needs no translation and cannot be read as 2026-03-08.
  */
 export const RELEASES = [
+  { version: "v0.20.0", date: "2026-08-17" },
   { version: "v0.19.1", date: "2026-08-12" },
   { version: "v0.19.0", date: "2026-08-12" },
   { version: "v0.18.0", date: "2026-08-09" },
