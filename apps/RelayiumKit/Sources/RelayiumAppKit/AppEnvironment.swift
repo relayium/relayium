@@ -6,9 +6,52 @@ import RelayiumShareKit
 /// hard-code, kept here so tests and the iOS app in R3 can point elsewhere.
 public enum AppEnvironment {
     public static let productionBaseURL = URL(string: "https://relayium.com")!
-    public static let keychainService = "com.relayium.mac"
+    /// The engineering candidate is a separately-built product, never a launch
+    /// preference. The exact bundle identity is baked by Engineering.xcconfig;
+    /// no argument, environment variable or defaults key can opt a production
+    /// binary into this mode.
+    public static var isEngineeringCandidate: Bool {
+        Bundle.main.bundleIdentifier == "com.relayium.mac.engineering"
+    }
+
+    public static var keychainService: String {
+        isEngineeringCandidate ? "com.relayium.mac.engineering" : "com.relayium.mac"
+    }
     public static let keychainAccount = "bearer-token"
-    public static let keychainAccessGroup = "7PVYUG4YQS.com.relayium.shared"
+    public static var keychainAccessGroup: String? {
+        isEngineeringCandidate ? nil : "7PVYUG4YQS.com.relayium.shared"
+    }
+
+    /// Persistent preferences for this product identity. The engineering app's
+    /// explicit suite is intentionally unrelated to the production bundle's
+    /// standard defaults domain.
+    public static var persistentDefaults: UserDefaults {
+        guard isEngineeringCandidate else { return .standard }
+        guard let defaults = UserDefaults(suiteName: "com.relayium.mac.engineering") else {
+            preconditionFailure("engineering defaults domain is unavailable")
+        }
+        return defaults
+    }
+
+    /// The engineering candidate gets an explicit second boundary underneath
+    /// its already-distinct sandbox container. This keeps journals, received
+    /// messages and staged uploads separate even if a future signing change
+    /// accidentally removes the container-level distinction.
+    public static func applicationSupportRoot(
+        fileManager: FileManager = .default,
+        create: Bool = true
+    ) -> URL? {
+        guard let support = try? fileManager.url(
+            for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: create) else { return nil }
+        guard isEngineeringCandidate else { return support }
+        let isolated = support.appendingPathComponent("Relayium Engineering", isDirectory: true)
+        if create {
+            do { try fileManager.createDirectory(at: isolated, withIntermediateDirectories: true) }
+            catch { return nil }
+        }
+        return isolated
+    }
 
     /// The iOS credential identity: this app's own bundle id, and NO access
     /// group. See `KeychainConfiguration.accessGroup`.
@@ -907,9 +950,9 @@ public enum AppEnvironment {
     /// the user granted this app, and the policy is their own answer; both are
     /// account-scoped inside the store.
     public static func makeInboxFolderStore(
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults? = nil
     ) -> UserDefaultsInboxFolderStore {
-        UserDefaultsInboxFolderStore(defaults: defaults)
+        UserDefaultsInboxFolderStore(defaults: defaults ?? persistentDefaults)
     }
 
     /// Where per-task delivery journals live.
@@ -925,9 +968,7 @@ public enum AppEnvironment {
     /// fails closed rather than journalling somewhere temporary.
     public static func makeInboxJournalStore(subdirectory: String = "device-inbox")
         -> InboxJournalStore? {
-        guard let support = try? FileManager.default.url(
-            for: .applicationSupportDirectory, in: .userDomainMask,
-            appropriateFor: nil, create: true) else { return nil }
+        guard let support = applicationSupportRoot() else { return nil }
         let directory = support.appendingPathComponent(subdirectory, isDirectory: true)
         return InboxJournalStore(directory: directory)
     }
@@ -945,9 +986,7 @@ public enum AppEnvironment {
     /// caller fails closed rather than storing a message somewhere temporary.
     public static func makeInboxMessageStore(subdirectory: String = "device-inbox")
         -> InboxMessageStore? {
-        guard let support = try? FileManager.default.url(
-            for: .applicationSupportDirectory, in: .userDomainMask,
-            appropriateFor: nil, create: true) else { return nil }
+        guard let support = applicationSupportRoot() else { return nil }
         let directory = support.appendingPathComponent(subdirectory, isDirectory: true)
             .appendingPathComponent("messages", isDirectory: true)
         return InboxMessageStore(directory: directory)
@@ -1152,7 +1191,10 @@ public enum AppEnvironment {
     /// into the next unless the runs are given separate roots.
     public static func makePendingUploadSupport(drafts: SharedDraftStore?,
                                                 root: URL? = nil) -> PendingUploadSupport {
-        PendingUploadSupport(store: PendingUploadStore(root: root ?? PendingUploadStore.defaultRoot()),
+        let defaultRoot = isEngineeringCandidate
+            ? applicationSupportRoot(create: false)!.appendingPathComponent("PendingUploads", isDirectory: true)
+            : PendingUploadStore.defaultRoot()
+        return PendingUploadSupport(store: PendingUploadStore(root: root ?? defaultRoot),
                              keys: makePendingUploadKeyStore(),
                              drafts: drafts)
     }

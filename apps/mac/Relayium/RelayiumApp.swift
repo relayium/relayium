@@ -292,7 +292,7 @@ struct RelayiumApp: App {
         // construction (they read both through closures), and a @StateObject
         // default value cannot reference another property — so all of them are
         // built here against one shared instance of each.
-        let prefs = VerificationPreference()
+        let prefs = VerificationPreference(defaults: AppEnvironment.persistentDefaults)
         let nearby = AppEnvironment.makeLanDiscoveryModel()
         // Holds the exact socket an inbound attempt is being built on, so the
         // NEARBY model's inbound builder cannot reach for a room the offer never
@@ -510,7 +510,7 @@ struct RelayiumApp: App {
                 ?? SupportedVersionModel.bundleVersion(),
             store: UITestMode.isActive
                 ? InMemorySupportedVersionPolicyStore()
-                : UserDefaultsSupportedVersionPolicyStore(),
+                : UserDefaultsSupportedVersionPolicyStore(defaults: AppEnvironment.persistentDefaults),
             source: HTTPSupportedVersionPolicySource()))
         // The purchase model, built from the session and from nothing else this
         // scene owns. Both closures read through to the session at the moment of
@@ -747,7 +747,12 @@ struct RelayiumApp: App {
         // for one transfer, however app-scoped the state is. A `Window` scene
         // also contributes no File ▸ New Window item and no ⌘N.
         Window("Relayium", id: "main") {
-            AppShellView()
+            VStack(spacing: 0) {
+                if AppEnvironment.isEngineeringCandidate {
+                    EngineeringCandidateBanner()
+                }
+                AppShellView()
+            }
                 .environmentObject(navigation)
                 // BOTH modules, as one container. SwiftUI's environment is keyed
                 // by type, so two `TransferModule`s could not both live in it —
@@ -935,7 +940,8 @@ struct RelayiumApp: App {
                     // it reaches production, and nothing about a UI-test run
                     // needs it. A skipped refresh leaves the embedded floor in
                     // force, which cannot block this build.
-                    guard !UITestMode.isActive else { return }
+                    guard !UITestMode.isActive,
+                          !AppEnvironment.isEngineeringCandidate else { return }
                     await versionSupport.refresh()
                 }
         }

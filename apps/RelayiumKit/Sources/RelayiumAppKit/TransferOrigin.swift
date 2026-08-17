@@ -181,7 +181,14 @@ extension AppEnvironment {
         return octets[0] == "127"
     }
 
-    #if DEBUG
+    #if RELAYIUM_ENGINEERING_CANDIDATE
+
+    /// The engineering candidate's only origin. Unlike the Debug acceptance
+    /// seam below, even this internal Release build accepts no launch input.
+    /// Its server is therefore either this exact loopback listener or nothing.
+    static let resolvedTransferBaseURL = URL(string: "http://127.0.0.1:18080")!
+
+    #elseif DEBUG
 
     /// The argument an acceptance launcher passes, with the origin as the next
     /// argument.

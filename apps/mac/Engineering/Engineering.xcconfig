@@ -1,0 +1,13 @@
+// Internal Device Inbox v2 candidate. This file is supplied explicitly with
+// xcodebuild; ordinary Debug and Release configurations never include it.
+SWIFT_ACTIVE_COMPILATION_CONDITIONS = $(inherited) RELAYIUM_ENGINEERING_CANDIDATE
+ENGINEERING_BUNDLE_ID_Relayium = com.relayium.mac.engineering
+ENGINEERING_BUNDLE_ID_RelayiumShare = com.relayium.mac.engineering.Share
+PRODUCT_BUNDLE_IDENTIFIER = $(ENGINEERING_BUNDLE_ID_$(TARGET_NAME))
+ENGINEERING_ENTITLEMENTS_Relayium = $(PROJECT_DIR)/Engineering/Relayium.entitlements
+ENGINEERING_ENTITLEMENTS_RelayiumShare = $(PROJECT_DIR)/Engineering/RelayiumShare.entitlements
+CODE_SIGN_ENTITLEMENTS = $(ENGINEERING_ENTITLEMENTS_$(TARGET_NAME))
+CODE_SIGN_IDENTITY = -
+CODE_SIGN_STYLE = Manual
+PROVISIONING_PROFILE_SPECIFIER =
+OTHER_CODE_SIGN_FLAGS =

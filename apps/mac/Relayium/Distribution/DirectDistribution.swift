@@ -56,7 +56,10 @@ enum AppDistribution {
 @MainActor
 final class AppUpdates {
     let controller = SPUStandardUpdaterController(
-        startingUpdater: true,
+        // The engineering candidate has no update channel. In particular it
+        // must never read the production appcast embedded in the ordinary
+        // direct-download Info.plist.
+        startingUpdater: !AppEnvironment.isEngineeringCandidate,
         updaterDelegate: nil,
         userDriverDelegate: nil
     )
@@ -73,6 +76,7 @@ final class AppUpdates {
     /// tampered or replayed policy document cannot reach the install path at
     /// all. `SupportedVersionSurfaceTests` refuses any other call here.
     func startUpdate() {
+        guard !AppEnvironment.isEngineeringCandidate else { return }
         updater.checkForUpdates()
         #if DEBUG
         // **Observation, and it is compiled out of every Release build.**
@@ -111,7 +115,9 @@ struct AppUpdatesMenuItem: View {
     let updates: AppUpdates
 
     var body: some View {
-        CheckForUpdatesView(updater: updates.updater)
+        if !AppEnvironment.isEngineeringCandidate {
+            CheckForUpdatesView(updater: updates.updater)
+        }
     }
 }
 
@@ -139,8 +145,10 @@ struct AppUpdatesSettingsTab: View {
     let updates: AppUpdates
 
     var body: some View {
-        UpdateSettingsView(updater: updates.updater)
-            .tabItem { Label(L10n.t(.settingsUpdates), systemImage: "arrow.triangle.2.circlepath") }
+        if !AppEnvironment.isEngineeringCandidate {
+            UpdateSettingsView(updater: updates.updater)
+                .tabItem { Label(L10n.t(.settingsUpdates), systemImage: "arrow.triangle.2.circlepath") }
+        }
     }
 }
 
