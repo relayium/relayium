@@ -703,7 +703,7 @@ jobs:
           jq --arg hash "$hash" '.dmgSha256=$hash | .notarized=true' \
             "$RUNNER_TEMP/provenance.json" > "$RUNNER_TEMP/provenance.final.json"
           mv "$RUNNER_TEMP/provenance.final.json" "$RUNNER_TEMP/provenance.json"
-          shasum -a 256 "$RUNNER_TEMP/Relayium.dmg" > "$RUNNER_TEMP/Relayium.dmg.sha256"
+          (cd "$RUNNER_TEMP" && shasum -a 256 Relayium.dmg > Relayium.dmg.sha256)
       # A public feed must sign the final stapled bytes, not the pre-notarized
       # package. The staging script also pins the enclosure to the immutable
       # macos-v<VERSION> release URL and emits the single web manifest that

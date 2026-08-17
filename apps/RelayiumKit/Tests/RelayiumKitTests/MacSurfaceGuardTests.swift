@@ -493,6 +493,15 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(workflow.contains("permissions:\n  contents: read"))
         XCTAssertTrue(workflow.contains("signedDmgSha256")
             && workflow.contains("Finalize notarized package provenance"))
+        XCTAssertTrue(workflow.contains(
+            "(cd \"$RUNNER_TEMP\" && shasum -a 256 Relayium.dmg > Relayium.dmg.sha256)"),
+            "the notarized artifact checksum must name a portable basename")
+        XCTAssertFalse(workflow.contains(
+            "shasum -a 256 \"$RUNNER_TEMP/Relayium.dmg\" > \"$RUNNER_TEMP/Relayium.dmg.sha256\""),
+            "a runner-absolute checksum cannot be verified by the publish runner")
+        XCTAssertTrue(workflow.contains(
+            "release=\"$RUNNER_TEMP/release\"\n          cd \"$release\"\n          shasum -a 256 -c Relayium.dmg.sha256"),
+            "publication must verify the portable checksum from its artifact root")
         for testClass in ["AppShellUITests", "DeviceInboxUITests",
                           "SubscriptionUITests", "LocalSessionUITests"] {
             XCTAssertTrue(workflow.contains("RelayiumUITests/\(testClass)"),
