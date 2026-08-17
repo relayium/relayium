@@ -44,6 +44,13 @@ on:
         default: false
         type: boolean
 
+# One execution owns a commit at a time. A release dispatch for an exact SHA
+# supersedes the push verification it is about to repeat; this prevents two
+# complete signed UI suites consuming runners for the same immutable source.
+concurrency:
+  group: macos-${{ github.sha }}
+  cancel-in-progress: true
+
 jobs:
   # No secrets, so this runs on pull requests from forks like any other check.
   test:
@@ -182,6 +189,7 @@ jobs:
   # repository secrets, and a job that tried would fail confusingly rather than
   # skip cleanly.
   signed-build:
+    needs: test
     runs-on: macos-15
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:

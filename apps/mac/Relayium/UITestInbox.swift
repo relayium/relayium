@@ -83,6 +83,30 @@ enum UITestInbox {
         showsReady || showsAttention || showsWorking || showsResult || showsAsk
     }
 
+    /// One private root for this app process.
+    ///
+    /// XCTest terminates one app and can launch the next before the old process
+    /// has released every journal/file handle.  Reusing three fixed Application
+    /// Support paths therefore made a best-effort `removeItem` race the previous
+    /// receiver: a failed removal was ignored and the new fixture inherited a
+    /// completed journal.  A process-unique root makes isolation structural and
+    /// also lets the two CI class shards run without sharing fixture state.
+    private static let launchRoot: URL? = {
+        guard let support = try? FileManager.default.url(
+            for: .applicationSupportDirectory, in: .userDomainMask,
+            appropriateFor: nil, create: true) else { return nil }
+        let root = support
+            .appendingPathComponent("uitest-inbox", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: root,
+                                                    withIntermediateDirectories: true)
+            return root
+        } catch {
+            return nil
+        }
+    }()
+
     /// The mode's own controller, or nil when this launch is not an inbox one.
     @MainActor
     static func makeController() -> InboxController? {
@@ -189,7 +213,7 @@ enum UITestInbox {
         return .ready
     }
 
-    /// A directory of this launch's own, emptied before use.
+    /// A directory of this launch's own.
     ///
     /// Application Support, deliberately, and not `temporaryDirectory` or
     /// `cachesDirectory`: `IOSSurfaceGuardTests` refuses both anywhere in these
@@ -197,13 +221,15 @@ enum UITestInbox {
     /// purge — and a journal even less so, since it is what stops a delivery
     /// being written twice.
     private static func launchDirectory(_ name: String) -> URL? {
-        guard let support = try? FileManager.default.url(
-            for: .applicationSupportDirectory, in: .userDomainMask,
-            appropriateFor: nil, create: true) else { return nil }
-        let directory = support.appendingPathComponent(name, isDirectory: true)
-        try? FileManager.default.removeItem(at: directory)
-        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        return directory
+        guard let root = launchRoot else { return nil }
+        let directory = root.appendingPathComponent(name, isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(at: directory,
+                                                    withIntermediateDirectories: true)
+            return directory
+        } catch {
+            return nil
+        }
     }
 }
 
