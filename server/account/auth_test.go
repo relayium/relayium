@@ -86,6 +86,45 @@ func TestRequireAuthBearer(t *testing.T) {
 	}
 }
 
+func TestBrowserDeviceCredentialCannotAuthenticateAsAnAccountBearer(t *testing.T) {
+	s, _ := newTestService(t)
+	ctx := context.Background()
+	u, err := s.store.UpsertUserByEmail(ctx, "browser-scope@example.com", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := "rlm_web_" + authx.RandToken()
+	dev, err := s.store.UpsertDevice(ctx, Device{ID: authx.NewID(), UserID: u.ID, Name: "browser", Kind: "browser", CreatedAt: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.store.CreateCLIToken(ctx, CLIToken{TokenHash: authx.HashToken(raw), UserID: u.ID, DeviceID: dev.ID, CreatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, path := range []string{"/api/me", "/api/billing/apple/catalog", "/api/billing/apple/account-token"} {
+		t.Run(path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req.Header.Set("Authorization", "Bearer "+raw)
+			rec := httptest.NewRecorder()
+			s.RequireAuth(func(w http.ResponseWriter, _ *http.Request, _ User) {
+				t.Error("browser installation credential reached an account-authorized handler")
+				w.WriteHeader(http.StatusNoContent)
+			})(rec, req)
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("exported browser credential status = %d, want 401", rec.Code)
+			}
+		})
+	}
+	if got := s.bearerDeviceID(func() *http.Request {
+		r := httptest.NewRequest(http.MethodPost, "/api/device-inbox/tasks", nil)
+		r.Header.Set("Authorization", "Bearer "+raw)
+		return r
+	}(), u.ID); got != "" {
+		t.Fatalf("browser credential was accepted as generic bearer device %q", got)
+	}
+}
+
 func TestBearerLogoutRevokesPresentedToken(t *testing.T) {
 	s, _ := newTestService(t)
 	ctx := context.Background()

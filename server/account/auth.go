@@ -28,6 +28,13 @@ func (s *Service) UserFromAuth(r *http.Request) (User, bool) {
 		return User{}, false
 	}
 	raw := strings.TrimSpace(h[len(bearerPrefix):])
+	// Browser-install credentials are scoped device proofs. They are accepted
+	// only beside an authenticated browser session by
+	// authenticatedSourceDeviceID; exporting the cookie must never turn it into
+	// a full account bearer credential.
+	if strings.HasPrefix(raw, "rlm_web_") {
+		return User{}, false
+	}
 	hash := authx.HashToken(raw)
 	uid, _, ok, err := s.store.GetCLITokenUser(r.Context(), hash)
 	if err != nil || !ok {
@@ -94,7 +101,7 @@ func (s *Service) bearerDeviceID(r *http.Request, userID string) string {
 		return ""
 	}
 	raw := strings.TrimSpace(h[len(bearerPrefix):])
-	if raw == "" {
+	if raw == "" || strings.HasPrefix(raw, "rlm_web_") {
 		return ""
 	}
 	uid, deviceID, ok, err := s.store.GetCLITokenUser(r.Context(), authx.HashToken(raw))
