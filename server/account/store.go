@@ -1618,6 +1618,8 @@ type Store interface {
 	// UserByAppleAccountToken resolves the account a token belongs to. An empty
 	// or malformed token returns not-found rather than scanning.
 	UserByAppleAccountToken(ctx context.Context, token string) (User, bool, error)
+	ApplyAppleRenewalState(ctx context.Context, state AppleRenewalState) (bool, error)
+	GetAppleRenewalState(ctx context.Context, userID string) (AppleRenewalState, bool, error)
 	// AppleProductPlan resolves one app's product id to a Relayium tier, keyed
 	// by bundle identity as well as product id (the macOS and iOS apps ship
 	// different bundle ids). An empty key returns not-found, and so does a

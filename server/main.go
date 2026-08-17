@@ -119,6 +119,9 @@ func main() {
 	// POST /api/apple/notifications. Set, the file must be complete or the server
 	// refuses to boot. See server/apple_store.go.
 	appleStoreConfig := flag.String("apple-store-config-file", envStr("RELAYIUM_APPLE_STORE_CONFIG_FILE", ""), "path to the App Store verifier's JSON config (environment, app identities, Apple root CA file); empty = OFF, and both POST /api/billing/apple/transaction and POST /api/apple/notifications answer 503")
+	appleServerIssuer := flag.String("apple-server-api-issuer-id", envStr("RELAYIUM_APPLE_SERVER_API_ISSUER_ID", ""), "App Store Server API issuer id; required with App Store billing")
+	appleServerKeyID := flag.String("apple-server-api-key-id", envStr("RELAYIUM_APPLE_SERVER_API_KEY_ID", ""), "App Store Server API key id; required with App Store billing")
+	appleServerKeyFile := flag.String("apple-server-api-private-key-file", envStr("RELAYIUM_APPLE_SERVER_API_PRIVATE_KEY_FILE", ""), "App Store Server API ES256 .p8 key; required with App Store billing")
 	enableMagic := flag.Bool("enable-magic", envBool("RELAYIUM_ENABLE_MAGIC", false), "enable email magic-link login (disabled by default)")
 	adminUser := flag.String("admin-user", envStr("RELAYIUM_ADMIN_USER", "admin"), "admin dashboard username at /admin (defaults to 'admin')")
 	adminPass := flag.String("admin-pass", envStr("RELAYIUM_ADMIN_PASS", ""), "admin dashboard password at /admin (empty disables the dashboard)")
@@ -254,6 +257,24 @@ func main() {
 		// The message already names the rule and the file; it is not wrapped
 		// again here, because a boot failure is read in a hurry.
 		log.Fatalf("%v", err)
+	}
+	var appleSubscriptionAPI *account.AppleServerAPIClient
+	if appleStore.verifier != nil {
+		if *appleServerIssuer == "" || *appleServerKeyID == "" || *appleServerKeyFile == "" {
+			log.Fatal("App Store billing requires RELAYIUM_APPLE_SERVER_API_ISSUER_ID, RELAYIUM_APPLE_SERVER_API_KEY_ID, and RELAYIUM_APPLE_SERVER_API_PRIVATE_KEY_FILE")
+		}
+		raw, readErr := os.ReadFile(*appleServerKeyFile)
+		if readErr != nil {
+			log.Fatalf("apple: reading App Store Server API key: %v", readErr)
+		}
+		key, keyErr := account.LoadApplePrivateKey(raw)
+		if keyErr != nil {
+			log.Fatalf("apple: parsing App Store Server API key: %v", keyErr)
+		}
+		appleSubscriptionAPI, err = account.NewAppleServerAPIClient(account.AppleServerAPIConfig{IssuerID: *appleServerIssuer, KeyID: *appleServerKeyID, PrivateKey: key}, appleStore.verifier)
+		if err != nil {
+			log.Fatalf("apple: App Store Server API configuration: %v", err)
+		}
 	}
 
 	// X-Forwarded-For is only trusted from configured reverse proxies; otherwise
@@ -563,6 +584,9 @@ func main() {
 		// to reason about, and no order in which a purchase could be verified
 		// against half a configuration.
 		appleStore.install(acct)
+		if appleSubscriptionAPI != nil {
+			acct.SetAppleSubscriptionReconciler(appleSubscriptionAPI)
+		}
 		// Notification retention is account storage maintenance, not blob-storage
 		// maintenance. Keep it outside the stored-transfers branch so deployments
 		// that deliberately disable file storage still bound completed Apple

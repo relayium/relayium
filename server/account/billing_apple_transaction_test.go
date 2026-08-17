@@ -22,14 +22,15 @@ const testAppleProduct = "com.relayium.app.pro.monthly"
 // one mapped product, and one authenticated account holding its app account
 // token.
 type appleTxFixture struct {
-	ts     *httptest.Server
-	svc    *Service
-	store  *SQLiteStore
-	mail   *capturingMailer
-	chain  *appleTestChain
-	cookie *http.Cookie
-	userID string
-	token  string
+	ts       *httptest.Server
+	svc      *Service
+	store    *SQLiteStore
+	mail     *capturingMailer
+	chain    *appleTestChain
+	verifier *AppleTransactionVerifier
+	cookie   *http.Cookie
+	userID   string
+	token    string
 }
 
 func newAppleTxFixture(t *testing.T) *appleTxFixture {
@@ -37,7 +38,14 @@ func newAppleTxFixture(t *testing.T) *appleTxFixture {
 	ts, svc, store, mail := newBillingServer(t)
 	seedTiers(t, store)
 	chain := newAppleTestChain(t)
-	svc.SetAppleTransactionVerifier(testVerifier(t, chain))
+	verifier := testVerifier(t, chain)
+	svc.SetAppleTransactionVerifier(verifier)
+	svc.SetAppleSubscriptionReconciler(appleReconcilerFunc(func(_ context.Context, tx VerifiedAppleTransaction, now time.Time) (AppleSubscriptionCanonical, error) {
+		return AppleSubscriptionCanonical{Transaction: tx, Renewal: VerifiedAppleRenewalInfo{
+			OriginalTransactionID: tx.OriginalTransactionID, AutoRenewProductID: tx.ProductID,
+			Environment: tx.Environment, RenewalDateMS: tx.ExpiresDateMS, SignedDateMS: now.UnixMilli(),
+		}}, nil
+	}))
 	mustAppleProduct(t, store, AppleProduct{
 		BundleID: testBundleIOS, ProductID: testAppleProduct,
 		PlanID: "pro", Cycle: "monthly", Active: true,
@@ -45,7 +53,7 @@ func newAppleTxFixture(t *testing.T) *appleTxFixture {
 	email := "apple-tx@example.com"
 	cookie := loginCookie(t, ts, mail, email)
 	f := &appleTxFixture{
-		ts: ts, svc: svc, store: store, mail: mail, chain: chain,
+		ts: ts, svc: svc, store: store, mail: mail, chain: chain, verifier: verifier,
 		cookie: cookie, userID: mustUserID(t, store, email),
 	}
 	f.token = postAppleToken(t, ts, cookie)
@@ -74,7 +82,21 @@ func (f *appleTxFixture) submit(t *testing.T, jws string) *http.Response {
 
 func (f *appleTxFixture) submitAs(t *testing.T, cookie *http.Cookie, jws string) *http.Response {
 	t.Helper()
-	return f.post(t, cookie, string(mustJSON(t, map[string]string{"signedTransactionInfo": jws})))
+	renewal := map[string]any{"originalTransactionId": "2000000000000001", "autoRenewProductId": testAppleProduct,
+		"environment": appleEnvProduction, "signedDate": time.Now().UnixMilli()}
+	if tx, err := f.verifier.verifyTransactionIdentity(jws, time.Now()); err == nil {
+		renewal["originalTransactionId"] = tx.OriginalTransactionID
+		renewal["autoRenewProductId"] = tx.ProductID
+		renewal["environment"] = tx.Environment
+	}
+	return f.post(t, cookie, string(mustJSON(t, map[string]string{"signedTransactionInfo": jws,
+		"signedRenewalInfo": f.chain.sign(t, renewal)})))
+}
+
+type appleReconcilerFunc func(context.Context, VerifiedAppleTransaction, time.Time) (AppleSubscriptionCanonical, error)
+
+func (f appleReconcilerFunc) CanonicalSubscription(ctx context.Context, tx VerifiedAppleTransaction, now time.Time) (AppleSubscriptionCanonical, error) {
+	return f(ctx, tx, now)
 }
 
 func (f *appleTxFixture) post(t *testing.T, cookie *http.Cookie, body string) *http.Response {
@@ -847,7 +869,14 @@ func TestAppleTransactionAcceptsABearerCredential(t *testing.T) {
 		t.Fatalf("issue bearer: %v", err)
 	}
 
-	body := string(mustJSON(t, map[string]string{"signedTransactionInfo": f.chain.sign(t, f.payload())}))
+	tx := f.payload()
+	body := string(mustJSON(t, map[string]string{
+		"signedTransactionInfo": f.chain.sign(t, tx),
+		"signedRenewalInfo": f.chain.sign(t, map[string]any{
+			"originalTransactionId": tx["originalTransactionId"], "autoRenewProductId": tx["productId"],
+			"environment": tx["environment"], "signedDate": time.Now().UnixMilli(),
+		}),
+	}))
 	req, err := http.NewRequest(http.MethodPost, f.ts.URL+"/api/billing/apple/transaction", strings.NewReader(body))
 	if err != nil {
 		t.Fatal(err)

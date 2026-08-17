@@ -61,7 +61,8 @@ func mustDualVerifier(t *testing.T, c *appleTestChain) *AppleTransactionVerifier
 func newAppleDualFixture(t *testing.T) *appleTxFixture {
 	t.Helper()
 	f := newAppleTxFixture(t)
-	f.svc.SetAppleTransactionVerifier(mustDualVerifier(t, f.chain))
+	f.verifier = mustDualVerifier(t, f.chain)
+	f.svc.SetAppleTransactionVerifier(f.verifier)
 	return f
 }
 

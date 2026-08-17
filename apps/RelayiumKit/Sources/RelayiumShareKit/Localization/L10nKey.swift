@@ -1171,6 +1171,10 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case subscriptionNothingToRestore = "subscription.nothingToRestore"
     /// Ask to Buy, or a bank approval. No transaction exists yet.
     case subscriptionDeferred = "subscription.deferred"
+    case subscriptionEffectImmediate = "subscription.effect.immediate"
+    case subscriptionEffectRenewal = "subscription.effect.renewal"
+    case subscriptionRenewalPending = "subscription.renewal.pending"
+    case subscriptionGrace = "subscription.grace"
     case subscriptionCompleted = "subscription.completed"
     /// Opens the App Store's own subscription management — the only place an
     /// App Store subscription can be changed or cancelled.

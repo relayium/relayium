@@ -76,6 +76,7 @@ public struct AppleSubscriptionOfferRow: Equatable, Identifiable, Sendable {
     /// "current" would tell a monthly subscriber that the yearly plan they are
     /// looking at is something they already have.
     public let isCurrentPlan: Bool
+    public let changeEffect: AppleSubscriptionChangeEffect
     /// Whether this row may start a purchase.
     ///
     /// The inverse of ``isCurrentPlan``, stated as its own field rather than
@@ -87,6 +88,10 @@ public struct AppleSubscriptionOfferRow: Equatable, Identifiable, Sendable {
     public let offersSubscribe: Bool
 
     public var id: String { productID }
+}
+
+public enum AppleSubscriptionChangeEffect: Equatable, Sendable {
+    case current, newSubscription, immediateUpgrade, nextRenewal
 }
 
 /// A sentence the purchase surface shows about itself, and how it should look.
@@ -131,7 +136,8 @@ public enum AppleSubscriptionPresentation {
                                  currentPlanID: String,
                                  currentCycle: String,
                                  language: AppLanguage? = nil) -> [AppleSubscriptionOfferRow] {
-        offers.map { offer in
+        let currentRank = offers.first { $0.product.planId == currentPlanID }?.product.sortOrder
+        return offers.map { offer in
             // BOTH halves have to match, and both have to be non-empty.
             //
             // '' as a plan id is the free tier and every signed-in account that
@@ -146,6 +152,12 @@ public enum AppleSubscriptionPresentation {
             let isCurrent = !currentPlanID.isEmpty && !currentCycle.isEmpty
                 && offer.product.planId == currentPlanID
                 && offer.product.cycle == currentCycle
+            let effect: AppleSubscriptionChangeEffect
+            if isCurrent { effect = .current }
+            else if currentPlanID.isEmpty || currentRank == nil { effect = .newSubscription }
+            else if offer.product.planId == currentPlanID { effect = .nextRenewal }
+            else if offer.product.sortOrder > currentRank! { effect = .immediateUpgrade }
+            else { effect = .nextRenewal }
             return AppleSubscriptionOfferRow(
                 productID: offer.product.productId,
                 title: offer.product.planName,
@@ -156,12 +168,22 @@ public enum AppleSubscriptionPresentation {
                                            trafficBytes: offer.product.trafficBytes,
                                            language: language),
                 isCurrentPlan: isCurrent,
+                changeEffect: effect,
                 // The exact product an account already holds may not be bought
                 // again — that is a second charge for the thing it is already
                 // paying for. The other cycle of the same tier is a different
                 // product and stays purchasable, which is how an Apple
                 // subscriber switches between monthly and yearly at all.
                 offersSubscribe: !isCurrent)
+        }
+    }
+
+    public static func effectText(_ effect: AppleSubscriptionChangeEffect,
+                                  language: AppLanguage? = nil) -> String {
+        switch effect {
+        case .current, .newSubscription: return ""
+        case .immediateUpgrade: return L10n.t(.subscriptionEffectImmediate, language: language)
+        case .nextRenewal: return L10n.t(.subscriptionEffectRenewal, language: language)
         }
     }
 

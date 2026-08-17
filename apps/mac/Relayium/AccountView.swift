@@ -77,7 +77,8 @@ struct AccountView: View {
                     currentCycle: usage.plan.billingCycle,
                     // The SERVER's answer to "who owns this entitlement", not
                     // anything this screen inferred from a purchase.
-                    entitlementProvider: usage.plan.entitlementProvider ?? "")
+                    entitlementProvider: usage.plan.entitlementProvider ?? "",
+                    appleRenewal: usage.plan.appleRenewal)
                     .frame(maxWidth: Metrics.readingMeasure, alignment: .leading)
             }
             devicesCard

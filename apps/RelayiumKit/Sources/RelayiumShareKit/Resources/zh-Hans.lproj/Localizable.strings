@@ -830,6 +830,10 @@
 "subscription.restore" = "恢复购买";
 "subscription.nothingToRestore" = "此 Apple ID 没有可恢复的 Relayium 订阅。";
 "subscription.deferred" = "这笔购买正在等待批准。一旦通过，Relayium 会立即更新你的套餐。";
+"subscription.effect.immediate" = "立即生效。未使用时长的按比例退款由 Apple 处理。";
+"subscription.effect.renewal" = "将在下次续订时生效；在此之前继续使用当前订阅。";
+"subscription.renewal.pending" = "Apple 将在下次续订时把此订阅切换为 %@ %@。";
+"subscription.grace" = "Apple 正在重试扣款。在 Apple 的账单宽限期内，你可以继续使用。";
 "subscription.completed" = "订阅已生效，上方的套餐已更新。";
 "subscription.manage" = "在 App Store 中管理";
 "subscription.managedByApple" = "此订阅由 Apple 计费。请在 App Store 中更改或取消。";

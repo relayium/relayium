@@ -36,10 +36,10 @@ import (
 //     replay clock: appleEventClock derives that from the transaction's own
 //     purchaseDate, so an envelope re-signed today cannot outrank a newer
 //     generation.
-//   - `data.signedRenewalInfo` is not read at all. It describes Apple's
-//     INTENTION to renew — auto-renew status, a pending price increase, an
-//     expiration reason — none of which is a paid-through date. Access is what
-//     the transaction says has been paid for.
+//   - `data.signedRenewalInfo` is independently verified and projected only as
+//     renewal intent, billing-retry and bounded-grace state. It never supplies
+//     a paid-through date by itself. Access still comes from the transaction,
+//     with grace bounded by Apple's signed grace-period expiry.
 //   - `data.status` is Apple's own subscription status enum. Same reason: it is
 //     a summary of the transaction, and the transaction is present.
 //
@@ -103,6 +103,8 @@ type VerifiedAppleNotification struct {
 	// Transaction is the INDEPENDENTLY verified nested transaction. Meaningful
 	// only when HasTransaction.
 	Transaction VerifiedAppleTransaction
+	Renewal     VerifiedAppleRenewalInfo
+	HasRenewal  bool
 	// Supported reports whether Transaction is a shape this server grants for —
 	// an auto-renewable subscription the account holder purchased themselves
 	// (appleSubscriptionShape). False is NOT a refusal: the payload is fully
@@ -194,6 +196,14 @@ func (v *AppleTransactionVerifier) VerifyNotification(signedPayload string, serv
 
 	out.HasTransaction = true
 	out.Transaction = tx
+	if env.SignedRenewalInfo != "" {
+		renewal, err := v.VerifyRenewalInfo(env.SignedRenewalInfo, tx, serverNow)
+		if err != nil {
+			return VerifiedAppleNotification{}, err
+		}
+		out.Renewal = renewal
+		out.HasRenewal = true
+	}
 	// Verified either way; Supported only decides what the handler does with it.
 	out.Supported = appleSubscriptionShape(tx) == nil
 	return out, nil
@@ -260,6 +270,7 @@ type appleNotificationEnvelope struct {
 	Environment           string
 	AppAppleID            int64
 	SignedTransactionInfo string
+	SignedRenewalInfo     string
 }
 
 type appleNotificationIdentity struct {
@@ -284,6 +295,7 @@ func parseAppleNotificationEnvelope(raw []byte) (appleNotificationEnvelope, erro
 			Environment           string      `json:"environment"`
 			AppAppleID            json.Number `json:"appAppleId"`
 			SignedTransactionInfo string      `json:"signedTransactionInfo"`
+			SignedRenewalInfo     string      `json:"signedRenewalInfo"`
 		} `json:"data"`
 		Summary *struct {
 			BundleID    string      `json:"bundleId"`
@@ -345,6 +357,7 @@ func parseAppleNotificationEnvelope(raw []byte) (appleNotificationEnvelope, erro
 	case p.Data != nil:
 		identity = appleNotificationIdentity{BundleID: p.Data.BundleID, Environment: p.Data.Environment, AppAppleID: p.Data.AppAppleID}
 		env.SignedTransactionInfo = p.Data.SignedTransactionInfo
+		env.SignedRenewalInfo = p.Data.SignedRenewalInfo
 	case p.Summary != nil:
 		identity = appleNotificationIdentity{BundleID: p.Summary.BundleID, Environment: p.Summary.Environment, AppAppleID: p.Summary.AppAppleID}
 	case p.ExternalPurchaseToken != nil:
@@ -378,6 +391,9 @@ func parseAppleNotificationEnvelope(raw []byte) (appleNotificationEnvelope, erro
 	// verified are not the bytes Apple signed into this envelope.
 	if env.SignedTransactionInfo != strings.TrimSpace(env.SignedTransactionInfo) {
 		return appleNotificationEnvelope{}, rejectApple("notification_transaction_info")
+	}
+	if env.SignedRenewalInfo != strings.TrimSpace(env.SignedRenewalInfo) {
+		return appleNotificationEnvelope{}, rejectApple("notification_renewal_info")
 	}
 	return env, nil
 }

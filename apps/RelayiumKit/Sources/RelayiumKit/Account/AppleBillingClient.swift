@@ -29,6 +29,17 @@ public protocol AppleBillingService {
     /// over, and report what the server made of it.
     func submitAppleTransaction(signedTransactionInfo: String,
                                 token: String) async throws -> AppleTransactionResult
+    func submitAppleTransaction(signedTransactionInfo: String,
+                                signedRenewalInfo: String,
+                                token: String) async throws -> AppleTransactionResult
+}
+
+public extension AppleBillingService {
+    func submitAppleTransaction(signedTransactionInfo: String,
+                                signedRenewalInfo: String,
+                                token: String) async throws -> AppleTransactionResult {
+        try await submitAppleTransaction(signedTransactionInfo: signedTransactionInfo, token: token)
+    }
 }
 
 /// What `GET /api/billing/apple/catalog` answered with on a 200: the products
@@ -375,6 +386,13 @@ extension AccountClient: AppleBillingService {
     /// or any error value this throws.
     public func submitAppleTransaction(signedTransactionInfo: String,
                                        token: String) async throws -> AppleTransactionResult {
+        try await submitAppleTransaction(signedTransactionInfo: signedTransactionInfo,
+                                         signedRenewalInfo: "", token: token)
+    }
+
+    public func submitAppleTransaction(signedTransactionInfo: String,
+                                       signedRenewalInfo: String,
+                                       token: String) async throws -> AppleTransactionResult {
         var req = URLRequest(url: baseURL.appendingPathComponent("api/billing/apple/transaction"))
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -384,7 +402,8 @@ extension AccountClient: AppleBillingService {
         // decoder reads. Base64url and `.` need no escaping either way, so the
         // bytes between the quotes are the bytes handed over.
         req.httpBody = try JSONEncoder().encode(
-            AppleTransactionSubmission(signedTransactionInfo: signedTransactionInfo))
+            AppleTransactionSubmission(signedTransactionInfo: signedTransactionInfo,
+                                       signedRenewalInfo: signedRenewalInfo))
         let (data, resp) = try await appleSend(req)
         switch resp.statusCode {
         case 200:
@@ -451,6 +470,9 @@ private struct AppleAccountTokenBody: Decodable { let appAccountToken: String }
 /// the encoded document has exactly one key — which is what the server's
 /// `DisallowUnknownFields` decoder requires and what a hand-built dictionary
 /// would leave to whoever edits the call site next.
-private struct AppleTransactionSubmission: Encodable { let signedTransactionInfo: String }
+private struct AppleTransactionSubmission: Encodable {
+    let signedTransactionInfo: String
+    let signedRenewalInfo: String
+}
 
 private struct AppleErrorBody: Decodable { let error: String }

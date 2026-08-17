@@ -28,6 +28,17 @@ public struct NativeUser: Codable, Equatable {
     /// Distinct from ``hasBilling``, which stays "this account has a Stripe
     /// customer, so the web Billing Portal is reachable".
     public var entitlementProvider: String? = nil
+    public var appleRenewal: AppleRenewalInfo? = nil
+}
+
+public struct AppleRenewalInfo: Codable, Equatable, Sendable {
+    public var available: Bool
+    public var currentProductId: String?
+    public var renewalProductId: String?
+    public var renewalAt: Int64?
+    public var inBillingRetry: Bool?
+    public var inGracePeriod: Bool?
+    public var graceUntil: Int64?
 }
 
 public struct MeResponse: Codable, Equatable { public let user: NativeUser }
@@ -69,6 +80,7 @@ public struct PlanInfo: Codable, Equatable {
     /// same reason. `/api/me/usage` carries it so the plan card can decide
     /// whether a billing control is honest without a second request.
     public var entitlementProvider: String? = nil
+    public var appleRenewal: AppleRenewalInfo? = nil
 }
 
 public struct UsageResponse: Codable, Equatable {

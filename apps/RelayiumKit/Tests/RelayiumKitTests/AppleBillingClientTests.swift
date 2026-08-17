@@ -94,14 +94,14 @@ final class AppleBillingClientTests: XCTestCase {
 
     // MARK: - submitting a transaction
 
-    /// **The request body is one key, and its value is the JWS byte for byte.**
+    /// Both independently signed documents are carried byte for byte.
     ///
     /// The server decodes with `DisallowUnknownFields` and refuses a value that
     /// is not equal to its own trimmed copy — because verifying a normalized
     /// copy of what a client sent means the bytes checked are not the bytes
     /// submitted. So this asserts the exact key set AND that the string is
     /// unchanged, rather than that the request "contains" the JWS.
-    func testTheSubmissionSendsExactlyOneFieldCarryingTheJWSUnchanged() async throws {
+    func testTheSubmissionSendsTransactionAndRenewalJWSUnchanged() async throws {
         StubURLProtocol.stub = .init(
             status: 200,
             body: Data(#"{"applied":true,"planId":"pro","status":"active","expiresAt":9,"provider":"apple"}"#.utf8),
@@ -112,13 +112,14 @@ final class AppleBillingClientTests: XCTestCase {
                 XCTAssertEqual(req.value(forHTTPHeaderField: "Content-Type"), "application/json")
             })
         _ = try await client().submitAppleTransaction(signedTransactionInfo: Self.jws,
+                                                      signedRenewalInfo: "renewal.jws.value",
                                                       token: "rlm_app_T")
         let object = try XCTUnwrap(JSONSerialization.jsonObject(
             with: Data(StubURLProtocol.lastBodyBytes)) as? [String: Any])
-        XCTAssertEqual(Set(object.keys), ["signedTransactionInfo"],
-                       "the body carries something other than the one field the server accepts")
+        XCTAssertEqual(Set(object.keys), ["signedTransactionInfo", "signedRenewalInfo"])
         XCTAssertEqual(object["signedTransactionInfo"] as? String, Self.jws,
                        "the JWS was not submitted byte for byte")
+        XCTAssertEqual(object["signedRenewalInfo"] as? String, "renewal.jws.value")
     }
 
     /// Whitespace is not tidied. A compact serialization has none in it, so a

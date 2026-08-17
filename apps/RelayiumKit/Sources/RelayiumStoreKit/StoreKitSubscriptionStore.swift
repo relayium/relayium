@@ -98,7 +98,7 @@ public actor StoreKitSubscriptionStore: SubscriptionStore {
         let result = try await product.purchase(options: [.appAccountToken(appAccountToken)])
         switch result {
         case .success(let verification):
-            return .delivered(record(verification))
+            return .delivered(await record(verification))
         case .userCancelled:
             return .userCancelled
         case .pending:
@@ -113,7 +113,7 @@ public actor StoreKitSubscriptionStore: SubscriptionStore {
     public func currentEntitlements() async -> [SignedStoreTransaction] {
         var out: [SignedStoreTransaction] = []
         for await verification in Transaction.currentEntitlements {
-            out.append(record(verification))
+            out.append(await record(verification))
         }
         return out
     }
@@ -167,10 +167,24 @@ public actor StoreKitSubscriptionStore: SubscriptionStore {
     /// unwrapped payload, because it is the compact JWS Apple signed — the
     /// bytes the server must check. Re-encoding the decoded transaction would
     /// produce a document with no signature over it.
-    private func record(_ verification: VerificationResult<Transaction>) -> SignedStoreTransaction {
+    private func record(_ verification: VerificationResult<Transaction>) async -> SignedStoreTransaction {
         let transaction = verification.unsafePayloadValue
         delivered[transaction.id] = transaction
+        let renewalJWS = await renewalInfoJWS(for: transaction)
         return SignedStoreTransaction(id: StoreTransactionID(rawValue: transaction.id),
-                                      jws: verification.jwsRepresentation)
+                                      jws: verification.jwsRepresentation,
+                                      renewalJWS: renewalJWS)
+    }
+
+    private func renewalInfoJWS(for transaction: Transaction) async -> String {
+        do {
+            guard let product = try await Product.products(for: [transaction.productID]).first,
+                  let info = product.subscription else { return "" }
+            for status in try await info.status where
+                status.transaction.unsafePayloadValue.originalID == transaction.originalID {
+                return status.renewalInfo.jwsRepresentation
+            }
+        } catch { return "" }
+        return ""
     }
 }

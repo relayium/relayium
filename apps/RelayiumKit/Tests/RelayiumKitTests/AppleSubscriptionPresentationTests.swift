@@ -14,15 +14,29 @@ final class AppleSubscriptionPresentationTests: XCTestCase {
 
     private func offer(_ id: String, plan: String, name: String, cycle: String,
                        price: String = "$1.99",
+                       sortOrder: Int64 = 10,
                        storageBytes: Int64? = nil,
                        trafficBytes: Int64? = nil) -> AppleSubscriptionOffer {
         AppleSubscriptionOffer(
             product: AppleCatalogProduct(productId: id, planId: plan, planName: name,
-                                         cycle: cycle, sortOrder: 10,
+                                         cycle: cycle, sortOrder: sortOrder,
                                          storageBytes: storageBytes,
                                          trafficBytes: trafficBytes),
             store: SubscriptionOffer(id: id, displayName: name, description: "d",
                                      displayPrice: price))
+    }
+
+    func testTierUpIsImmediateWhileTierDownAndCycleChangesWaitForRenewal() {
+        let offers = [
+            offer("plus.m", plan: "plus", name: "Plus", cycle: "monthly", sortOrder: 10),
+            offer("pro.m", plan: "pro", name: "Pro", cycle: "monthly", sortOrder: 20),
+            offer("pro.y", plan: "pro", name: "Pro", cycle: "yearly", sortOrder: 20),
+            offer("max.m", plan: "max", name: "Max", cycle: "monthly", sortOrder: 30),
+        ]
+        let rows = AppleSubscriptionPresentation.offerRows(
+            offers, currentPlanID: "pro", currentCycle: "monthly", language: .en)
+        XCTAssertEqual(rows.map(\.changeEffect),
+                       [.nextRenewal, .current, .nextRenewal, .immediateUpgrade])
     }
 
     // MARK: - the distribution channel decides what may be offered

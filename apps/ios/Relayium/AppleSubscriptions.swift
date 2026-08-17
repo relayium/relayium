@@ -45,6 +45,7 @@ struct AppleSubscriptionCard: View {
     /// product and a real purchase.
     let currentCycle: String
     let entitlementProvider: String
+    var appleRenewal: AppleRenewalInfo? = nil
 
     @Environment(\.openURL) private var openURL
 
@@ -54,6 +55,10 @@ struct AppleSubscriptionCard: View {
             Text(L10n.t(.subscriptionBody))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            if let renewalNotice {
+                Label(renewalNotice, systemImage: "info.circle")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
 
             if let blocked = AppleSubscriptionPresentation.eligibilityNotice(model.eligibility) {
                 Label(blocked, systemImage: "info.circle")
@@ -120,6 +125,14 @@ struct AppleSubscriptionCard: View {
                                                 currentCycle: currentCycle)
     }
 
+    private var renewalNotice: String? {
+        guard let state = appleRenewal, state.available else { return nil }
+        if state.inGracePeriod == true { return L10n.t(.subscriptionGrace) }
+        guard let target = state.renewalProductId, target != state.currentProductId,
+              let row = rows.first(where: { $0.productID == target }) else { return nil }
+        return L10n.t(.subscriptionRenewalPending, [row.title, row.cycleLabel])
+    }
+
     @ViewBuilder
     private func offerRow(_ row: AppleSubscriptionOfferRow) -> some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -139,6 +152,8 @@ struct AppleSubscriptionCard: View {
                 }
             }
             Text(row.price).font(.caption).foregroundStyle(.secondary)
+            let effect = AppleSubscriptionPresentation.effectText(row.changeEffect)
+            if !effect.isEmpty { Text(effect).font(.caption).foregroundStyle(.secondary) }
             // What the tier grants, from the server's own plan row — never a
             // figure this build carries.
             if let entitlements = row.entitlements {

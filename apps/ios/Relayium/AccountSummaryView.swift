@@ -313,7 +313,8 @@ struct AccountSummaryView: View {
                     // Read off the SAME projection as the plan id, so the badge
                     // cannot mark the other billing period of this tier.
                     currentCycle: usage.plan.billingCycle,
-                    entitlementProvider: user.entitlementProvider ?? "")
+                    entitlementProvider: user.entitlementProvider ?? "",
+                    appleRenewal: user.appleRenewal)
             }
         }
     }

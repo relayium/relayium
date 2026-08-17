@@ -76,6 +76,7 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 	}
 	var in struct {
 		SignedTransactionInfo string `json:"signedTransactionInfo"`
+		SignedRenewalInfo     string `json:"signedRenewalInfo"`
 	}
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, appleTransactionBodyLimit))
 	// One field, and only that field: an unknown key is either a client sending
@@ -98,7 +99,7 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 	// bytes checked are not the bytes submitted; the compact serialization has
 	// no whitespace in it, so a request carrying some is malformed, not untidy.
 	signed := in.SignedTransactionInfo
-	if signed == "" || strings.TrimSpace(signed) != signed {
+	if signed == "" || strings.TrimSpace(signed) != signed || in.SignedRenewalInfo == "" || strings.TrimSpace(in.SignedRenewalInfo) != in.SignedRenewalInfo {
 		writeAppleTransactionError(w, http.StatusBadRequest, "invalid_request")
 		return
 	}
@@ -112,6 +113,22 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 		writeAppleTransactionError(w, http.StatusBadRequest, "invalid_transaction")
 		return
 	}
+	if _, err := verifier.VerifyRenewalInfo(in.SignedRenewalInfo, tx, now); err != nil {
+		log.Printf("billing: apple renewal info refused for user %s (%s)", u.ID, appleRejectionCode(err))
+		writeAppleTransactionError(w, http.StatusBadRequest, "invalid_transaction")
+		return
+	}
+	if s.appleSubscriptions == nil {
+		writeAppleTransactionError(w, http.StatusServiceUnavailable, "reconciliation_unavailable")
+		return
+	}
+	canonical, err := s.appleSubscriptions.CanonicalSubscription(r.Context(), tx, now)
+	if err != nil {
+		log.Printf("billing: canonical apple subscription refresh for user %s failed: %v", u.ID, err)
+		writeAppleTransactionError(w, http.StatusServiceUnavailable, "reconciliation_unavailable")
+		return
+	}
+	tx = canonical.Transaction
 
 	// WHOSE PURCHASE IS THIS? The token inside the verified payload is an
 	// attribution key the server issued; it is resolved here and compared with
@@ -152,8 +169,14 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 		writeAppleTransactionError(w, http.StatusBadRequest, "invalid_transaction")
 		return
 	}
+	renewalState := appleRenewalState(u.ID, tx, canonical.Renewal, now)
+	if _, err := s.Store().ApplyAppleRenewalState(r.Context(), renewalState); err != nil {
+		log.Printf("billing: applying apple renewal state for user %s failed: %v", u.ID, err)
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
 
-	res, err := s.Store().ApplySubscriptionSource(r.Context(), appleSourceEvent(u.ID, tx, product, now))
+	res, err := s.Store().ApplySubscriptionSource(r.Context(), appleSourceEventWithRenewal(u.ID, tx, product, renewalState, now))
 	switch {
 	case errors.Is(err, ErrExternalSubscriptionOwned):
 		// One App Store subscription, one Relayium account. The apply wrote
@@ -199,6 +222,17 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 		ExpiresAt: res.Effective.PeriodEnd,
 		Provider:  res.Effective.Source,
 	})
+}
+
+func appleSourceEventWithRenewal(userID string, tx VerifiedAppleTransaction, product AppleProduct, renewal AppleRenewalState, now time.Time) SourceEvent {
+	ev := appleSourceEvent(userID, tx, product, now)
+	if !appleTransactionIsTerminal(tx) && renewal.graceActive(now) && renewal.GraceUntil > ev.PeriodEnd {
+		ev.PlanID = product.PlanID
+		ev.Status = "active"
+		ev.Cycle = product.Cycle
+		ev.PeriodEnd = renewal.GraceUntil
+	}
+	return ev
 }
 
 // appleSourceEvent turns a verified transaction plus the server's own product

@@ -126,6 +126,7 @@ private final class FakeBilling: AppleBillingService, @unchecked Sendable {
     private var _accountToken: Result<UUID, Error>
     private var _submissions: [Result<AppleTransactionResult, Error>] = []
     private var _submittedJWS: [String] = []
+    private var _submittedRenewalJWS: [String] = []
     private var _submittedBearers: [String] = []
     private var _accountTokenBearers: [String] = []
     /// Submissions from this 1-based call number onwards park until released.
@@ -153,6 +154,7 @@ private final class FakeBilling: AppleBillingService, @unchecked Sendable {
     var catalogBundleIDs: [String] { sync { _catalogBundleIDs } }
     var catalogBearers: [String] { sync { _catalogBearers } }
     var submittedJWS: [String] { sync { _submittedJWS } }
+    var submittedRenewalJWS: [String] { sync { _submittedRenewalJWS } }
     var submittedBearers: [String] { sync { _submittedBearers } }
     var accountTokenBearers: [String] { sync { _accountTokenBearers } }
 
@@ -173,9 +175,18 @@ private final class FakeBilling: AppleBillingService, @unchecked Sendable {
 
     func submitAppleTransaction(signedTransactionInfo: String,
                                 token: String) async throws -> AppleTransactionResult {
+        try await submitAppleTransaction(signedTransactionInfo: signedTransactionInfo,
+                                         signedRenewalInfo: "",
+                                         token: token)
+    }
+
+    func submitAppleTransaction(signedTransactionInfo: String,
+                                signedRenewalInfo: String,
+                                token: String) async throws -> AppleTransactionResult {
         journal.record("submit")
         sync {
             _submittedJWS.append(signedTransactionInfo)
+            _submittedRenewalJWS.append(signedRenewalInfo)
             _submittedBearers.append(token)
         }
         // Recorded BEFORE parking, so a test can see this submission is in
@@ -249,7 +260,7 @@ private enum Fixture {
     static let accountToken = UUID(uuidString: "3F2504E0-4F89-41D3-9A0C-0305E82C3301")!
     static let jws = "eyJhbGciOiJFUzI1NiJ9.eyJ0eCI6IjEifQ.SIG-not-touched_-~"
     static let delivery = SignedStoreTransaction(
-        id: StoreTransactionID(rawValue: 7_001), jws: jws)
+        id: StoreTransactionID(rawValue: 7_001), jws: jws, renewalJWS: "renewal-jws")
     static let entitlement = AppleTransactionResult(
         applied: true, planId: "plus", status: "active",
         expiresAt: 1_786_000_000, provider: "apple")
@@ -395,6 +406,8 @@ final class AppleSubscriptionModelTests: XCTestCase {
         XCTAssertEqual(rig.billing.accountTokenBearers, ["rlm_app_T"])
         XCTAssertEqual(rig.billing.submittedJWS, [Fixture.jws],
                        "the JWS was altered between the store and the server")
+        XCTAssertEqual(rig.billing.submittedRenewalJWS, ["renewal-jws"],
+                       "the renewal JWS was altered or omitted between the store and the server")
         XCTAssertEqual(rig.billing.submittedBearers, ["rlm_app_T"])
     }
 

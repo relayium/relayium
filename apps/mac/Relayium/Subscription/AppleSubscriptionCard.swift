@@ -54,12 +54,14 @@ struct AppleSubscriptionCard: View {
     /// `/api/me`'s `entitlementProvider`, which decides whether Apple's
     /// management control belongs on screen.
     let entitlementProvider: String
+    var appleRenewal: AppleRenewalInfo? = nil
 
     var body: some View {
         SectionCard(title: L10n.t(.subscriptionHeading)) {
             Text(L10n.t(.subscriptionBody))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+            if let renewalNotice { InlineMessage(.info, renewalNotice) }
 
             // Why this account may not buy, when it may not. Above the offers
             // rather than below them: it is the reason the buttons beneath are
@@ -197,6 +199,17 @@ struct AppleSubscriptionCard: View {
                                                 currentCycle: currentCycle)
     }
 
+    private var renewalNotice: String? {
+        guard let state = appleRenewal, state.available else { return nil }
+        if state.inGracePeriod == true {
+            return L10n.t(.subscriptionGrace)
+        }
+        guard let target = state.renewalProductId,
+              target != state.currentProductId,
+              let row = rows.first(where: { $0.productID == target }) else { return nil }
+        return L10n.t(.subscriptionRenewalPending, [row.title, row.cycleLabel])
+    }
+
     @ViewBuilder
     private func offerRow(_ row: AppleSubscriptionOfferRow) -> some View {
         HStack(alignment: .firstTextBaseline) {
@@ -224,6 +237,8 @@ struct AppleSubscriptionCard: View {
                 // The store's own price, in this language's per-period sentence.
                 // Nothing here reformats the number or the currency.
                 Text(row.price).font(.caption).foregroundStyle(.secondary)
+                let effect = AppleSubscriptionPresentation.effectText(row.changeEffect)
+                if !effect.isEmpty { Text(effect).font(.caption).foregroundStyle(.secondary) }
                 // What the tier actually grants, from the server's own plan row.
                 // Absent only against a deployment that does not send it.
                 if let entitlements = row.entitlements {

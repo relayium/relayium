@@ -99,10 +99,12 @@ public struct StoreTransactionID: Hashable, Sendable {
 public struct SignedStoreTransaction: Equatable, Sendable {
     public let id: StoreTransactionID
     public let jws: String
+    public let renewalJWS: String
 
-    public init(id: StoreTransactionID, jws: String) {
+    public init(id: StoreTransactionID, jws: String, renewalJWS: String = "") {
         self.id = id
         self.jws = jws
+        self.renewalJWS = renewalJWS
     }
 }
 

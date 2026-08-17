@@ -219,6 +219,18 @@ func (s *Service) applyAppleNotification(ctx context.Context, n VerifiedAppleNot
 		// reconcileApplePendingNotifications replays it the moment an owner exists.
 		return s.finishAppleNotification(ctx, n.UUID, appleNotificationPending, "unknown_owner", now)
 	}
+	var renewalState AppleRenewalState
+	if n.HasRenewal {
+		renewalState = appleRenewalState(owner, tx, n.Renewal, now)
+		if _, err := s.Store().ApplyAppleRenewalState(ctx, renewalState); err != nil {
+			log.Printf("apple notifications: applying renewal state for %s failed: %v", n.UUID, err)
+			return http.StatusInternalServerError, current.State, "storage"
+		}
+	} else if stored, ok, err := s.Store().GetAppleRenewalState(ctx, owner); err != nil {
+		return http.StatusInternalServerError, current.State, "storage"
+	} else if ok && stored.ExternalID == func() string { id, _ := appleSubscriptionKeyOf(tx).externalID(); return id }() {
+		renewalState = stored
+	}
 
 	// 5. WHICH TIER? Only for a transaction that still grants — see
 	//    appleNotificationProduct for why a refund must not depend on the catalog.
@@ -238,7 +250,11 @@ func (s *Service) applyAppleNotification(ctx context.Context, n VerifiedAppleNot
 	//    event clock comes from the transaction's own purchaseDate, so a late
 	//    delivery of an older generation is dropped by the store rather than by
 	//    anything here.
-	if _, err := s.Store().ApplySubscriptionSource(ctx, appleSourceEvent(owner, tx, product, now)); err != nil {
+	event := appleSourceEvent(owner, tx, product, now)
+	if renewalState.UserID != "" {
+		event = appleSourceEventWithRenewal(owner, tx, product, renewalState, now)
+	}
+	if _, err := s.Store().ApplySubscriptionSource(ctx, event); err != nil {
 		if errors.Is(err, ErrExternalSubscriptionOwned) {
 			s.recordAppleNotificationState(ctx, n.UUID, appleNotificationConflict, now)
 			return http.StatusInternalServerError, appleNotificationConflict, "ownership_conflict"

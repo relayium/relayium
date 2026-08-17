@@ -294,7 +294,8 @@ type Service struct {
 	// the shipping default and means UNCONFIGURED: the intake route answers 503
 	// rather than trusting anything, which is the only safe reading of "this
 	// deployment has no Apple roots". Wired by SetAppleTransactionVerifier.
-	appleTx *AppleTransactionVerifier
+	appleTx            *AppleTransactionVerifier
+	appleSubscriptions AppleSubscriptionReconciler
 }
 
 // rateLimiter is the minimal per-key limiter account needs; *signal.RateLimiter
@@ -470,6 +471,10 @@ func (s *Service) SetPreUpload(on bool) { s.preUpload = on }
 // /api/billing/apple/transaction answers 503, and no Apple state can be
 // created.
 func (s *Service) SetAppleTransactionVerifier(v *AppleTransactionVerifier) { s.appleTx = v }
+
+func (s *Service) SetAppleSubscriptionReconciler(v AppleSubscriptionReconciler) {
+	s.appleSubscriptions = v
+}
 
 // Store returns the account data store. Exported so the commercial
 // admin/billing layer (billing.go, admin.go, admin_rollout.go,

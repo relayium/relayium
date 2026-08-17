@@ -612,6 +612,12 @@ func (s *Service) handleMe(w http.ResponseWriter, r *http.Request, u User) {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
+	appleRenewal, hasAppleRenewal, err := s.store.GetAppleRenewalState(r.Context(), u.ID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	appleState := appleRenewalWire(appleRenewal, hasAppleRenewal, s.now())
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"user": map[string]any{
 			"id": u.ID, "email": u.Email, "displayName": u.DisplayName,
@@ -642,8 +648,19 @@ func (s *Service) handleMe(w http.ResponseWriter, r *http.Request, u User) {
 			// for every free account — so clients must default it rather than
 			// require it.
 			"entitlementProvider": entitlementProviderWire(u, live),
+			"appleRenewal":        appleState,
 		},
 	})
+}
+
+func appleRenewalWire(r AppleRenewalState, ok bool, now time.Time) map[string]any {
+	if !ok {
+		return map[string]any{"available": false}
+	}
+	grace := r.IsInBillingRetry && r.GraceUntil > now.Unix()
+	return map[string]any{"available": true, "currentProductId": r.CurrentProductID,
+		"renewalProductId": r.AutoRenewProductID, "renewalAt": r.RenewalAt,
+		"inBillingRetry": r.IsInBillingRetry, "inGracePeriod": grace, "graceUntil": r.GraceUntil}
 }
 
 // handleMeUsage 报告调用者当月的配额位置：当月流量对当月上限（可能因为月中改
@@ -738,6 +755,11 @@ func (s *Service) handleMeUsage(w http.ResponseWriter, r *http.Request, u User) 
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
+	appleRenewal, hasAppleRenewal, err := s.store.GetAppleRenewalState(ctx, u.ID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"period":   period,
 		"resetsAt": monthEnd,
@@ -767,6 +789,7 @@ func (s *Service) handleMeUsage(w http.ResponseWriter, r *http.Request, u User) 
 			// paid provider" and nothing else — the lookup above refuses rather
 			// than guessing it.
 			"entitlementProvider": entitlementProviderWire(u, liveProviders),
+			"appleRenewal":        appleRenewalWire(appleRenewal, hasAppleRenewal, s.now()),
 		},
 	})
 }

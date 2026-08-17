@@ -60,6 +60,18 @@ CREATE TABLE IF NOT EXISTS identities (
   user_id  TEXT NOT NULL REFERENCES users(id),
   PRIMARY KEY (provider, subject)
 );
+CREATE TABLE IF NOT EXISTS apple_renewal_states (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  external_id TEXT NOT NULL,
+  bundle_id TEXT NOT NULL,
+  current_product_id TEXT NOT NULL,
+  auto_renew_product_id TEXT NOT NULL,
+  in_billing_retry INTEGER NOT NULL DEFAULT 0,
+  grace_until INTEGER NOT NULL DEFAULT 0,
+  renewal_at INTEGER NOT NULL DEFAULT 0,
+  event_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS sessions (
   id         TEXT PRIMARY KEY,
   user_id    TEXT NOT NULL REFERENCES users(id),

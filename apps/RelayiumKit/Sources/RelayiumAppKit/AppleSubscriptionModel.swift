@@ -727,7 +727,9 @@ public final class AppleSubscriptionModel: ObservableObject {
             // The JWS goes over as the store produced it. Nothing between here
             // and the request body touches it.
             let result = try await billing.submitAppleTransaction(
-                signedTransactionInfo: delivery.jws, token: token)
+                signedTransactionInfo: delivery.jws,
+                signedRenewalInfo: delivery.renewalJWS,
+                token: token)
             submission = .accepted(result)
         } catch {
             submission = .refused(Self.failure(for: error))
