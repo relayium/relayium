@@ -1,17 +1,20 @@
 # Relayium Device Inbox v2 — content kind, the encrypted manifest, negotiation
 
-Status: **stages S1, S2 and the RECEIVER half of S3/S4 delivered.** This document
-specifies what v2 changes about v1: the protocol and capability vocabulary
-central negotiates (§2-§4), the one non-opaque field a sender declares when it
-creates a task (§5), the v2 **encrypted manifest** — its shape, its canonical
-bytes, its bounds and its refusals (§6-§11) — and what a receiver does with a
-decoded one (§13).
+Status: **stages S1-S4 delivered, on both halves.** This document specifies what
+v2 changes about v1: the protocol and capability vocabulary central negotiates
+(§2-§4), the one non-opaque field a sender declares when it creates a task (§5),
+the v2 **encrypted manifest** — its shape, its canonical bytes, its bounds and
+its refusals (§6-§11) — what a receiver does with a decoded one (§13), and what a
+sender seals (§14).
 
-**The sender half is NOT delivered.** No production sender seals a v2 manifest
-yet, so a delivery built by today's uploader is refused by every v2 receiver as
-`verify_failed`. That is safe only because there is no dual stack and no external
-users; it is also the blocking prerequisite for the feature working end to end.
-See §13.5.
+**Both senders now seal one.** RelayiumKit/macOS and the web client write the v2
+manifest at frame 0 of every Device Inbox delivery, files and messages alike, so
+a delivery is now readable end to end by its own receiver. See §14.
+
+Still outstanding, and stated plainly: **no text SEND surface**. The core APIs
+exist on both clients — `InboxSendModel.sendText` and `sendTextToDevice` — and
+nothing in either product's UI calls them yet. The device-first send surface and
+the migration/cutover of deployed clients are also outstanding.
 
 Everything v1 specified and v2 does not restate is unchanged and still current:
 device enrolment, public-key registration/rotation/revocation, presence, the
@@ -33,18 +36,6 @@ manifest under any circumstances — a `{"files":[…]}` document is refused as 
 version problem, which is the property that makes "v2 receivers read v2
 manifests" checkable rather than assumed.
 
-**What is still missing, stated plainly: no sender writes one.** A Device Inbox
-delivery references a Stored Object created by the ordinary upload path, and that
-path still seals the shared Stored-Wire manifest. So until the sender half lands,
-`protocolVersion: 2` on a create (§5) identifies the protocol generation both
-sides negotiated, and the ciphertext behind it carries a manifest its own
-receiver will refuse. The gap is safe only because there is no dual stack and no
-external users: every sender and every receiver moves together, so no build ever
-reads a manifest written by a build that disagreed with it.
-
-Also not implemented: any SENDER-side text UI, the device-first send surface, and
-the migration/cutover of deployed clients.
-
 Authoritative implementation:
 
 - `server/internal/inbox/inbox.go`, `server/internal/inbox/task.go` — protocol
@@ -64,6 +55,13 @@ Authoritative implementation:
 - `apps/RelayiumKit/Sources/RelayiumAppKit/DeviceInbox/InboxReceiver.swift`,
   `InboxMessageStore.swift`, `InboxJournal.swift`, `InboxReceiveEngine.swift` —
   the native receiver, the message store, and the folder-independent pass.
+- `apps/RelayiumKit/Sources/RelayiumAppKit/DeviceInbox/InboxSendManifest.swift`,
+  `InboxSendCoordinator.swift`, `InboxSendModel.swift`, `PendingUpload.swift`,
+  and `Sources/RelayiumKit/Cloud/CloudUploader.swift` — the native sender: the
+  durable plan's delivery kind, the manifest built from it, and the frame-0
+  document the uploader seals.
+- `web/src/lib/device-send.ts`, `stored-file.ts`, `store-crypto.ts` — the web
+  sender, its `sealedManifest` upload option, and the purpose/manifest pairing.
 
 Product source of truth: `DEVICE-INBOX-PRD.md`.
 
@@ -217,9 +215,8 @@ starts honouring.
 was **written to**. It is checked at create rather than inferred from the target
 device's registered version, because they are different claims by different
 parties: the device says what it can READ, the sender says what it WROTE, and
-only the sender knows. (As of S2 no sender has written a v2 manifest yet, so the
-field currently carries the negotiated protocol generation and acquires its full
-meaning when S3 seals one — see the status note at the top.)
+only the sender knows. Both senders now write a v2 manifest (§14), so the field
+means exactly that.
 
 Refusal: **409** `unsupported_protocol_version` with `supportedProtocols`,
 matching the registration path — the request was well-formed, the two sides
@@ -237,10 +234,7 @@ can later be mistaken for a description of what the delivery contains.
 ## 6. The encrypted manifest
 
 Frame 0 of a delivery's ciphertext is the manifest; frames 1… are the payload,
-concatenated in item order. The framing, chunking and AEAD are unchanged. (From
-S3 — as of S2 this section specifies the format and its three codecs, and a live
-delivery still carries the shared Stored-Wire manifest. See the status note at
-the top.)
+concatenated in item order. The framing, chunking and AEAD are unchanged.
 
 A **dedicated codec**, deliberately separate from the shared Stored-Wire
 manifest (`storecrypto.Manifest` / `StoredManifest` / `manifest.ts`). That
@@ -475,13 +469,91 @@ a macOS banner is drawn on a locked screen, and "you received a message" is the
 most a person walking past may learn. The body lives in the store and is read by
 the user opening the app.
 
-### 13.5 The sender half
+---
 
-Outstanding, and it blocks the feature end to end. A Device Inbox delivery
-references a Stored Object whose frame 0 is whatever the upload path sealed, and
-that path still writes the shared Stored-Wire manifest. Until an inbox send
-uploads an object carrying a v2 manifest, every delivery is refused by its own
-receiver as `verify_failed`. The e2e fixture in
-`server/cmd/relayium/inbox_e2e_test.go` shows the shape a real v2 sender must
-produce: the same `uint32BE(len) || encManifest || frames` body, with the
-dedicated manifest in the seq-0 unit.
+## 14. The sender
+
+Delivered on RelayiumKit/macOS and on the web. Both produce the same body the
+e2e fixture in `server/cmd/relayium/inbox_e2e_test.go` describes —
+`uint32BE(len) || encManifest || frames` — with the dedicated v2 manifest in the
+seq-0 unit and the payload concatenated after it in item order. The CLI is a
+receiver only and has no send path at all.
+
+### 14.1 Selecting the document, not deriving it
+
+The shared Stored-Wire manifest and the v2 manifest are separate formats, so the
+uploader **selects** between them rather than inferring one: `UploadManifest`
+(Swift) and the `sealedManifest` upload option (TypeScript) name which document
+frame 0 carries, and the choice is checked against the object's purpose **in
+both directions** before a byte is encrypted:
+
+| purpose | frame 0 |
+|---|---|
+| `share` | the shared Stored-Wire manifest, and nothing else |
+| `device_task` | a caller-sealed v2 manifest, and nothing else |
+
+Both refusals matter and neither is recoverable where it would otherwise be
+discovered. A delivery sealing the shared manifest is refused by its own receiver
+as `verify_failed` — after the whole ciphertext has been uploaded, queued and
+downloaded. A share sealing a v2 manifest is a download page that cannot read its
+own file list. The shared manifest is not even BUILT for a delivery, so a
+delivery's file names never reach the shared encoder.
+
+**Shared share bytes are unchanged.** A public share upload's frame 0 is byte for
+byte what it always was.
+
+### 14.2 The manifest is a function of the durable plan
+
+On native, the delivery kind lives on `PendingUploadPlan` (`deliveryKind`;
+absent means `file`), and `InboxSendManifest` rebuilds the manifest from that
+plan alone — no clock, no network, nothing left in memory from the attempt that
+staged it. Three things follow, and each answers a real failure:
+
+- a retry, a reseal after a key rotation, and a restart after the idle reaper
+  rebuild the IDENTICAL document, so none of them can produce a delivery of a
+  different kind or a different item order than the attempt before it;
+- a resume in a process that never saw the user's files is correct;
+- there is no fall-back — the shared manifest is not reachable from that code
+  path, so a plan that cannot produce a valid v2 manifest fails the send instead
+  of sealing the document its own receiver refuses.
+
+The field is additive and the plan version is deliberately NOT bumped: a plan
+written before text sending existed reads back as the file delivery it was, which
+keeps every interrupted upload resumable. That is duplicate- and data-loss
+safety, not v1 compatibility.
+
+**Item order is the sender's and is never sorted**, on both clients: item *i*
+describes the payload frames of item *i*. A folder send therefore keeps its
+`/`-separated relative hierarchy inside the seal, an empty file keeps a size-0
+item and contributes no frame, and every size is the exact byte length.
+
+### 14.3 A message
+
+Exactly one nonempty UTF-8 message of at most 64 KiB, bounded in **bytes** rather
+than characters — a per-character bound would let one emoji past a check the seal
+then refuses. The body is the payload frames; the manifest declares only its
+length and omits `name` entirely (§10). The create request is the same seven
+opaque fields a file send produces, so a message and a file delivery are
+indistinguishable to central, to its operators, and to anyone reading its
+storage.
+
+**One delivery is one kind.** Neither client has a parameter for attaching a file
+to a message; a mixed manifest is refused by the codec anyway.
+
+Both clients validate the whole manifest at ENCODE time, so a name no receiver
+would accept — traversal, a control character, a backslash, a drive prefix —
+fails the send before anything is uploaded rather than after.
+
+### 14.4 Eligibility splits along the capability
+
+- A **message** requires the target to announce `inbox.text.v1`
+  (`InboxTargetEligibility.canReceiveText`, `canSendText`). Native re-checks it
+  against a fresh device read before a byte moves, because a device can drop the
+  claim between staging and upload. The web client fails **closed** when the
+  target's capability list is absent.
+- A **file** deliberately never consults the token. Requiring it there would
+  refuse ordinary file deliveries to the CLI, to iOS, and to the headless
+  receiver — every build that receives perfectly well and renders no messages.
+- A **missing or unusable receive folder** stays a truthful FILE caveat and
+  suppresses text nowhere. A message is never written to that folder, and the
+  receiver decides the kind before it consults the folder at all (§13.1).
