@@ -55,7 +55,7 @@ import (
 // Stored-Wire shape. That is why `v` is checked first and why its absence
 // (which decodes to 0) is a refusal: a v1 document must fail as an unsupported
 // version, not as a manifest with no items.
-const Version = 2
+const Version = 3
 
 // Kind is the closed content-kind set. A delivery is files or it is a message;
 // there is no third value and no "unknown" that a receiver could guess at.

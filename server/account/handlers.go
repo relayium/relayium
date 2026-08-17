@@ -167,6 +167,7 @@ func (s *Service) routeMux() *http.ServeMux {
 	// device rows.
 	mux.HandleFunc("GET /api/devices", s.RequireAuth(s.handleListDevices))
 	mux.HandleFunc("POST /api/devices", s.RequireSession(s.handleUpsertDevice))
+	mux.HandleFunc("POST /api/devices/browser-install", s.RequireSession(s.handleBrowserDeviceInstall))
 	mux.HandleFunc("PATCH /api/devices/{id}", s.RequireAuth(s.handleRenameDevice))
 	mux.HandleFunc("DELETE /api/devices/{id}", s.RequireAuth(s.handleDeleteDevice))
 	// Device Inbox (Phase 1A). All RequireAuth; the device-self vs.
@@ -384,6 +385,48 @@ func (s *Service) handleUpsertDevice(w http.ResponseWriter, r *http.Request, u U
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"device": d})
+}
+
+// handleBrowserDeviceInstall creates one durable browser installation identity
+// and keeps its bearer out of JavaScript. A valid same-account cookie converges
+// on the existing row; a cookie for another account is never reused.
+func (s *Service) handleBrowserDeviceInstall(w http.ResponseWriter, r *http.Request, u User) {
+	if c, err := r.Cookie(browserDeviceCookie); err == nil && c.Value != "" {
+		uid, deviceID, ok, lookupErr := s.store.GetCLITokenUser(r.Context(), authx.HashToken(c.Value))
+		if lookupErr != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
+		if ok && uid == u.ID {
+			httpx.WriteJSON(w, http.StatusOK, map[string]any{"deviceId": deviceID, "created": false})
+			return
+		}
+		// A present but revoked/unknown credential must fail, not silently mint a
+		// replacement that undoes device revocation. A credential belonging to a
+		// different signed-in account is replaced below and never reused.
+		if !ok {
+			http.SetCookie(w, expiredBrowserDeviceCookie())
+			httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "browser_device_revoked"})
+			return
+		}
+	}
+	raw := "rlm_web_" + authx.RandToken()
+	d, err := s.store.RegisterBrowserDevice(r.Context(), BrowserDeviceRegistration{
+		UserID: u.ID, DeviceID: authx.NewID(), TokenHash: authx.HashToken(raw),
+		Name: "Web browser", At: s.now().Unix(), LastIP: canonicalDeviceIP(s.clientIP(r)),
+	})
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	http.SetCookie(w, &http.Cookie{Name: browserDeviceCookie, Value: raw, Path: "/api/",
+		MaxAge: 365 * 24 * 60 * 60, HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode})
+	httpx.WriteJSON(w, http.StatusCreated, map[string]any{"deviceId": d.ID, "created": true})
+}
+
+func expiredBrowserDeviceCookie() *http.Cookie {
+	return &http.Cookie{Name: browserDeviceCookie, Value: "", Path: "/api/", MaxAge: -1,
+		HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode}
 }
 
 func (s *Service) handleRenameDevice(w http.ResponseWriter, r *http.Request, u User) {

@@ -1,6 +1,6 @@
 {
   "_": [
-    "FROZEN cross-language vectors for the Device Inbox v2 encrypted manifest.",
+    "FROZEN cross-language vectors for the Device Inbox v3 encrypted manifest.",
     "Read by Go (server/internal/inboxmanifest), Swift (RelayiumKit InboxManifestTests)",
     "and TypeScript (web/src/lib/inbox-manifest.test.ts). It lives here because the",
     "Swift test target can only load resources from inside its own package; the other",
@@ -20,7 +20,7 @@
     "from a zero value without a pointer. For those, `reason` is the clause the",
     "reference implementation reports and each language pins its own in a unit test."
   ],
-  "version": 2,
+  "version": 3,
   "bounds": {
     "maxItems": 1000,
     "minItems": 1,
@@ -33,14 +33,14 @@
   "accept": [
     {
       "name": "one file",
-      "canonical": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"report.pdf\",\"size\":1024}]}",
+      "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"report.pdf\",\"size\":1024}]}",
       "kind": "file",
       "total": 1024,
       "items": [{ "kind": "file", "name": "report.pdf", "size": 1024 }]
     },
     {
       "name": "several files keep manifest order",
-      "canonical": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"b.txt\",\"size\":2},{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1},{\"kind\":\"file\",\"name\":\"c.txt\",\"size\":0}]}",
+      "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"b.txt\",\"size\":2},{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1},{\"kind\":\"file\",\"name\":\"c.txt\",\"size\":0}]}",
       "kind": "file",
       "total": 3,
       "items": [
@@ -51,77 +51,77 @@
     },
     {
       "name": "a folder send keeps relative paths",
-      "canonical": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"trip/day 1/IMG_0001.jpg\",\"size\":4096}]}",
+      "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"trip/day 1/IMG_0001.jpg\",\"size\":4096}]}",
       "kind": "file",
       "total": 4096,
       "items": [{ "kind": "file", "name": "trip/day 1/IMG_0001.jpg", "size": 4096 }]
     },
     {
       "name": "an empty file is a real file",
-      "canonical": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"empty\",\"size\":0}]}",
+      "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"empty\",\"size\":0}]}",
       "kind": "file",
       "total": 0,
       "items": [{ "kind": "file", "name": "empty", "size": 0 }]
     },
     {
       "name": "non-ASCII names are emitted raw, never escaped",
-      "canonical": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"发票 2026.pdf\",\"size\":7}]}",
+      "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"发票 2026.pdf\",\"size\":7}]}",
       "kind": "file",
       "total": 7,
       "items": [{ "kind": "file", "name": "发票 2026.pdf", "size": 7 }]
     },
     {
       "name": "quote and backslash are the only structural escapes",
-      "canonical": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"say \\\"hi\\\".txt\",\"size\":5}]}",
+      "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"say \\\"hi\\\".txt\",\"size\":5}]}",
       "kind": "file",
       "total": 5,
       "items": [{ "kind": "file", "name": "say \"hi\".txt", "size": 5 }]
     },
     {
       "name": "U+2028 is raw here and escaped by some encoders; this pins ours",
-      "canonical": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"line\u2028sep.txt\",\"size\":1}]}",
+      "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"line\u2028sep.txt\",\"size\":1}]}",
       "kind": "file",
       "total": 1,
       "items": [{ "kind": "file", "name": "line\u2028sep.txt", "size": 1 }]
     },
     {
       "name": "HTML-significant characters are raw, not \\u003c escaped",
-      "canonical": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a<b>&c.txt\",\"size\":1}]}",
+      "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a<b>&c.txt\",\"size\":1}]}",
       "kind": "file",
       "total": 1,
       "items": [{ "kind": "file", "name": "a<b>&c.txt", "size": 1 }]
     },
     {
       "name": "the drive-prefix rule is measured in bytes, not code units",
-      "canonical": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"é:1.txt\",\"size\":1}]}",
+      "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"é:1.txt\",\"size\":1}]}",
       "kind": "file",
       "total": 1,
       "items": [{ "kind": "file", "name": "é:1.txt", "size": 1 }]
     },
     {
       "name": "the largest exactly-representable size",
-      "canonical": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"huge.bin\",\"size\":9007199254740991}]}",
+      "canonical": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"huge.bin\",\"size\":9007199254740991}]}",
       "kind": "file",
       "total": 9007199254740991,
       "items": [{ "kind": "file", "name": "huge.bin", "size": 9007199254740991 }]
     },
     {
       "name": "text carries only its length, and no name",
-      "canonical": "{\"v\":2,\"items\":[{\"kind\":\"text\",\"size\":11}]}",
+      "canonical": "{\"v\":3,\"items\":[{\"kind\":\"text\",\"size\":11}]}",
       "kind": "text",
       "total": 11,
       "items": [{ "kind": "text", "size": 11 }]
     },
     {
       "name": "the shortest message",
-      "canonical": "{\"v\":2,\"items\":[{\"kind\":\"text\",\"size\":1}]}",
+      "canonical": "{\"v\":3,\"items\":[{\"kind\":\"text\",\"size\":1}]}",
       "kind": "text",
       "total": 1,
       "items": [{ "kind": "text", "size": 1 }]
     },
     {
       "name": "the longest message",
-      "canonical": "{\"v\":2,\"items\":[{\"kind\":\"text\",\"size\":65536}]}",
+      "canonical": "{\"v\":3,\"items\":[{\"kind\":\"text\",\"size\":65536}]}",
       "kind": "text",
       "total": 65536,
       "items": [{ "kind": "text", "size": 65536 }]
@@ -141,7 +141,7 @@
     {
       "name": "a future version is refused, never downgraded",
       "reason": "version",
-      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1}]}"
+      "json": "{\"v\":4,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1}]}"
     },
     {
       "name": "a missing version is not the current version",
@@ -151,243 +151,243 @@
     {
       "name": "no items describes nothing",
       "reason": "itemCount",
-      "json": "{\"v\":2,\"items\":[]}"
+      "json": "{\"v\":3,\"items\":[]}"
     },
     {
       "name": "a missing items array",
       "reason": "itemCount",
-      "json": "{\"v\":2}"
+      "json": "{\"v\":3}"
     },
     {
       "name": "an unknown kind is never guessed at",
       "reason": "unknownKind",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"folder\",\"name\":\"a\",\"size\":1}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"folder\",\"name\":\"a\",\"size\":1}]}"
     },
     {
       "name": "a missing kind",
       "reason": "unknownKind",
-      "json": "{\"v\":2,\"items\":[{\"name\":\"a.txt\",\"size\":1}]}"
+      "json": "{\"v\":3,\"items\":[{\"name\":\"a.txt\",\"size\":1}]}"
     },
     {
       "name": "kind is case-sensitive",
       "reason": "unknownKind",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"File\",\"name\":\"a.txt\",\"size\":1}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"File\",\"name\":\"a.txt\",\"size\":1}]}"
     },
     {
       "name": "files then text",
       "reason": "mixedKinds",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1},{\"kind\":\"text\",\"size\":5}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1},{\"kind\":\"text\",\"size\":5}]}"
     },
     {
       "name": "text then files",
       "reason": "mixedKinds",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"text\",\"size\":5},{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"text\",\"size\":5},{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1}]}"
     },
     {
       "name": "two messages have no frame boundary between them",
       "reason": "textItemCount",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"text\",\"size\":5},{\"kind\":\"text\",\"size\":6}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"text\",\"size\":5},{\"kind\":\"text\",\"size\":6}]}"
     },
     {
       "name": "a named message could be mistaken for a destination",
       "reason": "textName",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"text\",\"name\":\"note.txt\",\"size\":5}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"text\",\"name\":\"note.txt\",\"size\":5}]}"
     },
     {
       "name": "an empty name on a message is still a name field",
       "anyRefusal": true,
       "reason": "notCanonical",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"text\",\"name\":\"\",\"size\":5}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"text\",\"name\":\"\",\"size\":5}]}"
     },
     {
       "name": "an empty message is not a message",
       "reason": "size",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"text\",\"size\":0}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"text\",\"size\":0}]}"
     },
     {
       "name": "a message one byte over the ceiling",
       "reason": "size",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"text\",\"size\":65537}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"text\",\"size\":65537}]}"
     },
     {
       "name": "a negative message length",
       "reason": "size",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"text\",\"size\":-1}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"text\",\"size\":-1}]}"
     },
     {
       "name": "a file with no name",
       "reason": "name",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"\",\"size\":1}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"\",\"size\":1}]}"
     },
     {
       "name": "parent traversal",
       "reason": "name",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"../etc/passwd\",\"size\":1}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"../etc/passwd\",\"size\":1}]}"
     },
     {
       "name": "traversal buried mid-path",
       "reason": "name",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a/../../b.txt\",\"size\":1}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a/../../b.txt\",\"size\":1}]}"
     },
     {
       "name": "a bare dot component",
       "reason": "name",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"./a.txt\",\"size\":1}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"./a.txt\",\"size\":1}]}"
     },
     {
       "name": "an absolute path leaves the receive folder",
       "reason": "name",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"/etc/passwd\",\"size\":1}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"/etc/passwd\",\"size\":1}]}"
     },
     {
       "name": "a drive-qualified path is absolute on Windows",
       "reason": "name",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"C:/Windows/system32/a.dll\",\"size\":1}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"C:/Windows/system32/a.dll\",\"size\":1}]}"
     },
     {
       "name": "a backslash is a separator on Windows and a byte here",
       "reason": "name",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a\\\\b.txt\",\"size\":1}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a\\\\b.txt\",\"size\":1}]}"
     },
     {
       "name": "an empty path component is a second spelling of one path",
       "reason": "name",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a//b.txt\",\"size\":1}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a//b.txt\",\"size\":1}]}"
     },
     {
       "name": "a trailing separator names a directory, not a file",
       "reason": "name",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a/b/\",\"size\":1}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a/b/\",\"size\":1}]}"
     },
     {
       "name": "a NUL byte can truncate a C string",
       "reason": "name",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a\\u0000b.txt\",\"size\":1}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a\\u0000b.txt\",\"size\":1}]}"
     },
     {
       "name": "a newline can rewrite a log line",
       "reason": "name",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a\\nb.txt\",\"size\":1}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a\\nb.txt\",\"size\":1}]}"
     },
     {
       "name": "an escape byte can rewrite a terminal",
       "reason": "name",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a\\u001bb.txt\",\"size\":1}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a\\u001bb.txt\",\"size\":1}]}"
     },
     {
       "name": "DEL is a control byte too",
       "reason": "name",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a\\u007fb.txt\",\"size\":1}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a\\u007fb.txt\",\"size\":1}]}"
     },
     {
       "name": "a negative file size",
       "reason": "size",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":-1}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":-1}]}"
     },
     {
       "name": "one byte past exact integer representation",
       "reason": "size",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":9007199254740992}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":9007199254740992}]}"
     },
     {
       "name": "two sizes that each fit but whose sum does not",
       "reason": "totalOverflow",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a.bin\",\"size\":9007199254740991},{\"kind\":\"file\",\"name\":\"b.bin\",\"size\":1}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a.bin\",\"size\":9007199254740991},{\"kind\":\"file\",\"name\":\"b.bin\",\"size\":1}]}"
     },
     {
       "name": "an unknown field on the manifest",
       "reason": "malformed",
-      "json": "{\"v\":2,\"note\":\"hi\",\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1}]}"
+      "json": "{\"v\":3,\"note\":\"hi\",\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1}]}"
     },
     {
       "name": "an unknown field on an item",
       "reason": "malformed",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1,\"path\":\"/tmp\"}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1,\"path\":\"/tmp\"}]}"
     },
     {
       "name": "the message text itself never belongs in the manifest",
       "reason": "malformed",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"text\",\"size\":5,\"text\":\"hello\"}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"text\",\"size\":5,\"text\":\"hello\"}]}"
     },
     {
       "name": "a missing size defaults to nothing",
       "anyRefusal": true,
       "reason": "notCanonical",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\"}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\"}]}"
     },
     {
       "name": "keys out of canonical order",
       "reason": "notCanonical",
-      "json": "{\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1}],\"v\":2}"
+      "json": "{\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1}],\"v\":3}"
     },
     {
       "name": "item keys out of canonical order",
       "reason": "notCanonical",
-      "json": "{\"v\":2,\"items\":[{\"size\":1,\"kind\":\"file\",\"name\":\"a.txt\"}]}"
+      "json": "{\"v\":3,\"items\":[{\"size\":1,\"kind\":\"file\",\"name\":\"a.txt\"}]}"
     },
     {
       "name": "pretty-printed whitespace",
       "reason": "notCanonical",
-      "json": "{\"v\": 2, \"items\": [{\"kind\": \"file\", \"name\": \"a.txt\", \"size\": 1}]}"
+      "json": "{\"v\": 3, \"items\": [{\"kind\": \"file\", \"name\": \"a.txt\", \"size\": 1}]}"
     },
     {
       "name": "a trailing newline",
       "reason": "notCanonical",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1}]}\n"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1}]}\n"
     },
     {
       "name": "a duplicated key where the last would win",
       "reason": "notCanonical",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1,\"size\":2}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1,\"size\":2}]}"
     },
     {
       "name": "an unnecessarily escaped name",
       "reason": "notCanonical",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a\\u003cb.txt\",\"size\":1}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a\\u003cb.txt\",\"size\":1}]}"
     },
     {
       "name": "an escaped solidus",
       "reason": "notCanonical",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a\\/b.txt\",\"size\":1}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a\\/b.txt\",\"size\":1}]}"
     },
     {
       "name": "a float spelling of the version",
       "anyRefusal": true,
       "reason": "malformed",
-      "json": "{\"v\":2.0,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1}]}"
+      "json": "{\"v\":3.0,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1}]}"
     },
     {
       "name": "a float spelling of a size",
       "anyRefusal": true,
       "reason": "malformed",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1.0}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1.0}]}"
     },
     {
       "name": "an exponent spelling of a size",
       "anyRefusal": true,
       "reason": "malformed",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1e3}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1e3}]}"
     },
     {
       "name": "a fractional size",
       "anyRefusal": true,
       "reason": "malformed",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1.5}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1.5}]}"
     },
     {
       "name": "a stringly-typed size",
       "reason": "malformed",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":\"1\"}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":\"1\"}]}"
     },
     {
       "name": "items is not an array",
       "reason": "malformed",
-      "json": "{\"v\":2,\"items\":{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1}}"
+      "json": "{\"v\":3,\"items\":{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1}}"
     },
     {
       "name": "an item is not an object",
       "reason": "malformed",
-      "json": "{\"v\":2,\"items\":[\"a.txt\"]}"
+      "json": "{\"v\":3,\"items\":[\"a.txt\"]}"
     },
     {
       "name": "the whole document is an array",
@@ -407,7 +407,7 @@
     {
       "name": "a second document appended to the first",
       "reason": "malformed",
-      "json": "{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1}]}{\"v\":2,\"items\":[{\"kind\":\"text\",\"size\":1}]}"
+      "json": "{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1}]}{\"v\":3,\"items\":[{\"kind\":\"text\",\"size\":1}]}"
     }
   ],
   "generated": [

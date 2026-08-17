@@ -53,6 +53,7 @@ import {
   type LocalPhase,
   type SendErrorCode,
 } from "./device-inbox";
+import { BrowserDeviceError, ensureBrowserDevice } from "./browser-device";
 
 /** A send that did not produce a task, carrying the closed-set code the UI maps
  *  to one localized sentence. Never carries server text. */
@@ -363,6 +364,14 @@ export async function sendFilesToDevice(
     if (e instanceof InboxManifestError) throw new SendFailure("unsendable_content");
     throw new SendFailure("unknown");
   }
+  if (!isInertId(target.deviceID)) throw new SendFailure("unsupported_key");
+  try {
+    await ensureBrowserDevice(opts.signal);
+  } catch (e) {
+    if (e instanceof BrowserDeviceError && e.code === "browser_device_revoked")
+      throw new SendFailure("sender_device_required");
+    throw new SendFailure("network");
+  }
   return deliver(target, delivery, opts);
 }
 
@@ -391,6 +400,14 @@ export async function sendTextToDevice(
   if (body.length < INBOX_MANIFEST_MIN_TEXT_BYTES) throw new SendFailure("empty_message");
   if (body.length > INBOX_MANIFEST_MAX_TEXT_BYTES) throw new SendFailure("message_too_long");
   if (!target.capabilities?.includes(CAP_TEXT_V1)) throw new SendFailure("text_unsupported");
+  if (!isInertId(target.deviceID)) throw new SendFailure("unsupported_key");
+  try {
+    await ensureBrowserDevice(opts.signal);
+  } catch (e) {
+    if (e instanceof BrowserDeviceError && e.code === "browser_device_revoked")
+      throw new SendFailure("sender_device_required");
+    throw new SendFailure("network");
+  }
   return deliver(
     target,
     {

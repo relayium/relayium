@@ -22,7 +22,7 @@ import DeviceInboxPage from "./DeviceInboxPage.svelte";
 import { loadLang, messages } from "./i18n.svelte";
 import { refreshSession } from "./auth.svelte";
 import { loginOpen, loginIntent, setLoginOpen } from "./login.svelte";
-import { CAP_RECEIVE_V2, DEVICE_REFRESH_MS, INBOX_KEY_ALGORITHM } from "./device-inbox";
+import { CAP_RECEIVE_V3, DEVICE_REFRESH_MS, INBOX_KEY_ALGORITHM } from "./device-inbox";
 import { INBOX_PLATFORMS, REQUIRED_PLATFORM_IDS } from "./device-inbox-platforms";
 
 // The network half of a send is mocked: this suite is about what the PAGE hands
@@ -49,8 +49,8 @@ function inbox(over: Record<string, unknown> = {}) {
     LastHeartbeatAt: 1_700_000_000,
     PresenceExpiresAt: 1_700_000_090,
     HeartbeatIntervalSeconds: 30,
-    Capabilities: [CAP_RECEIVE_V2],
-    ReceiveCapability: CAP_RECEIVE_V2,
+    Capabilities: [CAP_RECEIVE_V3],
+    ReceiveCapability: CAP_RECEIVE_V3,
     ProtocolVersion: 1,
     AutoAccept: "auto",
     ReceiveDirReady: true,

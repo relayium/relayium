@@ -3,7 +3,7 @@ import sodium from "libsodium-wrappers";
 import { decodeKey, decryptManifest, encodeKey, importStoreKey } from "./store-crypto";
 import { decodeInboxManifest, INBOX_MANIFEST_MAX_TEXT_BYTES } from "./inbox-manifest";
 import {
-  CAP_RECEIVE_V2,
+  CAP_RECEIVE_V3,
   CAP_TEXT_V1,
   INBOX_KEY_ALGORITHM,
   INBOX_PROTOCOL_VERSION,
@@ -46,6 +46,7 @@ function json(body: unknown, status = 200): Response {
 function taskJson(over: Record<string, unknown> = {}) {
   return {
     ID: TASK_ID,
+    SourceDeviceID: "bbbbccccddddeeeeffff000011112222",
     TargetDeviceID: DEVICE_ID,
     IdempotencyKey: "",
     StoredFileID: OBJECT_ID,
@@ -94,6 +95,9 @@ function stubFetch() {
       if (r) return r;
     }
     // Default: the resumable upload happy path, then a created task.
+    if (call.url === "/api/devices/browser-install" && call.method === "POST") {
+      return json({ deviceId: "bbbbccccddddeeeeffff000011112222", created: false });
+    }
     if (call.url.startsWith("/api/uploads/") && call.url.endsWith("/finalize")) {
       return json({ id: OBJECT_ID, expiresAt: 1_700_600_000 });
     }
@@ -132,8 +136,8 @@ function targetSpec(presentsText = true) {
     algorithm: INBOX_KEY_ALGORITHM,
     publicKey: encodeKey(target.publicKey),
     capabilities: presentsText
-      ? [CAP_RECEIVE_V2, "inbox.autoaccept.v1", CAP_TEXT_V1]
-      : [CAP_RECEIVE_V2, "inbox.autoaccept.v1"],
+      ? [CAP_RECEIVE_V3, "inbox.autoaccept.v1", CAP_TEXT_V1]
+      : [CAP_RECEIVE_V3, "inbox.autoaccept.v1"],
   };
 }
 
@@ -639,7 +643,7 @@ describe("the sealed v2 manifest", () => {
     await sendFilesToDevice(targetSpec(), FILES(), sendOpts());
     const manifest = await sealedManifest(contentKeyFromCreate());
 
-    expect(manifest.v).toBe(2);
+    expect(manifest.v).toBe(3);
     expect(manifest.items.map((i) => i.kind)).toEqual(["file", "file"]);
     // Item order is the SENDER's and is never sorted: item i describes the
     // payload frames of blob i, so reordering renames every file.
@@ -900,8 +904,8 @@ describe("who may be offered a text send", () => {
     PresenceExpiresAt: 2,
     HeartbeatIntervalSeconds: 30,
     ProtocolVersion: 2,
-    Capabilities: [CAP_RECEIVE_V2, CAP_TEXT_V1],
-    ReceiveCapability: CAP_RECEIVE_V2,
+    Capabilities: [CAP_RECEIVE_V3, CAP_TEXT_V1],
+    ReceiveCapability: CAP_RECEIVE_V3,
     AutoAccept: "auto",
     ReceiveDirReady: true,
     Platform: "macos",
@@ -924,7 +928,7 @@ describe("who may be offered a text send", () => {
   it("follows the announced token", async () => {
     const { canSendText, parseDeviceInbox } = await import("./device-inbox");
     expect(canSendText(DEVICE_ID, parseDeviceInbox(inboxView()))).toBe(true);
-    expect(canSendText(DEVICE_ID, parseDeviceInbox(inboxView({ Capabilities: [CAP_RECEIVE_V2] })))).toBe(false);
+    expect(canSendText(DEVICE_ID, parseDeviceInbox(inboxView({ Capabilities: [CAP_RECEIVE_V3] })))).toBe(false);
     expect(canSendText(DEVICE_ID, null)).toBe(false);
   });
 

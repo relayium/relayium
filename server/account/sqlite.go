@@ -830,6 +830,18 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		`CREATE INDEX IF NOT EXISTS idx_inbox_tasks_lease ON inbox_tasks(lease_expires_at) WHERE lease_expires_at > 0`,
 		// Key revocation terminates exactly the tasks sealed to the revoked key.
 		`CREATE INDEX IF NOT EXISTS idx_inbox_tasks_key ON inbox_tasks(target_device_id, target_key_id)`,
+		// Existing v2 audit rows may have an empty source and are preserved. v3
+		// creation cannot add or mutate a row to that legacy shape.
+		`CREATE TRIGGER IF NOT EXISTS inbox_tasks_source_required_insert
+		 BEFORE INSERT ON inbox_tasks WHEN NEW.source_device_id = ''
+		 BEGIN SELECT RAISE(ABORT, 'inbox task source device required'); END`,
+		`CREATE TRIGGER IF NOT EXISTS inbox_tasks_source_required_update
+		 BEFORE UPDATE OF source_device_id ON inbox_tasks WHEN NEW.source_device_id = ''
+		 BEGIN SELECT RAISE(ABORT, 'inbox task source device required'); END`,
+		`CREATE TRIGGER IF NOT EXISTS inbox_tasks_source_owned_insert
+		 BEFORE INSERT ON inbox_tasks WHEN NOT EXISTS (
+		   SELECT 1 FROM devices WHERE id = NEW.source_device_id AND user_id = NEW.user_id)
+		 BEGIN SELECT RAISE(ABORT, 'inbox task source device not owned'); END`,
 		// Phase 1D-A: what a Stored Object IS, persisted rather than inferred.
 		// 'share' is the capability-link object every existing row is; the
 		// DEFAULT is what makes this migration safe on a live database, and
@@ -2653,6 +2665,29 @@ func (s *SQLiteStore) UpsertDevice(ctx context.Context, d Device) (Device, error
 		`SELECT `+deviceCols+` FROM devices WHERE id = ? AND user_id = ?`,
 		d.ID, d.UserID), &out)
 	return out, err
+}
+
+func (s *SQLiteStore) RegisterBrowserDevice(ctx context.Context, in BrowserDeviceRegistration) (Device, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return Device{}, err
+	}
+	defer tx.Rollback()
+	d := Device{ID: in.DeviceID, UserID: in.UserID, Name: in.Name, Kind: "browser",
+		CreatedAt: in.At, LastIP: in.LastIP}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO devices (`+deviceCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		d.ID, d.UserID, d.Name, d.CreatedAt, 0, d.Kind, d.LastIP, ""); err != nil {
+		return Device{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO cli_tokens
+		(token_hash, user_id, device_id, created_at, last_seen_at) VALUES (?, ?, ?, ?, 0)`,
+		in.TokenHash, in.UserID, in.DeviceID, in.At); err != nil {
+		return Device{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return Device{}, err
+	}
+	return d, nil
 }
 
 // registerApprovedDeviceTx is the one place an installation identifier decides

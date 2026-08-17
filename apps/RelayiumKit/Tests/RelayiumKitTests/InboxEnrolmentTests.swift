@@ -17,7 +17,7 @@ final class InboxEnrolmentTests: XCTestCase {
     }
 
     private func enrolResult(key: InboxKey?, protocolVersion: Int = 2,
-                             capability: String = InboxCapability.receiveV2,
+                             capability: String = InboxCapability.receiveV3,
                              algorithm: String = InboxProtocol.keyAlgorithm) -> InboxEnrolResult {
         InboxEnrolResult(inbox: InboxView(key: key), protocolVersion: protocolVersion,
                          receiveCapability: capability, keyAlgorithm: algorithm)

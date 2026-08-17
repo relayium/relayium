@@ -78,7 +78,7 @@ func decodeJSONBody(t *testing.T, resp *http.Response) map[string]any {
 }
 
 const validRegistration = `{"platform":"linux","appVersion":"0.15.0",
-	"protocolVersions":[2],"capabilities":["inbox.receive.v2","inbox.autoaccept.v1"]}`
+	"protocolVersions":[3],"capabilities":["inbox.receive.v3","inbox.autoaccept.v1"]}`
 
 // enrolledDevice registers a device inbox and its first key, returning the
 // device id, bearer and keypair. It fails the test if either step does not
@@ -332,17 +332,17 @@ func TestRegistrationNegotiatesAndEchoesTheAgreedVersion(t *testing.T) {
 	// A rolling client that speaks more than central does must be told what was
 	// actually agreed, not left to assume its highest.
 	resp := h.jsonDo(t, "PUT", "/api/devices/"+deviceID+"/inbox",
-		`{"platform":"linux","protocolVersions":[1,2,7],"capabilities":["inbox.receive.v2","inbox.receive.v9"]}`,
+		`{"platform":"linux","protocolVersions":[1,3,7],"capabilities":["inbox.receive.v3","inbox.receive.v9"]}`,
 		withBearer(token))
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("register: got %d, want 200", resp.StatusCode)
 	}
 	body := decodeJSONBody(t, resp)
-	if got := body["protocolVersion"]; got != float64(inbox.ProtocolV2) {
-		t.Fatalf("negotiated protocolVersion = %v, want %d", got, inbox.ProtocolV2)
+	if got := body["protocolVersion"]; got != float64(inbox.ProtocolV3) {
+		t.Fatalf("negotiated protocolVersion = %v, want %d", got, inbox.ProtocolV3)
 	}
-	if got := body["receiveCapability"]; got != inbox.CapReceiveV2 {
-		t.Fatalf("negotiated receiveCapability = %v, want %q", got, inbox.CapReceiveV2)
+	if got := body["receiveCapability"]; got != inbox.CapReceiveV3 {
+		t.Fatalf("negotiated receiveCapability = %v, want %q", got, inbox.CapReceiveV3)
 	}
 	if got := body["keyAlgorithm"]; got != inbox.KeyAlgX25519SealedBoxV1 {
 		t.Fatalf("keyAlgorithm = %v, want %q", got, inbox.KeyAlgX25519SealedBoxV1)
@@ -375,7 +375,7 @@ func TestUnsupportedProtocolVersionIsRefusedAndStoresNothing(t *testing.T) {
 	deviceID := currentDeviceID(t, h, token)
 
 	resp := h.jsonDo(t, "PUT", "/api/devices/"+deviceID+"/inbox",
-		`{"platform":"linux","protocolVersions":[42,43],"capabilities":["inbox.receive.v2"]}`,
+		`{"platform":"linux","protocolVersions":[42,43],"capabilities":["inbox.receive.v3"]}`,
 		withBearer(token))
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("unsupported protocol: got %d, want 409", resp.StatusCode)
@@ -411,7 +411,7 @@ func TestUnsupportedReceiveCapabilityIsRefusedAndStoresNothing(t *testing.T) {
 		`["inbox.autoaccept.v1"]`,
 	} {
 		resp := h.jsonDo(t, "PUT", "/api/devices/"+deviceID+"/inbox",
-			`{"platform":"linux","protocolVersions":[2],"capabilities":`+caps+`}`, withBearer(token))
+			`{"platform":"linux","protocolVersions":[3],"capabilities":`+caps+`}`, withBearer(token))
 		if resp.StatusCode != http.StatusConflict {
 			t.Fatalf("caps %s: got %d, want 409", caps, resp.StatusCode)
 		}
@@ -431,7 +431,7 @@ func TestAutomaticPolicyWithoutCapabilityIsRefusedAndStoresNothing(t *testing.T)
 	deviceID := currentDeviceID(t, h, token)
 
 	resp := h.jsonDo(t, "PUT", "/api/devices/"+deviceID+"/inbox",
-		`{"protocolVersions":[2],"capabilities":["inbox.receive.v2"],"autoAccept":"auto"}`,
+		`{"protocolVersions":[3],"capabilities":["inbox.receive.v3"],"autoAccept":"auto"}`,
 		withBearer(token))
 	if resp.StatusCode != http.StatusConflict {
 		t.Fatalf("auto without capability: got %d, want 409", resp.StatusCode)
@@ -453,13 +453,13 @@ func TestRegistrationRejectsMalformedAnnouncements(t *testing.T) {
 
 	for _, tc := range []struct{ name, body, wantErr string }{
 		{"unversioned capability",
-			`{"protocolVersions":[2],"capabilities":["inbox.receive"]}`, "invalid_capabilities"},
+			`{"protocolVersions":[3],"capabilities":["inbox.receive"]}`, "invalid_capabilities"},
 		{"auto-accept typo",
-			`{"protocolVersions":[2],"capabilities":["inbox.receive.v2"],"autoAccept":"always"}`, "invalid_auto_accept"},
+			`{"protocolVersions":[3],"capabilities":["inbox.receive.v3"],"autoAccept":"always"}`, "invalid_auto_accept"},
 		{"control character in platform",
-			`{"protocolVersions":[2],"capabilities":["inbox.receive.v2"],"platform":"li\u0000nux"}`, "invalid_device_metadata"},
+			`{"protocolVersions":[3],"capabilities":["inbox.receive.v3"],"platform":"li\u0000nux"}`, "invalid_device_metadata"},
 		{"oversized app version",
-			`{"protocolVersions":[2],"capabilities":["inbox.receive.v2"],"appVersion":"` + strings.Repeat("9", inbox.MaxAppVersionLen+1) + `"}`, "invalid_device_metadata"},
+			`{"protocolVersions":[3],"capabilities":["inbox.receive.v3"],"appVersion":"` + strings.Repeat("9", inbox.MaxAppVersionLen+1) + `"}`, "invalid_device_metadata"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			resp := h.jsonDo(t, "PUT", "/api/devices/"+deviceID+"/inbox", tc.body, withBearer(token))
@@ -995,7 +995,7 @@ func TestReRegistrationPreservesPresenceAndEnrolmentTime(t *testing.T) {
 
 	clock = base.Add(10 * time.Second)
 	if code := h.jsonDo(t, "PUT", "/api/devices/"+deviceID+"/inbox",
-		`{"platform":"linux","appVersion":"0.16.0","protocolVersions":[2],"capabilities":["inbox.receive.v2"]}`,
+		`{"platform":"linux","appVersion":"0.16.0","protocolVersions":[3],"capabilities":["inbox.receive.v3"]}`,
 		withBearer(token)).StatusCode; code != http.StatusOK {
 		t.Fatalf("re-register: %d", code)
 	}
@@ -1179,8 +1179,8 @@ func TestConcurrentRotationsFromTheSamePredecessorAllowExactlyOneWinner(t *testi
 		t.Fatal(err)
 	}
 	if _, err := st.UpsertDeviceInbox(ctx, DeviceInbox{
-		DeviceID: dev.ID, UserID: u.ID, ProtocolVersion: inbox.ProtocolV2,
-		Capabilities: []string{inbox.CapReceiveV2}, ReceiveCapability: inbox.CapReceiveV2,
+		DeviceID: dev.ID, UserID: u.ID, ProtocolVersion: inbox.ProtocolV3,
+		Capabilities: []string{inbox.CapReceiveV3}, ReceiveCapability: inbox.CapReceiveV3,
 		AutoAccept: inbox.AutoAcceptOff, RegisteredAt: 1, UpdatedAt: 1,
 	}); err != nil {
 		t.Fatal(err)
@@ -1372,8 +1372,8 @@ func TestAccountDeletionRemovesDeviceInboxAndKeys(t *testing.T) {
 				t.Fatal(err)
 			}
 			if _, err := st.UpsertDeviceInbox(ctx, DeviceInbox{
-				DeviceID: dev.ID, UserID: u.ID, ProtocolVersion: inbox.ProtocolV2,
-				Capabilities: []string{inbox.CapReceiveV2}, ReceiveCapability: inbox.CapReceiveV2,
+				DeviceID: dev.ID, UserID: u.ID, ProtocolVersion: inbox.ProtocolV3,
+				Capabilities: []string{inbox.CapReceiveV3}, ReceiveCapability: inbox.CapReceiveV3,
 				AutoAccept: inbox.AutoAcceptOff, RegisteredAt: 1, UpdatedAt: 1,
 			}); err != nil {
 				t.Fatal(err)
@@ -1419,8 +1419,8 @@ func assertRowCount(t *testing.T, st *SQLiteStore, query, arg string, want int) 
 func TestDeviceCanReceiveIsDecidedAgainstTheCurrentNegotiableSet(t *testing.T) {
 	key := DeviceKey{ID: "k1", Algorithm: inbox.KeyAlgX25519SealedBoxV1, CreatedAt: 1}
 	base := DeviceInbox{
-		DeviceID: "d1", ProtocolVersion: inbox.ProtocolV2,
-		ReceiveCapability: inbox.CapReceiveV2,
+		DeviceID: "d1", ProtocolVersion: inbox.ProtocolV3,
+		ReceiveCapability: inbox.CapReceiveV3,
 	}
 	if !DeviceCanReceive(base, key, true) {
 		t.Fatal("a currently-negotiable device must be sendable")
@@ -1451,7 +1451,7 @@ func TestDeviceCanReceiveIsDecidedAgainstTheCurrentNegotiableSet(t *testing.T) {
 	// inbox.text.v1 is not a receive capability and must not become a second
 	// gate: a receiver that only takes files is still a perfectly good target.
 	textless := base
-	textless.Capabilities = []string{inbox.CapReceiveV2}
+	textless.Capabilities = []string{inbox.CapReceiveV3}
 	if !DeviceCanReceive(textless, key, true) {
 		t.Fatal("a file-only receiver must remain sendable")
 	}

@@ -65,7 +65,7 @@ final class InboxSendModelTests: XCTestCase {
                      autoAccept: InboxAutoAccept = .auto, revoked: Bool = false,
                      canReceive: Bool = true, presence: InboxPresence = .online,
                      receiveDirReady: Bool = true, registeredAt: Int64 = 10,
-                     capability: String = InboxCapability.receiveV2,
+                     capability: String = InboxCapability.receiveV3,
                      presentsText: Bool = true,
                      isCurrent: Bool = false) -> InboxDeviceRow {
         let key = InboxKey(id: keyID, algorithm: InboxProtocol.keyAlgorithm,
@@ -73,7 +73,7 @@ final class InboxSendModelTests: XCTestCase {
         return InboxDeviceRow(id: id ?? deviceID, name: name, kind: kind, isCurrent: isCurrent,
                               inbox: InboxView(presence: presence, lastHeartbeatAt: 10,
                                                presenceExpiresAt: 100,
-                                               heartbeatIntervalSeconds: 30, protocolVersion: 2,
+                                               heartbeatIntervalSeconds: 30, protocolVersion: 3,
                                                capabilities: InboxProtocol
                                                    .announcedCapabilities(presentingText: presentsText),
                                                receiveCapability: capability,

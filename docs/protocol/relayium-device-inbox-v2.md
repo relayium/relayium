@@ -1,5 +1,8 @@
 # Relayium Device Inbox v2 — content kind, the encrypted manifest, negotiation
 
+> **Superseded by `relayium-device-inbox-v3.md`.** v2 is retained as historical
+> protocol documentation and is not a compatibility target.
+
 Status: **stages S1-S4 delivered, on both halves.** This document specifies what
 v2 changes about v1: the protocol and capability vocabulary central negotiates
 (§2-§4), the one non-opaque field a sender declares when it creates a task (§5),

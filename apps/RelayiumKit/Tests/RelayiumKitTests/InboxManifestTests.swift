@@ -195,7 +195,7 @@ final class InboxManifestTests: XCTestCase {
                       "item keys reordered")
         assertRefused(#"{"v": 2, "items": [{"kind": "file", "name": "a.txt", "size": 1}]}"#, .notCanonical,
                       "pretty printed")
-        assertRefused("{\"v\":2,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1}]}\n",
+        assertRefused("{\"v\":3,\"items\":[{\"kind\":\"file\",\"name\":\"a.txt\",\"size\":1}]}\n",
                       .notCanonical, "trailing newline")
         assertRefused(#"{"v":2,"items":[{"kind":"file","name":"a.txt","size":1,"size":2}]}"#, .notCanonical,
                       "a duplicated key where the last would win")
@@ -260,7 +260,7 @@ final class InboxManifestTests: XCTestCase {
     /// implementation that drifts fails here rather than on a user's device
     /// halfway through a delivery.
     private func vectors() throws -> [String: Any] {
-        let url = try XCTUnwrap(Bundle.module.url(forResource: "device-inbox-manifest-v2-vectors",
+        let url = try XCTUnwrap(Bundle.module.url(forResource: "device-inbox-manifest-v3-vectors",
                                                   withExtension: "json"))
         return try XCTUnwrap(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
     }

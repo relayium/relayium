@@ -8,6 +8,8 @@ import (
 	"github.com/relayium/relayium/authx"
 )
 
+const browserDeviceCookie = "relayium_browser_device"
+
 // UserFromAuth resolves the caller as an authenticated User from EITHER the
 // session cookie (browser) OR an "Authorization: Bearer rlm_cli_…" header (CLI
 // token, Task 5's cli_tokens table). A valid bearer touches the token's
@@ -99,6 +101,26 @@ func (s *Service) bearerDeviceID(r *http.Request, userID string) string {
 	if err != nil || !ok || uid != userID {
 		return ""
 	}
+	return deviceID
+}
+
+// authenticatedSourceDeviceID returns the server-minted device row proved by
+// the credential used for a v3 send. Native/CLI callers use Authorization;
+// browsers use a separate HttpOnly installation credential alongside their
+// session. No request-body value participates in this decision.
+func (s *Service) authenticatedSourceDeviceID(r *http.Request, userID string) string {
+	if _, session := s.UserFromRequest(r); !session {
+		return s.bearerDeviceID(r, userID)
+	}
+	c, err := r.Cookie(browserDeviceCookie)
+	if err != nil || c.Value == "" {
+		return ""
+	}
+	uid, deviceID, ok, err := s.store.GetCLITokenUser(r.Context(), authx.HashToken(c.Value))
+	if err != nil || !ok || uid != userID {
+		return ""
+	}
+	_ = s.store.TouchCLIToken(r.Context(), authx.HashToken(c.Value), s.now().Unix(), canonicalDeviceIP(s.clientIP(r)))
 	return deviceID
 }
 

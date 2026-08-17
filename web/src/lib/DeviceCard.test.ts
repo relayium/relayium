@@ -4,7 +4,7 @@ import DeviceCard from "./DeviceCard.svelte";
 import ConfirmModal from "./ConfirmModal.svelte";
 import { loadLang } from "./i18n.svelte";
 import { refreshSession } from "./auth.svelte";
-import { CAP_RECEIVE_V2, INBOX_KEY_ALGORITHM, type InboxTaskView } from "./device-inbox";
+import { CAP_RECEIVE_V3, INBOX_KEY_ALGORITHM, type InboxTaskView } from "./device-inbox";
 
 // The network half is mocked here on purpose: this suite is about what the CARD
 // does — which control starts a send, what it claims while one runs, when it
@@ -35,8 +35,8 @@ function inbox(over: Record<string, unknown> = {}) {
     PresenceExpiresAt: 1_700_000_090,
     HeartbeatIntervalSeconds: 30,
     ProtocolVersion: 1,
-    Capabilities: [CAP_RECEIVE_V2, "inbox.autoaccept.v1"],
-    ReceiveCapability: CAP_RECEIVE_V2,
+    Capabilities: [CAP_RECEIVE_V3, "inbox.autoaccept.v1"],
+    ReceiveCapability: CAP_RECEIVE_V3,
     AutoAccept: "auto",
     ReceiveDirReady: true,
     Platform: "linux",
@@ -52,6 +52,7 @@ function inbox(over: Record<string, unknown> = {}) {
 function task(over: Partial<InboxTaskView> = {}): InboxTaskView {
   return {
     ID: TASK_ID,
+    SourceDeviceID: "bbbbccccddddeeeeffff000011112222",
     State: "queued",
     ErrorCode: "",
     CiphertextBytes: 10,

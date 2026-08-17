@@ -159,6 +159,11 @@ type Device struct {
 	InstallID string
 }
 
+type BrowserDeviceRegistration struct {
+	UserID, DeviceID, TokenHash, Name, LastIP string
+	At                                        int64
+}
+
 // DeviceInbox is one device's Device Inbox enrolment: the negotiated protocol
 // version, the capabilities it announced, its automatic-receive policy, and its
 // heartbeat-derived presence. One row per device; absent = the device is not
@@ -1742,6 +1747,7 @@ type Store interface {
 	DeleteSpentEmailTokens(ctx context.Context, now int64) error
 	// devices
 	UpsertDevice(ctx context.Context, d Device) (Device, error)
+	RegisterBrowserDevice(ctx context.Context, in BrowserDeviceRegistration) (Device, error)
 	ListDevices(ctx context.Context, userID string) ([]Device, error)
 	RenameDevice(ctx context.Context, id, userID, name string) error
 	DeleteDevice(ctx context.Context, id, userID string) error

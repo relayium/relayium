@@ -410,8 +410,8 @@ func TestReauthenticationPreservesInboxEnrolmentKeysAndTasks(t *testing.T) {
 
 	if _, err := store.UpsertDeviceInbox(ctx, DeviceInbox{
 		DeviceID: deviceID, UserID: userID, Platform: "darwin", AppVersion: "1.1.3",
-		ProtocolVersion: 2, Capabilities: []string{"inbox.receive.v2"},
-		ReceiveCapability: "inbox.receive.v2", AutoAccept: "ask",
+		ProtocolVersion: 2, Capabilities: []string{"inbox.receive.v3"},
+		ReceiveCapability: "inbox.receive.v3", AutoAccept: "ask",
 		RegisteredAt: 100, UpdatedAt: 100,
 	}); err != nil {
 		t.Fatalf("enrol: %v", err)
@@ -499,7 +499,7 @@ func TestReauthenticationDoesNotClearARevokedInboxEnrolment(t *testing.T) {
 	deviceID, _ := tokenResolves(t, store, token)
 	if _, err := store.UpsertDeviceInbox(ctx, DeviceInbox{
 		DeviceID: deviceID, UserID: userID, Platform: "darwin", ProtocolVersion: 2,
-		Capabilities: []string{"inbox.receive.v2"}, ReceiveCapability: "inbox.receive.v2",
+		Capabilities: []string{"inbox.receive.v3"}, ReceiveCapability: "inbox.receive.v3",
 		AutoAccept: "off", RegisteredAt: 100, UpdatedAt: 100,
 	}); err != nil {
 		t.Fatalf("enrol: %v", err)

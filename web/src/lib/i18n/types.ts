@@ -686,6 +686,7 @@ export interface Messages {
     sendErrTooLarge: string;
     sendErrQuota: string;
     sendErrSignedOut: string;
+    sendErrSenderIdentity: string;
     sendErrNetwork: string;
     sendErrCancelled: string;
     sendErrUnsupportedKey: string;

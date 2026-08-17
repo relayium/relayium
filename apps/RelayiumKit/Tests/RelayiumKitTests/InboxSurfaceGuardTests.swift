@@ -1139,7 +1139,7 @@ final class InboxSurfaceGuardTests: XCTestCase {
             XCTAssertTrue(fixture.contains(isolated),
                           "the acceptance fixture shares \(isolated) with the installed product")
         }
-        XCTAssertTrue(fixture.contains("receiveCapability: InboxCapability.receiveV2"),
+        XCTAssertTrue(fixture.contains("receiveCapability: InboxCapability.receiveV3"),
                       "the acceptance server no longer negotiates the required v2 receiver")
         XCTAssertTrue(fixture.contains("InboxManifest.files("))
         XCTAssertTrue(fixture.contains("InboxManifest.encode(manifest)"))

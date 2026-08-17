@@ -15,9 +15,9 @@ import (
 func TestNegotiateProtocolVersionPicksHighestCommon(t *testing.T) {
 	// A rolling client that speaks more than central does must land on the
 	// highest version CENTRAL supports, not on whatever it asked for first.
-	got, err := NegotiateProtocolVersion([]int{1, 2, 99})
-	if err != nil || got != ProtocolV2 {
-		t.Fatalf("mixed set: got %d err %v, want %d", got, err, ProtocolV2)
+	got, err := NegotiateProtocolVersion([]int{1, 3, 99})
+	if err != nil || got != ProtocolV3 {
+		t.Fatalf("mixed set: got %d err %v, want %d", got, err, ProtocolV3)
 	}
 }
 
@@ -33,8 +33,8 @@ func TestNegotiateProtocolVersionRefusesV1Only(t *testing.T) {
 		t.Fatalf("a refused v1 client must get no version, got %d", v)
 	}
 	// And the refusal must carry an actionable set, not an empty one.
-	if got := SupportedProtocolVersions(); !reflect.DeepEqual(got, []int{ProtocolV2}) {
-		t.Fatalf("SupportedProtocolVersions() = %v, want [2]", got)
+	if got := SupportedProtocolVersions(); !reflect.DeepEqual(got, []int{ProtocolV3}) {
+		t.Fatalf("SupportedProtocolVersions() = %v, want [3]", got)
 	}
 }
 
@@ -49,7 +49,7 @@ func TestNegotiateProtocolVersionFailsClosed(t *testing.T) {
 	}{
 		{"empty", nil, ErrUnsupportedProtocol},
 		{"past only", []int{1}, ErrUnsupportedProtocol},
-		{"future only", []int{3, 4}, ErrUnsupportedProtocol},
+		{"future only", []int{4, 5}, ErrUnsupportedProtocol},
 		{"zero", []int{0}, ErrUnsupportedProtocol},
 		{"negative", []int{-1}, ErrUnsupportedProtocol},
 		{"flood", make([]int, MaxProtocolVersions+1), ErrTooManyProtocolVer},
@@ -67,14 +67,14 @@ func TestNegotiateProtocolVersionFailsClosed(t *testing.T) {
 }
 
 func TestNegotiateReceiveCapability(t *testing.T) {
-	got, err := NegotiateReceiveCapability([]string{CapAutoAcceptV1, CapReceiveV2})
-	if err != nil || got != CapReceiveV2 {
-		t.Fatalf("got %q err %v, want %q", got, err, CapReceiveV2)
+	got, err := NegotiateReceiveCapability([]string{CapAutoAcceptV1, CapReceiveV3})
+	if err != nil || got != CapReceiveV3 {
+		t.Fatalf("got %q err %v, want %q", got, err, CapReceiveV3)
 	}
 	// A device that only implements a receive version central does not know
 	// must not be registered as receiving: central cannot say what claiming a
 	// task means for it, so listing it as a send target would be a guess.
-	if _, err := NegotiateReceiveCapability([]string{"inbox.receive.v3", CapResumeV1}); !errors.Is(err, ErrUnsupportedCapability) {
+	if _, err := NegotiateReceiveCapability([]string{"inbox.receive.v4", CapResumeV1}); !errors.Is(err, ErrUnsupportedCapability) {
 		t.Fatalf("future-only receive capability must fail closed, got %v", err)
 	}
 	if _, err := NegotiateReceiveCapability(nil); !errors.Is(err, ErrUnsupportedCapability) {
@@ -88,23 +88,23 @@ func TestNegotiateReceiveCapability(t *testing.T) {
 	}
 	// Announcing an unknown SIBLING alongside a supported one is fine — the
 	// unknown one is carried, not negotiated.
-	if got, err := NegotiateReceiveCapability([]string{"inbox.receive.v3", CapReceiveV2}); err != nil || got != CapReceiveV2 {
+	if got, err := NegotiateReceiveCapability([]string{"inbox.receive.v3", CapReceiveV3}); err != nil || got != CapReceiveV3 {
 		t.Fatalf("mixed receive set: got %q err %v", got, err)
 	}
 	// The exported set the API echoes on a refusal must be the negotiable one,
 	// so a rejection cannot tell a client to implement a version central just
 	// stopped supporting.
-	if got := SupportedReceiveCapabilities(); !reflect.DeepEqual(got, []string{CapReceiveV2}) {
-		t.Fatalf("SupportedReceiveCapabilities() = %v, want [%s]", got, CapReceiveV2)
+	if got := SupportedReceiveCapabilities(); !reflect.DeepEqual(got, []string{CapReceiveV3}) {
+		t.Fatalf("SupportedReceiveCapabilities() = %v, want [%s]", got, CapReceiveV3)
 	}
 }
 
 func TestValidateCapabilitiesCanonicalises(t *testing.T) {
-	got, err := ValidateCapabilities([]string{CapResumeV1, CapReceiveV2, CapReceiveV2, "vendor.thing.v12"})
+	got, err := ValidateCapabilities([]string{CapResumeV1, CapReceiveV3, CapReceiveV3, "vendor.thing.v12"})
 	if err != nil {
 		t.Fatalf("validate: %v", err)
 	}
-	want := []string{CapReceiveV2, CapResumeV1, "vendor.thing.v12"}
+	want := []string{CapReceiveV3, CapResumeV1, "vendor.thing.v12"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v, want %v (deduped and sorted)", got, want)
 	}
@@ -115,16 +115,16 @@ func TestTextCapabilityIsCarriedNotNegotiated(t *testing.T) {
 	// not verify a text claim even if it wanted to. inbox.text.v1 must
 	// therefore survive validation verbatim (the SENDER reads it) and must
 	// never become a second gate on registration.
-	got, err := ValidateCapabilities([]string{CapReceiveV2, CapTextV1})
+	got, err := ValidateCapabilities([]string{CapReceiveV3, CapTextV1})
 	if err != nil {
 		t.Fatalf("validate: %v", err)
 	}
-	if !reflect.DeepEqual(got, []string{CapReceiveV2, CapTextV1}) {
+	if !reflect.DeepEqual(got, []string{CapReceiveV3, CapTextV1}) {
 		t.Fatalf("got %v, want the text token carried verbatim", got)
 	}
 	// A receiver that does NOT announce text is still a fully valid target for
 	// files. Absence of the token must not block registration.
-	if _, err := NegotiateReceiveCapability([]string{CapReceiveV2}); err != nil {
+	if _, err := NegotiateReceiveCapability([]string{CapReceiveV3}); err != nil {
 		t.Fatalf("a file-only receiver must still register: %v", err)
 	}
 }
@@ -155,7 +155,7 @@ func TestValidateCapabilitiesRejectsMalformed(t *testing.T) {
 	}
 	flood := make([]string, MaxCapabilities+1)
 	for i := range flood {
-		flood[i] = CapReceiveV2
+		flood[i] = CapReceiveV3
 	}
 	if _, err := ValidateCapabilities(flood); !errors.Is(err, ErrTooManyCapabilities) {
 		t.Errorf("flood: err = %v, want ErrTooManyCapabilities", err)
@@ -269,14 +269,14 @@ func TestValidateAutoAcceptDefaultsOff(t *testing.T) {
 }
 
 func TestAutomaticPolicyRequiresVersionedCapability(t *testing.T) {
-	if err := ValidateAutoAcceptCapability(AutoAcceptAuto, []string{CapReceiveV2}); !errors.Is(err, ErrUnsupportedAutoAcceptCapability) {
+	if err := ValidateAutoAcceptCapability(AutoAcceptAuto, []string{CapReceiveV3}); !errors.Is(err, ErrUnsupportedAutoAcceptCapability) {
 		t.Fatalf("auto without capability: err = %v", err)
 	}
 	if err := ValidateAutoAcceptCapability(AutoAcceptAuto, []string{CapReceiveV1, CapAutoAcceptV1}); err != nil {
 		t.Fatalf("auto with capability: %v", err)
 	}
 	for _, policy := range []string{AutoAcceptOff, AutoAcceptAsk} {
-		if err := ValidateAutoAcceptCapability(policy, []string{CapReceiveV2}); err != nil {
+		if err := ValidateAutoAcceptCapability(policy, []string{CapReceiveV3}); err != nil {
 			t.Fatalf("%s should not require auto capability: %v", policy, err)
 		}
 	}

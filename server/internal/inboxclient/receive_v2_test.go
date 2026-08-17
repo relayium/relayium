@@ -119,10 +119,10 @@ func TestCapabilitiesNeverAnnounceText(t *testing.T) {
 	if slices.Contains(caps, inbox.CapTextV1) {
 		t.Fatalf("this build announces %s and has no message store: %v", inbox.CapTextV1, caps)
 	}
-	if !slices.Contains(caps, inbox.CapReceiveV2) {
-		t.Fatalf("capabilities lack %s: %v", inbox.CapReceiveV2, caps)
+	if !slices.Contains(caps, inbox.CapReceiveV3) {
+		t.Fatalf("capabilities lack %s: %v", inbox.CapReceiveV3, caps)
 	}
-	if got := ProtocolVersions(); !slices.Equal(got, []int{inbox.ProtocolV2}) {
-		t.Fatalf("protocol versions = %v, want [%d]", got, inbox.ProtocolV2)
+	if got := ProtocolVersions(); !slices.Equal(got, []int{inbox.ProtocolV3}) {
+		t.Fatalf("protocol versions = %v, want [%d]", got, inbox.ProtocolV3)
 	}
 }

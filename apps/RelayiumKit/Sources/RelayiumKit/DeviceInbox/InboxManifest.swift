@@ -1,13 +1,13 @@
 import Foundation
 
-/// The Device Inbox v2 encrypted manifest — the small authenticated JSON
+/// The Device Inbox v3 encrypted manifest — the small authenticated JSON
 /// document a sender seals at frame 0 of a delivery, describing what the frames
 /// after it contain.
 ///
 /// This is the Swift third of one codec. The other two are
 /// `server/internal/inboxmanifest` and `web/src/lib/inbox-manifest.ts`, and all
 /// three are checked against the same frozen vectors in
-/// `Tests/Fixtures/device-inbox-manifest-v2-vectors.json`.
+/// `Tests/Fixtures/device-inbox-manifest-v3-vectors.json`.
 ///
 /// It is DELIBERATELY separate from `StoredManifest`, the shared Stored-Wire
 /// manifest. Those bytes are frozen and interop-tested across unrelated
@@ -36,7 +36,7 @@ public enum InboxManifest {
     /// Stored-Wire shape. That is why the version is checked first and why its
     /// absence is a refusal: a v1 document must fail as an unsupported version,
     /// not as a manifest with no items.
-    public static let version = 2
+    public static let version = 3
 
     /// Item-count bounds. The maximum matches the shared manifest's, so a
     /// folder that can be shared can also be sent to a device.

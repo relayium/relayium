@@ -29,14 +29,14 @@ export const INBOX_KEY_ALGORITHM = "x25519-sealedbox-v1";
  *  can be wrapped to (protocol §2, "Rejected public keys"). */
 export const X25519_PUBLIC_KEY_BYTES = 32;
 
-/** `inbox.receive.v2` — the capability central negotiates. A device central
+/** `inbox.receive.v3` — the capability central negotiates. A device central
  *  cannot describe must not appear as a send target (protocol §4).
  *
  *  v1 has no constant here on purpose. The owner waived old-protocol
  *  compatibility on 2026-08-17: there is no dual stack, so a device still
  *  announcing v1 is simply not a target, and giving this module a name for it
  *  would only invite a fallback branch. */
-export const CAP_RECEIVE_V2 = "inbox.receive.v2";
+export const CAP_RECEIVE_V3 = "inbox.receive.v3";
 
 /** `inbox.text.v1` — "this receiver shows a message as a message".
  *
@@ -50,7 +50,7 @@ export const CAP_TEXT_V1 = "inbox.text.v1";
 /** The protocol version this build writes its manifests to, declared on every
  *  `POST …/inbox/tasks`. An integer, and the only non-opaque field on that
  *  request: central learns which shape was sealed, never what is inside it. */
-export const INBOX_PROTOCOL_VERSION = 2;
+export const INBOX_PROTOCOL_VERSION = 3;
 
 /** Presence TTL is 90s against a 30s heartbeat (protocol §6). The sender polls
  *  the device list on a bounded timer so "online" is not indefinitely stale. */
@@ -253,7 +253,7 @@ export function sendAvailability(deviceID: string, inbox: DeviceInboxView | null
   // (protocol version, cleared enrolment) still gets central's verdict, not a
   // guess of ours.
   if (!inbox.CanReceive) return no("cannot_receive");
-  if (inbox.ReceiveCapability !== CAP_RECEIVE_V2) return no("unsupported_capability");
+  if (inbox.ReceiveCapability !== CAP_RECEIVE_V3) return no("unsupported_capability");
   const key = inbox.Key;
   if (!key || key.RevokedAt !== 0 || key.SupersededAt !== 0) return no("unsupported_key");
   if (key.Algorithm !== INBOX_KEY_ALGORITHM) return no("unsupported_key");
@@ -393,6 +393,7 @@ export function isTerminalTaskState(s: string): boolean {
  *  device, from the claim response. */
 export interface InboxTaskView {
   ID: string;
+  SourceDeviceID: string;
   State: string;
   ErrorCode: string;
   CiphertextBytes: number;
@@ -415,9 +416,11 @@ export function parseInboxTask(raw: unknown): InboxTaskView | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const t = raw as Record<string, unknown>;
   const id = str(t.ID);
-  if (!isInertId(id)) return null;
+  const sourceDeviceID = str(t.SourceDeviceID);
+  if (!isInertId(id) || !isInertId(sourceDeviceID)) return null;
   return {
     ID: id,
+    SourceDeviceID: sourceDeviceID,
     State: str(t.State),
     ErrorCode: str(t.ErrorCode),
     CiphertextBytes: num(t.CiphertextBytes),
@@ -493,6 +496,7 @@ export const SEND_ERROR_CODES = [
   "unsupported_auto_accept_capability",
   "malformed_wrapped_key",
   "invalid_idempotency_key",
+  "sender_device_required",
   // Locally-decided failures.
   "upload_too_large", // 413
   "quota_exceeded", // 429
@@ -505,7 +509,7 @@ export const SEND_ERROR_CODES = [
   // announce `inbox.text.v1`, so it would not present a message AS a message.
   "text_unsupported",
   "empty_message", // an empty message is not a message
-  "message_too_long", // over 64 KiB of UTF-8 (protocol v2 §9)
+  "message_too_long", // over 64 KiB of UTF-8 (protocol v3 §2)
   // The names or sizes themselves are ones no receiver would accept, so the
   // manifest could not be sealed. Terminal: a retry rebuilds the same refusal.
   "unsendable_content",

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  CAP_RECEIVE_V2,
+  CAP_RECEIVE_V3,
   CAP_TEXT_V1,
   INBOX_KEY_ALGORITHM,
   POLL_MAX_MS,
@@ -34,8 +34,8 @@ function inboxJson(over: Record<string, unknown> = {}) {
     PresenceExpiresAt: 1_700_000_090,
     HeartbeatIntervalSeconds: 30,
     ProtocolVersion: 1,
-    Capabilities: [CAP_RECEIVE_V2, "inbox.autoaccept.v1"],
-    ReceiveCapability: CAP_RECEIVE_V2,
+    Capabilities: [CAP_RECEIVE_V3, "inbox.autoaccept.v1"],
+    ReceiveCapability: CAP_RECEIVE_V3,
     AutoAccept: "auto",
     ReceiveDirReady: true,
     Platform: "linux",
@@ -116,7 +116,7 @@ describe("parseDeviceInbox", () => {
   });
 
   it("survives a Capabilities field that is not an array of strings", () => {
-    expect(parseDeviceInbox(inboxJson({ Capabilities: "inbox.receive.v2" }))!.Capabilities).toEqual([]);
+    expect(parseDeviceInbox(inboxJson({ Capabilities: "inbox.receive.v3" }))!.Capabilities).toEqual([]);
     expect(parseDeviceInbox(inboxJson({ Capabilities: [1, "a", null] }))!.Capabilities).toEqual(["a"]);
   });
 
@@ -210,12 +210,12 @@ describe("sendAvailability", () => {
     // send. Central cannot verify the claim either way — content kind lives
     // only inside the encrypted manifest.
     expect(CAP_TEXT_V1).toBe("inbox.text.v1");
-    const fileOnly = parseDeviceInbox(inboxJson({ Capabilities: [CAP_RECEIVE_V2] }))!;
+    const fileOnly = parseDeviceInbox(inboxJson({ Capabilities: [CAP_RECEIVE_V3] }))!;
     expect(fileOnly.Capabilities).not.toContain(CAP_TEXT_V1);
     expect(sendAvailability("dev1", fileOnly).sendable).toBe(true);
     // And a device that does announce it is carried verbatim, for the sender to
     // read when the text surface lands.
-    const withText = parseDeviceInbox(inboxJson({ Capabilities: [CAP_RECEIVE_V2, CAP_TEXT_V1] }))!;
+    const withText = parseDeviceInbox(inboxJson({ Capabilities: [CAP_RECEIVE_V3, CAP_TEXT_V1] }))!;
     expect(withText.Capabilities).toContain(CAP_TEXT_V1);
     expect(sendAvailability("dev1", withText).sendable).toBe(true);
   });
@@ -259,13 +259,16 @@ describe("task state vocabulary", () => {
 });
 
 describe("parseInboxTask", () => {
-  const base = { ID: "0123456789abcdef0123456789abcdef", State: "queued", ErrorCode: "" };
+  const base = { ID: "0123456789abcdef0123456789abcdef",
+    SourceDeviceID: "bbbbccccddddeeeeffff000011112222", State: "queued", ErrorCode: "" };
 
   it("refuses a task whose id could not be polled or cancelled safely", () => {
     expect(parseInboxTask({ ...base, ID: "../../me" })).toBeNull();
     expect(parseInboxTask({ ...base, ID: 42 })).toBeNull();
     expect(parseInboxTask(null)).toBeNull();
     expect(parseInboxTask([base])).toBeNull();
+    expect(parseInboxTask({ ...base, SourceDeviceID: "" })).toBeNull();
+    expect(parseInboxTask({ ...base, SourceDeviceID: "../another-device" })).toBeNull();
   });
 
   it("derives Terminal from the state table even when the server omits the flag", () => {
@@ -278,12 +281,14 @@ describe("parseInboxTask", () => {
 });
 
 describe("isSaved", () => {
-  const saved = parseInboxTask({ ID: "a".repeat(32), State: "saved", SavedAt: 1_700_000_500 })!;
+  const source = "b".repeat(32);
+  const saved = parseInboxTask({ ID: "a".repeat(32), SourceDeviceID: source,
+    State: "saved", SavedAt: 1_700_000_500 })!;
 
   it("is true only for the server's own saved state WITH its commit timestamp", () => {
     expect(isSaved(saved)).toBe(true);
-    expect(isSaved(parseInboxTask({ ID: "a".repeat(32), State: "saved", SavedAt: 0 })!)).toBe(false);
-    expect(isSaved(parseInboxTask({ ID: "a".repeat(32), State: "verifying", SavedAt: 5 })!)).toBe(false);
+    expect(isSaved(parseInboxTask({ ID: "a".repeat(32), SourceDeviceID: source, State: "saved", SavedAt: 0 })!)).toBe(false);
+    expect(isSaved(parseInboxTask({ ID: "a".repeat(32), SourceDeviceID: source, State: "verifying", SavedAt: 5 })!)).toBe(false);
     expect(isSaved(null)).toBe(false);
   });
 });

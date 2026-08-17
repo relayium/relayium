@@ -73,10 +73,10 @@ final class InboxSendCoordinatorTests: XCTestCase {
         return InboxDeviceRow(id: deviceID, name: "Studio", kind: "mac", isCurrent: false,
                               inbox: InboxView(presence: .online, lastHeartbeatAt: 10,
                                                presenceExpiresAt: 100,
-                                               heartbeatIntervalSeconds: 30, protocolVersion: 2,
+                                               heartbeatIntervalSeconds: 30, protocolVersion: 3,
                                                capabilities: InboxProtocol
                                                    .announcedCapabilities(presentingText: presentsText),
-                                               receiveCapability: InboxCapability.receiveV2,
+                                               receiveCapability: InboxCapability.receiveV3,
                                                autoAccept: autoAccept,
                                                receiveDirReady: receiveDirReady,
                                                revoked: revoked, canReceive: canReceive,

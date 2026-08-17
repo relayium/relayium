@@ -43,7 +43,7 @@ describe("the canonical form", () => {
       { name: "a.txt", size: 1 },
     ]);
     expect(encodeInboxManifest(m)).toBe(
-      '{"v":2,"items":[{"kind":"file","name":"b.txt","size":2},{"kind":"file","name":"a.txt","size":1}]}',
+      '{"v":3,"items":[{"kind":"file","name":"b.txt","size":2},{"kind":"file","name":"a.txt","size":1}]}',
     );
   });
 
@@ -51,7 +51,7 @@ describe("the canonical form", () => {
     // Absent, not empty. An empty string is something a receiver could be
     // tempted to treat as a destination; an absent key cannot be.
     const encoded = encodeInboxManifest(textManifest(11));
-    expect(encoded).toBe('{"v":2,"items":[{"kind":"text","size":11}]}');
+    expect(encoded).toBe('{"v":3,"items":[{"kind":"text","size":11}]}');
     expect(encoded).not.toContain("name");
   });
 
@@ -70,7 +70,7 @@ describe("the canonical form", () => {
       ["发票 2026.pdf", "发票 2026.pdf"],
     ]) {
       expect(encodeInboxManifest(fileManifest([{ name, size: 1 }]))).toBe(
-        `{"v":2,"items":[{"kind":"file","name":"${escaped}","size":1}]}`,
+        `{"v":3,"items":[{"kind":"file","name":"${escaped}","size":1}]}`,
       );
     }
   });
@@ -100,31 +100,31 @@ describe("fail-closed clauses", () => {
     // useless; diagnosed as a version it is something a person can act on.
     expect(reasonOf(decode('{"files":[{"name":"a.txt","size":1}]}'))).toBe("version");
     expect(reasonOf(decode('{"v":1,"items":[{"kind":"file","name":"a.txt","size":1}]}'))).toBe("version");
-    expect(reasonOf(decode('{"v":3,"items":[{"kind":"file","name":"a.txt","size":1}]}'))).toBe("version");
+    expect(reasonOf(decode('{"v":4,"items":[{"kind":"file","name":"a.txt","size":1}]}'))).toBe("version");
     expect(reasonOf(decode('{"items":[{"kind":"file","name":"a.txt","size":1}]}'))).toBe("version");
     expect(reasonOf(decode('{"v":0,"items":[{"kind":"file","name":"a.txt","size":1}]}'))).toBe("version");
   });
 
   it("allows exactly one content kind per delivery", () => {
-    expect(reasonOf(decode('{"v":2,"items":[{"kind":"file","name":"a.txt","size":1},{"kind":"text","size":5}]}'))).toBe(
+    expect(reasonOf(decode('{"v":3,"items":[{"kind":"file","name":"a.txt","size":1},{"kind":"text","size":5}]}'))).toBe(
       "mixedKinds",
     );
-    expect(reasonOf(decode('{"v":2,"items":[{"kind":"text","size":5},{"kind":"file","name":"a.txt","size":1}]}'))).toBe(
+    expect(reasonOf(decode('{"v":3,"items":[{"kind":"text","size":5},{"kind":"file","name":"a.txt","size":1}]}'))).toBe(
       "mixedKinds",
     );
     // A single stray item at the end of a long run: a check that only compared
     // neighbours, or only looked at the first two, would pass both cases above
     // and let this one through.
     const items = Array.from({ length: 39 }, () => ({ kind: "file" as const, name: "f", size: 1 }));
-    const strayed = { v: 2, items: [...items, { kind: "text" as const, size: 1 }] } as InboxManifest;
+    const strayed = { v: 3, items: [...items, { kind: "text" as const, size: 1 }] } as InboxManifest;
     expect(reasonOf(() => validateInboxManifest(strayed))).toBe("mixedKinds");
   });
 
   it("makes text exactly one unnamed bounded item", () => {
-    expect(reasonOf(decode('{"v":2,"items":[{"kind":"text","size":5},{"kind":"text","size":6}]}'))).toBe(
+    expect(reasonOf(decode('{"v":3,"items":[{"kind":"text","size":5},{"kind":"text","size":6}]}'))).toBe(
       "textItemCount",
     );
-    expect(reasonOf(decode('{"v":2,"items":[{"kind":"text","name":"note.txt","size":5}]}'))).toBe("textName");
+    expect(reasonOf(decode('{"v":3,"items":[{"kind":"text","name":"note.txt","size":5}]}'))).toBe("textName");
     for (const size of [0, -1, INBOX_MANIFEST_MAX_TEXT_BYTES + 1, INBOX_MANIFEST_MAX_SAFE_INTEGER]) {
       expect(reasonOf(() => textManifest(size)), `text of ${size}`).toBe("size");
     }
@@ -209,31 +209,31 @@ describe("fail-closed clauses", () => {
   });
 
   it("refuses unknown fields instead of ignoring them", () => {
-    expect(reasonOf(decode('{"v":2,"note":"hi","items":[{"kind":"file","name":"a.txt","size":1}]}'))).toBe("malformed");
-    expect(reasonOf(decode('{"v":2,"items":[{"kind":"file","name":"a.txt","size":1,"path":"/tmp"}]}'))).toBe(
+    expect(reasonOf(decode('{"v":3,"note":"hi","items":[{"kind":"file","name":"a.txt","size":1}]}'))).toBe("malformed");
+    expect(reasonOf(decode('{"v":3,"items":[{"kind":"file","name":"a.txt","size":1,"path":"/tmp"}]}'))).toBe(
       "malformed",
     );
     // The one that matters: a sender must not be able to smuggle the message
     // body into the structure every receiver parses first.
-    expect(reasonOf(decode('{"v":2,"items":[{"kind":"text","size":5,"text":"hello"}]}'))).toBe("malformed");
-    expect(reasonOf(decode('{"v":2,"items":[{"kind":"file","name":"a.txt","size":1}],"key":"AAAA"}'))).toBe("malformed");
+    expect(reasonOf(decode('{"v":3,"items":[{"kind":"text","size":5,"text":"hello"}]}'))).toBe("malformed");
+    expect(reasonOf(decode('{"v":3,"items":[{"kind":"file","name":"a.txt","size":1}],"key":"AAAA"}'))).toBe("malformed");
   });
 
   it("refuses every non-canonical spelling", () => {
     for (const doc of [
-      '{"items":[{"kind":"file","name":"a.txt","size":1}],"v":2}',
-      '{"v":2,"items":[{"size":1,"kind":"file","name":"a.txt"}]}',
-      '{"v": 2, "items": [{"kind": "file", "name": "a.txt", "size": 1}]}',
-      '{"v":2,"items":[{"kind":"file","name":"a.txt","size":1}]}\n',
-      '{"v":2,"items":[{"kind":"file","name":"a.txt","size":1,"size":2}]}',
-      '{"v":2,"items":[{"kind":"file","name":"a\\/b.txt","size":1}]}',
-      '{"v":2,"items":[{"kind":"file","name":"a\\u003cb.txt","size":1}]}',
+      '{"items":[{"kind":"file","name":"a.txt","size":1}],"v":3}',
+      '{"v":3,"items":[{"size":1,"kind":"file","name":"a.txt"}]}',
+      '{"v": 3, "items": [{"kind": "file", "name": "a.txt", "size": 1}]}',
+      '{"v":3,"items":[{"kind":"file","name":"a.txt","size":1}]}\n',
+      '{"v":3,"items":[{"kind":"file","name":"a.txt","size":1,"size":2}]}',
+      '{"v":3,"items":[{"kind":"file","name":"a\\/b.txt","size":1}]}',
+      '{"v":3,"items":[{"kind":"file","name":"a\\u003cb.txt","size":1}]}',
       // JavaScript cannot tell these spellings apart after JSON.parse; the
       // canonical-form check is the only thing that catches them here, which is
       // exactly why the check exists.
-      '{"v":2.0,"items":[{"kind":"file","name":"a.txt","size":1}]}',
-      '{"v":2,"items":[{"kind":"file","name":"a.txt","size":1.0}]}',
-      '{"v":2,"items":[{"kind":"file","name":"a.txt","size":1e3}]}',
+      '{"v":3.0,"items":[{"kind":"file","name":"a.txt","size":1}]}',
+      '{"v":3,"items":[{"kind":"file","name":"a.txt","size":1.0}]}',
+      '{"v":3,"items":[{"kind":"file","name":"a.txt","size":1e3}]}',
     ]) {
       expect(reasonOf(decode(doc)), doc).toBe("notCanonical");
     }
@@ -244,23 +244,23 @@ describe("fail-closed clauses", () => {
       "",
       "not json",
       '[{"kind":"file","name":"a.txt","size":1}]',
-      '{"v":2,"items":{"kind":"file","name":"a.txt","size":1}}',
-      '{"v":2,"items":["a.txt"]}',
-      '{"v":2,"items":[{"kind":"file","name":"a.txt","size":"1"}]}',
-      '{"v":2,"items":[{"kind":"file","name":"a.txt","size":1.5}]}',
-      '{"v":2,"items":[{"kind":"file","name":"a.txt","size":1}',
+      '{"v":3,"items":{"kind":"file","name":"a.txt","size":1}}',
+      '{"v":3,"items":["a.txt"]}',
+      '{"v":3,"items":[{"kind":"file","name":"a.txt","size":"1"}]}',
+      '{"v":3,"items":[{"kind":"file","name":"a.txt","size":1.5}]}',
+      '{"v":3,"items":[{"kind":"file","name":"a.txt","size":1}',
       // A second document appended to the first.
-      '{"v":2,"items":[{"kind":"file","name":"a.txt","size":1}]}{"v":2,"items":[{"kind":"text","size":1}]}',
+      '{"v":3,"items":[{"kind":"file","name":"a.txt","size":1}]}{"v":3,"items":[{"kind":"text","size":1}]}',
     ]) {
       expect(reasonOf(decode(doc)), doc).toBe("malformed");
     }
   });
 
   it("never guesses at an unknown kind", () => {
-    expect(reasonOf(decode('{"v":2,"items":[{"kind":"folder","name":"a","size":1}]}'))).toBe("unknownKind");
-    expect(reasonOf(decode('{"v":2,"items":[{"name":"a.txt","size":1}]}'))).toBe("unknownKind");
-    expect(reasonOf(decode('{"v":2,"items":[{"kind":"File","name":"a.txt","size":1}]}'))).toBe("unknownKind");
-    expect(reasonOf(decode('{"v":2,"items":[{"kind":"","name":"a.txt","size":1}]}'))).toBe("unknownKind");
+    expect(reasonOf(decode('{"v":3,"items":[{"kind":"folder","name":"a","size":1}]}'))).toBe("unknownKind");
+    expect(reasonOf(decode('{"v":3,"items":[{"name":"a.txt","size":1}]}'))).toBe("unknownKind");
+    expect(reasonOf(decode('{"v":3,"items":[{"kind":"File","name":"a.txt","size":1}]}'))).toBe("unknownKind");
+    expect(reasonOf(decode('{"v":3,"items":[{"kind":"","name":"a.txt","size":1}]}'))).toBe("unknownKind");
   });
 
   it("refuses to ENCODE an invalid manifest", () => {
@@ -268,11 +268,11 @@ describe("fail-closed clauses", () => {
     // happily and leave the refusal to the receiver — after the upload, and only
     // if the receiver is this careful.
     for (const m of [
-      { v: 2, items: [{ kind: "file", name: "../a", size: 1 }] },
-      { v: 2, items: [{ kind: "file", name: "a", size: 1 }, { kind: "text", size: 1 }] },
-      { v: 2, items: [] },
+      { v: 3, items: [{ kind: "file", name: "../a", size: 1 }] },
+      { v: 3, items: [{ kind: "file", name: "a", size: 1 }, { kind: "text", size: 1 }] },
+      { v: 3, items: [] },
       { v: 1, items: [{ kind: "file", name: "a", size: 1 }] },
-      { v: 2, items: [{ kind: "text", name: "n", size: 1 }] },
+      { v: 3, items: [{ kind: "text", name: "n", size: 1 }] },
     ] as unknown as InboxManifest[]) {
       expect(reasonOf(() => encodeInboxManifest(m)), JSON.stringify(m)).not.toBeNull();
     }
@@ -300,7 +300,7 @@ describe("fail-closed clauses", () => {
  *  It lives under the Swift package because SwiftPM can only load test
  *  resources from inside its own package directory. Go and this test have no
  *  such restriction and reach it by relative path, so there is one copy. */
-const VECTOR_PATH = "../apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v2-vectors.json";
+const VECTOR_PATH = "../apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json";
 
 interface AcceptVector {
   name: string;
@@ -359,7 +359,7 @@ describe("the frozen cross-language vectors", () => {
     expect(m.items).toEqual(tc.items);
     // ENCODE: and this implementation must produce those exact bytes from that
     // shape. Decoding alone would let a lenient encoder pass.
-    expect(encodeInboxManifest({ v: 2, items: tc.items } as InboxManifest)).toBe(tc.canonical);
+    expect(encodeInboxManifest({ v: 3, items: tc.items } as InboxManifest)).toBe(tc.canonical);
   });
 
   it.each(vectors.refuse.map((v) => [v.name, v] as const))("refuses %s", (_name, tc) => {

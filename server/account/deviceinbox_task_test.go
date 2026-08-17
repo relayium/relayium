@@ -93,8 +93,8 @@ func (h *taskHarness) enrolTarget(t *testing.T, userID, name, policy string, dir
 	if deviceID == "" {
 		t.Fatalf("no current device for a freshly minted bearer")
 	}
-	body := fmt.Sprintf(`{"platform":"linux","appVersion":"0.15.0","protocolVersions":[2],
-		"capabilities":["inbox.receive.v2","inbox.autoaccept.v1"],
+	body := fmt.Sprintf(`{"platform":"linux","appVersion":"0.15.0","protocolVersions":[3],
+		"capabilities":["inbox.receive.v3","inbox.autoaccept.v1"],
 		"autoAccept":%q,"receiveDirReady":%t}`, policy, dirReady)
 	if resp := h.jsonDo(t, "PUT", "/api/devices/"+deviceID+"/inbox", body, withBearer(token)); resp.StatusCode != 200 {
 		t.Fatalf("enrol %s: got %d, want 200", name, resp.StatusCode)
@@ -167,7 +167,7 @@ func (h *taskHarness) createTask(t *testing.T, deviceID string, o createOpts) *h
 		o.wrapped = sealedKey(o.idem)
 	}
 	if o.protocol == 0 {
-		o.protocol = inbox.ProtocolV2
+		o.protocol = inbox.ProtocolV3
 	}
 	proto := fmt.Sprintf(`"protocolVersion":%d,`, o.protocol)
 	if o.omitProtocol {
@@ -1597,7 +1597,7 @@ func TestCreateRejectsAWrappedKeyOfTheWrongShape(t *testing.T) {
 	if resp := h.jsonDo(t, "POST", "/api/devices/"+tg.deviceID+"/inbox/tasks",
 		fmt.Sprintf(`{"idempotencyKey":"wrap-empty","storedFileId":%q,"protocolVersion":%d,
 			"wrapAlgorithm":%q,"wrappedKey":"","targetKeyId":%q,"targetKeyGeneration":%d}`,
-			fileID, inbox.ProtocolV2, inbox.KeyAlgX25519SealedBoxV1, tg.keyID, tg.keyGen),
+			fileID, inbox.ProtocolV3, inbox.KeyAlgX25519SealedBoxV1, tg.keyID, tg.keyGen),
 		withBearer(tg.token)); resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("empty wrapped key: got %d, want 400", resp.StatusCode)
 	}
@@ -1710,7 +1710,7 @@ func TestQueueRejectsUnauthenticatedCallers(t *testing.T) {
 	// A capability link authenticates NOTHING. Holding one — or the stored file
 	// id inside it — must not reach any queue endpoint (PRD §8).
 	for _, c := range []struct{ method, path, body string }{
-		{"POST", "/api/devices/" + id + "/inbox/tasks", `{"idempotencyKey":"x","storedFileId":"f","protocolVersion":2,"wrapAlgorithm":"x25519-sealedbox-v1","wrappedKey":"","targetKeyId":"k","targetKeyGeneration":1}`},
+		{"POST", "/api/devices/" + id + "/inbox/tasks", `{"idempotencyKey":"x","storedFileId":"f","protocolVersion":3,"wrapAlgorithm":"x25519-sealedbox-v1","wrappedKey":"","targetKeyId":"k","targetKeyGeneration":1}`},
 		{"GET", "/api/devices/" + id + "/inbox/tasks", ""},
 		{"GET", "/api/devices/" + id + "/inbox/tasks/" + taskID, ""},
 		{"DELETE", "/api/devices/" + id + "/inbox/tasks/" + taskID, ""},
@@ -1775,10 +1775,11 @@ func TestQueueIsInvisibleAcrossAccounts(t *testing.T) {
 	}
 }
 
-// TestSessionCanSendButCannotSpeakForTheDevice is the session/device-self line.
+// TestBrowserInstallationCanSendButCannotSpeakForTheTargetDevice is the
+// browser-sender/device-self line.
 // A cookie is account-wide: letting a signed-in tab report `saved` would let the
 // UI claim a file landed on a machine that never received it.
-func TestSessionCanSendButCannotSpeakForTheDevice(t *testing.T) {
+func TestBrowserInstallationCanSendButCannotSpeakForTheTargetDevice(t *testing.T) {
 	h := newTaskHarness(t)
 	u := h.user(t, "split@example.test")
 	tg := h.enrolTarget(t, u, "server", inbox.AutoAcceptAuto, true)
@@ -1786,16 +1787,29 @@ func TestSessionCanSendButCannotSpeakForTheDevice(t *testing.T) {
 	cookie := h.cookie(t, u)
 	withCookie := func(r *http.Request) { r.AddCookie(cookie) }
 
-	// The browser is the primary SENDER, so creating must work from a cookie.
+	refused := h.createTask(t, tg.deviceID, createOpts{
+		idem: "web-no-device", fileID: fileID, keyID: tg.keyID, keyGen: tg.keyGen, authMutate: withCookie,
+	})
+	if refused.StatusCode != http.StatusConflict || apiErrorCode(t, refused) != "sender_device_required" {
+		t.Fatalf("cookie-only create: got %d, want 409 sender_device_required", refused.StatusCode)
+	}
+	install := h.jsonDo(t, "POST", "/api/devices/browser-install", `{}`, withCookie)
+	if install.StatusCode != http.StatusCreated || len(install.Cookies()) != 1 {
+		t.Fatalf("browser install: got %d and %d cookies", install.StatusCode, len(install.Cookies()))
+	}
+	deviceCookie := install.Cookies()[0]
+	withBrowser := func(r *http.Request) { r.AddCookie(cookie); r.AddCookie(deviceCookie) }
+
 	resp := h.createTask(t, tg.deviceID, createOpts{
-		idem: "web-1", fileID: fileID, keyID: tg.keyID, keyGen: tg.keyGen, authMutate: withCookie,
+		idem: "web-1", fileID: fileID, keyID: tg.keyID, keyGen: tg.keyGen, authMutate: withBrowser,
 	})
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("browser create: got %d, want 201", resp.StatusCode)
 	}
 	task := decodeJSONBody(t, resp)["task"].(map[string]any)
-	if task["SourceDeviceID"] != "" {
-		t.Fatalf("SourceDeviceID = %v for a browser send, want empty", task["SourceDeviceID"])
+	sourceID := task["SourceDeviceID"].(string)
+	if sourceID == "" || sourceID == tg.deviceID {
+		t.Fatalf("SourceDeviceID = %q, want distinct authenticated browser device", sourceID)
 	}
 	taskID := task["ID"].(string)
 
@@ -1869,7 +1883,7 @@ func TestCreateRequiresTheDeclaredProtocolVersion(t *testing.T) {
 		{"omitted", createOpts{omitProtocol: true}},
 		{"explicit zero", createOpts{protocol: -1}}, // -1 keeps the helper from defaulting
 		{"historical v1", createOpts{protocol: inbox.ProtocolV1}},
-		{"future", createOpts{protocol: inbox.ProtocolV2 + 1}},
+		{"future", createOpts{protocol: inbox.ProtocolV3 + 1}},
 		{"absurd", createOpts{protocol: 1 << 30}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1890,8 +1904,8 @@ func TestCreateRequiresTheDeclaredProtocolVersion(t *testing.T) {
 			// Actionable: the refusal names what central does speak, so a client
 			// can say "upgrade" instead of "the send failed".
 			got, ok := body["supportedProtocols"].([]any)
-			if !ok || len(got) == 0 || got[0] != float64(inbox.ProtocolV2) {
-				t.Fatalf("supportedProtocols = %v, want [%d]", body["supportedProtocols"], inbox.ProtocolV2)
+			if !ok || len(got) == 0 || got[0] != float64(inbox.ProtocolV3) {
+				t.Fatalf("supportedProtocols = %v, want [%d]", body["supportedProtocols"], inbox.ProtocolV3)
 			}
 			// Fail closed means nothing was written, not "written and reported".
 			var n int
@@ -1905,7 +1919,7 @@ func TestCreateRequiresTheDeclaredProtocolVersion(t *testing.T) {
 	fileID := h.storedObject(t, u, 32, time.Hour)
 	resp := h.createTask(t, tg.deviceID, createOpts{
 		idem: "proto-ok", fileID: fileID, keyID: tg.keyID, keyGen: tg.keyGen,
-		protocol: inbox.ProtocolV2, authMutate: withBearer(tg.token),
+		protocol: inbox.ProtocolV3, authMutate: withBearer(tg.token),
 	})
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("current version: got %d, want 201", resp.StatusCode)

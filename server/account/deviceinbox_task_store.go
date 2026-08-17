@@ -148,6 +148,12 @@ func (s *SQLiteStore) CreateInboxTask(ctx context.Context, t InboxTask) (InboxTa
 	if err := deviceOwned(ctx, tx, t.TargetDeviceID, t.UserID); err != nil {
 		return InboxTask{}, false, err
 	}
+	if t.SourceDeviceID == "" {
+		return InboxTask{}, false, ErrDeviceCannotReceive
+	}
+	if err := deviceOwned(ctx, tx, t.SourceDeviceID, t.UserID); err != nil {
+		return InboxTask{}, false, err
+	}
 	in, err := scanDeviceInbox(tx.QueryRowContext(ctx,
 		`SELECT `+deviceInboxCols+` FROM device_inbox WHERE device_id = ? AND user_id = ?`,
 		t.TargetDeviceID, t.UserID))
@@ -304,6 +310,7 @@ func (s *SQLiteStore) CreateInboxTask(ctx context.Context, t InboxTask) (InboxTa
 // (id, manifest, size, expiry, state), which cannot differ for identical input.
 func sameInboxTaskRequest(existing, req InboxTask) bool {
 	return existing.TargetDeviceID == req.TargetDeviceID &&
+		existing.SourceDeviceID == req.SourceDeviceID &&
 		existing.StoredFileID == req.StoredFileID &&
 		existing.WrapAlgorithm == req.WrapAlgorithm &&
 		existing.WrappedKey == req.WrappedKey &&
@@ -542,7 +549,7 @@ func (s *SQLiteStore) ClaimInboxTasks(ctx context.Context, deviceID, userID stri
 	rows, err := tx.QueryContext(ctx,
 		`SELECT `+inboxTaskCols+` FROM inbox_tasks
 		  WHERE target_device_id = ? AND user_id = ? AND state IN `+claimableStateSQL+`
-		    AND expires_at > ? AND next_attempt_at <= ?
+		    AND source_device_id <> '' AND expires_at > ? AND next_attempt_at <= ?
 		  ORDER BY created_at ASC, id ASC LIMIT ?`,
 		deviceID, userID, now, now, max)
 	if err != nil {

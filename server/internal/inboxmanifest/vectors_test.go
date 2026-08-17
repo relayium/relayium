@@ -18,7 +18,7 @@ import (
 // from inside its own package directory. Go and TypeScript have no such
 // restriction and reach it by relative path, which is why there is one copy and
 // not three.
-const vectorPath = "../../../apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v2-vectors.json"
+const vectorPath = "../../../apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json"
 
 type vectorFile struct {
 	Version int `json:"version"`

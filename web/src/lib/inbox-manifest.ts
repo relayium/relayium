@@ -1,11 +1,11 @@
-// The Device Inbox v2 encrypted manifest — the small authenticated JSON
+// The Device Inbox v3 encrypted manifest — the small authenticated JSON
 // document a sender seals at frame 0 of a delivery, describing what the frames
 // after it contain.
 //
 // This is the TypeScript third of one codec. The other two are
 // `server/internal/inboxmanifest` and RelayiumKit's `InboxManifest.swift`, and
 // all three are checked against the same frozen vectors in
-// `apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v2-vectors.json`.
+// `apps/RelayiumKit/Tests/Fixtures/device-inbox-manifest-v3-vectors.json`.
 //
 // It is DELIBERATELY separate from `manifest.ts`/`store-crypto.ts`, the shared
 // Stored-Wire manifest. Those bytes are frozen and interop-tested across
@@ -27,7 +27,7 @@
 //  5. TEXT IS NOT IN HERE. A message's bytes travel in the encrypted frames;
 //     the manifest carries only its length.
 
-export const INBOX_MANIFEST_VERSION = 2;
+export const INBOX_MANIFEST_VERSION = 3;
 
 /** Item-count bounds. `MAX` matches the shared manifest's, so a folder that can
  *  be shared can also be sent to a device. */

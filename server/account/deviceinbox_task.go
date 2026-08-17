@@ -156,8 +156,8 @@ func (s *Service) handleInboxTaskBlob(w http.ResponseWriter, r *http.Request, u 
 type inboxTaskView struct {
 	ID             string `json:"ID"`
 	TargetDeviceID string `json:"TargetDeviceID"`
-	// SourceDeviceID is "" when a browser session created the task. Audit
-	// metadata; never used for authorization.
+	// SourceDeviceID is the server-derived, authenticated sending installation.
+	// It is routing/conversation metadata, never request-body authority.
 	SourceDeviceID string `json:"SourceDeviceID"`
 	IdempotencyKey string `json:"IdempotencyKey"`
 	StoredFileID   string `json:"StoredFileID"`
@@ -244,6 +244,11 @@ type inboxDeliveryView struct {
 // after a later, less careful edit to this struct.
 func (s *Service) handleCreateInboxTask(w http.ResponseWriter, r *http.Request, u User) {
 	deviceID := r.PathValue("id")
+	sourceDeviceID := s.authenticatedSourceDeviceID(r, u.ID)
+	if sourceDeviceID == "" {
+		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "sender_device_required"})
+		return
+	}
 	var in struct {
 		IdempotencyKey string `json:"idempotencyKey"`
 		StoredFileID   string `json:"storedFileId"`
@@ -315,9 +320,7 @@ func (s *Service) handleCreateInboxTask(w http.ResponseWriter, r *http.Request, 
 	saved, created, err := s.store.CreateInboxTask(r.Context(), InboxTask{
 		ID: authx.NewID(), UserID: u.ID,
 		TargetDeviceID: deviceID,
-		// Recorded when a DEVICE sent this, "" for a browser session. Audit
-		// only — authorization is the account, never this field.
-		SourceDeviceID: s.bearerDeviceID(r, u.ID),
+		SourceDeviceID: sourceDeviceID,
 		IdempotencyKey: in.IdempotencyKey,
 		StoredFileID:   in.StoredFileID,
 		WrapAlgorithm:  in.WrapAlgorithm,

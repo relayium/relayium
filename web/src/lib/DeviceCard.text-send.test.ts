@@ -21,7 +21,7 @@ import DeviceCard from "./DeviceCard.svelte";
 import { loadLang } from "./i18n.svelte";
 import { refreshSession } from "./auth.svelte";
 import {
-  CAP_RECEIVE_V2,
+  CAP_RECEIVE_V3,
   CAP_TEXT_V1,
   INBOX_KEY_ALGORITHM,
   type InboxTaskView,
@@ -64,8 +64,8 @@ function inbox(over: Record<string, unknown> = {}) {
     PresenceExpiresAt: 1_700_000_090,
     HeartbeatIntervalSeconds: 30,
     ProtocolVersion: 2,
-    Capabilities: [CAP_RECEIVE_V2, CAP_TEXT_V1],
-    ReceiveCapability: CAP_RECEIVE_V2,
+    Capabilities: [CAP_RECEIVE_V3, CAP_TEXT_V1],
+    ReceiveCapability: CAP_RECEIVE_V3,
     AutoAccept: "auto",
     ReceiveDirReady: true,
     Platform: "macos",
@@ -81,6 +81,7 @@ function inbox(over: Record<string, unknown> = {}) {
 function task(over: Partial<InboxTaskView> = {}): InboxTaskView {
   return {
     ID: TASK_ID,
+    SourceDeviceID: "bbbbccccddddeeeeffff000011112222",
     State: "queued",
     ErrorCode: "",
     CiphertextBytes: 10,
@@ -213,7 +214,7 @@ describe("who is offered a message", () => {
   });
 
   it("disables it and says why when the device announces no message surface", async () => {
-    render({ Capabilities: [CAP_RECEIVE_V2] });
+    render({ Capabilities: [CAP_RECEIVE_V3] });
     await settle();
     expect(msgBtn().disabled, "a message was offered to a device that shows none").toBe(true);
     // Disabled AND explained: a dead control with nothing beside it is
@@ -230,7 +231,7 @@ describe("who is offered a message", () => {
     // The more important half of the rule: requiring `inbox.text.v1` of a file
     // send would refuse the CLI and every other receiver that takes files
     // perfectly well and renders no messages.
-    render({ Capabilities: [CAP_RECEIVE_V2] });
+    render({ Capabilities: [CAP_RECEIVE_V3] });
     await settle();
     expect(q(".sendzone")).not.toBeNull();
     const btn = q("button.sendbtn") as HTMLButtonElement;

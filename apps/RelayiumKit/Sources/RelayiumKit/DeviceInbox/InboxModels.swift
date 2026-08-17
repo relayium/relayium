@@ -176,6 +176,7 @@ public struct InboxDeviceRow: Equatable, Sendable, Decodable {
 public struct InboxTask: Equatable, Sendable {
     public let id: String
     public let targetDeviceID: String
+    public let sourceDeviceID: String
     public let idempotencyKey: String
     public let storedFileID: String
     public let state: InboxTaskState
@@ -190,7 +191,8 @@ public struct InboxTask: Equatable, Sendable {
     public let savedAt: Int64
     public let isTerminal: Bool
 
-    public init(id: String, targetDeviceID: String = "", idempotencyKey: String = "",
+    public init(id: String, targetDeviceID: String = "", sourceDeviceID: String = "",
+                idempotencyKey: String = "",
                 storedFileID: String = "",
                 state: InboxTaskState, errorCode: InboxTaskErrorCode = .device(.none),
                 ciphertextBytes: Int64 = 0,
@@ -200,6 +202,7 @@ public struct InboxTask: Equatable, Sendable {
                 savedAt: Int64 = 0, isTerminal: Bool? = nil) {
         self.id = id
         self.targetDeviceID = targetDeviceID
+        self.sourceDeviceID = sourceDeviceID
         self.idempotencyKey = idempotencyKey
         self.storedFileID = storedFileID
         self.state = state
@@ -218,7 +221,7 @@ public struct InboxTask: Equatable, Sendable {
 
 extension InboxTask: Decodable {
     fileprivate enum CodingKeys: String, CodingKey {
-        case id = "ID", targetDeviceID = "TargetDeviceID"
+        case id = "ID", targetDeviceID = "TargetDeviceID", sourceDeviceID = "SourceDeviceID"
         case idempotencyKey = "IdempotencyKey", storedFileID = "StoredFileID"
         case state = "State", errorCode = "ErrorCode", ciphertextBytes = "CiphertextBytes"
         case wrapAlgorithm = "WrapAlgorithm", targetKeyID = "TargetKeyID"
@@ -243,6 +246,7 @@ extension InboxTask: Decodable {
         }
         errorCode = code
         targetDeviceID = try c.decode(String.self, forKey: .targetDeviceID)
+        sourceDeviceID = try c.decode(String.self, forKey: .sourceDeviceID)
         // Older receiver fixtures and pre-sender servers did not expose this
         // account-only field. Receiver reads remain backward-compatible, while
         // `InboxSenderClient.createTask` requires an exact non-empty match.

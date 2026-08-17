@@ -24,17 +24,17 @@ public enum InboxProtocol {
     /// v1 is absent, not lower-preference. The owner waived old-protocol
     /// compatibility on 2026-08-17, so there is no dual stack and no downgrade:
     /// a central that speaks only v1 is one this build refuses to enrol with.
-    public static let versions: [Int] = [2]
+    public static let versions: [Int] = [3]
 
     /// The version a SENDER declares on `POST …/inbox/tasks` — the protocol the
     /// manifest sealed inside that task's ciphertext was written to. Separate
     /// from `versions` because it is a different claim: `versions` is what this
     /// build can READ, this is what it just WROTE.
-    public static let taskProtocolVersion = 2
+    public static let taskProtocolVersion = 3
 
     /// The capabilities EVERY build of this library may honestly announce.
     ///
-    /// `inbox.receive.v2` is required by central. `inbox.autoaccept.v1` is what
+    /// `inbox.receive.v3` is required by central. `inbox.autoaccept.v1` is what
     /// makes the `auto` policy storable at all, and `inbox.resume.v1` says this
     /// device resumes an interrupted ciphertext download from a complete frame
     /// boundary — which `InboxReceiver` does, through `StoreDecryptor`'s
@@ -52,7 +52,7 @@ public enum InboxProtocol {
     /// `announcedCapabilities(presentingText:)`, at the one site that knows
     /// which screens it ships. See that function.
     public static let capabilities: [String] = [
-        InboxCapability.receiveV2, InboxCapability.autoAcceptV1, InboxCapability.resumeV1,
+        InboxCapability.receiveV3, InboxCapability.autoAcceptV1, InboxCapability.resumeV1,
     ]
 
     /// What THIS build announces, given whether its own product surface renders
@@ -118,7 +118,7 @@ public enum InboxCapability {
     public static let receiveV1 = "inbox.receive.v1"
     /// Required of every receiving device: claim, unwrap, decode a v2 manifest,
     /// verify, commit atomically.
-    public static let receiveV2 = "inbox.receive.v2"
+    public static let receiveV3 = "inbox.receive.v3"
     /// "This receiver presents a text delivery as text." Announced only by a
     /// build that actually does, because a sender uses it to decide whether
     /// offering a text send to this device would be honest.

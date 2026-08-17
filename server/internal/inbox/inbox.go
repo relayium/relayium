@@ -49,15 +49,16 @@ const (
 	// build announcing only v1 must be told to upgrade, not quietly accepted.
 	ProtocolV1 = 1
 
-	// ProtocolV2 is the Device Inbox protocol this build speaks
-	// (docs/protocol/relayium-device-inbox-v2.md). Its one substantive change
-	// over v1 is that a delivery now declares its CONTENT KIND — file or text —
-	// and it does so only inside the authenticated encrypted manifest, so
-	// central still cannot tell a message from a file.
+	// ProtocolV2 is the historical content-kind protocol. It is named so a
+	// v2-only client can receive an explicit upgrade refusal.
 	ProtocolV2 = 2
+	// ProtocolV3 requires every task to carry the authenticated, server-derived
+	// source device identity returned to the target in its claim. The encrypted
+	// content framing remains private; this version changes routing identity.
+	ProtocolV3 = 3
 
-	MinProtocolVersion = ProtocolV2
-	MaxProtocolVersion = ProtocolV2
+	MinProtocolVersion = ProtocolV3
+	MaxProtocolVersion = ProtocolV3
 )
 
 // Capability tokens are versioned by construction ("<name>.v<N>"): a behaviour
@@ -70,12 +71,14 @@ const (
 	// decode a v2 manifest, so listing it as a send target would promise a
 	// delivery it would fail on.
 	CapReceiveV1 = "inbox.receive.v1"
-	// CapReceiveV2 is the REQUIRED capability for a receiving device: it says
+	// CapReceiveV3 is the REQUIRED capability for a receiving device: it says
 	// the device can claim a queued task, unwrap its content key with its own
 	// private key, decode the v2 encrypted manifest, verify, and commit
 	// atomically. Registration without a supported receive capability is
 	// refused (invariant 2).
 	CapReceiveV2 = "inbox.receive.v2"
+	// CapReceiveV3 additionally promises authenticated sender-device routing.
+	CapReceiveV3 = "inbox.receive.v3"
 	// CapTextV1 says this receiver presents a text delivery AS TEXT — it
 	// commits the message to its protected message store and shows it, rather
 	// than writing a file into the user's receive folder.
@@ -109,7 +112,7 @@ const (
 //
 // v1 is deliberately absent, not merely lower-preference. It is not a downgrade
 // path central may fall back to — a v1 device cannot read a v2 manifest at all.
-var supportedReceiveCapabilities = []string{CapReceiveV2}
+var supportedReceiveCapabilities = []string{CapReceiveV3}
 
 // SupportedReceiveCapabilities is the negotiable receive set, for the API layer
 // to echo on a refusal. Exported (and cloned) so no caller has to restate the

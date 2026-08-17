@@ -46,14 +46,14 @@ final class InboxSendTargetTests: XCTestCase {
     }
 
     private func view(presence: InboxPresence = .online,
-                      capability: String = InboxCapability.receiveV2,
+                      capability: String = InboxCapability.receiveV3,
                       autoAccept: InboxAutoAccept = .auto,
                       receiveDirReady: Bool = true, revoked: Bool = false,
                       canReceive: Bool = true, registeredAt: Int64 = 100,
                       key: InboxKey?) -> InboxView {
         InboxView(presence: presence, lastHeartbeatAt: 100, presenceExpiresAt: 190,
                   heartbeatIntervalSeconds: 30, protocolVersion: 1,
-                  capabilities: [InboxCapability.receiveV2],
+                  capabilities: [InboxCapability.receiveV3],
                   receiveCapability: capability, autoAccept: autoAccept,
                   receiveDirReady: receiveDirReady, revoked: revoked,
                   canReceive: canReceive, registeredAt: registeredAt, key: key)

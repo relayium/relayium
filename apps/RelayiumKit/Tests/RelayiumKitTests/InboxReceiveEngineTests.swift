@@ -128,7 +128,7 @@ final class InboxReceiveEngineTests: XCTestCase {
             // `InboxEnrolmentTests`; what this test is about is the policy and
             // the folder probe the request carries.
             protocolVersion: InboxProtocol.versions[0],
-            receiveCapability: InboxCapability.receiveV2,
+            receiveCapability: InboxCapability.receiveV3,
             keyAlgorithm: InboxProtocol.keyAlgorithm))
 
         _ = try await engine(h).prepare(platform: "darwin", appVersion: "1.0")
@@ -155,7 +155,7 @@ final class InboxReceiveEngineTests: XCTestCase {
                                            publicKey: InboxKeyMaterial.encode(h.deviceKey.publicKey),
                                            generation: 1)),
             protocolVersion: InboxProtocol.versions[0],
-            receiveCapability: InboxCapability.receiveV2,
+            receiveCapability: InboxCapability.receiveV3,
             keyAlgorithm: InboxProtocol.keyAlgorithm))
 
         // The default: a host that says nothing about its screens.

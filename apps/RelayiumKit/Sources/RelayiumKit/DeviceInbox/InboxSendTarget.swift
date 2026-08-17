@@ -133,7 +133,7 @@ public enum InboxTargetEligibility {
         // a v2 manifest, so it is refused here rather than offered as a target
         // and discovered after the file is already encrypted and uploaded. There
         // is no downgrade branch: the owner waived old-protocol compatibility.
-        guard inbox.receiveCapability == InboxCapability.receiveV2 else {
+        guard inbox.receiveCapability == InboxCapability.receiveV3 else {
             return no(.unsupportedCapability)
         }
         guard let key = inbox.key, key.isActive,

@@ -129,11 +129,11 @@ var ErrUnsupportedByServer = errors.New("relayium inbox: this Relayium server an
 // somewhere a person can read it. The absence is the truthful answer, and it is
 // what keeps a text send from being offered against a CLI target at all.
 func Capabilities() []string {
-	return []string{inbox.CapReceiveV2, inbox.CapAutoAcceptV1, inbox.CapResumeV1}
+	return []string{inbox.CapReceiveV3, inbox.CapAutoAcceptV1, inbox.CapResumeV1}
 }
 
 // ProtocolVersions is the set this build speaks.
-func ProtocolVersions() []int { return []int{inbox.ProtocolV2} }
+func ProtocolVersions() []int { return []int{inbox.ProtocolV3} }
 
 // Platform returns the announced platform label.
 func Platform() string { return runtime.GOOS }

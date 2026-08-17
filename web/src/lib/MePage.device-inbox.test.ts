@@ -10,7 +10,7 @@ import MePage from "./MePage.svelte";
 import ConfirmModal from "./ConfirmModal.svelte";
 import { loadLang } from "./i18n.svelte";
 import { refreshSession } from "./auth.svelte";
-import { CAP_RECEIVE_V2, DEVICE_REFRESH_MS, INBOX_KEY_ALGORITHM } from "./device-inbox";
+import { CAP_RECEIVE_V3, DEVICE_REFRESH_MS, INBOX_KEY_ALGORITHM } from "./device-inbox";
 
 const sendSpy = vi.fn();
 const fetchTaskSpy = vi.fn();
@@ -33,8 +33,8 @@ function inbox(over: Record<string, unknown> = {}) {
     LastHeartbeatAt: 1_700_000_000,
     PresenceExpiresAt: 1_700_000_090,
     HeartbeatIntervalSeconds: 30,
-    Capabilities: [CAP_RECEIVE_V2, "inbox.autoaccept.v1"],
-    ReceiveCapability: CAP_RECEIVE_V2,
+    Capabilities: [CAP_RECEIVE_V3, "inbox.autoaccept.v1"],
+    ReceiveCapability: CAP_RECEIVE_V3,
     ProtocolVersion: 1,
     AutoAccept: "auto",
     ReceiveDirReady: true,

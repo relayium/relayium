@@ -133,7 +133,7 @@ func TestSelfTransitionIsNotATransition(t *testing.T) {
 }
 
 func TestUnknownStatesFailClosed(t *testing.T) {
-	for _, pair := range [][2]string{
+	for _, pair := range [][3]string{
 		{"queued", "nonsense"}, {"nonsense", "queued"}, {"", "queued"}, {"queued", ""},
 		{SenderStateUploading, TaskQueued}, {TaskQueued, SenderStateUploading},
 	} {
@@ -215,8 +215,8 @@ func TestRetryBackoffIsBounded(t *testing.T) {
 }
 
 func TestInitialTaskStateFollowsThePolicy(t *testing.T) {
-	withAuto := []string{CapReceiveV2, CapAutoAcceptV1}
-	noAuto := []string{CapReceiveV2}
+	withAuto := []string{CapReceiveV3, CapAutoAcceptV1}
+	noAuto := []string{CapReceiveV3}
 
 	// off: refused outright. Queuing a task a device will never take would be a
 	// lie in the sender's UI.
@@ -284,7 +284,7 @@ func TestValidateTaskProtocolVersionFailsClosed(t *testing.T) {
 		{"omitted", 0, ErrUnsupportedProtocol},
 		{"negative", -1, ErrUnsupportedProtocol},
 		{"historical v1", ProtocolV1, ErrUnsupportedProtocol},
-		{"future", ProtocolV2 + 1, ErrUnsupportedProtocol},
+		{"future", ProtocolV3 + 1, ErrUnsupportedProtocol},
 		{"far future", 1 << 30, ErrUnsupportedProtocol},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -293,7 +293,7 @@ func TestValidateTaskProtocolVersionFailsClosed(t *testing.T) {
 			}
 		})
 	}
-	if err := ValidateTaskProtocolVersion(ProtocolV2); err != nil {
+	if err := ValidateTaskProtocolVersion(ProtocolV3); err != nil {
 		t.Fatalf("the current version must be accepted: %v", err)
 	}
 }

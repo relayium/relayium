@@ -80,7 +80,7 @@ final class InboxProtocolTests: XCTestCase {
         XCTAssertEqual(InboxProtocol.sealedBoxBytes, 80)
         XCTAssertEqual(InboxProtocol.claimTokenHeader, "X-Relayium-Inbox-Claim")
         XCTAssertEqual(InboxProtocol.capabilities,
-                       ["inbox.receive.v2", "inbox.autoaccept.v1", "inbox.resume.v1"])
+                       ["inbox.receive.v3", "inbox.autoaccept.v1", "inbox.resume.v1"])
     }
 
     /// v1 is gone, not deprioritised. The owner waived old-protocol
@@ -128,7 +128,7 @@ final class InboxProtocolTests: XCTestCase {
     ///
     /// Additively rather than as a separate list: the text claim is an extra
     /// promise on top of receiving, never a different way of receiving, and a
-    /// build that announced it INSTEAD of `inbox.receive.v2` would be refused by
+    /// build that announced it INSTEAD of `inbox.receive.v3` would be refused by
     /// central for the wrong reason entirely.
     func testABuildThatPresentsMessagesAnnouncesTheTextCapabilityOnTop() {
         let announced = InboxProtocol.announcedCapabilities(presentingText: true)
@@ -266,8 +266,8 @@ final class InboxProtocolTests: XCTestCase {
         let inbox: [String: Any] = [
             "Presence": "offline", "LastHeartbeatAt": 0, "PresenceExpiresAt": 0,
             "HeartbeatIntervalSeconds": 30, "ProtocolVersion": 1,
-            "Capabilities": ["inbox.receive.v2"],
-            "ReceiveCapability": "inbox.receive.v2", "AutoAccept": "off",
+            "Capabilities": ["inbox.receive.v3"],
+            "ReceiveCapability": "inbox.receive.v3", "AutoAccept": "off",
             "ReceiveDirReady": false, "Revoked": false, "CanReceive": true,
             "RegisteredAt": 1, "Key": NSNull(),
         ]
