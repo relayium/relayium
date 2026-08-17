@@ -16,8 +16,21 @@ describe("public repository status", () => {
     expect(readme).toContain("status-active%20development");
     expect(readme).toContain("The production web app and CLI");
     expect(readme).toContain("## Delivery status");
-    expect(readme).toContain(`**macOS — ${macos.version}, published as a direct download:**`);
-    expect(readme).toContain("**iOS — in development, not public:**");
+    const statusRows = Object.fromEntries(
+      readme.split("\n")
+        .filter((line) => /^\| \*\*(?:macOS|iOS)\*\* \|/.test(line))
+        .map((line) => [line.match(/^\| \*\*([^*]+)\*\*/)?.[1], line]),
+    );
+    const macosRow = statusRows.macOS ?? "";
+    const iosRow = statusRows.iOS ?? "";
+    expect(macosRow).toContain(`${macos.version} direct download`);
+    expect(macosRow).toContain(`/releases/tag/macos-v${macos.version}`);
+    expect(macosRow).toMatch(/no public Mac App Store listing/i);
+    expect(iosRow).toMatch(/In development/i);
+    expect(iosRow).toMatch(/Not available on the App Store or TestFlight/i);
+    expect(iosRow).not.toMatch(/\[[^\]]+\]\([^)]+\)/);
+    expect(iosRow).toMatch(/remain in the foreground/i);
+    expect(iosRow).toMatch(/push notifications are not supported/i);
     // Distribution truth, matched by shape rather than by one exact sentence, so
     // it survives an ordinary rewrite of the surrounding prose.
     //
@@ -41,23 +54,6 @@ describe("public repository status", () => {
     expect(readme).toContain(`macos-v${macos.version}`);
     expect(new Set([...readme.matchAll(/macos-v[0-9][0-9.]*/g)].map((m) => m[0])))
       .toEqual(new Set([`macos-v${macos.version}`]));
-    expect(readme).toMatch(/no Mac App Store listing/);
-    // iOS is offered nowhere, and says so in both places: the summary above the
-    // fold and the delivery-status entry.
-    //
-    // Both of these are matched by claim rather than by phrasing, because both
-    // phrasings have already moved once. `no download to install` was the old
-    // summary wording. `no App Store release` was the old delivery-status
-    // wording and became "no PUBLIC App Store release" in 395e8fbe — a literal
-    // that had quietly matched nothing since, and never reported it, because the
-    // assertion above it threw first. An `expect` that can only fail after its
-    // neighbour is fixed is not a guard, so neither is pinned to one sentence.
-    // `\bno\b` and a single optional qualifier, not `no[^.]*`: the loose bridge
-    // matched the "no" inside "notification" earlier in the same sentence and
-    // went on passing after the denial itself was inverted — a shape-tolerant
-    // pattern that tolerated the one change it exists to catch.
-    expect(readme).toMatch(/\bno\s+App\s+Store\s+listing\b[^.]*\bnothing\s+to\s+download\b/);
-    expect(readme).toMatch(/\bno\s+(?:\w+\s+)?App\s+Store\s+release\b/);
     // R3-D/E/F shipped the iOS realtime, nearby and account-management work the
     // status section used to list as unbuilt. What is still missing is the
     // lifecycle around it, and the section has to keep saying which is which:
@@ -65,7 +61,6 @@ describe("public repository status", () => {
     // leaves the foreground. Match that lifecycle truth by shape, across the
     // Markdown line breaks, rather than by one exact sentence.
     expect(readme).not.toMatch(/realtime and nearby transfer[^.]*still to be built/);
-    expect(readme).toMatch(/Nothing\s+runs\s+while\s+the\s+app\s+is\s+in\s+the\s+background/);
     expect(readme).not.toContain("status-M0%20MVP");
     expect(readme).not.toContain("This repository is **M0**");
     expect(readme).not.toContain("This is an early MVP");

@@ -99,22 +99,20 @@ describe("bumping the documents that name the published macOS release", () => {
     expect(text).not.toContain(`released as ${PUBLISHED}.`);
   });
 
-  it("leaves the Mac App Store package claims exactly where they are", async () => {
-    // The READMEs describe two artifacts on two channels. The Developer ID DMG
-    // is what this bump publishes; `1.2.4 (11)` is an App Store package that was
-    // uploaded to App Store Connect on a specific date. Moving the second
-    // because the first shipped would manufacture a TestFlight build nobody
-    // archived — an untrue distribution claim, which is the exact category the
-    // native-launch rules and the surface guards exist to prevent. A human edits
-    // those sentences when the App Store side actually moves.
+  it("does not rewrite or invent Mac App Store package claims", async () => {
+    // The root README is a concise public overview now. It must preserve the
+    // channel boundary without carrying internal App Store package history.
+    // If a detailed document does name such a package, a Developer ID release
+    // bump must still leave that independently versioned claim untouched.
     const root = await stagedDocs();
     const before = await readFile(resolve(repoRoot, "README.md"), "utf8");
     const appStoreClaims = (text) => [...text.matchAll(/[0-9]+(?:\.[0-9]+){1,2} \([0-9]+\)/g)].map((m) => m[0]);
-    expect(appStoreClaims(before).length, "README.md names no App Store package").toBeGreaterThan(0);
+    expect(before).toMatch(/no public Mac App Store listing/i);
 
     await bumpReleaseDocs({ repoRoot: root, from: PUBLISHED, to: NEXT });
     const after = await readFile(resolve(root, "README.md"), "utf8");
     expect(appStoreClaims(after)).toEqual(appStoreClaims(before));
+    expect(after).toMatch(/no public Mac App Store listing/i);
   });
 
   it("refuses a document that no longer names the published release", async () => {
