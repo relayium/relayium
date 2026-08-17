@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -22,7 +23,8 @@ type fakeBiller struct {
 	lastPortalCustomer  string
 	lastPortalReturnURL string
 
-	portalCalls int
+	portalCalls   int
+	checkoutCalls int
 
 	lastChangeCustomer string
 	lastChangePrice    string
@@ -83,8 +85,29 @@ func (f *fakeBiller) CancelSubscription(ctx context.Context, subID string, refun
 }
 
 func (f *fakeBiller) CreateCheckoutSession(ctx context.Context, in CheckoutInput) (string, error) {
+	f.checkoutCalls++
 	f.lastCheckout = in
 	return f.checkoutURL, nil
+}
+
+type checkoutProviderRefFailStore struct{ Store }
+
+func (s checkoutProviderRefFailStore) AcquireBillingAuthority(ctx context.Context, in BillingAuthorityRequest) (BillingAuthority, error) {
+	return acquireStoreBillingAuthority(ctx, s.Store, in)
+}
+
+func (s checkoutProviderRefFailStore) DispatchBillingPurchase(ctx context.Context, authority BillingAuthority, productID string, now int64) (BillingPurchaseAttempt, bool, error) {
+	store, ok := s.Store.(interface {
+		DispatchBillingPurchase(context.Context, BillingAuthority, string, int64) (BillingPurchaseAttempt, bool, error)
+	})
+	if !ok {
+		return BillingPurchaseAttempt{}, false, errors.New("missing dispatch store")
+	}
+	return store.DispatchBillingPurchase(ctx, authority, productID, now)
+}
+
+func (s checkoutProviderRefFailStore) SetBillingPurchaseProviderRef(context.Context, string, string, string) error {
+	return errors.New("injected provider ref persistence failure")
 }
 
 func (f *fakeBiller) CreatePortalSession(ctx context.Context, customerID, returnURL string) (string, error) {
@@ -262,6 +285,46 @@ func TestBillingCheckoutHappyPath(t *testing.T) {
 	}
 	if fb.lastCheckout.CancelURL != "http://example.test/me?billing=cancel" {
 		t.Fatalf("unexpected cancel url %q", fb.lastCheckout.CancelURL)
+	}
+}
+
+func TestBillingCheckoutNeverRedispatchesAnAmbiguousAttempt(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	fb := &fakeBiller{checkoutURL: "https://checkout.stripe.com/already-created"}
+	svc.biller = fb
+	svc.store = checkoutProviderRefFailStore{Store: svc.store}
+	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_monthly_pro"})
+	email := "checkout-ambiguous@example.com"
+	cookie := loginCookie(t, ts, mail, email)
+	now := svc.now()
+	svc.now = func() time.Time { return now }
+	post := func() *http.Response {
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/billing/checkout", strings.NewReader(`{"planId":"pro","cycle":"monthly"}`))
+		req.AddCookie(cookie)
+		resp, err := ts.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+
+	first := post()
+	first.Body.Close()
+	if first.StatusCode != http.StatusInternalServerError || fb.checkoutCalls != 1 {
+		t.Fatalf("first ambiguous call status=%d providerCalls=%d", first.StatusCode, fb.checkoutCalls)
+	}
+	// Well beyond Stripe's idempotency retention: local durable ambiguity, not
+	// the elapsed time, must prevent a second provider call.
+	now = now.Add(48 * time.Hour)
+	cookie = loginCookie(t, ts, mail, email)
+	second := post()
+	body := decodeErrBody(t, second)
+	second.Body.Close()
+	if second.StatusCode != http.StatusConflict || body["error"] != "billing_reconciliation_required" {
+		t.Fatalf("retry status=%d body=%v", second.StatusCode, body)
+	}
+	if fb.checkoutCalls != 1 {
+		t.Fatalf("ambiguous retry called Stripe again: %d calls", fb.checkoutCalls)
 	}
 }
 

@@ -124,8 +124,15 @@ func (s *Service) handleBillingCheckout(w http.ResponseWriter, r *http.Request, 
 		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "billing_reconciliation_required"})
 		return
 	}
-	if !created && attempt.ProviderRef != "" {
-		httpx.WriteJSON(w, http.StatusOK, map[string]string{"url": attempt.ProviderRef})
+	if !created {
+		if attempt.ProviderRef != "" {
+			httpx.WriteJSON(w, http.StatusOK, map[string]string{"url": attempt.ProviderRef})
+			return
+		}
+		// The provider call may already have succeeded while its response or our
+		// provider_ref write failed. Stripe's idempotency cache is bounded, so
+		// replaying the same key later is not proof against a second live Session.
+		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "billing_reconciliation_required"})
 		return
 	}
 	url, err := s.biller.CreateCheckoutSession(r.Context(), CheckoutInput{
