@@ -613,7 +613,13 @@
 "inbox.pause" = "Pause receiving";
 "inbox.resume" = "Resume receiving";
 "inbox.reveal" = "Show in Finder";
-"inbox.openDeviceInbox" = "Open Device Inbox";
+"inbox.openDeviceInbox" = "Open";
+"inbox.conversationsHeading" = "Conversations";
+"inbox.conversationLegacy" = "Earlier Relayium";
+"inbox.conversationLegacyLimited" = "File deliveries older than the retained recovery history cannot be added here. Those files remain in your receive folder.";
+"inbox.conversationRemoved" = "Removed device";
+"inbox.conversationStoreIssue" = "Some earlier Device Inbox history could not be loaded. Received files and messages were not deleted.";
+"inbox.conversationUnread" = "%@ unread";
 "inbox.askHeading" = "Waiting for your answer";
 "inbox.askExplain" = "Nothing is downloaded or written until you accept. Declining tells the sender it was not taken.";
 "inbox.askAccept" = "Receive";

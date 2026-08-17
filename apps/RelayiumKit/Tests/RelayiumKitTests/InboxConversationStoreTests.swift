@@ -72,6 +72,17 @@ final class InboxConversationStoreTests: XCTestCase {
         let legacy = try XCTUnwrap(store.conversations().first)
         XCTAssertEqual(legacy.senderDeviceID, InboxConversationStore.legacySenderID)
         XCTAssertEqual(legacy.deliveries.first?.messageID, "legacy-task")
+        let unsafe = InboxDeliveryRecord(taskID: "safe-name-task", senderDeviceID: "sender-device",
+            senderNameSnapshot: "  Sender\u{0000}\n" + String(repeating: "x", count: 100),
+            kind: .message, receivedAt: Date(), messageID: "safe-name-task", byteCount: 1)
+        _ = try store.record(unsafe)
+        let normalized = try XCTUnwrap(store.conversations().first {
+            $0.senderDeviceID == "sender-device"
+        })
+        XCTAssertFalse(normalized.senderNameSnapshot.unicodeScalars.contains {
+            CharacterSet.controlCharacters.contains($0)
+        })
+        XCTAssertLessThanOrEqual(normalized.senderNameSnapshot.unicodeScalars.count, 80)
         let bytes = try Data(contentsOf: index)
         XCTAssertFalse(String(decoding: bytes, as: UTF8.self).contains("secret"))
     }

@@ -1724,6 +1724,12 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// received". The bodies are rendered beneath it; nothing else in the
     /// product prints one.
     case inboxMessagesHeading = "inbox.messagesHeading"
+    case inboxConversationsHeading = "inbox.conversationsHeading"
+    case inboxConversationLegacy = "inbox.conversationLegacy"
+    case inboxConversationLegacyLimited = "inbox.conversationLegacyLimited"
+    case inboxConversationRemoved = "inbox.conversationRemoved"
+    case inboxConversationStoreIssue = "inbox.conversationStoreIssue"
+    case inboxConversationUnread = "inbox.conversationUnread"
 
     /// Where those messages live, said once, under the section.
     ///

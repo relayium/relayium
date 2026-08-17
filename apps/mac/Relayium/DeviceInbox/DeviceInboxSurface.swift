@@ -79,6 +79,7 @@ struct DeviceInboxSurface: View {
     /// the confirmation onto somebody else's row. It is never rendered — it is
     /// compared, and the row's visible text is the message and its time.
     @State private var copiedMessageID: String?
+    @State private var selectedConversationID: String?
 
     private var entry: DeviceInboxEntry {
         DeviceInboxEntry.entry(
@@ -113,14 +114,16 @@ struct DeviceInboxSurface: View {
                 if let target = deliveries.selectedCandidate {
                     DeviceSendDetail(target: target, deliveries: deliveries,
                                      onAccount: { onAccount(.signIn) })
+                } else if let id = selectedConversationID,
+                          let conversation = inbox.conversations.first(where: { $0.id == id }) {
+                    conversationDetail(conversation)
                 } else {
                     statusSection(offersControls: true)
                     notificationSection
                     askSection
                     folderSection
                     policySection
-                    resultsSection
-                    messagesSection
+                    conversationsSection
                     // The devices, in the one branch where the account is usable
                     // for sending. Deliberately NOT in `.statusOnly`: that branch
                     // exists because the receiver refused this account's
@@ -164,6 +167,134 @@ struct DeviceInboxSurface: View {
             for: NSApplication.didBecomeActiveNotification)) { _ in
             inbox.refreshNotificationPermission()
         }
+    }
+
+    // MARK: - conversations
+
+    private var conversationsSection: some View {
+        Section {
+            if inbox.conversationStoreIssue {
+                InlineMessage(.failure, L10n.t(.inboxConversationStoreIssue))
+                    .accessibilityIdentifier("inbox-conversation-store-issue")
+            }
+            if inbox.legacyConversationHistoryLimited {
+                InlineMessage(.info, L10n.t(.inboxConversationLegacyLimited))
+                    .accessibilityIdentifier("inbox-conversation-legacy-limited")
+            }
+            ForEach(inbox.conversations) { conversation in
+                HStack(alignment: .center) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack {
+                            if conversation.unreadCount > 0 {
+                                Circle().fill(.red).frame(width: 8, height: 8)
+                                    .accessibilityHidden(true)
+                            }
+                            Text(conversationName(conversation))
+                                .fontWeight(conversation.unreadCount > 0 ? .semibold : .regular)
+                        }
+                        Text(conversationSummary(conversation))
+                            .font(.caption).foregroundStyle(.secondary)
+                        if conversation.unreadCount > 0 {
+                            Text(L10n.t(.inboxConversationUnread,
+                                        [L10n.number(conversation.unreadCount)]))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer()
+                    Button(L10n.t(.inboxOpenDeviceInbox)) {
+                        selectedConversationID = conversation.id
+                        inbox.markConversationRead(conversation.id)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityLabel(L10n.detail([
+                        L10n.t(.inboxOpenDeviceInbox), conversationName(conversation)]))
+                    .accessibilityIdentifier("inbox-conversation-open")
+                }
+            }
+        } header: {
+            Text(L10n.t(.inboxConversationsHeading))
+                .accessibilityIdentifier("inbox-conversations")
+        }
+    }
+
+    private func conversationName(_ conversation: InboxConversation) -> String {
+        if conversation.senderDeviceID == InboxConversationStore.legacySenderID {
+            return L10n.t(.inboxConversationLegacy)
+        }
+        let name = inbox.displayName(for: conversation)
+        return inbox.isRemoved(conversation.senderDeviceID)
+            ? L10n.detail([name, L10n.t(.inboxConversationRemoved)]) : name
+    }
+
+    private func conversationSummary(_ conversation: InboxConversation) -> String {
+        var parts: [String] = []
+        if conversation.messageCount > 0 {
+            parts.append(L10n.detail([
+                L10n.number(conversation.messageCount), L10n.t(.inboxSavedMessage)]))
+        }
+        if conversation.fileCount > 0 {
+            parts.append(L10n.plural(.inboxSavedFiles, conversation.fileCount))
+        }
+        parts.append(L10n.date(conversation.lastActivity, dateStyle: .medium,
+                               timeStyle: .short))
+        return L10n.detail(parts)
+    }
+
+    private func conversationDetail(_ conversation: InboxConversation) -> some View {
+        Group {
+            Section {
+                Button(L10n.t(.sendBackToDevices)) { selectedConversationID = nil }
+                    .buttonStyle(.bordered)
+                    .keyboardShortcut(.cancelAction)
+                    .accessibilityIdentifier("inbox-conversation-back")
+                if let candidate = deliveries.candidates.first(where: {
+                    $0.id == conversation.senderDeviceID && $0.isSendable
+                }) {
+                    Button(L10n.t(.inboxOpenDeviceInbox)) {
+                        deliveries.selectTarget(candidate.id)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityIdentifier("inbox-conversation-send")
+                }
+            } header: {
+                Text(conversationName(conversation))
+            }
+            Section {
+                ForEach(conversation.deliveries) { delivery in
+                    VStack(alignment: .leading, spacing: 5) {
+                        if delivery.kind == .message, let message = inbox.message(for: delivery) {
+                            Text(message.text).textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Button(L10n.t(copiedMessageID == message.id
+                                          ? .commonCopied : .commonCopy)) {
+                                copyReceivedMessage(message.text)
+                                copiedMessageID = message.id
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityLabel(InboxMessagePresentation.copyActionLabel(
+                                copied: copiedMessageID == message.id))
+                        } else {
+                            Text(delivery.files.map(\.displayName).joined(separator: " · "))
+                                .textSelection(.enabled)
+                        }
+                        Text(L10n.date(delivery.receivedAt, dateStyle: .medium,
+                                       timeStyle: .short))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                HStack {
+                    Text(L10n.t(.inboxResultsHeading))
+                    Spacer()
+                    if conversation.fileCount > 0 {
+                        Button(L10n.t(.inboxRevealFolder)) { inbox.reveal(conversation) }
+                            .buttonStyle(.bordered)
+                            .accessibilityIdentifier("inbox-conversation-reveal")
+                    }
+                }
+            }
+        }
+        .onAppear { inbox.markConversationRead(conversation.id) }
     }
 
     // MARK: - no usable account

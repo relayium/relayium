@@ -729,26 +729,26 @@ final class InboxSurfaceGuardTests: XCTestCase {
     /// and Copy writes the body itself rather than a summary of it.
     func testTheDeviceInboxRendersReceivedMessagesWithAWorkingCopyAction() throws {
         let surface = try macSource("DeviceInbox/DeviceInboxSurface.swift")
-        XCTAssertTrue(surface.contains("private var messagesSection: some View"),
-                      "the Device Inbox has no received-messages section")
-        // In the usable-account branch, beside the file receipts. Outside it,
-        // this section would render for an account the receiver refused — one
-        // that cannot have received anything.
+        XCTAssertTrue(surface.contains("private func conversationDetail("),
+                      "the Device Inbox has no per-device received history")
+        // In the usable-account branch, inside the authenticated sender
+        // conversations. Outside it, history would render for an account the
+        // receiver refused — one that cannot have received anything.
         let afterSurface = try XCTUnwrap(
             surface.components(separatedBy: "case .surface:").dropFirst().first)
         let branch = try XCTUnwrap(afterSurface.components(separatedBy: "case .statusOnly:").first)
-        XCTAssertTrue(branch.contains("messagesSection"),
-                      "the messages section is rendered outside the usable-account branch")
+        XCTAssertTrue(branch.contains("conversationsSection"),
+                      "the conversation history is rendered outside the usable-account branch")
 
         // The body, whole and unformatted. `Text(message.text)` and not a
         // presentation helper: a helper is where a preview or a truncation would
         // be added, and this row is the one place the message may appear.
         XCTAssertTrue(surface.contains("Text(message.text)"),
                       "the message rows no longer render the message")
-        XCTAssertTrue(surface.contains("InboxMessagePresentation.receivedAt(message)"),
-                      "a message row no longer says when it arrived")
-        XCTAssertTrue(surface.contains("InboxMessagePresentation.shown(inbox.messages)"),
-                      "the section no longer draws the controller's message list")
+        XCTAssertTrue(surface.contains("delivery.receivedAt"),
+                      "a conversation message row no longer says when it arrived")
+        XCTAssertTrue(surface.contains("inbox.message(for: delivery)"),
+                      "conversation history no longer resolves its protected message reference")
 
         // Copy: an explicit control, named for assistive technology, writing the
         // EXACT characters that were received.
@@ -1140,14 +1140,14 @@ final class InboxSurfaceGuardTests: XCTestCase {
                           "the acceptance fixture shares \(isolated) with the installed product")
         }
         XCTAssertTrue(fixture.contains("receiveCapability: InboxCapability.receiveV3"),
-                      "the acceptance server no longer negotiates the required v2 receiver")
+                      "the acceptance server no longer negotiates the required v3 receiver")
         XCTAssertTrue(fixture.contains("InboxManifest.files("))
         XCTAssertTrue(fixture.contains("InboxManifest.encode(manifest)"))
         XCTAssertTrue(fixture.contains("seal(key: contentKey, seq: 0"))
         XCTAssertFalse(fixture.contains("encryptManifest(key: contentKey"),
-                       "the v2 fixture still seals a retired StoredManifest frame")
+                       "the v3 fixture still seals a retired StoredManifest frame")
         XCTAssertFalse(fixture.contains("receiveCapability: InboxCapability.receiveV1"),
-                       "the v2 acceptance client is being forced onto the retired v1 protocol")
+                       "the v3 acceptance client is being forced onto the retired v1 protocol")
         XCTAssertFalse(fixture.contains("temporaryDirectory"),
                        "a delivery or its journal may not land somewhere the system can purge")
         XCTAssertFalse(fixture.contains("cachesDirectory"))

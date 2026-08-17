@@ -995,6 +995,14 @@ public enum AppEnvironment {
         return InboxMessageStore(directory: directory)
     }
 
+    public static func makeInboxConversationStore(subdirectory: String = "device-inbox")
+        -> InboxConversationStore? {
+        guard let support = applicationSupportRoot() else { return nil }
+        let directory = support.appendingPathComponent(subdirectory, isDirectory: true)
+            .appendingPathComponent("conversations", isDirectory: true)
+        return InboxConversationStore(directory: directory)
+    }
+
     /// Journals are account-scoped even though central task ids are random.
     /// Relying on global uniqueness would still let account B inspect or replay
     /// account A's durable local receipt if a server defect or restored database
@@ -1128,6 +1136,18 @@ public enum AppEnvironment {
             messageStore: { account in
                 makeInboxMessageStore(subdirectory: inboxJournalSubdirectory(
                     base: journalSubdirectory, account: account))
+            },
+            conversationStore: { account in
+                makeInboxConversationStore(subdirectory: inboxJournalSubdirectory(
+                    base: journalSubdirectory, account: account))
+            },
+            legacyReceipts: { account in
+                guard let journals = makeInboxJournalStore(subdirectory: inboxJournalSubdirectory(
+                    base: journalSubdirectory, account: account)) else { return [] }
+                return try journals.completedReceipts()
+            },
+            deviceDirectory: { token in
+                try await InboxSenderClient(baseURL: baseURL, token: token, session: session).devices()
             },
             reveal: reveal,
             refreshNotificationPermission: refreshNotificationPermission,

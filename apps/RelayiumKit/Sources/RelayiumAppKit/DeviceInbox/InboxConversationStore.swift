@@ -72,7 +72,7 @@ public final class InboxConversationStore: @unchecked Sendable {
     }
 
     static let version = 1
-    static let legacySenderID = "legacy-v2"
+    public static let legacySenderID = "legacy-v2"
 
     public let directory: URL
     private let lock = NSLock()
@@ -84,6 +84,8 @@ public final class InboxConversationStore: @unchecked Sendable {
     public func record(_ record: InboxDeliveryRecord) throws -> Bool {
         try locked {
             guard Self.valid(record) else { throw InboxConversationStoreError.invalidRecord }
+            var record = record
+            record.senderNameSnapshot = Self.safeName(record.senderNameSnapshot)
             var index = try loadIndex()
             if let existing = index.records.firstIndex(where: { $0.taskID == record.taskID }) {
                 guard index.records[existing].senderDeviceID == record.senderDeviceID else {
@@ -145,6 +147,23 @@ public final class InboxConversationStore: @unchecked Sendable {
                 kind: .message, receivedAt: message.receivedAt, messageID: message.id,
                 byteCount: Int64(message.byteCount), readAt: message.receivedAt))
         }
+    }
+
+    public func importLegacy(receipts: [InboxReceipt]) throws {
+        for receipt in receipts {
+            _ = try record(InboxDeliveryRecord(taskID: receipt.taskID,
+                senderDeviceID: Self.legacySenderID, senderNameSnapshot: "",
+                kind: receipt.kind == .message ? .message : .files,
+                receivedAt: receipt.savedAt,
+                messageID: receipt.kind == .message ? receipt.taskID : nil,
+                files: receipt.urls.map(InboxDeliveryRecord.FileReference.init),
+                byteCount: receipt.byteCount, readAt: receipt.savedAt))
+        }
+    }
+
+    static func safeName(_ value: String) -> String {
+        String(value.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }.prefix(80))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private static func valid(_ record: InboxDeliveryRecord) -> Bool {

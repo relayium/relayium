@@ -35,6 +35,7 @@ public struct InboxReceipt: Equatable, Sendable, Identifiable {
 
     /// De-duplication identity, never displayed.
     public let taskID: String
+    public let senderDeviceID: String
     public let kind: Kind
     /// Absolute paths this delivery created, in plan order. EMPTY for a message,
     /// which has no path in the user's folder by design; the message is read
@@ -56,9 +57,11 @@ public struct InboxReceipt: Equatable, Sendable, Identifiable {
 
     public var id: String { taskID }
 
-    public init(taskID: String, kind: Kind = .files, urls: [URL], byteCount: Int64,
+    public init(taskID: String, senderDeviceID: String = InboxConversationStore.legacySenderID,
+                kind: Kind = .files, urls: [URL], byteCount: Int64,
                 savedAt: Date, isReplay: Bool) {
         self.taskID = taskID
+        self.senderDeviceID = senderDeviceID
         self.kind = kind
         self.urls = urls
         self.byteCount = byteCount
@@ -77,7 +80,9 @@ public struct InboxReceipt: Equatable, Sendable, Identifiable {
     /// The last is the sharp one — a journal can exist with a plan and no commits
     /// at all (planned, then interrupted), and a receipt derived from `plan`
     /// rather than `committed` would name files that were never created.
-    public static func make(taskID: String, journal: InboxJournal?,
+    public static func make(taskID: String,
+                            senderDeviceID: String = InboxConversationStore.legacySenderID,
+                            journal: InboxJournal?,
                             isReplay: Bool) -> InboxReceipt? {
         guard let journal, journal.isCompleted, !journal.committed.isEmpty else { return nil }
         if journal.contentKind == .text {
@@ -90,7 +95,8 @@ public struct InboxReceipt: Equatable, Sendable, Identifiable {
             guard let bytes = journal.messageBytes, bytes > 0 else { return nil }
             let stamp = journal.completedAt > 0 ? journal.completedAt : journal.updatedAt
             return InboxReceipt(
-                taskID: taskID, kind: .message, urls: [], byteCount: Int64(bytes),
+                taskID: taskID, senderDeviceID: senderDeviceID,
+                kind: .message, urls: [], byteCount: Int64(bytes),
                 savedAt: Date(timeIntervalSince1970: TimeInterval(stamp)), isReplay: isReplay)
         }
         // Plan order, not journal-append order: the plan is what the sender's
@@ -101,6 +107,7 @@ public struct InboxReceipt: Equatable, Sendable, Identifiable {
         let stamp = journal.completedAt > 0 ? journal.completedAt : journal.updatedAt
         return InboxReceipt(
             taskID: taskID,
+            senderDeviceID: senderDeviceID,
             urls: entries.map { URL(fileURLWithPath: $0.destination) },
             byteCount: entries.reduce(Int64(0)) { $0 + Int64($1.size) },
             savedAt: Date(timeIntervalSince1970: TimeInterval(stamp)),

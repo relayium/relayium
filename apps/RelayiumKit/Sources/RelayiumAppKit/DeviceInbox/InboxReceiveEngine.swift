@@ -243,7 +243,9 @@ public struct InboxReceiveEngine: Sendable {
             // on disk at this point, and a report that fails to reach central
             // must not be able to withhold the user's own evidence that their
             // delivery landed. The report is retried later from the journal.
-            emitReceipt(taskID: delivery.task.id, isReplay: outcome == .alreadyCommitted)
+            emitReceipt(taskID: delivery.task.id,
+                        senderDeviceID: delivery.task.sourceDeviceID,
+                        isReplay: outcome == .alreadyCommitted)
             await reportSaved(delivery, receiver: receiver)
         } catch is CancellationError {
             // A policy change, sign-out or account switch owns
@@ -266,9 +268,10 @@ public struct InboxReceiveEngine: Sendable {
     /// commit itself wrote, entry by entry, so a partially committed task cannot
     /// produce a receipt naming files that were never created — and a receipt and
     /// a crash recovery can never disagree about what is on disk.
-    private func emitReceipt(taskID: String, isReplay: Bool) {
+    private func emitReceipt(taskID: String, senderDeviceID: String, isReplay: Bool) {
         guard let onReceipt else { return }
         guard let receipt = InboxReceipt.make(taskID: taskID,
+                                              senderDeviceID: senderDeviceID,
                                               journal: try? journals.load(taskID),
                                               isReplay: isReplay) else { return }
         onReceipt(receipt)

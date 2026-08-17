@@ -135,6 +135,9 @@ public struct InboxRuntime: Sendable {
     /// messages is unchanged, and so a build that forgets to wire it shows an
     /// empty list rather than inventing one.
     public var messageStore: @Sendable (InboxAccountID) -> InboxMessageStore?
+    public var conversationStore: @Sendable (InboxAccountID) -> InboxConversationStore?
+    public var legacyReceipts: @Sendable (InboxAccountID) throws -> [InboxReceipt]
+    public var deviceDirectory: @Sendable (String) async throws -> [InboxDeviceRow]
     public var sleeper: InboxSleeping
     /// Show these paths in Finder. A seam so a test can prove that ONLY paths
     /// from a completed receipt ever reach it.
@@ -177,6 +180,12 @@ public struct InboxRuntime: Sendable {
                 notifier: InboxNotifying? = nil,
                 messageStore: @escaping @Sendable (InboxAccountID) -> InboxMessageStore?
                     = { _ in nil },
+                conversationStore: @escaping @Sendable (InboxAccountID) -> InboxConversationStore?
+                    = { _ in nil },
+                legacyReceipts: @escaping @Sendable (InboxAccountID) throws -> [InboxReceipt]
+                    = { _ in [] },
+                deviceDirectory: @escaping @Sendable (String) async throws -> [InboxDeviceRow]
+                    = { _ in [] },
                 sleeper: InboxSleeping = InboxTaskSleeper(),
                 reveal: @escaping @Sendable ([URL]) -> Void = { _ in },
                 refreshNotificationPermission: @escaping @Sendable () -> Void = {},
@@ -190,6 +199,9 @@ public struct InboxRuntime: Sendable {
         self.makeEngine = makeEngine
         self.notifier = notifier
         self.messageStore = messageStore
+        self.conversationStore = conversationStore
+        self.legacyReceipts = legacyReceipts
+        self.deviceDirectory = deviceDirectory
         self.sleeper = sleeper
         self.reveal = reveal
         self.refreshNotificationPermission = refreshNotificationPermission
@@ -289,6 +301,9 @@ public final class InboxController: ObservableObject {
     /// account that received them, and nothing about another account's session
     /// may show them.
     @Published public private(set) var messages: [InboxMessage] = []
+    @Published public private(set) var conversations: [InboxConversation] = []
+    @Published public private(set) var conversationStoreIssue = false
+    @Published public private(set) var legacyConversationHistoryLimited = false
     /// Tasks central is holding for an answer under `ask`. No names: the manifest
     /// is not decrypted until a task is claimed. Bounded ciphertext size and
     /// expiry remain available so two questions do not render as identical rows.
@@ -323,6 +338,9 @@ public final class InboxController: ObservableObject {
     /// Invalidated the instant a pass returns, so a callback that hops in late
     /// cannot overwrite the state the completed pass just established.
     private var passToken = 0
+    private var deviceNames: [String: String] = [:]
+    private var currentDeviceIDs: Set<String> = []
+    private var deviceDirectoryLoaded = false
     public init(runtime: InboxRuntime) {
         self.runtime = runtime
     }
@@ -409,6 +427,7 @@ public final class InboxController: ObservableObject {
         policy = runtime.folder.receivePolicy(account: account)
         refreshFolder()
         refreshMessages()
+        refreshConversations(importLegacy: true)
         state = isPaused ? .paused : .loading
         loop = Task { [weak self] in
             await draining?.value
@@ -432,6 +451,12 @@ public final class InboxController: ObservableObject {
     private func reset() {
         results = []
         messages = []
+        conversations = []
+        conversationStoreIssue = false
+        legacyConversationHistoryLimited = false
+        deviceNames = [:]
+        currentDeviceIDs = []
+        deviceDirectoryLoaded = false
         asking = []
         settingsError = nil
         isPaused = false
@@ -514,6 +539,7 @@ public final class InboxController: ObservableObject {
             do {
                 let engine = try await resolveEngine(generation, bearer: bearer)
                 guard isCurrent(generation) else { return }
+                await refreshDeviceDirectory(bearer: bearer, generation: generation)
                 if !prepared {
                     _ = try await engine.prepare(platform: runtime.platform,
                                                  appVersion: runtime.appVersion,
@@ -728,6 +754,7 @@ public final class InboxController: ObservableObject {
                                           ? .savedMessage
                                           : .saved(files: receipt.fileCount))
             }
+            persistConversation(receipt, generation: generation)
         }
         if results.count > runtime.resultLimit {
             results = Array(results.prefix(runtime.resultLimit))
@@ -749,6 +776,91 @@ public final class InboxController: ObservableObject {
             return
         }
         messages = store.all()
+    }
+
+    public func refreshConversations(importLegacy: Bool = false) {
+        guard let generation, let store = runtime.conversationStore(generation.account) else {
+            conversations = []
+            return
+        }
+        do {
+            if importLegacy, let legacy = runtime.messageStore(generation.account)?.all() {
+                try store.importLegacy(messages: legacy)
+                try store.importLegacy(receipts: runtime.legacyReceipts(generation.account))
+                // File journals are deliberately retained for a bounded period.
+                // Older files remain on disk, but no trustworthy sender/task
+                // metadata remains from which to reconstruct their history.
+                legacyConversationHistoryLimited = true
+            }
+            conversations = try store.conversations()
+            conversationStoreIssue = false
+        } catch {
+            conversations = []
+            conversationStoreIssue = true
+        }
+    }
+
+    public func markConversationRead(_ senderDeviceID: String) {
+        guard let generation, let store = runtime.conversationStore(generation.account),
+              let conversation = conversations.first(where: { $0.senderDeviceID == senderDeviceID })
+        else { return }
+        do {
+            try store.markRead(senderDeviceID: senderDeviceID,
+                               observedTaskIDs: Set(conversation.deliveries.map(\.taskID)), at: Date())
+            refreshConversations()
+        } catch { conversationStoreIssue = true }
+    }
+
+    public func message(for delivery: InboxDeliveryRecord) -> InboxMessage? {
+        guard let generation, let id = delivery.messageID else { return nil }
+        return try? runtime.messageStore(generation.account)?.load(id)
+    }
+
+    public func reveal(_ conversation: InboxConversation) {
+        runtime.reveal(conversation.deliveries.flatMap(\.files).map(\.url))
+    }
+
+    public func isRemoved(_ senderDeviceID: String) -> Bool {
+        deviceDirectoryLoaded
+            && senderDeviceID != InboxConversationStore.legacySenderID
+            && !currentDeviceIDs.contains(senderDeviceID)
+    }
+
+    public func displayName(for conversation: InboxConversation) -> String {
+        let fallback = conversation.senderNameSnapshot.isEmpty
+            ? String(conversation.senderDeviceID.prefix(8))
+                                                               : conversation.senderNameSnapshot
+        let base = deviceNames[conversation.senderDeviceID] ?? fallback
+        let duplicates = conversations.filter {
+            let otherFallback = $0.senderNameSnapshot.isEmpty
+                ? String($0.senderDeviceID.prefix(8)) : $0.senderNameSnapshot
+            return (deviceNames[$0.senderDeviceID] ?? otherFallback) == base
+        }
+        return duplicates.count > 1
+            ? base + " · " + String(conversation.senderDeviceID.suffix(6)) : base
+    }
+
+    private func persistConversation(_ receipt: InboxReceipt, generation: InboxGeneration) {
+        guard let store = runtime.conversationStore(generation.account) else { return }
+        let record = InboxDeliveryRecord(taskID: receipt.taskID,
+            senderDeviceID: receipt.senderDeviceID,
+            senderNameSnapshot: deviceNames[receipt.senderDeviceID] ?? "",
+            kind: receipt.kind == .message ? .message : .files,
+            receivedAt: receipt.savedAt,
+            messageID: receipt.kind == .message ? receipt.taskID : nil,
+            files: receipt.urls.map(InboxDeliveryRecord.FileReference.init),
+            byteCount: receipt.byteCount)
+        do {
+            _ = try store.record(record)
+            refreshConversations()
+        } catch { conversationStoreIssue = true }
+    }
+
+    private func refreshDeviceDirectory(bearer: String, generation: InboxGeneration) async {
+        guard let rows = try? await runtime.deviceDirectory(bearer), isCurrent(generation) else { return }
+        currentDeviceIDs = Set(rows.map(\.id))
+        deviceNames = Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0.name) })
+        deviceDirectoryLoaded = true
     }
 
     private func adoptPending(_ tasks: [InboxTask]) {

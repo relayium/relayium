@@ -246,7 +246,7 @@ enum InboxFixture {
                             contentKey: contentKey)
     }
 
-    /// The v2 manifest's canonical bytes, written HERE rather than through
+    /// The v3 manifest's canonical bytes, written HERE rather than through
     /// `InboxManifest.encode`.
     ///
     /// The encoder validates, so a fixture built on it could only pose as a
@@ -254,7 +254,7 @@ enum InboxFixture {
     /// that authenticates perfectly under the real content key and says
     /// something this receiver must refuse. A fixture that cannot lie cannot
     /// test a refusal.
-    static func manifestBytes(version: Int = 2,
+    static func manifestBytes(version: Int = 3,
                               items: [(kind: String, name: String?, size: Int)]) -> [UInt8] {
         var out = "{\"v\":\(version),\"items\":["
         for (i, item) in items.enumerated() {
@@ -281,7 +281,8 @@ enum InboxFixture {
         let encManifest = RelayiumKit.seal(key: key, seq: 0, plaintext: manifest)
         let ciphertext = Data(encryptChunks(key: key, files: payload))
         let sealed = try seal(contentKey: key, to: deviceKey.publicKey)
-        let task = InboxTask(id: taskID, storedFileID: "obj1", state: .downloading,
+        let task = InboxTask(id: taskID, sourceDeviceID: "sender-device",
+                             storedFileID: "obj1", state: .downloading,
                              ciphertextBytes: Int64(ciphertext.count),
                              targetKeyID: keyID)
         let delivery = InboxDelivery(task: task,

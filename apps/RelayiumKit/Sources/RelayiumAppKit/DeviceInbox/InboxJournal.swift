@@ -207,6 +207,19 @@ public struct InboxJournalStore: Sendable {
         }
     }
 
+    /// Completed v2 receipts still retained locally, for one-time conversation
+    /// migration. An unreadable retained journal fails the whole import visibly.
+    public func completedReceipts() throws -> [InboxReceipt] {
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else {
+            return []
+        }
+        return try names.filter { $0.hasSuffix(".json") }.compactMap { name in
+            let id = String(name.dropLast(".json".count))
+            let journal = try load(id)
+            return InboxReceipt.make(taskID: id, journal: journal, isReplay: true)
+        }
+    }
+
     // MARK: - durable, private writes
 
     static func ensureDirectory(_ url: URL) throws {

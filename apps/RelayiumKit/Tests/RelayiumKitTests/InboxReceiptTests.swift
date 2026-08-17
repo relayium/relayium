@@ -57,6 +57,14 @@ final class InboxReceiptTests: XCTestCase {
         XCTAssertEqual(receipt.byteCount, 3)
     }
 
+    func testV3AuthenticatedSenderReachesTheReceipt() throws {
+        let done = journal(plan: [("/tmp/root/a.txt", 3)], committed: ["/tmp/root/a.txt"],
+                           completed: true)
+        let receipt = try XCTUnwrap(InboxReceipt.make(taskID: "t1",
+            senderDeviceID: "sender-device", journal: done, isReplay: false))
+        XCTAssertEqual(receipt.senderDeviceID, "sender-device")
+    }
+
     /// Plan order, not append order: the plan is what the sender's manifest
     /// described and it is stable across a resumed commit.
     func testTheReceiptFollowsPlanOrderRatherThanCommitOrder() throws {

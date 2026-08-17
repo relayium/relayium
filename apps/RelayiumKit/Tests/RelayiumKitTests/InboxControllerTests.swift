@@ -32,6 +32,7 @@ final class InboxControllerTests: XCTestCase {
         var folder: InboxReceiveFolder!
         var journals: InboxJournalStore!
         var messages: InboxMessageStore!
+        var conversations: InboxConversationStore!
         var root: URL!
         var transports: [String: GatedInboxTransport] = [:]
         var deviceKeys: [String: InboxDeviceKeyPair] = [:]
@@ -45,14 +46,17 @@ final class InboxControllerTests: XCTestCase {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let journalDirectory = root.appendingPathExtension("journals")
         let messageDirectory = root.appendingPathExtension("messages")
+        let conversationDirectory = root.appendingPathExtension("conversations")
         addTeardownBlock {
             try? FileManager.default.removeItem(at: root)
             try? FileManager.default.removeItem(at: journalDirectory)
             try? FileManager.default.removeItem(at: messageDirectory)
+            try? FileManager.default.removeItem(at: conversationDirectory)
         }
         harness.root = root
         harness.journals = InboxJournalStore(directory: journalDirectory)
         harness.messages = InboxMessageStore(directory: messageDirectory)
+        harness.conversations = InboxConversationStore(directory: conversationDirectory)
         harness.folder = InboxReceiveFolder(
             store: harness.store,
             bookmarking: bookmarking ?? ControllerBookmarking(url: root))
@@ -60,6 +64,7 @@ final class InboxControllerTests: XCTestCase {
         let keys = harness.keys
         let journals = harness.journals!
         let messages = harness.messages!
+        let conversations = harness.conversations!
         let folder = harness.folder!
         let epoch = self.epoch
         let controller = InboxController(runtime: InboxRuntime(
@@ -79,6 +84,8 @@ final class InboxControllerTests: XCTestCase {
             },
             notifier: harness.notifier,
             messageStore: { _ in messages },
+            conversationStore: { _ in conversations },
+            deviceDirectory: { _ in [InboxDeviceRow(id: "sender-device", name: "Sender Mac")] },
             sleeper: harness.sleeper,
             reveal: { [revealed = harness.revealed] urls in revealed.record(urls) },
             platform: "macos", appVersion: "test",
@@ -485,6 +492,30 @@ final class InboxControllerTests: XCTestCase {
         XCTAssertEqual(harness.controller.state, .saved(files: 2))
         XCTAssertEqual(harness.notifier.delivered, [.saved(files: 2)])
         harness.controller.signedOut()
+    }
+
+    func testCompletedDeliveryIsGroupedByAuthenticatedSenderAndReplayStaysOneUnread() async throws {
+        let harness = try makeHarness()
+        try await seedKey(harness, account: accountA)
+        try enable(harness, account: accountA, policy: .auto)
+        try queueDelivery(harness, account: accountA, taskID: "conversation-task")
+        harness.controller.session(identity(accountA))
+
+        await waitUntil({ harness.controller.conversations.first?.deliveries.count == 1 },
+                        "conversation record was not published")
+        let conversation = try XCTUnwrap(harness.controller.conversations.first)
+        XCTAssertEqual(conversation.senderDeviceID, "sender-device")
+        XCTAssertEqual(harness.controller.displayName(for: conversation), "Sender Mac")
+        XCTAssertEqual(conversation.unreadCount, 1)
+        XCTAssertTrue(harness.controller.legacyConversationHistoryLimited)
+
+        harness.controller.refreshConversations()
+        XCTAssertEqual(harness.controller.conversations.first?.deliveries.count, 1)
+        XCTAssertEqual(harness.controller.conversations.first?.unreadCount, 1)
+        harness.controller.markConversationRead("sender-device")
+        XCTAssertEqual(harness.controller.conversations.first?.unreadCount, 0)
+        harness.controller.signedOut()
+        XCTAssertTrue(harness.controller.conversations.isEmpty)
     }
 
     /// A MESSAGE reaches the model layer as a message: its own state, its own
