@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"database/sql"
+	"errors"
 )
 
 func applyAppleRenewalStateTx(ctx context.Context, tx *sql.Tx, r AppleRenewalState) (bool, error) {
@@ -41,6 +42,76 @@ func (s *SQLiteStore) ApplyAppleLifecycle(ctx context.Context, ev SourceEvent, r
 		}
 	}
 	return res, tx.Commit()
+}
+
+// ApplyAuthorizedAppleLifecycle binds the verified App Store identity to the
+// account's durable billing authority and advances entitlement, renewal intent,
+// and the one dispatched purchase attempt in one transaction. Nothing about a
+// client outcome can release or move this authority.
+func (s *SQLiteStore) ApplyAuthorizedAppleLifecycle(ctx context.Context, ev SourceEvent, r AppleRenewalState, appleAccountToken, environment string) (SubscriptionApply, error) {
+	if ev.Provider != ProviderApple || ev.UserID == "" || ev.ExternalScope == "" || appleAccountToken == "" ||
+		(environment != appleEnvProduction && environment != appleEnvSandbox) {
+		return SubscriptionApply{}, ErrBillingAuthorityConflict
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return SubscriptionApply{}, err
+	}
+	defer tx.Rollback()
+	authority, err := acquireBillingAuthorityTx(ctx, tx, BillingAuthorityRequest{
+		UserID: ev.UserID, Provider: ProviderApple, ExternalScope: ev.ExternalScope,
+		AppleAccountToken: appleAccountToken, Now: ev.Now,
+	})
+	if err != nil {
+		return SubscriptionApply{}, err
+	}
+	if authority.AppleEnvironment == "" {
+		res, err := tx.ExecContext(ctx, `UPDATE billing_authorities SET apple_environment=?,updated_at=? WHERE user_id=? AND provider=? AND apple_environment='' AND epoch=?`, environment, ev.Now, ev.UserID, ProviderApple, authority.Epoch)
+		if err != nil {
+			return SubscriptionApply{}, err
+		}
+		if n, err := res.RowsAffected(); err != nil || n != 1 {
+			if err != nil {
+				return SubscriptionApply{}, err
+			}
+			return SubscriptionApply{}, ErrBillingAuthorityConflict
+		}
+		authority.AppleEnvironment = environment
+	} else if authority.AppleEnvironment != environment {
+		return SubscriptionApply{}, ErrBillingAuthorityConflict
+	}
+
+	var attemptID, attemptProduct string
+	err = tx.QueryRowContext(ctx, `SELECT id,product_id FROM billing_purchase_attempts WHERE user_id=? AND epoch=? AND provider=? AND state IN ('prepared','dispatched')`, ev.UserID, authority.Epoch, ProviderApple).Scan(&attemptID, &attemptProduct)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return SubscriptionApply{}, err
+	}
+	if err == nil && attemptProduct != r.CurrentProductID && attemptProduct != r.AutoRenewProductID {
+		return SubscriptionApply{}, ErrBillingPurchaseAmbiguous
+	}
+
+	result, err := applySourceTx(ctx, tx, ev)
+	if err != nil {
+		return SubscriptionApply{}, err
+	}
+	if result.Applied {
+		if _, err = applyAppleRenewalStateTx(ctx, tx, r); err != nil {
+			return SubscriptionApply{}, err
+		}
+		if attemptID != "" {
+			res, err := tx.ExecContext(ctx, `UPDATE billing_purchase_attempts SET state='resolved' WHERE id=? AND user_id=? AND epoch=? AND state IN ('prepared','dispatched')`, attemptID, ev.UserID, authority.Epoch)
+			if err != nil {
+				return SubscriptionApply{}, err
+			}
+			if n, err := res.RowsAffected(); err != nil || n != 1 {
+				if err != nil {
+					return SubscriptionApply{}, err
+				}
+				return SubscriptionApply{}, ErrBillingAuthorityConflict
+			}
+		}
+	}
+	return result, tx.Commit()
 }
 
 func (s *SQLiteStore) ApplyAppleRenewalState(ctx context.Context, r AppleRenewalState) (bool, error) {

@@ -379,10 +379,9 @@ final class AppleSubscriptionModelTests: XCTestCase {
     /// The rule, isolated from every path that uses it. One arm permits it.
     func testOnlyAnAcceptedSubmissionPermitsFinish() {
         XCTAssertTrue(AppleSubmission.accepted(Fixture.entitlement).permitsFinish)
-        // `applied: false` is a redelivery the server has converged on — still a
-        // decoded 200, still finishable. This is the one non-obvious acceptance,
-        // and treating it as a refusal would leave every renewal unfinished.
-        XCTAssertTrue(AppleSubmission.accepted(
+        // A decoded 200 is not enough: stale/ambiguous facts deliberately remain
+        // available to updates/restore until a canonical apply succeeds.
+        XCTAssertFalse(AppleSubmission.accepted(
             AppleTransactionResult(applied: false, planId: "free", status: "canceled",
                                    expiresAt: 0, provider: "apple")).permitsFinish)
         for failure in Fixture.everyRefusal {
@@ -1021,10 +1020,9 @@ final class AppleSubscriptionModelTests: XCTestCase {
         }
     }
 
-    /// A redelivery the server converged on — `applied: false` — IS an
-    /// acceptance, and is finished. Leaving it unfinished would make every
-    /// renewal accumulate forever in the store's queue.
-    func testAnUnappliedButAcceptedRedeliveryIsFinished() async {
+    /// A decoded success that did not atomically apply is not enough authority
+    /// to consume StoreKit's only recovery copy.
+    func testAnUnappliedRedeliveryRemainsAvailableForReconciliation() async {
         let rig = await makeReadyRig()
         let converged = AppleTransactionResult(applied: false, planId: "plus", status: "active",
                                                expiresAt: 1_786_000_000, provider: "apple")
@@ -1032,7 +1030,7 @@ final class AppleSubscriptionModelTests: XCTestCase {
         rig.billing.setSubmissions([.success(converged)])
         await rig.model.purchase(productID: Fixture.catalog[0])
 
-        XCTAssertEqual(rig.store.finished, [Fixture.delivery.id])
+        XCTAssertTrue(rig.store.finished.isEmpty)
         XCTAssertEqual(rig.model.state, .completed(converged))
     }
 

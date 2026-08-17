@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"sync"
 	"testing"
@@ -118,5 +119,97 @@ func TestAdminGrantCannotRacePersistentBillingAuthority(t *testing.T) {
 	}
 	if got.PlanID != freePlanID || got.PlanSource == SourceAdmin {
 		t.Fatalf("admin grant partially applied: %#v", got)
+	}
+}
+
+func TestAuthorizedAppleLifecycleAtomicallyBindsAndResolvesDispatch(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	u, err := store.UpsertUserByEmail(ctx, "authority-apple-apply@example.test", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	token := "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+	authority, err := store.AcquireBillingAuthority(ctx, BillingAuthorityRequest{
+		UserID: u.ID, Provider: ProviderApple, ExternalScope: testBundleIOS,
+		AppleAccountToken: token, Now: 100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempt, created, err := store.DispatchBillingPurchase(ctx, authority, testAppleProduct, 101)
+	if err != nil || !created {
+		t.Fatalf("dispatch created=%v err=%v", created, err)
+	}
+	ev := SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: "pro", Status: "active", Cycle: "monthly", PeriodEnd: 1000, ExternalID: "production:original-one", ExternalScope: testBundleIOS, EventAt: 200, Now: 102}
+	renewal := AppleRenewalState{UserID: u.ID, ExternalID: ev.ExternalID, BundleID: testBundleIOS, CurrentProductID: testAppleProduct, AutoRenewProductID: testAppleProduct, EventAt: 201, UpdatedAt: 102}
+	result, err := store.ApplyAuthorizedAppleLifecycle(ctx, ev, renewal, token, appleEnvProduction)
+	if err != nil || !result.Applied {
+		t.Fatalf("apply=%+v err=%v", result, err)
+	}
+	got, ok, err := store.BillingAuthority(ctx, u.ID)
+	if err != nil || !ok || got.AppleEnvironment != appleEnvProduction {
+		t.Fatalf("authority=%+v ok=%v err=%v", got, ok, err)
+	}
+	var state string
+	if err := store.db.QueryRowContext(ctx, `SELECT state FROM billing_purchase_attempts WHERE id=?`, attempt.ID).Scan(&state); err != nil || state != "resolved" {
+		t.Fatalf("attempt state=%q err=%v", state, err)
+	}
+}
+
+func TestAuthorizedAppleLifecycleAmbiguityRollsBackEveryProjection(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	u, _ := store.UpsertUserByEmail(ctx, "authority-apple-ambiguous@example.test", "")
+	token := "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+	authority, err := store.AcquireBillingAuthority(ctx, BillingAuthorityRequest{UserID: u.ID, Provider: ProviderApple, ExternalScope: testBundleIOS, AppleAccountToken: token, Now: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err = store.DispatchBillingPurchase(ctx, authority, "expected.product", 101); err != nil {
+		t.Fatal(err)
+	}
+	ev := SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: "pro", Status: "active", Cycle: "monthly", PeriodEnd: 1000, ExternalID: "production:other", ExternalScope: testBundleIOS, EventAt: 200, Now: 102}
+	renewal := AppleRenewalState{UserID: u.ID, ExternalID: ev.ExternalID, BundleID: testBundleIOS, CurrentProductID: "different.product", AutoRenewProductID: "different.product", EventAt: 201, UpdatedAt: 102}
+	if _, err := store.ApplyAuthorizedAppleLifecycle(ctx, ev, renewal, token, appleEnvProduction); !errors.Is(err, ErrBillingPurchaseAmbiguous) {
+		t.Fatalf("want ambiguity, got %v", err)
+	}
+	got, _, _ := store.BillingAuthority(ctx, u.ID)
+	if got.AppleEnvironment != "" {
+		t.Fatalf("failed apply partially bound environment: %+v", got)
+	}
+	if _, ok, err := store.GetSubscriptionSource(ctx, u.ID, ProviderApple); err != nil || ok {
+		t.Fatalf("failed apply wrote source: ok=%v err=%v", ok, err)
+	}
+	var state string
+	if err := store.db.QueryRowContext(ctx, `SELECT state FROM billing_purchase_attempts WHERE user_id=?`, u.ID).Scan(&state); err != nil || state != "dispatched" {
+		t.Fatalf("failed apply changed attempt: state=%q err=%v", state, err)
+	}
+	var renewalCount int
+	if err := store.db.QueryRowContext(ctx, `SELECT count(*) FROM apple_renewal_states WHERE user_id=?`, u.ID).Scan(&renewalCount); err != nil || renewalCount != 0 {
+		t.Fatalf("failed apply wrote renewal: count=%d err=%v", renewalCount, err)
+	}
+}
+
+func TestAuthorizedAppleLifecycleRejectsEnvironmentDrift(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	u, _ := store.UpsertUserByEmail(ctx, "authority-apple-env@example.test", "")
+	token := "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+	ev := SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: "pro", Status: "active", Cycle: "monthly", PeriodEnd: 1000, ExternalID: "sandbox:one", ExternalScope: testBundleIOS, EventAt: 200, Now: 102}
+	renewal := AppleRenewalState{UserID: u.ID, ExternalID: ev.ExternalID, BundleID: testBundleIOS, CurrentProductID: testAppleProduct, AutoRenewProductID: testAppleProduct, EventAt: 201, UpdatedAt: 102}
+	if _, err := store.ApplyAuthorizedAppleLifecycle(ctx, ev, renewal, token, appleEnvSandbox); err != nil {
+		t.Fatal(err)
+	}
+	ev.ExternalID = "production:one"
+	if _, err := store.ApplyAuthorizedAppleLifecycle(ctx, ev, renewal, token, appleEnvProduction); !errors.Is(err, ErrBillingAuthorityConflict) {
+		t.Fatalf("environment drift err=%v", err)
+	}
+	var environment string
+	if err := store.db.QueryRowContext(ctx, `SELECT apple_environment FROM billing_authorities WHERE user_id=?`, u.ID).Scan(&environment); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		t.Fatal(err)
+	}
+	if environment != appleEnvSandbox {
+		t.Fatalf("authority environment changed to %q", environment)
 	}
 }

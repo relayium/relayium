@@ -191,14 +191,17 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 	}
 	renewalState := appleRenewalState(u.ID, tx, canonical.Renewal, now)
 	atomic, ok := s.Store().(interface {
-		ApplyAppleLifecycle(context.Context, SourceEvent, AppleRenewalState) (SubscriptionApply, error)
+		ApplyAuthorizedAppleLifecycle(context.Context, SourceEvent, AppleRenewalState, string, string) (SubscriptionApply, error)
 	})
 	if !ok {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	res, err := atomic.ApplyAppleLifecycle(r.Context(), appleSourceEventWithRenewal(u.ID, tx, product, renewalState, now), renewalState)
+	res, err := atomic.ApplyAuthorizedAppleLifecycle(r.Context(), appleSourceEventWithRenewal(u.ID, tx, product, renewalState, now), renewalState, tx.AppAccountToken, tx.Environment)
 	switch {
+	case errors.Is(err, ErrBillingAuthorityConflict), errors.Is(err, ErrBillingPurchaseAmbiguous):
+		writeAppleTransactionError(w, http.StatusConflict, "billing_authority_conflict")
+		return
 	case errors.Is(err, ErrExternalSubscriptionOwned):
 		// One App Store subscription, one Relayium account. The apply wrote
 		// nothing, so there is no half-granted tier to undo.

@@ -35,9 +35,16 @@ func (s *SQLiteStore) AcquireBillingAuthority(ctx context.Context, in BillingAut
 		return BillingAuthority{}, err
 	}
 	defer tx.Rollback()
+	out, err := acquireBillingAuthorityTx(ctx, tx, in)
+	if err != nil {
+		return BillingAuthority{}, err
+	}
+	return out, tx.Commit()
+}
 
+func acquireBillingAuthorityTx(ctx context.Context, tx *sql.Tx, in BillingAuthorityRequest) (BillingAuthority, error) {
 	var existing BillingAuthority
-	err = tx.QueryRowContext(ctx, `SELECT user_id, provider, external_scope, apple_environment, apple_account_token, epoch, intent_id, created_at, updated_at FROM billing_authorities WHERE user_id=?`, in.UserID).
+	err := tx.QueryRowContext(ctx, `SELECT user_id, provider, external_scope, apple_environment, apple_account_token, epoch, intent_id, created_at, updated_at FROM billing_authorities WHERE user_id=?`, in.UserID).
 		Scan(&existing.UserID, &existing.Provider, &existing.ExternalScope, &existing.AppleEnvironment, &existing.AppleAccountToken, &existing.Epoch, &existing.IntentID, &existing.CreatedAt, &existing.UpdatedAt)
 	if err == nil {
 		if existing.Provider != in.Provider || existing.ExternalScope != in.ExternalScope || existing.AppleAccountToken != in.AppleAccountToken {
@@ -60,7 +67,6 @@ func (s *SQLiteStore) AcquireBillingAuthority(ctx context.Context, in BillingAut
 	if err != nil {
 		return BillingAuthority{}, err
 	}
-	defer rows.Close()
 	for rows.Next() {
 		var provider, sourcePlan, status, scope string
 		var end int64
@@ -73,6 +79,10 @@ func (s *SQLiteStore) AcquireBillingAuthority(ctx context.Context, in BillingAut
 		}
 	}
 	if err := rows.Err(); err != nil {
+		rows.Close()
+		return BillingAuthority{}, err
+	}
+	if err := rows.Close(); err != nil {
 		return BillingAuthority{}, err
 	}
 	intentID := authx.NewID()
@@ -80,8 +90,10 @@ func (s *SQLiteStore) AcquireBillingAuthority(ctx context.Context, in BillingAut
 		return BillingAuthority{}, err
 	}
 	out := BillingAuthority{UserID: in.UserID, Provider: in.Provider, ExternalScope: in.ExternalScope, AppleAccountToken: in.AppleAccountToken, Epoch: 1, IntentID: intentID, CreatedAt: in.Now, UpdatedAt: in.Now}
-	return out, tx.Commit()
+	return out, nil
 }
+
+var ErrBillingPurchaseAmbiguous = errors.New("account: billing purchase does not match dispatched intent")
 
 func (s *SQLiteStore) BillingAuthority(ctx context.Context, userID string) (BillingAuthority, bool, error) {
 	var out BillingAuthority

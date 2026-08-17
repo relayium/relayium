@@ -519,7 +519,7 @@ func TestAppleTransactionRejectsSecondAppWhileAppleSourceIsLive(t *testing.T) {
 		p["transactionId"] = "2000000000000002"
 		p["originalTransactionId"] = "2000000000000002"
 		p["purchaseDate"] = time.Now().Add(-24 * time.Hour).UnixMilli()
-	})), http.StatusConflict, "apple_subscription_conflict")
+	})), http.StatusConflict, "billing_authority_conflict")
 
 	after, ok := f.appleSource(t)
 	if !ok || after != before {
@@ -911,9 +911,9 @@ func TestAppleTransactionAcceptsABearerCredential(t *testing.T) {
 	}
 }
 
-// An Apple grant is additive: it must not disturb a Stripe subscription's own
-// row, and the effective projection keeps the higher tier.
-func TestAppleTransactionLeavesStripeStateAlone(t *testing.T) {
+// A live Stripe source is already provider authority. Apple intake must not
+// turn it into a second charge or mutate either provider projection.
+func TestAppleTransactionCannotCrossALiveStripeAuthority(t *testing.T) {
 	f := newAppleTxFixture(t)
 	ctx := context.Background()
 	if err := f.store.SetUserStripeCustomer(ctx, f.userID, "cus_apple_side"); err != nil {
@@ -923,9 +923,7 @@ func TestAppleTransactionLeavesStripeStateAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if got, _ := f.mustAccept(t, f.chain.sign(t, f.payload())); got.PlanID != "pro" {
-		t.Fatalf("the higher live tier did not win: %+v", got)
-	}
+	f.mustReject(t, f.chain.sign(t, f.payload()), http.StatusConflict, "billing_authority_conflict")
 	stripe, ok, err := f.store.GetSubscriptionSource(ctx, f.userID, ProviderStripe)
 	if err != nil || !ok {
 		t.Fatalf("stripe row: ok=%v err=%v", ok, err)
@@ -937,7 +935,10 @@ func TestAppleTransactionLeavesStripeStateAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(providers) != 2 {
-		t.Fatalf("double billing was hidden: %v", providers)
+	if len(providers) != 1 || providers[0] != ProviderStripe {
+		t.Fatalf("apple intake changed provider authority: %v", providers)
+	}
+	if _, ok, err := f.store.GetSubscriptionSource(ctx, f.userID, ProviderApple); err != nil || ok {
+		t.Fatalf("refused apple intake wrote a source: ok=%v err=%v", ok, err)
 	}
 }
