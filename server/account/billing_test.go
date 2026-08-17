@@ -467,7 +467,8 @@ func TestBillingChangePlanPendingPaymentDoesNotClaimSuccess(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatal(err)
 	}
-	if out["status"] != "payment_pending" || out["effective"] != "not_yet" {
+	if out["status"] != "payment_pending" || out["effective"] != "payment_pending" ||
+		out["requestedEffect"] != "now" {
 		t.Fatalf("response = %#v", out)
 	}
 	u, err := store.GetUserByID(context.Background(), uid)

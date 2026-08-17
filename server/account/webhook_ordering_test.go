@@ -26,7 +26,7 @@ func webhookEnvCreated(eventType, customer, status, priceID string, created int6
 func TestWebhookDropsStaleOutOfOrderEvent(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_order"
-	svc.biller = NewStripeClient("sk_test", secret, "")
+	svc.biller = newWebhookFixtureClient(secret)
 	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
 	cookie := loginCookie(t, ts, mail, "webhook-order@example.com")
 	_ = cookie

@@ -449,13 +449,6 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 			return
 		}
 	}
-	// Clear the local hint the instant Stripe releases the schedule. If the change
-	// below then fails (500), the DB must not keep advertising a pending downgrade
-	// that no longer exists in Stripe and will never fire.
-	if u.ScheduledPlanID != "" {
-		_ = s.Store().SetScheduledPlan(r.Context(), u.ID, "", "")
-	}
-
 	// Apply the stages the decision calls for. Stripe has no primitive that makes
 	// the composite's two stages atomic, so the order is chosen to be safely
 	// retryable instead: the immediate stage first (idempotent in the client, and

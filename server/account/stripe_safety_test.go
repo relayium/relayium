@@ -249,23 +249,25 @@ func TestOldDeletedDoesNotRevokeNewCanonicalSubscription(t *testing.T) {
 	}
 }
 
-func TestScheduleUpdateKeyIncludesTargetAndExistingGeneration(t *testing.T) {
-	var gets int
-	var keys []string
+func TestScheduleUpdateABABUsesCanonicalPostconditionAcrossAmbiguousResponses(t *testing.T) {
+	target := "price_old"
+	var posts int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/subscriptions":
 			fmt.Fprint(w, `{"data":[{"id":"sub_1","status":"active","schedule":"sched_1","items":{"data":[{"price":{"id":"price_current"}}]}}]}`)
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/subscription_schedules/sched_1":
-			gets++
-			target := "price_b"
-			if gets == 4 {
-				target = "price_c"
-			}
 			fmt.Fprintf(w, `{"id":"sched_1","phases":[{"start_date":100,"end_date":200,"items":[{"price":"price_current"}]},{"start_date":200,"end_date":0,"items":[{"price":%q}]}]}`, target)
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules/sched_1":
-			keys = append(keys, r.Header.Get("Idempotency-Key"))
-			fmt.Fprint(w, `{"id":"sched_1"}`)
+			posts++
+			if got := r.Header.Get("Idempotency-Key"); got != "" {
+				t.Fatalf("declarative update must not use replay-prone key %q", got)
+			}
+			if err := r.ParseForm(); err != nil {
+				t.Fatal(err)
+			}
+			target = r.Form.Get("phases[1][items][0][price]")
+			http.Error(w, "ambiguous response after apply", http.StatusInternalServerError)
 		default:
 			t.Fatalf("unexpected %s %s", r.Method, r.URL.Path)
 		}
@@ -274,13 +276,13 @@ func TestScheduleUpdateKeyIncludesTargetAndExistingGeneration(t *testing.T) {
 	c := NewStripeClient("sk_test", "whsec", "")
 	c.base = srv.URL
 	c.now = func() time.Time { return time.Unix(150, 0) }
-	for _, target := range []string{"price_a", "price_a", "price_d", "price_a"} {
-		if err := c.ScheduleDowngrade(context.Background(), "cus_1", target); err != nil {
+	for _, next := range []string{"price_a", "price_b", "price_a", "price_b"} {
+		if err := c.ScheduleDowngrade(context.Background(), "cus_1", next); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if len(keys) != 4 || keys[0] != keys[1] || keys[1] == keys[2] || keys[0] == keys[3] {
-		t.Fatalf("keys must be stable for one intent and change with target or schedule state: %q", keys)
+	if posts != 4 || target != "price_b" {
+		t.Fatalf("ABAB did not converge: posts=%d target=%q", posts, target)
 	}
 }
 
@@ -300,28 +302,23 @@ func TestStripeWebhookWriterPreservesFirstStatusHeadersAndBody(t *testing.T) {
 	}
 }
 
-func TestScheduleCreateRecoversFromReleasedIdempotencyReplay(t *testing.T) {
-	var createKeys []string
-	keyOrder := map[string]int{}
+func TestScheduleReleaseConvergesAfterAmbiguousResponse(t *testing.T) {
+	released := false
+	var releaseKey string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/subscriptions":
-			fmt.Fprint(w, `{"data":[{"id":"sub_1","status":"active","schedule":"","latest_invoice":"in_1","current_period_end":200,"items":{"data":[{"price":{"id":"price_current"}}]}}]}`)
-		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules":
-			key := r.Header.Get("Idempotency-Key")
-			createKeys = append(createKeys, key)
-			order, ok := keyOrder[key]
-			if !ok {
-				order = len(keyOrder)
-				keyOrder[key] = order
+			fmt.Fprint(w, `{"data":[{"id":"sub_1","status":"active","schedule":"sched_1","items":{"data":[{"price":{"id":"price_current"}}]}}]}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules/sched_1/release":
+			releaseKey = r.Header.Get("Idempotency-Key")
+			released = true
+			http.Error(w, "connection failed after Stripe applied release", http.StatusInternalServerError)
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/subscription_schedules/sched_1":
+			status := "active"
+			if released {
+				status = "released"
 			}
-			if order < 2 {
-				fmt.Fprintf(w, `{"id":"sched_released_%d","status":"released","phases":[{"start_date":100,"end_date":200,"items":[{"price":"price_current"}]}]}`, order)
-				return
-			}
-			fmt.Fprint(w, `{"id":"sched_live","status":"active","phases":[{"start_date":100,"end_date":200,"items":[{"price":"price_current"}]}]}`)
-		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules/sched_live":
-			fmt.Fprint(w, `{"id":"sched_live"}`)
+			fmt.Fprintf(w, `{"id":"sched_1","status":%q}`, status)
 		default:
 			t.Fatalf("unexpected %s %s", r.Method, r.URL.Path)
 		}
@@ -329,26 +326,107 @@ func TestScheduleCreateRecoversFromReleasedIdempotencyReplay(t *testing.T) {
 	defer srv.Close()
 	c := NewStripeClient("sk_test", "whsec", "")
 	c.base = srv.URL
-	for range 2 {
-		if err := c.ScheduleDowngrade(context.Background(), "cus_1", "price_target"); err != nil {
-			t.Fatal(err)
-		}
+	if err := c.ReleaseSchedule(context.Background(), "cus_1"); err != nil {
+		t.Fatalf("canonical terminal state must resolve ambiguous response: %v", err)
 	}
-	if len(createKeys) != 6 || createKeys[0] != createKeys[3] || createKeys[1] != createKeys[4] ||
-		createKeys[2] != createKeys[5] || len(keyOrder) != 3 {
-		t.Fatalf("each terminal generation must converge onto the same next key: %q", createKeys)
+	if releaseKey == "" || !released {
+		t.Fatalf("release intent was not stable or applied: key=%q released=%v", releaseKey, released)
+	}
+}
+
+func TestScheduleReleaseThenRescheduleRecoversFromVerbatimCreateReplay(t *testing.T) {
+	var createKeys []string
+	responseByKey := map[string]string{}
+	canonicalStatus := map[string]string{}
+	canonicalTarget := map[string]string{}
+	currentSchedule := ""
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/subscriptions":
+			fmt.Fprintf(w, `{"data":[{"id":"sub_1","status":"active","schedule":%q,"latest_invoice":"in_1","current_period_end":200,"items":{"data":[{"price":{"id":"price_current"}}]}}]}`, currentSchedule)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules":
+			key := r.Header.Get("Idempotency-Key")
+			createKeys = append(createKeys, key)
+			body, replay := responseByKey[key]
+			if !replay {
+				id := "sched_live"
+				if len(responseByKey) > 0 {
+					id = "sched_new"
+				}
+				body = fmt.Sprintf(`{"id":%q,"status":"active"}`, id)
+				responseByKey[key] = body
+				canonicalStatus[id] = "active"
+				currentSchedule = id
+			}
+			// Stripe replays the original response body byte-for-byte for a key.
+			fmt.Fprint(w, body)
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/subscription_schedules/"):
+			id := strings.TrimPrefix(r.URL.Path, "/v1/subscription_schedules/")
+			status, ok := canonicalStatus[id]
+			if !ok {
+				t.Fatalf("unknown canonical schedule %q", id)
+			}
+			phase1 := ""
+			if canonicalTarget[id] != "" {
+				phase1 = fmt.Sprintf(`,{"start_date":200,"end_date":0,"items":[{"price":%q}]}`, canonicalTarget[id])
+			}
+			fmt.Fprintf(w, `{"id":%q,"status":%q,"phases":[{"start_date":100,"end_date":200,"items":[{"price":"price_current"}]}%s]}`, id, status, phase1)
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1/subscription_schedules/") && !strings.HasSuffix(r.URL.Path, "/release"):
+			if err := r.ParseForm(); err != nil {
+				t.Fatal(err)
+			}
+			id := strings.TrimPrefix(r.URL.Path, "/v1/subscription_schedules/")
+			canonicalTarget[id] = r.Form.Get("phases[1][items][0][price]")
+			fmt.Fprintf(w, `{"id":%q}`, id)
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/release"):
+			id := strings.TrimSuffix(strings.TrimPrefix(r.URL.Path, "/v1/subscription_schedules/"), "/release")
+			canonicalStatus[id] = "released"
+			currentSchedule = ""
+			fmt.Fprintf(w, `{"id":%q,"status":"released"}`, id)
+		default:
+			t.Fatalf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+	c := NewStripeClient("sk_test", "whsec", "")
+	c.base = srv.URL
+	if err := c.ScheduleDowngrade(context.Background(), "cus_1", "price_target"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.ReleaseSchedule(context.Background(), "cus_1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.ScheduleDowngrade(context.Background(), "cus_1", "price_target"); err != nil {
+		t.Fatal(err)
+	}
+	if len(createKeys) != 3 || createKeys[0] != createKeys[1] || createKeys[2] == createKeys[0] {
+		t.Fatalf("released replay must advance to a new deterministic generation: %q", createKeys)
+	}
+	if currentSchedule != "sched_new" || canonicalTarget["sched_new"] != "price_target" {
+		t.Fatalf("reschedule did not converge: current=%q target=%q", currentSchedule, canonicalTarget["sched_new"])
 	}
 }
 
 func TestSchedulePastWaitingPhaseIsReleasedAndRecreated(t *testing.T) {
 	var released bool
 	var updatedOld bool
+	newTarget := ""
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/subscriptions":
 			fmt.Fprint(w, `{"data":[{"id":"sub_1","status":"active","schedule":"sched_old","latest_invoice":"in_2","current_period_end":300,"items":{"data":[{"price":{"id":"price_current"}}]}}]}`)
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/subscription_schedules/sched_old":
+			if released {
+				fmt.Fprint(w, `{"id":"sched_old","status":"released","phases":[]}`)
+				return
+			}
 			fmt.Fprint(w, `{"id":"sched_old","status":"active","current_phase":{"start_date":200,"end_date":300},"phases":[{"start_date":100,"end_date":200,"items":[{"price":"price_current"}]},{"start_date":200,"end_date":0,"items":[{"price":"price_previous_target"}]}]}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/subscription_schedules/sched_new":
+			phase1 := ""
+			if newTarget != "" {
+				phase1 = fmt.Sprintf(`,{"start_date":300,"end_date":0,"items":[{"price":%q}]}`, newTarget)
+			}
+			fmt.Fprintf(w, `{"id":"sched_new","status":"active","phases":[{"start_date":200,"end_date":300,"items":[{"price":"price_current"}]}%s]}`, phase1)
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules/sched_old/release":
 			released = true
 			fmt.Fprint(w, `{"id":"sched_old","status":"released"}`)
@@ -357,6 +435,10 @@ func TestSchedulePastWaitingPhaseIsReleasedAndRecreated(t *testing.T) {
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules/sched_old":
 			updatedOld = true
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules/sched_new":
+			if err := r.ParseForm(); err != nil {
+				t.Fatal(err)
+			}
+			newTarget = r.Form.Get("phases[1][items][0][price]")
 			fmt.Fprint(w, `{"id":"sched_new"}`)
 		default:
 			t.Fatalf("unexpected %s %s", r.Method, r.URL.Path)

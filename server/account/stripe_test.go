@@ -482,6 +482,7 @@ func TestChangeSubscriptionPlanFindsTrialingSubscription(t *testing.T) {
 
 func TestScheduleDowngradeRequestShape(t *testing.T) {
 	var sawList, sawCreate, sawUpdate bool
+	target := ""
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/v1/subscriptions":
@@ -500,6 +501,12 @@ func TestScheduleDowngradeRequestShape(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			// Seed schedule: one phase spanning the current period on price_pro.
 			fmt.Fprint(w, `{"id":"sub_sched_1","phases":[{"start_date":1000,"end_date":2000,"items":[{"price":"price_pro"}]}]}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/subscription_schedules/sub_sched_1":
+			phase1 := ""
+			if target != "" {
+				phase1 = fmt.Sprintf(`,{"start_date":2000,"items":[{"price":%q}]}`, target)
+			}
+			fmt.Fprintf(w, `{"id":"sub_sched_1","status":"active","phases":[{"start_date":1000,"end_date":2000,"items":[{"price":"price_pro"}]}%s]}`, phase1)
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules/sub_sched_1":
 			sawUpdate = true
 			if err := r.ParseForm(); err != nil {
@@ -517,6 +524,7 @@ func TestScheduleDowngradeRequestShape(t *testing.T) {
 			if got := r.Form.Get("phases[1][items][0][price]"); got != "price_plus" {
 				t.Errorf("phase1 price = %q, want price_plus (the downgrade)", got)
 			}
+			target = r.Form.Get("phases[1][items][0][price]")
 			// The trailing phase must be open-ended: real Stripe rejects an
 			// iterations param on it ("unknown parameter: phases[iterations]").
 			if got := r.Form.Get("phases[1][iterations]"); got != "" {
@@ -565,6 +573,7 @@ func TestScheduleDowngradeNoopWhenSamePrice(t *testing.T) {
 
 func TestScheduleDowngradeFindsTrialingSubscription(t *testing.T) {
 	var listQuery string
+	target := ""
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/subscriptions"):
@@ -580,7 +589,17 @@ func TestScheduleDowngradeFindsTrialingSubscription(t *testing.T) {
 				t.Errorf("from_subscription = %q, want sub_t", got)
 			}
 			w.Write([]byte(`{"id":"sub_sched_1","phases":[{"start_date":1000,"end_date":2000,"items":[{"price":"price_pro"}]}]}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/subscription_schedules/sub_sched_1":
+			phase1 := ""
+			if target != "" {
+				phase1 = fmt.Sprintf(`,{"start_date":2000,"items":[{"price":%q}]}`, target)
+			}
+			fmt.Fprintf(w, `{"id":"sub_sched_1","status":"active","phases":[{"start_date":1000,"end_date":2000,"items":[{"price":"price_pro"}]}%s]}`, phase1)
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules/sub_sched_1":
+			if err := r.ParseForm(); err != nil {
+				t.Fatal(err)
+			}
+			target = r.Form.Get("phases[1][items][0][price]")
 			w.Write([]byte(`{"id":"sub_sched_1"}`))
 		default:
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
@@ -611,6 +630,12 @@ func TestReleaseScheduleFindsTrialingSubscription(t *testing.T) {
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules/sub_sched_1/release":
 			sawRelease = true
 			w.Write([]byte(`{"id":"sub_sched_1","status":"released"}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/subscription_schedules/sub_sched_1":
+			status := "active"
+			if sawRelease {
+				status = "released"
+			}
+			fmt.Fprintf(w, `{"id":"sub_sched_1","status":%q}`, status)
 		default:
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}
@@ -640,6 +665,12 @@ func TestReleaseScheduleRequestShape(t *testing.T) {
 			sawRelease = true
 			w.Header().Set("Content-Type", "application/json")
 			fmt.Fprint(w, `{"id":"sub_sched_7","status":"released"}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/subscription_schedules/sub_sched_7":
+			status := "active"
+			if sawRelease {
+				status = "released"
+			}
+			fmt.Fprintf(w, `{"id":"sub_sched_7","status":%q}`, status)
 		default:
 			t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
 		}

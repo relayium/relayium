@@ -70,7 +70,12 @@
   });
   const scheduledLine = $derived(
     plan?.scheduledPlanId && plan.scheduledPlanName
-      ? t.billing.scheduledDowngradeRow(plan.scheduledPlanName, subEnd) : "",
+      ? t.billing.scheduledDowngradeRow(
+          plan.scheduledPlanName,
+          plan.scheduledCycle === "yearly" ? t.billing.cycleYearly
+            : plan.scheduledCycle === "monthly" ? t.billing.cycleMonthly : "",
+          subEnd,
+        ) : "",
   );
 
   // 照抄 Account.svelte 的 onManageBilling：跳 Stripe 客户门户。

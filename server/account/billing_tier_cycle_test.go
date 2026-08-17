@@ -224,9 +224,9 @@ func TestChangePlanCompositeCallOrder(t *testing.T) {
 
 // Stripe has no atomic two-stage primitive, so the partial failure has to be
 // reported truthfully AND be recoverable: the caller must see an error (not a
-// 200 promising a cycle change that will never fire), the DB must not advertise
-// a schedule Stripe knows nothing about, and a retry must finish the job without
-// charging the proration a second time.
+// 200 promising a cycle change that will never fire), an existing truthful
+// schedule hint must survive until its replacement succeeds, and a retry must
+// finish the job without charging the proration a second time.
 func TestChangePlanCompositePartialFailureIsReportedAndRetryConverges(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	fb := &orderRecordingBiller{priceNow: "price_plus_y", downgradeErr: errors.New("stripe down")}
@@ -236,6 +236,9 @@ func TestChangePlanCompositePartialFailureIsReportedAndRetryConverges(t *testing
 	cookie := loginCookie(t, ts, mail, email)
 	uid := mustUserID(t, store, email)
 	subscribeUserCycle(t, store, uid, "cus_partial", "plus", "yearly")
+	if err := store.SetScheduledPlan(context.Background(), uid, "plus", "monthly"); err != nil {
+		t.Fatal(err)
+	}
 
 	resp := changePlan(t, ts, cookie, `{"planId":"pro","cycle":"monthly"}`)
 	defer resp.Body.Close()
@@ -254,13 +257,14 @@ func TestChangePlanCompositePartialFailureIsReportedAndRetryConverges(t *testing
 	if fb.priceNow != "price_pro_y" {
 		t.Fatalf("immediate stage should have applied, price is %q", fb.priceNow)
 	}
-	// But nothing is pending in Stripe, so nothing may be advertised as pending.
+	// Replacement failed, so retain the last durable schedule hint rather than
+	// erasing truthful state before Stripe confirms the new schedule.
 	u, err := store.GetUserByID(context.Background(), uid)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u.ScheduledPlanID != "" || u.ScheduledCycle != "" {
-		t.Fatalf("failed scheduling must leave no pending marker, got %q/%q",
+	if u.ScheduledPlanID != "plus" || u.ScheduledCycle != "monthly" {
+		t.Fatalf("failed replacement must retain prior pending marker, got %q/%q",
 			u.ScheduledPlanID, u.ScheduledCycle)
 	}
 

@@ -196,7 +196,7 @@ const zh: Messages = {
     trialEndsOn: (date) => `试用中 · ${date} 到期`,
     pastDueNotice: "扣款失败 · 请更新支付方式",
     canceledUntil: (date) => `已取消 · ${date} 前有效`,
-    scheduledDowngradeRow: (name, date) => `已排期：${date} 期末降到 ${name}`,
+    scheduledDowngradeRow: (name, cycle, date) => `已排期：${date} 切换到 ${name}${cycle ? `（${cycle}）` : ""}`,
     appleManagedBadge: "由 App Store 管理",
     appleManagedNote: "这个订阅是在 App Store 购买的。请到 Apple 账户设置里更改或取消。",
     multipleProvidersNote: "你在不止一个渠道有生效中的订阅。请到当初购买的地方取消其中不需要的那个。",

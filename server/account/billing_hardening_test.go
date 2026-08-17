@@ -16,7 +16,7 @@ import (
 func TestWebhookRejectsWrongLivemode(t *testing.T) {
 	ts, svc, store, _ := newBillingServer(t)
 	secret := "whsec_livemode"
-	svc.biller = NewStripeClient("sk_test", secret, "") // wantLive=false
+	svc.biller = newWebhookFixtureClient(secret) // wantLive=false
 	mustPlan(t, store, Plan{ID: "plus", Name: "Plus", Active: true, TrafficBytes: 1 << 40, StripePriceMonthlyID: "price_plus_m"})
 
 	ctx := context.Background()
@@ -58,7 +58,7 @@ func TestWebhookRejectsWrongLivemode(t *testing.T) {
 func TestWebhookCustomerBindDoesNotFlip(t *testing.T) {
 	ts, svc, store, _ := newBillingServer(t)
 	secret := "whsec_bind"
-	svc.biller = NewStripeClient("sk_test", secret, "")
+	svc.biller = newWebhookFixtureClient(secret)
 
 	ctx := context.Background()
 	u, _ := store.UpsertUserByEmail(ctx, "bind@example.com", "B")

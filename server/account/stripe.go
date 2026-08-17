@@ -160,10 +160,11 @@ func NewStripeClient(secretKey, webhookSecret, portalConfig string) *stripeClien
 		wantLive:      strings.HasPrefix(secretKey, "sk_live_"),
 		// These are quick, non-streaming REST calls (unlike blob transfers
 		// elsewhere in this package), so a total timeout is safe and desirable.
-		http:           &http.Client{Timeout: 20 * time.Second},
-		base:           "https://api.stripe.com",
-		idemRetryDelay: 250 * time.Millisecond,
-		now:            time.Now,
+		http:                    &http.Client{Timeout: 20 * time.Second},
+		base:                    "https://api.stripe.com",
+		idemRetryDelay:          250 * time.Millisecond,
+		canonicalWebhookRefresh: true,
+		now:                     time.Now,
 	}
 }
 
@@ -806,6 +807,68 @@ func parseChangePreview(body []byte) (ChangePreview, error) {
 	return pv, nil
 }
 
+type stripeSchedule struct {
+	ID           string `json:"id"`
+	Status       string `json:"status"`
+	CurrentPhase struct {
+		StartDate int64 `json:"start_date"`
+		EndDate   int64 `json:"end_date"`
+	} `json:"current_phase"`
+	Phases []struct {
+		StartDate int64 `json:"start_date"`
+		EndDate   int64 `json:"end_date"`
+		Items     []struct {
+			Price string `json:"price"`
+		} `json:"items"`
+	} `json:"phases"`
+}
+
+func (c *stripeClient) schedule(ctx context.Context, id string) (stripeSchedule, error) {
+	body, err := c.request(ctx, http.MethodGet, "/v1/subscription_schedules/"+url.PathEscape(id), nil)
+	if err != nil {
+		return stripeSchedule{}, err
+	}
+	var sched stripeSchedule
+	if err := json.Unmarshal(body, &sched); err != nil {
+		return stripeSchedule{}, fmt.Errorf("stripe: schedule %s: parse response: %w", id, err)
+	}
+	if sched.ID == "" {
+		return stripeSchedule{}, fmt.Errorf("stripe: schedule response has no id")
+	}
+	return sched, nil
+}
+
+func terminalSchedule(status string) bool {
+	switch status {
+	case "released", "canceled", "completed":
+		return true
+	default:
+		return false
+	}
+}
+
+func scheduleTargets(s stripeSchedule, price string) bool {
+	return len(s.Phases) > 1 && len(s.Phases[1].Items) > 0 &&
+		s.Phases[1].Items[0].Price == price
+}
+
+func (c *stripeClient) releaseSchedule(ctx context.Context, id string) error {
+	key := stableStripeIntentKey("schedule-release", id)
+	_, releaseErr := c.requestIdempotent(ctx, http.MethodPost,
+		"/v1/subscription_schedules/"+url.PathEscape(id)+"/release", url.Values{}, key)
+	canonical, getErr := c.schedule(ctx, id)
+	if getErr == nil && terminalSchedule(canonical.Status) {
+		return nil
+	}
+	if releaseErr != nil {
+		return releaseErr
+	}
+	if getErr != nil {
+		return getErr
+	}
+	return fmt.Errorf("stripe: schedule %s release postcondition is %q", id, canonical.Status)
+}
+
 // ScheduleDowngrade defers a plan change to the end of the current billing
 // period using a subscription schedule: phase 0 keeps the current price until
 // the period ends, phase 1 switches to newPriceID, then the schedule releases
@@ -853,6 +916,9 @@ func (c *stripeClient) ScheduleDowngrade(ctx context.Context, customerID, newPri
 		return fmt.Errorf("stripe: no live subscription for customer %s", customerID)
 	}
 	sub := subs.Data[idx]
+	if len(sub.Items.Data) == 0 || sub.Items.Data[0].Price.ID == "" {
+		return fmt.Errorf("stripe: live subscription %s has no priced item", sub.ID)
+	}
 	if len(sub.Items.Data) > 0 && sub.Items.Data[0].Price.ID == newPriceID {
 		return nil // already on the target price — nothing to schedule
 	}
@@ -860,58 +926,48 @@ func (c *stripeClient) ScheduleDowngrade(ctx context.Context, customerID, newPri
 	//    current price and spans the current billing period.
 	seed := url.Values{}
 	seed.Set("from_subscription", sub.ID)
-	createSchedule := func() ([]byte, error) {
+	createSchedule := func() (stripeSchedule, error) {
 		generation := []string{"schedule-create", sub.ID, sub.Items.Data[0].Price.ID,
 			strconv.FormatInt(sub.CurrentPeriodEnd, 10), sub.LatestInvoice, newPriceID}
 		for attempts := 0; attempts < 8; attempts++ {
 			created, err := c.requestIdempotent(ctx, http.MethodPost, "/v1/subscription_schedules", seed,
 				stableStripeIntentKey(generation...))
 			if err != nil {
-				return nil, err
+				return stripeSchedule{}, err
 			}
-			var identity struct{ ID, Status string }
+			var identity struct {
+				ID string `json:"id"`
+			}
 			if err := json.Unmarshal(created, &identity); err != nil {
-				return nil, fmt.Errorf("stripe: create schedule: parse identity: %w", err)
+				return stripeSchedule{}, fmt.Errorf("stripe: create schedule: parse identity: %w", err)
 			}
-			switch identity.Status {
-			case "released", "canceled", "completed":
+			if identity.ID == "" {
+				return stripeSchedule{}, fmt.Errorf("stripe: created schedule has no id")
+			}
+			canonical, err := c.schedule(ctx, identity.ID)
+			if err != nil {
+				return stripeSchedule{}, err
+			}
+			if terminalSchedule(canonical.Status) {
 				// Each terminal replay becomes the durable generation for the next
 				// intent. This handles release -> reschedule repeatedly within Stripe's
 				// 24-hour idempotency cache while keeping every network retry stable.
-				generation = append(generation, "terminal-replay", identity.ID, identity.Status)
+				generation = append(generation, "terminal-replay", canonical.ID, canonical.Status)
 				continue
-			default:
-				return created, nil
 			}
+			return canonical, nil
 		}
-		return nil, fmt.Errorf("stripe: schedule create replay chain did not converge")
+		return stripeSchedule{}, fmt.Errorf("stripe: schedule create replay chain did not converge")
 	}
 	createdSchedule := sub.Schedule == ""
+	var sched stripeSchedule
 	if sub.Schedule != "" {
-		body, err = c.request(ctx, http.MethodGet, "/v1/subscription_schedules/"+sub.Schedule, nil)
+		sched, err = c.schedule(ctx, sub.Schedule)
 	} else {
-		body, err = createSchedule()
+		sched, err = createSchedule()
 	}
 	if err != nil {
 		return err
-	}
-	var sched struct {
-		ID           string `json:"id"`
-		Status       string `json:"status"`
-		CurrentPhase struct {
-			StartDate int64 `json:"start_date"`
-			EndDate   int64 `json:"end_date"`
-		} `json:"current_phase"`
-		Phases []struct {
-			StartDate int64 `json:"start_date"`
-			EndDate   int64 `json:"end_date"`
-			Items     []struct {
-				Price string `json:"price"`
-			} `json:"items"`
-		} `json:"phases"`
-	}
-	if err := json.Unmarshal(body, &sched); err != nil {
-		return fmt.Errorf("stripe: create schedule: parse response: %w", err)
 	}
 	if len(sched.Phases) == 0 || len(sched.Phases[0].Items) == 0 {
 		return fmt.Errorf("stripe: schedule %s has no seed phase", sched.ID)
@@ -920,17 +976,12 @@ func (c *stripeClient) ScheduleDowngrade(ctx context.Context, customerID, newPri
 		(sched.CurrentPhase.StartDate >= sched.Phases[0].EndDate || c.now().Unix() >= sched.Phases[0].EndDate) {
 		// The first waiting phase is over. Rewriting phase 0 now would rewrite
 		// history/current service rather than schedule a future transition.
-		if _, err := c.requestIdempotent(ctx, http.MethodPost,
-			"/v1/subscription_schedules/"+sched.ID+"/release", url.Values{},
-			stableStripeIntentKey("schedule-release", sched.ID)); err != nil {
+		if err := c.releaseSchedule(ctx, sched.ID); err != nil {
 			return err
 		}
-		body, err = createSchedule()
+		sched, err = createSchedule()
 		if err != nil {
 			return err
-		}
-		if err := json.Unmarshal(body, &sched); err != nil {
-			return fmt.Errorf("stripe: recreate schedule: parse response: %w", err)
 		}
 		if len(sched.Phases) == 0 || len(sched.Phases[0].Items) == 0 {
 			return fmt.Errorf("stripe: recreated schedule %s has no seed phase", sched.ID)
@@ -948,20 +999,18 @@ func (c *stripeClient) ScheduleDowngrade(ctx context.Context, customerID, newPri
 	upd.Set("phases[0][start_date]", strconv.FormatInt(p0.StartDate, 10))
 	upd.Set("phases[0][end_date]", strconv.FormatInt(p0.EndDate, 10))
 	upd.Set("phases[1][items][0][price]", newPriceID)
-	generation := []string{"schedule-update", sched.ID}
-	for _, phase := range sched.Phases {
-		generation = append(generation, strconv.FormatInt(phase.StartDate, 10),
-			strconv.FormatInt(phase.EndDate, 10))
-		for _, item := range phase.Items {
-			generation = append(generation, item.Price)
-		}
+	_, updateErr := c.request(ctx, http.MethodPost, "/v1/subscription_schedules/"+sched.ID, upd)
+	canonical, getErr := c.schedule(ctx, sched.ID)
+	if getErr == nil && scheduleTargets(canonical, newPriceID) {
+		return nil
 	}
-	generation = append(generation, newPriceID)
-	key := stableStripeIntentKey(generation...)
-	if _, err := c.requestIdempotent(ctx, http.MethodPost, "/v1/subscription_schedules/"+sched.ID, upd, key); err != nil {
-		return err
+	if updateErr != nil {
+		return updateErr
 	}
-	return nil
+	if getErr != nil {
+		return getErr
+	}
+	return fmt.Errorf("stripe: schedule %s update postcondition does not target %s", sched.ID, newPriceID)
 }
 
 // ReleaseSchedule detaches any subscription schedule from the customer's live
@@ -998,9 +1047,7 @@ func (c *stripeClient) ReleaseSchedule(ctx context.Context, customerID string) e
 	if schedule == "" {
 		return nil // no live subscription, or nothing scheduled — nothing to release
 	}
-	key := stableStripeIntentKey("schedule-release", schedule)
-	_, err = c.requestIdempotent(ctx, http.MethodPost, "/v1/subscription_schedules/"+schedule+"/release", url.Values{}, key)
-	return err
+	return c.releaseSchedule(ctx, schedule)
 }
 
 func stableStripeIntentKey(parts ...string) string {

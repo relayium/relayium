@@ -29,7 +29,7 @@ func cycleOf(t *testing.T, store *SQLiteStore, customer string) string {
 func TestWebhookRecordsYearlyCycleFromPriceID(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_cycle_y"
-	svc.biller = NewStripeClient("sk_test", secret, "")
+	svc.biller = newWebhookFixtureClient(secret)
 	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true,
 		StripePriceMonthlyID: "price_pro_m", StripePriceYearlyID: "price_pro_y"})
 	_ = loginCookie(t, ts, mail, "cycle-y@example.com")
@@ -52,7 +52,7 @@ func TestWebhookRecordsYearlyCycleFromPriceID(t *testing.T) {
 func TestWebhookRecordsMonthlyCycleFromPriceID(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_cycle_m"
-	svc.biller = NewStripeClient("sk_test", secret, "")
+	svc.biller = newWebhookFixtureClient(secret)
 	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true,
 		StripePriceMonthlyID: "price_pro_m", StripePriceYearlyID: "price_pro_y"})
 	_ = loginCookie(t, ts, mail, "cycle-m@example.com")
@@ -216,7 +216,7 @@ func TestChangePlanUnknownCycleFallsBackToTierOnly(t *testing.T) {
 func TestWebhookSameTierCycleDowngradeMarkerSurvivesUntilLanded(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_cycle_sched"
-	svc.biller = NewStripeClient("sk_test", secret, "")
+	svc.biller = newWebhookFixtureClient(secret)
 	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true,
 		StripePriceMonthlyID: "price_pro_m", StripePriceYearlyID: "price_pro_y"})
 	_ = loginCookie(t, ts, mail, "cyc-sched@example.com")

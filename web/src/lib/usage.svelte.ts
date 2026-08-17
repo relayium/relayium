@@ -29,6 +29,7 @@ export interface PlanInfo {
   billingCycle?: string; // 'monthly' | 'yearly' | ''（未知）
   scheduledPlanId?: string; // 排期期末降级的目标档 id，'' 无
   scheduledPlanName?: string; // 该目标档的展示名
+  scheduledCycle?: string; // 排期期末切换到的周期；'' = legacy unknown
   isTop: boolean; // 已在最高档：隐藏升级引导
   subscriptionStatus: string; // '' = 从未结账
   subscriptionEnd: number; // unix 秒；0 = 无订阅

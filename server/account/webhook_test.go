@@ -11,6 +11,15 @@ import (
 	"time"
 )
 
+// newWebhookFixtureClient is for tests that deliberately exercise projection of
+// an already-verified event payload. Canonical convergence has separate tests
+// with a fake Stripe API; production clients keep canonical refresh enabled.
+func newWebhookFixtureClient(secret string) *stripeClient {
+	c := NewStripeClient("sk_test", secret, "")
+	c.canonicalWebhookRefresh = false
+	return c
+}
+
 // webhookEnv builds a minimal Stripe event envelope JSON body matching the
 // fields VerifyWebhook parses (see stripe.go's envelope struct).
 func webhookEnv(eventType, customer, subscription, clientRefUserID, status, priceID string, currentPeriodEnd int64) string {
@@ -72,7 +81,7 @@ func TestWebhookUnconfigured404(t *testing.T) {
 
 func TestWebhookBadSignature400NoStateChange(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
-	svc.biller = NewStripeClient("sk_test", "whsec_real", "")
+	svc.biller = newWebhookFixtureClient("whsec_real")
 	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
 	cookie := loginCookie(t, ts, mail, "webhook-badsig@example.com")
 	_ = cookie
@@ -119,7 +128,7 @@ func mustUserID(t *testing.T, store *SQLiteStore, email string) string {
 func TestWebhookCheckoutCompletedBindsCustomer(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_checkout"
-	svc.biller = NewStripeClient("sk_test", secret, "")
+	svc.biller = newWebhookFixtureClient(secret)
 	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
 	cookie := loginCookie(t, ts, mail, "webhook-checkout@example.com")
 	_ = cookie
@@ -147,7 +156,7 @@ func TestWebhookCheckoutCompletedBindsCustomer(t *testing.T) {
 func TestWebhookSubscriptionUpdatedActiveAssignsPlan(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_sub_active"
-	svc.biller = NewStripeClient("sk_test", secret, "")
+	svc.biller = newWebhookFixtureClient(secret)
 	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
 	cookie := loginCookie(t, ts, mail, "webhook-active@example.com")
 	_ = cookie
@@ -206,7 +215,7 @@ func TestWebhookSubscriptionUpdatedActiveAssignsPlan(t *testing.T) {
 func TestWebhookSubscriptionUpdatedPastDueRetainsEntitlement(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_sub_pastdue"
-	svc.biller = NewStripeClient("sk_test", secret, "")
+	svc.biller = newWebhookFixtureClient(secret)
 	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
 	mustPlan(t, store, Plan{ID: "free", Name: "Free", Active: true})
 	cookie := loginCookie(t, ts, mail, "webhook-pastdue@example.com")
@@ -240,7 +249,7 @@ func TestWebhookSubscriptionUpdatedPastDueRetainsEntitlement(t *testing.T) {
 func TestWebhookSubscriptionDeletedRevertsToFreeCanceled(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_sub_deleted"
-	svc.biller = NewStripeClient("sk_test", secret, "")
+	svc.biller = newWebhookFixtureClient(secret)
 	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
 	mustPlan(t, store, Plan{ID: "free", Name: "Free", Active: true})
 	cookie := loginCookie(t, ts, mail, "webhook-deleted@example.com")
@@ -304,7 +313,7 @@ func signedWebhookRequest(t *testing.T, ts *httptest.Server, secret, body string
 func TestWebhookSubscriptionUpdatedAccruesPreviousSegment(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_accrue"
-	svc.biller = NewStripeClient("sk_test", secret, "")
+	svc.biller = newWebhookFixtureClient(secret)
 	plusCap := int64(300) << 30
 	mustPlan(t, store, Plan{ID: "plus", Name: "Plus", Active: true, TrafficBytes: plusCap, StripePriceMonthlyID: "price_plus_m"})
 	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, TrafficBytes: int64(1) << 40, StripePriceMonthlyID: "price_pro_m"})
@@ -371,7 +380,7 @@ func TestWebhookSubscriptionUpdatedAccruesPreviousSegment(t *testing.T) {
 func TestWebhookSubscriptionDeletedAccruesPreviousSegment(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_cancel_accrue"
-	svc.biller = NewStripeClient("sk_test", secret, "")
+	svc.biller = newWebhookFixtureClient(secret)
 	proCap := int64(50) << 30
 	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, TrafficBytes: proCap, StripePriceMonthlyID: "price_pro_m"})
 	mustPlan(t, store, Plan{ID: "free", Name: "Free", Active: true, TrafficBytes: 1073741824})
@@ -421,7 +430,7 @@ func TestWebhookSubscriptionDeletedAccruesPreviousSegment(t *testing.T) {
 func TestWebhookAdminSourceNotOverridden(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_admin"
-	svc.biller = NewStripeClient("sk_test", secret, "")
+	svc.biller = newWebhookFixtureClient(secret)
 	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
 	mustPlan(t, store, Plan{ID: "enterprise", Name: "Enterprise", Active: true})
 	cookie := loginCookie(t, ts, mail, "webhook-admin@example.com")
@@ -468,7 +477,7 @@ func TestWebhookAdminSourceNotOverridden(t *testing.T) {
 func TestWebhookAdminSourceNotOverriddenViaMetadata(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_admin_meta"
-	svc.biller = NewStripeClient("sk_test", secret, "")
+	svc.biller = newWebhookFixtureClient(secret)
 	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
 	mustPlan(t, store, Plan{ID: "plus", Name: "Plus", Active: true, StripePriceMonthlyID: "price_plus_m"})
 	cookie := loginCookie(t, ts, mail, "webhook-admin-meta@example.com")
@@ -517,7 +526,7 @@ func TestWebhookAdminSourceNotOverriddenViaMetadata(t *testing.T) {
 func TestWebhookUnknownCustomerIgnored200(t *testing.T) {
 	ts, svc, store, _ := newBillingServer(t)
 	secret := "whsec_unknown"
-	svc.biller = NewStripeClient("sk_test", secret, "")
+	svc.biller = newWebhookFixtureClient(secret)
 	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
 
 	body := webhookEnv("customer.subscription.updated", "cus_no_such_user", "sub_1", "", "active", "price_pro_m", 1700003000)
@@ -540,7 +549,7 @@ func TestWebhookUnknownCustomerIgnored200(t *testing.T) {
 func TestWebhookSubscriptionBeforeCheckoutUsesMetadata(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_race"
-	svc.biller = NewStripeClient("sk_test", secret, "")
+	svc.biller = newWebhookFixtureClient(secret)
 	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
 	cookie := loginCookie(t, ts, mail, "webhook-race@example.com")
 	_ = cookie
@@ -585,7 +594,7 @@ func TestWebhookSubscriptionBeforeCheckoutUsesMetadata(t *testing.T) {
 func TestWebhookActiveSubscriptionForgedPriceRevertsToFree(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_forged_price"
-	svc.biller = NewStripeClient("sk_test", secret, "")
+	svc.biller = newWebhookFixtureClient(secret)
 	if err := svc.SeedPlans(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -645,7 +654,7 @@ func TestWebhookStoreErrorReturns500(t *testing.T) {
 	ts := httptest.NewServer(svc.Routes())
 	t.Cleanup(ts.Close)
 	secret := "whsec_store_error"
-	svc.biller = NewStripeClient("sk_test", secret, "")
+	svc.biller = newWebhookFixtureClient(secret)
 	mustPlan(t, realStore, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
 
 	body := webhookEnv("customer.subscription.updated", "cus_store_err", "sub_1", "", "active", "price_pro_m", 1700005000)
@@ -659,7 +668,7 @@ func TestWebhookStoreErrorReturns500(t *testing.T) {
 func TestWebhookUnknownEventTypeIgnored200(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_unknown_type"
-	svc.biller = NewStripeClient("sk_test", secret, "")
+	svc.biller = newWebhookFixtureClient(secret)
 	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
 	cookie := loginCookie(t, ts, mail, "webhook-unknowntype@example.com")
 	_ = cookie

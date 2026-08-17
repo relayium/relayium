@@ -175,7 +175,19 @@ describe("PlanCard", () => {
       subscriptionStatus: "active", subscriptionEnd: 1789999999,
       scheduledPlanId: "free", scheduledPlanName: "Free",
     }));
-    expect(target.textContent ?? "").toMatch(/downgrades to Free/);
+    expect(target.textContent ?? "").toMatch(/changes to Free/);
+  });
+
+  it("names a same-tier annual-to-monthly schedule as a cycle change", async () => {
+    await mountWith(plan({
+      id: "pro", name: "Pro", billingCycle: "yearly",
+      subscriptionStatus: "active", subscriptionEnd: 1789999999,
+      scheduledPlanId: "pro", scheduledPlanName: "Pro", scheduledCycle: "monthly",
+    }));
+    const text = target.querySelector(".sched")?.textContent ?? "";
+    expect(text).toContain("changes to Pro");
+    expect(text).toContain("Monthly");
+    expect(text).not.toMatch(/downgrade/i);
   });
 
   it("free plan shows no cycle badge and only an upgrade CTA", async () => {
