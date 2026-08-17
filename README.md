@@ -236,149 +236,16 @@ pairing code requires sign-in; joining with that code does not.
 
 ## Delivery status
 
-- **Web — live:** LAN and cross-network realtime file/text transfer, encrypted
-  stored download links, accounts and usage controls, and the two maintained
-  languages — English and Simplified Chinese — are deployed at
-  [relayium.com](https://relayium.com/); the seven earlier locales remain as
-  archived tutorial pages rather than product languages.
-- **CLI and nodes — live:** published binaries provide pairing-code file/text
-  transfer, encrypted upload/download links, SSH and daemon-direct transfer,
-  folder sync, self-hosting, and managed relay/storage nodes.
-- **macOS — 1.2.7, published as a direct download:** the universal app supports account
-  registration and sign-in with device and stored-file management, six-digit
-  pairing-code transfer of files and text, folder transfer, nearby sending and
-  passive receiving, encrypted stored links to send and open, notifications and
-  deep links, English and Simplified Chinese as its maintained languages —
-  beside the seven frozen catalogs it still bundles, Arabic among them and still
-  laid out right to left — and a signed Sparkle update foundation. Signing in
-  still goes out to the browser for device approval — that is not a native Sign in
-  with Apple, which only the iOS app has. Its single window is a desktop shell
-  whose sidebar names five destinations at once — LAN Transfer, Cross-network
-  Transfer, Send a link, Device Inbox, Account — so the capabilities that need no
-  account (same-network sending and receiving, and joining someone else's pairing
-  code) are reachable without signing in; an account is asked for only where it
-  is actually required, with the reason stated. Opening a stored link somebody
-  sent needs no account either and has no row of its own: it is a link the OS
-  hands the app, so it opens when a supported `relayium.com` link is followed
-  rather than being somewhere to browse to. Files reach it
-  from outside the app three ways — dropped on the Dock icon, opened from
-  Finder's **Open With**, or sent through a Share extension; the Share extension
-  is registered by installing the app but, like every new third-party sharing
-  extension, stays switched off until the user allows it under Extensions ▸
-  Sharing, and the app says so rather than appearing broken. ⌘, opens a Settings
-  window with automatic update checks, the last check and the running version,
-  and an *Open at login* switch that reports what macOS actually did with it —
-  including the "registered, waiting for your approval" state a checkbox cannot
-  express. The 1.2.7 DMG is universal, Developer ID-signed, accepted by Apple
-  notarization, stapled and Gatekeeper-validated, and is attached to the
-  [`macos-v1.2.7`](https://github.com/relayium/relayium/releases/tag/macos-v1.2.7)
-  GitHub Release with its SHA-256 published beside it; in-app updates come from
-  the signed Sparkle appcast at `https://relayium.com/apps/macos/appcast.xml`.
-  A Developer ID download **is** the distribution channel here — there is no Mac
-  App Store listing. The App Store build of the same source is not hypothetical:
-  the matching 1.2.5 (12) package was archived from this release's exact source
-  graph — universal, sandboxed, App Store-signed, both privacy manifests, no
-  Sparkle — verified locally, and uploaded to App Store Connect on 2026-08-16,
-  where Xcode reported the upload accepted and package processing started; its
-  predecessor 1.2.4 (11) went the same way on 2026-08-15. Upload acceptance is
-  where the observed evidence stops. A fresh Organizer readback shows 1.2.5 (12)
-  as *Uploaded to Apple*; nothing has been observed about Apple finishing
-  processing, about the build reaching TestFlight or any tester group, or about
-  its export-compliance answer, so no TestFlight build is claimed for this
-  release. Nothing has been submitted for App
-  Review, and there is still no public Mac App Store listing. Whether relayium.com's own
-  **/apps** page offers that download is a separate switch, driven by
-  `web/native-releases.json`, which the
-  release workflow delivers to `main` together with the appcast.
-- **iOS — in development, not public:** a native SwiftUI app now exists at
-  [`apps/ios`](apps/ios) and builds against the same shared Swift package. Five
-  tabs divide it, and which ones need an account is structural rather than a
-  gate over the whole app. *Receive* opens an encrypted stored link without an
-  account — paste the link, inspect the decrypted manifest and its
-  delete-after-download warning, and save the files into the app's own folder in
-  the Files app. *Send* encrypts files, folders, photos or videos on the device
-  and creates a stored link with a chosen lifetime and optional
-  delete-after-first-download; the key never reaches Relayium, and this half
-  needs an account. *Direct* is the six-digit pairing code for a small live
-  handoff of files or text — creating a code needs an account, joining one does
-  not. *Nearby* lists the devices Relayium's code-less rendezvous groups with
-  yours, sends files or text to a peer you pick explicitly, and accepts one
-  unsolicited session at a time; seeing a device there proves neither the same
-  Wi-Fi nor its identity, and the app says so. *Account* registers, signs in
-  with an email and password or natively with Apple, and shows plan and usage
-  alongside device and stored-file management. It ships the same maintained
-  English and Simplified Chinese as the Mac app, beside the same seven frozen
-  catalogs.
-  Nothing runs while the app is in the background: it has no background
-  execution, so suspending or closing it stops whatever was in flight. A stored
-  upload survives that much, because *Send* copies the selected bytes into
-  app-private storage on the device before uploading them — reopening the app
-  offers the interrupted job back with the choice to resume it or discard the
-  staged copy, and only that explicit tap continues the upload. The app never
-  resumes anything on its own, nothing continues while it is closed, and the
-  realtime *Direct* and *Nearby* sessions stage nothing, so they end with the
-  foreground. Tapping a relayium.com share or pairing link opens the app on the
-  right tab with the link already filled in — it resolves the encrypted manifest
-  or prefills the six-digit code, and never joins a session or saves a file on
-  its own; a link that arrives mid-transfer waits rather than replacing it.
-  A **Share Extension** is now built into the engineering build: sharing files,
-  folders, photos or videos to Relayium from any app copies them into shared
-  app-private storage on the device and tells you they are saved there and that
-  nothing has been uploaded. You then open Relayium yourself and they are waiting
-  on *Send*, until you choose them and press Send — iOS does not let a share
-  extension open its containing app, so that last step is yours rather than
-  something the sheet can do for you. The extension makes no network request,
-  reads no account and holds no key — it stages local copies and stops, and the
-  app is still the only thing that encrypts, uploads or produces a link. A
-  waiting share is shown even when nobody is signed in, stays on the device until
-  it is sent or discarded, and is never expired or sent on its own. The App Group
-  and distribution profiles are registered, a signed App Store archive embeds the
-  extension, and the extension has run on a physical device: a signed build was
-  installed on an iPad, a real item was shared into Relayium through the system
-  share sheet, and reopening the app by hand showed it waiting on *Send*. That
-  proves the mechanism rather than its breadth — the newer draft-adoption path
-  has not been exercised against real iPhone Photos, Files and third-party
-  providers, and what a real provider hands over for a shared folder is still
-  untested. StoreKit subscriptions now render
-  in Account with purchase, restore and Apple-management paths, but the iOS
-  products and server verifier are not activated and no TestFlight build has
-  been uploaded. There is still no notification or push and no public App Store
-  release. The link association itself is verified by the OS at install time,
-  so it is one of the things that still needs a real device rather than a
-  simulator.
-- **Next:** macOS has been through that sequence — the core was completed, the
-  build was reviewed and installed by hand, and only then was 1.0 published as a
-  Developer ID download. iOS has not, and the order is the same for it:
-  complete the native core product and verify that completeness independently;
-  distribution comes after it, not alongside it. On iOS the core is still
-  bounded by what this build cannot do: background
-  execution — which keeps realtime sessions foreground-only and leaves a stored
-  upload waiting for the user to reopen the app and resume it by hand — plus
-  notifications and push. Universal-link routing is
-  wired and covered by tests, but its association is only verified on a real
-  install, so it stays on the real-device list below rather than the built list
-  above. The share extension has already had that signed install: the real share
-  sheet offered Relayium, and returning to the app put the waiting share in front
-  of the user as intended. What it still needs is breadth — what real iPhone
-  Photos, Files and third-party providers vend, and what any of them hands over
-  for a shared folder. Those paths still need hands-on real-device QA, and the
-  product still needs an explicit native-versus-web workflow audit; neither is
-  complete yet. The immediate distribution work is to configure the
-  iOS subscription group and products, activate the bundle-scoped server
-  catalog/verifier, upload the signed archive to TestFlight, and perform the
-  real-device Sandbox purchase/restore and native-versus-web audit. Background
-  execution, notification and push remain later product work. Universal-link
-  routing is wired but still needs a real install, and the share extension still
-  needs real-device provider coverage. macOS has its own App Store Connect record
-  and an earlier processed TestFlight candidate; its 1.2.4 (11) App Store
-  package was uploaded on 2026-08-15, and the succeeding 1.2.5 (12) package was
-  archived and uploaded on 2026-08-16 with the upload accepted and processing
-  started. That is not a TestFlight-ready build: no readback has confirmed
-  processing completion, group assignment or export compliance for it, and there
-  is no App Review submission and no public Mac App Store
-  listing, while the Developer ID channel remains the public one. Persistent device identity,
-  broader protocol documentation, and additional distribution formats remain
-  future work.
+| Platform | Availability | What to expect |
+| --- | --- | --- |
+| **Web** | [Live at relayium.com](https://relayium.com/) | LAN and cross-network file/text transfer, encrypted stored links, accounts, and usage controls. |
+| **CLI and nodes** | [Published on GitHub](https://github.com/relayium/relayium/releases) | Pairing-code transfer, encrypted links, direct transfer, folder sync, self-hosting, and relay/storage nodes. |
+| **macOS** | [1.2.7 direct download](https://github.com/relayium/relayium/releases/tag/macos-v1.2.7) | Universal, signed and notarized. The public channel is the Developer ID download with signed in-app updates; there is no public Mac App Store listing. |
+| **iOS** | In development | Not available on the App Store or TestFlight. Realtime work requires the app to remain in the foreground; background transfer and push notifications are not supported. |
+
+Relayium currently maintains English and Simplified Chinese. Detailed native
+implementation notes, release evidence, acceptance procedures, and future work
+live in [`docs/`](docs/) rather than on this project overview.
 
 **Self-hosting:** a root [`Dockerfile`](Dockerfile) + [`docker-compose.yml`](docker-compose.yml) build a
 single self-contained image (`docker compose up -d --build`). See [`docs/self-hosting.md`](docs/self-hosting.md).
