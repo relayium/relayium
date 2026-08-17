@@ -979,6 +979,14 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// The reconcile sweep's candidate query walks the Stripe rows.
 		`CREATE INDEX IF NOT EXISTS idx_subscription_sources_provider
 		   ON subscription_sources(provider, plan_id)`,
+		`CREATE TABLE IF NOT EXISTS stripe_webhook_events (
+		 event_id TEXT PRIMARY KEY,
+		 event_type TEXT NOT NULL,
+		 status TEXT NOT NULL CHECK(status IN ('processing','processed','failed')),
+		 attempts INTEGER NOT NULL DEFAULT 1,
+		 claimed_at INTEGER NOT NULL,
+		 finished_at INTEGER NOT NULL DEFAULT 0,
+		 failure TEXT NOT NULL DEFAULT '')`,
 		// The stable, opaque UUID an App Store purchase carries as
 		// `appAccountToken` so the resulting transaction can be attributed to
 		// this account. Server-issued, one per user, never a credential, and on

@@ -10,6 +10,58 @@ import (
 	sqlite "modernc.org/sqlite"
 )
 
+const stripeEventLeaseSeconds int64 = 60
+
+func (s *SQLiteStore) ClaimStripeWebhookEvent(ctx context.Context, eventID, eventType string, now int64) (bool, error) {
+	if eventID == "" {
+		return true, nil
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO stripe_webhook_events
+		(event_id,event_type,status,attempts,claimed_at) VALUES(?,?,'processing',1,?)`, eventID, eventType, now)
+	if err != nil {
+		return false, err
+	}
+	if n, _ := res.RowsAffected(); n == 1 {
+		return true, tx.Commit()
+	}
+	var status string
+	var claimed int64
+	if err := tx.QueryRowContext(ctx, `SELECT status,claimed_at FROM stripe_webhook_events WHERE event_id=?`, eventID).Scan(&status, &claimed); err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, err
+	}
+	if status == "processed" || (status == "processing" && now-claimed < stripeEventLeaseSeconds) {
+		return false, tx.Commit()
+	}
+	_, err = tx.ExecContext(ctx, `UPDATE stripe_webhook_events SET status='processing',attempts=attempts+1,claimed_at=?,finished_at=0,failure='' WHERE event_id=?`, now, eventID)
+	if err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
+}
+
+func (s *SQLiteStore) FinishStripeWebhookEvent(ctx context.Context, eventID string, processed bool, failure string, now int64) error {
+	if eventID == "" {
+		return nil
+	}
+	status := "failed"
+	if processed {
+		status, failure = "processed", ""
+	}
+	if len(failure) > 500 {
+		failure = failure[:500]
+	}
+	_, err := s.db.ExecContext(ctx, `UPDATE stripe_webhook_events SET status=?,finished_at=?,failure=? WHERE event_id=?`, status, now, failure, eventID)
+	return err
+}
+
 // SQLite storage for provider-neutral subscription state: the per-(user,
 // provider) source rows, the effective-projection recompute they all funnel
 // through, the Apple app-account token, and the Apple product catalog.

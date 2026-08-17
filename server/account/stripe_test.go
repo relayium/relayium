@@ -19,7 +19,7 @@ func signStripe(secret, payload string, ts int64) string {
 }
 
 func TestVerifyWebhookAcceptsValidRejectsTampered(t *testing.T) {
-	c := NewStripeClient("sk_test", "whsec_abc", "")
+	c := NewStripeClient("sk_test", "whsec_abc", "bpc_dedicated")
 	body := `{"type":"checkout.session.completed","data":{"object":{"customer":"cus_1"}}}`
 	sig := signStripe("whsec_abc", body, 1000)
 	if _, err := c.VerifyWebhook([]byte(body), sig, 1000); err != nil {
@@ -306,7 +306,7 @@ func TestCreatePortalSessionRequestShape(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	c := NewStripeClient("sk_test", "whsec_abc", "")
+	c := NewStripeClient("sk_test", "whsec_abc", "bpc_dedicated")
 	c.base = srv.URL
 
 	got, err := c.CreatePortalSession(context.Background(), "cus_1", "https://relayium.test/account")
@@ -398,6 +398,9 @@ func TestChangeSubscriptionPlanRequestShape(t *testing.T) {
 			}
 			if got := r.Form.Get("proration_behavior"); got != "always_invoice" {
 				t.Errorf("proration_behavior = %q, want always_invoice", got)
+			}
+			if got := r.Form.Get("payment_behavior"); got != "pending_if_incomplete" {
+				t.Errorf("payment_behavior = %q, want pending_if_incomplete", got)
 			}
 			// always_invoice makes this request charge money, so the header is
 			// part of its shape: without a deterministic Idempotency-Key a

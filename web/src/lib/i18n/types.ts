@@ -283,6 +283,7 @@ export interface Messages {
     popular: string; // "Most popular" ribbon on the highlighted tier
     save2mo: string; // yearly-toggle savings badge (yearly = 10x monthly => 2 months free)
     changeError: string; // in-app plan change (POST /api/billing/change-plan) failed
+		paymentPending: string;
     changeSuccess: string; // toast after a successful (immediate) upgrade
     downgradeScheduled: string; // toast after a downgrade is scheduled for period end
     previewLoading: string; // 弹窗加载预览时

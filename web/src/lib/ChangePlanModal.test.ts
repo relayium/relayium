@@ -89,3 +89,24 @@ it("shows a period-end summary with no charge for a downgrade", async () => {
   expect(text).not.toContain("charged");
   expect(text).toContain(renewalText);
 });
+
+it("keeps the dialog open and explains an incomplete payment", async () => {
+  let calls = 0;
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    calls++;
+    if (url === "/api/billing/preview") return { ok: true, json: async () => ({
+      effective: "now", immediateChargeCents: 734, immediateAdjustmentCents: 734,
+      nextAmountCents: 9999, nextCycle: "yearly", effectiveDate: RENEWAL,
+    }) };
+    if (url === "/api/billing/change-plan") return { ok: true, status: 202, json: async () => ({ status: "payment_pending" }) };
+    throw new Error(`unexpected ${url}`);
+  }) as unknown as typeof fetch);
+  await loadLang("en");
+  target = document.createElement("div"); document.body.appendChild(target);
+  app = mount(ChangePlanModal, { target, props: { planId: "pro", planName: "Pro", cycle: "yearly", onclose: vi.fn() } });
+  await new Promise((r) => setTimeout(r, 0)); flushSync();
+  (target.querySelector("button.btn-primary") as HTMLButtonElement).click();
+  await new Promise((r) => setTimeout(r, 0)); flushSync();
+  expect(calls).toBe(2);
+  expect(target.textContent).toMatch(/payment wasn't completed/i);
+});

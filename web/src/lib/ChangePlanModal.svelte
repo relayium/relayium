@@ -83,7 +83,9 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ planId, cycle }),
       });
-      if (!r.ok) { submitError = t.billing.changeError; return; }
+			const result = await r.json().catch(() => ({})) as { status?: string };
+			if (result.status === "payment_pending") { submitError = t.billing.paymentPending; return; }
+			if (!r.ok) { submitError = t.billing.changeError; return; }
       onclose(true);
     } catch {
       submitError = t.billing.changeError;

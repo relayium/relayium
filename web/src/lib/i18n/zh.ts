@@ -151,6 +151,7 @@ const zh: Messages = {
     popular: "最受欢迎",
     save2mo: "免费赠送 2 个月",
     changeError: "套餐切换失败，请重试。",
+		paymentPending: "付款尚未完成，因此当前套餐没有变化。请更新付款方式后重试。",
     changeSuccess: "套餐已更新，谢谢！",
     downgradeScheduled: "降级已安排——将在本计费周期结束时切换。",
     previewLoading: "正在计算…",

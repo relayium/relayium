@@ -1566,6 +1566,8 @@ type Store interface {
 	// and so returns ErrExternalSubscriptionOwned when another account already
 	// owns it — a refusal to adopt, not a transient failure to retry past.
 	SetUserStripeSubscription(ctx context.Context, userID, subID string) error
+	ClaimStripeWebhookEvent(ctx context.Context, eventID, eventType string, now int64) (bool, error)
+	FinishStripeWebhookEvent(ctx context.Context, eventID string, processed bool, failure string, now int64) error
 	// GetUserByStripeCustomer looks up a user by Stripe customer id (webhook
 	// dispatch). An empty customerID returns not-found.
 	GetUserByStripeCustomer(ctx context.Context, customerID string) (User, bool, error)

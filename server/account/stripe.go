@@ -100,6 +100,7 @@ type CheckoutInput struct {
 // checkout.session.completed (the plan is assigned by the subsequent
 // customer.subscription.* event Stripe always sends).
 type WebhookEvent struct {
+	EventID                                     string
 	Type                                        string // "checkout.session.completed" | "customer.subscription.updated" | "customer.subscription.deleted" | ...
 	CustomerID, SubscriptionID, PriceID, Status string
 	ClientRefUserID                             string
@@ -143,7 +144,8 @@ type stripeClient struct {
 	// idemRetryDelay is the base backoff before re-issuing a request whose
 	// Idempotency-Key Stripe reports as still in flight (see requestIdempotent).
 	// A field rather than a constant only so tests don't have to sleep.
-	idemRetryDelay time.Duration
+	idemRetryDelay          time.Duration
+	canonicalWebhookRefresh bool
 }
 
 // NewStripeClient builds the real Biller. secretKey/webhookSecret/portalConfig
@@ -262,6 +264,7 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 	}
 
 	var envelope struct {
+		ID       string `json:"id"`
 		Type     string `json:"type"`
 		Created  int64  `json:"created"`
 		Livemode bool   `json:"livemode"`
@@ -275,10 +278,15 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 				// its subscription at data.object.subscription. Parsing only the
 				// latter left SubscriptionID empty for every real subscription
 				// event — see the resolution below.
-				ID                string `json:"id"`
-				Object            string `json:"object"`
-				Customer          string `json:"customer"`
-				Subscription      string `json:"subscription"`
+				ID           string `json:"id"`
+				Object       string `json:"object"`
+				Customer     string `json:"customer"`
+				Subscription string `json:"subscription"`
+				Parent       *struct {
+					SubscriptionDetails *struct {
+						Subscription string `json:"subscription"`
+					} `json:"subscription_details"`
+				} `json:"parent"`
 				ClientReferenceID string `json:"client_reference_id"`
 				Status            string `json:"status"`
 				CurrentPeriodEnd  int64  `json:"current_period_end"`
@@ -309,6 +317,7 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 	}
 
 	ev := WebhookEvent{
+		EventID:          envelope.ID,
 		Type:             envelope.Type,
 		Created:          envelope.Created,
 		LiveMode:         envelope.Livemode,
@@ -317,6 +326,9 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 		Status:           envelope.Data.Object.Status,
 		ClientRefUserID:  envelope.Data.Object.ClientReferenceID,
 		CurrentPeriodEnd: envelope.Data.Object.CurrentPeriodEnd,
+	}
+	if ev.SubscriptionID == "" && envelope.Data.Object.Parent != nil && envelope.Data.Object.Parent.SubscriptionDetails != nil {
+		ev.SubscriptionID = envelope.Data.Object.Parent.SubscriptionDetails.Subscription
 	}
 	// On a customer.subscription.* event the object is the subscription itself,
 	// so its id lives at data.object.id (data.object.subscription is absent).
@@ -340,6 +352,46 @@ func (c *stripeClient) VerifyWebhook(payload []byte, sigHeader string, now int64
 	}
 	return ev, nil
 }
+
+func (c *stripeClient) canonicalSubscription(ctx context.Context, subID string) (SubscriptionInfo, bool, error) {
+	if !c.canonicalWebhookRefresh || subID == "" {
+		return SubscriptionInfo{}, false, nil
+	}
+	body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions/"+url.PathEscape(subID), nil)
+	if err != nil {
+		var apiErr *stripeAPIError
+		if errors.As(err, &apiErr) && apiErr.Status == http.StatusNotFound {
+			return SubscriptionInfo{}, true, nil
+		}
+		return SubscriptionInfo{}, false, err
+	}
+	var sub struct {
+		ID               string `json:"id"`
+		Status           string `json:"status"`
+		CurrentPeriodEnd int64  `json:"current_period_end"`
+		Items            struct {
+			Data []struct {
+				Price struct {
+					ID string `json:"id"`
+				} `json:"price"`
+				CurrentPeriodEnd int64 `json:"current_period_end"`
+			} `json:"data"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(body, &sub); err != nil {
+		return SubscriptionInfo{}, false, err
+	}
+	info := SubscriptionInfo{ID: sub.ID, Status: sub.Status, CurrentPeriodEnd: sub.CurrentPeriodEnd}
+	if len(sub.Items.Data) > 0 {
+		info.PriceID = sub.Items.Data[0].Price.ID
+		if info.CurrentPeriodEnd == 0 {
+			info.CurrentPeriodEnd = sub.Items.Data[0].CurrentPeriodEnd
+		}
+	}
+	return info, false, nil
+}
+
+var ErrPaymentPending = errors.New("stripe: payment incomplete; subscription change is pending")
 
 // CreateCheckoutSession creates a subscription-mode Stripe Checkout Session
 // and returns its hosted URL for the browser to redirect to.
@@ -642,9 +694,20 @@ func (c *stripeClient) ChangeSubscriptionPlan(ctx context.Context, customerID, n
 	form.Set("items[0][id]", sub.ItemID)
 	form.Set("items[0][price]", newPriceID)
 	form.Set("proration_behavior", "always_invoice")
-	if _, err := c.requestIdempotent(ctx, http.MethodPost, "/v1/subscriptions/"+sub.ID, form,
-		planChangeIdemKey(sub, newPriceID)); err != nil {
+	form.Set("payment_behavior", "pending_if_incomplete")
+	body, err := c.requestIdempotent(ctx, http.MethodPost, "/v1/subscriptions/"+sub.ID, form,
+		planChangeIdemKey(sub, newPriceID))
+	if err != nil {
 		return err
+	}
+	var changed struct {
+		PendingUpdate json.RawMessage `json:"pending_update"`
+	}
+	if err := json.Unmarshal(body, &changed); err != nil {
+		return fmt.Errorf("stripe: parse changed subscription: %w", err)
+	}
+	if len(changed.PendingUpdate) > 0 && string(changed.PendingUpdate) != "null" {
+		return ErrPaymentPending
 	}
 	return nil
 }
@@ -788,18 +851,16 @@ func (c *stripeClient) ScheduleDowngrade(ctx context.Context, customerID, newPri
 	if len(sub.Items.Data) > 0 && sub.Items.Data[0].Price.ID == newPriceID {
 		return nil // already on the target price — nothing to schedule
 	}
-	if sub.Schedule != "" {
-		// A schedule already governs this subscription (e.g. a prior pending
-		// downgrade). Don't stack schedules; surface an error so the caller can
-		// 500 and the user retries or uses the portal. (Followup: amend in place.)
-		return fmt.Errorf("stripe: subscription %s already has a pending schedule", sub.ID)
-	}
-
 	// 2. Seed a schedule from the subscription; its single phase mirrors the
 	//    current price and spans the current billing period.
 	seed := url.Values{}
 	seed.Set("from_subscription", sub.ID)
-	body, err = c.request(ctx, http.MethodPost, "/v1/subscription_schedules", seed)
+	if sub.Schedule != "" {
+		body, err = c.request(ctx, http.MethodGet, "/v1/subscription_schedules/"+sub.Schedule, nil)
+	} else {
+		key := stableStripeIntentKey("schedule-create", sub.ID, sub.Items.Data[0].Price.ID, newPriceID)
+		body, err = c.requestIdempotent(ctx, http.MethodPost, "/v1/subscription_schedules", seed, key)
+	}
 	if err != nil {
 		return err
 	}
@@ -831,7 +892,8 @@ func (c *stripeClient) ScheduleDowngrade(ctx context.Context, customerID, newPri
 	upd.Set("phases[0][start_date]", strconv.FormatInt(p0.StartDate, 10))
 	upd.Set("phases[0][end_date]", strconv.FormatInt(p0.EndDate, 10))
 	upd.Set("phases[1][items][0][price]", newPriceID)
-	if _, err := c.request(ctx, http.MethodPost, "/v1/subscription_schedules/"+sched.ID, upd); err != nil {
+	key := stableStripeIntentKey("schedule-update", sched.ID, p0.Items[0].Price, newPriceID)
+	if _, err := c.requestIdempotent(ctx, http.MethodPost, "/v1/subscription_schedules/"+sched.ID, upd, key); err != nil {
 		return err
 	}
 	return nil
@@ -870,8 +932,14 @@ func (c *stripeClient) ReleaseSchedule(ctx context.Context, customerID string) e
 	if schedule == "" {
 		return nil // no live subscription, or nothing scheduled — nothing to release
 	}
-	_, err = c.request(ctx, http.MethodPost, "/v1/subscription_schedules/"+schedule+"/release", url.Values{})
+	key := stableStripeIntentKey("schedule-release", schedule)
+	_, err = c.requestIdempotent(ctx, http.MethodPost, "/v1/subscription_schedules/"+schedule+"/release", url.Values{}, key)
 	return err
+}
+
+func stableStripeIntentKey(parts ...string) string {
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
+	return "relayium_" + hex.EncodeToString(sum[:])
 }
 
 // request performs an authenticated Stripe REST call and returns the raw body,
@@ -984,6 +1052,9 @@ func (c *stripeClient) requestIdempotent(ctx context.Context, method, path strin
 // postForSessionURL performs the shared form-POST + {"url":"..."} decode used
 // by both Checkout and Billing Portal session creation.
 func (c *stripeClient) postForSessionURL(ctx context.Context, path string, form url.Values) (string, error) {
+	if path == "/v1/billing_portal/sessions" && c.portalConfig == "" {
+		return "", errors.New("stripe: explicit Billing Portal configuration is required")
+	}
 	body, err := c.request(ctx, http.MethodPost, path, form)
 	if err != nil {
 		return "", err

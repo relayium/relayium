@@ -303,7 +303,7 @@ func TestChangePlanCompositeRetryAfterWebhookLandsSchedulesOnly(t *testing.T) {
 	if out["effective"] != "period_end" {
 		t.Fatalf("effective = %q, want period_end", out["effective"])
 	}
-	want := []string{"release", "schedule:price_pro_m"}
+	want := []string{"schedule:price_pro_m"}
 	if len(fb.calls) != len(want) {
 		t.Fatalf("calls = %v, want %v (nothing may be charged again)", fb.calls, want)
 	}

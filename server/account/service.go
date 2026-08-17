@@ -356,7 +356,9 @@ func NewService(store Store, mailer Mailer, cfg Config) *Service {
 		return int(binary.BigEndian.Uint64(b) % uint64(n))
 	}
 	if cfg.StripeSecretKey != "" {
-		svc.biller = NewStripeClient(cfg.StripeSecretKey, cfg.StripeWebhookSecret, cfg.StripePortalConfig)
+		client := NewStripeClient(cfg.StripeSecretKey, cfg.StripeWebhookSecret, cfg.StripePortalConfig)
+		client.canonicalWebhookRefresh = true
+		svc.biller = client
 	}
 	return svc
 }

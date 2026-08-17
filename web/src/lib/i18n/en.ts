@@ -151,6 +151,7 @@ const en: Messages = {
     popular: "Most popular",
     save2mo: "2 months free",
     changeError: "Couldn't change your plan. Please try again.",
+		paymentPending: "Payment wasn't completed, so your current plan is unchanged. Update your payment method and try again.",
     changeSuccess: "Plan updated — thanks!",
     downgradeScheduled: "Downgrade scheduled — you'll switch at the end of this billing period.",
     previewLoading: "Calculating…",

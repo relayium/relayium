@@ -441,9 +441,11 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 	// guard is what wedged this path at 500 whenever the marker desynced from
 	// Stripe (e.g. the same-tier-cycle premature-clear bug). One extra Stripe list
 	// call on the change path is cheap insurance against that lockout.
-	if err := s.biller.ReleaseSchedule(r.Context(), u.StripeCustomerID); err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return
+	if decision.Effect != effectPeriodEnd {
+		if err := s.biller.ReleaseSchedule(r.Context(), u.StripeCustomerID); err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
+		}
 	}
 	// Clear the local hint the instant Stripe releases the schedule. If the change
 	// below then fails (500), the DB must not keep advertising a pending downgrade
@@ -466,6 +468,10 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 		}
 	case effectComposite:
 		if err := s.biller.ChangeSubscriptionPlan(r.Context(), u.StripeCustomerID, immediatePriceID); err != nil {
+			if errors.Is(err, ErrPaymentPending) {
+				httpx.WriteJSON(w, http.StatusAccepted, map[string]string{"status": "payment_pending", "effective": "not_yet"})
+				return
+			}
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
@@ -483,6 +489,10 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 		}
 	default:
 		if err := s.biller.ChangeSubscriptionPlan(r.Context(), u.StripeCustomerID, immediatePriceID); err != nil {
+			if errors.Is(err, ErrPaymentPending) {
+				httpx.WriteJSON(w, http.StatusAccepted, map[string]string{"status": "payment_pending", "effective": "not_yet"})
+				return
+			}
 			http.Error(w, "server error", http.StatusInternalServerError)
 			return
 		}
@@ -906,8 +916,51 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	claimed, err := s.Store().ClaimStripeWebhookEvent(r.Context(), ev.EventID, ev.Type, s.Now().Unix())
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if !claimed {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	tw := &stripeWebhookWriter{ResponseWriter: w}
+	w = tw
+	defer func() {
+		processed := tw.status == 0 || tw.status < http.StatusInternalServerError
+		failure := ""
+		if !processed {
+			failure = "handler returned server error"
+		}
+		if err := s.Store().FinishStripeWebhookEvent(context.Background(), ev.EventID, processed, failure, s.Now().Unix()); err != nil {
+			log.Printf("billing: finish Stripe event %s: %v", ev.EventID, err)
+		}
+	}()
 
 	ctx := r.Context()
+	refresh := ev.Type == "customer.subscription.created" || ev.Type == "customer.subscription.updated" ||
+		ev.Type == "invoice.paid" || ev.Type == "invoice.payment_failed" || ev.Type == "invoice.payment_action_required"
+	if refresh {
+		if client, ok := s.biller.(*stripeClient); ok {
+			info, missing, err := client.canonicalSubscription(ctx, ev.SubscriptionID)
+			if err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+			if missing {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			if info.ID != "" {
+				ev.SubscriptionID, ev.PriceID, ev.Status, ev.CurrentPeriodEnd = info.ID, info.PriceID, info.Status, info.CurrentPeriodEnd
+			}
+		}
+		if ev.Type == "invoice.payment_failed" || ev.Type == "invoice.payment_action_required" {
+			ev.Status = "past_due"
+		}
+		ev.Type = "customer.subscription.updated"
+	}
 	switch ev.Type {
 	case "checkout.session.completed":
 		// Plan assignment is deferred to the accompanying
@@ -979,6 +1032,9 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 				planID = p.ID
 				cycle = cycleOfPrice(p, ev.PriceID)
 			}
+		}
+		if ev.Status == "past_due" {
+			planID, cycle = u.PlanID, u.BillingCycle
 		}
 		if u.PlanSource == "admin" {
 			// Admin comp wins: the projection records status/end for visibility
@@ -1090,8 +1146,29 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(http.StatusOK)
 
+	case "charge.refunded", "refund.created", "refund.updated", "refund.failed":
+		// Refund is an audit/payment event, not a subscription cancellation.
+		w.WriteHeader(http.StatusOK)
 	default:
 		// Unrecognized event type: acknowledge so Stripe doesn't retry.
 		w.WriteHeader(http.StatusOK)
 	}
+}
+
+type stripeWebhookWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *stripeWebhookWriter) WriteHeader(status int) {
+	if w.status == 0 {
+		w.status = status
+	}
+	w.ResponseWriter.WriteHeader(status)
+}
+func (w *stripeWebhookWriter) Write(p []byte) (int, error) {
+	if w.status == 0 {
+		w.status = http.StatusOK
+	}
+	return w.ResponseWriter.Write(p)
 }

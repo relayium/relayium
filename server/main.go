@@ -163,7 +163,7 @@ func main() {
 		"global blob-volume high-water mark in bytes; new uploads 503 once used >= this (0 disables the global soft cap)")
 	stripeSecretKey := flag.String("stripe-secret-key", envStr("RELAYIUM_STRIPE_SECRET_KEY", ""), "Stripe secret API key (sk_...); empty disables billing (/api/billing/* 404)")
 	stripeWebhookSecret := flag.String("stripe-webhook-secret", envStr("RELAYIUM_STRIPE_WEBHOOK_SECRET", ""), "Stripe webhook signing secret (whsec_...)")
-	stripePortalConfig := flag.String("stripe-portal-config", envStr("RELAYIUM_STRIPE_PORTAL_CONFIG", ""), "Stripe Billing Portal configuration id (empty uses the account default)")
+	stripePortalConfig := flag.String("stripe-portal-config", envStr("RELAYIUM_STRIPE_PORTAL_CONFIG", ""), "required dedicated Stripe Billing Portal configuration id; plan switching disabled and cancellation at period end")
 	// Deprecated and ignored: relay bandwidth is now bounded by each account's
 	// per-plan monthly traffic quota (billing plans phase-1), not this global
 	// allowance. Kept as an accepted-but-unused flag/env so a deployment whose
@@ -173,6 +173,9 @@ func main() {
 	_ = flag.Int64("relay-monthly-free", envInt64("RELAYIUM_RELAY_MONTHLY_FREE", 0),
 		"deprecated: superseded by per-plan monthly traffic quota; accepted but ignored")
 	flag.Parse()
+	if *stripeSecretKey != "" && *stripePortalConfig == "" {
+		log.Fatal("RELAYIUM_STRIPE_PORTAL_CONFIG is required when Stripe billing is enabled")
+	}
 
 	if *genAdminTOTP {
 		if err := generateAdminTOTP(*adminUser); err != nil {

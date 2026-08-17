@@ -201,7 +201,7 @@ func TestWebhookSubscriptionUpdatedActiveAssignsPlan(t *testing.T) {
 	}
 }
 
-func TestWebhookSubscriptionUpdatedPastDueRevertsToFree(t *testing.T) {
+func TestWebhookSubscriptionUpdatedPastDueRetainsEntitlement(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_sub_pastdue"
 	svc.biller = NewStripeClient("sk_test", secret, "")
@@ -227,8 +227,8 @@ func TestWebhookSubscriptionUpdatedPastDueRevertsToFree(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("GetUserByStripeCustomer: ok=%v err=%v", ok, err)
 	}
-	if u.PlanID != "free" {
-		t.Fatalf("want plan reverted to free, got %q", u.PlanID)
+	if u.PlanID != "pro" {
+		t.Fatalf("Smart Retry grace must retain pro, got %q", u.PlanID)
 	}
 	if u.SubscriptionStatus != "past_due" {
 		t.Fatalf("want status past_due, got %q", u.SubscriptionStatus)

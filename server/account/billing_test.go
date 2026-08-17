@@ -27,6 +27,7 @@ type fakeBiller struct {
 	lastChangeCustomer string
 	lastChangePrice    string
 	changeCalls        int
+	changeErr          error
 
 	lastDowngradeCustomer string
 	lastDowngradePrice    string
@@ -97,7 +98,7 @@ func (f *fakeBiller) ChangeSubscriptionPlan(ctx context.Context, customerID, new
 	f.changeCalls++
 	f.lastChangeCustomer = customerID
 	f.lastChangePrice = newPriceID
-	return nil
+	return f.changeErr
 }
 
 func (f *fakeBiller) ScheduleDowngrade(ctx context.Context, customerID, newPriceID string) error {
@@ -443,6 +444,38 @@ func TestBillingChangePlanUpgradeIsImmediate(t *testing.T) {
 	}
 	if fb.lastChangeCustomer != "cus_up" || fb.lastChangePrice != "price_pro_y" {
 		t.Fatalf("change args = %q/%q, want cus_up/price_pro_y", fb.lastChangeCustomer, fb.lastChangePrice)
+	}
+}
+
+func TestBillingChangePlanPendingPaymentDoesNotClaimSuccess(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	fb := &fakeBiller{changeErr: ErrPaymentPending}
+	svc.biller = fb
+	mustPlan(t, store, Plan{ID: "plus", Name: "Plus", Active: true, PriceMonthly: 500, StripePriceMonthlyID: "price_plus"})
+	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, PriceMonthly: 1000, StripePriceMonthlyID: "price_pro"})
+	email := "pending-payment@example.com"
+	cookie := loginCookie(t, ts, mail, email)
+	uid := mustUserID(t, store, email)
+	subscribeUserCycle(t, store, uid, "cus_pending", "plus", "monthly")
+
+	resp := changePlan(t, ts, cookie, `{"planId":"pro","cycle":"monthly"}`)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("status = %d, want 202", resp.StatusCode)
+	}
+	var out map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatal(err)
+	}
+	if out["status"] != "payment_pending" || out["effective"] != "not_yet" {
+		t.Fatalf("response = %#v", out)
+	}
+	u, err := store.GetUserByID(context.Background(), uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.PlanID != "plus" || u.ScheduledPlanID != "" {
+		t.Fatalf("pending payment changed local state: %+v", u)
 	}
 }
 
