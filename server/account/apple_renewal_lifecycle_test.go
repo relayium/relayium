@@ -333,6 +333,87 @@ func TestApplePendingReplayPreservesCurrentGenerationGrace(t *testing.T) {
 	}
 }
 
+func TestAppleNotificationGraceResolvesTrustedProductBeforeApplying(t *testing.T) {
+	newCase := func(t *testing.T) (*appleTxFixture, time.Time, VerifiedAppleTransaction, AppleRenewalState) {
+		t.Helper()
+		f := newAppleTxFixture(t)
+		now := time.Unix(2_000_000_000, 0)
+		tx := VerifiedAppleTransaction{OriginalTransactionID: "notification-grace", BundleID: testBundleIOS, ProductID: testAppleProduct, Environment: appleEnvProduction, AppAccountToken: f.token, PurchaseDateMS: now.Add(-time.Hour).UnixMilli(), ExpiresDateMS: now.Add(-time.Second).UnixMilli()}
+		external, _ := appleSubscriptionKeyOf(tx).externalID()
+		renewal := AppleRenewalState{UserID: f.userID, ExternalID: external, BundleID: testBundleIOS, CurrentProductID: testAppleProduct, AutoRenewProductID: testAppleProduct, IsInBillingRetry: true, GraceUntil: now.Add(time.Hour).Unix(), EventAt: now.Unix(), UpdatedAt: now.Unix()}
+		return f, now, tx, renewal
+	}
+	assertGrace := func(t *testing.T, f *appleTxFixture, renewal AppleRenewalState) {
+		t.Helper()
+		src, ok, err := f.store.GetSubscriptionSource(context.Background(), f.userID, ProviderApple)
+		if err != nil || !ok || src.PlanID != "pro" || src.Status != "active" || src.PeriodEnd != renewal.GraceUntil {
+			t.Fatalf("grace was not projected from the trusted product: %+v ok=%v err=%v", src, ok, err)
+		}
+	}
+
+	t.Run("signed renewal", func(t *testing.T) {
+		f, now, tx, renewal := newCase(t)
+		n := VerifiedAppleNotification{UUID: appleNotifyUUID(91), Type: "DID_FAIL_TO_RENEW", Supported: true, HasTransaction: true, Transaction: tx, HasRenewal: true, Renewal: VerifiedAppleRenewalInfo{OriginalTransactionID: tx.OriginalTransactionID, AutoRenewProductID: testAppleProduct, Environment: appleEnvProduction, IsInBillingRetry: true, GracePeriodExpiresMS: renewal.GraceUntil * 1000, SignedDateMS: renewal.EventAt * 1000}}
+		status, state, _ := f.svc.applyAppleNotification(context.Background(), n, now)
+		if status != http.StatusOK || state != appleNotificationApplied {
+			t.Fatalf("notification result: status=%d state=%s", status, state)
+		}
+		assertGrace(t, f, renewal)
+	})
+
+	t.Run("stored renewal", func(t *testing.T) {
+		f, now, tx, renewal := newCase(t)
+		if _, err := f.store.ApplyAppleRenewalState(context.Background(), renewal); err != nil {
+			t.Fatal(err)
+		}
+		n := VerifiedAppleNotification{UUID: appleNotifyUUID(92), Type: "DID_FAIL_TO_RENEW", Supported: true, HasTransaction: true, Transaction: tx}
+		status, state, _ := f.svc.applyAppleNotification(context.Background(), n, now)
+		if status != http.StatusOK || state != appleNotificationApplied {
+			t.Fatalf("notification result: status=%d state=%s", status, state)
+		}
+		assertGrace(t, f, renewal)
+	})
+
+	t.Run("unmapped remains pending", func(t *testing.T) {
+		f, now, tx, renewal := newCase(t)
+		mustAppleProduct(t, f.store, AppleProduct{BundleID: testBundleIOS, ProductID: testAppleProduct, PlanID: "pro", Cycle: "monthly", Active: false})
+		n := VerifiedAppleNotification{UUID: appleNotifyUUID(93), Type: "DID_FAIL_TO_RENEW", Supported: true, HasTransaction: true, Transaction: tx, HasRenewal: true, Renewal: VerifiedAppleRenewalInfo{OriginalTransactionID: tx.OriginalTransactionID, AutoRenewProductID: testAppleProduct, Environment: appleEnvProduction, IsInBillingRetry: true, GracePeriodExpiresMS: renewal.GraceUntil * 1000, SignedDateMS: renewal.EventAt * 1000}}
+		status, state, _ := f.svc.applyAppleNotification(context.Background(), n, now)
+		if status != http.StatusOK || state != appleNotificationPending {
+			t.Fatalf("unmapped result: status=%d state=%s", status, state)
+		}
+		if src, ok, err := f.store.GetSubscriptionSource(context.Background(), f.userID, ProviderApple); err != nil || ok {
+			t.Fatalf("unmapped grace wrote a source: %+v ok=%v err=%v", src, ok, err)
+		}
+	})
+
+	for _, terminal := range []struct {
+		name string
+		mut  func(*VerifiedAppleTransaction)
+	}{
+		{"refund", func(tx *VerifiedAppleTransaction) { tx.RevocationDateMS = tx.ExpiresDateMS }},
+		{"upgraded", func(tx *VerifiedAppleTransaction) { tx.IsUpgraded = true }},
+	} {
+		t.Run(terminal.name+" remains terminal", func(t *testing.T) {
+			f, now, tx, renewal := newCase(t)
+			if _, err := f.store.ApplySubscriptionSource(context.Background(), appleSourceEventWithRenewal(f.userID, tx, AppleProduct{PlanID: "pro", Cycle: "monthly"}, renewal, now)); err != nil {
+				t.Fatal(err)
+			}
+			terminal.mut(&tx)
+			mustAppleProduct(t, f.store, AppleProduct{BundleID: testBundleIOS, ProductID: testAppleProduct, PlanID: "pro", Cycle: "monthly", Active: false})
+			n := VerifiedAppleNotification{UUID: appleNotifyUUID(94), Type: "REFUND", Supported: true, HasTransaction: true, Transaction: tx, HasRenewal: true, Renewal: VerifiedAppleRenewalInfo{OriginalTransactionID: tx.OriginalTransactionID, AutoRenewProductID: testAppleProduct, Environment: appleEnvProduction, IsInBillingRetry: true, GracePeriodExpiresMS: renewal.GraceUntil * 1000, SignedDateMS: renewal.EventAt * 1000}}
+			status, state, _ := f.svc.applyAppleNotification(context.Background(), n, now)
+			if status != http.StatusOK || state != appleNotificationApplied {
+				t.Fatalf("terminal result: status=%d state=%s", status, state)
+			}
+			src, ok, err := f.store.GetSubscriptionSource(context.Background(), f.userID, ProviderApple)
+			if err != nil || !ok || src.PlanID != "free" || src.Status != "canceled" {
+				t.Fatalf("terminal transaction was resurrected: %+v ok=%v err=%v", src, ok, err)
+			}
+		})
+	}
+}
+
 func TestAppleLifecycleConflictDoesNotPolluteRenewalState(t *testing.T) {
 	store, err := OpenSQLite(":memory:")
 	if err != nil {

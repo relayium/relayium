@@ -238,7 +238,7 @@ func (s *Service) applyAppleNotification(ctx context.Context, n VerifiedAppleNot
 
 	// 5. WHICH TIER? Only for a transaction that still grants — see
 	//    appleNotificationProduct for why a refund must not depend on the catalog.
-	product, mapped, err := s.appleNotificationProduct(ctx, tx, now)
+	product, mapped, err := s.appleNotificationProductWithRenewal(ctx, tx, renewalState, now)
 	if err != nil {
 		log.Printf("apple notifications: resolving the product for %s failed: %v", n.UUID, err)
 		return http.StatusInternalServerError, current.State, "storage"
@@ -314,6 +314,18 @@ func preferDurableAppleRenewal(stored AppleRenewalState, exists bool, incoming A
 		return stored, true
 	}
 	return AppleRenewalState{}, false
+}
+
+func (s *Service) appleNotificationProductWithRenewal(ctx context.Context, tx VerifiedAppleTransaction, renewal AppleRenewalState, now time.Time) (AppleProduct, bool, error) {
+	product, mapped, err := s.appleNotificationProduct(ctx, tx, now)
+	if err != nil || !mapped || product.PlanID != "" || renewal.UserID == "" || appleTransactionIsTerminal(tx) || !renewal.graceActive(now) {
+		return product, mapped, err
+	}
+	// Expired transactions normally need no catalog lookup. A verified grace
+	// period is the exception: it restores the paid tier named by the matching
+	// durable renewal state, so that product must pass the same trusted catalog
+	// mapping as a currently paid transaction.
+	return s.Store().AppleProductPlan(ctx, tx.BundleID, renewal.CurrentProductID)
 }
 
 // finishAppleNotification records a non-applied outcome and answers 200.
@@ -462,7 +474,16 @@ func (s *Service) reconcileApplePendingNotifications(ctx context.Context, userID
 			continue
 		}
 		tx := rec.Projection.transaction()
-		product, mapped, err := s.appleNotificationProduct(ctx, tx, now)
+		stored, hasRenewal, err := s.Store().GetAppleRenewalState(ctx, userID)
+		if err != nil {
+			log.Printf("apple notifications: reading renewal for deferred %s failed: %v", rec.UUID, err)
+			continue
+		}
+		if !appleRenewalMatchesTransaction(stored, tx) {
+			hasRenewal = false
+			stored = AppleRenewalState{}
+		}
+		product, mapped, err := s.appleNotificationProductWithRenewal(ctx, tx, stored, now)
 		if err != nil {
 			log.Printf("apple notifications: resolving the product for deferred %s failed: %v", rec.UUID, err)
 			continue
@@ -473,23 +494,7 @@ func (s *Service) reconcileApplePendingNotifications(ctx context.Context, userID
 			continue
 		}
 		event := appleSourceEvent(userID, tx, product, now)
-		if stored, ok, err := s.Store().GetAppleRenewalState(ctx, userID); err != nil {
-			log.Printf("apple notifications: reading renewal for deferred %s failed: %v", rec.UUID, err)
-			continue
-		} else if ok && appleRenewalMatchesTransaction(stored, tx) {
-			// An expired transaction normally needs no catalog lookup, but a
-			// verified grace period restores its paid tier. Resolve that tier from
-			// the durable renewal identity rather than writing active-with-no-plan.
-			if !appleTransactionIsTerminal(tx) && stored.graceActive(now) && product.PlanID == "" {
-				product, mapped, err = s.Store().AppleProductPlan(ctx, tx.BundleID, stored.CurrentProductID)
-				if err != nil {
-					log.Printf("apple notifications: resolving the grace product for deferred %s failed: %v", rec.UUID, err)
-					continue
-				}
-				if !mapped {
-					continue
-				}
-			}
+		if hasRenewal {
 			event = appleSourceEventWithRenewal(userID, tx, product, stored, now)
 		}
 		if _, err := s.Store().ApplySubscriptionSource(ctx, event); err != nil {
