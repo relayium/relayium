@@ -19,9 +19,10 @@ import Foundation
 /// PRE-IMPLEMENTATION INVARIANTS, each asserted by a test in
 /// `InboxSenderClientTests`:
 ///
-///  1. NO PLAINTEXT LEAVES. The create body has exactly six keys. There is no
-///     shape, and no code path, carrying a content key, a file name, a
-///     destination path, a manifest plaintext or a device private key.
+///  1. NO PLAINTEXT LEAVES. The create body has exactly seven keys, the seventh
+///     being v2's integer `protocolVersion`. There is no shape, and no code
+///     path, carrying a content key, a content kind, a file name, a destination
+///     path, a message, a manifest plaintext or a device private key.
 ///  2. EVERY REMOTE IDENTIFIER IS CHECKED BEFORE IT BECOMES A URL. A target
 ///     device id and a task id are composed into paths, and
 ///     `appendingPathComponent` percent-encodes neither `/` nor `.`.
@@ -99,6 +100,9 @@ public struct InboxSendRequest: Equatable, Sendable {
         [
             "idempotencyKey": idempotencyKey,
             "storedFileId": storedFileID,
+            // The protocol the sealed manifest was written to. An integer, and
+            // the ONLY thing v2 added here: still no kind, no name, no text.
+            "protocolVersion": InboxProtocol.taskProtocolVersion,
             "wrapAlgorithm": wrapAlgorithm,
             "wrappedKey": wrappedKey,
             "targetKeyId": targetKeyID,

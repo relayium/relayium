@@ -25,9 +25,26 @@ export const INBOX_KEY_ALGORITHM = "x25519-sealedbox-v1";
  *  can be wrapped to (protocol §2, "Rejected public keys"). */
 export const X25519_PUBLIC_KEY_BYTES = 32;
 
-/** `inbox.receive.v1` — the capability central negotiates. A device central
- *  cannot describe must not appear as a send target (protocol §4). */
-export const CAP_RECEIVE_V1 = "inbox.receive.v1";
+/** `inbox.receive.v2` — the capability central negotiates. A device central
+ *  cannot describe must not appear as a send target (protocol §4).
+ *
+ *  v1 has no constant here on purpose. The owner waived old-protocol
+ *  compatibility on 2026-08-17: there is no dual stack, so a device still
+ *  announcing v1 is simply not a target, and giving this module a name for it
+ *  would only invite a fallback branch. */
+export const CAP_RECEIVE_V2 = "inbox.receive.v2";
+
+/** `inbox.text.v1` — "this receiver shows a message as a message".
+ *
+ *  Read off the target device, never assumed. It is what makes offering a text
+ *  send truthful: a receiver without it would land the message as a file in
+ *  someone's downloads folder, which is not what the sender was promised. */
+export const CAP_TEXT_V1 = "inbox.text.v1";
+
+/** The protocol version this build writes its manifests to, declared on every
+ *  `POST …/inbox/tasks`. An integer, and the only non-opaque field on that
+ *  request: central learns which shape was sealed, never what is inside it. */
+export const INBOX_PROTOCOL_VERSION = 2;
 
 /** Presence TTL is 90s against a 30s heartbeat (protocol §6). The sender polls
  *  the device list on a bounded timer so "online" is not indefinitely stale. */
@@ -230,7 +247,7 @@ export function sendAvailability(deviceID: string, inbox: DeviceInboxView | null
   // (protocol version, cleared enrolment) still gets central's verdict, not a
   // guess of ours.
   if (!inbox.CanReceive) return no("cannot_receive");
-  if (inbox.ReceiveCapability !== CAP_RECEIVE_V1) return no("unsupported_capability");
+  if (inbox.ReceiveCapability !== CAP_RECEIVE_V2) return no("unsupported_capability");
   const key = inbox.Key;
   if (!key || key.RevokedAt !== 0 || key.SupersededAt !== 0) return no("unsupported_key");
   if (key.Algorithm !== INBOX_KEY_ALGORITHM) return no("unsupported_key");

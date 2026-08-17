@@ -354,3 +354,26 @@ func InitialTaskState(policy string, caps []string, receiveDirReady bool) (strin
 
 // ErrAutoReceiveDisabled is the refusal for a target whose policy is `off`.
 var ErrAutoReceiveDisabled = errors.New("inbox: device automatic receive is disabled")
+
+// ValidateTaskProtocolVersion checks the version a SENDER declares when it
+// creates a task. It is the one non-opaque field v2 adds to create, and it is a
+// bare integer on purpose: it says which protocol the manifest inside the
+// ciphertext was written to, and nothing about what that manifest contains.
+//
+// Checked at create rather than inferred from the target device's registered
+// version, because they are different claims by different parties. A device says
+// what it can READ; the sender says what it WROTE. Only the sender knows, and a
+// sender that wrote a shape central does not define must be told now — while the
+// send can still be abandoned — rather than after the ciphertext is bound to a
+// task and a device has spent a lease failing to decode it.
+//
+// Fails closed: 0 (the zero value of an omitted JSON field) and every version
+// outside [MinProtocolVersion, MaxProtocolVersion] are refused. There is no
+// default, so a create that forgot the field cannot be treated as the current
+// version by accident.
+func ValidateTaskProtocolVersion(v int) error {
+	if v < MinProtocolVersion || v > MaxProtocolVersion {
+		return ErrUnsupportedProtocol
+	}
+	return nil
+}

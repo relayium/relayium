@@ -458,7 +458,7 @@ func (s *Service) writeInboxNegotiationError(w http.ResponseWriter, err error) {
 	case errors.Is(err, inbox.ErrUnsupportedCapability):
 		httpx.WriteJSON(w, http.StatusConflict, map[string]any{
 			"error":                        "unsupported_capability",
-			"supportedReceiveCapabilities": []string{inbox.CapReceiveV1},
+			"supportedReceiveCapabilities": inbox.SupportedReceiveCapabilities(),
 		})
 	case errors.Is(err, inbox.ErrUnsupportedAutoAcceptCapability):
 		httpx.WriteJSON(w, http.StatusConflict, map[string]any{

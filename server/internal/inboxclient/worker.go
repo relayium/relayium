@@ -122,12 +122,18 @@ var ErrUnsupportedByServer = errors.New("relayium inbox: this Relayium server an
 // Capabilities is what this build announces. It is a fixed list rather than a
 // computed one: adding a token has to be a deliberate edit that forces a look at
 // whether the behaviour behind it is actually implemented here.
+//
+// inbox.text.v1 is deliberately ABSENT. This build receives v2 file deliveries;
+// it has no message store and no way to show a message as a message, so
+// announcing the token would tell a sender that "send text to this server" ends
+// somewhere a person can read it. The absence is the truthful answer, and it is
+// what keeps a text send from being offered against a CLI target at all.
 func Capabilities() []string {
-	return []string{inbox.CapReceiveV1, inbox.CapAutoAcceptV1, inbox.CapResumeV1}
+	return []string{inbox.CapReceiveV2, inbox.CapAutoAcceptV1, inbox.CapResumeV1}
 }
 
 // ProtocolVersions is the set this build speaks.
-func ProtocolVersions() []int { return []int{inbox.ProtocolV1} }
+func ProtocolVersions() []int { return []int{inbox.ProtocolV2} }
 
 // Platform returns the announced platform label.
 func Platform() string { return runtime.GOOS }

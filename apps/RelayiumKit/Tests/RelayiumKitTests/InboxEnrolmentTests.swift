@@ -16,8 +16,8 @@ final class InboxEnrolmentTests: XCTestCase {
                  generation: generation, supersededAt: superseded, revokedAt: revoked)
     }
 
-    private func enrolResult(key: InboxKey?, protocolVersion: Int = 1,
-                             capability: String = InboxCapability.receiveV1,
+    private func enrolResult(key: InboxKey?, protocolVersion: Int = 2,
+                             capability: String = InboxCapability.receiveV2,
                              algorithm: String = InboxProtocol.keyAlgorithm) -> InboxEnrolResult {
         InboxEnrolResult(inbox: InboxView(key: key), protocolVersion: protocolVersion,
                          receiveCapability: capability, keyAlgorithm: algorithm)
@@ -30,8 +30,14 @@ final class InboxEnrolmentTests: XCTestCase {
     /// honour, which is the difference between an actionable message and "no".
     func testAVersionCapabilityOrAlgorithmThisBuildCannotHonourStopsEnrolment() async throws {
         let cases: [(InboxEnrolResult, InboxProtocolField)] = [
-            (enrolResult(key: nil, protocolVersion: 2), .protocolVersion),
-            (enrolResult(key: nil, capability: "inbox.receive.v2"), .receiveCapability),
+            // Both directions. v1 is the one that will actually occur — an
+            // older central still negotiating the historical protocol — and it
+            // must stop enrolment rather than leave this build registered as a
+            // receiver for manifests it can no longer read.
+            (enrolResult(key: nil, protocolVersion: 1), .protocolVersion),
+            (enrolResult(key: nil, protocolVersion: 3), .protocolVersion),
+            (enrolResult(key: nil, capability: InboxCapability.receiveV1), .receiveCapability),
+            (enrolResult(key: nil, capability: "inbox.receive.v3"), .receiveCapability),
             (enrolResult(key: nil, algorithm: "x25519-sealedbox-v2"), .keyAlgorithm),
         ]
         for (result, field) in cases {

@@ -96,7 +96,7 @@ final class InboxControllerTests: XCTestCase {
                                            publicKey: InboxKeyMaterial.encode(pair.publicKey),
                                            generation: 1, createdAt: 0, supersededAt: 0,
                                            revokedAt: 0)),
-            protocolVersion: 1, receiveCapability: InboxCapability.receiveV1,
+            protocolVersion: 2, receiveCapability: InboxCapability.receiveV2,
             keyAlgorithm: InboxProtocol.keyAlgorithm))
         return pair
     }
@@ -385,7 +385,7 @@ final class InboxControllerTests: XCTestCase {
                                             harness.deviceKeys[accountA.value]!.publicKey),
                                            generation: 1, createdAt: 0,
                                            supersededAt: 0, revokedAt: 0)),
-            protocolVersion: 1, receiveCapability: InboxCapability.receiveV1,
+            protocolVersion: 2, receiveCapability: InboxCapability.receiveV2,
             keyAlgorithm: InboxProtocol.keyAlgorithm))
         harness.controller.session(identity(accountA))
         await waitUntil({ watched.calls.contains(.offline) },

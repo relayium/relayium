@@ -38,13 +38,26 @@ import (
 // fleet of mixed client versions converges explicitly instead of each side
 // assuming the other's shape.
 const (
-	// ProtocolV1 is the encrypted-asynchronous-queue Device Inbox protocol
-	// (DEVICE-INBOX-PRD.md §6.3): the sender wraps a one-time content key to
-	// the target device's public key, central stores only ciphertext.
+	// ProtocolV1 is the HISTORICAL first Device Inbox protocol
+	// (docs/protocol/relayium-device-inbox-v1.md): file deliveries only, with
+	// the shared Stored-Wire manifest describing them.
+	//
+	// Named, but not supported. The owner waived old-client and old-protocol
+	// compatibility on 2026-08-17 (no external users, the release forces an
+	// update), so v2 replaces v1 outright rather than shipping a dual stack.
+	// Keeping the constant is what lets the refusal be asserted by name: a
+	// build announcing only v1 must be told to upgrade, not quietly accepted.
 	ProtocolV1 = 1
 
-	MinProtocolVersion = ProtocolV1
-	MaxProtocolVersion = ProtocolV1
+	// ProtocolV2 is the Device Inbox protocol this build speaks
+	// (docs/protocol/relayium-device-inbox-v2.md). Its one substantive change
+	// over v1 is that a delivery now declares its CONTENT KIND — file or text —
+	// and it does so only inside the authenticated encrypted manifest, so
+	// central still cannot tell a message from a file.
+	ProtocolV2 = 2
+
+	MinProtocolVersion = ProtocolV2
+	MaxProtocolVersion = ProtocolV2
 )
 
 // Capability tokens are versioned by construction ("<name>.v<N>"): a behaviour
@@ -52,11 +65,28 @@ const (
 // one, so an old client and a new central never disagree about what a token
 // means. See ValidateCapabilities for the accepted syntax.
 const (
-	// CapReceiveV1 is the REQUIRED capability for a receiving device: it says
-	// the device can claim a queued task, unwrap its content key with its own
-	// private key, verify, and commit atomically. Registration without a
-	// supported receive capability is refused (invariant 2).
+	// CapReceiveV1 is the HISTORICAL receive capability. Named so it can be
+	// refused by name (see ProtocolV1): a device announcing only v1 cannot
+	// decode a v2 manifest, so listing it as a send target would promise a
+	// delivery it would fail on.
 	CapReceiveV1 = "inbox.receive.v1"
+	// CapReceiveV2 is the REQUIRED capability for a receiving device: it says
+	// the device can claim a queued task, unwrap its content key with its own
+	// private key, decode the v2 encrypted manifest, verify, and commit
+	// atomically. Registration without a supported receive capability is
+	// refused (invariant 2).
+	CapReceiveV2 = "inbox.receive.v2"
+	// CapTextV1 says this receiver presents a text delivery AS TEXT — it
+	// commits the message to its protected message store and shows it, rather
+	// than writing a file into the user's receive folder.
+	//
+	// Central neither requires nor interprets it: content kind lives only
+	// inside the encrypted manifest, so central could not check the claim even
+	// if it wanted to. The token exists for the SENDER, which reads it off the
+	// device list to decide whether offering "send text" to that target would
+	// be honest. A receiver that stores text as a `.txt` file must not announce
+	// it — the whole value of the token is that its absence is truthful.
+	CapTextV1 = "inbox.text.v1"
 	// CapAutoAcceptV1 says the device implements the same-account automatic
 	// receive policy (PRD §8) — an explicitly enabled, default-off, per-device
 	// setting. Its ABSENCE is meaningful: such a device may only be sent to
@@ -74,9 +104,21 @@ const (
 //
 // supportedReceiveCapabilities is the set of receive capabilities central can
 // negotiate, highest preference first. Kept as an explicit list rather than
-// derived from a version number: adding a v2 must be a deliberate edit that
-// forces a look at what v1 senders will do with a v2-only device.
-var supportedReceiveCapabilities = []string{CapReceiveV1}
+// derived from a version number: adding a version must be a deliberate edit
+// that forces a look at what existing senders will do with such a device.
+//
+// v1 is deliberately absent, not merely lower-preference. It is not a downgrade
+// path central may fall back to — a v1 device cannot read a v2 manifest at all.
+var supportedReceiveCapabilities = []string{CapReceiveV2}
+
+// SupportedReceiveCapabilities is the negotiable receive set, for the API layer
+// to echo on a refusal. Exported (and cloned) so no caller has to restate the
+// list — a hand-written `[]string{CapReceiveV1}` in an error body is exactly how
+// a rejection ends up telling a client to implement the version central just
+// stopped supporting.
+func SupportedReceiveCapabilities() []string {
+	return slices.Clone(supportedReceiveCapabilities)
+}
 
 // KeyAlgX25519SealedBoxV1 wraps a task's 32-byte content key to a device with
 // libsodium's crypto_box_seal (X25519 + XSalsa20-Poly1305, ephemeral sender

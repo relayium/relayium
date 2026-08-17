@@ -32,6 +32,7 @@ import { decodeKey } from "./store-crypto";
 import { sealContentKey, UnusableDeviceKeyError } from "./device-seal";
 import {
   INBOX_KEY_ALGORITHM,
+  INBOX_PROTOCOL_VERSION,
   httpSendErrorCode,
   isInertId,
   parseInboxTask,
@@ -146,6 +147,8 @@ async function createTask(
       body: JSON.stringify({
         idempotencyKey,
         storedFileId,
+        // The shape the sealed manifest was written to — not what is in it.
+        protocolVersion: INBOX_PROTOCOL_VERSION,
         wrapAlgorithm: INBOX_KEY_ALGORITHM,
         wrappedKey: attempt.wrappedKey,
         targetKeyId: attempt.targetKeyId,

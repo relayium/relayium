@@ -215,8 +215,8 @@ func TestRetryBackoffIsBounded(t *testing.T) {
 }
 
 func TestInitialTaskStateFollowsThePolicy(t *testing.T) {
-	withAuto := []string{CapReceiveV1, CapAutoAcceptV1}
-	noAuto := []string{CapReceiveV1}
+	withAuto := []string{CapReceiveV2, CapAutoAcceptV1}
+	noAuto := []string{CapReceiveV2}
 
 	// off: refused outright. Queuing a task a device will never take would be a
 	// lie in the sender's UI.
@@ -268,5 +268,32 @@ func TestWrappedKeyBoundFitsASealedBox(t *testing.T) {
 	}
 	if MaxWrappedKeyLen > 4096 {
 		t.Fatalf("MaxWrappedKeyLen=%d is an unbounded blob, not a key", MaxWrappedKeyLen)
+	}
+}
+
+func TestValidateTaskProtocolVersionFailsClosed(t *testing.T) {
+	// The version a SENDER declares at create. Fail closed on every value that
+	// is not exactly what central defines — most importantly on 0, which is the
+	// zero value of an omitted JSON field. A create that forgot `protocolVersion`
+	// must be refused, never treated as the current version by default.
+	for _, tc := range []struct {
+		name string
+		in   int
+		want error
+	}{
+		{"omitted", 0, ErrUnsupportedProtocol},
+		{"negative", -1, ErrUnsupportedProtocol},
+		{"historical v1", ProtocolV1, ErrUnsupportedProtocol},
+		{"future", ProtocolV2 + 1, ErrUnsupportedProtocol},
+		{"far future", 1 << 30, ErrUnsupportedProtocol},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := ValidateTaskProtocolVersion(tc.in); !errors.Is(err, tc.want) {
+				t.Fatalf("ValidateTaskProtocolVersion(%d) = %v, want %v", tc.in, err, tc.want)
+			}
+		})
+	}
+	if err := ValidateTaskProtocolVersion(ProtocolV2); err != nil {
+		t.Fatalf("the current version must be accepted: %v", err)
 	}
 }

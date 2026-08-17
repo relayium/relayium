@@ -41,8 +41,8 @@ final class InboxClientTests: XCTestCase {
                            canReceive: Bool = false) -> String {
         """
         {"Presence":"\(presence)","LastHeartbeatAt":0,"PresenceExpiresAt":0,
-         "HeartbeatIntervalSeconds":30,"ProtocolVersion":1,"Capabilities":["inbox.receive.v1"],
-         "ReceiveCapability":"inbox.receive.v1","AutoAccept":"\(autoAccept)",
+         "HeartbeatIntervalSeconds":30,"ProtocolVersion":2,"Capabilities":["inbox.receive.v2"],
+         "ReceiveCapability":"inbox.receive.v2","AutoAccept":"\(autoAccept)",
          "ReceiveDirReady":false,"Revoked":false,"CanReceive":\(canReceive),
          "RegisteredAt":1,"Key":null}
         """
@@ -101,8 +101,8 @@ final class InboxClientTests: XCTestCase {
 
     func testEnrolPutsTheAnnouncedShape() async throws {
         respond(200, """
-        {"inbox":\(inboxJSON(autoAccept: "auto")),"protocolVersion":1,
-         "receiveCapability":"inbox.receive.v1","keyAlgorithm":"x25519-sealedbox-v1"}
+        {"inbox":\(inboxJSON(autoAccept: "auto")),"protocolVersion":2,
+         "receiveCapability":"inbox.receive.v2","keyAlgorithm":"x25519-sealedbox-v1"}
         """)
         let result = try await client().enrol(InboxEnrolRequest(
             platform: "darwin", appVersion: "1.2.3", autoAccept: .auto, receiveDirReady: true))
@@ -115,10 +115,10 @@ final class InboxClientTests: XCTestCase {
         XCTAssertEqual(body["platform"] as? String, "darwin")
         XCTAssertEqual(body["autoAccept"] as? String, "auto")
         XCTAssertEqual(body["receiveDirReady"] as? Bool, true)
-        XCTAssertEqual(body["protocolVersions"] as? [Int], [1])
+        XCTAssertEqual(body["protocolVersions"] as? [Int], [2])
         XCTAssertEqual(body["capabilities"] as? [String],
-                       ["inbox.receive.v1", "inbox.autoaccept.v1", "inbox.resume.v1"])
-        XCTAssertEqual(result.receiveCapability, "inbox.receive.v1")
+                       ["inbox.receive.v2", "inbox.autoaccept.v1", "inbox.resume.v1"])
+        XCTAssertEqual(result.receiveCapability, "inbox.receive.v2")
     }
 
     /// The enrolment body is the request most likely to grow a field it must never
@@ -126,8 +126,8 @@ final class InboxClientTests: XCTestCase {
     /// check — is what makes a future `privateKey` fail here.
     func testEnrolSendsExactlyTheNegotiationFieldsAndNothingElse() async throws {
         respond(200, """
-        {"inbox":\(inboxJSON()),"protocolVersion":1,
-         "receiveCapability":"inbox.receive.v1","keyAlgorithm":"x25519-sealedbox-v1"}
+        {"inbox":\(inboxJSON()),"protocolVersion":2,
+         "receiveCapability":"inbox.receive.v2","keyAlgorithm":"x25519-sealedbox-v1"}
         """)
         _ = try await client().enrol(InboxEnrolRequest(platform: "darwin", appVersion: "1",
                                                        autoAccept: .off, receiveDirReady: false))

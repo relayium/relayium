@@ -20,17 +20,34 @@ public enum InboxProtocol {
     /// Protocol versions this build speaks. A fixed list rather than a range:
     /// adding one has to be a deliberate edit that forces a look at whether the
     /// behaviour behind it is implemented here.
-    public static let versions: [Int] = [1]
+    ///
+    /// v1 is absent, not lower-preference. The owner waived old-protocol
+    /// compatibility on 2026-08-17, so there is no dual stack and no downgrade:
+    /// a central that speaks only v1 is one this build refuses to enrol with.
+    public static let versions: [Int] = [2]
+
+    /// The version a SENDER declares on `POST …/inbox/tasks` — the protocol the
+    /// manifest sealed inside that task's ciphertext was written to. Separate
+    /// from `versions` because it is a different claim: `versions` is what this
+    /// build can READ, this is what it just WROTE.
+    public static let taskProtocolVersion = 2
 
     /// The capabilities this build announces.
     ///
-    /// `inbox.receive.v1` is required by central. `inbox.autoaccept.v1` is what
+    /// `inbox.receive.v2` is required by central. `inbox.autoaccept.v1` is what
     /// makes the `auto` policy storable at all, and `inbox.resume.v1` says this
     /// device resumes an interrupted ciphertext download from a complete frame
     /// boundary — which `InboxReceiver` does, through `StoreDecryptor`'s
     /// consumed-ciphertext accounting.
+    ///
+    /// `inbox.text.v1` is NOT here yet, and its absence is a truth claim rather
+    /// than an oversight: the token means "this receiver shows a message as a
+    /// message", and the message store and its surface land in a later stage.
+    /// It is added the same commit that makes it true, never before — a sender
+    /// reads this list to decide whether offering "send text" to this device
+    /// would be honest.
     public static let capabilities: [String] = [
-        InboxCapability.receiveV1, InboxCapability.autoAcceptV1, InboxCapability.resumeV1,
+        InboxCapability.receiveV2, InboxCapability.autoAcceptV1, InboxCapability.resumeV1,
     ]
 
     /// The one wrap algorithm this protocol version defines.
@@ -66,9 +83,18 @@ public enum InboxProtocol {
     public static let claimBatch = 1
 }
 
-/// Capability tokens defined by v1.
+/// Capability tokens the Device Inbox protocol defines.
 public enum InboxCapability {
+    /// Historical. Named so the refusal can be asserted by name; never
+    /// announced by this build and never negotiable against a v2 central.
     public static let receiveV1 = "inbox.receive.v1"
+    /// Required of every receiving device: claim, unwrap, decode a v2 manifest,
+    /// verify, commit atomically.
+    public static let receiveV2 = "inbox.receive.v2"
+    /// "This receiver presents a text delivery as text." Announced only by a
+    /// build that actually does, because a sender uses it to decide whether
+    /// offering a text send to this device would be honest.
+    public static let textV1 = "inbox.text.v1"
     public static let autoAcceptV1 = "inbox.autoaccept.v1"
     public static let resumeV1 = "inbox.resume.v1"
 }

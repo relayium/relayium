@@ -129,7 +129,11 @@ public enum InboxTargetEligibility {
         // reason not visible in these fields (protocol version, cleared
         // enrolment), and its verdict must beat a local guess.
         guard inbox.canReceive else { return no(.cannotReceive) }
-        guard inbox.receiveCapability == InboxCapability.receiveV1 else {
+        // v2 only. A device still enrolled under `inbox.receive.v1` cannot decode
+        // a v2 manifest, so it is refused here rather than offered as a target
+        // and discovered after the file is already encrypted and uploaded. There
+        // is no downgrade branch: the owner waived old-protocol compatibility.
+        guard inbox.receiveCapability == InboxCapability.receiveV2 else {
             return no(.unsupportedCapability)
         }
         guard let key = inbox.key, key.isActive,

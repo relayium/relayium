@@ -14,7 +14,7 @@ import ConfirmModal from "./ConfirmModal.svelte";
 import { loadLang } from "./i18n.svelte";
 import { refreshSession } from "./auth.svelte";
 import { deviceSuffix, normalizeDeviceName, DEVICE_NAME_MAX } from "./device-identity";
-import { CAP_RECEIVE_V1, INBOX_KEY_ALGORITHM } from "./device-inbox";
+import { CAP_RECEIVE_V2, INBOX_KEY_ALGORITHM } from "./device-inbox";
 
 const USER = { id: "u1", email: "a@b.c", displayName: "A", hasPassword: true };
 
@@ -436,15 +436,15 @@ describe("发送入口的可发现性", () => {
           LastSeenAt: 1_700_100_000,
           Kind: "cli",
           // 与 DeviceCard.test.ts 的夹具同形：`sendAvailability` 要求登记、未撤销、
-          // 具备 inbox.receive.v1 能力、算法受支持、公钥合法，缺一个就没有发送控件。
+          // 具备 inbox.receive.v2 能力、算法受支持、公钥合法，缺一个就没有发送控件。
           Inbox: {
             Presence: "online",
             LastHeartbeatAt: 1_700_000_000,
             PresenceExpiresAt: 1_700_000_090,
             HeartbeatIntervalSeconds: 30,
             ProtocolVersion: 1,
-            Capabilities: [CAP_RECEIVE_V1, "inbox.autoaccept.v1"],
-            ReceiveCapability: CAP_RECEIVE_V1,
+            Capabilities: [CAP_RECEIVE_V2, "inbox.autoaccept.v1"],
+            ReceiveCapability: CAP_RECEIVE_V2,
             AutoAccept: "auto",
             ReceiveDirReady: true,
             Platform: "linux",

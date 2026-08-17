@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import sodium from "libsodium-wrappers";
 import { decryptManifest, encodeKey, importStoreKey } from "./store-crypto";
-import { INBOX_KEY_ALGORITHM } from "./device-inbox";
+import { INBOX_KEY_ALGORITHM, INBOX_PROTOCOL_VERSION } from "./device-inbox";
 import {
   CANCELLABLE_STATES,
   SendFailure,
@@ -195,17 +195,23 @@ describe("sending to a device", () => {
     expect(init[0].url).toContain("burnAfterRead=1");
   });
 
-  it("creates the task with exactly the six fields central accepts", async () => {
+  it("creates the task with exactly the seven fields central accepts", async () => {
     await sendFilesToDevice(targetSpec(), FILES(), sendOpts());
     const body = JSON.parse(String(created()!.body));
+    // The list is exhaustive on purpose. v2 added `protocolVersion` and NOTHING
+    // else: no kind, no name, no path, no message, no key. Content kind lives
+    // inside the encrypted manifest, so a seventh describing field appearing
+    // here would be central learning what it must not be able to learn.
     expect(Object.keys(body).sort()).toEqual([
       "idempotencyKey",
+      "protocolVersion",
       "storedFileId",
       "targetKeyGeneration",
       "targetKeyId",
       "wrapAlgorithm",
       "wrappedKey",
     ]);
+    expect(body.protocolVersion).toBe(INBOX_PROTOCOL_VERSION);
     expect(body.wrapAlgorithm).toBe(INBOX_KEY_ALGORITHM);
     expect(body.storedFileId).toBe(OBJECT_ID);
     expect(body.targetKeyId).toBe("k1");

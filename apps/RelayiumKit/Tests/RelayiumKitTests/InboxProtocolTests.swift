@@ -73,13 +73,37 @@ final class InboxProtocolTests: XCTestCase {
     /// Fixed values the wire depends on. Spelled out rather than derived, so a
     /// change to any of them is a deliberate edit that fails here first.
     func testProtocolConstantsMatchTheSpecification() {
-        XCTAssertEqual(InboxProtocol.versions, [1])
+        XCTAssertEqual(InboxProtocol.versions, [2])
+        XCTAssertEqual(InboxProtocol.taskProtocolVersion, 2)
         XCTAssertEqual(InboxProtocol.keyAlgorithm, "x25519-sealedbox-v1")
         XCTAssertEqual(InboxProtocol.publicKeyBytes, 32)
         XCTAssertEqual(InboxProtocol.sealedBoxBytes, 80)
         XCTAssertEqual(InboxProtocol.claimTokenHeader, "X-Relayium-Inbox-Claim")
         XCTAssertEqual(InboxProtocol.capabilities,
-                       ["inbox.receive.v1", "inbox.autoaccept.v1", "inbox.resume.v1"])
+                       ["inbox.receive.v2", "inbox.autoaccept.v1", "inbox.resume.v1"])
+    }
+
+    /// v1 is gone, not deprioritised. The owner waived old-protocol
+    /// compatibility, so this build must not announce a version or a receive
+    /// capability it can no longer honour — announcing v1 would make central
+    /// list this device to senders whose manifests it cannot decode.
+    func testTheHistoricalProtocolIsNotAnnounced() {
+        XCTAssertFalse(InboxProtocol.versions.contains(1))
+        XCTAssertFalse(InboxProtocol.capabilities.contains(InboxCapability.receiveV1))
+    }
+
+    /// `inbox.text.v1` means "this receiver shows a message as a message". It
+    /// must be announced by the same commit that makes that true and not one
+    /// earlier: a sender reads the token to decide whether offering a text send
+    /// to this device would be honest, so announcing it early is a lie that
+    /// lands somebody's message in a downloads folder.
+    ///
+    /// Flip this assertion in the stage that ships the message store and its
+    /// surface — never before.
+    func testTextCapabilityIsNotAnnouncedUntilTextIsPresentedAsText() {
+        XCTAssertEqual(InboxCapability.textV1, "inbox.text.v1")
+        XCTAssertFalse(InboxProtocol.capabilities.contains(InboxCapability.textV1),
+                       "this build has no message store yet; announcing inbox.text.v1 would promise a surface that does not exist")
     }
 
     /// One task per claim. A second task claimed before the first finishes could
@@ -209,8 +233,8 @@ final class InboxProtocolTests: XCTestCase {
         let inbox: [String: Any] = [
             "Presence": "offline", "LastHeartbeatAt": 0, "PresenceExpiresAt": 0,
             "HeartbeatIntervalSeconds": 30, "ProtocolVersion": 1,
-            "Capabilities": ["inbox.receive.v1"],
-            "ReceiveCapability": "inbox.receive.v1", "AutoAccept": "off",
+            "Capabilities": ["inbox.receive.v2"],
+            "ReceiveCapability": "inbox.receive.v2", "AutoAccept": "off",
             "ReceiveDirReady": false, "Revoked": false, "CanReceive": true,
             "RegisteredAt": 1, "Key": NSNull(),
         ]

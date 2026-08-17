@@ -228,26 +228,54 @@ type inboxDeliveryView struct {
 //
 // What the request may carry is deliberately small: which of the caller's own
 // Stored Objects to deliver, the content key sealed to the target's CURRENT
-// public key, and a sender-chosen idempotency key. Everything else — the
+// public key, a sender-chosen idempotency key, and — as of v2 — the integer
+// protocol version the sealed manifest was written to. Everything else — the
 // encrypted manifest, the ciphertext size, the expiry, the initial state — is
 // derived by central from state it can verify, so a sender cannot describe its
 // own object dishonestly or start a task in a state that has to be earned.
+//
+// What v2 deliberately does NOT add is any description of what is being sent.
+// There is no `kind`, no `text`, no `name`, no `path` and no key on this
+// request, and there must never be one: the whole point of putting content kind
+// inside the authenticated encrypted manifest is that central cannot tell a
+// message from a file, so a message cannot be read, indexed or logged here. The
+// strict decoder below is what enforces that — a create carrying one of those
+// fields is a 400, not a field central quietly ignores today and might honour
+// after a later, less careful edit to this struct.
 func (s *Service) handleCreateInboxTask(w http.ResponseWriter, r *http.Request, u User) {
 	deviceID := r.PathValue("id")
 	var in struct {
-		IdempotencyKey      string `json:"idempotencyKey"`
-		StoredFileID        string `json:"storedFileId"`
+		IdempotencyKey string `json:"idempotencyKey"`
+		StoredFileID   string `json:"storedFileId"`
+		// ProtocolVersion is REQUIRED from v2 on. Its zero value is not a
+		// version, so an omitted field is refused rather than defaulted.
+		ProtocolVersion     int    `json:"protocolVersion"`
 		WrapAlgorithm       string `json:"wrapAlgorithm"`
 		WrappedKey          string `json:"wrappedKey"`
 		TargetKeyID         string `json:"targetKeyId"`
 		TargetKeyGeneration int64  `json:"targetKeyGeneration"`
 	}
 	// Strict decoding is load-bearing here, not hygiene: it is what makes a
-	// request carrying `contentKey`, `privateKey`, `fileName` or `path` a 400
-	// rather than a silently ignored field that a later, less careful version of
-	// this struct might start honouring.
+	// request carrying `contentKey`, `privateKey`, `fileName`, `kind` or `text`
+	// a 400 rather than a silently ignored field that a later, less careful
+	// version of this struct might start honouring.
 	if err := httpx.DecodeStrictJSONBody(w, r, &in); err != nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	// Checked before every other FIELD, and answered like the registration path
+	// answers it: 409 with the supported set, so a client that speaks a version
+	// central does not can say "upgrade" instead of "the send failed".
+	//
+	// First among the field checks because it is the one that makes the others
+	// pointless: telling a v1 client its idempotency key is malformed would send
+	// it to fix something that was never the problem. (A body that does not
+	// decode at all is still a 400 above — there is no version to read yet.)
+	if err := inbox.ValidateTaskProtocolVersion(in.ProtocolVersion); err != nil {
+		httpx.WriteJSON(w, http.StatusConflict, map[string]any{
+			"error":              "unsupported_protocol_version",
+			"supportedProtocols": inbox.SupportedProtocolVersions(),
+		})
 		return
 	}
 	if in.IdempotencyKey == "" || len(in.IdempotencyKey) > inbox.MaxIdempotencyKeyLen ||

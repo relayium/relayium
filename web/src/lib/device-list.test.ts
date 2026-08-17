@@ -6,7 +6,7 @@
 // missing from the other, or a count that does not match the list beside it.
 import { describe, it, expect } from "vitest";
 import en from "./i18n/en";
-import { CAP_RECEIVE_V1, INBOX_KEY_ALGORITHM } from "./device-inbox";
+import { CAP_RECEIVE_V2, INBOX_KEY_ALGORITHM } from "./device-inbox";
 import {
   SUPPORTED_DEVICE_KINDS,
   censusOf,
@@ -29,8 +29,8 @@ function inbox(over: Record<string, unknown> = {}) {
     PresenceExpiresAt: 1_700_000_090,
     HeartbeatIntervalSeconds: 30,
     ProtocolVersion: 1,
-    Capabilities: [CAP_RECEIVE_V1],
-    ReceiveCapability: CAP_RECEIVE_V1,
+    Capabilities: [CAP_RECEIVE_V2],
+    ReceiveCapability: CAP_RECEIVE_V2,
     AutoAccept: "auto",
     ReceiveDirReady: true,
     Platform: "linux",

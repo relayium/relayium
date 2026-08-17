@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"slices"
 	"strings"
 
 	"github.com/relayium/relayium/internal/inbox"
@@ -522,11 +523,20 @@ func (s *SQLiteStore) RevokeDeviceKey(ctx context.Context, deviceID, userID, key
 // this CAN be sent to — the task queues and lands when it comes back (PRD §7.3),
 // which is the whole reason the queue exists. Conflating the two would make
 // "offline" mean "rejected".
+//
+// The receive capability is checked against the NEGOTIABLE SET rather than
+// against one named constant. A stored row outlives the release that wrote it:
+// a device enrolled under an older central keeps its old
+// `receive_capability` string until it next registers, so eligibility has to be
+// re-decided against what this build supports today. Written as a hard-coded
+// `== CapReceiveV1`, this line kept every previously-enrolled device eligible
+// through a protocol bump and would have handed v2 senders a target that can
+// only read v1.
 func DeviceCanReceive(in DeviceInbox, key DeviceKey, hasKey bool) bool {
 	return in.DeviceID != "" &&
 		in.RevokedAt == 0 &&
 		in.ProtocolVersion >= inbox.MinProtocolVersion &&
 		in.ProtocolVersion <= inbox.MaxProtocolVersion &&
-		in.ReceiveCapability == inbox.CapReceiveV1 &&
+		slices.Contains(inbox.SupportedReceiveCapabilities(), in.ReceiveCapability) &&
 		hasKey && key.Active()
 }

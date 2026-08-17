@@ -156,6 +156,7 @@ func (e *inboxEnv) sendFile(name string, data []byte) (taskID string) {
 	body, _ := json.Marshal(map[string]any{
 		"idempotencyKey":      "e2e-" + id,
 		"storedFileId":        id,
+		"protocolVersion":     inbox.ProtocolV2,
 		"wrapAlgorithm":       inbox.KeyAlgX25519SealedBoxV1,
 		"wrappedKey":          base64.RawURLEncoding.EncodeToString(sealed),
 		"targetKeyId":         in.Key.ID,

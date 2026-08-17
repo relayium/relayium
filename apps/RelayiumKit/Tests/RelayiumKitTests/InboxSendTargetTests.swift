@@ -46,14 +46,14 @@ final class InboxSendTargetTests: XCTestCase {
     }
 
     private func view(presence: InboxPresence = .online,
-                      capability: String = InboxCapability.receiveV1,
+                      capability: String = InboxCapability.receiveV2,
                       autoAccept: InboxAutoAccept = .auto,
                       receiveDirReady: Bool = true, revoked: Bool = false,
                       canReceive: Bool = true, registeredAt: Int64 = 100,
                       key: InboxKey?) -> InboxView {
         InboxView(presence: presence, lastHeartbeatAt: 100, presenceExpiresAt: 190,
                   heartbeatIntervalSeconds: 30, protocolVersion: 1,
-                  capabilities: [InboxCapability.receiveV1],
+                  capabilities: [InboxCapability.receiveV2],
                   receiveCapability: capability, autoAccept: autoAccept,
                   receiveDirReady: receiveDirReady, revoked: revoked,
                   canReceive: canReceive, registeredAt: registeredAt, key: key)
@@ -168,10 +168,16 @@ final class InboxSendTargetTests: XCTestCase {
     }
 
     func testAReceiveCapabilityThisBuildCannotDriveIsRefusedByName() throws {
-        let availability = InboxTargetEligibility
-            .availability(for: row(inbox: view(capability: "inbox.receive.v2",
-                                               key: try key())))
-        XCTAssertEqual(availability.block, .unsupportedCapability)
+        // Both directions matter. The historical v1 is the one that will
+        // actually appear — a device enrolled before the bump keeps its stored
+        // capability string until it next registers — and it cannot decode a v2
+        // manifest, so offering it would promise a delivery that fails after the
+        // file is already encrypted and uploaded.
+        for stale in [InboxCapability.receiveV1, "inbox.receive.v9", ""] {
+            let availability = InboxTargetEligibility
+                .availability(for: row(inbox: view(capability: stale, key: try key())))
+            XCTAssertEqual(availability.block, .unsupportedCapability, "capability \(stale)")
+        }
     }
 
     func testADeviceWithNoCurrentKeyCannotBeSealedTo() throws {

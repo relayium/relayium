@@ -120,8 +120,13 @@ final class InboxSenderClientTests: XCTestCase {
 
     // MARK: - the create body
 
-    /// THE privacy assertion. Six keys, named exactly, and nothing else.
-    func testTheCreateBodyHasExactlySixKeysAndNoPlaintext() async throws {
+    /// THE privacy assertion. Seven keys, named exactly, and nothing else.
+    ///
+    /// v2 added `protocolVersion` and only that. Content kind moved INTO the
+    /// encrypted manifest precisely so central cannot tell a message from a
+    /// file, so a `kind`, `text`, `name` or `path` key appearing here would undo
+    /// the entire reason for the change.
+    func testTheCreateBodyHasExactlySevenKeysAndNoPlaintext() async throws {
         StubURLProtocol.reset()
         StubURLProtocol.stub = .init(status: 201, body: json(["task": taskBody(),
                                                               "created": true]))
@@ -131,9 +136,10 @@ final class InboxSenderClientTests: XCTestCase {
         let sent = try XCTUnwrap(StubURLProtocol.bodyJSON(
             try XCTUnwrap(StubURLProtocol.observed.last)))
         XCTAssertEqual(Set(sent.keys), [
-            "idempotencyKey", "storedFileId", "wrapAlgorithm", "wrappedKey",
-            "targetKeyId", "targetKeyGeneration",
+            "idempotencyKey", "storedFileId", "protocolVersion", "wrapAlgorithm",
+            "wrappedKey", "targetKeyId", "targetKeyGeneration",
         ])
+        XCTAssertEqual(sent["protocolVersion"] as? Int, InboxProtocol.taskProtocolVersion)
         XCTAssertEqual(sent["idempotencyKey"] as? String, request.idempotencyKey)
         XCTAssertEqual(sent["storedFileId"] as? String, request.storedFileID)
         XCTAssertEqual(sent["wrapAlgorithm"] as? String, InboxProtocol.keyAlgorithm)

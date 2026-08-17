@@ -93,8 +93,8 @@ func (h *taskHarness) enrolTarget(t *testing.T, userID, name, policy string, dir
 	if deviceID == "" {
 		t.Fatalf("no current device for a freshly minted bearer")
 	}
-	body := fmt.Sprintf(`{"platform":"linux","appVersion":"0.15.0","protocolVersions":[1],
-		"capabilities":["inbox.receive.v1","inbox.autoaccept.v1"],
+	body := fmt.Sprintf(`{"platform":"linux","appVersion":"0.15.0","protocolVersions":[2],
+		"capabilities":["inbox.receive.v2","inbox.autoaccept.v1"],
 		"autoAccept":%q,"receiveDirReady":%t}`, policy, dirReady)
 	if resp := h.jsonDo(t, "PUT", "/api/devices/"+deviceID+"/inbox", body, withBearer(token)); resp.StatusCode != 200 {
 		t.Fatalf("enrol %s: got %d, want 200", name, resp.StatusCode)
@@ -143,14 +143,19 @@ func sealedKey(seed string) string {
 }
 
 type createOpts struct {
-	idem       string
-	fileID     string
-	keyID      string
-	keyGen     int64
-	wrapped    string
-	algorithm  string
-	extraJSON  string // raw extra fields, for strict-decoding tests
-	authMutate func(*http.Request)
+	idem      string
+	fileID    string
+	keyID     string
+	keyGen    int64
+	wrapped   string
+	algorithm string
+	// protocol overrides the declared manifest protocol version; 0 means "the
+	// version this build writes". omitProtocol drops the field entirely, which
+	// is the shape a client predating v2 would send.
+	protocol     int
+	omitProtocol bool
+	extraJSON    string // raw extra fields, for strict-decoding tests
+	authMutate   func(*http.Request)
 }
 
 func (h *taskHarness) createTask(t *testing.T, deviceID string, o createOpts) *http.Response {
@@ -161,9 +166,16 @@ func (h *taskHarness) createTask(t *testing.T, deviceID string, o createOpts) *h
 	if o.wrapped == "" {
 		o.wrapped = sealedKey(o.idem)
 	}
-	body := fmt.Sprintf(`{"idempotencyKey":%q,"storedFileId":%q,"wrapAlgorithm":%q,
+	if o.protocol == 0 {
+		o.protocol = inbox.ProtocolV2
+	}
+	proto := fmt.Sprintf(`"protocolVersion":%d,`, o.protocol)
+	if o.omitProtocol {
+		proto = ""
+	}
+	body := fmt.Sprintf(`{"idempotencyKey":%q,"storedFileId":%q,%s"wrapAlgorithm":%q,
 		"wrappedKey":%q,"targetKeyId":%q,"targetKeyGeneration":%d%s}`,
-		o.idem, o.fileID, o.algorithm, o.wrapped, o.keyID, o.keyGen, o.extraJSON)
+		o.idem, o.fileID, proto, o.algorithm, o.wrapped, o.keyID, o.keyGen, o.extraJSON)
 	return h.jsonDo(t, "POST", "/api/devices/"+deviceID+"/inbox/tasks", body, o.authMutate)
 }
 
@@ -1583,9 +1595,9 @@ func TestCreateRejectsAWrappedKeyOfTheWrongShape(t *testing.T) {
 	// An absent wrapped key, sent as a raw body so the helper's default cannot
 	// fill it in.
 	if resp := h.jsonDo(t, "POST", "/api/devices/"+tg.deviceID+"/inbox/tasks",
-		fmt.Sprintf(`{"idempotencyKey":"wrap-empty","storedFileId":%q,"wrapAlgorithm":%q,
-			"wrappedKey":"","targetKeyId":%q,"targetKeyGeneration":%d}`,
-			fileID, inbox.KeyAlgX25519SealedBoxV1, tg.keyID, tg.keyGen),
+		fmt.Sprintf(`{"idempotencyKey":"wrap-empty","storedFileId":%q,"protocolVersion":%d,
+			"wrapAlgorithm":%q,"wrappedKey":"","targetKeyId":%q,"targetKeyGeneration":%d}`,
+			fileID, inbox.ProtocolV2, inbox.KeyAlgX25519SealedBoxV1, tg.keyID, tg.keyGen),
 		withBearer(tg.token)); resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("empty wrapped key: got %d, want 400", resp.StatusCode)
 	}
@@ -1698,7 +1710,7 @@ func TestQueueRejectsUnauthenticatedCallers(t *testing.T) {
 	// A capability link authenticates NOTHING. Holding one — or the stored file
 	// id inside it — must not reach any queue endpoint (PRD §8).
 	for _, c := range []struct{ method, path, body string }{
-		{"POST", "/api/devices/" + id + "/inbox/tasks", `{"idempotencyKey":"x","storedFileId":"f","wrapAlgorithm":"x25519-sealedbox-v1","wrappedKey":"","targetKeyId":"k","targetKeyGeneration":1}`},
+		{"POST", "/api/devices/" + id + "/inbox/tasks", `{"idempotencyKey":"x","storedFileId":"f","protocolVersion":2,"wrapAlgorithm":"x25519-sealedbox-v1","wrappedKey":"","targetKeyId":"k","targetKeyGeneration":1}`},
 		{"GET", "/api/devices/" + id + "/inbox/tasks", ""},
 		{"GET", "/api/devices/" + id + "/inbox/tasks/" + taskID, ""},
 		{"DELETE", "/api/devices/" + id + "/inbox/tasks/" + taskID, ""},
@@ -1841,6 +1853,74 @@ func TestAnotherOfMyDevicesCannotActAsThisOne(t *testing.T) {
 
 // ---------- strict request shape and the zero-knowledge sweep ----------
 
+// TestCreateRequiresTheDeclaredProtocolVersion covers the ONE non-opaque field
+// v2 added to create. It fails closed in both directions: an omitted field is
+// not the current version by default, and a version central does not define is
+// refused with the actionable set rather than a bare 400.
+func TestCreateRequiresTheDeclaredProtocolVersion(t *testing.T) {
+	h := newTaskHarness(t)
+	u := h.user(t, "protocol@example.test")
+	tg := h.enrolTarget(t, u, "server", inbox.AutoAcceptAuto, true)
+
+	for _, tc := range []struct {
+		name string
+		opts createOpts
+	}{
+		{"omitted", createOpts{omitProtocol: true}},
+		{"explicit zero", createOpts{protocol: -1}}, // -1 keeps the helper from defaulting
+		{"historical v1", createOpts{protocol: inbox.ProtocolV1}},
+		{"future", createOpts{protocol: inbox.ProtocolV2 + 1}},
+		{"absurd", createOpts{protocol: 1 << 30}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fileID := h.storedObject(t, u, 32, time.Hour)
+			o := tc.opts
+			o.idem, o.fileID, o.keyID, o.keyGen = "proto-"+tc.name, fileID, tg.keyID, tg.keyGen
+			o.authMutate = withBearer(tg.token)
+			resp := h.createTask(t, tg.deviceID, o)
+			// 409, not 400: the request is well formed, the two sides simply do
+			// not overlap, and the client's correct move is to upgrade.
+			if resp.StatusCode != http.StatusConflict {
+				t.Fatalf("got %d, want 409", resp.StatusCode)
+			}
+			body := decodeJSONBody(t, resp)
+			if body["error"] != "unsupported_protocol_version" {
+				t.Fatalf("error = %v", body["error"])
+			}
+			// Actionable: the refusal names what central does speak, so a client
+			// can say "upgrade" instead of "the send failed".
+			got, ok := body["supportedProtocols"].([]any)
+			if !ok || len(got) == 0 || got[0] != float64(inbox.ProtocolV2) {
+				t.Fatalf("supportedProtocols = %v, want [%d]", body["supportedProtocols"], inbox.ProtocolV2)
+			}
+			// Fail closed means nothing was written, not "written and reported".
+			var n int
+			if err := h.store.db.QueryRow(`SELECT COUNT(*) FROM inbox_tasks`).Scan(&n); err != nil || n != 0 {
+				t.Fatalf("rows = %d (err %v), want 0", n, err)
+			}
+		})
+	}
+
+	// And the current version is accepted, so the gate is a gate and not a wall.
+	fileID := h.storedObject(t, u, 32, time.Hour)
+	resp := h.createTask(t, tg.deviceID, createOpts{
+		idem: "proto-ok", fileID: fileID, keyID: tg.keyID, keyGen: tg.keyGen,
+		protocol: inbox.ProtocolV2, authMutate: withBearer(tg.token),
+	})
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("current version: got %d, want 201", resp.StatusCode)
+	}
+	// The declared version is validated, not stored and echoed. Central holds no
+	// per-task protocol column, so nothing here can later be mistaken for a
+	// description of the delivery's contents.
+	task := decodeJSONBody(t, resp)["task"].(map[string]any)
+	for _, k := range []string{"ProtocolVersion", "protocolVersion", "Kind", "kind"} {
+		if _, present := task[k]; present {
+			t.Fatalf("the task view exposes %q; central must describe no delivery", k)
+		}
+	}
+}
+
 // TestCreateRejectsUnknownAndSecretShapedFields is the structural half of the
 // zero-knowledge promise: there is no field for a content key, a private key, a
 // file name or a path, and strict decoding turns an attempt to add one into a
@@ -1862,6 +1942,17 @@ func TestCreateRejectsUnknownAndSecretShapedFields(t *testing.T) {
 		`,"savedAt":123456`,       // nor stamp one
 		`,"ciphertextBytes":1`,    // nor describe its own object
 		`,"expiresAt":9999999999`, // nor extend its retention
+		// v2 moved content KIND into the encrypted manifest. Central must have
+		// no field for it and no field for the message itself, or the whole
+		// point of sealing the kind is lost: a `kind` here would let central,
+		// its logs and its operators tell a message from a file, and a `text`
+		// here would hand it the message.
+		`,"kind":"text"`,
+		`,"contentKind":"text"`,
+		`,"text":"` + marker + `"`,
+		`,"message":"` + marker + `"`,
+		`,"itemCount":1`,
+		`,"manifest":"` + marker + `"`,
 	} {
 		resp := h.createTask(t, tg.deviceID, createOpts{
 			idem: "strict-" + extra, fileID: fileID, keyID: tg.keyID, keyGen: tg.keyGen,

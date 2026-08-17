@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  CAP_RECEIVE_V1,
+  CAP_RECEIVE_V2,
+  CAP_TEXT_V1,
   INBOX_KEY_ALGORITHM,
   POLL_MAX_MS,
   POLL_MIN_MS,
@@ -31,8 +32,8 @@ function inboxJson(over: Record<string, unknown> = {}) {
     PresenceExpiresAt: 1_700_000_090,
     HeartbeatIntervalSeconds: 30,
     ProtocolVersion: 1,
-    Capabilities: [CAP_RECEIVE_V1, "inbox.autoaccept.v1"],
-    ReceiveCapability: CAP_RECEIVE_V1,
+    Capabilities: [CAP_RECEIVE_V2, "inbox.autoaccept.v1"],
+    ReceiveCapability: CAP_RECEIVE_V2,
     AutoAccept: "auto",
     ReceiveDirReady: true,
     Platform: "linux",
@@ -113,7 +114,7 @@ describe("parseDeviceInbox", () => {
   });
 
   it("survives a Capabilities field that is not an array of strings", () => {
-    expect(parseDeviceInbox(inboxJson({ Capabilities: "inbox.receive.v1" }))!.Capabilities).toEqual([]);
+    expect(parseDeviceInbox(inboxJson({ Capabilities: "inbox.receive.v2" }))!.Capabilities).toEqual([]);
     expect(parseDeviceInbox(inboxJson({ Capabilities: [1, "a", null] }))!.Capabilities).toEqual(["a"]);
   });
 
@@ -190,8 +191,31 @@ describe("sendAvailability", () => {
   });
 
   it("refuses a receive capability this build cannot drive", () => {
-    expect(avail({ ReceiveCapability: "inbox.receive.v2" }).block).toBe("unsupported_capability");
+    // v1 is the one that matters: a device still enrolled under the historical
+    // capability cannot read a v2 manifest, so offering it as a target would
+    // promise a delivery that fails after the file is already encrypted and
+    // uploaded. There is no downgrade branch — the owner waived old-protocol
+    // compatibility, so this is a refusal, not a fallback.
+    expect(avail({ ReceiveCapability: "inbox.receive.v1" }).block).toBe("unsupported_capability");
+    expect(avail({ ReceiveCapability: "inbox.receive.v9" }).block).toBe("unsupported_capability");
     expect(avail({ ReceiveCapability: "" }).block).toBe("unsupported_capability");
+  });
+
+  it("treats the text capability as a sender's truth claim, never as a gate", () => {
+    // `inbox.text.v1` says "this receiver shows a message as a message". It is
+    // read off the device, never required: a receiver that only takes files is
+    // still a perfectly good target for files, so its ABSENCE must not block a
+    // send. Central cannot verify the claim either way — content kind lives
+    // only inside the encrypted manifest.
+    expect(CAP_TEXT_V1).toBe("inbox.text.v1");
+    const fileOnly = parseDeviceInbox(inboxJson({ Capabilities: [CAP_RECEIVE_V2] }))!;
+    expect(fileOnly.Capabilities).not.toContain(CAP_TEXT_V1);
+    expect(sendAvailability("dev1", fileOnly).sendable).toBe(true);
+    // And a device that does announce it is carried verbatim, for the sender to
+    // read when the text surface lands.
+    const withText = parseDeviceInbox(inboxJson({ Capabilities: [CAP_RECEIVE_V2, CAP_TEXT_V1] }))!;
+    expect(withText.Capabilities).toContain(CAP_TEXT_V1);
+    expect(sendAvailability("dev1", withText).sendable).toBe(true);
   });
 
   it("refuses a device whose id could not be composed into a request path", () => {

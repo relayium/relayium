@@ -95,8 +95,8 @@ func newFakeCentral(t *testing.T) *fakeCentral {
 	fc := &fakeCentral{
 		t: t, deviceID: "dev-1", token: "rlm_cli_test",
 		autoAccept:       inbox.AutoAcceptOff,
-		protocolVersions: []int{inbox.ProtocolV1},
-		receiveCaps:      []string{inbox.CapReceiveV1},
+		protocolVersions: []int{inbox.ProtocolV2},
+		receiveCaps:      []string{inbox.CapReceiveV2},
 		corruptBlobByte:  -1,
 	}
 	mux := http.NewServeMux()
@@ -152,9 +152,9 @@ func (fc *fakeCentral) inboxView() *InboxView {
 		Presence:                 inbox.Presence(fc.presenceExpires, time.Now().Unix(), fc.revoked),
 		PresenceExpiresAt:        fc.presenceExpires,
 		HeartbeatIntervalSeconds: int(inbox.HeartbeatInterval.Seconds()),
-		ProtocolVersion:          inbox.ProtocolV1,
+		ProtocolVersion:          inbox.ProtocolV2,
 		Capabilities:             fc.caps,
-		ReceiveCapability:        inbox.CapReceiveV1,
+		ReceiveCapability:        inbox.CapReceiveV2,
 		AutoAccept:               fc.autoAccept,
 		ReceiveDirReady:          fc.dirReady,
 		Revoked:                  fc.revoked,
