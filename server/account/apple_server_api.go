@@ -155,8 +155,10 @@ func (c *AppleServerAPIClient) ProbeTestNotifications(ctx context.Context, apps 
 	if len(apps) == 0 {
 		return errors.New("stage A: no configured apps")
 	}
-	type target struct{ name, base string }
-	targets := []target{{appleEnvProduction, c.cfg.ProductionURL}, {appleEnvSandbox, c.cfg.SandboxURL}}
+	targets, err := c.probeTargets()
+	if err != nil {
+		return err
+	}
 	for _, app := range apps {
 		for _, target := range targets {
 			if err := c.probeTestNotification(ctx, target.name, target.base, app, out); err != nil {
@@ -165,6 +167,27 @@ func (c *AppleServerAPIClient) ProbeTestNotifications(ctx context.Context, apps 
 		}
 	}
 	return nil
+}
+
+type appleProbeTarget struct{ name, base string }
+
+func (c *AppleServerAPIClient) probeTargets() ([]appleProbeTarget, error) {
+	environments := c.verifier.Environments()
+	if len(environments) == 0 {
+		return nil, errors.New("stage A: no configured environments")
+	}
+	targets := make([]appleProbeTarget, 0, len(environments))
+	for _, environment := range environments {
+		switch environment {
+		case appleEnvProduction:
+			targets = append(targets, appleProbeTarget{environment, c.cfg.ProductionURL})
+		case appleEnvSandbox:
+			targets = append(targets, appleProbeTarget{environment, c.cfg.SandboxURL})
+		default:
+			return nil, fmt.Errorf("stage A: unsupported configured environment %q", environment)
+		}
+	}
+	return targets, nil
 }
 
 func (c *AppleServerAPIClient) probeTestNotification(ctx context.Context, environment, base string, app AppleAppConfig, out io.Writer) error {

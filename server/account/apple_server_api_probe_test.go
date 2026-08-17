@@ -179,6 +179,43 @@ func TestAppleServerAPIDefaultHostsMatchCurrentEndpoints(t *testing.T) {
 	}
 }
 
+func TestAppleServerAPIProbeUsesOnlyVerifiedEnvironments(t *testing.T) {
+	chain := newAppleTestChain(t)
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	for _, tc := range []struct {
+		name       string
+		envs, want []string
+	}{
+		{"production only", []string{appleEnvProduction}, []string{appleEnvProduction}},
+		{"sandbox only", []string{appleEnvSandbox}, []string{appleEnvSandbox}},
+		{"both", []string{appleEnvProduction, appleEnvSandbox}, []string{appleEnvProduction, appleEnvSandbox}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			app := AppleAppConfig{BundleID: testBundleIOS, AppAppleID: 6791918822}
+			verifier, err := NewAppleTransactionVerifier(AppleStoreConfig{Environments: tc.envs, Apps: []AppleAppConfig{app}, RootCertsPEM: chain.rootPEM})
+			if err != nil {
+				t.Fatal(err)
+			}
+			client, err := NewAppleServerAPIClient(AppleServerAPIConfig{IssuerID: "issuer", KeyID: "key", PrivateKey: key}, verifier)
+			if err != nil {
+				t.Fatal(err)
+			}
+			targets, err := client.probeTargets()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(targets) != len(tc.want) {
+				t.Fatalf("targets=%v", targets)
+			}
+			for i, target := range targets {
+				if target.name != tc.want[i] {
+					t.Fatalf("target[%d]=%s want %s", i, target.name, tc.want[i])
+				}
+			}
+		})
+	}
+}
+
 func TestAppleServerAPIProbeRequiresEveryAppAndEnvironment(t *testing.T) {
 	var posts int
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

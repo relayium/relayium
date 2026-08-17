@@ -281,7 +281,7 @@ func main() {
 		if appleSubscriptionAPI == nil || len(appleStore.probeApps) == 0 {
 			log.Fatal("apple probe: App Store verifier, API credentials, and at least one app are required")
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(len(appleStore.probeApps)*2)*2*time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(len(appleStore.probeApps)*len(appleStore.verifier.Environments()))*2*time.Minute)
 		defer cancel()
 		if err := appleSubscriptionAPI.ProbeTestNotifications(ctx, appleStore.probeApps, os.Stdout); err != nil {
 			log.Fatalf("apple probe: %v", err)
