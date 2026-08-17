@@ -44,7 +44,7 @@ func testProbeClient(t *testing.T, handler http.Handler, timeout time.Duration) 
 func TestAppleServerAPIProbeUsesSharedJWTAndVerifiesSuccessfulTest(t *testing.T) {
 	var mu sync.Mutex
 	gets := 0
-	token := "9f0b2e3a-1c4d-4e5f-8a9b-000000000111"
+	token := "9f0b2e3a-1c4d-4e5f-8a9b-000000000111_2000000000123/path"
 	var payload string
 	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
@@ -75,6 +75,9 @@ func TestAppleServerAPIProbeUsesSharedJWTAndVerifiesSuccessfulTest(t *testing.T)
 		if r.URL.Path != "/inApps/v1/notifications/test/"+token {
 			t.Errorf("GET path %q", r.URL.Path)
 		}
+		if !strings.Contains(r.RequestURI, "_2000000000123%2Fpath") {
+			t.Errorf("GET path was not escaped: %q", r.RequestURI)
+		}
 		mu.Lock()
 		gets++
 		n := gets
@@ -88,7 +91,7 @@ func TestAppleServerAPIProbeUsesSharedJWTAndVerifiesSuccessfulTest(t *testing.T)
 		case 3:
 			json.NewEncoder(w).Encode(map[string]any{"sendAttempts": []any{}})
 		default:
-			json.NewEncoder(w).Encode(map[string]any{"signedPayload": payload, "sendAttempts": []any{map[string]string{"sendAttemptResult": "SUCCESS"}}})
+			json.NewEncoder(w).Encode(map[string]any{"signedPayload": payload, "sendAttempts": []any{map[string]string{"sendAttemptResult": "TIMED_OUT"}, map[string]string{"sendAttemptResult": "SUCCESS"}}})
 		}
 	})
 	client, app, signed := testProbeClient(t, h, 200*time.Millisecond)
@@ -113,7 +116,7 @@ func TestAppleServerAPIProbeFailsClosed(t *testing.T) {
 		{"production post missing is delivery", appleEnvProduction, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.NotFound(w, r) }), "stage B"},
 		{"sandbox post missing is delivery", appleEnvSandbox, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.NotFound(w, r) }), "stage B"},
 		{"stage A malformed token", appleEnvProduction, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			json.NewEncoder(w).Encode(map[string]string{"testNotificationToken": "not-a-uuid"})
+			json.NewEncoder(w).Encode(map[string]string{"testNotificationToken": "bad\x00token"})
 		}), "invalid token"},
 		{"stage B terminal", appleEnvProduction, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodPost {
@@ -148,6 +151,77 @@ func TestAppleServerAPIProbeFailsClosed(t *testing.T) {
 			err := client.probeTestNotification(context.Background(), tc.env, client.cfg.ProductionURL, app, &out)
 			if err == nil || !strings.Contains(err.Error(), tc.want) || strings.Contains(err.Error(), "secret") || strings.Contains(out.String(), "hidden") {
 				t.Fatalf("err=%v out=%q", err, out.String())
+			}
+		})
+	}
+}
+
+func TestAppleServerAPITestTokenIsBoundedOpaqueText(t *testing.T) {
+	if !validAppleTestToken("9f0b2e3a-1c4d-4e5f-8a9b-000000000111_2000000000123") {
+		t.Fatal("documented opaque token shape rejected")
+	}
+	for _, token := range []string{"", strings.Repeat("x", 1025), "bad\x00token", "bad\ntoken", string([]byte{0xff})} {
+		if validAppleTestToken(token) {
+			t.Fatalf("unsafe token accepted: %q", token)
+		}
+	}
+}
+
+func TestAppleServerAPIProbeFailsFastOnExplicitDeliveryFailure(t *testing.T) {
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			json.NewEncoder(w).Encode(map[string]string{"testNotificationToken": "opaque_2000000000123"})
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"sendAttempts": []any{map[string]string{"sendAttemptResult": "TIMED_OUT"}}})
+	})
+	client, app, _ := testProbeClient(t, h, 100*time.Millisecond)
+	start := time.Now()
+	err := client.probeTestNotification(context.Background(), appleEnvProduction, client.cfg.ProductionURL, app, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "TEST delivery failed") || time.Since(start) >= 100*time.Millisecond || strings.Contains(err.Error(), "TIMED_OUT") {
+		t.Fatalf("err=%v elapsed=%v", err, time.Since(start))
+	}
+}
+
+func TestAppleServerAPIProbeRejectsSignedTestIdentityMismatch(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(map[string]any)
+	}{
+		{"environment", func(d map[string]any) { d["environment"] = appleEnvSandbox; delete(d, "appAppleId") }},
+		{"bundle", func(d map[string]any) { d["bundleId"] = testBundleMac; d["appAppleId"] = int64(6801142976) }},
+		{"production app id", func(d map[string]any) { d["appAppleId"] = int64(6801142976) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			chain := newAppleTestChain(t)
+			apps := []AppleAppConfig{{BundleID: testBundleIOS, AppAppleID: 6791918822}, {BundleID: testBundleMac, AppAppleID: 6801142976}}
+			verifier, err := NewAppleTransactionVerifier(AppleStoreConfig{Environments: []string{appleEnvProduction, appleEnvSandbox}, Apps: apps, RootCertsPEM: chain.rootPEM})
+			if err != nil {
+				t.Fatal(err)
+			}
+			payload := chain.notify(t, "", func(p map[string]any) { p["notificationType"] = "TEST" }, withAppleNotificationData(func(d map[string]any) {
+				d["environment"] = appleEnvProduction
+				d["bundleId"] = testBundleIOS
+				d["appAppleId"] = int64(6791918822)
+				d["signedTransactionInfo"] = ""
+				tc.mutate(d)
+			}))
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodPost {
+					json.NewEncoder(w).Encode(map[string]string{"testNotificationToken": "opaque_2000000000123"})
+					return
+				}
+				json.NewEncoder(w).Encode(map[string]any{"signedPayload": payload, "sendAttempts": []any{map[string]string{"sendAttemptResult": "SUCCESS"}}})
+			}))
+			defer server.Close()
+			key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+			client, err := NewAppleServerAPIClient(AppleServerAPIConfig{IssuerID: "issuer", KeyID: "key", PrivateKey: key, HTTP: server.Client(), ProductionURL: server.URL, SandboxURL: server.URL, ProbeInterval: time.Millisecond, ProbeTimeout: 50 * time.Millisecond}, verifier)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = client.probeTestNotification(context.Background(), appleEnvProduction, server.URL, apps[0], &bytes.Buffer{})
+			if err == nil || !strings.Contains(err.Error(), "signed TEST verification failed") {
+				t.Fatalf("mismatch accepted: %v", err)
 			}
 		})
 	}

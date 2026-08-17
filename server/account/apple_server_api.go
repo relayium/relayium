@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/golang-jwt/jwt/v5"
 )
@@ -219,7 +220,7 @@ func (c *AppleServerAPIClient) probeTestNotification(ctx context.Context, enviro
 	var created struct {
 		Token string `json:"testNotificationToken"`
 	}
-	if json.Unmarshal(body, &created) != nil || !validAppleNotificationUUID(created.Token) {
+	if json.Unmarshal(body, &created) != nil || !validAppleTestToken(created.Token) {
 		return fmt.Errorf("stage A: %s %s returned an invalid token", environment, app.BundleID)
 	}
 	fmt.Fprintf(out, "apple probe stage A ok: %s %s\n", environment, app.BundleID)
@@ -274,12 +275,18 @@ func (c *AppleServerAPIClient) probeTestNotification(ctx context.Context, enviro
 			return fmt.Errorf("stage B: %s %s invalid status response", environment, app.BundleID)
 		}
 		success := false
+		explicitFailure := false
 		for _, attempt := range status.SendAttempts {
 			if attempt.SendAttemptResult == "SUCCESS" {
 				success = true
+			} else if attempt.SendAttemptResult != "" {
+				explicitFailure = true
 			}
 		}
 		if !success {
+			if explicitFailure {
+				return fmt.Errorf("stage B: %s %s TEST delivery failed", environment, app.BundleID)
+			}
 			continue
 		}
 		if status.SignedPayload == "" {
@@ -293,6 +300,18 @@ func (c *AppleServerAPIClient) probeTestNotification(ctx context.Context, enviro
 		return nil
 	}
 	return fmt.Errorf("stage B: %s %s timed out", environment, app.BundleID)
+}
+
+func validAppleTestToken(token string) bool {
+	if token == "" || len(token) > 1024 || !utf8.ValidString(token) {
+		return false
+	}
+	for _, r := range token {
+		if r == 0 || (r >= 0 && r < 0x20) || r == 0x7f {
+			return false
+		}
+	}
+	return true
 }
 
 func appleRetryAfterDelay(raw string, now, deadline time.Time) (time.Duration, error) {
