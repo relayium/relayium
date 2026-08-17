@@ -835,9 +835,12 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		`CREATE TRIGGER IF NOT EXISTS inbox_tasks_source_required_insert
 		 BEFORE INSERT ON inbox_tasks WHEN NEW.source_device_id = ''
 		 BEGIN SELECT RAISE(ABORT, 'inbox task source device required'); END`,
-		`CREATE TRIGGER IF NOT EXISTS inbox_tasks_source_required_update
-		 BEFORE UPDATE OF source_device_id ON inbox_tasks WHEN NEW.source_device_id = ''
-		 BEGIN SELECT RAISE(ABORT, 'inbox task source device required'); END`,
+		// Replace the Stage 1 trigger: a task's authenticated conversation source
+		// is immutable, including changes to another device owned by the account.
+		`DROP TRIGGER IF EXISTS inbox_tasks_source_required_update`,
+		`CREATE TRIGGER IF NOT EXISTS inbox_tasks_source_immutable_update
+		 BEFORE UPDATE OF source_device_id ON inbox_tasks WHEN NEW.source_device_id <> OLD.source_device_id
+		 BEGIN SELECT RAISE(ABORT, 'inbox task source device immutable'); END`,
 		`CREATE TRIGGER IF NOT EXISTS inbox_tasks_source_owned_insert
 		 BEFORE INSERT ON inbox_tasks WHEN NOT EXISTS (
 		   SELECT 1 FROM devices WHERE id = NEW.source_device_id AND user_id = NEW.user_id)
@@ -2673,6 +2676,14 @@ func (s *SQLiteStore) RegisterBrowserDevice(ctx context.Context, in BrowserDevic
 		return Device{}, err
 	}
 	defer tx.Rollback()
+	var count int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM devices WHERE user_id = ? AND kind = 'browser'`, in.UserID).Scan(&count); err != nil {
+		return Device{}, err
+	}
+	if count >= MaxBrowserDevicesPerAccount {
+		return Device{}, ErrBrowserDeviceLimit
+	}
 	d := Device{ID: in.DeviceID, UserID: in.UserID, Name: in.Name, Kind: "browser",
 		CreatedAt: in.At, LastIP: in.LastIP}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO devices (`+deviceCols+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,

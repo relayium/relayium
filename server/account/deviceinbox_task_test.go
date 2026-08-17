@@ -2253,7 +2253,7 @@ func TestPerDeviceQueueDepthIsBounded(t *testing.T) {
 	for i := 0; i < inbox.MaxPendingTasksPerDevice; i++ {
 		fileID := h.storedObject(t, u, 1, time.Hour)
 		if _, _, err := h.store.CreateInboxTask(ctx, InboxTask{
-			ID: authx.NewID(), UserID: u, TargetDeviceID: tg.deviceID,
+			ID: authx.NewID(), UserID: u, TargetDeviceID: tg.deviceID, SourceDeviceID: tg.deviceID,
 			IdempotencyKey: fmt.Sprintf("depth-%d", i), StoredFileID: fileID,
 			WrapAlgorithm: inbox.KeyAlgX25519SealedBoxV1, WrappedKey: sealedKey("k"),
 			TargetKeyID: tg.keyID, TargetKeyGeneration: tg.keyGen, CreatedAt: h.nowUnix(),
@@ -2294,27 +2294,27 @@ func TestSchemaRefusesImpossibleRows(t *testing.T) {
 	u := h.user(t, "schema@example.test")
 	tg := h.enrolTarget(t, u, "server", inbox.AutoAcceptAuto, true)
 
-	base := `INSERT INTO inbox_tasks (id, user_id, target_device_id, idempotency_key, stored_file_id,
+	base := `INSERT INTO inbox_tasks (id, user_id, target_device_id, source_device_id, idempotency_key, stored_file_id,
 	  enc_manifest, wrap_algorithm, wrapped_key, target_key_id, target_key_generation,
 	  ciphertext_bytes, state, claim_token_hash, lease_expires_at, saved_at,
 	  created_at, updated_at, expires_at) VALUES `
 	for name, values := range map[string]string{
-		"an invented state":                `('a', ?, ?, 'i1', 'f', x'00', 'alg', 'w', 'k', 1, 0, 'sent',      '',  0, 0, 1, 1, 9)`,
-		"a sender-local state":             `('b', ?, ?, 'i2', 'f', x'00', 'alg', 'w', 'k', 1, 0, 'uploading', '',  0, 0, 1, 1, 9)`,
-		"a saved timestamp without saved":  `('c', ?, ?, 'i3', 'f', x'00', 'alg', 'w', 'k', 1, 0, 'queued',    '',  0, 7, 1, 1, 9)`,
-		"a lease with no claimant":         `('d', ?, ?, 'i4', 'f', x'00', 'alg', 'w', 'k', 1, 0, 'downloading','', 5, 0, 1, 1, 9)`,
-		"an empty idempotency key":         `('e', ?, ?, '',   'f', x'00', 'alg', 'w', 'k', 1, 0, 'queued',    '',  0, 0, 1, 1, 9)`,
-		"a negative ciphertext byte count": `('f', ?, ?, 'i6', 'f', x'00', 'alg', 'w', 'k', 1, -1,'queued',    '',  0, 0, 1, 1, 9)`,
+		"an invented state":                `('a', ?, ?, ?, 'i1', 'f', x'00', 'alg', 'w', 'k', 1, 0, 'sent',      '',  0, 0, 1, 1, 9)`,
+		"a sender-local state":             `('b', ?, ?, ?, 'i2', 'f', x'00', 'alg', 'w', 'k', 1, 0, 'uploading', '',  0, 0, 1, 1, 9)`,
+		"a saved timestamp without saved":  `('c', ?, ?, ?, 'i3', 'f', x'00', 'alg', 'w', 'k', 1, 0, 'queued',    '',  0, 7, 1, 1, 9)`,
+		"a lease with no claimant":         `('d', ?, ?, ?, 'i4', 'f', x'00', 'alg', 'w', 'k', 1, 0, 'downloading','', 5, 0, 1, 1, 9)`,
+		"an empty idempotency key":         `('e', ?, ?, ?, '',   'f', x'00', 'alg', 'w', 'k', 1, 0, 'queued',    '',  0, 0, 1, 1, 9)`,
+		"a negative ciphertext byte count": `('f', ?, ?, ?, 'i6', 'f', x'00', 'alg', 'w', 'k', 1, -1,'queued',    '',  0, 0, 1, 1, 9)`,
 	} {
-		if _, err := h.store.db.Exec(base+values, u, tg.deviceID); err == nil {
+		if _, err := h.store.db.Exec(base+values, u, tg.deviceID, tg.deviceID); err == nil {
 			t.Fatalf("the database accepted %s", name)
 		}
 	}
 	// The shape that MUST be allowed: a claimant retained after its lease ended,
 	// which is what makes a retried final report idempotent.
 	if _, err := h.store.db.Exec(base+
-		`('ok', ?, ?, 'i7', 'f', x'00', 'alg', 'w', 'k', 1, 0, 'saved', 'hash', 0, 5, 1, 1, 9)`,
-		u, tg.deviceID); err != nil {
+		`('ok', ?, ?, ?, 'i7', 'f', x'00', 'alg', 'w', 'k', 1, 0, 'saved', 'hash', 0, 5, 1, 1, 9)`,
+		u, tg.deviceID, tg.deviceID); err != nil {
 		t.Fatalf("the database refused a legitimately finished row: %v", err)
 	}
 }

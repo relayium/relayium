@@ -10,6 +10,10 @@ import (
 // Postgres swap need only touch sqlite.go.
 var ErrNotFound = errors.New("account: not found")
 
+const MaxBrowserDevicesPerAccount = 20
+
+var ErrBrowserDeviceLimit = errors.New("account: browser device limit reached")
+
 // User is an account holder. PII is limited to email + display name.
 type User struct {
 	ID            string

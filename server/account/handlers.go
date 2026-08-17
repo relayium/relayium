@@ -405,7 +405,7 @@ func (s *Service) handleBrowserDeviceInstall(w http.ResponseWriter, r *http.Requ
 		// replacement that undoes device revocation. A credential belonging to a
 		// different signed-in account is replaced below and never reused.
 		if !ok {
-			http.SetCookie(w, expiredBrowserDeviceCookie())
+			http.SetCookie(w, expiredBrowserDeviceCookie(s.CookieSecure()))
 			httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "browser_device_revoked"})
 			return
 		}
@@ -416,17 +416,21 @@ func (s *Service) handleBrowserDeviceInstall(w http.ResponseWriter, r *http.Requ
 		Name: "Web browser", At: s.now().Unix(), LastIP: canonicalDeviceIP(s.clientIP(r)),
 	})
 	if err != nil {
+		if errors.Is(err, ErrBrowserDeviceLimit) {
+			httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "browser_device_limit"})
+			return
+		}
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: browserDeviceCookie, Value: raw, Path: "/api/",
-		MaxAge: 365 * 24 * 60 * 60, HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode})
+		MaxAge: 365 * 24 * 60 * 60, HttpOnly: true, Secure: s.CookieSecure(), SameSite: http.SameSiteStrictMode})
 	httpx.WriteJSON(w, http.StatusCreated, map[string]any{"deviceId": d.ID, "created": true})
 }
 
-func expiredBrowserDeviceCookie() *http.Cookie {
+func expiredBrowserDeviceCookie(secure bool) *http.Cookie {
 	return &http.Cookie{Name: browserDeviceCookie, Value: "", Path: "/api/", MaxAge: -1,
-		HttpOnly: true, Secure: true, SameSite: http.SameSiteStrictMode}
+		HttpOnly: true, Secure: secure, SameSite: http.SameSiteStrictMode}
 }
 
 func (s *Service) handleRenameDevice(w http.ResponseWriter, r *http.Request, u User) {

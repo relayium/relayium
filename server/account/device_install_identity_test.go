@@ -410,7 +410,7 @@ func TestReauthenticationPreservesInboxEnrolmentKeysAndTasks(t *testing.T) {
 
 	if _, err := store.UpsertDeviceInbox(ctx, DeviceInbox{
 		DeviceID: deviceID, UserID: userID, Platform: "darwin", AppVersion: "1.1.3",
-		ProtocolVersion: 2, Capabilities: []string{"inbox.receive.v3"},
+		ProtocolVersion: 3, Capabilities: []string{"inbox.receive.v3"},
 		ReceiveCapability: "inbox.receive.v3", AutoAccept: "ask",
 		RegisteredAt: 100, UpdatedAt: 100,
 	}); err != nil {
@@ -438,7 +438,7 @@ func TestReauthenticationPreservesInboxEnrolmentKeysAndTasks(t *testing.T) {
 		t.Fatalf("stage ciphertext: %v", err)
 	}
 	task, _, err := store.CreateInboxTask(ctx, InboxTask{
-		ID: "task-1", UserID: userID, TargetDeviceID: deviceID,
+		ID: "task-1", UserID: userID, TargetDeviceID: deviceID, SourceDeviceID: deviceID,
 		IdempotencyKey: "idem-1", StoredFileID: "file-1", EncManifest: []byte("opaque"),
 		WrapAlgorithm: "x25519-sealedbox", WrappedKey: "d3JhcHBlZA",
 		TargetKeyID: "key-2", TargetKeyGeneration: 2, CiphertextBytes: 10,
@@ -461,7 +461,7 @@ func TestReauthenticationPreservesInboxEnrolmentKeysAndTasks(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("the Device Inbox enrolment did not survive: found=%v err=%v", found, err)
 	}
-	if inbox.AutoAccept != "ask" || inbox.ProtocolVersion != 2 {
+	if inbox.AutoAccept != "ask" || inbox.ProtocolVersion != 3 {
 		t.Fatalf("the enrolment was rewritten: %+v", inbox)
 	}
 	keys, err := store.ListDeviceKeys(ctx, deviceID, userID)
