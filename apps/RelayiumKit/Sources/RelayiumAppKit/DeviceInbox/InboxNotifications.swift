@@ -3,12 +3,13 @@ import Foundation
 
 /// What the Device Inbox is allowed to put on a notification banner.
 ///
-/// A two-case enum carrying a COUNT and a closed code, and nothing else. This is
-/// the type that makes "notification previews contain no user content" a property
-/// of the design rather than of whoever writes the next call site: there is no
-/// field here through which a file name, a destination path, an account email, a
-/// device id, a task id, a bearer or key material could travel, so no future
-/// caller can add one without changing this declaration and its tests.
+/// Four cases carrying, between them, a COUNT and two closed codes — and, when a
+/// message arrives, nothing whatsoever. This is the type that makes "notification
+/// previews contain no user content" a property of the design rather than of
+/// whoever writes the next call site: there is no field here through which a file
+/// name, a destination path, an account email, a device id, a task id, a bearer
+/// or key material could travel, so no future caller can add one without changing
+/// this declaration and its tests.
 ///
 /// The rule it exists for: a macOS notification preview is readable on a LOCKED
 /// screen, by anyone in the room. "3 files saved" is the most a person walking

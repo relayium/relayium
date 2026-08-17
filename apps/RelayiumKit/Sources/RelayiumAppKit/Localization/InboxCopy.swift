@@ -430,7 +430,13 @@ public enum InboxNotificationPermissionPresentation {
 /// The whole type is counts and closed codes. There is no branch here that can
 /// reach a file name, a path, an account email, a device id, a task id, a bearer
 /// or key material, because `InboxNotification` carries none of them — which is
-/// the point of that enum having exactly three cases.
+/// the point of that enum's four cases carrying, between them, one count and two
+/// closed codes. `savedMessage`, the case a preview would belong to, carries
+/// nothing at all.
+///
+/// Neither half interpolates. Every arm returns a catalog lookup or delegates to
+/// another closed-code renderer, so there is no `\(…)` anywhere in this type for
+/// a value to enter through — asserted as text by `InboxSurfaceGuardTests`.
 public enum InboxNotificationPresentation {
     public static func title(_ notification: InboxNotification,
                              language: AppLanguage? = nil) -> String {
@@ -438,9 +444,9 @@ public enum InboxNotificationPresentation {
         case .saved:
             return L10n.t(.inboxNotifyTitleSaved, language: language)
         case .savedMessage:
-            // The title carries the whole announcement, and the body repeats it
-            // rather than adding a length, a sender or a preview. There is
-            // nothing else this banner is allowed to say.
+            // The same sentence the menu bar and the receipt row use, because
+            // there is exactly one true thing to say about a message on a locked
+            // screen and all three surfaces have to say it identically.
             return L10n.t(.inboxSavedMessage, language: language)
         case .attention, .failed:
             return L10n.t(.inboxNotifyTitleAttention, language: language)
@@ -453,7 +459,13 @@ public enum InboxNotificationPresentation {
         case .saved(let files):
             return L10n.plural(.inboxSavedFiles, files, language: language)
         case .savedMessage:
-            return L10n.t(.inboxSavedMessage, language: language)
+            // Where to read it, and nothing about it. The `saved` arm above
+            // renders a COUNT because a count is a fact about files that costs a
+            // passer-by nothing; a message has no such fact — not its length, not
+            // its sender, not its first words — so this half spends itself on the
+            // route instead. `savedMessage` carries no associated value, so there
+            // is nothing here a call site could substitute in.
+            return L10n.t(.inboxNotifyBodyMessage, language: language)
         case .attention(let attention):
             return InboxStatusPresentation.text(for: attention, language: language)
         case .failed(let failure):

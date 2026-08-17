@@ -620,6 +620,7 @@
 "inbox.errorNotificationSettings" = "无法打开「系统设置」。请自行打开，然后前往「通知」中的 Relayium。";
 "inbox.notifyTitleSaved" = "已接收文件";
 "inbox.savedMessage" = "已收到消息";
+"inbox.notifyBodyMessage" = "在 Relayium 的「设备收件箱」中查看。";
 "inbox.messagesHeading" = "消息";
 "inbox.messagesExplain" = "发送到这台 Mac 的消息保存在 Relayium 中，不在你的接收文件夹里，因此没有对应的文件可找。";
 "inbox.moreMessages" = "另有 %@ 条";

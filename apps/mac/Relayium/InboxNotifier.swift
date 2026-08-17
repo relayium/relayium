@@ -19,6 +19,12 @@ import RelayiumAppKit
 /// past the Mac reads it. "3 files saved" is the most a passer-by may learn about
 /// what somebody sent to this machine.
 ///
+/// A received MESSAGE is the sharpest case of that rule, and it is the one the
+/// type settles rather than this file: `savedMessage` has no associated value at
+/// all, so there is nothing here to render even by mistake. The banner says that
+/// something arrived and where to read it; the text itself is in
+/// `InboxMessageStore`, behind the app the user opens themselves.
+///
 /// ## Why it does not go quiet while the app is frontmost
 ///
 /// `TransferNotifier` suppresses a banner when the user is looking at the window,
@@ -79,6 +85,16 @@ final class InboxNotifier: InboxNotifying {
             // apart are two events, and the ledger has already refused the
             // duplicates that are not.
             identifier = "relayium-inbox-saved-\(UUID().uuidString)"  // nonlocalized: an id
+        case .savedMessage:
+            // Per delivery too, and for a reason files do not have: two messages
+            // are two things somebody wrote, and a shared identifier would have
+            // the second REPLACE the first in Notification Centre — the one
+            // notice that a message is waiting, silently overwritten.
+            //
+            // A distinct prefix rather than reusing the one above so the two
+            // kinds stay legible where they are read back as text; it carries a
+            // kind, never a delivery.
+            identifier = "relayium-inbox-message-\(UUID().uuidString)"  // nonlocalized: an id
         case .attention, .failed:
             identifier = Self.attentionIdentifier
         }

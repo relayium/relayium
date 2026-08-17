@@ -633,6 +633,83 @@ final class InboxSurfaceGuardTests: XCTestCase {
         }
     }
 
+    /// **The message banner is a kind, never a message.**
+    ///
+    /// `savedMessage` reached the notifier with no payload to render, which is
+    /// the property that makes this safe — but "no payload" only holds while the
+    /// notifier stays unable to fetch one. It has the receipt's own vocabulary
+    /// banned above; a message is held somewhere else entirely, in
+    /// `InboxMessageStore`, and reaching it would take nothing more than an
+    /// `@EnvironmentObject` and one property access.
+    ///
+    /// So: the case is named explicitly, the switch cannot fall through into it,
+    /// and the file names no route to the store at all. All three are ABSENCES
+    /// with no runtime to observe — a banner that had grown a preview would look
+    /// entirely correct in every screenshot except a locked one.
+    func testTheMessageBannerNamesItsCaseAndCanReachNoMessageText() throws {
+        let notifier = try macSource("InboxNotifier.swift")
+        XCTAssertTrue(notifier.contains("case .savedMessage:"),
+                      "the notifier folds a message into another case's arm, so the two "
+                      + "cannot be told apart or given separate notification identities")
+        // A `default:` would silently absorb whatever case is added next — and
+        // the case most likely to be added next is one that carries content.
+        guard let start = notifier.range(of: "switch notification {") else {
+            return XCTFail("the notifier no longer switches over the notification")
+        }
+        let block = String(notifier[start.lowerBound...].prefix(1_200))
+        XCTAssertFalse(block.contains("default:"),
+                       "the notifier switches over the notification with a fall-through")
+        // Every name that leads to a stored message, the store that holds them,
+        // and the presentation layer that renders one. None of them belongs in a
+        // file whose output macOS draws on a locked screen.
+        for banned in ["InboxMessageStore", "InboxMessage", "InboxMessagePresentation",
+                       "message.text", "inbox.messages", ".messages"] {
+            XCTAssertFalse(notifier.contains(banned),
+                           "the Device Inbox notification can reach a received message "
+                           + "via \(banned)")
+        }
+    }
+
+    /// **The banner copy has no substitution site, so there is nothing to fill.**
+    ///
+    /// The runtime half is in `InboxNotificationTests`, which checks the shipped
+    /// catalog entries for a `%@`. This is the other side of the same claim and
+    /// the one a catalog check cannot make: even with a template that has no
+    /// slot, `"\(something)"` in a renderer would put a value on the banner
+    /// without any catalog changing. `InboxNotificationPresentation` returns
+    /// lookups and delegations only, and this is what keeps it that way.
+    func testTheNotificationCopyInterpolatesNothingIntoABanner() throws {
+        let copy = try packageSource("Localization/InboxCopy.swift")
+        guard let start = copy.range(of: "public enum InboxNotificationPresentation {") else {
+            return XCTFail("the notification presentation is gone or renamed")
+        }
+        let presentation = String(copy[start.upperBound...])
+        // Both halves handle the message, by name, in a closed switch.
+        XCTAssertEqual(occurrences(of: "case .savedMessage:", in: presentation), 2,
+                       "the title and the body do not each name the message case")
+        XCTAssertFalse(presentation.contains("default:"),
+                       "the banner copy has a fall-through arm")
+        // The one construct through which a runtime value could reach a returned
+        // string. Its absence is the whole assertion.
+        XCTAssertFalse(presentation.contains("\\("),
+                       "the banner copy interpolates a value into a notification string")
+        // And it reaches for no message and builds no summary of one.
+        // `InboxMessagePresentation` is the renderer for the pane somebody opened
+        // their own Mac to read; `prefix`/`truncat` are how a preview gets built
+        // out of a body that a future refactor handed in. The file's plural
+        // renderer is deliberately NOT banned here — the `saved` arm's file count
+        // is the one number this type may say.
+        for banned in ["InboxMessagePresentation", "InboxMessage", "prefix(", "truncat"] {
+            XCTAssertFalse(presentation.contains(banned),
+                           "the banner copy can build a message preview via \(banned)")
+        }
+        // The message body is its OWN string rather than the title reused, and it
+        // is the argument-free key. A body that fell back to `inboxSavedMessage`
+        // would restore the sentence-twice banner this replaced.
+        XCTAssertTrue(presentation.contains("L10n.t(.inboxNotifyBodyMessage, language: language)"),
+                      "the message banner's body is not the dedicated route sentence")
+    }
+
     // MARK: - the message surface, and the claim that rests on it
 
     /// **A received message is rendered as a message, with an action that puts

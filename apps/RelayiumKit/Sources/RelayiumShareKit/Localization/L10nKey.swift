@@ -1694,6 +1694,19 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// later.
     case inboxSavedMessage = "inbox.savedMessage"
 
+    /// The second line of the message banner: where to go, and nothing else.
+    ///
+    /// The banner used to render `inbox.savedMessage` as both halves, which read
+    /// as the same sentence twice and told a user who had never opened the
+    /// Device Inbox nothing about where the message now is. This says that, and
+    /// only that.
+    ///
+    /// It takes NO argument, and that is the property rather than a convenience:
+    /// a body with a `%@` in it is a slot, and the only value anyone would ever
+    /// be tempted to put in this particular slot is the message. `L10nKey` has no
+    /// preview key for the same reason — there is nothing here to reach for.
+    case inboxNotifyBodyMessage = "inbox.notifyBodyMessage"
+
     /// The Device Inbox section that shows received messages, in the app the
     /// user opened themselves.
     ///

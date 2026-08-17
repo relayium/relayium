@@ -5,7 +5,7 @@ import XCTest
 /// What may be announced, and what may be announced twice.
 ///
 /// The privacy half is a claim about the TYPE, not about the current call sites:
-/// `InboxNotification` has three cases and none of them can carry a file name, a
+/// `InboxNotification` has four cases and none of them can carry a file name, a
 /// path, an account email, a device id, a task id, a bearer or key material. The
 /// assertions below drive the rendered strings for every case and check that
 /// nothing the user or the protocol supplied appears in them, so a future case
@@ -146,6 +146,67 @@ final class InboxNotificationTests: XCTestCase {
             XCTAssertNotEqual(body,
                               InboxNotificationPresentation.body(.saved(files: 0),
                                                                  language: language))
+            // The two halves say different things. They were the same string for
+            // one delivery, which read as the sentence twice and left a user who
+            // had never opened the Device Inbox with no idea where the message
+            // had gone. The body is the route; the title is the event.
+            XCTAssertNotEqual(title, body,
+                              "\(language) renders the message banner as one sentence twice")
+            // No digit anywhere in either half. A message has no count, and a
+            // number on this banner could only have come from a length, a
+            // position in a batch or an identifier — none of which a locked
+            // screen may show.
+            for half in [title, body] {
+                XCTAssertNil(half.rangeOfCharacter(from: .decimalDigits),
+                             "\(language) put a number on a message banner: \(half)")
+            }
         }
+    }
+
+    /// **Nothing can be substituted into the message banner, in either half.**
+    ///
+    /// The strongest version of the rule, and the one a future edit is most
+    /// likely to break quietly: `L10n.t` renders its catalog entry verbatim, so
+    /// the ONLY way user content could reach this banner is a template with a
+    /// `%@` in it and a call site that fills it. Both maintained catalogs are
+    /// checked for the slot rather than for the content — an assertion about the
+    /// finished string would pass right up until somebody added the argument.
+    ///
+    /// `testPlaceholderSignaturesMatchEnglish` then carries this to the frozen
+    /// seven: a locale may not introduce a specifier English does not have.
+    func testTheMessageBannerStringsHaveNoSubstitutionSlotAtAll() throws {
+        for language in [AppLanguage.en, .zh] {
+            let catalog = try XCTUnwrap(StringsCatalog.load(language),
+                                        "catalog for \(language.rawValue) is missing")
+            for key in [L10nKey.inboxSavedMessage, .inboxNotifyBodyMessage] {
+                let template = try XCTUnwrap(catalog[key.rawValue],
+                                             "\(language.rawValue) is missing \(key.rawValue)")
+                XCTAssertEqual(formatSpecifiers(template), [],
+                               "\(language.rawValue) \(key.rawValue) has a substitution slot, "
+                               + "which is where a message preview would go: \(template)")
+            }
+        }
+    }
+
+    /// **`savedMessage` has no associated value, measured rather than read.**
+    ///
+    /// The privacy claim for a received message is not a rule about call sites —
+    /// it is that the case has no payload, so there is no expression anywhere
+    /// that could put the text, its length, its sender or its delivery id on a
+    /// banner. Reflection is what turns that from a statement in a doc comment
+    /// into something that fails when the declaration changes: adding
+    /// `case savedMessage(preview: String)` would give the mirror a child here
+    /// long before any renderer decided what to do with it.
+    ///
+    /// The `saved` case is checked in the same breath so this cannot pass by the
+    /// mirror simply seeing nothing at all.
+    func testTheMessageCaseHasNoAssociatedValueToCarryContent() {
+        XCTAssertEqual(Mirror(reflecting: InboxNotification.savedMessage).children.count, 0,
+                       "InboxNotification.savedMessage gained a payload; a macOS banner is "
+                       + "drawn on the lock screen and there is nothing about a message it "
+                       + "may show")
+        XCTAssertEqual(Mirror(reflecting: InboxNotification.saved(files: 3)).children.count, 1,
+                       "the mirror sees no payload on a case that has one, so the assertion "
+                       + "above proves nothing")
     }
 }
