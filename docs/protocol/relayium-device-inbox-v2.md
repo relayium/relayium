@@ -137,10 +137,13 @@ to — content kind is sealed (invariant 1). The token exists for the sender,
 which reads it off the device list to decide whether offering "send text" to
 that target would be honest.
 
-Its **absence is meaningful**. A receiver that would write a message into the
-user's downloads folder as a `.txt` file must not announce it: the sender would
-then promise a message and deliver a file. A build announces `inbox.text.v1` in
-the same commit that makes it true and never one commit earlier.
+Its **absence is meaningful**. A receiver that does not present a message to its
+user must not announce it: the sender would then promise a message its recipient
+cannot read. Absence does not mean the message would arrive as a file — a v2
+receiver classifies the sealed kind before it consults any folder (§13.1), so a
+build with no message surface either refuses the delivery outright or commits it
+somewhere its user never sees. A build announces `inbox.text.v1` in the same
+commit that makes it true and never one commit earlier.
 
 **The claim is per BUILD, not per library and not per platform.** A store is not
 a surface: a build can commit a message perfectly and still leave its user with
@@ -155,9 +158,11 @@ Where it stands now:
 
 - **CLI receiver** — announces `inbox.receive.v2`, `inbox.autoaccept.v1` and
   `inbox.resume.v1`, and deliberately **not** `inbox.text.v1`. It has no message
-  store, and a build that would write a message into a downloads folder as a file
-  must not claim to present one.
+  store and **refuses** a text delivery (`unsupported_kind`) rather than writing
+  one into the receive folder, which is why it must not claim to present one.
 - **iOS app** — the same three. It has no Device Inbox message surface at all.
+  RelayiumKit's receiver would still commit a message to the local store, which
+  is exactly the state this token must not describe: stored is not presented.
 - **Headless receiver host** (`AppInboxReceiverHost`) — the same three. It runs
   the real receiver against a real server and renders nothing.
 - **macOS app** — announces `inbox.text.v1` on top of the three. What backs it:
@@ -557,3 +562,42 @@ fails the send before anything is uploaded rather than after.
 - A **missing or unusable receive folder** stays a truthful FILE caveat and
   suppresses text nowhere. A message is never written to that folder, and the
   receiver decides the kind before it consults the folder at all (§13.1).
+
+### 14.5 A delivery staged before v2 restarts; it never resumes
+
+A native send is durable, so the cutover has to answer a plan that was already
+half-uploaded when the build changed underneath it. Its frame 0 is the shared
+Stored-Wire manifest, and nothing in the plan said so: `deliveryKind` is absent
+for a pre-v2 delivery exactly as it is for a current file one. Resuming such a
+session would splice v2 payload frames in behind a v1 header and produce an
+object its own receiver refuses as `verify_failed` after downloading all of it.
+
+`PendingUploadPlan` therefore records `inboxProtocolVersion`, written for every
+delivery this build stages and absent on every plan written before it. A share
+never carries it, and a share plan that does is refused whole.
+
+A plan without the marker is **restarted** before anything else happens, in
+`InboxSendCoordinator.deliver`:
+
+- the upload session, its chunk size, the finalized object id and the sealed
+  wrapped key are dropped, so the next attempt inits a fresh session and streams
+  from byte zero under the canonical v2 manifest;
+- the **content key is rotated first**. Frame 0 is sealed at AEAD sequence 0
+  under that key, and the v2 document is not the v1 one, so re-sealing under the
+  same key would encrypt different plaintext under a spent nonce. The key is
+  replaced before the plan is rewritten, so a crash in between simply leaves the
+  restart owed and the next attempt repeats it;
+- the staged bytes are never touched. They may be the last copy Relayium holds;
+- the **creation-idempotency key survives**, so a plan whose create may already
+  have landed converges or is refused by central — it never queues the user's
+  file a second time;
+- a plan that already names a task is **not** restarted at all. It has finished
+  uploading and central bound its object; it is only being carried until its
+  tidy-up completes.
+
+The abandoned v1 object is left to central's collector, which reclaims an unbound
+`device_task` object. It is unreadable the moment its key is replaced.
+
+This is not v1 compatibility, which the owner waived on 2026-08-17: nothing
+decodes, sends or falls back to a v1 document. It is duplicate- and data-loss
+safety for ciphertext that was already in flight.

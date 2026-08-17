@@ -89,14 +89,26 @@ public final class InboxSendCoordinator: @unchecked Sendable {
                                                     token: token)
         }
 
-        var contentKey = try await contentKey(for: plan, token: token)
+        // A delivery staged before this build may already have fed a server
+        // session whose frame 0 is the shared Stored-Wire manifest. It is
+        // restarted here — before the content key is read, before the target is
+        // checked, and before a byte moves — because everything below assumes
+        // the object it is continuing was framed the way this build frames one.
+        //
+        // Checked on the plan the CALLER holds and applied to the plan on DISK,
+        // and deliberately after the recorded-task branch above: a job whose
+        // task exists is not uploading anything and must keep its convergence
+        // state exactly as the attempt that created it left it.
+        let staged = plan.speaksInboxV2 ? plan : try await restartOnInboxV2(plan)
+
+        var contentKey = try await contentKey(for: staged, token: token)
         defer { InboxKeyMaterial.zero(&contentKey) }
         // A sign-out or account switch may have cancelled the owner while the
         // protected store was answering. Never let that old credential cross
         // the first network boundary after the suspension returns.
         try Task.checkCancellation()
 
-        var current = plan
+        var current = staged
         if current.finalizedStoredId == nil {
             // The fail-fast guard. Its only job is to not spend the user's
             // bandwidth on a target that is going to refuse.
@@ -342,6 +354,48 @@ public final class InboxSendCoordinator: @unchecked Sendable {
 
     // MARK: - steps
 
+    /// Put a pre-v2 delivery back at byte zero, with a content key that has
+    /// never sealed anything.
+    ///
+    /// **The key rotation is not hygiene, it is the reason this cannot be a
+    /// plan edit alone.** Frame 0 is sealed at AEAD sequence 0 under the
+    /// content key, and the v2 document is not the v1 one — so re-sealing frame
+    /// 0 for the same job under the same key would encrypt DIFFERENT plaintext
+    /// under a nonce that key has already used. That is nonce reuse in the
+    /// strict sense: it exposes both manifests to anyone holding the old
+    /// ciphertext and hands them the authentication key for forging frames.
+    /// A fresh content key makes the restarted upload an unrelated stream.
+    ///
+    /// The old object becomes unopenable the moment its key is replaced, which
+    /// is the honest end state for ciphertext no task will ever own: central's
+    /// own collector reclaims an unbound `device_task` object, and nothing in it
+    /// was ever readable by anyone but this device.
+    ///
+    /// **The order is the crash contract.** The key is rotated first and the
+    /// plan is rewritten second, so a crash in between leaves a plan that still
+    /// says "legacy" — and the next attempt runs this whole step again, which is
+    /// exactly what it should do. The reverse order would leave a plan claiming
+    /// v2 while the key that sealed the v1 header was still in place, and the
+    /// window would be one where nothing knows a restart is owed.
+    ///
+    /// Both failures are `recoveryStateWriteFailed`: nothing has been sent,
+    /// nothing is released, the staged bytes and the idempotency key stay, and a
+    /// later attempt repeats the step once local storage is writable.
+    private func restartOnInboxV2(_ plan: PendingUploadPlan) async throws -> PendingUploadPlan {
+        var fresh = generateStoreKey()
+        defer { InboxKeyMaterial.zero(&fresh) }
+        do {
+            try await keys.save(id: plan.jobId, keyB64url: encodeStoreKey(fresh))
+        } catch {
+            throw InboxSendFailure.recoveryStateWriteFailed
+        }
+        do {
+            return try store.restartForInboxV2(plan)
+        } catch {
+            throw InboxSendFailure.recoveryStateWriteFailed
+        }
+    }
+
     private func contentKey(for plan: PendingUploadPlan, token: String) async throws -> [UInt8] {
         let stored: String?
         do {
@@ -391,10 +445,16 @@ public final class InboxSendCoordinator: @unchecked Sendable {
         }
         // The capability gate for a MESSAGE, re-checked here rather than trusted
         // from the moment the send was staged: a device can drop the claim by
-        // downgrading between the two, and a message landing on a build that
-        // does not present one would be written into a downloads folder as a
-        // file. Definitive — the remedy is on that machine — so the ciphertext
-        // goes back.
+        // downgrading between the two.
+        //
+        // What the absent token means is that the target has NOT promised a
+        // user-visible message surface — not that the message becomes a file. A
+        // v2 receiver classifies the sealed kind before it consults any folder:
+        // the CLI and the headless receiver refuse a text delivery outright, and
+        // a native build without the surface may commit the message to its own
+        // store and never show it to anyone. Either way the sender would have
+        // promised a message its recipient cannot read. Definitive — the remedy
+        // is on that machine — so the ciphertext goes back.
         //
         // A FILE delivery deliberately never reaches this branch. Requiring
         // `inbox.text.v1` of it would refuse ordinary file sends to every
@@ -409,6 +469,12 @@ public final class InboxSendCoordinator: @unchecked Sendable {
     private func upload(_ plan: PendingUploadPlan, key: [UInt8], token: String,
                         onProgress: (@Sendable (Int, Int) -> Void)?) async throws
         -> PendingUploadPlan {
+        // The invariant `deliver` establishes, restated where it is relied on: a
+        // v2 manifest may only be sealed over a session this build's framing
+        // opened. Deliberately NOT a terminal refusal — it releases nothing and
+        // deletes nothing, because the remedy for a plan that reached here
+        // un-restarted is to restart it, not to destroy the user's staged copy.
+        guard plan.speaksInboxV2 else { throw InboxSendFailure.uploadFailed }
         // Built BEFORE the session is opened, and outside the catch below, so a
         // plan that cannot produce a valid v2 manifest fails as itself rather
         // than as a resumable upload failure the user would be invited to retry

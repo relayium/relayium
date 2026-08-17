@@ -172,19 +172,24 @@ public enum InboxTargetEligibility {
     ///    so requiring the token in the general verdict would refuse ordinary
     ///    file deliveries to every build that does not render messages — the
     ///    CLI, iOS, and the headless receiver among them;
-    ///  * a receiver without it would land a message as a file in somebody's
-    ///    downloads folder, so offering "send text" to it would promise a
-    ///    message and deliver a file.
+    ///  * a receiver without it has not promised a user-visible message
+    ///    surface, so offering "send text" to it would promise something the
+    ///    recipient cannot read. It does NOT mean the message arrives as a
+    ///    file: a v2 receiver classifies the sealed kind first, so the CLI and
+    ///    the headless receiver refuse a text delivery outright, and a native
+    ///    build without the surface may store the message and present it
+    ///    nowhere.
     ///
     /// Central neither requires nor interprets the token and could not verify it
     /// if it wanted to — content kind is sealed — so its absence is read as the
     /// truthful answer rather than as a stale list: a device that has not said
     /// it presents text is one this sender must not offer text to.
     ///
-    /// The receive FOLDER is deliberately not consulted. A message is never
-    /// written there, so a missing, revoked or unwritable folder has nothing to
-    /// do with whether one can land — the receiver classifies kind first and
-    /// consults the folder second (protocol v2 §13.1), and suppressing text here
+    /// The receive FOLDER is deliberately not consulted, and it is the same
+    /// ordering that makes the paragraph above true. A message is never written
+    /// there: the receiver classifies kind first and consults the folder second
+    /// (protocol v2 §13.1), so a missing, revoked or unwritable folder has
+    /// nothing to do with whether a message can land, and suppressing text here
     /// would refuse a delivery that folder was never going to touch.
     public static func canReceiveText(_ row: InboxDeviceRow) -> Bool {
         guard availability(for: row).sendable else { return false }

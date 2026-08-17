@@ -37,8 +37,10 @@ export const CAP_RECEIVE_V2 = "inbox.receive.v2";
 /** `inbox.text.v1` — "this receiver shows a message as a message".
  *
  *  Read off the target device, never assumed. It is what makes offering a text
- *  send truthful: a receiver without it would land the message as a file in
- *  someone's downloads folder, which is not what the sender was promised. */
+ *  send truthful: a receiver without it has not promised a user-visible message
+ *  surface, so the message would be refused after the upload (the CLI and the
+ *  headless receiver reject a text delivery outright) or stored somewhere its
+ *  user never sees it. */
 export const CAP_TEXT_V1 = "inbox.text.v1";
 
 /** The protocol version this build writes its manifests to, declared on every
@@ -279,9 +281,12 @@ export function sendAvailability(deviceID: string, inbox: DeviceInboxView | null
  *     requiring the token in the general verdict would refuse ordinary file
  *     deliveries to every build that does not render messages — the CLI, iOS,
  *     and the headless receiver among them;
- *   * a receiver without it would land a message as a file in somebody's
- *     downloads folder, so offering "send text" to it would promise a message
- *     and deliver a file.
+ *   * a receiver without it has not promised a surface that shows a message, so
+ *     offering "send text" to it would promise something its user cannot read.
+ *     It does NOT mean the message arrives as a file: a v2 receiver classifies
+ *     the sealed kind first, so the CLI and the headless receiver refuse a text
+ *     delivery outright, and a native build without the surface may store the
+ *     message and present it nowhere.
  *
  *  Central neither requires nor interprets the token and could not verify it if
  *  it wanted to — content kind is sealed — so its absence is read as the

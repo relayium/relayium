@@ -84,7 +84,7 @@ export interface SendTarget {
    *
    *  Optional and fail-CLOSED: a caller that does not supply it cannot send a
    *  message, which is the safe direction — the cost of being wrong the other
-   *  way is a message written into somebody's downloads folder as a file. */
+   *  way is a message delivered to a build that never shows one. */
   capabilities?: readonly string[];
 }
 
@@ -376,8 +376,9 @@ export async function sendFilesToDevice(
  *  its storage.
  *
  *  Refused outright for a target that does not announce `inbox.text.v1`: that
- *  build would land the message as a file in the user's downloads folder, and
- *  offering the action at all would promise something else. */
+ *  build has not promised a surface that shows a message, so the delivery would
+ *  either be refused after the whole upload or be stored where its user never
+ *  sees it. Offering the action at all would promise something else. */
 export async function sendTextToDevice(
   target: SendTarget,
   message: string,

@@ -19,6 +19,12 @@ import RelayiumKit
 ///     v2 manifest fails, rather than quietly sealing the document its own
 ///     receiver refuses as `verify_failed`.
 ///
+/// **A plan is not asked whether it is a v2 plan here.** That precondition
+/// belongs one level up: `InboxSendCoordinator` restarts a delivery staged
+/// before v2 — new content key, no session, no object — before it ever builds a
+/// manifest. Refusing it here instead would classify the user's staged bytes as
+/// unsendable content, which is the one answer that releases them.
+///
 /// **Item order is the plan's, never sorted.** `PendingUploadStore` stages
 /// sources in selection order and `sources(for:)` reads them back in that same
 /// order, so manifest item *i* describes the payload frames of staged file *i*.

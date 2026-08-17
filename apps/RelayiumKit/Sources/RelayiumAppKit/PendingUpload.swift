@@ -172,10 +172,48 @@ public struct PendingUploadPlan: Codable, Equatable {
     /// default, exactly like `purpose`: a kind written by a future build
     /// describes payload framing this one cannot honour.
     public var deliveryKind: InboxManifestKind?
+    /// The Device Inbox protocol whose manifest this job's frame 0 seals.
+    ///
+    /// **This is the field that makes the v2 cutover safe, and it is a marker
+    /// about the CIPHERTEXT rather than a preference.** Absent means the plan
+    /// was written before this build existed, so whatever it may already have
+    /// sealed at frame 0 is the shared Stored-Wire manifest a v1 delivery
+    /// carried. Present and equal to `InboxProtocol.taskProtocolVersion` means
+    /// every byte this job has fed to a server session was framed by the build
+    /// that wrote the marker.
+    ///
+    /// Reading it is therefore the only way to tell "resume this upload" from
+    /// "this upload's first frame is a document no v2 receiver accepts". The
+    /// distinction cannot be recovered from `deliveryKind`: absent there means
+    /// `file`, which is what a legacy delivery also was, so a legacy plan would
+    /// otherwise resume its half-uploaded object and splice v2 payload frames in
+    /// behind a v1 frame 0.
+    ///
+    /// nil is never treated as v2 by any call site. `PendingUploadStore
+    /// .restartForInboxV2` is what turns a legacy device plan into one this
+    /// build may upload, and it invalidates the old session and object state in
+    /// the same atomic write that records this marker — so the marker can only
+    /// ever describe ciphertext that does not exist yet.
+    ///
+    /// Optional and additive, with the version deliberately NOT bumped, for the
+    /// reasons written above `sourceDraftId`. A share carries none of it: its
+    /// frame 0 is the shared manifest, unchanged and unversioned by this field.
+    /// A value this build does not know is refused by `valid`, exactly like an
+    /// unknown `purpose`: it describes framing this build cannot honour.
+    public var inboxProtocolVersion: Int?
 
     /// The purpose to act on. Absent means `share`: the only thing a plan
     /// written before this field existed could have been.
     public var effectivePurpose: UploadPurpose { purpose ?? .share }
+
+    /// Whether this plan's ciphertext is Device Inbox v2's, and may therefore be
+    /// resumed rather than restarted.
+    ///
+    /// Deliberately positive-only: absent is not "probably fine", it is a plan
+    /// whose frame 0 this build did not write.
+    public var speaksInboxV2: Bool {
+        inboxProtocolVersion == InboxProtocol.taskProtocolVersion
+    }
 
     /// The delivery kind to act on. Absent means `file`. Read through this,
     /// never directly, so no call site can tell "absent" from "file".
@@ -482,7 +520,17 @@ public final class PendingUploadStore: @unchecked Sendable {
                                          // `nil` for a file send, so an ordinary
                                          // delivery's encoded plan is unchanged
                                          // and a share's stays byte-identical.
-                                         deliveryKind: deliveryKind == .file ? nil : deliveryKind)
+                                         deliveryKind: deliveryKind == .file ? nil : deliveryKind,
+                                         // Written for every delivery this build
+                                         // stages, and only for a delivery: it
+                                         // is what a later process reads to know
+                                         // this job's frame 0 was v2's, and a
+                                         // share has no such document. Recorded
+                                         // here, before any session exists, so
+                                         // no ciphertext can predate the marker
+                                         // that describes it.
+                                         inboxProtocolVersion: target == nil
+                                             ? nil : InboxProtocol.taskProtocolVersion)
             try write(plan)                 // LAST: this is what makes the job complete
             return plan
         } catch {
@@ -647,6 +695,11 @@ public final class PendingUploadStore: @unchecked Sendable {
                 // carrying the field is two builds disagreeing about what this
                 // job is, refused for the same reason the target fields are.
                 && plan.deliveryKind == nil
+                // Nor a Device Inbox protocol: the shared manifest is not
+                // versioned by it, and a share claiming one is the same
+                // disagreement. This is also what keeps the marker from
+                // spreading into plans that have nothing to do with deliveries.
+                && plan.inboxProtocolVersion == nil
         case .deviceTask:
             guard fields.allSatisfy({ $0 }), let target = plan.target else { return false }
             if let wrapped = plan.targetWrappedKey,
@@ -658,6 +711,15 @@ public final class PendingUploadStore: @unchecked Sendable {
             // delivery nothing could ever act on.
             if let taskId = plan.deviceTaskId,
                (try? StoredObjectID.checked(taskId)) != taskId { return false }
+            // Absent is a LEGACY delivery and stays readable: refusing it here
+            // would make the plan unresumable and therefore sweepable, and the
+            // staged copy of the user's file would be deleted by the very change
+            // meant to protect it. A value this build does not know is refused
+            // instead, exactly as an unknown `purpose` is — it describes frame-0
+            // framing this build cannot produce, and guessing at it is how a
+            // resume writes a blend no receiver can open.
+            if let version = plan.inboxProtocolVersion,
+               version != InboxProtocol.taskProtocolVersion { return false }
             // A message is exactly one payload item within the manifest's own
             // bounds. Re-checked on READ rather than trusted from `prepare`,
             // because this is the shape the manifest is rebuilt from on every
@@ -765,6 +827,63 @@ public final class PendingUploadStore: @unchecked Sendable {
         }
         var updated = current
         updated.deviceTaskId = checked
+        try write(updated)
+        return updated
+    }
+
+    /// Move a delivery staged by a pre-v2 build onto Device Inbox v2, by
+    /// throwing away everything that describes its old ciphertext and NOTHING
+    /// that describes the user's intent.
+    ///
+    /// A legacy plan may already have opened a server session, and that
+    /// session's frame 0 is the shared Stored-Wire manifest. Resuming it while
+    /// this build seals a v2 manifest would produce an object whose header and
+    /// payload disagree — the exact blend a receiver reports as `verify_failed`
+    /// after downloading all of it. So the session, its chunk size, the
+    /// finalized object id and the sealed box that named it are dropped, and the
+    /// next attempt inits a fresh session and streams from byte zero under the
+    /// canonical v2 manifest.
+    ///
+    /// **What survives is deliberate, and each survivor prevents a real loss:**
+    ///
+    ///  - the STAGED BYTES and the job directory. They may be the last copy
+    ///    Relayium holds — the shared draft behind them was retired the moment
+    ///    this plan became durable — so nothing here deletes a file;
+    ///  - the target, the TTL and the delivery kind: the user asked for this
+    ///    delivery and did not change their mind by upgrading;
+    ///  - the CREATION IDEMPOTENCY KEY. A legacy plan that reached a finalized
+    ///    object may also have attempted a create whose answer was lost, so a
+    ///    fresh key here would queue the user's file as a SECOND delivery.
+    ///    Keeping it means central converges or refuses; it never duplicates.
+    ///
+    /// Refused once `deviceTaskId` exists, and that refusal is the point rather
+    /// than caution: a plan naming a task has finished uploading, owns an object
+    /// central bound to that task, and is only being carried until its tidy-up
+    /// completes. Restarting it would re-upload bytes the account already paid
+    /// for and hand a second create the same idempotency key.
+    ///
+    /// Idempotent: a plan that already speaks v2 is returned untouched, so a
+    /// second caller cannot wipe a session the first one has since opened.
+    @discardableResult
+    public func restartForInboxV2(_ plan: PendingUploadPlan) throws -> PendingUploadPlan {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let current = currentPlan(jobId: plan.jobId), !current.retired,
+              current.effectivePurpose == .deviceTask else {
+            throw PendingUploadError.stagingMissing
+        }
+        guard !current.speaksInboxV2 else { return current }
+        guard current.deviceTaskId == nil else { throw PendingUploadError.unusableSelection }
+        var updated = current
+        // One atomic write. A crash may observe the legacy plan or the restarted
+        // one, never a marker claiming v2 over a session that fed a v1 header.
+        updated.uploadId = nil
+        updated.uploadChunkSize = nil
+        updated.finalizedStoredId = nil
+        // The sealed box wrapped the content key this job is about to stop
+        // using. Leaving it would create a task whose target could open nothing.
+        updated.targetWrappedKey = nil
+        updated.inboxProtocolVersion = InboxProtocol.taskProtocolVersion
         try write(updated)
         return updated
     }

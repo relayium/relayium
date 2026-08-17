@@ -853,8 +853,9 @@ final class InboxSendModelTests: XCTestCase {
     }
 
     /// A device that does not announce `inbox.text.v1` is refused BEFORE
-    /// anything is staged: it would land the message as a file in somebody's
-    /// downloads folder, which is not what the sender was promised.
+    /// anything is staged: it has not promised a surface that shows a message,
+    /// so the delivery would either be refused after the upload or be stored
+    /// where nobody sees it.
     func testAMessageIsRefusedForADeviceThatWouldNotPresentIt() async throws {
         sender.deviceRows = [row(presentsText: false), currentRow()]
         let (model, _) = await signedIn()
