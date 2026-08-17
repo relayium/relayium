@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -20,6 +21,7 @@ func webhookEnv(eventType, customer, subscription, clientRefUserID, status, pric
 // as CreateCheckoutSession stamps via subscription_data[metadata][user_id]
 // (see stripe.go), used to exercise the out-of-order-delivery fallback.
 func webhookEnvWithMetadata(eventType, customer, subscription, clientRefUserID, status, priceID string, currentPeriodEnd int64, metadataUserID string) string {
+	eventID := fmt.Sprintf("evt_%x", sha256.Sum256([]byte(fmt.Sprintf("%s\x00%s\x00%s\x00%s\x00%s\x00%d\x00%s", eventType, customer, subscription, status, priceID, currentPeriodEnd, metadataUserID))))
 	items := "null"
 	if priceID != "" {
 		items = fmt.Sprintf(`{"data":[{"price":{"id":%q}}]}`, priceID)
@@ -34,11 +36,11 @@ func webhookEnvWithMetadata(eventType, customer, subscription, clientRefUserID, 
 	// "subscription" key); on checkout.session.completed the object is the
 	// session, which references its subscription at data.object.subscription.
 	if strings.HasPrefix(eventType, "customer.subscription") {
-		return fmt.Sprintf(`{"type":%q,"data":{"object":{"id":%q,"object":"subscription","customer":%q,"client_reference_id":%q,"status":%q,"current_period_end":%d,"metadata":%s,"items":%s}}}`,
-			eventType, subscription, customer, clientRefUserID, status, currentPeriodEnd, metadata, items)
+		return fmt.Sprintf(`{"id":%q,"type":%q,"data":{"object":{"id":%q,"object":"subscription","customer":%q,"client_reference_id":%q,"status":%q,"current_period_end":%d,"metadata":%s,"items":%s}}}`,
+			eventID, eventType, subscription, customer, clientRefUserID, status, currentPeriodEnd, metadata, items)
 	}
-	return fmt.Sprintf(`{"type":%q,"data":{"object":{"object":"checkout.session","customer":%q,"subscription":%q,"client_reference_id":%q,"status":%q,"current_period_end":%d,"metadata":%s,"items":%s}}}`,
-		eventType, customer, subscription, clientRefUserID, status, currentPeriodEnd, metadata, items)
+	return fmt.Sprintf(`{"id":%q,"type":%q,"data":{"object":{"object":"checkout.session","customer":%q,"subscription":%q,"client_reference_id":%q,"status":%q,"current_period_end":%d,"metadata":%s,"items":%s}}}`,
+		eventID, eventType, customer, subscription, clientRefUserID, status, currentPeriodEnd, metadata, items)
 }
 
 // postWebhook signs body with secret at the current time and POSTs it to the

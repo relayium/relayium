@@ -15,8 +15,8 @@ func webhookEnvCreated(eventType, customer, status, priceID string, created int6
 	}
 	// Real customer.subscription.* shape: the object IS the subscription, id at
 	// data.object.id with object=="subscription" (see webhookEnvWithMetadata).
-	return fmt.Sprintf(`{"type":%q,"created":%d,"data":{"object":{"id":"sub_x","object":"subscription","customer":%q,"status":%q,"current_period_end":0,"metadata":null,"items":%s}}}`,
-		eventType, created, customer, status, items)
+	return fmt.Sprintf(`{"id":"evt_%d_%s","type":%q,"created":%d,"data":{"object":{"id":"sub_x","object":"subscription","customer":%q,"status":%q,"current_period_end":0,"metadata":null,"items":%s}}}`,
+		created, status, eventType, created, customer, status, items)
 }
 
 // A stale (out-of-order / re-delivered) subscription event must not revert newer

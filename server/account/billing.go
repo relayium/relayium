@@ -1,6 +1,7 @@
 package account
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -916,27 +917,39 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	claimed, err := s.Store().ClaimStripeWebhookEvent(r.Context(), ev.EventID, ev.Type, s.Now().Unix())
+	if ev.EventID == "" {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	claim, err := s.Store().ClaimStripeWebhookEvent(r.Context(), ev.EventID, ev.Type, s.Now().Unix())
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	if !claimed {
+	if claim.State == StripeWebhookProcessed {
 		w.WriteHeader(http.StatusOK)
 		return
 	}
-	tw := &stripeWebhookWriter{ResponseWriter: w}
-	w = tw
+	if claim.State == StripeWebhookInFlight {
+		http.Error(w, "retry later", http.StatusServiceUnavailable)
+		return
+	}
+	responseWriter := w
+	tw := newStripeWebhookWriter()
 	defer func() {
-		processed := tw.status == 0 || tw.status < http.StatusInternalServerError
+		processed := tw.status < http.StatusInternalServerError
 		failure := ""
 		if !processed {
 			failure = "handler returned server error"
 		}
-		if err := s.Store().FinishStripeWebhookEvent(context.Background(), ev.EventID, processed, failure, s.Now().Unix()); err != nil {
+		if err := s.Store().FinishStripeWebhookEvent(context.Background(), ev.EventID, claim.LeaseToken, processed, failure, s.Now().Unix()); err != nil {
 			log.Printf("billing: finish Stripe event %s: %v", ev.EventID, err)
+			http.Error(responseWriter, "server error", http.StatusInternalServerError)
+			return
 		}
+		tw.flushTo(responseWriter)
 	}()
+	w = tw
 
 	ctx := r.Context()
 	refresh := ev.Type == "customer.subscription.created" || ev.Type == "customer.subscription.updated" ||
@@ -955,9 +968,6 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 			if info.ID != "" {
 				ev.SubscriptionID, ev.PriceID, ev.Status, ev.CurrentPeriodEnd = info.ID, info.PriceID, info.Status, info.CurrentPeriodEnd
 			}
-		}
-		if ev.Type == "invoice.payment_failed" || ev.Type == "invoice.payment_action_required" {
-			ev.Status = "past_due"
 		}
 		ev.Type = "customer.subscription.updated"
 	}
@@ -1156,19 +1166,36 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 }
 
 type stripeWebhookWriter struct {
-	http.ResponseWriter
-	status int
+	header      http.Header
+	status      int
+	wroteHeader bool
+	body        bytes.Buffer
 }
 
+func newStripeWebhookWriter() *stripeWebhookWriter {
+	return &stripeWebhookWriter{header: make(http.Header), status: http.StatusOK}
+}
+func (w *stripeWebhookWriter) Header() http.Header { return w.header }
 func (w *stripeWebhookWriter) WriteHeader(status int) {
-	if w.status == 0 {
-		w.status = status
+	if w.wroteHeader {
+		return
 	}
-	w.ResponseWriter.WriteHeader(status)
+	w.status = status
+	w.wroteHeader = true
 }
 func (w *stripeWebhookWriter) Write(p []byte) (int, error) {
-	if w.status == 0 {
+	if !w.wroteHeader {
+		w.wroteHeader = true
 		w.status = http.StatusOK
 	}
-	return w.ResponseWriter.Write(p)
+	return w.body.Write(p)
+}
+func (w *stripeWebhookWriter) flushTo(dst http.ResponseWriter) {
+	for key, values := range w.header {
+		for _, value := range values {
+			dst.Header().Add(key, value)
+		}
+	}
+	dst.WriteHeader(w.status)
+	_, _ = dst.Write(w.body.Bytes())
 }

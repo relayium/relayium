@@ -149,8 +149,8 @@ type stripeClient struct {
 }
 
 // NewStripeClient builds the real Biller. secretKey/webhookSecret/portalConfig
-// come from RELAYIUM_STRIPE_{SECRET_KEY,WEBHOOK_SECRET,PORTAL_CONFIG}; an empty
-// portalConfig uses the Stripe account's default Billing Portal configuration.
+// come from RELAYIUM_STRIPE_{SECRET_KEY,WEBHOOK_SECRET,PORTAL_CONFIG}. Portal
+// creation fails closed when its dedicated configuration is absent.
 func NewStripeClient(secretKey, webhookSecret, portalConfig string) *stripeClient {
 	return &stripeClient{
 		secretKey:     secretKey,
@@ -569,12 +569,13 @@ func (c *stripeClient) EnsureCustomer(ctx context.Context, email, userID string)
 // CreatePortalSession creates a Stripe Billing Portal Session for an existing
 // customer and returns its hosted URL.
 func (c *stripeClient) CreatePortalSession(ctx context.Context, customerID, returnURL string) (string, error) {
+	if c.portalConfig == "" {
+		return "", errors.New("stripe: dedicated billing portal configuration is required")
+	}
 	form := url.Values{}
 	form.Set("customer", customerID)
 	form.Set("return_url", returnURL)
-	if c.portalConfig != "" {
-		form.Set("configuration", c.portalConfig)
-	}
+	form.Set("configuration", c.portalConfig)
 	return c.postForSessionURL(ctx, "/v1/billing_portal/sessions", form)
 }
 
@@ -822,10 +823,12 @@ func (c *stripeClient) ScheduleDowngrade(ctx context.Context, customerID, newPri
 	}
 	var subs struct {
 		Data []struct {
-			ID       string `json:"id"`
-			Status   string `json:"status"`
-			Schedule string `json:"schedule"`
-			Items    struct {
+			ID               string `json:"id"`
+			Status           string `json:"status"`
+			Schedule         string `json:"schedule"`
+			LatestInvoice    string `json:"latest_invoice"`
+			CurrentPeriodEnd int64  `json:"current_period_end"`
+			Items            struct {
 				Data []struct {
 					Price struct {
 						ID string `json:"id"`
@@ -858,7 +861,8 @@ func (c *stripeClient) ScheduleDowngrade(ctx context.Context, customerID, newPri
 	if sub.Schedule != "" {
 		body, err = c.request(ctx, http.MethodGet, "/v1/subscription_schedules/"+sub.Schedule, nil)
 	} else {
-		key := stableStripeIntentKey("schedule-create", sub.ID, sub.Items.Data[0].Price.ID, newPriceID)
+		key := stableStripeIntentKey("schedule-create", sub.ID, sub.Items.Data[0].Price.ID,
+			strconv.FormatInt(sub.CurrentPeriodEnd, 10), sub.LatestInvoice)
 		body, err = c.requestIdempotent(ctx, http.MethodPost, "/v1/subscription_schedules", seed, key)
 	}
 	if err != nil {
@@ -892,7 +896,16 @@ func (c *stripeClient) ScheduleDowngrade(ctx context.Context, customerID, newPri
 	upd.Set("phases[0][start_date]", strconv.FormatInt(p0.StartDate, 10))
 	upd.Set("phases[0][end_date]", strconv.FormatInt(p0.EndDate, 10))
 	upd.Set("phases[1][items][0][price]", newPriceID)
-	key := stableStripeIntentKey("schedule-update", sched.ID, p0.Items[0].Price, newPriceID)
+	generation := []string{"schedule-update", sched.ID}
+	for _, phase := range sched.Phases {
+		generation = append(generation, strconv.FormatInt(phase.StartDate, 10),
+			strconv.FormatInt(phase.EndDate, 10))
+		for _, item := range phase.Items {
+			generation = append(generation, item.Price)
+		}
+	}
+	generation = append(generation, newPriceID)
+	key := stableStripeIntentKey(generation...)
 	if _, err := c.requestIdempotent(ctx, http.MethodPost, "/v1/subscription_schedules/"+sched.ID, upd, key); err != nil {
 		return err
 	}
@@ -915,6 +928,7 @@ func (c *stripeClient) ReleaseSchedule(ctx context.Context, customerID string) e
 	}
 	var subs struct {
 		Data []struct {
+			ID       string `json:"id"`
 			Status   string `json:"status"`
 			Schedule string `json:"schedule"`
 		} `json:"data"`

@@ -12,42 +12,72 @@ import (
 
 const stripeEventLeaseSeconds int64 = 60
 
-func (s *SQLiteStore) ClaimStripeWebhookEvent(ctx context.Context, eventID, eventType string, now int64) (bool, error) {
+type StripeWebhookClaimState int
+
+const (
+	StripeWebhookClaimed StripeWebhookClaimState = iota
+	StripeWebhookProcessed
+	StripeWebhookInFlight
+)
+
+type StripeWebhookClaim struct {
+	State      StripeWebhookClaimState
+	LeaseToken int64
+}
+
+func (s *SQLiteStore) ClaimStripeWebhookEvent(ctx context.Context, eventID, eventType string, now int64) (StripeWebhookClaim, error) {
 	if eventID == "" {
-		return true, nil
+		return StripeWebhookClaim{}, errors.New("account: empty Stripe webhook event id")
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return false, err
+		return StripeWebhookClaim{}, err
 	}
 	defer tx.Rollback()
 	res, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO stripe_webhook_events
 		(event_id,event_type,status,attempts,claimed_at) VALUES(?,?,'processing',1,?)`, eventID, eventType, now)
 	if err != nil {
-		return false, err
+		return StripeWebhookClaim{}, err
 	}
 	if n, _ := res.RowsAffected(); n == 1 {
-		return true, tx.Commit()
+		if err := tx.Commit(); err != nil {
+			return StripeWebhookClaim{}, err
+		}
+		return StripeWebhookClaim{State: StripeWebhookClaimed, LeaseToken: now}, nil
 	}
 	var status string
 	var claimed int64
 	if err := tx.QueryRowContext(ctx, `SELECT status,claimed_at FROM stripe_webhook_events WHERE event_id=?`, eventID).Scan(&status, &claimed); err != nil {
 		if err == sql.ErrNoRows {
-			return false, nil
+			return StripeWebhookClaim{State: StripeWebhookInFlight}, nil
 		}
-		return false, err
+		return StripeWebhookClaim{}, err
 	}
-	if status == "processed" || (status == "processing" && now-claimed < stripeEventLeaseSeconds) {
-		return false, tx.Commit()
+	if status == "processed" {
+		return StripeWebhookClaim{State: StripeWebhookProcessed}, tx.Commit()
 	}
-	_, err = tx.ExecContext(ctx, `UPDATE stripe_webhook_events SET status='processing',attempts=attempts+1,claimed_at=?,finished_at=0,failure='' WHERE event_id=?`, now, eventID)
+	if status == "processing" && now-claimed < stripeEventLeaseSeconds {
+		return StripeWebhookClaim{State: StripeWebhookInFlight}, tx.Commit()
+	}
+	res, err = tx.ExecContext(ctx, `UPDATE stripe_webhook_events SET status='processing',attempts=attempts+1,claimed_at=?,finished_at=0,failure='' WHERE event_id=? AND status=? AND claimed_at=?`, now, eventID, status, claimed)
 	if err != nil {
-		return false, err
+		return StripeWebhookClaim{}, err
 	}
-	return true, tx.Commit()
+	if n, err := res.RowsAffected(); err != nil {
+		return StripeWebhookClaim{}, err
+	} else if n != 1 {
+		return StripeWebhookClaim{State: StripeWebhookInFlight}, tx.Commit()
+	}
+	if err := tx.Commit(); err != nil {
+		return StripeWebhookClaim{}, err
+	}
+	return StripeWebhookClaim{State: StripeWebhookClaimed, LeaseToken: now}, nil
 }
 
-func (s *SQLiteStore) FinishStripeWebhookEvent(ctx context.Context, eventID string, processed bool, failure string, now int64) error {
+func (s *SQLiteStore) FinishStripeWebhookEvent(ctx context.Context, eventID string, leaseToken int64, processed bool, failure string, now int64) error {
+	if leaseToken <= 0 {
+		return errors.New("account: invalid Stripe webhook lease token")
+	}
 	if eventID == "" {
 		return nil
 	}
@@ -58,8 +88,18 @@ func (s *SQLiteStore) FinishStripeWebhookEvent(ctx context.Context, eventID stri
 	if len(failure) > 500 {
 		failure = failure[:500]
 	}
-	_, err := s.db.ExecContext(ctx, `UPDATE stripe_webhook_events SET status=?,finished_at=?,failure=? WHERE event_id=?`, status, now, failure, eventID)
-	return err
+	res, err := s.db.ExecContext(ctx, `UPDATE stripe_webhook_events SET status=?,finished_at=?,failure=? WHERE event_id=? AND status='processing' AND claimed_at=?`, status, now, failure, eventID, leaseToken)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return fmt.Errorf("account: Stripe webhook event %s is not processing", eventID)
+	}
+	return nil
 }
 
 // SQLite storage for provider-neutral subscription state: the per-(user,
