@@ -1035,6 +1035,10 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 		// customer.subscription.* event Stripe always sends alongside this
 		// one; here we only bind the newly-created (or reused) customer id.
 		if ev.ClientRefUserID != "" {
+			if _, err := acquireStoreBillingAuthority(ctx, s.Store(), BillingAuthorityRequest{UserID: ev.ClientRefUserID, Provider: ProviderStripe, Now: s.Now().Unix()}); err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
 			// CAS bind, not an unconditional overwrite: if the user already has a
 			// customer, keep it. An unconditional write would let a second
 			// customer's event flip the binding (duplicate-customer takeover of the
@@ -1063,12 +1067,6 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusOK)
 				return
 			}
-			// CAS bind (see checkout.session.completed above): never flip an
-			// existing customer binding under a second customer's event.
-			if _, err := s.Store().SetUserStripeCustomerIfEmpty(ctx, ev.MetadataUserID, ev.CustomerID); err != nil {
-				http.Error(w, "server error", http.StatusInternalServerError)
-				return
-			}
 			u, err = s.Store().GetUserByID(ctx, ev.MetadataUserID)
 			if err != nil {
 				if errors.Is(err, ErrNotFound) {
@@ -1080,6 +1078,19 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "server error", http.StatusInternalServerError)
 				return
 			}
+			if _, err := acquireStoreBillingAuthority(ctx, s.Store(), BillingAuthorityRequest{UserID: u.ID, Provider: ProviderStripe, Now: s.Now().Unix()}); err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+			// Bind only after provider authority. An admin/Apple conflict must
+			// not leave a Stripe customer half-attached to the account.
+			if _, err := s.Store().SetUserStripeCustomerIfEmpty(ctx, ev.MetadataUserID, ev.CustomerID); err != nil {
+				http.Error(w, "server error", http.StatusInternalServerError)
+				return
+			}
+		} else if _, err := acquireStoreBillingAuthority(ctx, s.Store(), BillingAuthorityRequest{UserID: u.ID, Provider: ProviderStripe, Now: s.Now().Unix()}); err != nil {
+			http.Error(w, "server error", http.StatusInternalServerError)
+			return
 		}
 		// Ordering guard: drop an out-of-order / re-delivered event older than the
 		// last one applied, so it cannot revert newer subscription state.

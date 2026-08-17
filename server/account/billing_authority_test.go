@@ -213,3 +213,28 @@ func TestAuthorizedAppleLifecycleRejectsEnvironmentDrift(t *testing.T) {
 		t.Fatalf("authority environment changed to %q", environment)
 	}
 }
+
+func TestAuthorizedStripeLifecycleResolvesAttemptAndBlocksApple(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	u, _ := store.UpsertUserByEmail(ctx, "authority-stripe-apply@example.test", "")
+	authority, err := store.AcquireBillingAuthority(ctx, BillingAuthorityRequest{UserID: u.ID, Provider: ProviderStripe, Now: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempt, _, err := store.DispatchBillingPurchase(ctx, authority, "pro:monthly", 101)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := store.ApplyAuthorizedStripeLifecycle(ctx, SourceEvent{UserID: u.ID, Provider: ProviderStripe, PlanID: "pro", Status: "active", Cycle: "monthly", PeriodEnd: 1000, EventAt: 200, Now: 102})
+	if err != nil || !result.Applied {
+		t.Fatalf("stripe apply=%+v err=%v", result, err)
+	}
+	var state string
+	if err := store.db.QueryRowContext(ctx, `SELECT state FROM billing_purchase_attempts WHERE id=?`, attempt.ID).Scan(&state); err != nil || state != "resolved" {
+		t.Fatalf("attempt state=%q err=%v", state, err)
+	}
+	if _, err := store.AcquireBillingAuthority(ctx, BillingAuthorityRequest{UserID: u.ID, Provider: ProviderApple, ExternalScope: testBundleIOS, AppleAccountToken: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", Now: 103}); !errors.Is(err, ErrBillingAuthorityConflict) {
+		t.Fatalf("Apple crossed Stripe authority: %v", err)
+	}
+}

@@ -427,7 +427,7 @@ func TestWebhookSubscriptionDeletedAccruesPreviousSegment(t *testing.T) {
 	}
 }
 
-func TestWebhookAdminSourceNotOverridden(t *testing.T) {
+func TestWebhookCannotAttachStripeAuthorityToAdminGrant(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_admin"
 	svc.biller = newWebhookFixtureClient(secret)
@@ -448,8 +448,8 @@ func TestWebhookAdminSourceNotOverridden(t *testing.T) {
 	body := webhookEnv("customer.subscription.updated", "cus_admin_1", "sub_1", "", "active", "price_pro_m", 1700002000)
 	resp := postWebhook(t, ts, secret, body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("want 200, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("want 500 so Stripe keeps the paid conflict visible, got %d", resp.StatusCode)
 	}
 	u, ok, err := store.GetUserByStripeCustomer(context.Background(), "cus_admin_1")
 	if err != nil || !ok {
@@ -461,8 +461,11 @@ func TestWebhookAdminSourceNotOverridden(t *testing.T) {
 	if u.PlanSource != "admin" {
 		t.Fatalf("plan source must stay admin, got %q", u.PlanSource)
 	}
-	if u.SubscriptionStatus != "active" {
-		t.Fatalf("status should still record, got %q", u.SubscriptionStatus)
+	if u.SubscriptionStatus != "" {
+		t.Fatalf("refused Stripe event partially wrote status %q", u.SubscriptionStatus)
+	}
+	if _, ok, err := store.GetSubscriptionSource(context.Background(), uid, ProviderStripe); err != nil || ok {
+		t.Fatalf("refused Stripe event wrote source: ok=%v err=%v", ok, err)
 	}
 }
 
@@ -474,7 +477,7 @@ func TestWebhookAdminSourceNotOverridden(t *testing.T) {
 // must still win — plan_id must stay the admin-assigned plan — even when the
 // user is resolved via the metadata fallback rather than the direct
 // GetUserByStripeCustomer lookup.
-func TestWebhookAdminSourceNotOverriddenViaMetadata(t *testing.T) {
+func TestWebhookMetadataCannotHalfBindStripeToAdminGrant(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_admin_meta"
 	svc.biller = newWebhookFixtureClient(secret)
@@ -497,8 +500,8 @@ func TestWebhookAdminSourceNotOverriddenViaMetadata(t *testing.T) {
 	body := webhookEnvWithMetadata("customer.subscription.updated", "cus_admin_meta", "sub_1", "", "active", "price_plus_m", 1700007000, uid)
 	resp := postWebhook(t, ts, secret, body)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("want 200, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("want 500 so Stripe retries the conflict, got %d", resp.StatusCode)
 	}
 
 	u, err := store.GetUserByID(context.Background(), uid)
@@ -511,15 +514,11 @@ func TestWebhookAdminSourceNotOverriddenViaMetadata(t *testing.T) {
 	if u.PlanSource != "admin" {
 		t.Fatalf("plan source must stay admin, got %q", u.PlanSource)
 	}
-	if u.SubscriptionStatus != "active" {
-		t.Fatalf("status should still record, got %q", u.SubscriptionStatus)
+	if u.SubscriptionStatus != "" {
+		t.Fatalf("refused Stripe event partially wrote status %q", u.SubscriptionStatus)
 	}
-	// handleStripeWebhook's metadata-fallback branch calls
-	// SetUserStripeCustomer to bind the customer BEFORE the
-	// u.PlanSource == "admin" check runs (see billing.go), so the customer id
-	// does get bound even though the plan assignment itself is guarded.
-	if u.StripeCustomerID != "cus_admin_meta" {
-		t.Fatalf("want stripe_customer_id bound to cus_admin_meta via metadata fallback even for an admin-comped user, got %q", u.StripeCustomerID)
+	if u.StripeCustomerID != "" {
+		t.Fatalf("refused Stripe event half-bound customer %q", u.StripeCustomerID)
 	}
 }
 

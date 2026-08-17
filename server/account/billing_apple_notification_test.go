@@ -118,6 +118,38 @@ func (s *appleFailingStore) ApplySubscriptionSource(ctx context.Context, ev Sour
 	return s.Store.ApplySubscriptionSource(ctx, ev)
 }
 
+func (s *appleFailingStore) ApplyAuthorizedAppleLifecycle(ctx context.Context, ev SourceEvent, renewal AppleRenewalState, token, environment string) (SubscriptionApply, error) {
+	s.mu.Lock()
+	s.applies++
+	s.mu.Unlock()
+	if s.failApply {
+		return SubscriptionApply{}, errAppleTestStorage
+	}
+	store, ok := s.Store.(interface {
+		ApplyAuthorizedAppleLifecycle(context.Context, SourceEvent, AppleRenewalState, string, string) (SubscriptionApply, error)
+	})
+	if !ok {
+		return SubscriptionApply{}, errAppleTestStorage
+	}
+	return store.ApplyAuthorizedAppleLifecycle(ctx, ev, renewal, token, environment)
+}
+
+func (s *appleFailingStore) ApplyAuthorizedAppleSource(ctx context.Context, ev SourceEvent, token, environment, productID string) (SubscriptionApply, error) {
+	s.mu.Lock()
+	s.applies++
+	s.mu.Unlock()
+	if s.failApply {
+		return SubscriptionApply{}, errAppleTestStorage
+	}
+	store, ok := s.Store.(interface {
+		ApplyAuthorizedAppleSource(context.Context, SourceEvent, string, string, string) (SubscriptionApply, error)
+	})
+	if !ok {
+		return SubscriptionApply{}, errAppleTestStorage
+	}
+	return store.ApplyAuthorizedAppleSource(ctx, ev, token, environment, productID)
+}
+
 func (s *appleFailingStore) SetAppleNotificationState(ctx context.Context, uuid, state string, now int64) error {
 	if s.failState[state] {
 		return errAppleTestStorage
@@ -156,6 +188,27 @@ func TestAppleNotificationAppliesTheEntitlement(t *testing.T) {
 	}
 	if rec.Type != "DID_RENEW" {
 		t.Fatalf("notification type not recorded for operators: %q", rec.Type)
+	}
+}
+
+func TestAppleNotificationCannotCrossStripeBillingAuthority(t *testing.T) {
+	f := newAppleTxFixture(t)
+	ctx := context.Background()
+	if err := f.store.SetUserSubscription(ctx, f.userID, "plus", "active", time.Now().Add(time.Hour).Unix(), ProviderStripe, "monthly", time.Now().Unix(), 100); err != nil {
+		t.Fatal(err)
+	}
+	uuid := appleNotifyUUID(44)
+	f.mustNotify(t, f.envelope(t, uuid), http.StatusInternalServerError)
+
+	if _, ok, err := f.store.GetSubscriptionSource(ctx, f.userID, ProviderApple); err != nil || ok {
+		t.Fatalf("conflicting notification wrote Apple source: ok=%v err=%v", ok, err)
+	}
+	stripe, ok, err := f.store.GetSubscriptionSource(ctx, f.userID, ProviderStripe)
+	if err != nil || !ok || stripe.PlanID != "plus" {
+		t.Fatalf("conflicting notification changed Stripe: %+v ok=%v err=%v", stripe, ok, err)
+	}
+	if rec := f.ledger(t, uuid); rec.State == appleNotificationApplied {
+		t.Fatalf("conflicting notification was ACKed applied: %+v", rec)
 	}
 }
 
@@ -497,12 +550,14 @@ func TestAppleNotificationDefersAnUnattributableDelivery(t *testing.T) {
 func TestAppleNotificationDrainsOnceTheOwnerIsKnown(t *testing.T) {
 	f := newAppleTxFixture(t)
 	uuid := appleNotifyUUID(22)
-	stranger := "7c9e6679-7425-4de8-a4d1-4d1e2f3a4b5c"
 	expires := time.Now().Add(30 * 24 * time.Hour).UnixMilli()
 
-	// Apple's notification arrives first, for a token this server does not know.
+	// Apple's notification arrives first without an attribution token. The later
+	// canonical intake must bind through the same subscription identity; a
+	// different nonempty token is a permanent authority conflict, not something
+	// this drain may silently rewrite.
 	f.mustNotify(t, f.envelope(t, uuid, func(p map[string]any) {
-		p["appAccountToken"] = stranger
+		delete(p, "appAccountToken")
 		p["expiresDate"] = expires
 	}), http.StatusOK)
 	if got := f.ledger(t, uuid).State; got != appleNotificationPending {

@@ -49,7 +49,15 @@ func (s *SQLiteStore) ApplyAppleLifecycle(ctx context.Context, ev SourceEvent, r
 // and the one dispatched purchase attempt in one transaction. Nothing about a
 // client outcome can release or move this authority.
 func (s *SQLiteStore) ApplyAuthorizedAppleLifecycle(ctx context.Context, ev SourceEvent, r AppleRenewalState, appleAccountToken, environment string) (SubscriptionApply, error) {
-	if ev.Provider != ProviderApple || ev.UserID == "" || ev.ExternalScope == "" || appleAccountToken == "" ||
+	return s.applyAuthorizedAppleLifecycle(ctx, ev, &r, appleAccountToken, environment, r.CurrentProductID, r.AutoRenewProductID)
+}
+
+func (s *SQLiteStore) ApplyAuthorizedAppleSource(ctx context.Context, ev SourceEvent, appleAccountToken, environment, productID string) (SubscriptionApply, error) {
+	return s.applyAuthorizedAppleLifecycle(ctx, ev, nil, appleAccountToken, environment, productID, "")
+}
+
+func (s *SQLiteStore) applyAuthorizedAppleLifecycle(ctx context.Context, ev SourceEvent, renewal *AppleRenewalState, appleAccountToken, environment, currentProductID, autoRenewProductID string) (SubscriptionApply, error) {
+	if ev.Provider != ProviderApple || ev.UserID == "" || ev.ExternalScope == "" ||
 		(environment != appleEnvProduction && environment != appleEnvSandbox) {
 		return SubscriptionApply{}, ErrBillingAuthorityConflict
 	}
@@ -58,6 +66,14 @@ func (s *SQLiteStore) ApplyAuthorizedAppleLifecycle(ctx context.Context, ev Sour
 		return SubscriptionApply{}, err
 	}
 	defer tx.Rollback()
+	if appleAccountToken == "" {
+		if err := tx.QueryRowContext(ctx, `SELECT apple_account_token FROM users WHERE id=?`, ev.UserID).Scan(&appleAccountToken); err != nil || appleAccountToken == "" {
+			if err != nil {
+				return SubscriptionApply{}, err
+			}
+			return SubscriptionApply{}, ErrBillingAuthorityConflict
+		}
+	}
 	authority, err := acquireBillingAuthorityTx(ctx, tx, BillingAuthorityRequest{
 		UserID: ev.UserID, Provider: ProviderApple, ExternalScope: ev.ExternalScope,
 		AppleAccountToken: appleAccountToken, Now: ev.Now,
@@ -86,7 +102,7 @@ func (s *SQLiteStore) ApplyAuthorizedAppleLifecycle(ctx context.Context, ev Sour
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return SubscriptionApply{}, err
 	}
-	if err == nil && attemptProduct != r.CurrentProductID && attemptProduct != r.AutoRenewProductID {
+	if err == nil && attemptProduct != currentProductID && attemptProduct != autoRenewProductID {
 		return SubscriptionApply{}, ErrBillingPurchaseAmbiguous
 	}
 
@@ -95,8 +111,10 @@ func (s *SQLiteStore) ApplyAuthorizedAppleLifecycle(ctx context.Context, ev Sour
 		return SubscriptionApply{}, err
 	}
 	if result.Applied {
-		if _, err = applyAppleRenewalStateTx(ctx, tx, r); err != nil {
-			return SubscriptionApply{}, err
+		if renewal != nil {
+			if _, err = applyAppleRenewalStateTx(ctx, tx, *renewal); err != nil {
+				return SubscriptionApply{}, err
+			}
 		}
 		if attemptID != "" {
 			res, err := tx.ExecContext(ctx, `UPDATE billing_purchase_attempts SET state='resolved' WHERE id=? AND user_id=? AND epoch=? AND state IN ('prepared','dispatched')`, attemptID, ev.UserID, authority.Epoch)

@@ -258,17 +258,18 @@ func (s *Service) applyAppleNotification(ctx context.Context, n VerifiedAppleNot
 	if renewalState.UserID != "" {
 		event = appleSourceEventWithRenewal(owner, tx, product, renewalState, now)
 	}
+	atomic, ok := s.Store().(interface {
+		ApplyAuthorizedAppleLifecycle(context.Context, SourceEvent, AppleRenewalState, string, string) (SubscriptionApply, error)
+		ApplyAuthorizedAppleSource(context.Context, SourceEvent, string, string, string) (SubscriptionApply, error)
+	})
+	if !ok {
+		return http.StatusInternalServerError, current.State, "storage"
+	}
 	var applyErr error
-	if n.HasRenewal {
-		atomic, ok := s.Store().(interface {
-			ApplyAppleLifecycle(context.Context, SourceEvent, AppleRenewalState) (SubscriptionApply, error)
-		})
-		if !ok {
-			return http.StatusInternalServerError, current.State, "storage"
-		}
-		_, applyErr = atomic.ApplyAppleLifecycle(ctx, event, renewalState)
+	if renewalState.UserID != "" {
+		_, applyErr = atomic.ApplyAuthorizedAppleLifecycle(ctx, event, renewalState, tx.AppAccountToken, tx.Environment)
 	} else {
-		_, applyErr = s.Store().ApplySubscriptionSource(ctx, event)
+		_, applyErr = atomic.ApplyAuthorizedAppleSource(ctx, event, tx.AppAccountToken, tx.Environment, tx.ProductID)
 	}
 	if applyErr != nil {
 		if errors.Is(applyErr, ErrExternalSubscriptionOwned) {
@@ -497,8 +498,22 @@ func (s *Service) reconcileApplePendingNotifications(ctx context.Context, userID
 		if hasRenewal {
 			event = appleSourceEventWithRenewal(userID, tx, product, stored, now)
 		}
-		if _, err := s.Store().ApplySubscriptionSource(ctx, event); err != nil {
-			log.Printf("apple notifications: replaying deferred %s failed: %v", rec.UUID, err)
+		atomic, ok := s.Store().(interface {
+			ApplyAuthorizedAppleLifecycle(context.Context, SourceEvent, AppleRenewalState, string, string) (SubscriptionApply, error)
+			ApplyAuthorizedAppleSource(context.Context, SourceEvent, string, string, string) (SubscriptionApply, error)
+		})
+		if !ok {
+			log.Printf("apple notifications: replaying deferred %s failed: authority store unavailable", rec.UUID)
+			continue
+		}
+		var applyErr error
+		if hasRenewal {
+			_, applyErr = atomic.ApplyAuthorizedAppleLifecycle(ctx, event, stored, tx.AppAccountToken, tx.Environment)
+		} else {
+			_, applyErr = atomic.ApplyAuthorizedAppleSource(ctx, event, tx.AppAccountToken, tx.Environment, tx.ProductID)
+		}
+		if applyErr != nil {
+			log.Printf("apple notifications: replaying deferred %s failed: %v", rec.UUID, applyErr)
 			continue
 		}
 		if err := s.Store().SetAppleNotificationState(ctx, rec.UUID, appleNotificationApplied, now.Unix()); err != nil {

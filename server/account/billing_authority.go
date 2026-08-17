@@ -24,6 +24,16 @@ type BillingAuthority struct {
 	Epoch, CreatedAt, UpdatedAt                                                    int64
 }
 
+func acquireStoreBillingAuthority(ctx context.Context, store Store, in BillingAuthorityRequest) (BillingAuthority, error) {
+	authorities, ok := store.(interface {
+		AcquireBillingAuthority(context.Context, BillingAuthorityRequest) (BillingAuthority, error)
+	})
+	if !ok {
+		return BillingAuthority{}, errors.New("account: billing authority store unavailable")
+	}
+	return authorities.AcquireBillingAuthority(ctx, in)
+}
+
 func (s *SQLiteStore) AcquireBillingAuthority(ctx context.Context, in BillingAuthorityRequest) (BillingAuthority, error) {
 	if in.UserID == "" || (in.Provider != ProviderStripe && in.Provider != ProviderApple) ||
 		(in.Provider == ProviderApple) != (in.ExternalScope != "") ||
@@ -103,6 +113,35 @@ func (s *SQLiteStore) BillingAuthority(ctx context.Context, userID string) (Bill
 		return BillingAuthority{}, false, nil
 	}
 	return out, err == nil, err
+}
+
+// ApplyAuthorizedStripeLifecycle is the only Stripe source write path. It
+// adopts a legacy canonical Stripe fact into the durable authority when no
+// authority exists, and otherwise refuses cross-provider/admin writes before
+// either entitlement or attempt state can move.
+func (s *SQLiteStore) ApplyAuthorizedStripeLifecycle(ctx context.Context, ev SourceEvent) (SubscriptionApply, error) {
+	if ev.Provider != ProviderStripe || ev.UserID == "" {
+		return SubscriptionApply{}, ErrBillingAuthorityConflict
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return SubscriptionApply{}, err
+	}
+	defer tx.Rollback()
+	authority, err := acquireBillingAuthorityTx(ctx, tx, BillingAuthorityRequest{UserID: ev.UserID, Provider: ProviderStripe, Now: ev.Now})
+	if err != nil {
+		return SubscriptionApply{}, err
+	}
+	result, err := applySourceTx(ctx, tx, ev)
+	if err != nil {
+		return SubscriptionApply{}, err
+	}
+	if result.Applied {
+		if _, err := tx.ExecContext(ctx, `UPDATE billing_purchase_attempts SET state='resolved' WHERE user_id=? AND epoch=? AND provider=? AND state IN ('prepared','dispatched')`, ev.UserID, authority.Epoch, ProviderStripe); err != nil {
+			return SubscriptionApply{}, err
+		}
+	}
+	return result, tx.Commit()
 }
 
 type BillingPurchaseAttempt struct {

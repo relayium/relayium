@@ -525,12 +525,12 @@ func (s *Service) ReconcileAppleSubscriptions(ctx context.Context) {
 		}
 		ren := appleRenewalState(src.UserID, fact.Transaction, fact.Renewal, now)
 		atomic, ok := s.Store().(interface {
-			ApplyAppleLifecycle(context.Context, SourceEvent, AppleRenewalState) (SubscriptionApply, error)
+			ApplyAuthorizedAppleLifecycle(context.Context, SourceEvent, AppleRenewalState, string, string) (SubscriptionApply, error)
 		})
 		if !ok {
 			return
 		}
-		if _, err = atomic.ApplyAppleLifecycle(ctx, appleSourceEventWithRenewal(src.UserID, fact.Transaction, product, ren, now), ren); err != nil {
+		if _, err = atomic.ApplyAuthorizedAppleLifecycle(ctx, appleSourceEventWithRenewal(src.UserID, fact.Transaction, product, ren, now), ren, fact.Transaction.AppAccountToken, fact.Transaction.Environment); err != nil {
 			failed++
 			continue
 		}

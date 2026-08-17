@@ -2039,10 +2039,15 @@ func (s *SQLiteStore) SetUserSubscription(ctx context.Context, userID, planID, s
 	// and it is the projection's top rule, which is what keeps it winning while
 	// providers keep updating underneath.
 	if knownProvider(source) {
-		_, err := s.ApplySubscriptionSource(ctx, SourceEvent{
+		event := SourceEvent{
 			UserID: userID, Provider: source, PlanID: planID, Status: status,
 			Cycle: cycle, PeriodEnd: end, EventAt: subEventAt, Now: now,
-		})
+		}
+		if source == ProviderStripe {
+			_, err := s.ApplyAuthorizedStripeLifecycle(ctx, event)
+			return err
+		}
+		_, err := s.ApplySubscriptionSource(ctx, event)
 		return err
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
