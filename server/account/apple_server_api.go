@@ -20,6 +20,8 @@ type AppleSubscriptionCanonical struct {
 	Renewal     VerifiedAppleRenewalInfo
 }
 
+type AppleSubscriptionIdentity struct{ OriginalTransactionID, Environment, BundleID string }
+
 type AppleSubscriptionReconciler interface {
 	CanonicalSubscription(context.Context, VerifiedAppleTransaction, time.Time) (AppleSubscriptionCanonical, error)
 }
@@ -59,18 +61,22 @@ func NewAppleServerAPIClient(cfg AppleServerAPIConfig, verifier *AppleTransactio
 }
 
 func (c *AppleServerAPIClient) CanonicalSubscription(ctx context.Context, submitted VerifiedAppleTransaction, now time.Time) (AppleSubscriptionCanonical, error) {
+	return c.CanonicalSubscriptionByIdentity(ctx, AppleSubscriptionIdentity{submitted.OriginalTransactionID, submitted.Environment, submitted.BundleID}, now)
+}
+
+func (c *AppleServerAPIClient) CanonicalSubscriptionByIdentity(ctx context.Context, identity AppleSubscriptionIdentity, now time.Time) (AppleSubscriptionCanonical, error) {
 	base := c.cfg.ProductionURL
-	if submitted.Environment == appleEnvSandbox {
+	if identity.Environment == appleEnvSandbox {
 		base = c.cfg.SandboxURL
 	}
-	tok := jwt.NewWithClaims(jwt.SigningMethodES256, jwt.MapClaims{"iss": c.cfg.IssuerID, "iat": now.Unix(), "exp": now.Add(5 * time.Minute).Unix(), "aud": "appstoreconnect-v1", "bid": submitted.BundleID})
+	tok := jwt.NewWithClaims(jwt.SigningMethodES256, jwt.MapClaims{"iss": c.cfg.IssuerID, "iat": now.Unix(), "exp": now.Add(5 * time.Minute).Unix(), "aud": "appstoreconnect-v1", "bid": identity.BundleID})
 	tok.Header["kid"] = c.cfg.KeyID
 	tok.Header["typ"] = "JWT"
 	signed, err := tok.SignedString(c.cfg.PrivateKey)
 	if err != nil {
 		return AppleSubscriptionCanonical{}, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(base, "/")+"/inApps/v1/subscriptions/"+url.PathEscape(submitted.TransactionID), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(base, "/")+"/inApps/v1/subscriptions/"+url.PathEscape(identity.OriginalTransactionID), nil)
 	if err != nil {
 		return AppleSubscriptionCanonical{}, err
 	}
@@ -105,7 +111,7 @@ func (c *AppleServerAPIClient) CanonicalSubscription(ctx context.Context, submit
 			if e != nil || appleSubscriptionShape(tx) != nil {
 				continue
 			}
-			if tx.OriginalTransactionID != submitted.OriginalTransactionID || tx.BundleID != submitted.BundleID || tx.Environment != submitted.Environment {
+			if tx.OriginalTransactionID != identity.OriginalTransactionID || tx.BundleID != identity.BundleID || tx.Environment != identity.Environment {
 				continue
 			}
 			ren, e := c.verifier.VerifyRenewalInfo(last.SignedRenewalInfo, tx, now)

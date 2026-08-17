@@ -39,6 +39,15 @@ final class AppleSubscriptionPresentationTests: XCTestCase {
                        [.nextRenewal, .current, .nextRenewal, .immediateUpgrade])
     }
 
+    func testCompletedDeferredChangeUsesCanonicalRenewalFact() {
+        let result = AppleTransactionResult(applied: true, planId: "plus", status: "active",
+                                            expiresAt: 100, provider: "apple",
+                                            currentProductId: "plus.monthly",
+                                            autoRenewProductId: "pro.yearly", renewalAt: 100)
+        XCTAssertEqual(AppleSubscriptionPresentation.notice(for: .completed(result), language: .en),
+                       .success(L10n.t(.subscriptionEffectRenewal, language: .en)))
+    }
+
     // MARK: - the distribution channel decides what may be offered
 
     /// **The compliance rule, stated once.** An App Store build sells in the app

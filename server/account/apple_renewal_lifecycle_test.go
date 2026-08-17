@@ -6,11 +6,21 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 )
+
+type appleSweepFact struct{ value AppleSubscriptionCanonical }
+
+func (f *appleSweepFact) CanonicalSubscription(context.Context, VerifiedAppleTransaction, time.Time) (AppleSubscriptionCanonical, error) {
+	return f.value, nil
+}
+func (f *appleSweepFact) CanonicalSubscriptionByIdentity(context.Context, AppleSubscriptionIdentity, time.Time) (AppleSubscriptionCanonical, error) {
+	return f.value, nil
+}
 
 func TestAppleRenewalInfoIsIndependentlyVerifiedAndBoundToTransaction(t *testing.T) {
 	chain := newAppleTestChain(t)
@@ -25,6 +35,7 @@ func TestAppleRenewalInfoIsIndependentlyVerifiedAndBoundToTransaction(t *testing
 	renewal := func(original string) string {
 		return chain.sign(t, map[string]any{
 			"originalTransactionId": original, "autoRenewProductId": tx.ProductID,
+			"appAccountToken": tx.AppAccountToken, "autoRenewStatus": 1,
 			"environment": tx.Environment, "signedDate": now.UnixMilli(),
 		})
 	}
@@ -34,6 +45,51 @@ func TestAppleRenewalInfoIsIndependentlyVerifiedAndBoundToTransaction(t *testing
 	if _, err := v.VerifyRenewalInfo(renewal("9999999999999999"), tx, now); err == nil {
 		t.Fatal("mismatched renewal identity accepted")
 	}
+	badToken := chain.sign(t, map[string]any{"originalTransactionId": tx.OriginalTransactionID, "autoRenewProductId": tx.ProductID, "appAccountToken": "00000000-0000-0000-0000-000000000000", "environment": tx.Environment, "signedDate": now.UnixMilli()})
+	if _, err := v.VerifyRenewalInfo(badToken, tx, now); err == nil {
+		t.Fatal("mismatched renewal account token accepted")
+	}
+}
+
+func TestAppleGraceRejectsUnboundedAndNonRetryRenewal(t *testing.T) {
+	chain := newAppleTestChain(t)
+	v := testVerifier(t, chain)
+	now := time.Now().UTC()
+	tx, err := v.Verify(chain.sign(t, applePayload(func(p map[string]any) { p["appAccountToken"] = "73f2ef7a-7203-4ccb-9cb4-fbfbf4561925" })), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sign := func(retry bool, grace time.Time) string {
+		return chain.sign(t, map[string]any{"originalTransactionId": tx.OriginalTransactionID, "autoRenewProductId": tx.ProductID, "autoRenewStatus": 1, "environment": tx.Environment, "isInBillingRetryPeriod": retry, "gracePeriodExpiresDate": grace.UnixMilli(), "signedDate": now.UnixMilli()})
+	}
+	for _, jws := range []string{sign(false, now.Add(time.Hour)), sign(true, time.UnixMilli(tx.ExpiresDateMS).Add(29*24*time.Hour))} {
+		r, err := v.VerifyRenewalInfo(jws, tx, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if r.GracePeriodExpiresMS != 0 {
+			t.Fatalf("unbounded grace accepted: %+v", r)
+		}
+	}
+}
+
+func TestAppleAutoRenewOffIsValidIntentButNeverGrace(t *testing.T) {
+	chain := newAppleTestChain(t)
+	v := testVerifier(t, chain)
+	now := time.Now().UTC()
+	tx, err := v.Verify(chain.sign(t, applePayload()), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jws := chain.sign(t, map[string]any{"originalTransactionId": tx.OriginalTransactionID, "autoRenewProductId": "", "autoRenewStatus": 0, "environment": tx.Environment, "isInBillingRetryPeriod": true, "gracePeriodExpiresDate": time.UnixMilli(tx.ExpiresDateMS).Add(time.Hour).UnixMilli(), "expirationIntent": 1, "priceIncreaseStatus": 0, "signedDate": now.UnixMilli()})
+	r, err := v.VerifyRenewalInfo(jws, tx, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := appleRenewalState("u", tx, r, now)
+	if r.AutoRenewEnabled || r.AutoRenewProductID != "" || state.graceActive(now) {
+		t.Fatalf("auto-renew-off misprojected: %+v", r)
+	}
 }
 
 func TestAppleGraceIsBoundedAndNeverResurrectsTerminalTransaction(t *testing.T) {
@@ -41,7 +97,7 @@ func TestAppleGraceIsBoundedAndNeverResurrectsTerminalTransaction(t *testing.T) 
 	tx := VerifiedAppleTransaction{OriginalTransactionID: "1", BundleID: testBundleIOS,
 		ProductID: testAppleProduct, Environment: appleEnvProduction, ExpiresDateMS: now.Add(-time.Hour).UnixMilli()}
 	product := AppleProduct{PlanID: "pro", Cycle: "monthly"}
-	renewal := AppleRenewalState{UserID: "u", IsInBillingRetry: true, GraceUntil: now.Add(time.Hour).Unix()}
+	renewal := AppleRenewalState{UserID: "u", AutoRenewEnabled: true, IsInBillingRetry: true, GraceUntil: now.Add(time.Hour).Unix()}
 	if got := appleSourceEventWithRenewal("u", tx, product, renewal, now); got.PlanID != "pro" || got.PeriodEnd != renewal.GraceUntil {
 		t.Fatalf("active grace = %+v", got)
 	}
@@ -87,6 +143,69 @@ func TestApplePurchaseFailsClosedWithoutCanonicalReconciler(t *testing.T) {
 	f.mustReject(t, f.chain.sign(t, f.payload()), 503, "reconciliation_unavailable")
 	if _, ok := f.appleSource(t); ok {
 		t.Fatal("entitlement granted without canonical App Store status")
+	}
+}
+
+func TestAppleLocalClockLapsesAndNewerRenewalRestores(t *testing.T) {
+	store, err := OpenSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	u, err := store.UpsertUserByEmail(ctx, "clock-lapse@example.test", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := int64(2_000_000_000)
+	ev := SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: "pro", Status: "active", Cycle: "monthly", PeriodEnd: now - 1, ExternalID: "1", ExternalScope: testBundleIOS, EventAt: 10, Now: now - 100}
+	ren := AppleRenewalState{UserID: u.ID, ExternalID: "1", BundleID: testBundleIOS, CurrentProductID: "pro.m", AutoRenewProductID: "pro.m", AutoRenewEnabled: true, EventAt: 10, UpdatedAt: now - 100}
+	if _, err = store.ApplyAppleLifecycle(ctx, ev, ren); err != nil {
+		t.Fatal(err)
+	}
+	if err = store.LapseAppleSubscription(ctx, u.ID, now); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.GetUserByID(ctx, u.ID)
+	if err != nil || got.PlanID != "free" {
+		t.Fatalf("missed expiry still grants: %+v %v", got, err)
+	}
+	ev.PlanID = "pro"
+	ev.Status = "active"
+	ev.PeriodEnd = now + 3600
+	ev.EventAt = 12
+	ev.Now = now + 1
+	ren.EventAt = 12
+	if _, err = store.ApplyAppleLifecycle(ctx, ev, ren); err != nil {
+		t.Fatal(err)
+	}
+	got, err = store.GetUserByID(ctx, u.ID)
+	if err != nil || got.PlanID != "pro" {
+		t.Fatalf("renewal did not restore: %+v %v", got, err)
+	}
+}
+
+func TestAppleLifecycleConflictDoesNotPolluteRenewalState(t *testing.T) {
+	store, err := OpenSQLite(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	a, _ := store.UpsertUserByEmail(ctx, "owner-a@example.test", "")
+	b, _ := store.UpsertUserByEmail(ctx, "owner-b@example.test", "")
+	ev := SourceEvent{UserID: a.ID, Provider: ProviderApple, PlanID: "pro", Status: "active", PeriodEnd: 300, ExternalID: "shared", ExternalScope: testBundleIOS, EventAt: 10, Now: 100}
+	ren := AppleRenewalState{UserID: a.ID, ExternalID: "shared", BundleID: testBundleIOS, CurrentProductID: "pro.m", AutoRenewProductID: "pro.y", AutoRenewEnabled: true, EventAt: 10, UpdatedAt: 100}
+	if _, err = store.ApplyAppleLifecycle(ctx, ev, ren); err != nil {
+		t.Fatal(err)
+	}
+	ev.UserID = b.ID
+	ren.UserID = b.ID
+	if _, err = store.ApplyAppleLifecycle(ctx, ev, ren); !errors.Is(err, ErrExternalSubscriptionOwned) {
+		t.Fatalf("conflict=%v", err)
+	}
+	if _, ok, err := store.GetAppleRenewalState(ctx, b.ID); err != nil || ok {
+		t.Fatalf("conflict polluted renewal: ok=%v err=%v", ok, err)
 	}
 }
 
@@ -140,5 +259,45 @@ func TestAppleServerAPISelectsOnlyCanonicalMatchingSubscription(t *testing.T) {
 	}
 	if got.Transaction.SignedDateMS != now.UnixMilli() || got.Renewal.OriginalTransactionID != submitted.OriginalTransactionID {
 		t.Fatalf("noncanonical result: %+v", got)
+	}
+}
+
+func TestAppleSweepRevokesExpiredCanonicalFactAndRestoresRenewal(t *testing.T) {
+	_, svc, store, _ := newBillingServer(t)
+	seedTiers(t, store)
+	ctx := context.Background()
+	now := time.Unix(2_000_000_000, 0)
+	svc.now = func() time.Time { return now }
+	u, _ := store.UpsertUserByEmail(ctx, "sweep-renew@example.test", "")
+	token := mustNewAppAccountToken(t)
+	if _, err := store.EnsureAppleAccountToken(ctx, u.ID, token); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpsertAppleProduct(ctx, AppleProduct{BundleID: testBundleIOS, ProductID: testAppleProduct, PlanID: "pro", Cycle: "monthly", Active: true, UpdatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+	base := VerifiedAppleTransaction{OriginalTransactionID: "sweep-1", TransactionID: "tx", BundleID: testBundleIOS, ProductID: testAppleProduct, Environment: appleEnvProduction, AppAccountToken: token, PurchaseDateMS: now.Add(-time.Hour).UnixMilli(), SignedDateMS: now.UnixMilli()}
+	live := base
+	live.ExpiresDateMS = now.Add(time.Hour).UnixMilli()
+	ren := VerifiedAppleRenewalInfo{OriginalTransactionID: base.OriginalTransactionID, AutoRenewProductID: testAppleProduct, Environment: appleEnvProduction, AutoRenewEnabled: true, SignedDateMS: now.UnixMilli()}
+	state := appleRenewalState(u.ID, live, ren, now)
+	if _, err := store.ApplyAppleLifecycle(ctx, appleSourceEventWithRenewal(u.ID, live, AppleProduct{PlanID: "pro", Cycle: "monthly"}, state, now), state); err != nil {
+		t.Fatal(err)
+	}
+	facts := &appleSweepFact{value: AppleSubscriptionCanonical{Transaction: base, Renewal: ren}}
+	facts.value.Transaction.ExpiresDateMS = now.Add(-time.Second).UnixMilli()
+	svc.SetAppleSubscriptionReconciler(facts)
+	svc.ReconcileAppleSubscriptions(ctx)
+	got, _ := store.GetUserByID(ctx, u.ID)
+	if got.PlanID != "free" {
+		t.Fatalf("sweep missed expiry: %+v", got)
+	}
+	facts.value.Transaction.ExpiresDateMS = now.Add(time.Hour).UnixMilli()
+	facts.value.Transaction.SignedDateMS = now.Add(time.Minute).UnixMilli()
+	facts.value.Renewal.SignedDateMS = facts.value.Transaction.SignedDateMS
+	svc.ReconcileAppleSubscriptions(ctx)
+	got, _ = store.GetUserByID(ctx, u.ID)
+	if got.PlanID != "pro" {
+		t.Fatalf("sweep missed renewal: %+v", got)
 	}
 }

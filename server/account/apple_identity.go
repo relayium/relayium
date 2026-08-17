@@ -112,3 +112,15 @@ func (k appleSubscriptionKey) externalID() (string, bool) {
 func appleExternalIDIsSandbox(externalID string) bool {
 	return strings.HasPrefix(externalID, appleSandboxExternalPrefix)
 }
+
+func appleIdentityFromSource(src SubscriptionSource) (AppleSubscriptionIdentity, bool) {
+	id, env := src.ExternalID, appleEnvProduction
+	if appleExternalIDIsSandbox(id) {
+		id = strings.TrimPrefix(id, appleSandboxExternalPrefix)
+		env = appleEnvSandbox
+	}
+	if id == "" || src.ExternalScope == "" || strings.Contains(id, appleExternalIDSeparator) {
+		return AppleSubscriptionIdentity{}, false
+	}
+	return AppleSubscriptionIdentity{id, env, src.ExternalScope}, true
+}

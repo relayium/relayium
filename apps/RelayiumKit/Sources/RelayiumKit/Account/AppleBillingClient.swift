@@ -195,14 +195,34 @@ public struct AppleTransactionResult: Codable, Equatable {
     public var expiresAt: Int64
     /// `"apple"`, or `"multiple"` when a Stripe subscription is live alongside.
     public var provider: String
+    public var currentProductId: String
+    public var autoRenewProductId: String
+    public var renewalAt: Int64
 
     public init(applied: Bool, planId: String, status: String,
-                expiresAt: Int64, provider: String) {
+                expiresAt: Int64, provider: String,
+                currentProductId: String = "", autoRenewProductId: String = "", renewalAt: Int64 = 0) {
         self.applied = applied
         self.planId = planId
         self.status = status
         self.expiresAt = expiresAt
         self.provider = provider
+        self.currentProductId = currentProductId
+        self.autoRenewProductId = autoRenewProductId
+        self.renewalAt = renewalAt
+    }
+
+    private enum CodingKeys: String, CodingKey { case applied, planId, status, expiresAt, provider, currentProductId, autoRenewProductId, renewalAt }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        applied = try c.decode(Bool.self, forKey: .applied)
+        planId = try c.decode(String.self, forKey: .planId)
+        status = try c.decode(String.self, forKey: .status)
+        expiresAt = try c.decode(Int64.self, forKey: .expiresAt)
+        provider = try c.decode(String.self, forKey: .provider)
+        currentProductId = try c.decodeIfPresent(String.self, forKey: .currentProductId) ?? ""
+        autoRenewProductId = try c.decodeIfPresent(String.self, forKey: .autoRenewProductId) ?? ""
+        renewalAt = try c.decodeIfPresent(Int64.self, forKey: .renewalAt) ?? 0
     }
 }
 

@@ -222,10 +222,6 @@ func (s *Service) applyAppleNotification(ctx context.Context, n VerifiedAppleNot
 	var renewalState AppleRenewalState
 	if n.HasRenewal {
 		renewalState = appleRenewalState(owner, tx, n.Renewal, now)
-		if _, err := s.Store().ApplyAppleRenewalState(ctx, renewalState); err != nil {
-			log.Printf("apple notifications: applying renewal state for %s failed: %v", n.UUID, err)
-			return http.StatusInternalServerError, current.State, "storage"
-		}
 	} else if stored, ok, err := s.Store().GetAppleRenewalState(ctx, owner); err != nil {
 		return http.StatusInternalServerError, current.State, "storage"
 	} else if ok && stored.ExternalID == func() string { id, _ := appleSubscriptionKeyOf(tx).externalID(); return id }() {
@@ -254,12 +250,24 @@ func (s *Service) applyAppleNotification(ctx context.Context, n VerifiedAppleNot
 	if renewalState.UserID != "" {
 		event = appleSourceEventWithRenewal(owner, tx, product, renewalState, now)
 	}
-	if _, err := s.Store().ApplySubscriptionSource(ctx, event); err != nil {
-		if errors.Is(err, ErrExternalSubscriptionOwned) {
+	var applyErr error
+	if n.HasRenewal {
+		atomic, ok := s.Store().(interface {
+			ApplyAppleLifecycle(context.Context, SourceEvent, AppleRenewalState) (SubscriptionApply, error)
+		})
+		if !ok {
+			return http.StatusInternalServerError, current.State, "storage"
+		}
+		_, applyErr = atomic.ApplyAppleLifecycle(ctx, event, renewalState)
+	} else {
+		_, applyErr = s.Store().ApplySubscriptionSource(ctx, event)
+	}
+	if applyErr != nil {
+		if errors.Is(applyErr, ErrExternalSubscriptionOwned) {
 			s.recordAppleNotificationState(ctx, n.UUID, appleNotificationConflict, now)
 			return http.StatusInternalServerError, appleNotificationConflict, "ownership_conflict"
 		}
-		if errors.Is(err, ErrAppleSubscriptionConflict) {
+		if errors.Is(applyErr, ErrAppleSubscriptionConflict) {
 			// Permanent until the existing live subscription lapses or an operator
 			// resolves the paid conflict. Keep it visible as a conflict and answer
 			// non-2xx so Apple's retry can re-evaluate the invariant after that state
@@ -267,7 +275,7 @@ func (s *Service) applyAppleNotification(ctx context.Context, n VerifiedAppleNot
 			s.recordAppleNotificationState(ctx, n.UUID, appleNotificationConflict, now)
 			return http.StatusInternalServerError, appleNotificationConflict, "apple_subscription_conflict"
 		}
-		log.Printf("apple notifications: applying %s failed: %v", n.UUID, err)
+		log.Printf("apple notifications: applying %s failed: %v", n.UUID, applyErr)
 		// Left non-terminal on purpose: the retry redoes the apply.
 		return http.StatusInternalServerError, current.State, "storage"
 	}

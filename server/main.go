@@ -586,6 +586,7 @@ func main() {
 		appleStore.install(acct)
 		if appleSubscriptionAPI != nil {
 			acct.SetAppleSubscriptionReconciler(appleSubscriptionAPI)
+			go acct.RunAppleSubscriptionReconciler(context.Background(), 15*time.Minute)
 		}
 		// Notification retention is account storage maintenance, not blob-storage
 		// maintenance. Keep it outside the stored-transfers branch so deployments

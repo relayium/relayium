@@ -1,6 +1,7 @@
 package account
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -43,11 +44,14 @@ type appleTransactionResult struct {
 	// already recorded (a redelivery of a previous period). The state reported
 	// alongside it is then the CURRENT one, not what the stale event would have
 	// produced.
-	Applied   bool   `json:"applied"`
-	PlanID    string `json:"planId"`
-	Status    string `json:"status"`
-	ExpiresAt int64  `json:"expiresAt"`
-	Provider  string `json:"provider"`
+	Applied            bool   `json:"applied"`
+	PlanID             string `json:"planId"`
+	Status             string `json:"status"`
+	ExpiresAt          int64  `json:"expiresAt"`
+	Provider           string `json:"provider"`
+	CurrentProductID   string `json:"currentProductId"`
+	AutoRenewProductID string `json:"autoRenewProductId"`
+	RenewalAt          int64  `json:"renewalAt"`
 }
 
 func writeAppleTransactionError(w http.ResponseWriter, status int, code string) {
@@ -170,13 +174,14 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	renewalState := appleRenewalState(u.ID, tx, canonical.Renewal, now)
-	if _, err := s.Store().ApplyAppleRenewalState(r.Context(), renewalState); err != nil {
-		log.Printf("billing: applying apple renewal state for user %s failed: %v", u.ID, err)
+	atomic, ok := s.Store().(interface {
+		ApplyAppleLifecycle(context.Context, SourceEvent, AppleRenewalState) (SubscriptionApply, error)
+	})
+	if !ok {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-
-	res, err := s.Store().ApplySubscriptionSource(r.Context(), appleSourceEventWithRenewal(u.ID, tx, product, renewalState, now))
+	res, err := atomic.ApplyAppleLifecycle(r.Context(), appleSourceEventWithRenewal(u.ID, tx, product, renewalState, now), renewalState)
 	switch {
 	case errors.Is(err, ErrExternalSubscriptionOwned):
 		// One App Store subscription, one Relayium account. The apply wrote
@@ -216,11 +221,14 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 	s.reconcileApplePendingNotifications(r.Context(), u.ID, appleSubscriptionKeyOf(tx), now)
 
 	httpx.WriteJSON(w, http.StatusOK, appleTransactionResult{
-		Applied:   res.Applied,
-		PlanID:    res.Effective.PlanID,
-		Status:    res.Effective.Status,
-		ExpiresAt: res.Effective.PeriodEnd,
-		Provider:  res.Effective.Source,
+		Applied:            res.Applied,
+		PlanID:             res.Effective.PlanID,
+		Status:             res.Effective.Status,
+		ExpiresAt:          res.Effective.PeriodEnd,
+		Provider:           res.Effective.Source,
+		CurrentProductID:   tx.ProductID,
+		AutoRenewProductID: canonical.Renewal.AutoRenewProductID,
+		RenewalAt:          appleSeconds(canonical.Renewal.RenewalDateMS),
 	})
 }
 

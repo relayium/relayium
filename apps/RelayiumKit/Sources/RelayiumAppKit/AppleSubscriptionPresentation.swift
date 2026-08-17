@@ -286,6 +286,9 @@ public enum AppleSubscriptionPresentation {
             return .info(L10n.t(.subscriptionDeferred, language: language))
         case .nothingToRestore:
             return .info(L10n.t(.subscriptionNothingToRestore, language: language))
+        case .completed(let result) where !result.autoRenewProductId.isEmpty &&
+            result.autoRenewProductId != result.currentProductId && result.renewalAt > 0:
+            return .success(L10n.t(.subscriptionEffectRenewal, language: language))
         case .completed:
             return .success(L10n.t(.subscriptionCompleted, language: language))
         case .failed(let failure):

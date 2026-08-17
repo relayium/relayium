@@ -476,6 +476,68 @@ func (s *Service) SetAppleSubscriptionReconciler(v AppleSubscriptionReconciler) 
 	s.appleSubscriptions = v
 }
 
+// ReconcileAppleSubscriptions is the missed-notification backstop. External
+// calls live only in this bounded sweep; request enforcement uses local clocks.
+func (s *Service) ReconcileAppleSubscriptions(ctx context.Context) {
+	lister, ok := s.Store().(interface {
+		ListAppleSubscriptionSources(context.Context) ([]SubscriptionSource, error)
+	})
+	if !ok {
+		return
+	}
+	canonical, ok := s.appleSubscriptions.(interface {
+		CanonicalSubscriptionByIdentity(context.Context, AppleSubscriptionIdentity, time.Time) (AppleSubscriptionCanonical, error)
+	})
+	if !ok {
+		return
+	}
+	sources, err := lister.ListAppleSubscriptionSources(ctx)
+	if err != nil {
+		return
+	}
+	now := s.now()
+	for _, src := range sources {
+		identity, ok := appleIdentityFromSource(src)
+		if !ok {
+			continue
+		}
+		fact, err := canonical.CanonicalSubscriptionByIdentity(ctx, identity, now)
+		if err != nil {
+			continue
+		}
+		owner, owned, err := s.Store().UserByAppleAccountToken(ctx, fact.Transaction.AppAccountToken)
+		if err != nil || !owned || owner.ID != src.UserID {
+			continue
+		}
+		product, ok, err := s.Store().AppleProductPlan(ctx, fact.Transaction.BundleID, fact.Transaction.ProductID)
+		if err != nil || !ok {
+			continue
+		}
+		ren := appleRenewalState(src.UserID, fact.Transaction, fact.Renewal, now)
+		atomic, ok := s.Store().(interface {
+			ApplyAppleLifecycle(context.Context, SourceEvent, AppleRenewalState) (SubscriptionApply, error)
+		})
+		if !ok {
+			return
+		}
+		_, _ = atomic.ApplyAppleLifecycle(ctx, appleSourceEventWithRenewal(src.UserID, fact.Transaction, product, ren, now), ren)
+	}
+}
+
+func (s *Service) RunAppleSubscriptionReconciler(ctx context.Context, interval time.Duration) {
+	s.ReconcileAppleSubscriptions(ctx)
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			s.ReconcileAppleSubscriptions(ctx)
+		}
+	}
+}
+
 // Store returns the account data store. Exported so the commercial
 // admin/billing layer (billing.go, admin.go, admin_rollout.go,
 // plan_enforce.go — slated to move to a private repo, see server/ext) can

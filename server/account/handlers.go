@@ -594,6 +594,16 @@ func (s *Service) handleStats(w http.ResponseWriter, r *http.Request, u User) {
 }
 
 func (s *Service) handleMe(w http.ResponseWriter, r *http.Request, u User) {
+	if _, err := s.planForUser(r.Context(), u.ID); err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if refreshed, err := s.store.GetUserByID(r.Context(), u.ID); err == nil {
+		u = refreshed
+	} else {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
 	hasPass, err := s.store.HasPassword(r.Context(), u.ID)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -672,6 +682,16 @@ func appleRenewalWire(r AppleRenewalState, ok bool, now time.Time) map[string]an
 // 导人。
 func (s *Service) handleMeUsage(w http.ResponseWriter, r *http.Request, u User) {
 	ctx := r.Context()
+	if _, err := s.planForUser(ctx, u.ID); err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if refreshed, err := s.store.GetUserByID(ctx, u.ID); err == nil {
+		u = refreshed
+	} else {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
 	now := s.now().Unix()
 	period := periodOf(now)
 	_, monthEnd := monthRange(period)

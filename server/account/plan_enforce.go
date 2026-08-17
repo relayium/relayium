@@ -20,6 +20,13 @@ func freePlanFallback() Plan { return defaultPlans()[0] }
 // real store error is propagated so the over* gates can fail OPEN rather than
 // silently enforcing the Free cap against a paid user during a DB blip.
 func (s *Service) planForUser(ctx context.Context, userID string) (Plan, error) {
+	if lapser, ok := s.Store().(interface {
+		LapseAppleSubscription(context.Context, string, int64) error
+	}); ok {
+		if err := lapser.LapseAppleSubscription(ctx, userID, s.now().Unix()); err != nil {
+			return freePlanFallback(), err
+		}
+	}
 	u, err := s.Store().GetUserByID(ctx, userID)
 	if err != nil {
 		if err == ErrNotFound {
