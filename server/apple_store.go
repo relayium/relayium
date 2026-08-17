@@ -87,9 +87,17 @@ func loadAppleStore(path string) (appleStoreSetup, error) {
 		// operator needs to know which document broke it.
 		return appleStoreSetup{}, fmt.Errorf("%w (from %s)", err, path)
 	}
+	probeApps := make([]account.AppleAppConfig, 0, len(cfg.Apps))
+	for _, configured := range cfg.Apps {
+		app, ok := v.ConfiguredApp(strings.TrimSpace(configured.BundleID))
+		if !ok {
+			return appleStoreSetup{}, fmt.Errorf("account: verified App Store app enumeration failed (from %s)", path)
+		}
+		probeApps = append(probeApps, app)
+	}
 	// From the VERIFIER, not from the file: what is reported is the closed set the
 	// verifier actually accepts, after its own validation and normalization.
-	return appleStoreSetup{verifier: v, probeApps: append([]account.AppleAppConfig(nil), cfg.Apps...), env: strings.Join(v.Environments(), "+"), apps: len(cfg.Apps)}, nil
+	return appleStoreSetup{verifier: v, probeApps: probeApps, env: strings.Join(v.Environments(), "+"), apps: len(probeApps)}, nil
 }
 
 // install wires the verifier into the account service, or does nothing at all.

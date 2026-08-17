@@ -48,10 +48,10 @@ func NewAppleServerAPIClient(cfg AppleServerAPIConfig, verifier *AppleTransactio
 		cfg.HTTP = &http.Client{Timeout: 15 * time.Second}
 	}
 	if cfg.ProductionURL == "" {
-		cfg.ProductionURL = "https://api.storekit.itunes.apple.com"
+		cfg.ProductionURL = "https://api.storekit.apple.com"
 	}
 	if cfg.SandboxURL == "" {
-		cfg.SandboxURL = "https://api.storekit-sandbox.itunes.apple.com"
+		cfg.SandboxURL = "https://api.storekit-sandbox.apple.com"
 	}
 	if cfg.ProbeInterval <= 0 {
 		cfg.ProbeInterval = 3 * time.Second
@@ -187,7 +187,7 @@ func (c *AppleServerAPIClient) probeTestNotification(ctx context.Context, enviro
 	if readErr != nil {
 		return fmt.Errorf("stage A: %s %s API returned an invalid response", environment, app.BundleID)
 	}
-	if environment == appleEnvSandbox && resp.StatusCode == http.StatusNotFound {
+	if resp.StatusCode == http.StatusNotFound {
 		return fmt.Errorf("stage B: %s %s TEST delivery is not configured (HTTP 404)", environment, app.BundleID)
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -232,14 +232,14 @@ func (c *AppleServerAPIClient) probeTestNotification(ctx context.Context, enviro
 				return fmt.Errorf("stage B: %s %s rate limited", environment, app.BundleID)
 			}
 			rateLimited = true
-			seconds, parseErr := strconv.Atoi(resp.Header.Get("Retry-After"))
-			if parseErr != nil || seconds < 0 || seconds > 30 {
+			delay, parseErr := appleRetryAfterDelay(resp.Header.Get("Retry-After"), time.Now(), deadline)
+			if parseErr != nil {
 				return fmt.Errorf("stage B: %s %s invalid Retry-After", environment, app.BundleID)
 			}
 			select {
 			case <-ctx.Done():
 				return fmt.Errorf("stage B: %s %s timed out", environment, app.BundleID)
-			case <-time.After(time.Duration(seconds) * time.Second):
+			case <-time.After(delay):
 			}
 			continue
 		}
@@ -270,4 +270,16 @@ func (c *AppleServerAPIClient) probeTestNotification(ctx context.Context, enviro
 		return nil
 	}
 	return fmt.Errorf("stage B: %s %s timed out", environment, app.BundleID)
+}
+
+func appleRetryAfterDelay(raw string, now, deadline time.Time) (time.Duration, error) {
+	millis, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	retryAt := time.UnixMilli(millis)
+	if !retryAt.After(now) || retryAt.After(deadline) {
+		return 0, errors.New("retry instant is outside the probe deadline")
+	}
+	return retryAt.Sub(now), nil
 }

@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -82,7 +83,7 @@ func TestAppleServerAPIProbeUsesSharedJWTAndVerifiesSuccessfulTest(t *testing.T)
 		case 1:
 			http.NotFound(w, r)
 		case 2:
-			w.Header().Set("Retry-After", "0")
+			w.Header().Set("Retry-After", strconv.FormatInt(time.Now().Add(20*time.Millisecond).UnixMilli(), 10))
 			w.WriteHeader(http.StatusTooManyRequests)
 		case 3:
 			json.NewEncoder(w).Encode(map[string]any{"sendAttempts": []any{}})
@@ -109,6 +110,7 @@ func TestAppleServerAPIProbeFailsClosed(t *testing.T) {
 		want    string
 	}{
 		{"stage A terminal", appleEnvProduction, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Error(w, "secret", http.StatusForbidden) }), "stage A"},
+		{"production post missing is delivery", appleEnvProduction, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.NotFound(w, r) }), "stage B"},
 		{"sandbox post missing is delivery", appleEnvSandbox, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.NotFound(w, r) }), "stage B"},
 		{"stage A malformed token", appleEnvProduction, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(map[string]string{"testNotificationToken": "not-a-uuid"})
@@ -132,18 +134,48 @@ func TestAppleServerAPIProbeFailsClosed(t *testing.T) {
 				json.NewEncoder(w).Encode(map[string]string{"testNotificationToken": "9f0b2e3a-1c4d-4e5f-8a9b-000000000115"})
 				return
 			}
-			w.Header().Set("Retry-After", "0")
+			w.Header().Set("Retry-After", strconv.FormatInt(time.Now().Add(10*time.Millisecond).UnixMilli(), 10))
 			w.WriteHeader(http.StatusTooManyRequests)
 		}), "rate limited"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			client, app, _ := testProbeClient(t, tc.handler, 5*time.Millisecond)
+			timeout := 5 * time.Millisecond
+			if tc.name == "second rate limit" {
+				timeout = 100 * time.Millisecond
+			}
+			client, app, _ := testProbeClient(t, tc.handler, timeout)
 			var out bytes.Buffer
 			err := client.probeTestNotification(context.Background(), tc.env, client.cfg.ProductionURL, app, &out)
 			if err == nil || !strings.Contains(err.Error(), tc.want) || strings.Contains(err.Error(), "secret") || strings.Contains(out.String(), "hidden") {
 				t.Fatalf("err=%v out=%q", err, out.String())
 			}
 		})
+	}
+}
+
+func TestAppleServerAPIRetryAfterIsAbsoluteUnixMilliseconds(t *testing.T) {
+	now := time.UnixMilli(2_000_000_000_000)
+	deadline := now.Add(10 * time.Second)
+	got, err := appleRetryAfterDelay(strconv.FormatInt(now.Add(3*time.Second).UnixMilli(), 10), now, deadline)
+	if err != nil || got != 3*time.Second {
+		t.Fatalf("delay=%v err=%v", got, err)
+	}
+	for _, raw := range []string{"", "30", "not-a-time", strconv.FormatInt(now.UnixMilli(), 10), strconv.FormatInt(now.Add(-time.Millisecond).UnixMilli(), 10), strconv.FormatInt(deadline.Add(time.Millisecond).UnixMilli(), 10)} {
+		if _, err := appleRetryAfterDelay(raw, now, deadline); err == nil {
+			t.Fatalf("Retry-After %q accepted", raw)
+		}
+	}
+}
+
+func TestAppleServerAPIDefaultHostsMatchCurrentEndpoints(t *testing.T) {
+	chain := newAppleTestChain(t)
+	key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	client, err := NewAppleServerAPIClient(AppleServerAPIConfig{IssuerID: "issuer", KeyID: "key", PrivateKey: key}, testVerifier(t, chain))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.cfg.ProductionURL != "https://api.storekit.apple.com" || client.cfg.SandboxURL != "https://api.storekit-sandbox.apple.com" {
+		t.Fatalf("hosts: %s %s", client.cfg.ProductionURL, client.cfg.SandboxURL)
 	}
 }
 

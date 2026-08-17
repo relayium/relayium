@@ -102,7 +102,7 @@ func TestLoadAppleStoreInstallsTheConfiguredVerifier(t *testing.T) {
 	}
 	cfg := filepath.Join(dir, "apple-store.json")
 	body := fmt.Sprintf(`{"environment":"Production","rootCertsFile":%q,"apps":[
-		{"bundleId":"com.example.app","appAppleId":1234567890},
+		{"bundleId":" com.example.app ","appAppleId":1234567890},
 		{"bundleId":"com.example.mac","appAppleId":1234567891}
 	]}`, roots)
 	if err := os.WriteFile(cfg, []byte(body), 0o600); err != nil {
