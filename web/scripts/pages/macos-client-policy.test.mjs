@@ -149,10 +149,10 @@ describe("the macOS client version policy", () => {
           recommendedVersion: "1.2.9",
         }
       : {
-          policyRevision: 2,
-          minimumSupportedVersion: "1.2.9",
-          minimumSupportedBuild: 15,
-          recommendedVersion: "1.2.9",
+          policyRevision: 3,
+          minimumSupportedVersion: "1.2.10",
+          minimumSupportedBuild: 16,
+          recommendedVersion: "1.2.10",
         });
   });
 
