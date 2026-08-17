@@ -210,8 +210,11 @@ func (s *SQLiteStore) LapseAppleSubscription(ctx context.Context, userID string,
 	return tx.Commit()
 }
 
-func (s *SQLiteStore) ListAppleSubscriptionSources(ctx context.Context) ([]SubscriptionSource, error) {
-	rows, err := s.reader().QueryContext(ctx, `SELECT `+subscriptionSourceCols+` FROM subscription_sources WHERE provider=? AND external_id<>''`, ProviderApple)
+func (s *SQLiteStore) ListAppleSubscriptionSources(ctx context.Context, afterUserID string, limit int) ([]SubscriptionSource, error) {
+	if limit <= 0 || limit > 500 {
+		return nil, errors.New("account: invalid apple sweep page size")
+	}
+	rows, err := s.reader().QueryContext(ctx, `SELECT `+subscriptionSourceCols+` FROM subscription_sources WHERE provider=? AND external_id<>'' AND user_id>? ORDER BY user_id LIMIT ?`, ProviderApple, afterUserID, limit)
 	if err != nil {
 		return nil, err
 	}

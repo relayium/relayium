@@ -481,7 +481,7 @@ func (s *Service) SetAppleSubscriptionReconciler(v AppleSubscriptionReconciler) 
 // calls live only in this bounded sweep; request enforcement uses local clocks.
 func (s *Service) ReconcileAppleSubscriptions(ctx context.Context) {
 	lister, ok := s.Store().(interface {
-		ListAppleSubscriptionSources(context.Context) ([]SubscriptionSource, error)
+		ListAppleSubscriptionSources(context.Context, string, int) ([]SubscriptionSource, error)
 	})
 	if !ok {
 		return
@@ -492,49 +492,57 @@ func (s *Service) ReconcileAppleSubscriptions(ctx context.Context) {
 	if !ok {
 		return
 	}
-	sources, err := lister.ListAppleSubscriptionSources(ctx)
-	if err != nil {
-		log.Printf("apple subscription sweep: list failed")
-		return
-	}
 	now := s.now()
 	var refreshed, failed int
-	for _, src := range sources {
-		identity, ok := appleIdentityFromSource(src)
-		if !ok {
-			failed++
-			continue
-		}
-		fact, err := canonical.CanonicalSubscriptionByIdentity(ctx, identity, now)
+	const pageSize = 100
+	after := ""
+	for {
+		sources, err := lister.ListAppleSubscriptionSources(ctx, after, pageSize)
 		if err != nil {
-			failed++
-			continue
-		}
-		owner, owned, err := s.Store().UserByAppleAccountToken(ctx, fact.Transaction.AppAccountToken)
-		if err != nil || !owned || owner.ID != src.UserID {
-			failed++
-			continue
-		}
-		var product AppleProduct
-		if !appleTransactionIsTerminal(fact.Transaction) {
-			product, ok, err = s.Store().AppleProductPlan(ctx, fact.Transaction.BundleID, fact.Transaction.ProductID)
-		}
-		if err != nil || (!ok && !appleTransactionIsTerminal(fact.Transaction)) {
-			failed++
-			continue
-		}
-		ren := appleRenewalState(src.UserID, fact.Transaction, fact.Renewal, now)
-		atomic, ok := s.Store().(interface {
-			ApplyAuthorizedAppleLifecycle(context.Context, SourceEvent, AppleRenewalState, string, string) (SubscriptionApply, error)
-		})
-		if !ok {
+			log.Printf("apple subscription sweep: list failed")
 			return
 		}
-		if _, err = atomic.ApplyAuthorizedAppleLifecycle(ctx, appleSourceEventWithRenewal(src.UserID, fact.Transaction, product, ren, now), ren, fact.Transaction.AppAccountToken, fact.Transaction.Environment); err != nil {
-			failed++
-			continue
+		for _, src := range sources {
+			identity, ok := appleIdentityFromSource(src)
+			if !ok {
+				failed++
+				continue
+			}
+			fact, err := canonical.CanonicalSubscriptionByIdentity(ctx, identity, now)
+			if err != nil {
+				failed++
+				continue
+			}
+			owner, owned, err := s.Store().UserByAppleAccountToken(ctx, fact.Transaction.AppAccountToken)
+			if err != nil || !owned || owner.ID != src.UserID {
+				failed++
+				continue
+			}
+			var product AppleProduct
+			if !appleTransactionIsTerminal(fact.Transaction) {
+				product, ok, err = s.Store().AppleProductPlan(ctx, fact.Transaction.BundleID, fact.Transaction.ProductID)
+			}
+			if err != nil || (!ok && !appleTransactionIsTerminal(fact.Transaction)) {
+				failed++
+				continue
+			}
+			ren := appleRenewalState(src.UserID, fact.Transaction, fact.Renewal, now)
+			atomic, ok := s.Store().(interface {
+				ApplyAuthorizedAppleLifecycle(context.Context, SourceEvent, AppleRenewalState, string, string) (SubscriptionApply, error)
+			})
+			if !ok {
+				return
+			}
+			if _, err = atomic.ApplyAuthorizedAppleLifecycle(ctx, appleSourceEventWithRenewal(src.UserID, fact.Transaction, product, ren, now), ren, fact.Transaction.AppAccountToken, fact.Transaction.Environment); err != nil {
+				failed++
+				continue
+			}
+			refreshed++
 		}
-		refreshed++
+		if len(sources) < pageSize {
+			break
+		}
+		after = sources[len(sources)-1].UserID
 	}
 	if failed > 0 {
 		log.Printf("apple subscription sweep: refreshed=%d failed=%d", refreshed, failed)

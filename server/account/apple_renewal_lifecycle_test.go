@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -461,6 +462,9 @@ func TestAppleServerAPISelectsOnlyCanonicalMatchingSubscription(t *testing.T) {
 		"environment":           submitted.Environment,
 		"signedDate":            now.UnixMilli(),
 	})
+	lastTransactions := []any{map[string]any{"signedTransactionInfo": mismatchedJWS, "signedRenewalInfo": renewalJWS}, map[string]any{
+		"signedTransactionInfo": canonicalJWS, "signedRenewalInfo": renewalJWS,
+	}}
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auth := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if auth == "" {
@@ -481,11 +485,7 @@ func TestAppleServerAPISelectsOnlyCanonicalMatchingSubscription(t *testing.T) {
 				t.Errorf("kid=%v", parsed.Header["kid"])
 			}
 		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{map[string]any{
-			"lastTransactions": []any{map[string]any{"signedTransactionInfo": mismatchedJWS, "signedRenewalInfo": renewalJWS}, map[string]any{
-				"signedTransactionInfo": canonicalJWS, "signedRenewalInfo": renewalJWS,
-			}},
-		}}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{map[string]any{"lastTransactions": lastTransactions}}})
 	}))
 	defer server.Close()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -505,6 +505,33 @@ func TestAppleServerAPISelectsOnlyCanonicalMatchingSubscription(t *testing.T) {
 	}
 	if got.Transaction.SignedDateMS != now.UnixMilli() || got.Renewal.OriginalTransactionID != submitted.OriginalTransactionID {
 		t.Fatalf("noncanonical result: %+v", got)
+	}
+	lastTransactions = append(lastTransactions, map[string]any{"signedTransactionInfo": canonicalJWS, "signedRenewalInfo": renewalJWS})
+	if _, err := client.CanonicalSubscription(context.Background(), submitted, now); err != nil {
+		t.Fatalf("identical canonical replay was ambiguous: %v", err)
+	}
+	conflictingJWS := chain.sign(t, applePayload(func(p map[string]any) {
+		p["appAccountToken"] = "73f2ef7a-7203-4ccb-9cb4-fbfbf4561925"
+		p["signedDate"] = now.UnixMilli()
+		p["transactionId"] = "2000000000000999"
+	}))
+	lastTransactions = append(lastTransactions, map[string]any{"signedTransactionInfo": conflictingJWS, "signedRenewalInfo": renewalJWS})
+	if _, err := client.CanonicalSubscription(context.Background(), submitted, now); err == nil {
+		t.Fatal("same-millisecond conflicting canonical transactions were ordered by array position")
+	}
+	conflictingRenewalJWS := chain.sign(t, map[string]any{
+		"originalTransactionId": submitted.OriginalTransactionID,
+		"autoRenewProductId":    submitted.ProductID,
+		"environment":           submitted.Environment,
+		"signedDate":            now.UnixMilli(),
+		"expirationIntent":      1,
+	})
+	lastTransactions = []any{
+		map[string]any{"signedTransactionInfo": canonicalJWS, "signedRenewalInfo": renewalJWS},
+		map[string]any{"signedTransactionInfo": canonicalJWS, "signedRenewalInfo": conflictingRenewalJWS},
+	}
+	if _, err := client.CanonicalSubscription(context.Background(), submitted, now); err == nil {
+		t.Fatal("same-millisecond conflicting renewal facts were ordered by array position")
 	}
 }
 
@@ -585,5 +612,30 @@ func TestAppleSweepRevokesExpiredCanonicalFactAndRestoresRenewal(t *testing.T) {
 	got, _ = store.GetUserByID(ctx, u.ID)
 	if got.PlanID != "free" {
 		t.Fatalf("unmapped refund still grants: %+v", got)
+	}
+}
+
+func TestAppleSweepSourceEnumerationIsBoundedAndCursorStable(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	for i := 0; i < 3; i++ {
+		u, err := store.UpsertUserByEmail(ctx, fmt.Sprintf("sweep-page-%d@example.test", i), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.ApplySubscriptionSource(ctx, SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: "pro", Status: "active", PeriodEnd: 2000, ExternalID: fmt.Sprintf("production:sweep-%d", i), ExternalScope: testBundleIOS, EventAt: 10, Now: 1}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first, err := store.ListAppleSubscriptionSources(ctx, "", 2)
+	if err != nil || len(first) != 2 {
+		t.Fatalf("first page len=%d err=%v", len(first), err)
+	}
+	second, err := store.ListAppleSubscriptionSources(ctx, first[len(first)-1].UserID, 2)
+	if err != nil || len(second) != 1 || second[0].UserID <= first[len(first)-1].UserID {
+		t.Fatalf("second page=%+v err=%v", second, err)
+	}
+	if _, err := store.ListAppleSubscriptionSources(ctx, "", 501); err == nil {
+		t.Fatal("unbounded sweep page was accepted")
 	}
 }

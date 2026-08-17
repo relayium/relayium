@@ -131,8 +131,18 @@ func (c *AppleServerAPIClient) CanonicalSubscriptionByIdentity(ctx context.Conte
 			if e != nil {
 				continue
 			}
-			if best.Transaction.SignedDateMS == 0 || tx.SignedDateMS > best.Transaction.SignedDateMS {
-				best = AppleSubscriptionCanonical{tx, ren}
+			candidate := AppleSubscriptionCanonical{tx, ren}
+			switch {
+			case best.Transaction.SignedDateMS == 0 || tx.SignedDateMS > best.Transaction.SignedDateMS:
+				best = candidate
+			case tx.SignedDateMS < best.Transaction.SignedDateMS:
+				continue
+			case tx != best.Transaction:
+				return AppleSubscriptionCanonical{}, errors.New("app store status api: ambiguous canonical transaction")
+			case ren.SignedDateMS > best.Renewal.SignedDateMS:
+				best.Renewal = ren
+			case ren.SignedDateMS == best.Renewal.SignedDateMS && ren != best.Renewal:
+				return AppleSubscriptionCanonical{}, errors.New("app store status api: ambiguous canonical renewal")
 			}
 		}
 	}
