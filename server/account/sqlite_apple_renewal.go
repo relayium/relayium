@@ -171,25 +171,17 @@ func (s *SQLiteStore) applyAuthorizedAppleLifecycle(ctx context.Context, ev Sour
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return SubscriptionApply{}, err
 	}
+	hasAttempt := err == nil
 	immediatePurchase := attemptProduct == ev.AppleDispatchProductID && ev.AppleDispatchPurchase
-	renewalExternalID, renewalIdentityOK := (appleSubscriptionKey{
-		OriginalTransactionID: ev.AppleRenewalOriginalID,
-		Environment:           ev.AppleRenewalEnvironment,
-	}).externalID()
-	deferredChange := renewal != nil && ev.AppleRenewalAutoRenewEnabled &&
-		ev.AppleRenewalAccountToken == appleAccountToken &&
-		renewalExternalID == ev.ExternalID && renewalIdentityOK &&
-		renewal.ExternalID == ev.ExternalID && renewal.BundleID == ev.ExternalScope &&
-		ev.AppleRenewalTargetProductID == attemptProduct &&
-		renewal.AutoRenewProductID == attemptProduct
-	resolveAttempt := err == nil && hasSubject && subject.AttemptID == attemptID &&
-		(immediatePurchase || deferredChange)
+	resolveAttempt := hasAttempt && hasSubject && subject.AttemptID == attemptID &&
+		immediatePurchase
 
 	result, err := applySourceTx(ctx, tx, ev)
 	if err != nil {
 		return SubscriptionApply{}, err
 	}
 	if result.Applied {
+		result.PurchaseAttemptPending = hasAttempt
 		if _, err := tx.ExecContext(ctx, `INSERT INTO apple_billing_external_subjects(environment,external_id,user_id,bundle_id)
  VALUES(?,?,?,?) ON CONFLICT(environment,external_id) DO UPDATE SET
  user_id=excluded.user_id,bundle_id=excluded.bundle_id
@@ -217,6 +209,8 @@ func (s *SQLiteStore) applyAuthorizedAppleLifecycle(ctx context.Context, ev Sour
 			if err := advanceBillingAuthorityGenerationTx(ctx, tx, authority, ev.Now); err != nil {
 				return SubscriptionApply{}, err
 			}
+			result.PurchaseAttemptPending = false
+			result.PurchaseAttemptResolved = true
 		}
 	}
 	return result, tx.Commit()

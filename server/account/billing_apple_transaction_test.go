@@ -272,6 +272,30 @@ func TestSubmittedPurchaseProofResolvesAttemptWhenCanonicalLatestIsRenewal(t *te
 	}
 }
 
+func TestAppliedLifecycleWithUnresolvedPurchaseAttemptReturnsConflict(t *testing.T) {
+	f := newAppleTxFixture(t)
+	dispatchToken := "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+	authority, err := f.store.AcquireBillingAuthority(context.Background(), BillingAuthorityRequest{UserID: f.userID, Provider: ProviderApple, ExternalScope: testBundleIOS, AppleAccountToken: dispatchToken, Now: time.Now().Unix()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempt, created, err := f.store.DispatchAppleBillingPurchase(context.Background(), authority, testAppleProduct, dispatchToken, time.Now().Unix())
+	if err != nil || !created {
+		t.Fatalf("dispatch=%+v created=%v err=%v", attempt, created, err)
+	}
+	f.mustReject(t, f.chain.sign(t, f.payload(func(p map[string]any) {
+		p["appAccountToken"] = dispatchToken
+		p["transactionReason"] = "RENEWAL"
+	})), http.StatusConflict, "purchase_reconciliation_required")
+	if source, ok := f.appleSource(t); !ok || source.PlanID != "pro" {
+		t.Fatalf("canonical lifecycle was not applied before safe refusal: ok=%v source=%+v", ok, source)
+	}
+	var state string
+	if err := f.store.db.QueryRow(`SELECT state FROM billing_purchase_attempts WHERE id=?`, attempt.ID).Scan(&state); err != nil || state != "dispatched" {
+		t.Fatalf("unresolved attempt state=%q err=%v", state, err)
+	}
+}
+
 func TestRetiredTokenEndpointPreservesExistingLegacyTransactionRecovery(t *testing.T) {
 	f := newAppleTxFixture(t)
 	req, _ := http.NewRequest(http.MethodPost, f.ts.URL+"/api/billing/apple/account-token", nil)

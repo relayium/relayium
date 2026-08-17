@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestAppleVerifiedRenewalTargetResolvesDeferredPurchaseWithoutChangingCurrentEntitlement(t *testing.T) {
+func TestAppleRenewalTargetNeverResolvesAnUnprovenDeferredPurchase(t *testing.T) {
 	for _, tc := range []struct {
 		name, currentProduct, targetProduct, currentPlan, currentCycle string
 	}{
@@ -38,9 +38,6 @@ func TestAppleVerifiedRenewalTargetResolvesDeferredPurchaseWithoutChangingCurren
 				Status: "active", Cycle: tc.currentCycle, PeriodEnd: 2_000,
 				ExternalID: renewal.ExternalID, ExternalScope: testBundleIOS,
 				EventAt: 200, Now: 102,
-				AppleRenewalOriginalID: renewal.ExternalID, AppleRenewalEnvironment: appleEnvProduction,
-				AppleRenewalAccountToken: token, AppleRenewalTargetProductID: tc.targetProduct,
-				AppleRenewalAutoRenewEnabled: true,
 			}
 			result, err := store.ApplyAuthorizedAppleLifecycle(ctx, event, renewal, token, appleEnvProduction)
 			if err != nil || !result.Applied {
@@ -53,12 +50,12 @@ func TestAppleVerifiedRenewalTargetResolvesDeferredPurchaseWithoutChangingCurren
 			if err := store.db.QueryRowContext(ctx, `SELECT state FROM billing_purchase_attempts WHERE id=?`, attempt.ID).Scan(&state); err != nil {
 				t.Fatal(err)
 			}
-			if state != "resolved" {
-				t.Fatalf("verified deferred target left attempt %q", state)
+			if state != "dispatched" {
+				t.Fatalf("unproven deferred target resolved attempt: %q", state)
 			}
 			next, ok, err := store.BillingAuthority(ctx, u.ID)
-			if err != nil || !ok || next.Epoch != authority.Epoch+1 {
-				t.Fatalf("resolved deferred attempt did not open the next generation: %+v ok=%v err=%v", next, ok, err)
+			if err != nil || !ok || next.Epoch != authority.Epoch {
+				t.Fatalf("unproven deferred attempt advanced authority: %+v ok=%v err=%v", next, ok, err)
 			}
 			stored, ok, err := store.GetAppleRenewalState(ctx, u.ID)
 			if err != nil || !ok || stored.AutoRenewProductID != tc.targetProduct || stored.CurrentProductID != tc.currentProduct {
@@ -76,9 +73,7 @@ func TestAppleUnrelatedRenewalCannotResolveDeferredPurchase(t *testing.T) {
 	authority, _ := store.AcquireBillingAuthority(ctx, BillingAuthorityRequest{UserID: u.ID, Provider: ProviderApple, ExternalScope: testBundleIOS, AppleAccountToken: token, Now: 100})
 	attempt, _, _ := store.DispatchAppleBillingPurchase(ctx, authority, "plus.yearly", token, 101)
 	renewal := AppleRenewalState{UserID: u.ID, ExternalID: "original-other", BundleID: testBundleIOS, CurrentProductID: "pro.yearly", AutoRenewProductID: "max.yearly", AutoRenewEnabled: true, EventAt: 200, UpdatedAt: 102}
-	event := SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: "pro", Status: "active", Cycle: "yearly", PeriodEnd: 2_000, ExternalID: renewal.ExternalID, ExternalScope: testBundleIOS, EventAt: 200, Now: 102,
-		AppleRenewalOriginalID: renewal.ExternalID, AppleRenewalEnvironment: appleEnvProduction,
-		AppleRenewalAccountToken: token, AppleRenewalTargetProductID: "max.yearly", AppleRenewalAutoRenewEnabled: true}
+	event := SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: "pro", Status: "active", Cycle: "yearly", PeriodEnd: 2_000, ExternalID: renewal.ExternalID, ExternalScope: testBundleIOS, EventAt: 200, Now: 102}
 	if _, err := store.ApplyAuthorizedAppleLifecycle(ctx, event, renewal, token, appleEnvProduction); err != nil {
 		t.Fatal(err)
 	}

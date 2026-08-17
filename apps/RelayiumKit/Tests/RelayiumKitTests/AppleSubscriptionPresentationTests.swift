@@ -150,13 +150,13 @@ final class AppleSubscriptionPresentationTests: XCTestCase {
     /// charge. Marking it "current plan" tells a monthly subscriber they already
     /// hold the yearly plan they are reading about — and, because the badge also
     /// withdraws the button, takes away the only way they had to switch to it.
-    func testTheSameTierOnTheOtherCycleIsNeitherCurrentNorUnbuyable() {
+    func testTheSameTierOnTheOtherCycleIsManagedByApple() {
         let offers = [offer("pro.m", plan: "pro", name: "Pro", cycle: "monthly"),
                       offer("pro.y", plan: "pro", name: "Pro", cycle: "yearly")]
         let rows = AppleSubscriptionPresentation.offerRows(offers, currentPlanID: "pro",
                                                            currentCycle: "monthly", language: .en)
         XCTAssertEqual(rows.map(\.isCurrentPlan), [true, false])
-        XCTAssertEqual(rows.map(\.offersSubscribe), [false, true])
+        XCTAssertEqual(rows.map(\.offersSubscribe), [false, false])
     }
 
     /// **The exact product an account holds offers no Subscribe button.**
@@ -192,7 +192,7 @@ final class AppleSubscriptionPresentationTests: XCTestCase {
         let rows = AppleSubscriptionPresentation.offerRows(offers, currentPlanID: "pro",
                                                            currentCycle: "", language: .en)
         XCTAssertEqual(rows.map(\.isCurrentPlan), [false, false])
-        XCTAssertEqual(rows.map(\.offersSubscribe), [true, true])
+        XCTAssertEqual(rows.map(\.offersSubscribe), [false, false])
     }
 
     // MARK: - what a tier grants, and which period it is billed on

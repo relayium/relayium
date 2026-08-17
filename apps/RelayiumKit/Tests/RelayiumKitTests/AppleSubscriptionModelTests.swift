@@ -378,6 +378,10 @@ final class AppleSubscriptionModelTests: XCTestCase {
         XCTAssertFalse(AppleSubmission.accepted(
             AppleTransactionResult(applied: false, planId: "free", status: "canceled",
                                    expiresAt: 0, provider: "apple")).permitsFinish)
+        XCTAssertFalse(AppleSubmission.accepted(
+            AppleTransactionResult(applied: true, planId: "pro", status: "active",
+                                   expiresAt: 1_786_000_000, provider: "apple",
+                                   dispatchPending: true, dispatchResolved: false)).permitsFinish)
         for failure in Fixture.everyRefusal {
             XCTAssertFalse(AppleSubmission.refused(failure).permitsFinish,
                            "\(failure) permits a finish")

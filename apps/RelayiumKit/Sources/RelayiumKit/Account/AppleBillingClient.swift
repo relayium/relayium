@@ -205,10 +205,13 @@ public struct AppleTransactionResult: Codable, Equatable {
     public var currentProductId: String
     public var autoRenewProductId: String
     public var renewalAt: Int64
+    public var dispatchPending: Bool
+    public var dispatchResolved: Bool
 
     public init(applied: Bool, planId: String, status: String,
                 expiresAt: Int64, provider: String,
-                currentProductId: String = "", autoRenewProductId: String = "", renewalAt: Int64 = 0) {
+                currentProductId: String = "", autoRenewProductId: String = "", renewalAt: Int64 = 0,
+                dispatchPending: Bool = false, dispatchResolved: Bool = false) {
         self.applied = applied
         self.planId = planId
         self.status = status
@@ -217,9 +220,11 @@ public struct AppleTransactionResult: Codable, Equatable {
         self.currentProductId = currentProductId
         self.autoRenewProductId = autoRenewProductId
         self.renewalAt = renewalAt
+        self.dispatchPending = dispatchPending
+        self.dispatchResolved = dispatchResolved
     }
 
-    private enum CodingKeys: String, CodingKey { case applied, planId, status, expiresAt, provider, currentProductId, autoRenewProductId, renewalAt }
+    private enum CodingKeys: String, CodingKey { case applied, planId, status, expiresAt, provider, currentProductId, autoRenewProductId, renewalAt, dispatchPending, dispatchResolved }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         applied = try c.decode(Bool.self, forKey: .applied)
@@ -230,6 +235,8 @@ public struct AppleTransactionResult: Codable, Equatable {
         currentProductId = try c.decodeIfPresent(String.self, forKey: .currentProductId) ?? ""
         autoRenewProductId = try c.decodeIfPresent(String.self, forKey: .autoRenewProductId) ?? ""
         renewalAt = try c.decodeIfPresent(Int64.self, forKey: .renewalAt) ?? 0
+        dispatchPending = try c.decodeIfPresent(Bool.self, forKey: .dispatchPending) ?? false
+        dispatchResolved = try c.decodeIfPresent(Bool.self, forKey: .dispatchResolved) ?? false
     }
 }
 
@@ -319,7 +326,7 @@ extension AccountClient: AppleBillingService {
 		case 401: throw AppleBillingError.notSignedIn
 		case 409:
 			let body = try? JSONDecoder().decode(AppleErrorBody.self, from: data)
-			if body?.error == "billing_authority_conflict" || body?.error == "purchase_reconciliation_required" {
+			if body?.error == "billing_authority_conflict" || body?.error == "purchase_reconciliation_required" || body?.error == "manage_with_apple" {
 				throw AppleBillingError.purchaseAuthorityManaged(provider: body?.provider ?? "apple")
 			}
 			throw AppleBillingError.server(status: 409)
@@ -457,6 +464,7 @@ extension AccountClient: AppleBillingService {
             switch appleErrorCode(in: data) {
             case "subscription_owned": throw AppleBillingError.subscriptionOwned
             case "apple_subscription_conflict": throw AppleBillingError.appleSubscriptionConflict
+            case "purchase_reconciliation_required": throw AppleBillingError.reconciliationUnavailable
             default: throw AppleBillingError.server(status: 409)
             }
         case 429: throw AppleBillingError.rateLimited

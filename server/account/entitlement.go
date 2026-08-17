@@ -147,15 +147,6 @@ type SourceEvent struct {
 	ApplePurchaseDateMS    int64
 	AppleDispatchPurchase  bool
 	AppleDispatchProductID string
-	// AppleRenewal* is an independently verified signedRenewalInfo fact from
-	// the canonical subscription response. It resolves a deferred downgrade or
-	// cycle change only when every identity component matches the current
-	// per-dispatch attempt; it never changes the current entitlement itself.
-	AppleRenewalOriginalID       string
-	AppleRenewalEnvironment      string
-	AppleRenewalAccountToken     string
-	AppleRenewalTargetProductID  string
-	AppleRenewalAutoRenewEnabled bool
 }
 
 // EffectiveEntitlement is what the users-row projection will be set to.
@@ -177,6 +168,12 @@ type SubscriptionApply struct {
 	// Applied is false when the event was dropped as stale for its provider —
 	// neither the source row nor the projection changed.
 	Applied bool
+	// PurchaseAttemptPending is distinct from Applied: a canonical lifecycle
+	// event can be durable while the exact StoreKit purchase dispatch that
+	// delivered it is still unresolved. Such a response must not let the client
+	// finish the transaction.
+	PurchaseAttemptPending  bool
+	PurchaseAttemptResolved bool
 	// Effective is the projection now in force (the CURRENT one when the event
 	// was dropped, not a hypothetical).
 	Effective EffectiveEntitlement

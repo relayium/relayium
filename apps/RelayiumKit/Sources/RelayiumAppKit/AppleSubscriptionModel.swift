@@ -109,7 +109,9 @@ public enum AppleSubmission: Equatable {
     /// keeps re-offering, which is visible, harmless, and self-correcting the
     /// moment a submission is accepted.
     public var permitsFinish: Bool {
-        if case .accepted(let result) = self { return result.applied }
+        if case .accepted(let result) = self {
+            return result.applied && (!result.dispatchPending || result.dispatchResolved)
+        }
         return false
     }
 }

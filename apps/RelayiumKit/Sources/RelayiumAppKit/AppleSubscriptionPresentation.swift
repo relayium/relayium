@@ -176,7 +176,12 @@ public enum AppleSubscriptionPresentation {
                 // paying for. The other cycle of the same tier is a different
                 // product and stays purchasable, which is how an Apple
                 // subscriber switches between monthly and yearly at all.
-                offersSubscribe: !isCurrent)
+                // Relayium has not yet proved the appAccountToken shape Apple
+                // returns for a deferred subscription-group change. Until a
+                // real Sandbox transaction proves it, renewal-bound changes
+                // belong in Apple's management surface and never reach our
+                // purchase-dispatch endpoint or StoreKit.
+                offersSubscribe: !isCurrent && effect != .nextRenewal)
         }
     }
 

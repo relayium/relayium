@@ -1,12 +1,58 @@
 package account
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
 	"sync"
 	"testing"
 )
+
+func TestAppleNextRenewalChangesNeverCreateAPurchaseDispatch(t *testing.T) {
+	f := newAppleCatalogFixture(t)
+	products := []AppleProduct{
+		{BundleID: testBundleMac, ProductID: "pro.yearly", PlanID: "pro", Cycle: "yearly", Active: true},
+		{BundleID: testBundleMac, ProductID: "plus.monthly", PlanID: "plus", Cycle: "monthly", Active: true},
+		{BundleID: testBundleMac, ProductID: "max.monthly", PlanID: "max", Cycle: "monthly", Active: true},
+	}
+	for _, product := range products {
+		mustAppleProduct(t, f.store, product)
+	}
+	if _, err := f.store.AcquireBillingAuthority(context.Background(), BillingAuthorityRequest{
+		UserID: f.userID, Provider: ProviderApple, ExternalScope: testBundleMac,
+		AppleAccountToken: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", Now: 99,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.store.ApplySubscriptionSource(context.Background(), SourceEvent{
+		UserID: f.userID, Provider: ProviderApple, PlanID: "pro", Status: "active",
+		Cycle: "monthly", PeriodEnd: 2_000_000_000, ExternalID: "sandbox:current",
+		ExternalScope: testBundleMac, EventAt: 100, Now: 100,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for _, productID := range []string{"pro.yearly", "plus.monthly"} {
+		resp := postApplePurchaseDispatch(t, f, testBundleMac, productID)
+		var body map[string]string
+		_ = json.NewDecoder(resp.Body).Decode(&body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusConflict || body["error"] != "manage_with_apple" {
+			t.Fatalf("%s was not sent to Apple management: status=%d body=%v", productID, resp.StatusCode, body)
+		}
+	}
+	var attempts int
+	if err := f.store.db.QueryRow(`SELECT COUNT(*) FROM billing_purchase_attempts WHERE user_id=?`, f.userID).Scan(&attempts); err != nil || attempts != 0 {
+		t.Fatalf("next-renewal change created attempts=%d err=%v", attempts, err)
+	}
+	resp := postApplePurchaseDispatch(t, f, testBundleMac, "max.monthly")
+	var body map[string]string
+	_ = json.NewDecoder(resp.Body).Decode(&body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("immediate upgrade regressed: status=%d body=%v", resp.StatusCode, body)
+	}
+}
 
 func postApplePurchaseDispatch(t *testing.T, f *appleCatalogFixture, bundleID, productID string) *http.Response {
 	t.Helper()

@@ -852,7 +852,7 @@
 "subscription.nothingToRestore" = "This Apple ID has no Relayium subscription to restore.";
 "subscription.deferred" = "This purchase is waiting for approval. Relayium will update your plan as soon as it is approved.";
 "subscription.effect.immediate" = "Starts immediately. Apple handles any prorated refund for unused time.";
-"subscription.effect.renewal" = "Takes effect at your next renewal; your current subscription continues until then.";
+"subscription.effect.renewal" = "Manage this next-renewal change with Apple; your current subscription continues until then.";
 "subscription.renewal.pending" = "At the next renewal, Apple will switch this subscription to %@ %@.";
 "subscription.grace" = "Apple is retrying this payment. Your access continues during Apple's billing grace period.";
 "subscription.billing.retry" = "Apple is retrying your payment. No billing grace period is active, so access may be interrupted.";

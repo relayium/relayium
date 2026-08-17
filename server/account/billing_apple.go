@@ -51,7 +51,8 @@ func (s *Service) handleApplePurchaseDispatch(w http.ResponseWriter, r *http.Req
 		writeAppleTransactionError(w, http.StatusConflict, "purchases_paused")
 		return
 	}
-	if _, ok, err := s.Store().AppleProductPlan(r.Context(), in.BundleID, in.ProductID); err != nil {
+	target, ok, err := s.Store().AppleProductPlan(r.Context(), in.BundleID, in.ProductID)
+	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	} else if !ok {
@@ -65,6 +66,15 @@ func (s *Service) handleApplePurchaseDispatch(w http.ResponseWriter, r *http.Req
 	}
 	if !eligible.Allowed {
 		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "billing_authority_conflict", "provider": eligible.BlockedBy})
+		return
+	}
+	manage, err := s.applePurchaseMustBeManagedByApple(r.Context(), u.ID, target)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if manage {
+		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "manage_with_apple", "provider": ProviderApple})
 		return
 	}
 	candidate, err := newAppAccountToken()
@@ -99,4 +109,33 @@ func (s *Service) handleApplePurchaseDispatch(w http.ResponseWriter, r *http.Req
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]string{"appAccountToken": attempt.AppleAccountToken, "attemptId": attempt.ID})
+}
+
+// applePurchaseMustBeManagedByApple keeps unproven deferred subscription-group
+// transitions out of Relayium's purchase dispatch. A new subscription is safe;
+// for an existing Apple subscription only a strictly higher tier is an
+// immediate StoreKit purchase. Same-tier cycle changes and lower tiers take
+// effect at renewal and must be changed in Apple's own management surface until
+// their real Sandbox token/JWS shape has been observed and reviewed.
+func (s *Service) applePurchaseMustBeManagedByApple(ctx context.Context, userID string, target AppleProduct) (bool, error) {
+	source, ok, err := s.Store().GetSubscriptionSource(ctx, userID, ProviderApple)
+	if err != nil || !ok || !source.grantsAccess() {
+		return false, err
+	}
+	if source.ExternalScope != target.BundleID {
+		return true, nil
+	}
+	if source.PlanID == target.PlanID {
+		return true, nil
+	}
+	plans, err := s.applePlanFacts(ctx)
+	if err != nil {
+		return false, err
+	}
+	current, currentOK := plans[source.PlanID]
+	next, nextOK := plans[target.PlanID]
+	if !currentOK || !nextOK {
+		return false, errors.New("apple purchase tier ordering unavailable")
+	}
+	return next.SortOrder <= current.SortOrder, nil
 }

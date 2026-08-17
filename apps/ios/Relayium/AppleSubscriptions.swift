@@ -160,7 +160,10 @@ struct AppleSubscriptionCard: View {
             }
             // No button on the product the account already holds: buying it
             // again is a second charge for what it is already paying for.
-            if row.offersSubscribe {
+            if row.changeEffect == .nextRenewal {
+                Link(L10n.t(.subscriptionManage), destination: URL(string: "https://apps.apple.com/account/subscriptions")!)
+                    .accessibilityIdentifier("subscription-manage-\(row.productID)")
+            } else if row.offersSubscribe {
                 Button(L10n.t(.subscriptionSubscribe)) {
                     Task { await model.purchase(productID: row.productID) }
                 }

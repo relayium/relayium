@@ -52,6 +52,8 @@ type appleTransactionResult struct {
 	CurrentProductID   string `json:"currentProductId"`
 	AutoRenewProductID string `json:"autoRenewProductId"`
 	RenewalAt          int64  `json:"renewalAt"`
+	DispatchPending    bool   `json:"dispatchPending"`
+	DispatchResolved   bool   `json:"dispatchResolved"`
 }
 
 func writeAppleTransactionError(w http.ResponseWriter, status int, code string) {
@@ -202,11 +204,6 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 	event := appleSourceEventWithRenewal(u.ID, tx, product, renewalState, now)
 	event.AppleDispatchPurchase = dispatchPurchase
 	event.AppleDispatchProductID = dispatchProductID
-	event.AppleRenewalOriginalID = canonical.Renewal.OriginalTransactionID
-	event.AppleRenewalEnvironment = canonical.Renewal.Environment
-	event.AppleRenewalAccountToken = canonical.Renewal.AppAccountToken
-	event.AppleRenewalTargetProductID = canonical.Renewal.AutoRenewProductID
-	event.AppleRenewalAutoRenewEnabled = canonical.Renewal.AutoRenewEnabled
 	res, err := atomic.ApplyAuthorizedAppleLifecycle(r.Context(), event, renewalState, tx.AppAccountToken, tx.Environment)
 	switch {
 	case errors.Is(err, ErrBillingAuthorityConflict), errors.Is(err, ErrBillingPurchaseAmbiguous):
@@ -228,6 +225,10 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 	case err != nil:
 		log.Printf("billing: applying an apple subscription for user %s failed: %v", u.ID, err)
 		http.Error(w, "server error", http.StatusInternalServerError)
+		return
+	}
+	if res.PurchaseAttemptPending && !res.PurchaseAttemptResolved {
+		writeAppleTransactionError(w, http.StatusConflict, "purchase_reconciliation_required")
 		return
 	}
 	// This account has just presented a verified transaction for this
@@ -258,6 +259,8 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 		CurrentProductID:   tx.ProductID,
 		AutoRenewProductID: canonical.Renewal.AutoRenewProductID,
 		RenewalAt:          appleSeconds(canonical.Renewal.RenewalDateMS),
+		DispatchPending:    res.PurchaseAttemptPending,
+		DispatchResolved:   res.PurchaseAttemptResolved,
 	})
 }
 
