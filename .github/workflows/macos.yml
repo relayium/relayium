@@ -47,6 +47,9 @@ on:
 # One execution owns a commit at a time. A release dispatch for an exact SHA
 # supersedes the push verification it is about to repeat; this prevents two
 # complete signed UI suites consuming runners for the same immutable source.
+permissions:
+  contents: read
+
 concurrency:
   group: macos-${{ github.sha }}
   # A release dispatch may supersede the automatic push check for the same
@@ -55,6 +58,30 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' }}
 
 jobs:
+  contract:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Validate release contract
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          NOTARIZE: ${{ inputs.notarize }}
+          PUBLISH_RELEASE: ${{ inputs.publish_release }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            if [ -n "$RELEASE_VERSION" ]; then
+              printf '%s' "$RELEASE_VERSION" | grep -Eq '^[0-9]+(\.[0-9]+){1,2}$' || exit 1
+              [ "$NOTARIZE" = true ] || exit 1
+              actual="$(xcodebuild -project apps/mac/Relayium.xcodeproj -scheme Relayium -showBuildSettings | awk '/MARKETING_VERSION =/{print $3; exit}')"
+              [ "$actual" = "$RELEASE_VERSION" ] || { echo "::error::release $RELEASE_VERSION != MARKETING_VERSION $actual"; exit 1; }
+            fi
+            if [ "$PUBLISH_RELEASE" = true ]; then
+              [ -n "$RELEASE_VERSION" ] && [ "$GITHUB_REF" = refs/heads/main ] || exit 1
+              node apps/mac/scripts/check-release-readiness.mjs --require-approved
+            fi
+          fi
+
   # No secrets, so this runs on pull requests from forks like any other check.
   test:
     runs-on: macos-15
@@ -194,7 +221,7 @@ jobs:
   # The complete product-flow suite is split only at XCTest class boundaries.
   # Both shards are mandatory; neither changes, skips, or weakens a test.
   ui-smoke:
-    needs: test
+    needs: [test, contract]
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     strategy:
       fail-fast: false
@@ -265,35 +292,11 @@ jobs:
         run: security delete-keychain "$RUNNER_TEMP/ui-signing.keychain-db" || true
 
   signed-build:
-    needs: [test, ui-smoke]
+    needs: [test, contract]
     runs-on: macos-15
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Validate release request
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          RELEASE_VERSION: ${{ inputs.release_version }}
-          NOTARIZE: ${{ inputs.notarize }}
-          PUBLISH_RELEASE: ${{ inputs.publish_release }}
-        run: |
-          set -euo pipefail
-          if [ -n "$RELEASE_VERSION" ]; then
-            printf '%s' "$RELEASE_VERSION" | grep -Eq '^[0-9]+(\.[0-9]+){1,2}$' || {
-              echo "::error::release_version is not a supported app version"; exit 1; }
-            [ "$NOTARIZE" = true ] || {
-              echo "::error::release_version requires notarize=true so Sparkle signs the final stapled DMG"; exit 1; }
-          fi
-          if [ "$PUBLISH_RELEASE" = true ]; then
-            [ -n "$RELEASE_VERSION" ] || {
-              echo "::error::publish_release requires release_version"; exit 1; }
-            [ "$GITHUB_REF" = "refs/heads/main" ] || {
-              echo "::error::public macOS releases must run from main"; exit 1; }
-            node apps/mac/scripts/check-release-readiness.mjs --require-approved
-          fi
-      # Materialize the Developer ID identity into a throwaway keychain. Fails
-      # loudly if the secrets are unset so a build is never silently produced
-      # unsigned once signing is expected.
       - name: Import signing certificate
         env:
           CERT_P12_BASE64: ${{ secrets.MACOS_SIGNING_CERT_P12_BASE64 }}
@@ -550,9 +553,70 @@ jobs:
             "$RUNNER_TEMP/dd/Build/Products/Release/Relayium.app" \
             "$RUNNER_TEMP/Relayium.dmg" \
             "Developer ID Application"
+      - name: Record signed package provenance
+        id: package_identity
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+          app="$RUNNER_TEMP/dd/Build/Products/Release/Relayium.app"
+          build="$(defaults read "$app/Contents/Info" CFBundleVersion)"
+          version="$(defaults read "$app/Contents/Info" CFBundleShortVersionString)"
+          [ -z "$RELEASE_VERSION" ] || [ "$version" = "$RELEASE_VERSION" ]
+          hash="$(shasum -a 256 "$RUNNER_TEMP/Relayium.dmg" | awk '{print $1}')"
+          jq -n --arg repository "$GITHUB_REPOSITORY" --arg sha "$GITHUB_SHA" \
+            --arg version "$version" --arg build "$build" --arg hash "$hash" \
+            --arg attempt "$GITHUB_RUN_ATTEMPT" \
+            '{repository:$repository,sha:$sha,version:$version,build:$build,
+              signedDmgSha256:$hash,dmgSha256:$hash,runAttempt:$attempt}' \
+            > "$RUNNER_TEMP/provenance.json"
+          mkdir "$RUNNER_TEMP/release-tools"
+          cp "$RUNNER_TEMP/dd/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_appcast" \
+            "$RUNNER_TEMP/release-tools/generate_appcast"
+      - name: Upload signed package artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-macos-signed-${{ github.sha }}-${{ inputs.release_version || 'ci' }}
+          path: |
+            ${{ runner.temp }}/Relayium.dmg
+            ${{ runner.temp }}/Relayium.dmg.sha256
+            ${{ runner.temp }}/provenance.json
+            ${{ runner.temp }}/release-tools/generate_appcast
+          if-no-files-found: error
+          retention-days: 14
       # This is a disposable acceptance check, not release publication. Sparkle
       # refuses to add an EdDSA enclosure signature when the supplied private
       # key does not derive the SUPublicEDKey embedded in the mounted app.
+      - name: Remove signing keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
+
+  notarize-stage:
+    needs: [ui-smoke, signed-build]
+    if: github.event_name == 'workflow_dispatch' && (inputs.notarize || inputs.validate_notary_credentials || inputs.validate_sparkle_key || inputs.release_version != '')
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: relayium-macos-signed-${{ github.sha }}-${{ inputs.release_version || 'ci' }}
+          path: ${{ runner.temp }}
+      - name: Verify signed package provenance
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: |
+          set -euo pipefail
+          [ "$(jq -r .repository "$RUNNER_TEMP/provenance.json")" = "$GITHUB_REPOSITORY" ]
+          [ "$(jq -r .sha "$RUNNER_TEMP/provenance.json")" = "$GITHUB_SHA" ]
+          [ "$(jq -r .runAttempt "$RUNNER_TEMP/provenance.json")" -ge 1 ]
+          [ -z "$RELEASE_VERSION" ] || [ "$(jq -r .version "$RUNNER_TEMP/provenance.json")" = "$RELEASE_VERSION" ]
+          shasum -a 256 -c "$RUNNER_TEMP/Relayium.dmg.sha256"
+          [ "$(jq -r .dmgSha256 "$RUNNER_TEMP/provenance.json")" = "$(shasum -a 256 "$RUNNER_TEMP/Relayium.dmg" | awk '{print $1}')" ]
+          mount="$RUNNER_TEMP/verify-mount"; mkdir "$mount"
+          hdiutil attach "$RUNNER_TEMP/Relayium.dmg" -mountpoint "$mount" -nobrowse -readonly
+          codesign --verify --deep --strict --verbose=2 "$mount/Relayium.app"
+          [ "$(defaults read "$mount/Relayium.app/Contents/Info" CFBundleVersion)" = "$(jq -r .build "$RUNNER_TEMP/provenance.json")" ]
+          hdiutil detach "$mount"
       - name: Validate Sparkle update-signing key
         if: github.event_name == 'workflow_dispatch' && inputs.validate_sparkle_key
         env:
@@ -563,7 +627,7 @@ jobs:
             echo "::error::MACOS_SPARKLE_PRIVATE_KEY is not set"
             exit 1
           fi
-          tools="$RUNNER_TEMP/dd/SourcePackages/artifacts/sparkle/Sparkle/bin"
+          tools="$RUNNER_TEMP/release-tools"
           validation_dir="$RUNNER_TEMP/sparkle-key-validation"
           log="$RUNNER_TEMP/sparkle-key-validation.log"
           mkdir "$validation_dir"
@@ -626,6 +690,15 @@ jobs:
           apps/mac/scripts/notarize-dmg.sh \
             "$RUNNER_TEMP/Relayium.dmg" \
             "$RUNNER_TEMP/notarization"
+      - name: Finalize notarized package provenance
+        if: github.event_name == 'workflow_dispatch' && inputs.notarize
+        run: |
+          set -euo pipefail
+          hash="$(shasum -a 256 "$RUNNER_TEMP/Relayium.dmg" | awk '{print $1}')"
+          jq --arg hash "$hash" '.dmgSha256=$hash | .notarized=true' \
+            "$RUNNER_TEMP/provenance.json" > "$RUNNER_TEMP/provenance.final.json"
+          mv "$RUNNER_TEMP/provenance.final.json" "$RUNNER_TEMP/provenance.json"
+          shasum -a 256 "$RUNNER_TEMP/Relayium.dmg" > "$RUNNER_TEMP/Relayium.dmg.sha256"
       # A public feed must sign the final stapled bytes, not the pre-notarized
       # package. The staging script also pins the enclosure to the immutable
       # macos-v<VERSION> release URL and emits the single web manifest that
@@ -641,13 +714,12 @@ jobs:
             echo "::error::MACOS_SPARKLE_PRIVATE_KEY is not set"
             exit 1
           fi
-          app="$RUNNER_TEMP/dd/Build/Products/Release/Relayium.app"
-          built_version="$(plutil -extract CFBundleShortVersionString raw -o - "$app/Contents/Info.plist")"
+          built_version="$(jq -r .version "$RUNNER_TEMP/provenance.json")"
           if [ "$built_version" != "$RELEASE_VERSION" ]; then
             echo "::error::release_version $RELEASE_VERSION does not match the built app version $built_version"
             exit 1
           fi
-          tools="$RUNNER_TEMP/dd/SourcePackages/artifacts/sparkle/Sparkle/bin"
+          tools="$RUNNER_TEMP/release-tools"
           generated="$RUNNER_TEMP/generated-appcast"
           staged="$RUNNER_TEMP/release-web"
           mkdir -p "$generated" "$staged/public/apps/macos"
@@ -709,21 +781,6 @@ jobs:
       # Without the manual notarize input this remains a CI acceptance artifact,
       # not a public release. Public publication and the /apps page flip are
       # separate, explicitly controlled G5 steps.
-      - name: Upload signed DMG artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: relayium-macos-${{ github.sha }}
-          path: |
-            ${{ runner.temp }}/Relayium.dmg
-            ${{ runner.temp }}/Relayium.dmg.sha256
-            ${{ runner.temp }}/release-web/native-releases.json
-            ${{ runner.temp }}/release-web/public/apps/macos/appcast.xml
-            ${{ runner.temp }}/release-web/native-client-policy.json
-            ${{ runner.temp }}/release-web/public/apps/macos/client-policy.json
-          if-no-files-found: error
-          retention-days: 14
-      # Preserve Apple's rejection details even when the notarization step
-      # fails. A rejected DMG itself is deliberately not uploaded.
       - name: Upload notarization evidence
         if: always() && github.event_name == 'workflow_dispatch' && inputs.notarize
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -735,15 +792,27 @@ jobs:
       - name: Remove notarization API key
         if: always()
         run: rm -P "$RUNNER_TEMP/notary-key.p8" 2>/dev/null || true
-      - name: Remove signing keychain
-        if: always()
-        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
+      - name: Upload notarized release candidate
+        if: github.event_name == 'workflow_dispatch' && inputs.release_version != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: relayium-macos-${{ github.sha }}-${{ inputs.release_version || 'ci' }}
+          path: |
+            ${{ runner.temp }}/Relayium.dmg
+            ${{ runner.temp }}/Relayium.dmg.sha256
+            ${{ runner.temp }}/provenance.json
+            ${{ runner.temp }}/release-web/native-releases.json
+            ${{ runner.temp }}/release-web/public/apps/macos/appcast.xml
+            ${{ runner.temp }}/release-web/native-client-policy.json
+            ${{ runner.temp }}/release-web/public/apps/macos/client-policy.json
+          if-no-files-found: error
+          retention-days: 14
 
   # This job is the only holder of repository write permission. Ordinary
   # signed builds, credential checks, and notarization candidates cannot
   # publish anything.
   publish:
-    needs: [test, signed-build]
+    needs: notarize-stage
     if: github.event_name == 'workflow_dispatch' && inputs.publish_release
     runs-on: ubuntu-latest
     permissions:
@@ -755,7 +824,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: relayium-macos-${{ github.sha }}
+          name: relayium-macos-${{ github.sha }}-${{ inputs.release_version || 'ci' }}
           path: ${{ runner.temp }}/release
       - name: Verify publication artifacts
         env:
@@ -765,6 +834,13 @@ jobs:
           release="$RUNNER_TEMP/release"
           cd "$release"
           shasum -a 256 -c Relayium.dmg.sha256
+          [ "$(jq -r .repository provenance.json)" = "$GITHUB_REPOSITORY" ]
+          [ "$(jq -r .sha provenance.json)" = "$GITHUB_SHA" ]
+          [ "$(jq -r .version provenance.json)" = "$RELEASE_VERSION" ]
+          [ "$(jq -r .notarized provenance.json)" = true ]
+          [ "$(jq -r .dmgSha256 provenance.json)" = \
+            "$(shasum -a 256 Relayium.dmg | awk '{print $1}')" ]
+          [ "$(jq -r .build provenance.json)" -gt 0 ]
           expected="https://github.com/${GITHUB_REPOSITORY}/releases/download/macos-v${RELEASE_VERSION}/Relayium.dmg"
           [ "$(jq -r '.macos.available' release-web/native-releases.json)" = true ]
           [ "$(jq -r '.macos.version' release-web/native-releases.json)" = "$RELEASE_VERSION" ]

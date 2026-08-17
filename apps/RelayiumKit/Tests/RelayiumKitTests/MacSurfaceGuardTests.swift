@@ -451,14 +451,25 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "CI compiles macOS but never launches its product flows")
         let uiJob = try XCTUnwrap(workflow.range(of: "  ui-smoke:"))
         let signedJob = try XCTUnwrap(workflow.range(of: "  signed-build:"))
+        let notarizeJob = try XCTUnwrap(workflow.range(of: "  notarize-stage:"))
+        let publishJob = try XCTUnwrap(workflow.range(of: "  publish:"))
         let runtimeStep = try XCTUnwrap(workflow.range(of:
             "      - name: Run macOS product-flow UI smoke (${{ matrix.shard }})"))
         XCTAssertGreaterThan(runtimeStep.lowerBound, uiJob.lowerBound)
         XCTAssertLessThan(runtimeStep.lowerBound, signedJob.lowerBound)
         XCTAssertTrue(workflow.contains("Install UI provisioning profiles"),
                       "the UI app needs its certificate and profiles")
-        XCTAssertTrue(workflow.contains("needs: [test, ui-smoke]"),
-                      "signing must wait for every mandatory UI shard")
+        XCTAssertTrue(workflow.contains("needs: [test, contract]"),
+                      "signed packaging must wait for cheap contract gates")
+        XCTAssertTrue(workflow.contains("needs: [ui-smoke, signed-build]"),
+                      "notarization must wait for every mandatory UI shard and package")
+        XCTAssertTrue(workflow.contains("needs: notarize-stage"),
+                      "publication bypasses the notarized candidate")
+        XCTAssertLessThan(signedJob.lowerBound, notarizeJob.lowerBound)
+        XCTAssertLessThan(notarizeJob.lowerBound, publishJob.lowerBound)
+        XCTAssertTrue(workflow.contains("permissions:\n  contents: read"))
+        XCTAssertTrue(workflow.contains("signedDmgSha256")
+            && workflow.contains("Finalize notarized package provenance"))
         for testClass in ["AppShellUITests", "DeviceInboxUITests",
                           "SubscriptionUITests", "LocalSessionUITests"] {
             XCTAssertTrue(workflow.contains("RelayiumUITests/\(testClass)"),
