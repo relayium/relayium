@@ -18,24 +18,25 @@ releasing a version.
 | Bundle ID | `com.relayium.app` |
 | Share extension bundle | `com.relayium.app.share` |
 | Team | `7PVYUG4YQS` |
-| Candidate version | `1.0` |
-| Candidate build | `1` |
+| Candidate version | `1.2.10` |
+| Candidate build | `2` |
 
 App Store Connect was inspected read-only on 2026-08-13 and contained no iOS
-TestFlight builds, so build `1` was not consumed at that time.
+TestFlight builds. Build `2` is the first candidate after the retained build
+`1` acceptance archive and is strictly monotonic in the project source.
 
-A local signed archive and non-uploading App Store export pass with the intended
-distribution identities and profiles. The retained candidate artifacts are:
+A local signed archive and non-uploading App Store export of historical build
+`1` passed with the intended distribution identities and profiles. The retained
+historical artifacts are:
 
 - archive: `/tmp/Relayium-iOS-subscriptions-e4dd73d7.xcarchive`;
 - IPA: `/tmp/Relayium-iOS-subscriptions-e4dd73d7-export/Relayium.ipa`;
 - IPA SHA-256:
   `45be4bbf6ac8f14482276804e42a624af6c9ba185159b621e403996378df8bbc`.
 
-These artifacts are local acceptance evidence, not permission to upload. Any
-shipping source or build-setting change after the archive requires a new
-exact-source archive and checksum before delivery. A release-record-only edit
-to this document does not change the archived product.
+These artifacts are historical acceptance evidence, not the `1.2.10 (2)`
+candidate and not permission to upload. The current candidate requires a new
+exact-source archive and checksum before delivery.
 
 ## Subscription activation boundary
 
