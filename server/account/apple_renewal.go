@@ -138,6 +138,8 @@ func appleRenewalState(userID string, tx VerifiedAppleTransaction, r VerifiedApp
 		CurrentProductID: tx.ProductID, AutoRenewProductID: r.AutoRenewProductID,
 		IsInBillingRetry: r.IsInBillingRetry, AutoRenewEnabled: r.AutoRenewEnabled,
 		GraceUntil: appleSeconds(r.GracePeriodExpiresMS), RenewalAt: appleSeconds(r.RenewalDateMS),
-		EventAt: appleSeconds(r.SignedDateMS), UpdatedAt: now.Unix(),
+		// signedDate is Apple's renewal ordering fact and is already verified in
+		// milliseconds. Truncating it makes distinct facts compare equal.
+		EventAt: r.SignedDateMS, UpdatedAt: now.Unix(),
 		ExpirationIntent: r.ExpirationIntent, PriceIncreaseStatus: r.PriceIncreaseStatus}
 }

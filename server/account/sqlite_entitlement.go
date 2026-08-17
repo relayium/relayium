@@ -242,7 +242,11 @@ func applySourceTx(ctx context.Context, tx *sql.Tx, ev SourceEvent) (Subscriptio
 			return SubscriptionApply{}, ErrAppleSubscriptionConflict
 		}
 	}
-	if ev.EventAt > 0 && havePrev && ev.EventAt < prev.EventAt && !appleProductionSupersedesSandbox {
+	// Apple's clock orders only one external subscription. A replacement
+	// originalTransactionId starts a new domain after the prior source lapses;
+	// while it is live, the conflict guard above refuses the second identity.
+	sameOrderingDomain := ev.Provider != ProviderApple || ev.ExternalID == "" || prev.ExternalID == "" || ev.ExternalID == prev.ExternalID
+	if ev.EventAt > 0 && havePrev && sameOrderingDomain && ev.EventAt < prev.EventAt && !appleProductionSupersedesSandbox {
 		// Stale/replayed: leave BOTH the source row and the projection exactly as
 		// they are. Advancing the clock without applying the state (or vice
 		// versa) is what makes a replay permanently corrupting.

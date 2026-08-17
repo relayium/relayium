@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -294,6 +295,34 @@ func TestStaleSourceEventLeavesRowAndProjectionUnchanged(t *testing.T) {
 	}
 	if row.PlanID != "pro" || row.Status != "active" || row.EventAt != 2000 {
 		t.Fatalf("stale event mutated the source row: %+v", row)
+	}
+}
+
+func TestAppleReplacementSubscriptionStartsANewOrderingDomain(t *testing.T) {
+	store := newTestStore(t)
+	seedTiers(t, store)
+	u := newEntitlementUser(t, store, "apple-order-domain@example.com")
+	ctx := context.Background()
+	first := SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: freePlanID,
+		Status: "canceled", ExternalID: "old-original", ExternalScope: "com.relayium.mac",
+		EventAt: 9_000, Now: 100}
+	if _, err := store.ApplySubscriptionSource(ctx, first); err != nil {
+		t.Fatal(err)
+	}
+	replacement := SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: "pro",
+		Status: "active", Cycle: "monthly", PeriodEnd: 10_000, ExternalID: "new-original",
+		ExternalScope: "com.relayium.mac", EventAt: 1_000, Now: 101}
+	got, err := store.ApplySubscriptionSource(ctx, replacement)
+	if err != nil || !got.Applied || got.Effective.PlanID != "pro" {
+		t.Fatalf("replacement=%+v err=%v", got, err)
+	}
+	first.PlanID, first.Status, first.Now = "plus", "active", 102
+	if _, err := store.ApplySubscriptionSource(ctx, first); !errors.Is(err, ErrAppleSubscriptionConflict) {
+		t.Fatalf("late old identity err=%v", err)
+	}
+	src, ok, err := store.GetSubscriptionSource(ctx, u.ID, ProviderApple)
+	if err != nil || !ok || src.ExternalID != "new-original" || src.PlanID != "pro" {
+		t.Fatalf("late old identity changed source: %+v ok=%v err=%v", src, ok, err)
 	}
 }
 
