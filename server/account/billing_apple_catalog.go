@@ -373,7 +373,7 @@ func (s *Service) applePlanFacts(ctx context.Context) (map[string]Plan, error) {
 // and the account screen cannot disagree about who owns the entitlement.
 //
 // A purchase may start only when that projection says the entitlement is
-// nobody's ('' — a free account) or Apple's ALONE. Changing tier inside a
+// nobody's (” — a free account) or Apple's ALONE. Changing tier inside a
 // subscription group is itself an App Store purchase, and refusing it would
 // leave an Apple subscriber with no way to upgrade from the app that sold it
 // to them. Everything else blocks, named so the client can say WHERE the
@@ -387,6 +387,20 @@ func (s *Service) applePlanFacts(ctx context.Context) (map[string]Plan, error) {
 //     not: the account is already double-billed, and selling it a further
 //     subscription can only deepen that.
 func (s *Service) appleCatalogEligibility(ctx context.Context, u User, bundleID string) (appleCatalogPurchase, error) {
+	authorities, ok := s.Store().(interface {
+		BillingAuthority(context.Context, string) (BillingAuthority, bool, error)
+	})
+	if !ok {
+		return appleCatalogPurchase{}, errors.New("billing authority store unavailable")
+	}
+	if authority, exists, err := authorities.BillingAuthority(ctx, u.ID); err != nil {
+		return appleCatalogPurchase{}, err
+	} else if exists {
+		if authority.Provider == ProviderApple && authority.ExternalScope == bundleID {
+			return appleCatalogPurchase{Allowed: true}, nil
+		}
+		return appleCatalogPurchase{Allowed: false, BlockedBy: authority.Provider}, nil
+	}
 	live, err := s.Store().LiveEntitlementProviders(ctx, u.ID)
 	if err != nil {
 		return appleCatalogPurchase{}, err

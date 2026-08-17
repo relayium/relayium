@@ -89,6 +89,36 @@ func (f *appleCatalogFixture) productIDs(t *testing.T, query string) []string {
 
 const macQuery = "?bundleId=" + testBundleMac
 
+func TestAppleCatalogUsesStickyBillingAuthorityBeforeLiveEntitlement(t *testing.T) {
+	for _, tc := range []struct {
+		name, provider, scope, queryBundle, blockedBy string
+		allowed                                       bool
+	}{
+		{"stripe checkout", ProviderStripe, "", testBundleMac, ProviderStripe, false},
+		{"same apple app", ProviderApple, testBundleMac, testBundleMac, "", true},
+		{"other apple app", ProviderApple, testBundleMac, testBundleIOS, ProviderApple, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newAppleCatalogFixture(t)
+			u, err := f.store.GetUserByID(context.Background(), f.userID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := BillingAuthorityRequest{UserID: f.userID, Provider: tc.provider, ExternalScope: tc.scope, Now: time.Now().Unix()}
+			if tc.provider == ProviderApple {
+				request.AppleAccountToken = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+			}
+			if _, err := f.store.AcquireBillingAuthority(context.Background(), request); err != nil {
+				t.Fatal(err)
+			}
+			got, err := f.svc.appleCatalogEligibility(context.Background(), u, tc.queryBundle)
+			if err != nil || got.Allowed != tc.allowed || got.BlockedBy != tc.blockedBy {
+				t.Fatalf("eligibility=%+v err=%v", got, err)
+			}
+		})
+	}
+}
+
 // ── fail-closed ──────────────────────────────────────────────────────────────
 
 // The shipping default. A deployment with no verifier configured cannot accept
