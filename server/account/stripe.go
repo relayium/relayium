@@ -556,6 +556,138 @@ func (c *stripeClient) CancelSubscriptionForDeletion(ctx context.Context, subID,
 	return false, errors.New("stripe: cancellation is not yet canonical")
 }
 
+type stripeDeletionList struct {
+	Data    []struct{ ID, Status string } `json:"data"`
+	HasMore bool                          `json:"has_more"`
+}
+
+func (c *stripeClient) deletionList(ctx context.Context, path string, query url.Values) ([]string, error) {
+	var ids []string
+	for {
+		query.Set("limit", "100")
+		body, err := c.request(ctx, http.MethodGet, path+"?"+query.Encode(), nil)
+		if err != nil {
+			return nil, err
+		}
+		var page stripeDeletionList
+		if err := json.Unmarshal(body, &page); err != nil {
+			return nil, fmt.Errorf("stripe: parse deletion inventory: %w", err)
+		}
+		for _, v := range page.Data {
+			if path == "/v1/subscriptions" && (v.Status == "canceled" || v.Status == "incomplete_expired") {
+				continue
+			}
+			if path == "/v1/subscription_schedules" && (v.Status == "canceled" || v.Status == "completed" || v.Status == "released") {
+				continue
+			}
+			ids = append(ids, v.ID)
+		}
+		if !page.HasMore || len(page.Data) == 0 {
+			return ids, nil
+		}
+		query.Set("starting_after", page.Data[len(page.Data)-1].ID)
+	}
+}
+
+func (c *stripeClient) DiscoverDeletionHazards(ctx context.Context, customerID string) (BillingDeletionProgress, error) {
+	if customerID == "" {
+		return BillingDeletionProgress{}, errors.New("stripe: deletion customer identity is required")
+	}
+	base := url.Values{"customer": {customerID}}
+	copyQ := func(extra ...string) url.Values {
+		q := url.Values{}
+		for k, v := range base {
+			q[k] = append([]string(nil), v...)
+		}
+		for i := 0; i+1 < len(extra); i += 2 {
+			q.Set(extra[i], extra[i+1])
+		}
+		return q
+	}
+	var p BillingDeletionProgress
+	var err error
+	if p.CheckoutSessions, err = c.deletionList(ctx, "/v1/checkout/sessions", copyQ("status", "open")); err != nil {
+		return p, err
+	}
+	if p.Subscriptions, err = c.deletionList(ctx, "/v1/subscriptions", copyQ("status", "all")); err != nil {
+		return p, err
+	}
+	if p.Schedules, err = c.deletionList(ctx, "/v1/subscription_schedules", copyQ()); err != nil {
+		return p, err
+	}
+	if p.InvoiceItems, err = c.deletionList(ctx, "/v1/invoiceitems", copyQ("pending", "true")); err != nil {
+		return p, err
+	}
+	draft, err := c.deletionList(ctx, "/v1/invoices", copyQ("status", "draft"))
+	if err != nil {
+		return p, err
+	}
+	open, err := c.deletionList(ctx, "/v1/invoices", copyQ("status", "open"))
+	if err != nil {
+		return p, err
+	}
+	p.Invoices = append(draft, open...)
+	return p, nil
+}
+
+func (c *stripeClient) ReconcileDeletionHazards(ctx context.Context, row BillingCancellation, p BillingDeletionProgress) error {
+	key := func(kind, id string) string {
+		sum := sha256.Sum256([]byte(row.IdempotencyKey + "\x00" + kind + "\x00" + id))
+		return "acct-delete:" + hex.EncodeToString(sum[:16])
+	}
+	for _, id := range p.CheckoutSessions {
+		if _, err := c.requestKeyed(ctx, http.MethodPost, "/v1/checkout/sessions/"+url.PathEscape(id)+"/expire", nil, key("session", id)); err != nil && !stripeDeletionObjectGone(err) {
+			return err
+		}
+	}
+	for _, id := range p.Schedules {
+		form := url.Values{"invoice_now": {"false"}, "prorate": {"false"}}
+		if _, err := c.requestKeyed(ctx, http.MethodPost, "/v1/subscription_schedules/"+url.PathEscape(id)+"/cancel", form, key("schedule", id)); err != nil && !stripeDeletionObjectGone(err) {
+			return err
+		}
+	}
+	for _, id := range p.Subscriptions {
+		form := url.Values{"invoice_now": {"false"}, "prorate": {"false"}}
+		if _, err := c.requestKeyed(ctx, http.MethodDelete, "/v1/subscriptions/"+url.PathEscape(id), form, key("subscription", id)); err != nil && !stripeDeletionObjectGone(err) {
+			return err
+		}
+	}
+	for _, id := range p.InvoiceItems {
+		if _, err := c.requestKeyed(ctx, http.MethodDelete, "/v1/invoiceitems/"+url.PathEscape(id), nil, key("invoiceitem", id)); err != nil && !stripeDeletionObjectGone(err) {
+			return err
+		}
+	}
+	for _, id := range p.Invoices {
+		body, err := c.request(ctx, http.MethodGet, "/v1/invoices/"+url.PathEscape(id), nil)
+		if err != nil && stripeDeletionObjectGone(err) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		var inv struct {
+			Status string `json:"status"`
+		}
+		if err := json.Unmarshal(body, &inv); err != nil {
+			return err
+		}
+		method, path := http.MethodPost, "/v1/invoices/"+url.PathEscape(id)+"/void"
+		if inv.Status == "draft" {
+			method = http.MethodDelete
+			path = "/v1/invoices/" + url.PathEscape(id)
+		}
+		if _, err := c.requestKeyed(ctx, method, path, nil, key("invoice", id)); err != nil && !stripeDeletionObjectGone(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+func stripeDeletionObjectGone(err error) bool {
+	var apiErr *stripeAPIError
+	return errors.As(err, &apiErr) && apiErr.Status == http.StatusNotFound
+}
+
 // latestInvoiceID reads a subscription's latest_invoice id.
 func (c *stripeClient) latestInvoiceID(ctx context.Context, subID string) (string, error) {
 	body, err := c.request(ctx, http.MethodGet, "/v1/subscriptions/"+subID, nil)

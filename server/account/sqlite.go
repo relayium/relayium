@@ -1032,6 +1032,8 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
  provider TEXT NOT NULL CHECK(provider IN ('stripe','apple')),
  created_at INTEGER NOT NULL,
  expires_at INTEGER NOT NULL)`,
+		`ALTER TABLE billing_deletion_holds ADD COLUMN review_at INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE billing_deletion_holds ADD COLUMN subject_released_at INTEGER NOT NULL DEFAULT 0`,
 		`CREATE INDEX IF NOT EXISTS idx_billing_deletion_hold_email ON billing_deletion_holds(email_hmac,expires_at)`,
 		`CREATE TABLE IF NOT EXISTS billing_deletion_config (
  id INTEGER PRIMARY KEY CHECK(id=1),
@@ -1048,6 +1050,9 @@ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (
  created_at INTEGER NOT NULL,
  updated_at INTEGER NOT NULL,
  UNIQUE(billing_subject_id,provider))`,
+		`ALTER TABLE billing_cancellation_outbox ADD COLUMN progress_json TEXT NOT NULL DEFAULT '{}'`,
+		`ALTER TABLE billing_cancellation_outbox ADD COLUMN terminal_at INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE billing_cancellation_outbox ADD COLUMN archived_at INTEGER NOT NULL DEFAULT 0`,
 		`ALTER TABLE users ADD COLUMN billing_hold_hmac BLOB NOT NULL DEFAULT X''`,
 		`CREATE TABLE IF NOT EXISTS billing_purchase_attempts (
  id TEXT PRIMARY KEY,
@@ -1966,6 +1971,11 @@ func (s *SQLiteStore) SetUserPlanAdmin(ctx context.Context, userID, planID strin
 		return err
 	}
 	defer tx.Rollback()
+	if frozen, err := billingUserFrozenTx(ctx, tx, userID, now); err != nil {
+		return err
+	} else if frozen {
+		return ErrBillingAuthorityConflict
+	}
 	var hasAuthority int
 	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(
 		SELECT 1 FROM billing_authorities WHERE user_id=?
@@ -2219,6 +2229,22 @@ func (s *SQLiteStore) ClearAccountDeletion(ctx context.Context, userID string) e
 		return err
 	}
 	defer tx.Rollback()
+	var provider string
+	_ = tx.QueryRowContext(ctx, `SELECT provider FROM billing_deletion_holds WHERE billing_subject_id=?`, userID).Scan(&provider)
+	if provider == ProviderStripe {
+		var terminal int
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM billing_cancellation_outbox WHERE billing_subject_id=? AND provider='stripe' AND state='terminal')`, userID).Scan(&terminal); err != nil {
+			return err
+		}
+		if terminal != 0 {
+			if _, err := tx.ExecContext(ctx, `UPDATE billing_deletion_holds SET subject_released_at=unixepoch() WHERE billing_subject_id=?`, userID); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, `UPDATE users SET plan_id='free',plan_source='',subscription_status='canceled',subscription_end=0,scheduled_plan_id='',scheduled_cycle='' WHERE id=?`, userID); err != nil {
+				return err
+			}
+		}
+	}
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE users SET deleted_at = 0, purge_after = 0, purge_reminder_sent = 0 WHERE id = ?`, userID); err != nil {
 		return err
@@ -2265,6 +2291,17 @@ func (s *SQLiteStore) PurgeTransientUserData(ctx context.Context, userID string)
 		return nil, err
 	}
 	defer tx.Rollback()
+	blobs, err := purgeTransientUserDataTx(ctx, tx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return blobs, nil
+}
+
+func purgeTransientUserDataTx(ctx context.Context, tx *sql.Tx, userID string) ([]BlobRef, error) {
 	blobs, err := userBlobsToReclaim(ctx, tx, userID)
 	if err != nil {
 		return nil, err
@@ -2305,9 +2342,6 @@ func (s *SQLiteStore) PurgeTransientUserData(ctx context.Context, userID string)
 		if _, err := tx.ExecContext(ctx, st.q, st.args...); err != nil {
 			return nil, err
 		}
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
 	}
 	return blobs, nil
 }

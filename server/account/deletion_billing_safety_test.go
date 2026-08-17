@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,16 +17,150 @@ type deletionStripeBiller struct {
 	cancelCalls           int
 	store                 *SQLiteStore
 	observedDurableOutbox bool
+	didReconcile          bool
+	hazards               BillingDeletionProgress
+	observedProgress      bool
 }
 
-func (b *deletionStripeBiller) CancelSubscriptionForDeletion(ctx context.Context, _ string, _ string) (bool, error) {
+func (b *deletionStripeBiller) DiscoverDeletionHazards(ctx context.Context, _ string) (BillingDeletionProgress, error) {
+	if b.didReconcile && b.terminal {
+		return BillingDeletionProgress{}, nil
+	}
+	if len(b.hazards.CheckoutSessions)+len(b.hazards.Subscriptions)+len(b.hazards.Schedules)+len(b.hazards.InvoiceItems)+len(b.hazards.Invoices) > 0 {
+		return b.hazards, nil
+	}
+	return BillingDeletionProgress{Subscriptions: []string{"sub_delete"}}, nil
+}
+func (b *deletionStripeBiller) ReconcileDeletionHazards(ctx context.Context, _ BillingCancellation, _ BillingDeletionProgress) error {
 	b.cancelCalls++
+	b.didReconcile = true
 	if b.store != nil {
 		var n int
 		_ = b.store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM billing_cancellation_outbox WHERE state='pending'`).Scan(&n)
 		b.observedDurableOutbox = n > 0
+		var progress string
+		_ = b.store.db.QueryRowContext(ctx, `SELECT progress_json FROM billing_cancellation_outbox WHERE state='pending'`).Scan(&progress)
+		b.observedProgress = strings.Contains(progress, "checkoutSessions") || strings.Contains(progress, "subscriptions")
 	}
-	return b.terminal, b.cancelErr
+	return b.cancelErr
+}
+
+func TestStripeDeletionPersistsEveryCustomerHazardBeforeMutation(t *testing.T) {
+	svc, store, _, u, token := deletionFixture(t, "all-hazards@example.test")
+	b := &deletionStripeBiller{fakeBiller: &fakeBiller{}, terminal: true, store: store, hazards: BillingDeletionProgress{
+		CheckoutSessions: []string{"cs_1"}, Subscriptions: []string{"sub_1", "sub_2"}, Schedules: []string{"sub_sched_1"}, InvoiceItems: []string{"ii_1"}, Invoices: []string{"in_draft", "in_open"},
+	}}
+	svc.biller = b
+	seedStripeDeletion(t, store, u)
+	if err := svc.ConfirmAccountDeletion(context.Background(), token); err != nil {
+		t.Fatal(err)
+	}
+	if !b.observedProgress {
+		t.Fatal("provider mutation ran before durable customer-wide inventory")
+	}
+	var state, progress string
+	if err := store.db.QueryRow(`SELECT state,progress_json FROM billing_cancellation_outbox WHERE billing_subject_id=?`, u.ID).Scan(&state, &progress); err != nil {
+		t.Fatal(err)
+	}
+	if state != "terminal" || progress != "{}" {
+		t.Fatalf("state=%q progress=%q", state, progress)
+	}
+}
+
+func TestBillingDeletionHoldNeverExpiresByClockAndFreezesAdmin(t *testing.T) {
+	svc, store, _, u, token := deletionFixture(t, "permanent-hold@example.test")
+	if _, err := store.AcquireBillingAuthority(context.Background(), BillingAuthorityRequest{UserID: u.ID, Provider: ProviderApple, ExternalScope: testBundleIOS, AppleAccountToken: "ffffffff-ffff-4fff-8fff-ffffffffffff", Now: 100}); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.ConfirmAccountDeletion(context.Background(), token); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`UPDATE billing_deletion_holds SET expires_at=1,review_at=1 WHERE billing_subject_id=?`, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	if frozen, err := store.BillingUserFrozen(context.Background(), u.ID); err != nil || !frozen {
+		t.Fatalf("frozen=%v err=%v", frozen, err)
+	}
+	if err := store.SetUserPlanAdmin(context.Background(), u.ID, "pro", 1<<40); !errors.Is(err, ErrBillingAuthorityConflict) {
+		t.Fatalf("admin bypassed permanent hold: %v", err)
+	}
+}
+
+func TestDeletionConfirmationIsOneLocalTransaction(t *testing.T) {
+	svc, store, _, u, token := deletionFixture(t, "atomic-confirm@example.test")
+	seedStripeDeletion(t, store, u)
+	if _, err := store.db.Exec(`CREATE TRIGGER reject_delete_schedule BEFORE UPDATE OF deleted_at ON users BEGIN SELECT RAISE(ABORT,'injected'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.ConfirmAccountDeletion(context.Background(), token); err == nil {
+		t.Fatal("injected final write unexpectedly committed")
+	}
+	if _, ok, err := store.PeekEmailToken(context.Background(), authx.HashToken(token), "delete", time.Now().Unix()); err != nil || !ok {
+		t.Fatalf("confirmation token was consumed: ok=%v err=%v", ok, err)
+	}
+	for _, table := range []string{"billing_deletion_holds", "billing_cancellation_outbox"} {
+		var n int
+		if err := store.db.QueryRow(`SELECT COUNT(*) FROM `+table+` WHERE billing_subject_id=?`, u.ID).Scan(&n); err != nil || n != 0 {
+			t.Fatalf("partial %s rows=%d err=%v", table, n, err)
+		}
+	}
+	var reactivate int
+	if err := store.db.QueryRow(`SELECT COUNT(*) FROM email_tokens WHERE user_id=? AND purpose='reactivate'`, u.ID).Scan(&reactivate); err != nil || reactivate != 0 {
+		t.Fatalf("partial reactivate tokens=%d err=%v", reactivate, err)
+	}
+}
+
+func TestTerminalStripeRecoveryReleasesOriginalButNotReplacementIdentity(t *testing.T) {
+	svc, store, _, u, token := deletionFixture(t, "terminal-recovery@example.test")
+	b := &deletionStripeBiller{fakeBiller: &fakeBiller{}, terminal: true, store: store}
+	svc.biller = b
+	seedStripeDeletion(t, store, u)
+	if err := svc.ConfirmAccountDeletion(context.Background(), token); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ClearAccountDeletion(context.Background(), u.ID); err != nil {
+		t.Fatal(err)
+	}
+	if frozen, err := store.BillingUserFrozen(context.Background(), u.ID); err != nil || frozen {
+		t.Fatalf("recovered original frozen=%v err=%v", frozen, err)
+	}
+	replacement, err := store.UpsertUserByEmail(context.Background(), "replacement-terminal@example.test", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`UPDATE users SET billing_hold_hmac=(SELECT email_hmac FROM billing_deletion_holds WHERE billing_subject_id=?) WHERE id=?`, u.ID, replacement.ID); err != nil {
+		t.Fatal(err)
+	}
+	if frozen, err := store.BillingUserFrozen(context.Background(), replacement.ID); err != nil || !frozen {
+		t.Fatalf("replacement identity frozen=%v err=%v", frozen, err)
+	}
+}
+
+func TestTerminalCancellationCompactionDropsProviderIdentifiersButKeepsHold(t *testing.T) {
+	svc, store, _, u, token := deletionFixture(t, "compact-terminal@example.test")
+	b := &deletionStripeBiller{fakeBiller: &fakeBiller{}, terminal: true, store: store}
+	svc.biller = b
+	seedStripeDeletion(t, store, u)
+	if err := svc.ConfirmAccountDeletion(context.Background(), token); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.Exec(`UPDATE billing_cancellation_outbox SET terminal_at=1 WHERE billing_subject_id=?`, u.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CompactBillingCancellations(context.Background(), 2, 3); err != nil {
+		t.Fatal(err)
+	}
+	var customer, subscription, progress string
+	var archived int64
+	if err := store.db.QueryRow(`SELECT customer_id,subscription_id,progress_json,archived_at FROM billing_cancellation_outbox WHERE billing_subject_id=?`, u.ID).Scan(&customer, &subscription, &progress, &archived); err != nil {
+		t.Fatal(err)
+	}
+	if customer != "" || subscription != "" || progress != "{}" || archived != 3 {
+		t.Fatalf("customer=%q subscription=%q progress=%q archived=%d", customer, subscription, progress, archived)
+	}
+	if frozen, err := store.BillingUserFrozen(context.Background(), u.ID); err != nil || !frozen {
+		t.Fatalf("compaction released hold: frozen=%v err=%v", frozen, err)
+	}
 }
 
 func deletionFixture(t *testing.T, email string) (*Service, *SQLiteStore, *capturingMailer, User, string) {

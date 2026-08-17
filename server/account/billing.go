@@ -22,6 +22,9 @@ func (s *Service) handleBillingCheckout(w http.ResponseWriter, r *http.Request, 
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
+	if s.refuseFrozenBilling(w, r, u) {
+		return
+	}
 	// Guard against creating a SECOND concurrent subscription (double billing).
 	// Checkout is subscription-mode; Stripe will happily open another live
 	// subscription on a customer that already has one. A user who is already
@@ -167,6 +170,26 @@ func writeAlreadySubscribed(w http.ResponseWriter, provider string) {
 	})
 }
 
+func (s *Service) refuseFrozenBilling(w http.ResponseWriter, r *http.Request, u User) bool {
+	store, ok := s.Store().(interface {
+		BillingUserFrozen(context.Context, string) (bool, error)
+	})
+	if !ok {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return true
+	}
+	frozen, err := store.BillingUserFrozen(r.Context(), u.ID)
+	if err != nil {
+		http.Error(w, "server error", http.StatusInternalServerError)
+		return true
+	}
+	if !frozen {
+		return false
+	}
+	httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "billing_deletion_pending"})
+	return true
+}
+
 // blockingProvider attributes a refusal: which provider's live subscription is
 // standing in the way.
 //
@@ -248,6 +271,9 @@ func (s *Service) refuseIfManagedElsewhere(w http.ResponseWriter, r *http.Reques
 func (s *Service) handleBillingPortal(w http.ResponseWriter, r *http.Request, u User) {
 	if s.biller == nil {
 		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if s.refuseFrozenBilling(w, r, u) {
 		return
 	}
 	// BEFORE the customer check, not after it. `has a Stripe customer` is not a
@@ -410,6 +436,9 @@ func resolvePlanChange(cur Plan, curCycle string, target Plan, wantCycle string)
 func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request, u User) {
 	if s.biller == nil {
 		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if s.refuseFrozenBilling(w, r, u) {
 		return
 	}
 	var in struct {
@@ -581,6 +610,9 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 // change-plan this performs no state change and never touches Stripe except
 // the read-only preview call. All amounts are cents.
 func (s *Service) handleBillingPreview(w http.ResponseWriter, r *http.Request, u User) {
+	if s.refuseFrozenBilling(w, r, u) {
+		return
+	}
 	if s.biller == nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
@@ -697,6 +729,9 @@ func (s *Service) handleBillingPreview(w http.ResponseWriter, r *http.Request, u
 func (s *Service) handleBillingCancelScheduledChange(w http.ResponseWriter, r *http.Request, u User) {
 	if s.biller == nil {
 		http.Error(w, "not found", http.StatusNotFound)
+		return
+	}
+	if s.refuseFrozenBilling(w, r, u) {
 		return
 	}
 	if s.refuseIfManagedElsewhere(w, r, u) {

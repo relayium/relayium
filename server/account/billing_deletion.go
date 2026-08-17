@@ -5,18 +5,27 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 
 	"github.com/relayium/relayium/authx"
 )
 
-const billingDeletionHoldDays = 400
+const billingDeletionReviewDays = 400
 
 type BillingCancellation struct {
 	ID, BillingSubjectID, Provider, CustomerID, SubscriptionID, IdempotencyKey, State string
-	Attempts, CreatedAt, UpdatedAt                                                    int64
+	ProgressJSON                                                                      string
+	Attempts, CreatedAt, UpdatedAt, TerminalAt, ArchivedAt                            int64
+}
+
+type BillingDeletionProgress struct {
+	CheckoutSessions []string `json:"checkoutSessions,omitempty"`
+	Subscriptions    []string `json:"subscriptions,omitempty"`
+	Schedules        []string `json:"schedules,omitempty"`
+	InvoiceItems     []string `json:"invoiceItems,omitempty"`
+	Invoices         []string `json:"invoices,omitempty"`
 }
 
 func (s *SQLiteStore) ConfigureBillingHoldSecret(secret string) error {
@@ -40,7 +49,7 @@ func (s *SQLiteStore) ConfigureBillingHoldSecret(secret string) error {
 		return err
 	} else if !hmac.Equal(existing, fingerprint[:]) {
 		var active int
-		if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM billing_deletion_holds WHERE expires_at>unixepoch())`).Scan(&active); err != nil {
+		if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM billing_deletion_holds WHERE subject_released_at=0)`).Scan(&active); err != nil {
 			return err
 		}
 		if active != 0 {
@@ -94,74 +103,108 @@ func (s *SQLiteStore) billingEmailHMAC(email string) []byte {
 	return m.Sum(nil)
 }
 
-func billingUserFrozenTx(ctx context.Context, tx *sql.Tx, userID string, now int64) (bool, error) {
+func billingUserFrozenTx(ctx context.Context, tx *sql.Tx, userID string, _ int64) (bool, error) {
 	var frozen int
 	err := tx.QueryRowContext(ctx, `SELECT EXISTS(
  SELECT 1 FROM billing_deletion_holds h
  LEFT JOIN users u ON u.id=?
- WHERE h.expires_at>? AND (h.billing_subject_id=? OR (length(u.billing_hold_hmac)>0 AND h.email_hmac=u.billing_hold_hmac))
-)`, userID, now, userID).Scan(&frozen)
+ WHERE (h.billing_subject_id=? AND h.subject_released_at=0)
+    OR (h.billing_subject_id<>? AND length(u.billing_hold_hmac)>0 AND h.email_hmac=u.billing_hold_hmac)
+)`, userID, userID, userID).Scan(&frozen)
 	return frozen != 0, err
 }
 
-func (s *SQLiteStore) PrepareBillingDeletion(ctx context.Context, u User, now int64) (BillingCancellation, bool, error) {
+func (s *SQLiteStore) BillingUserFrozen(ctx context.Context, userID string) (bool, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return BillingCancellation{}, false, err
+		return false, err
 	}
 	defer tx.Rollback()
-	var provider string
-	_ = tx.QueryRowContext(ctx, `SELECT provider FROM billing_authorities WHERE user_id=?`, u.ID).Scan(&provider)
-	var stripeExternalID string
-	stripeErr := tx.QueryRowContext(ctx, `SELECT external_id FROM subscription_sources WHERE user_id=? AND provider=?`, u.ID, ProviderStripe).Scan(&stripeExternalID)
-	if stripeErr != nil && !errors.Is(stripeErr, sql.ErrNoRows) {
-		return BillingCancellation{}, false, stripeErr
+	return billingUserFrozenTx(ctx, tx, userID, 0)
+}
+
+// CommitAccountDeletion makes authorization, billing freeze/outbox, recovery,
+// live-data removal, and the deletion schedule one indivisible local decision.
+// No provider call is permitted until this transaction commits.
+func (s *SQLiteStore) CommitAccountDeletion(ctx context.Context, tokenHash string, u User, now, purgeAfter int64, reactivate EmailToken) ([]BlobRef, bool, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, false, err
 	}
-	hasStripe := stripeErr == nil || u.StripeCustomerID != "" || u.StripeSubscriptionID != ""
-	if provider == "" {
-		_ = tx.QueryRowContext(ctx, `SELECT provider FROM subscription_sources WHERE user_id=? ORDER BY CASE provider WHEN 'stripe' THEN 0 ELSE 1 END LIMIT 1`, u.ID).Scan(&provider)
+	defer tx.Rollback()
+	var deletedAt int64
+	if err := tx.QueryRowContext(ctx, `SELECT email,stripe_customer_id,stripe_subscription_id,deleted_at FROM users WHERE id=?`, u.ID).Scan(&u.Email, &u.StripeCustomerID, &u.StripeSubscriptionID, &deletedAt); err != nil {
+		return nil, false, err
 	}
+	if deletedAt > 0 {
+		return nil, true, tx.Commit()
+	}
+	reactivate.Email = u.Email
+	res, err := tx.ExecContext(ctx, `UPDATE email_tokens SET used_at=? WHERE token_hash=? AND purpose='delete' AND used_at=0 AND expires_at>? AND user_id=?`, now, tokenHash, now, u.ID)
+	if err != nil {
+		return nil, false, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return nil, false, nil
+	}
+	digest := s.billingEmailHMAC(u.Email)
+	var provider, stripeExternalID string
+	if err := tx.QueryRowContext(ctx, `SELECT provider FROM billing_authorities WHERE user_id=?`, u.ID).Scan(&provider); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, false, err
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT external_id FROM subscription_sources WHERE user_id=? AND provider='stripe'`, u.ID).Scan(&stripeExternalID); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, false, err
+	}
+	hasStripe := stripeExternalID != "" || u.StripeCustomerID != "" || u.StripeSubscriptionID != ""
 	if provider == "" && hasStripe {
 		provider = ProviderStripe
 	}
 	if provider == "" {
-		return BillingCancellation{}, false, tx.Commit()
+		if err := tx.QueryRowContext(ctx, `SELECT provider FROM subscription_sources WHERE user_id=? ORDER BY CASE provider WHEN 'apple' THEN 0 ELSE 1 END LIMIT 1`, u.ID).Scan(&provider); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, false, err
+		}
 	}
-	digest := s.billingEmailHMAC(u.Email)
-	if len(digest) == 0 {
-		return BillingCancellation{}, false, errors.New("account: billing deletion hold secret is unavailable")
+	if provider != "" {
+		if len(digest) == 0 {
+			return nil, false, errors.New("account: billing deletion hold secret is unavailable")
+		}
+		reviewAt := now + billingDeletionReviewDays*86400
+		if _, err := tx.ExecContext(ctx, `INSERT INTO billing_deletion_holds(billing_subject_id,email_hmac,provider,created_at,expires_at,review_at,subject_released_at) VALUES(?,?,?,?,?,?,0) ON CONFLICT(billing_subject_id) DO UPDATE SET review_at=MAX(review_at,excluded.review_at),subject_released_at=0`, u.ID, digest, provider, now, reviewAt, reviewAt); err != nil {
+			return nil, false, err
+		}
 	}
-	expires := now + billingDeletionHoldDays*86400
-	if _, err := tx.ExecContext(ctx, `INSERT INTO billing_deletion_holds(billing_subject_id,email_hmac,provider,created_at,expires_at)
- VALUES(?,?,?,?,?) ON CONFLICT(billing_subject_id) DO UPDATE SET expires_at=MAX(expires_at,excluded.expires_at)`, u.ID, digest, provider, now, expires); err != nil {
-		return BillingCancellation{}, false, err
+	if hasStripe {
+		subID := u.StripeSubscriptionID
+		if subID == "" {
+			subID = stripeExternalID
+		}
+		id := authx.NewID()
+		key := "relayium-account-delete-" + id
+		if _, err := tx.ExecContext(ctx, `INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,attempts,created_at,updated_at,progress_json) VALUES(?,?,?,?,?,?,'pending',0,?,?,'{}') ON CONFLICT(billing_subject_id,provider) DO NOTHING`, id, u.ID, ProviderStripe, u.StripeCustomerID, subID, key, now, now); err != nil {
+			return nil, false, err
+		}
 	}
-	if !hasStripe {
-		return BillingCancellation{}, false, tx.Commit()
+	if _, err := tx.ExecContext(ctx, `INSERT INTO email_tokens(token_hash,user_id,email,purpose,created_at,expires_at,used_at) VALUES(?,?,?,?,?,?,0)`, reactivate.TokenHash, reactivate.UserID, normEmail(reactivate.Email), reactivate.Purpose, reactivate.CreatedAt, reactivate.ExpiresAt); err != nil {
+		return nil, false, err
 	}
-	subscriptionID := u.StripeSubscriptionID
-	if subscriptionID == "" {
-		subscriptionID = stripeExternalID
-	}
-	out := BillingCancellation{ID: authx.NewID(), BillingSubjectID: u.ID, Provider: ProviderStripe, CustomerID: u.StripeCustomerID, SubscriptionID: subscriptionID, State: "pending", CreatedAt: now, UpdatedAt: now}
-	out.IdempotencyKey = "relayium-account-delete-" + out.ID
-	_, err = tx.ExecContext(ctx, `INSERT INTO billing_cancellation_outbox(id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,attempts,created_at,updated_at)
- VALUES(?,?,?,?,?,?,?,0,?,?) ON CONFLICT(billing_subject_id,provider) DO NOTHING`, out.ID, out.BillingSubjectID, out.Provider, out.CustomerID, out.SubscriptionID, out.IdempotencyKey, out.State, now, now)
+	blobs, err := purgeTransientUserDataTx(ctx, tx, u.ID)
 	if err != nil {
-		return BillingCancellation{}, false, err
+		return nil, false, err
 	}
-	if err := tx.QueryRowContext(ctx, `SELECT id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,attempts,created_at,updated_at FROM billing_cancellation_outbox WHERE billing_subject_id=? AND provider=?`, u.ID, ProviderStripe).
-		Scan(&out.ID, &out.BillingSubjectID, &out.Provider, &out.CustomerID, &out.SubscriptionID, &out.IdempotencyKey, &out.State, &out.Attempts, &out.CreatedAt, &out.UpdatedAt); err != nil {
-		return BillingCancellation{}, false, err
+	if _, err := tx.ExecContext(ctx, `UPDATE users SET deleted_at=?,purge_after=?,purge_reminder_sent=0 WHERE id=? AND deleted_at=0`, now, purgeAfter, u.ID); err != nil {
+		return nil, false, err
 	}
-	return out, true, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return nil, false, err
+	}
+	return blobs, true, nil
 }
 
 func (s *SQLiteStore) PendingBillingCancellations(ctx context.Context, limit int) ([]BillingCancellation, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 100
 	}
-	rows, err := s.reader().QueryContext(ctx, `SELECT id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,attempts,created_at,updated_at FROM billing_cancellation_outbox WHERE state='pending' ORDER BY created_at,id LIMIT ?`, limit)
+	rows, err := s.reader().QueryContext(ctx, `SELECT id,billing_subject_id,provider,customer_id,subscription_id,idempotency_key,state,progress_json,attempts,created_at,updated_at,terminal_at,archived_at FROM billing_cancellation_outbox WHERE state='pending' ORDER BY created_at,id LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +212,7 @@ func (s *SQLiteStore) PendingBillingCancellations(ctx context.Context, limit int
 	var out []BillingCancellation
 	for rows.Next() {
 		var c BillingCancellation
-		if err := rows.Scan(&c.ID, &c.BillingSubjectID, &c.Provider, &c.CustomerID, &c.SubscriptionID, &c.IdempotencyKey, &c.State, &c.Attempts, &c.CreatedAt, &c.UpdatedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.BillingSubjectID, &c.Provider, &c.CustomerID, &c.SubscriptionID, &c.IdempotencyKey, &c.State, &c.ProgressJSON, &c.Attempts, &c.CreatedAt, &c.UpdatedAt, &c.TerminalAt, &c.ArchivedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -177,23 +220,40 @@ func (s *SQLiteStore) PendingBillingCancellations(ctx context.Context, limit int
 	return out, rows.Err()
 }
 
-func (s *SQLiteStore) FinishBillingCancellation(ctx context.Context, id string, terminal bool, now int64) error {
+func (s *SQLiteStore) FinishBillingCancellation(ctx context.Context, id, progress string, terminal bool, now int64) error {
 	state := "pending"
 	if terminal {
 		state = "terminal"
 	}
-	_, err := s.db.ExecContext(ctx, `UPDATE billing_cancellation_outbox SET state=?,attempts=attempts+1,updated_at=? WHERE id=? AND state='pending'`, state, now, id)
+	terminalAt := int64(0)
+	if terminal {
+		terminalAt = now
+	}
+	_, err := s.db.ExecContext(ctx, `UPDATE billing_cancellation_outbox SET state=?,progress_json=?,attempts=attempts+1,updated_at=?,terminal_at=? WHERE id=? AND state='pending'`, state, progress, now, terminalAt, id)
+	return err
+}
+
+func (s *SQLiteStore) SaveBillingCancellationProgress(ctx context.Context, id, progress string, now int64) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE billing_cancellation_outbox SET progress_json=?,updated_at=? WHERE id=? AND state='pending'`, progress, now, id)
+	return err
+}
+
+func (s *SQLiteStore) CompactBillingCancellations(ctx context.Context, before, now int64) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE billing_cancellation_outbox SET customer_id='',subscription_id='',progress_json='{}',archived_at=? WHERE state='terminal' AND terminal_at>0 AND terminal_at<=? AND archived_at=0`, now, before)
 	return err
 }
 
 type deletionStripeProvider interface {
-	CancelSubscriptionForDeletion(context.Context, string, string) (bool, error)
+	DiscoverDeletionHazards(context.Context, string) (BillingDeletionProgress, error)
+	ReconcileDeletionHazards(context.Context, BillingCancellation, BillingDeletionProgress) error
 }
 
 func (s *Service) ReconcileBillingCancellations(ctx context.Context) {
 	store, ok := s.Store().(interface {
 		PendingBillingCancellations(context.Context, int) ([]BillingCancellation, error)
-		FinishBillingCancellation(context.Context, string, bool, int64) error
+		SaveBillingCancellationProgress(context.Context, string, string, int64) error
+		FinishBillingCancellation(context.Context, string, string, bool, int64) error
+		CompactBillingCancellations(context.Context, int64, int64) error
 	})
 	provider, configured := s.biller.(deletionStripeProvider)
 	if !ok || !configured {
@@ -205,14 +265,26 @@ func (s *Service) ReconcileBillingCancellations(ctx context.Context) {
 		return
 	}
 	for _, row := range rows {
-		terminal := false
-		if row.SubscriptionID != "" {
-			terminal, err = provider.CancelSubscriptionForDeletion(ctx, row.SubscriptionID, row.IdempotencyKey)
-		} else {
-			err = fmt.Errorf("canonical subscription id unavailable")
+		progress, discoverErr := provider.DiscoverDeletionHazards(ctx, row.CustomerID)
+		encoded, _ := json.Marshal(progress)
+		if discoverErr == nil {
+			discoverErr = store.SaveBillingCancellationProgress(ctx, row.ID, string(encoded), s.now().Unix())
 		}
-		if finishErr := store.FinishBillingCancellation(ctx, row.ID, err == nil && terminal, s.now().Unix()); finishErr != nil {
+		if discoverErr == nil {
+			discoverErr = provider.ReconcileDeletionHazards(ctx, row, progress)
+		}
+		terminal := false
+		if discoverErr == nil {
+			progress, discoverErr = provider.DiscoverDeletionHazards(ctx, row.CustomerID)
+			encoded, _ = json.Marshal(progress)
+			terminal = len(progress.CheckoutSessions)+len(progress.Subscriptions)+len(progress.Schedules)+len(progress.InvoiceItems)+len(progress.Invoices) == 0
+		}
+		if finishErr := store.FinishBillingCancellation(ctx, row.ID, string(encoded), discoverErr == nil && terminal, s.now().Unix()); finishErr != nil {
 			log.Printf("billing deletion: recording cancellation attempt failed")
 		}
+	}
+	now := s.now().Unix()
+	if err := store.CompactBillingCancellations(ctx, now-billingDeletionReviewDays*86400, now); err != nil {
+		log.Printf("billing deletion: compacting terminal cancellation records failed")
 	}
 }

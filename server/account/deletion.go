@@ -67,44 +67,30 @@ func (s *Service) ConfirmAccountDeletion(ctx context.Context, rawToken string) e
 		// Already pending: idempotent no-op, per the doc comment above.
 		return nil
 	}
-	if prepared, ok := s.store.(interface {
-		PrepareBillingDeletion(context.Context, User, int64) (BillingCancellation, bool, error)
-	}); ok {
-		if _, _, err := prepared.PrepareBillingDeletion(ctx, u, now.Unix()); err != nil {
-			return err
-		}
-		s.ReconcileBillingCancellations(context.WithoutCancel(ctx))
-	}
-	tok, ok, err = s.store.UseEmailToken(ctx, tokenHash, "delete", now.Unix())
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return ErrInvalidToken
-	}
-
 	st := s.ResolveSettings(ctx)
 	purgeAfter := now.Unix() + st.AccountGraceDays*86400
-
-	// Issue the reactivate token BEFORE the account becomes pending, so the
-	// moment SetAccountDeletion commits there is guaranteed to be a usable
-	// reactivate token in email_tokens — even if the scheduled-deletion email
-	// send below fails. Minting it for a not-yet-pending account is harmless
-	// (reactivation is idempotent, and the token is bounded to the grace window).
-	raw, err := s.issueReactivateToken(ctx, tok.UserID, u.Email)
-	if err != nil {
-		return err
-	}
+	raw := authx.RandToken()
+	reactivate := EmailToken{TokenHash: authx.HashToken(raw), UserID: u.ID, Email: u.Email, Purpose: "reactivate", CreatedAt: now.Unix(), ExpiresAt: purgeAfter}
 
 	// Every blob the purge orphaned: finalized stored files AND the partial blob
 	// of every chunked upload the account had open or half-finished. They are one
 	// list because they are one job — ciphertext with no row left to reach it —
 	// and the store has already deduplicated the case where a stored file and a
 	// stale session name the same blob.
-	blobs, err := s.store.PurgeTransientUserData(ctx, tok.UserID)
+	atomicStore, ok := s.store.(interface {
+		CommitAccountDeletion(context.Context, string, User, int64, int64, EmailToken) ([]BlobRef, bool, error)
+	})
+	if !ok {
+		return errors.New("account deletion: atomic store unavailable")
+	}
+	blobs, committed, err := atomicStore.CommitAccountDeletion(ctx, tokenHash, u, now.Unix(), purgeAfter, reactivate)
 	if err != nil {
 		return err
 	}
+	if !committed {
+		return ErrInvalidToken
+	}
+	s.ReconcileBillingCancellations(context.WithoutCancel(ctx))
 	// Blob deletes are best-effort cleanup, not part of the account-state
 	// transaction: a node being unreachable must not block scheduling the
 	// deletion (the orphaned blob is queued for GC's retry instead). Derive
@@ -120,10 +106,6 @@ func (s *Service) ConfirmAccountDeletion(ctx context.Context, rawToken string) e
 		} else {
 			_ = s.store.EnqueueNodeDelete(cleanupCtx, b.BlobKey, b.NodeID, now.Unix())
 		}
-	}
-
-	if err := s.store.SetAccountDeletion(ctx, tok.UserID, now.Unix(), purgeAfter); err != nil {
-		return err
 	}
 
 	// The scheduled-deletion email is best-effort: the deletion is genuinely
