@@ -19,4 +19,4 @@ package selfupdate
 // 改动前完全一致。TestVersionFloor 钉住这些语义。
 //
 // 是 var 不是 const，只为了测试能替换；生产里只在这里改一次。
-var minSupportedVersion = ""
+var minSupportedVersion = "v0.21.0"

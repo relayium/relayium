@@ -60,6 +60,7 @@ describe("the macOS client version policy", () => {
         recommendedVersion: policy.macos.recommendedVersion,
         latestVersion: policy.macos.latestVersion,
       },
+      nextRelease: policy.nextRelease,
     }, null, 2)}\n`);
   });
 
@@ -76,6 +77,16 @@ describe("the macOS client version policy", () => {
       "policyRevision",
       "recommendedVersion",
     ]);
+  });
+
+  it("prepares the 1.2.9 cutover without advertising an unavailable release", () => {
+    expect(policy.macos.latestVersion).toBe("1.2.7");
+    expect(policy.nextRelease).toEqual({
+      version: "1.2.9",
+      minimumSupportedVersion: "1.2.9",
+      minimumSupportedBuild: 15,
+      recommendedVersion: "1.2.9",
+    });
   });
 
   /// **The requirement and the revision that names it, pinned together.**

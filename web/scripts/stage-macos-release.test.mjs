@@ -35,6 +35,13 @@ async function writeWebRoot(webRoot, policy = {}) {
   );
 }
 
+async function writeNextRelease(webRoot, nextRelease) {
+  const path = join(webRoot, "native-client-policy.json");
+  const policy = JSON.parse(await readFile(path, "utf8"));
+  policy.nextRelease = nextRelease;
+  await writeFile(path, `${JSON.stringify(policy, null, 2)}\n`);
+}
+
 async function fixture(overrides = {}, policy = {}) {
   const root = await mkdtemp(join(tmpdir(), "relayium-stage-macos-"));
   work.push(root);
@@ -352,6 +359,50 @@ describe("the policy revision a release advances", () => {
       {}, { policyRevision: 1000000000, latestVersion: "0.9" });
     await expect(stageMacOSRelease({ version: "1.0", appcastPath, webRoot }))
       .rejects.toThrow(/would exceed 1000000000/);
+  });
+});
+
+describe("an atomic minimum-version cutover", () => {
+  it("raises the requirement only while staging its matching release", async () => {
+    const { webRoot, appcastPath } = await fixture({ "sparkle:version": "15" }, {
+      policyRevision: 1,
+      minimumSupportedVersion: "0.9",
+      minimumSupportedBuild: 11,
+      recommendedVersion: "0.9",
+      latestVersion: "0.9",
+    });
+    await writeNextRelease(webRoot, {
+      version: "1.0",
+      minimumSupportedVersion: "1.0",
+      minimumSupportedBuild: 15,
+      recommendedVersion: "1.0",
+    });
+
+    const result = await stageMacOSRelease({ version: "1.0", appcastPath, webRoot });
+    const staged = JSON.parse(await readFile(join(webRoot, "native-client-policy.json"), "utf8"));
+    expect(result).toMatchObject({ criticalUpdateBuild: 15, policyRevision: 2 });
+    expect(staged).toEqual({
+      schema: 1,
+      macos: {
+        policyRevision: 2,
+        minimumSupportedVersion: "1.0",
+        minimumSupportedBuild: 15,
+        recommendedVersion: "1.0",
+        latestVersion: "1.0",
+      },
+    });
+  });
+
+  it("refuses to apply a cutover prepared for a different release", async () => {
+    const { webRoot, appcastPath } = await fixture();
+    await writeNextRelease(webRoot, {
+      version: "1.1",
+      minimumSupportedVersion: "1.1",
+      minimumSupportedBuild: 2,
+      recommendedVersion: "1.1",
+    });
+    await expect(stageMacOSRelease({ version: "1.0", appcastPath, webRoot }))
+      .rejects.toThrow(/prepared for 1\.1/);
   });
 });
 

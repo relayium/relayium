@@ -157,7 +157,28 @@ async function readClientPolicy(root) {
   if (compareVersions(mac.minimumSupportedVersion, mac.recommendedVersion) > 0) {
     throw new Error("client policy minimum is above its own recommended version");
   }
-  return { path, policy: parsed };
+  const next = parsed.nextRelease;
+  if (next !== undefined) {
+    const keys = Object.keys(next ?? {}).sort();
+    const expected = ["minimumSupportedBuild", "minimumSupportedVersion",
+      "recommendedVersion", "version"];
+    if (!next || typeof next !== "object" || JSON.stringify(keys) !== JSON.stringify(expected)) {
+      throw new Error("client policy nextRelease has an unsupported shape");
+    }
+    for (const key of ["version", "minimumSupportedVersion", "recommendedVersion"]) {
+      if (typeof next[key] !== "string" || !/^[0-9]+(?:\.[0-9]+){0,3}$/.test(next[key])) {
+        throw new Error(`client policy nextRelease ${key} is not an app version`);
+      }
+    }
+    if (!Number.isInteger(next.minimumSupportedBuild) || next.minimumSupportedBuild < 1) {
+      throw new Error("client policy nextRelease minimumSupportedBuild must be positive");
+    }
+    if (compareVersions(next.minimumSupportedVersion, next.recommendedVersion) > 0
+        || compareVersions(next.recommendedVersion, next.version) > 0) {
+      throw new Error("client policy nextRelease versions are inconsistent");
+    }
+  }
+  return { path, policy: parsed, nextRelease: next };
 }
 
 /// Numeric, component by component. `1.2.10` is above `1.2.9`, which is the one
@@ -255,11 +276,16 @@ export async function stageMacOSRelease({
 
   const source = resolve(appcastPath);
   const root = resolve(webRoot);
-  const { path: policyPath, policy } = await readClientPolicy(root);
+  const { path: policyPath, policy, nextRelease } = await readClientPolicy(root);
+  if (nextRelease && nextRelease.version !== version) {
+    throw new Error(
+      `client policy is prepared for ${nextRelease.version}, not requested release ${version}`);
+  }
+  const releasePolicy = nextRelease ?? policy.macos;
   const generatedAppcast = await readFile(source, "utf8");
   const appcast = applyCriticalUpdate(
     canonicalizeChannel(generatedAppcast),
-    policy.macos.minimumSupportedBuild,
+    releasePolicy.minimumSupportedBuild,
   );
   // Two elements, not one. The enclosure carries the asset; the item carries
   // the version. The single misnamed `item = enclosure(...)` this replaced is
@@ -292,14 +318,14 @@ export async function stageMacOSRelease({
   // are running is already unsupported — and the update it directs them to is
   // this one. Equality is fine and is the strongest coherent policy: everything
   // before this release, and nothing after it.
-  if (BigInt(policy.macos.minimumSupportedBuild) > BigInt(build)) {
+  if (BigInt(releasePolicy.minimumSupportedBuild) > BigInt(build)) {
     throw new Error(
-      `client policy minimumSupportedBuild ${policy.macos.minimumSupportedBuild} is above `
+      `client policy minimumSupportedBuild ${releasePolicy.minimumSupportedBuild} is above `
       + `the released build ${build}`);
   }
-  if (compareVersions(policy.macos.recommendedVersion, version) > 0) {
+  if (compareVersions(releasePolicy.recommendedVersion, version) > 0) {
     throw new Error(
-      `client policy recommends ${policy.macos.recommendedVersion}, which is above the released `
+      `client policy recommends ${releasePolicy.recommendedVersion}, which is above the released `
       + `version ${version}`);
   }
 
@@ -349,7 +375,7 @@ export async function stageMacOSRelease({
   // climbed on every attempt would turn each retry into a diff, and there is no
   // clock or counter here to make it idempotent for us. So the test is the
   // document itself: same `latestVersion` spelling, same revision, same bytes.
-  const changesTheDocument = policy.macos.latestVersion !== version;
+  const changesTheDocument = policy.macos.latestVersion !== version || nextRelease !== undefined;
   const policyRevision = policy.macos.policyRevision + (changesTheDocument ? 1 : 0);
   if (policyRevision > MAX_POLICY_REVISION) {
     throw new Error(
@@ -357,7 +383,14 @@ export async function stageMacOSRelease({
   }
   const stagedPolicy = serializeClientPolicy({
     ...policy,
-    macos: { ...policy.macos, policyRevision, latestVersion: version },
+    macos: {
+      ...policy.macos,
+      policyRevision,
+      minimumSupportedVersion: releasePolicy.minimumSupportedVersion,
+      minimumSupportedBuild: releasePolicy.minimumSupportedBuild,
+      recommendedVersion: releasePolicy.recommendedVersion,
+      latestVersion: version,
+    },
   });
   const publishedPolicyPath = resolve(root, PUBLISHED_CLIENT_POLICY_PATH);
   await mkdir(dirname(destination), { recursive: true });
@@ -386,7 +419,7 @@ export async function stageMacOSRelease({
     downloadUrl: expectedUrl,
     manifestPath,
     appcastPath: destination,
-    criticalUpdateBuild: policy.macos.minimumSupportedBuild,
+    criticalUpdateBuild: releasePolicy.minimumSupportedBuild,
     policyRevision,
     clientPolicyPath: policyPath,
     publishedClientPolicyPath: publishedPolicyPath,

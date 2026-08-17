@@ -5646,19 +5646,15 @@ final class MacSurfaceGuardTests: XCTestCase {
                                "\(path) still describes the merged Workspace: \(stale)")
             }
         }
-        // The two documents that describe the sidebar describe the sidebar that
-        // exists: two transfer destinations, and Open a link reachable rather
-        // than listed.
-        for path in ["README.md", "apps/README.md"] {
-            let text = flattened(try claimSurfaceText(path))
-            XCTAssertTrue(text.contains("LAN Transfer"),
-                          "\(path) does not name the same-network destination")
-            XCTAssertTrue(text.contains("Cross-network Transfer"),
-                          "\(path) does not name the pairing-code destination")
-            XCTAssertFalse(text.contains("Open a link, Device Inbox"),
-                           "\(path) still lists Open a link as a sidebar row")
-        }
+        // The detailed native README describes the sidebar. The root README is
+        // deliberately a concise availability table and links into docs.
         let apps = flattened(try claimSurfaceText("apps/README.md"))
+        XCTAssertTrue(apps.contains("LAN Transfer"),
+                      "apps/README.md does not name the same-network destination")
+        XCTAssertTrue(apps.contains("Cross-network Transfer"),
+                      "apps/README.md does not name the pairing-code destination")
+        XCTAssertFalse(apps.contains("Open a link, Device Inbox"),
+                       "apps/README.md still lists Open a link as a sidebar row")
         XCTAssertTrue(apps.contains("five destinations"),
                       "apps/README.md no longer counts the browseable rows")
         XCTAssertTrue(apps.localizedCaseInsensitiveContains("deep link"),

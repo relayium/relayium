@@ -12,9 +12,9 @@ import (
 // itself, a release published mid-rollout would leave the fleet on two
 // versions — the precise thing a staged rollout exists to prevent.
 func TestUpdateInstallsTargetTagNotLatest(t *testing.T) {
-	const payload = "BINARY-v0.8.0"
+	const payload = "BINARY-v0.22.0"
 	fr := &fakeRelease{
-		tag:       "v0.8.0",
+		tag:       "v0.22.0",
 		latestTag: "v9.9.9", // newer release exists; we must NOT take it
 		asset:     AssetName(runtime.GOOS, runtime.GOARCH),
 		archive:   tarGzWith(t, payload),
@@ -24,8 +24,8 @@ func TestUpdateInstallsTargetTagNotLatest(t *testing.T) {
 	target := writeTarget(t, "OLD")
 
 	o := baseOpts(srv, target)
-	o.CurrentVersion = "v0.7.0"
-	o.TargetTag = "v0.8.0"
+	o.CurrentVersion = "v0.21.0"
+	o.TargetTag = "v0.22.0"
 
 	from, to, changed, err := Update(context.Background(), o, io.Discard)
 	if err != nil {
@@ -34,11 +34,11 @@ func TestUpdateInstallsTargetTagNotLatest(t *testing.T) {
 	if !changed {
 		t.Error("changed = false, want true")
 	}
-	if from != "v0.7.0" {
-		t.Errorf("from = %q, want %q", from, "v0.7.0")
+	if from != "v0.21.0" {
+		t.Errorf("from = %q, want %q", from, "v0.21.0")
 	}
-	if to != "v0.8.0" {
-		t.Errorf("to = %q, want the pinned tag v0.8.0, not latest", to)
+	if to != "v0.22.0" {
+		t.Errorf("to = %q, want the pinned tag v0.22.0, not latest", to)
 	}
 	got, err := os.ReadFile(target)
 	if err != nil {
@@ -53,7 +53,7 @@ func TestUpdateInstallsTargetTagNotLatest(t *testing.T) {
 // refused, so nothing can quietly walk a node back to a known-vulnerable build.
 func TestUpdateRefusesDowngradeByDefault(t *testing.T) {
 	fr := &fakeRelease{
-		tag:     "v0.7.0",
+		tag:     "v0.21.0",
 		asset:   AssetName(runtime.GOOS, runtime.GOARCH),
 		archive: tarGzWith(t, "OLDER-BINARY"),
 	}
@@ -62,8 +62,8 @@ func TestUpdateRefusesDowngradeByDefault(t *testing.T) {
 	target := writeTarget(t, "CURRENT")
 
 	o := baseOpts(srv, target)
-	o.CurrentVersion = "v0.9.0"
-	o.TargetTag = "v0.7.0"
+	o.CurrentVersion = "v0.22.0"
+	o.TargetTag = "v0.21.0"
 
 	_, _, changed, err := Update(context.Background(), o, io.Discard)
 	if err == nil {
@@ -84,7 +84,7 @@ func TestUpdateRefusesDowngradeByDefault(t *testing.T) {
 func TestUpdateAllowsDowngradeWhenOptedIn(t *testing.T) {
 	const payload = "OLDER-BINARY"
 	fr := &fakeRelease{
-		tag:     "v0.7.0",
+		tag:     "v0.21.0",
 		asset:   AssetName(runtime.GOOS, runtime.GOARCH),
 		archive: tarGzWith(t, payload),
 	}
@@ -93,16 +93,16 @@ func TestUpdateAllowsDowngradeWhenOptedIn(t *testing.T) {
 	target := writeTarget(t, "CURRENT")
 
 	o := baseOpts(srv, target)
-	o.CurrentVersion = "v0.9.0"
-	o.TargetTag = "v0.7.0"
+	o.CurrentVersion = "v0.22.0"
+	o.TargetTag = "v0.21.0"
 	o.AllowDowngrade = true
 
 	_, to, changed, err := Update(context.Background(), o, io.Discard)
 	if err != nil {
 		t.Fatalf("Update with AllowDowngrade: %v", err)
 	}
-	if !changed || to != "v0.7.0" {
-		t.Errorf("changed=%v to=%q, want true and v0.7.0", changed, to)
+	if !changed || to != "v0.21.0" {
+		t.Errorf("changed=%v to=%q, want true and v0.21.0", changed, to)
 	}
 	got, err := os.ReadFile(target)
 	if err != nil {

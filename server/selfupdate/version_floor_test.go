@@ -14,6 +14,10 @@ import (
 //
 // 地板是中心够不着的那一半。这几条用例钉的就是「中心够不着」这件事本身。
 func TestVersionFloor(t *testing.T) {
+	if minSupportedVersion != "v0.21.0" {
+		t.Fatalf("production rollback floor = %q, want v0.21.0", minSupportedVersion)
+	}
+
 	withFloor := func(t *testing.T, floor string) {
 		t.Helper()
 		old := minSupportedVersion

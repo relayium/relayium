@@ -414,9 +414,9 @@ func TestLatestTag(t *testing.T) {
 // resolved to macos-v1.1.4 and then tried to download
 // relayium_<os>_<arch>.tar.gz from a release that has no such asset.
 func TestUpdateResolvesLatestAcrossTagFamilies(t *testing.T) {
-	const payload = "BINARY-v0.19.0"
+	const payload = "BINARY-v0.22.0"
 	fr := &fakeRelease{
-		tag:      "v0.19.0",
+		tag:      "v0.22.0",
 		asset:    AssetName(runtime.GOOS, runtime.GOARCH),
 		archive:  tarGzWith(t, payload),
 		listAlso: []fakeGHRelease{{TagName: "macos-v1.1.4"}, {TagName: "macos-v1.1.3"}},
@@ -426,14 +426,14 @@ func TestUpdateResolvesLatestAcrossTagFamilies(t *testing.T) {
 
 	target := writeTarget(t, "OLD")
 	o := baseOpts(srv, target)
-	o.CurrentVersion = "v0.18.0"
+	o.CurrentVersion = "v0.21.0"
 
 	_, to, changed, err := Update(context.Background(), o, io.Discard)
 	if err != nil {
 		t.Fatalf("Update: %v", err)
 	}
-	if !changed || to != "v0.19.0" {
-		t.Fatalf("to=%q changed=%v, want v0.19.0 and true", to, changed)
+	if !changed || to != "v0.22.0" {
+		t.Fatalf("to=%q changed=%v, want v0.22.0 and true", to, changed)
 	}
 	if got, _ := os.ReadFile(target); string(got) != payload {
 		t.Fatalf("installed binary = %q, want %q", got, payload)

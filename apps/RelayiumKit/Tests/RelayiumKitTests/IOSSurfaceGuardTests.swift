@@ -2326,24 +2326,14 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// rather than whatever directory the runner happens to start in.
     private var repoRoot: URL { appsRoot.deletingLastPathComponent() }
 
-    /// One bullet of the root README's delivery-status list, whitespace-
-    /// flattened and lowercased so re-wrapping a paragraph is never a failure.
-    ///
-    /// Sliced rather than read whole, because "resume" is a true word about the
-    /// CLI, which the same file also describes.
-    private func deliveryStatusEntry(_ opener: String) throws -> String {
+    /// One row of the concise root README delivery-status table.
+    private func deliveryStatusEntry(_ platform: String) throws -> String {
         let readme = try String(contentsOf: repoRoot.appendingPathComponent("README.md"),
                                 encoding: .utf8)
-        let start = try XCTUnwrap(readme.range(of: "\n- **\(opener)"),
-                                  "the README no longer has a `\(opener)` delivery-status entry")
-        let rest = readme[start.upperBound...]
-        // Whichever ends the bullet first: the next one, or the end of the list.
-        let end = [rest.range(of: "\n- **")?.lowerBound,
-                   rest.range(of: "\n\n")?.lowerBound].compactMap { $0 }.min() ?? rest.endIndex
-        let entry = rest[..<end].split(whereSeparator: \.isWhitespace)
-            .joined(separator: " ").lowercased()
-        XCTAssertGreaterThan(entry.count, 200, "the `\(opener)` entry sliced down to nothing")
-        return entry
+        let row = try XCTUnwrap(readme.split(separator: "\n").first {
+            $0.hasPrefix("| **\(platform)** |")
+        }, "the README no longer has a `\(platform)` delivery-status row")
+        return row.lowercased()
     }
 
     /// The iOS bullet once listed *resume* among the things this build has no
@@ -2354,22 +2344,11 @@ final class IOSSurfaceGuardTests: XCTestCase {
     func testTheReadmeIOSEntrySeparatesNoBackgroundFromReopenAndResume() throws {
         let ios = try deliveryStatusEntry("iOS")
 
-        XCTAssertTrue(ios.contains("no background execution"),
-                      "the README must name the actual limit: background execution")
-        for half in ["app-private", "stag", "reopen", "resume", "discard"] {
-            XCTAssertTrue(ios.contains(half),
-                          "the README dropped part of the staged reopen-and-resume path: \(half)")
-        }
-        XCTAssertTrue(ios.contains("explicit") || ios.contains("on its own"),
-                      "the README must say the resume is the user's, not the app's")
-        for realtime in ["direct", "nearby", "foreground"] {
-            XCTAssertTrue(ios.contains(realtime),
-                          "the README must still bound the realtime tabs: \(realtime)")
-        }
-        for stale in ["no background transfer", "resume and background", "resumable transfer"] {
-            XCTAssertFalse(ios.contains(stale),
-                           "the README's iOS entry is back to the generic claim: \(stale)")
-        }
+        XCTAssertTrue(ios.contains("in development"))
+        XCTAssertTrue(ios.contains("not available on the app store or testflight"))
+        XCTAssertTrue(ios.contains("foreground"))
+        XCTAssertTrue(ios.contains("background transfer"))
+        XCTAssertTrue(ios.contains("push notifications"))
     }
 
     /// The Next bullet is the roadmap, so what it lists as remaining has to be
@@ -2386,24 +2365,12 @@ final class IOSSurfaceGuardTests: XCTestCase {
     /// notifications" would claim the routing does not exist. It has to be named
     /// as unverified rather than as absent, so both halves are asserted.
     func testTheReadmeNextEntryScopesTheRemainingIOSWork() throws {
-        let next = try deliveryStatusEntry("Next:")
-
-        for remaining in ["background execution", "notification", "push",
-                          "share extension", "real-device", "native-versus-web"] {
-            XCTAssertTrue(next.contains(remaining),
-                          "the roadmap stopped naming remaining work: \(remaining)")
-        }
-        XCTAssertTrue(next.contains("universal-link"),
-                      "the roadmap stopped tracking link routing altogether")
-        XCTAssertTrue(next.contains("wired"),
-                      "the roadmap still lists universal-link routing as work not done")
-        XCTAssertTrue(next.contains("real install") || next.contains("real-device"),
-                      "the roadmap must say what about link routing is still unverified")
-        for stale in ["no background transfer", "resume and background", "resumable transfer",
-                      "no universal-link"] {
-            XCTAssertFalse(next.contains(stale),
-                           "the roadmap is back to the generic claim: \(stale)")
-        }
+        let readme = try String(contentsOf: repoRoot.appendingPathComponent("README.md"),
+                                encoding: .utf8)
+        XCTAssertTrue(readme.contains("[`docs/`](docs/)"),
+                      "the concise README no longer points detailed future work to docs")
+        XCTAssertFalse(readme.contains("- **Next:"),
+                       "the root README grew a second long-form roadmap")
     }
 
     /// The iOS bullet describes what a link DOES, and bounds it.
@@ -2416,13 +2383,8 @@ final class IOSSurfaceGuardTests: XCTestCase {
     func testTheReadmeIOSEntryStatesWhatALinkDoesAndDoesNot() throws {
         let ios = try deliveryStatusEntry("iOS")
 
-        XCTAssertTrue(ios.contains("link"), "the README does not mention link routing at all")
-        for bounded in ["never joins", "waits"] {
-            XCTAssertTrue(ios.contains(bounded),
-                          "the README dropped what a link is NOT allowed to do: \(bounded)")
-        }
-        XCTAssertFalse(ios.contains("no universal-link"),
-                       "the README's iOS entry still calls link routing absent")
+        XCTAssertFalse(ios.contains("]("), "the unpublished iOS row contains a download link")
+        XCTAssertTrue(ios.contains("not available"), "the unpublished state is only implied")
     }
 
     /// The management model is app-scoped and injected once.
