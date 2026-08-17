@@ -17,13 +17,15 @@ import { describe, expect, it } from "vitest";
 /// served.
 const CANONICAL = "native-client-policy.json";
 const PUBLISHED = "public/apps/macos/client-policy.json";
+const policyRoot = process.env.RELAYIUM_POLICY_TEST_ROOT ?? process.cwd();
 
-const canonicalText = await readFile(resolve(process.cwd(), CANONICAL), "utf8");
-const publishedText = await readFile(resolve(process.cwd(), PUBLISHED), "utf8");
+const canonicalText = await readFile(resolve(policyRoot, CANONICAL), "utf8");
+const publishedText = await readFile(resolve(policyRoot, PUBLISHED), "utf8");
 const policy = JSON.parse(canonicalText);
 const manifest = JSON.parse(
-  await readFile(resolve(process.cwd(), "native-releases.json"), "utf8"),
+  await readFile(resolve(policyRoot, "native-releases.json"), "utf8"),
 );
+const isPreparedCutover = Object.hasOwn(policy, "nextRelease");
 
 /** Numeric, component by component: `1.2.10` is above `1.2.9`. */
 function compare(left, right) {
@@ -79,14 +81,44 @@ describe("the macOS client version policy", () => {
     ]);
   });
 
-  it("prepares the 1.2.9 cutover without advertising an unavailable release", () => {
-    expect(policy.macos.latestVersion).toBe("1.2.7");
-    expect(policy.nextRelease).toEqual({
-      version: "1.2.9",
-      minimumSupportedVersion: "1.2.9",
-      minimumSupportedBuild: 15,
-      recommendedVersion: "1.2.9",
-    });
+  it("is exactly the prepared source or the staged 1.2.9 cutover", () => {
+    const expected = isPreparedCutover
+      ? {
+          manifest: { available: true, version: "1.2.7", build: 13 },
+          macos: {
+            policyRevision: 1,
+            minimumSupportedVersion: "1.2.4",
+            minimumSupportedBuild: 11,
+            recommendedVersion: "1.2.5",
+            latestVersion: "1.2.7",
+          },
+          nextRelease: {
+            version: "1.2.9",
+            minimumSupportedVersion: "1.2.9",
+            minimumSupportedBuild: 15,
+            recommendedVersion: "1.2.9",
+          },
+        }
+      : {
+          manifest: { available: true, version: "1.2.9", build: 15 },
+          macos: {
+            policyRevision: 2,
+            minimumSupportedVersion: "1.2.9",
+            minimumSupportedBuild: 15,
+            recommendedVersion: "1.2.9",
+            latestVersion: "1.2.9",
+          },
+          nextRelease: undefined,
+        };
+    expect({
+      manifest: {
+        available: manifest.macos.available,
+        version: manifest.macos.version,
+        build: manifest.macos.build,
+      },
+      macos: policy.macos,
+      nextRelease: policy.nextRelease,
+    }).toEqual(expected);
   });
 
   /// **The requirement and the revision that names it, pinned together.**
@@ -109,12 +141,19 @@ describe("the macOS client version policy", () => {
       minimumSupportedVersion: policy.macos.minimumSupportedVersion,
       minimumSupportedBuild: policy.macos.minimumSupportedBuild,
       recommendedVersion: policy.macos.recommendedVersion,
-    }).toEqual({
-      policyRevision: 1,
-      minimumSupportedVersion: "1.2.4",
-      minimumSupportedBuild: 11,
-      recommendedVersion: "1.2.5",
-    });
+    }).toEqual(isPreparedCutover
+      ? {
+          policyRevision: 1,
+          minimumSupportedVersion: "1.2.4",
+          minimumSupportedBuild: 11,
+          recommendedVersion: "1.2.5",
+        }
+      : {
+          policyRevision: 2,
+          minimumSupportedVersion: "1.2.9",
+          minimumSupportedBuild: 15,
+          recommendedVersion: "1.2.9",
+        });
   });
 
   it("carries a revision inside the range every client will read", () => {
