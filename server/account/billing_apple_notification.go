@@ -222,9 +222,17 @@ func (s *Service) applyAppleNotification(ctx context.Context, n VerifiedAppleNot
 	var renewalState AppleRenewalState
 	if n.HasRenewal {
 		renewalState = appleRenewalState(owner, tx, n.Renewal, now)
+		if stored, ok, err := s.Store().GetAppleRenewalState(ctx, owner); err != nil {
+			return http.StatusInternalServerError, current.State, "storage"
+		} else if preferred, use := preferDurableAppleRenewal(stored, ok, renewalState, tx); use {
+			// A same-generation notification may arrive out of order. Project from
+			// the newest durable signed renewal fact; the atomic write below will
+			// reject the older incoming renewal while applying the source event.
+			renewalState = preferred
+		}
 	} else if stored, ok, err := s.Store().GetAppleRenewalState(ctx, owner); err != nil {
 		return http.StatusInternalServerError, current.State, "storage"
-	} else if ok && stored.ExternalID == func() string { id, _ := appleSubscriptionKeyOf(tx).externalID(); return id }() {
+	} else if ok && appleRenewalMatchesTransaction(stored, tx) {
 		renewalState = stored
 	}
 
@@ -294,6 +302,18 @@ func (s *Service) applyAppleNotification(ctx context.Context, n VerifiedAppleNot
 	// applied, and a failure here leaves those rows exactly where they were.
 	s.reconcileApplePendingNotifications(ctx, owner, appleSubscriptionKeyOf(tx), now)
 	return http.StatusOK, appleNotificationApplied, "applied"
+}
+
+func appleRenewalMatchesTransaction(r AppleRenewalState, tx VerifiedAppleTransaction) bool {
+	externalID, ok := appleSubscriptionKeyOf(tx).externalID()
+	return ok && r.UserID != "" && r.ExternalID == externalID && r.BundleID == tx.BundleID
+}
+
+func preferDurableAppleRenewal(stored AppleRenewalState, exists bool, incoming AppleRenewalState, tx VerifiedAppleTransaction) (AppleRenewalState, bool) {
+	if exists && appleRenewalMatchesTransaction(stored, tx) && stored.EventAt >= incoming.EventAt {
+		return stored, true
+	}
+	return AppleRenewalState{}, false
 }
 
 // finishAppleNotification records a non-applied outcome and answers 200.
@@ -452,7 +472,27 @@ func (s *Service) reconcileApplePendingNotifications(ctx context.Context, userID
 			// letting the next delivery arrive is the recovery.
 			continue
 		}
-		if _, err := s.Store().ApplySubscriptionSource(ctx, appleSourceEvent(userID, tx, product, now)); err != nil {
+		event := appleSourceEvent(userID, tx, product, now)
+		if stored, ok, err := s.Store().GetAppleRenewalState(ctx, userID); err != nil {
+			log.Printf("apple notifications: reading renewal for deferred %s failed: %v", rec.UUID, err)
+			continue
+		} else if ok && appleRenewalMatchesTransaction(stored, tx) {
+			// An expired transaction normally needs no catalog lookup, but a
+			// verified grace period restores its paid tier. Resolve that tier from
+			// the durable renewal identity rather than writing active-with-no-plan.
+			if !appleTransactionIsTerminal(tx) && stored.graceActive(now) && product.PlanID == "" {
+				product, mapped, err = s.Store().AppleProductPlan(ctx, tx.BundleID, stored.CurrentProductID)
+				if err != nil {
+					log.Printf("apple notifications: resolving the grace product for deferred %s failed: %v", rec.UUID, err)
+					continue
+				}
+				if !mapped {
+					continue
+				}
+			}
+			event = appleSourceEventWithRenewal(userID, tx, product, stored, now)
+		}
+		if _, err := s.Store().ApplySubscriptionSource(ctx, event); err != nil {
 			log.Printf("apple notifications: replaying deferred %s failed: %v", rec.UUID, err)
 			continue
 		}

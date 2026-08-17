@@ -270,6 +270,69 @@ func TestAppleDerivedLapsePreservesRealProviderClockOrdering(t *testing.T) {
 	}
 }
 
+func TestAppleOlderSameGenerationRenewalCannotDropDurableGrace(t *testing.T) {
+	now := time.Unix(2_000_000_000, 0)
+	tx := VerifiedAppleTransaction{OriginalTransactionID: "renewal-order", BundleID: testBundleIOS, ProductID: testAppleProduct, Environment: appleEnvProduction, PurchaseDateMS: now.Add(-time.Hour).UnixMilli(), ExpiresDateMS: now.Add(-time.Second).UnixMilli()}
+	external, _ := appleSubscriptionKeyOf(tx).externalID()
+	newer := AppleRenewalState{UserID: "u", ExternalID: external, BundleID: testBundleIOS, CurrentProductID: testAppleProduct, AutoRenewProductID: testAppleProduct, IsInBillingRetry: true, GraceUntil: now.Add(time.Hour).Unix(), EventAt: 20}
+	older := newer
+	older.IsInBillingRetry = false
+	older.GraceUntil = 0
+	older.EventAt = 10
+	chosen, ok := preferDurableAppleRenewal(newer, true, older, tx)
+	if !ok || !chosen.graceActive(now) {
+		t.Fatalf("older renewal displaced grace: %+v", chosen)
+	}
+	mismatch := newer
+	mismatch.ExternalID = "other"
+	if _, ok := preferDurableAppleRenewal(mismatch, true, older, tx); ok {
+		t.Fatal("cross-subscription renewal merged")
+	}
+	mismatch = newer
+	mismatch.BundleID = "other.bundle"
+	if _, ok := preferDurableAppleRenewal(mismatch, true, older, tx); ok {
+		t.Fatal("cross-bundle renewal merged")
+	}
+	for _, terminal := range []VerifiedAppleTransaction{func() VerifiedAppleTransaction { x := tx; x.RevocationDateMS = now.UnixMilli(); return x }(), func() VerifiedAppleTransaction { x := tx; x.IsUpgraded = true; return x }()} {
+		ev := appleSourceEventWithRenewal("u", terminal, AppleProduct{PlanID: "pro", Cycle: "monthly"}, chosen, now)
+		if ev.PlanID != "free" || ev.Status != "canceled" {
+			t.Fatalf("terminal resurrected by renewal: %+v", ev)
+		}
+	}
+}
+
+func TestApplePendingReplayPreservesCurrentGenerationGrace(t *testing.T) {
+	_, svc, store, _ := newBillingServer(t)
+	ctx := context.Background()
+	if err := svc.SeedPlans(ctx); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Unix(2_000_000_000, 0)
+	svc.now = func() time.Time { return now }
+	u, _ := store.UpsertUserByEmail(ctx, "pending-grace@example.test", "")
+	if err := store.UpsertAppleProduct(ctx, AppleProduct{BundleID: testBundleIOS, ProductID: testAppleProduct, PlanID: "pro", Cycle: "monthly", Active: true, UpdatedAt: 1}); err != nil {
+		t.Fatal(err)
+	}
+	tx := VerifiedAppleTransaction{OriginalTransactionID: "pending-grace", BundleID: testBundleIOS, ProductID: testAppleProduct, Environment: appleEnvProduction, PurchaseDateMS: now.Add(-time.Hour).UnixMilli(), ExpiresDateMS: now.Add(-time.Second).UnixMilli()}
+	external, _ := appleSubscriptionKeyOf(tx).externalID()
+	renewal := AppleRenewalState{UserID: u.ID, ExternalID: external, BundleID: testBundleIOS, CurrentProductID: testAppleProduct, AutoRenewProductID: testAppleProduct, IsInBillingRetry: true, GraceUntil: now.Add(time.Hour).Unix(), EventAt: 20, UpdatedAt: now.Unix()}
+	if _, err := store.ApplyAppleLifecycle(ctx, appleSourceEventWithRenewal(u.ID, tx, AppleProduct{PlanID: "pro", Cycle: "monthly"}, renewal, now), renewal); err != nil {
+		t.Fatal(err)
+	}
+	uuid := "9f0b2e3a-1c4d-4e5f-8a9b-000000000099"
+	if _, _, err := store.ClaimAppleNotification(ctx, AppleNotificationRecord{UUID: uuid, Type: "DID_RENEW", ReceivedAt: now.Unix(), Supported: true, Projection: appleNotificationProjection(tx)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetAppleNotificationState(ctx, uuid, appleNotificationPending, now.Unix()); err != nil {
+		t.Fatal(err)
+	}
+	svc.reconcileApplePendingNotifications(ctx, u.ID, appleSubscriptionKeyOf(tx), now)
+	src, ok, err := store.GetSubscriptionSource(ctx, u.ID, ProviderApple)
+	if err != nil || !ok || !src.grantsAccess() || src.PeriodEnd != renewal.GraceUntil {
+		t.Fatalf("pending replay dropped grace: %+v ok=%v err=%v", src, ok, err)
+	}
+}
+
 func TestAppleLifecycleConflictDoesNotPolluteRenewalState(t *testing.T) {
 	store, err := OpenSQLite(":memory:")
 	if err != nil {
