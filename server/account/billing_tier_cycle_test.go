@@ -242,12 +242,12 @@ func TestChangePlanCompositePartialFailureIsReportedAndRetryConverges(t *testing
 	if resp.StatusCode != http.StatusBadGateway {
 		t.Fatalf("a half-applied composite must return a typed partial result, got %d", resp.StatusCode)
 	}
-	var partial map[string]string
+	var partial map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&partial); err != nil {
 		t.Fatal(err)
 	}
 	if partial["status"] != "partial" || partial["effective"] != "now" ||
-		partial["failedStage"] != "period_end" || partial["retryable"] != "true" {
+		partial["failedStage"] != "period_end" || partial["retryable"] != true {
 		t.Fatalf("partial result = %#v", partial)
 	}
 	// The immediate stage DID apply, so the subscription really is on pro yearly.

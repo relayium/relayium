@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -103,7 +104,7 @@ func TestFailedInvoiceAfterPaidKeepsCanonicalActiveState(t *testing.T) {
 	}
 }
 
-func TestInvoiceWithoutSubscriptionCannotGrantEntitlement(t *testing.T) {
+func TestInvoiceWithoutSubscriptionCannotMutateOrRevokeCanonicalEntitlement(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_invoice_without_subscription"
 	svc.biller = NewStripeClient("sk_test", secret, "")
@@ -113,8 +114,19 @@ func TestInvoiceWithoutSubscriptionCannotGrantEntitlement(t *testing.T) {
 	if err := store.SetUserStripeCustomer(context.Background(), uid, "cus_one_off"); err != nil {
 		t.Fatal(err)
 	}
+	if err := store.SetUserStripeSubscription(context.Background(), uid, "sub_canonical"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetUserSubscription(context.Background(), uid, "pro", "active", 4000,
+		"stripe", "monthly", 2000, 0); err != nil {
+		t.Fatal(err)
+	}
+	before, err := store.GetUserByID(context.Background(), uid)
+	if err != nil {
+		t.Fatal(err)
+	}
 	resp := postWebhook(t, ts, secret,
-		webhookEnv("invoice.paid", "cus_one_off", "", "", "active", "price_pro_m", 3000))
+		webhookEnv("invoice.paid", "cus_one_off", "", "", "canceled", "", 9000))
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("invoice without subscription = %d, want ACK", resp.StatusCode)
@@ -123,8 +135,92 @@ func TestInvoiceWithoutSubscriptionCannotGrantEntitlement(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if u.PlanID != "free" || u.SubscriptionStatus != "" {
-		t.Fatalf("non-subscription invoice granted entitlement: %+v", u)
+	if u.PlanID != before.PlanID || u.SubscriptionStatus != before.SubscriptionStatus ||
+		u.BillingCycle != before.BillingCycle || u.SubscriptionEnd != before.SubscriptionEnd ||
+		u.StripeSubscriptionID != before.StripeSubscriptionID {
+		t.Fatalf("non-subscription invoice mutated canonical entitlement: before=%+v after=%+v", before, u)
+	}
+}
+
+type panicRoundTripper struct{}
+
+func (panicRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	panic("injected canonical refresh panic")
+}
+
+func TestWebhookPanicAfterClaimIsFailedAndCanonicalRetryConverges(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	secret := "whsec_post_claim_panic"
+	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true,
+		StripePriceMonthlyID: "price_pro_m"})
+	loginCookie(t, ts, mail, "panic-retry@example.com")
+	uid := mustUserID(t, store, "panic-retry@example.com")
+	if err := store.SetUserStripeCustomer(context.Background(), uid, "cus_panic"); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetUserStripeSubscription(context.Background(), uid, "sub_panic"); err != nil {
+		t.Fatal(err)
+	}
+
+	client := NewStripeClient("sk_test", secret, "")
+	client.canonicalWebhookRefresh = true
+	client.http = &http.Client{Transport: panicRoundTripper{}}
+	svc.biller = client
+	body := webhookEnv("invoice.paid", "cus_panic", "sub_panic", "", "", "", 0)
+	eventID := eventIDFromBody(t, body)
+
+	resp := postWebhook(t, ts, secret, body)
+	failedBody, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode < 500 || resp.StatusCode > 599 {
+		t.Fatalf("panic response = %d, want 5xx", resp.StatusCode)
+	}
+	if strings.Contains(strings.ToLower(string(failedBody)), "ok") ||
+		resp.Header.Get("X-Relayium-Test") != "" {
+		t.Fatalf("panic leaked buffered success: headers=%v body=%q", resp.Header, failedBody)
+	}
+	var status string
+	var attempts int
+	if err := store.db.QueryRow(`SELECT status, attempts FROM stripe_webhook_events WHERE event_id=?`,
+		eventID).Scan(&status, &attempts); err != nil {
+		t.Fatal(err)
+	}
+	if status != "failed" || attempts != 1 {
+		t.Fatalf("panic ledger = status %q attempts %d, want failed/1", status, attempts)
+	}
+
+	stripe := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"id":"sub_panic","status":"active","current_period_end":5000,"items":{"data":[{"price":{"id":"price_pro_m"}}]}}`)
+	}))
+	defer stripe.Close()
+	client.base = stripe.URL
+	client.http = stripe.Client()
+	retry := postWebhook(t, ts, secret, body)
+	retryBody, err := io.ReadAll(retry.Body)
+	retry.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retry.StatusCode != http.StatusOK {
+		t.Fatalf("canonical retry = %d body %q", retry.StatusCode, retryBody)
+	}
+	if err := store.db.QueryRow(`SELECT status, attempts FROM stripe_webhook_events WHERE event_id=?`,
+		eventID).Scan(&status, &attempts); err != nil {
+		t.Fatal(err)
+	}
+	if status != "processed" || attempts != 2 {
+		t.Fatalf("retry ledger = status %q attempts %d, want processed/2", status, attempts)
+	}
+	u, err := store.GetUserByID(context.Background(), uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.PlanID != "pro" || u.SubscriptionStatus != "active" ||
+		u.StripeSubscriptionID != "sub_panic" || u.SubscriptionEnd != 5000 {
+		t.Fatalf("canonical retry did not converge: %+v", u)
 	}
 }
 

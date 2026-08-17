@@ -489,9 +489,9 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 			// charging again.
 			log.Printf("billing: composite change for user %s (customer %s): immediate %s applied but scheduling %s failed: %v",
 				u.ID, u.StripeCustomerID, immediatePriceID, scheduledPriceID, err)
-			httpx.WriteJSON(w, http.StatusBadGateway, map[string]string{
+			httpx.WriteJSON(w, http.StatusBadGateway, map[string]any{
 				"status": "partial", "effective": string(effectNow),
-				"failedStage": "period_end", "retryable": "true",
+				"failedStage": "period_end", "retryable": true,
 			})
 			return
 		}

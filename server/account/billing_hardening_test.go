@@ -26,7 +26,7 @@ func TestWebhookRejectsWrongLivemode(t *testing.T) {
 	}
 
 	body := func(live bool) string {
-		return fmt.Sprintf(`{"type":"customer.subscription.updated","livemode":%t,"data":{"object":{"id":"sub_x","object":"subscription","customer":"cus_live","status":"active","current_period_end":0,"metadata":null,"items":{"data":[{"price":{"id":"price_plus_m"}}]}}}}`, live)
+		return fmt.Sprintf(`{"id":"evt_livemode","type":"customer.subscription.updated","livemode":%t,"data":{"object":{"id":"sub_x","object":"subscription","customer":"cus_live","status":"active","current_period_end":0,"metadata":null,"items":{"data":[{"price":{"id":"price_plus_m"}}]}}}}`, live)
 	}
 
 	// livemode:true against a test key → rejected (ACK 200, no plan change).
