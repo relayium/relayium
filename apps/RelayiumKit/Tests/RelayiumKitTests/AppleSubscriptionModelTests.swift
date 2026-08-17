@@ -124,6 +124,7 @@ private final class FakeBilling: AppleBillingService, @unchecked Sendable {
     private var _catalogBundleIDs: [String] = []
     private var _catalogBearers: [String] = []
     private var _accountToken: Result<UUID, Error>
+    private var _dispatches: [Result<ApplePurchaseDispatch, Error>] = []
     private var _submissions: [Result<AppleTransactionResult, Error>] = []
     private var _submittedJWS: [String] = []
     private var _submittedRenewalJWS: [String] = []
@@ -141,6 +142,9 @@ private final class FakeBilling: AppleBillingService, @unchecked Sendable {
 
     func setCatalog(_ value: Result<AppleProductCatalog, Error>) { sync { _catalog = value } }
     func setAccountToken(_ value: Result<UUID, Error>) { sync { _accountToken = value } }
+    func setDispatches(_ values: [Result<ApplePurchaseDispatch, Error>]) {
+        sync { _dispatches = values }
+    }
     /// Answers, consumed in order. The last one repeats once the list runs out.
     func setSubmissions(_ values: [Result<AppleTransactionResult, Error>]) {
         sync { _submissions = values }
@@ -171,6 +175,20 @@ private final class FakeBilling: AppleBillingService, @unchecked Sendable {
         journal.record("accountToken")
         sync { _accountTokenBearers.append(token) }
         return try sync { _accountToken }.get()
+    }
+
+    func dispatchApplePurchase(bundleID: String, productID: String,
+                               token: String) async throws -> ApplePurchaseDispatch {
+        journal.record("accountToken")
+        sync { _accountTokenBearers.append(token) }
+        let configured: Result<ApplePurchaseDispatch, Error>? = sync {
+            guard let first = _dispatches.first else { return nil }
+            if _dispatches.count > 1 { _dispatches.removeFirst() }
+            return first
+        }
+        if let configured { return try configured.get() }
+        return ApplePurchaseDispatch(appAccountToken: try sync { _accountToken }.get(),
+                                     attemptId: "attempt-one")
     }
 
     func submitAppleTransaction(signedTransactionInfo: String,
@@ -450,6 +468,30 @@ final class AppleSubscriptionModelTests: XCTestCase {
         XCTAssertEqual(rig.model.state, .deferred)
         XCTAssertTrue(rig.store.finished.isEmpty)
         XCTAssertEqual(rig.journal.count("refresh"), 0)
+    }
+
+    /// A client outcome is not provider authority. Once the server emitted a
+    /// dispatch, a modified client must not turn Cancel or Ask to Buy into a
+    /// second StoreKit sheet. Recovery is Transaction.updates/restore only.
+    func testAnUnresolvedDispatchNeverOpensASecondStoreKitSheet() async {
+        for firstOutcome in [StorePurchaseOutcome.userCancelled, .pending] {
+            let rig = await makeReadyRig()
+            rig.store.setPurchase(.success(firstOutcome))
+            rig.billing.setDispatches([
+                .success(ApplePurchaseDispatch(appAccountToken: Fixture.accountToken,
+                                               attemptId: "attempt-one")),
+                .failure(AppleBillingError.purchaseAuthorityManaged(provider: "apple")),
+            ])
+
+            await rig.model.purchase(productID: Fixture.catalog[0])
+            await rig.model.purchase(productID: Fixture.catalog[0])
+
+            XCTAssertEqual(rig.journal.count("purchase"), 1,
+                           "\(firstOutcome) opened a second StoreKit sheet")
+            XCTAssertEqual(rig.model.state,
+                           .failed(.purchaseNotAllowed(blockedBy: "apple")))
+            XCTAssertTrue(rig.store.finished.isEmpty)
+        }
     }
 
     // MARK: - signed out

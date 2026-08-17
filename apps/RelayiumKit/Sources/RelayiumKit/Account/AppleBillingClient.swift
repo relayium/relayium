@@ -1,7 +1,7 @@
 import Foundation
 
-/// The two authenticated requests an in-app purchase needs from Relayium's
-/// server, and the exact vocabulary of refusals they can answer with.
+/// The authenticated requests an in-app purchase needs from Relayium's server,
+/// and the exact vocabulary of refusals they can answer with.
 ///
 /// It is a protocol rather than the concrete `AccountClient` for the same reason
 /// `AccountManagementService` is: the interesting behaviour of the orchestration
@@ -23,6 +23,8 @@ public protocol AppleBillingService {
     /// product the server has no mapping for, and the failure would land after
     /// the customer had been charged. A binary cannot be corrected; a row can.
     func appleCatalog(bundleID: String, token: String) async throws -> AppleProductCatalog
+    func dispatchApplePurchase(bundleID: String, productID: String,
+                               token: String) async throws -> ApplePurchaseDispatch
     /// This account's stable App Store `appAccountToken`, minted on first ask.
     func appleAccountToken(token: String) async throws -> UUID
     /// Submit one signed App Store transaction, exactly as the store handed it
@@ -32,6 +34,15 @@ public protocol AppleBillingService {
     func submitAppleTransaction(signedTransactionInfo: String,
                                 signedRenewalInfo: String,
                                 token: String) async throws -> AppleTransactionResult
+}
+
+public struct ApplePurchaseDispatch: Codable, Equatable, Sendable {
+    public let appAccountToken: UUID
+    public let attemptId: String
+    public init(appAccountToken: UUID, attemptId: String) {
+        self.appAccountToken = appAccountToken
+        self.attemptId = attemptId
+    }
 }
 
 public extension AppleBillingService {
@@ -265,6 +276,9 @@ public enum AppleBillingError: Error, Equatable {
     /// Relayium App Store app. Finishing would strand the newly charged
     /// transaction, so it remains pending for an operator/user resolution.
     case appleSubscriptionConflict
+    /// The account is durably managed by another billing channel/app, or an
+    /// earlier Apple dispatch is unresolved. It is not a transient retry.
+    case purchaseAuthorityManaged(provider: String)
     /// 503 `verifier_unavailable` — this deployment holds no Apple trust roots
     /// and can verify nothing. The shipping default today.
     case verifierUnavailable
@@ -291,6 +305,32 @@ public enum AppleBillingError: Error, Equatable {
 }
 
 extension AccountClient: AppleBillingService {
+	public func dispatchApplePurchase(bundleID: String, productID: String,
+	                                  token: String) async throws -> ApplePurchaseDispatch {
+		var req = URLRequest(url: baseURL.appendingPathComponent("api/billing/apple/purchase-dispatch"))
+		req.httpMethod = "POST"
+		req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+		req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+		req.httpBody = try JSONEncoder().encode(ApplePurchaseDispatchRequest(bundleId: bundleID, productId: productID))
+		let (data, resp) = try await appleSend(req)
+		switch resp.statusCode {
+		case 200:
+			guard let body = try? JSONDecoder().decode(ApplePurchaseDispatchBody.self, from: data),
+			      let uuid = UUID(uuidString: body.appAccountToken), !body.attemptId.isEmpty else {
+				throw AppleBillingError.decoding
+			}
+			return ApplePurchaseDispatch(appAccountToken: uuid, attemptId: body.attemptId)
+		case 401: throw AppleBillingError.notSignedIn
+		case 409:
+			let body = try? JSONDecoder().decode(AppleErrorBody.self, from: data)
+			if body?.error == "billing_authority_conflict" || body?.error == "purchase_reconciliation_required" {
+				throw AppleBillingError.purchaseAuthorityManaged(provider: body?.provider ?? "apple")
+			}
+			throw AppleBillingError.server(status: 409)
+		case 429: throw AppleBillingError.rateLimited
+		default: throw AppleBillingError.server(status: resp.statusCode)
+		}
+	}
     /// `GET /api/billing/apple/catalog?bundleId=…`.
     ///
     /// **The bundle identity is a parameter and is the caller's own.** It is the
@@ -490,6 +530,8 @@ extension AccountClient: AppleBillingService {
 
 /// The 200 body of the account-token endpoint: `{"appAccountToken": "<uuid>"}`.
 private struct AppleAccountTokenBody: Decodable { let appAccountToken: String }
+private struct ApplePurchaseDispatchRequest: Encodable { let bundleId: String; let productId: String }
+private struct ApplePurchaseDispatchBody: Decodable { let appAccountToken: String; let attemptId: String }
 
 /// The whole request body of the transaction endpoint. One stored property, so
 /// the encoded document has exactly one key — which is what the server's
@@ -500,4 +542,4 @@ private struct AppleTransactionSubmission: Encodable {
     let signedRenewalInfo: String
 }
 
-private struct AppleErrorBody: Decodable { let error: String }
+private struct AppleErrorBody: Decodable { let error: String; let provider: String? }

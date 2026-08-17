@@ -461,9 +461,11 @@ public final class AppleSubscriptionModel: ObservableObject {
             return
         }
 
-        let appAccountToken: UUID
+        let dispatch: ApplePurchaseDispatch
         do {
-            appAccountToken = try await billing.appleAccountToken(token: token)
+            dispatch = try await billing.dispatchApplePurchase(bundleID: bundleID,
+                                                               productID: productID,
+                                                               token: token)
         } catch {
             guard !superseded(g) else { return }
             state = .failed(Self.failure(for: error))
@@ -474,7 +476,7 @@ public final class AppleSubscriptionModel: ObservableObject {
         let outcome: StorePurchaseOutcome
         do {
             outcome = try await store.purchase(productID: productID,
-                                               appAccountToken: appAccountToken)
+                                               appAccountToken: dispatch.appAccountToken)
         } catch {
             guard !superseded(g) else { return }
             state = .failed(Self.failure(for: error))
@@ -759,7 +761,12 @@ public final class AppleSubscriptionModel: ObservableObject {
     /// Map a thrown value onto the typed failure, keeping the server's own
     /// vocabulary intact and reducing everything else to a type name.
     private static func failure(for error: Error) -> AppleSubscriptionFailure {
-        if let billing = error as? AppleBillingError { return .billing(billing) }
+        if let billing = error as? AppleBillingError {
+            if case .purchaseAuthorityManaged(let provider) = billing {
+                return .purchaseNotAllowed(blockedBy: provider)
+            }
+            return .billing(billing)
+        }
         return .unexpected(type: String(describing: type(of: error)))
     }
 }

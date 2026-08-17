@@ -230,6 +230,7 @@ func (s *Service) routeMux() *http.ServeMux {
 	// one billing call they make; POST because it may mint the token. See
 	// handleAppleAccountToken for why it is not a credential.
 	mux.HandleFunc("POST /api/billing/apple/account-token", s.RequireAuth(s.handleAppleAccountToken))
+	mux.HandleFunc("POST /api/billing/apple/purchase-dispatch", s.RequireAuth(s.handleApplePurchaseDispatch))
 	// The signed-transaction intake the token above exists to be attached to.
 	// RequireAuth for the same reason: it is a native call with a bearer token,
 	// and the caller's identity is half the decision — the other half is Apple's

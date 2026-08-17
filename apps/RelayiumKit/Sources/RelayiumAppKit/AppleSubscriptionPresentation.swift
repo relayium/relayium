@@ -367,6 +367,8 @@ public enum AppleSubscriptionPresentation {
                 return L10n.t(.subscriptionErrorAlreadyLinked, language: language)
             case .appleSubscriptionConflict:
                 return L10n.t(.subscriptionErrorAppleConflict, language: language)
+            case .purchaseAuthorityManaged(let provider):
+                return blockedNotice(blockedBy: provider, language: language)
             case .verifierUnavailable:
                 return L10n.t(.subscriptionErrorNotReady, language: language)
             case .reconciliationUnavailable:

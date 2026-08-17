@@ -92,6 +92,41 @@ final class AppleBillingClientTests: XCTestCase {
         }
     }
 
+    // MARK: - dispatching a purchase
+
+    func testThePurchaseDispatchCarriesOnlyBundleProductAndBearer() async throws {
+        StubURLProtocol.stub = .init(
+            status: 200,
+            body: Data(#"{"appAccountToken":"3f2504e0-4f89-41d3-9a0c-0305e82c3301","attemptId":"attempt-one"}"#.utf8),
+            check: { req in
+                XCTAssertEqual(req.url?.path, "/api/billing/apple/purchase-dispatch")
+                XCTAssertEqual(req.httpMethod, "POST")
+                XCTAssertEqual(req.value(forHTTPHeaderField: "Authorization"), "Bearer rlm_app_T")
+                XCTAssertNil(req.url?.query)
+            })
+        let out = try await client().dispatchApplePurchase(
+            bundleID: "com.relayium.mac", productID: "com.relayium.mac.pro.monthly",
+            token: "rlm_app_T")
+        XCTAssertEqual(out.attemptId, "attempt-one")
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: Data(StubURLProtocol.lastBodyBytes)) as? [String: String])
+        XCTAssertEqual(body, ["bundleId": "com.relayium.mac",
+                              "productId": "com.relayium.mac.pro.monthly"])
+    }
+
+    func testAnExistingAuthorityOrDispatchIsNotASecondPurchasePermission() async {
+        for code in ["billing_authority_conflict", "purchase_reconciliation_required"] {
+            StubURLProtocol.stub = .init(
+                status: 409,
+                body: Data("{\"error\":\"\(code)\",\"provider\":\"apple\"}".utf8))
+            await XCTAssertThrowsErrorAsync(try await self.client().dispatchApplePurchase(
+                bundleID: "com.relayium.mac", productID: "p", token: "t")) {
+                XCTAssertEqual($0 as? AppleBillingError,
+                               .purchaseAuthorityManaged(provider: "apple"))
+            }
+        }
+    }
+
     // MARK: - submitting a transaction
 
     /// Both independently signed documents are carried byte for byte.
