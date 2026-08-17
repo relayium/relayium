@@ -496,8 +496,18 @@ struct RelayiumApp: App {
         // inherit one either. The source is the production document; the refresh
         // that would reach it is skipped for acceptance at the scene root, so the
         // suite runs against the embedded floor and nothing leaves the machine.
+        //
+        // The version this policy is evaluated against is the BUNDLE's, except
+        // in an acceptance launch that names another one. `appVersionOverride`
+        // is nil in Release — the whole seam is inside `#if DEBUG` — and nil in
+        // any Debug launch that is not a UI test, so a shipped process reaches
+        // `bundleVersion()` unconditionally. It exists because the blocking
+        // state is the one this suite cannot otherwise reach: every candidate
+        // that can be built and signed is, by the release guard's own rule,
+        // above the published minimum.
         _versionSupport = StateObject(wrappedValue: SupportedVersionModel(
-            currentVersion: SupportedVersionModel.bundleVersion(),
+            currentVersion: UITestMode.appVersionOverride
+                ?? SupportedVersionModel.bundleVersion(),
             store: UITestMode.isActive
                 ? InMemorySupportedVersionPolicyStore()
                 : UserDefaultsSupportedVersionPolicyStore(),

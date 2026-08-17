@@ -87,6 +87,17 @@ struct UnsupportedVersionView: View {
     let policy: SupportedVersionPolicy
     let update: () -> Void
     let quit: () -> Void
+    #if DEBUG
+    /// Whether the shipped update action has run in this process.
+    ///
+    /// Observed only so that a built-App acceptance run can assert the button
+    /// below reaches `AppUpdates.startUpdate()` — Sparkle's own check in this
+    /// build — instead of asserting on an appcast fetch it must not depend on.
+    /// The property and the marker it renders are both inside `#if DEBUG`, so a
+    /// Release build has neither; and the witness publishes nothing unless the
+    /// process is a UI-test launch, so an ordinary Debug run has neither either.
+    @ObservedObject private var updateAction = UITestUpdateActionWitness.shared
+    #endif
 
     var body: some View {
         VStack(spacing: Metrics.section) {
@@ -120,6 +131,19 @@ struct UnsupportedVersionView: View {
                 Button(L10n.t(.updateActionQuit), action: quit)
                     .accessibilityIdentifier("version-blocked-quit")
             }
+            #if DEBUG
+            // The acceptance suite's evidence that the button above reached the
+            // shipped update action. Absent from Release with the property it
+            // reads, and false in every Debug launch that is not a UI test — so
+            // no build a person can install renders this.
+            if updateAction.wasReached {
+                // nonlocalized: a UI-test marker, absent from Release
+                Text(verbatim: "update-action-reached")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("version-blocked-update-reached")
+            }
+            #endif
         }
         .padding(Metrics.page)
         .frame(minWidth: 480, minHeight: 320)

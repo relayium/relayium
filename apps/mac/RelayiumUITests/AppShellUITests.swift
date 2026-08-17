@@ -124,13 +124,25 @@ final class AppShellUITests: XCTestCase {
         return link
     }
 
+    /// Sparkle's one-time "check for updates automatically?" consent, which a
+    /// fresh runner shows before anything else this app draws.
+    ///
+    /// Extracted from `ensureProductWindowIsOpen` because the version-blocked
+    /// launch cannot use that helper: its recovery path is the menu bar's Open
+    /// item, and a blocked build's menu deliberately offers only Update and
+    /// Quit. The consent still has to be cleared, so this half is shared and the
+    /// window half is not.
+    private func declineSparkleAutomaticChecksIfAsked() {
+        let sparkleDecline = app.buttons["Don’t Check"]
+        if sparkleDecline.waitForExistence(timeout: 2) { sparkleDecline.click() }
+    }
+
     /// A fresh runner may show Sparkle's one-time consent, while a reused
     /// runner may restore the deliberate closed-window state from the residency
     /// test. Resolve either through the controls a person actually sees, then
     /// begin every product assertion with the real work window in front.
     private func ensureProductWindowIsOpen() {
-        let sparkleDecline = app.buttons["Don’t Check"]
-        if sparkleDecline.waitForExistence(timeout: 2) { sparkleDecline.click() }
+        declineSparkleAutomaticChecksIfAsked()
         if app.windows.allElementsBoundByIndex.contains(where: {
             $0.frame.width >= 800 && $0.frame.height >= 500
         }) { return }
@@ -318,6 +330,138 @@ final class AppShellUITests: XCTestCase {
     func testTheMainWindowOpens() {
         XCTAssertTrue(mainWindow.waitForExistence(timeout: 20),
                       "the unique main window did not appear")
+    }
+
+    /// Relaunch this app with the version its SUPPORT POLICY should evaluate.
+    ///
+    /// **Only the number changes.** `CFBundleShortVersionString` is untouched,
+    /// so this is the real signed candidate with the real gate, the real
+    /// embedded floor and the real update seam — it is simply asked the question
+    /// a below-minimum build asks. That input cannot come from the bundle: the
+    /// release guard refuses a candidate that ships below its own published
+    /// minimum, precisely because such a build would block on first launch.
+    ///
+    /// The relaunch is deliberate rather than a fresh `XCUIApplication` alone:
+    /// `setUp` has already opened the product window, so this process inherits a
+    /// restored-open window state. Without that, a run following the
+    /// closed-window test would restore closed — and a blocked build's menu bar
+    /// offers no way to reopen it, by design.
+    private func launchEvaluating(version: String) {
+        app.terminate()
+        app = XCUIApplication()
+        app.launchArguments = offlineLaunchArguments
+            + ["--relayium-ui-testing-app-version", version]
+        app.launch()
+        declineSparkleAutomaticChecksIfAsked()
+    }
+
+    /// **A build below the minimum supported version does not run the product.**
+    ///
+    /// The one state the source guards cannot reach: that the gate replaces the
+    /// shell rather than covering it is a claim about a running app, and every
+    /// candidate this suite can build is above the minimum.
+    ///
+    /// Three separate things are asserted, because a screen that appeared while
+    /// the shell went on running behind it would satisfy the first alone — and
+    /// that is the failure the whole design exists to prevent: the transfer
+    /// modules' tasks opening a room socket and registering for notifications
+    /// behind an update button.
+    func testABuildBelowTheMinimumIsBlockedAndOffersOnlyTheUpdateAction() {
+        // Below `SupportedVersionPolicy.embeddedFloor.minimumSupported`, which
+        // is what decides this launch: acceptance never fetches a policy, so the
+        // floor compiled into the binary is the whole requirement.
+        // `SupportedVersionSurfaceTests` holds this literal to that floor.
+        launchEvaluating(version: "1.2.3")
+
+        let blocked = app.descendants(matching: .any)["version-blocked"].firstMatch
+        XCTAssertTrue(blocked.waitForExistence(timeout: 30),
+                      "a build below the minimum supported version did not show the "
+                      + "blocking surface")
+
+        // The product is NOT BUILT, not merely hidden. Every shell arm and every
+        // sidebar row is checked, so a gate that had become an overlay would
+        // fail here rather than pass on the presence of the screen above.
+        for (title, id) in Self.destinationIDs {
+            XCTAssertFalse(app.descendants(matching: .any)["destination-\(id)"].firstMatch.exists,
+                           "the blocked build still renders the \(title) surface")
+            XCTAssertFalse(app.descendants(matching: .any)["sidebar-\(id)"].firstMatch.exists,
+                           "the blocked build still offers the \(title) sidebar row")
+            XCTAssertFalse(app.staticTexts[title].exists,
+                           "the blocked build still names \(title)")
+        }
+        // The dismissible recommendation is a different state and the two must
+        // never be on screen together.
+        XCTAssertFalse(app.descendants(matching: .any)["version-recommendation"]
+            .firstMatch.exists,
+                       "the blocked build also shows the dismissible recommendation")
+
+        // Two ways out and no third. A dismiss here would make the minimum a
+        // suggestion, and this state exists for the cases where it is not one.
+        let update = app.descendants(matching: .any)["version-blocked-update"].firstMatch
+        XCTAssertTrue(update.waitForExistence(timeout: 10),
+                      "the blocking surface offers no update action")
+        XCTAssertTrue(app.descendants(matching: .any)["version-blocked-quit"].firstMatch.exists,
+                      "the blocking surface offers no way to leave")
+        XCTAssertFalse(app.descendants(matching: .any)["version-recommendation-dismiss"]
+            .firstMatch.exists,
+                       "the blocking surface offers a way past the block")
+
+        // **The button reaches the shipped update action**, which in this build
+        // is Sparkle's own check. Asserted through the Debug-only witness the
+        // action writes rather than through what Sparkle then does: an appcast
+        // fetch over the public network, a signature check and possibly a
+        // download are all outside this change and none of them may decide
+        // whether this test passes. That the action IS Sparkle's check, and that
+        // the witness is compiled out of Release and cannot displace it, are
+        // source claims — `SupportedVersionSurfaceTests` makes them.
+        XCTAssertFalse(app.descendants(matching: .any)["version-blocked-update-reached"]
+            .firstMatch.exists,
+                       "the update action ran before anybody pressed the button")
+        update.click()
+        XCTAssertTrue(app.descendants(matching: .any)["version-blocked-update-reached"]
+            .firstMatch.waitForExistence(timeout: 20),
+                      "the blocking surface's update button did not reach the "
+                      + "direct build's Sparkle update action")
+    }
+
+    /// The other side of the same seam: a supported version runs the product.
+    ///
+    /// Two launches, because they answer two different questions. The first
+    /// names a supported version explicitly, so passing the argument at all is
+    /// shown not to be what blocks. The second passes no override, which is the
+    /// shipped path — the bundle's own `CFBundleShortVersionString` against the
+    /// embedded floor — and is the one that would catch a floor raised past the
+    /// version this candidate actually is.
+    func testASupportedBuildRendersTheOrdinaryShell() {
+        // `SupportedVersionPolicy.embeddedFloor.recommended`, held to that value
+        // by `SupportedVersionSurfaceTests`: at the recommendation there is
+        // nothing to say at all, so neither surface should appear.
+        launchEvaluating(version: "1.2.5")
+        ensureProductWindowIsOpen()
+        assertTheOrdinaryShellIsRunning()
+
+        app.terminate()
+        app = XCUIApplication()
+        app.launchArguments = offlineLaunchArguments
+        app.launch()
+        ensureProductWindowIsOpen()
+        assertTheOrdinaryShellIsRunning()
+    }
+
+    private func assertTheOrdinaryShellIsRunning(file: StaticString = #filePath,
+                                                 line: UInt = #line) {
+        let window = mainWindow
+        XCTAssertTrue(window.waitForExistence(timeout: 20),
+                      "the supported build has no product window", file: file, line: line)
+        XCTAssertTrue(sidebarDestination("LAN Transfer", in: window)
+            .waitForExistence(timeout: 20),
+                      "the supported build's shell has no destinations",
+                      file: file, line: line)
+        XCTAssertFalse(app.descendants(matching: .any)["version-blocked"].firstMatch.exists,
+                       "a supported build was blocked", file: file, line: line)
+        XCTAssertFalse(app.descendants(matching: .any)["version-recommendation"]
+            .firstMatch.exists,
+                       "a supported build was told to update", file: file, line: line)
     }
 
     /// All five browseable destinations are in the sidebar, by their

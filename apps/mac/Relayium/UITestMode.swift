@@ -1,3 +1,6 @@
+// For `ObservableObject`/`@Published` on the Debug-only update-action witness
+// below, which the blocking surface observes.
+import Combine
 import Foundation
 import RelayiumAppKit
 import RelayiumKit
@@ -280,6 +283,39 @@ enum UITestMode {
         return URL(string: arguments[arguments.index(after: flag)])
     }
 
+    /// **The marketing version this launch's SUPPORT POLICY is evaluated
+    /// against**, when the acceptance suite names one.
+    ///
+    /// The one input a built-App run cannot otherwise vary. Whether the blocking
+    /// surface really replaces the product is a runtime fact about a build below
+    /// the minimum, and every candidate this suite can build is above it by the
+    /// release guard's own rule — `SupportedVersionSurfaceTests` refuses a
+    /// candidate that ships below its own published minimum, because such a
+    /// build would block on first launch and the only way out of it would be an
+    /// update to itself. The alternatives were to sign and notarize a
+    /// below-minimum app, or to raise the published minimum above the shipping
+    /// version, which would block every installed copy.
+    ///
+    /// **It changes the number and nothing else.** The floor compiled into this
+    /// binary, the decoder, the model, the gate, the menu bar and the update
+    /// action are all production, and `CFBundleShortVersionString` is untouched
+    /// — so the About box, the device list and Sparkle's own build comparison
+    /// still read the build that is really running. This value reaches exactly
+    /// one call: the `currentVersion` the scene hands `SupportedVersionModel`.
+    ///
+    /// The value follows the flag as the next argument. A string `AppVersion`
+    /// refuses is simply refused, and the launch falls back to the bundle's own
+    /// version — which is the shipped behaviour.
+    // nonlocalized: a test-only launch argument, absent from Release
+    static let appVersionArgument = "--relayium-ui-testing-app-version"
+    static var appVersionOverride: AppVersion? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard isActive,
+              let flag = arguments.firstIndex(of: appVersionArgument),
+              arguments.index(after: flag) < arguments.endIndex else { return nil }
+        return AppVersion(arguments[arguments.index(after: flag)])
+    }
+
     /// The Device Inbox controller an acceptance launch may use, or nil.
     ///
     /// Delegated to `UITestInbox`, which owns the stub transport and the
@@ -425,6 +461,10 @@ enum UITestMode {
     /// nil, so a shipped launch can never be handed a link by its own arguments.
     static var launchDeepLink: URL? { nil }
 
+    /// nil, so a shipped launch always evaluates the version policy against the
+    /// version this bundle actually is, and cannot be told it is another one.
+    static var appVersionOverride: AppVersion? { nil }
+
     /// false, so a shipped launch can never be told it already holds an account.
     static let isSignedIn = false
     static let answersAccountAPI = false
@@ -462,6 +502,44 @@ enum UITestMode {
     }
     #endif
 }
+
+#if DEBUG
+/// **That the shipped update action ran. Nothing about what it then did.**
+///
+/// The blocked screen's Update button calls the distribution seam's
+/// `startUpdate()`, which in this build is Sparkle's own check. A UI test cannot
+/// assert on what that check produces: the answer is an appcast fetch over the
+/// public network, a signature verification and — on a machine where a newer
+/// release exists — a download. All three are outside the product change under
+/// test and any of them can fail for reasons that are not a defect.
+///
+/// So this observes the one fact that IS the claim: the button reached the
+/// shipped action. It is written from inside `startUpdate()` after Sparkle's
+/// check has been started, so a version of that function that stopped calling
+/// Sparkle would still have to keep this line — which is why
+/// `SupportedVersionSurfaceTests` also reads the function's body and requires
+/// `updater.checkForUpdates()` to be there, unconditionally and outside every
+/// compilation gate. Runtime evidence that the seam is reached; source evidence
+/// that the seam is Sparkle.
+///
+/// **Absent from Release**, like every other type in this file: it is inside
+/// `#if DEBUG`, so the shipped binary contains neither the object nor the call.
+/// And inside a Debug build it publishes nothing unless `UITestMode.isActive`,
+/// so a developer running the app from Xcode never renders the marker either.
+@MainActor
+final class UITestUpdateActionWitness: ObservableObject {
+    static let shared = UITestUpdateActionWitness()
+
+    @Published private(set) var wasReached = false
+
+    private init() {}
+
+    static func record() {
+        guard UITestMode.isActive else { return }
+        shared.wasReached = true
+    }
+}
+#endif
 
 #if DEBUG
 /// Mints deterministically, and — for the expiry launch — mints a code that

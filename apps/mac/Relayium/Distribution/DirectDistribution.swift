@@ -74,6 +74,21 @@ final class AppUpdates {
     /// all. `SupportedVersionSurfaceTests` refuses any other call here.
     func startUpdate() {
         updater.checkForUpdates()
+        #if DEBUG
+        // **Observation, and it is compiled out of every Release build.**
+        //
+        // It records that this function ran, AFTER the line above has started
+        // Sparkle's check — so acceptance can assert that the blocked screen's
+        // Update button reaches the shipped update path without waiting on an
+        // appcast fetch, a signature verification or a download, none of which a
+        // UI test may depend on. It publishes nothing unless the process is an
+        // acceptance launch.
+        //
+        // Nothing production is inside this gate: the updater call is the first
+        // statement in the function and is not conditional on anything. That is
+        // the property `SupportedVersionSurfaceTests` reads the body for.
+        UITestUpdateActionWitness.record()
+        #endif
     }
 }
 

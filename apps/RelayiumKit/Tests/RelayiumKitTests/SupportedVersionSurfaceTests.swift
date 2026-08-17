@@ -49,6 +49,47 @@ final class SupportedVersionSurfaceTests: XCTestCase {
             .joined(separator: "\n")
     }
 
+    /// The file as a RELEASE build compiles it: every `#if DEBUG` arm removed,
+    /// every `#else` arm of one kept.
+    ///
+    /// This is what makes "absent from Release" an assertion rather than a
+    /// sentence in a comment. The acceptance seams below — a launch argument
+    /// that tells the policy which version to evaluate, and an object that
+    /// records that the update action ran — are exactly the two things that must
+    /// not exist in a shipped binary: one decides whether the app runs at all,
+    /// and the other is reachable from the surface a blocked build shows. A
+    /// `#if DEBUG` around them is only worth what a test holds it to.
+    ///
+    /// An `#if` on anything OTHER than `DEBUG` keeps both arms, because this
+    /// function's job is to over-approximate what Release contains: a seam
+    /// hidden behind a condition this does not model should be reported, not
+    /// quietly excused.
+    private func releaseCode(_ source: String) -> String {
+        var stack: [(isDebugGate: Bool, inElse: Bool)] = []
+        var kept: [String] = []
+        for line in source.components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed == "#if" || trimmed.hasPrefix("#if ") {
+                stack.append((isDebugGate: trimmed == "#if DEBUG", inElse: false))
+                continue
+            }
+            // `#elseif` is treated as an else: it opens an arm this does not
+            // model, and keeping it is the over-approximating direction.
+            if trimmed == "#else" || trimmed.hasPrefix("#elseif") {
+                if !stack.isEmpty { stack[stack.count - 1].inElse = true }
+                continue
+            }
+            if trimmed == "#endif" {
+                if !stack.isEmpty { stack.removeLast() }
+                continue
+            }
+            guard !stack.contains(where: { $0.isDebugGate && !$0.inElse }) else { continue }
+            kept.append(line)
+        }
+        XCTAssertTrue(stack.isEmpty, "unbalanced #if in the scanned source")
+        return kept.joined(separator: "\n")
+    }
+
     /// One declaration's body, so a claim about `startUpdate` is not satisfied
     /// by a line somewhere else in the file.
     private func declaration(of signature: String, in source: String) throws -> String {
@@ -223,6 +264,136 @@ final class SupportedVersionSurfaceTests: XCTestCase {
                                    + "                ? InMemorySupportedVersionPolicyStore()\n"
                                    + "                : UserDefaultsSupportedVersionPolicyStore()"),
                       "an acceptance launch writes a policy into the product's defaults")
+    }
+
+    // MARK: - the acceptance seams, and their absence from Release
+
+    /// **The version an acceptance launch may name, and the Release build that
+    /// cannot be told anything.**
+    ///
+    /// The blocking state is the one state a built-App run cannot otherwise
+    /// reach: `testTheProjectPolicyFeedAndFloorDescribeOneReleaseHistory` above
+    /// refuses a candidate that ships below its own published minimum, so every
+    /// app this suite can build and sign is a supported one. The seam supplies
+    /// the only missing input — the number the policy compares — and it must
+    /// exist nowhere a user's copy could reach.
+    func testTheAcceptanceVersionOverrideIsCompiledOutOfEveryReleaseBuild() throws {
+        let mode = try macSource("UITestMode.swift")
+        XCTAssertTrue(mode.contains(
+            #"static let appVersionArgument = "--relayium-ui-testing-app-version""#),
+            "the acceptance version override no longer has a launch argument")
+        // Gated on the acceptance flag as well as on the compilation condition,
+        // like every other seam in that file: a Debug build a developer runs
+        // from Xcode passes no such argument and must read its own bundle.
+        XCTAssertTrue(mode.contains(
+            "guard isActive,\n"
+            + "              let flag = arguments.firstIndex(of: appVersionArgument),"),
+            "a Debug launch that is not an acceptance run can name its own version")
+
+        let release = code(releaseCode(mode))
+        XCTAssertFalse(release.contains("appVersionArgument"),
+                       "a Release build carries the version-override launch argument")
+        XCTAssertFalse(release.contains("relayium-ui-testing-app-version"))
+        XCTAssertTrue(release.contains("static var appVersionOverride: AppVersion? { nil }"),
+                      "the Release answer for the version override is not a nil constant")
+    }
+
+    /// **The update-action witness observes and decides nothing.**
+    ///
+    /// A UI test cannot assert on what Sparkle's check produces — an appcast
+    /// fetch, a signature verification, possibly a download — without depending
+    /// on the public network and on which release the machine already has. So
+    /// the runtime claim is narrowed to the one thing under test: the blocked
+    /// screen's button reaches the shipped update action. That the action IS
+    /// Sparkle stays a source claim, made by
+    /// `testTheDirectUpdateActionIsSparkleAndNothingElse` and reinforced here —
+    /// the updater call is the first statement of the function and is inside no
+    /// compilation gate, so the observation cannot be what runs.
+    func testTheUpdateActionWitnessIsCompiledOutAndDecidesNothing() throws {
+        let mode = try macSource("UITestMode.swift")
+        XCTAssertTrue(mode.contains("final class UITestUpdateActionWitness: ObservableObject"))
+        XCTAssertTrue(mode.contains("guard UITestMode.isActive else { return }"),
+                      "the update-action witness publishes outside an acceptance launch")
+        XCTAssertFalse(code(releaseCode(mode)).contains("UITestUpdateActionWitness"),
+                       "a Release build carries the update-action witness")
+
+        let direct = try macSource("Distribution/DirectDistribution.swift")
+        let action = try declaration(of: "func startUpdate()", in: direct)
+        XCTAssertTrue(action.contains("{\n        updater.checkForUpdates()\n        #if DEBUG"),
+                      "Sparkle's own check is no longer this function's unconditional "
+                      + "first statement")
+        let releaseAction = code(releaseCode(action))
+        XCTAssertTrue(releaseAction.contains("updater.checkForUpdates()"),
+                      "the production update call is inside the acceptance gate")
+        XCTAssertFalse(releaseAction.contains("UITestUpdateActionWitness"))
+
+        let gate = try macSource("Shell/AppVersionGate.swift")
+        let releaseGate = code(releaseCode(gate))
+        XCTAssertFalse(releaseGate.contains("UITestUpdateActionWitness"),
+                       "the shipped blocking screen observes the acceptance witness")
+        XCTAssertFalse(releaseGate.contains("version-blocked-update-reached"),
+                       "the shipped blocking screen carries the acceptance marker")
+        // …and the two identifiers a shipped build does carry are untouched.
+        XCTAssertTrue(releaseGate.contains(#".accessibilityIdentifier("version-blocked-update")"#))
+        XCTAssertTrue(releaseGate.contains(#".accessibilityIdentifier("version-blocked")"#))
+    }
+
+    /// The scene reads the bundle unless acceptance names another version, and
+    /// exactly one place reads it at all.
+    func testTheSceneEvaluatesTheBundleVersionUnlessAcceptanceNamesAnother() throws {
+        let app = try macSource("RelayiumApp.swift")
+        XCTAssertTrue(app.contains("currentVersion: UITestMode.appVersionOverride\n"
+                                   + "                ?? SupportedVersionModel.bundleVersion(),"),
+                      "the scene no longer falls back to the bundle's own version")
+        XCTAssertEqual(app.components(separatedBy: "UITestMode.appVersionOverride").count - 1, 1,
+                       "the version override is read more or less than once")
+        // The surface is handed a version; it never asks for one. A view that
+        // could read the override would be a second place to keep honest.
+        let gate = try macSource("Shell/AppVersionGate.swift")
+        XCTAssertFalse(gate.contains("appVersionOverride"))
+        XCTAssertFalse(gate.contains("bundleVersion"))
+    }
+
+    /// **The built-App evidence exists, and still measures what it claims to.**
+    ///
+    /// Everything above this line is source. The two runtime cases live in the
+    /// UI suite, which this package cannot run — so what it can do is hold the
+    /// suite to still containing them, and hold the versions those launches use
+    /// against the floor this binary compiles. A published minimum that rose
+    /// past `1.2.5`, or fell below `1.2.3`, would leave both launches passing
+    /// while testing the same state twice.
+    func testTheAcceptanceSuiteDrivesBothSidesOfTheVersionGate() throws {
+        let ui = try text("apps/mac/RelayiumUITests/AppShellUITests.swift")
+        for name in ["func testABuildBelowTheMinimumIsBlockedAndOffersOnlyTheUpdateAction()",
+                     "func testASupportedBuildRendersTheOrdinaryShell()"] {
+            XCTAssertTrue(ui.contains(name), "the acceptance suite lost \(name)")
+        }
+        XCTAssertTrue(ui.contains(#"+ ["--relayium-ui-testing-app-version", version]"#),
+                      "the acceptance suite no longer names the version to evaluate")
+        XCTAssertTrue(ui.contains(#"launchEvaluating(version: "1.2.3")"#),
+                      "the blocked acceptance launch no longer names a version")
+        XCTAssertTrue(ui.contains(#"launchEvaluating(version: "1.2.5")"#),
+                      "the supported acceptance launch no longer names a version")
+        // The shipped path too: no override at all, which is the only launch
+        // that would notice a floor raised past the version this candidate is.
+        XCTAssertTrue(ui.contains("app.launchArguments = offlineLaunchArguments\n"
+                                  + "        app.launch()\n"
+                                  + "        ensureProductWindowIsOpen()\n"
+                                  + "        assertTheOrdinaryShellIsRunning()"),
+                      "the acceptance suite no longer launches without an override")
+        for identifier in ["version-blocked", "version-blocked-update",
+                           "version-blocked-update-reached"] {
+            XCTAssertTrue(ui.contains("\"\(identifier)\""),
+                          "the acceptance suite no longer asserts \(identifier)")
+        }
+
+        let floor = SupportedVersionPolicy.embeddedFloor
+        let blocked = try XCTUnwrap(AppVersion("1.2.3"))
+        XCTAssertTrue(blocked < floor.minimumSupported,
+                      "the suite's blocked launch is no longer below the embedded floor")
+        let supported = try XCTUnwrap(AppVersion("1.2.5"))
+        XCTAssertTrue(supported >= floor.recommended,
+                      "the suite's supported launch is no longer a supported version")
     }
 
     // MARK: - the version graph
