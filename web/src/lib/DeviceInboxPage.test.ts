@@ -606,10 +606,15 @@ describe("sending, without leaving this page", () => {
     flushSync();
 
     expect(sendSpy, "the drop did not reach the send pipeline").toHaveBeenCalledTimes(1);
-    const [target, sent] = sendSpy.mock.calls[0] as [{ deviceID: string; publicKey: string }, File[]];
+    const [target, sent] = sendSpy.mock.calls[0] as [
+      { deviceID: string; publicKey: string },
+      { file: File; path?: string }[],
+    ];
     expect(target.deviceID).toBe(READY_DEVICE.ID);
     expect(target.publicKey).toBe(ZERO_KEY);
-    expect(sent).toEqual(files);
+    // Named entries: each file travels with the relative path its manifest name
+    // will be, so a dropped FOLDER keeps its shape on the other device.
+    expect(sent).toEqual(files.map((file) => ({ file })));
     // And it reports what happened, in the card's persistent live region.
     expect(root.querySelector(".sendstatus")!.textContent).toMatch(/Uploaded to Relayium/i);
   });
@@ -624,7 +629,8 @@ describe("sending, without leaving this page", () => {
     await Promise.resolve();
     flushSync();
     expect(sendSpy).toHaveBeenCalledTimes(1);
-    expect((sendSpy.mock.calls[0] as [unknown, File[]])[1]).toEqual([file]);
+    expect((sendSpy.mock.calls[0] as [unknown, { file: File; path?: string }[]])[1])
+      .toEqual([{ file, path: undefined }]);
   });
 
   it("names the account, and keeps My Devices as a secondary management route only", async () => {

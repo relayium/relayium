@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import sodium from "libsodium-wrappers";
-import { decryptManifest, encodeKey, importStoreKey } from "./store-crypto";
-import { INBOX_KEY_ALGORITHM, INBOX_PROTOCOL_VERSION } from "./device-inbox";
+import { decodeKey, decryptManifest, encodeKey, importStoreKey } from "./store-crypto";
+import { decodeInboxManifest, INBOX_MANIFEST_MAX_TEXT_BYTES } from "./inbox-manifest";
+import {
+  CAP_RECEIVE_V2,
+  CAP_TEXT_V1,
+  INBOX_KEY_ALGORITHM,
+  INBOX_PROTOCOL_VERSION,
+} from "./device-inbox";
 import {
   CANCELLABLE_STATES,
   SendFailure,
@@ -9,6 +15,7 @@ import {
   fetchInboxTask,
   newIdempotencyKey,
   sendFilesToDevice,
+  sendTextToDevice,
 } from "./device-send";
 
 await sodium.ready;
@@ -115,20 +122,91 @@ function sendOpts(over: Record<string, unknown> = {}) {
   return { ttl: 604_800, idempotencyKey: "web-fixed-key", ...over } as never;
 }
 
-function targetSpec() {
+/** A send target. `presentsText` is what makes both halves of the capability
+ *  rule reachable: a message needs `inbox.text.v1` and a file must not. */
+function targetSpec(presentsText = true) {
   return {
     deviceID: DEVICE_ID,
     keyID: "k1",
     keyGeneration: 1,
     algorithm: INBOX_KEY_ALGORITHM,
     publicKey: encodeKey(target.publicKey),
+    capabilities: presentsText
+      ? [CAP_RECEIVE_V2, "inbox.autoaccept.v1", CAP_TEXT_V1]
+      : [CAP_RECEIVE_V2, "inbox.autoaccept.v1"],
   };
 }
 
+/** The content key central was handed, unsealed the way the target device would
+ *  unseal it — the only key that opens anything below. */
+function contentKeyFromCreate(): Uint8Array {
+  const body = JSON.parse(String(created()!.body));
+  const sealed = sodium.from_base64(body.wrappedKey, sodium.base64_variants.URLSAFE_NO_PADDING);
+  return sodium.crypto_box_seal_open(sealed, target.publicKey, target.privateKey);
+}
+
+/** The sealed frame-0 unit of the delivery that was just uploaded. */
+function frameZero(): Uint8Array {
+  const len = new DataView(initBody!.buffer, initBody!.byteOffset, 4).getUint32(0);
+  expect(initBody!.length, "the length prefix does not describe the frame").toBe(4 + len);
+  return initBody!.slice(4, 4 + len);
+}
+
+/** Frame 0, decoded with the Device Inbox v2 codec. */
+async function sealedManifest(contentKey: Uint8Array) {
+  const pt = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: new Uint8Array(12) },
+    await importStoreKey(contentKey),
+    frameZero() as Uint8Array<ArrayBuffer>,
+  );
+  return decodeInboxManifest(new Uint8Array(pt));
+}
+
+/** Every payload frame's plaintext, concatenated in the order it was sent —
+ *  which is the order the manifest's items claim. */
+async function payloadPlaintext(contentKey: Uint8Array): Promise<Uint8Array> {
+  const key = await importStoreKey(contentKey);
+  const parts: Uint8Array[] = [];
+  for (const c of calls.filter((c) => c.method === "PATCH")) {
+    parts.push(await toBytes(c.body));
+  }
+  const stream = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let at = 0;
+  for (const p of parts) {
+    stream.set(p, at);
+    at += p.length;
+  }
+  const out: number[] = [];
+  let off = 0;
+  let seq = 1;
+  while (off + 4 <= stream.length) {
+    const n = new DataView(stream.buffer, stream.byteOffset + off, 4).getUint32(0);
+    off += 4;
+    const iv = new Uint8Array(12);
+    new DataView(iv.buffer).setUint32(8, seq);
+    const pt = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      key,
+      stream.slice(off, off + n) as Uint8Array<ArrayBuffer>,
+    );
+    out.push(...new Uint8Array(pt));
+    off += n;
+    seq++;
+  }
+  expect(off, "trailing bytes after the last frame").toBe(stream.length);
+  return new Uint8Array(out);
+}
+
+/** The outgoing selection, in the shape a picker or the folder walker produces:
+ *  bytes plus the relative path that becomes the manifest name. */
 const FILES = () => [
-  new File([new TextEncoder().encode("payroll numbers")], "Q3 payroll.xlsx"),
-  new File([new TextEncoder().encode("more")], "secret folder/notes.md"),
+  { file: new File([new TextEncoder().encode("payroll numbers")], "Q3 payroll.xlsx") },
+  { file: new File([new TextEncoder().encode("more")], "notes.md"), path: "secret folder/notes.md" },
 ];
+
+/** What the manifest of `FILES()` must say, in order. */
+const FILE_NAMES = ["Q3 payroll.xlsx", "secret folder/notes.md"];
+const FILE_SIZES = [15, 4];
 
 beforeEach(() => {
   calls = [];
@@ -228,10 +306,19 @@ describe("sending to a device", () => {
     const contentKey = sodium.crypto_box_seal_open(sealed, target.publicKey, target.privateKey);
     expect(contentKey.length).toBe(32);
 
-    const manifestLen = new DataView(initBody!.buffer, initBody!.byteOffset, 4).getUint32(0);
-    const encManifest = initBody!.slice(4, 4 + manifestLen);
-    const manifest = await decryptManifest(await importStoreKey(contentKey), encManifest);
-    expect(manifest.files.map((f) => f.name)).toEqual(["Q3 payroll.xlsx", "secret folder/notes.md"]);
+    // Frame 0 is the Device Inbox v2 manifest, opened with the v2 codec. It is
+    // NOT the shared Stored-Wire manifest: a delivery that sealed that document
+    // is refused by its own receiver as `verify_failed`, after the whole
+    // ciphertext has been uploaded, queued and downloaded.
+    const manifest = await sealedManifest(contentKey);
+    expect(manifest.items.map((i) => i.kind)).toEqual(["file", "file"]);
+    expect(manifest.items.map((i) => i.name)).toEqual(FILE_NAMES);
+    expect(manifest.items.map((i) => i.size)).toEqual(FILE_SIZES);
+
+    await expect(
+      decryptManifest(await importStoreKey(contentKey), frameZero()),
+      "a delivery's frame 0 must not also parse as the shared manifest",
+    ).rejects.toThrow();
   });
 
   it("no request carries a file name, a path or the raw content key", async () => {
@@ -534,6 +621,329 @@ describe("reading and cancelling a task", () => {
     ]);
     for (const s of ["downloading", "verifying", "saved", "expired", "revoked", "failed_terminal"]) {
       expect(CANCELLABLE_STATES.has(s), `${s} offered a cancel button`).toBe(false);
+    }
+  });
+});
+
+// The Device Inbox v2 manifest a sender seals.
+//
+// Everything here is asserted against the BYTES a delivery produced, opened
+// with its own content key, rather than against the intermediate values the
+// sender happened to compute. That is the only way to check the property that
+// matters: a v2 receiver opens frame 0 with the v2 codec, so a sender that
+// sealed the shared Stored-Wire manifest has produced a delivery its own
+// receiver refuses as `verify_failed` — after the whole file has been uploaded,
+// queued and downloaded.
+describe("the sealed v2 manifest", () => {
+  it("seals a file delivery's names, sizes and order, hierarchy included", async () => {
+    await sendFilesToDevice(targetSpec(), FILES(), sendOpts());
+    const manifest = await sealedManifest(contentKeyFromCreate());
+
+    expect(manifest.v).toBe(2);
+    expect(manifest.items.map((i) => i.kind)).toEqual(["file", "file"]);
+    // Item order is the SENDER's and is never sorted: item i describes the
+    // payload frames of blob i, so reordering renames every file.
+    expect(manifest.items.map((i) => i.name)).toEqual(FILE_NAMES);
+    expect(manifest.items.map((i) => i.size)).toEqual(FILE_SIZES);
+  });
+
+  it("keeps a folder's hierarchy and an empty file, and matches the payload order", async () => {
+    const picked = [
+      { file: new File([new TextEncoder().encode("second")], "IMG_0002.jpg"), path: "trip/day 1/IMG_0002.jpg" },
+      { file: new File([new TextEncoder().encode("first")], "IMG_0001.jpg"), path: "trip/day 1/IMG_0001.jpg" },
+      // An empty file is a real file: a manifest item of size 0 and no frame.
+      { file: new File([], "empty.txt"), path: "trip/notes/empty.txt" },
+      { file: new File([new TextEncoder().encode("hello device inbox")], "readme.md") },
+    ];
+    await sendFilesToDevice(targetSpec(), picked, sendOpts());
+    const key = contentKeyFromCreate();
+    const manifest = await sealedManifest(key);
+
+    expect(manifest.items.map((i) => i.name)).toEqual([
+      "trip/day 1/IMG_0002.jpg",
+      "trip/day 1/IMG_0001.jpg",
+      "trip/notes/empty.txt",
+      "readme.md",
+    ]);
+    expect(manifest.items.map((i) => i.size)).toEqual([6, 5, 0, 18]);
+    expect(new TextDecoder().decode(await payloadPlaintext(key))).toBe("secondfirsthello device inbox");
+  });
+
+  it("a share upload's frame 0 is still the shared Stored-Wire manifest", async () => {
+    const { uploadFileResumable } = await import("./stored-file");
+    const out = await uploadFileResumable([new File(["x"], "a.txt")], { burnAfterRead: true, ttl: 3600 });
+    const shared = await decryptManifest(await importStoreKey(decodeKey(out.key)), frameZero());
+    expect(shared.files).toEqual([{ name: "a.txt", size: 1 }]);
+  });
+
+  it("refuses a name no receiver would accept, before a byte is uploaded", async () => {
+    for (const name of ["../../etc/passwd", "/etc/passwd", "a\\b.txt", "a/../b"]) {
+      calls = [];
+      await expect(
+        sendFilesToDevice(targetSpec(), [{ file: new File(["x"], "x"), path: name }], sendOpts()),
+      ).rejects.toMatchObject({ code: "unsendable_content" });
+      expect(uploadInits(), `${name} reached the network`).toHaveLength(0);
+      expect(creates()).toHaveLength(0);
+    }
+  });
+
+  it("refuses to seal a v2 manifest onto a share, or the shared one onto a delivery", async () => {
+    const { uploadFileResumable, ManifestPurposeMismatchError } = await import("./stored-file");
+    // A share carrying a v2 manifest is a download page that cannot read its
+    // own file list.
+    await expect(
+      uploadFileResumable([new File(["x"], "a.txt")], {
+        burnAfterRead: false,
+        ttl: 3600,
+        sealedManifest: new TextEncoder().encode('{"v":2,"items":[{"kind":"file","name":"a.txt","size":1}]}'),
+      }),
+    ).rejects.toBeInstanceOf(ManifestPurposeMismatchError);
+    // And the reverse: a delivery that did not seal its own document would seal
+    // the shared one, which its own receiver refuses as `verify_failed`.
+    await expect(
+      uploadFileResumable([new File(["x"], "a.txt")], {
+        burnAfterRead: false,
+        ttl: 3600,
+        purpose: "device_task",
+      }),
+    ).rejects.toBeInstanceOf(ManifestPurposeMismatchError);
+    expect(uploadInits(), "a refused upload still opened a session").toHaveLength(0);
+  });
+});
+
+describe("sending a message", () => {
+  const MESSAGE = "meet me at 6 — 会议室 B";
+
+  it("seals one text item carrying only its byte length", async () => {
+    await sendTextToDevice(targetSpec(), MESSAGE, sendOpts());
+    const manifest = await sealedManifest(contentKeyFromCreate());
+
+    expect(manifest.items).toHaveLength(1);
+    expect(manifest.items[0].kind).toBe("text");
+    // A text item has NO name key: an empty string is something a receiver
+    // could be tempted to treat as a destination, an absent one cannot be.
+    expect("name" in manifest.items[0]).toBe(false);
+    expect(manifest.items[0].size).toBe(new TextEncoder().encode(MESSAGE).length);
+  });
+
+  it("carries the body in the payload frames and nowhere else", async () => {
+    await sendTextToDevice(targetSpec(), MESSAGE, sendOpts());
+    const key = contentKeyFromCreate();
+    expect(new TextDecoder().decode(await payloadPlaintext(key))).toBe(MESSAGE);
+
+    // Not in the manifest frame, and not anywhere central can read it: every
+    // request URL and body, hexed, must not contain the message's bytes.
+    const body = new TextEncoder().encode(MESSAGE);
+    const everything: string[] = [];
+    for (const c of calls) {
+      everything.push(c.url);
+      everything.push(hex(await toBytes(c.body)));
+    }
+    const blob = everything.join("\n");
+    expect(blob).not.toContain(hex(body));
+    expect(blob).not.toContain(MESSAGE);
+    expect(hex(frameZero())).not.toContain(hex(body));
+  });
+
+  it("creates the task with exactly the seven opaque fields a file send uses", async () => {
+    await sendTextToDevice(targetSpec(), MESSAGE, sendOpts());
+    const body = JSON.parse(String(created()!.body));
+
+    expect(Object.keys(body).sort()).toEqual([
+      "idempotencyKey",
+      "protocolVersion",
+      "storedFileId",
+      "targetKeyGeneration",
+      "targetKeyId",
+      "wrapAlgorithm",
+      "wrappedKey",
+    ]);
+    expect(body.protocolVersion).toBe(INBOX_PROTOCOL_VERSION);
+    // Kind is sealed. Nothing on this request may name it, or name what the
+    // delivery contains, ever.
+    for (const forbidden of ["kind", "text", "message", "name", "path", "manifest", "itemCount"]) {
+      expect(Object.keys(body), `the create carried ${forbidden}`).not.toContain(forbidden);
+    }
+    expect(String(created()!.body)).not.toContain(MESSAGE);
+  });
+
+  it("is indistinguishable from a file delivery on the wire", async () => {
+    await sendTextToDevice(targetSpec(), MESSAGE, sendOpts());
+    const messageInit = uploadInits()[0].url;
+    const messageCreate = Object.keys(JSON.parse(String(created()!.body))).sort();
+
+    calls = [];
+    await sendFilesToDevice(targetSpec(), FILES(), sendOpts());
+    expect(uploadInits()[0].url.replace(/size=\d+/, "size=N")).toBe(messageInit.replace(/size=\d+/, "size=N"));
+    expect(Object.keys(JSON.parse(String(created()!.body))).sort()).toEqual(messageCreate);
+  });
+
+  it("refuses a target that would not present a message as a message", async () => {
+    await expect(sendTextToDevice(targetSpec(false), MESSAGE, sendOpts())).rejects.toMatchObject({
+      code: "text_unsupported",
+    });
+    expect(uploadInits(), "the ciphertext was uploaded anyway").toHaveLength(0);
+    expect(creates()).toHaveLength(0);
+  });
+
+  it("fails closed when the target's capabilities are unknown", async () => {
+    const spec = targetSpec();
+    delete (spec as { capabilities?: unknown }).capabilities;
+    await expect(sendTextToDevice(spec, MESSAGE, sendOpts())).rejects.toMatchObject({
+      code: "text_unsupported",
+    });
+  });
+
+  it("sends FILES to that same target without the text capability", async () => {
+    // The other half of the rule, and the more important one: requiring
+    // `inbox.text.v1` of a file send would refuse the CLI, iOS, and every other
+    // receiver that takes files perfectly well and renders no messages.
+    const task = await sendFilesToDevice(targetSpec(false), FILES(), sendOpts());
+    expect(task.ID).toBe(TASK_ID);
+    expect(uploadInits()[0].url).toContain("purpose=device_task");
+    expect((await sealedManifest(contentKeyFromCreate())).items[0].kind).toBe("file");
+  });
+
+  it("refuses an empty message and one over 64 KiB, in UTF-8 bytes", async () => {
+    await expect(sendTextToDevice(targetSpec(), "", sendOpts())).rejects.toMatchObject({
+      code: "empty_message",
+    });
+    await expect(
+      sendTextToDevice(targetSpec(), "a".repeat(INBOX_MANIFEST_MAX_TEXT_BYTES + 1), sendOpts()),
+    ).rejects.toMatchObject({ code: "message_too_long" });
+    // One emoji is four UTF-8 bytes, so a per-character bound would let this
+    // past a check the seal then refuses.
+    await expect(
+      sendTextToDevice(targetSpec(), "🙂".repeat(INBOX_MANIFEST_MAX_TEXT_BYTES / 4 + 1), sendOpts()),
+    ).rejects.toMatchObject({ code: "message_too_long" });
+    expect(uploadInits()).toHaveLength(0);
+    expect(creates()).toHaveLength(0);
+  });
+
+  it("accepts both ends of the range", async () => {
+    for (const size of [1, INBOX_MANIFEST_MAX_TEXT_BYTES]) {
+      calls = [];
+      await sendTextToDevice(targetSpec(), "a".repeat(size), sendOpts());
+      expect((await sealedManifest(contentKeyFromCreate())).items[0].size).toBe(size);
+    }
+  });
+
+  it("one delivery is one kind: nothing can attach a file to a message", async () => {
+    await sendTextToDevice(targetSpec(), MESSAGE, sendOpts());
+    const manifest = await sealedManifest(contentKeyFromCreate());
+    expect(new Set(manifest.items.map((i) => i.kind)).size).toBe(1);
+  });
+
+  it("converges a retry onto one delivery, exactly as a file send does", async () => {
+    // The first create's answer is lost; the second carries the SAME
+    // idempotency key, so central converges rather than queueing a second
+    // message — and the delivery is still a message.
+    let attempt = 0;
+    handlers.push((c) => {
+      if (c.url.includes("/inbox/tasks") && c.method === "POST" && attempt++ === 0) {
+        return new Response("", { status: 502 });
+      }
+      return undefined;
+    });
+    const task = await sendTextToDevice(targetSpec(), MESSAGE, sendOpts());
+
+    expect(task.ID).toBe(TASK_ID);
+    expect(creates()).toHaveLength(2);
+    const keys = creates().map((c) => JSON.parse(String(c.body)).idempotencyKey);
+    expect(new Set(keys).size, "the retry minted a second idempotency key").toBe(1);
+    expect(uploadInits(), "the retry re-uploaded the ciphertext").toHaveLength(1);
+    expect((await sealedManifest(contentKeyFromCreate())).items[0].kind).toBe("text");
+  });
+
+  it("stays a message across a key rotation and reseal", async () => {
+    const rotated = sodium.crypto_box_keypair();
+    let attempt = 0;
+    handlers.push((c) => {
+      if (c.url.includes("/inbox/keys")) {
+        return json({
+          keys: [
+            {
+              ID: "k2",
+              Algorithm: INBOX_KEY_ALGORITHM,
+              PublicKey: encodeKey(rotated.publicKey),
+              Generation: 2,
+              SupersededAt: 0,
+              RevokedAt: 0,
+            },
+          ],
+        });
+      }
+      if (c.url.includes("/inbox/tasks") && c.method === "POST" && attempt++ === 0) {
+        return json({ error: "stale_target_key" }, 409);
+      }
+      return undefined;
+    });
+
+    await sendTextToDevice(targetSpec(), MESSAGE, sendOpts());
+
+    expect(creates()).toHaveLength(2);
+    expect(JSON.parse(String(creates()[1].body)).targetKeyId).toBe("k2");
+    expect(uploadInits(), "a reseal must not re-upload a byte").toHaveLength(1);
+    // The reseal wrapped the SAME content key, so the manifest it opens is the
+    // one the first attempt sealed — still a message, never a file.
+    const body = JSON.parse(String(creates()[1].body));
+    const sealed = sodium.from_base64(body.wrappedKey, sodium.base64_variants.URLSAFE_NO_PADDING);
+    const key = sodium.crypto_box_seal_open(sealed, rotated.publicKey, rotated.privateKey);
+    expect((await sealedManifest(key)).items[0].kind).toBe("text");
+  });
+});
+
+describe("who may be offered a text send", () => {
+  const inboxView = (over: Record<string, unknown> = {}) => ({
+    Presence: "online",
+    LastHeartbeatAt: 1,
+    PresenceExpiresAt: 2,
+    HeartbeatIntervalSeconds: 30,
+    ProtocolVersion: 2,
+    Capabilities: [CAP_RECEIVE_V2, CAP_TEXT_V1],
+    ReceiveCapability: CAP_RECEIVE_V2,
+    AutoAccept: "auto",
+    ReceiveDirReady: true,
+    Platform: "macos",
+    AppVersion: "1.0",
+    Revoked: false,
+    CanReceive: true,
+    RegisteredAt: 1,
+    Key: {
+      ID: "k1",
+      Algorithm: INBOX_KEY_ALGORITHM,
+      PublicKey: encodeKey(target.publicKey),
+      Generation: 1,
+      CreatedAt: 1,
+      SupersededAt: 0,
+      RevokedAt: 0,
+    },
+    ...over,
+  });
+
+  it("follows the announced token", async () => {
+    const { canSendText, parseDeviceInbox } = await import("./device-inbox");
+    expect(canSendText(DEVICE_ID, parseDeviceInbox(inboxView()))).toBe(true);
+    expect(canSendText(DEVICE_ID, parseDeviceInbox(inboxView({ Capabilities: [CAP_RECEIVE_V2] })))).toBe(false);
+    expect(canSendText(DEVICE_ID, null)).toBe(false);
+  });
+
+  it("does not suppress text for an unusable receive folder", async () => {
+    // A message is never written to the receive folder, so a folder that is not
+    // ready has nothing to do with whether one can land. It stays a truthful
+    // FILE caveat and blocks nothing.
+    const { canSendText, sendAvailability, parseDeviceInbox } = await import("./device-inbox");
+    const inbox = parseDeviceInbox(inboxView({ ReceiveDirReady: false }));
+    expect(canSendText(DEVICE_ID, inbox)).toBe(true);
+    const avail = sendAvailability(DEVICE_ID, inbox);
+    expect(avail.sendable).toBe(true);
+    expect(avail.caveats).toContain("directory_not_ready");
+  });
+
+  it("still refuses text on a device no send may reach at all", async () => {
+    const { canSendText, parseDeviceInbox } = await import("./device-inbox");
+    for (const over of [{ Revoked: true }, { CanReceive: false }, { AutoAccept: "off" }]) {
+      expect(canSendText(DEVICE_ID, parseDeviceInbox(inboxView(over))), JSON.stringify(over)).toBe(false);
     }
   });
 });

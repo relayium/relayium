@@ -314,7 +314,9 @@ describe("choosing files", () => {
     input.dispatchEvent(new Event("change", { bubbles: true }));
     await settle();
     expect(sendSpy).toHaveBeenCalledTimes(1);
-    expect(sendSpy.mock.calls[0][1]).toEqual([f]);
+    // Named entries, not bare Files: the manifest name is the relative path a
+    // folder send has to keep, and it is decided here rather than downstream.
+    expect(sendSpy.mock.calls[0][1]).toEqual([{ file: f, path: undefined }]);
     expect(sendSpy.mock.calls[0][0]).toMatchObject({ deviceID: DEVICE_ID, keyID: "k1", keyGeneration: 1 });
   });
 
@@ -325,7 +327,7 @@ describe("choosing files", () => {
     q(".sendzone")!.dispatchEvent(dropEvent([f]));
     await settle();
     expect(sendSpy).toHaveBeenCalledTimes(1);
-    expect(sendSpy.mock.calls[0][1]).toEqual([f]);
+    expect(sendSpy.mock.calls[0][1]).toEqual([{ file: f }]);
   });
 
   it("a drag that announced files and delivered none is refused out loud", async () => {

@@ -12,7 +12,7 @@
   import { lang, messages, type Messages } from "./i18n.svelte";
   import { session } from "./auth.svelte";
   import { formatSize } from "./format";
-  import { hasFiles, filesFromDataTransfer } from "./drag";
+  import { hasFiles, filesFromDataTransfer, pickedFromInput, type PickedFile } from "./drag";
   import { confirmDialog } from "./confirm-dialog.svelte";
   import { DEVICE_NAME_MAX, normalizeDeviceName } from "./device-identity";
   import {
@@ -302,11 +302,14 @@
 
   // ── sending ──────────────────────────────────────────────────────────────
 
-  async function startSend(files: File[]) {
+  /** `picked` carries each file's relative path as well as its bytes, so a
+   *  dropped folder keeps its shape inside the encrypted manifest. Dropping the
+   *  path here would flatten a folder into a pile of files on the other device. */
+  async function startSend(picked: PickedFile[]) {
     if (!avail.sendable || busy) return;
     const key = inbox?.Key;
     if (!key) return;
-    if (!files.length) {
+    if (!picked.length) {
       dropRejected = true;
       return;
     }
@@ -317,8 +320,8 @@
     cancelFailed = false;
     dropRejected = false;
     pollAttempt = 0;
-    fileCount = files.length;
-    fileBytes = files.reduce((n, f) => n + f.size, 0);
+    fileCount = picked.length;
+    fileBytes = picked.reduce((n, p) => n + p.file.size, 0);
     local = "encrypting";
     sent = 0;
     total = fileBytes;
@@ -332,8 +335,11 @@
           keyGeneration: key.Generation,
           algorithm: key.Algorithm,
           publicKey: key.PublicKey,
+          // Carried even though a file send never reads it, so the target this
+          // card builds describes the device rather than describing one action.
+          capabilities: inbox?.Capabilities,
         },
-        files,
+        picked,
         {
           ttl: DELIVERY_TTL_SECONDS,
           idempotencyKey: newIdempotencyKey(),
@@ -395,7 +401,10 @@
 
   function onPick(e: Event) {
     const input = e.currentTarget as HTMLInputElement;
-    const picked = input.files ? Array.from(input.files) : [];
+    // Through the shared normalizer, which reads `webkitRelativePath` — empty
+    // for the plain multi-file pick this input offers, and the folder's own path
+    // for anything that arrives carrying one.
+    const picked = input.files ? pickedFromInput(input.files) : [];
     input.value = ""; // so choosing the same file twice still fires a change
     void startSend(picked);
   }
@@ -438,13 +447,14 @@
     // the browser would not hand over — IS refused out loud: it was aimed here
     // and nothing happened, which is the one case silence would be misread as
     // a send.
+    // The walker keeps each file's relative path, and it is carried through to
+    // the manifest rather than flattened away here.
     const picked = await filesFromDataTransfer(e.dataTransfer);
-    const files = picked.map((p) => p.file);
-    if (!files.length) {
+    if (!picked.length) {
       dropRejected = true;
       return;
     }
-    void startSend(files);
+    void startSend(picked);
   }
 
   // ── copy ─────────────────────────────────────────────────────────────────

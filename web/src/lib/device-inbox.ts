@@ -270,6 +270,33 @@ export function sendAvailability(deviceID: string, inbox: DeviceInboxView | null
   return { ...base, sendable: true, caveats };
 }
 
+/** Would offering a TEXT send to this device be honest?
+ *
+ *  Deliberately NOT folded into `sendAvailability`, and the separation is the
+ *  point in both directions:
+ *
+ *   * a receiver without `inbox.text.v1` is a perfectly good FILE target, so
+ *     requiring the token in the general verdict would refuse ordinary file
+ *     deliveries to every build that does not render messages — the CLI, iOS,
+ *     and the headless receiver among them;
+ *   * a receiver without it would land a message as a file in somebody's
+ *     downloads folder, so offering "send text" to it would promise a message
+ *     and deliver a file.
+ *
+ *  Central neither requires nor interprets the token and could not verify it if
+ *  it wanted to — content kind is sealed — so its absence is read as the
+ *  truthful answer rather than as a stale list.
+ *
+ *  The receive FOLDER is deliberately not consulted. A message is never written
+ *  there, so a missing, revoked or unwritable folder has nothing to do with
+ *  whether one can land: the receiver classifies kind first and consults the
+ *  folder second (protocol v2 §13.1). `directory_not_ready` stays a truthful
+ *  FILE caveat on `sendAvailability` and suppresses nothing here. */
+export function canSendText(deviceID: string, inbox: DeviceInboxView | null): boolean {
+  if (!sendAvailability(deviceID, inbox).sendable) return false;
+  return !!inbox && inbox.Capabilities.includes(CAP_TEXT_V1);
+}
+
 // ── Sender-local phases vs. server states ──────────────────────────────────
 
 /** PRD §10 items 1-2. Central stores neither and refuses them by name
@@ -425,6 +452,14 @@ export const SEND_ERROR_CODES = [
   "cancelled",
   "unsupported_key", // the target's key is not one this client may wrap to
   "no_files", // an empty or file-less drop
+  // Message-only, and never reachable from a file send: the target does not
+  // announce `inbox.text.v1`, so it would not present a message AS a message.
+  "text_unsupported",
+  "empty_message", // an empty message is not a message
+  "message_too_long", // over 64 KiB of UTF-8 (protocol v2 §9)
+  // The names or sizes themselves are ones no receiver would accept, so the
+  // manifest could not be sealed. Terminal: a retry rebuilds the same refusal.
+  "unsendable_content",
   "unknown",
 ] as const;
 export type SendErrorCode = (typeof SEND_ERROR_CODES)[number];

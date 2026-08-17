@@ -10,6 +10,7 @@ import {
   decodeKey,
   encodeKey,
   completionVerifier,
+  sealManifestBytes,
   StoreDecryptor,
   STORE_CHUNK_SIZE,
   FRAME_OVERHEAD,
@@ -47,6 +48,19 @@ export interface RetainedUploadOptions {
   /** Omitted means `share`, exactly as the server resolves an absent
    *  `?purpose=`. Never inferred from anything else. */
   purpose?: "share" | "device_task";
+  /** The plaintext frame-0 document, when this upload seals its own.
+   *
+   *  A Device Inbox delivery's frame 0 is the dedicated v2 manifest
+   *  (`inbox-manifest.ts`), which carries the delivery's content kind; a share's
+   *  is the shared Stored-Wire manifest, whose bytes are frozen and interop
+   *  tested across unrelated products. Neither may be the other, so this field
+   *  and `purpose` are checked against each other before a byte is encrypted —
+   *  see `checkedManifest`.
+   *
+   *  Already canonical when it arrives: `encodeInboxManifestBytes` produced it,
+   *  and the frozen cross-language vectors pin that spelling. Nothing here
+   *  re-encodes or re-validates it. */
+  sealedManifest?: Uint8Array;
 }
 
 /** A pre-upload into a pairing room.
@@ -91,6 +105,34 @@ function uploadQuery(opts: UploadOptions): string {
   }
   const q = `?burnAfterRead=${opts.burnAfterRead ? 1 : 0}&ttl=${opts.ttl}`;
   return opts.purpose && opts.purpose !== "share" ? `${q}&purpose=${encodeURIComponent(opts.purpose)}` : q;
+}
+
+/** An upload whose purpose and frame-0 document do not agree. Thrown before a
+ *  byte is encrypted, because neither mistake is recoverable where it would
+ *  otherwise be discovered: a `device_task` object carrying the shared manifest
+ *  is refused by its own v2 receiver as `verify_failed`, after the whole
+ *  ciphertext has been uploaded, queued and downloaded; a share carrying a v2
+ *  manifest is a download page that cannot read its own file list. */
+export class ManifestPurposeMismatchError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ManifestPurposeMismatchError";
+  }
+}
+
+/** The frame-0 document this upload may seal, or `undefined` for the shared
+ *  Stored-Wire manifest. Checked in BOTH directions, so neither purpose can end
+ *  up carrying the other's document. */
+function checkedManifest(opts: UploadOptions): Uint8Array | undefined {
+  const sealed = isPairRoom(opts) ? undefined : opts.sealedManifest;
+  const isDelivery = opts.purpose === "device_task";
+  if (isDelivery && !sealed) {
+    throw new ManifestPurposeMismatchError("a Device Inbox delivery must seal its own v2 manifest");
+  }
+  if (!isDelivery && sealed) {
+    throw new ManifestPurposeMismatchError(`purpose ${opts.purpose ?? "share"} may not seal its own manifest`);
+  }
+  return sealed;
 }
 
 export interface StoredFileMeta {
@@ -301,9 +343,14 @@ export async function uploadFile(
   // bytes and real time, and this path is also uploadFileResumable's fallback —
   // see the pair-room clause there.
   if (isPairRoom(opts)) throw new Error("pair-room uploads must use the resumable path");
+  const sealed = checkedManifest(opts);
   const sk = await generateStoreKey();
-  const manifest: StoredManifest = { files: files.map((f) => ({ name: f.name, size: f.size })) };
-  const encManifest = await encryptManifest(sk.key, manifest);
+  // A caller-sealed document replaces the shared manifest entirely — the
+  // Stored-Wire one is not built at all, so a delivery's file names never even
+  // reach the shared encoder.
+  const encManifest = sealed
+    ? await sealManifestBytes(sk.key, sealed)
+    : await encryptManifest(sk.key, { files: files.map((f) => ({ name: f.name, size: f.size })) });
 
   const total = files.reduce((n, f) => n + f.size, 0);
   const header = new Uint8Array(4);
@@ -379,6 +426,11 @@ export async function uploadFileResumable(
     // the single-shot path in answer to a response that was already malformed,
     // and there is nothing to retry — the same id would be refused again.
     if (e instanceof InvalidStoredObjectIdError) throw e;
+    // A purpose/manifest mismatch is this client refusing itself, not a server
+    // too old to offer /api/uploads. The single-shot path applies the identical
+    // check, so falling through would only reach the same refusal one layer
+    // later — with the caller told the fallback failed instead.
+    if (e instanceof ManifestPurposeMismatchError) throw e;
     if (e instanceof UploadError && (e.status === 413 || e.status === 429 || e.status === 401)) throw e;
     if (cipherSizeFor(files) > FALLBACK_MAX_CIPHER_BYTES) throw e;
     return uploadFile(files, opts, onProgress, signal);
@@ -409,9 +461,13 @@ async function chunkedUpload(
   onProgress?: (p: UploadProgress) => void,
   signal?: AbortSignal,
 ): Promise<UploadResult> {
+  const sealed = checkedManifest(opts);
   const sk = await generateStoreKey();
-  const manifest: StoredManifest = { files: files.map((f) => ({ name: f.name, size: f.size })) };
-  const encManifest = await encryptManifest(sk.key, manifest);
+  // See `uploadFile`: a caller-sealed document replaces the shared manifest
+  // rather than being merged into it.
+  const encManifest = sealed
+    ? await sealManifestBytes(sk.key, sealed)
+    : await encryptManifest(sk.key, { files: files.map((f) => ({ name: f.name, size: f.size })) });
 
   // 密文总长可以在加密之前精确算出来 —— 流式之后没有 Blob 可以问 .size，而 init
   // 的 ?size= 需要它（服务端只拿它做提前拒绝，不入库、finalize 不校验）。

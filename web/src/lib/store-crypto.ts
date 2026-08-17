@@ -71,8 +71,23 @@ export function decodeKey(s: string): Bytes {
 
 export async function encryptManifest(key: CryptoKey, m: StoredManifest): Promise<Bytes> {
   validateManifestFiles(m?.files);
-  const pt = enc.encode(JSON.stringify(m)) as Bytes;
-  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce(0) }, key, pt);
+  return sealManifestBytes(key, enc.encode(JSON.stringify(m)) as Bytes);
+}
+
+/** Seal an ALREADY-CANONICAL manifest document at the frame-0 AEAD unit.
+ *
+ *  The one thing frame 0 is: sequence 0 under the object's content key. What
+ *  document it carries is the caller's, which is what lets a Device Inbox
+ *  delivery seal the dedicated v2 manifest (`inbox-manifest.ts`) at the same
+ *  position a share seals the Stored-Wire one, with the framing, chunking and
+ *  AEAD around it completely unchanged.
+ *
+ *  It validates NOTHING, deliberately: the bytes are the caller's canonical
+ *  spelling, pinned by that format's own frozen vectors, and re-deriving them
+ *  here would be a second encoder to disagree with. `encryptManifest` above
+ *  keeps the shared manifest's validation next to the shared manifest. */
+export async function sealManifestBytes(key: CryptoKey, plaintext: Uint8Array): Promise<Bytes> {
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce(0) }, key, plaintext as Bytes);
   return new Uint8Array(ct);
 }
 

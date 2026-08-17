@@ -102,7 +102,17 @@ describe("pair-room finalize carries a completion verifier", () => {
 
   it("sends no body at all for a device-task upload", async () => {
     const seen = installFinalizeCapture();
-    await uploadFileResumable([file()], { burnAfterRead: false, ttl: 3600, purpose: "device_task" });
+    await uploadFileResumable([file()], {
+      burnAfterRead: false,
+      ttl: 3600,
+      purpose: "device_task",
+      // A Device Inbox delivery seals its own frame-0 document, and the upload
+      // path refuses the purpose without one — the shared manifest is exactly
+      // what its v2 receiver would refuse as `verify_failed`. Irrelevant to what
+      // this test is about, which is the FINALIZE body, but it is what makes a
+      // delivery upload reachable at all.
+      sealedManifest: new TextEncoder().encode('{"v":2,"items":[{"kind":"file","name":"a.txt","size":3}]}'),
+    });
     expect(seen.finalizeBody).toBeUndefined();
   });
 });

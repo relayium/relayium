@@ -25,12 +25,23 @@
 import {
   UploadError,
   InvalidStoredObjectIdError,
+  ManifestPurposeMismatchError,
   uploadFileResumable,
   type UploadProgress,
 } from "./stored-file";
 import { decodeKey } from "./store-crypto";
 import { sealContentKey, UnusableDeviceKeyError } from "./device-seal";
 import {
+  encodeInboxManifestBytes,
+  fileManifest,
+  textManifest,
+  InboxManifestError,
+  INBOX_MANIFEST_MAX_TEXT_BYTES,
+  INBOX_MANIFEST_MIN_TEXT_BYTES,
+} from "./inbox-manifest";
+import type { PickedFile } from "./drag";
+import {
+  CAP_TEXT_V1,
   INBOX_KEY_ALGORITHM,
   INBOX_PROTOCOL_VERSION,
   httpSendErrorCode,
@@ -67,7 +78,24 @@ export interface SendTarget {
   keyGeneration: number;
   algorithm: string;
   publicKey: string;
+  /** What the target device announced. Read only by `sendTextToDevice`, which
+   *  requires `inbox.text.v1`; a FILE send never consults it, because requiring
+   *  it there would refuse every receiver that has no message surface.
+   *
+   *  Optional and fail-CLOSED: a caller that does not supply it cannot send a
+   *  message, which is the safe direction — the cost of being wrong the other
+   *  way is a message written into somebody's downloads folder as a file. */
+  capabilities?: readonly string[];
 }
+
+/** One outgoing file: the bytes, plus the "/"-separated relative path a folder
+ *  send has to keep.
+ *
+ *  Structurally `drag.ts`'s `PickedFile`, and deliberately the same type rather
+ *  than a copy: the walker that flattens a dropped folder is where the path
+ *  comes from, and a send that took bare `File`s would have to throw it away —
+ *  a folder would arrive on the other device as a flat pile of files. */
+export type OutgoingFile = PickedFile;
 
 export interface SendOptions {
   /** Requested retention of the ciphertext. Clamped by central and by the
@@ -105,6 +133,10 @@ function failureFor(e: unknown, signal?: AbortSignal): SendFailure {
     return new SendFailure("cancelled");
   }
   if (e instanceof UnusableDeviceKeyError) return new SendFailure("unsupported_key");
+  // This client refusing itself: the purpose and the frame-0 document did not
+  // agree. Reported as its own terminal code rather than as a network failure,
+  // which would invite a retry that cannot succeed.
+  if (e instanceof ManifestPurposeMismatchError) return new SendFailure("unsendable_content");
   // A refused identifier is a trust-boundary failure, not a user-visible quota
   // or auth problem — reported as `unknown` rather than guessed at, and never
   // with the offending value.
@@ -291,20 +323,96 @@ async function releaseObject(storedFileId: string): Promise<void> {
  *  than duplicating. */
 const CREATE_ATTEMPTS = 3;
 
-/** Encrypt, upload and queue one delivery. Resolves with the task central
- *  actually holds, or throws `SendFailure`.
+/** What one delivery seals and sends: the canonical frame-0 document, and the
+ *  payload blobs whose frames follow it in exactly this order. */
+interface Delivery {
+  manifest: Uint8Array;
+  payload: File[];
+}
+
+/** Encrypt, upload and queue one FILE OR FOLDER delivery. Resolves with the task
+ *  central actually holds, or throws `SendFailure`.
  *
- *  Never creates a share link, never persists the content key: the key exists
- *  in this function's locals and inside the sealed box, and nowhere else. The
- *  caller gets a task id, not a key. */
+ *  `files` carries each item's manifest NAME as well as its bytes, so a folder
+ *  send keeps its shape: the name is the "/"-separated relative path, sealed
+ *  inside the manifest and visible to nobody in between.
+ *
+ *  Deliberately does NOT require `inbox.text.v1` of its target. That token says
+ *  the receiver presents a message as a message, which has nothing to do with
+ *  whether it can take a file. */
 export async function sendFilesToDevice(
   target: SendTarget,
-  files: File[],
+  files: OutgoingFile[],
+  opts: SendOptions,
+): Promise<InboxTaskView> {
+  if (!files.length) throw new SendFailure("no_files");
+  let delivery: Delivery;
+  try {
+    // Item order is the caller's and is never sorted: item i describes the
+    // payload frames of blob i, so reordering would rename every file.
+    delivery = {
+      manifest: encodeInboxManifestBytes(
+        fileManifest(files.map((f) => ({ name: f.path ?? f.file.name, size: f.file.size }))),
+      ),
+      payload: files.map((f) => f.file),
+    };
+  } catch (e) {
+    // A name no receiver would accept — traversal, a control character, a
+    // backslash — fails the send here rather than after the upload, which is
+    // where the receiver would otherwise refuse it. Terminal either way.
+    if (e instanceof InboxManifestError) throw new SendFailure("unsendable_content");
+    throw new SendFailure("unknown");
+  }
+  return deliver(target, delivery, opts);
+}
+
+/** Encrypt, upload and queue one MESSAGE. Exactly one nonempty UTF-8 message of
+ *  at most 64 KiB, and no attachments: one delivery is one kind.
+ *
+ *  The body travels ONLY in the encrypted payload frames. The manifest declares
+ *  its length and nothing else, and the create request central sees is the same
+ *  seven opaque fields a file send produces — so a message and a file delivery
+ *  are indistinguishable to the server, to its operators, and to anyone reading
+ *  its storage.
+ *
+ *  Refused outright for a target that does not announce `inbox.text.v1`: that
+ *  build would land the message as a file in the user's downloads folder, and
+ *  offering the action at all would promise something else. */
+export async function sendTextToDevice(
+  target: SendTarget,
+  message: string,
+  opts: SendOptions,
+): Promise<InboxTaskView> {
+  // Measured in UTF-8 BYTES, which is what the manifest declares and what the
+  // receiver re-measures. A per-character bound would let one emoji past a
+  // check the seal then refuses.
+  const body = new TextEncoder().encode(message);
+  if (body.length < INBOX_MANIFEST_MIN_TEXT_BYTES) throw new SendFailure("empty_message");
+  if (body.length > INBOX_MANIFEST_MAX_TEXT_BYTES) throw new SendFailure("message_too_long");
+  if (!target.capabilities?.includes(CAP_TEXT_V1)) throw new SendFailure("text_unsupported");
+  return deliver(
+    target,
+    {
+      manifest: encodeInboxManifestBytes(textManifest(body.length)),
+      // A `File` because that is what the chunked encryptor reads, and its name
+      // is never used: the manifest omits `name` entirely for a text item, and
+      // the upload path does not build a Stored-Wire manifest for a delivery at
+      // all.
+      // nonlocalized: an internal blob label, never sealed and never displayed
+      payload: [new File([body as BlobPart], "message")],
+    },
+    opts,
+  );
+}
+
+/** The wire half every delivery shares, whatever it contains. */
+async function deliver(
+  target: SendTarget,
+  delivery: Delivery,
   opts: SendOptions,
 ): Promise<InboxTaskView> {
   const { signal, onProgress } = opts;
   if (!isInertId(target.deviceID)) throw new SendFailure("unsupported_key");
-  if (!files.length) throw new SendFailure("no_files");
   if (aborted(signal)) throw new SendFailure("cancelled");
 
   let storedFileId = "";
@@ -317,11 +425,22 @@ export async function sendFilesToDevice(
   };
   try {
     const uploaded = await uploadFileResumable(
-      files,
+      delivery.payload,
       // burnAfterRead is false and maxDownloads is never sent: the queue
       // requires an unlimited-until-TTL object and central refuses the
       // contradiction by name rather than rewriting it (protocol §25).
-      { burnAfterRead: false, ttl: opts.ttl, purpose: "device_task" },
+      //
+      // `sealedManifest` is what makes frame 0 the Device Inbox v2 document
+      // rather than the shared Stored-Wire one. It is REQUIRED for this purpose
+      // and refused for every other, in both directions, before a byte is
+      // encrypted — a delivery that sealed the shared manifest would be refused
+      // by its own receiver as `verify_failed`.
+      {
+        burnAfterRead: false,
+        ttl: opts.ttl,
+        purpose: "device_task",
+        sealedManifest: delivery.manifest,
+      },
       (p: UploadProgress) => onProgress?.({ phase: p.phase, sent: p.sent, total: p.total }),
       signal,
     );
