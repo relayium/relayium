@@ -184,7 +184,13 @@ func (c *AppleServerAPIClient) probeTestNotification(ctx context.Context, enviro
 	}
 	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	resp.Body.Close()
-	if readErr != nil || resp.StatusCode != http.StatusOK {
+	if readErr != nil {
+		return fmt.Errorf("stage A: %s %s API returned an invalid response", environment, app.BundleID)
+	}
+	if environment == appleEnvSandbox && resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("stage B: %s %s TEST delivery is not configured (HTTP 404)", environment, app.BundleID)
+	}
+	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("stage A: %s %s API returned HTTP %d", environment, app.BundleID, resp.StatusCode)
 	}
 	var created struct {

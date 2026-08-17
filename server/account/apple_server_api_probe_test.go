@@ -104,28 +104,30 @@ func TestAppleServerAPIProbeUsesSharedJWTAndVerifiesSuccessfulTest(t *testing.T)
 func TestAppleServerAPIProbeFailsClosed(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
+		env     string
 		handler http.Handler
 		want    string
 	}{
-		{"stage A terminal", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Error(w, "secret", http.StatusForbidden) }), "stage A"},
-		{"stage A malformed token", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		{"stage A terminal", appleEnvProduction, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.Error(w, "secret", http.StatusForbidden) }), "stage A"},
+		{"sandbox post missing is delivery", appleEnvSandbox, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { http.NotFound(w, r) }), "stage B"},
+		{"stage A malformed token", appleEnvProduction, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			json.NewEncoder(w).Encode(map[string]string{"testNotificationToken": "not-a-uuid"})
 		}), "invalid token"},
-		{"stage B terminal", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		{"stage B terminal", appleEnvProduction, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodPost {
 				json.NewEncoder(w).Encode(map[string]string{"testNotificationToken": "9f0b2e3a-1c4d-4e5f-8a9b-000000000112"})
 			} else {
 				http.Error(w, "secret", http.StatusBadRequest)
 			}
 		}), "stage B"},
-		{"timeout", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		{"timeout", appleEnvProduction, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodPost {
 				json.NewEncoder(w).Encode(map[string]string{"testNotificationToken": "9f0b2e3a-1c4d-4e5f-8a9b-000000000113"})
 			} else {
 				http.NotFound(w, r)
 			}
 		}), "timed out"},
-		{"second rate limit", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		{"second rate limit", appleEnvProduction, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method == http.MethodPost {
 				json.NewEncoder(w).Encode(map[string]string{"testNotificationToken": "9f0b2e3a-1c4d-4e5f-8a9b-000000000115"})
 				return
@@ -137,7 +139,7 @@ func TestAppleServerAPIProbeFailsClosed(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			client, app, _ := testProbeClient(t, tc.handler, 5*time.Millisecond)
 			var out bytes.Buffer
-			err := client.probeTestNotification(context.Background(), appleEnvProduction, client.cfg.ProductionURL, app, &out)
+			err := client.probeTestNotification(context.Background(), tc.env, client.cfg.ProductionURL, app, &out)
 			if err == nil || !strings.Contains(err.Error(), tc.want) || strings.Contains(err.Error(), "secret") || strings.Contains(out.String(), "hidden") {
 				t.Fatalf("err=%v out=%q", err, out.String())
 			}
