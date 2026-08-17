@@ -4900,12 +4900,20 @@ final class MacSurfaceGuardTests: XCTestCase {
         XCTAssertTrue(session.contains("transfer-waiting-pairing-peer"))
         XCTAssertTrue(session.contains("transfer-cancel-pairing-watch"))
         guard let laneNote = session.range(of: "private var laneNote: some View"),
-              let body = session.range(of: "var body: some View") else {
+              let body = session.range(of: "var body: some View"),
+              let exit = session.range(of: "\n            exit", range: body.lowerBound..<laneNote.lowerBound),
+              let laneContent = session.range(of: "switch mode", range: body.lowerBound..<laneNote.lowerBound),
+              let gatedLaneNote = session.range(
+                of: "if peerCapabilityIsKnown { laneNote }",
+                range: body.lowerBound..<laneNote.lowerBound
+              ) else {
             return XCTFail("the session pane no longer has the shape this guards")
         }
         XCTAssertLessThan(body.lowerBound, laneNote.lowerBound)
-        XCTAssertTrue(session.contains("if peerCapabilityIsKnown { laneNote }\n            exit"),
-                      "the lane note must sit with the exit rather than inside one lane")
+        XCTAssertLessThan(exit.lowerBound, laneContent.lowerBound,
+                          "the exit must remain reachable above long lane content")
+        XCTAssertLessThan(laneContent.lowerBound, gatedLaneNote.lowerBound,
+                          "the capability-gated note must sit outside either transfer lane")
     }
 
     /// **The connect phase says the right thing about the DEVICE, not about the
