@@ -1009,6 +1009,32 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// The reconcile sweep's candidate query walks the Stripe rows.
 		`CREATE INDEX IF NOT EXISTS idx_subscription_sources_provider
 		   ON subscription_sources(provider, plan_id)`,
+		// One durable money-moving channel per account. This is deliberately not
+		// a TTL lease: a client cancellation, crash or Ask-to-Buy delay cannot
+		// prove that the provider will never charge later.
+		`CREATE TABLE IF NOT EXISTS billing_authorities (
+ user_id TEXT PRIMARY KEY,
+ provider TEXT NOT NULL CHECK(provider IN ('stripe','apple')),
+ external_scope TEXT NOT NULL DEFAULT '',
+ apple_environment TEXT NOT NULL DEFAULT '',
+ apple_account_token TEXT NOT NULL DEFAULT '',
+ epoch INTEGER NOT NULL DEFAULT 1,
+ intent_id TEXT NOT NULL UNIQUE,
+ created_at INTEGER NOT NULL,
+ updated_at INTEGER NOT NULL,
+ CHECK(epoch > 0),
+ CHECK((provider='apple' AND external_scope<>'' AND apple_account_token<>'') OR (provider='stripe' AND external_scope='' AND apple_environment='' AND apple_account_token='')))`,
+		`CREATE TABLE IF NOT EXISTS billing_purchase_attempts (
+ id TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL,
+ provider TEXT NOT NULL,
+ external_scope TEXT NOT NULL DEFAULT '',
+ product_id TEXT NOT NULL,
+ state TEXT NOT NULL CHECK(state IN ('prepared','dispatched','resolved')),
+ epoch INTEGER NOT NULL,
+ created_at INTEGER NOT NULL)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_billing_purchase_attempt_unresolved
+ ON billing_purchase_attempts(user_id,epoch) WHERE state IN ('prepared','dispatched')`,
 		`CREATE TABLE IF NOT EXISTS stripe_webhook_events (
 		 event_id TEXT PRIMARY KEY,
 		 event_type TEXT NOT NULL,
@@ -1870,6 +1896,13 @@ func (s *SQLiteStore) SetUserPlanAdmin(ctx context.Context, userID, planID strin
 		return err
 	}
 	defer tx.Rollback()
+	var hasAuthority int
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM billing_authorities WHERE user_id=?)`, userID).Scan(&hasAuthority); err != nil {
+		return err
+	}
+	if hasAuthority != 0 {
+		return ErrBillingAuthorityConflict
+	}
 	if err := accrueQuotaTx(ctx, tx, userID, planID, now); err != nil {
 		return err
 	}
