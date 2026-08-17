@@ -88,7 +88,20 @@ public final class InboxConversationStore: @unchecked Sendable {
             record.senderNameSnapshot = Self.safeName(record.senderNameSnapshot)
             var index = try loadIndex()
             if let existing = index.records.firstIndex(where: { $0.taskID == record.taskID }) {
-                guard index.records[existing].senderDeviceID == record.senderDeviceID else {
+                let previous = index.records[existing]
+                if previous.senderDeviceID == Self.legacySenderID,
+                   record.senderDeviceID != Self.legacySenderID {
+                    // A startup import may see the old flat record before the
+                    // retained v3 journal is replayed. Authenticated journal
+                    // attribution upgrades that placeholder; it never lets one
+                    // real sender overwrite another. Preserve the old read mark
+                    // so a restart does not announce the delivery again.
+                    if record.readAt == nil { record.readAt = previous.readAt }
+                    index.records[existing] = record
+                    try save(index)
+                    return false
+                }
+                guard previous.senderDeviceID == record.senderDeviceID else {
                     throw InboxConversationStoreError.invalidRecord
                 }
                 if !record.senderNameSnapshot.isEmpty {
@@ -152,7 +165,9 @@ public final class InboxConversationStore: @unchecked Sendable {
     public func importLegacy(receipts: [InboxReceipt]) throws {
         for receipt in receipts {
             _ = try record(InboxDeliveryRecord(taskID: receipt.taskID,
-                senderDeviceID: Self.legacySenderID, senderNameSnapshot: "",
+                // v3 journals carry authenticated sender identity. Only an old
+                // journal whose field was absent belongs in Legacy.
+                senderDeviceID: receipt.senderDeviceID, senderNameSnapshot: "",
                 kind: receipt.kind == .message ? .message : .files,
                 receivedAt: receipt.savedAt,
                 messageID: receipt.kind == .message ? receipt.taskID : nil,

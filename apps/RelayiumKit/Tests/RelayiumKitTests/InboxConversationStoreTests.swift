@@ -86,4 +86,29 @@ final class InboxConversationStoreTests: XCTestCase {
         let bytes = try Data(contentsOf: index)
         XCTAssertFalse(String(decoding: bytes, as: UTF8.self).contains("secret"))
     }
+
+    func testRestartImportKeepsAuthenticatedJournalSenderAndUpgradesLegacyPlaceholder() throws {
+        let direct = store()
+        let receipt = InboxReceipt(taskID: "journal-task", senderDeviceID: "sender-device",
+            urls: [URL(fileURLWithPath: "/tmp/a.txt")], byteCount: 1,
+            savedAt: Date(timeIntervalSince1970: 10), isReplay: true)
+        try direct.importLegacy(receipts: [receipt])
+        XCTAssertEqual(try direct.conversations().first?.senderDeviceID, "sender-device")
+
+        let promoted = store()
+        try promoted.importLegacy(messages: [InboxMessage(id: "same-task",
+            receivedAt: Date(timeIntervalSince1970: 5), text: "body")])
+        var authenticated = message("same-task", sender: "sender-device", at: 5)
+        authenticated.readAt = nil
+        XCTAssertFalse(try promoted.record(authenticated))
+        let conversation = try XCTUnwrap(promoted.conversations().first)
+        XCTAssertEqual(conversation.senderDeviceID, "sender-device")
+        XCTAssertNotNil(conversation.deliveries.first?.readAt,
+                        "restart attribution must not turn an old delivery unread")
+
+        XCTAssertThrowsError(try promoted.record(message("same-task", sender: "forged-device"))) {
+            XCTAssertEqual($0 as? InboxConversationStoreError, .invalidRecord)
+        }
+        XCTAssertEqual(try promoted.conversations().first?.senderDeviceID, "sender-device")
+    }
 }
