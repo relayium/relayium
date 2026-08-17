@@ -171,8 +171,19 @@ func (s *SQLiteStore) applyAuthorizedAppleLifecycle(ctx context.Context, ev Sour
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return SubscriptionApply{}, err
 	}
+	immediatePurchase := attemptProduct == ev.AppleDispatchProductID && ev.AppleDispatchPurchase
+	renewalExternalID, renewalIdentityOK := (appleSubscriptionKey{
+		OriginalTransactionID: ev.AppleRenewalOriginalID,
+		Environment:           ev.AppleRenewalEnvironment,
+	}).externalID()
+	deferredChange := renewal != nil && ev.AppleRenewalAutoRenewEnabled &&
+		ev.AppleRenewalAccountToken == appleAccountToken &&
+		renewalExternalID == ev.ExternalID && renewalIdentityOK &&
+		renewal.ExternalID == ev.ExternalID && renewal.BundleID == ev.ExternalScope &&
+		ev.AppleRenewalTargetProductID == attemptProduct &&
+		renewal.AutoRenewProductID == attemptProduct
 	resolveAttempt := err == nil && hasSubject && subject.AttemptID == attemptID &&
-		attemptProduct == ev.AppleDispatchProductID && ev.AppleDispatchPurchase
+		(immediatePurchase || deferredChange)
 
 	result, err := applySourceTx(ctx, tx, ev)
 	if err != nil {

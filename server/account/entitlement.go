@@ -147,6 +147,15 @@ type SourceEvent struct {
 	ApplePurchaseDateMS    int64
 	AppleDispatchPurchase  bool
 	AppleDispatchProductID string
+	// AppleRenewal* is an independently verified signedRenewalInfo fact from
+	// the canonical subscription response. It resolves a deferred downgrade or
+	// cycle change only when every identity component matches the current
+	// per-dispatch attempt; it never changes the current entitlement itself.
+	AppleRenewalOriginalID       string
+	AppleRenewalEnvironment      string
+	AppleRenewalAccountToken     string
+	AppleRenewalTargetProductID  string
+	AppleRenewalAutoRenewEnabled bool
 }
 
 // EffectiveEntitlement is what the users-row projection will be set to.

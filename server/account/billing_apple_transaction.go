@@ -202,6 +202,11 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 	event := appleSourceEventWithRenewal(u.ID, tx, product, renewalState, now)
 	event.AppleDispatchPurchase = dispatchPurchase
 	event.AppleDispatchProductID = dispatchProductID
+	event.AppleRenewalOriginalID = canonical.Renewal.OriginalTransactionID
+	event.AppleRenewalEnvironment = canonical.Renewal.Environment
+	event.AppleRenewalAccountToken = canonical.Renewal.AppAccountToken
+	event.AppleRenewalTargetProductID = canonical.Renewal.AutoRenewProductID
+	event.AppleRenewalAutoRenewEnabled = canonical.Renewal.AutoRenewEnabled
 	res, err := atomic.ApplyAuthorizedAppleLifecycle(r.Context(), event, renewalState, tx.AppAccountToken, tx.Environment)
 	switch {
 	case errors.Is(err, ErrBillingAuthorityConflict), errors.Is(err, ErrBillingPurchaseAmbiguous):
