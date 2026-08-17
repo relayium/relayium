@@ -284,8 +284,11 @@ export interface Messages {
     save2mo: string; // yearly-toggle savings badge (yearly = 10x monthly => 2 months free)
     changeError: string; // in-app plan change (POST /api/billing/change-plan) failed
 		paymentPending: string;
+    compositePaymentPending: string;
     changeSuccess: string; // toast after a successful (immediate) upgrade
     downgradeScheduled: string; // toast after a downgrade is scheduled for period end
+    compositeScheduled: string;
+    compositePartial: string;
     previewLoading: string; // 弹窗加载预览时
     // The immediate-change summaries are chosen by the SIGN of the previewed
     // proration, because Stripe floors an invoice at zero: a real credit and a
@@ -304,7 +307,7 @@ export interface Messages {
     confirmChange: string; // 弹窗确认按钮
     cancel: string; // 弹窗取消按钮
     previewError: string; // 预览请求失败
-    scheduledNote: (plan: string) => string; // banner: a downgrade to <plan> is pending at period end
+    scheduledNote: (plan: string, cycle: string) => string; // period-end target tier and cycle
     scheduledBadge: string; // badge on the tier a pending downgrade will switch to
     keepCurrentPlan: string; // CTA to cancel the pending downgrade (stay on the current tier)
     cancelScheduledError: string; // canceling the scheduled downgrade failed

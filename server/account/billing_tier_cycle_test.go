@@ -238,9 +238,17 @@ func TestChangePlanCompositePartialFailureIsReportedAndRetryConverges(t *testing
 	subscribeUserCycle(t, store, uid, "cus_partial", "plus", "yearly")
 
 	resp := changePlan(t, ts, cookie, `{"planId":"pro","cycle":"monthly"}`)
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("a half-applied composite must not report success, got %d", resp.StatusCode)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("a half-applied composite must return a typed partial result, got %d", resp.StatusCode)
+	}
+	var partial map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&partial); err != nil {
+		t.Fatal(err)
+	}
+	if partial["status"] != "partial" || partial["effective"] != "now" ||
+		partial["failedStage"] != "period_end" || partial["retryable"] != "true" {
+		t.Fatalf("partial result = %#v", partial)
 	}
 	// The immediate stage DID apply, so the subscription really is on pro yearly.
 	if fb.priceNow != "price_pro_y" {

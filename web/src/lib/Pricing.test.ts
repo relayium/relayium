@@ -395,7 +395,7 @@ describe("Pricing", () => {
       if (url === "/api/billing/preview") {
         return { ok: true, status: 200, json: async () => ({ effective: "now", immediateChargeCents: 500, nextAmountCents: 890, nextCycle: "monthly", effectiveDate: 1789999999 }) };
       }
-      if (url === "/api/billing/change-plan") { changeBody = JSON.parse(init!.body as string); return { ok: true, status: 200, json: async () => ({ status: "ok" }) }; }
+      if (url === "/api/billing/change-plan") { changeBody = JSON.parse(init!.body as string); return { ok: true, status: 200, json: async () => ({ status: "ok", effective: "now" }) }; }
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
@@ -453,7 +453,7 @@ describe("Pricing", () => {
       if (url === "/api/billing/preview") {
         return { ok: true, status: 200, json: async () => ({ effective: "period_end", immediateChargeCents: 0, nextAmountCents: 390, nextCycle: "monthly", effectiveDate: 1789999999 }) };
       }
-      if (url === "/api/billing/change-plan") { changeBody = JSON.parse(init!.body as string); return { ok: true, status: 200, json: async () => ({ status: "ok" }) }; }
+      if (url === "/api/billing/change-plan") { changeBody = JSON.parse(init!.body as string); return { ok: true, status: 200, json: async () => ({ status: "ok", effective: "period_end" }) }; }
       throw new Error(`unexpected fetch ${url}`);
     });
     vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
@@ -496,11 +496,11 @@ describe("Pricing", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/billing/change-plan", expect.objectContaining({ method: "POST" }));
     expect(changeBody).toEqual({ planId: "plus", cycle: "monthly" });
 
-    // onModalClose(true) closes the modal and surfaces the success toast — the
+    // The server's effect closes the modal and surfaces the matching toast — the
     // actual wiring point this test exists to cover.
     expect(target.querySelector(".modal")).toBeNull();
-    expect(target.textContent).toContain("Plan updated — thanks!");
-    expect(target.querySelector('.ok-note[role="status"]')?.textContent).toContain("Plan updated — thanks!");
+    expect(target.textContent).toContain("Downgrade scheduled");
+    expect(target.querySelector('.ok-note[role="status"]')?.textContent).toContain("Downgrade scheduled");
   });
 
   it("defaults the cycle toggle to the subscriber's current cycle", async () => {
@@ -533,7 +533,7 @@ describe("Pricing", () => {
       { id: "pro", name: "Pro", storageBytes: 5e10, trafficBytes: 1e12, retentionSecs: 90 * 86400, priceMonthly: 890, priceYearly: 7900, purchasableMonthly: true, purchasableYearly: true },
     ];
     // On Pro, with a pending downgrade to Plus.
-    let meUser: Record<string, unknown> = { id: "u1", email: "s@example.com", displayName: "", hasPassword: true, planId: "pro", subscriptionStatus: "active", hasBilling: true, scheduledPlanId: "plus" };
+    let meUser: Record<string, unknown> = { id: "u1", email: "s@example.com", displayName: "", hasPassword: true, planId: "pro", subscriptionStatus: "active", hasBilling: true, scheduledPlanId: "plus", scheduledCycle: "monthly" };
     let cancelCalls = 0;
     const fetchMock = vi.fn(async (url: string) => {
       if (url === "/api/plans") return { ok: true, status: 200, json: async () => TIERS2 };
@@ -548,6 +548,7 @@ describe("Pricing", () => {
 
     // Banner names the scheduled tier; the Plus card shows a "Scheduled" badge.
     expect(target.querySelector(".sched-banner")?.textContent).toContain("Plus");
+    expect(target.querySelector(".sched-banner")?.textContent).toContain("Monthly");
     const plusCard = Array.from(target.querySelectorAll(".tier")).find((c) => c.textContent?.includes("Plus"))!;
     expect(plusCard.textContent).toContain("Scheduled");
 

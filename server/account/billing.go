@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/relayium/relayium/httpx"
 )
@@ -470,7 +471,10 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 	case effectComposite:
 		if err := s.biller.ChangeSubscriptionPlan(r.Context(), u.StripeCustomerID, immediatePriceID); err != nil {
 			if errors.Is(err, ErrPaymentPending) {
-				httpx.WriteJSON(w, http.StatusAccepted, map[string]string{"status": "payment_pending", "effective": "not_yet"})
+				httpx.WriteJSON(w, http.StatusAccepted, map[string]string{
+					"status": "payment_pending", "effective": "payment_pending",
+					"requestedEffect": string(effectComposite),
+				})
 				return
 			}
 			http.Error(w, "server error", http.StatusInternalServerError)
@@ -485,13 +489,19 @@ func (s *Service) handleBillingChangePlan(w http.ResponseWriter, r *http.Request
 			// charging again.
 			log.Printf("billing: composite change for user %s (customer %s): immediate %s applied but scheduling %s failed: %v",
 				u.ID, u.StripeCustomerID, immediatePriceID, scheduledPriceID, err)
-			http.Error(w, "server error", http.StatusInternalServerError)
+			httpx.WriteJSON(w, http.StatusBadGateway, map[string]string{
+				"status": "partial", "effective": string(effectNow),
+				"failedStage": "period_end", "retryable": "true",
+			})
 			return
 		}
 	default:
 		if err := s.biller.ChangeSubscriptionPlan(r.Context(), u.StripeCustomerID, immediatePriceID); err != nil {
 			if errors.Is(err, ErrPaymentPending) {
-				httpx.WriteJSON(w, http.StatusAccepted, map[string]string{"status": "payment_pending", "effective": "not_yet"})
+				httpx.WriteJSON(w, http.StatusAccepted, map[string]string{
+					"status": "payment_pending", "effective": "payment_pending",
+					"requestedEffect": string(decision.Effect),
+				})
 				return
 			}
 			http.Error(w, "server error", http.StatusInternalServerError)
@@ -937,10 +947,15 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 	responseWriter := w
 	tw := newStripeWebhookWriter()
 	defer func() {
+		panicked := recover()
+		if panicked != nil {
+			tw = newStripeWebhookWriter()
+			http.Error(tw, "server error", http.StatusInternalServerError)
+		}
 		processed := tw.status < http.StatusInternalServerError
 		failure := ""
 		if !processed {
-			failure = "handler returned server error"
+			failure = "handler failed"
 		}
 		if err := s.Store().FinishStripeWebhookEvent(context.Background(), ev.EventID, claim.Generation, processed, failure, s.Now().Unix()); err != nil {
 			log.Printf("billing: finish Stripe event %s: %v", ev.EventID, err)
@@ -948,10 +963,19 @@ func (s *Service) handleStripeWebhook(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		tw.flushTo(responseWriter)
+		// A recovered panic is deliberately not rethrown: Stripe receives a 5xx
+		// only after the ledger durably records failed, and can retry the event.
 	}()
 	w = tw
 
 	ctx := r.Context()
+	if strings.HasPrefix(ev.Type, "invoice.") && ev.SubscriptionID == "" {
+		// An invoice without a subscription may be a one-off invoice or a Stripe
+		// event shape we do not understand. It is verified and ledgered, but it is
+		// not canonical subscription evidence and therefore cannot change access.
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 	refresh := ev.Type == "customer.subscription.created" || ev.Type == "customer.subscription.updated" ||
 		ev.Type == "invoice.paid" || ev.Type == "invoice.payment_failed" || ev.Type == "invoice.payment_action_required"
 	if refresh {

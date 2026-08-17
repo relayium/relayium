@@ -127,7 +127,7 @@ describe("Pricing with a non-Stripe entitlement", () => {
       // Nor the read-only half of the same Stripe claim: a "Scheduled" badge on a
       // tier this account is not scheduled to move to is a false statement, and
       // the managed-elsewhere note is the truthful thing in its place.
-      expect(target.textContent).not.toContain(en.billing.scheduledNote("Plus"));
+      expect(target.textContent).not.toContain(en.billing.scheduledNote("Plus", ""));
       expect(target.textContent).not.toContain(en.billing.scheduledBadge);
       expect(target.textContent).toContain(en.billing.appleManagedBadge);
 
@@ -142,7 +142,7 @@ describe("Pricing with a non-Stripe entitlement", () => {
       planId: "pro", subscriptionStatus: "active", hasBilling: true,
       entitlementProvider: "stripe", scheduledPlanId: "plus",
     });
-    expect(target.textContent).toContain(en.billing.scheduledNote("Plus"));
+    expect(target.textContent).toContain(en.billing.scheduledNote("Plus", ""));
     expect(target.textContent).toContain(en.billing.scheduledBadge);
 
     const keep = [...target.querySelectorAll("button")]

@@ -67,7 +67,7 @@ it("states a zero adjustment without inventing a charge or a credit", async () =
 
 it("names both stages of a composite yearly-then-monthly change", async () => {
   const text = await mountModal({
-    effective: "composite", immediateChargeCents: 4200, immediateAdjustmentCents: 4200,
+    effective: "now_then_period_end", immediateChargeCents: 4200, immediateAdjustmentCents: 4200,
     nextAmountCents: 999, nextCycle: "monthly", effectiveDate: RENEWAL,
     immediateCycle: "yearly", immediateAmountCents: 9999,
     scheduledCycle: "monthly", scheduledAmountCents: 999,
@@ -108,5 +108,33 @@ it("keeps the dialog open and explains an incomplete payment", async () => {
   (target.querySelector("button.btn-primary") as HTMLButtonElement).click();
   await new Promise((r) => setTimeout(r, 0)); flushSync();
   expect(calls).toBe(2);
-  expect(target.textContent).toMatch(/payment wasn't completed/i);
+  expect(target.textContent).toMatch(/needs action and may expire/i);
+});
+
+it("says a pending composite has not scheduled its second stage", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+    if (url === "/api/billing/preview") return { ok: true, json: async () => ({
+      effective: "now_then_period_end", immediateChargeCents: 734,
+      immediateAdjustmentCents: 734, nextAmountCents: 999,
+      nextCycle: "monthly", effectiveDate: RENEWAL,
+      immediateCycle: "yearly", immediateAmountCents: 9999,
+      scheduledCycle: "monthly", scheduledAmountCents: 999,
+    }) };
+    if (url === "/api/billing/change-plan") return {
+      ok: true, status: 202, json: async () => ({
+        status: "payment_pending", effective: "payment_pending",
+        requestedEffect: "now_then_period_end",
+      }),
+    };
+    throw new Error(`unexpected ${url}`);
+  }) as unknown as typeof fetch);
+  await loadLang("en");
+  target = document.createElement("div"); document.body.appendChild(target);
+  app = mount(ChangePlanModal, { target, props: {
+    planId: "pro", planName: "Pro", cycle: "monthly", onclose: vi.fn(),
+  } });
+  await new Promise((r) => setTimeout(r, 0)); flushSync();
+  (target.querySelector("button.btn-primary") as HTMLButtonElement).click();
+  await new Promise((r) => setTimeout(r, 0)); flushSync();
+  expect(target.textContent).toMatch(/later cycle switch was not scheduled/i);
 });

@@ -103,6 +103,31 @@ func TestFailedInvoiceAfterPaidKeepsCanonicalActiveState(t *testing.T) {
 	}
 }
 
+func TestInvoiceWithoutSubscriptionCannotGrantEntitlement(t *testing.T) {
+	ts, svc, store, mail := newBillingServer(t)
+	secret := "whsec_invoice_without_subscription"
+	svc.biller = NewStripeClient("sk_test", secret, "")
+	mustPlan(t, store, Plan{ID: "pro", Name: "Pro", Active: true, StripePriceMonthlyID: "price_pro_m"})
+	loginCookie(t, ts, mail, "one-off-invoice@example.com")
+	uid := mustUserID(t, store, "one-off-invoice@example.com")
+	if err := store.SetUserStripeCustomer(context.Background(), uid, "cus_one_off"); err != nil {
+		t.Fatal(err)
+	}
+	resp := postWebhook(t, ts, secret,
+		webhookEnv("invoice.paid", "cus_one_off", "", "", "active", "price_pro_m", 3000))
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("invoice without subscription = %d, want ACK", resp.StatusCode)
+	}
+	u, err := store.GetUserByID(context.Background(), uid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.PlanID != "free" || u.SubscriptionStatus != "" {
+		t.Fatalf("non-subscription invoice granted entitlement: %+v", u)
+	}
+}
+
 func TestOldDeletedDoesNotRevokeNewCanonicalSubscription(t *testing.T) {
 	ts, svc, store, mail := newBillingServer(t)
 	secret := "whsec_old_deleted"
@@ -152,6 +177,7 @@ func TestScheduleUpdateKeyIncludesTargetAndExistingGeneration(t *testing.T) {
 	defer srv.Close()
 	c := NewStripeClient("sk_test", "whsec", "")
 	c.base = srv.URL
+	c.now = func() time.Time { return time.Unix(150, 0) }
 	for _, target := range []string{"price_a", "price_a", "price_d", "price_a"} {
 		if err := c.ScheduleDowngrade(context.Background(), "cus_1", target); err != nil {
 			t.Fatal(err)
@@ -175,5 +201,79 @@ func TestStripeWebhookWriterPreservesFirstStatusHeadersAndBody(t *testing.T) {
 	if recorder.Code != http.StatusAccepted || recorder.Header().Get("X-Relayium-Test") != "kept" || recorder.Body.String() != "pending" {
 		t.Fatalf("buffered response = status %d header %q body %q", recorder.Code,
 			recorder.Header().Get("X-Relayium-Test"), recorder.Body.String())
+	}
+}
+
+func TestScheduleCreateRecoversFromReleasedIdempotencyReplay(t *testing.T) {
+	var createKeys []string
+	keyOrder := map[string]int{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/subscriptions":
+			fmt.Fprint(w, `{"data":[{"id":"sub_1","status":"active","schedule":"","latest_invoice":"in_1","current_period_end":200,"items":{"data":[{"price":{"id":"price_current"}}]}}]}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules":
+			key := r.Header.Get("Idempotency-Key")
+			createKeys = append(createKeys, key)
+			order, ok := keyOrder[key]
+			if !ok {
+				order = len(keyOrder)
+				keyOrder[key] = order
+			}
+			if order < 2 {
+				fmt.Fprintf(w, `{"id":"sched_released_%d","status":"released","phases":[{"start_date":100,"end_date":200,"items":[{"price":"price_current"}]}]}`, order)
+				return
+			}
+			fmt.Fprint(w, `{"id":"sched_live","status":"active","phases":[{"start_date":100,"end_date":200,"items":[{"price":"price_current"}]}]}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules/sched_live":
+			fmt.Fprint(w, `{"id":"sched_live"}`)
+		default:
+			t.Fatalf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+	c := NewStripeClient("sk_test", "whsec", "")
+	c.base = srv.URL
+	for range 2 {
+		if err := c.ScheduleDowngrade(context.Background(), "cus_1", "price_target"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(createKeys) != 6 || createKeys[0] != createKeys[3] || createKeys[1] != createKeys[4] ||
+		createKeys[2] != createKeys[5] || len(keyOrder) != 3 {
+		t.Fatalf("each terminal generation must converge onto the same next key: %q", createKeys)
+	}
+}
+
+func TestSchedulePastWaitingPhaseIsReleasedAndRecreated(t *testing.T) {
+	var released bool
+	var updatedOld bool
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/subscriptions":
+			fmt.Fprint(w, `{"data":[{"id":"sub_1","status":"active","schedule":"sched_old","latest_invoice":"in_2","current_period_end":300,"items":{"data":[{"price":{"id":"price_current"}}]}}]}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/subscription_schedules/sched_old":
+			fmt.Fprint(w, `{"id":"sched_old","status":"active","current_phase":{"start_date":200,"end_date":300},"phases":[{"start_date":100,"end_date":200,"items":[{"price":"price_current"}]},{"start_date":200,"end_date":0,"items":[{"price":"price_previous_target"}]}]}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules/sched_old/release":
+			released = true
+			fmt.Fprint(w, `{"id":"sched_old","status":"released"}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules":
+			fmt.Fprint(w, `{"id":"sched_new","status":"active","phases":[{"start_date":200,"end_date":300,"items":[{"price":"price_current"}]}]}`)
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules/sched_old":
+			updatedOld = true
+		case r.Method == http.MethodPost && r.URL.Path == "/v1/subscription_schedules/sched_new":
+			fmt.Fprint(w, `{"id":"sched_new"}`)
+		default:
+			t.Fatalf("unexpected %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+	c := NewStripeClient("sk_test", "whsec", "")
+	c.base = srv.URL
+	c.now = func() time.Time { return time.Unix(250, 0) }
+	if err := c.ScheduleDowngrade(context.Background(), "cus_1", "price_target"); err != nil {
+		t.Fatal(err)
+	}
+	if !released || updatedOld {
+		t.Fatalf("past schedule release=%v updatedOld=%v", released, updatedOld)
 	}
 }

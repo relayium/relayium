@@ -146,6 +146,7 @@ type stripeClient struct {
 	// A field rather than a constant only so tests don't have to sleep.
 	idemRetryDelay          time.Duration
 	canonicalWebhookRefresh bool
+	now                     func() time.Time
 }
 
 // NewStripeClient builds the real Biller. secretKey/webhookSecret/portalConfig
@@ -162,6 +163,7 @@ func NewStripeClient(secretKey, webhookSecret, portalConfig string) *stripeClien
 		http:           &http.Client{Timeout: 20 * time.Second},
 		base:           "https://api.stripe.com",
 		idemRetryDelay: 250 * time.Millisecond,
+		now:            time.Now,
 	}
 }
 
@@ -858,18 +860,48 @@ func (c *stripeClient) ScheduleDowngrade(ctx context.Context, customerID, newPri
 	//    current price and spans the current billing period.
 	seed := url.Values{}
 	seed.Set("from_subscription", sub.ID)
+	createSchedule := func() ([]byte, error) {
+		generation := []string{"schedule-create", sub.ID, sub.Items.Data[0].Price.ID,
+			strconv.FormatInt(sub.CurrentPeriodEnd, 10), sub.LatestInvoice, newPriceID}
+		for attempts := 0; attempts < 8; attempts++ {
+			created, err := c.requestIdempotent(ctx, http.MethodPost, "/v1/subscription_schedules", seed,
+				stableStripeIntentKey(generation...))
+			if err != nil {
+				return nil, err
+			}
+			var identity struct{ ID, Status string }
+			if err := json.Unmarshal(created, &identity); err != nil {
+				return nil, fmt.Errorf("stripe: create schedule: parse identity: %w", err)
+			}
+			switch identity.Status {
+			case "released", "canceled", "completed":
+				// Each terminal replay becomes the durable generation for the next
+				// intent. This handles release -> reschedule repeatedly within Stripe's
+				// 24-hour idempotency cache while keeping every network retry stable.
+				generation = append(generation, "terminal-replay", identity.ID, identity.Status)
+				continue
+			default:
+				return created, nil
+			}
+		}
+		return nil, fmt.Errorf("stripe: schedule create replay chain did not converge")
+	}
+	createdSchedule := sub.Schedule == ""
 	if sub.Schedule != "" {
 		body, err = c.request(ctx, http.MethodGet, "/v1/subscription_schedules/"+sub.Schedule, nil)
 	} else {
-		key := stableStripeIntentKey("schedule-create", sub.ID, sub.Items.Data[0].Price.ID,
-			strconv.FormatInt(sub.CurrentPeriodEnd, 10), sub.LatestInvoice)
-		body, err = c.requestIdempotent(ctx, http.MethodPost, "/v1/subscription_schedules", seed, key)
+		body, err = createSchedule()
 	}
 	if err != nil {
 		return err
 	}
 	var sched struct {
-		ID     string `json:"id"`
+		ID           string `json:"id"`
+		Status       string `json:"status"`
+		CurrentPhase struct {
+			StartDate int64 `json:"start_date"`
+			EndDate   int64 `json:"end_date"`
+		} `json:"current_phase"`
 		Phases []struct {
 			StartDate int64 `json:"start_date"`
 			EndDate   int64 `json:"end_date"`
@@ -883,6 +915,26 @@ func (c *stripeClient) ScheduleDowngrade(ctx context.Context, customerID, newPri
 	}
 	if len(sched.Phases) == 0 || len(sched.Phases[0].Items) == 0 {
 		return fmt.Errorf("stripe: schedule %s has no seed phase", sched.ID)
+	}
+	if !createdSchedule && len(sched.Phases) > 1 && sched.Phases[0].EndDate > 0 &&
+		(sched.CurrentPhase.StartDate >= sched.Phases[0].EndDate || c.now().Unix() >= sched.Phases[0].EndDate) {
+		// The first waiting phase is over. Rewriting phase 0 now would rewrite
+		// history/current service rather than schedule a future transition.
+		if _, err := c.requestIdempotent(ctx, http.MethodPost,
+			"/v1/subscription_schedules/"+sched.ID+"/release", url.Values{},
+			stableStripeIntentKey("schedule-release", sched.ID)); err != nil {
+			return err
+		}
+		body, err = createSchedule()
+		if err != nil {
+			return err
+		}
+		if err := json.Unmarshal(body, &sched); err != nil {
+			return fmt.Errorf("stripe: recreate schedule: parse response: %w", err)
+		}
+		if len(sched.Phases) == 0 || len(sched.Phases[0].Items) == 0 {
+			return fmt.Errorf("stripe: recreated schedule %s has no seed phase", sched.ID)
+		}
 	}
 	p0 := sched.Phases[0]
 

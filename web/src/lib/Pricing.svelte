@@ -57,6 +57,9 @@
   const currentTier = $derived(tiers.find((x) => x.id === currentPlanId));
   // Tier a pending period-end downgrade will switch to ("" = none).
   const scheduledPlanId = $derived(session().user?.scheduledPlanId ?? "");
+  const scheduledCycle = $derived(session().user?.scheduledCycle ?? "");
+  const scheduledCycleName = $derived(scheduledCycle === "yearly" ? t.billing.cycleYearly
+    : scheduledCycle === "monthly" ? t.billing.cycleMonthly : "");
   const scheduledTier = $derived(tiers.find((x) => x.id === scheduledPlanId));
 
   onMount(async () => {
@@ -166,11 +169,14 @@
   // The modal itself calls /api/billing/change-plan; here we just close it and,
   // on success, surface the toast and poll /api/me for the webhook-applied
   // change to land (same cadence the old inline flow used).
-  function onModalClose(changed: boolean) {
+  function onModalClose(effect: "now" | "period_end" | "now_then_period_end" | "partial" | null) {
     modalTier = null;
     checkoutError = "";
-    if (changed) {
-      changeMsg = t.billing.changeSuccess;
+    if (effect) {
+      changeMsg = effect === "now" ? t.billing.changeSuccess
+        : effect === "period_end" ? t.billing.downgradeScheduled
+        : effect === "now_then_period_end" ? t.billing.compositeScheduled
+        : t.billing.compositePartial;
       setTimeout(() => refreshSession(), 1500);
       setTimeout(() => refreshSession(), 4000);
     }
@@ -269,7 +275,7 @@
        Ordinary Stripe scheduling is untouched. -->
   {#if scheduledPlanId && scheduledTier && !managedElsewhere}
     <div class="sched-banner">
-      <span>{t.billing.scheduledNote(scheduledTier.name)}</span>
+      <span>{t.billing.scheduledNote(scheduledTier.name, scheduledCycleName)}</span>
       <button type="button" class="btn btn-ghost" disabled={busyPlanId === "__cancel__"} onclick={cancelScheduled}>
         {t.billing.keepCurrentPlan}
       </button>

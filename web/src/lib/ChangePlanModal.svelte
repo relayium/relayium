@@ -4,11 +4,12 @@
   const t = $derived<Messages>(messages[lang()]);
 
   let { planId, planName, cycle, onclose }: {
-    planId: string; planName: string; cycle: "monthly" | "yearly"; onclose: (changed: boolean) => void;
+    planId: string; planName: string; cycle: "monthly" | "yearly";
+    onclose: (effect: "now" | "period_end" | "now_then_period_end" | "partial" | null) => void;
   } = $props();
 
   interface Preview {
-    effective: "now" | "period_end" | "composite";
+    effective: "now" | "period_end" | "now_then_period_end";
     // What the card is actually charged today; Stripe floors it at zero.
     immediateChargeCents: number;
     // The SIGNED proration. Negative is a credit the customer is owed, which the
@@ -43,7 +44,7 @@
     // Both stage amounts are required to describe a composite truthfully; without
     // them, fall through to the single-stage summary rather than quoting a $0.00
     // stage the server never sent.
-    if (preview.effective === "composite"
+    if (preview.effective === "now_then_period_end"
       && preview.immediateAmountCents !== undefined && preview.scheduledAmountCents !== undefined) {
       // A composite is always an upward tier move onto a yearly price, so its
       // proration is a charge; only the cycle switch is deferred.
@@ -83,10 +84,20 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ planId, cycle }),
       });
-			const result = await r.json().catch(() => ({})) as { status?: string };
-			if (result.status === "payment_pending") { submitError = t.billing.paymentPending; return; }
+			const result = await r.json().catch(() => ({})) as {
+        status?: string; effective?: string; requestedEffect?: string; failedStage?: string;
+      };
+			if (result.status === "payment_pending") {
+        submitError = result.requestedEffect === "now_then_period_end"
+          ? t.billing.compositePaymentPending : t.billing.paymentPending;
+        return;
+      }
+      if (result.status === "partial" && result.effective === "now"
+        && result.failedStage === "period_end") { onclose("partial"); return; }
 			if (!r.ok) { submitError = t.billing.changeError; return; }
-      onclose(true);
+      if (result.effective === "now" || result.effective === "period_end"
+        || result.effective === "now_then_period_end") onclose(result.effective);
+      else submitError = t.billing.changeError;
     } catch {
       submitError = t.billing.changeError;
     } finally {
@@ -111,7 +122,7 @@
     {#if submitError}<p class="err">{submitError}</p>{/if}
     <div class="actions">
       <button class="btn btn-primary" disabled={!preview || submitting} onclick={confirm}>{t.billing.confirmChange}</button>
-      <button class="btn" disabled={submitting} onclick={() => onclose(false)}>{t.billing.cancel}</button>
+      <button class="btn" disabled={submitting} onclick={() => onclose(null)}>{t.billing.cancel}</button>
     </div>
   </div>
 </div>
