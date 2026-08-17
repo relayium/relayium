@@ -18,8 +18,10 @@ import {
   parseInboxTask,
   pollDelay,
   sendAvailability,
+  textDraftSize,
   toSendErrorCode,
 } from "./device-inbox";
+import { INBOX_MANIFEST_MAX_TEXT_BYTES } from "./inbox-manifest";
 
 /** 43 canonical base64url characters = 32 raw bytes. All-zero is the simplest
  *  spelling that satisfies the trailing-bit rule. */
@@ -317,6 +319,63 @@ describe("error mapping", () => {
     expect(httpSendErrorCode(429)).toBe("quota_exceeded");
     expect(httpSendErrorCode(0)).toBe("network");
     expect(httpSendErrorCode(500)).toBe("unknown");
+  });
+});
+
+// The bound a composer enables its Send button against. It has to be the same
+// bound `sendTextToDevice` applies, measured the same way — a counter that
+// disagrees with the seal either refuses a legal message or promises one the
+// send then rejects after the user believed the length was fine.
+describe("measuring a message draft", () => {
+  it("counts UTF-8 bytes, not characters", () => {
+    expect(textDraftSize("abc").bytes).toBe(3);
+    // Three bytes each in UTF-8.
+    expect(textDraftSize("会议室").bytes).toBe(9);
+    // Four: one astral code point, which is also two UTF-16 units — so both a
+    // `.length` and a code-point count would be wrong here, in two directions.
+    expect(textDraftSize("🙂").bytes).toBe(4);
+    expect("🙂".length, "the JS length that must NOT be used").toBe(2);
+    expect(textDraftSize("meet me at 6 — 会议室 B 🙂").bytes).toBe(
+      new TextEncoder().encode("meet me at 6 — 会议室 B 🙂").length,
+    );
+  });
+
+  it("measures the draft exactly as typed, never trimmed or normalized", () => {
+    // Whitespace a user deliberately wrote is part of the message, and it is
+    // what `sendTextToDevice` would seal — so it is what gets counted.
+    expect(textDraftSize("  ").bytes).toBe(2);
+    expect(textDraftSize("  ").sendable, "a whitespace message is still a message").toBe(true);
+    expect(textDraftSize("a\n\n").bytes).toBe(3);
+  });
+
+  it("calls an empty draft empty and unsendable", () => {
+    const empty = textDraftSize("");
+    expect(empty).toEqual({ bytes: 0, empty: true, tooLong: false, sendable: false, overflow: 0 });
+  });
+
+  it("accepts both ends of the range and refuses one byte past it", () => {
+    expect(textDraftSize("a").sendable).toBe(true);
+    const atLimit = textDraftSize("a".repeat(INBOX_MANIFEST_MAX_TEXT_BYTES));
+    expect(atLimit.sendable).toBe(true);
+    expect(atLimit.tooLong).toBe(false);
+    expect(atLimit.overflow).toBe(0);
+
+    const over = textDraftSize("a".repeat(INBOX_MANIFEST_MAX_TEXT_BYTES + 1));
+    expect(over.tooLong).toBe(true);
+    expect(over.sendable).toBe(false);
+    expect(over.overflow, "the sentence that says how far over would be wrong").toBe(1);
+  });
+
+  it("puts an emoji-only draft over the bound at the byte, not the character", () => {
+    // 16385 emoji is 65 540 bytes: well inside any per-character limit and four
+    // bytes past this one.
+    const draft = "🙂".repeat(INBOX_MANIFEST_MAX_TEXT_BYTES / 4 + 1);
+    const size = textDraftSize(draft);
+    expect(size.tooLong).toBe(true);
+    expect(size.overflow).toBe(4);
+    expect(draft.length, "a character count would have called this sendable").toBeLessThan(
+      INBOX_MANIFEST_MAX_TEXT_BYTES,
+    );
   });
 });
 

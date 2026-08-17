@@ -599,6 +599,28 @@ export interface Messages {
     dropHint: string; // "or drop files here"
     dropActive: string; // shown while a file drag is over this card
     dropRejected: string; // a drop that carried no ordinary file
+    // Sending a MESSAGE to the same device. One delivery is one kind: a message
+    // never carries attachments and a file send never carries a message, so
+    // these are a second composer beside the drop zone rather than a mode of it.
+    sendMessageButton: string; // visible label on the control that opens the composer
+    sendMessageButtonLabel: (name: string) => string; // accessible name — names the device
+    composerHeading: (name: string) => string; // the composer's own label; the target's context
+    messagePlaceholder: string;
+    // 64 KiB of UTF-8 is not a bound anyone can estimate from what is on screen
+    // — an emoji is four bytes, a Chinese character three — so the count is
+    // beside the field at all times, not a refusal after the message is written.
+    messageCount: (bytes: number, max: number) => string;
+    messageEmptyHint: string; // why the button is disabled with nothing typed
+    messageTooLongHint: (over: number) => string; // …and how far over it is
+    messageSend: string;
+    messageSendLabel: (name: string) => string;
+    composerClose: string; // collapse the composer; the draft is kept
+    // The target has not announced `inbox.text.v1`. Shown beside the disabled
+    // control rather than instead of it: a composer simply removed teaches the
+    // reader that this browser cannot send messages at all, which is false.
+    textUnavailable: string;
+    messagePrivacyNote: string; // the words never leave this browser unencrypted
+    messageSummary: (bytes: number) => string; // what this send carries — a size, never the text
     // Sender-local phases (PRD §10 items 1-2). Central stores neither.
     phaseEncrypting: (pct: number) => string;
     phaseUploading: (pct: number) => string;
@@ -658,6 +680,13 @@ export interface Messages {
     sendErrCancelled: string;
     sendErrUnsupportedKey: string;
     sendErrNoFiles: string;
+    // Message-only refusals, plus the one a manifest this client would not seal
+    // produces. All four are in the closed set and none is reachable from the
+    // other kind of send.
+    sendErrTextUnsupported: string;
+    sendErrEmptyMessage: string;
+    sendErrMessageTooLong: string;
+    sendErrUnsendableContent: string;
     sendErrUnknown: string;
     // Managing what was queued.
     cancelTask: string;

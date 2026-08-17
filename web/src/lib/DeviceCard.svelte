@@ -16,12 +16,14 @@
   import { confirmDialog } from "./confirm-dialog.svelte";
   import { DEVICE_NAME_MAX, normalizeDeviceName } from "./device-identity";
   import {
+    canSendText,
     parseDeviceInbox,
     sendAvailability,
     isSaved,
     isServerTaskState,
     isTaskErrorCode,
     pollDelay,
+    textDraftSize,
     type DeviceInboxView,
     type InboxTaskView,
     type LocalPhase,
@@ -29,6 +31,7 @@
     type SendCaveat,
     type SendErrorCode,
   } from "./device-inbox";
+  import { INBOX_MANIFEST_MAX_TEXT_BYTES } from "./inbox-manifest";
   import {
     CANCELLABLE_STATES,
     SendFailure,
@@ -36,6 +39,7 @@
     fetchInboxTask,
     newIdempotencyKey,
     sendFilesToDevice,
+    sendTextToDevice,
   } from "./device-send";
 
   interface DeviceRow {
@@ -177,6 +181,32 @@
   let fileBytes = $state(0);
   let dragOver = $state(false);
   let dropRejected = $state(false);
+  /** Which kind the delivery on screen is. One send is one kind, so this is
+   *  what keeps a file summary from being left standing beside a message — and
+   *  the message's own summary is a byte count, never its text. */
+  let sendKind = $state<"files" | "text" | null>(null);
+  let messageBytes = $state(0);
+
+  // ── the message draft ────────────────────────────────────────────────────
+  // The body lives HERE and nowhere else: never in a log, never in a request
+  // field central can read, never in storage, and never in any state the status
+  // line or the summary below renders. Everything downstream of this variable
+  // sees a byte count.
+  let draft = $state("");
+  let composerOpen = $state(false);
+
+  /** Whether offering a message to this device would be truthful. Separate from
+   *  `avail.sendable` in both directions: a receiver without `inbox.text.v1` is
+   *  still a perfectly good FILE target, and a `directory_not_ready` caveat says
+   *  nothing about a message, which is never written to that folder. */
+  const canText = $derived(canSendText(device.ID, inbox));
+  const draftSize = $derived(textDraftSize(draft));
+  // A `<label for>` and an `aria-controls` both need one. Derived from the
+  // device id, which `sendAvailability` has already established is an inert
+  // token before any of this renders, so two cards in one list never collide.
+  const composerId = $derived(`inbox-composer-${device.ID}`);
+  const fieldId = $derived(`${composerId}-field`);
+  const countId = $derived(`${composerId}-count`);
 
   // Generation counter shared by the send and the poll. Anything async compares
   // against it before writing state, so a superseded send, a late poll, a
@@ -219,6 +249,14 @@
     dropRejected = false;
     fileCount = 0;
     fileBytes = 0;
+    sendKind = null;
+    messageBytes = 0;
+    // The draft goes with them, for exactly the reason the rename editor below
+    // does and more sharply: a half-typed message addressed to somebody else's
+    // device, left in a field after an account switch, is the plainest possible
+    // form of the leak this watcher exists to prevent.
+    draft = "";
+    composerOpen = false;
     // The rename editor goes too. The page clears `devices` on an account
     // switch, which unmounts every card — but this component owns the guard
     // precisely because it must not depend on the page remembering to. A
@@ -320,6 +358,8 @@
     cancelFailed = false;
     dropRejected = false;
     pollAttempt = 0;
+    sendKind = "files";
+    messageBytes = 0;
     fileCount = picked.length;
     fileBytes = picked.reduce((n, p) => n + p.file.size, 0);
     local = "encrypting";
@@ -357,6 +397,90 @@
       local = null;
       armPoll();
     } catch (e) {
+      if (mine !== gen) return;
+      error = e instanceof SendFailure ? e.code : "unknown";
+      local = null;
+    } finally {
+      if (mine === gen) controller = null;
+    }
+  }
+
+  /** Queue the draft as a MESSAGE.
+   *
+   *  Deliberately the same state machine as `startSend`: one `gen`, one
+   *  `AbortController`, one `local` phase, one `task`, one poll. A parallel
+   *  tracker for messages would give this card two sources of truth about what
+   *  it is doing, and the first thing that would break is cancel.
+   *
+   *  `busy` is the double-send guard, exactly as it is for files — and because
+   *  both kinds share it, a message cannot start beside a running file send
+   *  either. One send is one kind, and one card runs one send. */
+  async function startTextSend() {
+    if (!canText || busy) return;
+    const key = inbox?.Key;
+    if (!key) return;
+    // Snapshot the exact string that was measured. The field stays editable
+    // while the send runs, so re-reading `draft` afterwards could queue a
+    // different message than the one whose length was sealed — and could
+    // measure sendable while the current text is not.
+    const message = draft;
+    const size = textDraftSize(message);
+    if (!size.sendable) return;
+    const mine = ++gen;
+    clearPoll();
+    task = null;
+    error = null;
+    cancelFailed = false;
+    dropRejected = false;
+    pollAttempt = 0;
+    // A message carries no attachments, so any file summary from a previous
+    // delivery is retired here rather than left standing beside it.
+    sendKind = "text";
+    fileCount = 0;
+    fileBytes = 0;
+    messageBytes = size.bytes;
+    local = "encrypting";
+    sent = 0;
+    total = size.bytes;
+    controller = new AbortController();
+    const signal = controller.signal;
+    try {
+      const created = await sendTextToDevice(
+        {
+          deviceID: device.ID,
+          keyID: key.ID,
+          keyGeneration: key.Generation,
+          algorithm: key.Algorithm,
+          publicKey: key.PublicKey,
+          // Read for real by this send: it is what makes the offer truthful,
+          // and `sendTextToDevice` fails closed without it.
+          capabilities: inbox?.Capabilities,
+        },
+        message,
+        {
+          ttl: DELIVERY_TTL_SECONDS,
+          idempotencyKey: newIdempotencyKey(),
+          signal,
+          onProgress: (p) => {
+            if (mine !== gen) return;
+            local = p.phase;
+            sent = p.sent;
+            total = p.total;
+          },
+        },
+      );
+      if (mine !== gen) return;
+      task = created;
+      local = null;
+      // Emptied ONLY here, and only when central actually holds the task:
+      // retyping a message that was already queued would deliver it twice, and
+      // clearing it any earlier would destroy the user's words on a failure
+      // they can retry from. An edit made mid-send is theirs and is kept.
+      if (draft === message) draft = "";
+      armPoll();
+    } catch (e) {
+      // Every failure path — refused, cancelled, network — leaves the draft
+      // exactly as it is, so Send can be pressed again without retyping it.
       if (mine !== gen) return;
       error = e instanceof SendFailure ? e.code : "unknown";
       local = null;
@@ -565,6 +689,10 @@
       case "cancelled": return d.sendErrCancelled;
       case "unsupported_key": return d.sendErrUnsupportedKey;
       case "no_files": return d.sendErrNoFiles;
+      case "text_unsupported": return d.sendErrTextUnsupported;
+      case "empty_message": return d.sendErrEmptyMessage;
+      case "message_too_long": return d.sendErrMessageTooLong;
+      case "unsendable_content": return d.sendErrUnsendableContent;
       default: return d.sendErrUnknown;
     }
   }
@@ -723,6 +851,26 @@
           >
             {t.deviceInbox.sendButton}
           </button>
+          <!-- A second kind, not a second mode: it opens its own composer and
+               leaves the file controls exactly where they were. Disabled rather
+               than removed when the target announces no message surface — the
+               sentence under the zone is what says why.
+               Not disabled by `busy`, unlike the file picker beside it: this
+               opens a panel, it does not start a delivery. Writing the next
+               message while an upload finishes is exactly what someone would
+               want to do, and the composer's own Send button is what says a
+               send cannot start yet. -->
+          <button
+            class="msgbtn"
+            type="button"
+            disabled={!canText}
+            aria-expanded={canText ? composerOpen : undefined}
+            aria-controls={canText && composerOpen ? composerId : undefined}
+            aria-label={t.deviceInbox.sendMessageButtonLabel(device.Name)}
+            onclick={() => { if (canText) composerOpen = !composerOpen; }}
+          >
+            {t.deviceInbox.sendMessageButton}
+          </button>
           <span class="drophint" aria-hidden="true">
             {dragOver ? t.deviceInbox.dropActive : t.deviceInbox.dropHint}
           </span>
@@ -739,6 +887,64 @@
         {#each avail.caveats as c (c)}
           <p class="inboxcaveat">{caveatText(c)}</p>
         {/each}
+        <!-- Why the message control is disabled. Always present when it is, and
+             never allowed to touch the file half above it: a receiver without
+             `inbox.text.v1` takes files perfectly well.
+             Deliberately NOT an `.inboxcaveat`: a caveat qualifies the send that
+             IS on offer, and this qualifies nothing about dropping a file
+             here. -->
+        {#if !canText}
+          <p class="inboxtextoff">{t.deviceInbox.textUnavailable}</p>
+        {/if}
+
+        <!-- The composer is a SIBLING of the drop zone, never inside it: a
+             textarea within a file drop target would swallow a drag aimed at the
+             zone, and a file dropped on it would start a delivery the user was
+             in the middle of writing an alternative to. -->
+        {#if canText && composerOpen}
+          <div class="composer" id={composerId}>
+            <!-- The heading is the field's own label and carries the target, so
+                 the composer never reads as "a message" detached from a device. -->
+            <label class="composerhead" for={fieldId}>{t.deviceInbox.composerHeading(device.Name)}</label>
+            <textarea
+              id={fieldId}
+              class="composerfield"
+              rows="3"
+              bind:value={draft}
+              placeholder={t.deviceInbox.messagePlaceholder}
+              aria-describedby={countId}
+              aria-invalid={draftSize.tooLong}
+            ></textarea>
+            <!-- The count is beside the field at all times rather than a refusal
+                 afterwards, and it is the whole explanation of a disabled Send —
+                 which is why the empty and over-the-bound sentences sit in it. -->
+            <p class="composercount" class:bad={draftSize.tooLong} id={countId}>
+              <span class="composerbytes">{t.deviceInbox.messageCount(draftSize.bytes, INBOX_MANIFEST_MAX_TEXT_BYTES)}</span>
+              {#if draftSize.tooLong}
+                <span class="composerwhy">{t.deviceInbox.messageTooLongHint(draftSize.overflow)}</span>
+              {:else if draftSize.empty}
+                <span class="composerwhy">{t.deviceInbox.messageEmptyHint}</span>
+              {/if}
+            </p>
+            <div class="composeractions">
+              <button
+                class="sendbtn"
+                type="button"
+                disabled={busy || !draftSize.sendable}
+                aria-label={t.deviceInbox.messageSendLabel(device.Name)}
+                onclick={startTextSend}
+              >
+                {t.deviceInbox.messageSend}
+              </button>
+              <!-- Collapse, not discard: the draft survives so reopening the
+                   composer is not a punishment for closing it. -->
+              <button class="linkish" type="button" onclick={() => (composerOpen = false)}>
+                {t.deviceInbox.composerClose}
+              </button>
+            </div>
+            <p class="composernote">{t.deviceInbox.messagePrivacyNote}</p>
+          </div>
+        {/if}
       {:else}
         <p class="inboxblocked">{blockText(avail.block ?? "not_enrolled")}</p>
       {/if}
@@ -752,7 +958,12 @@
         </div>
       {/if}
 
-      {#if fileCount > 0 && (local || task)}
+      <!-- What this delivery carries, and only ever as a measurement: a count
+           and a size for files, a byte count for a message. The body itself is
+           never rendered here or anywhere else on this card. -->
+      {#if sendKind === "text" && (local || task)}
+        <p class="sendfiles">{t.deviceInbox.messageSummary(messageBytes)}</p>
+      {:else if sendKind === "files" && fileCount > 0 && (local || task)}
         <p class="sendfiles">{t.deviceInbox.fileSummary(fileCount, formatSize(fileBytes))}</p>
       {/if}
 
@@ -893,6 +1104,10 @@
   }
   .sendzone.dragover { border-color: var(--accent); border-style: solid; background: var(--code-bg); }
   .sendzone.busy { opacity: .75; }
+  /* …except the message control, which stays live during a send. Dimming it
+     with the rest of the zone would make the one control that still works look
+     like the ones that don't. */
+  .sendzone.busy .msgbtn { opacity: 1; }
 
   .sendbtn {
     font: inherit; font-size: var(--fs-xs); cursor: pointer;
@@ -901,6 +1116,20 @@
     padding: var(--space-2) var(--space-4);
     transition: background-color .13s;
   }
+  /* The message control is the quieter sibling of Send files: same size and
+     rhythm, an outline rather than the accent, so the zone still has one
+     primary action while both kinds are equally reachable. */
+  .msgbtn {
+    font: inherit; font-size: var(--fs-xs); cursor: pointer;
+    background: none; color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-4);
+    transition: border-color .13s, color .13s;
+  }
+  .msgbtn:hover:not(:disabled) { border-color: var(--accent-border); color: var(--accent-fg); }
+  .msgbtn:disabled { opacity: .6; cursor: default; }
+  .msgbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
   .sendbtn:hover:not(:disabled) { background: var(--social-bg); }
   .sendbtn:disabled { opacity: .6; cursor: default; }
   /* Visible focus is a requirement, not a default: the button is the keyboard
@@ -916,10 +1145,41 @@
      working in some engines. */
   .filepick { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 
-  .inboxcaveat, .inboxblocked, .sendfiles, .senderr, .sendstatus {
+  /* The composer: a quiet panel under the drop zone rather than a second boxed
+     surface beside it, so an enrolled row does not grow two competing frames. */
+  .composer {
+    display: flex; flex-direction: column; gap: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+  }
+  .composerhead { font-size: var(--fs-xs); color: var(--text-h); }
+  .composerfield {
+    /* `width: 100%` with the default content-box would overflow its padding out
+       of the panel at the narrowest widths. */
+    box-sizing: border-box; width: 100%; min-height: 5.5rem; resize: vertical;
+    font: inherit; font-size: var(--fs-sm); line-height: 1.6; color: var(--text-h);
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: var(--space-2);
+    /* Logical, so the field and its text read the same in a right-to-left UI. */
+    text-align: start;
+  }
+  .composerfield:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .composerfield[aria-invalid="true"] { border-color: var(--danger); }
+  .composercount {
+    margin: 0; display: flex; flex-wrap: wrap; gap: var(--space-2);
+    font-size: var(--fs-xs); color: var(--text);
+  }
+  /* Tabular digits: the count changes on every keystroke and a proportional
+     font makes the whole line jitter while typing. */
+  .composerbytes { font-variant-numeric: tabular-nums; }
+  .composercount.bad { color: var(--danger); }
+  .composeractions { display: flex; gap: var(--space-3); flex-wrap: wrap; align-items: center; }
+  .composernote { margin: 0; font-size: var(--fs-xs); line-height: 1.6; max-width: 68ch; color: var(--text); }
+
+  .inboxcaveat, .inboxtextoff, .inboxblocked, .sendfiles, .senderr, .sendstatus {
     margin: 0; font-size: var(--fs-xs); line-height: 1.6; max-width: 68ch;
   }
-  .inboxcaveat, .sendfiles { color: var(--text); }
+  .inboxcaveat, .inboxtextoff, .sendfiles { color: var(--text); }
   .inboxblocked { color: var(--text); }
   .senderr { color: var(--danger); }
 
@@ -944,7 +1204,7 @@
   .sendstatus.bad { color: var(--danger); background: var(--danger-bg); border-color: var(--danger-border); }
 
   @media (prefers-reduced-motion: reduce) {
-    .sendzone, .sendbtn { transition: none; }
+    .sendzone, .sendbtn, .msgbtn { transition: none; }
   }
 
   @media (max-width: 520px) {
@@ -954,6 +1214,8 @@
        their own rather than being squeezed beside a wrapped device name. */
     .rowactions { flex: 1 0 100%; margin-inline-start: 0; }
     .sendzone { flex-direction: column; align-items: stretch; }
-    .sendbtn { width: 100%; }
+    /* Covers the composer's Send too, which is a `.sendbtn` as well. */
+    .sendbtn, .msgbtn { width: 100%; }
+    .composeractions { flex-direction: column; align-items: stretch; }
   }
 </style>

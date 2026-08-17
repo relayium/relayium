@@ -17,6 +17,10 @@
 //     "the target device saved it" must not share one vague state. So the
 //     sender-local phases and the server states are different types here, and
 //     `saved` is reachable only from the server's own `saved`.
+import {
+  INBOX_MANIFEST_MAX_TEXT_BYTES,
+  INBOX_MANIFEST_MIN_TEXT_BYTES,
+} from "./inbox-manifest";
 
 /** The one wrap algorithm this protocol version defines (protocol §2). */
 export const INBOX_KEY_ALGORITHM = "x25519-sealedbox-v1";
@@ -300,6 +304,46 @@ export function sendAvailability(deviceID: string, inbox: DeviceInboxView | null
 export function canSendText(deviceID: string, inbox: DeviceInboxView | null): boolean {
   if (!sendAvailability(deviceID, inbox).sendable) return false;
   return !!inbox && inbox.Capabilities.includes(CAP_TEXT_V1);
+}
+
+/** What a composer has to know about a draft before its Send button may be
+ *  enabled — and the only thing about the draft that ever leaves it. */
+export interface TextDraftSize {
+  /** Exactly what the manifest would declare and the receiver re-measures. */
+  bytes: number;
+  empty: boolean;
+  tooLong: boolean;
+  /** The precondition `sendTextToDevice` applies, asked BEFORE the button is
+   *  pressed rather than after. */
+  sendable: boolean;
+  /** How far past the bound, for the sentence that says so. 0 when within. */
+  overflow: number;
+}
+
+/** Measure a draft the way the protocol does: in UTF-8 BYTES.
+ *
+ *  A character count would be a different, wrong bound — one emoji is four
+ *  bytes and one Chinese character is three — and it would enable a button for
+ *  a message the seal then refuses with `message_too_long`, after the user had
+ *  been told the length was fine.
+ *
+ *  Takes the draft EXACTLY as typed: never trimmed, never normalized. Trailing
+ *  whitespace a user deliberately wrote is theirs, and a counter measuring
+ *  something other than what would be sent is a counter that lies at the bound.
+ *
+ *  Pure, and outside the component, so both bounds are unit-testable without a
+ *  DOM — the same reason the send decisions above live here. */
+export function textDraftSize(draft: string): TextDraftSize {
+  const bytes = new TextEncoder().encode(draft).length;
+  const empty = bytes < INBOX_MANIFEST_MIN_TEXT_BYTES;
+  const tooLong = bytes > INBOX_MANIFEST_MAX_TEXT_BYTES;
+  return {
+    bytes,
+    empty,
+    tooLong,
+    sendable: !empty && !tooLong,
+    overflow: tooLong ? bytes - INBOX_MANIFEST_MAX_TEXT_BYTES : 0,
+  };
 }
 
 // ── Sender-local phases vs. server states ──────────────────────────────────
