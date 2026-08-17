@@ -929,6 +929,8 @@
 "send.refusalStaging" = "Your files couldn't be copied into Relayium, so nothing was sent.";
 "send.refusalKeyStorage" = "Relayium couldn't store the key for this delivery, so it wasn't started.";
 "send.refusalAlreadySending" = "Something is already being prepared. Wait for it to finish.";
+"send.refusalMessageEmpty" = "Type a message to send first.";
+"send.refusalMessageTooLong" = "That message is too long to send to a device. Send it as a file instead.";
 "send.actionStop" = "Stop";
 "send.actionCancelDelivery" = "Cancel delivery";
 "send.cancelRefused" = "This couldn't be cancelled — the other device has already started taking it.";

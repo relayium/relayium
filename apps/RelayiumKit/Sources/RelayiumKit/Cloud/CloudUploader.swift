@@ -12,6 +12,43 @@ public struct UploadOutcome: Equatable {
     }
 }
 
+/// What frame 0 of an upload seals.
+///
+/// Two documents, deliberately not one. The shared Stored-Wire manifest
+/// describes public share objects whose bytes are frozen and interop-tested
+/// across unrelated products; the Device Inbox v2 manifest carries a content
+/// kind and is free to be stricter. Teaching the first about the second would
+/// change what a share object looks like, so this type SELECTS between them and
+/// no code path can end up producing a blend.
+public enum UploadManifest: Equatable, Sendable {
+    /// The shared Stored-Wire manifest, derived from the sources' names and
+    /// sizes. What every public share upload has always sealed, byte for byte.
+    case storedWire
+    /// A dedicated, ALREADY CANONICAL plaintext document, sealed verbatim.
+    ///
+    /// The bytes belong to the caller — for a Device Inbox delivery they are
+    /// `InboxManifest.encode`'s output — because this type must not acquire an
+    /// opinion about a format whose canonical spelling is pinned by frozen
+    /// cross-language vectors. It only seals what it is handed.
+    case sealed([UInt8])
+}
+
+/// The manifest a purpose is allowed to seal, checked in both directions.
+///
+/// A `device_task` object whose frame 0 is the shared manifest is refused by its
+/// own v2 receiver as `verify_failed` — after the whole ciphertext has been
+/// uploaded. A share whose frame 0 is a v2 manifest is a download page that
+/// cannot read its own file list. Neither is recoverable at the point it would
+/// be discovered, so both are refused here, before a byte moves.
+func uploadManifestMatches(purpose: UploadPurpose, manifest: UploadManifest) -> Bool {
+    switch (purpose, manifest) {
+    case (.deviceTask, .sealed): return true
+    case (.deviceTask, .storedWire): return false
+    case (.share, .storedWire): return true
+    case (.share, .sealed): return false
+    }
+}
+
 /// The chunked upload: encrypt and send interleaved, so resident memory is one
 /// upload chunk plus one frame rather than the whole ciphertext.
 ///
@@ -52,12 +89,22 @@ public final class CloudUploader {
     public init(transport: ResumableTransport) { self.transport = transport }
 
     /// The framed-stream header every session leads with: the length-prefixed
-    /// encrypted manifest. A pure function of (key, names, sizes) — which is
-    /// what lets a re-initialized session be byte-identical to the one the
-    /// server reaped.
-    static func manifestHeader(key: [UInt8], sources: [PlaintextSource]) throws -> [UInt8] {
-        let manifest = StoredManifest(files: sources.map { ManifestFile(name: $0.name, size: $0.size) })
-        let encManifest = try encryptManifest(key: key, manifest)
+    /// encrypted manifest. A pure function of (key, manifest) — which is what
+    /// lets a re-initialized session be byte-identical to the one the server
+    /// reaped, for a caller-sealed document exactly as for the shared one.
+    static func manifestHeader(key: [UInt8], sources: [PlaintextSource],
+                               manifest: UploadManifest = .storedWire) throws -> [UInt8] {
+        let encManifest: [UInt8]
+        switch manifest {
+        case .storedWire:
+            let stored = StoredManifest(files: sources.map { ManifestFile(name: $0.name, size: $0.size) })
+            encManifest = try encryptManifest(key: key, stored)
+        case .sealed(let plaintext):
+            // Sealed verbatim, at the same AEAD unit the shared manifest uses —
+            // sequence 0 under the content key — because v2 changes the DOCUMENT
+            // at frame 0 and nothing about the framing around it.
+            encManifest = seal(key: key, seq: 0, plaintext: plaintext)
+        }
         let n = encManifest.count
         var header: [UInt8] = [UInt8(n >> 24 & 0xff), UInt8(n >> 16 & 0xff),
                                UInt8(n >> 8 & 0xff), UInt8(n & 0xff)]
@@ -75,6 +122,13 @@ public final class CloudUploader {
                        burnAfterRead: Bool, ttl: Int,
                        token: String,
                        onProgress: @escaping (_ sent: Int, _ total: Int) -> Void) async throws -> UploadOutcome {
+        // This path mints its own content key and hands back a `#k=` capability,
+        // which is a public share by definition — so the shared manifest is the
+        // only coherent frame 0 here, and the check states it rather than
+        // leaving it to the fact that no caller passes anything else.
+        guard uploadManifestMatches(purpose: purpose, manifest: .storedWire) else {
+            throw StoredWireError.invalidManifest
+        }
         let raw = generateStoreKey()
         let header = try Self.manifestHeader(key: raw, sources: sources)
         let total = try Self.checkedCipherSize(sources.map(\.size))
@@ -135,12 +189,23 @@ public final class CloudUploader {
     /// re-open a reaped device delivery as a public share — which is exactly
     /// what an inherited `.share` default would do, silently, on the path where
     /// nobody is watching.
+    ///
+    /// `manifest` has no default for the same reason and one more. It decides
+    /// which document frame 0 carries, it is derived from the durable plan, and
+    /// it is derived on EVERY attempt: a retry, a reseal after a key rotation
+    /// and a restart after the idle reaper all rebuild it from the same plan, so
+    /// none of them can produce a delivery of a different kind — or fall back to
+    /// the shared manifest — than the attempt before it.
     public func resume(sources: [PlaintextSource], key: [UInt8], uploadId: String?,
                        uploadChunkSize: Int?, purpose: UploadPurpose,
+                       manifest: UploadManifest,
                        burnAfterRead: Bool, ttl: Int, token: String,
                        onUploadSession: (String, Int) throws -> Void,
                        onProgress: @escaping (_ sent: Int, _ total: Int) -> Void) async throws -> UploadOutcome {
-        let header = try Self.manifestHeader(key: key, sources: sources)
+        guard uploadManifestMatches(purpose: purpose, manifest: manifest) else {
+            throw StoredWireError.invalidManifest
+        }
+        let header = try Self.manifestHeader(key: key, sources: sources, manifest: manifest)
         let total = try Self.checkedCipherSize(sources.map(\.size))
 
         var session: (id: String, chunkSize: Int)?

@@ -432,6 +432,143 @@ public final class InboxSendModel: ObservableObject {
         }
     }
 
+    /// Stage one MESSAGE as a delivery to the chosen device and drive it to a
+    /// task.
+    ///
+    /// The same durable machinery a file send uses, and deliberately so: the
+    /// idempotency key is minted once and written before any network work, the
+    /// content key is filed under the job, an ambiguous create converges rather
+    /// than queueing a second delivery, and a retry rebuilds the identical
+    /// manifest from the plan. A message is not special enough to earn a second
+    /// copy of that.
+    ///
+    /// What IS different is stated in three places and nowhere else: the plan
+    /// records `deliveryKind: .text`, the manifest carries one `text` item and
+    /// only its byte length, and the target must announce `inbox.text.v1`.
+    ///
+    /// The message body never reaches central, the manifest, the card, a log or
+    /// this model's published state — only its length does. Its bytes are the
+    /// payload frames, and nothing else.
+    ///
+    /// **One kind per delivery**: there are no attachments here and no parameter
+    /// for one. A mixed manifest is refused by the codec, so mixing could only
+    /// ever produce a delivery no receiver accepts.
+    public func sendText(_ message: String, token: String) {
+        refusal = nil
+        actionError = nil
+        guard let accountId, !accountId.isEmpty, !token.isEmpty else {
+            refusal = .notSignedIn
+            return
+        }
+        // Measured in UTF-8 BYTES, which is what the manifest declares and what
+        // the receiver re-measures. A per-Character bound would let one emoji
+        // past a check the seal then refuses.
+        let bytes = Array(message.utf8)
+        guard bytes.count >= InboxManifest.minTextBytes else { refusal = .messageEmpty; return }
+        guard bytes.count <= InboxManifest.maxTextBytes else { refusal = .messageTooLong; return }
+        guard let targetID = selectedTargetID,
+              let candidate = candidates.first(where: { $0.id == targetID }) else {
+            refusal = .noTargetChosen
+            return
+        }
+        guard let row = rows.first(where: { $0.id == targetID }),
+              let target = InboxTargetEligibility.target(for: row) else {
+            refusal = .targetUnavailable(candidate.availability.block ?? .cannotReceive)
+            return
+        }
+        // Checked AFTER the general verdict so the sentence a user reads names
+        // the first thing that would have to change: a revoked device is
+        // revoked, not "cannot present text". The coordinator re-checks this
+        // against a fresh device read before a byte moves.
+        guard InboxTargetEligibility.canReceiveText(row) else {
+            refusal = .textUnsupported
+            return
+        }
+        guard work[Self.stagingKey] == nil else { refusal = .alreadySending; return }
+
+        let g = accountGeneration
+        let store = pending.store
+        let keys = pending.keys
+        let durableTarget = PendingUploadTarget(target)
+        stageTextPlaceholder(byteCount: bytes.count, target: targetID)
+        work[Self.stagingKey] = Task { [weak self] in
+            var staged: PendingUploadPlan?
+            var keyWasSaved = false
+            do {
+                let preparation = Task.detached(priority: .userInitiated) {
+                    // The source is built INSIDE the detached task, from the
+                    // bytes alone, so nothing carrying the message crosses an
+                    // isolation boundary as a live object.
+                    try store.prepare(sources: [DataSource(name: Self.messageStagingName,
+                                                           bytes: bytes)],
+                                      accountId: accountId, burnAfterRead: false,
+                                      ttl: UploadPurpose.deviceTaskTTLSeconds,
+                                      sourceDraftId: nil, target: durableTarget,
+                                      deliveryKind: .text)
+                }
+                let plan = try await withTaskCancellationHandler {
+                    try await preparation.value
+                } onCancel: {
+                    preparation.cancel()
+                }
+                staged = plan
+                try Task.checkCancellation()
+                let key = generateStoreKey()
+                do {
+                    try await keys.save(id: plan.jobId, keyB64url: encodeStoreKey(key))
+                    keyWasSaved = true
+                } catch {
+                    store.purge(plan)
+                    throw InboxSendRefusal.keyStorageFailed
+                }
+                guard let self, g == self.accountGeneration else { throw CancellationError() }
+                self.work[plan.jobId] = self.work[Self.stagingKey]
+                self.work[Self.stagingKey] = nil
+                self.adopt(plan, g: g)
+                // No `onSelectionCommitted`: a message has no shared draft and
+                // no picked selection behind it, so there is nothing to retire
+                // and nothing whose last copy this staging just became.
+                await self.run(plan, token: token, g: g)
+            } catch {
+                guard let self else { return }
+                if let plan = staged, self.records[plan.jobId] == nil {
+                    if keyWasSaved { try? await keys.remove(id: plan.jobId) }
+                    store.purge(plan)
+                }
+                self.work[Self.stagingKey] = nil
+                self.records.removeValue(forKey: Self.stagingKey)
+                self.publish()
+                guard g == self.accountGeneration else { return }
+                if let refusal = error as? InboxSendRefusal {
+                    self.refusal = refusal
+                } else if !(error is CancellationError) {
+                    self.refusal = .stagingFailed
+                }
+            }
+        }
+    }
+
+    /// The on-disk slot label for a staged message.
+    ///
+    /// It is a `PendingUploadFile.name`, which the store requires to be
+    /// non-empty, and it goes NOWHERE else: the v2 manifest omits `name`
+    /// entirely for a text item, and `manifest(of:)` below hands the card an
+    /// empty file list for a text plan. So this string is never sealed, never
+    /// sent and never displayed.
+    // nonlocalized: an internal staging label, never displayed and never sealed
+    static let messageStagingName = "message"
+
+    /// The card for a message being staged. It carries the byte count and the
+    /// target — never the message.
+    private func stageTextPlaceholder(byteCount: Int, target: String) {
+        sequence += 1
+        records[Self.stagingKey] = Record(
+            plan: nil, result: nil, activity: .preparing,
+            files: [], fileCount: 1, byteCount: byteCount,
+            targetDeviceID: target, sequence: sequence)
+        publish()
+    }
+
     /// The key the ONE staging attempt is tracked under. A job id does not exist
     /// yet while a selection is being copied, and two concurrent stagings of the
     /// same selection would be two deliveries of the same files.
@@ -491,7 +628,12 @@ public final class InboxSendModel: ObservableObject {
     /// has no business on a screen; the NAME is the sanitized manifest identity
     /// the receiving side will rebuild.
     private static func manifest(of plan: PendingUploadPlan) -> [FileMeta] {
-        plan.files.map { FileMeta(name: $0.name, size: $0.size) }
+        // A MESSAGE has no file list. Its plan carries one staged entry under an
+        // internal slot label, and handing that label to a card would put a
+        // fabricated file name in front of the user for a delivery that is not a
+        // file. The byte count on the record is the whole truthful description.
+        guard plan.effectiveDeliveryKind == .file else { return [] }
+        return plan.files.map { FileMeta(name: $0.name, size: $0.size) }
     }
 
     /// What a plan about to be attempted is doing, read from the plan itself.

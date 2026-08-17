@@ -389,12 +389,41 @@ public final class InboxSendCoordinator: @unchecked Sendable {
             try await abandon(plan, token: token, includingObject: true)
             throw InboxSendFailure.targetUnavailable(block)
         }
+        // The capability gate for a MESSAGE, re-checked here rather than trusted
+        // from the moment the send was staged: a device can drop the claim by
+        // downgrading between the two, and a message landing on a build that
+        // does not present one would be written into a downloads folder as a
+        // file. Definitive — the remedy is on that machine — so the ciphertext
+        // goes back.
+        //
+        // A FILE delivery deliberately never reaches this branch. Requiring
+        // `inbox.text.v1` of it would refuse ordinary file sends to every
+        // receiver that does not render messages.
+        if plan.effectiveDeliveryKind == .text, !InboxTargetEligibility.canReceiveText(row) {
+            try await abandon(plan, token: token, includingObject: true)
+            throw InboxSendFailure.textUnsupported
+        }
         return target
     }
 
     private func upload(_ plan: PendingUploadPlan, key: [UInt8], token: String,
                         onProgress: (@Sendable (Int, Int) -> Void)?) async throws
         -> PendingUploadPlan {
+        // Built BEFORE the session is opened, and outside the catch below, so a
+        // plan that cannot produce a valid v2 manifest fails as itself rather
+        // than as a resumable upload failure the user would be invited to retry
+        // forever. Every bound the receiver applies is applied here first.
+        let manifest: UploadManifest
+        do {
+            manifest = try InboxSendManifest.sealed(for: plan)
+        } catch {
+            // Terminal and definitive: the names and sizes are the plan's own,
+            // so every later attempt would rebuild exactly the same refusal.
+            // Nothing has been uploaded yet, so `abandon` releases only what a
+            // never-uploaded send owns — which is nothing.
+            try await abandon(plan, token: token, includingObject: true)
+            throw InboxSendFailure.unsendableContent
+        }
         do {
             let sources = try store.sources(for: plan)
             let outcome = try await uploader.resume(
@@ -404,6 +433,11 @@ public final class InboxSendCoordinator: @unchecked Sendable {
                 // object's authorization model, and a `share` here would publish
                 // the user's delivery as a public link.
                 purpose: plan.effectivePurpose,
+                // Likewise from the plan: the dedicated Device Inbox v2 document,
+                // never the shared Stored-Wire manifest. A reaped session that
+                // re-inits below rebuilds this same value, so the replacement
+                // object carries the same manifest the first one did.
+                manifest: manifest,
                 burnAfterRead: plan.burnAfterRead, ttl: plan.ttl, token: token,
                 onUploadSession: { [store] id, chunkSize in
                     // Persisted before bytes move, so a crash cannot orphan a
@@ -575,6 +609,15 @@ public enum InboxSendFailure: Error, Equatable, Sendable {
     case targetMissing
     /// The device is still here but may not be sent to, for this named reason.
     case targetUnavailable(InboxTargetBlock)
+    /// The target does not announce `inbox.text.v1`, so a message sent to it
+    /// would be presented as something nobody promised. Applies to a MESSAGE
+    /// delivery only; a file delivery never consults the token.
+    case textUnsupported
+    /// This plan cannot produce a valid Device Inbox v2 manifest — a name no
+    /// receiver would accept, a message outside its bounds, more items than the
+    /// protocol carries. Terminal: the names and sizes are the plan's own, so
+    /// every retry would rebuild the same refusal.
+    case unsendableContent
     /// The target rotated its key again after the one reseal was spent.
     case staleTargetKey
     /// The content key could not be wrapped for this target.

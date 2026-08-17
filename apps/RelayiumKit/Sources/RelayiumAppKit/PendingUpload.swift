@@ -153,10 +153,33 @@ public struct PendingUploadPlan: Codable, Equatable {
     /// Read through `targetKeyWasResealed`, never directly, so absent and false
     /// cannot be told apart by a call site.
     public var targetKeyResealed: Bool?
+    /// What this delivery CONTAINS — files, or one message — and therefore which
+    /// Device Inbox v2 manifest its frame 0 seals.
+    ///
+    /// Durable, and that is the whole point. The manifest is rebuilt from this
+    /// plan on every attempt, so a retry, a reseal after a key rotation and a
+    /// restart after the idle reaper all produce the same kind as the attempt
+    /// before them. Deriving it from whatever is in memory instead would let a
+    /// resume in a fresh process seal a file manifest over a message.
+    ///
+    /// Optional and additive, with the version deliberately NOT bumped, for the
+    /// reasons written above `sourceDraftId`. Absent means `file`, which is what
+    /// every plan written before text sending existed was. That is duplicate-
+    /// and data-loss safety for an interrupted upload, not v1 compatibility:
+    /// nothing about the v1 protocol is honoured anywhere in this file.
+    ///
+    /// A raw value this build does not know is a DECODE failure rather than a
+    /// default, exactly like `purpose`: a kind written by a future build
+    /// describes payload framing this one cannot honour.
+    public var deliveryKind: InboxManifestKind?
 
     /// The purpose to act on. Absent means `share`: the only thing a plan
     /// written before this field existed could have been.
     public var effectivePurpose: UploadPurpose { purpose ?? .share }
+
+    /// The delivery kind to act on. Absent means `file`. Read through this,
+    /// never directly, so no call site can tell "absent" from "file".
+    public var effectiveDeliveryKind: InboxManifestKind { deliveryKind ?? .file }
 
     /// Whether the one refresh-and-reseal has been spent. Absent means no: a
     /// plan written before this field existed had never resealed anything.
@@ -306,6 +329,9 @@ public final class PendingUploadStore: @unchecked Sendable {
         // pinned ones the uploader would have used. The pin is what makes these
         // the bytes the user consented to: a path looked up a second time is
         // the lookup that can lie.
+        //
+        // No `deliveryKind` parameter, deliberately: a `SelectedFile` is a file
+        // the user picked, and a message never arrives through this door.
         try prepare(sources: try stageCloudFiles(files), accountId: accountId,
                     burnAfterRead: burnAfterRead, ttl: ttl,
                     sourceDraftId: sourceDraftId, target: target)
@@ -318,11 +344,24 @@ public final class PendingUploadStore: @unchecked Sendable {
     public func prepare(sources: [PlaintextSource], accountId: String,
                         burnAfterRead: Bool, ttl: Int,
                         sourceDraftId: String? = nil,
-                        target: PendingUploadTarget? = nil) throws -> PendingUploadPlan {
+                        target: PendingUploadTarget? = nil,
+                        deliveryKind: InboxManifestKind = .file) throws -> PendingUploadPlan {
         lock.lock()
         defer { lock.unlock() }
         guard !sources.isEmpty, sources.count <= MAX_FILES else {
             throw PendingUploadError.unusableSelection
+        }
+        // The kind is checked BEFORE a byte is copied, against the same bounds
+        // the manifest codec applies, so a message that could never be sealed is
+        // refused here rather than after it has been written to disk under a
+        // content key. `.text` is a device delivery by construction: there is no
+        // shape of public share that carries one.
+        if deliveryKind == .text {
+            guard target != nil, sources.count == 1,
+                  sources[0].size >= InboxManifest.minTextBytes,
+                  sources[0].size <= InboxManifest.maxTextBytes else {
+                throw PendingUploadError.unusableSelection
+            }
         }
         guard !accountId.isEmpty, ttl > 0 else {
             throw PendingUploadError.unusableSelection
@@ -439,7 +478,11 @@ public final class PendingUploadStore: @unchecked Sendable {
                                          targetKeyId: target?.keyId,
                                          targetKeyGeneration: target?.keyGeneration,
                                          createIdempotencyKey: target?.createIdempotencyKey,
-                                         targetWrappedKey: nil)
+                                         targetWrappedKey: nil,
+                                         // `nil` for a file send, so an ordinary
+                                         // delivery's encoded plan is unchanged
+                                         // and a share's stays byte-identical.
+                                         deliveryKind: deliveryKind == .file ? nil : deliveryKind)
             try write(plan)                 // LAST: this is what makes the job complete
             return plan
         } catch {
@@ -599,6 +642,11 @@ public final class PendingUploadStore: @unchecked Sendable {
             return fields.allSatisfy { !$0 }
                 && plan.deviceTaskId == nil && plan.targetKeyResealed == nil
                 && plan.targetWrappedKey == nil
+                // A share has no content kind at all: its frame 0 is the shared
+                // Stored-Wire manifest, which has no room for one. A share plan
+                // carrying the field is two builds disagreeing about what this
+                // job is, refused for the same reason the target fields are.
+                && plan.deliveryKind == nil
         case .deviceTask:
             guard fields.allSatisfy({ $0 }), let target = plan.target else { return false }
             if let wrapped = plan.targetWrappedKey,
@@ -610,6 +658,15 @@ public final class PendingUploadStore: @unchecked Sendable {
             // delivery nothing could ever act on.
             if let taskId = plan.deviceTaskId,
                (try? StoredObjectID.checked(taskId)) != taskId { return false }
+            // A message is exactly one payload item within the manifest's own
+            // bounds. Re-checked on READ rather than trusted from `prepare`,
+            // because this is the shape the manifest is rebuilt from on every
+            // later attempt — including one in a process that never staged it.
+            if plan.effectiveDeliveryKind == .text {
+                guard plan.files.count == 1,
+                      plan.files[0].size >= InboxManifest.minTextBytes,
+                      plan.files[0].size <= InboxManifest.maxTextBytes else { return false }
+            }
             // A device delivery may never be burn-after-read: the queue refuses
             // a limited object, so such a plan could not be uploaded at all.
             return target.isWellFormed && !plan.burnAfterRead

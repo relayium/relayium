@@ -298,4 +298,13 @@ public enum InboxSendRefusal: Error, Equatable, Sendable {
     case keyStorageFailed
     /// A send for this selection is already running.
     case alreadySending
+    /// There is no message to send. An empty message is not a message: a
+    /// receiver asked to commit one would have to invent something to show.
+    case messageEmpty
+    /// The message is longer than this protocol carries (64 KiB of UTF-8).
+    case messageTooLong
+    /// The chosen device does not announce `inbox.text.v1`, so it would not
+    /// present a message AS a message. Refused before anything is staged, and
+    /// applying to messages only — a file send never consults the token.
+    case textUnsupported
 }

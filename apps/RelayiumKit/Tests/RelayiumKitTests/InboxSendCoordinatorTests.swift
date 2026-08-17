@@ -58,19 +58,27 @@ final class InboxSendCoordinatorTests: XCTestCase {
 
     // MARK: - fixtures
 
+    /// A device this account may send to.
+    ///
+    /// `inbox.text.v1` is announced by DEFAULT here and absent from the shared
+    /// list on purpose, so both halves of the capability rule are reachable: a
+    /// message needs the token, and a file must not.
     private func row(keyID: String? = nil, publicKey: String? = nil, generation: Int64 = 4,
                      autoAccept: InboxAutoAccept = .auto, revoked: Bool = false,
-                     canReceive: Bool = true) -> InboxDeviceRow {
+                     canReceive: Bool = true, presentsText: Bool = true,
+                     receiveDirReady: Bool = true) -> InboxDeviceRow {
         let key = InboxKey(id: keyID ?? self.keyID, algorithm: InboxProtocol.keyAlgorithm,
                            publicKey: publicKey ?? devicePublicKey, generation: generation,
                            createdAt: 10)
         return InboxDeviceRow(id: deviceID, name: "Studio", kind: "mac", isCurrent: false,
                               inbox: InboxView(presence: .online, lastHeartbeatAt: 10,
                                                presenceExpiresAt: 100,
-                                               heartbeatIntervalSeconds: 30, protocolVersion: 1,
-                                               capabilities: [InboxCapability.receiveV1],
-                                               receiveCapability: InboxCapability.receiveV1,
-                                               autoAccept: autoAccept, receiveDirReady: true,
+                                               heartbeatIntervalSeconds: 30, protocolVersion: 2,
+                                               capabilities: InboxProtocol
+                                                   .announcedCapabilities(presentingText: presentsText),
+                                               receiveCapability: InboxCapability.receiveV2,
+                                               autoAccept: autoAccept,
+                                               receiveDirReady: receiveDirReady,
                                                revoked: revoked, canReceive: canReceive,
                                                registeredAt: 10, key: key))
     }

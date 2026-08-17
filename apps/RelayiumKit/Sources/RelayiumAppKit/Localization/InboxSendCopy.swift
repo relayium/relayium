@@ -86,6 +86,18 @@ public enum InboxSendPresentation {
             return L10n.t(.sendErrorTargetMissing, language: language)
         case .targetUnavailable(let block):
             return text(for: block, language: language)
+        case .textUnsupported:
+            // The sentence the unsupported-capability block already carries:
+            // that build cannot do this, and updating it may fix it. Reused
+            // rather than minted, so one condition does not acquire two
+            // explanations depending on which action discovered it.
+            return L10n.t(.sendBlockUnsupportedCapability, language: language)
+        case .unsendableContent:
+            // Nothing left this device and nothing will: the names or sizes
+            // themselves are what no receiver would accept. It reads as the
+            // staging refusal because that is where the user's remedy is —
+            // choose something else — rather than on the other machine.
+            return L10n.t(.sendRefusalStaging, language: language)
         case .staleTargetKey:
             return L10n.t(.sendErrorStaleKey, language: language)
         case .sealFailed:
@@ -257,6 +269,13 @@ public enum InboxSendPresentation {
         case .stagingFailed:     return L10n.t(.sendRefusalStaging, language: language)
         case .keyStorageFailed:  return L10n.t(.sendRefusalKeyStorage, language: language)
         case .alreadySending:    return L10n.t(.sendRefusalAlreadySending, language: language)
+        case .messageEmpty:      return L10n.t(.sendRefusalMessageEmpty, language: language)
+        case .messageTooLong:    return L10n.t(.sendRefusalMessageTooLong, language: language)
+        // The same sentence the unsupported-capability block carries: that
+        // build cannot do this, and updating it may fix it. Reused rather than
+        // minted, so one condition does not acquire two explanations depending
+        // on which action discovered it.
+        case .textUnsupported:   return L10n.t(.sendBlockUnsupportedCapability, language: language)
         }
     }
 

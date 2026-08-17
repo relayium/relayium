@@ -65,15 +65,17 @@ final class InboxSendModelTests: XCTestCase {
                      autoAccept: InboxAutoAccept = .auto, revoked: Bool = false,
                      canReceive: Bool = true, presence: InboxPresence = .online,
                      receiveDirReady: Bool = true, registeredAt: Int64 = 10,
-                     capability: String = InboxCapability.receiveV1,
+                     capability: String = InboxCapability.receiveV2,
+                     presentsText: Bool = true,
                      isCurrent: Bool = false) -> InboxDeviceRow {
         let key = InboxKey(id: keyID, algorithm: InboxProtocol.keyAlgorithm,
                            publicKey: devicePublicKey, generation: 4, createdAt: 10)
         return InboxDeviceRow(id: id ?? deviceID, name: name, kind: kind, isCurrent: isCurrent,
                               inbox: InboxView(presence: presence, lastHeartbeatAt: 10,
                                                presenceExpiresAt: 100,
-                                               heartbeatIntervalSeconds: 30, protocolVersion: 1,
-                                               capabilities: [InboxCapability.receiveV1],
+                                               heartbeatIntervalSeconds: 30, protocolVersion: 2,
+                                               capabilities: InboxProtocol
+                                                   .announcedCapabilities(presentingText: presentsText),
                                                receiveCapability: capability,
                                                autoAccept: autoAccept,
                                                receiveDirReady: receiveDirReady,
@@ -806,6 +808,126 @@ final class InboxSendModelTests: XCTestCase {
         model.send(files: [], sourceDraftId: nil, token: "bearer")
         XCTAssertEqual(model.refusal, .noSelection)
         XCTAssertEqual(store.deviceSendPlans(for: "acct-1"), [])
+    }
+
+    // MARK: - sending a message
+
+    /// A message goes through the same durable machinery a file does, and comes
+    /// out the other end as a delivery whose sealed manifest says `text`.
+    func testAMessageBecomesATextDeliveryOnTheSameDurablePath() async throws {
+        let (model, _) = await signedIn()
+        model.selectTarget(deviceID)
+        sender.createOutcomes = [
+            .success(InboxTaskCreation(task: task(idempotencyKey: "recorded"), created: true)),
+        ]
+        sender.taskResults = [.success(task(state: .saved, idempotencyKey: "recorded"))]
+
+        model.sendText("meet me at 6", token: "bearer")
+        await waitUntil("the arrival") { model.items.first?.activity.isSavedOnTarget == true }
+
+        XCTAssertEqual(transport.purposes, [.deviceTask])
+        XCTAssertEqual(sender.creates.count, 1, "exactly one delivery per message")
+        XCTAssertTrue(InboxIdempotencyKey.isValid(try XCTUnwrap(sender.createdIdempotencyKeys.first)))
+        // The card describes a message by its size and nothing else: the staged
+        // slot label is internal and must never be rendered as a file name.
+        XCTAssertEqual(model.items.first?.files, [])
+        XCTAssertEqual(model.items.first?.byteCount, Array("meet me at 6".utf8).count)
+    }
+
+    /// The plan the retry would rebuild from says `text`, so no later attempt
+    /// can seal a file manifest over a message.
+    func testTheDurablePlanRecordsTheMessageKind() async throws {
+        let (model, _) = await signedIn()
+        model.selectTarget(deviceID)
+        sender.createOutcomes = [.failure(InboxError.api(status: 401, code: ""))]
+
+        model.sendText("still here", token: "bearer")
+        await waitUntil("the rejected credential") {
+            model.items.first?.activity == .stopped(.notAuthorized)
+        }
+
+        let minted = try XCTUnwrap(store.deviceSendPlans(for: "acct-1").first)
+        XCTAssertEqual(minted.effectiveDeliveryKind, .text)
+        XCTAssertEqual(minted.effectivePurpose, .deviceTask)
+        XCTAssertEqual(try InboxSendManifest.manifest(for: minted).kind, .text)
+    }
+
+    /// A device that does not announce `inbox.text.v1` is refused BEFORE
+    /// anything is staged: it would land the message as a file in somebody's
+    /// downloads folder, which is not what the sender was promised.
+    func testAMessageIsRefusedForADeviceThatWouldNotPresentIt() async throws {
+        sender.deviceRows = [row(presentsText: false), currentRow()]
+        let (model, _) = await signedIn()
+        model.selectTarget(deviceID)
+
+        model.sendText("hello", token: "bearer")
+
+        XCTAssertEqual(model.refusal, .textUnsupported)
+        XCTAssertEqual(store.deviceSendPlans(for: "acct-1"), [])
+        XCTAssertTrue(transport.purposes.isEmpty)
+    }
+
+    /// And the same device still takes FILES. Requiring the text token of a file
+    /// send would refuse every receiver that has no message surface.
+    func testTheSameDeviceStillTakesFilesWithoutTheTextCapability() async throws {
+        sender.deviceRows = [row(presentsText: false), currentRow()]
+        let (model, _) = await signedIn()
+        model.selectTarget(deviceID)
+        sender.createOutcomes = [
+            .success(InboxTaskCreation(task: task(idempotencyKey: "recorded"), created: true)),
+        ]
+
+        model.send(files: try selection(), sourceDraftId: nil, token: "bearer")
+        await waitUntil("the tracked task") { model.items.first?.taskID != nil }
+
+        XCTAssertNil(model.refusal)
+        XCTAssertEqual(transport.purposes, [.deviceTask])
+    }
+
+    /// Both message bounds, measured in UTF-8 bytes, refused before staging.
+    func testAMessageOutsideItsBoundsIsRefusedWithItsOwnReason() async throws {
+        let (model, _) = await signedIn()
+        model.selectTarget(deviceID)
+
+        model.sendText("", token: "bearer")
+        XCTAssertEqual(model.refusal, .messageEmpty)
+
+        model.sendText(String(repeating: "a", count: InboxManifest.maxTextBytes + 1),
+                       token: "bearer")
+        XCTAssertEqual(model.refusal, .messageTooLong)
+
+        // One emoji is four UTF-8 bytes, so a per-character bound would let a
+        // message past a check the seal then refuses.
+        model.sendText(String(repeating: "🙂", count: InboxManifest.maxTextBytes / 4 + 1),
+                       token: "bearer")
+        XCTAssertEqual(model.refusal, .messageTooLong)
+
+        XCTAssertEqual(store.deviceSendPlans(for: "acct-1"), [])
+        XCTAssertTrue(transport.purposes.isEmpty)
+    }
+
+    /// The preconditions a message shares with a file send keep their own
+    /// refusals, and the message-specific ones do not shadow them.
+    func testAMessageKeepsTheSharedPreconditions() async throws {
+        let (model, _) = await signedIn()
+        model.sendText("hello", token: "bearer")
+        XCTAssertEqual(model.refusal, .noTargetChosen)
+
+        model.selectTarget(deviceID)
+        model.sendText("hello", token: "")
+        XCTAssertEqual(model.refusal, .notSignedIn)
+    }
+
+    /// Each new refusal renders a sentence, and none of them renders the raw
+    /// enum name at the user.
+    func testTheMessageRefusalsAllRenderCopy() {
+        for refusal in [InboxSendRefusal.messageEmpty, .messageTooLong, .textUnsupported] {
+            let text = InboxSendPresentation.text(for: refusal)
+            XCTAssertFalse(text.isEmpty)
+            XCTAssertFalse(text.contains("refusal"), "a raw key reached the user: \(text)")
+        }
+        XCTAssertNotEqual(InboxSendPresentation.text(for: InboxSendRefusal.messageEmpty),
+                          InboxSendPresentation.text(for: InboxSendRefusal.messageTooLong))
     }
 
     // MARK: - helpers that need the shared-draft half

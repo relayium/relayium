@@ -375,6 +375,11 @@ public final class CloudUploadModel: ObservableObject {
                 // may run in a process that never saw the send being started,
                 // and the purpose decides the object's authorization model.
                 purpose: plan.effectivePurpose,
+                // This model drives SHARE uploads, so frame 0 is the shared
+                // Stored-Wire manifest and stays byte-identical to what it has
+                // always been. A device delivery is `InboxSendCoordinator`'s,
+                // and it seals the dedicated v2 document instead.
+                manifest: .storedWire,
                 burnAfterRead: plan.burnAfterRead, ttl: plan.ttl, token: token,
                 onUploadSession: { [weak self] id, chunkSize in
                     // Persisted from the uploader's own context, before bytes

@@ -16,12 +16,18 @@ final class StubTransport: ResumableTransport, @unchecked Sendable {
     /// object's authorization model, so "which one actually left" is an
     /// assertion rather than a detail.
     var purposes: [UploadPurpose] = []
+    /// Every framed header an init was handed, in order — `uint32BE(len) ||
+    /// encManifest`. Recorded because frame 0 is where a delivery's content kind
+    /// lives, so "which document actually left" is an assertion in its own right
+    /// and, for a session the reaper replaced, so is "the same one twice".
+    var headers: [[UInt8]] = []
     var initCount: Int { purposes.count }
 
     func initUpload(header: [UInt8], purpose: UploadPurpose, burnAfterRead: Bool, ttl: Int,
                     size: Int, token: String) async throws -> (uploadId: String, chunkSize: Int) {
         if let e = initError { throw e }
         purposes.append(purpose)
+        headers.append(header)
         return ("up1", chunkSize)
     }
 

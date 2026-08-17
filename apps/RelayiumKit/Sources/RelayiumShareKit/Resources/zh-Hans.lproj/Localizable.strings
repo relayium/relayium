@@ -913,6 +913,8 @@
 "send.refusalStaging" = "无法把文件复制到 Relayium，因此没有发送任何内容。";
 "send.refusalKeyStorage" = "Relayium 无法保存这次投递的密钥，因此没有开始。";
 "send.refusalAlreadySending" = "已经有内容正在准备中。请等它完成。";
+"send.refusalMessageEmpty" = "请先输入要发送的消息。";
+"send.refusalMessageTooLong" = "这条消息太长，无法发送到设备。请改用文件发送。";
 "send.actionStop" = "停止";
 "send.actionCancelDelivery" = "取消投递";
 "send.cancelRefused" = "无法取消——对方设备已经开始取走了。";

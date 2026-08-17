@@ -163,6 +163,41 @@ public enum InboxTargetEligibility {
                                        isCurrentDevice: row.isCurrent)
     }
 
+    /// Would offering a TEXT send to this device be honest?
+    ///
+    /// Deliberately NOT folded into `availability(for:)`, and the separation is
+    /// the point in both directions:
+    ///
+    ///  * a receiver without `inbox.text.v1` is a perfectly good FILE target,
+    ///    so requiring the token in the general verdict would refuse ordinary
+    ///    file deliveries to every build that does not render messages — the
+    ///    CLI, iOS, and the headless receiver among them;
+    ///  * a receiver without it would land a message as a file in somebody's
+    ///    downloads folder, so offering "send text" to it would promise a
+    ///    message and deliver a file.
+    ///
+    /// Central neither requires nor interprets the token and could not verify it
+    /// if it wanted to — content kind is sealed — so its absence is read as the
+    /// truthful answer rather than as a stale list: a device that has not said
+    /// it presents text is one this sender must not offer text to.
+    ///
+    /// The receive FOLDER is deliberately not consulted. A message is never
+    /// written there, so a missing, revoked or unwritable folder has nothing to
+    /// do with whether one can land — the receiver classifies kind first and
+    /// consults the folder second (protocol v2 §13.1), and suppressing text here
+    /// would refuse a delivery that folder was never going to touch.
+    public static func canReceiveText(_ row: InboxDeviceRow) -> Bool {
+        guard availability(for: row).sendable else { return false }
+        return row.inbox?.capabilities.contains(InboxCapability.textV1) == true
+    }
+
+    /// The seal target for a TEXT delivery, or nil when this device may not be
+    /// sent one. Every file-send rule, plus `inbox.text.v1`.
+    public static func textTarget(for row: InboxDeviceRow) -> InboxSendTarget? {
+        guard canReceiveText(row) else { return nil }
+        return target(for: row)
+    }
+
     /// The seal target for a row, or nil when it may not be sent to.
     public static func target(for row: InboxDeviceRow) -> InboxSendTarget? {
         let availability = availability(for: row)

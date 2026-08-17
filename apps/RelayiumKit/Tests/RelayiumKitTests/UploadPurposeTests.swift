@@ -146,13 +146,33 @@ final class UploadPurposeTests: XCTestCase {
     }
 
     func testAFreshUploadCarriesTheCallersPurpose() async throws {
-        for purpose in UploadPurpose.allCases {
-            let transport = ReapingTransport(reap: false)
+        let transport = ReapingTransport(reap: false)
+        _ = try await CloudUploader(transport: transport).upload(
+            sources: source(), purpose: .share, burnAfterRead: false,
+            ttl: 86_400, token: "t", onProgress: { _, _ in })
+        XCTAssertEqual(transport.purposes, [.share])
+    }
+
+    /// A fresh single-shot upload cannot be a DELIVERY, and it says so before a
+    /// byte moves.
+    ///
+    /// This path seals the shared Stored-Wire manifest and has no parameter for
+    /// anything else, so a `device_task` object created here would carry the one
+    /// document a v2 receiver refuses — discovered only after the whole
+    /// ciphertext was uploaded, queued, downloaded and decrypted, as
+    /// `verify_failed`. A device send uses `resume` with a durable plan, which
+    /// is where the v2 manifest comes from.
+    func testAFreshUploadRefusesADeliveryPurposeBeforeAnythingIsSent() async {
+        let transport = ReapingTransport(reap: false)
+        do {
             _ = try await CloudUploader(transport: transport).upload(
-                sources: source(), purpose: purpose, burnAfterRead: false,
+                sources: source(), purpose: .deviceTask, burnAfterRead: false,
                 ttl: 86_400, token: "t", onProgress: { _, _ in })
-            XCTAssertEqual(transport.purposes, [purpose])
+            XCTFail("a device-task single-shot upload was accepted")
+        } catch {
+            XCTAssertEqual(error as? StoredWireError, .invalidManifest)
         }
+        XCTAssertTrue(transport.purposes.isEmpty, "an init left for a refused upload")
     }
 
     /// The default on `upload` is `.share`, deliberately, and every existing
@@ -174,7 +194,11 @@ final class UploadPurposeTests: XCTestCase {
             let transport = ReapingTransport(reap: true)
             _ = try await CloudUploader(transport: transport).resume(
                 sources: source(), key: generateStoreKey(), uploadId: "UPLOAD0000000009",
-                uploadChunkSize: 64 * 1024, purpose: purpose, burnAfterRead: false,
+                uploadChunkSize: 64 * 1024, purpose: purpose,
+                // The manifest a purpose is allowed to seal is fixed by that
+                // purpose, so it travels with it here rather than being held
+                // constant across the loop.
+                manifest: Self.manifest(for: purpose), burnAfterRead: false,
                 ttl: 86_400, token: "t", onUploadSession: { _, _ in },
                 onProgress: { _, _ in })
             XCTAssertEqual(transport.purposes, [purpose],
@@ -189,9 +213,22 @@ final class UploadPurposeTests: XCTestCase {
         let transport = ReapingTransport(reap: false)
         _ = try await CloudUploader(transport: transport).resume(
             sources: source(), key: generateStoreKey(), uploadId: "UPLOAD0000000009",
-            uploadChunkSize: 64 * 1024, purpose: .deviceTask, burnAfterRead: false,
+            uploadChunkSize: 64 * 1024, purpose: .deviceTask,
+            manifest: Self.manifest(for: .deviceTask), burnAfterRead: false,
             ttl: 86_400, token: "t", onUploadSession: { _, _ in }, onProgress: { _, _ in })
         XCTAssertTrue(transport.purposes.isEmpty)
+    }
+
+    /// The one frame-0 document each purpose may carry: the shared Stored-Wire
+    /// manifest for a share, the dedicated Device Inbox v2 one for a delivery.
+    /// `CloudUploader` refuses the other pairing outright.
+    private static func manifest(for purpose: UploadPurpose) -> UploadManifest {
+        switch purpose {
+        case .share: return .storedWire
+        case .deviceTask:
+            return .sealed((try? InboxManifest.encode(
+                try InboxManifest.files([(name: "a.bin", size: 1024)]))) ?? [])
+        }
     }
 }
 

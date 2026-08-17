@@ -1913,6 +1913,8 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case sendRefusalStaging = "send.refusalStaging"
     case sendRefusalKeyStorage = "send.refusalKeyStorage"
     case sendRefusalAlreadySending = "send.refusalAlreadySending"
+    case sendRefusalMessageEmpty = "send.refusalMessageEmpty"
+    case sendRefusalMessageTooLong = "send.refusalMessageTooLong"
 
     case sendActionStop = "send.actionStop"
     case sendActionCancelDelivery = "send.actionCancelDelivery"
