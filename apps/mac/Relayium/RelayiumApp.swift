@@ -699,6 +699,25 @@ struct RelayiumApp: App {
                 else { return false }
                 return NSWorkspace.shared.open(url)
             },
+            // **The one place `inbox.text.v1` is claimed, and it is claimed by
+            // the target that ships the screen backing it.**
+            //
+            // The token means "this receiver presents a text delivery AS text",
+            // which a sender reads to decide whether offering a text send here
+            // would be honest. It is therefore a statement about a surface, and
+            // the surface is this app's: `DeviceInboxSurface.messagesSection`
+            // renders each received message, newest first, with the text itself
+            // and a Copy action that puts exactly those characters on the
+            // pasteboard.
+            //
+            // It is passed HERE rather than kept in `InboxProtocol` because the
+            // library renders nothing and every other build that links it would
+            // inherit the claim: the iOS app, which has no Device Inbox message
+            // UI, and `AppInboxReceiverHost`, which is headless. Neither may
+            // announce it, and neither does — both take the base set. If this
+            // app's messages section is ever removed, this argument goes with
+            // it in the same edit.
+            capabilities: InboxProtocol.announcedCapabilities(presentingText: true),
             appVersion: Self.appVersion)
         notifier.onPermission = { [weak receiving] permission in
             Task { @MainActor in receiving?.updateNotificationPermission(permission) }

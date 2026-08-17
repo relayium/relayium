@@ -37,8 +37,20 @@ class FakeInboxTransport: InboxTransport, @unchecked Sendable {
 
     private let lock = NSLock()
     private var _calls: [Call] = []
+    private var _enrolRequests: [InboxEnrolRequest] = []
 
     var calls: [Call] { sync { _calls } }
+
+    /// Every enrolment request, whole.
+    ///
+    /// `Call.enrol` carries only the two fields the scheduling tests branch on,
+    /// and deliberately stays that way — widening it would churn every
+    /// `XCTAssertEqual` over `calls`. What a capability claim needs is the
+    /// request AS SENT, because the announcement is the wire fact: a build that
+    /// renders no message must not put `inbox.text.v1` in this array, and no
+    /// assertion over a local constant can prove that.
+    var enrolRequests: [InboxEnrolRequest] { sync { _enrolRequests } }
+
     private func record(_ call: Call) { sync { _calls.append(call) } }
 
     /// Non-`async` on purpose: taking an `NSLock` directly inside an `async`
@@ -93,6 +105,7 @@ class FakeInboxTransport: InboxTransport, @unchecked Sendable {
 
     func enrol(_ request: InboxEnrolRequest) async throws -> InboxEnrolResult {
         record(.enrol(autoAccept: request.autoAccept, receiveDirReady: request.receiveDirReady))
+        sync { _enrolRequests.append(request) }
         return try enrolResult.get()
     }
 

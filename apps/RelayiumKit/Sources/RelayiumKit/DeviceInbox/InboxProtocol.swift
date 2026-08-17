@@ -32,7 +32,7 @@ public enum InboxProtocol {
     /// build can READ, this is what it just WROTE.
     public static let taskProtocolVersion = 2
 
-    /// The capabilities this build announces.
+    /// The capabilities EVERY build of this library may honestly announce.
     ///
     /// `inbox.receive.v2` is required by central. `inbox.autoaccept.v1` is what
     /// makes the `auto` policy storable at all, and `inbox.resume.v1` says this
@@ -40,20 +40,43 @@ public enum InboxProtocol {
     /// boundary — which `InboxReceiver` does, through `StoreDecryptor`'s
     /// consumed-ciphertext accounting.
     ///
-    /// `inbox.text.v1` is here as of the commit that made it TRUE, and not one
-    /// commit earlier. The token means "this receiver presents a text delivery
-    /// as text", and a sender reads this list to decide whether offering a text
-    /// send to this device would be honest. What backs it: a message is
-    /// committed whole to `InboxMessageStore` — a per-account, 0700/0600 store
-    /// in Application Support — and surfaced as a message, never written into
-    /// the user's receive folder and never as a `.txt` file.
+    /// **`inbox.text.v1` is deliberately absent, and its absence here is the
+    /// point.** The token is a claim about a SURFACE — "this receiver presents a
+    /// text delivery as text" — and a library that renders nothing cannot make
+    /// it. Every build that links this module would inherit it if it lived in
+    /// this list: the iOS app, which has no Device Inbox message UI at all, and
+    /// the headless acceptance receiver, which has no UI of any kind. Both would
+    /// then tell a sender that offering a text send to them is honest.
     ///
-    /// The CLI receiver deliberately still does NOT announce it: it has no
-    /// message store, so for that build the absence is the truthful answer.
+    /// A build that CAN make the claim announces it explicitly through
+    /// `announcedCapabilities(presentingText:)`, at the one site that knows
+    /// which screens it ships. See that function.
     public static let capabilities: [String] = [
         InboxCapability.receiveV2, InboxCapability.autoAcceptV1, InboxCapability.resumeV1,
-        InboxCapability.textV1,
     ]
+
+    /// What THIS build announces, given whether its own product surface renders
+    /// a received message as a message.
+    ///
+    /// `presentingText` is answered by the app target, never by this module and
+    /// never by an `#if os(…)`. A platform is not a surface: the same macOS
+    /// condition covers the shipped app, whose Device Inbox now renders a
+    /// received-messages section with a Copy action, and the headless receiver
+    /// host, which renders nothing — so a compile-time platform test would put
+    /// the claim on a build that cannot keep it.
+    ///
+    /// What backs a `true` answer, and what would have to survive before any
+    /// other caller may pass one: a message is committed whole to
+    /// `InboxMessageStore` — a per-account, 0700/0600 store in Application
+    /// Support, never the user's receive folder and never a `.txt` file — and
+    /// the caller's own surface reads it back and shows the text.
+    ///
+    /// The CLI receiver announces the base set for the same reason under the
+    /// other half of the rule: it has no message store, so for that build the
+    /// absence is the truthful answer.
+    public static func announcedCapabilities(presentingText: Bool) -> [String] {
+        presentingText ? capabilities + [InboxCapability.textV1] : capabilities
+    }
 
     /// The one wrap algorithm this protocol version defines.
     public static let keyAlgorithm = "x25519-sealedbox-v1"

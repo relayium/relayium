@@ -183,4 +183,77 @@ final class InboxCopyTests: XCTestCase {
         XCTAssertNotEqual(absent, broken)
         XCTAssertFalse(broken.isEmpty)
     }
+
+    // MARK: - the received-messages section
+
+    private func message(_ id: String, _ text: String, at seconds: TimeInterval)
+        -> InboxMessage {
+        InboxMessage(id: id, receivedAt: Date(timeIntervalSince1970: seconds), text: text)
+    }
+
+    /// **The section's copy describes a message; it never contains one.**
+    ///
+    /// Everything this presentation returns is a heading, a footer, a timestamp
+    /// or a control name. The body reaches the screen straight off
+    /// `InboxMessage.text` at the view, because a presentation helper that took
+    /// the body is where a preview or a truncation would eventually be added —
+    /// and a preview is the one thing a received message must never have.
+    func testTheMessageSectionCopyNeverContainsAMessage() {
+        let secret = "the door code is 4321"
+        let one = message("task1", secret, at: 1_700_000_000)
+        for language in AppLanguage.allCases {
+            for text in [InboxMessagePresentation.heading(language: language),
+                         InboxMessagePresentation.explanation(language: language),
+                         InboxMessagePresentation.receivedAt(one, language: language),
+                         InboxMessagePresentation.copyActionLabel(copied: false,
+                                                                  language: language),
+                         InboxMessagePresentation.copyActionLabel(copied: true,
+                                                                  language: language)] {
+                XCTAssertFalse(text.isEmpty, "empty message-section copy in \(language)")
+                XCTAssertFalse(text.contains(secret),
+                               "the message section's copy carries the message in \(language)")
+                XCTAssertFalse(text.contains("task1"),
+                               "the message section's copy carries a delivery id in \(language)")
+            }
+        }
+    }
+
+    /// The section shows the newest messages and COUNTS the rest.
+    ///
+    /// Nothing here deletes a message, so silence at the display bound is the
+    /// one thing that could make one look deleted. Under the bound there is
+    /// nothing to say and the count is absent entirely.
+    func testTheDisplayBoundCountsWhatItDoesNotDrawAndIsSilentUnderIt() {
+        let limit = InboxMessagePresentation.displayLimit
+        let few = (0..<limit).map { message("task\($0)", "m\($0)", at: 1_700_000_000) }
+        XCTAssertEqual(InboxMessagePresentation.shown(few).count, limit)
+        XCTAssertNil(InboxMessagePresentation.more(few),
+                     "a full-but-not-over section claims there is more")
+
+        let many = (0..<(limit + 7)).map { message("task\($0)", "m\($0)", at: 1_700_000_000) }
+        XCTAssertEqual(InboxMessagePresentation.shown(many).count, limit,
+                       "the section draws more rows than its bound")
+        XCTAssertEqual(InboxMessagePresentation.more(many, language: .en), "+7 more")
+        // The order the store handed over is preserved exactly: `shown` takes a
+        // prefix and never re-sorts, so newest-first stays newest-first.
+        XCTAssertEqual(InboxMessagePresentation.shown(many).map(\.id),
+                       many.prefix(limit).map(\.id))
+    }
+
+    /// Copy and Copied are different sentences, and neither is bare "Copy".
+    ///
+    /// This pane renders a COLUMN of these controls, one per message. Visible,
+    /// the compact label is right; spoken, "Copy" twenty times names nothing, so
+    /// the accessible name says which kind of thing is being copied.
+    func testTheCopyActionIsNamedForAColumnOfIdenticalButtons() {
+        for language in AppLanguage.allCases {
+            let idle = InboxMessagePresentation.copyActionLabel(copied: false,
+                                                               language: language)
+            let done = InboxMessagePresentation.copyActionLabel(copied: true, language: language)
+            XCTAssertNotEqual(idle, done,
+                              "Copy and Copied read identically in \(language)")
+            XCTAssertNotEqual(idle, L10n.t(.commonCopy, language: language),
+                              "the accessible name is the bare visible label in \(language)")
+        }
+    }
 }

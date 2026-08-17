@@ -102,12 +102,19 @@ public struct InboxReceiveEngine: Sendable {
     }
 
     /// Enrol and make this account's device key usable. Run once before passes.
+    ///
+    /// `capabilities` is what this BUILD announces, handed down from the app
+    /// that composed the controller. Defaulted to the base set so a caller that
+    /// says nothing claims nothing extra.
     @discardableResult
-    public func prepare(platform: String, appVersion: String) async throws -> InboxKey {
+    public func prepare(platform: String, appVersion: String,
+                        capabilities: [String] = InboxProtocol.capabilities)
+        async throws -> InboxKey {
         let opened = folder.open(account: account)
         defer { opened.access?.release() }
         let result = try await InboxEnrolment.enrol(transport, platform: platform,
                                                    appVersion: appVersion,
+                                                   capabilities: capabilities,
                                                    autoAccept: announcedPolicy,
                                                    receiveDirReady: opened.state.canReceive)
         return try await InboxEnrolment.ensureUsableKey(transport: transport, keys: keys,
@@ -135,11 +142,14 @@ public struct InboxReceiveEngine: Sendable {
     ///
     /// The enrolment is announced WITHOUT touching the key history. Registering a
     /// device key is work the user has just said they do not want done.
-    public func announceStopped(platform: String, appVersion: String) async throws {
+    public func announceStopped(platform: String, appVersion: String,
+                                capabilities: [String] = InboxProtocol.capabilities)
+        async throws {
         let opened = folder.open(account: account)
         defer { opened.access?.release() }
         _ = try await InboxEnrolment.enrol(transport, platform: platform,
                                            appVersion: appVersion,
+                                           capabilities: capabilities,
                                            autoAccept: announcedPolicy,
                                            receiveDirReady: opened.state.canReceive)
         // Presence is a claim about NOW. This device is about to stop polling,
@@ -183,8 +193,15 @@ public struct InboxReceiveEngine: Sendable {
         let pending = try await transport.pending(limit: InboxProtocol.claimBatch)
         onPending?(pending)
         if pending.isEmpty {
+            // The JOURNAL is pruned here and the message store is NOT, which is
+            // the whole distinction between the two. A journal entry is
+            // bookkeeping ABOUT a delivery and expires once it can no longer
+            // prevent a duplicate or a data loss; a message IS the delivery —
+            // the user's own content, received once and held until they say
+            // otherwise. Deleting it on a timer nobody chose would be data loss
+            // dressed as housekeeping, so there is no timer and no cutoff to
+            // reach for: see `InboxMessageStore`.
             journals.prune(now: now())
-            messages.prune(now: now())
             return root == nil ? .notReceiving(opened.state) : .idle
         }
         if let root {

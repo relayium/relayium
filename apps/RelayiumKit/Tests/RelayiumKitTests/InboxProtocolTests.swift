@@ -80,8 +80,7 @@ final class InboxProtocolTests: XCTestCase {
         XCTAssertEqual(InboxProtocol.sealedBoxBytes, 80)
         XCTAssertEqual(InboxProtocol.claimTokenHeader, "X-Relayium-Inbox-Claim")
         XCTAssertEqual(InboxProtocol.capabilities,
-                       ["inbox.receive.v2", "inbox.autoaccept.v1", "inbox.resume.v1",
-                        "inbox.text.v1"])
+                       ["inbox.receive.v2", "inbox.autoaccept.v1", "inbox.resume.v1"])
     }
 
     /// v1 is gone, not deprioritised. The owner waived old-protocol
@@ -93,21 +92,51 @@ final class InboxProtocolTests: XCTestCase {
         XCTAssertFalse(InboxProtocol.capabilities.contains(InboxCapability.receiveV1))
     }
 
-    /// `inbox.text.v1` means "this receiver shows a message as a message". It is
-    /// announced by the same commit that made that true and not one earlier: a
-    /// sender reads the token to decide whether offering a text send to this
-    /// device would be honest, so announcing it early is a lie that lands
-    /// somebody's message in a downloads folder.
+    /// **`inbox.text.v1` is a claim about a SURFACE, so this library never makes
+    /// it.**
     ///
-    /// This assertion was inverted when `InboxMessageStore` shipped. What backs
-    /// the claim, and what would have to be removed before it could be inverted
-    /// back: a message is committed whole to a per-account protected store
+    /// The token means "this receiver shows a message as a message", and a
+    /// sender reads it to decide whether offering a text send to that device
+    /// would be honest. A store is not a surface: a build can commit a message
+    /// perfectly and still leave its user with no way to read one, which is
+    /// exactly the state this token must not describe.
+    ///
+    /// It briefly lived in `capabilities`, and the consequence names the rule.
+    /// Every build that links this module inherited it — including iOS, which
+    /// has no Device Inbox message UI at all — so a phone with no screen for a
+    /// message was telling central it presented one.
+    ///
+    /// The base set is therefore what ANY build may say, and the extra token is
+    /// opted into per build. What a caller passing `true` must have:
+    /// a message committed whole to a per-account protected store
     /// (`InboxMessageStoreTests`), never to the receive folder
-    /// (`InboxTextDeliveryTests`), and it is readable back as text through
-    /// `InboxController.messages`.
-    func testTextCapabilityIsAnnouncedBecauseAMessageIsStoredAsAMessage() {
+    /// (`InboxTextDeliveryTests`), readable back through
+    /// `InboxController.messages`, and a screen that renders it — on macOS,
+    /// `DeviceInboxSurface.messagesSection`, asserted in `InboxSurfaceGuardTests`.
+    func testTheTextCapabilityIsNeverAGenericLibraryClaim() {
         XCTAssertEqual(InboxCapability.textV1, "inbox.text.v1")
-        XCTAssertTrue(InboxProtocol.capabilities.contains(InboxCapability.textV1))
+        XCTAssertFalse(InboxProtocol.capabilities.contains(InboxCapability.textV1),
+                       "the shared capability set claims a text surface on behalf of "
+                       + "every build that links it, including ones that have none")
+        XCTAssertEqual(InboxProtocol.announcedCapabilities(presentingText: false),
+                       InboxProtocol.capabilities,
+                       "a build that presents no message announces something other "
+                       + "than the base set")
+    }
+
+    /// And a build that DOES ship the surface announces it, additively.
+    ///
+    /// Additively rather than as a separate list: the text claim is an extra
+    /// promise on top of receiving, never a different way of receiving, and a
+    /// build that announced it INSTEAD of `inbox.receive.v2` would be refused by
+    /// central for the wrong reason entirely.
+    func testABuildThatPresentsMessagesAnnouncesTheTextCapabilityOnTop() {
+        let announced = InboxProtocol.announcedCapabilities(presentingText: true)
+        XCTAssertEqual(announced, InboxProtocol.capabilities + [InboxCapability.textV1])
+        for base in InboxProtocol.capabilities {
+            XCTAssertTrue(announced.contains(base),
+                          "announcing a text surface dropped \(base)")
+        }
     }
 
     /// One task per claim. A second task claimed before the first finishes could

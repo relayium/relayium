@@ -1057,6 +1057,13 @@ public enum AppEnvironment {
         // Settings. Neither default can produce a false claim.
         refreshNotificationPermission: @escaping @Sendable () -> Void = {},
         openNotificationSettings: @escaping @Sendable () -> Bool = { false },
+        // What the composing app announces. Defaulted to the base set for the
+        // same reason the two seams above are defaulted to their honest
+        // answers: the extra tokens are claims about SCREENS, and a build that
+        // forgets to pass one should under-claim rather than promise a surface
+        // it does not ship. See
+        // `InboxProtocol.announcedCapabilities(presentingText:)`.
+        capabilities: [String] = InboxProtocol.capabilities,
         appVersion: String,
         session: URLSession = .shared
     ) -> InboxController {
@@ -1083,7 +1090,8 @@ public enum AppEnvironment {
             reveal: reveal,
             refreshNotificationPermission: refreshNotificationPermission,
             openNotificationSettings: openNotificationSettings,
-            platform: inboxPlatform, appVersion: appVersion))
+            platform: inboxPlatform, capabilities: capabilities,
+            appVersion: appVersion))
     }
 
     /// The iOS send half: this account's own devices as delivery targets.

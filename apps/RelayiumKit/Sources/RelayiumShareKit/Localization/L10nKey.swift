@@ -1694,6 +1694,32 @@ public enum L10nKey: String, CaseIterable, Sendable {
     /// later.
     case inboxSavedMessage = "inbox.savedMessage"
 
+    /// The Device Inbox section that shows received messages, in the app the
+    /// user opened themselves.
+    ///
+    /// This is the surface `inbox.text.v1` is a claim about, so the heading says
+    /// what the section holds rather than repeating the status line's "Message
+    /// received". The bodies are rendered beneath it; nothing else in the
+    /// product prints one.
+    case inboxMessagesHeading = "inbox.messagesHeading"
+
+    /// Where those messages live, said once, under the section.
+    ///
+    /// It names the one fact a reader of this list needs and cannot see: a
+    /// message is NOT in their receive folder, so there is no file to go and
+    /// look for. It deliberately states no retention — nothing deletes these on
+    /// a schedule, so there is no schedule to describe.
+    case inboxMessagesExplain = "inbox.messagesExplain"
+
+    /// %@ — how many further messages this account holds beyond the ones drawn.
+    ///
+    /// Counted rather than dropped, for the same reason `inbox.moreFiles` is: a
+    /// section that silently stopped at its display bound would under-report
+    /// what this Mac is holding. A separate key from `inbox.moreFiles` so the
+    /// two cannot drift into each other, and because the noun differs in
+    /// languages that inflect it.
+    case inboxMoreMessages = "inbox.moreMessages"
+
     /// macOS will not show a delivery banner.
     ///
     /// The body is the load-bearing half: it has to say that receiving and saving

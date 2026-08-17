@@ -270,6 +270,82 @@ public enum InboxReceiptPresentation {
     }
 }
 
+/// The received-messages section: what its rows say ABOUT a message, never the
+/// message.
+///
+/// **The body is not in this file, and that is the design.** Everything here is
+/// a heading, a timestamp or a control name — the row's own text comes straight
+/// off `InboxMessage.text` at the view, unformatted, untruncated and
+/// unsummarised. A presentation helper that took the body would be a place for a
+/// preview to be built, and a preview is the one thing a message must not have:
+/// `InboxNotificationPresentation` above is deliberately unable to name one.
+///
+/// The split also keeps the two audiences apart. A banner macOS draws on a
+/// locked screen says only that a message arrived; this section is a list
+/// somebody opened their own Mac to read, so it shows the whole thing.
+public enum InboxMessagePresentation {
+    /// How many rows the section draws before it starts counting instead.
+    ///
+    /// A bound on the SECTION, not on the store. Nothing is deleted and nothing
+    /// is hidden without being counted — `InboxMessageStore.all()` still returns
+    /// every message, and `more` below states how many are held beyond these.
+    /// The number is small because each row renders a body up to 64 KiB inside a
+    /// `Form`, and a list that renders everything at once would make a Mac that
+    /// has received a thousand messages unusable at the moment it is opened.
+    public static let displayLimit = 20
+
+    public static func heading(language: AppLanguage? = nil) -> String {
+        L10n.t(.inboxMessagesHeading, language: language)
+    }
+
+    public static func explanation(language: AppLanguage? = nil) -> String {
+        L10n.t(.inboxMessagesExplain, language: language)
+    }
+
+    /// When this Mac committed the message. The same shape the receipt rows use,
+    /// so two lists in one window do not format one fact two ways.
+    public static func receivedAt(_ message: InboxMessage,
+                                  language: AppLanguage? = nil) -> String {
+        L10n.date(message.receivedAt, dateStyle: .medium, timeStyle: .short,
+                  language: language)
+    }
+
+    /// The messages this section draws, newest first.
+    ///
+    /// The order is the store's and is asserted rather than assumed: a reader
+    /// looking for what just arrived looks at the top, and `InboxMessageStore`
+    /// breaks a same-second tie on id so the list cannot reshuffle between two
+    /// reads of an unchanged directory.
+    public static func shown(_ messages: [InboxMessage]) -> [InboxMessage] {
+        Array(messages.prefix(displayLimit))
+    }
+
+    /// "+7 more", or nil when everything this account holds is on screen.
+    public static func more(_ messages: [InboxMessage],
+                            language: AppLanguage? = nil) -> String? {
+        let hidden = messages.count - displayLimit
+        guard hidden > 0 else { return nil }
+        return L10n.t(.inboxMoreMessages, [L10n.number(hidden, language: language)],
+                      language: language)
+    }
+
+    /// The accessible name of one row's Copy control.
+    ///
+    /// Visible, the button is the compact Copy/Copied pair every other copy
+    /// control in this app uses. Spoken, that is not enough: this pane contains a
+    /// column of them, one per message, and "Copy" repeated twenty times names
+    /// nothing. `text.copyReceivedMessage` is the existing sentence for exactly
+    /// this — a received message's copy action — and it is reused rather than
+    /// re-translated.
+    public static func copyActionLabel(copied: Bool,
+                                       language: AppLanguage? = nil) -> String {
+        copied
+            ? L10n.detail([L10n.t(.commonCopied, language: language),
+                           L10n.t(.textReceived, language: language)], language: language)
+            : L10n.t(.textCopyReceivedMessage, language: language)
+    }
+}
+
 /// The folder line in Settings.
 public enum InboxFolderPresentation {
     /// The chosen folder's own name, or the sentence that says there is none.

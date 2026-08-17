@@ -72,6 +72,13 @@ struct DeviceInboxSurface: View {
     /// so a signed-out pane built on it alone could say nothing more useful than
     /// "sign in", including to somebody whose address is merely unverified.
     @EnvironmentObject private var session: AccountSession
+    /// Which row last had its Copy pressed, so that button can say "Copied".
+    ///
+    /// Keyed by the delivery's id rather than by its position, because the list
+    /// is newest first and a message arriving while the pane is open would move
+    /// the confirmation onto somebody else's row. It is never rendered — it is
+    /// compared, and the row's visible text is the message and its time.
+    @State private var copiedMessageID: String?
 
     private var entry: DeviceInboxEntry {
         DeviceInboxEntry.entry(
@@ -91,6 +98,7 @@ struct DeviceInboxSurface: View {
                 folderSection
                 policySection
                 resultsSection
+                messagesSection
                 // Sending, in the one branch where the account is usable for it.
                 // Deliberately NOT in `.statusOnly`: that branch exists because
                 // the receiver refused this account's identifier, and the send
@@ -576,6 +584,105 @@ struct DeviceInboxSurface: View {
         }
     }
 
+    // MARK: - what arrived that was not a file
+
+    /// **Received messages, shown as messages — the surface `inbox.text.v1` is
+    /// a claim about.**
+    ///
+    /// ## Why this section had to exist before the capability could be announced
+    ///
+    /// The token means "this receiver presents a text delivery AS text", and a
+    /// sender reads it to decide whether offering a text send to this Mac would
+    /// be honest. Until this section existed, everything below it was true — a
+    /// message was decoded, committed whole to a protected per-account store and
+    /// never written into the receive folder — and the user still had no way to
+    /// read one. The status line said *Message received*; the Recently received
+    /// row said *Message received*; the banner said *Message received*; and the
+    /// message itself was on the disk with nothing to open it. That is the
+    /// state the announcement was rejected for, and this is the repair.
+    ///
+    /// ## What a row shows, and what it deliberately does not
+    ///
+    /// The time it arrived, the message in full, and Copy. No sender, no length,
+    /// no truncation and no preview — the body is `InboxMessage.text` rendered
+    /// unchanged, because a person opening this pane is here to read it. That is
+    /// the opposite rule from `InboxNotifier`, which macOS draws on a locked
+    /// screen unasked and which is therefore not allowed to name anything; both
+    /// rules hold at once because they describe different rooms.
+    ///
+    /// ## Why Copy, and why it is the exact bytes
+    ///
+    /// A message that arrives on a Mac is almost always on its way somewhere
+    /// else — a terminal, a form, a door code typed into a keypad. Selection
+    /// alone would leave a body of several thousand characters to be dragged
+    /// through. `copyReceivedMessage` writes `message.text` and nothing else:
+    /// not a summary, not a trimmed copy, not the row's rendering of it.
+    ///
+    /// ## Why it is rendered only when it has something to say
+    ///
+    /// Like `askSection` above, and unlike `resultsSection`, which has an empty
+    /// state because a Mac that has received no files still wants to know where
+    /// they would land. A Mac that has never been sent a message has nothing to
+    /// explain, and an empty section here would advertise a feature to somebody
+    /// who cannot act on it.
+    @ViewBuilder
+    private var messagesSection: some View {
+        if !inbox.messages.isEmpty {
+            Section {
+                // Newest first, from the store's own order — see
+                // `InboxMessageStore.all()`, which breaks a same-second tie so
+                // this list cannot reshuffle under the reader between two
+                // redraws.
+                ForEach(Array(InboxMessagePresentation.shown(inbox.messages).enumerated()),
+                        id: \.element.id) { index, message in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(InboxMessagePresentation.receivedAt(message))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .accessibilityIdentifier("inbox-message-received-\(index)")
+                            Spacer()
+                            // On the LEAF, and named per row: this is the one
+                            // section in the pane with a column of identical
+                            // controls, which is the arrangement the propagation
+                            // defect at the top of this file bites hardest.
+                            Button(L10n.t(copiedMessageID == message.id
+                                          ? .commonCopied : .commonCopy)) {
+                                copyReceivedMessage(message.text)
+                                copiedMessageID = message.id
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityLabel(InboxMessagePresentation.copyActionLabel(
+                                copied: copiedMessageID == message.id))
+                            .accessibilityIdentifier("inbox-message-copy-\(index)")
+                        }
+                        // The message, whole. `fixedSize` because a Form row
+                        // otherwise truncates it to one line, which would put
+                        // this pane back where it started: a message on the disk
+                        // the user cannot read.
+                        Text(message.text)
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityIdentifier("inbox-message-\(index)")
+                    }
+                }
+                // Counted, never dropped. Nothing here deletes a message, so a
+                // section that stopped at its bound in silence would be the one
+                // thing that could make one look deleted.
+                if let more = InboxMessagePresentation.more(inbox.messages) {
+                    caption(more)
+                        .accessibilityIdentifier("inbox-messages-more")
+                }
+            } header: {
+                Text(InboxMessagePresentation.heading())
+                    .accessibilityIdentifier("inbox-messages")
+            } footer: {
+                caption(InboxMessagePresentation.explanation())
+            }
+        }
+    }
+
     // MARK: - residency
 
     /// The same complete residency control the settings pane offers, and the
@@ -602,4 +709,20 @@ struct DeviceInboxSurface: View {
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
     }
+}
+
+/// One clipboard write, of exactly what was received.
+///
+/// A free function beside the view for the reason the transfer pane's is one: it
+/// is two AppKit calls, and a shared helper in `RelayiumAppKit` would put
+/// `NSPasteboard` in a module that renders nothing.
+///
+/// It takes the STRING and not the message, which is the same refusal the
+/// notification-settings seam makes by taking nothing at all: there is no
+/// parameter here through which a task id, a receipt or a path could reach the
+/// pasteboard, and the one call site passes `message.text` and nothing else.
+@MainActor
+private func copyReceivedMessage(_ text: String) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(text, forType: .string)
 }

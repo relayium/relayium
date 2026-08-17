@@ -34,18 +34,28 @@ public enum InboxEnrolment {
     /// The three checks below are separate on purpose: each names the exact field
     /// central chose that this build cannot honour, which is the difference
     /// between an actionable message and "the server said no".
+    /// - Parameter capabilities: what THIS build announces. Defaulted to the set
+    ///   every build may honestly claim, so a caller that says nothing announces
+    ///   nothing extra — the safe direction, because the additional tokens are
+    ///   claims about surfaces this module cannot see. A build whose own screens
+    ///   back a further claim passes it explicitly; see
+    ///   `InboxProtocol.announcedCapabilities(presentingText:)`.
     @discardableResult
     public static func enrol(_ transport: InboxTransport,
                              platform: String, appVersion: String,
+                             capabilities: [String] = InboxProtocol.capabilities,
                              autoAccept: InboxAutoAccept,
                              receiveDirReady: Bool) async throws -> InboxEnrolResult {
         let result = try await transport.enrol(InboxEnrolRequest(
-            platform: platform, appVersion: appVersion,
+            platform: platform, appVersion: appVersion, capabilities: capabilities,
             autoAccept: autoAccept, receiveDirReady: receiveDirReady))
         guard InboxProtocol.versions.contains(result.protocolVersion) else {
             throw InboxError.unsupportedByServer(field: .protocolVersion)
         }
-        guard InboxProtocol.capabilities.contains(result.receiveCapability) else {
+        // Checked against what was ANNOUNCED, not against the library's base
+        // set: central selects from the list this device sent, so the announced
+        // set is the only one whose contents this build has promised to honour.
+        guard capabilities.contains(result.receiveCapability) else {
             throw InboxError.unsupportedByServer(field: .receiveCapability)
         }
         guard result.keyAlgorithm == InboxProtocol.keyAlgorithm else {

@@ -85,14 +85,25 @@ public struct InboxMessageStore: Sendable {
 
     public init(directory: URL) { self.directory = directory }
 
-    /// How long a message is kept before `prune` may remove it.
+    /// **There is no retention, and no time-based deletion anywhere in this
+    /// type.**
     ///
-    /// Deliberately long, and deliberately NOT the journal's retention. A
-    /// journal entry is bookkeeping about a delivery; a message IS the delivery,
-    /// and deleting the user's own content on a schedule they did not choose
-    /// would be data loss dressed as hygiene. The bound exists so an
-    /// unattended Mac does not accumulate messages forever, and it is a year.
-    public static let retention: TimeInterval = 365 * 24 * 60 * 60
+    /// This store briefly had both: a one-year cutoff and a `prune(now:)` the
+    /// receive loop called on every idle pass. Both are gone, and their absence
+    /// is a requirement rather than an omission waiting to be filled in.
+    ///
+    /// A journal entry is bookkeeping ABOUT a delivery and may expire once it
+    /// can no longer prevent a duplicate or a data loss — `InboxJournalStore`
+    /// still prunes for exactly that reason. A message IS the delivery. It is
+    /// the user's own content, it exists in no other copy on this Mac, and no
+    /// interval is long enough to make deleting it on a schedule they never
+    /// chose anything other than silent data loss. A person who has not opened
+    /// the app in fourteen months has not consented to losing what was sent to
+    /// them; they have been away.
+    ///
+    /// `remove(_:)` below is the only deletion this type offers, it takes one
+    /// id, and nothing in the receive loop calls it. Deletion is a thing a user
+    /// does, so it needs a user.
 
     /// The stored-record format. Bumped only for a change this build could not
     /// read; an unrecognised version is refused, never guessed at.
@@ -174,10 +185,20 @@ public struct InboxMessageStore: Sendable {
                             text: record.text)
     }
 
-    /// Every message this account holds, newest first.
+    /// Every message this account holds, newest first — ALL of them, however old.
     ///
     /// Unreadable records are SKIPPED rather than thrown: one corrupt file must
-    /// not make the rest of a person's messages unreachable.
+    /// not make the rest of a person's messages unreachable. Nothing else is
+    /// skipped; there is no cutoff and no limit, because this is the call the
+    /// surface renders and a message missing from it is a message the user has
+    /// no way to reach.
+    ///
+    /// The tie-break on id is not decoration. `receivedAt` is stored to the
+    /// second, so two deliveries worked in the same second compare equal — and
+    /// `sorted(by:)` is not stable, so without it the newest-first order of a
+    /// pair that landed together would differ between two reads of the same
+    /// unchanged directory. The id ordering is arbitrary but FIXED, which is
+    /// what a list that must not reshuffle under the reader needs.
     public func all() -> [InboxMessage] {
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else {
             return []
@@ -185,25 +206,22 @@ public struct InboxMessageStore: Sendable {
         return names
             .filter { $0.hasSuffix(".json") }
             .compactMap { try? load(String($0.dropLast(".json".count))) }
-            .sorted { $0.receivedAt > $1.receivedAt }
+            .sorted {
+                $0.receivedAt == $1.receivedAt ? $0.id > $1.id : $0.receivedAt > $1.receivedAt
+            }
     }
 
+    /// Delete ONE message, named by the caller.
+    ///
+    /// The only deletion this type has, and it is deliberately the shape that
+    /// cannot become a policy: it takes a single id, so there is nothing here to
+    /// hand a cutoff, a count or a predicate to. Nothing in the receive loop
+    /// calls it — see the note above `version`.
     public func remove(_ id: String) throws {
         let url = try path(id)
         if unlink(url.path) != 0, errno != ENOENT {
             throw InboxMessageStoreError.system(errno)
         }
         InboxJournalStore.fsyncDirectory(directory)
-    }
-
-    /// Drop messages older than `retention`.
-    ///
-    /// Best effort, and never a reason to fail a delivery: this is housekeeping
-    /// on content the user already has.
-    public func prune(now: Date) {
-        let cutoff = now.addingTimeInterval(-Self.retention)
-        for message in all() where message.receivedAt < cutoff {
-            try? remove(message.id)
-        }
     }
 }

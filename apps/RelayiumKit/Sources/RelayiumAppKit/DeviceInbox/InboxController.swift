@@ -155,6 +155,16 @@ public struct InboxRuntime: Sendable {
     /// the one call site that implements it.
     public var openNotificationSettings: @Sendable () -> Bool
     public var platform: String
+    /// What this BUILD announces to central at enrolment.
+    ///
+    /// Beside `platform` because it is the same kind of fact — what this
+    /// executable is — and it is a runtime value rather than a library constant
+    /// for the reason `InboxProtocol.announcedCapabilities(presentingText:)`
+    /// records: some tokens are claims about screens, and the only place that
+    /// knows which screens ship is the app that composed this runtime. The
+    /// default is the base set, so a host that says nothing claims nothing
+    /// extra.
+    public var capabilities: [String]
     public var appVersion: String
     public var backoff: InboxBackoff
     /// How many completed receipts are kept for the Settings result list. Bounded
@@ -171,7 +181,9 @@ public struct InboxRuntime: Sendable {
                 reveal: @escaping @Sendable ([URL]) -> Void = { _ in },
                 refreshNotificationPermission: @escaping @Sendable () -> Void = {},
                 openNotificationSettings: @escaping @Sendable () -> Bool = { false },
-                platform: String, appVersion: String,
+                platform: String,
+                capabilities: [String] = InboxProtocol.capabilities,
+                appVersion: String,
                 backoff: InboxBackoff = InboxBackoff(),
                 resultLimit: Int = 10) {
         self.folder = folder
@@ -183,6 +195,7 @@ public struct InboxRuntime: Sendable {
         self.refreshNotificationPermission = refreshNotificationPermission
         self.openNotificationSettings = openNotificationSettings
         self.platform = platform
+        self.capabilities = capabilities
         self.appVersion = appVersion
         self.backoff = backoff
         self.resultLimit = resultLimit
@@ -265,8 +278,11 @@ public final class InboxController: ObservableObject {
     /// Completed deliveries, newest first, bounded.
     @Published public private(set) var results: [InboxReceipt] = []
     /// Messages this account has received, newest first, read from the protected
-    /// store. This is the whole of what `inbox.text.v1` promises at the model
-    /// layer: a message is stored AS a message and can be read back as one.
+    /// store. This is the MODEL half of what `inbox.text.v1` promises — a message
+    /// is stored as a message and can be read back as one — and it is only half:
+    /// the token is a claim about a surface, so a build announces it only once
+    /// its own screens render this list. On macOS that is
+    /// `DeviceInboxSurface.messagesSection`.
     ///
     /// It is refreshed on a generation change and when a message lands, never on
     /// a redraw, and it is cleared on sign-out — the files stay on disk for the
@@ -469,7 +485,8 @@ public final class InboxController: ObservableObject {
                         let engine = try await resolveEngine(generation, bearer: bearer)
                         guard isCurrent(generation) else { return }
                         try await engine.announceStopped(platform: runtime.platform,
-                                                         appVersion: runtime.appVersion)
+                                                         appVersion: runtime.appVersion,
+                                                         capabilities: runtime.capabilities)
                         guard isCurrent(generation) else { return }
                         runtime.folder.setStopAnnouncementPending(false,
                                                                   account: generation.account)
@@ -499,7 +516,8 @@ public final class InboxController: ObservableObject {
                 guard isCurrent(generation) else { return }
                 if !prepared {
                     _ = try await engine.prepare(platform: runtime.platform,
-                                                 appVersion: runtime.appVersion)
+                                                 appVersion: runtime.appVersion,
+                                                 capabilities: runtime.capabilities)
                     guard isCurrent(generation) else { return }
                     prepared = true
                 }
@@ -716,7 +734,7 @@ public final class InboxController: ObservableObject {
         }
         // Re-read the store rather than appending the receipt's own idea of what
         // landed: the store is what the commit wrote, and a list assembled from
-        // receipts would drift from it across a relaunch, a prune or a replay.
+        // receipts would drift from it across a relaunch or a replay.
         if receipts.contains(where: { $0.kind == .message }) { refreshMessages() }
     }
 

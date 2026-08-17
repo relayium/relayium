@@ -144,16 +144,35 @@ user's downloads folder as a `.txt` file must not announce it: the sender would
 then promise a message and deliver a file. A build announces `inbox.text.v1` in
 the same commit that makes it true and never one commit earlier.
 
-Where it stands now: the CLI receiver announces `inbox.receive.v2`,
-`inbox.autoaccept.v1` and `inbox.resume.v1`, and deliberately **not**
-`inbox.text.v1` — it has no message store, and a build that would write a message
-into a downloads folder as a file must not claim to present one.
+**The claim is per BUILD, not per library and not per platform.** A store is not
+a surface: a build can commit a message perfectly and still leave its user with
+no way to read one, which is precisely the state this token must not describe.
+So no shared capability list contains it, and no compile-time platform test
+selects it — the same `os(macOS)` condition covers the shipped Mac app and the
+headless acceptance receiver, and only one of those presents anything. Each
+build states the answer for itself, at the site that knows which screens it
+ships, through `InboxProtocol.announcedCapabilities(presentingText:)`.
 
-RelayiumKit announces `inbox.text.v1` **as of the commit that made it true**: a
-message is committed whole to `InboxMessageStore` and is readable back as text
-through `InboxController.messages`. `InboxProtocolTests` asserts the token is
-announced and names what backs it, so removing the store without removing the
-claim fails there.
+Where it stands now:
+
+- **CLI receiver** — announces `inbox.receive.v2`, `inbox.autoaccept.v1` and
+  `inbox.resume.v1`, and deliberately **not** `inbox.text.v1`. It has no message
+  store, and a build that would write a message into a downloads folder as a file
+  must not claim to present one.
+- **iOS app** — the same three. It has no Device Inbox message surface at all.
+- **Headless receiver host** (`AppInboxReceiverHost`) — the same three. It runs
+  the real receiver against a real server and renders nothing.
+- **macOS app** — announces `inbox.text.v1` on top of the three. What backs it:
+  a message is committed whole to `InboxMessageStore`, is readable back through
+  `InboxController.messages`, and is **rendered** by the Device Inbox's
+  received-messages section — newest first, each row showing the message text and
+  the time it arrived, with a Copy action that writes exactly those characters to
+  the pasteboard.
+
+`InboxProtocolTests` asserts the shared list never carries the token, and
+`InboxSurfaceGuardTests` asserts that the one build announcing it is the one
+rendering the section — so removing the surface without removing the claim, or
+adding the claim to a build with no surface, fails there.
 
 ## 4. Send-target eligibility
 

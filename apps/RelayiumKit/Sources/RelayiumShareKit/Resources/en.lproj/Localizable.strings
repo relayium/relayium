@@ -630,6 +630,9 @@
 "inbox.errorNotificationSettings" = "Relayium couldn't open System Settings. Open it yourself and go to Notifications, then Relayium.";
 "inbox.notifyTitleSaved" = "Files received";
 "inbox.savedMessage" = "Message received";
+"inbox.messagesHeading" = "Messages";
+"inbox.messagesExplain" = "Messages sent to this Mac are kept here in Relayium, not in your receive folder, so there is no file to look for.";
+"inbox.moreMessages" = "+%@ more";
 "inbox.notifyTitleAttention" = "Device Inbox needs attention";
 "inbox.bannersBlocked" = "Notification banners are turned off";
 "inbox.bannersBlockedBody" = "Files sent to this Mac are still received and saved to the folder you chose. Only the banner that announces them is hidden; recent deliveries are still listed below.";

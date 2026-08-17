@@ -135,6 +135,86 @@ final class InboxReceiveEngineTests: XCTestCase {
         XCTAssertEqual(h.transport.calls.first, .enrol(autoAccept: .auto, receiveDirReady: true))
     }
 
+    /// **What goes on the wire is what the caller announced, and a caller that
+    /// announces nothing extra claims no text surface.**
+    ///
+    /// The capability list is a claim about the BUILD, so it arrives as an
+    /// argument rather than being read from a library constant. This asserts the
+    /// two halves that matter at the boundary: the default under-claims, and an
+    /// explicit claim is transmitted rather than dropped.
+    ///
+    /// It reads the request as SENT — `FakeInboxTransport.enrolRequests` — for
+    /// the reason the wire fact is the only one that matters here: a test over
+    /// `InboxProtocol` alone would still pass if `prepare` ignored its argument
+    /// and enrolled with something else entirely.
+    func testEnrolmentAnnouncesTheCapabilitiesThisBuildWasGivenAndNoOthers()
+        async throws {
+        let h = try await harness()
+        h.transport.enrolResult = .success(InboxEnrolResult(
+            inbox: InboxView(key: InboxKey(id: "key1", algorithm: InboxProtocol.keyAlgorithm,
+                                           publicKey: InboxKeyMaterial.encode(h.deviceKey.publicKey),
+                                           generation: 1)),
+            protocolVersion: InboxProtocol.versions[0],
+            receiveCapability: InboxCapability.receiveV2,
+            keyAlgorithm: InboxProtocol.keyAlgorithm))
+
+        // The default: a host that says nothing about its screens.
+        _ = try await engine(h).prepare(platform: "darwin", appVersion: "1.0")
+        XCTAssertEqual(h.transport.enrolRequests.map(\.capabilities),
+                       [InboxProtocol.capabilities])
+        XCTAssertFalse(h.transport.enrolRequests[0].capabilities
+            .contains(InboxCapability.textV1),
+                       "a receiver that was told nothing about a message surface "
+                       + "announced one anyway")
+
+        // And a host that ships one, saying so.
+        _ = try await engine(h).prepare(
+            platform: "darwin", appVersion: "1.0",
+            capabilities: InboxProtocol.announcedCapabilities(presentingText: true))
+        XCTAssertEqual(h.transport.enrolRequests.last?.capabilities,
+                       InboxProtocol.announcedCapabilities(presentingText: true))
+
+        // The same rule on the way OUT. `announceStopped` re-enrols to say the
+        // policy is now `off`, and a stop that quietly announced a different
+        // capability set would leave central holding a claim this build never
+        // made in the first place.
+        try await engine(h).announceStopped(platform: "darwin", appVersion: "1.0")
+        XCTAssertEqual(h.transport.enrolRequests.last?.capabilities,
+                       InboxProtocol.capabilities)
+    }
+
+    /// **A received message is never deleted on a timer, and an idle pass is
+    /// where that used to happen.**
+    ///
+    /// The receive loop called `messages.prune(now:)` beside the journal's on
+    /// every pass that found nothing to do, against a one-year cutoff. The two
+    /// stores are not the same kind of thing: a journal entry is bookkeeping
+    /// ABOUT a delivery and expires once it can no longer prevent a duplicate or
+    /// a data loss, while a message IS the delivery — the user's own content,
+    /// held in no other copy on this Mac. Deleting it on a schedule they never
+    /// chose is silent data loss, and "they have not opened the app in fourteen
+    /// months" describes somebody who was away, not somebody who consented.
+    ///
+    /// The cutoff and the `prune` are both gone from `InboxMessageStore`, so
+    /// this drives the loop that used to call it and checks a message far older
+    /// than any retention it ever had is still there afterwards. The journal's
+    /// own pruning is unchanged and stays covered by `InboxJournalTests`.
+    func testAnIdlePassNeverDeletesAReceivedMessageHoweverOldItIs() async throws {
+        let h = try await harness()
+        // Ten years before this harness's clock: older than the one-year cutoff
+        // that used to be here, and older than any that could replace it.
+        let ancient = epoch.addingTimeInterval(-10 * 365 * 24 * 60 * 60)
+        try h.messages.commit(id: "task1", text: "the door code is 4321", receivedAt: ancient)
+        h.transport.pendingResults = [.success([])]
+
+        let result = try await engine(h).pass()
+
+        XCTAssertEqual(result, .idle)
+        XCTAssertEqual(h.messages.all().map(\.text), ["the door code is 4321"],
+                       "an idle pass deleted the user's own content")
+        XCTAssertEqual(try h.messages.load("task1")?.receivedAt, ancient)
+    }
+
     // MARK: - no folder
 
     /// An unusable folder is no longer the gate on the whole receive path, and

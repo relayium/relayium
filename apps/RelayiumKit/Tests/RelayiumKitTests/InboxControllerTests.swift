@@ -516,6 +516,47 @@ final class InboxControllerTests: XCTestCase {
                        "another account's session could see these messages")
     }
 
+    /// **The list the surface renders is newest first, and it still contains
+    /// what was received years ago.**
+    ///
+    /// Two requirements in one drive, because they are one property from the
+    /// reader's side: opening the Device Inbox shows the newest message at the
+    /// top, and nothing has quietly gone missing underneath it. The ordering is
+    /// the store's — `InboxMessageStore.all()` — and this asserts it survives
+    /// the trip through the published property a view binds to, which is the
+    /// only order a user ever sees.
+    ///
+    /// The two messages are committed straight into the store rather than
+    /// delivered, for a reason the harness makes unavoidable: the receiver
+    /// stamps its own clock, this harness pins that clock to one instant, and
+    /// `receivedAt` is stored to the second — so two real deliveries would tie
+    /// and the assertion would be about the tie-break rather than about the
+    /// order. Committing gives the two the dates the requirement is stated in.
+    func testTheMessageListIsNewestFirstAndKeepsWhatArrivedLongAgo() async throws {
+        let harness = try makeHarness()
+        try await seedKey(harness, account: accountA)
+        try enable(harness, account: accountA, policy: .auto)
+        // A decade apart, and the older one far beyond the one-year cutoff this
+        // store briefly had. Both must be here.
+        try harness.messages.commit(id: "task1", text: "the door code is 4321",
+                                    receivedAt: epoch.addingTimeInterval(-10 * 365 * 86_400))
+        try harness.messages.commit(id: "task2", text: "running late", receivedAt: epoch)
+        harness.controller.session(identity(accountA))
+
+        await waitUntil({ harness.controller.messages.count == 2 },
+                        "the messages were never read back from the store")
+        XCTAssertEqual(harness.controller.messages.map(\.text),
+                       ["running late", "the door code is 4321"],
+                       "the message list is not newest first")
+        // And an idle pass — the one that used to prune — leaves both alone.
+        await waitUntil({ harness.controller.state == .ready(.auto) },
+                        "the loop never completed an idle pass")
+        harness.controller.refreshMessages()
+        XCTAssertEqual(harness.controller.messages.count, 2,
+                       "running the receive loop deleted a received message")
+        harness.controller.signedOut()
+    }
+
     /// A delivery whose commit did not happen produces no receipt, no
     /// notification and no saved claim — only an actionable blocker.
     func testAFailedDeliveryNeverProducesASavedClaim() async throws {

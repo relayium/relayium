@@ -505,6 +505,189 @@ final class InboxSurfaceGuardTests: XCTestCase {
         }
     }
 
+    // MARK: - the message surface, and the claim that rests on it
+
+    /// **A received message is rendered as a message, with an action that puts
+    /// exactly it on the clipboard.**
+    ///
+    /// This is the surface `inbox.text.v1` is a claim about, and the reason it
+    /// is a guard rather than a preference is what the pane looked like without
+    /// it. A message was decoded, committed whole to a protected store and
+    /// deliberately kept out of the receive folder — every model-layer test
+    /// green — and the user had no way to read one. The status line said
+    /// *Message received*, the Recently received row said *Message received*,
+    /// the banner said *Message received*, and the message sat on the disk with
+    /// nothing in the product that would open it.
+    ///
+    /// So the assertions are about the three things a reader needs and a
+    /// refactor could quietly drop: the body is rendered, the time is rendered,
+    /// and Copy writes the body itself rather than a summary of it.
+    func testTheDeviceInboxRendersReceivedMessagesWithAWorkingCopyAction() throws {
+        let surface = try macSource("DeviceInbox/DeviceInboxSurface.swift")
+        XCTAssertTrue(surface.contains("private var messagesSection: some View"),
+                      "the Device Inbox has no received-messages section")
+        // In the usable-account branch, beside the file receipts. Outside it,
+        // this section would render for an account the receiver refused — one
+        // that cannot have received anything.
+        let afterSurface = try XCTUnwrap(
+            surface.components(separatedBy: "case .surface:").dropFirst().first)
+        let branch = try XCTUnwrap(afterSurface.components(separatedBy: "case .statusOnly:").first)
+        XCTAssertTrue(branch.contains("messagesSection"),
+                      "the messages section is rendered outside the usable-account branch")
+
+        // The body, whole and unformatted. `Text(message.text)` and not a
+        // presentation helper: a helper is where a preview or a truncation would
+        // be added, and this row is the one place the message may appear.
+        XCTAssertTrue(surface.contains("Text(message.text)"),
+                      "the message rows no longer render the message")
+        XCTAssertTrue(surface.contains("InboxMessagePresentation.receivedAt(message)"),
+                      "a message row no longer says when it arrived")
+        XCTAssertTrue(surface.contains("InboxMessagePresentation.shown(inbox.messages)"),
+                      "the section no longer draws the controller's message list")
+
+        // Copy: an explicit control, named for assistive technology, writing the
+        // EXACT characters that were received.
+        XCTAssertTrue(surface.contains("copyReceivedMessage(message.text)"),
+                      "the Copy action does not copy the message itself")
+        XCTAssertTrue(surface.contains("NSPasteboard.general.clearContents()")
+                      && surface.contains("NSPasteboard.general.setString(text, forType: .string)"),
+                      "the Copy action does not reach the pasteboard")
+        XCTAssertTrue(surface.contains(
+            ".accessibilityLabel(InboxMessagePresentation.copyActionLabel("),
+                      "a column of identical Copy buttons with no accessible names")
+        XCTAssertTrue(surface.contains("\"inbox-message-copy-\\(index)\""),
+                      "the per-row Copy control is unnamed")
+        XCTAssertTrue(surface.contains("\"inbox-message-\\(index)\""),
+                      "the message row itself is unnamed")
+
+        // Nothing is silently withheld. The section draws a bounded number of
+        // rows, and says how many more this Mac is holding — a bound that
+        // stopped in silence would make a message look deleted, which is the
+        // one impression this feature must never give.
+        XCTAssertTrue(surface.contains("InboxMessagePresentation.more(inbox.messages)"),
+                      "the display bound drops messages without counting them")
+
+        // The delivery id is COMPARED, to keep the Copied confirmation on the
+        // row it belongs to. It is never drawn — the surface-wide ban on
+        // rendering an identifier holds here too.
+        XCTAssertFalse(surface.contains("Text(message.id"),
+                       "a message row renders the delivery identifier")
+        XCTAssertFalse(surface.contains("Text(verbatim: message.id"),
+                       "a message row renders the delivery identifier")
+    }
+
+    /// **`inbox.text.v1` is announced by the target that ships the screen, and
+    /// by nothing else.**
+    ///
+    /// The token means "this receiver presents a text delivery AS text", which
+    /// makes it a claim about a surface. It lived for one commit in
+    /// `InboxProtocol.capabilities`, where every build that links the library
+    /// inherited it: the iOS app, which has no Device Inbox message UI at all,
+    /// and `AppInboxReceiverHost`, which is headless. Both were telling central
+    /// they presented messages.
+    ///
+    /// So the announcement is an argument, passed at exactly one site, and this
+    /// is what stops a second one appearing in a build with no such screen.
+    func testOnlyTheBuildThatRendersMessagesAnnouncesTheTextCapability() throws {
+        let app = try macSource("RelayiumApp.swift")
+        XCTAssertTrue(app.contains(
+            "capabilities: InboxProtocol.announcedCapabilities(presentingText: true)"),
+                      "the macOS app renders a messages section and does not announce it")
+
+        // One claimant in this target, and it is the app scene that composes the
+        // receiver — not a view, not a fixture.
+        let claimants = try macSources().filter { $0.text.contains("presentingText: true") }
+            .map(\.name).sorted()
+        XCTAssertEqual(claimants, ["RelayiumApp.swift"],
+                       "a second macOS site announces a text surface")
+
+        // The library announces nothing extra on anyone's behalf.
+        for name in ["DeviceInbox/InboxController.swift", "DeviceInbox/InboxEnrolment.swift",
+                     "DeviceInbox/InboxReceiveEngine.swift", "AppEnvironment.swift"] {
+            XCTAssertFalse(try packageSource(name).contains("presentingText: true"),
+                           "\(name) claims a text surface for every build that links it")
+        }
+
+        // The headless acceptance receiver runs the real controller against a
+        // real server with no UI of any kind. It is the sharpest case for why a
+        // platform test would be wrong here: it is macOS, and it presents
+        // nothing.
+        let hosts = try code(appsRoot.appendingPathComponent(
+            "RelayiumKit/Sources/RelayiumPeerKit/AppInboxHosts.swift"))
+        XCTAssertFalse(hosts.contains("presentingText: true"),
+                       "the headless receiver host claims a message surface it does not have")
+
+        // And iOS, which is the build the shared claim was actually false for.
+        let iosRoot = appsRoot.appendingPathComponent("ios")
+        let iosNames = try FileManager.default.subpathsOfDirectory(atPath: iosRoot.path)
+            .filter { $0.hasSuffix(".swift") }
+        XCTAssertGreaterThanOrEqual(iosNames.count, 10,
+                                    "found \(iosNames.count) iOS sources at \(iosRoot.path)")
+        for name in iosNames {
+            let source = try code(iosRoot.appendingPathComponent(name))
+            XCTAssertFalse(source.contains("presentingText: true"),
+                           "iOS/\(name) announces a Device Inbox text surface it does not ship")
+            // Naming the token at all needs a look. iOS ships no Device Inbox
+            // message surface, so the only honest uses here would be a refusal
+            // — and a refusal on this platform is currently expressed by simply
+            // not announcing it.
+            XCTAssertFalse(source.contains("InboxCapability.textV1"),
+                           "iOS/\(name) names the text capability token; iOS has no "
+                           + "Device Inbox message surface, so this needs review")
+        }
+    }
+
+    /// Nothing in the Device Inbox deletes a received message on a schedule.
+    ///
+    /// The store had a one-year cutoff and a `prune(now:)` that the receive loop
+    /// called on every idle pass. A journal entry may expire — it is bookkeeping
+    /// about a delivery — but a message IS the delivery, held in no other copy
+    /// on this Mac, and a timer nobody chose deleting it is data loss dressed as
+    /// housekeeping. Both are gone; this is what stops one coming back as a
+    /// convenience beside the journal's.
+    ///
+    /// The runtime half is `InboxReceiveEngineTests`, which drives the pass that
+    /// used to prune and finds a ten-year-old message still there.
+    func testNoReceivedMessageIsDeletedOnASchedule() throws {
+        let store = try packageSource("DeviceInbox/InboxMessageStore.swift")
+        XCTAssertFalse(store.contains("func prune("),
+                       "the message store grew a time-based deletion again")
+        XCTAssertFalse(store.contains("static let retention"),
+                       "the message store grew a retention cutoff again")
+        // The explicit, one-id deletion stays. It is the shape that cannot
+        // become a policy: there is nothing to hand a cutoff or a predicate to.
+        XCTAssertTrue(store.contains("public func remove(_ id: String) throws"),
+                      "the only user-driven deletion is gone")
+
+        let engine = try packageSource("DeviceInbox/InboxReceiveEngine.swift")
+        XCTAssertFalse(engine.contains("messages.prune"),
+                       "the receive loop prunes the user's messages again")
+        // The journal's own pruning is unchanged, and its presence here is what
+        // makes the absence above a decision rather than an oversight.
+        XCTAssertTrue(engine.contains("journals.prune(now: now())"),
+                      "the journal's pruning was removed with the message store's")
+    }
+
+    /// Every Device Inbox engine this target builds is given a message store.
+    ///
+    /// A missing `messages:` is a compile error, and this target's compiler is
+    /// `xcodebuild` — which the package's own `swift test` never runs. That gap
+    /// has already shipped one app target that could not build, so the argument
+    /// is checked as text here, where the fast suite can see it.
+    func testEveryMacEngineIsBuiltWithAMessageStore() throws {
+        var built = 0
+        for (name, text) in try macSources() {
+            for construction in text.components(separatedBy: "InboxReceiveEngine(").dropFirst() {
+                built += 1
+                let arguments = String(construction.prefix(400))
+                XCTAssertTrue(arguments.contains("messages:"),
+                              "\(name) builds a receive engine with no message store, "
+                              + "which does not compile")
+            }
+        }
+        XCTAssertGreaterThan(built, 0, "no macOS source builds a receive engine any more")
+    }
+
     /// PRD §9: receiving ends at a quarantined file on disk. It never hands that
     /// file to an application, a process launcher or an archive extractor.
     func testTheInboxNeverOpensExecutesOrExtractsReceivedContent() throws {

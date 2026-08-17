@@ -90,8 +90,15 @@ enum UITestInbox {
         let folderStore = InMemoryInboxFolderStore()
         let keys = InMemoryInboxDeviceKeyStore()
         guard let root = launchDirectory("uitest-inbox-receive"),
-              let journalRoot = launchDirectory("uitest-inbox-journal") else { return nil }
+              let journalRoot = launchDirectory("uitest-inbox-journal"),
+              // The message store is the fixture's OWN, and separate from the
+              // journal root for the reason the product keeps them apart: a
+              // journal entry is bookkeeping about a delivery and a message is
+              // the delivery. A launch that shared one directory would let the
+              // journal's prune reach a message record.
+              let messageRoot = launchDirectory("uitest-inbox-messages") else { return nil }
         let journals = InboxJournalStore(directory: journalRoot)
+        let messages = InboxMessageStore(directory: messageRoot)
 
         // The attention fixture needs a grant that RESOLVES nowhere, which a real
         // bookmark cannot be made to do on demand — the seam the Phase 2A review
@@ -129,9 +136,13 @@ enum UITestInbox {
             folder: folder,
             makeEngine: { account, _ in
                 InboxReceiveEngine(transport: transport, keys: keys, journals: journals,
-                                   folder: folder, account: account)
+                                   messages: messages, folder: folder, account: account)
             },
             notifier: nil,
+            // The same store the engine commits into, so the fixture's surface
+            // reads back what its own receiver wrote rather than an empty list
+            // the product would never show.
+            messageStore: { _ in messages },
             // The PRODUCTION sleeper, with the intervals scaled down. The first
             // version of this fixture used a sleeper that returned immediately,
             // which turned the loop into a tight main-actor cycle: the app stayed
