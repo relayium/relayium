@@ -467,6 +467,21 @@ final class MacSurfaceGuardTests: XCTestCase {
                       "publication bypasses the notarized candidate")
         XCTAssertLessThan(signedJob.lowerBound, notarizeJob.lowerBound)
         XCTAssertLessThan(notarizeJob.lowerBound, publishJob.lowerBound)
+        let downloadedTool = try XCTUnwrap(workflow.range(
+            of: "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c",
+            range: notarizeJob.lowerBound..<publishJob.lowerBound))
+        let restoredTool = try XCTUnwrap(workflow.range(
+            of: "chmod 0755 \"$RUNNER_TEMP/release-tools/generate_appcast\"",
+            range: notarizeJob.lowerBound..<publishJob.lowerBound))
+        let executableGuard = try XCTUnwrap(workflow.range(
+            of: "test -x \"$RUNNER_TEMP/release-tools/generate_appcast\"",
+            range: notarizeJob.lowerBound..<publishJob.lowerBound))
+        let firstToolInvocation = try XCTUnwrap(workflow.range(
+            of: "| \"$tools/generate_appcast\"",
+            range: notarizeJob.lowerBound..<publishJob.lowerBound))
+        XCTAssertLessThan(downloadedTool.lowerBound, restoredTool.lowerBound)
+        XCTAssertLessThan(restoredTool.lowerBound, executableGuard.lowerBound)
+        XCTAssertLessThan(executableGuard.lowerBound, firstToolInvocation.lowerBound)
         XCTAssertTrue(workflow.contains("permissions:\n  contents: read"))
         XCTAssertTrue(workflow.contains("signedDmgSha256")
             && workflow.contains("Finalize notarized package provenance"))

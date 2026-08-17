@@ -617,6 +617,11 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "$mount/Relayium.app"
           [ "$(defaults read "$mount/Relayium.app/Contents/Info" CFBundleVersion)" = "$(jq -r .build "$RUNNER_TEMP/provenance.json")" ]
           hdiutil detach "$mount"
+          chmod 0755 "$RUNNER_TEMP/release-tools/generate_appcast"
+          test -x "$RUNNER_TEMP/release-tools/generate_appcast" || {
+            echo "::error::restored generate_appcast is not executable"
+            exit 1
+          }
       - name: Validate Sparkle update-signing key
         if: github.event_name == 'workflow_dispatch' && inputs.validate_sparkle_key
         env:
