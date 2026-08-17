@@ -122,6 +122,7 @@ func main() {
 	appleServerIssuer := flag.String("apple-server-api-issuer-id", envStr("RELAYIUM_APPLE_SERVER_API_ISSUER_ID", ""), "App Store Server API issuer id; required with App Store billing")
 	appleServerKeyID := flag.String("apple-server-api-key-id", envStr("RELAYIUM_APPLE_SERVER_API_KEY_ID", ""), "App Store Server API key id; required with App Store billing")
 	appleServerKeyFile := flag.String("apple-server-api-private-key-file", envStr("RELAYIUM_APPLE_SERVER_API_PRIVATE_KEY_FILE", ""), "App Store Server API ES256 .p8 key; required with App Store billing")
+	appleServerAPIProbe := flag.Bool("apple-server-api-probe", false, "probe App Store Server API credentials and TEST delivery for every configured app/environment, then exit")
 	enableMagic := flag.Bool("enable-magic", envBool("RELAYIUM_ENABLE_MAGIC", false), "enable email magic-link login (disabled by default)")
 	adminUser := flag.String("admin-user", envStr("RELAYIUM_ADMIN_USER", "admin"), "admin dashboard username at /admin (defaults to 'admin')")
 	adminPass := flag.String("admin-pass", envStr("RELAYIUM_ADMIN_PASS", ""), "admin dashboard password at /admin (empty disables the dashboard)")
@@ -275,6 +276,17 @@ func main() {
 		if err != nil {
 			log.Fatalf("apple: App Store Server API configuration: %v", err)
 		}
+	}
+	if *appleServerAPIProbe {
+		if appleSubscriptionAPI == nil || len(appleStore.probeApps) == 0 {
+			log.Fatal("apple probe: App Store verifier, API credentials, and at least one app are required")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(len(appleStore.probeApps)*2)*2*time.Minute)
+		defer cancel()
+		if err := appleSubscriptionAPI.ProbeTestNotifications(ctx, appleStore.probeApps, os.Stdout); err != nil {
+			log.Fatalf("apple probe: %v", err)
+		}
+		return
 	}
 
 	// X-Forwarded-For is only trusted from configured reverse proxies; otherwise

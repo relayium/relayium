@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,10 +28,11 @@ type AppleSubscriptionReconciler interface {
 }
 
 type AppleServerAPIConfig struct {
-	IssuerID, KeyID           string
-	PrivateKey                *ecdsa.PrivateKey
-	HTTP                      *http.Client
-	ProductionURL, SandboxURL string
+	IssuerID, KeyID             string
+	PrivateKey                  *ecdsa.PrivateKey
+	HTTP                        *http.Client
+	ProductionURL, SandboxURL   string
+	ProbeInterval, ProbeTimeout time.Duration
 }
 
 type AppleServerAPIClient struct {
@@ -51,6 +53,12 @@ func NewAppleServerAPIClient(cfg AppleServerAPIConfig, verifier *AppleTransactio
 	if cfg.SandboxURL == "" {
 		cfg.SandboxURL = "https://api.storekit-sandbox.itunes.apple.com"
 	}
+	if cfg.ProbeInterval <= 0 {
+		cfg.ProbeInterval = 3 * time.Second
+	}
+	if cfg.ProbeTimeout <= 0 {
+		cfg.ProbeTimeout = 105 * time.Second
+	}
 	for _, raw := range []string{cfg.ProductionURL, cfg.SandboxURL} {
 		u, err := url.Parse(raw)
 		if err != nil || u.Scheme != "https" || u.Host == "" {
@@ -58,6 +66,13 @@ func NewAppleServerAPIClient(cfg AppleServerAPIConfig, verifier *AppleTransactio
 		}
 	}
 	return &AppleServerAPIClient{cfg: cfg, verifier: verifier}, nil
+}
+
+func (c *AppleServerAPIClient) authorization(bundleID string, now time.Time) (string, error) {
+	tok := jwt.NewWithClaims(jwt.SigningMethodES256, jwt.MapClaims{"iss": c.cfg.IssuerID, "iat": now.Unix(), "exp": now.Add(5 * time.Minute).Unix(), "aud": "appstoreconnect-v1", "bid": bundleID})
+	tok.Header["kid"] = c.cfg.KeyID
+	tok.Header["typ"] = "JWT"
+	return tok.SignedString(c.cfg.PrivateKey)
 }
 
 func (c *AppleServerAPIClient) CanonicalSubscription(ctx context.Context, submitted VerifiedAppleTransaction, now time.Time) (AppleSubscriptionCanonical, error) {
@@ -69,10 +84,7 @@ func (c *AppleServerAPIClient) CanonicalSubscriptionByIdentity(ctx context.Conte
 	if identity.Environment == appleEnvSandbox {
 		base = c.cfg.SandboxURL
 	}
-	tok := jwt.NewWithClaims(jwt.SigningMethodES256, jwt.MapClaims{"iss": c.cfg.IssuerID, "iat": now.Unix(), "exp": now.Add(5 * time.Minute).Unix(), "aud": "appstoreconnect-v1", "bid": identity.BundleID})
-	tok.Header["kid"] = c.cfg.KeyID
-	tok.Header["typ"] = "JWT"
-	signed, err := tok.SignedString(c.cfg.PrivateKey)
+	signed, err := c.authorization(identity.BundleID, now)
 	if err != nil {
 		return AppleSubscriptionCanonical{}, err
 	}
@@ -127,4 +139,129 @@ func (c *AppleServerAPIClient) CanonicalSubscriptionByIdentity(ctx context.Conte
 		return AppleSubscriptionCanonical{}, errors.New("app store status api: no matching verified subscription")
 	}
 	return best, nil
+}
+
+type appleTestNotificationStatus struct {
+	SignedPayload string `json:"signedPayload"`
+	SendAttempts  []struct {
+		SendAttemptResult string `json:"sendAttemptResult"`
+	} `json:"sendAttempts"`
+}
+
+// ProbeTestNotifications verifies credentials and TEST delivery without opening
+// Relayium storage. Apple's remote delivery still reaches the configured normal
+// notification URL and may create its ordinary TEST ledger row there.
+func (c *AppleServerAPIClient) ProbeTestNotifications(ctx context.Context, apps []AppleAppConfig, out io.Writer) error {
+	if len(apps) == 0 {
+		return errors.New("stage A: no configured apps")
+	}
+	type target struct{ name, base string }
+	targets := []target{{appleEnvProduction, c.cfg.ProductionURL}, {appleEnvSandbox, c.cfg.SandboxURL}}
+	for _, app := range apps {
+		for _, target := range targets {
+			if err := c.probeTestNotification(ctx, target.name, target.base, app, out); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (c *AppleServerAPIClient) probeTestNotification(ctx context.Context, environment, base string, app AppleAppConfig, out io.Writer) error {
+	auth, err := c.authorization(app.BundleID, time.Now())
+	if err != nil {
+		return errors.New("stage A: JWT construction failed")
+	}
+	endpoint := strings.TrimRight(base, "/") + "/inApps/v1/notifications/test"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
+	if err != nil {
+		return errors.New("stage A: request construction failed")
+	}
+	req.Header.Set("Authorization", "Bearer "+auth)
+	resp, err := c.cfg.HTTP.Do(req)
+	if err != nil {
+		return fmt.Errorf("stage A: %s %s API request failed", environment, app.BundleID)
+	}
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	resp.Body.Close()
+	if readErr != nil || resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("stage A: %s %s API returned HTTP %d", environment, app.BundleID, resp.StatusCode)
+	}
+	var created struct {
+		Token string `json:"testNotificationToken"`
+	}
+	if json.Unmarshal(body, &created) != nil || !validAppleNotificationUUID(created.Token) {
+		return fmt.Errorf("stage A: %s %s returned an invalid token", environment, app.BundleID)
+	}
+	fmt.Fprintf(out, "apple probe stage A ok: %s %s\n", environment, app.BundleID)
+	deadline := time.Now().Add(c.cfg.ProbeTimeout)
+	rateLimited := false
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("stage B: %s %s timed out", environment, app.BundleID)
+		case <-time.After(c.cfg.ProbeInterval):
+		}
+		auth, err = c.authorization(app.BundleID, time.Now())
+		if err != nil {
+			return errors.New("stage B: JWT construction failed")
+		}
+		statusURL := endpoint + "/" + url.PathEscape(created.Token)
+		req, _ = http.NewRequestWithContext(ctx, http.MethodGet, statusURL, nil)
+		req.Header.Set("Authorization", "Bearer "+auth)
+		resp, err = c.cfg.HTTP.Do(req)
+		if err != nil {
+			return fmt.Errorf("stage B: %s %s delivery status failed", environment, app.BundleID)
+		}
+		body, readErr = io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		resp.Body.Close()
+		if readErr != nil {
+			return fmt.Errorf("stage B: %s %s invalid status response", environment, app.BundleID)
+		}
+		if resp.StatusCode == http.StatusNotFound {
+			continue
+		}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			if rateLimited {
+				return fmt.Errorf("stage B: %s %s rate limited", environment, app.BundleID)
+			}
+			rateLimited = true
+			seconds, parseErr := strconv.Atoi(resp.Header.Get("Retry-After"))
+			if parseErr != nil || seconds < 0 || seconds > 30 {
+				return fmt.Errorf("stage B: %s %s invalid Retry-After", environment, app.BundleID)
+			}
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("stage B: %s %s timed out", environment, app.BundleID)
+			case <-time.After(time.Duration(seconds) * time.Second):
+			}
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("stage B: %s %s API returned HTTP %d", environment, app.BundleID, resp.StatusCode)
+		}
+		var status appleTestNotificationStatus
+		if json.Unmarshal(body, &status) != nil {
+			return fmt.Errorf("stage B: %s %s invalid status response", environment, app.BundleID)
+		}
+		success := false
+		for _, attempt := range status.SendAttempts {
+			if attempt.SendAttemptResult == "SUCCESS" {
+				success = true
+			}
+		}
+		if !success {
+			continue
+		}
+		if status.SignedPayload == "" {
+			return fmt.Errorf("stage B: %s %s missing signed payload", environment, app.BundleID)
+		}
+		verified, verifyErr := c.verifier.VerifyNotification(status.SignedPayload, time.Now())
+		if verifyErr != nil || verified.Type != "TEST" || verified.Environment != environment || verified.BundleID != app.BundleID || (environment == appleEnvProduction && verified.AppAppleID != app.AppAppleID) {
+			return fmt.Errorf("stage B: %s %s signed TEST verification failed", environment, app.BundleID)
+		}
+		fmt.Fprintf(out, "apple probe stage B ok: %s %s\n", environment, app.BundleID)
+		return nil
+	}
+	return fmt.Errorf("stage B: %s %s timed out", environment, app.BundleID)
 }

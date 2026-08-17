@@ -119,6 +119,9 @@ func TestLoadAppleStoreInstallsTheConfiguredVerifier(t *testing.T) {
 	if setup.env != "Production" || setup.apps != 2 {
 		t.Fatalf("boot summary does not describe the file: env=%q apps=%d", setup.env, setup.apps)
 	}
+	if len(setup.probeApps) != 2 || setup.probeApps[0].BundleID != "com.example.app" || setup.probeApps[1].BundleID != "com.example.mac" {
+		t.Fatalf("probe app enumeration does not match the verified config: %+v", setup.probeApps)
+	}
 
 	var sink fakeAppleSink
 	setup.install(&sink)
