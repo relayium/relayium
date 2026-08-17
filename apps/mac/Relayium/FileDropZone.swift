@@ -116,3 +116,26 @@ func chooseFilesOrFolders(into store: SelectionStore) {
     // is where a destructive action belongs.
     if panel.runModal() == .OK { store.add(panel.urls) }
 }
+
+/// The same picker restricted to FOLDERS, for a surface that offers "a folder"
+/// as a distinct answer from "some files".
+///
+/// It is a configuration of the one picker rather than a second one: it appends
+/// through `SelectionStore.add` exactly as the general form does, so a user who
+/// chose files and then reached for Folder adds to the batch instead of silently
+/// losing it, and `expandSelection` gives every file inside the chosen folder its
+/// `relativePath` — which is what keeps the hierarchy inside the sealed manifest
+/// rather than flattening it into a pile on the other device.
+///
+/// `canChooseFiles = false` is the whole difference and it is not decoration: a
+/// control labelled Folder that accepted a file would stage something the user
+/// did not choose and describe it as a folder afterwards.
+@MainActor
+func chooseFolders(into store: SelectionStore) {
+    let panel = NSOpenPanel()
+    panel.allowsMultipleSelection = true
+    panel.canChooseFiles = false
+    panel.canChooseDirectories = true
+    panel.prompt = L10n.t(.pickerPrompt)
+    if panel.runModal() == .OK { store.add(panel.urls) }
+}

@@ -146,10 +146,10 @@ final class InboxSurfaceGuardTests: XCTestCase {
         // this app's own picker — so no delivery here can have come from one.
         XCTAssertTrue(app.contains("drafts: nil, root: UITestMode.pendingUploadRoot()"),
                       "the macOS sender can retire a shared draft it never received")
-        XCTAssertFalse(try macSource("DeviceInbox/DeviceSendSection.swift")
+        XCTAssertFalse(try macSource("DeviceInbox/DeviceSendDetail.swift")
             .contains("sourceDraftId: selection"),
                        "a macOS device send claims a draft it did not come from")
-        XCTAssertTrue(try macSource("DeviceInbox/DeviceSendSection.swift")
+        XCTAssertTrue(try macSource("DeviceInbox/DeviceSendDetail.swift")
             .contains("sourceDraftId: nil"),
                       "a macOS device send must report the draft it came from: none")
         // Rendered by the Device Inbox surface, in the one branch where the
@@ -157,40 +157,168 @@ final class InboxSurfaceGuardTests: XCTestCase {
         // refused, and staging a plan under it would fail.
         let surface = try macSource("DeviceInbox/DeviceInboxSurface.swift")
         XCTAssertEqual(occurrences(of: "DeviceSendSection(", in: surface), 1,
-                       "the send half is rendered zero or twice")
+                       "the device list is rendered zero or twice")
+        XCTAssertEqual(occurrences(of: "DeviceSendDetail(", in: surface), 1,
+                       "the device's own send screen is rendered zero or twice")
         let surfaceBranch = try XCTUnwrap(
             surface.components(separatedBy: "case .surface:").dropFirst().first)
         let branch = try XCTUnwrap(surfaceBranch.components(separatedBy: "case .statusOnly:").first)
         XCTAssertTrue(branch.contains("DeviceSendSection("),
                       "the send half is rendered outside the usable-account branch")
+        XCTAssertTrue(branch.contains("DeviceSendDetail("),
+                      "the composer is rendered outside the usable-account branch")
         // Every decision belongs to the model, so `swift test` can drive it.
         // A view that re-derived any of these is a view no test reaches.
-        let send = try macSource("DeviceInbox/DeviceSendSection.swift")
+        let list = try macSource("DeviceInbox/DeviceSendSection.swift")
+        let detail = try macSource("DeviceInbox/DeviceSendDetail.swift")
+        let action = try macSource("DeviceInbox/DeliveryActionButton.swift")
         for owned in ["deliveries.candidates", "deliveries.selectTarget(",
-                      "deliveries.refreshTargets(", "deliveries.send(", "deliveries.act(",
+                      "deliveries.refreshTargets(", "InboxSendActions.offered(for: item)"] {
+            XCTAssertTrue(list.contains(owned),
+                          "the device list re-derives what InboxSendModel owns: \(owned)")
+        }
+        for owned in ["deliveries.send(", "deliveries.sendText(",
+                      "InboxSendComposer.order(", "InboxSendActions.cancel(for: item)",
                       "InboxSendActions.offered(for: item)",
-                      "InboxSendActions.warnsDeliveryMayStillArrive("] {
-            XCTAssertTrue(send.contains(owned),
-                          "the send pane re-derives what InboxSendModel owns: \(owned)")
+                      "InboxSendActions.current(in: deliveries.items,"] {
+            XCTAssertTrue(detail.contains(owned),
+                          "the send screen re-derives what InboxSendModel owns: \(owned)")
         }
-        // Sealed to a device the USER chose. There is no fallback target,
-        // because a delivery produces no link and has nobody to fall back to.
-        XCTAssertTrue(send.contains(
-            "!selection.files.isEmpty && deliveries.selectedTargetID != nil"),
-                      "Send can fire without a chosen device")
-        // The credential is read at the moment of use and stored nowhere: two
-        // reads, both inside the two functions that spend it.
-        XCTAssertEqual(occurrences(of: "session.bearerToken", in: send), 2,
-                       "the send pane names the credential outside its two spend sites")
-        XCTAssertFalse(send.contains("@State private var token"),
-                       "the send pane stores a credential")
-        // And it obeys the receive surface's own bans: no received identity, no
-        // launching, no unpacking.
-        for banned in ["receipt.urls", "url.path", "lastPathComponent", "receipt.taskID",
-                       "NSWorkspace.shared.open(", "Process(", "activateFileViewerSelecting"] {
-            XCTAssertFalse(send.contains(banned),
-                           "the Device Inbox send pane can reach \(banned)")
+        for owned in ["deliveries.act(", "InboxSendActions.warnsDeliveryMayStillArrive("] {
+            XCTAssertTrue(action.contains(owned),
+                          "the delivery control re-derives what InboxSendModel owns: \(owned)")
         }
+        // The credential is read at the moment of use and stored nowhere. One
+        // read per function that spends it, and no send surface holds one.
+        XCTAssertEqual(occurrences(of: "session.bearerToken", in: list), 1,
+                       "the device list names the credential outside its one refresh site")
+        XCTAssertEqual(occurrences(of: "session.bearerToken", in: detail), 2,
+                       "the send screen names the credential outside its refresh and "
+                       + "its one spend site")
+        XCTAssertEqual(occurrences(of: "session.bearerToken", in: action), 1,
+                       "the delivery control names the credential outside its one spend site")
+        for source in [list, detail, action] {
+            XCTAssertFalse(source.contains("@State private var token"),
+                           "a Device Inbox send surface stores a credential")
+            // And they obey the receive surface's own bans: no received
+            // identity, no launching, no unpacking.
+            for banned in ["receipt.urls", "url.path", "lastPathComponent", "receipt.taskID",
+                           "NSWorkspace.shared.open(", "Process(",
+                           "activateFileViewerSelecting"] {
+                XCTAssertFalse(source.contains(banned),
+                               "a Device Inbox send surface can reach \(banned)")
+            }
+        }
+    }
+
+    // MARK: - one device at a time
+
+    /// **The content controls belong to one device's screen, and the landing
+    /// page has none of them.**
+    ///
+    /// The owner's report was that the send controls were dumped into the main
+    /// page, and they were: a file picker, a device list and a Send button
+    /// rendered as siblings of the folder grant and the receive policy, so the
+    /// screen offered *Choose Files or Folders…* a short scroll above *Choose
+    /// Folder* with nothing saying that the first was about sending and the
+    /// second about receiving. A user could stage files with no device chosen
+    /// and no statement anywhere that one was required.
+    ///
+    /// These assertions are the shape of the repair, and each is an ABSENCE that
+    /// no runtime observes: a picker back on the landing page, a composer that
+    /// reads a device id it kept for itself, or a send screen that cannot be
+    /// left would all look correct in a screenshot.
+    func testEverySendControlBelongsToTheChosenDevicesOwnScreen() throws {
+        let list = try macSource("DeviceInbox/DeviceSendSection.swift")
+        let detail = try macSource("DeviceInbox/DeviceSendDetail.swift")
+
+        // Nothing that composes a delivery is on the page that lists devices.
+        for control in ["TextEditor(", "chooseFilesOrFolders(", "chooseFolders(",
+                        "SelectionStore()", "deliveries.send(", "deliveries.sendText(",
+                        "\"inbox-send-start\"", "\"inbox-send-message\""] {
+            XCTAssertFalse(list.contains(control),
+                           "the device list renders \(control), which belongs to one device")
+        }
+        // A row opens a device rather than sending to it. The verb matters: a
+        // row whose button said Send would promise that pressing it sends
+        // something, and nothing has been chosen yet at that point.
+        XCTAssertTrue(list.contains("L10n.t(.sendContentAction)"),
+                      "the device row does not offer the Send Content action")
+        XCTAssertTrue(list.contains("deliveries.selectTarget(candidate.id)"),
+                      "the device row opens something other than the model's selection")
+
+        // The three actions the owner asked for, each stating its own kind, and
+        // no fourth path to a delivery. Both file pickers exist and they are
+        // configured differently — a control offering both cannot mean *a
+        // folder*, which is the whole reason there are two.
+        for control in ["case .message: messageSection", "case .files:   filesSection",
+                        "chooseFilesOrFolders(into: selection)", "chooseFolders(into: selection)",
+                        "deliveries.sendText(draft, token: token)",
+                        "\"inbox-send-choose-files\"", "\"inbox-send-choose-folder\"",
+                        "\"inbox-send-message\"", "\"inbox-send-start\""] {
+            XCTAssertTrue(detail.contains(control),
+                          "the send screen is missing \(control)")
+        }
+        // **No mode picker anywhere in it.** `MacSurfaceGuardTests` bans the
+        // segmented one app-wide; this says the same thing about this screen in
+        // the terms of its own defect — a control whose only effect is to hide
+        // the other half of what you came here to do.
+        XCTAssertFalse(detail.contains("pickerStyle("),
+                       "the send screen asks which kind before letting the user act")
+        let folderPicker = try macSource("FileDropZone.swift")
+        XCTAssertTrue(folderPicker.contains("panel.canChooseFiles = false"),
+                      "the folder picker would accept a file and call it a folder")
+        XCTAssertTrue(folderPicker.contains("func chooseFolders(into store: SelectionStore)"),
+                      "there is no folder-only picker for the send screen to call")
+        // The message is sent EXACTLY as typed. A trim, a normalization or a
+        // re-encode here would send bytes the user did not write and a length
+        // the counter beside the field did not report.
+        for mangling in ["draft.trimmingCharacters", "draft.replacingOccurrences",
+                         "draft.precomposedString"] {
+            XCTAssertFalse(detail.contains(mangling),
+                           "the composer alters the message before sending it")
+        }
+        // Bounded in BYTES, through the shared type, so one emoji cannot pass a
+        // check the seal then refuses.
+        XCTAssertTrue(detail.contains("InboxTextDraft(draft)"),
+                      "the composer measures the message some other way than the protocol does")
+        XCTAssertFalse(detail.contains("draft.count"),
+                       "the composer bounds the message in characters rather than bytes")
+        // Text is gated on the capability and NOTHING else. The receive folder
+        // in particular: a message is never written there.
+        XCTAssertTrue(detail.contains("!draftSize.isSendable || !target.canReceiveText"),
+                      "the message button is enabled or disabled on some other condition")
+        XCTAssertTrue(detail.contains("InboxSendPresentation.textRefusal(for: target)"),
+                      "a device that cannot present text is refused without saying why")
+        for folderState in ["inbox.folder", "folderMissing", "receiveDirReady"] {
+            XCTAssertFalse(detail.contains(folderState),
+                           "the send screen consults the RECEIVE folder (\(folderState))")
+        }
+        // File and folder sending stay available on a device with no text
+        // capability. The file Send is gated on the ONE thing that could make it
+        // meaningless — an empty batch — and never on the message's capability,
+        // its bounds or the receiver's folder.
+        XCTAssertTrue(detail.contains(".disabled(selection.files.isEmpty)"),
+                      "the file Send is gated on something other than having files")
+
+        // The way out exists, it is the model's own selection, and there is no
+        // second copy of "which device am I on" anywhere in this app.
+        XCTAssertTrue(detail.contains("deliveries.selectTarget(nil)"),
+                      "the send screen cannot be left")
+        XCTAssertTrue(detail.contains("\"inbox-send-back\""),
+                      "the way back carries no accessibility identifier")
+        for state in try macSources() {
+            XCTAssertFalse(state.text.contains("@State private var selectedDevice"),
+                           "\(state.name) keeps its own copy of the chosen device")
+            XCTAssertFalse(state.text.contains("@State private var openDevice"),
+                           "\(state.name) keeps its own copy of the chosen device")
+        }
+        // A cancel is offered while a send is running, it is the model's answer
+        // to which one, and it is drawn as the screen's primary control.
+        XCTAssertTrue(detail.contains("isProminent: true"),
+                      "the cancel on a running send is one bordered button among four")
+        XCTAssertTrue(detail.contains(".filter { $0 != cancel }"),
+                      "the cancel is offered twice on the same send")
     }
 
     // MARK: - one surface, two entries

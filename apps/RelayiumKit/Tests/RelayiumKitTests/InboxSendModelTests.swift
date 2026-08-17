@@ -931,6 +931,93 @@ final class InboxSendModelTests: XCTestCase {
                           InboxSendPresentation.text(for: InboxSendRefusal.messageTooLong))
     }
 
+    /// **The picker knows which devices could be sent a message, and it is the
+    /// same verdict `sendText` applies.**
+    ///
+    /// A per-device send screen has to decide whether to offer a message
+    /// composer at all, and the device rows that answer that are private to this
+    /// model — a seal must use the target's CURRENT key, so no surface holds a
+    /// row. Without this on the candidate, a composer could only offer text to
+    /// every device and discover the refusal after the user had written the
+    /// message.
+    ///
+    /// It is deliberately not folded into `isSendable`: a receiver without the
+    /// token is a perfectly good FILE target.
+    func testTheCandidateSaysWhetherOfferingAMessageWouldBeHonest() async throws {
+        sender.deviceRows = [row(), currentRow(),
+                             row(id: otherDeviceID, name: "Desk", presentsText: false),
+                             row(id: "DEVICEblocked999", autoAccept: .off),
+                             bareRow(id: "DEVICEbrowser999")]
+        let (model, _) = await signedIn()
+
+        func candidate(_ id: String) throws -> InboxSendCandidate {
+            try XCTUnwrap(model.candidates.first { $0.id == id })
+        }
+        XCTAssertTrue(try candidate(deviceID).canReceiveText)
+        XCTAssertFalse(try candidate(otherDeviceID).canReceiveText,
+                       "a device that never announced inbox.text.v1 must not be offered text")
+        // Still a file target: the capability gates the composer, not the row.
+        XCTAssertTrue(try candidate(otherDeviceID).isSendable)
+        // A device that cannot be sent to at all cannot be sent a message
+        // either — the capability is asked after the general verdict, so a
+        // revoked device reads as revoked rather than as "cannot present text".
+        XCTAssertFalse(try candidate("DEVICEblocked999").canReceiveText)
+        XCTAssertFalse(try candidate("DEVICEbrowser999").canReceiveText)
+
+        // And the candidate's answer is the one the send path enforces.
+        model.selectTarget(otherDeviceID)
+        model.sendText("hello", token: "bearer")
+        XCTAssertEqual(model.refusal, .textUnsupported)
+    }
+
+    /// **The chosen device is the navigation state, so every way it can go stale
+    /// returns the screen to the list.**
+    ///
+    /// macOS renders the composer only while `selectedCandidate` is non-nil. A
+    /// view holding its own copy of "which device am I on" would keep a composer
+    /// pointed at a device that had been revoked, switched off, removed from the
+    /// account or left behind by a sign-out — and the next send would be aimed
+    /// at whatever row had moved into that place.
+    func testTheChosenDeviceDescribesItselfAndGoesWhenItStopsBeingLegal() async throws {
+        sender.deviceRows = [row(), currentRow()]
+        let (model, session) = await signedIn()
+
+        XCTAssertNil(model.selectedCandidate, "nothing is chosen until the user chooses")
+        model.selectTarget(deviceID)
+        XCTAssertEqual(model.selectedCandidate?.id, deviceID)
+        XCTAssertEqual(model.selectedCandidate?.name, "Studio",
+                       "the screen's header would name the wrong device")
+
+        // Receiving is switched off over there, and the list is re-read — which
+        // is what the send screen does when it opens.
+        sender.deviceRows = [row(autoAccept: .off), currentRow()]
+        model.refreshTargets(token: "bearer")
+        await waitUntil("the second read") { model.candidates.first?.isSendable == false }
+        XCTAssertNil(model.selectedCandidate,
+                     "a revoked device leaves a composer still pointed at it")
+
+        // The same for a device that has left the account entirely.
+        sender.deviceRows = [row(), currentRow()]
+        model.refreshTargets(token: "bearer")
+        await waitUntil("the third read") { model.candidates.first?.isSendable == true }
+        model.selectTarget(deviceID)
+        XCTAssertEqual(model.selectedCandidate?.id, deviceID)
+        sender.deviceRows = [currentRow()]
+        model.refreshTargets(token: "bearer")
+        await waitUntil("the emptied list") { model.candidates.isEmpty }
+        XCTAssertNil(model.selectedCandidate)
+
+        // And an account leaving takes it synchronously, before a redraw could
+        // show the next account a screen headed with the last one's device.
+        sender.deviceRows = [row(), currentRow()]
+        model.refreshTargets(token: "bearer")
+        await waitUntil("the fourth read") { !model.candidates.isEmpty }
+        model.selectTarget(deviceID)
+        session.send(.loggedOut)
+        XCTAssertNil(model.selectedCandidate)
+        XCTAssertNil(model.selectedTargetID)
+    }
+
     // MARK: - helpers that need the shared-draft half
 
     private func stageDraft(named: String = "shared.txt") throws -> SharedDraftPlan {

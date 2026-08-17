@@ -3215,7 +3215,16 @@ final class MacSurfaceGuardTests: XCTestCase {
         let shared = try source(named: "DeviceInbox/DeviceInboxSurface.swift")
         XCTAssertTrue(shared.contains("let onAccount: (AuthMode) -> Void"),
                       "the shared surface no longer forwards the requested half")
-        XCTAssertFalse(shared.contains("@State") && shared.contains("AuthMode"),
+        // Per LINE, not per file. Written as two whole-file `contains` calls,
+        // this said "the surface has some `@State` and mentions `AuthMode`
+        // somewhere" — which became true, and stayed failing, the moment the
+        // surface grew a `@State private var copiedMessageID` for the Copy
+        // button on a received message. That state is not a mode and never was.
+        // What the guard means is that no state DECLARATION is of the form's
+        // mode, and this is that sentence.
+        let holdsTheMode = shared.components(separatedBy: "\n")
+            .contains { $0.contains("@State") && $0.contains("AuthMode") }
+        XCTAssertFalse(holdsTheMode,
                        "the shared Device Inbox surface holds the form's mode itself")
         XCTAssertFalse(shared.contains("switch mode"),
                        "the shared Device Inbox surface branches on the form's mode")

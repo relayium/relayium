@@ -1854,6 +1854,48 @@ public enum L10nKey: String, CaseIterable, Sendable {
     case sendTargetOnline = "send.targetOnline"
     case sendTargetOffline = "send.targetOffline"
 
+    // MARK: - one device at a time
+    //
+    // The macOS Device Inbox landing page used to carry the file picker, the
+    // device list and the Send button as three sibling sections of one form,
+    // directly under the receiving controls — so the screen offered "choose
+    // files", "choose a folder to receive into" and "choose a device" with
+    // nothing saying which belonged to which direction. These name the repair:
+    // a list of the account's own devices, and a screen belonging to ONE of them
+    // that the content controls live on.
+    //
+    // `send.contentAction` is deliberately a verb phrase rather than "Send":
+    // it opens a screen, and a row whose button said Send would promise that
+    // pressing it sends something.
+
+    case sendMyDevicesHeading = "send.myDevicesHeading"
+    case sendMyDevicesExplain = "send.myDevicesExplain"
+    case sendContentAction = "send.contentAction"
+    /// The way back to the device list, named by where it goes rather than by
+    /// the word Back — which on a Mac names a browser control and says nothing
+    /// about what is on the other side of it.
+    case sendBackToDevices = "send.backToDevices"
+    case sendActiveHeading = "send.activeHeading"
+
+    // The two kinds one delivery may be, each its own group with its own Send.
+    // Never both at once: a mixed manifest is refused by the codec, so offering
+    // a message with an attachment could only ever produce a delivery no
+    // receiver accepts. Choosing files and choosing a folder are two ACTIONS of
+    // the one file kind — `NSOpenPanel` has to be told whether a file is a legal
+    // choice, and a chosen folder keeps its hierarchy inside the seal.
+    case sendKindMessage = "send.kindMessage"
+    case sendKindFiles = "send.kindFiles"
+    case sendChooseFolders = "send.chooseFolders"
+
+    // The message composer. `%1$@ of %2$@` is measured in BYTES, because that is
+    // the bound the manifest declares and the receiver re-measures — a count of
+    // characters would tell the user they had spent a quarter of a limit they
+    // had in fact reached.
+    case sendMessageLabel = "send.messageLabel"
+    case sendMessagePlaceholder = "send.messagePlaceholder"
+    case sendMessageSize = "send.messageSize"
+    case sendMessageAction = "send.messageAction"
+
     // Truthful qualifications on a send that IS allowed, said BEFORE the file is
     // encrypted and uploaded rather than after.
     case sendCaveatNeedsApproval = "send.caveatNeedsApproval"

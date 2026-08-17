@@ -245,6 +245,25 @@ public final class InboxSendModel: ObservableObject {
         return status == 401 || status == 403 ? .notAuthorized : .unreachable
     }
 
+    /// The chosen device as the picker describes it, or nil.
+    ///
+    /// **The single answer to "is a per-device screen still legal".** A macOS
+    /// send screen is bound to one device, and the three ways that binding can
+    /// stop being true are already handled here rather than anywhere a view
+    /// could reimplement them: `adopt(_ rows:)` drops a selection whose device
+    /// went away, was revoked or had receiving switched off, and
+    /// `isolateFromPreviousAccount` drops it when the account changes. A surface
+    /// that renders only while this is non-nil therefore returns to the list by
+    /// construction instead of sending to whichever row moved into that place.
+    ///
+    /// Computed rather than published: it is a lookup in two values that are
+    /// already `@Published`, so a view reading it redraws when either moves and
+    /// there is no third copy of the selection to fall out of step.
+    public var selectedCandidate: InboxSendCandidate? {
+        guard let selectedTargetID else { return nil }
+        return candidates.first { $0.id == selectedTargetID }
+    }
+
     /// Choose a device, or choose none. A blocked row can never become the
     /// selection: a selection the Send button then refuses is a dead end the
     /// user has to discover by pressing it.

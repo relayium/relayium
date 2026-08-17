@@ -92,21 +92,45 @@ struct DeviceInboxSurface: View {
             // a Device Inbox that renders whichever branch happened to be last.
             switch entry {
             case .surface:
-                statusSection(offersControls: true)
-                notificationSection
-                askSection
-                folderSection
-                policySection
-                resultsSection
-                messagesSection
-                // Sending, in the one branch where the account is usable for it.
-                // Deliberately NOT in `.statusOnly`: that branch exists because
-                // the receiver refused this account's identifier, and the send
-                // half stages a durable plan under the same identifier — so it
-                // would offer a Send whose only outcome is a staging failure.
-                DeviceSendSection(deliveries: deliveries,
-                                  onAccount: { onAccount(.signIn) })
-                residencySection
+                // **The one place this surface has a child, and it is a child of
+                // the whole page rather than of a section inside it.**
+                //
+                // A device's send screen replaces the receive controls instead
+                // of appearing under them, because the failure being repaired is
+                // exactly that they were siblings: a file picker and a Send
+                // button rendered a short scroll below the receive folder's own
+                // *Choose Folder*, with nothing on screen saying which of the
+                // two directions either belonged to. Stacking the composer under
+                // them would reproduce that with more controls, not fewer.
+                //
+                // `selectedCandidate` is the whole of the navigation state, and
+                // it belongs to `InboxSendModel`. That is what makes the exits
+                // safe rather than remembered: a device revoked, switched off,
+                // removed from the account, or left behind by a sign-out clears
+                // the model's selection, and this branch returns to the list on
+                // the same redraw. A `@State` flag here could stay true over a
+                // device that no longer exists.
+                if let target = deliveries.selectedCandidate {
+                    DeviceSendDetail(target: target, deliveries: deliveries,
+                                     onAccount: { onAccount(.signIn) })
+                } else {
+                    statusSection(offersControls: true)
+                    notificationSection
+                    askSection
+                    folderSection
+                    policySection
+                    resultsSection
+                    messagesSection
+                    // The devices, in the one branch where the account is usable
+                    // for sending. Deliberately NOT in `.statusOnly`: that branch
+                    // exists because the receiver refused this account's
+                    // identifier, and the send half stages a durable plan under
+                    // the same identifier — so it would offer a send whose only
+                    // outcome is a staging failure.
+                    DeviceSendSection(deliveries: deliveries,
+                                      onAccount: { onAccount(.signIn) })
+                    residencySection
+                }
             case .statusOnly:
                 statusSection(offersControls: false)
             case let .account(gate):

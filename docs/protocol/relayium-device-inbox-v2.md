@@ -11,10 +11,17 @@ sender seals (§14).
 manifest at frame 0 of every Device Inbox delivery, files and messages alike, so
 a delivery is now readable end to end by its own receiver. See §14.
 
-Still outstanding, and stated plainly: **no text SEND surface**. The core APIs
-exist on both clients — `InboxSendModel.sendText` and `sendTextToDevice` — and
-nothing in either product's UI calls them yet. The device-first send surface and
-the migration/cutover of deployed clients are also outstanding.
+**macOS now has the device-first send surface**, and it is the first product
+surface that calls a text send. The Device Inbox screen lists *My Devices*; each
+device opens its own child screen, bound to that one device, carrying the message
+composer, the file picker and the folder picker, with the message group gated on
+`inbox.text.v1` (§4) and the file groups deliberately not. One send is one kind:
+the two groups have two Sends and there is no control that could combine them.
+
+Still outstanding, and stated plainly: **the web client has no text send
+surface**. `sendTextToDevice` exists there and nothing in its UI calls it. iOS
+has neither the text surface nor the device-first arrangement. The
+migration/cutover of deployed clients is also outstanding.
 
 Everything v1 specified and v2 does not restate is unchanged and still current:
 device enrolment, public-key registration/rotation/revocation, presence, the

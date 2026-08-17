@@ -326,6 +326,62 @@ public enum InboxSendPresentation {
         return L10n.t(.sendDiscardMayArrive, language: language)
     }
 
+    // MARK: - one device's own send screen
+
+    /// The action on a device row that opens that device's send screen.
+    ///
+    /// The SPOKEN version carries the device as well as the verb, because a list
+    /// of devices offers a column of identical "Send Content" buttons and the
+    /// name is the only thing separating the Mac in the study from the one in
+    /// the office. Same rule, and the same reason, as `actionLabel(for:on:)`.
+    public static func openLabel(for candidate: InboxSendCandidate,
+                                 language: AppLanguage? = nil) -> String {
+        L10n.detail([L10n.t(.sendContentAction, language: language),
+                     name(of: candidate, language: language),
+                     kind(of: candidate, language: language)], language: language)
+    }
+
+    /// The name of one content group.
+    public static func label(for kind: InboxSendContentKind,
+                             language: AppLanguage? = nil) -> String {
+        switch kind {
+        case .message: return L10n.t(.sendKindMessage, language: language)
+        case .files:   return L10n.t(.sendKindFiles, language: language)
+        }
+    }
+
+    /// "1.2 KB of 64 KB", in bytes because the protocol's bound is in bytes.
+    ///
+    /// Rendered next to the composer at all times rather than only when it
+    /// overflows: a 64 KiB limit measured in UTF-8 is not a number a person can
+    /// estimate from what is on screen, and discovering it by being refused
+    /// after writing is the failure this line exists to prevent.
+    public static func size(of draft: InboxTextDraft,
+                            language: AppLanguage? = nil) -> String {
+        L10n.t(.sendMessageSize, [L10n.bytes(Int64(draft.byteCount), language: language),
+                                  L10n.bytes(Int64(InboxManifest.maxTextBytes),
+                                             language: language)],
+               language: language)
+    }
+
+    /// Why this device's message composer cannot send, or nil when it can.
+    ///
+    /// Only the capability: the message bounds are the composer's own business
+    /// and are said by `size(of:)` beside the counter. The sentence reuses the
+    /// unsupported-capability block for the reason `text(for: .textUnsupported)`
+    /// does — one condition, one explanation, wherever it is discovered.
+    ///
+    /// **The receive FOLDER is deliberately not consulted here**, matching
+    /// `InboxTargetEligibility.canReceiveText`: a message is never written to
+    /// that folder, so a missing or unwritable one has nothing to say about
+    /// whether a message can land, and suppressing text for it would refuse a
+    /// delivery the folder was never going to touch.
+    public static func textRefusal(for candidate: InboxSendCandidate,
+                                   language: AppLanguage? = nil) -> String? {
+        guard !candidate.canReceiveText else { return nil }
+        return L10n.t(.sendBlockUnsupportedCapability, language: language)
+    }
+
     // MARK: - which kind of send
 
     /// The name of one route, as the chooser renders it.

@@ -30,13 +30,31 @@ public struct InboxSendCandidate: Identifiable, Equatable, Sendable {
     /// with two similarly named devices can tell them apart.
     public let kind: String
     public let availability: InboxTargetAvailability
+    /// Whether offering this device a TEXT send would be honest — it announces
+    /// `inbox.text.v1`, so a message arrives somewhere a person can read it.
+    ///
+    /// Carried on the candidate rather than derived at the composer, because the
+    /// device rows this is read from are private to `InboxSendModel` — a seal
+    /// must use the target's CURRENT key, so no key material leaves that model
+    /// and no surface holds a row. A composer that could not ask this question
+    /// would have to offer text to every device and discover the refusal after
+    /// the user had written the message.
+    ///
+    /// Deliberately separate from `isSendable`: a receiver without the token is
+    /// a perfectly good FILE target — the CLI, iOS and the headless receiver
+    /// among them — so this gates the message composer and nothing else.
+    /// `false` on a blocked row, because `InboxTargetEligibility.canReceiveText`
+    /// requires the general verdict first.
+    public let canReceiveText: Bool
 
     public init(id: String, name: String, kind: String,
-                availability: InboxTargetAvailability) {
+                availability: InboxTargetAvailability,
+                canReceiveText: Bool = false) {
         self.id = id
         self.name = name
         self.kind = kind
         self.availability = availability
+        self.canReceiveText = canReceiveText
     }
 
     public var isSendable: Bool { availability.sendable }
@@ -54,7 +72,13 @@ public struct InboxSendCandidate: Identifiable, Equatable, Sendable {
     public static func candidates(from rows: [InboxDeviceRow]) -> [InboxSendCandidate] {
         rows.filter { !$0.isCurrent }.map { row in
             InboxSendCandidate(id: row.id, name: row.name, kind: row.kind,
-                               availability: InboxTargetEligibility.availability(for: row))
+                               availability: InboxTargetEligibility.availability(for: row),
+                               // The same predicate the send path re-checks
+                               // against a fresh device read, asked once here so
+                               // the composer can be honest before anything is
+                               // typed. It is never the authority: `sendText`
+                               // and the coordinator both ask again.
+                               canReceiveText: InboxTargetEligibility.canReceiveText(row))
         }
     }
 }
@@ -241,6 +265,39 @@ public enum InboxSendActions {
         }
     }
 
+    /// The one control that STOPS what is happening to this send right now, or
+    /// nil when nothing is happening that could be stopped.
+    ///
+    /// Derived from `offered(for:)` rather than from a second `switch` over the
+    /// activity, which is the same rule that function follows about the failure
+    /// table: a surface that decided for itself which cancel applied would be a
+    /// copy of this decision able to drift out of step with it — and the two
+    /// answers are not interchangeable. `stopAttempt` ends work on THIS device
+    /// and touches nothing durable; `cancelDelivery` asks central to drop a
+    /// delivery that may be one moment from landing, and central refuses it
+    /// while the target holds a live claim.
+    ///
+    /// The order is deliberate: while an attempt is running there is no task to
+    /// cancel yet, and `offered(for:)` never returns both.
+    public static func cancel(for item: InboxSendItem) -> InboxSendAction? {
+        let offered = offered(for: item)
+        if offered.contains(.stopAttempt) { return .stopAttempt }
+        if offered.contains(.cancelDelivery) { return .cancelDelivery }
+        return nil
+    }
+
+    /// The newest send aimed at one device, or nil.
+    ///
+    /// `items` is newest-first from `InboxSendModel.publish()`, so the first
+    /// match is the one a per-device screen is about. It is a lookup rather than
+    /// a second list: the model owns every send this account has, and a surface
+    /// bound to one device asks which of them is this device's rather than
+    /// keeping its own.
+    public static func current(in items: [InboxSendItem],
+                               for deviceID: String) -> InboxSendItem? {
+        items.first { $0.targetDeviceID == deviceID }
+    }
+
     /// Whether this action needs the user to be warned that a delivery it cannot
     /// see may still arrive.
     ///
@@ -307,4 +364,89 @@ public enum InboxSendRefusal: Error, Equatable, Sendable {
     /// present a message AS a message. Refused before anything is staged, and
     /// applying to messages only — a file send never consults the token.
     case textUnsupported
+}
+
+// MARK: - what one send is made of
+
+/// What one delivery to a device may be, as a closed set.
+///
+/// **One send is one kind, and there are exactly two.** It mirrors the wire —
+/// `InboxManifest` carries file items or one text item and refuses a mixed
+/// document outright — so a composer offering a message with an attachment could
+/// only ever produce a delivery no receiver accepts. The surface therefore gives
+/// each kind its own group with its own Send, and there is no control anywhere
+/// that could combine them.
+///
+/// Choosing FILES and choosing a FOLDER are two actions and one kind: both stage
+/// into the same batch and produce the same delivery, and a folder keeps its
+/// hierarchy inside the seal because `expandSelection` records each file's
+/// relative path. They are separate buttons because `NSOpenPanel` has to be told
+/// whether a file is a legal choice — not separate kinds.
+public enum InboxSendContentKind: String, Equatable, Sendable, CaseIterable {
+    case message
+    case files
+
+    /// Whether this kind needs the target to announce `inbox.text.v1`.
+    ///
+    /// True for exactly one of them, which is the whole capability split: a
+    /// receiver without the token is a perfectly good FILE target — the CLI, iOS
+    /// and the headless receiver among them — so requiring it of files would
+    /// refuse ordinary deliveries to every build that renders no messages.
+    public var needsTextCapability: Bool { self == .message }
+}
+
+/// A message being written, measured the way the protocol measures it.
+///
+/// **Bytes, not characters, and that is the whole reason this type exists.**
+/// `InboxSendModel.sendText` bounds the message in UTF-8 bytes because that is
+/// what the manifest declares and what the receiver re-measures — so a composer
+/// counting `String.count` would let a screenful of emoji past its own check and
+/// hand the user a refusal after they had written the message. One emoji is four
+/// bytes; 16,384 of them are exactly the limit this type reports and the limit
+/// `String.count` would have said was a quarter spent.
+///
+/// Pure, and holding no text: it is constructed from the draft and answers three
+/// questions about it. The message itself never leaves the composer except as the
+/// argument to `sendText`, so nothing here can put a body in a published property.
+public struct InboxTextDraft: Equatable, Sendable {
+    /// The exact number of UTF-8 bytes the manifest would declare.
+    public let byteCount: Int
+
+    public init(_ text: String) {
+        byteCount = text.utf8.count
+    }
+
+    /// Nothing to send. An empty message is not a message: a receiver asked to
+    /// commit one would have to invent something to show.
+    public var isEmpty: Bool { byteCount < InboxManifest.minTextBytes }
+    public var isTooLong: Bool { byteCount > InboxManifest.maxTextBytes }
+    /// The exact precondition `sendText` applies, asked before the button is
+    /// enabled rather than after it is pressed.
+    public var isSendable: Bool { !isEmpty && !isTooLong }
+    /// How far over the limit, for the sentence that says so. Zero when within.
+    public var overflowBytes: Int { max(byteCount - InboxManifest.maxTextBytes, 0) }
+}
+
+/// How a device's own send screen is laid out.
+public enum InboxSendComposer {
+
+    /// Both kinds, in the order this device's screen stacks them.
+    ///
+    /// **A dead end never leads.** A device that does not announce
+    /// `inbox.text.v1` still shows its message group — with the reason, because
+    /// a control that is simply absent teaches nobody why — but it shows it
+    /// BELOW the files, so the first thing on the screen is the thing that
+    /// works. A device that does announce it leads with the message, which is
+    /// the cheapest thing a person opens a per-device screen to do.
+    ///
+    /// Neither kind is ever dropped: hiding the message composer on a CLI target
+    /// would leave a user believing this build cannot send messages at all,
+    /// which is the opposite of the truth.
+    ///
+    /// It is a function rather than a layout decision inside the view so
+    /// `swift test` can assert both orders without one — the same reason every
+    /// other decision on this screen lives outside it.
+    public static func order(canReceiveText: Bool) -> [InboxSendContentKind] {
+        canReceiveText ? [.message, .files] : [.files, .message]
+    }
 }
