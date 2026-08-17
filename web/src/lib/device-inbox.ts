@@ -497,6 +497,7 @@ export const SEND_ERROR_CODES = [
   "malformed_wrapped_key",
   "invalid_idempotency_key",
   "sender_device_required",
+  "browser_device_limit",
   // Locally-decided failures.
   "upload_too_large", // 413
   "quota_exceeded", // 429

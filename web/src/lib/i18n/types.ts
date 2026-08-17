@@ -687,6 +687,7 @@ export interface Messages {
     sendErrQuota: string;
     sendErrSignedOut: string;
     sendErrSenderIdentity: string;
+    sendErrBrowserDeviceLimit: string;
     sendErrNetwork: string;
     sendErrCancelled: string;
     sendErrUnsupportedKey: string;

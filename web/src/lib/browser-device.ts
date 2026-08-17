@@ -20,10 +20,10 @@ export async function ensureBrowserDevice(signal?: AbortSignal): Promise<void> {
     throw new BrowserDeviceError("unavailable");
   }
   if (!response.ok) {
-    let code = "unavailable";
+    let code: BrowserDeviceErrorCode = "unavailable";
     try {
       const body = (await response.json()) as { error?: unknown };
-      if (body.error === "browser_device_revoked") code = body.error;
+      if (body.error === "browser_device_revoked" || body.error === "browser_device_limit") code = body.error;
     } catch {
       // A non-JSON refusal remains a closed generic availability failure.
     }
@@ -31,8 +31,10 @@ export async function ensureBrowserDevice(signal?: AbortSignal): Promise<void> {
   }
 }
 
+export type BrowserDeviceErrorCode = "browser_device_revoked" | "browser_device_limit" | "unavailable";
+
 export class BrowserDeviceError extends Error {
-  constructor(public readonly code: string) {
+  constructor(public readonly code: BrowserDeviceErrorCode) {
     super(`browser device identity unavailable: ${code}`);
     this.name = "BrowserDeviceError";
   }

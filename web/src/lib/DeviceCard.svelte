@@ -686,6 +686,7 @@
       case "quota_exceeded": return d.sendErrQuota;
       case "signed_out": return d.sendErrSignedOut;
       case "sender_device_required": return d.sendErrSenderIdentity;
+	  case "browser_device_limit": return d.sendErrBrowserDeviceLimit;
       case "network": return d.sendErrNetwork;
       case "cancelled": return d.sendErrCancelled;
       case "unsupported_key": return d.sendErrUnsupportedKey;

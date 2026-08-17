@@ -549,6 +549,7 @@ describe("failures", () => {
     ["signed_out", "You're signed out"],
     ["quota_exceeded", "plan's limit"],
     ["upload_too_large", "size limit"],
+    ["browser_device_limit", "browser sending identity limit"],
     ["network", "connection dropped"],
     ["unknown", "didn't go through"],
   ])("explains %s in the user's own terms", async (code, expected) => {

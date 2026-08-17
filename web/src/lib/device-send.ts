@@ -370,6 +370,8 @@ export async function sendFilesToDevice(
   } catch (e) {
     if (e instanceof BrowserDeviceError && e.code === "browser_device_revoked")
       throw new SendFailure("sender_device_required");
+    if (e instanceof BrowserDeviceError && e.code === "browser_device_limit")
+      throw new SendFailure("browser_device_limit");
     throw new SendFailure("network");
   }
   return deliver(target, delivery, opts);
@@ -406,6 +408,8 @@ export async function sendTextToDevice(
   } catch (e) {
     if (e instanceof BrowserDeviceError && e.code === "browser_device_revoked")
       throw new SendFailure("sender_device_required");
+    if (e instanceof BrowserDeviceError && e.code === "browser_device_limit")
+      throw new SendFailure("browser_device_limit");
     throw new SendFailure("network");
   }
   return deliver(

@@ -227,6 +227,21 @@ const deletes = () => calls.filter((c) => c.url.startsWith("/api/files/") && c.m
 const uploadInits = () => calls.filter((c) => c.url.startsWith("/api/uploads?"));
 
 describe("sending to a device", () => {
+  it("preserves the browser identity limit before encrypting files or text", async () => {
+    handlers.push((c) => c.url === "/api/devices/browser-install"
+      ? json({ error: "browser_device_limit" }, 409)
+      : undefined);
+
+    await expect(sendFilesToDevice(targetSpec(), FILES(), sendOpts())).rejects.toMatchObject({
+      code: "browser_device_limit",
+    });
+    await expect(sendTextToDevice(targetSpec(), "hello", sendOpts())).rejects.toMatchObject({
+      code: "browser_device_limit",
+    });
+    expect(uploadInits()).toHaveLength(0);
+    expect(creates()).toHaveLength(0);
+  });
+
   it("uploads as purpose=device_task, unlimited-until-TTL, and never as a share", async () => {
     await sendFilesToDevice(targetSpec(), FILES(), sendOpts());
     const init = uploadInits();

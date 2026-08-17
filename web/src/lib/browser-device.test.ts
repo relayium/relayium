@@ -18,13 +18,21 @@ describe("browser sender identity", () => {
     expect(request).not.toContain("access_token");
   });
 
-  it("preserves the closed revoked reason and sanitizes every other refusal", async () => {
+  it("preserves actionable closed reasons and sanitizes every other refusal", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(
       JSON.stringify({ error: "browser_device_revoked", detail: "secret" }),
       { status: 409, headers: { "content-type": "application/json" } },
     )));
     await expect(ensureBrowserDevice()).rejects.toEqual(
       expect.objectContaining<Partial<BrowserDeviceError>>({ code: "browser_device_revoked" }),
+    );
+
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({ error: "browser_device_limit", detail: "secret" }),
+      { status: 409, headers: { "content-type": "application/json" } },
+    )));
+    await expect(ensureBrowserDevice()).rejects.toEqual(
+      expect.objectContaining<Partial<BrowserDeviceError>>({ code: "browser_device_limit" }),
     );
 
     vi.stubGlobal("fetch", vi.fn(async () => new Response(

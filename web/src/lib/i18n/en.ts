@@ -455,6 +455,7 @@ const en: Messages = {
     sendErrQuota: "You've reached your plan's limit, so nothing was uploaded.",
     sendErrSignedOut: "You're signed out. Sign in and try again.",
     sendErrSenderIdentity: "This browser's sending identity is no longer valid. Reload the page to enroll it again, then retry.",
+    sendErrBrowserDeviceLimit: "This account has reached its browser sending identity limit. Use a browser already enrolled for this account, or contact support.",
     sendErrNetwork: "The connection dropped. If nothing appears below, the file wasn't queued — try again.",
     sendErrCancelled: "Cancelled. Nothing was queued.",
     sendErrUnsupportedKey: "That device's encryption key isn't usable, so nothing could be encrypted for it.",

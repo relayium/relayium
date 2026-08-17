@@ -455,6 +455,7 @@ const zh: Messages = {
     sendErrQuota: "已经到达你套餐的限额，什么都没上传。",
     sendErrSignedOut: "你已登出。重新登录后再试。",
     sendErrSenderIdentity: "这个浏览器的发送身份已失效。请刷新页面重新登记，然后再试。",
+    sendErrBrowserDeviceLimit: "这个账户的浏览器发送身份已达到上限。请改用已为此账户登记的浏览器，或联系支持。",
     sendErrNetwork: "连接中断了。如果下面没有出现任务，说明文件没有排队——请重试。",
     sendErrCancelled: "已取消。什么都没排队。",
     sendErrUnsupportedKey: "那台设备的加密公钥不可用，没法为它加密任何东西。",
