@@ -141,8 +141,10 @@ type SourceEvent struct {
 	// BillingAttemptID is verified Stripe subscription metadata. It is never
 	// supplied by a browser and is used only to converge the matching durable
 	// Checkout attempt after this canonical lifecycle fact applies.
-	BillingAttemptID string
-	BillingProductID string
+	BillingAttemptID       string
+	BillingProductID       string
+	AppleTransactionReason string
+	ApplePurchaseDateMS    int64
 }
 
 // EffectiveEntitlement is what the users-row projection will be set to.

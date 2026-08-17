@@ -147,6 +147,10 @@ func (s *Service) applyAppleNotification(ctx context.Context, n VerifiedAppleNot
 	if n.HasTransaction {
 		rec.Projection = appleNotificationProjection(n.Transaction)
 	}
+	if n.HasRenewal {
+		rec.HasRenewal = true
+		rec.Renewal = n.Renewal
+	}
 	current, fresh, err := s.Store().ClaimAppleNotification(ctx, rec)
 	if err != nil {
 		log.Printf("apple notifications: claiming %s failed: %v", n.UUID, err)
@@ -165,6 +169,8 @@ func (s *Service) applyAppleNotification(ctx context.Context, n VerifiedAppleNot
 		// event both requests converge on.
 		n.HasTransaction = current.Projection.OriginalTransactionID != ""
 		n.Supported = current.Supported
+		n.HasRenewal = current.HasRenewal
+		n.Renewal = current.Renewal
 		if n.HasTransaction {
 			n.Transaction = current.Projection.transaction()
 		}
@@ -200,6 +206,9 @@ func (s *Service) applyAppleNotification(ctx context.Context, n VerifiedAppleNot
 	// 4. WHOSE SUBSCRIPTION IS THIS? Two independent keys, and they must agree.
 	owner, resolved, err := s.resolveAppleNotificationOwner(ctx, tx)
 	if err != nil {
+		if errors.Is(err, ErrAppleBillingSubjectDeleted) {
+			return s.finishAppleNotification(ctx, n.UUID, appleNotificationQuarantined, "deleted_owner", now)
+		}
 		if errors.Is(err, ErrExternalSubscriptionOwned) {
 			// Apple's record and ours disagree about who holds this subscription.
 			// Nothing is granted, the projection is preserved, and the delivery is
@@ -391,7 +400,7 @@ func (s *Service) resolveAppleNotificationOwner(ctx context.Context, tx Verified
 		// authorizes nothing either way — this is a lookup, not a credential check,
 		// and unlike the authenticated intake there is no caller to compare it
 		// against.
-		u, found, err := s.Store().UserByAppleAccountToken(ctx, tx.AppAccountToken)
+		u, found, err := s.appleTokenOwner(ctx, tx.AppAccountToken)
 		if err != nil {
 			return "", false, err
 		}
@@ -483,6 +492,15 @@ func (s *Service) reconcileApplePendingNotifications(ctx context.Context, userID
 		if !appleRenewalMatchesTransaction(stored, tx) {
 			hasRenewal = false
 			stored = AppleRenewalState{}
+		}
+		if rec.HasRenewal {
+			incoming := appleRenewalState(userID, tx, rec.Renewal, now)
+			if preferred, use := preferDurableAppleRenewal(stored, hasRenewal, incoming, tx); use {
+				stored = preferred
+			} else {
+				stored = incoming
+			}
+			hasRenewal = true
 		}
 		product, mapped, err := s.appleNotificationProductWithRenewal(ctx, tx, stored, now)
 		if err != nil {

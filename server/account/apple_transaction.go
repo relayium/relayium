@@ -256,10 +256,11 @@ type VerifiedAppleTransaction struct {
 	// AppAccountToken is the server-issued attribution UUID, normalized to lower
 	// case. It says which account the purchase CLAIMS to belong to; the store
 	// decides whether that claim is the submitter's to make.
-	AppAccountToken string
-	Environment     string
-	Type            string
-	OwnershipType   string
+	AppAccountToken   string
+	Environment       string
+	Type              string
+	OwnershipType     string
+	TransactionReason string
 	// IsUpgraded is Apple's "this transaction was replaced by an upgrade". It is
 	// optional in the payload: ABSENT means false, and any present value that is
 	// not a JSON boolean — `null` included — is a refusal rather than a
@@ -400,6 +401,7 @@ func parseAppleTransactionPayload(raw []byte) (VerifiedAppleTransaction, error) 
 		ProductID             string `json:"productId"`
 		Type                  string `json:"type"`
 		InAppOwnershipType    string `json:"inAppOwnershipType"`
+		TransactionReason     string `json:"transactionReason"`
 		Environment           string `json:"environment"`
 		AppAccountToken       string `json:"appAccountToken"`
 		// RawMessage, not *bool: decoding JSON `null` into a pointer yields nil,
@@ -428,7 +430,8 @@ func parseAppleTransactionPayload(raw []byte) (VerifiedAppleTransaction, error) 
 		ProductID:     p.ProductID,
 		TransactionID: p.TransactionID, OriginalTransactionID: p.OriginalTransactionID,
 		Environment: p.Environment, Type: p.Type, OwnershipType: p.InAppOwnershipType,
-		IsUpgraded: isUpgraded,
+		TransactionReason: p.TransactionReason,
+		IsUpgraded:        isUpgraded,
 		// Apple's UUIDs may arrive in either case; RFC 4122 hex is
 		// case-insensitive, and the stored token is lower case.
 		AppAccountToken: strings.ToLower(p.AppAccountToken),

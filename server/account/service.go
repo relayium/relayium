@@ -513,10 +513,16 @@ func (s *Service) ReconcileAppleSubscriptions(ctx context.Context) {
 				failed++
 				continue
 			}
-			owner, owned, err := s.Store().UserByAppleAccountToken(ctx, fact.Transaction.AppAccountToken)
-			if err != nil || !owned || owner.ID != src.UserID {
-				failed++
-				continue
+			// The environment-qualified subscription binding is the sweep's
+			// lookup authority. When Apple includes appAccountToken it must still
+			// resolve through the durable subject/tombstone map and agree; a
+			// missing token cannot broaden the already-bound identity.
+			if fact.Transaction.AppAccountToken != "" {
+				owner, owned, ownerErr := s.appleTokenOwner(ctx, fact.Transaction.AppAccountToken)
+				if ownerErr != nil || !owned || owner.ID != src.UserID {
+					failed++
+					continue
+				}
 			}
 			var product AppleProduct
 			if !appleTransactionIsTerminal(fact.Transaction) {

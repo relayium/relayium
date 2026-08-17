@@ -146,6 +146,38 @@ func TestAppleRenewalProjectionRejectsOutOfOrderState(t *testing.T) {
 	}
 }
 
+func TestAppleRenewalOrderingIsScopedToExternalSubscriptionIdentity(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	u, _ := store.UpsertUserByEmail(ctx, "renewal-order-scope@example.test", "")
+	newerOld := AppleRenewalState{UserID: u.ID, ExternalID: "production:old", BundleID: testBundleIOS, CurrentProductID: "plus.monthly", EventAt: 900, UpdatedAt: 900}
+	if applied, err := store.ApplyAppleRenewalState(ctx, newerOld); err != nil || !applied {
+		t.Fatalf("old subscription apply=%v err=%v", applied, err)
+	}
+	olderNew := AppleRenewalState{UserID: u.ID, ExternalID: "production:new", BundleID: testBundleIOS, CurrentProductID: "pro.monthly", EventAt: 100, UpdatedAt: 100}
+	if applied, err := store.ApplyAppleRenewalState(ctx, olderNew); err != nil || !applied {
+		t.Fatalf("new subscription was stale-dropped by unrelated identity: applied=%v err=%v", applied, err)
+	}
+	got, ok, err := store.GetAppleRenewalState(ctx, u.ID)
+	if err != nil || !ok || got.ExternalID != olderNew.ExternalID || got.CurrentProductID != olderNew.CurrentProductID {
+		t.Fatalf("renewal=%+v ok=%v err=%v", got, ok, err)
+	}
+}
+
+func TestAppleNotificationClaimPersistsVerifiedRenewalForReplay(t *testing.T) {
+	store := newTestStore(t)
+	rec := AppleNotificationRecord{UUID: appleNotifyUUID(199), Type: "DID_FAIL_TO_RENEW", ReceivedAt: 100, Supported: true,
+		Projection: AppleNotificationProjection{BundleID: testBundleIOS, ProductID: testAppleProduct, OriginalTransactionID: "original", Environment: appleEnvProduction, AppAccountToken: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", PurchaseDateMS: 1000, ExpiresDateMS: 2000},
+		HasRenewal: true, Renewal: VerifiedAppleRenewalInfo{OriginalTransactionID: "original", AutoRenewProductID: testAppleProduct, Environment: appleEnvProduction, IsInBillingRetry: true, GracePeriodExpiresMS: 3000, SignedDateMS: 1500}}
+	if _, fresh, err := store.ClaimAppleNotification(context.Background(), rec); err != nil || !fresh {
+		t.Fatalf("claim fresh=%v err=%v", fresh, err)
+	}
+	got, ok, err := store.GetAppleNotification(context.Background(), rec.UUID)
+	if err != nil || !ok || !got.HasRenewal || got.Renewal.GracePeriodExpiresMS != rec.Renewal.GracePeriodExpiresMS {
+		t.Fatalf("stored renewal=%+v ok=%v err=%v", got, ok, err)
+	}
+}
+
 func TestApplePurchaseFailsClosedWithoutCanonicalReconciler(t *testing.T) {
 	f := newAppleTxFixture(t)
 	f.svc.SetAppleSubscriptionReconciler(nil)

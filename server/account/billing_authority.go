@@ -80,7 +80,10 @@ func billingHistoryTx(ctx context.Context, tx *sql.Tx, userID string) (billingHi
 		}
 		out.Provider = ProviderApple
 	}
-	if appleAccountToken != "" && out.Provider == "" {
+	if appleAccountToken != "" {
+		if out.Provider != "" && out.Provider != ProviderApple {
+			return billingHistory{}, ErrBillingAuthorityConflict
+		}
 		out.Provider = ProviderApple
 	}
 	if out.Provider == ProviderApple && out.ExternalScope == "" {
@@ -137,6 +140,21 @@ func backfillBillingAuthorities(ctx context.Context, db *sql.DB, now int64) erro
 	return tx.Commit()
 }
 
+// backfillLegacyAppleBillingSubjects retains pre-dispatch appAccountTokens as
+// sticky ownership tombstones. They deliberately point at no real purchase
+// attempt: a later renewal may update the same Apple authority, but it can
+// never be mistaken for proof that a newly dispatched purchase completed.
+func backfillLegacyAppleBillingSubjects(ctx context.Context, db *sql.DB, now int64) error {
+	_, err := db.ExecContext(ctx, `INSERT INTO apple_billing_subjects
+ (app_account_token,user_id,attempt_id,bundle_id,authority_epoch,created_at)
+ SELECT lower(u.apple_account_token),u.id,'legacy:' || u.id,
+        COALESCE(NULLIF(a.external_scope,''),?),COALESCE(a.epoch,0),?
+ FROM users u LEFT JOIN billing_authorities a ON a.user_id=u.id AND a.provider='apple'
+ WHERE u.apple_account_token<>''
+	ON CONFLICT(app_account_token) DO NOTHING`, billingUnknownAppleScope, now)
+	return err
+}
+
 func acquireStoreBillingAuthority(ctx context.Context, store Store, in BillingAuthorityRequest) (BillingAuthority, error) {
 	authorities, ok := store.(interface {
 		AcquireBillingAuthority(context.Context, BillingAuthorityRequest) (BillingAuthority, error)
@@ -170,7 +188,33 @@ func acquireBillingAuthorityTx(ctx context.Context, tx *sql.Tx, in BillingAuthor
 	err := tx.QueryRowContext(ctx, `SELECT user_id, provider, external_scope, apple_environment, apple_account_token, epoch, intent_id, created_at, updated_at FROM billing_authorities WHERE user_id=?`, in.UserID).
 		Scan(&existing.UserID, &existing.Provider, &existing.ExternalScope, &existing.AppleEnvironment, &existing.AppleAccountToken, &existing.Epoch, &existing.IntentID, &existing.CreatedAt, &existing.UpdatedAt)
 	if err == nil {
-		if existing.Provider != in.Provider || existing.ExternalScope != in.ExternalScope || existing.AppleAccountToken != in.AppleAccountToken {
+		// A pre-authority App Store token proves that Apple may already have
+		// accepted an Ask-to-Buy purchase, but it cannot name the bundle until a
+		// verified transaction arrives. Bind that deliberately sticky unknown
+		// scope exactly once from the signed transaction; never use this path to
+		// move a known bundle or a different token.
+		if existing.Provider == ProviderApple && existing.ExternalScope == billingUnknownAppleScope &&
+			in.Provider == ProviderApple && in.ExternalScope != "" &&
+			existing.AppleAccountToken == in.AppleAccountToken {
+			res, updateErr := tx.ExecContext(ctx, `UPDATE billing_authorities
+ SET external_scope=?,updated_at=?
+ WHERE user_id=? AND provider=? AND external_scope=? AND apple_account_token=? AND epoch=? AND intent_id=?`,
+				in.ExternalScope, in.Now, existing.UserID, ProviderApple, billingUnknownAppleScope,
+				existing.AppleAccountToken, existing.Epoch, existing.IntentID)
+			if updateErr != nil {
+				return BillingAuthority{}, updateErr
+			}
+			if n, updateErr := res.RowsAffected(); updateErr != nil || n != 1 {
+				if updateErr != nil {
+					return BillingAuthority{}, updateErr
+				}
+				return BillingAuthority{}, ErrBillingAuthorityConflict
+			}
+			existing.ExternalScope = in.ExternalScope
+			existing.UpdatedAt = in.Now
+		}
+		if existing.Provider != in.Provider || existing.ExternalScope != in.ExternalScope ||
+			(existing.Provider == ProviderStripe && existing.AppleAccountToken != in.AppleAccountToken) {
 			return BillingAuthority{}, ErrBillingAuthorityConflict
 		}
 		return existing, nil
@@ -192,20 +236,24 @@ func acquireBillingAuthorityTx(ctx context.Context, tx *sql.Tx, in BillingAuthor
 	}
 	if history.Provider != "" {
 		if history.Provider != in.Provider ||
-			(history.Provider == ProviderApple && history.ExternalScope != in.ExternalScope) ||
-			(history.Provider == ProviderApple && history.AppleAccountToken != in.AppleAccountToken) {
+			(history.Provider == ProviderApple && history.ExternalScope != billingUnknownAppleScope && history.ExternalScope != in.ExternalScope) {
 			return BillingAuthority{}, ErrBillingAuthorityConflict
 		}
 	}
+	authorityToken := in.AppleAccountToken
+	if history.Provider == ProviderApple && history.AppleAccountToken != "" {
+		authorityToken = history.AppleAccountToken
+	}
 	intentID := authx.NewID()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO billing_authorities(user_id,provider,external_scope,apple_environment,apple_account_token,epoch,intent_id,created_at,updated_at) VALUES(?,?,?,?,?,1,?,?,?)`, in.UserID, in.Provider, in.ExternalScope, "", in.AppleAccountToken, intentID, in.Now, in.Now); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO billing_authorities(user_id,provider,external_scope,apple_environment,apple_account_token,epoch,intent_id,created_at,updated_at) VALUES(?,?,?,?,?,1,?,?,?)`, in.UserID, in.Provider, in.ExternalScope, "", authorityToken, intentID, in.Now, in.Now); err != nil {
 		return BillingAuthority{}, err
 	}
-	out := BillingAuthority{UserID: in.UserID, Provider: in.Provider, ExternalScope: in.ExternalScope, AppleAccountToken: in.AppleAccountToken, Epoch: 1, IntentID: intentID, CreatedAt: in.Now, UpdatedAt: in.Now}
+	out := BillingAuthority{UserID: in.UserID, Provider: in.Provider, ExternalScope: in.ExternalScope, AppleAccountToken: authorityToken, Epoch: 1, IntentID: intentID, CreatedAt: in.Now, UpdatedAt: in.Now}
 	return out, nil
 }
 
 var ErrBillingPurchaseAmbiguous = errors.New("account: billing purchase does not match dispatched intent")
+var ErrAppleBillingSubjectDeleted = errors.New("account: apple billing subject belongs to a purged account")
 
 func advanceBillingAuthorityGenerationTx(ctx context.Context, tx *sql.Tx, authority BillingAuthority, now int64) error {
 	nextIntent := authx.NewID()
@@ -282,7 +330,13 @@ func stripeAttemptMayConverge(status string) bool {
 
 type BillingPurchaseAttempt struct {
 	ID, UserID, Provider, ExternalScope, ProductID, State, ProviderURL, ProviderSessionID, ProviderSubscriptionID string
+	AppleAccountToken                                                                                             string
 	Epoch, CreatedAt                                                                                              int64
+}
+
+type AppleBillingSubject struct {
+	AppAccountToken, UserID, AttemptID, BundleID, Environment string
+	AuthorityEpoch, CreatedAt, DeletedAt                      int64
 }
 
 // DispatchBillingPurchase atomically grants the one external dispatch allowed
@@ -303,8 +357,8 @@ func (s *SQLiteStore) DispatchBillingPurchase(ctx context.Context, authority Bil
 		return BillingPurchaseAttempt{}, false, ErrBillingAuthorityConflict
 	}
 	var out BillingPurchaseAttempt
-	err = tx.QueryRowContext(ctx, `SELECT id,user_id,provider,external_scope,product_id,state,provider_ref,provider_session_id,provider_subscription_id,epoch,created_at FROM billing_purchase_attempts WHERE user_id=? AND epoch=? AND state IN ('prepared','dispatched')`, authority.UserID, authority.Epoch).
-		Scan(&out.ID, &out.UserID, &out.Provider, &out.ExternalScope, &out.ProductID, &out.State, &out.ProviderURL, &out.ProviderSessionID, &out.ProviderSubscriptionID, &out.Epoch, &out.CreatedAt)
+	err = tx.QueryRowContext(ctx, `SELECT id,user_id,provider,external_scope,product_id,state,provider_ref,provider_session_id,provider_subscription_id,apple_account_token,epoch,created_at FROM billing_purchase_attempts WHERE user_id=? AND epoch=? AND state IN ('prepared','dispatched')`, authority.UserID, authority.Epoch).
+		Scan(&out.ID, &out.UserID, &out.Provider, &out.ExternalScope, &out.ProductID, &out.State, &out.ProviderURL, &out.ProviderSessionID, &out.ProviderSubscriptionID, &out.AppleAccountToken, &out.Epoch, &out.CreatedAt)
 	if err == nil {
 		return out, false, nil
 	}
@@ -316,6 +370,66 @@ func (s *SQLiteStore) DispatchBillingPurchase(ctx context.Context, authority Bil
 		return BillingPurchaseAttempt{}, false, err
 	}
 	return out, true, tx.Commit()
+}
+
+func (s *SQLiteStore) DispatchAppleBillingPurchase(ctx context.Context, authority BillingAuthority, productID, candidateToken string, now int64) (BillingPurchaseAttempt, bool, error) {
+	if authority.Provider != ProviderApple || !validAppAccountToken(candidateToken) {
+		return BillingPurchaseAttempt{}, false, ErrBillingAuthorityConflict
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return BillingPurchaseAttempt{}, false, err
+	}
+	defer tx.Rollback()
+	var current BillingAuthority
+	if err := tx.QueryRowContext(ctx, `SELECT user_id,provider,external_scope,apple_environment,apple_account_token,epoch,intent_id,created_at,updated_at FROM billing_authorities WHERE user_id=?`, authority.UserID).
+		Scan(&current.UserID, &current.Provider, &current.ExternalScope, &current.AppleEnvironment, &current.AppleAccountToken, &current.Epoch, &current.IntentID, &current.CreatedAt, &current.UpdatedAt); err != nil {
+		return BillingPurchaseAttempt{}, false, err
+	}
+	if current != authority {
+		return BillingPurchaseAttempt{}, false, ErrBillingAuthorityConflict
+	}
+	var out BillingPurchaseAttempt
+	err = tx.QueryRowContext(ctx, `SELECT id,user_id,provider,external_scope,product_id,state,provider_ref,provider_session_id,provider_subscription_id,apple_account_token,epoch,created_at FROM billing_purchase_attempts WHERE user_id=? AND epoch=? AND state IN ('prepared','dispatched')`, authority.UserID, authority.Epoch).
+		Scan(&out.ID, &out.UserID, &out.Provider, &out.ExternalScope, &out.ProductID, &out.State, &out.ProviderURL, &out.ProviderSessionID, &out.ProviderSubscriptionID, &out.AppleAccountToken, &out.Epoch, &out.CreatedAt)
+	if err == nil {
+		return out, false, nil
+	}
+	if err != sql.ErrNoRows {
+		return BillingPurchaseAttempt{}, false, err
+	}
+	out = BillingPurchaseAttempt{ID: authx.NewID(), UserID: authority.UserID, Provider: ProviderApple, ExternalScope: authority.ExternalScope, ProductID: productID, State: "dispatched", AppleAccountToken: candidateToken, Epoch: authority.Epoch, CreatedAt: now}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO billing_purchase_attempts(id,user_id,provider,external_scope,product_id,state,provider_ref,apple_account_token,epoch,created_at) VALUES(?,?,?,?,?,'dispatched','',?,?,?)`, out.ID, out.UserID, out.Provider, out.ExternalScope, out.ProductID, out.AppleAccountToken, out.Epoch, out.CreatedAt); err != nil {
+		return BillingPurchaseAttempt{}, false, err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO apple_billing_subjects(app_account_token,user_id,attempt_id,bundle_id,authority_epoch,created_at) VALUES(?,?,?,?,?,?)`, candidateToken, out.UserID, out.ID, out.ExternalScope, out.Epoch, now); err != nil {
+		return BillingPurchaseAttempt{}, false, err
+	}
+	return out, true, tx.Commit()
+}
+
+func appleBillingSubjectTx(ctx context.Context, tx *sql.Tx, token string) (AppleBillingSubject, bool, error) {
+	if !validAppAccountToken(token) {
+		return AppleBillingSubject{}, false, nil
+	}
+	var out AppleBillingSubject
+	err := tx.QueryRowContext(ctx, `SELECT app_account_token,user_id,attempt_id,bundle_id,authority_epoch,environment,created_at,deleted_at FROM apple_billing_subjects WHERE app_account_token=?`, strings.ToLower(token)).Scan(&out.AppAccountToken, &out.UserID, &out.AttemptID, &out.BundleID, &out.AuthorityEpoch, &out.Environment, &out.CreatedAt, &out.DeletedAt)
+	if err == sql.ErrNoRows {
+		return AppleBillingSubject{}, false, nil
+	}
+	return out, err == nil, err
+}
+
+func (s *SQLiteStore) AppleBillingSubjectByToken(ctx context.Context, token string) (AppleBillingSubject, bool, error) {
+	if !validAppAccountToken(token) {
+		return AppleBillingSubject{}, false, nil
+	}
+	var out AppleBillingSubject
+	err := s.reader().QueryRowContext(ctx, `SELECT app_account_token,user_id,attempt_id,bundle_id,authority_epoch,environment,created_at,deleted_at FROM apple_billing_subjects WHERE app_account_token=?`, strings.ToLower(token)).Scan(&out.AppAccountToken, &out.UserID, &out.AttemptID, &out.BundleID, &out.AuthorityEpoch, &out.Environment, &out.CreatedAt, &out.DeletedAt)
+	if err == sql.ErrNoRows {
+		return AppleBillingSubject{}, false, nil
+	}
+	return out, err == nil, err
 }
 
 func (s *SQLiteStore) SetBillingPurchaseProviderSession(ctx context.Context, userID, attemptID, sessionID, checkoutURL string) error {
@@ -372,8 +486,8 @@ func (s *SQLiteStore) PrepareBillingPurchase(ctx context.Context, authority Bill
 		return BillingPurchaseAttempt{}, false, ErrBillingAuthorityConflict
 	}
 	var out BillingPurchaseAttempt
-	err = tx.QueryRowContext(ctx, `SELECT id,user_id,provider,external_scope,product_id,state,provider_ref,provider_session_id,provider_subscription_id,epoch,created_at FROM billing_purchase_attempts WHERE user_id=? AND epoch=? AND state IN ('prepared','dispatched')`, authority.UserID, authority.Epoch).
-		Scan(&out.ID, &out.UserID, &out.Provider, &out.ExternalScope, &out.ProductID, &out.State, &out.ProviderURL, &out.ProviderSessionID, &out.ProviderSubscriptionID, &out.Epoch, &out.CreatedAt)
+	err = tx.QueryRowContext(ctx, `SELECT id,user_id,provider,external_scope,product_id,state,provider_ref,provider_session_id,provider_subscription_id,apple_account_token,epoch,created_at FROM billing_purchase_attempts WHERE user_id=? AND epoch=? AND state IN ('prepared','dispatched')`, authority.UserID, authority.Epoch).
+		Scan(&out.ID, &out.UserID, &out.Provider, &out.ExternalScope, &out.ProductID, &out.State, &out.ProviderURL, &out.ProviderSessionID, &out.ProviderSubscriptionID, &out.AppleAccountToken, &out.Epoch, &out.CreatedAt)
 	if err == nil {
 		return out, false, nil
 	}

@@ -107,20 +107,15 @@ func (s *Service) handleApplePurchaseDispatch(w http.ResponseWriter, r *http.Req
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	token, err := s.Store().EnsureAppleAccountToken(r.Context(), u.ID, candidate)
-	if err != nil {
-		http.Error(w, "server error", http.StatusInternalServerError)
-		return
-	}
 	authorities, ok := s.Store().(interface {
 		AcquireBillingAuthority(context.Context, BillingAuthorityRequest) (BillingAuthority, error)
-		DispatchBillingPurchase(context.Context, BillingAuthority, string, int64) (BillingPurchaseAttempt, bool, error)
+		DispatchAppleBillingPurchase(context.Context, BillingAuthority, string, string, int64) (BillingPurchaseAttempt, bool, error)
 	})
 	if !ok {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	authority, err := authorities.AcquireBillingAuthority(r.Context(), BillingAuthorityRequest{UserID: u.ID, Provider: ProviderApple, ExternalScope: in.BundleID, AppleAccountToken: token, Now: s.now().Unix()})
+	authority, err := authorities.AcquireBillingAuthority(r.Context(), BillingAuthorityRequest{UserID: u.ID, Provider: ProviderApple, ExternalScope: in.BundleID, AppleAccountToken: candidate, Now: s.now().Unix()})
 	if errors.Is(err, ErrBillingAuthorityConflict) {
 		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "billing_authority_conflict", "provider": "existing"})
 		return
@@ -129,7 +124,7 @@ func (s *Service) handleApplePurchaseDispatch(w http.ResponseWriter, r *http.Req
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
 	}
-	attempt, created, err := authorities.DispatchBillingPurchase(r.Context(), authority, in.ProductID, s.now().Unix())
+	attempt, created, err := authorities.DispatchAppleBillingPurchase(r.Context(), authority, in.ProductID, candidate, s.now().Unix())
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
@@ -138,5 +133,5 @@ func (s *Service) handleApplePurchaseDispatch(w http.ResponseWriter, r *http.Req
 		httpx.WriteJSON(w, http.StatusConflict, map[string]string{"error": "purchase_reconciliation_required", "provider": ProviderApple})
 		return
 	}
-	httpx.WriteJSON(w, http.StatusOK, map[string]string{"appAccountToken": token, "attemptId": attempt.ID})
+	httpx.WriteJSON(w, http.StatusOK, map[string]string{"appAccountToken": attempt.AppleAccountToken, "attemptId": attempt.ID})
 }

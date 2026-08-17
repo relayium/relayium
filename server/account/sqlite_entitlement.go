@@ -616,12 +616,27 @@ func (s *SQLiteStore) EnsureAppleAccountToken(ctx context.Context, userID, candi
 		return "", err
 	}
 	if current != "" {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO apple_billing_subjects(app_account_token,user_id,attempt_id,bundle_id,authority_epoch,created_at)
+ VALUES(?,?,? || ?,?,0,strftime('%s','now')) ON CONFLICT(app_account_token) DO NOTHING`, current, userID, "legacy:", userID, billingUnknownAppleScope); err != nil {
+			return "", err
+		}
 		return current, tx.Commit()
+	}
+	var retained int
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM apple_billing_subjects WHERE app_account_token=?)`, strings.ToLower(candidate)).Scan(&retained); err != nil {
+		return "", err
+	}
+	if retained != 0 {
+		return "", errors.New("account: app account token is retained by billing history")
 	}
 	// The unique index refuses a token another account already holds, so one
 	// token can never address two users.
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE users SET apple_account_token = ? WHERE id = ?`, candidate, userID); err != nil {
+		return "", err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO apple_billing_subjects(app_account_token,user_id,attempt_id,bundle_id,authority_epoch,created_at)
+ VALUES(?,?,? || ?,?,0,strftime('%s','now'))`, strings.ToLower(candidate), userID, "legacy:", userID, billingUnknownAppleScope); err != nil {
 		return "", err
 	}
 	return candidate, tx.Commit()

@@ -15,7 +15,9 @@ func applyAppleRenewalStateTx(ctx context.Context, tx *sql.Tx, r AppleRenewalSta
  auto_renew_enabled=excluded.auto_renew_enabled,in_billing_retry=excluded.in_billing_retry,
  grace_until=excluded.grace_until,renewal_at=excluded.renewal_at,event_at=excluded.event_at,updated_at=excluded.updated_at,
  expiration_intent=excluded.expiration_intent,price_increase_status=excluded.price_increase_status
- WHERE excluded.event_at > apple_renewal_states.event_at`, r.UserID, r.ExternalID, r.BundleID, r.CurrentProductID, r.AutoRenewProductID,
+ WHERE excluded.external_id<>apple_renewal_states.external_id
+    OR excluded.bundle_id<>apple_renewal_states.bundle_id
+    OR excluded.event_at > apple_renewal_states.event_at`, r.UserID, r.ExternalID, r.BundleID, r.CurrentProductID, r.AutoRenewProductID,
 		appleBoolInt(r.AutoRenewEnabled), appleBoolInt(r.IsInBillingRetry), r.GraceUntil, r.RenewalAt, r.EventAt, r.UpdatedAt, r.ExpirationIntent, r.PriceIncreaseStatus)
 	if err != nil {
 		return false, err
@@ -66,6 +68,27 @@ func (s *SQLiteStore) applyAuthorizedAppleLifecycle(ctx context.Context, ev Sour
 		return SubscriptionApply{}, err
 	}
 	defer tx.Rollback()
+	subject, hasSubject, err := appleBillingSubjectTx(ctx, tx, appleAccountToken)
+	if err != nil {
+		return SubscriptionApply{}, err
+	}
+	if hasSubject && (subject.UserID != ev.UserID ||
+		(subject.BundleID != billingUnknownAppleScope && subject.BundleID != ev.ExternalScope) || subject.DeletedAt != 0) {
+		return SubscriptionApply{}, ErrBillingAuthorityConflict
+	}
+	if hasSubject && subject.BundleID == billingUnknownAppleScope {
+		res, bindErr := tx.ExecContext(ctx, `UPDATE apple_billing_subjects SET bundle_id=? WHERE app_account_token=? AND bundle_id=? AND deleted_at=0`, ev.ExternalScope, subject.AppAccountToken, billingUnknownAppleScope)
+		if bindErr != nil {
+			return SubscriptionApply{}, bindErr
+		}
+		if n, bindErr := res.RowsAffected(); bindErr != nil || n != 1 {
+			if bindErr != nil {
+				return SubscriptionApply{}, bindErr
+			}
+			return SubscriptionApply{}, ErrBillingAuthorityConflict
+		}
+		subject.BundleID = ev.ExternalScope
+	}
 	if appleAccountToken == "" {
 		if err := tx.QueryRowContext(ctx, `SELECT apple_account_token FROM users WHERE id=?`, ev.UserID).Scan(&appleAccountToken); err != nil || appleAccountToken == "" {
 			if err != nil {
@@ -81,6 +104,22 @@ func (s *SQLiteStore) applyAuthorizedAppleLifecycle(ctx context.Context, ev Sour
 	if err != nil {
 		return SubscriptionApply{}, err
 	}
+	if hasSubject {
+		switch {
+		case subject.Environment == "":
+			if _, err := tx.ExecContext(ctx, `UPDATE apple_billing_subjects SET environment=? WHERE app_account_token=? AND environment=''`, environment, subject.AppAccountToken); err != nil {
+				return SubscriptionApply{}, err
+			}
+		case subject.Environment == appleEnvSandbox && environment == appleEnvProduction:
+			if _, err := tx.ExecContext(ctx, `UPDATE apple_billing_subjects SET environment=? WHERE app_account_token=? AND environment=?`, environment, subject.AppAccountToken, appleEnvSandbox); err != nil {
+				return SubscriptionApply{}, err
+			}
+		case subject.Environment == appleEnvProduction && environment == appleEnvSandbox:
+			return SubscriptionApply{Applied: false}, tx.Commit()
+		case subject.Environment != environment:
+			return SubscriptionApply{}, ErrBillingAuthorityConflict
+		}
+	}
 	if authority.AppleEnvironment == "" {
 		res, err := tx.ExecContext(ctx, `UPDATE billing_authorities SET apple_environment=?,updated_at=? WHERE user_id=? AND provider=? AND apple_environment='' AND epoch=?`, environment, ev.Now, ev.UserID, ProviderApple, authority.Epoch)
 		if err != nil {
@@ -93,18 +132,33 @@ func (s *SQLiteStore) applyAuthorizedAppleLifecycle(ctx context.Context, ev Sour
 			return SubscriptionApply{}, ErrBillingAuthorityConflict
 		}
 		authority.AppleEnvironment = environment
+	} else if authority.AppleEnvironment == appleEnvSandbox && environment == appleEnvProduction {
+		res, err := tx.ExecContext(ctx, `UPDATE billing_authorities SET apple_environment=?,updated_at=? WHERE user_id=? AND provider=? AND apple_environment=? AND epoch=?`, appleEnvProduction, ev.Now, ev.UserID, ProviderApple, appleEnvSandbox, authority.Epoch)
+		if err != nil {
+			return SubscriptionApply{}, err
+		}
+		if n, err := res.RowsAffected(); err != nil || n != 1 {
+			if err != nil {
+				return SubscriptionApply{}, err
+			}
+			return SubscriptionApply{}, ErrBillingAuthorityConflict
+		}
+		authority.AppleEnvironment = appleEnvProduction
+	} else if authority.AppleEnvironment == appleEnvProduction && environment == appleEnvSandbox {
+		return SubscriptionApply{Applied: false}, tx.Commit()
 	} else if authority.AppleEnvironment != environment {
 		return SubscriptionApply{}, ErrBillingAuthorityConflict
 	}
 
 	var attemptID, attemptProduct string
-	err = tx.QueryRowContext(ctx, `SELECT id,product_id FROM billing_purchase_attempts WHERE user_id=? AND epoch=? AND provider=? AND state IN ('prepared','dispatched')`, ev.UserID, authority.Epoch, ProviderApple).Scan(&attemptID, &attemptProduct)
+	var attemptCreated int64
+	err = tx.QueryRowContext(ctx, `SELECT id,product_id,created_at FROM billing_purchase_attempts WHERE user_id=? AND epoch=? AND provider=? AND state IN ('prepared','dispatched')`, ev.UserID, authority.Epoch, ProviderApple).Scan(&attemptID, &attemptProduct, &attemptCreated)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return SubscriptionApply{}, err
 	}
-	if err == nil && attemptProduct != currentProductID && attemptProduct != autoRenewProductID {
-		return SubscriptionApply{}, ErrBillingPurchaseAmbiguous
-	}
+	resolveAttempt := err == nil && hasSubject && subject.AttemptID == attemptID &&
+		attemptProduct == ev.BillingProductID && ev.AppleTransactionReason == "PURCHASE" &&
+		ev.ApplePurchaseDateMS >= attemptCreated*1000
 
 	result, err := applySourceTx(ctx, tx, ev)
 	if err != nil {
@@ -116,7 +170,7 @@ func (s *SQLiteStore) applyAuthorizedAppleLifecycle(ctx context.Context, ev Sour
 				return SubscriptionApply{}, err
 			}
 		}
-		if attemptID != "" {
+		if resolveAttempt {
 			res, err := tx.ExecContext(ctx, `UPDATE billing_purchase_attempts SET state='resolved' WHERE id=? AND user_id=? AND epoch=? AND state IN ('prepared','dispatched')`, attemptID, ev.UserID, authority.Epoch)
 			if err != nil {
 				return SubscriptionApply{}, err

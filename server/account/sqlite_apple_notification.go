@@ -3,6 +3,7 @@ package account
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 )
@@ -79,6 +80,10 @@ const (
 	// it is preserved rather than dropped, and its delivery is deliberately
 	// failed so it stays visible in App Store Connect's notification history.
 	appleNotificationConflict = "conflict"
+	// appleNotificationQuarantined is a verified fact attributed to an account
+	// that was hard-purged. The retained appAccountToken tombstone prevents both
+	// rebinding and endless provider retries without retaining user content.
+	appleNotificationQuarantined = "quarantined"
 )
 
 // appleNotificationTerminal reports whether a recorded state means the work is
@@ -91,7 +96,7 @@ const (
 // must re-run the decision rather than be told the work is over.
 func appleNotificationTerminal(state string) bool {
 	switch state {
-	case appleNotificationApplied, appleNotificationIgnored, appleNotificationUnsupported:
+	case appleNotificationApplied, appleNotificationIgnored, appleNotificationUnsupported, appleNotificationQuarantined:
 		return true
 	}
 	return false
@@ -129,8 +134,9 @@ type AppleNotificationProjection struct {
 	// they are stored because appleEventClock's low bit depends on them: a
 	// replayed projection that forgot them would order a refund as though it were
 	// still live.
-	RevocationDateMS int64
-	IsUpgraded       bool
+	RevocationDateMS  int64
+	IsUpgraded        bool
+	TransactionReason string
 }
 
 // appleNotificationProjection reduces a verified transaction to what a replay
@@ -146,6 +152,7 @@ func appleNotificationProjection(tx VerifiedAppleTransaction) AppleNotificationP
 		ExpiresDateMS:         tx.ExpiresDateMS,
 		RevocationDateMS:      tx.RevocationDateMS,
 		IsUpgraded:            tx.IsUpgraded,
+		TransactionReason:     tx.TransactionReason,
 	}
 }
 
@@ -169,6 +176,7 @@ func (p AppleNotificationProjection) transaction() VerifiedAppleTransaction {
 		ExpiresDateMS:         p.ExpiresDateMS,
 		RevocationDateMS:      p.RevocationDateMS,
 		IsUpgraded:            p.IsUpgraded,
+		TransactionReason:     p.TransactionReason,
 	}
 }
 
@@ -187,6 +195,8 @@ type AppleNotificationRecord struct {
 	// entitlement fields and accidentally treat it as supported.
 	Supported  bool
 	Projection AppleNotificationProjection
+	HasRenewal bool
+	Renewal    VerifiedAppleRenewalInfo
 }
 
 // appleNotificationCols is the full column list. `environment` is LAST because
@@ -197,16 +207,21 @@ type AppleNotificationRecord struct {
 // NOT NULL default is what makes its INSERT still land.
 const appleNotificationCols = `notification_uuid, state, notification_type, received_at, updated_at,
 	supported, bundle_id, product_id, original_transaction_id, app_account_token,
-	purchase_date_ms, expires_date_ms, revocation_date_ms, is_upgraded, environment`
+	purchase_date_ms, expires_date_ms, revocation_date_ms, is_upgraded, environment, transaction_reason, renewal_projection`
 
 func scanAppleNotification(sc rowScanner) (AppleNotificationRecord, error) {
 	var r AppleNotificationRecord
 	var supported, upgraded int64
+	var renewalJSON string
 	err := sc.Scan(&r.UUID, &r.State, &r.Type, &r.ReceivedAt, &r.UpdatedAt,
 		&supported,
 		&r.Projection.BundleID, &r.Projection.ProductID, &r.Projection.OriginalTransactionID,
 		&r.Projection.AppAccountToken, &r.Projection.PurchaseDateMS, &r.Projection.ExpiresDateMS,
-		&r.Projection.RevocationDateMS, &upgraded, &r.Projection.Environment)
+		&r.Projection.RevocationDateMS, &upgraded, &r.Projection.Environment, &r.Projection.TransactionReason, &renewalJSON)
+	if err == nil && renewalJSON != "" {
+		err = json.Unmarshal([]byte(renewalJSON), &r.Renewal)
+		r.HasRenewal = err == nil
+	}
 	r.Projection.IsUpgraded = upgraded != 0
 	r.Supported = supported != 0
 	return r, err
@@ -232,14 +247,22 @@ func (s *SQLiteStore) ClaimAppleNotification(ctx context.Context, rec AppleNotif
 	if rec.UUID == "" {
 		return AppleNotificationRecord{}, false, errors.New("account: apple notification needs a uuid")
 	}
+	renewalJSON := ""
+	if rec.HasRenewal {
+		raw, err := json.Marshal(rec.Renewal)
+		if err != nil {
+			return AppleNotificationRecord{}, false, err
+		}
+		renewalJSON = string(raw)
+	}
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO apple_notifications (`+appleNotificationCols+`)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(notification_uuid) DO NOTHING`,
 		rec.UUID, appleNotificationReceived, rec.Type, rec.ReceivedAt, rec.ReceivedAt, b2i(rec.Supported),
 		rec.Projection.BundleID, rec.Projection.ProductID, rec.Projection.OriginalTransactionID,
 		rec.Projection.AppAccountToken, rec.Projection.PurchaseDateMS, rec.Projection.ExpiresDateMS,
-		rec.Projection.RevocationDateMS, b2i(rec.Projection.IsUpgraded), rec.Projection.Environment)
+		rec.Projection.RevocationDateMS, b2i(rec.Projection.IsUpgraded), rec.Projection.Environment, rec.Projection.TransactionReason, renewalJSON)
 	if err != nil {
 		return AppleNotificationRecord{}, false, err
 	}
@@ -287,15 +310,15 @@ func (s *SQLiteStore) GetAppleNotification(ctx context.Context, uuid string) (Ap
 func (s *SQLiteStore) SetAppleNotificationState(ctx context.Context, uuid, state string, now int64) error {
 	switch state {
 	case appleNotificationApplied, appleNotificationIgnored, appleNotificationUnsupported,
-		appleNotificationPending, appleNotificationConflict:
+		appleNotificationPending, appleNotificationConflict, appleNotificationQuarantined:
 	default:
 		return fmt.Errorf("account: %q is not an apple notification state", state)
 	}
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE apple_notifications SET state = ?, updated_at = ?
-		  WHERE notification_uuid = ? AND state NOT IN (?, ?, ?)`,
+		  WHERE notification_uuid = ? AND state NOT IN (?, ?, ?, ?)`,
 		state, now, uuid,
-		appleNotificationApplied, appleNotificationIgnored, appleNotificationUnsupported)
+		appleNotificationApplied, appleNotificationIgnored, appleNotificationUnsupported, appleNotificationQuarantined)
 	return err
 }
 

@@ -1034,12 +1034,24 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
  provider_ref TEXT NOT NULL DEFAULT '',
  provider_session_id TEXT NOT NULL DEFAULT '',
  provider_subscription_id TEXT NOT NULL DEFAULT '',
+ apple_account_token TEXT NOT NULL DEFAULT '',
  epoch INTEGER NOT NULL,
  created_at INTEGER NOT NULL)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_billing_purchase_attempt_unresolved
  ON billing_purchase_attempts(user_id,epoch) WHERE state IN ('prepared','dispatched')`,
 		`ALTER TABLE billing_purchase_attempts ADD COLUMN provider_session_id TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE billing_purchase_attempts ADD COLUMN provider_subscription_id TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE billing_purchase_attempts ADD COLUMN apple_account_token TEXT NOT NULL DEFAULT ''`,
+		`CREATE TABLE IF NOT EXISTS apple_billing_subjects (
+ app_account_token TEXT PRIMARY KEY,
+ user_id TEXT NOT NULL,
+ attempt_id TEXT NOT NULL UNIQUE,
+ bundle_id TEXT NOT NULL,
+ authority_epoch INTEGER NOT NULL,
+ environment TEXT NOT NULL DEFAULT '',
+ created_at INTEGER NOT NULL,
+ deleted_at INTEGER NOT NULL DEFAULT 0)`,
+		`CREATE INDEX IF NOT EXISTS idx_apple_billing_subject_user ON apple_billing_subjects(user_id,deleted_at)`,
 		`CREATE TABLE IF NOT EXISTS stripe_webhook_events (
 		 event_id TEXT PRIMARY KEY,
 		 event_type TEXT NOT NULL,
@@ -1122,7 +1134,9 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
   expires_date_ms         INTEGER NOT NULL DEFAULT 0,
   revocation_date_ms      INTEGER NOT NULL DEFAULT 0,
   is_upgraded             INTEGER NOT NULL DEFAULT 0,
-  environment             TEXT NOT NULL DEFAULT '')`,
+  environment             TEXT NOT NULL DEFAULT '',
+  transaction_reason      TEXT NOT NULL DEFAULT '',
+  renewal_projection      TEXT NOT NULL DEFAULT '')`,
 		// The signed environment the projection came from, added to a table that
 		// already existed (2026-08). It is part of the subscription's identity, not
 		// a label: `originalTransactionId` is unique only within one App Store, so a
@@ -1136,6 +1150,8 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		// honest UNKNOWN: it is skipped and logged during a replay rather than
 		// guessed into either store (see reconcileApplePendingNotifications).
 		`ALTER TABLE apple_notifications ADD COLUMN environment TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE apple_notifications ADD COLUMN transaction_reason TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE apple_notifications ADD COLUMN renewal_projection TEXT NOT NULL DEFAULT ''`,
 		// The drain's query: deferred rows for one external subscription. Partial,
 		// because the states that matter are a small minority of a table whose
 		// ordinary population is terminal rows nobody queries by subscription.
@@ -1161,6 +1177,10 @@ func OpenSQLite(dsn string) (*SQLiteStore, error) {
 		}
 	}
 	if err := backfillBillingAuthorities(context.Background(), db, time.Now().Unix()); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if err := backfillLegacyAppleBillingSubjects(context.Background(), db, time.Now().Unix()); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -2406,6 +2426,11 @@ func (s *SQLiteStore) ArchiveAndPurgeUser(ctx context.Context, userID string, no
 		// Non-FK but user-owned.
 		{`DELETE FROM magic_tokens WHERE email=(SELECT email FROM users WHERE id=?)`, []any{userID}},
 		{`DELETE FROM cli_device_auth WHERE user_id=?`, []any{userID}},
+		// appAccountTokens survive hard account deletion as non-rebindable billing
+		// tombstones. Late Ask-to-Buy and renewal facts can then be quarantined
+		// instead of being attributed to a new account or reopening another
+		// provider's purchase path.
+		{`UPDATE apple_billing_subjects SET deleted_at=? WHERE user_id=? AND deleted_at=0`, []any{now, userID}},
 		// Per-provider subscription state. It carries user_id and a real
 		// REFERENCES users(id), so it must go before the users row — and it must
 		// go at all: leaving it would retain a purged account's billing history

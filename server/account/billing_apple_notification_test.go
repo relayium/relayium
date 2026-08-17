@@ -194,7 +194,11 @@ func TestAppleNotificationAppliesTheEntitlement(t *testing.T) {
 func TestAppleNotificationCannotCrossStripeBillingAuthority(t *testing.T) {
 	f := newAppleTxFixture(t)
 	ctx := context.Background()
-	if err := f.store.SetUserSubscription(ctx, f.userID, "plus", "active", time.Now().Add(time.Hour).Unix(), ProviderStripe, "monthly", time.Now().Unix(), 100); err != nil {
+	// Seed the contradictory legacy state below the new authority guard. A live
+	// server can no longer create it: minting an Apple token is sticky history and
+	// already blocks Stripe checkout. The notification path must still fail
+	// closed when upgrading an old database that contains both facts.
+	if _, err := f.store.ApplySubscriptionSource(ctx, SourceEvent{UserID: f.userID, Provider: ProviderStripe, PlanID: "plus", Status: "active", Cycle: "monthly", PeriodEnd: time.Now().Add(time.Hour).Unix(), ExternalID: "sub_legacy", EventAt: 100, Now: time.Now().Unix()}); err != nil {
 		t.Fatal(err)
 	}
 	uuid := appleNotifyUUID(44)
@@ -209,6 +213,22 @@ func TestAppleNotificationCannotCrossStripeBillingAuthority(t *testing.T) {
 	}
 	if rec := f.ledger(t, uuid); rec.State == appleNotificationApplied {
 		t.Fatalf("conflicting notification was ACKed applied: %+v", rec)
+	}
+}
+
+func TestAppleNotificationForDeletedBillingSubjectIsQuarantined(t *testing.T) {
+	f := newAppleTxFixture(t)
+	ctx := context.Background()
+	if _, err := f.store.db.ExecContext(ctx, `UPDATE apple_billing_subjects SET deleted_at=? WHERE app_account_token=?`, time.Now().Unix(), f.token); err != nil {
+		t.Fatal(err)
+	}
+	uuid := appleNotifyUUID(45)
+	f.mustNotify(t, f.envelope(t, uuid), http.StatusOK)
+	if rec := f.ledger(t, uuid); rec.State != appleNotificationQuarantined {
+		t.Fatalf("deleted subject notification=%+v", rec)
+	}
+	if _, ok, err := f.store.GetSubscriptionSource(ctx, f.userID, ProviderApple); err != nil || ok {
+		t.Fatalf("quarantined notification wrote source: ok=%v err=%v", ok, err)
 	}
 }
 

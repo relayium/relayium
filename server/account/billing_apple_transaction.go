@@ -124,7 +124,7 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 			return
 		}
 	}
-	preOwner, ok, err := s.Store().UserByAppleAccountToken(r.Context(), tx.AppAccountToken)
+	preOwner, ok, err := s.appleTokenOwner(r.Context(), tx.AppAccountToken)
 	if err != nil {
 		http.Error(w, "server error", http.StatusInternalServerError)
 		return
@@ -162,7 +162,7 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 	// to be atomic — binding this subscription to this user in the same
 	// transaction as the entitlement it grants — is ApplySubscriptionSource's
 	// contract, used below.
-	owner, ok, err := s.Store().UserByAppleAccountToken(r.Context(), tx.AppAccountToken)
+	owner, ok, err := s.appleTokenOwner(r.Context(), tx.AppAccountToken)
 	if err != nil {
 		log.Printf("billing: resolving an apple account token for user %s failed: %v", u.ID, err)
 		http.Error(w, "server error", http.StatusInternalServerError)
@@ -251,6 +251,24 @@ func (s *Service) handleAppleTransaction(w http.ResponseWriter, r *http.Request,
 	})
 }
 
+func (s *Service) appleTokenOwner(ctx context.Context, token string) (User, bool, error) {
+	subject, found, err := s.Store().AppleBillingSubjectByToken(ctx, token)
+	if err != nil {
+		return User{}, false, err
+	}
+	if found {
+		if subject.DeletedAt != 0 {
+			return User{}, false, ErrAppleBillingSubjectDeleted
+		}
+		u, err := s.Store().GetUserByID(ctx, subject.UserID)
+		if errors.Is(err, ErrNotFound) {
+			return User{}, false, ErrAppleBillingSubjectDeleted
+		}
+		return u, err == nil, err
+	}
+	return s.Store().UserByAppleAccountToken(ctx, token)
+}
+
 func appleSourceEventWithRenewal(userID string, tx VerifiedAppleTransaction, product AppleProduct, renewal AppleRenewalState, now time.Time) SourceEvent {
 	ev := appleSourceEvent(userID, tx, product, now)
 	if !appleTransactionIsTerminal(tx) && renewal.graceActive(now) && renewal.GraceUntil > ev.PeriodEnd {
@@ -295,10 +313,13 @@ func appleSourceEvent(userID string, tx VerifiedAppleTransaction, product AppleP
 		// originalTransactionId is the subscription's identity across every renewal
 		// within one App Store, which — qualified by that store — is exactly what an
 		// external subscription id must be.
-		ExternalID: externalID,
-		PeriodEnd:  appleSeconds(tx.ExpiresDateMS),
-		EventAt:    appleEventClock(tx),
-		Now:        now.Unix(),
+		ExternalID:             externalID,
+		PeriodEnd:              appleSeconds(tx.ExpiresDateMS),
+		EventAt:                appleEventClock(tx),
+		Now:                    now.Unix(),
+		BillingProductID:       tx.ProductID,
+		AppleTransactionReason: tx.TransactionReason,
+		ApplePurchaseDateMS:    tx.PurchaseDateMS,
 	}
 	if !appleTransactionGrants(tx, now) {
 		ev.PlanID = freePlanID

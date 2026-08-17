@@ -134,8 +134,8 @@ func TestAppleAccountTokenEndpointConcurrentRequestsConverge(t *testing.T) {
 	}
 }
 
-// The token lives on the users row, so the hard purge that removes the account
-// removes it with no second cleanup path to keep in step.
+// The user lookup disappears at hard purge, while the opaque billing subject
+// remains as a non-rebindable tombstone for late Ask-to-Buy facts.
 func TestAppleAccountTokenDisappearsWithTheAccount(t *testing.T) {
 	ts, _, store, mail := newBillingServer(t)
 	email := "apple-token-purge@example.com"
@@ -152,6 +152,9 @@ func TestAppleAccountTokenDisappearsWithTheAccount(t *testing.T) {
 	}
 	if _, ok, err := store.UserByAppleAccountToken(ctx, token); err != nil || ok {
 		t.Fatalf("token outlived the account: ok=%v err=%v", ok, err)
+	}
+	if subject, ok, err := store.AppleBillingSubjectByToken(ctx, token); err != nil || !ok || subject.UserID != uid || subject.DeletedAt != 200 {
+		t.Fatalf("billing tombstone=%+v ok=%v err=%v", subject, ok, err)
 	}
 }
 
@@ -273,6 +276,31 @@ func TestAppleNotificationProjectionPurgesThroughSandboxBinding(t *testing.T) {
 	}
 	if _, ok, err := store.GetAppleNotification(ctx, other.UUID); err != nil || !ok {
 		t.Fatalf("the other store's projection was purged too: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestDeletedAppleBillingSubjectTokenCannotBeRebound(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	owner, _ := store.UpsertUserByEmail(ctx, "deleted-billing-subject@example.test", "")
+	token := "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+	authority, err := store.AcquireBillingAuthority(ctx, BillingAuthorityRequest{UserID: owner.ID, Provider: ProviderApple, ExternalScope: testBundleIOS, AppleAccountToken: token, Now: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, created, err := store.DispatchAppleBillingPurchase(ctx, authority, testAppleProduct, token, 101); err != nil || !created {
+		t.Fatalf("dispatch created=%v err=%v", created, err)
+	}
+	if _, err := store.db.ExecContext(ctx, `UPDATE apple_billing_subjects SET deleted_at=200 WHERE app_account_token=?`, token); err != nil {
+		t.Fatal(err)
+	}
+	other, _ := store.UpsertUserByEmail(ctx, "new-billing-subject@example.test", "")
+	if _, err := store.EnsureAppleAccountToken(ctx, other.ID, token); err == nil {
+		t.Fatal("retained Apple billing token rebound to another account")
+	}
+	subject, ok, err := store.AppleBillingSubjectByToken(ctx, token)
+	if err != nil || !ok || subject.UserID != owner.ID || subject.DeletedAt != 200 {
+		t.Fatalf("tombstone=%+v ok=%v err=%v", subject, ok, err)
 	}
 }
 

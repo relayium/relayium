@@ -229,11 +229,11 @@ func TestAuthorizedAppleLifecycleAtomicallyBindsAndResolvesDispatch(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	attempt, created, err := store.DispatchBillingPurchase(ctx, authority, testAppleProduct, 101)
+	attempt, created, err := store.DispatchAppleBillingPurchase(ctx, authority, testAppleProduct, token, 101)
 	if err != nil || !created {
 		t.Fatalf("dispatch created=%v err=%v", created, err)
 	}
-	ev := SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: "pro", Status: "active", Cycle: "monthly", PeriodEnd: 1000, ExternalID: "production:original-one", ExternalScope: testBundleIOS, EventAt: 200, Now: 102}
+	ev := SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: "pro", Status: "active", Cycle: "monthly", PeriodEnd: 1000, ExternalID: "production:original-one", ExternalScope: testBundleIOS, BillingProductID: testAppleProduct, AppleTransactionReason: "PURCHASE", ApplePurchaseDateMS: 102000, EventAt: 200, Now: 102}
 	renewal := AppleRenewalState{UserID: u.ID, ExternalID: ev.ExternalID, BundleID: testBundleIOS, CurrentProductID: testAppleProduct, AutoRenewProductID: testAppleProduct, EventAt: 201, UpdatedAt: 102}
 	result, err := store.ApplyAuthorizedAppleLifecycle(ctx, ev, renewal, token, appleEnvProduction)
 	if err != nil || !result.Applied {
@@ -250,13 +250,13 @@ func TestAuthorizedAppleLifecycleAtomicallyBindsAndResolvesDispatch(t *testing.T
 	if err := store.db.QueryRowContext(ctx, `SELECT state FROM billing_purchase_attempts WHERE id=?`, attempt.ID).Scan(&state); err != nil || state != "resolved" {
 		t.Fatalf("attempt state=%q err=%v", state, err)
 	}
-	next, created, err := store.DispatchBillingPurchase(ctx, got, "com.relayium.app.max.monthly", 103)
+	next, created, err := store.DispatchAppleBillingPurchase(ctx, got, "com.relayium.app.max.monthly", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", 103)
 	if err != nil || !created || next.Epoch != got.Epoch {
 		t.Fatalf("next canonical generation dispatch=%+v created=%v err=%v", next, created, err)
 	}
 }
 
-func TestAuthorizedAppleLifecycleAmbiguityRollsBackEveryProjection(t *testing.T) {
+func TestAuthorizedAppleLifecycleProductMismatchAppliesFactWithoutResolvingAttempt(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 	u, _ := store.UpsertUserByEmail(ctx, "authority-apple-ambiguous@example.test", "")
@@ -265,32 +265,32 @@ func TestAuthorizedAppleLifecycleAmbiguityRollsBackEveryProjection(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err = store.DispatchBillingPurchase(ctx, authority, "expected.product", 101); err != nil {
+	if _, _, err = store.DispatchAppleBillingPurchase(ctx, authority, "expected.product", token, 101); err != nil {
 		t.Fatal(err)
 	}
 	ev := SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: "pro", Status: "active", Cycle: "monthly", PeriodEnd: 1000, ExternalID: "production:other", ExternalScope: testBundleIOS, EventAt: 200, Now: 102}
 	renewal := AppleRenewalState{UserID: u.ID, ExternalID: ev.ExternalID, BundleID: testBundleIOS, CurrentProductID: "different.product", AutoRenewProductID: "different.product", EventAt: 201, UpdatedAt: 102}
-	if _, err := store.ApplyAuthorizedAppleLifecycle(ctx, ev, renewal, token, appleEnvProduction); !errors.Is(err, ErrBillingPurchaseAmbiguous) {
-		t.Fatalf("want ambiguity, got %v", err)
+	if result, err := store.ApplyAuthorizedAppleLifecycle(ctx, ev, renewal, token, appleEnvProduction); err != nil || !result.Applied {
+		t.Fatalf("canonical lifecycle must apply while purchase remains unresolved: result=%+v err=%v", result, err)
 	}
 	got, _, _ := store.BillingAuthority(ctx, u.ID)
-	if got.AppleEnvironment != "" {
-		t.Fatalf("failed apply partially bound environment: %+v", got)
+	if got.AppleEnvironment != appleEnvProduction || got.Epoch != authority.Epoch {
+		t.Fatalf("lifecycle must bind environment without resolving mismatched purchase: %+v", got)
 	}
-	if _, ok, err := store.GetSubscriptionSource(ctx, u.ID, ProviderApple); err != nil || ok {
-		t.Fatalf("failed apply wrote source: ok=%v err=%v", ok, err)
+	if src, ok, err := store.GetSubscriptionSource(ctx, u.ID, ProviderApple); err != nil || !ok || src.PlanID != "pro" {
+		t.Fatalf("canonical lifecycle not projected: source=%+v ok=%v err=%v", src, ok, err)
 	}
 	var state string
 	if err := store.db.QueryRowContext(ctx, `SELECT state FROM billing_purchase_attempts WHERE user_id=?`, u.ID).Scan(&state); err != nil || state != "dispatched" {
 		t.Fatalf("failed apply changed attempt: state=%q err=%v", state, err)
 	}
 	var renewalCount int
-	if err := store.db.QueryRowContext(ctx, `SELECT count(*) FROM apple_renewal_states WHERE user_id=?`, u.ID).Scan(&renewalCount); err != nil || renewalCount != 0 {
-		t.Fatalf("failed apply wrote renewal: count=%d err=%v", renewalCount, err)
+	if err := store.db.QueryRowContext(ctx, `SELECT count(*) FROM apple_renewal_states WHERE user_id=?`, u.ID).Scan(&renewalCount); err != nil || renewalCount != 1 {
+		t.Fatalf("canonical renewal not projected: count=%d err=%v", renewalCount, err)
 	}
 }
 
-func TestAuthorizedAppleLifecycleRejectsEnvironmentDrift(t *testing.T) {
+func TestAuthorizedAppleLifecyclePromotesSandboxToProductionAndNeverRegresses(t *testing.T) {
 	store := newTestStore(t)
 	ctx := context.Background()
 	u, _ := store.UpsertUserByEmail(ctx, "authority-apple-env@example.test", "")
@@ -301,15 +301,104 @@ func TestAuthorizedAppleLifecycleRejectsEnvironmentDrift(t *testing.T) {
 		t.Fatal(err)
 	}
 	ev.ExternalID = "production:one"
-	if _, err := store.ApplyAuthorizedAppleLifecycle(ctx, ev, renewal, token, appleEnvProduction); !errors.Is(err, ErrBillingAuthorityConflict) {
-		t.Fatalf("environment drift err=%v", err)
+	renewal.ExternalID = ev.ExternalID
+	if result, err := store.ApplyAuthorizedAppleLifecycle(ctx, ev, renewal, token, appleEnvProduction); err != nil || !result.Applied {
+		t.Fatalf("production promotion result=%+v err=%v", result, err)
 	}
 	var environment string
 	if err := store.db.QueryRowContext(ctx, `SELECT apple_environment FROM billing_authorities WHERE user_id=?`, u.ID).Scan(&environment); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		t.Fatal(err)
 	}
-	if environment != appleEnvSandbox {
+	if environment != appleEnvProduction {
 		t.Fatalf("authority environment changed to %q", environment)
+	}
+	ev.ExternalID = "sandbox:later"
+	ev.EventAt++
+	renewal.ExternalID = ev.ExternalID
+	renewal.EventAt++
+	if result, err := store.ApplyAuthorizedAppleLifecycle(ctx, ev, renewal, token, appleEnvSandbox); err != nil || result.Applied {
+		t.Fatalf("sandbox regression result=%+v err=%v", result, err)
+	}
+}
+
+func TestAppleRenewalAndOldTokenCannotResolveANewerPurchaseAttempt(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	u, _ := store.UpsertUserByEmail(ctx, "authority-apple-old-token@example.test", "")
+	firstToken := "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+	authority, err := store.AcquireBillingAuthority(ctx, BillingAuthorityRequest{UserID: u.ID, Provider: ProviderApple, ExternalScope: testBundleIOS, AppleAccountToken: firstToken, Now: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, created, err := store.DispatchAppleBillingPurchase(ctx, authority, "plus.monthly", firstToken, 101)
+	if err != nil || !created {
+		t.Fatalf("first dispatch=%+v created=%v err=%v", first, created, err)
+	}
+	purchase := SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: "plus", Status: "active", Cycle: "monthly", PeriodEnd: 1000, ExternalID: "production:original", ExternalScope: testBundleIOS, BillingProductID: "plus.monthly", AppleTransactionReason: "PURCHASE", ApplePurchaseDateMS: 102000, EventAt: 200, Now: 102}
+	if result, err := store.ApplyAuthorizedAppleSource(ctx, purchase, firstToken, appleEnvProduction, purchase.BillingProductID); err != nil || !result.Applied {
+		t.Fatalf("first purchase result=%+v err=%v", result, err)
+	}
+	authority, _, _ = store.BillingAuthority(ctx, u.ID)
+	secondToken := "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+	second, created, err := store.DispatchAppleBillingPurchase(ctx, authority, "pro.monthly", secondToken, 103)
+	if err != nil || !created {
+		t.Fatalf("second dispatch=%+v created=%v err=%v", second, created, err)
+	}
+	renewal := purchase
+	renewal.EventAt = 202
+	renewal.Now = 104
+	renewal.PeriodEnd = 2000
+	renewal.AppleTransactionReason = "RENEWAL"
+	if result, err := store.ApplyAuthorizedAppleSource(ctx, renewal, firstToken, appleEnvProduction, renewal.BillingProductID); err != nil || !result.Applied {
+		t.Fatalf("old-token renewal result=%+v err=%v", result, err)
+	}
+	var state string
+	if err := store.db.QueryRowContext(ctx, `SELECT state FROM billing_purchase_attempts WHERE id=?`, second.ID).Scan(&state); err != nil || state != "dispatched" {
+		t.Fatalf("old renewal resolved new attempt: state=%q err=%v", state, err)
+	}
+	src, ok, err := store.GetSubscriptionSource(ctx, u.ID, ProviderApple)
+	if err != nil || !ok || src.PeriodEnd != renewal.PeriodEnd {
+		t.Fatalf("old subscription lifecycle was blocked: source=%+v ok=%v err=%v", src, ok, err)
+	}
+}
+
+func TestApplePurchaseBeforeDispatchDoesNotResolveAttempt(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	u, _ := store.UpsertUserByEmail(ctx, "authority-apple-pre-dispatch@example.test", "")
+	token := "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+	authority, err := store.AcquireBillingAuthority(ctx, BillingAuthorityRequest{UserID: u.ID, Provider: ProviderApple, ExternalScope: testBundleIOS, AppleAccountToken: token, Now: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempt, _, err := store.DispatchAppleBillingPurchase(ctx, authority, testAppleProduct, token, 200)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := SourceEvent{UserID: u.ID, Provider: ProviderApple, PlanID: "pro", Status: "active", Cycle: "monthly", PeriodEnd: 1000, ExternalID: "production:old", ExternalScope: testBundleIOS, BillingProductID: testAppleProduct, AppleTransactionReason: "PURCHASE", ApplePurchaseDateMS: 199000, EventAt: 400, Now: 201}
+	if result, err := store.ApplyAuthorizedAppleSource(ctx, ev, token, appleEnvProduction, testAppleProduct); err != nil || !result.Applied {
+		t.Fatalf("canonical old purchase result=%+v err=%v", result, err)
+	}
+	var state string
+	if err := store.db.QueryRowContext(ctx, `SELECT state FROM billing_purchase_attempts WHERE id=?`, attempt.ID).Scan(&state); err != nil || state != "dispatched" {
+		t.Fatalf("pre-dispatch purchase resolved attempt: state=%q err=%v", state, err)
+	}
+}
+
+func TestBillingHistoryRejectsLegacyAppleTokenAndStripeHistory(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	u, _ := store.UpsertUserByEmail(ctx, "ambiguous-provider-history@example.test", "")
+	if _, err := store.db.ExecContext(ctx, `UPDATE users SET apple_account_token=?,stripe_customer_id=? WHERE id=?`, "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "cus_legacy", u.ID); err != nil {
+		t.Fatal(err)
+	}
+	tx, err := store.db.BeginTx(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	if _, err := billingHistoryTx(ctx, tx, u.ID); !errors.Is(err, ErrBillingAuthorityConflict) {
+		t.Fatalf("ambiguous Apple+Stripe history error=%v", err)
 	}
 }
 
@@ -437,5 +526,24 @@ func TestBillingAuthorityBackfillTreatsLegacyAppleTokenAsStickyHistory(t *testin
 	}
 	if _, err := store.AcquireBillingAuthority(ctx, BillingAuthorityRequest{UserID: u.ID, Provider: ProviderStripe, Now: 11}); !errors.Is(err, ErrBillingAuthorityConflict) {
 		t.Fatalf("Stripe crossed token-only Apple history: %v", err)
+	}
+}
+
+func TestLegacyAppleTokenDoesNotBlockPerDispatchPurchaseToken(t *testing.T) {
+	store := newTestStore(t)
+	ctx := context.Background()
+	u, _ := store.UpsertUserByEmail(ctx, "legacy-to-dispatch-token@example.test", "")
+	legacy := "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+	if _, err := store.EnsureAppleAccountToken(ctx, u.ID, legacy); err != nil {
+		t.Fatal(err)
+	}
+	dispatch := "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+	authority, err := store.AcquireBillingAuthority(ctx, BillingAuthorityRequest{UserID: u.ID, Provider: ProviderApple, ExternalScope: testBundleIOS, AppleAccountToken: dispatch, Now: 100})
+	if err != nil || authority.AppleAccountToken != legacy {
+		t.Fatalf("authority=%+v err=%v", authority, err)
+	}
+	attempt, created, err := store.DispatchAppleBillingPurchase(ctx, authority, testAppleProduct, dispatch, 101)
+	if err != nil || !created || attempt.AppleAccountToken != dispatch {
+		t.Fatalf("attempt=%+v created=%v err=%v", attempt, created, err)
 	}
 }
