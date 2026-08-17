@@ -719,7 +719,7 @@ func appleRenewalWire(r AppleRenewalState, ok bool, now time.Time) map[string]an
 		"renewalProductId": r.AutoRenewProductID, "renewalAt": r.RenewalAt,
 		"autoRenewEnabled": r.AutoRenewEnabled, "expirationIntent": r.ExpirationIntent,
 		"priceIncreaseStatus": r.PriceIncreaseStatus,
-		"inBillingRetry": r.IsInBillingRetry, "inGracePeriod": grace, "graceUntil": r.GraceUntil}
+		"inBillingRetry":      r.IsInBillingRetry, "inGracePeriod": grace, "graceUntil": r.GraceUntil}
 }
 
 // handleMeUsage 报告调用者当月的配额位置：当月流量对当月上限（可能因为月中改
