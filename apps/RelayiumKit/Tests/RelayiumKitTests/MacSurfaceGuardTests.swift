@@ -449,16 +449,26 @@ final class MacSurfaceGuardTests: XCTestCase {
         let workflow = try String(contentsOf: workflowURL, encoding: .utf8)
         XCTAssertTrue(workflow.contains("Run macOS product-flow UI smoke"),
                       "CI compiles macOS but never launches its product flows")
+        let uiJob = try XCTUnwrap(workflow.range(of: "  ui-smoke:"))
         let signedJob = try XCTUnwrap(workflow.range(of: "  signed-build:"))
         let runtimeStep = try XCTUnwrap(workflow.range(of:
-            "      - name: Run macOS product-flow UI smoke"))
-        XCTAssertGreaterThan(runtimeStep.lowerBound, signedJob.lowerBound,
-                             "the UI app needs the signed job's certificate and profiles")
+            "      - name: Run macOS product-flow UI smoke (${{ matrix.shard }})"))
+        XCTAssertGreaterThan(runtimeStep.lowerBound, uiJob.lowerBound)
+        XCTAssertLessThan(runtimeStep.lowerBound, signedJob.lowerBound)
+        XCTAssertTrue(workflow.contains("Install UI provisioning profiles"),
+                      "the UI app needs its certificate and profiles")
+        XCTAssertTrue(workflow.contains("needs: [test, ui-smoke]"),
+                      "signing must wait for every mandatory UI shard")
+        for testClass in ["AppShellUITests", "DeviceInboxUITests",
+                          "SubscriptionUITests", "LocalSessionUITests"] {
+            XCTAssertTrue(workflow.contains("RelayiumUITests/\(testClass)"),
+                          "the hosted shards omit \(testClass)")
+        }
         XCTAssertTrue(workflow.contains(
             "xcodebuild -project apps/mac/Relayium.xcodeproj -scheme Relayium"))
         XCTAssertTrue(workflow.contains("-destination 'platform=macOS'"))
-        XCTAssertTrue(workflow.contains("-only-testing:RelayiumUITests test"))
-        XCTAssertTrue(workflow.contains("timeout-minutes: 50"),
+        XCTAssertTrue(workflow.contains("only+=(\"-only-testing:$class\")"))
+        XCTAssertTrue(workflow.contains("timeout: 30") && workflow.contains("timeout: 35"),
                       "a hosted desktop failure can occupy the runner indefinitely")
     }
 
